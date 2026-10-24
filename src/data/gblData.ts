@@ -10062,15 +10062,62 @@ export interface TacticalRecommendationResult {
 }
 
 /**
- * Real-time Lead, Swap, Post-Faint & Endgame Tactical Recommendation Engine (v3.34):
+ * Scales a 100%-HP Battle Rating (BR) by the actual remaining HP% of both Pokémon:
+ *   BR_live = clamp(150, 850, round(baseBr + 220 * ln(max(8, userHpPct) / max(8, oppHpPct))))
+ */
+export function scaleBrByHpRatio(baseBr: number, userHpPct: number = 100, oppHpPct: number = 100): number {
+  const uHp = Math.max(8, Math.min(100, Number.isFinite(userHpPct) ? userHpPct : 100));
+  const oHp = Math.max(8, Math.min(100, Number.isFinite(oppHpPct) ? oppHpPct : 100));
+  if (Math.abs(uHp - oHp) <= 1) return Math.round(baseBr);
+  const delta = 220 * Math.log(uHp / oHp);
+  return Math.max(150, Math.min(850, Math.round(baseBr + delta)));
+}
+
+/**
+ * Conservative unshielded Charged Move attribution from observed HP drop:
+ * - Returns null whenever the attack was shielded or hpDeltaPct < 5%.
+ * - Only returns a move name when |hpDeltaPct - move.damagePct| <= 8% AND
+ *   every other candidate move on that Pokémon is separated by >= 12%.
+ */
+export function inferUnshieldedChargedMoveName(
+  hpDeltaPct: number,
+  shielded: boolean,
+  candidateMoves: Array<{ name: string; damagePct: number }>
+): string | null {
+  if (shielded || !Number.isFinite(hpDeltaPct) || hpDeltaPct < 5 || !candidateMoves || candidateMoves.length === 0) {
+    return null;
+  }
+  const uniqueMoves = new Map<string, number>();
+  for (const m of candidateMoves) {
+    if (m && m.name && Number.isFinite(m.damagePct) && m.damagePct > 0) {
+      uniqueMoves.set(m.name.trim(), m.damagePct);
+    }
+  }
+  const sorted = Array.from(uniqueMoves.entries())
+    .map(([name, damagePct]) => ({ name, damagePct, diff: Math.abs(hpDeltaPct - damagePct) }))
+    .sort((a, b) => a.diff - b.diff);
+  if (sorted.length === 0) return null;
+  const best = sorted[0];
+  if (best.diff > 8) return null;
+  if (sorted.length > 1) {
+    const second = sorted[1];
+    if (Math.abs(best.damagePct - second.damagePct) < 12 && second.diff < 12) {
+      return null;
+    }
+  }
+  return best.name;
+}
+
+/**
+ * Real-time Lead, Swap, Post-Faint, Persistent-HP & Shield Callout Tactical Engine (v3.40):
+ * - Persists HP% across all non-fainted Pokémon on both teams (userSlotHpPct[0..2] & oppSlotHpPct[0..2])
+ *   and scales both active and bench matchups by remaining HP ratio.
+ * - Issues immediate SHIELD (1S) vs NO SHIELD (TANK IT) callouts when "Attack incoming! Use a Protect Shield?" appears.
  * - Evaluates Post-Faint "Switch in a new Pokémon?" replacement options across:
  *   1. Active Opponent Matchup & Farm Potential (45%)
  *   2. Both Swap Clocks (playerSwapRemainingSec & oppSwapRemainingSec) (25%)
- *   3. Known Revealed Bench Opponent(s) (20%)
+ *   3. Known Revealed Bench Opponent(s) with Persistent Bench HP% (20%)
  *   4. Expected Unseen Meta Threats (10%)
- * - Differentiates Opponent Faint Replacement (swap clock stays ready) vs. Manual Swap (swap clock locked 50s)
- *   using Counter-Swap Minimax before recommending any swap.
- * - Reads the full shield & fainted Pokémon picture (1v1, 2v1, 1v2) for accurate backline/endgame advice.
  */
 export function computeTacticalLeadAndSwapRecommendation(params: {
   team: TeamMember[];
@@ -10083,10 +10130,18 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
   oppShields: number;
   userFaintedSlots?: boolean[];
   oppFaintedSlots?: boolean[];
+  userSlotHpPct?: number[];
+  oppSlotHpPct?: number[];
+  activeOppSlotIdx?: number;
   playerSwapRemainingSec?: number;
   oppSwapRemainingSec?: number;
   lastOppSwitchWasFaint?: boolean;
   isPostFaintPrompt?: boolean;
+  isAttackIncomingPrompt?: boolean;
+  maxOppMoveDmgPct?: number;
+  minOppMoveDmgPct?: number;
+  maxOppMoveName?: string;
+  minOppMoveName?: string;
   league: string;
 }): TacticalRecommendationResult {
   const {
@@ -10099,10 +10154,18 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
     oppShields,
     userFaintedSlots = [false, false, false],
     oppFaintedSlots = [false, false, false],
+    userSlotHpPct = [100, 100, 100],
+    oppSlotHpPct = [100, 100, 100],
+    activeOppSlotIdx,
     playerSwapRemainingSec = 0,
     oppSwapRemainingSec = 0,
     lastOppSwitchWasFaint = false,
     isPostFaintPrompt = false,
+    isAttackIncomingPrompt = false,
+    maxOppMoveDmgPct = 55,
+    minOppMoveDmgPct = 30,
+    maxOppMoveName = "Nuke",
+    minOppMoveName = "Bait",
     league
   } = params;
 
@@ -10145,24 +10208,57 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
   const curIdx = Math.max(0, Math.min(2, activeUserIdx));
   const curMember = team[curIdx] || team[0];
 
+  const resolvedOppIdx =
+    typeof activeOppSlotIdx === "number" && activeOppSlotIdx >= 0 && activeOppSlotIdx < 3
+      ? activeOppSlotIdx
+      : Math.max(
+          0,
+          scannedOpponents.findIndex((o) => o && o.toLowerCase() === activeOppName.toLowerCase())
+        );
+
+  const getUserSlotHp = (idx: number): number => {
+    if (userFaintedSlots[idx]) return 0;
+    const raw = userSlotHpPct[idx];
+    return typeof raw === "number" && Number.isFinite(raw) ? Math.max(1, Math.min(100, Math.round(raw))) : 100;
+  };
+
+  const getOppSlotHp = (idx: number): number => {
+    if (oppFaintedSlots[idx]) return 0;
+    const raw = oppSlotHpPct[idx];
+    return typeof raw === "number" && Number.isFinite(raw) ? Math.max(1, Math.min(100, Math.round(raw))) : 100;
+  };
+
+  const activeUserHp = getUserSlotHp(curIdx);
+  const activeOppHp = getOppSlotHp(resolvedOppIdx);
+
   const userAliveCount = Math.max(1, Math.min(3, 3 - userFaintedSlots.filter(Boolean).length));
   const oppAliveCount = Math.max(1, Math.min(3, 3 - oppFaintedSlots.filter(Boolean).length));
 
   // Compute 9x9 shield matrix for all 3 team members against the active opponent
   const matchup9x9 = getOverlayRealtime9x9Matchup(activeOppName, team, false, league);
 
+  // Live HP-scaled BR for user slotIdx vs active opponent
   const getBr = (slotIdx: number, myS: number, theirS: number): number => {
     const grid = matchup9x9.slotGrids[slotIdx];
-    if (!grid) return 500;
     const sU = Math.max(0, Math.min(2, myS));
     const sO = Math.max(0, Math.min(2, theirS));
-    return grid[sU]?.[sO] ?? 500;
+    const baseBr = grid?.[sU]?.[sO] ?? 500;
+    return scaleBrByHpRatio(baseBr, getUserSlotHp(slotIdx), activeOppHp);
   };
 
-  const getPairBr = (attackerName: string, defenderName: string, myS: number, theirS: number): number => {
+  // Pairwise BR between any user slot/pokemon and any opponent slot/pokemon, scaled by their persistent HP%
+  const getPairBr = (
+    attackerName: string,
+    defenderName: string,
+    myS: number,
+    theirS: number,
+    attackerHpPct: number = 100,
+    defenderHpPct: number = 100
+  ): number => {
     const sU = Math.max(0, Math.min(2, myS));
     const sO = Math.max(0, Math.min(2, theirS));
-    return evaluateFastRoughShieldBattleRating(attackerName, defenderName, sU, sO, league);
+    const baseBr = evaluateFastRoughShieldBattleRating(attackerName, defenderName, sU, sO, league);
+    return scaleBrByHpRatio(baseBr, attackerHpPct, defenderHpPct);
   };
 
   const curBrNow = getBr(curIdx, uS, oS);
@@ -10176,33 +10272,45 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
   const b2Br = getBr(2, Math.min(1, uS), Math.min(1, oS));
   const oppBeatsBackline = b1Br < 475 && b2Br < 475;
 
-  const isLeadPhase = scannedOpponents.length <= 1 && curIdx === 0 && userAliveCount === 3 && oppAliveCount === 3;
-  const isOppSwapped = scannedOpponents.length > 1 && activeOppName.toLowerCase() !== (scannedOpponents[0] || "").toLowerCase();
+  const isLeadPhase =
+    scannedOpponents.length <= 1 &&
+    curIdx === 0 &&
+    userAliveCount === 3 &&
+    oppAliveCount === 3 &&
+    activeUserHp >= 75 &&
+    activeOppHp >= 75;
+  const isOppSwapped =
+    scannedOpponents.length > 1 && activeOppName.toLowerCase() !== (scannedOpponents[0] || "").toLowerCase();
 
-  // Known alive bench opponents (excluding current active opponent)
-  const revealedBenchOpps = scannedOpponents.filter((oppName, idx) => {
-    if (!oppName || oppName.toLowerCase() === activeOppName.toLowerCase()) return false;
-    return !oppFaintedSlots[idx];
-  });
+  // Known alive bench opponents with their persistent slot index & stored HP%
+  const revealedBenchOppEntries = scannedOpponents
+    .map((oppName, idx) => ({ name: oppName, idx, hpPct: getOppSlotHp(idx) }))
+    .filter((entry) => entry.name && entry.name.toLowerCase() !== activeOppName.toLowerCase() && !oppFaintedSlots[entry.idx]);
+  const revealedBenchOpps = revealedBenchOppEntries.map((e) => e.name);
 
   // Unseen meta pool for backline risk estimation when < 3 opponents revealed
   const unseenMetaPool = getLeagueTopMetaSpeciesNames(league, 6);
 
-  // Score alive candidate slots for both Post-Faint replacement and Counter-Swap Minimax
+  // Score alive candidate slots for Post-Faint replacement, Counter-Swap Minimax & Bench HP Guidance
   const candidateScores: Record<string, number> = {};
   const candidateDetails = [0, 1, 2]
     .filter((idx) => !userFaintedSlots[idx] && (isPostFaintPrompt || idx !== curIdx))
     .map((idx) => {
       const mName = team[idx]?.name || `Slot ${idx + 1}`;
+      const candHp = getUserSlotHp(idx);
       const activeBr = getBr(idx, uS, oS);
       const zeroBr = getBr(idx, 0, 0);
       const oneBr = getBr(idx, Math.min(1, uS), Math.min(1, oS));
 
       let worstResponseBr = 500;
-      if (revealedBenchOpps.length > 0) {
-        worstResponseBr = Math.min(...revealedBenchOpps.map((bOpp) => getPairBr(mName, bOpp, uS, oS)));
+      if (revealedBenchOppEntries.length > 0) {
+        worstResponseBr = Math.min(
+          ...revealedBenchOppEntries.map((bOpp) => getPairBr(mName, bOpp.name, uS, oS, candHp, bOpp.hpPct))
+        );
       } else if (oppAliveCount > 1 && unseenMetaPool.length > 0) {
-        const sortedMetaBrs = unseenMetaPool.map((uOpp) => getPairBr(mName, uOpp, 1, 1)).sort((a, b) => a - b);
+        const sortedMetaBrs = unseenMetaPool
+          .map((uOpp) => getPairBr(mName, uOpp, 1, 1, candHp, 100))
+          .sort((a, b) => a - b);
         worstResponseBr = sortedMetaBrs[Math.min(1, sortedMetaBrs.length - 1)] ?? 465;
       }
 
@@ -10212,22 +10320,30 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
           ? activeBr * 1.18
           : activeBr * 0.55 + worstResponseBr * 0.45;
       const knownBenchFactor =
-        revealedBenchOpps.length > 0
-          ? revealedBenchOpps.reduce((acc, bOpp) => acc + getPairBr(mName, bOpp, uS, oS), 0) / revealedBenchOpps.length
+        revealedBenchOppEntries.length > 0
+          ? revealedBenchOppEntries.reduce(
+              (acc, bOpp) => acc + getPairBr(mName, bOpp.name, uS, oS, candHp, bOpp.hpPct),
+              0
+            ) / revealedBenchOppEntries.length
           : oneBr;
       const unseenMetaFactor =
         unseenMetaPool.length > 0
-          ? unseenMetaPool.reduce((acc, uOpp) => acc + getPairBr(mName, uOpp, 1, 1), 0) / unseenMetaPool.length
+          ? unseenMetaPool.reduce((acc, uOpp) => acc + getPairBr(mName, uOpp, 1, 1, candHp, 100), 0) /
+            unseenMetaPool.length
           : 500;
 
+      // Penalize swapping in a critically low-HP (<25% HP) bench Pokémon unless active opponent is also in KO range (<22% HP)
+      const lowHpSwapPenalty = candHp <= 24 && activeOppHp > 22 ? -95 : candHp <= 38 && activeOppHp > 35 ? -35 : 0;
+
       const compositeScore = Math.round(
-        activeFactor * 0.45 + clockFactor * 0.25 + knownBenchFactor * 0.20 + unseenMetaFactor * 0.10
+        activeFactor * 0.45 + clockFactor * 0.25 + knownBenchFactor * 0.20 + unseenMetaFactor * 0.10 + lowHpSwapPenalty
       );
       candidateScores[mName] = compositeScore;
 
       return {
         idx,
         name: mName,
+        hpPct: candHp,
         activeBr,
         zeroBr,
         oneBr,
@@ -10236,18 +10352,85 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
       };
     });
 
-  // Best available alive bench options
+  // Best available alive bench options (factoring in persistent bench HP%)
   const benchIndices = [0, 1, 2].filter((idx) => idx !== curIdx && !userFaintedSlots[idx]);
   const bestBenchIdx =
-    benchIndices.length > 0
-      ? benchIndices.reduce((best, idx) => (getBr(idx, uS, oS) > getBr(best, uS, oS) ? idx : best), benchIndices[0])
-      : curIdx;
+    candidateDetails.length > 0
+      ? [...candidateDetails].sort((a, b) => b.compositeScore - a.compositeScore)[0].idx
+      : benchIndices[0] ?? curIdx;
   const bestBenchBr = getBr(bestBenchIdx, uS, oS);
+  const bestBenchHp = getUserSlotHp(bestBenchIdx);
   const bestBenchName = team[bestBenchIdx]?.name || "Swap";
 
   const canPlayerSwap = playerSwapRemainingSec <= 0 && benchIndices.length > 0;
   const oppSwitchLockActive = !lastOppSwitchWasFaint && oppSwapRemainingSec >= 12;
   const oppCanCounterSwap = lastOppSwitchWasFaint || oppSwapRemainingSec <= 8;
+
+  // =========================================================================
+  // CASE -1: IMMEDIATE "ATTACK INCOMING! USE A PROTECT SHIELD?" CALLOUT
+  // =========================================================================
+  if (isAttackIncomingPrompt && uS > 0) {
+    const isLethalMax = maxOppMoveDmgPct >= activeUserHp - 6;
+    const isLethalMin = minOppMoveDmgPct >= activeUserHp - 4;
+    const isBigBaitSpread = maxOppMoveDmgPct - minOppMoveDmgPct >= 28 && !isLethalMin;
+    const healthiestBenchHp =
+      benchIndices.length > 0 ? Math.max(...benchIndices.map((idx) => getUserSlotHp(idx))) : 0;
+
+    if (isLethalMax && (userAliveCount === 1 || curBrNow >= 485 || healthiestBenchHp <= 35 || oppBeatsBackline)) {
+      const baitNote = isBigBaitSpread ? ` (Watch ${minOppMoveName} ${minOppMoveDmgPct}% Bait)` : "";
+      return makeRec(
+        true,
+        "SHIELD CALL",
+        `SHIELD (1S) — BLOCK ${maxOppMoveName.toUpperCase()}`,
+        `Use 1S (${uS - 1}S Left)`,
+        `${maxOppMoveName} (${maxOppMoveDmgPct}%) KOs ${curMember.name} (${activeUserHp}% HP)${baitNote}`,
+        "rose",
+        null,
+        null,
+        candidateScores
+      );
+    }
+
+    if (!isLethalMax && activeUserHp - maxOppMoveDmgPct >= 16) {
+      return makeRec(
+        true,
+        "SHIELD CALL",
+        `NO SHIELD (TANK IT • ${activeUserHp}% HP)`,
+        `Hold ${uS}S for Backline`,
+        `Survives ${maxOppMoveName} (${maxOppMoveDmgPct}% Dmg -> ~${Math.max(1, activeUserHp - maxOppMoveDmgPct)}% HP Left)`,
+        "sky",
+        null,
+        null,
+        candidateScores
+      );
+    }
+
+    if (activeUserHp <= 24 && healthiestBenchHp >= 65 && bestBenchBr >= 515) {
+      return makeRec(
+        true,
+        "SHIELD CALL",
+        `NO SHIELD (LET ${curMember.name.toUpperCase()} FAINT)`,
+        `Save ${uS}S for ${bestBenchName} (${bestBenchHp}% HP)`,
+        `Preserve Shields -> Farm w/ ${bestBenchName}`,
+        "amber",
+        bestBenchIdx,
+        bestBenchName,
+        candidateScores
+      );
+    }
+
+    return makeRec(
+      true,
+      "SHIELD CALL",
+      isLethalMax ? `SHIELD (1S) TO SURVIVE` : `TANK OR 1S (CALL BAIT)`,
+      isLethalMax ? `Commit 1S` : `Hold ${uS}S if Bait (${minOppMoveDmgPct}%)`,
+      `${maxOppMoveName}: ${maxOppMoveDmgPct}% vs ${curMember.name} ${activeUserHp}% HP`,
+      isLethalMax ? "amber" : "sky",
+      null,
+      null,
+      candidateScores
+    );
+  }
 
   // =========================================================================
   // CASE 0: POST-FAINT "SWITCH IN A NEW POKÉMON?" MODAL RECOMMENDATION
@@ -10256,27 +10439,48 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
     const sortedPostFaint = [...candidateDetails].sort((a, b) => b.compositeScore - a.compositeScore);
     const bestPick = sortedPostFaint[0];
     const altPick = sortedPostFaint[1] || null;
-    const holdSuffix = altPick ? ` (Hold ${altPick.name})` : "";
-    const actionText = `SEND IN ➔ ${bestPick.name}${holdSuffix}`;
+    const holdSuffix = altPick ? ` (Hold ${altPick.name} ${altPick.hpPct}% HP)` : "";
+    const actionText = `SEND IN ➔ ${bestPick.name} (${bestPick.hpPct}% HP)${holdSuffix}`;
     const shieldPlan = uS > 0 ? `Keep ${uS}S Ready` : "0S Farm/Close";
-    let goalText = `Punish ${activeOppName} (${bestPick.activeBr} BR)`;
+    let goalText = `Punish ${activeOppName} (${activeOppHp}% HP • ${bestPick.activeBr} BR)`;
     let tone: "emerald" | "amber" | "sky" | "rose" = "emerald";
 
-    if (oppSwapRemainingSec >= 12) {
+    if (activeOppHp <= 25) {
+      goalText = `Fast-Move Farm Down ${activeOppName} (${activeOppHp}% HP) & Bank Energy`;
+      tone = "emerald";
+    } else if (oppSwapRemainingSec >= 12) {
       goalText = `Punish ${oppSwapRemainingSec}s Opp Swap Lock (${bestPick.activeBr} BR)`;
       tone = "emerald";
     } else if (oppAliveCount === 1) {
-      goalText = `Close Out Last Opponent (${bestPick.activeBr} BR)`;
+      goalText = `Close Out Last Opponent (${activeOppHp}% HP • ${bestPick.activeBr} BR)`;
       tone = "emerald";
-    } else if (revealedBenchOpps.length > 0 && altPick) {
-      goalText = `Save ${altPick.name} for ${revealedBenchOpps[0]} (Opp Swap ${oppSwapRemainingSec}s)`;
+    } else if (revealedBenchOppEntries.length > 0 && altPick) {
+      const bOpp = revealedBenchOppEntries[0];
+      goalText = `Save ${altPick.name} (${altPick.hpPct}%) for ${bOpp.name} (${bOpp.hpPct}% HP)`;
       tone = "sky";
     } else {
-      goalText = `Best vs ${activeOppName} + Unseen Backline (Opp Swap ${oppSwapRemainingSec}s)`;
+      goalText = `Best vs ${activeOppName} (${activeOppHp}% HP) + Unseen Backline`;
       tone = bestPick.activeBr >= 510 ? "emerald" : "sky";
     }
 
     return makeRec(true, "POST-FAINT PICK", actionText, shieldPlan, goalText, tone, bestPick.idx, bestPick.name, candidateScores);
+  }
+
+  // =========================================================================
+  // CASE 0.5: FAST-MOVE FARM-DOWN RANGE (OPPONENT AT <= 22% HP)
+  // =========================================================================
+  if (activeOppHp <= 22 && activeUserHp >= 28 && curBrNow >= 450) {
+    return makeRec(
+      true,
+      `FARM DOWN (${activeOppHp}% OPP)`,
+      `FAST-MOVE FARM DOWN (${curMember.name})`,
+      "Hold Charged Energy",
+      `KO ${activeOppName} (${activeOppHp}% HP) w/ Fast Moves & Bank Energy`,
+      "emerald",
+      null,
+      null,
+      candidateScores
+    );
   }
 
   // =========================================================================

@@ -123,22 +123,20 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official v3.34 Release (Post-Faint Switch Recommendations, Counter-Swap Minimax, Midpoint Swap Clock & AI Training Export)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official v3.40 Release (Floating HP Bar Tracking, Persistent Bench HP Memory, Charged Attack Detection & Live Shield Callouts)
             
-            ### What's New in v3.34
-            - **Post-Faint `"Switch in a new Pokémon?"` Modal Detection & Replacement Scorer**:
-              - Expanded bottom OCR vertical capture (`srcMoves`: `0.70f..0.95f`) to detect `"Switch in a new Pokémon?"` / `"Choose a Pokémon"` after your Pokémon faints.
-              - Scores your remaining alive bench Pokémon across **Active Opponent Matchup (45%)**, **Both Teams' Swap Clocks (25%)**, **Known Bench Opponent Matchup (20%)**, and **Expected Unseen Meta Threats (10%)**, with a 1-tap **"Send In ➔"** confirmation button in the HUD.
-            - **Counter-Swap Minimax & Faint vs. Manual Swap Clock Differentiation**:
-              - Differentiates post-faint entries (which do **not** reset the 50s swap clock) from manual switches (50s swap clock reset).
-              - Evaluates both `playerSwapRemainingSec` and `oppSwapRemainingSec` before recommending swaps: penalizes aggressive alignment swaps when the opponent's swap clock is unlocked (`0s`) and recommends **Stay In & Chip / Soft Lose** or **Safe Swap**, while recommending **Punish Locked Switch** when the opponent is swap-locked (`> 15s`).
-            - **Full Shield & Fainted Pokémon Picture for Endgame / Backline Advice**:
-              - Replaces front-line alignment advice (`"Maintain Alignment"`) once Pokémon have fainted with dedicated **1v1 Closer**, **2v1 Advantage**, and **1v2 Comeback** recommendations factoring in `playerAliveCount`, `oppAliveCount`, `playerShieldsRemaining`, and `oppShieldsRemaining`.
-            - **1st-Frame Immediate Swap Detection, Midpoint Swap Clock & 2nd-Frame Validity Bit Latch**:
-              - Updates the HUD, active matchup column, and tactical recommendations immediately on **Frame 1** (`[1F]` provisional badge on the swap clock) while anchoring the swap clock start time **halfway between the last frame with the old Pokémon and the first frame with the new Pokémon**.
-              - Latches on **Frame 2** when confirmed by successive OCR, or automatically reverts the swap clock if Frame 2 fails to confirm or a Pokéball faint drop confirms a post-faint entry.
-            - **Decision-Tree AI Training Telemetry & Detailed JSONL Log Export**:
-              - Tracks recommended actions, candidate scores, swap clocks, shield/alive states, actual player/opponent actions, and recommendation adherence (`adherenceRatePct`) across battle timelines, with **🤖 AI Training Detailed Log (JSONL Dataset)** export in both Android and Web.
+            ### What's New in v3.40
+            - **Real-Time Floating HP Bar Tracking (Height-Invariant 2D Capsule Scanner)**:
+              - Tracks both the Opponent's and Player's floating HP bars (`0–100%`) across variable Pokémon heights and head-bobbing animations using horizontal capsule scanline invariants (`W_fill + W_depleted ≈ 12.8%w`, `6–16px` thickness, white border check, and camera-cut freeze).
+            - **Persistent Per-Slot HP Memory Across All Non-Fainted Pokémon (`userSlotHpPct[0..2]` & `oppSlotHpPct[0..2]`)**:
+              - Remembers every Pokémon's remaining HP% when it swaps to the bench and displays per-slot HP bars and `%` readouts in the 3x3 matrix headers.
+              - Scales all active and bench matchup Battle Ratings by `ln(userSlotHpPct[i] / oppSlotHpPct[j])` so future swaps, post-faint picks, and endgame recommendations account for chipped bench Pokémon on both teams.
+              - Highlights Charged Move cells with a glowing **`KO`** badge whenever a move's damage % is sufficient to knock out the target's remaining HP%.
+            - **Bidirectional Charged Attack Detection & Conservative Unshielded Move Attribution**:
+              - Detects Charged Attacks thrown by both the Opponent (`"Attack incoming! Use a Protect Shield?"` / `"NOT NOW"`) and the Player (bottom move button disappearance during the swipe minigame).
+              - Logs `CHARGED_ATTACK` timeline events (`actor`, `shielded`, `hpBeforePct`, `hpAfterPct`, `hpDeltaPct`) and attributes a specific move name **only** when the attack goes unshielded and the observed `ΔHP%` drop unambiguously matches a single move (`±8%` error and `≥12%` separation).
+            - **Instant `"Attack Incoming!"` Shield vs. No-Shield Callout**:
+              - Immediately displays an urgent **`[SHIELD CALL]`** recommendation (`SHIELD (1S)` vs. `NO SHIELD (TANK IT)`) when `"Attack incoming! Use a Protect Shield?"` appears, evaluating lethal vs. bait move damage against your current HP% and bench health.
             
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)

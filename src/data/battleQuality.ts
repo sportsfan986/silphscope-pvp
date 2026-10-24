@@ -57,7 +57,13 @@ export type ContextualEventFlag =
 
 export type TimelineEventActor = 'user' | 'opp';
 
-export type TimelineEventType = 'SWAP' | 'SHIELD' | 'FAINT' | 'POST_FAINT_PROMPT' | 'DECISION_SNAPSHOT';
+export type TimelineEventType =
+  | 'SWAP'
+  | 'SHIELD'
+  | 'FAINT'
+  | 'POST_FAINT_PROMPT'
+  | 'DECISION_SNAPSHOT'
+  | 'CHARGED_ATTACK';
 
 export interface BattleTimelineEvent {
   type: TimelineEventType;
@@ -85,6 +91,13 @@ export interface BattleTimelineEvent {
   candidateScores?: Record<string, number> | null;
   followedRecommendation?: boolean | null;
   validityLatched?: boolean | null;
+  shielded?: boolean | null;
+  hpBeforePct?: number | null;
+  hpAfterPct?: number | null;
+  hpDeltaPct?: number | null;
+  inferredMoveName?: string | null;
+  userSlotHpPct?: number[] | null;
+  oppSlotHpPct?: number[] | null;
 }
 
 export interface ExecutionIntervalSegment {

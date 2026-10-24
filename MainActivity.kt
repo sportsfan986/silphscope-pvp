@@ -89,7 +89,10 @@ data class BattleLogEntry(
     val userFaints: Int? = null,
     val oppFaints: Int? = null,
     val userShieldsRemaining: Int? = null,
-    val oppShieldsRemaining: Int? = null
+    val oppShieldsRemaining: Int? = null,
+    val adherenceRatePct: Int? = null,
+    val recommendationsIssuedCount: Int? = null,
+    val recommendationsFollowedCount: Int? = null
 )
 
 data class GblSeasonInfo(
@@ -158,6 +161,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textOppChargedMovesDesc: TextView
     private lateinit var btnToggleBattleToasts: Button
     private lateinit var textBattleToastsDesc: TextView
+    private lateinit var btnToggleTacticalRec: Button
+    private lateinit var textTacticalRecDesc: TextView
     private lateinit var seekbarOverlayScale: SeekBar
     private lateinit var textOverlayScaleValue: TextView
     private lateinit var textOverlayScaleDefaultTick: TextView
@@ -420,6 +425,7 @@ class MainActivity : AppCompatActivity() {
     private val PREFS_KEY_OPP_COUNT_MODE = "opp_count_mode"
     private val PREFS_KEY_ENABLE_4_CHARGED_MOVES = OverlayService.PREFS_KEY_ENABLE_4_CHARGED_MOVES
     private val PREFS_KEY_DISABLE_BATTLE_TOASTS = OverlayService.PREFS_KEY_DISABLE_BATTLE_TOASTS
+    private val PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS = OverlayService.PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS
     private val PREFS_KEY_LAST_SYNC_TIMESTAMP = OverlayService.PREFS_KEY_LAST_SYNC_TIMESTAMP
     private val PREFS_KEY_OVERLAY_SCALE_PCT = "overlay_scale_pct"
     private val DEFAULT_OVERLAY_SCALE_PCT = 78
@@ -809,6 +815,8 @@ class MainActivity : AppCompatActivity() {
             view.id == R.id.btn_mode_auto ||
             view.id == R.id.btn_mode_abb ||
             view.id == R.id.btn_mode_abc ||
+            view.id == R.id.btn_mode_duo ||
+            view.id == R.id.btn_swap_slot_1_3 ||
             view.id == R.id.btn_dialog_auto_detect_style ||
             view.id == R.id.btn_dialog_suggest_upgrades ||
             view.id == R.id.text_p1_rec_header ||
@@ -1110,6 +1118,7 @@ class MainActivity : AppCompatActivity() {
         if (::btnToggleOppCountBasis.isInitialized) updateOppCountBasisUi()
         if (::btnToggleOppChargedMoves.isInitialized) updateOppChargedMovesUi()
         if (::btnToggleBattleToasts.isInitialized) updateBattleToastsUi()
+        if (::btnToggleTacticalRec.isInitialized) updateTacticalRecUi()
         if (::presetsContainer.isInitialized && presetsContainer.childCount > 0) {
             refreshPresetsUi()
         }
@@ -1147,6 +1156,8 @@ class MainActivity : AppCompatActivity() {
         textOppChargedMovesDesc = findViewById(R.id.text_opp_charged_moves_desc)
         btnToggleBattleToasts = findViewById(R.id.btn_toggle_battle_toasts)
         textBattleToastsDesc = findViewById(R.id.text_battle_toasts_desc)
+        btnToggleTacticalRec = findViewById(R.id.btn_toggle_tactical_rec)
+        textTacticalRecDesc = findViewById(R.id.text_tactical_rec_desc)
         seekbarOverlayScale = findViewById(R.id.seekbar_overlay_scale)
         textOverlayScaleValue = findViewById(R.id.text_overlay_scale_value)
         textOverlayScaleDefaultTick = findViewById(R.id.text_overlay_scale_default_tick)
@@ -1269,6 +1280,7 @@ class MainActivity : AppCompatActivity() {
         updateOppCountBasisUi()
         updateOppChargedMovesUi()
         updateBattleToastsUi()
+        updateTacticalRecUi()
 
         editSyncGithubToken.setText(prefs.getString(PREFS_KEY_SYNC_GITHUB_TOKEN, "") ?: "")
         editSyncGistId.setText(prefs.getString(PREFS_KEY_SYNC_GIST_ID, "") ?: "")
@@ -1523,6 +1535,21 @@ class MainActivity : AppCompatActivity() {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
                     action = OverlayService.ACTION_UPDATE_SETTINGS
                     putExtra(OverlayService.EXTRA_DISABLE_BATTLE_TOASTS, nextDisable)
+                }
+                startService(updateIntent)
+            }
+        }
+
+        btnToggleTacticalRec.setOnClickListener {
+            val currentShow = prefs.getBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, true)
+            val nextShow = !currentShow
+            prefs.edit().putBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, nextShow).apply()
+            updateTacticalRecUi()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_SHOW_TACTICAL_RECOMMENDATIONS, nextShow)
                 }
                 startService(updateIntent)
             }
@@ -3656,40 +3683,89 @@ class MainActivity : AppCompatActivity() {
         val (currSeason, prevSeason) = getCurrentAndPreviousSeason()
         val dateFmt = java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.US)
         val options = arrayOf(
-            "Today (Day)",
-            "Yesterday",
-            "This Week (Last 7 Days)",
-            "Current Season (${currSeason.name} • Since ${dateFmt.format(java.util.Date(currSeason.startMs))})",
-            "Previous Season (${dateFmt.format(java.util.Date(prevSeason.startMs))} – ${dateFmt.format(java.util.Date(prevSeason.endMs))})",
-            "All Time"
+            "Today (Day) — Summary",
+            "Yesterday — Summary",
+            "This Week (Last 7 Days) — Summary",
+            "Current Season (${currSeason.name} • Since ${dateFmt.format(java.util.Date(currSeason.startMs))}) — Summary",
+            "Previous Season (${dateFmt.format(java.util.Date(prevSeason.startMs))} – ${dateFmt.format(java.util.Date(prevSeason.endMs))}) — Summary",
+            "All Time — Summary",
+            "🤖 AI Training Detailed Log (JSONL Dataset • Today)",
+            "🤖 AI Training Detailed Log (JSONL Dataset • All Time)"
         )
-        val keys = arrayOf("DAY", "YESTERDAY", "WEEK", "CURRENT_SEASON", "PREVIOUS_SEASON", "ALL_TIME")
+        val keys = arrayOf("DAY", "YESTERDAY", "WEEK", "CURRENT_SEASON", "PREVIOUS_SEASON", "ALL_TIME", "AI_TRAIN_DAY", "AI_TRAIN_ALL")
 
         AlertDialog.Builder(this)
-            .setTitle(if (isShareIntent) "📤 Share Battle Log Summary — Range" else "📋 Copy Battle Log Summary — Range")
+            .setTitle(if (isShareIntent) "📤 Share Battle Log / AI Training Data" else "📋 Copy Battle Log / AI Training Data")
             .setItems(options) { _, which ->
                 val chosenKey = keys.getOrElse(which) { "ALL_TIME" }
-                val exportText = buildPlainTextExport(
-                    allLogs,
-                    selectedLogLeagueFilter,
-                    selectedLogTeamFilter,
-                    chosenKey
-                )
+                val isAiDataset = chosenKey.startsWith("AI_TRAIN_")
+                val timeKey = if (chosenKey == "AI_TRAIN_DAY") "DAY" else if (chosenKey == "AI_TRAIN_ALL") "ALL_TIME" else chosenKey
+                val exportText = if (isAiDataset) {
+                    buildAiTrainingDatasetExport(
+                        allLogs,
+                        selectedLogLeagueFilter,
+                        selectedLogTeamFilter,
+                        timeKey
+                    )
+                } else {
+                    buildPlainTextExport(
+                        allLogs,
+                        selectedLogLeagueFilter,
+                        selectedLogTeamFilter,
+                        timeKey
+                    )
+                }
                 if (isShareIntent) {
                     val sendIntent = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
-                        putExtra(Intent.EXTRA_SUBJECT, "SilphScope PvP Battle Log")
+                        putExtra(Intent.EXTRA_SUBJECT, if (isAiDataset) "SilphScope PvP AI Training Dataset (JSONL)" else "SilphScope PvP Battle Log")
                         putExtra(Intent.EXTRA_TEXT, exportText)
                     }
-                    startActivity(Intent.createChooser(sendIntent, "Share SilphScope PvP Battle Log"))
+                    startActivity(Intent.createChooser(sendIntent, if (isAiDataset) "Share SilphScope AI Training Log" else "Share SilphScope PvP Battle Log"))
                 } else {
                     val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    cm.setPrimaryClip(android.content.ClipData.newPlainText("SilphScope PvP Battle Log", exportText))
-                    Toast.makeText(this, "Copied Battle Log Summary (${options[which]}) to clipboard!", Toast.LENGTH_SHORT).show()
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("SilphScope PvP Export", exportText))
+                    Toast.makeText(this, "Copied ${options[which]} to clipboard!", Toast.LENGTH_SHORT).show()
                 }
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun buildAiTrainingDatasetExport(
+        allLogs: List<BattleLogEntry>,
+        leagueFilter: String,
+        teamFilter: String,
+        timeframeFilter: String
+    ): String {
+        val filtered = filterBattleLogs(allLogs, leagueFilter, teamFilter, timeframeFilter)
+        val gson = com.google.gson.Gson()
+        return filtered.joinToString("\n") { log ->
+            val recEvents = log.timelineEvents.filter { !it.recommendedAction.isNullOrBlank() }
+            val followed = recEvents.count { it.followedRecommendation == true }
+            val adherencePct = log.adherenceRatePct ?: if (recEvents.isNotEmpty()) ((followed * 100.0) / recEvents.size).toInt() else null
+            val record = mapOf(
+                "schemaVersion" to "3.40",
+                "battleId" to log.id,
+                "timestampMs" to log.timestampMs,
+                "league" to log.league,
+                "userTeamName" to log.userTeamName,
+                "userPokemon" to log.userPokemon,
+                "opponents" to log.opponents,
+                "leadMatchup" to log.leadMatchup,
+                "result" to log.result,
+                "battleDurationSec" to log.battleDurationSec,
+                "userFaints" to log.userFaints,
+                "oppFaints" to log.oppFaints,
+                "userShieldsRemaining" to log.userShieldsRemaining,
+                "oppShieldsRemaining" to log.oppShieldsRemaining,
+                "adherenceRatePct" to adherencePct,
+                "recommendationsIssuedCount" to (log.recommendationsIssuedCount ?: recEvents.size),
+                "recommendationsFollowedCount" to (log.recommendationsFollowedCount ?: followed),
+                "timelineEvents" to log.timelineEvents
+            )
+            gson.toJson(record)
+        }
     }
 
     private fun renderBattleLogPage() {
@@ -4571,6 +4647,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateTacticalRecUi() {
+        val showRecs = prefs.getBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, true)
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        if (showRecs) {
+            btnToggleTacticalRec.text = "Recs On"
+            btnToggleTacticalRec.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            btnToggleTacticalRec.setTextColor(0xFFFFFFFF.toInt())
+            textTacticalRecDesc.text = "Default: Shows 1-line Action, Shield Plan & Matchup Goal row in Overlay"
+        } else {
+            btnToggleTacticalRec.text = "Recs Off"
+            btnToggleTacticalRec.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+            btnToggleTacticalRec.setTextColor(theme.primaryTextColor)
+            textTacticalRecDesc.text = "Active: Tactical Recommendation row hidden in Overlay"
+        }
+    }
+
     /**
      * Checks notifications (Android 13+), SYSTEM_ALERT_WINDOW, and initiates overlay launch
      */
@@ -4692,6 +4784,7 @@ class MainActivity : AppCompatActivity() {
             putExtra(OverlayService.EXTRA_OPP_COUNT_MODE, prefs.getString(PREFS_KEY_OPP_COUNT_MODE, "my_fasts") ?: "my_fasts")
             putExtra(OverlayService.EXTRA_ENABLE_4_CHARGED_MOVES, prefs.getBoolean(PREFS_KEY_ENABLE_4_CHARGED_MOVES, false))
             putExtra(OverlayService.EXTRA_DISABLE_BATTLE_TOASTS, prefs.getBoolean(PREFS_KEY_DISABLE_BATTLE_TOASTS, false))
+            putExtra(OverlayService.EXTRA_SHOW_TACTICAL_RECOMMENDATIONS, prefs.getBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, true))
             putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt(PREFS_KEY_OVERLAY_SCALE_PCT, DEFAULT_OVERLAY_SCALE_PCT))
             putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, DEFAULT_OVERLAY_TRANSPARENCY_PCT))
             putExtra(OverlayService.EXTRA_APP_THEME_ID, prefs.getString(OverlayService.PREFS_KEY_APP_THEME_ID, "slate") ?: "slate")
@@ -4874,6 +4967,7 @@ class MainActivity : AppCompatActivity() {
             textName.text = preset.name
 
             val isAbb = preset.archetype.equals("ABB", ignoreCase = true)
+            val isDuo = preset.archetype.equals("DUO", ignoreCase = true)
             textArchetype?.text = if (preset.isArchetypeManual) "${preset.archetype}*" else preset.archetype
 
             val maxCp = preset.pokemon.maxOfOrNull { it.cp } ?: 0
@@ -4894,30 +4988,28 @@ class MainActivity : AppCompatActivity() {
             applyCurrentAppThemeToSubtree(itemView)
             val activeTheme = getActiveAppTheme()
 
-            val targetTotal = preset.topMetaTargetsTotal.takeIf { it > 0 } ?: 25
-            val altCount = preset.altMovesetSlots.count { it.isAltMoveset }
-            val altHeaderBadge = if (altCount > 0) {
-                "  •  <font color='#c4b5fd'><b>[⚡ $altCount Alt Moveset${if (altCount > 1) "s" else ""}]</b></font>"
-            } else {
-                ""
-            }
+            val targetTotal = preset.topMetaTargetsTotal.takeIf { it > 0 } ?: 50
             val sharedWeakBadge = if (preset.sharedWeaknesses.isNotEmpty()) {
-                "  •  <font color='#fbbf24'>B-Weak: ${preset.sharedWeaknesses.joinToString("/").uppercase()}</font>"
+                if (isDuo) {
+                    "  •  <font color='#34d399'>☯️ 1⇄3 Covers: ${preset.sharedWeaknesses.joinToString("/").uppercase()}</font>"
+                } else {
+                    "  •  <font color='#fbbf24'>B-Weak: ${preset.sharedWeaknesses.joinToString("/").uppercase()}</font>"
+                }
             } else {
                 ""
             }
 
             val metricsHtml = "Core: <font color='$machHex'><b>${preset.machineAggBr} ($machTier)</b></font>  •  " +
-                "Beats <font color='#6ee7b7'><b>${preset.topMetaWinsCount}/$targetTotal</b></font> Top Meta$altHeaderBadge<br>" +
+                "Beats <font color='#6ee7b7'><b>${preset.topMetaWinsCount}/$targetTotal</b></font> Top Meta<br>" +
                 "Lead BR: <font color='$leadHex'>${preset.leadAggBr} ($leadTier)</font>  •  " +
                 "Swap BR: <font color='$swap2Hex'>#2 ${preset.safeSwapBr} ($swap2Tier)</font> / <font color='$swap3Hex'>#3 ${preset.closerSwapBr} ($swap3Tier)</font>  •  " +
                 "Closer BR: <font color='$closeHex'>${preset.closerBr} ($closeTier)</font>$sharedWeakBadge"
             textMetricsBadges?.text = android.text.Html.fromHtml(metricsHtml, android.text.Html.FROM_HTML_MODE_LEGACY)
 
-            val roleLabels = if (isAbb) {
-                listOf("Lead (A)", "Bait Swap (B1)", "Sweeper (B2)")
-            } else {
-                listOf("Lead", "Safe Swap", "Closer")
+            val roleLabels = when {
+                isAbb -> listOf("Lead (A)", "Bait Swap (B1)", "Sweeper (B2)")
+                isDuo -> listOf("Lead (Core 1)", "Pivot (Swap)", "Co-Core (Core 2)")
+                else -> listOf("Lead", "Safe Swap", "Closer")
             }
             val slotBrHtmlLabels = listOf(
                 "<font color='$leadHex'>Lead BR ${preset.leadAggBr} ($leadTier)</font>",
@@ -4926,19 +5018,10 @@ class MainActivity : AppCompatActivity() {
             )
 
             val pokemonRowsHtml = preset.pokemon.mapIndexed { sIdx, slot ->
-                val ivLabel = if (!slot.ivs.isNullOrBlank()) " · IV ${slot.ivs}" else ""
+                val ivText = if (!slot.ivs.isNullOrBlank()) "IV ${slot.ivs}" else "PvPoke IVs"
                 val rTag = roleLabels.getOrElse(sIdx) { "Slot ${sIdx + 1}" }
                 val brTag = slotBrHtmlLabels.getOrElse(sIdx) { "" }
-                val altInfo = preset.altMovesetSlots.getOrNull(sIdx)
-                val isAlt = altInfo?.isAltMoveset == true
-                val altBadge = if (isAlt) " <font color='#c4b5fd'><b>[⚡ Alt Moveset]</b></font>" else ""
-                val movesColor = if (isAlt) "#ddd6fe" else "#cbd5e1"
-                val stdNote = if (isAlt && altInfo != null) {
-                    " <font color='#94a3b8'><i>(Std: ${altInfo.standardFastMove} + ${altInfo.standardCharged1}/${altInfo.standardCharged2})</i></font>"
-                } else {
-                    ""
-                }
-                "• <b>[$rTag · $brTag]</b> ${slot.name}$altBadge (CP ${slot.cp}$ivLabel) — <font color='$movesColor'><b>${slot.fastMove} + ${slot.chargedMove1} / ${slot.chargedMove2}</b></font>$stdNote"
+                "• <b>[$rTag · $brTag]</b> ${slot.name} <font color='#94a3b8'>($ivText · CP ${slot.cp})</font>"
             }.joinToString("<br>")
 
             val winsList = if (preset.keyMetaTargetsBeaten.isNotEmpty()) preset.keyMetaTargetsBeaten.take(5).joinToString(", ") else "Balanced neutral coverage"
@@ -4949,12 +5032,17 @@ class MainActivity : AppCompatActivity() {
             val summaryBlockHtml = "<br>" +
                 "<font color='#6ee7b7'><b>✅ Key Wins:</b></font> $winsList<br>" +
                 "<font color='#fcd34d'><b>⚠️ Key Threats (Slot 1/2/3 BR):</b></font> $threatsList<br>" +
-                "<font color='$breakersColor'><b>🚨 Core Breakers (Slot 1/2/3 BR):</b></font> $breakersList" +
-                (if (preset.synergySummary.isNotBlank()) "<br><font color='#94a3b8'><i>${preset.synergySummary}</i></font>" else "")
+                "<font color='$breakersColor'><b>🚨 Core Breakers (Slot 1/2/3 BR):</b></font> $breakersList"
 
             textPokemon.text = android.text.Html.fromHtml(pokemonRowsHtml + summaryBlockHtml, android.text.Html.FROM_HTML_MODE_LEGACY)
 
-            textArchetype?.setTextColor(if (isAbb) 0xFFFBBF24.toInt() else activeTheme.accentColor)
+            textArchetype?.setTextColor(
+                when {
+                    isAbb -> 0xFFFBBF24.toInt()
+                    isDuo -> 0xFF34D399.toInt()
+                    else -> activeTheme.accentColor
+                }
+            )
             textLeague.setTextColor(
                 when (resolvedLeague) {
                     "GREAT LEAGUE" -> activeTheme.accentColor
@@ -5168,7 +5256,7 @@ class MainActivity : AppCompatActivity() {
             val f2 = editAntiMetaFeat2.text.toString().trim()
             val picks = listOf(f1, f2).filter { it.isNotEmpty() }
             val picksStr = if (picks.isEmpty()) "0 Featured Picks (Full Meta)" else "Featuring: ${picks.joinToString(" + ")}"
-            textAntiMetaStatus.text = "Default Team Name: \"$defaultTeamName\" • $picksStr • Tap Generate to rank Best 5 ABB & 5 ABC options."
+            textAntiMetaStatus.text = "Default Team Name: \"$defaultTeamName\" • $picksStr • Tap Generate to rank Best 5 ABB, 5 ABC & 5 Duo-Core options."
         }
 
         val feat1Adapter = PokemonAutocompleteAdapter(antiMetaLeagueProvider)
@@ -5239,7 +5327,7 @@ class MainActivity : AppCompatActivity() {
             if (layoutAntiMetaResults.childCount == 0) {
                 runAntiMetaTeamBuilderGeneration()
             } else {
-                Toast.makeText(this, "Anti-Meta Team Builder (ABB & ABC) ready above your presets!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Anti-Meta Team Builder (ABB, ABC & Duo-Core) ready above your presets!", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -5278,7 +5366,7 @@ class MainActivity : AppCompatActivity() {
         val defaultNamePreview = OverlayService.formatAntiMetaDefaultTeamNameStatic(lg)
 
         btnGenerateAntiMetaTeams.isEnabled = false
-        btnGenerateAntiMetaTeams.text = "⏳ Generating Best 5 ABB & 5 ABC Teams..."
+        btnGenerateAntiMetaTeams.text = "⏳ Generating Best 5 ABB, 5 ABC & 5 Duo-Core Teams..."
         textAntiMetaStatus.text = "Simulating $lg Anti-Meta lineups (${if (featuredList.isEmpty()) "0 Featured" else featuredList.joinToString(" + ")})..."
 
         antiMetaJob?.cancel()
@@ -5290,14 +5378,14 @@ class MainActivity : AppCompatActivity() {
             )
             withContext(Dispatchers.Main) {
                 btnGenerateAntiMetaTeams.isEnabled = true
-                btnGenerateAntiMetaTeams.text = "⚡ Generate Best 5 ABB & 5 ABC Anti-Meta Teams"
+                btnGenerateAntiMetaTeams.text = "⚡ Generate Best 5 ABB, 5 ABC & 5 Duo-Core Teams"
                 val featLabel = if (result.featuredPokemon.isEmpty()) {
                     "0 Featured Picks (Full Meta)"
                 } else {
                     "Featuring ${result.featuredPokemon.joinToString(" + ")}"
                 }
                 textAntiMetaStatus.text =
-                    "✅ Generated Top ${result.top5AbbTeams.size} ABB & Top ${result.top5AbcTeams.size} ABC Teams ($featLabel • ${result.candidatesEvaluated} trios + ${result.movesetCombosSimulated} alt moveset sims in ${result.elapsedMs}ms)\n• ${result.metaSummaryLabel} • Default Name: \"$defaultNamePreview\""
+                    "✅ Generated Top ${result.top5AbbTeams.size} ABB, Top ${result.top5AbcTeams.size} ABC & Top ${result.top5DuoTeams.size} Duo-Core Teams ($featLabel • ${result.candidatesEvaluated} trios + ${result.movesetCombosSimulated} alt moveset sims in ${result.elapsedMs}ms)\n• ${result.metaSummaryLabel} • Default Name: \"$defaultNamePreview\""
                 renderAntiMetaBuilderResults(result)
             }
         }
@@ -5338,6 +5426,7 @@ class MainActivity : AppCompatActivity() {
 
         fun addOptionCard(opt: OverlayService.Companion.AntiMetaTeamOption) {
             val isAbb = opt.archetype.equals("ABB", ignoreCase = true)
+            val isDuo = opt.archetype.equals("DUO", ignoreCase = true)
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setBackgroundColor(activeTheme.innerCardColor)
@@ -5360,7 +5449,11 @@ class MainActivity : AppCompatActivity() {
             val (machTier, machHex) = getMachineBrTierLabelAndHex(opt.machineAggBr)
             val (swapTier, swapHex) = getMatchupTierCodeAndHex(opt.safeSwapBr)
             val (closeTier, closeHex) = getMatchupTierCodeAndHex(opt.closerBr)
-            val archHex = if (isAbb) "#fbbf24" else "#38bdf8"
+            val archHex = when {
+                isAbb -> "#fbbf24"
+                isDuo -> "#34d399"
+                else -> "#38bdf8"
+            }
             val altCount = opt.altMovesetSlots.count { it.isAltMoveset }
             val altHeaderBadge = if (altCount > 0) {
                 "  •  <font color='#c4b5fd'><b>[⚡ $altCount Alt Moveset${if (altCount > 1) "s" else ""}]</b></font>"
@@ -5400,10 +5493,10 @@ class MainActivity : AppCompatActivity() {
             topRow.addView(selectBtn)
             card.addView(topRow)
 
-            val roleLabels = if (isAbb) {
-                listOf("Lead (A)", "Bait Swap (B1)", "Sweeper (B2)")
-            } else {
-                listOf("Lead", "Safe Swap", "Closer")
+            val roleLabels = when {
+                isAbb -> listOf("Lead (A)", "Bait Swap (B1)", "Sweeper (B2)")
+                isDuo -> listOf("Lead (Core 1)", "Pivot (Swap)", "Co-Core (Core 2)")
+                else -> listOf("Lead", "Safe Swap", "Closer")
             }
             val roleBrHtml = listOf(
                 "<font color='$leadHex'>Lead BR ${opt.leadAggBr} ($leadTier)</font>",
@@ -5450,7 +5543,7 @@ class MainActivity : AppCompatActivity() {
 
             val winsList = if (opt.keyMetaTargetsBeaten.isNotEmpty()) opt.keyMetaTargetsBeaten.take(5).joinToString(", ") else "Balanced neutral coverage"
             val threatsList = if (opt.keyThreats.isNotEmpty()) opt.keyThreats.take(4).joinToString(", ") else "No severe role threats"
-            val breakersList = if (opt.coreBreakers.isNotEmpty()) opt.coreBreakers.take(4).joinToString(", ") else "None in Top 25 Meta!"
+            val breakersList = if (opt.coreBreakers.isNotEmpty()) opt.coreBreakers.take(4).joinToString(", ") else "None in Top 50 Meta!"
             val breakersColor = if (opt.coreBreakers.isNotEmpty()) "#fda4af" else "#6ee7b7"
 
             val breakdownHtml =
@@ -5494,10 +5587,52 @@ class MainActivity : AppCompatActivity() {
         )
         result.top5AbcTeams.forEach { addOptionCard(it) }
 
+        if (result.top5DuoTeams.isNotEmpty()) {
+            addSectionHeader(
+                title = "☯️ Best 5 Duo-Core Anti-Meta Lineups (Yin-Yang 1st ⇄ 3rd + Safe Swap Pivot)",
+                subtitle = "1st & 3rd perfectly cover each other's weaknesses (interchangeable 1⇄3 Lead/Closer); 2nd is Safe Swap Pivot",
+                titleColor = 0xFF34D399.toInt()
+            )
+            result.top5DuoTeams.forEach { addOptionCard(it) }
+        }
+
+        // Competitive Archetype Playbooks Card (Duo-Core, ABC, ABB)
+        addSectionHeader(
+            title = "📖 Competitive Archetype Playbooks (PvPoke / Silph Arena / GBL Championship Strategy)",
+            subtitle = "How to pilot Duo-Core, ABC, and ABB teams in tournament & ranked play",
+            titleColor = 0xFF6EE7B7.toInt()
+        )
+        val playbookCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(activeTheme.innerCardColor)
+            val pad = (10 * density).toInt()
+            setPadding(pad, pad, pad, pad)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = (8 * density).toInt()
+            }
+        }
+        val playbookHtml =
+            "<b><font color='#34d399'>☯️ DUO-CORE (Yin-Yang 1st & 3rd + 2nd Safe Swap Pivot):</font></b><br>" +
+            "Recreates classic symmetric cores (e.g. Swampert/Skarmory, Clodsire/Feraligatr). #1 (Lead) and #3 (Co-Core) cover each other's weaknesses as Yin & Yang opposite attackers—swap #1 ⇄ #3 anytime to adapt to micro-meta shifts. #2 is your Safe Switch Pivot: if you lose lead, swap to #2 to fight for switch advantage or exit with a +1 shield advantage, then bring back #1 or #3 to farm down for loaded energy.<br><br>" +
+            "<b><font color='#38bdf8'>⚔️ ABC BALANCED TRIAD (Lead • Safe Swap • Hard Counter Closer):</font></b><br>" +
+            "#1 counters most common leads; #2 is your Safe Switch that holds its own across the meta; #3 hard-counters whatever your Lead loses to. When losing lead, pivot to #2 to soak damage, burn opponent shields, and either flip switch or soft-lose so #1 or #3 can farm down.<br><br>" +
+            "<b><font color='#fbbf24'>🛡️ ABB BAIT & SWEEP (Protector Lead A • Bait Swap B1 • Sweeper B2):</font></b><br>" +
+            "Runs two similar backline counters (B1 & B2) protected by #1 Lead (A). If your Lead faces a threat to your backline, stay in at all costs. If your Lead faces a neutral/bad matchup, chip and immediately swap to #2 (B1) to lure out the opponent's backline counter, eliminate it with #1 (A), and sweep with #3 (B2) once the counter is gone."
+        val playbookTv = TextView(this).apply {
+            text = android.text.Html.fromHtml(playbookHtml, android.text.Html.FROM_HTML_MODE_LEGACY)
+            textSize = 10.5f
+            setTextColor(activeTheme.primaryTextColor)
+        }
+        playbookCard.addView(playbookTv)
+        layoutAntiMetaResults.addView(playbookCard)
+
         val bottomMetaList = result.top50MetaList.ifEmpty { result.top25MetaList }
         if (bottomMetaList.isNotEmpty()) {
             addSectionHeader(
-                title = "🎯 Top ${bottomMetaList.size} ${result.league} Meta Determined by SilphScope (Meta Battle Ranking in Parentheses • #1–#25 = /25 Wins Pool)",
+                title = "🎯 Top ${bottomMetaList.size} ${result.league} Meta Determined by SilphScope (Meta Battle Ranking in Parentheses • #1–#50 = /50 Audit Pool)",
                 subtitle = "Teams are built & scored against the full Top-100 role-weighted synthetic meta + season logs",
                 titleColor = 0xFFC4B5FD.toInt()
             )
@@ -5638,6 +5773,7 @@ class MainActivity : AppCompatActivity() {
         val btnModeAuto = dialogView.findViewById<Button>(R.id.btn_mode_auto)
         val btnModeAbb = dialogView.findViewById<Button>(R.id.btn_mode_abb)
         val btnModeAbc = dialogView.findViewById<Button>(R.id.btn_mode_abc)
+        val btnModeDuo = dialogView.findViewById<Button>(R.id.btn_mode_duo)
         val textDialogArchetypeSummary = dialogView.findViewById<TextView>(R.id.text_dialog_archetype_summary)
         val textDialogMetaBlendInfo = dialogView.findViewById<TextView>(R.id.text_dialog_meta_blend_info)
         val textDialogAutoDetectBanner = dialogView.findViewById<TextView>(R.id.text_dialog_autodetect_banner)
@@ -5646,6 +5782,7 @@ class MainActivity : AppCompatActivity() {
         val btnDialogOptimizeMovesets = dialogView.findViewById<Button>(R.id.btn_dialog_optimize_movesets)
         val btnSwapSlot12 = dialogView.findViewById<Button>(R.id.btn_swap_slot_1_2)
         val btnSwapSlot23 = dialogView.findViewById<Button>(R.id.btn_swap_slot_2_3)
+        val btnSwapSlot13 = dialogView.findViewById<Button>(R.id.btn_swap_slot_1_3)
         val textP1RoleTitle = dialogView.findViewById<TextView>(R.id.text_p1_role_title)
         val textP2RoleTitle = dialogView.findViewById<TextView>(R.id.text_p2_role_title)
         val textP3RoleTitle = dialogView.findViewById<TextView>(R.id.text_p3_role_title)
@@ -5689,6 +5826,7 @@ class MainActivity : AppCompatActivity() {
         fun updateStyleModeButtonsUi() {
             val activeTint = android.content.res.ColorStateList.valueOf(0xFF0284C7.toInt())
             val activeAbbTint = android.content.res.ColorStateList.valueOf(0xFFD97706.toInt())
+            val activeDuoTint = android.content.res.ColorStateList.valueOf(0xFF059669.toInt())
             val inactiveTint = android.content.res.ColorStateList.valueOf(0xFF334155.toInt())
             val activeText = 0xFFFFFFFF.toInt()
             val inactiveText = 0xFFCBD5E1.toInt()
@@ -5696,6 +5834,7 @@ class MainActivity : AppCompatActivity() {
             val isAuto = dialogManualArchetypeOverride == null
             val isAbb = dialogManualArchetypeOverride.equals("ABB", ignoreCase = true)
             val isAbc = dialogManualArchetypeOverride.equals("ABC", ignoreCase = true)
+            val isDuo = dialogManualArchetypeOverride.equals("DUO", ignoreCase = true)
 
             btnModeAuto?.backgroundTintList = if (isAuto) activeTint else inactiveTint
             btnModeAuto?.setTextColor(if (isAuto) activeText else inactiveText)
@@ -5705,6 +5844,9 @@ class MainActivity : AppCompatActivity() {
 
             btnModeAbc?.backgroundTintList = if (isAbc) activeTint else inactiveTint
             btnModeAbc?.setTextColor(if (isAbc) activeText else inactiveText)
+
+            btnModeDuo?.backgroundTintList = if (isDuo) activeDuoTint else inactiveTint
+            btnModeDuo?.setTextColor(if (isDuo) activeText else inactiveText)
         }
 
         fun buildResolvedSlot(
@@ -5803,6 +5945,7 @@ class MainActivity : AppCompatActivity() {
             updateStyleModeButtonsUi()
 
             val isAbb = eval.archetype.equals("ABB", ignoreCase = true)
+            val isDuo = eval.archetype.equals("DUO", ignoreCase = true)
             val (leadTier, leadHex) = getMatchupTierCodeAndHex(eval.leadAggBr)
             val (machTier, machHex) = getMachineBrTierLabelAndHex(eval.machineAggBr)
             val (swap2Tier, swap2Hex) = getMatchupTierCodeAndHex(eval.safeSwapBr)
@@ -5811,17 +5954,27 @@ class MainActivity : AppCompatActivity() {
 
             val overrideSuffix = if (dialogManualArchetypeOverride != null) " • OVERRIDDEN" else ""
             textDialogArchetypeBadge?.text = "Style: [${eval.archetype}$overrideSuffix]"
-            textDialogArchetypeBadge?.setTextColor(if (isAbb) 0xFFFBBF24.toInt() else 0xFF38BDF8.toInt())
+            textDialogArchetypeBadge?.setTextColor(
+                when {
+                    isAbb -> 0xFFFBBF24.toInt()
+                    isDuo -> 0xFF34D399.toInt()
+                    else -> 0xFF38BDF8.toInt()
+                }
+            )
 
             textDialogLeadBrBadge?.text = "Lead BR: ${eval.leadAggBr} ($leadTier)"
             textDialogLeadBrBadge?.setTextColor(android.graphics.Color.parseColor(leadHex))
 
-            val targetTotal = eval.topMetaTargetsTotal.takeIf { it > 0 } ?: 25
+            val targetTotal = eval.topMetaTargetsTotal.takeIf { it > 0 } ?: 50
             textDialogMachBrBadge?.text = "Core: ${eval.machineAggBr} ($machTier) • Beats ${eval.topMetaWinsCount}/$targetTotal Meta"
             textDialogMachBrBadge?.setTextColor(android.graphics.Color.parseColor(machHex))
 
             val weakHtml = if (eval.sharedWeaknesses.isNotEmpty()) {
-                "  •  <font color='#fbbf24'>Shared B-Pair Weaknesses: ${eval.sharedWeaknesses.joinToString(", ").uppercase()}</font>"
+                if (isDuo) {
+                    "  •  <font color='#34d399'>☯️ 1⇄3 Core Coverage: ${eval.sharedWeaknesses.joinToString(", ").uppercase()}</font>"
+                } else {
+                    "  •  <font color='#fbbf24'>Shared B-Pair Weaknesses: ${eval.sharedWeaknesses.joinToString(", ").uppercase()}</font>"
+                }
             } else {
                 ""
             }
@@ -5851,9 +6004,21 @@ class MainActivity : AppCompatActivity() {
             val alt1Tag = if (eval.altMovesetSlots.getOrNull(0)?.isAltMoveset == true) " ⚡Alt" else ""
             val alt2Tag = if (eval.altMovesetSlots.getOrNull(1)?.isAltMoveset == true) " ⚡Alt" else ""
             val alt3Tag = if (eval.altMovesetSlots.getOrNull(2)?.isAltMoveset == true) " ⚡Alt" else ""
-            textP1RoleTitle?.text = (if (isAbb) "⚔️ Slot 1 (Lead A) & Moveset" else "⚔️ Slot 1 (Lead) & Moveset") + alt1Tag
-            textP2RoleTitle?.text = (if (isAbb) "🔄 Slot 2 (Bait Swap B1) & Moveset" else "🔄 Slot 2 (Safe Swap) & Moveset") + alt2Tag
-            textP3RoleTitle?.text = (if (isAbb) "🛡️ Slot 3 (Sweeper B2) & Moveset" else "🛡️ Slot 3 (Closer) & Moveset") + alt3Tag
+            textP1RoleTitle?.text = when {
+                isAbb -> "⚔️ Slot 1 (Lead A) & Moveset"
+                isDuo -> "☯️ Slot 1 (Core 1 Lead) & Moveset"
+                else -> "⚔️ Slot 1 (Lead) & Moveset"
+            } + alt1Tag
+            textP2RoleTitle?.text = when {
+                isAbb -> "🔄 Slot 2 (Bait Swap B1) & Moveset"
+                isDuo -> "🔄 Slot 2 (Safe Swap Pivot) & Moveset"
+                else -> "🔄 Slot 2 (Safe Swap) & Moveset"
+            } + alt2Tag
+            textP3RoleTitle?.text = when {
+                isAbb -> "🛡️ Slot 3 (Sweeper B2) & Moveset"
+                isDuo -> "☯️ Slot 3 (Core 2 Co-Core) & Moveset"
+                else -> "🛡️ Slot 3 (Closer) & Moveset"
+            } + alt3Tag
 
             textP1LeadBr?.text = "Lead BR: ${eval.leadAggBr} ($leadTier)"
             textP1LeadBr?.setTextColor(android.graphics.Color.parseColor(leadHex))
@@ -6037,6 +6202,11 @@ class MainActivity : AppCompatActivity() {
             textDialogAutoDetectBanner?.visibility = android.view.View.GONE
             refreshDialogTeamEvaluation(autoReorder = false)
         }
+        btnModeDuo?.setOnClickListener {
+            dialogManualArchetypeOverride = "DUO"
+            textDialogAutoDetectBanner?.visibility = android.view.View.GONE
+            refreshDialogTeamEvaluation(autoReorder = false)
+        }
 
         btnDialogAutoDetect?.setOnClickListener {
             dialogManualArchetypeOverride = null
@@ -6073,6 +6243,19 @@ class MainActivity : AppCompatActivity() {
             val eval = refreshDialogTeamEvaluation(autoReorder = false)
             textDialogAutoDetectBanner?.text =
                 "Swapped Slot 2 ⇄ Slot 3: #2 Safe Swap ${s3.name} (Swap BR ${eval.safeSwapBr}) • #3 Closer ${s2.name} (Swap BR ${eval.closerSwapBr})"
+            textDialogAutoDetectBanner?.visibility = android.view.View.VISIBLE
+        }
+
+        btnSwapSlot13?.setOnClickListener {
+            val lg = currentLeagueProvider()
+            val top3Defaults = getLeagueTop3Defaults(lg)
+            val s1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0])
+            val s2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1])
+            val s3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2])
+            applySlotsToDialogInputs(listOf(s3, s2, s1))
+            val eval = refreshDialogTeamEvaluation(autoReorder = false)
+            textDialogAutoDetectBanner?.text =
+                "☯️ Duo-Core Swap Slot 1 ⇄ Slot 3: #1 Lead ${s3.name} (Lead BR ${eval.leadAggBr}) • #2 Pivot ${s2.name} (Swap BR ${eval.safeSwapBr}) • #3 Co-Core ${s1.name} (Closer BR ${eval.closerBr})"
             textDialogAutoDetectBanner?.visibility = android.view.View.VISIBLE
         }
 

@@ -831,6 +831,39 @@
             background: transparent !important;
         }
 
+        .dmg-cell.dmg-ko {
+            box-shadow: inset 0 0 0 1px rgba(244, 63, 94, 0.85);
+            background: rgba(159, 18, 57, 0.36) !important;
+            color: #ffe4e6 !important;
+            font-weight: 900;
+        }
+
+        .hp-slot-pill {
+            font-size: 7px;
+            font-weight: 800;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            padding: 0 2.5px;
+            border-radius: 2.5px;
+            margin-left: 2.5px;
+            line-height: 1.15;
+            flex-shrink: 0;
+        }
+        .hp-slot-pill.hp-high {
+            color: #6ee7b7;
+            background: rgba(6, 78, 59, 0.55);
+            border: 1px solid rgba(52, 211, 153, 0.45);
+        }
+        .hp-slot-pill.hp-mid {
+            color: #fde047;
+            background: rgba(113, 63, 18, 0.55);
+            border: 1px solid rgba(250, 204, 21, 0.45);
+        }
+        .hp-slot-pill.hp-low {
+            color: #fca5a5;
+            background: rgba(136, 19, 55, 0.65);
+            border: 1px solid rgba(251, 113, 133, 0.55);
+        }
+
         .user-fast-badge {
             font-size: 8px;
             font-weight: 800;
@@ -1379,6 +1412,8 @@
             oppShields: 2,
             player_shields_remaining: 2,
             opponent_shields_remaining: 2,
+            playerSlotHpPct: [100, 100, 100],
+            oppSlotHpPct: [100, 100, 100],
             throwAlignmentText: "—",
             throwHorizonText: "—"
         };
@@ -1835,6 +1870,8 @@
             battleData.opponent_shields_remaining = 2;
             battleData.playerFaintedSlots = [false, false, false];
             battleData.oppFaintedSlots = [false, false, false];
+            battleData.playerSlotHpPct = [100, 100, 100];
+            battleData.oppSlotHpPct = [100, 100, 100];
             battleData.leadMatchup = preservedLead || "NEUTRAL";
             battleData.throwAlignmentText = "—";
             battleData.throwHorizonText = "—";
@@ -2085,9 +2122,10 @@
                     if (startBattleBtn) startBattleBtn.classList.remove("hidden");
                 }
 
-                // Render active team chips for player switches
+                // Render active team chips for player switches with persistent slot HP%
                 const teamChipsContainer = document.getElementById("sky-team-chips");
                 if (teamChipsContainer && battleData.team) {
+                    const pSlotHpArr = Array.isArray(battleData.playerSlotHpPct) ? battleData.playerSlotHpPct : [100, 100, 100];
                     teamChipsContainer.innerHTML = battleData.team.map((member, mIdx) => {
                         const fullName = member.name || "Pokemon";
                         const shortName = fullName
@@ -2097,8 +2135,10 @@
                             .substring(0, 6);
                         const isActive = (fullName.toLowerCase() === (battleData.userActivePokemon || "").toLowerCase());
                         const isFainted = !isActive && !!(battleData.playerFaintedSlots && battleData.playerFaintedSlots[mIdx]);
+                        const slotHp = typeof pSlotHpArr[mIdx] === "number" ? Math.max(0, Math.min(100, Math.round(pSlotHpArr[mIdx]))) : 100;
+                        const hpTag = (!isFainted && slotHp < 100) ? ` ${slotHp}%` : "";
                         const faintStyle = isFainted ? 'opacity:0.4; text-decoration:line-through;' : '';
-                        return `<button class="chip-btn ${isActive && !isFainted ? 'active' : ''} ${isFainted ? 'col-fainted' : ''}" style="${faintStyle}" onclick="selectUserPokemonByIndex(${mIdx})" title="Active lead: ${fullName}${isFainted ? ' (Fainted)' : ''}">${shortName}</button>`;
+                        return `<button class="chip-btn ${isActive && !isFainted ? 'active' : ''} ${isFainted ? 'col-fainted' : ''}" style="${faintStyle}" onclick="selectUserPokemonByIndex(${mIdx})" title="Active lead: ${fullName}${isFainted ? ' (Fainted)' : ' (' + slotHp + '% HP)'}">${shortName}${hpTag}</button>`;
                     }).join("");
                 }
             } catch (e) {
@@ -2285,6 +2325,8 @@
 
                 // 1. Render 3v3 Battle Matrix FIRST in FIXED [1st seen, 2nd seen, 3rd seen] order
                 const activeOppSlotIdx = typeof battleData.activeOpponentSlotIndex === "number" ? battleData.activeOpponentSlotIndex : 0;
+                const pSlotHpArr = Array.isArray(battleData.playerSlotHpPct) ? battleData.playerSlotHpPct : [100, 100, 100];
+                const oSlotHpArr = Array.isArray(battleData.oppSlotHpPct) ? battleData.oppSlotHpPct : [100, 100, 100];
                 try {
                     if (matrixBody && battleData.scannedOpponents && battleData.scannedOpponents.length > 0) {
                         const ordLabels = ["1st", "2nd", "3rd"];
@@ -2292,15 +2334,22 @@
                             const isActiveOpp = (opp.isActive !== undefined) ? !!opp.isActive : (idx === activeOppSlotIdx);
                             const isOppShad = (opp.isShadow !== undefined) ? !!opp.isShadow : (isActiveOpp && battleData.isOpponentShadow);
                             const fullOppDisplay = (isOppShad ? "S-" : "") + (opp.name || opp.code);
+                            const oppFainted = !isActiveOpp && !!(battleData.oppFaintedSlots && battleData.oppFaintedSlots[idx]);
+                            const oppSlotHp = oppFainted ? 0 : (typeof oSlotHpArr[idx] === "number" ? Math.max(0, Math.min(100, Math.round(oSlotHpArr[idx]))) : 100);
+                            const hpCls = oppSlotHp > 50 ? "hp-high" : (oppSlotHp > 20 ? "hp-mid" : "hp-low");
+                            const hpBadgeHtml = oppFainted
+                                ? `<span class="hp-slot-pill hp-low">0%</span>`
+                                : `<span class="hp-slot-pill ${hpCls}">${oppSlotHp}%</span>`;
                             const p1Dots = renderTierDots(opp.matrix ? opp.matrix.p1 : "W,N,L");
                             const p2Dots = renderTierDots(opp.matrix ? opp.matrix.p2 : "N,N,N");
                             const p3Dots = renderTierDots(opp.matrix ? opp.matrix.p3 : "SW,W,W");
                             const ordTag = ordLabels[idx] || `#${idx + 1}`;
                             return `
-                            <div class="matrix-row ${isActiveOpp ? 'active-lead' : ''}" onclick="swapOpponentByIndex(${idx})" style="cursor:pointer;" title="${isActiveOpp ? 'Active Opponent (' + ordTag + ' seen)' : 'Tap to inspect/activate (' + ordTag + ' seen)'}">
-                                <span class="matrix-opp-name" title="${fullOppDisplay}">
+                            <div class="matrix-row ${isActiveOpp ? 'active-lead' : ''}" onclick="swapOpponentByIndex(${idx})" style="cursor:pointer;" title="${isActiveOpp ? 'Active Opponent (' + ordTag + ' seen, ' + oppSlotHp + '% HP)' : 'Tap to inspect/activate (' + ordTag + ' seen, ' + oppSlotHp + '% HP)'}">
+                                <span class="matrix-opp-name" title="${fullOppDisplay} (${oppSlotHp}% HP)">
                                     <span style="color:${isActiveOpp ? '#38bdf8' : '#64748b'}; font-weight:700; font-size:7.5px; margin-right:3px;">${ordTag}</span>
-                                    ${fullOppDisplay}
+                                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${fullOppDisplay}</span>
+                                    ${hpBadgeHtml}
                                 </span>
                                 <div class="matrix-team-block">
                                     <span class="team-initial">${teamList[0].initial}:</span><span class="shield-dots">${p1Dots}</span>
@@ -2389,7 +2438,11 @@
                                 const isFainted = !isAct && !!(battleData.playerFaintedSlots && battleData.playerFaintedSlots[idx]);
                                 const faintCls = isFainted ? "col-fainted" : "";
                                 const tierCls = td.tier === "resist" ? "tier-resist" : (td.tier === "weak" ? "tier-weak" : "tier-neutral");
-                                return `<div class="dmg-cell ${tierCls} ${isAct && !isFainted ? 'active-col' : ''} ${faintCls}">${td.dmgPct}%</div>`;
+                                const targetHp = typeof pSlotHpArr[idx] === "number" ? pSlotHpArr[idx] : 100;
+                                const isKo = !isFainted && targetHp > 0 && td.dmgPct >= targetHp;
+                                const koCls = isKo ? "dmg-ko" : "";
+                                const labelTxt = isKo ? `${td.dmgPct}% KO` : `${td.dmgPct}%`;
+                                return `<div class="dmg-cell ${tierCls} ${isAct && !isFainted ? 'active-col' : ''} ${faintCls} ${koCls}" title="${td.code || ''}: ${td.dmgPct}% dmg vs ${targetHp}% HP">${labelTxt}</div>`;
                             }).join("");
 
                             return `
@@ -2497,8 +2550,11 @@
                                     return `<div class="dmg-cell tier-empty ${isAct && !isFainted ? 'active-col' : ''} ${faintCls}">—</div>`;
                                 }
                                 const tierCls = od.tier === "high" ? "tier-high" : (od.tier === "low" ? "tier-low" : "tier-neutral");
-                                const text = od.dmgPct >= 100 ? "KO!" : `${od.dmgPct}%`;
-                                return `<div class="dmg-cell ${tierCls} ${isAct && !isFainted ? 'active-col' : ''} ${faintCls}">${text}</div>`;
+                                const targetHp = typeof oSlotHpArr[idx] === "number" ? oSlotHpArr[idx] : 100;
+                                const isKo = !isFainted && targetHp > 0 && od.dmgPct >= targetHp;
+                                const koCls = isKo ? "dmg-ko" : "";
+                                const text = od.dmgPct >= 100 ? "KO!" : (isKo ? `${od.dmgPct}% KO` : `${od.dmgPct}%`);
+                                return `<div class="dmg-cell ${tierCls} ${isAct && !isFainted ? 'active-col' : ''} ${faintCls} ${koCls}" title="${od.code || ''}: ${od.dmgPct}% dmg vs ${targetHp}% HP">${text}</div>`;
                             }).join("");
 
                             return `

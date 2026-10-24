@@ -97,7 +97,9 @@ import {
   AntiMetaTeamBuilderResult,
   COMPETITIVE_ARCHETYPE_PLAYBOOKS,
   computeTacticalLeadAndSwapRecommendation,
-  TacticalRecommendationResult
+  TacticalRecommendationResult,
+  scaleBrByHpRatio,
+  inferUnshieldedChargedMoveName
 } from './data/gblData';
 import {
   BattleQualityMetadata,
@@ -1103,6 +1105,9 @@ export default function App() {
   const [oppPokeballCount, setOppPokeballCount] = useState<number>(3);
   const [playerFaintedSlots, setPlayerFaintedSlots] = useState<boolean[]>([false, false, false]);
   const [oppFaintedSlots, setOppFaintedSlots] = useState<boolean[]>([false, false, false]);
+  const [userSlotHpPct, setUserSlotHpPct] = useState<number[]>([100, 100, 100]);
+  const [oppSlotHpPct, setOppSlotHpPct] = useState<number[]>([100, 100, 100]);
+  const [isAttackIncomingPrompt, setIsAttackIncomingPrompt] = useState<boolean>(false);
   const [isPlayerTurnOne, setIsPlayerTurnOne] = useState<boolean>(true);
   const [isOppTurnOne, setIsOppTurnOne] = useState<boolean>(true);
   const [isPostFaintPromptActive, setIsPostFaintPromptActive] = useState<boolean>(false);
@@ -1364,6 +1369,9 @@ export default function App() {
     setOppShields(2);
     setPlayerFaintedSlots([false, false, false]);
     setOppFaintedSlots([false, false, false]);
+    setUserSlotHpPct([100, 100, 100]);
+    setOppSlotHpPct([100, 100, 100]);
+    setIsAttackIncomingPrompt(false);
     setIsPlayerTurnOne(true);
     setIsOppTurnOne(true);
     setIsPostFaintPromptActive(false);
@@ -1416,6 +1424,9 @@ export default function App() {
     setOppShields(2);
     setPlayerFaintedSlots([false, false, false]);
     setOppFaintedSlots([false, false, false]);
+    setUserSlotHpPct([100, 100, 100]);
+    setOppSlotHpPct([100, 100, 100]);
+    setIsAttackIncomingPrompt(false);
     setIsPostFaintPromptActive(false);
     setLastOppSwitchWasFaint(false);
     setLastPlayerSwitchWasFaint(false);
@@ -1455,6 +1466,9 @@ export default function App() {
       setOppSwapEndTimeMs(0);
       setOppPokeballCount(3);
       setOppFaintedSlots([false, false, false]);
+      setUserSlotHpPct([100, 100, 100]);
+      setOppSlotHpPct([100, 100, 100]);
+      setIsAttackIncomingPrompt(false);
       setLastOppSwitchWasFaint(false);
       setOppSwitchValidityLatched(true);
       setProvisionalOppPrevState(null);
@@ -1826,6 +1840,10 @@ export default function App() {
     const faintedMon = activePreset?.pokemon[activeUserSlotIndex]?.name || 'Lead';
     const nextFainted = [...playerFaintedSlots];
     nextFainted[activeUserSlotIndex] = true;
+    const nextUserHp = [...userSlotHpPct];
+    nextUserHp[activeUserSlotIndex] = 0;
+    setUserSlotHpPct(nextUserHp);
+    setIsAttackIncomingPrompt(false);
     const aliveRemaining = [0, 1, 2].filter((idx) => !nextFainted[idx]);
     setPlayerFaintedSlots(nextFainted);
     setPlayerPokeballCount(Math.max(1, aliveRemaining.length));
@@ -1852,7 +1870,9 @@ export default function App() {
             userAliveCount: aliveRemaining.length,
             oppAliveCount: Math.max(1, 3 - oppFaintedSlots.filter(Boolean).length),
             lastPlayerSwitchWasFaint: true,
-            lastOppSwitchWasFaint
+            lastOppSwitchWasFaint,
+            userSlotHpPct: nextUserHp,
+            oppSlotHpPct
           }
         ]);
       }
@@ -1882,7 +1902,9 @@ export default function App() {
             userAliveCount: 1,
             oppAliveCount: Math.max(1, 3 - oppFaintedSlots.filter(Boolean).length),
             lastPlayerSwitchWasFaint: true,
-            lastOppSwitchWasFaint
+            lastOppSwitchWasFaint,
+            userSlotHpPct: nextUserHp,
+            oppSlotHpPct
           }
         ]);
       }
@@ -1895,6 +1917,9 @@ export default function App() {
     const faintedOpp = scannedOpponents[activeOpponentSlotIndex] || activeOpponentKey;
     const nextFainted = [...oppFaintedSlots];
     nextFainted[activeOpponentSlotIndex] = true;
+    const nextOppHp = [...oppSlotHpPct];
+    nextOppHp[activeOpponentSlotIndex] = 0;
+    setOppSlotHpPct(nextOppHp);
     setOppFaintedSlots(nextFainted);
     setOppPokeballCount(Math.max(1, 3 - nextFainted.filter(Boolean).length));
     setLastOppSwitchWasFaint(true);
@@ -1925,7 +1950,9 @@ export default function App() {
           userAliveCount: Math.max(1, 3 - playerFaintedSlots.filter(Boolean).length),
           oppAliveCount: Math.max(1, 3 - nextFainted.filter(Boolean).length),
           lastPlayerSwitchWasFaint,
-          lastOppSwitchWasFaint: true
+          lastOppSwitchWasFaint: true,
+          userSlotHpPct,
+          oppSlotHpPct: nextOppHp
         }
       ]);
     }
@@ -2022,6 +2049,9 @@ export default function App() {
     setOppShields(2);
     setPlayerFaintedSlots([false, false, false]);
     setOppFaintedSlots([false, false, false]);
+    setUserSlotHpPct([100, 100, 100]);
+    setOppSlotHpPct([100, 100, 100]);
+    setIsAttackIncomingPrompt(false);
     setIsPlayerTurnOne(true);
     setIsOppTurnOne(true);
     setIsPostFaintPromptActive(false);
@@ -2032,8 +2062,35 @@ export default function App() {
     setProvisionalOppPrevState(null);
     setLastConfirmedOppFrameTimeMs(nowFrameMs);
     setLastConfirmedPlayerFrameTimeMs(nowFrameMs);
-    setStartBattleToast(`Match Reset (3 Balls, 2 Shields, t_0 = 0.00s)`);
+    setStartBattleToast(`Match Reset (100% HP, 3 Balls, 2 Shields, t_0 = 0.00s)`);
     setTimeout(() => setStartBattleToast(null), 1800);
+  };
+
+  // Update active player slot's persistent HP%
+  const handleUpdateUserActiveHp = (newHpPct: number) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(newHpPct)));
+    setUserSlotHpPct((prev) => {
+      const next = [...prev];
+      next[activeUserSlotIndex] = clamped;
+      return next;
+    });
+    if (clamped <= 0 && !playerFaintedSlots[activeUserSlotIndex]) {
+      handleSimulatePlayerFaint();
+    }
+  };
+
+  // Update active opponent slot's persistent HP%
+  const handleUpdateOppActiveHp = (newHpPct: number) => {
+    const targetIdx = Math.max(0, Math.min(activeOpponentSlotIndex, 2));
+    const clamped = Math.max(0, Math.min(100, Math.round(newHpPct)));
+    setOppSlotHpPct((prev) => {
+      const next = [...prev];
+      next[targetIdx] = clamped;
+      return next;
+    });
+    if (clamped <= 0 && !oppFaintedSlots[targetIdx]) {
+      handleSimulateOpponentFaint();
+    }
   };
 
   const handleSelectOpponent = (name: string) => {
@@ -2083,7 +2140,43 @@ export default function App() {
     );
   }, [activeOpponentName, activePreset, isOpponentShadow, precomputed9x9State]);
 
-  // Lead, Swap, Post-Faint & Endgame Tactical Recommendation (v3.34)
+  // Compute opponent charged move damage bounds against active player Pokémon for Shield vs No-Shield callout
+  const activeOppChargedMoveBounds = useMemo(() => {
+    const mySlot = activePreset?.pokemon[activeUserSlotIndex] || activePreset?.pokemon[0];
+    const myName = mySlot?.name || 'Palkia (Origin)';
+    const myShad = myName.toLowerCase().includes('shadow');
+    const rawMyStats = POKEMON_DATABASE[myName] || POKEMON_DATABASE['Palkia (Origin)'];
+    const myEffStats = computeEffectiveStatsForLeague(
+      rawMyStats,
+      activePreset?.league || activeOpponentLeague,
+      mySlot?.cp,
+      mySlot?.ivs,
+      myShad
+    );
+    const candidateMoves: Array<{ name: string; damagePct: number }> = (activeOpponent?.chargedMoves || []).map((cm) => {
+      const dmg = calculateChargedDamage(activeOpponent, myEffStats, cm, isOpponentShadow, myShad);
+      return { name: cm.name, damagePct: dmg.percentage };
+    });
+    if (candidateMoves.length === 0) {
+      return {
+        maxDmgPct: 55,
+        minDmgPct: 30,
+        maxMoveName: 'Charged Move',
+        minMoveName: 'Bait Move',
+        candidateMoves: [] as Array<{ name: string; damagePct: number }>
+      };
+    }
+    const sortedDesc = [...candidateMoves].sort((a, b) => b.damagePct - a.damagePct);
+    return {
+      maxDmgPct: sortedDesc[0].damagePct,
+      minDmgPct: sortedDesc[sortedDesc.length - 1].damagePct,
+      maxMoveName: sortedDesc[0].name,
+      minMoveName: sortedDesc[sortedDesc.length - 1].name,
+      candidateMoves
+    };
+  }, [activeOpponent, activePreset, activeUserSlotIndex, activeOpponentLeague, isOpponentShadow]);
+
+  // Lead, Swap, Post-Faint, Persistent-HP & Shield Callout Tactical Recommendation (v3.40)
   const activeTacticalRec: TacticalRecommendationResult | null = useMemo(() => {
     if (isWaitingOpponent || scannedOpponents.length === 0 || !activePreset?.pokemon?.length) {
       return null;
@@ -2098,10 +2191,18 @@ export default function App() {
       oppShields,
       userFaintedSlots: playerFaintedSlots,
       oppFaintedSlots,
+      userSlotHpPct,
+      oppSlotHpPct,
+      activeOppSlotIdx: safeActiveOppSlot,
       playerSwapRemainingSec,
       oppSwapRemainingSec,
       lastOppSwitchWasFaint,
       isPostFaintPrompt: isPostFaintPromptActive,
+      isAttackIncomingPrompt,
+      maxOppMoveDmgPct: activeOppChargedMoveBounds.maxDmgPct,
+      minOppMoveDmgPct: activeOppChargedMoveBounds.minDmgPct,
+      maxOppMoveName: activeOppChargedMoveBounds.maxMoveName,
+      minOppMoveName: activeOppChargedMoveBounds.minMoveName,
       league: activePreset.league
     });
     return rec && rec.visible ? rec : null;
@@ -2113,6 +2214,10 @@ export default function App() {
     safeActiveOppSlot,
     playerFaintedSlots,
     oppFaintedSlots,
+    userSlotHpPct,
+    oppSlotHpPct,
+    isAttackIncomingPrompt,
+    activeOppChargedMoveBounds,
     battleTimelineEvents,
     activeOpponentName,
     isOpponentShadow,
@@ -2123,6 +2228,221 @@ export default function App() {
     lastOppSwitchWasFaint,
     isPostFaintPromptActive
   ]);
+
+  // Resolve an Opponent Charged Attack (either Shielded 1S or Unshielded Tank with conservative move inference)
+  const handleResolveOppChargedAttack = (useShield: boolean, simulatedMoveIdx: number = 0) => {
+    const activeMon = activePreset?.pokemon[activeUserSlotIndex]?.name || 'Lead';
+    const activeOppMon = scannedOpponents[safeActiveOppSlot] || activeOpponentName;
+    const hpBefore = userSlotHpPct[activeUserSlotIndex] ?? 100;
+    const shouldShield = useShield && userShields > 0;
+    const recActionUpper = (activeTacticalRec?.actionLabel || '').toUpperCase();
+    const recWantedShield = recActionUpper.includes('SHIELD (1S)');
+    const recWantedTank = recActionUpper.includes('NO SHIELD') || recActionUpper.includes('TANK');
+    const followedShieldCall =
+      recWantedShield ? shouldShield : recWantedTank ? !shouldShield : null;
+
+    if (shouldShield) {
+      const nextShields = Math.max(0, userShields - 1);
+      setUserShields(nextShields);
+      setIsAttackIncomingPrompt(false);
+      if (!isWaitingOpponent) {
+        const relT = getRelativeBattleSeconds();
+        setBattleTimelineEvents((prevEv) => [
+          ...prevEv,
+          {
+            type: 'CHARGED_ATTACK',
+            actor: 'opp',
+            t: relT,
+            activePokemon: activeOppMon,
+            pokemonShielded: activeMon,
+            shieldNumber: userShields >= 2 ? 1 : 2,
+            userShieldsRemaining: nextShields,
+            oppShieldsRemaining: oppShields,
+            recommendedAction: activeTacticalRec?.actionLabel || null,
+            recommendedGoal: activeTacticalRec?.goalText || null,
+            decisionPhase: 'SHIELD_CALL',
+            playerSwapRemainingSec,
+            oppSwapRemainingSec,
+            userAliveCount: Math.max(1, 3 - playerFaintedSlots.filter(Boolean).length),
+            oppAliveCount: Math.max(1, 3 - oppFaintedSlots.filter(Boolean).length),
+            lastPlayerSwitchWasFaint,
+            lastOppSwitchWasFaint,
+            followedRecommendation: followedShieldCall,
+            shielded: true,
+            hpBeforePct: hpBefore,
+            hpAfterPct: hpBefore,
+            hpDeltaPct: 0,
+            inferredMoveName: null,
+            userSlotHpPct,
+            oppSlotHpPct
+          }
+        ]);
+      }
+      setStartBattleToast(`🛡️ Shielded ${activeOppMon} Charged Attack (${nextShields}S left)`);
+      setTimeout(() => setStartBattleToast(null), 2000);
+      return;
+    }
+
+    // Unshielded: apply damage from chosen opponent charged move
+    const chosenMove =
+      activeOppChargedMoveBounds.candidateMoves[simulatedMoveIdx] ||
+      activeOppChargedMoveBounds.candidateMoves[0] || {
+        name: activeOppChargedMoveBounds.maxMoveName,
+        damagePct: activeOppChargedMoveBounds.maxDmgPct
+      };
+    const hpAfter = Math.max(0, hpBefore - chosenMove.damagePct);
+    const actualDelta = hpBefore - hpAfter;
+    const inferredMove = inferUnshieldedChargedMoveName(
+      actualDelta,
+      false,
+      activeOppChargedMoveBounds.candidateMoves
+    );
+    const nextUserHp = [...userSlotHpPct];
+    nextUserHp[activeUserSlotIndex] = hpAfter;
+    setUserSlotHpPct(nextUserHp);
+    setIsAttackIncomingPrompt(false);
+
+    if (!isWaitingOpponent) {
+      const relT = getRelativeBattleSeconds();
+      setBattleTimelineEvents((prevEv) => [
+        ...prevEv,
+        {
+          type: 'CHARGED_ATTACK',
+          actor: 'opp',
+          t: relT,
+          activePokemon: activeOppMon,
+          userShieldsRemaining: userShields,
+          oppShieldsRemaining: oppShields,
+          recommendedAction: activeTacticalRec?.actionLabel || null,
+          recommendedGoal: activeTacticalRec?.goalText || null,
+          decisionPhase: 'SHIELD_CALL',
+          playerSwapRemainingSec,
+          oppSwapRemainingSec,
+          userAliveCount: Math.max(1, 3 - playerFaintedSlots.filter(Boolean).length),
+          oppAliveCount: Math.max(1, 3 - oppFaintedSlots.filter(Boolean).length),
+          lastPlayerSwitchWasFaint,
+          lastOppSwitchWasFaint,
+          followedRecommendation: followedShieldCall,
+          shielded: false,
+          hpBeforePct: hpBefore,
+          hpAfterPct: hpAfter,
+          hpDeltaPct: actualDelta,
+          inferredMoveName: inferredMove,
+          userSlotHpPct: nextUserHp,
+          oppSlotHpPct
+        }
+      ]);
+    }
+
+    if (hpAfter <= 0) {
+      handleSimulatePlayerFaint();
+    } else {
+      const moveSuffix = inferredMove ? ` • ${inferredMove}` : '';
+      setStartBattleToast(`⚡ Opp Charged Attack (-${actualDelta}% HP -> ${hpAfter}% HP${moveSuffix})`);
+      setTimeout(() => setStartBattleToast(null), 2200);
+    }
+  };
+
+  // Simulate or log Player throwing a Charged Attack
+  const handleThrowMyChargedAttack = (moveIdx: number = 0, forceOppShield: boolean = false) => {
+    const activeMon = activePreset?.pokemon[activeUserSlotIndex]?.name || 'Lead';
+    const activeOppMon = scannedOpponents[safeActiveOppSlot] || activeOpponentName;
+    const hpBefore = oppSlotHpPct[safeActiveOppSlot] ?? 100;
+    const myRows = myMoveTimingInfo || [];
+    const chosenRow = myRows[moveIdx] || myRows[0];
+    const dmgPct = chosenRow?.oppDamages?.[safeActiveOppSlot]?.dmgPct ?? chosenRow?.dmgPct ?? 45;
+    const oppUsesShield = forceOppShield && oppShields > 0;
+
+    if (oppUsesShield) {
+      const nextOppShields = Math.max(0, oppShields - 1);
+      setOppShields(nextOppShields);
+      if (!isWaitingOpponent) {
+        const relT = getRelativeBattleSeconds();
+        setBattleTimelineEvents((prevEv) => [
+          ...prevEv,
+          {
+            type: 'CHARGED_ATTACK',
+            actor: 'user',
+            t: relT,
+            activePokemon: activeMon,
+            pokemonShielded: activeOppMon,
+            shieldNumber: oppShields >= 2 ? 1 : 2,
+            userShieldsRemaining: userShields,
+            oppShieldsRemaining: nextOppShields,
+            recommendedAction: activeTacticalRec?.actionLabel || null,
+            recommendedGoal: activeTacticalRec?.goalText || null,
+            decisionPhase: activeTacticalRec?.phaseBadge || 'MID_GAME',
+            playerSwapRemainingSec,
+            oppSwapRemainingSec,
+            userAliveCount: Math.max(1, 3 - playerFaintedSlots.filter(Boolean).length),
+            oppAliveCount: Math.max(1, 3 - oppFaintedSlots.filter(Boolean).length),
+            lastPlayerSwitchWasFaint,
+            lastOppSwitchWasFaint,
+            shielded: true,
+            hpBeforePct: hpBefore,
+            hpAfterPct: hpBefore,
+            hpDeltaPct: 0,
+            inferredMoveName: null,
+            userSlotHpPct,
+            oppSlotHpPct
+          }
+        ]);
+      }
+      setStartBattleToast(`⚡ ${activeMon} Charged Attack (Blocked by Opp Shield • ${nextOppShields}S left)`);
+      setTimeout(() => setStartBattleToast(null), 2000);
+      return;
+    }
+
+    const hpAfter = Math.max(0, hpBefore - dmgPct);
+    const actualDelta = hpBefore - hpAfter;
+    const myCandidateMoves = myRows.map((r) => ({
+      name: r.name,
+      damagePct: r.oppDamages?.[safeActiveOppSlot]?.dmgPct ?? r.dmgPct
+    }));
+    const inferredMove = inferUnshieldedChargedMoveName(actualDelta, false, myCandidateMoves);
+    const nextOppHp = [...oppSlotHpPct];
+    nextOppHp[safeActiveOppSlot] = hpAfter;
+    setOppSlotHpPct(nextOppHp);
+
+    if (!isWaitingOpponent) {
+      const relT = getRelativeBattleSeconds();
+      setBattleTimelineEvents((prevEv) => [
+        ...prevEv,
+        {
+          type: 'CHARGED_ATTACK',
+          actor: 'user',
+          t: relT,
+          activePokemon: activeMon,
+          userShieldsRemaining: userShields,
+          oppShieldsRemaining: oppShields,
+          recommendedAction: activeTacticalRec?.actionLabel || null,
+          recommendedGoal: activeTacticalRec?.goalText || null,
+          decisionPhase: activeTacticalRec?.phaseBadge || 'MID_GAME',
+          playerSwapRemainingSec,
+          oppSwapRemainingSec,
+          userAliveCount: Math.max(1, 3 - playerFaintedSlots.filter(Boolean).length),
+          oppAliveCount: Math.max(1, 3 - oppFaintedSlots.filter(Boolean).length),
+          lastPlayerSwitchWasFaint,
+          lastOppSwitchWasFaint,
+          shielded: false,
+          hpBeforePct: hpBefore,
+          hpAfterPct: hpAfter,
+          hpDeltaPct: actualDelta,
+          inferredMoveName: inferredMove,
+          userSlotHpPct,
+          oppSlotHpPct: nextOppHp
+        }
+      ]);
+    }
+
+    if (hpAfter <= 0) {
+      handleSimulateOpponentFaint();
+    } else {
+      const moveSuffix = inferredMove ? ` • ${inferredMove}` : '';
+      setStartBattleToast(`⚡ ${activeMon} Charged Attack (-${actualDelta}% Opp HP -> ${hpAfter}% HP${moveSuffix})`);
+      setTimeout(() => setStartBattleToast(null), 2200);
+    }
+  };
 
   // Auto-calculated Lead Matchup (Slot 0 1st-seen opponent vs Your Lead p1)
   const currentLeadMatchup: 'FAVORABLE' | 'NEUTRAL' | 'NEGATIVE' = useMemo(() => {
@@ -2261,10 +2581,17 @@ export default function App() {
           lastOppSwitchWasFaint: ev.lastOppSwitchWasFaint ?? null,
           candidateScores: ev.candidateScores || null,
           followedRecommendation: ev.followedRecommendation ?? null,
-          validityLatched: ev.validityLatched ?? true
+          validityLatched: ev.validityLatched ?? true,
+          shielded: ev.shielded ?? null,
+          hpBeforePct: ev.hpBeforePct ?? null,
+          hpAfterPct: ev.hpAfterPct ?? null,
+          hpDeltaPct: ev.hpDeltaPct ?? null,
+          inferredMoveName: ev.inferredMoveName ?? null,
+          userSlotHpPct: ev.userSlotHpPct ?? null,
+          oppSlotHpPct: ev.oppSlotHpPct ?? null
         }));
         return JSON.stringify({
-          schemaVersion: '3.34-ai-decision-tree',
+          schemaVersion: '3.40-ai-decision-tree',
           battleId: b.id,
           timestampMs: b.timestampMs,
           league: b.league,
@@ -3904,7 +4231,27 @@ export default function App() {
                               Goal: {activeTacticalRec.goalText}
                             </span>
                           </div>
-                          {activeTacticalRec.recommendedSwapSlotIndex !== null &&
+                          {isAttackIncomingPrompt && userShields > 0 ? (
+                            <div className="flex items-center gap-1 shrink-0 self-center">
+                              <button
+                                type="button"
+                                onClick={() => handleResolveOppChargedAttack(true, 0)}
+                                className="px-1.5 py-0.5 rounded bg-pink-500/35 hover:bg-pink-500/55 text-pink-100 font-extrabold text-[7px] border border-pink-300/60 whitespace-nowrap"
+                                title="Use 1 Protect Shield against incoming Opponent Charged Attack"
+                              >
+                                🛡️ Shield (1S)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleResolveOppChargedAttack(false, 0)}
+                                className="px-1.5 py-0.5 rounded bg-sky-500/30 hover:bg-sky-500/50 text-sky-100 font-extrabold text-[7px] border border-sky-300/60 whitespace-nowrap"
+                                title="No Shield — Tank the incoming Opponent Charged Attack"
+                              >
+                                Tank (0S)
+                              </button>
+                            </div>
+                          ) : (
+                            activeTacticalRec.recommendedSwapSlotIndex !== null &&
                             activeTacticalRec.recommendedSwapSlotIndex !== undefined &&
                             (isPostFaintPromptActive ||
                               activeTacticalRec.recommendedSwapSlotIndex !== activeUserSlotIndex) && (
@@ -3916,7 +4263,8 @@ export default function App() {
                               >
                                 {isPostFaintPromptActive ? 'Send In ➔' : 'Swap ➔'}
                               </button>
-                            )}
+                            )
+                          )}
                         </div>
                       )}
 
@@ -3997,26 +4345,38 @@ export default function App() {
                           </button>
                         </div>
                         <div className="flex items-center gap-0.5">
-                          {activePreset.pokemon.map((member, idx) => (
-                            <button
-                              key={member.id}
-                              onClick={() => handleSelectUserSlot(idx)}
-                              className={`text-[8px] font-bold px-1 py-0.5 rounded border transition ${
-                                activeUserSlotIndex === idx && !playerFaintedSlots[idx]
-                                  ? 'bg-emerald-500/40 text-white border-emerald-400'
-                                  : playerFaintedSlots[idx]
-                                  ? 'bg-slate-900/30 text-slate-500 border-white/10 opacity-35 line-through'
-                                  : 'bg-slate-900/50 text-slate-200 border-white/20 hover:bg-slate-800'
-                              }`}
-                              title={`${member.name}${playerFaintedSlots[idx] ? ' (Fainted)' : ''}`}
-                            >
-                              {member.name.replace(/^Shadow\s+/i, 'S-').replace(/^Kanto\s+/i, '').split(' ')[0].slice(0, 5)}
-                            </button>
-                          ))}
+                          {activePreset.pokemon.map((member, idx) => {
+                            const slotHp = playerFaintedSlots[idx] ? 0 : (userSlotHpPct[idx] ?? 100);
+                            return (
+                              <button
+                                key={member.id}
+                                onClick={() => handleSelectUserSlot(idx)}
+                                className={`text-[8px] font-bold px-1 py-0.5 rounded border transition flex items-center gap-0.5 ${
+                                  activeUserSlotIndex === idx && !playerFaintedSlots[idx]
+                                    ? 'bg-emerald-500/40 text-white border-emerald-400'
+                                    : playerFaintedSlots[idx]
+                                    ? 'bg-slate-900/30 text-slate-500 border-white/10 opacity-35 line-through'
+                                    : 'bg-slate-900/50 text-slate-200 border-white/20 hover:bg-slate-800'
+                                }`}
+                                title={`${member.name} (${playerFaintedSlots[idx] ? 'Fainted' : `${slotHp}% HP persisted`})`}
+                              >
+                                <span>{member.name.replace(/^Shadow\s+/i, 'S-').replace(/^Kanto\s+/i, '').split(' ')[0].slice(0, 4)}</span>
+                                {!playerFaintedSlots[idx] && (
+                                  <span
+                                    className={`text-[6.5px] font-mono ${
+                                      slotHp > 50 ? 'text-emerald-300' : slotHp > 20 ? 'text-amber-300' : 'text-rose-300'
+                                    }`}
+                                  >
+                                    {slotHp}%
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
 
-                      {/* v2.33: Pokéball Counts, Shield Counts & Quick Simulation Controls */}
+                      {/* v3.40: Pokéball Counts, Shield Counts, Persistent Floating HP% & Charged Attack Simulator Controls */}
                       <div className="flex flex-col gap-0.5 px-1 py-0.5 bg-black/35 rounded border border-white/10 text-[7px] font-mono my-0.5">
                         <div className="flex items-center justify-between gap-1">
                           <div className="flex items-center gap-1">
@@ -4033,7 +4393,7 @@ export default function App() {
                               type="button"
                               onClick={handleSimulatePlayerSwap}
                               className="px-1 py-0.2 rounded bg-sky-500/20 hover:bg-sky-500/40 text-sky-200 border border-sky-400/30"
-                              title="Simulate True Swap for Player (resets to 50s)"
+                              title="Simulate True Swap for Player (resets to 50s, preserves current slot HP%)"
                             >
                               Swap P
                             </button>
@@ -4047,18 +4407,18 @@ export default function App() {
                             </button>
                             <button
                               type="button"
-                              onClick={handleUsePlayerShield}
-                              className="px-1 py-0.2 rounded bg-pink-500/20 hover:bg-pink-500/40 text-pink-200 border border-pink-400/30"
-                              title="Simulate Player Shield Used (-1 shield, never alters life or swap timer)"
+                              onClick={() => handleThrowMyChargedAttack(0, false)}
+                              className="px-1 py-0.2 rounded bg-amber-500/25 hover:bg-amber-500/45 text-amber-200 border border-amber-400/40"
+                              title="Simulate throwing your Charged Move 1 (unshielded HP drop + logs CHARGED_ATTACK)"
                             >
-                              Shld P
+                              ⚡My Atk
                             </button>
                           </div>
                           <button
                             type="button"
                             onClick={handleResetTimersAndBalls}
                             className="px-1 py-0.2 rounded bg-slate-700/50 hover:bg-slate-600 text-slate-300 border border-slate-500/30 ml-auto"
-                            title="Reset all swap clocks to 0s (Ready), restore 3 Pokéballs and 2 Shields"
+                            title="Reset all swap clocks to 0s (Ready), restore 100% HP, 3 Pokéballs and 2 Shields"
                           >
                             ↺
                           </button>
@@ -4078,7 +4438,7 @@ export default function App() {
                               type="button"
                               onClick={() => handleSimulateOpponentSwap(false)}
                               className="px-1 py-0.2 rounded bg-sky-500/20 hover:bg-sky-500/40 text-sky-200 border border-sky-400/30"
-                              title="Simulate True Swap for Opponent (resets to 50s)"
+                              title="Simulate True Swap for Opponent (resets to 50s, preserves current slot HP%)"
                             >
                               Swap Opp
                             </button>
@@ -4092,12 +4452,47 @@ export default function App() {
                             </button>
                             <button
                               type="button"
-                              onClick={handleUseOpponentShield}
-                              className="px-1 py-0.2 rounded bg-pink-500/20 hover:bg-pink-500/40 text-pink-200 border border-pink-400/30"
-                              title="Simulate Opponent Shield Used (-1 shield, never alters life or swap timer)"
+                              onClick={() => setIsAttackIncomingPrompt((prev) => !prev)}
+                              className={`px-1 py-0.2 rounded border transition ${
+                                isAttackIncomingPrompt
+                                  ? 'bg-rose-500/50 text-white border-rose-300 animate-pulse'
+                                  : 'bg-rose-500/20 hover:bg-rose-500/40 text-rose-200 border-rose-400/40'
+                              }`}
+                              title='Simulate "Attack incoming! Use a Protect Shield?" prompt to trigger instant Shield vs No-Shield recommendation'
                             >
-                              Shld Opp
+                              ⚡Opp Atk
                             </button>
+                          </div>
+                        </div>
+                        {/* Persistent Floating HP% Sliders for Active User & Active Opponent */}
+                        <div className="grid grid-cols-2 gap-1.5 pt-0.5 border-t border-white/10 items-center">
+                          <div className="flex items-center gap-1" title="Adjust Active Player Pokémon HP% (persists when swapped to bench)">
+                            <span className="text-emerald-300 font-bold shrink-0">
+                              HP:{userSlotHpPct[activeUserSlotIndex] ?? 100}%
+                            </span>
+                            <input
+                              type="range"
+                              min={5}
+                              max={100}
+                              step={5}
+                              value={userSlotHpPct[activeUserSlotIndex] ?? 100}
+                              onChange={(e) => handleUpdateUserActiveHp(Number(e.target.value))}
+                              className="w-full h-1 accent-emerald-400 cursor-pointer"
+                            />
+                          </div>
+                          <div className="flex items-center gap-1" title="Adjust Active Opponent Pokémon HP% (persists when swapped to bench)">
+                            <span className="text-amber-300 font-bold shrink-0">
+                              Opp:{oppSlotHpPct[safeActiveOppSlot] ?? 100}%
+                            </span>
+                            <input
+                              type="range"
+                              min={5}
+                              max={100}
+                              step={5}
+                              value={oppSlotHpPct[safeActiveOppSlot] ?? 100}
+                              onChange={(e) => handleUpdateOppActiveHp(Number(e.target.value))}
+                              className="w-full h-1 accent-amber-400 cursor-pointer"
+                            />
                           </div>
                         </div>
                       </div>
@@ -4224,6 +4619,20 @@ export default function App() {
                                   <span className={`font-bold truncate text-[9.5px] ${isOppFainted ? 'text-slate-400 line-through' : 'text-slate-100'}`} title={fullOppDisplay}>
                                     {fullOppDisplay}
                                   </span>
+                                  {!isOppFainted && (
+                                    <span
+                                      className={`text-[7px] font-mono font-bold shrink-0 ml-auto ${
+                                        (oppSlotHpPct[idx] ?? 100) > 50
+                                          ? 'text-emerald-300'
+                                          : (oppSlotHpPct[idx] ?? 100) > 20
+                                          ? 'text-amber-300'
+                                          : 'text-rose-300'
+                                      }`}
+                                      title={`Persisted Opponent HP: ${oppSlotHpPct[idx] ?? 100}%`}
+                                    >
+                                      {oppSlotHpPct[idx] ?? 100}%
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-[1px] text-[9px] font-mono shrink-0">
                                   <span className="font-bold text-slate-300">{p1Init}:</span>
@@ -4354,14 +4763,18 @@ export default function App() {
                                     </div>
                                   </div>
 
-                                  {/* Right: 3-Pokemon Team Damage % Columns with Vertical Active Highlight & Faint Column Dimming */}
+                                  {/* Right: 3-Pokemon Team Damage % Columns with Vertical Active Highlight, Faint Dimming & KO Range Highlighting */}
                                   <div className="grid grid-cols-3 w-[84px] items-center text-center font-mono shrink-0">
                                     {(row.teamDamages || []).map((cell, cIdx) => {
                                       const isActv = cIdx === activeUserSlotIndex;
                                       const isFainted = !isActv && !!playerFaintedSlots[cIdx];
+                                      const targetUserHp = isFainted ? 0 : (userSlotHpPct[cIdx] ?? 100);
+                                      const isKoRange = !isFainted && !cell.isEmpty && cell.dmgPct >= targetUserHp;
                                       const textCls =
                                         isFainted
                                           ? 'text-[#5A6577] opacity-35'
+                                          : isKoRange
+                                          ? 'text-rose-200 font-black'
                                           : cell.tier === 'resist'
                                           ? 'text-emerald-300'
                                           : cell.tier === 'weak'
@@ -4373,15 +4786,21 @@ export default function App() {
                                           className={`py-0.5 text-[7.5px] font-extrabold leading-tight ${textCls} ${
                                             isFainted
                                               ? 'bg-slate-950/40 opacity-35'
+                                              : isKoRange
+                                              ? 'bg-rose-600/35 border border-rose-400/80 rounded-xs'
                                               : isActv
                                               ? `bg-sky-500/25 border-x border-sky-400/80 shadow-[inset_0_0_6px_rgba(56,189,248,0.25)] ${
                                                   isLastRow ? 'border-b rounded-b' : ''
                                                 }`
                                               : 'bg-slate-900/40'
                                           }`}
-                                          title={isFainted ? `${cell.name} (Fainted)` : `${cell.name}: ${cell.dmgPct}%`}
+                                          title={
+                                            isFainted
+                                              ? `${cell.name} (Fainted)`
+                                              : `${cell.name} (${targetUserHp}% HP): ${cell.dmgPct}%${isKoRange ? ' — LETHAL KO RANGE!' : ''}`
+                                          }
                                         >
-                                          {cell.isEmpty ? '—' : `${cell.dmgPct}%`}
+                                          {cell.isEmpty ? '—' : isKoRange ? `KO ${cell.dmgPct}%` : `${cell.dmgPct}%`}
                                         </div>
                                       );
                                     })}
@@ -4527,15 +4946,19 @@ export default function App() {
                                     </div>
                                   </div>
 
-                                  {/* Right: 3-Opponent Outgoing Damage % Columns with Vertical Active Highlight & Faint Dimming */}
+                                  {/* Right: 3-Opponent Outgoing Damage % Columns with Vertical Active Highlight, Faint Dimming & KO Range Highlighting */}
                                   <div className="grid grid-cols-3 w-[84px] items-center text-center font-mono shrink-0">
                                     {(row.oppDamages || []).map((cell, cIdx) => {
                                       const isActv = cIdx === safeActiveOppSlot;
                                       const isFainted = !isActv && !!oppFaintedSlots[cIdx];
+                                      const targetOppHp = isFainted ? 0 : (oppSlotHpPct[cIdx] ?? 100);
+                                      const isKoRange = !isFainted && !cell.isEmpty && cell.dmgPct >= targetOppHp;
                                       const textCls = isFainted
                                         ? 'text-[#5A6577] opacity-35'
                                         : cell.isEmpty
                                         ? 'text-slate-500'
+                                        : isKoRange
+                                        ? 'text-emerald-200 font-black'
                                         : cell.tier === 'resist'
                                         ? 'text-emerald-300'
                                         : cell.tier === 'weak'
@@ -4547,15 +4970,23 @@ export default function App() {
                                           className={`py-0.5 text-[7.5px] font-extrabold leading-tight ${textCls} ${
                                             isFainted
                                               ? 'bg-slate-950/40 opacity-35'
+                                              : isKoRange
+                                              ? 'bg-emerald-600/35 border border-emerald-400/80 rounded-xs shadow-[0_0_6px_rgba(16,185,129,0.3)]'
                                               : isActv
                                               ? `bg-sky-500/25 border-x border-sky-400/80 shadow-[inset_0_0_6px_rgba(56,189,248,0.25)] ${
                                                   isLastRow ? 'border-b rounded-b' : ''
                                                 }`
                                               : 'bg-slate-900/40'
                                           }`}
-                                          title={isFainted ? `${cell.name} (Fainted)` : cell.isEmpty ? 'Unscanned opponent slot' : `${cell.name}: ${cell.dmgPct}%`}
+                                          title={
+                                            isFainted
+                                              ? `${cell.name} (Fainted)`
+                                              : cell.isEmpty
+                                              ? 'Unscanned opponent slot'
+                                              : `${cell.name} (${targetOppHp}% HP): ${cell.dmgPct}%${isKoRange ? ' — IN KO RANGE!' : ''}`
+                                          }
                                         >
-                                          {cell.isEmpty ? '—' : cell.dmgPct >= 100 ? 'KO!' : `${cell.dmgPct}%`}
+                                          {cell.isEmpty ? '—' : isKoRange ? `KO ${cell.dmgPct}%` : `${cell.dmgPct}%`}
                                         </div>
                                       );
                                     })}
@@ -4588,8 +5019,9 @@ export default function App() {
                   {/* Charge Move 1 */}
                   <div className="relative flex flex-col items-center">
                     <button 
-                      onClick={() => alert(`Used ${userActivePokemon.chargedMoves[0]?.name || 'Charge Move 1'}!`)}
+                      onClick={() => handleThrowMyChargedAttack(0, false)}
                       className="w-16 h-16 rounded-full bg-gradient-to-tr from-amber-600 to-amber-400 border-2 border-amber-300 shadow-lg shadow-amber-500/30 flex items-center justify-center active:scale-90 transition transform"
+                      title={`Throw ${userActivePokemon.chargedMoves[0]?.name || 'Charge Move 1'} (applies damage to active opponent HP% & logs CHARGED_ATTACK)`}
                     >
                       <Zap className="w-7 h-7 text-white fill-white" />
                     </button>
@@ -4602,8 +5034,9 @@ export default function App() {
                   {userActivePokemon.chargedMoves[1] && (
                     <div className="relative flex flex-col items-center">
                       <button 
-                        onClick={() => alert(`Used ${userActivePokemon.chargedMoves[1]?.name}!`)}
+                        onClick={() => handleThrowMyChargedAttack(1, false)}
                         className="w-16 h-16 rounded-full bg-gradient-to-tr from-sky-600 to-sky-400 border-2 border-sky-300 shadow-lg shadow-sky-500/30 flex items-center justify-center active:scale-90 transition transform"
+                        title={`Throw ${userActivePokemon.chargedMoves[1]?.name || 'Charge Move 2'} (applies damage to active opponent HP% & logs CHARGED_ATTACK)`}
                       >
                         <Shield className="w-7 h-7 text-white" />
                       </button>

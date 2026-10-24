@@ -64,6 +64,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.coroutines.resume
+import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
@@ -120,9 +121,11 @@ class OverlayService : LifecycleService() {
         const val EXTRA_APP_THEME_ID = "extra_app_theme_id"
         const val EXTRA_ENABLE_4_CHARGED_MOVES = "extra_enable_4_charged_moves"
         const val EXTRA_DISABLE_BATTLE_TOASTS = "extra_disable_battle_toasts"
+        const val EXTRA_SHOW_TACTICAL_RECOMMENDATIONS = "extra_show_tactical_recommendations"
 
         const val PREFS_KEY_ENABLE_4_CHARGED_MOVES = "enable_4_charged_moves"
         const val PREFS_KEY_DISABLE_BATTLE_TOASTS = "disable_battle_toasts"
+        const val PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS = "show_tactical_recommendations"
         const val PREFS_KEY_OVERLAY_TRANSPARENCY_PCT = "overlay_transparency_pct"
         const val PREFS_KEY_APP_THEME_ID = "gbl_app_theme_id"
         const val PREFS_KEY_SHOW_THEME_WATERMARK = "gbl_show_theme_watermark"
@@ -213,7 +216,10 @@ class OverlayService : LifecycleService() {
             val userFaints: Int? = null,
             val oppFaints: Int? = null,
             val userShieldsRemaining: Int? = null,
-            val oppShieldsRemaining: Int? = null
+            val oppShieldsRemaining: Int? = null,
+            val adherenceRatePct: Int? = null,
+            val recommendationsIssuedCount: Int? = null,
+            val recommendationsFollowedCount: Int? = null
         )
 
         data class SyncTeamSlot(
@@ -712,6 +718,255 @@ class OverlayService : LifecycleService() {
             val energyCost: Int = 50
         )
 
+        data class MoveBuffEffect(
+            val selfAtkDelta: Int = 0,
+            val selfDefDelta: Int = 0,
+            val oppAtkDelta: Int = 0,
+            val oppDefDelta: Int = 0,
+            val chance: Double = 0.0
+        )
+
+        data class ChargedCycleSimResult(
+            val effectivePressure: Double,
+            val effectiveFreqMult: Double,
+            val bestMovePct: Int,
+            val fastestMovePct: Int
+        )
+
+        val BASELINE_MOVE_BUFF_EFFECTS: Map<String, MoveBuffEffect> = mapOf(
+            "bulldoze" to MoveBuffEffect(0, 0, 0, -1, 1.0),
+            "icy wind" to MoveBuffEffect(0, 0, -1, 0, 1.0),
+            "chilling water" to MoveBuffEffect(0, 0, -1, 0, 1.0),
+            "lunge" to MoveBuffEffect(0, 0, -1, 0, 1.0),
+            "breaking swipe" to MoveBuffEffect(0, 0, -1, 0, 0.5),
+            "feather dance" to MoveBuffEffect(0, 0, -2, 0, 1.0),
+            "rock tomb" to MoveBuffEffect(0, 0, -1, 0, 1.0),
+            "sand tomb" to MoveBuffEffect(0, 0, 0, -1, 1.0),
+            "poison fang" to MoveBuffEffect(0, 0, 0, -1, 1.0),
+            "psychic fangs" to MoveBuffEffect(0, 0, 0, -1, 1.0),
+            "acid spray" to MoveBuffEffect(0, 0, 0, -2, 1.0),
+            "crunch" to MoveBuffEffect(0, 0, 0, -1, 0.3),
+            "liquidation" to MoveBuffEffect(0, 0, 0, -1, 0.3),
+            "shadow ball" to MoveBuffEffect(0, 0, 0, -1, 0.1),
+            "shadow bone" to MoveBuffEffect(0, 0, 0, -1, 0.2),
+            "earth power" to MoveBuffEffect(0, 0, 0, -1, 0.1),
+            "bug buzz" to MoveBuffEffect(0, 0, 0, -1, 0.3),
+            "psychic" to MoveBuffEffect(0, 0, 0, -1, 0.1),
+            "scald" to MoveBuffEffect(0, 0, -1, 0, 0.5),
+            "scorching sands" to MoveBuffEffect(0, 0, -1, 0, 0.3),
+            "moonblast" to MoveBuffEffect(0, 0, -1, 0, 0.1),
+            "mirror shot" to MoveBuffEffect(0, 0, -1, 0, 0.3),
+            "zap cannon" to MoveBuffEffect(0, 0, -1, 0, 0.66),
+            "rage fist" to MoveBuffEffect(1, 0, 0, 0, 1.0),
+            "power-up punch" to MoveBuffEffect(1, 0, 0, 0, 1.0),
+            "flame charge" to MoveBuffEffect(1, 0, 0, 0, 1.0),
+            "trailblaze" to MoveBuffEffect(1, 0, 0, 0, 1.0),
+            "triple axel" to MoveBuffEffect(1, 0, 0, 0, 1.0),
+            "torch song" to MoveBuffEffect(1, 0, 0, 0, 1.0),
+            "aura wheel" to MoveBuffEffect(1, 0, 0, 0, 1.0),
+            "night slash" to MoveBuffEffect(2, 0, 0, 0, 0.125),
+            "air cutter" to MoveBuffEffect(1, 0, 0, 0, 0.3),
+            "ancient power" to MoveBuffEffect(1, 1, 0, 0, 0.1),
+            "ominous wind" to MoveBuffEffect(1, 1, 0, 0, 0.1),
+            "close combat" to MoveBuffEffect(0, -2, 0, 0, 1.0),
+            "wild charge" to MoveBuffEffect(0, -2, 0, 0, 1.0),
+            "brave bird" to MoveBuffEffect(0, -3, 0, 0, 1.0),
+            "superpower" to MoveBuffEffect(-1, -1, 0, 0, 1.0),
+            "overheat" to MoveBuffEffect(-2, 0, 0, 0, 1.0),
+            "draco meteor" to MoveBuffEffect(-2, 0, 0, 0, 1.0),
+            "psycho boost" to MoveBuffEffect(-2, 0, 0, 0, 1.0),
+            "leaf storm" to MoveBuffEffect(-2, 0, 0, 0, 1.0),
+            "v-create" to MoveBuffEffect(0, -3, 0, 0, 1.0)
+        )
+
+        val DYNAMIC_MOVE_BUFF_TABLE = java.util.concurrent.ConcurrentHashMap<String, MoveBuffEffect>()
+
+        fun resolveMoveBuffEffectStatic(moveName: String): MoveBuffEffect {
+            val clean = moveName.replace("*", "").trim().lowercase()
+            if (clean.isEmpty()) return MoveBuffEffect()
+            val idKey = clean.replace(" ", "_").replace("-", "_")
+            return DYNAMIC_MOVE_BUFF_TABLE[clean]
+                ?: DYNAMIC_MOVE_BUFF_TABLE[idKey]
+                ?: BASELINE_MOVE_BUFF_EFFECTS[clean]
+                ?: MoveBuffEffect()
+        }
+
+        fun isDominatedSameTypeChargedPairStatic(
+            c1Name: String,
+            c2Name: String,
+            myTypes: List<String> = emptyList()
+        ): Boolean {
+            val clean1 = c1Name.replace("*", "").trim()
+            val clean2 = c2Name.replace("*", "").trim()
+            if (clean1.isEmpty() || clean2.isEmpty() || clean1.equals(clean2, ignoreCase = true)) {
+                return false
+            }
+            val defaultType = myTypes.firstOrNull() ?: "normal"
+            val s1 = resolveChargedMoveStatsStatic(clean1, defaultType)
+            val s2 = resolveChargedMoveStatsStatic(clean2, defaultType)
+            if (!s1.type.equals(s2.type, ignoreCase = true)) {
+                return false
+            }
+            val b1 = resolveMoveBuffEffectStatic(clean1)
+            val b2 = resolveMoveBuffEffectStatic(clean2)
+
+            fun hasPositiveBuff(b: MoveBuffEffect): Boolean =
+                b.chance >= 0.25 && (b.selfAtkDelta > 0 || b.selfDefDelta > 0 || b.oppAtkDelta < 0 || b.oppDefDelta < 0)
+
+            fun hasSelfDebuff(b: MoveBuffEffect): Boolean =
+                b.chance >= 0.50 && (b.selfAtkDelta < 0 || b.selfDefDelta < 0)
+
+            val e1 = s1.energyCost.coerceIn(35, 80)
+            val e2 = s2.energyCost.coerceIn(35, 80)
+            val dpe1 = s1.power.toDouble() / e1.toDouble()
+            val dpe2 = s2.power.toDouble() / e2.toDouble()
+
+            // Check if s2 is dominated by s1
+            val s2DominatedByS1 = !hasPositiveBuff(b2) && !hasSelfDebuff(b1) && (
+                (e2 >= e1 && s2.power <= s1.power) ||
+                    (e1 - e2 < 15 && dpe1 >= dpe2 * 1.15 && s1.power >= s2.power)
+                )
+            // Check if s1 is dominated by s2
+            val s1DominatedByS2 = !hasPositiveBuff(b1) && !hasSelfDebuff(b2) && (
+                (e1 >= e2 && s1.power <= s2.power) ||
+                    (e2 - e1 < 15 && dpe2 >= dpe1 * 1.15 && s2.power >= s1.power)
+                )
+            return s2DominatedByS1 || s1DominatedByS2
+        }
+
+        fun simulateTurnByTurnChargedCycleStatic(
+            c1Name: String,
+            c1Pct: Int,
+            c1Stats: MoveStats,
+            c2Name: String,
+            c2Pct: Int,
+            c2Stats: MoveStats,
+            fastEpt: Double,
+            defShields: Int,
+            attackerTypes: List<String>
+        ): ChargedCycleSimResult {
+            val e1 = c1Stats.energyCost.coerceIn(35, 80)
+            val e2 = c2Stats.energyCost.coerceIn(35, 80)
+            val b1 = resolveMoveBuffEffectStatic(c1Name)
+            val b2 = resolveMoveBuffEffectStatic(c2Name)
+
+            val atkStage1 = (b1.selfAtkDelta - b1.oppDefDelta).toDouble() * b1.chance
+            val defStage1 = (b1.selfDefDelta - b1.oppAtkDelta).toDouble() * b1.chance
+            val atkStage2 = (b2.selfAtkDelta - b2.oppDefDelta).toDouble() * b2.chance
+            val defStage2 = (b2.selfDefDelta - b2.oppAtkDelta).toDouble() * b2.chance
+
+            val effPace1 = Math.pow(50.0 / e1.toDouble(), 0.28).coerceIn(0.84, 1.22)
+            val effPace2 = Math.pow(50.0 / e2.toDouble(), 0.28).coerceIn(0.84, 1.22)
+
+            val unshieldedCycleVal1 = c1Pct.toDouble() * effPace1 +
+                max(0.0, atkStage1) * 5.5 + max(0.0, defStage1) * 5.0 -
+                max(0.0, -defStage1) * 3.5 - max(0.0, -atkStage1) * 3.5
+            val unshieldedCycleVal2 = c2Pct.toDouble() * effPace2 +
+                max(0.0, atkStage2) * 5.5 + max(0.0, defStage2) * 5.0 -
+                max(0.0, -defStage2) * 3.5 - max(0.0, -atkStage2) * 3.5
+
+            val use1AsPrimary = unshieldedCycleVal1 >= unshieldedCycleVal2
+            val bestPct = if (use1AsPrimary) c1Pct else c2Pct
+            val bestEnergy = if (use1AsPrimary) e1 else e2
+            val bestPace = if (use1AsPrimary) effPace1 else effPace2
+            val bestAtkStage = if (use1AsPrimary) atkStage1 else atkStage2
+            val bestDefStage = if (use1AsPrimary) defStage1 else defStage2
+
+            val altPct = if (use1AsPrimary) c2Pct else c1Pct
+            val altEnergy = if (use1AsPrimary) e2 else e1
+            val altAtkStage = if (use1AsPrimary) atkStage2 else atkStage1
+            val altDefStage = if (use1AsPrimary) defStage2 else defStage1
+
+            // Determine optimal shield-burn / setup move without forcing a worse/expensive move
+            fun shieldSetupScore(pct: Int, energy: Int, atkStg: Double, defStg: Double): Double {
+                val energySavedBonus = (60.0 - energy.toDouble()) * 0.58
+                val buffBonus = max(0.0, atkStg) * 11.5 + max(0.0, defStg) * 10.5 -
+                    max(0.0, -defStg) * 12.0 - max(0.0, -atkStg) * 10.0
+                val credibilityMult = if (pct < 18 && atkStg <= 0.0 && defStg <= 0.0) 0.55 else 1.0
+                return energySavedBonus * credibilityMult + buffBonus + pct.toDouble() * 0.30
+            }
+
+            val primaryShieldScore = shieldSetupScore(bestPct, bestEnergy, bestAtkStage, bestDefStage)
+            val altIsValidShieldSetup = (altEnergy <= bestEnergy - 10 && altDefStage >= 0.0 && altAtkStage >= 0.0) ||
+                (altEnergy <= bestEnergy + 5 && (altAtkStage > 0.20 || altDefStage > 0.20)) ||
+                (bestDefStage < -0.5 && altDefStage >= 0.0 && altEnergy <= bestEnergy)
+            val altShieldScore = if (altIsValidShieldSetup) {
+                shieldSetupScore(altPct, altEnergy, altAtkStage, altDefStage)
+            } else {
+                -999.0
+            }
+
+            val useAltForShieldBurn = altShieldScore > primaryShieldScore
+            val burnPct = if (useAltForShieldBurn) altPct else bestPct
+            val burnEnergy = if (useAltForShieldBurn) altEnergy else bestEnergy
+            val burnAtkStage = if (useAltForShieldBurn) altAtkStage else bestAtkStage
+            val burnDefStage = if (useAltForShieldBurn) altDefStage else bestDefStage
+
+            val unshieldedBase = bestPct.toDouble() * bestPace
+            val energySavingsFromBait = if (useAltForShieldBurn) max(0, bestEnergy - burnEnergy).toDouble() else 0.0
+
+            val cyclePressure: Double
+            val activeCycleEnergy: Double
+            when {
+                defShields <= 0 -> {
+                    val setupFirstIn0S = useAltForShieldBurn &&
+                        (burnAtkStage >= 0.5 || burnDefStage >= 0.5) &&
+                        burnEnergy <= bestEnergy - 10 &&
+                        burnPct >= (bestPct * 0.52).toInt()
+                    val buffFollowup = if (setupFirstIn0S) {
+                        (burnAtkStage * 8.5 + burnDefStage * 7.5)
+                    } else {
+                        max(0.0, bestAtkStage) * 8.0 + max(0.0, bestDefStage) * 7.5 -
+                            max(0.0, -bestDefStage) * 4.5 - max(0.0, -bestAtkStage) * 4.0
+                    }
+                    val finisherFlexBonus = if (altEnergy <= bestEnergy - 10 && altPct >= 26) {
+                        (bestEnergy - altEnergy).toDouble() * 0.20
+                    } else {
+                        0.0
+                    }
+                    cyclePressure = unshieldedBase * 1.70 + buffFollowup + finisherFlexBonus
+                    activeCycleEnergy = if (setupFirstIn0S) (burnEnergy + bestEnergy) * 0.5 else bestEnergy.toDouble()
+                }
+                defShields == 1 -> {
+                    // Cycle 1: Shielded throw (applies burnAtkStage / burnDefStage through shield)
+                    // Cycle 2: Unshielded closer amplified by Cycle 1 stat changes + residual energy advantage
+                    val postShieldAtkMult = (1.0 + 0.16 * burnAtkStage).coerceIn(0.76, 1.42)
+                    val shieldTempoBonus = energySavingsFromBait * 0.45 + (55.0 - burnEnergy.toDouble()) * 0.22
+                    val postShieldStatValue = burnDefStage * 9.5 + max(0.0, burnAtkStage) * 6.5 +
+                        max(0.0, bestAtkStage) * 4.0 + max(0.0, bestDefStage) * 3.5 -
+                        max(0.0, -bestDefStage) * 3.5
+                    cyclePressure = (unshieldedBase * postShieldAtkMult * 1.24) + shieldTempoBonus + postShieldStatValue
+                    activeCycleEnergy = (burnEnergy.toDouble() * 0.55) + (bestEnergy.toDouble() * 0.45)
+                }
+                else -> {
+                    // Cycle 1 & Cycle 2: Shielded throws (2x compounded stat stages through shields)
+                    // Cycle 3: Unshielded closer scaled by fast move EPT / burnEnergy reachability
+                    val twoShieldAtkMult = (1.0 + 0.26 * burnAtkStage).coerceIn(0.70, 1.58)
+                    val cycle3Reach = ((fastEpt / 3.5) * (50.0 / burnEnergy.toDouble())).coerceIn(0.68, 1.34)
+                    val twoShieldTempoBonus = energySavingsFromBait * 0.60 + (55.0 - burnEnergy.toDouble()) * 0.34
+                    val compoundedStatValue = burnDefStage * 13.5 + burnAtkStage * 9.5
+                    cyclePressure = (unshieldedBase * twoShieldAtkMult * 0.82 * cycle3Reach) + twoShieldTempoBonus + compoundedStatValue
+                    activeCycleEnergy = (burnEnergy.toDouble() * 0.72) + (bestEnergy.toDouble() * 0.28)
+                }
+            }
+
+            val dominatedPenalty = if (isDominatedSameTypeChargedPairStatic(c1Name, c2Name, attackerTypes)) 6.5 else 0.0
+            val pacingFactor = ((fastEpt / 3.5) * (50.0 / activeCycleEnergy.coerceIn(35.0, 80.0))).coerceIn(0.78, 1.26)
+            val freqMult = 0.82 + 0.18 * pacingFactor
+            val fastestPct = when {
+                e1 < e2 -> c1Pct
+                e2 < e1 -> c2Pct
+                else -> min(c1Pct, c2Pct)
+            }
+
+            return ChargedCycleSimResult(
+                effectivePressure = (cyclePressure - dominatedPenalty).coerceAtLeast(10.0),
+                effectiveFreqMult = freqMult,
+                bestMovePct = max(c1Pct, c2Pct),
+                fastestMovePct = fastestPct
+            )
+        }
+
         data class PokemonMeta(
             val name: String,
             val speciesId: String,
@@ -741,8 +996,8 @@ class OverlayService : LifecycleService() {
         val RECOMMENDED_CHARGED_MOVES: Map<String, Triple<String, String, String>> = mapOf(
             "Rillaboom" to Triple("Drum Beating", "Earth Power", "Frenzy Plant"),
             "rillaboom" to Triple("Drum Beating", "Earth Power", "Frenzy Plant"),
-            "Tinkaton" to Triple("Gigaton Hammer", "Bulldoze", "Brutal Swing"),
-            "tinkaton" to Triple("Gigaton Hammer", "Bulldoze", "Brutal Swing"),
+            "Tinkaton" to Triple("Gigaton Hammer", "Bulldoze", "Play Rough"),
+            "tinkaton" to Triple("Gigaton Hammer", "Bulldoze", "Play Rough"),
             "Kanto Ninetales" to Triple("Weather Ball (Fire)", "Energy Ball", "Psyshock"),
             "ninetales" to Triple("Weather Ball (Fire)", "Energy Ball", "Psyshock"),
             "Ninetales (Alolan)" to Triple("Weather Ball (Ice)", "Chilling Water", "Psyshock"),
@@ -1244,7 +1499,7 @@ class OverlayService : LifecycleService() {
             "Super Power" to MoveStats("Superpower", "fighting", 85, 40),
             "Drum Beating" to MoveStats("Drum Beating", "grass", 60, 35),
             "Gigaton Hammer" to MoveStats("Gigaton Hammer", "steel", 130, 60),
-            "Bulldoze" to MoveStats("Bulldoze", "ground", 80, 55),
+            "Bulldoze" to MoveStats("Bulldoze", "ground", 45, 45),
             "Air Cutter" to MoveStats("Air Cutter", "flying", 60, 40),
             "Rock Tomb" to MoveStats("Rock Tomb", "rock", 75, 50),
             "Sand Tomb" to MoveStats("Sand Tomb", "ground", 55, 45),
@@ -1765,7 +2020,7 @@ class OverlayService : LifecycleService() {
         val MOVE_ENERGY_COST: Map<String, Int> = mapOf(
             "Drum Beating" to 35,
             "Gigaton Hammer" to 60,
-            "Bulldoze" to 55,
+            "Bulldoze" to 45,
             "Air Cutter" to 40,
             "Behemoth Blade" to 55,
             "Behemoth Bash" to 45,
@@ -2830,6 +3085,54 @@ class OverlayService : LifecycleService() {
                                 DYNAMIC_FAST_TYPE[moveId.lowercase()] = type
                             } else {
                                 DYNAMIC_MOVE_DATABASE[name] = MoveStats(name, type, power, energyCost)
+                                val rawChance = obj.optDouble("buffApplyChance")
+                                    ?: obj.optString("buffApplyChance")?.toDoubleOrNull()
+                                    ?: 0.0
+                                var selfAtk = 0
+                                var selfDef = 0
+                                var oppAtk = 0
+                                var oppDef = 0
+                                val buffsSelfArr = obj.optJsonArray("buffsSelf")
+                                val buffsOppArr = obj.optJsonArray("buffsOpponent")
+                                val buffsArr = obj.optJsonArray("buffs")
+                                val buffTarget = obj.optString("buffTarget")?.lowercase()?.trim() ?: ""
+                                if (buffsSelfArr != null && buffsSelfArr.size() >= 2) {
+                                    selfAtk = runCatching { buffsSelfArr.get(0).asInt }.getOrDefault(0)
+                                    selfDef = runCatching { buffsSelfArr.get(1).asInt }.getOrDefault(0)
+                                }
+                                if (buffsOppArr != null && buffsOppArr.size() >= 2) {
+                                    oppAtk = runCatching { buffsOppArr.get(0).asInt }.getOrDefault(0)
+                                    oppDef = runCatching { buffsOppArr.get(1).asInt }.getOrDefault(0)
+                                }
+                                if (buffsArr != null && buffsArr.size() >= 2 && selfAtk == 0 && selfDef == 0 && oppAtk == 0 && oppDef == 0) {
+                                    val b0 = runCatching { buffsArr.get(0).asInt }.getOrDefault(0)
+                                    val b1 = runCatching { buffsArr.get(1).asInt }.getOrDefault(0)
+                                    when (buffTarget) {
+                                        "opponent" -> {
+                                            oppAtk = b0
+                                            oppDef = b1
+                                        }
+                                        "self" -> {
+                                            selfAtk = b0
+                                            selfDef = b1
+                                        }
+                                        "both" -> {
+                                            selfAtk = b0
+                                            selfDef = b1
+                                            oppAtk = b0
+                                            oppDef = b1
+                                        }
+                                    }
+                                }
+                                val normChance = if (rawChance > 1.0) (rawChance / 100.0).coerceIn(0.0, 1.0) else rawChance.coerceIn(0.0, 1.0)
+                                if (normChance > 0.0 && (selfAtk != 0 || selfDef != 0 || oppAtk != 0 || oppDef != 0)) {
+                                    val parsedBuff = MoveBuffEffect(selfAtk, selfDef, oppAtk, oppDef, normChance)
+                                    DYNAMIC_MOVE_BUFF_TABLE[name.lowercase().trim()] = parsedBuff
+                                    DYNAMIC_MOVE_BUFF_TABLE[moveId.lowercase().trim()] = parsedBuff
+                                } else {
+                                    DYNAMIC_MOVE_BUFF_TABLE.remove(name.lowercase().trim())
+                                    DYNAMIC_MOVE_BUFF_TABLE.remove(moveId.lowercase().trim())
+                                }
                             }
                         } catch (_: Exception) {}
                     }
@@ -3333,9 +3636,18 @@ class OverlayService : LifecycleService() {
                 return ((pressureAllShieldsFirst + pressureDisguiseFirst) * 0.5) to ((bonusAllShieldsFirst + bonusDisguiseFirst) * 0.5)
             }
 
-            val avgUserCost = ((userC1Stats.energyCost + userC2Stats.energyCost) * 0.5).coerceIn(35.0, 80.0)
-            val userPacingFactor = ((userFastEpt / 3.5) * (50.0 / avgUserCost)).coerceIn(0.78, 1.26)
-            val userChargedFreqMult = 0.82 + 0.18 * userPacingFactor
+            val userSim = simulateTurnByTurnChargedCycleStatic(
+                c1Name = uC1,
+                c1Pct = userC1Pct,
+                c1Stats = userC1Stats,
+                c2Name = uC2,
+                c2Pct = userC2Pct,
+                c2Stats = userC2Stats,
+                fastEpt = userFastEpt,
+                defShields = sOpp,
+                attackerTypes = myMeta.types
+            )
+            val userChargedFreqMult = userSim.effectiveFreqMult
 
             val userRawPressure: Double
             val oppMimikyuDelta: Double
@@ -3344,7 +3656,7 @@ class OverlayService : LifecycleService() {
                 userRawPressure = incPressure
                 oppMimikyuDelta = mimiBonus
             } else {
-                userRawPressure = chargedPressureAgainstShields(bestUserCharged, minUserCharged, sOpp)
+                userRawPressure = userSim.effectivePressure
                 oppMimikyuDelta = 0.0
             }
 
@@ -3379,9 +3691,18 @@ class OverlayService : LifecycleService() {
                 val rawOppFastEff = getTypeEffectivenessStatic(oppFastType, myMeta.types)
                 val oppFastEff = if (oppIsAegislash) rawOppFastEff * getAegislashFastDmgMult(sOpp) else rawOppFastEff
 
-                val avgOppCost = ((oppC1Stats.energyCost + oppC2Stats.energyCost) * 0.5).coerceIn(35.0, 80.0)
-                val oppPacingFactor = ((oppFastEpt / 3.5) * (50.0 / avgOppCost)).coerceIn(0.78, 1.26)
-                val oppChargedFreqMult = 0.82 + 0.18 * oppPacingFactor
+                val oppSim = simulateTurnByTurnChargedCycleStatic(
+                    c1Name = oC1Name,
+                    c1Pct = oppC1Pct,
+                    c1Stats = oppC1Stats,
+                    c2Name = oC2Name,
+                    c2Pct = oppC2Pct,
+                    c2Stats = oppC2Stats,
+                    fastEpt = oppFastEpt,
+                    defShields = sUser,
+                    attackerTypes = oppMeta.types
+                )
+                val oppChargedFreqMult = oppSim.effectiveFreqMult
 
                 val oppRawPressure: Double
                 val myMimikyuDelta: Double
@@ -3390,7 +3711,7 @@ class OverlayService : LifecycleService() {
                     oppRawPressure = incPressure
                     myMimikyuDelta = mimiBonus
                 } else {
-                    oppRawPressure = chargedPressureAgainstShields(bestOppCharged, minOppCharged, sUser)
+                    oppRawPressure = oppSim.effectivePressure
                     myMimikyuDelta = 0.0
                 }
 
@@ -3659,34 +3980,57 @@ class OverlayService : LifecycleService() {
             val uC1 = myCharged1?.takeIf { it.isNotBlank() } ?: myMeta.chargedMove1
             val uC2 = myCharged2?.takeIf { it.isNotBlank() } ?: myMeta.chargedMove2
 
+            val userC1Stats = resolveChargedMoveStatsStatic(uC1, myMeta.types.firstOrNull() ?: "normal")
+            val userC2Stats = resolveChargedMoveStatsStatic(uC2, myMeta.types.firstOrNull() ?: "normal")
             val userC1Pct = calculateChargedMoveDamagePctStatic(myMeta, oppMeta, uC1, myShadow, oppShadow)
             val userC2Pct = calculateChargedMoveDamagePctStatic(myMeta, oppMeta, uC2, myShadow, oppShadow)
             val bestUserCharged = max(userC1Pct, userC2Pct)
-            val minUserCharged = min(userC1Pct, userC2Pct)
 
+            val oppC1Stats = resolveChargedMoveStatsStatic(oppMeta.chargedMove1, oppMeta.types.firstOrNull() ?: "normal")
+            val oppC2Stats = resolveChargedMoveStatsStatic(oppMeta.chargedMove2, oppMeta.types.firstOrNull() ?: "normal")
             val oppC1Pct = calculateChargedMoveDamagePctStatic(oppMeta, myMeta, oppMeta.chargedMove1, oppShadow, myShadow)
             val oppC2Pct = calculateChargedMoveDamagePctStatic(oppMeta, myMeta, oppMeta.chargedMove2, oppShadow, myShadow)
             val bestOppCharged = max(oppC1Pct, oppC2Pct)
-            val minOppCharged = min(oppC1Pct, oppC2Pct)
 
             val uFastKey = uFast.lowercase().trim()
             val userFastType = DYNAMIC_FAST_TYPE[uFastKey] ?: fastMoveTypeMapStatic[uFastKey] ?: myMeta.types.firstOrNull() ?: "normal"
+            val userFastTurns = (DYNAMIC_FAST_TURNS[uFastKey] ?: FAST_MOVE_TURNS[uFastKey] ?: myMeta.fastTurns).coerceAtLeast(1)
+            val userFastEnergy = (DYNAMIC_FAST_ENERGY[uFastKey] ?: FAST_MOVE_ENERGY[uFastKey] ?: (userFastTurns * 3)).coerceAtLeast(1)
+            val userFastEpt = userFastEnergy.toDouble() / userFastTurns.toDouble()
+
             val oFastKey = oppMeta.defaultFastMove.lowercase().trim()
             val oppFastType = DYNAMIC_FAST_TYPE[oFastKey] ?: fastMoveTypeMapStatic[oFastKey] ?: oppMeta.types.firstOrNull() ?: "normal"
+            val oppFastTurns = (DYNAMIC_FAST_TURNS[oFastKey] ?: FAST_MOVE_TURNS[oFastKey] ?: oppMeta.fastTurns).coerceAtLeast(1)
+            val oppFastEnergy = (DYNAMIC_FAST_ENERGY[oFastKey] ?: FAST_MOVE_ENERGY[oFastKey] ?: (oppFastTurns * 3)).coerceAtLeast(1)
+            val oppFastEpt = oppFastEnergy.toDouble() / oppFastTurns.toDouble()
 
             val userFastEff = getTypeEffectivenessStatic(userFastType, oppMeta.types)
             val oppFastEff = getTypeEffectivenessStatic(oppFastType, myMeta.types)
 
-            val userRawPressure = when (sOpp) {
-                0 -> bestUserCharged * 1.7
-                1 -> ((bestUserCharged + minUserCharged) * 0.5) * 1.4
-                else -> minUserCharged * 1.0
-            }
-            val oppRawPressure = when (sUser) {
-                0 -> bestOppCharged * 1.7
-                1 -> ((bestOppCharged + minOppCharged) * 0.5) * 1.4
-                else -> minOppCharged * 1.0
-            }
+            val userSim = simulateTurnByTurnChargedCycleStatic(
+                c1Name = uC1,
+                c1Pct = userC1Pct,
+                c1Stats = userC1Stats,
+                c2Name = uC2,
+                c2Pct = userC2Pct,
+                c2Stats = userC2Stats,
+                fastEpt = userFastEpt,
+                defShields = sOpp,
+                attackerTypes = myMeta.types
+            )
+            val oppSim = simulateTurnByTurnChargedCycleStatic(
+                c1Name = oppMeta.chargedMove1,
+                c1Pct = oppC1Pct,
+                c1Stats = oppC1Stats,
+                c2Name = oppMeta.chargedMove2,
+                c2Pct = oppC2Pct,
+                c2Stats = oppC2Stats,
+                fastEpt = oppFastEpt,
+                defShields = sUser,
+                attackerTypes = oppMeta.types
+            )
+            val userRawPressure = userSim.effectivePressure * userSim.effectiveFreqMult
+            val oppRawPressure = oppSim.effectivePressure * oppSim.effectiveFreqMult
 
             val avgShields = (sUser + sOpp) * 0.5
             val fastWeight = if (avgShields <= 1.0) 95.0 + avgShields * 25.0 else 120.0 + (avgShields - 1.0) * 35.0
@@ -4651,15 +4995,68 @@ class OverlayService : LifecycleService() {
                 }
             }
 
+            // Detect Symmetric Yin-Yang Duo-Core: Core 1 and Core 2 cover each other's weaknesses while Pivot acts as Safe Swap
+            fun countCoveredWeaknesses(defenderTypes: List<String>, partnerWeaknesses: Set<String>): Int {
+                return partnerWeaknesses.count { wType ->
+                    getTypeEffectivenessStatic(wType, defenderTypes) < 0.95
+                }
+            }
+
+            fun hasSharedUnresistedWeakness(typesA: List<String>, typesB: List<String>): Boolean {
+                val wA = getWeaknesses(typesA)
+                val wB = getWeaknesses(typesB)
+                return wA.intersect(wB).isNotEmpty()
+            }
+
             val swapScores = (0 until 3).map { computeSwapStatsForIndex(it).first }
             val closerMeans = (0 until 3).map { computeCloserStatsForIndex(it) }
 
-            val cleanOverride = manualArchetypeOverride?.trim()?.uppercase()?.takeIf { it == "ABB" || it == "ABC" }
-            val archetype: String = cleanOverride ?: if (detectedAbbTriplet != null) "ABB" else "ABC"
+            var detectedDuoTriplet: Triple<Int, Int, Int>? = null // (core1Idx, pivotIdx, core2Idx)
+            var detectedDuoCoveredTypes: List<String> = emptyList()
+            var bestDuoScore = -1.0
+
+            val duoPairs = listOf(
+                Triple(0, 1, 2), // Core (0, 2) + Pivot 1
+                Triple(0, 2, 1), // Core (0, 1) + Pivot 2
+                Triple(1, 0, 2)  // Core (1, 2) + Pivot 0
+            )
+            for ((cA, piv, cB) in duoPairs) {
+                if (hasSharedUnresistedWeakness(typesList[cA], typesList[cB])) continue
+                val aCoversB = countCoveredWeaknesses(typesList[cA], weakList[cB])
+                val bCoversA = countCoveredWeaknesses(typesList[cB], weakList[cA])
+                if (aCoversB >= 1 && bCoversA >= 1 && (aCoversB + bCoversA) >= 3) {
+                    val symScore = (aCoversB + bCoversA) * 18.0 + swapScores[piv] * 0.12 + (if (piv == 1) 8.0 else 0.0)
+                    if (symScore > bestDuoScore) {
+                        bestDuoScore = symScore
+                        detectedDuoTriplet = Triple(cA, piv, cB)
+                        val mutCovered = (weakList[cB].filter { getTypeEffectivenessStatic(it, typesList[cA]) < 0.95 } +
+                            weakList[cA].filter { getTypeEffectivenessStatic(it, typesList[cB]) < 0.95 })
+                            .distinct()
+                            .map { it.replaceFirstChar { c -> c.uppercase() } }
+                        detectedDuoCoveredTypes = mutCovered
+                    }
+                }
+            }
+
+            val cleanOverride = manualArchetypeOverride?.trim()?.uppercase()?.takeIf { it == "ABB" || it == "ABC" || it == "DUO" }
+            val archetype: String = cleanOverride ?: when {
+                detectedAbbTriplet != null -> "ABB"
+                detectedDuoTriplet != null -> "DUO"
+                else -> "ABC"
+            }
 
             if (archetype == "ABB" && detectedSharedWeaknesses.isEmpty()) {
                 val backShared = weakList[1].intersect(weakList[2])
                 detectedSharedWeaknesses = backShared.map { it.replaceFirstChar { c -> c.uppercase() } }
+            } else if (archetype == "DUO") {
+                if (detectedDuoCoveredTypes.isEmpty()) {
+                    val mutCovered = (weakList[2].filter { getTypeEffectivenessStatic(it, typesList[0]) < 0.95 } +
+                        weakList[0].filter { getTypeEffectivenessStatic(it, typesList[2]) < 0.95 })
+                        .distinct()
+                        .map { it.replaceFirstChar { c -> c.uppercase() } }
+                    detectedDuoCoveredTypes = mutCovered
+                }
+                detectedSharedWeaknesses = detectedDuoCoveredTypes
             }
 
             val finalOrderIndices: List<Int>
@@ -4670,6 +5067,25 @@ class OverlayService : LifecycleService() {
                     val (baitB, sweepB) = computeBaitVsSweeperScore(padded[bB], swapScores[bB], closerMeans[bB])
                     val b1First = (baitA + sweepB) >= (baitB + sweepA)
                     finalOrderIndices = if (b1First) listOf(aIdx, bA, bB) else listOf(aIdx, bB, bA)
+                } else {
+                    finalOrderIndices = listOf(0, 1, 2)
+                }
+            } else if (archetype == "DUO") {
+                if (autoReorder) {
+                    val (cA, piv, cB) = detectedDuoTriplet ?: run {
+                        // Pick highest Swap BR member as Pivot (Slot 2) and place the 2 core partners at Slots 1 & 3
+                        val bestPiv = (0..2).maxByOrNull { swapScores[it] } ?: 1
+                        val others = (0..2).filter { it != bestPiv }
+                        Triple(others[0], bestPiv, others[1])
+                    }
+                    var leadA = 0.0
+                    var leadB = 0.0
+                    for ((opp, prob) in dist.leadWeights) {
+                        if (prob <= 0.0) continue
+                        leadA += prob * (slotLeadBrMap[cA][opp] ?: 500.0)
+                        leadB += prob * (slotLeadBrMap[cB][opp] ?: 500.0)
+                    }
+                    finalOrderIndices = if (leadA >= leadB) listOf(cA, piv, cB) else listOf(cB, piv, cA)
                 } else {
                     finalOrderIndices = listOf(0, 1, 2)
                 }
@@ -4711,13 +5127,13 @@ class OverlayService : LifecycleService() {
             val closerSwapBrVal = swapScores[i3].roundToInt().coerceIn(150, 850)
             val closerBrVal = closerMeans[i3].roundToInt().coerceIn(150, 850)
 
-            // Audit Top 25 Meta Targets for Key Wins, Key Threats (with BR1/BR2/BR3), and Core Breakers (with BR1/BR2/BR3)
-            val top25MetaThreats = dist.fieldWeights.entries
+            // Audit Top 50 Meta Targets for Key Wins, Key Threats (with BR1/BR2/BR3), and Core Breakers (with BR1/BR2/BR3)
+            val top50MetaThreats = dist.fieldWeights.entries
                 .sortedByDescending { it.value }
                 .map { it.key }
-                .take(25)
-                .ifEmpty { getTopMetaPoolForLeagueStatic(league).take(25) }
-            val targetAuditTotal = top25MetaThreats.size.takeIf { it > 0 } ?: 25
+                .take(50)
+                .ifEmpty { getTopMetaPoolForLeagueStatic(league).take(50) }
+            val targetAuditTotal = top50MetaThreats.size.takeIf { it > 0 } ?: 50
 
             fun formatThreatWithMemberBrs(threatName: String): String {
                 val r0 = slotLeadBrMap[i1][threatName] ?: 500.0
@@ -4733,7 +5149,7 @@ class OverlayService : LifecycleService() {
             val coreBreakersRaw = ArrayList<String>()
             val keyThreatsRaw = ArrayList<String>()
 
-            for (threat in top25MetaThreats) {
+            for (threat in top50MetaThreats) {
                 val r0 = slotLeadBrMap[i1][threat] ?: 500.0
                 val r1 = slotSwapBrMap[i2][threat] ?: 500.0
                 val r2 = slotCloserBrMap[i3][threat] ?: 500.0
@@ -4752,7 +5168,7 @@ class OverlayService : LifecycleService() {
             }
 
             if (keyThreatsRaw.isEmpty()) {
-                val sortedTough = top25MetaThreats
+                val sortedTough = top50MetaThreats
                     .filter { it !in coreBreakersRaw }
                     .map { t ->
                         val r0 = slotLeadBrMap[i1][t] ?: 500.0
@@ -4766,13 +5182,13 @@ class OverlayService : LifecycleService() {
                 }
             }
 
-            val keyThreatsFormatted = keyThreatsRaw.take(5).map { formatThreatWithMemberBrs(it) }
-            val coreBreakersFormatted = coreBreakersRaw.take(5).map { formatThreatWithMemberBrs(it) }
+            val keyThreatsFormatted = keyThreatsRaw.take(6).map { formatThreatWithMemberBrs(it) }
+            val coreBreakersFormatted = coreBreakersRaw.take(6).map { formatThreatWithMemberBrs(it) }
 
-            val roleLabels = if (archetype == "ABB") {
-                listOf("Lead (A)", "Bait Swap (B1)", "Sweeper (B2)")
-            } else {
-                listOf("Lead", "Safe Swap", "Closer")
+            val roleLabels = when (archetype) {
+                "ABB" -> listOf("Lead (A)", "Bait Swap (B1)", "Sweeper (B2)")
+                "DUO" -> listOf("Lead (Core 1)", "Pivot (Swap)", "Co-Core (Core 2)")
+                else -> listOf("Lead", "Safe Swap", "Closer")
             }
 
             val altMovesetSlots = ordered.mapIndexed { sIdx, m ->
@@ -4804,25 +5220,38 @@ class OverlayService : LifecycleService() {
             val breakersPreview = if (coreBreakersFormatted.isNotEmpty()) {
                 coreBreakersFormatted.take(4).joinToString(", ")
             } else {
-                "None (0 hard core breakers in Top 25)"
+                "None (0 hard core breakers in Top 50)"
             }
             val altNotes = altMovesetSlots
                 .filter { it.isAltMoveset }
                 .map { "${it.pokemonName} (${it.fastMove} + ${it.chargedMove1}/${it.chargedMove2})" }
             val altSuffix = if (altNotes.isNotEmpty()) " • Alt Moveset Tech: ${altNotes.joinToString("; ")}." else ""
 
-            val synergySummary = if (archetype == "ABB") {
-                val sharedStr = if (detectedSharedWeaknesses.isNotEmpty()) detectedSharedWeaknesses.joinToString("/").uppercase() else "BACKLINE"
-                "ABB Lineup: ${slot1.name} (Lead A) covers backline $sharedStr weakness for ${slot2.name} (Bait B1) & ${slot3.name} (Sweeper B2). Beats ${beatenTargets.size}/$targetAuditTotal Top Meta. Key Wins: $winsPreview. Key Threats: $threatsPreview. Core Breakers: $breakersPreview.$altSuffix"
-            } else {
-                "ABC Balanced Core: ${slot1.name} Lead ($leadAggVal BR) + ${slot2.name} Safe Swap ($safeSwapBrVal BR) + ${slot3.name} Closer ($closerBrVal BR). Beats ${beatenTargets.size}/$targetAuditTotal Top Meta. Key Wins: $winsPreview. Key Threats: $threatsPreview. Core Breakers: $breakersPreview.$altSuffix"
+            val synergySummary = when (archetype) {
+                "ABB" -> {
+                    val sharedStr = if (detectedSharedWeaknesses.isNotEmpty()) detectedSharedWeaknesses.joinToString("/").uppercase() else "BACKLINE"
+                    "ABB Lineup: ${slot1.name} (Lead A) covers backline $sharedStr weakness for ${slot2.name} (Bait B1) & ${slot3.name} (Sweeper B2). Beats ${beatenTargets.size}/$targetAuditTotal Top Meta. Key Wins: $winsPreview. Key Threats: $threatsPreview. Core Breakers: $breakersPreview.$altSuffix"
+                }
+                "DUO" -> {
+                    val covStr = if (detectedSharedWeaknesses.isNotEmpty()) " (${detectedSharedWeaknesses.joinToString("/")} covered)" else ""
+                    "Duo-Core (Yin-Yang 1⇄3): ${slot1.name} (Core 1 Lead, $leadAggVal BR) & ${slot3.name} (Core 2 Co-Core, $closerBrVal BR) mutually cover each other's weaknesses$covStr, with ${slot2.name} ($safeSwapBrVal BR) as the Safe Swap Pivot. Beats ${beatenTargets.size}/$targetAuditTotal Top Meta. Key Wins: $winsPreview. Key Threats: $threatsPreview. Core Breakers: $breakersPreview.$altSuffix"
+                }
+                else -> {
+                    "ABC Balanced Core: ${slot1.name} Lead ($leadAggVal BR) + ${slot2.name} Safe Swap ($safeSwapBrVal BR) + ${slot3.name} Closer ($closerBrVal BR). Beats ${beatenTargets.size}/$targetAuditTotal Top Meta. Key Wins: $winsPreview. Key Threats: $threatsPreview. Core Breakers: $breakersPreview.$altSuffix"
+                }
             }
 
-            val reasonSummary = if (archetype == "ABB") {
-                val sharedStr = if (detectedSharedWeaknesses.isNotEmpty()) detectedSharedWeaknesses.joinToString("/") else "Backline"
-                "⚡ Auto-Detected ABB Lineup (Shared $sharedStr weakness covered by ${slot1.name}) → #1 Lead (A): ${slot1.name} (Lead BR $leadAggVal) • #2 Bait Swap (B1): ${slot2.name} (Swap BR $safeSwapBrVal) • #3 Sweeper (B2): ${slot3.name} (Closer BR $closerBrVal) • $synergySummary"
-            } else {
-                "⚡ Auto-Detected ABC Balanced Core → #1 Lead kept: ${slot1.name} (Lead BR $leadAggVal) • #2 Safe Swap moved to Slot 2: ${slot2.name} (Swap BR $safeSwapBrVal) • #3 Closer: ${slot3.name} (Closer BR $closerBrVal) • $synergySummary"
+            val reasonSummary = when (archetype) {
+                "ABB" -> {
+                    val sharedStr = if (detectedSharedWeaknesses.isNotEmpty()) detectedSharedWeaknesses.joinToString("/") else "Backline"
+                    "⚡ Auto-Detected ABB Lineup (Shared $sharedStr weakness covered by ${slot1.name}) → #1 Lead (A): ${slot1.name} (Lead BR $leadAggVal) • #2 Bait Swap (B1): ${slot2.name} (Swap BR $safeSwapBrVal) • #3 Sweeper (B2): ${slot3.name} (Closer BR $closerBrVal) • $synergySummary"
+                }
+                "DUO" -> {
+                    "☯️ Auto-Detected Duo-Core Lineup (Yin-Yang 1st & 3rd Core) → #1 Core 1 Lead: ${slot1.name} (Lead BR $leadAggVal) • #2 Safe Swap Pivot: ${slot2.name} (Swap BR $safeSwapBrVal) • #3 Core 2 Co-Core: ${slot3.name} (Closer BR $closerBrVal) • $synergySummary"
+                }
+                else -> {
+                    "⚡ Auto-Detected ABC Balanced Core → #1 Lead kept: ${slot1.name} (Lead BR $leadAggVal) • #2 Safe Swap moved to Slot 2: ${slot2.name} (Swap BR $safeSwapBrVal) • #3 Closer: ${slot3.name} (Closer BR $closerBrVal) • $synergySummary"
+                }
             }
 
             return TeamArchetypeEvaluationResult(
@@ -5361,16 +5790,27 @@ class OverlayService : LifecycleService() {
                         ).distinctBy { it.lowercase() }
                     }
 
-                val cPairs = mutableListOf<Pair<String, String>>()
+                val slotMeta = resolveRecommendedMovesForSpecies(m.name, league, m.cp, m.ivs)
+                val slotTypes = slotMeta?.types ?: emptyList()
+                val rawPairs = mutableListOf<Pair<String, String>>()
                 if (chargedPool.size <= 1) {
                     val only = chargedPool.firstOrNull() ?: m.chargedMove1
-                    cPairs.add(only to only)
+                    rawPairs.add(only to only)
                 } else {
                     for (i in 0 until chargedPool.size) {
                         for (j in (i + 1) until chargedPool.size) {
-                            cPairs.add(chargedPool[i] to chargedPool[j])
+                            rawPairs.add(chargedPool[i] to chargedPool[j])
                         }
                     }
+                }
+                val nonDominatedPairs = rawPairs.filterNot { (c1, c2) ->
+                    isDominatedSameTypeChargedPairStatic(c1, c2, slotTypes)
+                }
+                val cPairs = if (nonDominatedPairs.isNotEmpty()) nonDominatedPairs else rawPairs
+                val hasDualTypeOption = cPairs.any { (c1, c2) ->
+                    val t1 = resolveChargedMoveStatsStatic(c1, slotTypes.firstOrNull() ?: "normal").type
+                    val t2 = resolveChargedMoveStatsStatic(c2, slotTypes.firstOrNull() ?: "normal").type
+                    !t1.equals(t2, ignoreCase = true)
                 }
 
                 val curFastNorm = m.fastMove.trim().lowercase()
@@ -5450,7 +5890,16 @@ class OverlayService : LifecycleService() {
                         val newLeadBr = if (slotIdx == 0) candLeadAggBr else baselineEval.leadAggBr
                         val leadDelta = newLeadBr - baselineEval.leadAggBr
 
-                        val composite = 0.55 * machDelta.toDouble() + 0.45 * roleDelta.toDouble()
+                        val c1S = resolveChargedMoveStatsStatic(c1Move, slotTypes.firstOrNull() ?: "normal")
+                        val c2S = resolveChargedMoveStatsStatic(c2Move, slotTypes.firstOrNull() ?: "normal")
+                        val isSameTypePair = !c1Move.equals(c2Move, ignoreCase = true) && c1S.type.equals(c2S.type, ignoreCase = true)
+                        val roleCoverageAdj = when {
+                            !isSameTypePair -> 0.0
+                            slotIdx == 1 && hasDualTypeOption -> -2.2 // Safe Swap prefers dual-type coverage when available
+                            else -> 0.0
+                        }
+
+                        val composite = 0.55 * machDelta.toDouble() + 0.45 * roleDelta.toDouble() + roleCoverageAdj
                         scored.add(
                             MovesetUpgradeSuggestion(
                                 slotIndex = slotIdx,
@@ -5574,7 +6023,7 @@ class OverlayService : LifecycleService() {
 
         data class AntiMetaTeamOption(
             val id: String,
-            val archetype: String, // "ABB" or "ABC"
+            val archetype: String, // "ABB", "ABC", or "DUO"
             val rank: Int,
             val league: String,
             val pokemon: List<TeamMember>,
@@ -5602,6 +6051,7 @@ class OverlayService : LifecycleService() {
             val featuredPokemon: List<String>,
             val top5AbbTeams: List<AntiMetaTeamOption>,
             val top5AbcTeams: List<AntiMetaTeamOption>,
+            val top5DuoTeams: List<AntiMetaTeamOption> = emptyList(),
             val candidatesEvaluated: Int,
             val movesetCombosSimulated: Int = 0,
             val metaTargetCount: Int = 25,
@@ -5874,7 +6324,7 @@ class OverlayService : LifecycleService() {
             val topMetaPool = extendedRankedPool.take(60)
             val top25MetaThreats = roleMeta.top25Threats
             val top50MetaThreats = roleMeta.top50Threats
-            val targetAuditTotal = top25MetaThreats.size.takeIf { it > 0 } ?: 25
+            val targetAuditTotal = top50MetaThreats.size.takeIf { it > 0 } ?: 50
 
             fun isMegaOrPrimal(name: String, speciesId: String = ""): Boolean {
                 val n = name.lowercase()
@@ -6123,7 +6573,7 @@ class OverlayService : LifecycleService() {
                     return "$threatName($oppBr0/$oppBr1/$oppBr2)"
                 }
 
-                for (threat in top25MetaThreats) {
+                for (threat in top50MetaThreats) {
                     val r0 = m0.leadByOpp[threat] ?: 500.0
                     val r1 = m1.swapByOpp[threat] ?: 500.0
                     val r2 = m2.closerByOpp[threat] ?: 500.0
@@ -6144,7 +6594,7 @@ class OverlayService : LifecycleService() {
                 }
 
                 if (keyThreats.isEmpty()) {
-                    val sortedTough = top25MetaThreats
+                    val sortedTough = top50MetaThreats
                         .filter { it !in coreBreakerSpecies }
                         .map { t ->
                             val r0 = m0.leadByOpp[t] ?: 500.0
@@ -6167,14 +6617,16 @@ class OverlayService : LifecycleService() {
                     }
                 }
 
+                val duoSymmetryBonus = if (archetype == "DUO") sharedWeaks.size * 4.5 else 0.0
                 val rawComposite = 0.48 * machineAggBr.toDouble() +
                     0.20 * m0.leadBr.toDouble() +
                     0.16 * m1.swapBr.toDouble() +
                     0.16 * m2.closerBr.toDouble() +
-                    beatenTargets.size * 1.65 -
+                    beatenTargets.size * 1.65 +
+                    duoSymmetryBonus -
                     coreBreakers.size * 7.5 -
                     keyThreats.size * 1.8 -
-                    (if (archetype == "ABC") unresistedTripleWeakPenalty else 0.0)
+                    (if (archetype == "ABC" || archetype == "DUO") unresistedTripleWeakPenalty else 0.0)
                 val compositeAntiMetaScore = (rawComposite * 10.0).roundToInt() / 10.0
 
                 val winsPreview = beatenTargets.take(5).joinToString(", ").ifEmpty { "Broad neutral coverage" }
@@ -6182,7 +6634,7 @@ class OverlayService : LifecycleService() {
                 val breakersPreview = if (coreBreakers.isNotEmpty()) {
                     coreBreakers.take(4).joinToString(", ")
                 } else {
-                    "None (0 hard core breakers in Top 25)"
+                    "None (0 hard core breakers in Top 50)"
                 }
                 val altNotes = altMovesetSlots
                     .filter { it.isAltMoveset }
@@ -6209,10 +6661,13 @@ class OverlayService : LifecycleService() {
                     }
                 }
 
-                val synergySummary = if (archetype == "ABB") {
-                    "ABB Lineup: ${m0.member.name} (Lead A) covers backline ${sharedWeaks.joinToString("/") { it.uppercase() }} weakness for ${m1.member.name} (Bait B1) & ${m2.member.name} (Sweeper B2). Beats ${beatenTargets.size}/$targetAuditTotal Top Meta. Key Wins: $winsPreview. Key Threats: $threatsPreview. Core Breakers: $breakersPreview.$altSuffix"
-                } else {
-                    "ABC Balanced Core: ${m0.member.name} Lead (${m0.leadBr} BR) + ${m1.member.name} Safe Swap (${m1.swapBr} BR) + ${m2.member.name} Closer (${m2.closerBr} BR). Beats ${beatenTargets.size}/$targetAuditTotal Top Meta. Key Wins: $winsPreview. Key Threats: $threatsPreview. Core Breakers: $breakersPreview.$altSuffix"
+                val synergySummary = when (archetype) {
+                    "ABB" -> "ABB Lineup: ${m0.member.name} (Lead A) covers backline ${sharedWeaks.joinToString("/") { it.uppercase() }} weakness for ${m1.member.name} (Bait B1) & ${m2.member.name} (Sweeper B2). Beats ${beatenTargets.size}/$targetAuditTotal Top Meta. Key Wins: $winsPreview. Key Threats: $threatsPreview. Core Breakers: $breakersPreview.$altSuffix"
+                    "DUO" -> {
+                        val covStr = if (sharedWeaks.isNotEmpty()) " (${sharedWeaks.joinToString("/") { it.uppercase() }} covered)" else ""
+                        "Duo-Core (Yin-Yang 1⇄3): ${m0.member.name} (Core 1 Lead, ${m0.leadBr} BR) & ${m2.member.name} (Core 2 Co-Core, ${m2.closerBr} BR) mutually cover each other's weaknesses$covStr, with ${m1.member.name} (${m1.swapBr} BR) as the Safe Swap Pivot. Beats ${beatenTargets.size}/$targetAuditTotal Top Meta. Key Wins: $winsPreview. Key Threats: $threatsPreview. Core Breakers: $breakersPreview.$altSuffix"
+                    }
+                    else -> "ABC Balanced Core: ${m0.member.name} Lead (${m0.leadBr} BR) + ${m1.member.name} Safe Swap (${m1.swapBr} BR) + ${m2.member.name} Closer (${m2.closerBr} BR). Beats ${beatenTargets.size}/$targetAuditTotal Top Meta. Key Wins: $winsPreview. Key Threats: $threatsPreview. Core Breakers: $breakersPreview.$altSuffix"
                 }
 
                 return AntiMetaTeamOption(
@@ -6242,6 +6697,7 @@ class OverlayService : LifecycleService() {
 
             val abbCandidates = ArrayList<AntiMetaTeamOption>()
             val abcCandidates = ArrayList<AntiMetaTeamOption>()
+            val duoCandidates = ArrayList<AntiMetaTeamOption>()
             val seenTrios = HashSet<String>()
             var candidatesEvaluated = 0
 
@@ -6374,6 +6830,48 @@ class OverlayService : LifecycleService() {
                     }
                 }
 
+                // Evaluate Symmetric Yin-Yang Duo-Core (1st & 3rd cover each other's weaknesses; 2nd is Safe Swap Pivot)
+                var bestDuoOrder: Triple<Int, Int, Int>? = null
+                var bestDuoCovered: List<String> = emptyList()
+                var bestDuoStructureScore = Double.NEGATIVE_INFINITY
+
+                for ((pivotIdx, cI, cJ) in indexPermutations) {
+                    val wI = evals[cI].weaknesses.toSet()
+                    val wJ = evals[cJ].weaknesses.toSet()
+                    if (wI.intersect(wJ).isNotEmpty()) continue // Core partners cannot share an unresisted weakness
+                    val rI = evals[cI].resistances.toSet()
+                    val rJ = evals[cJ].resistances.toSet()
+                    val coveredByI = wJ.filter { it in rI }
+                    val coveredByJ = wI.filter { it in rJ }
+                    if (coveredByI.isNotEmpty() && coveredByJ.isNotEmpty() && (coveredByI.size + coveredByJ.size) >= 3) {
+                        val c1First = (evals[cI].leadBr + evals[cJ].closerBr) >= (evals[cJ].leadBr + evals[cI].closerBr)
+                        val ordered = if (c1First) Triple(cI, pivotIdx, cJ) else Triple(cJ, pivotIdx, cI)
+                        val dScore = (coveredByI.size + coveredByJ.size) * 32.0 +
+                            evals[ordered.first].leadBr * 0.35 +
+                            evals[ordered.second].swapBr * 0.38 +
+                            evals[ordered.third].closerBr * 0.27
+                        if (dScore > bestDuoStructureScore) {
+                            bestDuoStructureScore = dScore
+                            bestDuoOrder = ordered
+                            bestDuoCovered = (coveredByI + coveredByJ).distinct()
+                        }
+                    }
+                }
+
+                if (bestDuoOrder != null) {
+                    duoCandidates.add(
+                        buildTeamOptionFromEvals(
+                            evals[bestDuoOrder.first],
+                            evals[bestDuoOrder.second],
+                            evals[bestDuoOrder.third],
+                            "DUO",
+                            bestDuoCovered,
+                            "anti-meta-duo",
+                            sig
+                        )
+                    )
+                }
+
                 if (bestAbbOrder != null) {
                     abbCandidates.add(
                         buildTeamOptionFromEvals(
@@ -6401,8 +6899,8 @@ class OverlayService : LifecycleService() {
                 }
             }
 
-            if (abbCandidates.size < 8 || abcCandidates.size < 8) {
-                for (trio in triosToEvaluate.take(80)) {
+            if (abbCandidates.size < 8 || abcCandidates.size < 8 || duoCandidates.size < 8) {
+                for (trio in triosToEvaluate.take(90)) {
                     val list3 = listOf(trio.first, trio.second, trio.third)
                     val e0 = slotEvalCache[list3[0].name.lowercase()] ?: continue
                     val e1 = slotEvalCache[list3[1].name.lowercase()] ?: continue
@@ -6432,6 +6930,31 @@ class OverlayService : LifecycleService() {
                         }
                     }
 
+                    if (duoCandidates.size < 8 && duoCandidates.none { it.id.endsWith(sig) }) {
+                        for ((pivotIdx, cI, cJ) in indexPermutations) {
+                            val wI = evals[cI].weaknesses.toSet()
+                            val wJ = evals[cJ].weaknesses.toSet()
+                            val rI = evals[cI].resistances.toSet()
+                            val rJ = evals[cJ].resistances.toSet()
+                            val covered = (wJ.filter { it in rI } + wI.filter { it in rJ }).distinct()
+                            if (covered.size >= 2 && wI.intersect(wJ).size <= 1) {
+                                val ordered = if (evals[cI].leadBr >= evals[cJ].leadBr) Triple(cI, pivotIdx, cJ) else Triple(cJ, pivotIdx, cI)
+                                duoCandidates.add(
+                                    buildTeamOptionFromEvals(
+                                        evals[ordered.first],
+                                        evals[ordered.second],
+                                        evals[ordered.third],
+                                        "DUO",
+                                        covered,
+                                        "anti-meta-duo-fallback",
+                                        sig
+                                    )
+                                )
+                                break
+                            }
+                        }
+                    }
+
                     if (abcCandidates.size < 8 && abcCandidates.none { it.id.endsWith(sig) }) {
                         val m0 = e0
                         val m1 = if (e1.swapBr >= e2.swapBr) e1 else e2
@@ -6445,6 +6968,7 @@ class OverlayService : LifecycleService() {
 
             abbCandidates.sortByDescending { it.compositeAntiMetaScore }
             abcCandidates.sortByDescending { it.compositeAntiMetaScore }
+            duoCandidates.sortByDescending { it.compositeAntiMetaScore }
 
             fun pickTopDiverseFinalists(list: List<AntiMetaTeamOption>, maxCount: Int): List<AntiMetaTeamOption> {
                 val picked = ArrayList<AntiMetaTeamOption>(maxCount)
@@ -6519,10 +7043,10 @@ class OverlayService : LifecycleService() {
                 val b2 = slotEvalCache[option.pokemon.getOrNull(2)?.name?.lowercase() ?: ""] ?: return option
                 val baseEvals = listOf(b0, b1, b2)
                 val curEvals = mutableListOf(b0, b1, b2)
-                val roleLabels = if (option.archetype == "ABB") {
-                    listOf("Lead (A)", "Bait Swap (B1)", "Sweeper (B2)")
-                } else {
-                    listOf("Lead", "Safe Swap", "Closer")
+                val roleLabels = when (option.archetype) {
+                    "ABB" -> listOf("Lead (A)", "Bait Swap (B1)", "Sweeper (B2)")
+                    "DUO" -> listOf("Lead (Core 1)", "Pivot (Swap)", "Co-Core (Core 2)")
+                    else -> listOf("Lead", "Safe Swap", "Closer")
                 }
 
                 for (slotIdx in 0..2) {
@@ -6543,16 +7067,26 @@ class OverlayService : LifecycleService() {
                         .take(5)
                         .ifEmpty { listOf(stdEval.member.chargedMove1, stdEval.member.chargedMove2).distinctBy { it.lowercase() } }
 
-                    val chargedPairs = ArrayList<Pair<String, String>>()
+                    val rawChargedPairs = ArrayList<Pair<String, String>>()
                     if (chargedPool.size <= 1) {
                         val only = chargedPool.firstOrNull() ?: stdEval.member.chargedMove1
-                        chargedPairs.add(only to only)
+                        rawChargedPairs.add(only to only)
                     } else {
                         for (i in 0 until chargedPool.size) {
                             for (j in (i + 1) until chargedPool.size) {
-                                chargedPairs.add(chargedPool[i] to chargedPool[j])
+                                rawChargedPairs.add(chargedPool[i] to chargedPool[j])
                             }
                         }
+                    }
+                    val stdTypes = resolveRecommendedMovesForSpecies(stdEval.member.name, normLeague)?.types ?: emptyList()
+                    val nonDomPairs = rawChargedPairs.filterNot { (c1, c2) ->
+                        isDominatedSameTypeChargedPairStatic(c1, c2, stdTypes)
+                    }
+                    val chargedPairs = if (nonDomPairs.isNotEmpty()) nonDomPairs else rawChargedPairs
+                    val hasDualTypeOption = chargedPairs.any { (c1, c2) ->
+                        val t1 = resolveChargedMoveStatsStatic(c1, stdTypes.firstOrNull() ?: "normal").type
+                        val t2 = resolveChargedMoveStatsStatic(c2, stdTypes.firstOrNull() ?: "normal").type
+                        !t1.equals(t2, ignoreCase = true)
                     }
 
                     var bestSlotEval = curEvals[slotIdx]
@@ -6584,8 +7118,13 @@ class OverlayService : LifecycleService() {
                                 option.id,
                                 "opt"
                             )
-                            if (trialTeam.compositeAntiMetaScore > bestScore + 0.4) {
-                                bestScore = trialTeam.compositeAntiMetaScore
+                            val c1S = resolveChargedMoveStatsStatic(c1, stdTypes.firstOrNull() ?: "normal")
+                            val c2S = resolveChargedMoveStatsStatic(c2, stdTypes.firstOrNull() ?: "normal")
+                            val isSameTypePair = !c1.equals(c2, ignoreCase = true) && c1S.type.equals(c2S.type, ignoreCase = true)
+                            val roleAdj = if (isSameTypePair && slotIdx == 1 && hasDualTypeOption) -1.2 else 0.0
+                            val effectiveTrialScore = trialTeam.compositeAntiMetaScore + roleAdj
+                            if (effectiveTrialScore > bestScore + 0.4) {
+                                bestScore = effectiveTrialScore
                                 bestSlotEval = candEval
                             }
                         }
@@ -6658,9 +7197,12 @@ class OverlayService : LifecycleService() {
                 .sortedByDescending { it.compositeAntiMetaScore }
             val abcFinalists = pickTopDiverseFinalists(abcCandidates, 6).map { optimizeTeamOptionMovesets(it) }
                 .sortedByDescending { it.compositeAntiMetaScore }
+            val duoFinalists = pickTopDiverseFinalists(duoCandidates, 6).map { optimizeTeamOptionMovesets(it) }
+                .sortedByDescending { it.compositeAntiMetaScore }
 
             val top5Abb = abbFinalists.take(5).mapIndexed { idx, item -> item.copy(rank = idx + 1) }
             val top5Abc = abcFinalists.take(5).mapIndexed { idx, item -> item.copy(rank = idx + 1) }
+            val top5Duo = duoFinalists.take(5).mapIndexed { idx, item -> item.copy(rank = idx + 1) }
             val elapsed = max(1L, System.currentTimeMillis() - t0)
 
             return AntiMetaTeamBuilderResult(
@@ -6669,6 +7211,7 @@ class OverlayService : LifecycleService() {
                 featuredPokemon = slotConstraints.map { it.displayLabel },
                 top5AbbTeams = top5Abb,
                 top5AbcTeams = top5Abc,
+                top5DuoTeams = top5Duo,
                 candidatesEvaluated = candidatesEvaluated,
                 movesetCombosSimulated = movesetCombosSimulated,
                 metaTargetCount = targetAuditTotal,
@@ -6733,6 +7276,7 @@ class OverlayService : LifecycleService() {
     private var oppCountMode = "my_fasts"
     private var enable4ChargedMoves = false
     private var disableBattleToasts = false
+    private var showTacticalRecommendations = true
     private var overlayScalePct = 78
     private var overlayTransparencyPct = 72
     private var appThemeId = "dialga_shiny_midnight"
@@ -6785,6 +7329,44 @@ class OverlayService : LifecycleService() {
     private var oppSwitchAliveFrames: Int = 0
     private var playerShieldDropFrames: Int = 0
     private var oppShieldDropFrames: Int = 0
+    private var playerShieldRestoreFrames: Int = 0
+    private var oppShieldRestoreFrames: Int = 0
+
+    // v3.34: 1st-Frame Immediate Swap Detection, Midpoint Swap Clock, 2nd-Frame Validity Bit & Post-Faint Prompt
+    private var lastConfirmedPlayerFrameTimeMs: Long = 0L
+    private var lastConfirmedOppFrameTimeMs: Long = 0L
+    private var playerSwitchValidityLatched: Boolean = true
+    private var oppSwitchValidityLatched: Boolean = true
+    private var provisionalOppPrevName: String = ""
+    private var provisionalOppPrevSpecies: String = ""
+    private var provisionalOppPrevWasAddedToDetected: Boolean = false
+    private var provisionalPlayerPrevName: String = ""
+    private var isPostFaintSwitchPromptActive: Boolean = false
+    private var lastRecommendedAction: String = ""
+    private var lastRecommendedGoal: String = ""
+    private var lastRecommendedPhase: String = "LEAD"
+    private var lastRecommendedSwapSlotIdx: Int = -1
+    private var lastRecommendedCandidateScores: Map<String, Int> = emptyMap()
+    private var recommendationsIssuedInBattle: Int = 0
+    private var recommendationsFollowedInBattle: Int = 0
+
+    // v3.40: Persistent Per-Slot HP Memory (0..100%) & Bidirectional Charged Attack State Machine
+    private val playerSlotHpPct = IntArray(3) { 100 }
+    private val oppSlotHpPct = IntArray(3) { 100 }
+    private var sampledPlayerHpPct: Int = -1
+    private var sampledOppHpPct: Int = -1
+    private var isAttackIncomingPromptActive: Boolean = false
+    private var attackIncomingDetectedAtMs: Long = 0L
+    private var pendingChargedAttackActor: String = "" // "opp" | "user" | ""
+    private var pendingChargedAttackStartMs: Long = 0L
+    private var pendingChargedAttackPreUserHp: Int = 100
+    private var pendingChargedAttackPreOppHp: Int = 100
+    private var pendingChargedAttackPreUserShields: Int = 2
+    private var pendingChargedAttackPreOppShields: Int = 2
+    private var pendingChargedAttackAttackerName: String = ""
+    private var pendingChargedAttackDefenderName: String = ""
+    private var lastSteadyMoveButtonsSeenMs: Long = 0L
+    private var lastChargedAttackLoggedMs: Long = 0L
 
     // Phase 2: Battle Clock Synchronization (t0) & Live Timeline Event Logger
     private var battleClockAnchorMs: Long = 0L
@@ -6815,7 +7397,7 @@ class OverlayService : LifecycleService() {
     }
 
     data class BattleTimelineEvent(
-        val type: String = "SWAP", // "SWAP" | "SHIELD" | "FAINT"
+        val type: String = "SWAP", // "SWAP" | "SHIELD" | "FAINT" | "POST_FAINT_PROMPT" | "DECISION_SNAPSHOT" | "CHARGED_ATTACK"
         val actor: String = "user", // "user" | "opp"
         val t: Double = 0.0, // Relative elapsed seconds (Date.now() - t0) / 1000
         val pokemonIn: String? = null,
@@ -6825,7 +7407,29 @@ class OverlayService : LifecycleService() {
         val activePokemon: String? = null,
         val pokemonShielded: String? = null,
         val userShieldsRemaining: Int = 2,
-        val oppShieldsRemaining: Int = 2
+        val oppShieldsRemaining: Int = 2,
+        val recommendedAction: String? = null,
+        val recommendedGoal: String? = null,
+        val decisionPhase: String? = null,
+        val recommendedTargetPokemon: String? = null,
+        val playerSwapRemainingSec: Int? = null,
+        val oppSwapRemainingSec: Int? = null,
+        val userAliveCount: Int? = null,
+        val oppAliveCount: Int? = null,
+        val lastPlayerSwitchWasFaint: Boolean? = null,
+        val lastOppSwitchWasFaint: Boolean? = null,
+        val activeMatchupBr: Int? = null,
+        val candidateScores: Map<String, Int>? = null,
+        val followedRecommendation: Boolean? = null,
+        val validityLatched: Boolean? = null,
+        // v3.40: Charged Attack & Persistent Slot HP Telemetry
+        val shielded: Boolean? = null,
+        val hpBeforePct: Int? = null,
+        val hpAfterPct: Int? = null,
+        val hpDeltaPct: Int? = null,
+        val inferredMoveName: String? = null,
+        val userSlotHpPct: List<Int>? = null,
+        val oppSlotHpPct: List<Int>? = null
     )
 
     data class ExecutionIntervalSegment(
@@ -6942,6 +7546,7 @@ class OverlayService : LifecycleService() {
         oppCountMode = prefs.getString("opp_count_mode", "my_fasts") ?: "my_fasts"
         enable4ChargedMoves = prefs.getBoolean(PREFS_KEY_ENABLE_4_CHARGED_MOVES, false)
         disableBattleToasts = prefs.getBoolean(PREFS_KEY_DISABLE_BATTLE_TOASTS, false)
+        showTacticalRecommendations = prefs.getBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, true)
         overlayScalePct = prefs.getInt("overlay_scale_pct", 78).coerceIn(50, 100)
         overlayTransparencyPct = prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 72).coerceIn(0, 100)
         val rawSavedThemeId = prefs.getString(PREFS_KEY_APP_THEME_ID, "dialga_shiny_midnight") ?: "dialga_shiny_midnight"
@@ -7449,6 +8054,13 @@ class OverlayService : LifecycleService() {
                 }
                 overlayView?.evaluateJavascript("if (window.setDisableBattleToasts) setDisableBattleToasts($disableBattleToasts);", null)
 
+                showTacticalRecommendations = if (intent?.hasExtra(EXTRA_SHOW_TACTICAL_RECOMMENDATIONS) == true) {
+                    intent.getBooleanExtra(EXTRA_SHOW_TACTICAL_RECOMMENDATIONS, true)
+                } else {
+                    prefs.getBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, showTacticalRecommendations)
+                }
+                overlayView?.evaluateJavascript("if (window.setShowTacticalRecs) setShowTacticalRecs($showTacticalRecommendations);", null)
+
                 val requestedTeamName = intent?.getStringExtra(EXTRA_TEAM_NAME)
                     ?: intent?.getStringExtra("preset")
                 if (!requestedTeamName.isNullOrBlank()) {
@@ -7518,6 +8130,12 @@ class OverlayService : LifecycleService() {
                     disableBattleToasts = prefs.getBoolean(PREFS_KEY_DISABLE_BATTLE_TOASTS, disableBattleToasts)
                 }
                 overlayView?.evaluateJavascript("if (window.setDisableBattleToasts) setDisableBattleToasts($disableBattleToasts);", null)
+                if (intent?.hasExtra(EXTRA_SHOW_TACTICAL_RECOMMENDATIONS) == true) {
+                    showTacticalRecommendations = intent.getBooleanExtra(EXTRA_SHOW_TACTICAL_RECOMMENDATIONS, true)
+                } else {
+                    showTacticalRecommendations = prefs.getBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, showTacticalRecommendations)
+                }
+                overlayView?.evaluateJavascript("if (window.setShowTacticalRecs) setShowTacticalRecs($showTacticalRecommendations);", null)
                 syncTierThresholdsFromPrefs(prefs)
                 val updatedScalePct = intent?.getIntExtra(
                     EXTRA_OVERLAY_SCALE_PCT,
@@ -7783,7 +8401,7 @@ class OverlayService : LifecycleService() {
         )
         val srcMoves = Rect(
             (w * 0.08f).toInt().coerceIn(0, w - 1),
-            (h * 0.80f).toInt().coerceIn(0, h - 1),
+            (h * 0.70f).toInt().coerceIn(0, h - 1),
             (w * 0.92f).toInt().coerceIn(1, w),
             (h * 0.95f).toInt().coerceIn(1, h)
         )
@@ -7869,7 +8487,21 @@ class OverlayService : LifecycleService() {
             (h * 0.125f).toInt().coerceIn(1, h)
         )
 
-        // Frame Timestamp Tracking & Pokéball/Shield Status Sampling before screen recycle
+        // v3.40: Height-Invariant 2D Floating HP Bar Corridors (Opponent Y: 0.20..0.46, Player Y: 0.47..0.68)
+        val oppHpCorridorRect = Rect(
+            (w * 0.25f).toInt().coerceIn(0, w - 1),
+            (h * 0.20f).toInt().coerceIn(0, h - 1),
+            (w * 0.50f).toInt().coerceIn(1, w),
+            (h * 0.46f).toInt().coerceIn(1, h)
+        )
+        val playerHpCorridorRect = Rect(
+            (w * 0.16f).toInt().coerceIn(0, w - 1),
+            (h * 0.47f).toInt().coerceIn(0, h - 1),
+            (w * 0.45f).toInt().coerceIn(1, w),
+            (h * 0.68f).toInt().coerceIn(1, h)
+        )
+
+        // Frame Timestamp Tracking & Pokéball/Shield/HP Status Sampling before screen recycle
         prevFrameTimestampMs = currentFrameTimestampMs
         currentFrameTimestampMs = System.currentTimeMillis()
         if (sampledPlayerBalls in 1..3) prevValidPlayerBalls = sampledPlayerBalls
@@ -7886,6 +8518,8 @@ class OverlayService : LifecycleService() {
         }
         sampledPlayerShields = if (sampledPlayerBalls in 1..3) detectActiveShieldCount(screen, playerShieldRect) else -1
         sampledOppShields = if (sampledOppBalls in 1..3) detectActiveShieldCount(screen, oppShieldRect) else -1
+        sampledOppHpPct = detectFloatingHpBarPct(screen, oppHpCorridorRect, w)
+        sampledPlayerHpPct = detectFloatingHpBarPct(screen, playerHpCorridorRect, w)
 
         screen.recycle()
 
@@ -7930,6 +8564,7 @@ class OverlayService : LifecycleService() {
         handleOpponentLines(oppLines)
         handlePlayerSwitchLines(playerTopLines, playerMoveLines)
         updateSteadyFrameBallAndShieldState()
+        updateLiveHpAndChargedAttackState(oppLines, playerTopLines, playerMoveLines)
     }
 
     /**
@@ -7960,9 +8595,16 @@ class OverlayService : LifecycleService() {
     }
 
     /**
-     * Interpolates T_swap midway between frame F_prev and detection frame F_detect
-     * to eliminate capture interval latency, anchoring the timer to calculated animation start.
+     * Interpolates T_swap midway between the last frame where the old Pokémon was seen
+     * and the first frame where the new Pokémon is seen (with fallback to prevFrameTimestampMs).
      */
+    private fun getMidpointSwapStartTimeMs(lastOldPokemonFrameMs: Long, firstNewPokemonFrameMs: Long = currentFrameTimestampMs): Long {
+        if (lastOldPokemonFrameMs > 0L && firstNewPokemonFrameMs > lastOldPokemonFrameMs && (firstNewPokemonFrameMs - lastOldPokemonFrameMs) <= 8000L) {
+            return (lastOldPokemonFrameMs + firstNewPokemonFrameMs) / 2L
+        }
+        return getInterpolatedSwapStartTimeMs()
+    }
+
     private fun getInterpolatedSwapStartTimeMs(): Long {
         return if (prevFrameTimestampMs > 0L && currentFrameTimestampMs > prevFrameTimestampMs) {
             (prevFrameTimestampMs + currentFrameTimestampMs) / 2L
@@ -8239,6 +8881,438 @@ class OverlayService : LifecycleService() {
         }
     }
 
+    /**
+     * v3.40: Height-Invariant 2D Floating HP Bar Capsule Scanner.
+     * Scans vertically in 2px steps across the target corridor (Opponent Y: 0.20..0.46, Player Y: 0.47..0.68)
+     * to locate the floating horizontal HP capsule regardless of Pokémon height (e.g. Palkia vs. Honchkrow vs. Tinkaton)
+     * or idle head-bobbing animations.
+     *
+     * Verifies the Niantic HP Capsule Width Invariant:
+     *   W_total = W_fill (Green / Yellow / Red) + W_dark (Depleted Charcoal Track) ∈ [0.105 * screenW, 0.155 * screenW]
+     * across at least 3 adjacent scanlines (6px–16px vertical thickness).
+     * Returns 1..100 (or -1 if no valid HP bar capsule is visible on screen).
+     */
+    private fun detectFloatingHpBarPct(screen: Bitmap, searchRect: Rect, fullScreenWidth: Int): Int {
+        return try {
+            val left = searchRect.left.coerceIn(0, screen.width - 1)
+            val right = searchRect.right.coerceIn(0, screen.width)
+            val top = searchRect.top.coerceIn(0, screen.height - 1)
+            val bottom = searchRect.bottom.coerceIn(0, screen.height)
+            val cw = right - left
+            val ch = bottom - top
+            if (cw <= 24 || ch <= 10) return -1
+
+            val minBarWidth = (fullScreenWidth * 0.105f).toInt().coerceAtLeast(36)
+            val maxBarWidth = (fullScreenWidth * 0.158f).toInt().coerceAtMost(cw - 2)
+            if (minBarWidth >= maxBarWidth) return -1
+
+            val pixels = IntArray(cw * ch)
+            screen.getPixels(pixels, 0, cw, left, top, cw, ch)
+
+            // Classify pixel: 1 = HP Fill (Green / Yellow / Red), 2 = Depleted Dark Track, 0 = Background
+            fun classifyHpPixel(pixel: Int): Int {
+                val r = (pixel shr 16) and 0xFF
+                val g = (pixel shr 8) and 0xFF
+                val b = pixel and 0xFF
+                // Green HP fill (>50% HP)
+                if (g >= 165 && r <= 145 && b <= 170 && (g - r) >= 35) return 1
+                // Yellow / Amber HP fill (20%..50% HP)
+                if (r >= 185 && g in 125..225 && b <= 105 && (r - b) >= 90) return 1
+                // Red HP fill (<20% HP)
+                if (r >= 175 && g <= 95 && b <= 95 && (r - g) >= 85) return 1
+                // Depleted Dark Charcoal Track (right portion of capsule)
+                val maxCh = max(r, max(g, b))
+                val minCh = min(r, min(g, b))
+                if (r in 22..96 && g in 26..102 && b in 30..110 && (maxCh - minCh) <= 26) return 2
+                return 0
+            }
+
+            data class ScanlineBarCandidate(val ry: Int, val xStart: Int, val wFill: Int, val wTotal: Int)
+            val candidates = mutableListOf<ScanlineBarCandidate>()
+
+            var ry = 0
+            while (ry < ch) {
+                val rowOffset = ry * cw
+                var bestXStart = -1
+                var bestWFill = 0
+                var bestWTotal = 0
+
+                var rx = 0
+                while (rx < cw - minBarWidth) {
+                    if (classifyHpPixel(pixels[rowOffset + rx]) == 1) {
+                        val xStart = rx
+                        var wFill = 0
+                        var gap = 0
+                        while (rx < cw) {
+                            val cls = classifyHpPixel(pixels[rowOffset + rx])
+                            if (cls == 1) {
+                                wFill += 1 + gap
+                                gap = 0
+                                rx++
+                            } else if (gap < 2) {
+                                gap++
+                                rx++
+                            } else {
+                                break
+                            }
+                        }
+                        // Scan contiguous depleted dark track immediately to the right of fill
+                        var wDark = 0
+                        var darkGap = 0
+                        var dx = xStart + wFill
+                        while (dx < cw && (dx - xStart) <= maxBarWidth + 4) {
+                            val cls = classifyHpPixel(pixels[rowOffset + dx])
+                            if (cls == 2) {
+                                wDark += 1 + darkGap
+                                darkGap = 0
+                                dx++
+                            } else if (darkGap < 2) {
+                                darkGap++
+                                dx++
+                            } else {
+                                break
+                            }
+                        }
+                        val wTotal = wFill + wDark
+                        if (wFill >= 3 && wTotal in minBarWidth..maxBarWidth && wTotal > bestWTotal) {
+                            bestXStart = xStart
+                            bestWFill = wFill
+                            bestWTotal = wTotal
+                        }
+                    } else {
+                        rx++
+                    }
+                }
+                if (bestWTotal in minBarWidth..maxBarWidth) {
+                    candidates.add(ScanlineBarCandidate(ry, bestXStart, bestWFill, bestWTotal))
+                }
+                ry += 2
+            }
+
+            if (candidates.size < 2) return -1
+
+            // Find vertical cluster of >= 2 adjacent 2px-stepped scanlines (4..16px vertical thickness)
+            // with consistent xStart (±6px) and wTotal (±8px)
+            var bestCluster: List<ScanlineBarCandidate>? = null
+            for (i in candidates.indices) {
+                val anchor = candidates[i]
+                val cluster = candidates.filter { c ->
+                    kotlin.math.abs(c.ry - anchor.ry) <= 12 &&
+                        kotlin.math.abs(c.xStart - anchor.xStart) <= 6 &&
+                        kotlin.math.abs(c.wTotal - anchor.wTotal) <= 8
+                }
+                if (cluster.size >= 2 && (bestCluster == null || cluster.size > bestCluster!!.size)) {
+                    bestCluster = cluster
+                }
+            }
+
+            val validCluster = bestCluster ?: return -1
+            val sortedRatios = validCluster.map { c ->
+                ((c.wFill.toDouble() / c.wTotal.toDouble()) * 100.0).roundToInt().coerceIn(1, 100)
+            }.sorted()
+            sortedRatios[sortedRatios.size / 2]
+        } catch (_: Exception) {
+            -1
+        }
+    }
+
+    /**
+     * v3.40: Scales a 100%-HP baseline Battle Rating (150..850) by the live or persisted
+     * HP% ratio between the user's slot and the opponent's slot.
+     */
+    private fun scaleBrByHpRatio(baseBr: Int, userHpPct: Int, oppHpPct: Int): Int {
+        val u = max(8.0, min(100.0, userHpPct.toDouble()))
+        val o = max(8.0, min(100.0, oppHpPct.toDouble()))
+        if (kotlin.math.abs(u - o) <= 3.0) return baseBr
+        val delta = (220.0 * kotlin.math.ln(u / o)).roundToInt()
+        return (baseBr + delta).coerceIn(150, 850)
+    }
+
+    /**
+     * v3.40: Conservative unshielded Charged Move attribution.
+     * Returns a specific move name ONLY when the attack was unshielded AND the observed HP% drop
+     * is within ±8% of exactly one candidate move with >=12% separation from any other move.
+     */
+    private fun inferUnshieldedChargedMoveName(
+        hpDeltaPct: Int,
+        candidateMoves: List<Pair<String, Int>>
+    ): String? {
+        if (hpDeltaPct <= 4 || candidateMoves.isEmpty()) return null
+        val sorted = candidateMoves
+            .filter { it.first.isNotBlank() && it.second > 0 }
+            .distinctBy { it.first.lowercase() }
+            .map { Triple(it.first, it.second, kotlin.math.abs(hpDeltaPct - it.second)) }
+            .sortedBy { it.third }
+        if (sorted.isEmpty()) return null
+        val best = sorted[0]
+        if (best.third > 8) return null
+        if (sorted.size >= 2) {
+            val second = sorted[1]
+            if (kotlin.math.abs(second.third - best.third) < 12) return null
+        }
+        return best.first
+    }
+
+    /**
+     * v3.40: Reconciles live floating HP bar readings, detects Opponent ("Attack incoming! Use a Protect Shield?")
+     * and Player charged-attack camera cuts, freezes HP updates during camera zooms / swap transitions,
+     * and logs CHARGED_ATTACK timeline events with persistent per-slot HP memory.
+     */
+    private fun updateLiveHpAndChargedAttackState(
+        oppLines: List<Text.Line>,
+        playerTopLines: List<Text.Line>,
+        playerMoveLines: List<Text.Line>
+    ) {
+        if (isWaitingForOpponent) return
+        val nowMs = currentFrameTimestampMs.takeIf { it > 0L } ?: System.currentTimeMillis()
+        val preset = currentPreset
+        val activeLeague = preset?.league ?: "MASTER LEAGUE"
+        val activeUserIdx = (preset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) } ?: 0).coerceIn(0, 2)
+        val activeOppBase = FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
+        val activeOppIdx = if (detectedOpponents.isNotEmpty()) {
+            detectedOpponents.indexOfFirst {
+                FormResolver.extractBaseSpecies(it).equals(activeOppBase, ignoreCase = true)
+            }.let { if (it in 0..2) it else 0 }
+        } else 0
+
+        val bottomLower = playerMoveLines.joinToString(" ") { it.text.lowercase() }
+        val hasAttackIncomingText = bottomLower.contains("attack incoming") ||
+            bottomLower.contains("protect shield") ||
+            bottomLower.contains("use a protect") ||
+            bottomLower.contains("not now")
+
+        val hasTopNameplateText = oppLines.any { it.text.trim().length >= 3 && !isOverlayHudSelfText(it.text.lowercase()) } ||
+            playerTopLines.any { it.text.trim().length >= 3 && !isOverlayHudSelfText(it.text.lowercase()) }
+        val topHudVisible = hasTopNameplateText || (sampledPlayerBalls in 1..3 && sampledOppBalls in 1..3)
+
+        // Track when the player's normal bottom charged move buttons were last visible
+        if (topHudVisible && !hasAttackIncomingText && !isPostFaintSwitchPromptActive && playerMoveLines.any { it.text.trim().length >= 4 }) {
+            lastSteadyMoveButtonsSeenMs = nowMs
+        }
+
+        // 1. Detect Opponent Charged Attack ("Attack incoming! Use a Protect Shield?")
+        if (hasAttackIncomingText) {
+            val wasPromptActive = isAttackIncomingPromptActive
+            isAttackIncomingPromptActive = true
+            attackIncomingDetectedAtMs = nowMs
+            if (pendingChargedAttackActor != "opp" && (nowMs - lastChargedAttackLoggedMs) > 2500L) {
+                pendingChargedAttackActor = "opp"
+                pendingChargedAttackStartMs = nowMs
+                pendingChargedAttackPreUserHp = playerSlotHpPct[activeUserIdx].coerceIn(1, 100)
+                pendingChargedAttackPreOppHp = oppSlotHpPct[activeOppIdx].coerceIn(1, 100)
+                pendingChargedAttackPreUserShields = playerShieldsRemaining
+                pendingChargedAttackPreOppShields = oppShieldsRemaining
+                pendingChargedAttackAttackerName = formatOpponentNameWithShadow(activeOpponentName)
+                pendingChargedAttackDefenderName = activeUserPokemonName ?: preset?.pokemon?.getOrNull(activeUserIdx)?.name ?: "Player"
+            }
+            if (!wasPromptActive) {
+                recalculateAndPushBattleData()
+                showBattleToast("⚡ Attack Incoming! See SHIELD vs NO SHIELD Callout")
+            }
+            return
+        } else if (isAttackIncomingPromptActive && (topHudVisible || (nowMs - attackIncomingDetectedAtMs) > 4200L)) {
+            isAttackIncomingPromptActive = false
+            recalculateAndPushBattleData()
+        }
+
+        // 2. Detect Player Charged Attack Minigame (Top HUD & Pokéballs hide shortly after steady bottom move buttons)
+        if (!topHudVisible &&
+            sampledPlayerBalls == -1 &&
+            sampledOppBalls == -1 &&
+            !isPostFaintSwitchPromptActive &&
+            pendingChargedAttackActor.isEmpty() &&
+            lastSteadyMoveButtonsSeenMs > 0L &&
+            (nowMs - lastSteadyMoveButtonsSeenMs) <= 3500L &&
+            (nowMs - lastChargedAttackLoggedMs) > 3000L
+        ) {
+            pendingChargedAttackActor = "user"
+            pendingChargedAttackStartMs = nowMs
+            pendingChargedAttackPreUserHp = playerSlotHpPct[activeUserIdx].coerceIn(1, 100)
+            pendingChargedAttackPreOppHp = oppSlotHpPct[activeOppIdx].coerceIn(1, 100)
+            pendingChargedAttackPreUserShields = playerShieldsRemaining
+            pendingChargedAttackPreOppShields = oppShieldsRemaining
+            pendingChargedAttackAttackerName = activeUserPokemonName ?: preset?.pokemon?.getOrNull(activeUserIdx)?.name ?: "Player"
+            pendingChargedAttackDefenderName = formatOpponentNameWithShadow(activeOpponentName)
+            return
+        }
+
+        // Freeze HP bar updates when top HUD is hidden (charged attack camera cut)
+        if (!topHudVisible) return
+
+        var hpChanged = false
+
+        // 3. Update Persistent Active Slot HP% (with 900ms post-swap transition guard)
+        if (sampledPlayerHpPct in 1..100 && (nowMs - lastPlayerSwitchFrameMs) >= 900L && !playerFaintedSlots[activeUserIdx]) {
+            val curHp = playerSlotHpPct[activeUserIdx]
+            // Smooth upward jitter while allowing immediate downward damage drops
+            val nextHp = if (sampledPlayerHpPct <= curHp) {
+                sampledPlayerHpPct
+            } else if (sampledPlayerHpPct - curHp <= 5) {
+                curHp
+            } else {
+                ((curHp + sampledPlayerHpPct) / 2.0).roundToInt().coerceIn(1, 100)
+            }
+            if (kotlin.math.abs(nextHp - curHp) >= 2) {
+                playerSlotHpPct[activeUserIdx] = nextHp
+                hpChanged = true
+            }
+        }
+
+        if (sampledOppHpPct in 1..100 && (nowMs - lastOppSwitchFrameMs) >= 900L && !oppFaintedSlots[activeOppIdx]) {
+            val curHp = oppSlotHpPct[activeOppIdx]
+            val nextHp = if (sampledOppHpPct <= curHp) {
+                sampledOppHpPct
+            } else if (sampledOppHpPct - curHp <= 5) {
+                curHp
+            } else {
+                ((curHp + sampledOppHpPct) / 2.0).roundToInt().coerceIn(1, 100)
+            }
+            if (kotlin.math.abs(nextHp - curHp) >= 2) {
+                oppSlotHpPct[activeOppIdx] = nextHp
+                hpChanged = true
+            }
+        }
+
+        // 4. Reconcile Pending Charged Attack once steady battle camera returns
+        if (pendingChargedAttackActor.isNotEmpty() && (nowMs - pendingChargedAttackStartMs) >= 900L) {
+            val actor = pendingChargedAttackActor
+            val eventT = getElapsedBattleSeconds(pendingChargedAttackStartMs)
+            val playerRemSec = if (playerSwapEndTimeMs > nowMs) ceil((playerSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
+            val oppRemSec = if (oppSwapEndTimeMs > nowMs) ceil((oppSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
+
+            if (actor == "opp") {
+                val postHp = if (playerFaintedSlots[activeUserIdx]) 0 else playerSlotHpPct[activeUserIdx].coerceIn(0, 100)
+                val hpBefore = pendingChargedAttackPreUserHp
+                val hpDelta = max(0, hpBefore - postHp)
+                val shieldDropped = playerShieldsRemaining < pendingChargedAttackPreUserShields
+                val shielded = shieldDropped || (hpDelta <= 3 && pendingChargedAttackPreUserShields > 0 && !playerFaintedSlots[activeUserIdx])
+
+                val inferredMove: String? = if (!shielded) {
+                    val oppMeta = computeEffectiveCombatStats(getPokemonMeta(activeOpponentName, activeLeague, isOpponentShadow), activeLeague)
+                    val userSlot = preset?.pokemon?.getOrNull(activeUserIdx)
+                    val isUserShad = (activeUserPokemonName ?: "").contains("Shadow", ignoreCase = true)
+                    val userMeta = computeEffectiveCombatStats(
+                        getPokemonMeta(activeUserPokemonName ?: "Dialga (Origin)", activeLeague, isUserShad),
+                        activeLeague,
+                        userSlot?.cp,
+                        userSlot?.ivs
+                    )
+                    val thirdMove = oppMeta.chargedMove3.takeIf { it.isNotBlank() }
+                        ?: COMMON_THIRD_CHARGED_MOVE[oppMeta.name]
+                        ?: "Outrage"
+                    val moveNames = listOf(oppMeta.chargedMove1, oppMeta.chargedMove2, thirdMove, oppMeta.chargedMove4)
+                        .filter { it.isNotBlank() }
+                        .distinct()
+                    val candPairs = moveNames.map { mName ->
+                        mName to calculateChargedMoveDamagePercent(
+                            attacker = oppMeta,
+                            defender = userMeta,
+                            moveName = mName,
+                            isAttackerShadow = isOpponentShadow,
+                            isDefenderShadow = isUserShad
+                        )
+                    }
+                    inferUnshieldedChargedMoveName(hpDelta, candPairs)
+                } else null
+
+                battleTimelineEvents.add(
+                    BattleTimelineEvent(
+                        type = "CHARGED_ATTACK",
+                        actor = "opp",
+                        t = eventT,
+                        activePokemon = pendingChargedAttackAttackerName,
+                        pokemonShielded = if (shielded) pendingChargedAttackDefenderName else null,
+                        shielded = shielded,
+                        hpBeforePct = hpBefore,
+                        hpAfterPct = if (shielded) max(1, hpBefore - 1) else postHp,
+                        hpDeltaPct = if (shielded) 1 else hpDelta,
+                        inferredMoveName = inferredMove,
+                        userSlotHpPct = playerSlotHpPct.toList(),
+                        oppSlotHpPct = oppSlotHpPct.toList(),
+                        userShieldsRemaining = playerShieldsRemaining,
+                        oppShieldsRemaining = oppShieldsRemaining,
+                        recommendedAction = lastRecommendedAction.ifEmpty { null },
+                        recommendedGoal = lastRecommendedGoal.ifEmpty { null },
+                        decisionPhase = "CHARGED_MOVE",
+                        playerSwapRemainingSec = playerRemSec,
+                        oppSwapRemainingSec = oppRemSec
+                    )
+                )
+                lastChargedAttackLoggedMs = nowMs
+                pendingChargedAttackActor = ""
+                hpChanged = true
+                val moveLabel = inferredMove ?: "Charged Attack"
+                val outcomeLabel = if (shielded) "Shielded" else "-${hpDelta}% HP"
+                showBattleToast("⚡ Opp $moveLabel ($outcomeLabel)")
+            } else if (actor == "user") {
+                val postHp = if (oppFaintedSlots[activeOppIdx]) 0 else oppSlotHpPct[activeOppIdx].coerceIn(0, 100)
+                val hpBefore = pendingChargedAttackPreOppHp
+                val hpDelta = max(0, hpBefore - postHp)
+                val shieldDropped = oppShieldsRemaining < pendingChargedAttackPreOppShields
+                val shielded = shieldDropped || (hpDelta <= 3 && pendingChargedAttackPreOppShields > 0 && !oppFaintedSlots[activeOppIdx])
+
+                val inferredMove: String? = if (!shielded) {
+                    val userSlot = preset?.pokemon?.getOrNull(activeUserIdx)
+                    val isUserShad = (activeUserPokemonName ?: "").contains("Shadow", ignoreCase = true)
+                    val userMeta = computeEffectiveCombatStats(
+                        getPokemonMeta(activeUserPokemonName ?: "Dialga (Origin)", activeLeague, isUserShad),
+                        activeLeague,
+                        userSlot?.cp,
+                        userSlot?.ivs
+                    )
+                    val oppMeta = computeEffectiveCombatStats(getPokemonMeta(activeOpponentName, activeLeague, isOpponentShadow), activeLeague)
+                    val moveNames = listOf(
+                        userSlot?.chargedMove1 ?: userMeta.chargedMove1,
+                        userSlot?.chargedMove2 ?: userMeta.chargedMove2
+                    ).filter { it.isNotBlank() }.distinct()
+                    val candPairs = moveNames.map { mName ->
+                        mName to calculateChargedMoveDamagePercent(
+                            attacker = userMeta,
+                            defender = oppMeta,
+                            moveName = mName,
+                            isAttackerShadow = isUserShad,
+                            isDefenderShadow = isOpponentShadow
+                        )
+                    }
+                    inferUnshieldedChargedMoveName(hpDelta, candPairs)
+                } else null
+
+                if (shielded || hpDelta >= 6) {
+                    battleTimelineEvents.add(
+                        BattleTimelineEvent(
+                            type = "CHARGED_ATTACK",
+                            actor = "user",
+                            t = eventT,
+                            activePokemon = pendingChargedAttackAttackerName,
+                            pokemonShielded = if (shielded) pendingChargedAttackDefenderName else null,
+                            shielded = shielded,
+                            hpBeforePct = hpBefore,
+                            hpAfterPct = if (shielded) max(1, hpBefore - 1) else postHp,
+                            hpDeltaPct = if (shielded) 1 else hpDelta,
+                            inferredMoveName = inferredMove,
+                            userSlotHpPct = playerSlotHpPct.toList(),
+                            oppSlotHpPct = oppSlotHpPct.toList(),
+                            userShieldsRemaining = playerShieldsRemaining,
+                            oppShieldsRemaining = oppShieldsRemaining,
+                            recommendedAction = lastRecommendedAction.ifEmpty { null },
+                            recommendedGoal = lastRecommendedGoal.ifEmpty { null },
+                            decisionPhase = "CHARGED_MOVE",
+                            playerSwapRemainingSec = playerRemSec,
+                            oppSwapRemainingSec = oppRemSec
+                        )
+                    )
+                    lastChargedAttackLoggedMs = nowMs
+                    hpChanged = true
+                }
+                pendingChargedAttackActor = ""
+            }
+        }
+
+        if (hpChanged) {
+            recalculateAndPushBattleData()
+        }
+    }
+
     private val OCR_MENU_IGNORED_WORDS = setOf(
         "party", "parties", "battle", "battles", "league", "schedule",
         "rank", "rating", "rewards", "reward", "train", "training",
@@ -8450,10 +9524,41 @@ class OverlayService : LifecycleService() {
             val anyLineHasShadow = rawMatchedLine.contains("shadow", ignoreCase = true) ||
                 sortedLines.any { it.text.contains("shadow", ignoreCase = true) }
 
-            // Trigger immediately when opponent spawns or switches/faints into a different species
             if (System.currentTimeMillis() - lastBattleResetTimeMs < 600L) return
             val speciesChanged = isWaitingForOpponent || !newBaseSpecies.equals(activeOpponentSpecies, ignoreCase = true)
+
+            // v3.34: 2nd-Frame Validity Check — If Frame 1 was an unlatched provisional swap and Frame 2 immediately
+            // re-detects the OLD opponent species (meaning Frame 1 was a 1-frame OCR glitch), revert the swap & clock!
+            if (!oppSwitchValidityLatched &&
+                speciesChanged &&
+                provisionalOppPrevSpecies.isNotEmpty() &&
+                newBaseSpecies.equals(provisionalOppPrevSpecies, ignoreCase = true) &&
+                (currentFrameTimestampMs - lastOppSwitchFrameMs) <= 2600L
+            ) {
+                if (provisionalOppPrevWasAddedToDetected && detectedOpponents.isNotEmpty()) {
+                    val badBase = activeOpponentSpecies
+                    detectedOpponents.removeAll { FormResolver.extractBaseSpecies(it).equals(badBase, ignoreCase = true) }
+                }
+                activeOpponentName = provisionalOppPrevName
+                activeOpponentSpecies = provisionalOppPrevSpecies
+                availableOpponentForms = FormResolver.getVariantsForSpecies(provisionalOppPrevSpecies, activeLeague)
+                currentFormIndex = availableOpponentForms.indexOfFirst { it.name == provisionalOppPrevName }.coerceAtLeast(0)
+                oppSwapEndTimeMs = oppSwapEndTimeBeforeSwitch
+                oppSwitchValidityLatched = true
+                provisionalOppPrevName = ""
+                provisionalOppPrevSpecies = ""
+                provisionalOppPrevWasAddedToDetected = false
+                lastConfirmedOppFrameTimeMs = currentFrameTimestampMs
+                if (battleTimelineEvents.isNotEmpty() && battleTimelineEvents.last().actor == "opp" && battleTimelineEvents.last().validityLatched == false) {
+                    battleTimelineEvents.removeAt(battleTimelineEvents.lastIndex)
+                }
+                recalculateAndPushBattleData()
+                return
+            }
+
             if (speciesChanged) {
+                val prevOppRawName = activeOpponentName
+                val prevOppRawSpecies = activeOpponentSpecies
                 val prevOppFormattedName = if (!isWaitingForOpponent && activeOpponentName != "Waiting...") {
                     formatOpponentNameWithShadow(activeOpponentName)
                 } else ""
@@ -8463,6 +9568,7 @@ class OverlayService : LifecycleService() {
                 } else -1
 
                 val wasWaitingForOpponent = isWaitingForOpponent
+                val preDetectedSize = detectedOpponents.size
                 isWaitingForOpponent = false
                 isBattleActive = true
                 lastClearedOpponentsSnapshot = emptyList()
@@ -8488,28 +9594,34 @@ class OverlayService : LifecycleService() {
 
                 // 1-per-species deduplication on opponent team (maintaining fixed 1st/2nd/3rd seen order)
                 upsertDetectedOpponentBySpecies(matched.name, newBaseSpecies)
+                val wasAddedNewToDetected = detectedOpponents.size > preDetectedSize
                 val newOppFormattedName = formatOpponentNameWithShadow(matched.name)
 
                 val newOppSlotIdx = detectedOpponents.indexOfFirst {
                     FormResolver.extractBaseSpecies(it).equals(newBaseSpecies, ignoreCase = true)
                 }
-                // Resurrection Guard: Any Pokémon entering the field is 100% alive (never stays greyed out when swapped back in!)
+                // Resurrection Guard: Any Pokémon entering the field is 100% alive
                 if (newOppSlotIdx in 0..2 && oppFaintedSlots[newOppSlotIdx]) {
                     oppFaintedSlots[newOppSlotIdx] = false
+                    if (oppSlotHpPct[newOppSlotIdx] <= 0) oppSlotHpPct[newOppSlotIdx] = 50
                     oppPokeballCount = (3 - oppFaintedSlots.count { it }).coerceIn(1, 3)
                 }
 
                 if (wasWaitingForOpponent) {
-                    // Phase 2 Clock Anchor: Initialize t_0 = 0.00s at the exact millisecond the opponent's lead Pokémon is recognized
                     battleClockAnchorMs = System.currentTimeMillis()
                     battleTimelineEvents.clear()
-
-                    // Turn 1 Lead Spawn: all 3 Pokémon are alive, swap clock is 0s Ready
                     oppPokeballCount = 3
                     oppFaintedSlots.fill(false)
+                    oppSlotHpPct.fill(100)
+                    playerSlotHpPct.fill(100)
                     oppSwapEndTimeMs = 0L
                     lastOppSwitchWasFaint = false
                     oppSwitchConfirmedAlive = true
+                    oppSwitchValidityLatched = true
+                    provisionalOppPrevName = ""
+                    provisionalOppPrevSpecies = ""
+                    provisionalOppPrevWasAddedToDetected = false
+                    lastConfirmedOppFrameTimeMs = currentFrameTimestampMs
                     oppSwitchAliveFrames = 0
                     oppPostSwitchLowBallFrames = 0
                     lastObservedLowOppBalls = 3
@@ -8517,7 +9629,8 @@ class OverlayService : LifecycleService() {
                     recalculateAndPushBattleData()
                     showBattleToast("⚔️ Opponent: ${matched.name} (${matched.fastTurns}t ${matched.defaultFastMove})")
                 } else {
-                    val swapStartMs = getInterpolatedSwapStartTimeMs()
+                    // v3.34: Start Swap Clock halfway between last frame with old Pokémon and first frame with new Pokémon
+                    val swapStartMs = getMidpointSwapStartTimeMs(lastConfirmedOppFrameTimeMs, currentFrameTimestampMs)
                     val elapsedSec = getElapsedBattleSeconds(swapStartMs)
                     val priorFaintsExcludingPrev = (0..2).count {
                         it != prevOppSlotIdx && it != newOppSlotIdx && oppFaintedSlots[it]
@@ -8532,10 +9645,17 @@ class OverlayService : LifecycleService() {
                         effectiveOppBalls < aliveBeforeSwitch &&
                         (prevOppSlotIdx !in 0..2 || !oppFaintedSlots[prevOppSlotIdx])
 
+                    // Record pre-switch snapshot for 2nd-frame validity bit revert if Frame 2 disproves Frame 1
+                    provisionalOppPrevName = prevOppRawName
+                    provisionalOppPrevSpecies = prevOppRawSpecies
+                    provisionalOppPrevWasAddedToDetected = wasAddedNewToDetected
+                    oppSwitchValidityLatched = false
+
+                    val nowRemPlayerSec = if (playerSwapEndTimeMs > currentFrameTimestampMs) ceil((playerSwapEndTimeMs - currentFrameTimestampMs) / 1000.0).toInt() else 0
+                    val userAliveNow = (3 - playerFaintedSlots.count { it }).coerceIn(1, 3)
+
                     if (isFaintReplacement) {
-                        // Faint Replacement (verified by Pokéball drop vs prior alive count):
-                        // 1. Do NOT reset Swap Clock (preserve existing cooldown/ready timer).
-                        // 2. Mark prior species as FAINTED (grey out / dim column in attacks table).
+                        oppSwapEndTimeBeforeSwitch = oppSwapEndTimeMs
                         oppPreSwitchBallCount = aliveBeforeSwitch
                         lastOppPrevSlotIdx = prevOppSlotIdx
                         lastOppSwitchTimeMs = swapStartMs
@@ -8546,13 +9666,18 @@ class OverlayService : LifecycleService() {
                         oppPostSwitchLowBallFrames = 2
                         if (prevOppSlotIdx in 0..2 && prevOppSlotIdx != newOppSlotIdx) {
                             oppFaintedSlots[prevOppSlotIdx] = true
+                            oppSlotHpPct[prevOppSlotIdx] = 0
                         }
                         if (effectiveOppBalls == 1) {
                             for (idx in 0 until min(3, detectedOpponents.size)) {
-                                if (idx != newOppSlotIdx) oppFaintedSlots[idx] = true
+                                if (idx != newOppSlotIdx) {
+                                    oppFaintedSlots[idx] = true
+                                    oppSlotHpPct[idx] = 0
+                                }
                             }
                         }
                         oppPokeballCount = (3 - oppFaintedSlots.count { it }).coerceIn(1, 3)
+                        val oppRemSec = if (oppSwapEndTimeMs > currentFrameTimestampMs) ceil((oppSwapEndTimeMs - currentFrameTimestampMs) / 1000.0).toInt() else 0
                         battleTimelineEvents.add(
                             BattleTimelineEvent(
                                 type = "FAINT",
@@ -8562,17 +9687,27 @@ class OverlayService : LifecycleService() {
                                 pokemonIn = newOppFormattedName,
                                 pokemonOut = prevOppFormattedName.ifEmpty { null },
                                 userShieldsRemaining = playerShieldsRemaining,
-                                oppShieldsRemaining = oppShieldsRemaining
+                                oppShieldsRemaining = oppShieldsRemaining,
+                                recommendedAction = lastRecommendedAction.ifEmpty { null },
+                                recommendedGoal = lastRecommendedGoal.ifEmpty { null },
+                                decisionPhase = "OPP_FAINT_ENTRY",
+                                playerSwapRemainingSec = nowRemPlayerSec,
+                                oppSwapRemainingSec = oppRemSec,
+                                userAliveCount = userAliveNow,
+                                oppAliveCount = oppPokeballCount,
+                                lastPlayerSwitchWasFaint = lastPlayerSwitchWasFaint,
+                                lastOppSwitchWasFaint = true,
+                                candidateScores = lastRecommendedCandidateScores.takeIf { it.isNotEmpty() },
+                                validityLatched = false
                             )
                         )
+                        lastConfirmedOppFrameTimeMs = currentFrameTimestampMs
                         isOppTurnOne = false
                         recalculateAndPushBattleData()
                         val faintedLabel = prevOppFormattedName.ifEmpty { "Opponent" }
                         showBattleToast("💀 Opp Faint Swap: $faintedLabel → ${matched.name} (${matched.fastTurns}t ${matched.defaultFastMove})")
                     } else {
-                        // True Tactical Swap (or HUD still sliding in on switch frame):
-                        // 1. Reset Swap Clock to 50s (will roll back if HUD reveals fainted ball on subsequent frames).
-                        // 2. Prior species remains alive (do NOT grey out column).
+                        // True Manual Swap (Frame 1 Provisional with Midpoint Swap Clock; latches on Frame 2 or reverts to Faint if ball drops)
                         oppSwapEndTimeBeforeSwitch = oppSwapEndTimeMs
                         oppPreSwitchBallCount = aliveBeforeSwitch
                         lastOppPrevSlotIdx = prevOppSlotIdx
@@ -8586,6 +9721,7 @@ class OverlayService : LifecycleService() {
                             oppFaintedSlots[prevOppSlotIdx] = false
                         }
                         oppSwapEndTimeMs = swapStartMs + 50000L
+                        val oppRemSec = ceil((oppSwapEndTimeMs - currentFrameTimestampMs).coerceAtLeast(0L) / 1000.0).toInt()
                         battleTimelineEvents.add(
                             BattleTimelineEvent(
                                 type = "SWAP",
@@ -8594,34 +9730,75 @@ class OverlayService : LifecycleService() {
                                 pokemonIn = newOppFormattedName,
                                 pokemonOut = prevOppFormattedName.ifEmpty { null },
                                 userShieldsRemaining = playerShieldsRemaining,
-                                oppShieldsRemaining = oppShieldsRemaining
+                                oppShieldsRemaining = oppShieldsRemaining,
+                                recommendedAction = lastRecommendedAction.ifEmpty { null },
+                                recommendedGoal = lastRecommendedGoal.ifEmpty { null },
+                                decisionPhase = "OPP_SWAP",
+                                playerSwapRemainingSec = nowRemPlayerSec,
+                                oppSwapRemainingSec = oppRemSec,
+                                userAliveCount = userAliveNow,
+                                oppAliveCount = (3 - oppFaintedSlots.count { it }).coerceIn(1, 3),
+                                lastPlayerSwitchWasFaint = lastPlayerSwitchWasFaint,
+                                lastOppSwitchWasFaint = false,
+                                candidateScores = lastRecommendedCandidateScores.takeIf { it.isNotEmpty() },
+                                validityLatched = false
                             )
                         )
+                        lastConfirmedOppFrameTimeMs = currentFrameTimestampMs
                         isOppTurnOne = false
                         recalculateAndPushBattleData()
                         showBattleToast("⚔️ Opponent: ${matched.name} (${matched.fastTurns}t ${matched.defaultFastMove})")
                     }
                 }
             } else {
-                // Species Changed = NO:
+                // Species Changed = NO: Frame 2+ confirms the active opponent species -> Latch Validity Bit!
+                lastConfirmedOppFrameTimeMs = currentFrameTimestampMs
+                if (!oppSwitchValidityLatched) {
+                    oppSwitchValidityLatched = true
+                    provisionalOppPrevName = ""
+                    provisionalOppPrevSpecies = ""
+                    provisionalOppPrevWasAddedToDetected = false
+                    val lastEvIdx = battleTimelineEvents.indexOfLast { it.actor == "opp" && it.validityLatched == false }
+                    if (lastEvIdx >= 0) {
+                        battleTimelineEvents[lastEvIdx] = battleTimelineEvents[lastEvIdx].copy(validityLatched = true)
+                    }
+                    recalculateAndPushBattleData()
+                }
                 if (anyLineHasShadow && !manualShadowOverrides.containsKey(newBaseSpecies) && !isOpponentShadow) {
                     isOpponentShadow = true
                     manualShadowOverrides[newBaseSpecies] = true
                     recalculateAndPushBattleData()
                 }
             }
+        } else if (!oppSwitchValidityLatched && (currentFrameTimestampMs - lastOppSwitchFrameMs) >= 1400L) {
+            // If Frame 2 had no conflicting old-species OCR text, latch the provisional swap
+            oppSwitchValidityLatched = true
+            provisionalOppPrevName = ""
+            provisionalOppPrevSpecies = ""
+            provisionalOppPrevWasAddedToDetected = false
+            recalculateAndPushBattleData()
         }
     }
 
     /**
      * Executes a player switch, applying Faint vs. True Swap classification,
-     * resurrection guard for returning Pokémon, timestamp interpolation, and 50s cooldown management (v2.94).
+     * resurrection guard, midpoint timestamp interpolation, 2nd-frame validity bit, and recommendation adherence tracking (v3.34).
      */
-    private fun executePlayerSwitch(newSlotName: String) {
+    private fun executePlayerSwitch(newSlotName: String, fromOcrFrame: Boolean = false) {
         val preset = currentPreset ?: return
         val newSlotIdx = preset.pokemon.indexOfFirst { it.name.equals(newSlotName, ignoreCase = true) }
 
-        if (newSlotName.equals(activeUserPokemonName, ignoreCase = true)) {
+        if (newSlotName.equals(activeUserPokemonName, ignoreCase = true) && !isPostFaintSwitchPromptActive) {
+            lastConfirmedPlayerFrameTimeMs = currentFrameTimestampMs.takeIf { it > 0L } ?: System.currentTimeMillis()
+            if (!playerSwitchValidityLatched) {
+                playerSwitchValidityLatched = true
+                provisionalPlayerPrevName = ""
+                val lastEvIdx = battleTimelineEvents.indexOfLast { it.actor == "user" && it.validityLatched == false }
+                if (lastEvIdx >= 0) {
+                    battleTimelineEvents[lastEvIdx] = battleTimelineEvents[lastEvIdx].copy(validityLatched = true)
+                }
+                recalculateAndPushBattleData()
+            }
             if (newSlotIdx in 0..2 && playerFaintedSlots[newSlotIdx]) {
                 playerFaintedSlots[newSlotIdx] = false
                 playerPokeballCount = (3 - playerFaintedSlots.count { it }).coerceIn(1, 3)
@@ -8630,25 +9807,49 @@ class OverlayService : LifecycleService() {
             return
         }
 
-        // Resurrection Guard: Any Pokémon entering the field is 100% alive (never stays greyed out when swapped back in!)
+        // v3.34: 2nd-Frame Validity Revert for Player OCR Switch — if Frame 1 was a provisional OCR switch
+        // and Frame 2 immediately re-detects the previous player Pokémon, revert the switch & restore the swap clock!
+        if (fromOcrFrame &&
+            !playerSwitchValidityLatched &&
+            provisionalPlayerPrevName.isNotEmpty() &&
+            newSlotName.equals(provisionalPlayerPrevName, ignoreCase = true) &&
+            (currentFrameTimestampMs - lastPlayerSwitchFrameMs) <= 2600L
+        ) {
+            activeUserPokemonName = provisionalPlayerPrevName
+            playerSwapEndTimeMs = playerSwapEndTimeBeforeSwitch
+            playerSwitchValidityLatched = true
+            provisionalPlayerPrevName = ""
+            lastConfirmedPlayerFrameTimeMs = currentFrameTimestampMs
+            if (battleTimelineEvents.isNotEmpty() && battleTimelineEvents.last().actor == "user" && battleTimelineEvents.last().validityLatched == false) {
+                battleTimelineEvents.removeAt(battleTimelineEvents.lastIndex)
+            }
+            recalculateAndPushBattleData()
+            return
+        }
+
+        // Resurrection Guard: Any Pokémon entering the field is 100% alive
         if (newSlotIdx in 0..2 && playerFaintedSlots[newSlotIdx]) {
             playerFaintedSlots[newSlotIdx] = false
             playerPokeballCount = (3 - playerFaintedSlots.count { it }).coerceIn(1, 3)
         }
 
-        // If the battle hasn't started yet (waiting for opponent lead spawn), update active lead without triggering swap cooldown
         if (isWaitingForOpponent) {
             activeUserPokemonName = newSlotName
             playerFaintedSlots.fill(false)
             playerPokeballCount = 3
             playerSwapEndTimeMs = 0L
+            isPostFaintSwitchPromptActive = false
+            playerSwitchValidityLatched = true
+            lastConfirmedPlayerFrameTimeMs = System.currentTimeMillis()
             recalculateAndPushBattleData()
             return
         }
 
+        val nowMs = currentFrameTimestampMs.takeIf { it > 0L } ?: System.currentTimeMillis()
         val prevPlayerPokemon = activeUserPokemonName ?: preset.pokemon.firstOrNull()?.name ?: ""
         val prevSlotIdx = preset.pokemon.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) }.let { if (it >= 0) it else 0 }
-        val swapStartMs = getInterpolatedSwapStartTimeMs()
+        // v3.34: Start Swap Clock halfway between last frame with old Pokémon and first frame with new Pokémon
+        val swapStartMs = getMidpointSwapStartTimeMs(lastConfirmedPlayerFrameTimeMs, nowMs)
         val elapsedSec = getElapsedBattleSeconds(swapStartMs)
         val priorFaintsExcludingPrev = (0..2).count {
             it != prevSlotIdx && it != newSlotIdx && playerFaintedSlots[it]
@@ -8656,37 +9857,63 @@ class OverlayService : LifecycleService() {
         val aliveBeforeSwitch = (3 - priorFaintsExcludingPrev).coerceIn(2, 3)
         val effectivePlayerBalls = when {
             sampledPlayerBalls in 1..3 -> sampledPlayerBalls
-            (currentFrameTimestampMs - lastObservedLowPlayerBallsTimeMs) <= 15000L && lastObservedLowPlayerBalls in 1..2 -> lastObservedLowPlayerBalls
+            (nowMs - lastObservedLowPlayerBallsTimeMs) <= 15000L && lastObservedLowPlayerBalls in 1..2 -> lastObservedLowPlayerBalls
             else -> -1
         }
-        val isFaintReplacement = effectivePlayerBalls in 1..2 &&
-            effectivePlayerBalls < aliveBeforeSwitch &&
-            !playerFaintedSlots[prevSlotIdx]
+        val isFaintReplacement = isPostFaintSwitchPromptActive ||
+            playerFaintedSlots[prevSlotIdx] ||
+            (effectivePlayerBalls in 1..2 && effectivePlayerBalls < aliveBeforeSwitch && !playerFaintedSlots[prevSlotIdx])
 
+        // Evaluate whether the player's switch followed the active tactical recommendation
+        val followedRec: Boolean? = if (lastRecommendedAction.isNotEmpty()) {
+            recommendationsIssuedInBattle++
+            val matchedRec = if (lastRecommendedSwapSlotIdx in 0..2) {
+                newSlotIdx == lastRecommendedSwapSlotIdx
+            } else {
+                lastRecommendedAction.contains("SWAP", ignoreCase = true) ||
+                    lastRecommendedAction.contains("SEND IN", ignoreCase = true) ||
+                    lastRecommendedAction.contains("PIVOT", ignoreCase = true) ||
+                    lastRecommendedAction.contains("PUNISH", ignoreCase = true)
+            }
+            if (matchedRec) recommendationsFollowedInBattle++
+            matchedRec
+        } else null
+
+        val recTargetName = if (lastRecommendedSwapSlotIdx in 0..2) preset.pokemon.getOrNull(lastRecommendedSwapSlotIdx)?.name else null
+        val oppRemSec = if (oppSwapEndTimeMs > nowMs) ceil((oppSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
+        val oppAliveNow = (3 - oppFaintedSlots.count { it }).coerceIn(1, 3)
+
+        provisionalPlayerPrevName = prevPlayerPokemon
+        playerSwitchValidityLatched = !fromOcrFrame
+        isPostFaintSwitchPromptActive = false
         activeUserPokemonName = newSlotName
         isPlayerTurnOne = false
+        lastConfirmedPlayerFrameTimeMs = nowMs
 
         if (isFaintReplacement) {
-            // Faint Replacement (verified by Pokéball drop vs prior alive count):
-            // 1. Do NOT reset Swap Clock (preserve existing cooldown/ready timer).
-            // 2. Mark prior species as FAINTED (grey out / dim column in attacks table).
+            playerSwapEndTimeBeforeSwitch = playerSwapEndTimeMs
             playerPreSwitchBallCount = aliveBeforeSwitch
             lastPlayerPrevSlotIdx = prevSlotIdx
             lastPlayerSwitchTimeMs = swapStartMs
-            lastPlayerSwitchFrameMs = currentFrameTimestampMs
+            lastPlayerSwitchFrameMs = nowMs
             lastPlayerSwitchWasFaint = true
             playerSwitchConfirmedAlive = true
             playerSwitchAliveFrames = 0
             playerPostSwitchLowBallFrames = 2
             if (prevSlotIdx in 0..2 && prevSlotIdx != newSlotIdx) {
                 playerFaintedSlots[prevSlotIdx] = true
+                playerSlotHpPct[prevSlotIdx] = 0
             }
             if (effectivePlayerBalls == 1 && newSlotIdx in 0..2) {
                 for (idx in 0..2) {
-                    if (idx != newSlotIdx) playerFaintedSlots[idx] = true
+                    if (idx != newSlotIdx) {
+                        playerFaintedSlots[idx] = true
+                        playerSlotHpPct[idx] = 0
+                    }
                 }
             }
             playerPokeballCount = (3 - playerFaintedSlots.count { it }).coerceIn(1, 3)
+            val playerRemSec = if (playerSwapEndTimeMs > nowMs) ceil((playerSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
             battleTimelineEvents.add(
                 BattleTimelineEvent(
                     type = "FAINT",
@@ -8696,21 +9923,32 @@ class OverlayService : LifecycleService() {
                     pokemonIn = newSlotName,
                     pokemonOut = prevPlayerPokemon.ifEmpty { null },
                     userShieldsRemaining = playerShieldsRemaining,
-                    oppShieldsRemaining = oppShieldsRemaining
+                    oppShieldsRemaining = oppShieldsRemaining,
+                    recommendedAction = lastRecommendedAction.ifEmpty { null },
+                    recommendedGoal = lastRecommendedGoal.ifEmpty { null },
+                    decisionPhase = "POST_FAINT_SWAP",
+                    recommendedTargetPokemon = recTargetName,
+                    playerSwapRemainingSec = playerRemSec,
+                    oppSwapRemainingSec = oppRemSec,
+                    userAliveCount = playerPokeballCount,
+                    oppAliveCount = oppAliveNow,
+                    lastPlayerSwitchWasFaint = true,
+                    lastOppSwitchWasFaint = lastOppSwitchWasFaint,
+                    candidateScores = lastRecommendedCandidateScores.takeIf { it.isNotEmpty() },
+                    followedRecommendation = followedRec,
+                    validityLatched = !fromOcrFrame
                 )
             )
             recalculateAndPushBattleData()
             val faintedLabel = prevPlayerPokemon.ifEmpty { "Player" }
             showBattleToast("💀 Player Faint Swap: $faintedLabel → $newSlotName")
         } else {
-            // True Tactical Swap (or HUD still sliding in on switch frame):
-            // 1. Reset Swap Clock to 50s (will roll back if HUD reveals fainted ball on subsequent frames).
-            // 2. Prior species remains alive (do NOT grey out column).
+            // True Manual Swap: start 50s Swap Clock at midpoint between last old-mon frame and first new-mon frame
             playerSwapEndTimeBeforeSwitch = playerSwapEndTimeMs
             playerPreSwitchBallCount = aliveBeforeSwitch
             lastPlayerPrevSlotIdx = prevSlotIdx
             lastPlayerSwitchTimeMs = swapStartMs
-            lastPlayerSwitchFrameMs = currentFrameTimestampMs
+            lastPlayerSwitchFrameMs = nowMs
             lastPlayerSwitchWasFaint = false
             playerSwitchConfirmedAlive = false
             playerSwitchAliveFrames = 0
@@ -8719,6 +9957,7 @@ class OverlayService : LifecycleService() {
                 playerFaintedSlots[prevSlotIdx] = false
             }
             playerSwapEndTimeMs = swapStartMs + 50000L
+            val playerRemSec = ceil((playerSwapEndTimeMs - nowMs).coerceAtLeast(0L) / 1000.0).toInt()
             battleTimelineEvents.add(
                 BattleTimelineEvent(
                     type = "SWAP",
@@ -8727,7 +9966,20 @@ class OverlayService : LifecycleService() {
                     pokemonIn = newSlotName,
                     pokemonOut = prevPlayerPokemon.ifEmpty { null },
                     userShieldsRemaining = playerShieldsRemaining,
-                    oppShieldsRemaining = oppShieldsRemaining
+                    oppShieldsRemaining = oppShieldsRemaining,
+                    recommendedAction = lastRecommendedAction.ifEmpty { null },
+                    recommendedGoal = lastRecommendedGoal.ifEmpty { null },
+                    decisionPhase = lastRecommendedPhase.ifEmpty { "MIDGAME" },
+                    recommendedTargetPokemon = recTargetName,
+                    playerSwapRemainingSec = playerRemSec,
+                    oppSwapRemainingSec = oppRemSec,
+                    userAliveCount = (3 - playerFaintedSlots.count { it }).coerceIn(1, 3),
+                    oppAliveCount = oppAliveNow,
+                    lastPlayerSwitchWasFaint = false,
+                    lastOppSwitchWasFaint = lastOppSwitchWasFaint,
+                    candidateScores = lastRecommendedCandidateScores.takeIf { it.isNotEmpty() },
+                    followedRecommendation = followedRec,
+                    validityLatched = !fromOcrFrame
                 )
             )
             recalculateAndPushBattleData()
@@ -8767,8 +10019,9 @@ class OverlayService : LifecycleService() {
         val frameTimeMs = currentFrameTimestampMs.takeIf { it > 0L } ?: System.currentTimeMillis()
         val eventT = getElapsedBattleSeconds(frameTimeMs)
 
-        // Shield count transitions (verified across 2 visible HUD frames so Charged Move camera zooms never false-drop shields)
+        // Shield count transitions + 2-frame continual self-healing restoration (if a shield was not actually used)
         if (sampledPlayerShields in 0..1 && sampledPlayerShields < playerShieldsRemaining) {
+            playerShieldRestoreFrames = 0
             playerShieldDropFrames++
             if (playerShieldDropFrames >= 2) {
                 val prevShields = playerShieldsRemaining
@@ -8793,11 +10046,32 @@ class OverlayService : LifecycleService() {
                 changed = true
                 showBattleToast("🛡️ Player Shield Used ($playerShieldsRemaining left)")
             }
-        } else if (sampledPlayerShields >= playerShieldsRemaining) {
+        } else if (sampledPlayerShields in 1..2 && sampledPlayerShields > playerShieldsRemaining) {
             playerShieldDropFrames = 0
+            playerShieldRestoreFrames++
+            if (playerShieldRestoreFrames >= 2) {
+                val restoredTo = sampledPlayerShields.coerceIn(1, 2)
+                val shieldsRestoredCount = (restoredTo - playerShieldsRemaining).coerceAtLeast(1)
+                repeat(shieldsRestoredCount) {
+                    val lastUserShieldIdx = battleTimelineEvents.indexOfLast {
+                        it.type.equals("SHIELD", ignoreCase = true) && it.actor.equals("user", ignoreCase = true)
+                    }
+                    if (lastUserShieldIdx >= 0) {
+                        battleTimelineEvents.removeAt(lastUserShieldIdx)
+                    }
+                }
+                playerShieldsRemaining = restoredTo
+                playerShieldRestoreFrames = 0
+                changed = true
+                showBattleToast("🛡️ Player Shield Restored ($playerShieldsRemaining left)")
+            }
+        } else if (sampledPlayerShields == playerShieldsRemaining) {
+            playerShieldDropFrames = 0
+            playerShieldRestoreFrames = 0
         }
 
         if (sampledOppShields in 0..1 && sampledOppShields < oppShieldsRemaining) {
+            oppShieldRestoreFrames = 0
             oppShieldDropFrames++
             if (oppShieldDropFrames >= 2) {
                 val prevShields = oppShieldsRemaining
@@ -8822,8 +10096,28 @@ class OverlayService : LifecycleService() {
                 changed = true
                 showBattleToast("🛡️ Opponent Shield Used ($oppShieldsRemaining left)")
             }
-        } else if (sampledOppShields >= oppShieldsRemaining) {
+        } else if (sampledOppShields in 1..2 && sampledOppShields > oppShieldsRemaining) {
             oppShieldDropFrames = 0
+            oppShieldRestoreFrames++
+            if (oppShieldRestoreFrames >= 2) {
+                val restoredTo = sampledOppShields.coerceIn(1, 2)
+                val shieldsRestoredCount = (restoredTo - oppShieldsRemaining).coerceAtLeast(1)
+                repeat(shieldsRestoredCount) {
+                    val lastOppShieldIdx = battleTimelineEvents.indexOfLast {
+                        it.type.equals("SHIELD", ignoreCase = true) && it.actor.equals("opp", ignoreCase = true)
+                    }
+                    if (lastOppShieldIdx >= 0) {
+                        battleTimelineEvents.removeAt(lastOppShieldIdx)
+                    }
+                }
+                oppShieldsRemaining = restoredTo
+                oppShieldRestoreFrames = 0
+                changed = true
+                showBattleToast("🛡️ Opponent Shield Restored ($oppShieldsRemaining left)")
+            }
+        } else if (sampledOppShields == oppShieldsRemaining) {
+            oppShieldDropFrames = 0
+            oppShieldRestoreFrames = 0
         }
 
         // Player Pokéball self-healing & post-switch verification
@@ -8846,6 +10140,7 @@ class OverlayService : LifecycleService() {
             if (playerPokeballCount != 3 || playerFaintedSlots.any { it }) {
                 playerPokeballCount = 3
                 playerFaintedSlots.fill(false)
+                for (i in 0..2) if (playerSlotHpPct[i] <= 0) playerSlotHpPct[i] = 100
                 changed = true
             }
         } else if (sampledPlayerBalls in 1..2) {
@@ -8857,9 +10152,13 @@ class OverlayService : LifecycleService() {
             ) {
                 // HUD finished sliding in after faint replacement: mark prior slot fainted & rollback Swap Clock reset!
                 playerFaintedSlots[lastPlayerPrevSlotIdx] = true
+                playerSlotHpPct[lastPlayerPrevSlotIdx] = 0
                 if (sampledPlayerBalls == 1 && activeUserIdx in 0..2) {
                     for (idx in 0..2) {
-                        if (idx != activeUserIdx) playerFaintedSlots[idx] = true
+                        if (idx != activeUserIdx) {
+                            playerFaintedSlots[idx] = true
+                            playerSlotHpPct[idx] = 0
+                        }
                     }
                 }
                 playerPokeballCount = (3 - playerFaintedSlots.count { it }).coerceIn(1, 3)
@@ -8903,6 +10202,7 @@ class OverlayService : LifecycleService() {
             if (oppPokeballCount != 3 || oppFaintedSlots.any { it }) {
                 oppPokeballCount = 3
                 oppFaintedSlots.fill(false)
+                for (i in 0..2) if (oppSlotHpPct[i] <= 0) oppSlotHpPct[i] = 100
                 changed = true
             }
         } else if (sampledOppBalls in 1..2) {
@@ -8914,9 +10214,13 @@ class OverlayService : LifecycleService() {
             ) {
                 // HUD finished sliding in after faint replacement: mark prior slot fainted & rollback Swap Clock reset!
                 oppFaintedSlots[lastOppPrevSlotIdx] = true
+                oppSlotHpPct[lastOppPrevSlotIdx] = 0
                 if (sampledOppBalls == 1 && activeOppIdx in 0..2) {
                     for (idx in 0 until min(3, detectedOpponents.size)) {
-                        if (idx != activeOppIdx) oppFaintedSlots[idx] = true
+                        if (idx != activeOppIdx) {
+                            oppFaintedSlots[idx] = true
+                            oppSlotHpPct[idx] = 0
+                        }
                     }
                 }
                 oppPokeballCount = (3 - oppFaintedSlots.count { it }).coerceIn(1, 3)
@@ -9073,6 +10377,70 @@ class OverlayService : LifecycleService() {
         val preset = currentPreset ?: return
         if (preset.pokemon.isEmpty()) return
 
+        // 0. v3.34: Detect "Switch in a new Pokémon?" Post-Faint Prompt in bottom region (0.70h..0.95h)
+        if (!isWaitingForOpponent && playerMoveLines.isNotEmpty()) {
+            val combinedBottomLower = playerMoveLines.joinToString(" ") { it.text.lowercase() }
+            val hasSwitchPromptHeader = combinedBottomLower.contains("switch in a new") ||
+                combinedBottomLower.contains("switch in a") ||
+                combinedBottomLower.contains("new pokemon") ||
+                combinedBottomLower.contains("new pokémon")
+
+            // Also check if 2 distinct alive bench species names appear simultaneously in the bottom card area
+            val curActiveIdx = preset.pokemon.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) }.coerceAtLeast(0)
+            val benchMatchedSlots = mutableSetOf<Int>()
+            for (line in playerMoveLines) {
+                val text = line.text.trim()
+                if (text.length < 3) continue
+                for ((slotIdx, slot) in preset.pokemon.withIndex()) {
+                    if (slotIdx == curActiveIdx || playerFaintedSlots[slotIdx]) continue
+                    val score = scoreTeamMemberOnLine(text, slot)
+                    if (score != null && score <= 1) {
+                        benchMatchedSlots.add(slotIdx)
+                    }
+                }
+            }
+
+            if (hasSwitchPromptHeader || benchMatchedSlots.size >= 2) {
+                if (!isPostFaintSwitchPromptActive) {
+                    isPostFaintSwitchPromptActive = true
+                    if (curActiveIdx in 0..2 && !playerFaintedSlots[curActiveIdx]) {
+                        playerFaintedSlots[curActiveIdx] = true
+                        playerPokeballCount = (3 - playerFaintedSlots.count { it }).coerceIn(1, 3)
+                    }
+                    lastPlayerSwitchWasFaint = true
+                    val faintedMon = preset.pokemon.getOrNull(curActiveIdx)?.name ?: activeUserPokemonName
+                    val nowMs = currentFrameTimestampMs.takeIf { it > 0L } ?: System.currentTimeMillis()
+                    val playerRemSec = if (playerSwapEndTimeMs > nowMs) ceil((playerSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
+                    val oppRemSec = if (oppSwapEndTimeMs > nowMs) ceil((oppSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
+                    recalculateAndPushBattleData()
+                    battleTimelineEvents.add(
+                        BattleTimelineEvent(
+                            type = "POST_FAINT_PROMPT",
+                            actor = "user",
+                            t = getElapsedBattleSeconds(nowMs),
+                            pokemonFainted = faintedMon,
+                            pokemonOut = faintedMon,
+                            userShieldsRemaining = playerShieldsRemaining,
+                            oppShieldsRemaining = oppShieldsRemaining,
+                            recommendedAction = lastRecommendedAction.ifEmpty { null },
+                            recommendedGoal = lastRecommendedGoal.ifEmpty { null },
+                            decisionPhase = "POST_FAINT_SWAP",
+                            recommendedTargetPokemon = if (lastRecommendedSwapSlotIdx in 0..2) preset.pokemon.getOrNull(lastRecommendedSwapSlotIdx)?.name else null,
+                            playerSwapRemainingSec = playerRemSec,
+                            oppSwapRemainingSec = oppRemSec,
+                            userAliveCount = playerPokeballCount,
+                            oppAliveCount = (3 - oppFaintedSlots.count { it }).coerceIn(1, 3),
+                            lastPlayerSwitchWasFaint = true,
+                            lastOppSwitchWasFaint = lastOppSwitchWasFaint,
+                            candidateScores = lastRecommendedCandidateScores.takeIf { it.isNotEmpty() }
+                        )
+                    )
+                    showBattleToast("⚡ Switch Prompt Detected — See SEND IN Recommendation!")
+                }
+                return
+            }
+        }
+
         // 1. Evaluate Top-Left Player Nameplate lines across ALL 3 team slots simultaneously
         val candidateTopLines = playerTopLines
             .filter { line ->
@@ -9096,7 +10464,6 @@ class OverlayService : LifecycleService() {
                     lineScores[slotIdx] = score
                 }
             }
-            // If a single line matched multiple distinct slots at the same fuzzy level, ignore unless one is strictly better
             if (lineScores.isNotEmpty()) {
                 val minLineScore = lineScores.values.minOrNull()!!
                 val bestOnLine = lineScores.filterValues { it == minLineScore }.keys
@@ -9107,7 +10474,6 @@ class OverlayService : LifecycleService() {
                         slotBestScores[winIdx] = minLineScore
                     }
                 } else if (minLineScore == 0) {
-                    // Disambiguate substring species names (e.g. Porygon2 vs Porygon) by longest base species
                     val longestIdx = bestOnLine.maxByOrNull { idx ->
                         FormResolver.extractBaseSpecies(preset.pokemon[idx].name).length
                     }
@@ -9126,25 +10492,23 @@ class OverlayService : LifecycleService() {
             val winningSlots = slotBestScores.filterValues { it == bestScore }.keys.toList()
             if (winningSlots.size == 1) {
                 val winningSlot = preset.pokemon[winningSlots[0]]
-                executePlayerSwitch(winningSlot.name)
+                executePlayerSwitch(winningSlot.name, fromOcrFrame = true)
                 return
             }
         }
 
         // Unique-CP fallback ONLY if no species name matched above AND the detected CP belongs to exactly 1 slot on the team
-        // (prevents shared CPs like Tinkaton 2499 & Swampert 2499 from ever defaulting to Slot 0 Lead)
         for (line in candidateTopLines) {
             val cpMatch = Regex("(?i)\\bcp\\s*(\\d{3,4})\\b").find(line.text)
             val detectedCp = cpMatch?.groupValues?.getOrNull(1)?.toIntOrNull() ?: continue
             val matchingSlots = preset.pokemon.filter { it.cp == detectedCp }
             if (matchingSlots.size == 1) {
-                executePlayerSwitch(matchingSlots[0].name)
+                executePlayerSwitch(matchingSlots[0].name, fromOcrFrame = true)
                 return
             }
         }
 
         // 2. Check Bottom Charged Move Buttons across all bottom move lines
-        // Evaluates all 3 slots and requires a strictly unique best score (ties never default to Slot 0)
         val validMoveLines = playerMoveLines.filter { it.text.trim().length >= 3 }
         if (validMoveLines.isNotEmpty()) {
             val combinedBottomNorm = validMoveLines.joinToString(" ") { normalizeOcrToken(it.text, rnAsM = true) }
@@ -9197,8 +10561,15 @@ class OverlayService : LifecycleService() {
             }
 
             if (bestSlot != null && bestScore >= 3 && bestScore > secondBestScore) {
-                executePlayerSwitch(bestSlot.name)
+                executePlayerSwitch(bestSlot.name, fromOcrFrame = true)
+                return
             }
+        }
+
+        if (!playerSwitchValidityLatched && (currentFrameTimestampMs - lastPlayerSwitchFrameMs) >= 1400L) {
+            playerSwitchValidityLatched = true
+            provisionalPlayerPrevName = ""
+            recalculateAndPushBattleData()
         }
     }
 
@@ -9298,6 +10669,34 @@ class OverlayService : LifecycleService() {
         oppSwitchAliveFrames = 0
         playerShieldDropFrames = 0
         oppShieldDropFrames = 0
+        playerShieldRestoreFrames = 0
+        oppShieldRestoreFrames = 0
+        lastConfirmedPlayerFrameTimeMs = 0L
+        lastConfirmedOppFrameTimeMs = 0L
+        playerSwitchValidityLatched = true
+        oppSwitchValidityLatched = true
+        provisionalOppPrevName = ""
+        provisionalOppPrevSpecies = ""
+        provisionalOppPrevWasAddedToDetected = false
+        provisionalPlayerPrevName = ""
+        isPostFaintSwitchPromptActive = false
+        playerSlotHpPct.fill(100)
+        oppSlotHpPct.fill(100)
+        sampledPlayerHpPct = -1
+        sampledOppHpPct = -1
+        isAttackIncomingPromptActive = false
+        attackIncomingDetectedAtMs = 0L
+        pendingChargedAttackActor = ""
+        pendingChargedAttackStartMs = 0L
+        lastSteadyMoveButtonsSeenMs = 0L
+        lastChargedAttackLoggedMs = 0L
+        lastRecommendedAction = ""
+        lastRecommendedGoal = ""
+        lastRecommendedPhase = "LEAD"
+        lastRecommendedSwapSlotIdx = -1
+        lastRecommendedCandidateScores = emptyMap()
+        recommendationsIssuedInBattle = 0
+        recommendationsFollowedInBattle = 0
 
         stopBattleOcrLoop()
         startBattleOcrLoop()
@@ -9441,6 +10840,11 @@ class OverlayService : LifecycleService() {
             explicitOppShieldsRemaining = if (formattedOpponents.isNotEmpty()) endOppShields else null
         )
 
+        val evalEvents = finalTimelineEvents.filter { it.followedRecommendation != null }
+        val recsIssued = max(recommendationsIssuedInBattle, evalEvents.size)
+        val recsFollowed = max(recommendationsFollowedInBattle, evalEvents.count { it.followedRecommendation == true })
+        val adherencePct = if (recsIssued > 0) ((recsFollowed * 100.0) / recsIssued.toDouble()).roundToInt().coerceIn(0, 100) else null
+
         val nowMs = System.currentTimeMillis()
         val newEntry = SyncBattleLogRecord(
             id = "log-$nowMs-${(100..999).random()}",
@@ -9465,7 +10869,10 @@ class OverlayService : LifecycleService() {
             userFaints = finalUserFaints,
             oppFaints = finalOppFaints,
             userShieldsRemaining = endUserShields,
-            oppShieldsRemaining = endOppShields
+            oppShieldsRemaining = endOppShields,
+            adherenceRatePct = adherencePct,
+            recommendationsIssuedCount = recsIssued,
+            recommendationsFollowedCount = recsFollowed
         )
 
         val logsType = object : TypeToken<List<SyncBattleLogRecord>>() {}.type
@@ -10468,6 +11875,35 @@ class OverlayService : LifecycleService() {
                 "opponent_shields_remaining" to oppShieldsRemaining,
                 "playerFaintedSlots" to playerFaintedSlots.toList(),
                 "oppFaintedSlots" to oppFaintedSlots.toList(),
+                "playerSlotHpPct" to playerSlotHpPct.toList(),
+                "oppSlotHpPct" to oppSlotHpPct.toList(),
+                "teamArchetype" to (currentPreset?.archetype ?: "ABC"),
+                "showTacticalRec" to showTacticalRecommendations,
+                "showTacticalRecommendations" to showTacticalRecommendations,
+                "tacticalRec" to mapOf(
+                    "phase" to "WAITING",
+                    "archetype" to (currentPreset?.archetype ?: "ABC"),
+                    "action" to "AWAITING LEAD",
+                    "actionLabel" to "[${(currentPreset?.archetype ?: "ABC").uppercase()}] AWAITING LEAD",
+                    "shieldPlan" to "2S",
+                    "goal" to "Scan opponent lead to compute plan",
+                    "goalText" to "Scan opponent lead to compute plan",
+                    "tone" to "neutral",
+                    "urgencyColor" to "sky",
+                    "recommendedSwapSlotIndex" to -1
+                ),
+                "tacticalRecommendation" to mapOf(
+                    "phase" to "WAITING",
+                    "archetype" to (currentPreset?.archetype ?: "ABC"),
+                    "action" to "AWAITING LEAD",
+                    "actionLabel" to "[${(currentPreset?.archetype ?: "ABC").uppercase()}] AWAITING LEAD",
+                    "shieldPlan" to "2S",
+                    "goal" to "Scan opponent lead to compute plan",
+                    "goalText" to "Scan opponent lead to compute plan",
+                    "tone" to "neutral",
+                    "urgencyColor" to "sky",
+                    "recommendedSwapSlotIndex" to -1
+                ),
                 "team" to teamData,
                 "scannedOpponents" to emptyList<Map<String, Any>>(),
                 "oppMoveTimingRows" to emptyList<Map<String, Any>>(),
@@ -11000,6 +12436,379 @@ class OverlayService : LifecycleService() {
             )
         }
 
+        // v3.40: Compute Real-Time Tactical Lead, HP-Scaled Counter-Swap Minimax, Shield Callout, Post-Faint & Endgame Recommendation
+        val teamArchetype = (currentPreset?.archetype ?: "ABC").uppercase()
+        val oppFullNameForMatrix = if (isOpponentShadow && !oppMeta.name.startsWith("Shadow ", ignoreCase = true)) {
+            "Shadow ${oppMeta.name}"
+        } else {
+            oppMeta.name
+        }
+        val teamSlotsList = listOf(p1, p2, p3)
+        val activeSlotIdxSafe = activeUserSlotIndex.coerceIn(0, 2)
+        val activeOppSlotSafe = activeOpponentSlotIndex.coerceIn(0, 2)
+        val activeUserHp = if (playerFaintedSlots[activeSlotIdxSafe]) 0 else playerSlotHpPct[activeSlotIdxSafe].coerceIn(1, 100)
+        val activeOppHp = if (oppFaintedSlots[activeOppSlotSafe]) 0 else oppSlotHpPct[activeOppSlotSafe].coerceIn(1, 100)
+
+        fun slotBrAgainst(slotIdx: Int, targetOppName: String, uS: Int, oS: Int): Int {
+            val s = teamSlotsList.getOrNull(slotIdx)
+            val sName = s?.name ?: teamNames.getOrElse(slotIdx) { "Dialga (Origin)" }
+            val baseBr = getOverlayRealtimeMatchupRatingStatic(
+                myName = sName,
+                oppName = targetOppName,
+                userShields = uS.coerceIn(0, 2),
+                oppShields = oS.coerceIn(0, 2),
+                league = activeLeague,
+                myFastMove = s?.fastMove,
+                myCharged1 = s?.chargedMove1,
+                myCharged2 = s?.chargedMove2,
+                myCp = s?.cp,
+                myIvs = s?.ivs
+            )
+            val uHp = if (slotIdx in 0..2 && !playerFaintedSlots[slotIdx]) playerSlotHpPct[slotIdx].coerceIn(1, 100) else 100
+            val targetBase = FormResolver.extractBaseSpecies(targetOppName).lowercase()
+            val oIdx = displayList.indexOfFirst { FormResolver.extractBaseSpecies(it).equals(targetBase, ignoreCase = true) }
+            val oHp = if (oIdx in 0..2 && !oppFaintedSlots[oIdx]) oppSlotHpPct[oIdx].coerceIn(1, 100) else 100
+            return scaleBrByHpRatio(baseBr, uHp, oHp)
+        }
+        fun slotBr(slotIdx: Int, uS: Int, oS: Int): Int = slotBrAgainst(slotIdx, oppFullNameForMatrix, uS, oS)
+
+        val curEqS = min(playerShieldsRemaining, oppShieldsRemaining).coerceIn(0, 2)
+        val curBr = slotBr(activeSlotIdxSafe, playerShieldsRemaining, oppShieldsRemaining)
+        val br0s = slotBr(activeSlotIdxSafe, 0, 0)
+        val br1s = slotBr(activeSlotIdxSafe, 1, 1)
+        val br2s = slotBr(activeSlotIdxSafe, 2, 2)
+
+        val playerAliveCount = (3 - playerFaintedSlots.count { it }).coerceIn(1, 3)
+        val oppAliveCount = (3 - oppFaintedSlots.count { it }).coerceIn(1, 3)
+
+        var shieldPlanStr = when {
+            playerShieldsRemaining == 0 -> "0S"
+            br0s >= activeTierWMin && br0s >= br1s - 25 -> "0S"
+            playerShieldsRemaining >= 2 && br2s >= activeTierWMin && br2s > br1s + 35 -> "2S"
+            br1s >= activeTierLMax -> "1S"
+            br0s >= 445 -> "0S"
+            else -> "1S->0S"
+        }
+
+        val canPlayerSwap = playerSwapRemainingSec <= 0
+        val aliveBenchIndices = (0..2).filter { !playerFaintedSlots[it] && (isPostFaintSwitchPromptActive || it != activeSlotIdxSafe) }
+        val isLeadPhase = activeOpponentSlotIndex == 0 &&
+            activeSlotIdxSafe == 0 &&
+            oppSwapRemainingSec <= 0 &&
+            detectedOpponents.size <= 1 &&
+            playerAliveCount == 3 &&
+            oppAliveCount == 3 &&
+            !isPostFaintSwitchPromptActive &&
+            !isAttackIncomingPromptActive
+
+        // Known alive bench opponents (excluding current active opponent)
+        val revealedBenchOpponents = detectedOpponents.mapIndexedNotNull { idx, oName ->
+            val oBase = FormResolver.extractBaseSpecies(oName)
+            if (oBase.equals(oppMeta.baseSpecies, ignoreCase = true) || (idx in 0..2 && oppFaintedSlots[idx])) null else oName
+        }
+
+        // Score alive bench candidates across Active Opp (45%), Swap Clocks (25%), Known Bench (20%), Unseen Meta (10%) + v3.40 persistent HP penalty
+        val candidateScoreMap = mutableMapOf<String, Int>()
+        val candidateWorstRespMap = mutableMapOf<Int, Int>()
+        for (bIdx in aliveBenchIndices) {
+            val bName = teamNames.getOrElse(bIdx) { "Slot ${bIdx + 1}" }
+            val bHp = playerSlotHpPct[bIdx].coerceIn(1, 100)
+            val actBr = slotBr(bIdx, playerShieldsRemaining, oppShieldsRemaining)
+            val zeroBr = slotBr(bIdx, 0, 0)
+            val oneBr = slotBr(bIdx, 1, 1)
+            val worstResp = if (revealedBenchOpponents.isNotEmpty()) {
+                revealedBenchOpponents.minOf { bOpp -> slotBrAgainst(bIdx, bOpp, playerShieldsRemaining, oppShieldsRemaining) }
+            } else {
+                min(actBr, oneBr)
+            }
+            candidateWorstRespMap[bIdx] = worstResp
+            val activeFactor = actBr * 0.65 + zeroBr * 0.35
+            val clockFactor = if (oppSwapRemainingSec >= 12 || oppAliveCount == 1) {
+                actBr * 1.18
+            } else {
+                actBr * 0.55 + worstResp * 0.45
+            }
+            val knownBenchFactor = if (revealedBenchOpponents.isNotEmpty()) {
+                revealedBenchOpponents.map { bOpp -> slotBrAgainst(bIdx, bOpp, playerShieldsRemaining, oppShieldsRemaining) }.average()
+            } else {
+                oneBr.toDouble()
+            }
+            val unseenMetaFactor = ((actBr + oneBr) / 2.0)
+            val lowHpPenalty = when {
+                bHp < 25 && activeOppHp > 22 -> -110
+                bHp < 40 && activeOppHp > 35 -> -45
+                else -> 0
+            }
+            val compScore = (activeFactor * 0.45 + clockFactor * 0.25 + knownBenchFactor * 0.20 + unseenMetaFactor * 0.10 + lowHpPenalty).roundToInt()
+            candidateScoreMap[bName] = compScore
+        }
+
+        var recPhase = if (isLeadPhase) "LEAD" else "MIDGAME"
+        var recAction = "STAY IN"
+        var recGoal = "Hold Switch Adv"
+        var recTone = "stay"
+        var recSwapIdx = -1
+
+        val oppSwitchLockActive = !lastOppSwitchWasFaint && oppSwapRemainingSec >= 12
+        val oppCanCounterSwap = lastOppSwitchWasFaint || oppSwapRemainingSec <= 8
+
+        val oppDmgPcts = oppMoveTimingRows.mapNotNull { it["activeDmgPct"] as? Int }
+        val maxOppMoveDmgPct = oppDmgPcts.maxOrNull() ?: 55
+        val minOppMoveDmgPct = oppDmgPcts.minOrNull() ?: 35
+
+        if (isAttackIncomingPromptActive && playerShieldsRemaining >= 1 && !isPostFaintSwitchPromptActive) {
+            // 0. v3.40: INSTANT "ATTACK INCOMING!" SHIELD VS. NO-SHIELD CALLOUT
+            recPhase = "SHIELD_CALL"
+            val maxMoveKos = maxOppMoveDmgPct >= activeUserHp - 8
+            val minMoveKos = minOppMoveDmgPct >= activeUserHp - 5
+            val healthyBenchExists = aliveBenchIndices.any { playerSlotHpPct[it] >= 55 && slotBr(it, playerShieldsRemaining, oppShieldsRemaining) >= activeTierWMin }
+            if (minMoveKos || (maxMoveKos && (curBr >= activeTierLMax || !healthyBenchExists || playerAliveCount == 1))) {
+                recAction = "SHIELD (1S)"
+                shieldPlanStr = "Use 1S"
+                recTone = "swap"
+                recGoal = if (minMoveKos) {
+                    "Any Move KOs (${minOppMoveDmgPct}%+ vs ${activeUserHp}% HP) — Protect Active"
+                } else {
+                    "Nuke KOs (${maxOppMoveDmgPct}% vs ${activeUserHp}% HP) — Shield to Flip/Farm"
+                }
+            } else {
+                recAction = "NO SHIELD (TANK IT)"
+                shieldPlanStr = "Save ${playerShieldsRemaining}S"
+                recTone = "stay"
+                recGoal = if (maxOppMoveDmgPct < activeUserHp - 15) {
+                    "Survives Max Move (${maxOppMoveDmgPct}% vs ${activeUserHp}% HP) — Save Shields"
+                } else {
+                    "Tank & Farm Down w/ Backline (Save Shield Advantage)"
+                }
+            }
+        } else if (isPostFaintSwitchPromptActive && aliveBenchIndices.isNotEmpty()) {
+            // 1. POST-FAINT "Switch in a new Pokémon?" Replacement Recommendation
+            recPhase = "POST_FAINT_SWAP"
+            val sortedBench = aliveBenchIndices.sortedByDescending { idx ->
+                candidateScoreMap[teamNames.getOrElse(idx) { "" }] ?: slotBr(idx, playerShieldsRemaining, oppShieldsRemaining)
+            }
+            val bestIdx = sortedBench.first()
+            val secondIdx = sortedBench.getOrNull(1)
+            val bestCode = abbrPokemon3(teamNames[bestIdx])
+            val bestBr = slotBr(bestIdx, playerShieldsRemaining, oppShieldsRemaining)
+            val holdText = if (secondIdx != null) " (HOLD ${abbrPokemon3(teamNames[secondIdx])})" else ""
+            recAction = "SEND IN -> $bestCode$holdText"
+            recSwapIdx = bestIdx
+            recTone = if (bestBr >= activeTierWMin) "stay" else "counter"
+            shieldPlanStr = if (playerShieldsRemaining > 0) "Keep ${playerShieldsRemaining}S" else "0S"
+            recGoal = when {
+                oppSwapRemainingSec >= 12 -> "Punish ${oppSwapRemainingSec}s Lock ($bestBr BR)"
+                oppAliveCount == 1 -> "Close Last Opp ($bestBr BR)"
+                revealedBenchOpponents.isNotEmpty() && secondIdx != null ->
+                    "Save ${abbrPokemon3(teamNames[secondIdx])} for ${abbrPokemon3(revealedBenchOpponents.first())}"
+                else -> "Best Re-Entry (Opp Swap ${oppSwapRemainingSec}s)"
+            }
+        } else if (activeOppHp <= 22 && activeUserHp >= 28) {
+            // 1B. v3.40: FAST-MOVE FARM-DOWN CALLOUT (Opponent in red HP range)
+            recAction = "FARM DOWN (NO THROW)"
+            shieldPlanStr = if (maxOppMoveDmgPct >= activeUserHp - 5 && playerShieldsRemaining > 0) "1S if Thrown" else "0S"
+            recGoal = "Opp at ${activeOppHp}% HP — Fast-Move Farm & Bank Energy"
+            recTone = "stay"
+        } else if (playerAliveCount == 1 && oppAliveCount == 1) {
+            // 2A. 1v1 ENDGAME AWARENESS (Never says "Maintain Alignment" or "Save Shields for Backline")
+            recPhase = "ENDGAME"
+            if (playerShieldsRemaining > 0 && oppShieldsRemaining == 0) {
+                recAction = "CLOSE 1v1 (BURN ${playerShieldsRemaining}S)"
+                shieldPlanStr = "${playerShieldsRemaining}S"
+                recGoal = "Shield 1st Charged to Close ($curBr BR)"
+                recTone = if (curBr >= 500) "stay" else "bait"
+            } else if (playerShieldsRemaining > 0 && oppShieldsRemaining > 0) {
+                val needBait = br0s < 480 && br1s >= 500
+                recAction = if (needBait) "CLOSE 1v1 (BAIT->NUKE)" else "CLOSE 1v1 (COMMIT ${playerShieldsRemaining}S)"
+                shieldPlanStr = "${playerShieldsRemaining}S"
+                recGoal = if (needBait) "Strip Last Opp Shield to Close" else "Out-Pace 1v1 ($curBr BR)"
+                recTone = if (curBr >= 500) "stay" else "bait"
+            } else {
+                recAction = "CLOSE 1v1 (0S RACE)"
+                shieldPlanStr = "0S"
+                recGoal = if (br0s >= 500) "Throw on CMP / Win 0S ($br0s BR)" else "Catch or Sneak Fast Move to Steal"
+                recTone = if (br0s >= 500) "stay" else "swap"
+            }
+        } else if (playerAliveCount >= 2 && oppAliveCount == 1) {
+            // 2B. 2v1 ENDGAME AWARENESS (Opponent has 2 fainted)
+            recPhase = "ENDGAME"
+            val bestBenchIdx = aliveBenchIndices.maxByOrNull { slotBr(it, playerShieldsRemaining, oppShieldsRemaining) }
+            val bestBenchBr = if (bestBenchIdx != null) slotBr(bestBenchIdx, playerShieldsRemaining, oppShieldsRemaining) else curBr
+            val bestBenchCode = if (bestBenchIdx != null) abbrPokemon3(teamNames[bestBenchIdx]) else "BACK"
+            if (canPlayerSwap && bestBenchIdx != null && bestBenchBr >= curBr + 75 && curBr < 475) {
+                recAction = "SWAP -> $bestBenchCode TO CLOSE"
+                recSwapIdx = bestBenchIdx
+                recTone = "stay"
+                recGoal = "Last Opp Mon (No Opp Bench Left)"
+            } else {
+                recAction = if (curBr >= activeTierWMin) "2v1 PRESS -> FINISH" else "2v1 CHIP FOR $bestBenchCode"
+                recTone = "stay"
+                recGoal = "Opp Last Mon (${playerAliveCount}v1 Advantage)"
+            }
+        } else if (playerAliveCount == 1 && oppAliveCount >= 2) {
+            // 2C. 1v2 ENDGAME AWARENESS (Player has 2 fainted)
+            recPhase = "ENDGAME"
+            val backOppCode = revealedBenchOpponents.firstOrNull()?.let { abbrPokemon3(it) } ?: "BACK"
+            recAction = if (playerShieldsRemaining > 0) "1v2 FARM FOR $backOppCode" else "1v2 OVERFARM & NUKE"
+            shieldPlanStr = if (playerShieldsRemaining > 0) "Hold 1S" else "0S"
+            recGoal = "Bank Energy Before $backOppCode Enters"
+            recTone = if (curBr >= 500) "bait" else "swap"
+        } else if (isLeadPhase) {
+            val pivotIdx = if (1 in aliveBenchIndices) 1 else aliveBenchIndices.firstOrNull()
+            val pivotCode = if (pivotIdx != null) abbrPokemon3(teamNames[pivotIdx]) else "SWAP"
+            val corePartnerCode = abbrPokemon3(teamNames.getOrElse(2) { p1Name })
+            val backlineWeakToLead = (1..2).any { bIdx -> slotBr(bIdx, curEqS, curEqS) <= activeTierLMax }
+
+            if (curBr >= activeTierSwMin) {
+                recAction = "STAY IN"
+                recGoal = "Dominate Lead & Hold Switch"
+                recTone = "stay"
+            } else if (curBr >= activeTierWMin) {
+                recAction = "STAY IN"
+                recGoal = if (br0s >= activeTierWMin) "Win 0S & Bank Energy" else "Commit $shieldPlanStr for Switch"
+                recTone = "stay"
+            } else if (teamArchetype == "ABB" && backlineWeakToLead && curBr >= activeTierSlMax) {
+                recAction = "STAY IN (ABB)"
+                recGoal = "Eliminate Backline Threat"
+                recTone = "stay"
+            } else if (curBr > activeTierLMax) {
+                if (teamArchetype == "ABB" && pivotIdx != null && canPlayerSwap) {
+                    recAction = "CHIP -> SWAP $pivotCode"
+                    recGoal = "Soft Chip & Lure Backline Counter"
+                    recTone = "bait"
+                    recSwapIdx = pivotIdx
+                } else {
+                    recAction = "STAY / SOFT LOSE"
+                    recGoal = if (br0s >= 450) "Soft Lose 0S -> Farm Down" else "Play +1 Shield Adv"
+                    recTone = "bait"
+                }
+            } else {
+                if (canPlayerSwap && pivotIdx != null) {
+                    recAction = if (teamArchetype == "ABB") "BAIT -> $pivotCode" else "SWAP -> $pivotCode"
+                    recGoal = when (teamArchetype) {
+                        "ABB" -> "Lure Threat & Farm w/ ${abbrPokemon3(p1Name)}"
+                        "DUO" -> "Push Shield/Switch -> Farm w/ $corePartnerCode"
+                        else -> "Fight for Switch or +1 Shield Adv"
+                    }
+                    recTone = "swap"
+                    recSwapIdx = pivotIdx
+                } else {
+                    recAction = "SOFT LOSE 0S"
+                    recGoal = "No Shields -> Farm w/ Backline"
+                    recTone = "bait"
+                }
+            }
+        } else if (curBr <= activeTierLMax && aliveBenchIndices.isNotEmpty()) {
+            // 3. COUNTER-SWAP MINIMAX (Differentiates Faint Replacement vs. Manual Swap using BOTH Swap Clocks & Persistent Bench HP)
+            val bestCounterIdx = aliveBenchIndices.maxByOrNull { idx ->
+                candidateScoreMap[teamNames.getOrElse(idx) { "" }] ?: slotBr(idx, playerShieldsRemaining, oppShieldsRemaining)
+            } ?: aliveBenchIndices.first()
+            val bestCounterBr = slotBr(bestCounterIdx, playerShieldsRemaining, oppShieldsRemaining)
+            val bestCounterHp = playerSlotHpPct[bestCounterIdx].coerceIn(1, 100)
+            val bestCounterCode = abbrPokemon3(teamNames[bestCounterIdx])
+
+            if (!canPlayerSwap && playerSwapRemainingSec > 0) {
+                recAction = "LOCKED (${playerSwapRemainingSec}s) • CHIP"
+                shieldPlanStr = "0S"
+                recGoal = "Wait ${playerSwapRemainingSec}s or Faint -> $bestCounterCode"
+                recTone = "swap"
+            } else if (bestCounterHp < 25 && activeOppHp > 25 && activeUserHp >= 35) {
+                // Do not swap a critically low (<25% HP) bench Pokémon into fast-move farm-down
+                recAction = "STAY / CHIP (SAVE $bestCounterCode)"
+                shieldPlanStr = "0S"
+                recGoal = "$bestCounterCode at ${bestCounterHp}% HP — Chip First"
+                recTone = "bait"
+            } else if (oppSwitchLockActive && bestCounterBr > curBr + 45) {
+                // Opponent manual-swapped and locked their swap timer!
+                recPhase = "OPP_SWAP"
+                recAction = "PUNISH LOCK -> $bestCounterCode"
+                recGoal = "Opp Locked ${oppSwapRemainingSec}s • Farm w/ $bestCounterCode (${bestCounterHp}% HP)"
+                recTone = "counter"
+                recSwapIdx = bestCounterIdx
+            } else if (oppCanCounterSwap && oppAliveCount > 1 && bestCounterBr > curBr + 45) {
+                // Opponent entered after a faint (or their swap timer is ready <= 8s): run Counter-Swap Minimax
+                val worstRespBr = candidateWorstRespMap[bestCounterIdx] ?: 440
+                val branchAScore = (bestCounterBr * 0.35 + worstRespBr * 0.65 - 45.0).roundToInt()
+                val branchBScore = (br0s * 0.45 + bestCounterBr * 0.55).roundToInt()
+                if (branchBScore >= branchAScore && curBr >= 360) {
+                    recPhase = "FAINT_ENTRY"
+                    recAction = "STAY & CHIP (HOLD SWAP)"
+                    shieldPlanStr = "0S"
+                    recGoal = "Opp Swap Ready (${oppSwapRemainingSec}s) -> Free $bestCounterCode After Faint"
+                    recTone = "bait"
+                } else {
+                    recPhase = "OPP_SWAP"
+                    recAction = "SAFE PIVOT -> $bestCounterCode"
+                    recGoal = "Flip Tempo (Opp Swap ${oppSwapRemainingSec}s)"
+                    recTone = "counter"
+                    recSwapIdx = bestCounterIdx
+                }
+            } else if (bestCounterBr > curBr + 45) {
+                recAction = "COUNTER -> $bestCounterCode"
+                recGoal = if (bestCounterBr >= activeTierWMin) "Punish Swap & Farm Energy" else "Neutralize & Take Shields"
+                recTone = "counter"
+                recSwapIdx = bestCounterIdx
+            } else {
+                recAction = "STAY / CHIP"
+                recGoal = "Chip & Soft Lose 0S -> Farm Down"
+                recTone = "bait"
+            }
+        } else if (activeSlotIdxSafe > 0) {
+            val leadAlive = !playerFaintedSlots[0]
+            val farmPartnerCode = if (leadAlive) abbrPokemon3(p1Name) else abbrPokemon3(teamNames.getOrElse(2) { p1Name })
+            if (activeSlotIdxSafe == 1 && teamArchetype == "ABB") {
+                recAction = if (curBr >= activeTierWMin) "PRESSURE (B1)" else "BAIT SHIELDS"
+                recGoal = if (curBr >= activeTierWMin) "Flip Switch or Force 2S" else "Draw Threat -> Farm w/ $farmPartnerCode"
+                recTone = if (curBr >= activeTierWMin) "stay" else "bait"
+            } else if (activeSlotIdxSafe == 1) {
+                recAction = if (curBr >= activeTierWMin) "FIGHT SWITCH" else "SOFT LOSE (PIVOT)"
+                recGoal = if (curBr >= activeTierWMin) "Win Switch Advantage" else "Force Shield Adv -> Farm w/ $farmPartnerCode"
+                recTone = if (curBr >= activeTierWMin) "stay" else "bait"
+            } else {
+                recAction = if (curBr >= activeTierWMin) "SWEEP / CLOSE" else "OUTPACE / CHIP"
+                recGoal = if (curBr >= activeTierWMin) "Close Match w/ Energy" else "Land Heavy Charge Move"
+                recTone = if (curBr >= activeTierWMin) "stay" else "bait"
+            }
+        } else {
+            recAction = if (curBr >= activeTierWMin) "STAY IN" else "SOFT LOSE 0S"
+            recGoal = if (curBr >= activeTierWMin) {
+                if (oppSwitchLockActive) "Farm Locked Opp (${oppSwapRemainingSec}s)" else "Hold Tempo & Bank Energy"
+            } else {
+                "Chip 0S -> Setup Backline"
+            }
+            recTone = if (curBr >= activeTierWMin) "stay" else "bait"
+        }
+
+        val recUrgencyColor = when (recTone) {
+            "stay" -> "emerald"
+            "counter" -> "sky"
+            "swap" -> "rose"
+            "bait" -> "amber"
+            else -> "sky"
+        }
+        val recActionLabel = if (recPhase == "SHIELD_CALL") "[SHIELD CALL] $recAction" else "[$teamArchetype] $recAction"
+
+        lastRecommendedAction = recActionLabel
+        lastRecommendedGoal = recGoal
+        lastRecommendedPhase = recPhase
+        lastRecommendedSwapSlotIdx = recSwapIdx
+        lastRecommendedCandidateScores = candidateScoreMap
+
+        val tacticalRecommendation = mapOf(
+            "phase" to recPhase,
+            "archetype" to teamArchetype,
+            "action" to recAction,
+            "actionLabel" to recActionLabel,
+            "shieldPlan" to shieldPlanStr,
+            "goal" to recGoal,
+            "goalText" to recGoal,
+            "tone" to recTone,
+            "urgencyColor" to recUrgencyColor,
+            "recommendedSwapSlotIndex" to recSwapIdx,
+            "activeBr" to curBr,
+            "candidateScores" to candidateScoreMap
+        )
+
         val battlePayload = mapOf(
             "activeOpponent" to oppMeta.name,
             "activeOpponentFastMove" to oppMeta.defaultFastMove,
@@ -11032,6 +12841,10 @@ class OverlayService : LifecycleService() {
             "playerSwapEndTimeMs" to playerSwapEndTimeMs,
             "oppSwapRemainingSec" to oppSwapRemainingSec,
             "oppSwapEndTimeMs" to oppSwapEndTimeMs,
+            "playerSwitchValidityLatched" to playerSwitchValidityLatched,
+            "oppSwitchValidityLatched" to oppSwitchValidityLatched,
+            "isPostFaintSwitchPromptActive" to isPostFaintSwitchPromptActive,
+            "isAttackIncomingPromptActive" to isAttackIncomingPromptActive,
             "playerPokeballs" to playerPokeballCount,
             "oppPokeballs" to oppPokeballCount,
             "playerShields" to playerShieldsRemaining,
@@ -11040,6 +12853,13 @@ class OverlayService : LifecycleService() {
             "opponent_shields_remaining" to oppShieldsRemaining,
             "playerFaintedSlots" to playerFaintedSlots.toList(),
             "oppFaintedSlots" to oppFaintedSlots.toList(),
+            "playerSlotHpPct" to playerSlotHpPct.toList(),
+            "oppSlotHpPct" to oppSlotHpPct.toList(),
+            "teamArchetype" to teamArchetype,
+            "showTacticalRec" to showTacticalRecommendations,
+            "showTacticalRecommendations" to showTacticalRecommendations,
+            "tacticalRec" to tacticalRecommendation,
+            "tacticalRecommendation" to tacticalRecommendation,
             "team" to teamData,
             "scannedOpponents" to scannedOpponentsData,
             "oppMoveTimingRows" to oppMoveTimingRows,
@@ -11402,7 +13222,7 @@ class OverlayService : LifecycleService() {
             if (isOverlayMinimized || currentLayoutMode != "option1") return
             val density = resources.displayMetrics.density
             val targetHeight = (heightDp * density).toInt()
-            if (layoutParams.height < 0 || Math.abs(layoutParams.height - targetHeight) > 4) {
+            if (layoutParams.height < 0 || Math.abs(layoutParams.height - targetHeight) > 1) {
                 layoutParams.height = targetHeight
                 Handler(Looper.getMainLooper()).post {
                     try {
