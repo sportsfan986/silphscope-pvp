@@ -10149,33 +10149,20 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
   const oppAliveCount = Math.max(1, Math.min(3, 3 - oppFaintedSlots.filter(Boolean).length));
 
   // Compute 9x9 shield matrix for all 3 team members against the active opponent
-  const matrices = team.map((m) =>
-    calculateMatchupShieldMatrix(
-      m.name,
-      activeOppName,
-      league,
-      m.fastMove,
-      m.chargedMove1,
-      m.chargedMove2,
-      m.cp,
-      m.ivs
-    )
-  );
+  const matchup9x9 = getOverlayRealtime9x9Matchup(activeOppName, team, false, league);
 
   const getBr = (slotIdx: number, myS: number, theirS: number): number => {
-    const mat = matrices[slotIdx]?.matrix;
-    if (!mat) return 500;
-    const key = `${Math.max(0, Math.min(2, myS))}-${Math.max(0, Math.min(2, theirS))}` as keyof typeof mat;
-    return mat[key]?.rating ?? 500;
+    const grid = matchup9x9.slotGrids[slotIdx];
+    if (!grid) return 500;
+    const sU = Math.max(0, Math.min(2, myS));
+    const sO = Math.max(0, Math.min(2, theirS));
+    return grid[sU]?.[sO] ?? 500;
   };
 
   const getPairBr = (attackerName: string, defenderName: string, myS: number, theirS: number): number => {
-    const prof = getDynamicThreeShieldRatings(attackerName, defenderName, league);
-    if (myS === 0 && theirS === 0) return prof.r0;
-    if (myS === 1 && theirS === 1) return prof.r1;
-    if (myS === 2 && theirS === 2) return prof.r2;
-    const baseBr = myS === 2 ? prof.r2 : myS === 1 ? prof.r1 : prof.r0;
-    return Math.max(150, Math.min(850, baseBr + (myS - theirS) * 115));
+    const sU = Math.max(0, Math.min(2, myS));
+    const sO = Math.max(0, Math.min(2, theirS));
+    return evaluateFastRoughShieldBattleRating(attackerName, defenderName, sU, sO, league);
   };
 
   const curBrNow = getBr(curIdx, uS, oS);
@@ -10199,9 +10186,7 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
   });
 
   // Unseen meta pool for backline risk estimation when < 3 opponents revealed
-  const unseenMetaPool = (DEFAULT_META_BY_LEAGUE[league] || DEFAULT_META_BY_LEAGUE["great"] || [])
-    .slice(0, 6)
-    .map((p) => p.name);
+  const unseenMetaPool = getLeagueTopMetaSpeciesNames(league, 6);
 
   // Score alive candidate slots for both Post-Faint replacement and Counter-Swap Minimax
   const candidateScores: Record<string, number> = {};

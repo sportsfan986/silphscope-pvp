@@ -2236,15 +2236,8 @@ export default function App() {
     handleSkipLoggingStoppedBattle();
   };
 
-  const buildAiTrainingDatasetJsonl = (timeframe: 'CURRENT_SEASON' | 'PREVIOUS_SEASON' | 'ALL') => {
-    const filtered = battleLogs.filter((b) => {
-      if (timeframe === 'ALL') return true;
-      if (timeframe === 'CURRENT_SEASON') {
-        return b.timestampMs >= currentSeason.startMs && b.timestampMs <= currentSeason.endMs;
-      }
-      return b.timestampMs >= prevSeason.startMs && b.timestampMs <= prevSeason.endMs;
-    });
-    return filtered
+  const buildAiTrainingDatasetJsonl = (entries: WebBattleLogEntry[] = battleLogs) => {
+    return entries
       .map((b) => {
         const events = (b.timelineEvents || []).map((ev) => ({
           t: ev.t,
@@ -4083,7 +4076,7 @@ export default function App() {
                             </span>
                             <button
                               type="button"
-                              onClick={handleSimulateOpponentSwap}
+                              onClick={() => handleSimulateOpponentSwap(false)}
                               className="px-1 py-0.2 rounded bg-sky-500/20 hover:bg-sky-500/40 text-sky-200 border border-sky-400/30"
                               title="Simulate True Swap for Opponent (resets to 50s)"
                             >
@@ -8463,7 +8456,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => {
-                        const jsonl = buildAiTrainingDatasetJsonl(logFilterTimeframe);
+                        const jsonl = buildAiTrainingDatasetJsonl(filteredLogs);
                         navigator.clipboard.writeText(jsonl);
                         const blob = new Blob([jsonl], { type: 'application/x-ndjson' });
                         const url = URL.createObjectURL(blob);
