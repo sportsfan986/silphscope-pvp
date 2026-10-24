@@ -1049,6 +1049,8 @@
                 <span class="opp-move-tag" id="sky-opp-fastmove">(1 Hz OCR Active)</span>
             </div>
             <div class="header-right-cluster">
+                <span id="sky-player-hp-pill" class="hp-slot-pill hp-high" title="Your Active Pokémon Live HP%">My:100%</span>
+                <span id="sky-opp-hp-pill" class="hp-slot-pill hp-high" title="Opponent Active Pokémon Live HP%">Opp:100%</span>
                 <button id="btn-player-shields" type="button" class="hud-shield-btn player-shield" onclick="cyclePlayerShields(event)" title="Your shields remaining (Tap to cycle 2->1->0->2)">
                     <span class="shield-glyph">🛡️</span><span id="txt-player-shields" class="shield-val">2</span>
                 </button>
@@ -2122,7 +2124,7 @@
                     if (startBattleBtn) startBattleBtn.classList.remove("hidden");
                 }
 
-                // Render active team chips for player switches with persistent slot HP%
+                // Render active team chips for player switches with persistent slot HP% (always visible)
                 const teamChipsContainer = document.getElementById("sky-team-chips");
                 if (teamChipsContainer && battleData.team) {
                     const pSlotHpArr = Array.isArray(battleData.playerSlotHpPct) ? battleData.playerSlotHpPct : [100, 100, 100];
@@ -2134,11 +2136,12 @@
                             .split(" ")[0]
                             .substring(0, 6);
                         const isActive = (fullName.toLowerCase() === (battleData.userActivePokemon || "").toLowerCase());
-                        const isFainted = !isActive && !!(battleData.playerFaintedSlots && battleData.playerFaintedSlots[mIdx]);
-                        const slotHp = typeof pSlotHpArr[mIdx] === "number" ? Math.max(0, Math.min(100, Math.round(pSlotHpArr[mIdx]))) : 100;
-                        const hpTag = (!isFainted && slotHp < 100) ? ` ${slotHp}%` : "";
-                        const faintStyle = isFainted ? 'opacity:0.4; text-decoration:line-through;' : '';
-                        return `<button class="chip-btn ${isActive && !isFainted ? 'active' : ''} ${isFainted ? 'col-fainted' : ''}" style="${faintStyle}" onclick="selectUserPokemonByIndex(${mIdx})" title="Active lead: ${fullName}${isFainted ? ' (Fainted)' : ' (' + slotHp + '% HP)'}">${shortName}${hpTag}</button>`;
+                        const rawHp = typeof member.hpPct === "number" ? member.hpPct : (typeof pSlotHpArr[mIdx] === "number" ? pSlotHpArr[mIdx] : 100);
+                        const isFainted = (rawHp <= 0) || (!isActive && !!(battleData.playerFaintedSlots && battleData.playerFaintedSlots[mIdx]));
+                        const slotHp = isFainted ? 0 : Math.max(0, Math.min(100, Math.round(rawHp)));
+                        const hpTag = ` ${slotHp}%`;
+                        const faintStyle = isFainted ? 'opacity:0.45; text-decoration:line-through;' : '';
+                        return `<button class="chip-btn ${isActive && !isFainted ? 'active' : ''} ${isFainted ? 'col-fainted' : ''}" style="${faintStyle}" onclick="selectUserPokemonByIndex(${mIdx})" title="Active lead: ${fullName}${isFainted ? ' (Fainted 0% HP)' : ' (' + slotHp + '% HP)'}">${shortName}${hpTag}</button>`;
                     }).join("");
                 }
             } catch (e) {
@@ -2172,10 +2175,35 @@
                 if (activeSlotIdx < 0) activeSlotIdx = 0;
             }
 
+            const activeOppSlotIdx = typeof battleData.activeOpponentSlotIndex === "number" ? battleData.activeOpponentSlotIndex : 0;
+            const pSlotHpArr = Array.isArray(battleData.playerSlotHpPct) ? battleData.playerSlotHpPct : [100, 100, 100];
+            const oSlotHpArr = Array.isArray(battleData.oppSlotHpPct) ? battleData.oppSlotHpPct : [100, 100, 100];
+            const activeUserHpVal = typeof battleData.activeUserHpPct === "number"
+                ? Math.max(0, Math.min(100, Math.round(battleData.activeUserHpPct)))
+                : (typeof pSlotHpArr[activeSlotIdx] === "number" ? Math.max(0, Math.min(100, Math.round(pSlotHpArr[activeSlotIdx]))) : 100);
+            const activeOppHpVal = typeof battleData.activeOppHpPct === "number"
+                ? Math.max(0, Math.min(100, Math.round(battleData.activeOppHpPct)))
+                : (typeof oSlotHpArr[activeOppSlotIdx] === "number" ? Math.max(0, Math.min(100, Math.round(oSlotHpArr[activeOppSlotIdx]))) : 100);
+
+            const playerHpPillEl = document.getElementById("sky-player-hp-pill");
+            if (playerHpPillEl) {
+                const uCls = activeUserHpVal > 50 ? "hp-high" : (activeUserHpVal > 20 ? "hp-mid" : "hp-low");
+                playerHpPillEl.className = `hp-slot-pill ${uCls}`;
+                playerHpPillEl.textContent = `My:${activeUserHpVal}%`;
+                playerHpPillEl.title = `Your Active Pokémon HP: ${activeUserHpVal}%`;
+            }
+            const oppHpPillEl = document.getElementById("sky-opp-hp-pill");
+            if (oppHpPillEl) {
+                const oCls = isWaitingState ? "hp-high" : (activeOppHpVal > 50 ? "hp-high" : (activeOppHpVal > 20 ? "hp-mid" : "hp-low"));
+                oppHpPillEl.className = `hp-slot-pill ${oCls}`;
+                oppHpPillEl.textContent = isWaitingState ? "Opp:—" : `Opp:${activeOppHpVal}%`;
+                oppHpPillEl.title = isWaitingState ? "Waiting for opponent HP bar" : `Active Opponent HP: ${activeOppHpVal}%`;
+            }
+
             const my3Letter = abbrPoke(battleData.userActivePokemon || "Lead", false);
             const userFastTelemetry = battleData.userFastTelemetry || `${abbrMove5(battleData.userFastMoveName || "Fast")} ${battleData.userFastMoveTurns || 2}t`;
             if (myShortEl) {
-                myShortEl.textContent = isWaitingState ? `${my3Letter}` : `${my3Letter} · ${userFastTelemetry}`;
+                myShortEl.textContent = isWaitingState ? `${my3Letter} (${activeUserHpVal}%)` : `${my3Letter} ${activeUserHpVal}% · ${userFastTelemetry}`;
             }
 
             if (isWaitingState) {
@@ -2227,7 +2255,7 @@
 
                 const winsCmp = battleData.winsCmp !== undefined ? !!battleData.winsCmp : true;
                 if (cmpBadgeEl) {
-                    cmpBadgeEl.textContent = winsCmp ? "CMP WIN ✓" : "CMP LOSS";
+                    cmpBadgeEl.textContent = (winsCmp ? "CMP WIN ✓" : "CMP LOSS") + ` · ${activeOppHpVal}% HP`;
                     cmpBadgeEl.className = "cmp-pill " + (winsCmp ? "win" : "loss");
                 }
 
@@ -2324,9 +2352,6 @@
                 } catch (e) {}
 
                 // 1. Render 3v3 Battle Matrix FIRST in FIXED [1st seen, 2nd seen, 3rd seen] order
-                const activeOppSlotIdx = typeof battleData.activeOpponentSlotIndex === "number" ? battleData.activeOpponentSlotIndex : 0;
-                const pSlotHpArr = Array.isArray(battleData.playerSlotHpPct) ? battleData.playerSlotHpPct : [100, 100, 100];
-                const oSlotHpArr = Array.isArray(battleData.oppSlotHpPct) ? battleData.oppSlotHpPct : [100, 100, 100];
                 try {
                     if (matrixBody && battleData.scannedOpponents && battleData.scannedOpponents.length > 0) {
                         const ordLabels = ["1st", "2nd", "3rd"];
@@ -2334,8 +2359,9 @@
                             const isActiveOpp = (opp.isActive !== undefined) ? !!opp.isActive : (idx === activeOppSlotIdx);
                             const isOppShad = (opp.isShadow !== undefined) ? !!opp.isShadow : (isActiveOpp && battleData.isOpponentShadow);
                             const fullOppDisplay = (isOppShad ? "S-" : "") + (opp.name || opp.code);
-                            const oppFainted = !isActiveOpp && !!(battleData.oppFaintedSlots && battleData.oppFaintedSlots[idx]);
-                            const oppSlotHp = oppFainted ? 0 : (typeof oSlotHpArr[idx] === "number" ? Math.max(0, Math.min(100, Math.round(oSlotHpArr[idx]))) : 100);
+                            const rawOppHp = typeof opp.hpPct === "number" ? opp.hpPct : (typeof oSlotHpArr[idx] === "number" ? oSlotHpArr[idx] : 100);
+                            const oppFainted = (rawOppHp <= 0) || !!(battleData.oppFaintedSlots && battleData.oppFaintedSlots[idx]);
+                            const oppSlotHp = oppFainted ? 0 : Math.max(0, Math.min(100, Math.round(rawOppHp)));
                             const hpCls = oppSlotHp > 50 ? "hp-high" : (oppSlotHp > 20 ? "hp-mid" : "hp-low");
                             const hpBadgeHtml = oppFainted
                                 ? `<span class="hp-slot-pill hp-low">0%</span>`
@@ -2344,11 +2370,12 @@
                             const p2Dots = renderTierDots(opp.matrix ? opp.matrix.p2 : "N,N,N");
                             const p3Dots = renderTierDots(opp.matrix ? opp.matrix.p3 : "SW,W,W");
                             const ordTag = ordLabels[idx] || `#${idx + 1}`;
+                            const rowFaintStyle = oppFainted && !isActiveOpp ? "opacity:0.55;" : "";
                             return `
-                            <div class="matrix-row ${isActiveOpp ? 'active-lead' : ''}" onclick="swapOpponentByIndex(${idx})" style="cursor:pointer;" title="${isActiveOpp ? 'Active Opponent (' + ordTag + ' seen, ' + oppSlotHp + '% HP)' : 'Tap to inspect/activate (' + ordTag + ' seen, ' + oppSlotHp + '% HP)'}">
+                            <div class="matrix-row ${isActiveOpp ? 'active-lead' : ''}" onclick="swapOpponentByIndex(${idx})" style="cursor:pointer;${rowFaintStyle}" title="${isActiveOpp ? 'Active Opponent (' + ordTag + ' seen, ' + oppSlotHp + '% HP)' : 'Tap to inspect/activate (' + ordTag + ' seen, ' + oppSlotHp + '% HP)'}">
                                 <span class="matrix-opp-name" title="${fullOppDisplay} (${oppSlotHp}% HP)">
                                     <span style="color:${isActiveOpp ? '#38bdf8' : '#64748b'}; font-weight:700; font-size:7.5px; margin-right:3px;">${ordTag}</span>
-                                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${fullOppDisplay}</span>
+                                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;${oppFainted ? 'text-decoration:line-through;' : ''}">${fullOppDisplay}</span>
                                     ${hpBadgeHtml}
                                 </span>
                                 <div class="matrix-team-block">

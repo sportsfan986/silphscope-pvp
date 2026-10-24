@@ -2591,7 +2591,7 @@ export default function App() {
           oppSlotHpPct: ev.oppSlotHpPct ?? null
         }));
         return JSON.stringify({
-          schemaVersion: '3.40-ai-decision-tree',
+          schemaVersion: '3.41-ai-decision-tree',
           battleId: b.id,
           timestampMs: b.timestampMs,
           league: b.league,
@@ -3634,7 +3634,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v3.34 • Android Native Overlay
+                  v3.41 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -4126,8 +4126,22 @@ export default function App() {
                             </>
                           )}
                         </div>
-                        {/* Interactive Shield Counters: You (P) & Opponent (O) */}
+                        {/* Interactive Shield Counters & Live HP% Pills: You (My) & Opponent (Opp) */}
                         <div className="flex items-center gap-1 shrink-0 font-mono text-[8px] font-extrabold">
+                          <span
+                            className={`px-1 py-0.5 rounded border leading-none shrink-0 ${
+                              (userSlotHpPct[activeUserSlotIndex] ?? 100) <= 0
+                                ? 'text-slate-400 bg-slate-900/60 border-slate-700 line-through'
+                                : (userSlotHpPct[activeUserSlotIndex] ?? 100) <= 22
+                                ? 'text-rose-200 bg-rose-950/70 border-rose-400/70'
+                                : (userSlotHpPct[activeUserSlotIndex] ?? 100) <= 50
+                                ? 'text-amber-200 bg-amber-950/70 border-amber-400/70'
+                                : 'text-emerald-200 bg-emerald-950/70 border-emerald-400/70'
+                            }`}
+                            title={`Active Player Pokémon HP: ${userSlotHpPct[activeUserSlotIndex] ?? 100}%`}
+                          >
+                            My:{userSlotHpPct[activeUserSlotIndex] ?? 100}%
+                          </span>
                           <button
                             type="button"
                             onClick={(e) => {
@@ -4150,6 +4164,22 @@ export default function App() {
                             <span className="text-[8px]">🛡️</span>
                             <span>{userShields}</span>
                           </button>
+                          {!isWaitingOpponent && scannedOpponents.length > 0 && (
+                            <span
+                              className={`px-1 py-0.5 rounded border leading-none shrink-0 ${
+                                (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 0
+                                  ? 'text-slate-400 bg-slate-900/60 border-slate-700 line-through'
+                                  : (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 22
+                                  ? 'text-rose-200 bg-rose-950/70 border-rose-400/70'
+                                  : (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 50
+                                  ? 'text-amber-200 bg-amber-950/70 border-amber-400/70'
+                                  : 'text-emerald-200 bg-emerald-950/70 border-emerald-400/70'
+                              }`}
+                              title={`Active Opponent Pokémon HP: ${oppSlotHpPct[safeActiveOppSlot] ?? 100}%`}
+                            >
+                              Opp:{oppSlotHpPct[safeActiveOppSlot] ?? 100}%
+                            </span>
+                          )}
                           <button
                             type="button"
                             onClick={(e) => {
@@ -4168,7 +4198,7 @@ export default function App() {
                             <span>{oppShields}</span>
                           </button>
 
-                          {/* v3.34: Opponent Swap Clock with 1st-Frame Provisional [1F] Validity Indicator */}
+                          {/* v3.41: Opponent Swap Clock with 1st-Frame Provisional [1F] Validity Indicator */}
                           {!isWaitingOpponent && scannedOpponents.length > 0 && (
                             <span
                               className={`font-mono font-extrabold text-[8px] px-1.5 py-0.5 rounded border leading-none transition-colors shrink-0 ${
@@ -4186,7 +4216,7 @@ export default function App() {
                                   : 'Opponent Swap Countdown (50s midpoint countdown, resets on Manual Swap)'
                               }
                             >
-                              Opp Swap: {oppSwapRemainingSec}s{!oppSwitchValidityLatched ? ' [1F]' : ''}
+                              {oppSwapRemainingSec}s{!oppSwitchValidityLatched ? ' [1F]' : ''}
                             </span>
                           )}
                         </div>
@@ -4361,15 +4391,19 @@ export default function App() {
                                 title={`${member.name} (${playerFaintedSlots[idx] ? 'Fainted' : `${slotHp}% HP persisted`})`}
                               >
                                 <span>{member.name.replace(/^Shadow\s+/i, 'S-').replace(/^Kanto\s+/i, '').split(' ')[0].slice(0, 4)}</span>
-                                {!playerFaintedSlots[idx] && (
-                                  <span
-                                    className={`text-[6.5px] font-mono ${
-                                      slotHp > 50 ? 'text-emerald-300' : slotHp > 20 ? 'text-amber-300' : 'text-rose-300'
-                                    }`}
-                                  >
-                                    {slotHp}%
-                                  </span>
-                                )}
+                                <span
+                                  className={`text-[6.5px] font-mono ${
+                                    playerFaintedSlots[idx]
+                                      ? 'text-slate-500'
+                                      : slotHp > 50
+                                      ? 'text-emerald-300'
+                                      : slotHp > 20
+                                      ? 'text-amber-300'
+                                      : 'text-rose-300'
+                                  }`}
+                                >
+                                  {slotHp}%
+                                </span>
                               </button>
                             );
                           })}
@@ -4619,20 +4653,20 @@ export default function App() {
                                   <span className={`font-bold truncate text-[9.5px] ${isOppFainted ? 'text-slate-400 line-through' : 'text-slate-100'}`} title={fullOppDisplay}>
                                     {fullOppDisplay}
                                   </span>
-                                  {!isOppFainted && (
-                                    <span
-                                      className={`text-[7px] font-mono font-bold shrink-0 ml-auto ${
-                                        (oppSlotHpPct[idx] ?? 100) > 50
-                                          ? 'text-emerald-300'
-                                          : (oppSlotHpPct[idx] ?? 100) > 20
-                                          ? 'text-amber-300'
-                                          : 'text-rose-300'
-                                      }`}
-                                      title={`Persisted Opponent HP: ${oppSlotHpPct[idx] ?? 100}%`}
-                                    >
-                                      {oppSlotHpPct[idx] ?? 100}%
-                                    </span>
-                                  )}
+                                  <span
+                                    className={`text-[7px] font-mono font-bold shrink-0 ml-auto ${
+                                      isOppFainted
+                                        ? 'text-slate-500 line-through'
+                                        : (oppSlotHpPct[idx] ?? 100) > 50
+                                        ? 'text-emerald-300'
+                                        : (oppSlotHpPct[idx] ?? 100) > 20
+                                        ? 'text-amber-300'
+                                        : 'text-rose-300'
+                                    }`}
+                                    title={`Persisted Opponent HP: ${isOppFainted ? 0 : (oppSlotHpPct[idx] ?? 100)}%`}
+                                  >
+                                    {isOppFainted ? 0 : (oppSlotHpPct[idx] ?? 100)}%
+                                  </span>
                                 </div>
                                 <div className="flex items-center gap-[1px] text-[9px] font-mono shrink-0">
                                   <span className="font-bold text-slate-300">{p1Init}:</span>
@@ -4664,7 +4698,7 @@ export default function App() {
                                     : 'bg-red-500/25 border border-red-400/50 text-red-300'
                                 }`}
                               >
-                                {oppMoveTimingInfo.winsCmp ? 'CMP WIN ✓' : 'CMP LOSS'}
+                                {oppMoveTimingInfo.winsCmp ? 'CMP WIN ✓' : 'CMP LOSS'} · {oppSlotHpPct[safeActiveOppSlot] ?? 100}% HP
                               </span>
                             </span>
                             <div className="grid grid-cols-3 w-[84px] text-center font-mono text-[7.5px] font-extrabold">
@@ -4831,7 +4865,7 @@ export default function App() {
                                 </span>
                               </span>
                               <span className="text-sky-300 font-extrabold text-[7.5px] font-mono">
-                                {abbrPoke3(userLeadName, false)} ({userFastInfo.telemetry})
+                                {abbrPoke3(userLeadName, false)} {userSlotHpPct[activeUserSlotIndex] ?? 100}% · ({userFastInfo.telemetry})
                               </span>
                             </span>
                             <div className="grid grid-cols-3 w-[84px] text-center font-mono text-[7.5px] font-extrabold">

@@ -123,20 +123,17 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official v3.40 Release (Floating HP Bar Tracking, Persistent Bench HP Memory, Charged Attack Detection & Live Shield Callouts)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official v3.41 Release (Calibrated Floating HP Bar Tracking, Live My/Opp HP HUD Pills, Faint 0% HP Enforcement & KO-Threshold Shield Logic)
             
-            ### What's New in v3.40
-            - **Real-Time Floating HP Bar Tracking (Height-Invariant 2D Capsule Scanner)**:
-              - Tracks both the Opponent's and Player's floating HP bars (`0–100%`) across variable Pokémon heights and head-bobbing animations using horizontal capsule scanline invariants (`W_fill + W_depleted ≈ 12.8%w`, `6–16px` thickness, white border check, and camera-cut freeze).
-            - **Persistent Per-Slot HP Memory Across All Non-Fainted Pokémon (`userSlotHpPct[0..2]` & `oppSlotHpPct[0..2]`)**:
-              - Remembers every Pokémon's remaining HP% when it swaps to the bench and displays per-slot HP bars and `%` readouts in the 3x3 matrix headers.
-              - Scales all active and bench matchup Battle Ratings by `ln(userSlotHpPct[i] / oppSlotHpPct[j])` so future swaps, post-faint picks, and endgame recommendations account for chipped bench Pokémon on both teams.
-              - Highlights Charged Move cells with a glowing **`KO`** badge whenever a move's damage % is sufficient to knock out the target's remaining HP%.
-            - **Bidirectional Charged Attack Detection & Conservative Unshielded Move Attribution**:
-              - Detects Charged Attacks thrown by both the Opponent (`"Attack incoming! Use a Protect Shield?"` / `"NOT NOW"`) and the Player (bottom move button disappearance during the swipe minigame).
-              - Logs `CHARGED_ATTACK` timeline events (`actor`, `shielded`, `hpBeforePct`, `hpAfterPct`, `hpDeltaPct`) and attributes a specific move name **only** when the attack goes unshielded and the observed `ΔHP%` drop unambiguously matches a single move (`±8%` error and `≥12%` separation).
-            - **Instant `"Attack Incoming!"` Shield vs. No-Shield Callout**:
-              - Immediately displays an urgent **`[SHIELD CALL]`** recommendation (`SHIELD (1S)` vs. `NO SHIELD (TANK IT)`) when `"Attack incoming! Use a Protect Shield?"` appears, evaluating lethal vs. bait move damage against your current HP% and bench health.
+            ### What's New in v3.41
+            - **Calibrated Floating HP Bar Scanner (`detectFloatingHpBarPct`)**:
+              - Re-engineered the 2D HP capsule scanner against real 1080×2400 GBL gameplay footage (`300px` full-HP bar width = `0.278w`, left-edge X-anchor validation at `0.560w..0.635w` for Opponent and `0.048w..0.098w` for Player, and exact Pokémon GO RGB classifiers for Spring-Mint Green `RGB(28,254,187)`, Golden Yellow `RGB(251,224,45)`, Coral Red `RGB(237,101,98)`, and Orange Drain Cap `RGB(251,152,24)`).
+            - **Prominent Live `My:XX%` & `Opp:YY%` HP Display Across the Overlay HUD**:
+              - Displays live color-coded **`My:XX%`** and **`Opp:YY%`** HP pills directly in the top Overlay HUD header bar, in the `Opponent Attacks` and `My Attacks` section headers, on all 3 team chips (always visible), and on all 3 opponent matrix rows (including `0%` strikethrough when fainted).
+            - **Swap-Clock-Locked Faint Detection & End-of-Battle `0% HP` Enforcement**:
+              - Accurately marks replaced Pokémon as fainted (`0% HP`) whenever a switch occurs while the 50s swap timer is still locked (`>5s` remaining) or when prior tracked HP was `≤28%`, when Pokéball indicators drop to `1`, or when the final Pokémon's HP bar disappears at the end of a battle.
+            - **Live HP-Scaled Shield Logic & KO Range Callouts**:
+              - Dynamically incorporates live `activeUserHpPct` and `activeOppHpPct` into all Shield Plans (`1S (KO @XX%)`, `1S (KO Risk)`, `0S (Tank)`) and instant `"Attack Incoming!"` Shield vs. No-Shield callouts.
             
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)

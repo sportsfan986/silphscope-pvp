@@ -10641,14 +10641,21 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
 
     // DUO-CORE or ABC Lead Reveal
     const tag = archetype === "DUO" ? "DUO LEAD" : "ABC LEAD";
+    const isMaxMoveLethal = maxOppMoveDmgPct >= activeUserHp - 5;
+    const isSafeToTank = maxOppMoveDmgPct <= activeUserHp - 18;
     if (curBrNow >= 550) {
-      const shieldAdvice = curBr00 >= 535 ? "0S–1S (Wins 0S)" : "Match 1S";
+      const shieldAdvice =
+        uS > 0 && isMaxMoveLethal
+          ? `1S (KO @${activeUserHp}%)`
+          : curBr00 >= 535 && isSafeToTank
+          ? "0S–1S (Tank OK)"
+          : "Match 1S";
       return makeRec(
         true,
         tag,
         `STAY IN (${curMember.name})`,
         shieldAdvice,
-        "Win Lead & Hold Switch Adv",
+        `Win Lead (You ${activeUserHp}% vs Opp ${activeOppHp}%)`,
         "emerald",
         null,
         null,
@@ -10661,8 +10668,8 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
           true,
           tag,
           `STAY IN (Soft Lose)`,
-          "0S (Force Opp 1S)",
-          `Win +1 Shield -> Farm w/ ${team[1].name}`,
+          uS > 0 && isMaxMoveLethal && activeOppHp <= 45 ? `1S (KO @${activeUserHp}%)` : "0S (Force Opp 1S)",
+          `Win +1 Shield -> Farm w/ ${team[1].name} (You ${activeUserHp}% vs Opp ${activeOppHp}%)`,
           "sky",
           null,
           null,
@@ -10778,8 +10785,8 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
         `STAY IN (${curMember.name})`,
         canFlip ? "1S Pressure" : "0S Soft Lose",
         canFlip
-          ? `Flip Switch or Force Shields for ${team[2].name}`
-          : `Soft Lose -> Farm Down w/ ${team[0].name}`,
+          ? `Flip Switch or Force Shields for ${team[2].name} (You ${activeUserHp}% vs Opp ${activeOppHp}%)`
+          : `Soft Lose -> Farm Down w/ ${team[0].name} (You ${activeUserHp}% vs Opp ${activeOppHp}%)`,
         canFlip ? "emerald" : "sky",
         null,
         null,
@@ -10792,10 +10799,14 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
         true,
         "SAFE SWAP",
         `STAY IN (${curMember.name})`,
-        curBr00 >= 515 ? "0S–1S" : "1S",
+        uS > 0 && maxOppMoveDmgPct >= activeUserHp - 5
+          ? `1S (KO @${activeUserHp}%)`
+          : curBr00 >= 515 && maxOppMoveDmgPct <= activeUserHp - 18
+          ? "0S–1S (Tank OK)"
+          : "1S",
         oppSwitchLockActive
-          ? `Exploit ${oppSwapRemainingSec}s Lock & Win Switch`
-          : "Win Switch Advantage",
+          ? `Exploit ${oppSwapRemainingSec}s Lock (You ${activeUserHp}% vs Opp ${activeOppHp}%)`
+          : `Win Switch Adv (You ${activeUserHp}% vs Opp ${activeOppHp}%)`,
         "emerald",
         null,
         null,
@@ -10807,7 +10818,7 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
       "SAFE SWAP",
       `STAY IN (${curMember.name})`,
       "0S (Don't Burn 2S)",
-      `Win Shield Adv / Soft Lose -> Farm w/ ${farmPartnerName}`,
+      `Win Shield Adv / Soft Lose -> Farm w/ ${farmPartnerName} (You ${activeUserHp}% vs Opp ${activeOppHp}%)`,
       "sky",
       null,
       null,
@@ -10827,8 +10838,10 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
       ? "CORE 1"
       : "ACTIVE";
   const shieldPlan =
-    curBr00 >= 525
-      ? "0S (Save Shields)"
+    uS > 0 && maxOppMoveDmgPct >= activeUserHp - 5 && curBr11 >= 475
+      ? `1S (KO @${activeUserHp}%)`
+      : curBr00 >= 525 && maxOppMoveDmgPct <= activeUserHp - 15
+      ? "0S (Tank)"
       : curBr11 >= 515 && uS >= 1
       ? "1S to Secure"
       : curBr22 >= 515 && uS >= 2
@@ -10837,9 +10850,9 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
   const goalText =
     curBrNow >= 520
       ? curIdx === 2 || oppAliveCount <= 2
-        ? "Close Out & Sweep Backline"
-        : "Farm Energy & Hold Tempo"
-      : `Chip Damage -> Set Up ${bestBenchName}`;
+        ? `Close Out & Sweep Backline (You ${activeUserHp}% vs Opp ${activeOppHp}%)`
+        : `Farm Energy & Hold Tempo (You ${activeUserHp}% vs Opp ${activeOppHp}%)`
+      : `Chip Damage -> Set Up ${bestBenchName} (You ${activeUserHp}% vs Opp ${activeOppHp}%)`;
 
   return makeRec(
     true,
