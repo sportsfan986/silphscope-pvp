@@ -3932,7 +3932,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v3.54 • Android Native Overlay
+                  v3.55 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>

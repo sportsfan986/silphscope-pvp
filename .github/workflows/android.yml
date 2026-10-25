@@ -123,17 +123,16 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official v3.54 Release (Pending-Damage-Verified Turn-T Prediction, Multi-Move Damage Integration, Turn-Phased OCR & Post-KO Faint Freeze)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official v3.55 Release (Smaller/Shifted Pokémon & Overlay-Occluded HP Bar Detection + 2Hz 2T+ Move-Duration Cooldown & Adaptive 1T Energy Feedback Loop)
             
-            ### What's New in v3.54
-            - **Post-Charged-Move KO Faint Freeze (`OverlayService.kt`)**:
-              - Immediately detects when a charged move KOs the active opponent (`sampledOppHpPct == -1` while player HUD returns) and freezes fast-move energy generation until the next opponent Pokémon swaps in with a live HP bar.
-            - **Pending-Damage-Gated Turn-T Prediction & Multi-Move Damage Integration (`OverlayService.kt`)**:
-              - Removes unconditional free-running predictive HP/energy jumps when no attacks are thrown.
-              - For 2+ turn fast moves (2T/3T/4T/5T), predictive damage & energy are applied on Turn T ONLY when the orange pending-damage indicator is detected on the floating HP bar (and sampled across 2 scans on 3T+ moves).
-              - For 1-turn fast moves, damage and energy are applied only upon confirmed HP bar drops and verified via cumulative damage integration over multiple moves.
-            - **Turn-Phased OCR Capture (`OverlayService.kt`)**:
-              - Phase-locks the 2.00 Hz (500ms) OCR capture loop to observed GBL turn boundaries so damage and energy appear on the overlay at the exact moment energy becomes available for swap/catch warnings.
+            ### What's New in v3.55
+            - **Expanded Floating HP Bar Corridor & Overlay-Occluded / Text-Overlapped Detection (`OverlayService.kt`)**:
+              - Expands floating HP bar search corridors (`oppHpCorridorRect` & `playerHpCorridorRect`) and X-anchor bounds (`0.435w..0.665w` for Opponent, `0.035w..0.135w` for Player) so smaller, medium, and laterally shifted Pokémon (such as Solgaleo, Mimikyu, Plusle) are reliably detected.
+              - Detects HP bars partially or fully underneath the semi-transparent `#0B111E` overlay or overlapped by `"SUPER EFFECTIVE"` combat text without losing track of HP drops when opponent attack rows expand.
+            - **2Hz 2T+ Move-Duration Cooldown & Adaptive 1T Energy Feedback Loop (`OverlayService.kt`)**:
+              - Eliminates +1–2 fast move energy overcounting against opponents with suboptimal IVs or under-leveled CP (where each fast move deals a higher HP% drop than standard 2500/1500 CP templates).
+              - At 2 Hz sampling rate, 2-turn and longer fast moves enforce their physical move-duration cooldown (`fastTurns * 500ms - 160ms`) and elapsed-time window ceiling rather than dividing cumulative HP drop by static template damage.
+              - 1-turn fast moves use a self-calibrating feedback loop that blends expected damage per turn with observed damage per detected active turn over time.
             
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)
