@@ -3932,7 +3932,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v3.52 • Android Native Overlay
+                  v3.53 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -5032,10 +5032,43 @@ export default function App() {
                       {!isWaitingOpponent && scannedOpponents.length > 0 && (
                         <div className="flex flex-col gap-0.5 my-1">
                           {/* Opponent Attacks Section Header (2-Line) + 3-Team Column Headers & Opponent Swap Clock */}
-                          <div className="grid grid-cols-[minmax(0,1fr)_84px] items-end gap-1 px-1 pt-0.5">
-                            <div className="flex flex-col gap-0.5 pr-1 min-w-0">
+                          <div className="grid grid-cols-[minmax(0,1fr)_84px] items-stretch gap-1 px-1 pt-0.5">
+                            <div className="flex flex-col justify-between gap-0.5 pr-1 min-w-0">
                               <div className="text-[7.5px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center justify-between gap-1 min-w-0">
-                                <span className="shrink-0">Opp Attacks</span>
+                                <span className="flex items-center gap-1 min-w-0 shrink-0">
+                                  <span className="shrink-0">Opp Attacks</span>
+                                  <span
+                                    className={`text-[7px] font-mono font-extrabold px-1 py-0.2 rounded border leading-none shrink-0 ${
+                                      (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 0
+                                        ? 'text-slate-400 bg-slate-900/60 border-slate-700 line-through'
+                                        : (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 22
+                                        ? 'text-rose-200 bg-rose-950/70 border-rose-400/70'
+                                        : (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 50
+                                        ? 'text-amber-200 bg-amber-950/70 border-amber-400/70'
+                                        : 'text-emerald-200 bg-emerald-950/70 border-emerald-400/70'
+                                    }`}
+                                    title={`Active Opponent HP: ${oppSlotHpPct[safeActiveOppSlot] ?? 100}%`}
+                                  >
+                                    {oppSlotHpPct[safeActiveOppSlot] ?? 100}%
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const next = oppShields > 0 ? oppShields - 1 : 2;
+                                      setOppShields(next);
+                                    }}
+                                    className={`px-1 py-0.2 rounded border text-[7px] font-mono font-extrabold leading-none transition-all flex items-center gap-0.5 active:scale-95 cursor-pointer shrink-0 ${
+                                      oppShields === 0
+                                        ? 'opacity-50 text-slate-400 bg-slate-900/60 border-slate-700 line-through'
+                                        : 'text-amber-300 bg-amber-950/60 border-amber-400/60 hover:bg-amber-900/50'
+                                    }`}
+                                    title={`Opponent Shields: ${oppShields}/2 remaining (Tap to cycle 2->1->0->2)`}
+                                  >
+                                    <span className="text-[7px]">🛡️</span>
+                                    <span>{oppShields}</span>
+                                  </button>
+                                </span>
                                 <span className="flex items-center gap-1 shrink-0">
                                   <span
                                     className={`text-[7px] font-mono font-black px-1 py-0.2 rounded border leading-none ${
@@ -5070,11 +5103,33 @@ export default function App() {
                                   </span>
                                 </span>
                               </div>
-                              <div className="text-amber-300 font-extrabold text-[7.5px] font-mono normal-case truncate leading-tight">
-                                {abbrPoke3(activeOpponent.name, false)} {oppSlotHpPct[safeActiveOppSlot] ?? 100}% · {oppFastInfo.telemetry}
+                              <div className="flex items-center justify-between gap-1 min-w-0 leading-tight">
+                                <span className="text-amber-300 font-extrabold text-[7.5px] font-mono normal-case truncate min-w-0 flex-1">
+                                  {abbrPoke3(activeOpponent.name, false)} {oppSlotHpPct[safeActiveOppSlot] ?? 100}% · {oppFastInfo.telemetry}
+                                </span>
+                                {(() => {
+                                  const activeOppE = oppSlotEnergy[safeActiveOppSlot] ?? oppEnergy;
+                                  const cheapestOppCost = Math.min(
+                                    ...activeOpponent.chargedMoves.map((m) => m.energyCost || 40),
+                                    45
+                                  );
+                                  const oppRdy = activeOppE >= cheapestOppCost;
+                                  return (
+                                    <span
+                                      className={`text-[6.8px] font-mono font-black px-1 py-0.2 rounded border shrink-0 leading-none ${
+                                        oppRdy
+                                          ? 'text-yellow-200 bg-amber-700/75 border-yellow-300/90 shadow-[0_0_4px_rgba(250,204,21,0.5)]'
+                                          : 'text-sky-200 bg-sky-950/70 border-sky-400/50'
+                                      }`}
+                                      title={`Opponent Energy: ${activeOppE}E (Cheapest Charged Move: ${cheapestOppCost}E)`}
+                                    >
+                                      {activeOppE}E{oppRdy ? ' READY' : ''}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                             </div>
-                            <div className="grid grid-cols-3 w-[84px] text-center font-mono text-[7.5px] font-extrabold">
+                            <div className="grid grid-cols-3 w-[84px] text-center font-mono text-[7.5px] font-extrabold items-stretch">
                               {[0, 1, 2].map((slotIdx) => {
                                 const memberName = activePreset.pokemon[slotIdx]?.name || '';
                                 const code = memberName
@@ -5082,19 +5137,29 @@ export default function App() {
                                   : '---';
                                 const isActv = slotIdx === activeUserSlotIndex;
                                 const isFainted = !isActv && !!playerFaintedSlots[slotIdx];
+                                const slotHp = isFainted ? 0 : (userSlotHpPct[slotIdx] ?? 100);
+                                const hpColorCls = isFainted
+                                  ? 'text-slate-500'
+                                  : slotHp > 50
+                                  ? 'text-emerald-300'
+                                  : slotHp > 20
+                                  ? 'text-amber-300'
+                                  : 'text-rose-300';
                                 return (
                                   <span
                                     key={slotIdx}
-                                    className={`py-0.5 leading-none transition ${
+                                    onClick={() => handleSelectUserSlot(slotIdx)}
+                                    className={`py-0.5 leading-[1.05] transition flex flex-col items-center justify-between cursor-pointer ${
                                       isFainted
                                         ? 'opacity-35 text-[#5A6577] line-through'
                                         : isActv
                                         ? 'bg-sky-500/25 text-sky-200 border-t border-x border-sky-400/80 rounded-t shadow-[0_0_6px_rgba(56,189,248,0.25)]'
                                         : 'text-slate-400'
                                     }`}
-                                    title={isFainted ? `${memberName} (Fainted)` : memberName}
+                                    title={isFainted ? `${memberName} (Fainted)` : `${memberName} (${slotHp}% HP)`}
                                   >
-                                    {code}
+                                    <span>{code}</span>
+                                    <span className={`text-[6.8px] font-mono ${hpColorCls}`}>{slotHp}%</span>
                                   </span>
                                 );
                               })}
@@ -5218,10 +5283,48 @@ export default function App() {
                           </div>
 
                           {/* My Attacks Section Header (2-Line) + 3-Opponent Column Headers & Player Swap Clock */}
-                          <div className="grid grid-cols-[minmax(0,1fr)_84px] items-end gap-1 px-1 pt-1">
-                            <div className="flex flex-col gap-0.5 pr-1 min-w-0">
+                          <div className="grid grid-cols-[minmax(0,1fr)_84px] items-stretch gap-1 px-1 pt-1">
+                            <div className="flex flex-col justify-between gap-0.5 pr-1 min-w-0">
                               <div className="text-[7.5px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center justify-between gap-1 min-w-0">
-                                <span className="shrink-0">My Attacks</span>
+                                <span className="flex items-center gap-1 min-w-0 shrink-0">
+                                  <span className="shrink-0">My Attacks</span>
+                                  <span
+                                    className={`text-[7px] font-mono font-extrabold px-1 py-0.2 rounded border leading-none shrink-0 ${
+                                      (userSlotHpPct[activeUserSlotIndex] ?? 100) <= 0
+                                        ? 'text-slate-400 bg-slate-900/60 border-slate-700 line-through'
+                                        : (userSlotHpPct[activeUserSlotIndex] ?? 100) <= 22
+                                        ? 'text-rose-200 bg-rose-950/70 border-rose-400/70'
+                                        : (userSlotHpPct[activeUserSlotIndex] ?? 100) <= 50
+                                        ? 'text-amber-200 bg-amber-950/70 border-amber-400/70'
+                                        : 'text-emerald-200 bg-emerald-950/70 border-emerald-400/70'
+                                    }`}
+                                    title={`Active Player Pokémon HP: ${userSlotHpPct[activeUserSlotIndex] ?? 100}%`}
+                                  >
+                                    {userSlotHpPct[activeUserSlotIndex] ?? 100}%
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const next = userShields > 0 ? userShields - 1 : 2;
+                                      setUserShields(next);
+                                    }}
+                                    className={`px-1 py-0.2 rounded border text-[7px] font-mono font-extrabold leading-none transition-all flex items-center gap-0.5 active:scale-95 cursor-pointer shrink-0 ${
+                                      userShields === 0
+                                        ? 'opacity-50 text-slate-400 bg-slate-900/60 border-slate-700 line-through'
+                                        : 'text-sky-200 border-sky-400/50 hover:bg-sky-900/50'
+                                    }`}
+                                    style={{
+                                      borderColor: userShields > 0 ? `rgba(${activeTheme.overlayHeaderRgb}, 0.65)` : undefined,
+                                      backgroundColor: userShields > 0 ? `rgba(${activeTheme.overlayHeaderRgb}, 0.22)` : undefined,
+                                      color: userShields > 0 ? activeTheme.accentHex : undefined
+                                    }}
+                                    title={`Your Shields: ${userShields}/2 remaining (Tap to cycle 2->1->0->2)`}
+                                  >
+                                    <span className="text-[7px]">🛡️</span>
+                                    <span>{userShields}</span>
+                                  </button>
+                                </span>
                                 <span className="flex items-center gap-1 shrink-0">
                                   <span
                                     className={`text-[7px] font-mono font-black px-1 py-0.2 rounded border leading-none ${
@@ -5252,11 +5355,33 @@ export default function App() {
                                   </span>
                                 </span>
                               </div>
-                              <div className="text-sky-300 font-extrabold text-[7.5px] font-mono normal-case truncate leading-tight">
-                                {abbrPoke3(userLeadName, false)} {userSlotHpPct[activeUserSlotIndex] ?? 100}% · {userFastInfo.telemetry}
+                              <div className="flex items-center justify-between gap-1 min-w-0 leading-tight">
+                                <span className="text-sky-300 font-extrabold text-[7.5px] font-mono normal-case truncate min-w-0 flex-1">
+                                  {abbrPoke3(userLeadName, false)} {userSlotHpPct[activeUserSlotIndex] ?? 100}% · {userFastInfo.telemetry}
+                                </span>
+                                {(() => {
+                                  const activeUserE = userSlotEnergy[activeUserSlotIndex] ?? userEnergy;
+                                  const cheapestUserCost = Math.min(
+                                    ...(myMoveTimingInfo || []).map((r) => r.energy || 50),
+                                    45
+                                  );
+                                  const userRdy = (myMoveTimingInfo || []).length > 0 && activeUserE >= cheapestUserCost;
+                                  return (
+                                    <span
+                                      className={`text-[6.8px] font-mono font-black px-1 py-0.2 rounded border shrink-0 leading-none ${
+                                        userRdy
+                                          ? 'text-yellow-200 bg-amber-700/75 border-yellow-300/90 shadow-[0_0_4px_rgba(250,204,21,0.5)]'
+                                          : 'text-sky-200 bg-sky-950/70 border-sky-400/50'
+                                      }`}
+                                      title={`Your Active Pokémon Energy: ${activeUserE}E`}
+                                    >
+                                      {activeUserE}E{userRdy ? ' READY' : ''}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                             </div>
-                            <div className="grid grid-cols-3 w-[84px] text-center font-mono text-[7.5px] font-extrabold">
+                            <div className="grid grid-cols-3 w-[84px] text-center font-mono text-[7.5px] font-extrabold items-stretch">
                               {[0, 1, 2].map((oppIdx) => {
                                 const oppName = scannedOpponents[oppIdx] || '';
                                 const code = oppName
@@ -5264,20 +5389,31 @@ export default function App() {
                                   : '---';
                                 const isActv = oppIdx === safeActiveOppSlot;
                                 const isFainted = !isActv && !!oppFaintedSlots[oppIdx];
+                                const oppHp = oppName ? (isFainted ? 0 : (oppSlotHpPct[oppIdx] ?? 100)) : null;
+                                const hpColorCls = !oppName
+                                  ? 'text-slate-600'
+                                  : isFainted
+                                  ? 'text-slate-500'
+                                  : (oppHp ?? 100) > 50
+                                  ? 'text-emerald-300'
+                                  : (oppHp ?? 100) > 20
+                                  ? 'text-amber-300'
+                                  : 'text-rose-300';
                                 return (
                                   <span
                                     key={oppIdx}
                                     onClick={() => oppName && handleSwapActiveOpponent(oppName)}
-                                    className={`py-0.5 leading-none transition ${oppName ? 'cursor-pointer' : ''} ${
+                                    className={`py-0.5 leading-[1.05] transition flex flex-col items-center justify-between ${oppName ? 'cursor-pointer' : ''} ${
                                       isFainted
                                         ? 'opacity-35 text-[#5A6577] line-through'
-                                        : isActv
+                                        : oppName && isActv
                                         ? 'bg-sky-500/25 text-sky-200 border-t border-x border-sky-400/80 rounded-t shadow-[0_0_6px_rgba(56,189,248,0.25)]'
                                         : 'text-slate-400'
                                     }`}
-                                    title={isFainted ? `${oppName} (Fainted)` : oppName}
+                                    title={isFainted ? `${oppName} (Fainted)` : oppName ? `${oppName} (${oppHp}% HP)` : 'Unscanned slot'}
                                   >
-                                    {code}
+                                    <span>{code}</span>
+                                    <span className={`text-[6.8px] font-mono ${hpColorCls}`}>{oppHp !== null ? `${oppHp}%` : '—'}</span>
                                   </span>
                                 );
                               })}

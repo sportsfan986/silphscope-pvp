@@ -629,7 +629,7 @@
         .section-header-grid {
             display: grid;
             grid-template-columns: minmax(0, 1fr) 87px;
-            align-items: end;
+            align-items: stretch;
             gap: 4px;
             padding: 1px 0 0 1px;
         }
@@ -637,6 +637,7 @@
         .section-header-left {
             display: flex;
             flex-direction: column;
+            justify-content: space-between;
             gap: 1px;
             min-width: 0;
             font-size: 7.8px;
@@ -652,16 +653,30 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 4px;
+            gap: 3px;
             min-width: 0;
         }
 
         .section-header-line2 {
             display: flex;
             align-items: center;
+            justify-content: space-between;
+            gap: 3px;
             min-width: 0;
             font-size: 7.8px;
             line-height: 1.1;
+        }
+
+        .atk-hdr-shield-btn {
+            padding: 0 2.5px;
+            font-size: 7px;
+            line-height: 1.1;
+            border-radius: 2.5px;
+            gap: 1px;
+        }
+
+        .atk-hdr-shield-btn .shield-glyph {
+            font-size: 7px;
         }
 
         .dmg-col-headers {
@@ -672,15 +687,33 @@
             font-size: 7.5px;
             font-weight: 900;
             font-variant-numeric: tabular-nums;
+            align-items: stretch;
         }
 
         .dmg-col-hdr {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
             padding: 1px 0;
             color: #94a3b8;
             border-left: 1px solid transparent;
             border-right: 1px solid transparent;
             border-top: 1px solid transparent;
-            line-height: 1.15;
+            line-height: 1.05;
+        }
+
+        .dmg-col-hdr-code {
+            font-size: 7.5px;
+            font-weight: 900;
+            line-height: 1.05;
+        }
+
+        .dmg-col-hdr-hp {
+            font-size: 7px;
+            font-weight: 800;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            line-height: 1.05;
         }
 
         .dmg-col-hdr.active-col {
@@ -1233,14 +1266,21 @@
             <div class="section-header-grid">
                 <div class="section-header-left">
                     <div class="section-header-line1">
-                        <span style="flex-shrink:0;">Opp Attacks</span>
+                        <div style="display:flex; align-items:center; gap:2.5px; min-width:0; flex-shrink:0;">
+                            <span style="flex-shrink:0;">Opp Attacks</span>
+                            <span id="sky-opp-atk-hp-pill" class="hp-slot-pill hp-high" style="margin-left:1px;" title="Opponent Active Pokémon Live HP%">100%</span>
+                            <button id="btn-opp-atk-shields" type="button" class="hud-shield-btn opp-shield atk-hdr-shield-btn" onclick="cycleOpponentShields(event)" title="Opponent shields remaining (Tap to cycle 2->1->0->2)">
+                                <span class="shield-glyph">🛡️</span><span id="txt-opp-atk-shields" class="shield-val">2</span>
+                            </button>
+                        </div>
                         <div style="display:flex; align-items:center; gap:2.5px; flex-shrink:0;">
                             <span id="sky-opp-cmp-badge" class="cmp-pill" title="Opponent Charged Move Priority (CMP)">CMP—</span>
                             <span class="swap-clock-badge opp-swap-badge" id="sky-opp-swap-clock" title="Opponent Switch/Swap Cooldown Timer">Swap: 0s</span>
                         </div>
                     </div>
                     <div class="section-header-line2">
-                        <span id="sky-opp-fastmove" style="color:var(--secondary-accent-hex); font-weight:800; font-family:monospace; text-transform:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">—</span>
+                        <span id="sky-opp-fastmove" style="color:var(--secondary-accent-hex); font-weight:800; font-family:monospace; text-transform:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1;">—</span>
+                        <span id="sky-opp-atk-energy-pill" class="energy-slot-pill building" style="margin-left:2px; flex-shrink:0;" title="Opponent Active Pokémon Energy">0E</span>
                     </div>
                 </div>
                 <div id="sky-opp-dmg-headers" class="dmg-col-headers"></div>
@@ -1253,14 +1293,21 @@
             <div class="section-header-grid">
                 <div class="section-header-left">
                     <div class="section-header-line1">
-                        <span style="flex-shrink:0;">My Attacks</span>
+                        <div style="display:flex; align-items:center; gap:2.5px; min-width:0; flex-shrink:0;">
+                            <span style="flex-shrink:0;">My Attacks</span>
+                            <span id="sky-my-atk-hp-pill" class="hp-slot-pill hp-high" style="margin-left:1px;" title="Your Active Pokémon Live HP%">100%</span>
+                            <button id="btn-player-atk-shields" type="button" class="hud-shield-btn player-shield atk-hdr-shield-btn" onclick="cyclePlayerShields(event)" title="Your shields remaining (Tap to cycle 2->1->0->2)">
+                                <span class="shield-glyph">🛡️</span><span id="txt-player-atk-shields" class="shield-val">2</span>
+                            </button>
+                        </div>
                         <div style="display:flex; align-items:center; gap:2.5px; flex-shrink:0;">
                             <span id="sky-my-cmp-badge" class="cmp-pill" title="Your Charged Move Priority (CMP)">CMP—</span>
                             <span class="swap-clock-badge player-swap-badge" id="sky-player-swap-clock" title="Player Switch/Swap Cooldown Timer">Swap: 0s</span>
                         </div>
                     </div>
                     <div class="section-header-line2">
-                        <span id="sky-my-short" style="color:#38bdf8; font-weight:800; font-family:monospace; text-transform:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Lead</span>
+                        <span id="sky-my-short" style="color:#38bdf8; font-weight:800; font-family:monospace; text-transform:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1;">Lead</span>
+                        <span id="sky-my-atk-energy-pill" class="energy-slot-pill building" style="margin-left:2px; flex-shrink:0;" title="Your Active Pokémon Energy">0E</span>
                     </div>
                 </div>
                 <div id="sky-my-dmg-headers" class="dmg-col-headers"></div>
@@ -1955,6 +2002,14 @@
                 if (pShields === 0) btnP.classList.add("shield-zero");
                 else btnP.classList.remove("shield-zero");
             }
+            const btnAtkP = document.getElementById("btn-player-atk-shields");
+            const txtAtkP = document.getElementById("txt-player-atk-shields");
+            if (btnAtkP && txtAtkP) {
+                txtAtkP.textContent = String(pShields);
+                btnAtkP.title = `Your Shields: ${pShields}/2 remaining (Tap to cycle 2->1->0->2)`;
+                if (pShields === 0) btnAtkP.classList.add("shield-zero");
+                else btnAtkP.classList.remove("shield-zero");
+            }
 
             const btnO = document.getElementById("btn-opp-shields");
             const txtO = document.getElementById("txt-opp-shields");
@@ -1963,6 +2018,14 @@
                 btnO.title = `Opponent Shields: ${oShields}/2 remaining (Tap to cycle 2->1->0->2)`;
                 if (oShields === 0) btnO.classList.add("shield-zero");
                 else btnO.classList.remove("shield-zero");
+            }
+            const btnAtkO = document.getElementById("btn-opp-atk-shields");
+            const txtAtkO = document.getElementById("txt-opp-atk-shields");
+            if (btnAtkO && txtAtkO) {
+                txtAtkO.textContent = String(oShields);
+                btnAtkO.title = `Opponent Shields: ${oShields}/2 remaining (Tap to cycle 2->1->0->2)`;
+                if (oShields === 0) btnAtkO.classList.add("shield-zero");
+                else btnAtkO.classList.remove("shield-zero");
             }
         }
 
@@ -2345,18 +2408,53 @@
                 || (battleData.activeOppMoveReady ? `${activeOppEnergyVal}E READY` : `${activeOppEnergyVal}E`);
 
             const playerHpPillEl = document.getElementById("sky-player-hp-pill");
+            const uCls = activeUserHpVal > 50 ? "hp-high" : (activeUserHpVal > 20 ? "hp-mid" : "hp-low");
             if (playerHpPillEl) {
-                const uCls = activeUserHpVal > 50 ? "hp-high" : (activeUserHpVal > 20 ? "hp-mid" : "hp-low");
                 playerHpPillEl.className = `hp-slot-pill ${uCls}`;
                 playerHpPillEl.textContent = `My:${activeUserHpVal}% ${activeUserEnergyVal}E`;
                 playerHpPillEl.title = `Your Active Pokémon HP: ${activeUserHpVal}% • Energy: ${activeUserEnergyVal}E`;
             }
+            const myAtkHpPillEl = document.getElementById("sky-my-atk-hp-pill");
+            if (myAtkHpPillEl) {
+                myAtkHpPillEl.className = `hp-slot-pill ${uCls}`;
+                myAtkHpPillEl.textContent = `${activeUserHpVal}%`;
+                myAtkHpPillEl.title = `Your Active Pokémon HP: ${activeUserHpVal}%`;
+            }
+            const myRowsForE = battleData.myMoveTimingRows || [];
+            const myCheapestE = myRowsForE.length > 0
+                ? Math.min(...myRowsForE.map(r => typeof r.energy === "number" ? r.energy : 50))
+                : 35;
+            const myMoveRdy = activeUserEnergyVal >= myCheapestE && myRowsForE.length > 0;
+            const myAtkEnergyPillEl = document.getElementById("sky-my-atk-energy-pill");
+            if (myAtkEnergyPillEl) {
+                myAtkEnergyPillEl.className = `energy-slot-pill ${myMoveRdy ? "ready" : "building"}`;
+                myAtkEnergyPillEl.textContent = myMoveRdy ? `${activeUserEnergyVal}E READY` : `${activeUserEnergyVal}E`;
+                myAtkEnergyPillEl.title = `Your Active Pokémon Energy: ${activeUserEnergyVal}E`;
+            }
+
             const oppHpPillEl = document.getElementById("sky-opp-hp-pill");
+            const oCls = isWaitingState ? "hp-high" : (activeOppHpVal > 50 ? "hp-high" : (activeOppHpVal > 20 ? "hp-mid" : "hp-low"));
             if (oppHpPillEl) {
-                const oCls = isWaitingState ? "hp-high" : (activeOppHpVal > 50 ? "hp-high" : (activeOppHpVal > 20 ? "hp-mid" : "hp-low"));
                 oppHpPillEl.className = `hp-slot-pill ${oCls}`;
                 oppHpPillEl.textContent = isWaitingState ? "Opp:—" : `Opp:${activeOppHpVal}%`;
                 oppHpPillEl.title = isWaitingState ? "Waiting for opponent HP bar" : `Active Opponent HP: ${activeOppHpVal}% • Energy: ${activeOppEnergyLabel}`;
+            }
+            const oppAtkHpPillEl = document.getElementById("sky-opp-atk-hp-pill");
+            if (oppAtkHpPillEl) {
+                oppAtkHpPillEl.className = `hp-slot-pill ${oCls}`;
+                oppAtkHpPillEl.textContent = isWaitingState ? "—" : `${activeOppHpVal}%`;
+                oppAtkHpPillEl.title = isWaitingState ? "Waiting for opponent HP bar" : `Active Opponent HP: ${activeOppHpVal}%`;
+            }
+            const oppRowsForE = battleData.oppMoveTimingRows || [];
+            const oppCheapestE = oppRowsForE.length > 0
+                ? Math.min(...oppRowsForE.map(r => typeof r.energy === "number" ? r.energy : 50))
+                : 35;
+            const oppMoveRdy = !isWaitingState && (!!battleData.activeOppMoveReady || activeOppEnergyVal >= oppCheapestE || String(activeOppEnergyLabel).includes("READY"));
+            const oppAtkEnergyPillEl = document.getElementById("sky-opp-atk-energy-pill");
+            if (oppAtkEnergyPillEl) {
+                oppAtkEnergyPillEl.className = `energy-slot-pill ${oppMoveRdy ? "ready" : "building"}`;
+                oppAtkEnergyPillEl.textContent = isWaitingState ? "0E" : activeOppEnergyLabel;
+                oppAtkEnergyPillEl.title = isWaitingState ? "Waiting for opponent energy" : `Active Opponent Energy: ${activeOppEnergyLabel}`;
             }
 
             const my3Letter = abbrPoke(battleData.userActivePokemon || "Lead", false);
@@ -2587,9 +2685,12 @@
                         oppDmgHeadersEl.innerHTML = teamList.slice(0, 3).map((member, idx) => {
                             const code = member.code || abbrPoke(member.name, false);
                             const isAct = (idx === activeSlotIdx);
-                            const isFainted = !isAct && !!(battleData.playerFaintedSlots && battleData.playerFaintedSlots[idx]);
+                            const rawHp = typeof member.hpPct === "number" ? member.hpPct : (typeof pSlotHpArr[idx] === "number" ? pSlotHpArr[idx] : 100);
+                            const isFainted = (rawHp <= 0) || (!isAct && !!(battleData.playerFaintedSlots && battleData.playerFaintedSlots[idx]));
+                            const slotHp = isFainted ? 0 : Math.max(0, Math.min(100, Math.round(rawHp)));
+                            const hpColor = isFainted ? "#64748b" : (slotHp > 50 ? "#6ee7b7" : (slotHp > 20 ? "#fde047" : "#fca5a5"));
                             const faintCls = isFainted ? "col-fainted" : "";
-                            return `<span class="dmg-col-hdr ${isAct && !isFainted ? 'active-col' : ''} ${faintCls}">${code}</span>`;
+                            return `<span class="dmg-col-hdr ${isAct && !isFainted ? 'active-col' : ''} ${faintCls}" onclick="selectUserPokemonByIndex(${idx})" style="cursor:pointer;" title="${member.name || code} (${slotHp}% HP)"><span class="dmg-col-hdr-code">${code}</span><span class="dmg-col-hdr-hp" style="color:${hpColor};">${slotHp}%</span></span>`;
                         }).join("");
                     }
 
@@ -2685,10 +2786,14 @@
                             const isAct = opp && opp.isActive !== undefined ? !!opp.isActive : (idx === activeOppSlotIdx);
                             const isShad = opp && opp.isShadow !== undefined ? !!opp.isShadow : (isAct && battleData.isOpponentShadow);
                             const code = opp ? (opp.code || abbrPoke(opp.name, isShad)) : "—";
-                            const isFainted = !isAct && !!(battleData.oppFaintedSlots && battleData.oppFaintedSlots[idx]);
+                            const rawOppHp = opp ? (typeof opp.hpPct === "number" ? opp.hpPct : (typeof oSlotHpArr[idx] === "number" ? oSlotHpArr[idx] : 100)) : null;
+                            const isFainted = opp ? ((rawOppHp !== null && rawOppHp <= 0) || (!isAct && !!(battleData.oppFaintedSlots && battleData.oppFaintedSlots[idx]))) : false;
+                            const slotHp = opp ? (isFainted ? 0 : Math.max(0, Math.min(100, Math.round(rawOppHp !== null ? rawOppHp : 100)))) : null;
+                            const hpText = slotHp !== null ? `${slotHp}%` : "—";
+                            const hpColor = !opp ? "#475569" : (isFainted ? "#64748b" : (slotHp > 50 ? "#6ee7b7" : (slotHp > 20 ? "#fde047" : "#fca5a5")));
                             const faintCls = isFainted ? "col-fainted" : "";
-                            const clickAttr = opp ? `onclick="swapOpponentByIndex(${idx})" style="cursor:pointer;"` : "";
-                            return `<span class="dmg-col-hdr ${isAct && !isFainted ? 'active-col' : ''} ${faintCls}" ${clickAttr}>${code}</span>`;
+                            const clickAttr = opp ? `onclick="swapOpponentByIndex(${idx})" style="cursor:pointer;" title="${opp.name || code} (${slotHp}% HP)"` : "";
+                            return `<span class="dmg-col-hdr ${opp && isAct && !isFainted ? 'active-col' : ''} ${faintCls}" ${clickAttr}><span class="dmg-col-hdr-code">${code}</span><span class="dmg-col-hdr-hp" style="color:${hpColor};">${hpText}</span></span>`;
                         }).join("");
                     }
 

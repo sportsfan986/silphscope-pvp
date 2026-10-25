@@ -123,14 +123,14 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official v3.52 Release (Full Top-of-Screen Overlay Slide, 2-Line Opp/My Attacks Headers & Locked 3-Column Alignment)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official v3.53 Release (Attack Header HP, Shield & Energy Badges + 2-Row Pokémon Column Headers with HP%)
             
-            ### What's New in v3.52
-            - **Full Top-of-Screen Overlay Slide (`OverlayService.kt`)**:
-              - Enables `FLAG_LAYOUT_NO_LIMITS` and `LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS` (`LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES` on API 28+) and removes the `16px` top drag ceiling so the overlay can slide all the way to the very top edge of the screen.
-            - **2-Line `Opp Attacks` & `My Attacks` Headers with Locked 3-Column Alignment (`overlay.html`)**:
-              - Splits `Opp Attacks` and `My Attacks` header blocks into two compact lines (`Opp Attacks` + `CMP✓/✗` + `Swap: 0s` on line 1, and active Pokémon HP% + fast move telemetry on line 2).
-              - Locks the section header grid to `grid-template-columns: minmax(0, 1fr) 87px` so the 3 Pokémon column headers always align pixel-for-pixel above the 3 damage percentage columns.
+            ### What's New in v3.53
+            - **HP, Shield & Energy Badges in `Opp Attacks` and `My Attacks` Headers (`overlay.html`)**:
+              - Adds live HP% and interactive Shield (`🛡️`) badges directly next to `Opp Attacks` and `My Attacks` on Line 1.
+              - Adds live Energy (`E` / `READY`) badges on the right side of Line 2 below the Swap timer.
+            - **2-Row Pokémon Column Headers (`overlay.html`)**:
+              - Shifts the 3-letter Pokémon abbreviations (`TIN`, `MIM`, `SWA`, `GLA`, etc.) up to Row 1 of each column header and prints each Pokémon's live `HP%` in Row 2 directly below it.
             
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)
