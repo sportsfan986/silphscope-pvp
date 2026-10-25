@@ -2591,7 +2591,7 @@ export default function App() {
           oppSlotHpPct: ev.oppSlotHpPct ?? null
         }));
         return JSON.stringify({
-          schemaVersion: '3.41-ai-decision-tree',
+          schemaVersion: '3.42-ai-decision-tree',
           battleId: b.id,
           timestampMs: b.timestampMs,
           league: b.league,
@@ -3634,7 +3634,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v3.41 • Android Native Overlay
+                  v3.42 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
