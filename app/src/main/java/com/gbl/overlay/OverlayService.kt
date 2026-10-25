@@ -8955,27 +8955,35 @@ class OverlayService : LifecycleService() {
             val pixels = IntArray(cw * ch)
             screen.getPixels(pixels, 0, cw, left, top, cw, ch)
 
-            // Classify pixel: 1 = Green Fill (>50% HP), 2 = Yellow Fill (20..50% HP), 3 = Coral Red Fill (<20% HP), 4 = Depleted Track / Drain Cap, 0 = Background
+            // v3.45: Fuzzy multi-band HP pixel classifier across all 3 HP color ranges (both unobstructed & overlay-dimmed),
+            // with explicit separation of Orange Pending-Damage slivers:
+            // 1 = Green/Mint/Teal Fill (>50% HP), 2 = Yellow/Gold Fill (20..50% HP),
+            // 3 = Coral Red/Salmon Fill (<20% HP), 4 = Orange Pending-Damage Sliver / Depleted Dark Track, 0 = Background
             fun classifyHpPixel(pixel: Int): Int {
                 val r = (pixel shr 16) and 0xFF
                 val g = (pixel shr 8) and 0xFF
                 val b = pixel and 0xFF
-                // 1. Spring-Mint Green HP fill (>50% HP): bright RGB(28, 254, 187) OR overlay-dimmed RGB(13..35, 95..194, 75..170)
-                if (g >= 195 && r <= 105 && b in 130..220 && (g - r) >= 105) return 1
-                if (g in 95..194 && r <= 42 && b in 75..170 && (g - r) >= 70 && (b - r) >= 55 && (g - b) in 8..45) return 1
-                // 2. Golden Yellow HP fill (20..50% HP): bright RGB(251, 224, 45) OR overlay-dimmed RGB(115..199, 102..185, 22..58)
-                if (r >= 200 && g in 164..248 && b <= 98 && (r - b) >= 115) return 2
-                if (r in 115..199 && g in 102..185 && b <= 58 && r >= g && (r - g) <= 26 && (r - b) >= 72 && (g - b) >= 62) return 2
-                // 3. Coral Red HP fill (<20% HP): bright RGB(237, 101, 98) OR overlay-dimmed RGB(165..199, 65..110, 50..95)
-                if (r >= 200 && g in 70..130 && b in 70..130 && (r - g) >= 85 && kotlin.math.abs(g - b) <= 30) return 3
-                if (r in 165..199 && g in 65..110 && b in 50..95 && (r - g) >= 72 && (r - b) >= 80 && kotlin.math.abs(g - b) <= 42) return 3
-                // 4A. Orange damage-drain cap immediately to the right of active fill: bright RGB(251, 152, 24) OR overlay-dimmed RGB(165..214, 90..165, 18..55)
-                if (r >= 165 && g in 90..165 && b <= 55 && (r - g) >= 55 && (g - b) >= 45) return 4
+                // 1. Spring-Mint / Teal-Green HP fill (>50% HP) with generous color fuzziness:
+                //    Bright RGB(28..135, 140..255, 80..245) OR overlay-dimmed RGB(10..95, 65..210, 45..198)
+                if (g >= 140 && r <= 135 && b in 80..245 && (g - r) >= 40 && g >= b - 24) return 1
+                if (g in 65..210 && r <= 95 && b in 45..198 && (g - r) >= 22 && (b - r) >= 12 && kotlin.math.abs(g - b) <= 72) return 1
+                // 2. Golden Yellow / Warm Gold HP fill (20..50% HP) with generous color fuzziness:
+                //    Bright RGB(165..255, 125..255, 10..120) OR overlay-dimmed RGB(78..220, 62..205, 8..95)
+                if (r >= 165 && g in 125..255 && b <= 120 && r >= g - 20 && (r - g) <= 82 && (r - b) >= 60 && (g - b) >= 36) return 2
+                if (r in 78..220 && g in 62..205 && b <= 95 && r >= g - 16 && (r - g) <= 58 && (r - b) >= 30 && (g - b) >= 20) return 2
+                // 3. Coral Red / Crimson / Salmon HP fill (<20% HP) with generous color fuzziness:
+                //    Bright RGB(160..255, 22..145, 25..150) OR overlay-dimmed RGB(85..210, 18..122, 20..128)
+                //    Coral Red has balanced G & B (|G - B| <= 46), distinguishing it from Orange pending damage (G >> B).
+                if (r >= 160 && g in 22..145 && b in 25..150 && (r - g) >= 56 && (r - b) >= 48 && kotlin.math.abs(g - b) <= 46) return 3
+                if (r in 85..210 && g in 18..122 && b in 20..128 && (r - g) >= 34 && (r - b) >= 28 && kotlin.math.abs(g - b) <= 44) return 3
+                // 4A. Deep Orange Pending-Damage Sliver (r >> g >> b, e.g. RGB(251, 152, 24) or dimmed RGB(175, 95, 12)):
+                //     Classified as 4 (non-active track) so a shrinking pending-damage sliver is never mistaken for Red or Yellow HP.
+                if (r >= 130 && g in 60..172 && b <= 68 && (r - g) >= 55 && (g - b) >= 38) return 4
                 // 4B. Depleted Dark Translucent Capsule Track (supports dark navy/charcoal track and translucent track over 3D Pokémon models)
                 val maxCh = max(r, max(g, b))
                 val minCh = min(r, min(g, b))
                 val luma = (r + g + b) / 3
-                if (luma in 10..118 && maxCh <= 152 && (maxCh - minCh) <= 92) return 4
+                if (luma in 8..135 && maxCh <= 168 && (maxCh - minCh) <= 98) return 4
                 return 0
             }
 
@@ -8993,8 +9001,8 @@ class OverlayService : LifecycleService() {
                 val maxCh = max(r, max(g, b))
                 val minCh = min(r, min(g, b))
                 val luma = (r + g + b) / 3
-                if (luma >= 140 && (maxCh - minCh) <= 80) return true
-                if (luma >= 75 && (luma - refDarkLuma) >= 28 && r >= 68 && g >= 65 && b >= 55) return true
+                if (luma >= 135 && (maxCh - minCh) <= 85) return true
+                if (luma >= 72 && (luma - refDarkLuma) >= 25 && r >= 64 && g >= 62 && b >= 52) return true
                 return false
             }
 
@@ -9013,58 +9021,112 @@ class OverlayService : LifecycleService() {
                 val rowOffset = ry * cw
                 var rx = relAnchorMinX
                 while (rx <= relAnchorMaxX) {
-                    val startBand = classifyHpPixel(pixels[rowOffset + rx])
-                    if (startBand in 1..3) {
+                    val initBand = classifyHpPixel(pixels[rowOffset + rx])
+                    if (initBand in 1..3) {
                         val xStart = rx
-                        var xEnd = rx
-                        var gap = 0
-                        var scanX = rx + 1
-                        val maxScanX = min(cw - 1, xStart + maxOuterW)
-                        while (scanX <= maxScanX) {
-                            val cls = classifyHpPixel(pixels[rowOffset + scanX])
-                            // Enforce single-color-band continuity so a green HP bar never bleeds into yellow fur/flames behind the depleted track
-                            if (cls == startBand) {
-                                xEnd = scanX
-                                gap = 0
-                                scanX++
-                            } else if (gap < 4) {
-                                gap++
-                                scanX++
-                            } else {
+                        // 1. Key strictly on the LEFTMOST colored HP bar portion by verifying Left Outer Border (1..10px left of xStart) FIRST.
+                        //    This guarantees detached pending-damage slivers further right in the bar are never locked onto.
+                        var leftBorderX = -1
+                        var innerPadLuma = 90
+                        var px = max(0, xStart - 5)
+                        while (px <= max(0, xStart - 1)) {
+                            innerPadLuma = min(innerPadLuma, pixelLuma(pixels[rowOffset + px]))
+                            px++
+                        }
+                        var bx = xStart - 1
+                        val minBx = max(0, xStart - 10)
+                        while (bx >= minBx) {
+                            if (isBorderPixel(pixels[rowOffset + bx], innerPadLuma)) {
+                                leftBorderX = bx
                                 break
                             }
+                            bx--
                         }
-                        val wFill = xEnd - xStart + 1
-                        if (wFill >= 4) {
-                            // 1. Verify Left Outer Border (3..8px left of xStart)
-                            var leftBorderX = -1
-                            val innerPadLuma = pixelLuma(pixels[rowOffset + max(0, xStart - 2)])
-                            var bx = xStart - 3
-                            val minBx = max(0, xStart - 9)
-                            while (bx >= minBx) {
-                                if (isBorderPixel(pixels[rowOffset + bx], innerPadLuma)) {
-                                    leftBorderX = bx
+
+                        if (leftBorderX != -1) {
+                            // 2. Verify Right Outer Border at leftBorderX + minOuterW .. maxOuterW
+                            var rightBorderX = -1
+                            var rbx = min(cw - 1, leftBorderX + minOuterW)
+                            val maxRbx = min(cw - 1, leftBorderX + maxOuterW)
+                            while (rbx <= maxRbx) {
+                                var insideLuma = 90
+                                var ipx = max(0, rbx - 6)
+                                while (ipx <= max(0, rbx - 2)) {
+                                    insideLuma = min(insideLuma, pixelLuma(pixels[rowOffset + ipx]))
+                                    ipx++
+                                }
+                                if (isBorderPixel(pixels[rowOffset + rbx], insideLuma)) {
+                                    rightBorderX = rbx
                                     break
                                 }
-                                bx--
+                                rbx++
                             }
-                            if (leftBorderX != -1) {
-                                // 2. Verify Right Outer Border at leftBorderX + minOuterW .. maxOuterW
-                                var rightBorderX = -1
-                                var rbx = min(cw - 1, leftBorderX + minOuterW)
-                                val maxRbx = min(cw - 1, leftBorderX + maxOuterW)
-                                while (rbx <= maxRbx) {
-                                    val insideLuma = pixelLuma(pixels[rowOffset + max(0, rbx - 4)])
-                                    if (isBorderPixel(pixels[rowOffset + rbx], insideLuma)) {
-                                        rightBorderX = rbx
+
+                            if (rightBorderX != -1) {
+                                val outerW = rightBorderX - leftBorderX
+                                val fullInteriorW = max(1, outerW - padInset)
+                                val trackEndX = rightBorderX - max(2, padInset / 2)
+                                val maxScanX = min(cw - 1, trackEndX)
+
+                                // 3. Lock onto the authoritative color band & reference RGB of the leftmost HP bar portion (xStart .. xStart + 3)
+                                val secondBand = if (xStart + 1 <= maxScanX) classifyHpPixel(pixels[rowOffset + xStart + 1]) else initBand
+                                val leftBand = if (secondBand in 1..3) secondBand else initBand
+                                var refRSum = 0
+                                var refGSum = 0
+                                var refBSum = 0
+                                var refCount = 0
+                                var sxRef = xStart
+                                val maxRefX = min(maxScanX, xStart + 3)
+                                while (sxRef <= maxRefX) {
+                                    val pRef = pixels[rowOffset + sxRef]
+                                    if (classifyHpPixel(pRef) == leftBand || sxRef == xStart) {
+                                        refRSum += (pRef shr 16) and 0xFF
+                                        refGSum += (pRef shr 8) and 0xFF
+                                        refBSum += pRef and 0xFF
+                                        refCount++
+                                    }
+                                    sxRef++
+                                }
+                                val refR = refRSum / max(1, refCount)
+                                val refG = refGSum / max(1, refCount)
+                                val refB = refBSum / max(1, refCount)
+
+                                // 4. Scan rightward across ONLY the leftmost colored HP bar portion;
+                                //    stop immediately if the color steps into an Orange pending-damage sliver or depleted track.
+                                var xEnd = xStart
+                                var gap = 0
+                                var scanX = xStart + 1
+                                while (scanX <= maxScanX) {
+                                    val p = pixels[rowOffset + scanX]
+                                    val cls = classifyHpPixel(p)
+                                    val r = (p shr 16) and 0xFF
+                                    val g = (p shr 8) and 0xFF
+                                    val b = p and 0xFF
+                                    // Reject transitions from Yellow (leftBand=2) or Red (leftBand=3) into an Orange pending-damage sliver:
+                                    // - Yellow -> Orange pending damage has a sharp jump in (R - G) and drop in G
+                                    // - Coral Red -> Orange pending damage has a sharp jump in (G - B)
+                                    val isPendingDamageStep = when (leftBand) {
+                                        2 -> ((r - g) - (refR - refG)) > 28 || (refG - g) > 36
+                                        3 -> ((g - b) - (refG - refB)) > 28
+                                        else -> false
+                                    }
+                                    if (cls == leftBand && !isPendingDamageStep) {
+                                        xEnd = scanX
+                                        gap = 0
+                                        scanX++
+                                    } else if (isPendingDamageStep) {
+                                        // Hit the orange pending-damage sliver to the right of active HP fill — stop immediately!
+                                        break
+                                    } else if (gap < 4) {
+                                        gap++
+                                        scanX++
+                                    } else {
                                         break
                                     }
-                                    rbx++
                                 }
-                                if (rightBorderX != -1) {
-                                    val outerW = rightBorderX - leftBorderX
-                                    val fullInteriorW = max(1, outerW - padInset)
-                                    val trackEndX = rightBorderX - max(2, padInset / 2)
+
+                                val wFill = xEnd - xStart + 1
+                                if (wFill >= 4) {
                                     var darkPx = 0
                                     var brightWhitePx = 0
                                     val totalRem = max(0, trackEndX - (xEnd + 1) + 1)
@@ -9073,11 +9135,12 @@ class OverlayService : LifecycleService() {
                                         val p = pixels[rowOffset + dx]
                                         val cls = classifyHpPixel(p)
                                         val pLuma = pixelLuma(p)
-                                        if (cls in 1..4 || pLuma <= 140) darkPx++
-                                        if (pLuma >= 175) brightWhitePx++
+                                        if (cls in 1..4 || pLuma <= 168) darkPx++
+                                        if (pLuma >= 185) brightWhitePx++
                                         dx++
                                     }
-                                    if (brightWhitePx <= 4 && (totalRem <= 8 || (darkPx.toFloat() / max(1, totalRem).toFloat()) >= 0.80f)) {
+                                    val maxAllowedBright = max(10, totalRem / 5)
+                                    if (brightWhitePx <= maxAllowedBright && (totalRem <= 10 || (darkPx.toFloat() / max(1, totalRem).toFloat()) >= 0.60f)) {
                                         candidates.add(
                                             ScanlineBarCandidate(
                                                 ry = ry,
@@ -9088,11 +9151,13 @@ class OverlayService : LifecycleService() {
                                                 fullInteriorW = fullInteriorW
                                             )
                                         )
+                                        // Key strictly on the leftmost colored HP bar portion for this scanline row
+                                        break
                                     }
                                 }
                             }
                         }
-                        rx = max(rx + 1, xEnd + 1)
+                        rx++
                     } else {
                         rx++
                     }
