@@ -123,16 +123,16 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official v3.43 Release (Full 4-Sided Outer Border Rectangle HP Bar Scanner, Zero-Bias 100% Width & Bi-Directional Live HP Updates)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official v3.51 Release (Damage-Verified Fast-Move Energy Engine, Symmetric Attack Headers, CMP✓/CMP✗ Badges & Swap Timers)
             
-            ### What's New in v3.43
-            - **Full 4-Sided Outer Border Rectangle HP Bar Scanner (`detectFloatingHpBarPct`)**:
-              - Validates the complete 4-sided outer white/silver rectangle border (`leftBorderX`, `rightBorderX` at `0.274w..0.296w`, top horizontal border line, and bottom horizontal border line) and verifies that the interior between `xFillEnd` and `rightBorderX` is valid depleted dark track.
-              - Computes the `100%` HP interior width directly from the detected outer border rectangle (`(rightBorderX - leftBorderX) - padInset`), eliminating bias error and rejecting all non-capsule overlay UI badges (e.g., yellow shield buttons and green team chips).
-            - **Expanded Player HP Corridor for Flying/Tall Pokémon (`0.24h..0.69h`)**:
-              - Expands `playerHpCorridorRect` upward from `0.46h` to `0.24h` so high-hovering flying Pokémon (e.g., `Fearow` at `0.334h`) and `"Attack Incoming!"` camera angles are accurately tracked every frame.
-            - **Bi-Directional Live HP Gauge Updates on Every Scan**:
-              - Allows the active Player and Opponent HP gauges to move freely **up or down** on every valid scan so swapping to a Pokémon with higher remaining HP immediately updates the gauge while preserving outgoing bench Pokémon HP across 1-frame nameplate-vs-HP-bar transition overlaps.
+            ### What's New in v3.51
+            - **Damage-Verified Fast-Move Energy Engine**:
+              - Assumes fast moves are thrown on proper turn timing (`500ms` per turn) and grants energy automatically on move completion unless fast move damage fails to register a full turn (`500ms+`) after expected damage application.
+              - Restores withheld fast-move energy automatically when the next fast move damage drop is observed to recover from momentary scan glitches or HP integer rounding lag.
+              - Never relies on charged move button fill indicators (which wrap around a second time when overcharging).
+            - **Symmetric Opponent & My Attacks Header Rows**:
+              - Removes opponent fast move telemetry and swap clock from the top header row for a cleaner battle header.
+              - Formats the **Opp Attacks** header row to match the **My Attacks** header row, displaying active Pokémon fast move info (`FER 85% · BS 3t/11e/3%`), a compact `CMP✓` (green) / `CMP✗` (red) priority indicator on both rows, and the `Swap: 0s` cooldown timer on both rows.
             
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)

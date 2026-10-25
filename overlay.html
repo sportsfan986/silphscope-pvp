@@ -856,13 +856,14 @@
         }
 
         .swap-clock-badge {
-            font-size: 8px;
+            font-size: 7.4px;
             font-weight: 800;
             font-family: monospace;
-            padding: 1px 4.5px;
+            padding: 0.5px 3.5px;
             border-radius: 3px;
             white-space: nowrap;
             flex-shrink: 0;
+            line-height: 1.15;
             font-variant-numeric: tabular-nums;
             border: 1px solid rgba(255, 255, 255, 0.3);
             background: rgba(15, 23, 42, 0.7);
@@ -954,23 +955,41 @@
         }
 
         .cmp-pill {
-            font-size: 7.5px;
-            font-weight: 800;
-            padding: 0.5px 3.5px;
+            font-size: 7.2px;
+            font-weight: 900;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            padding: 0.5px 3px;
             border-radius: 3px;
             flex-shrink: 0;
+            line-height: 1.15;
+            white-space: nowrap;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            background: rgba(15, 23, 42, 0.65);
+            color: #94a3b8;
         }
 
         .cmp-pill.win {
-            background: rgba(22, 163, 74, 0.35);
+            background: rgba(22, 163, 74, 0.28);
             border: 1px solid #4ade80;
-            color: #86efac;
+            color: #e2e8f0;
+        }
+
+        .cmp-pill.win .cmp-mark {
+            color: #4ade80;
+            font-weight: 900;
+            margin-left: 1px;
         }
 
         .cmp-pill.loss {
-            background: rgba(185, 28, 28, 0.35);
+            background: rgba(185, 28, 28, 0.28);
             border: 1px solid #f87171;
-            color: #fca5a5;
+            color: #e2e8f0;
+        }
+
+        .cmp-pill.loss .cmp-mark {
+            color: #f87171;
+            font-weight: 900;
+            margin-left: 1px;
         }
 
         .scan-indicator {
@@ -1117,12 +1136,11 @@
     <!-- OPTION 1: Top-Left Sky Trench (Transparent, Full-Width Header, 3-Column Threat Matrices) -->
     <div id="mode-sky-trench" class="glass-panel">
         <div id="overlay-watermark-bg" class="overlay-watermark-bg hidden"></div>
-        <!-- Header: Upper-Left Sword Minimize Button, Opponent Name, Opponent Fast Move Telemetry & Opponent Swap Clock Badge -->
+        <!-- Header: Upper-Left Sword Minimize Button, Opponent Name, Live HP/Energy Pills & Shield Counters -->
         <div class="header-row">
             <button id="btn-minimize-sword" class="sword-minimize-btn" onclick="minimizeToBubble()" title="Minimize overlay to floating bubble & pause OCR">⚔️</button>
             <div class="opp-title" id="sky-title">
-                <span id="sky-opp-name">WAITING FOR OPPONENT...</span> 
-                <span class="opp-move-tag" id="sky-opp-fastmove">(1 Hz OCR Active)</span>
+                <span id="sky-opp-name">WAITING FOR OPPONENT...</span>
             </div>
             <div class="header-right-cluster">
                 <span id="sky-player-hp-pill" class="hp-slot-pill hp-high" title="Your Active Pokémon Live HP%">My:100%</span>
@@ -1133,7 +1151,6 @@
                 <button id="btn-opp-shields" type="button" class="hud-shield-btn opp-shield" onclick="cycleOpponentShields(event)" title="Opponent shields remaining (Tap to cycle 2->1->0->2)">
                     <span class="shield-glyph">🛡️</span><span id="txt-opp-shields" class="shield-val">2</span>
                 </button>
-                <span class="swap-clock-badge opp-swap-badge" id="sky-opp-swap-clock" title="Opponent Switch/Swap Cooldown Timer">Opp Swap: 0s</span>
             </div>
         </div>
 
@@ -1197,8 +1214,14 @@
         <div class="timing-rows-container">
             <div class="section-header-grid">
                 <div class="section-header-left">
-                    <span>Opponent Attacks</span>
-                    <span id="sky-cmp-badge" class="cmp-pill win">CMP: —</span>
+                    <div style="display:flex; align-items:center; gap:3.5px; min-width:0; overflow:hidden;">
+                        <span style="flex-shrink:0;">Opp Attacks</span>
+                        <span id="sky-opp-fastmove" style="color:var(--secondary-accent-hex); font-weight:800; font-family:monospace; text-transform:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">—</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:2.5px; flex-shrink:0;">
+                        <span id="sky-opp-cmp-badge" class="cmp-pill" title="Opponent Charged Move Priority (CMP)">CMP—</span>
+                        <span class="swap-clock-badge opp-swap-badge" id="sky-opp-swap-clock" title="Opponent Switch/Swap Cooldown Timer">Swap: 0s</span>
+                    </div>
                 </div>
                 <div id="sky-opp-dmg-headers" class="dmg-col-headers"></div>
             </div>
@@ -1209,11 +1232,14 @@
         <div class="timing-rows-container">
             <div class="section-header-grid">
                 <div class="section-header-left">
-                    <div style="display:flex; align-items:center; gap:4px; min-width:0; overflow:hidden;">
-                        <span>My Attacks</span>
-                        <span id="sky-my-short" style="color:#38bdf8; font-weight:800; font-family:monospace; text-transform:none;">Lead</span>
+                    <div style="display:flex; align-items:center; gap:3.5px; min-width:0; overflow:hidden;">
+                        <span style="flex-shrink:0;">My Attacks</span>
+                        <span id="sky-my-short" style="color:#38bdf8; font-weight:800; font-family:monospace; text-transform:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Lead</span>
                     </div>
-                    <span class="swap-clock-badge player-swap-badge" id="sky-player-swap-clock" title="Player Switch/Swap Cooldown Timer">Swap: 0s</span>
+                    <div style="display:flex; align-items:center; gap:2.5px; flex-shrink:0;">
+                        <span id="sky-my-cmp-badge" class="cmp-pill" title="Your Charged Move Priority (CMP)">CMP—</span>
+                        <span class="swap-clock-badge player-swap-badge" id="sky-player-swap-clock" title="Player Switch/Swap Cooldown Timer">Swap: 0s</span>
+                    </div>
                 </div>
                 <div id="sky-my-dmg-headers" class="dmg-col-headers"></div>
             </div>
@@ -1857,7 +1883,7 @@
 
             const oppClockEl = document.getElementById("sky-opp-swap-clock");
             const playerClockEl = document.getElementById("sky-player-swap-clock");
-            updateSwapClockBadge(oppClockEl, "Opp Swap", oppSec, true, oppLatched);
+            updateSwapClockBadge(oppClockEl, "Swap", oppSec, true, oppLatched);
             updateSwapClockBadge(playerClockEl, "Swap", playerSec, false, playerLatched);
         }
 
@@ -2255,7 +2281,8 @@
             const oppNameEl = document.getElementById("sky-opp-name");
             const oppMoveEl = document.getElementById("sky-opp-fastmove");
             const myShortEl = document.getElementById("sky-my-short");
-            const cmpBadgeEl = document.getElementById("sky-cmp-badge");
+            const oppCmpBadgeEl = document.getElementById("sky-opp-cmp-badge");
+            const myCmpBadgeEl = document.getElementById("sky-my-cmp-badge");
             const oppDmgHeadersEl = document.getElementById("sky-opp-dmg-headers");
             const myDmgHeadersEl = document.getElementById("sky-my-dmg-headers");
             const timingRowsEl = document.getElementById("sky-move-timing-rows");
@@ -2318,10 +2345,14 @@
 
             if (isWaitingState) {
                 if (oppNameEl) oppNameEl.textContent = "WAITING FOR OPPONENT...";
-                if (oppMoveEl) oppMoveEl.textContent = "(1 Hz OCR Active)";
-                if (cmpBadgeEl) {
-                    cmpBadgeEl.textContent = "CMP: —";
-                    cmpBadgeEl.className = "cmp-pill win";
+                if (oppMoveEl) oppMoveEl.textContent = "—";
+                if (oppCmpBadgeEl) {
+                    oppCmpBadgeEl.textContent = "CMP—";
+                    oppCmpBadgeEl.className = "cmp-pill";
+                }
+                if (myCmpBadgeEl) {
+                    myCmpBadgeEl.textContent = "CMP—";
+                    myCmpBadgeEl.className = "cmp-pill";
                 }
                 if (oppDmgHeadersEl) oppDmgHeadersEl.innerHTML = "";
                 if (myDmgHeadersEl) myDmgHeadersEl.innerHTML = "";
@@ -2359,14 +2390,26 @@
                 const shadPrefix = battleData.isOpponentShadow ? "SHADOW " : "";
                 if (oppNameEl) oppNameEl.textContent = "VS " + shadPrefix + (battleData.activeOpponent || "").toUpperCase();
 
+                const opp3Letter = abbrPoke(battleData.activeOpponent || "Opp", false);
                 const oppFastTelemetry = battleData.oppFastTelemetry
                     || `${abbrMove5(battleData.activeOpponentFastMove || "Fast")} ${battleData.activeOpponentTurns || 2}t`;
-                if (oppMoveEl) oppMoveEl.textContent = `[${oppFastTelemetry}]`;
+                if (oppMoveEl) oppMoveEl.textContent = `${opp3Letter} ${activeOppHpVal}% · ${oppFastTelemetry}`;
 
                 const winsCmp = battleData.winsCmp !== undefined ? !!battleData.winsCmp : true;
-                if (cmpBadgeEl) {
-                    cmpBadgeEl.textContent = (winsCmp ? "CMP WIN ✓" : "CMP LOSS") + ` · ${activeOppHpVal}% HP`;
-                    cmpBadgeEl.className = "cmp-pill " + (winsCmp ? "win" : "loss");
+                const oppWinsCmp = !winsCmp;
+                if (oppCmpBadgeEl) {
+                    oppCmpBadgeEl.innerHTML = oppWinsCmp
+                        ? 'CMP<span class="cmp-mark">✓</span>'
+                        : 'CMP<span class="cmp-mark">✗</span>';
+                    oppCmpBadgeEl.className = "cmp-pill " + (oppWinsCmp ? "win" : "loss");
+                    oppCmpBadgeEl.title = oppWinsCmp ? "Opponent wins CMP tie" : "Opponent loses CMP tie";
+                }
+                if (myCmpBadgeEl) {
+                    myCmpBadgeEl.innerHTML = winsCmp
+                        ? 'CMP<span class="cmp-mark">✓</span>'
+                        : 'CMP<span class="cmp-mark">✗</span>';
+                    myCmpBadgeEl.className = "cmp-pill " + (winsCmp ? "win" : "loss");
+                    myCmpBadgeEl.title = winsCmp ? "Your Pokémon wins CMP tie" : "Your Pokémon loses CMP tie";
                 }
 
                 // Render Lead & Swap Tactical Recommendation Row (between header-row and action-toolbar)

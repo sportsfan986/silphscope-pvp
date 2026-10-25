@@ -3932,7 +3932,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v3.50 • Android Native Overlay
+                  v3.51 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -4413,14 +4413,10 @@ export default function App() {
                             <>
                               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block shrink-0" />
                               <span className="text-emerald-200">WAITING FOR OPPONENT...</span>
-                              <span className="text-amber-300 font-semibold text-[9px]">(1 Hz OCR Active)</span>
                             </>
                           ) : (
                             <>
                               <span className="truncate">VS {isOpponentShadow ? 'S-' : ''}{activeOpponent.name.toUpperCase()}</span>
-                              <span className="text-amber-300 font-bold text-[8.5px] font-mono shrink-0 bg-black/35 px-1 rounded border border-amber-400/30">
-                                {oppFastInfo.telemetry}
-                              </span>
                             </>
                           )}
                         </div>
@@ -4503,28 +4499,6 @@ export default function App() {
                             <span className="text-[8px]">🛡️</span>
                             <span>{oppShields}</span>
                           </button>
-
-                          {/* v3.41: Opponent Swap Clock with 1st-Frame Provisional [1F] Validity Indicator */}
-                          {!isWaitingOpponent && scannedOpponents.length > 0 && (
-                            <span
-                              className={`font-mono font-extrabold text-[8px] px-1.5 py-0.5 rounded border leading-none transition-colors shrink-0 ${
-                                !oppSwitchValidityLatched
-                                  ? 'text-cyan-300 bg-cyan-950/70 border-cyan-400/80 animate-pulse'
-                                  : oppSwapRemainingSec <= 0
-                                  ? 'text-[#FF3B30] bg-red-950/60 border-red-500/60 shadow-[0_0_6px_rgba(255,59,48,0.35)]'
-                                  : oppSwapRemainingSec < 10
-                                  ? 'text-[#FFD700] bg-amber-950/60 border-amber-400/60'
-                                  : 'text-white bg-black/45 border-white/40'
-                              }`}
-                              title={
-                                !oppSwitchValidityLatched
-                                  ? 'Frame 1 Provisional Swap Detected — Awaiting Frame 2 OCR Validity Latch'
-                                  : 'Opponent Swap Countdown (50s midpoint countdown, resets on Manual Swap)'
-                              }
-                            >
-                              {oppSwapRemainingSec}s{!oppSwitchValidityLatched ? ' [1F]' : ''}
-                            </span>
-                          )}
                         </div>
                       </div>
 
@@ -5057,18 +5031,47 @@ export default function App() {
                       {/* Opponent Attacks & My Attacks (Segmented Range Bars + 3-Column Damage Matrices with Vertical Highlight) */}
                       {!isWaitingOpponent && scannedOpponents.length > 0 && (
                         <div className="flex flex-col gap-0.5 my-1">
-                          {/* Opponent Attacks Section Header + 3-Team Column Headers */}
+                          {/* Opponent Attacks Section Header + 3-Team Column Headers & Opponent Swap Clock */}
                           <div className="grid grid-cols-[44px_1fr_84px] items-center gap-1 px-1 pt-0.5">
-                            <span className="text-[7.5px] font-extrabold text-slate-400 uppercase tracking-wider col-span-2 flex items-center justify-between pr-1">
-                              <span>Opp Attacks</span>
-                              <span
-                                className={`text-[7px] font-extrabold px-1 rounded ${
-                                  oppMoveTimingInfo.winsCmp
-                                    ? 'bg-emerald-500/25 border border-emerald-400/50 text-emerald-300'
-                                    : 'bg-red-500/25 border border-red-400/50 text-red-300'
-                                }`}
-                              >
-                                {oppMoveTimingInfo.winsCmp ? 'CMP WIN ✓' : 'CMP LOSS'} · {oppSlotHpPct[safeActiveOppSlot] ?? 100}% HP
+                            <span className="text-[7.5px] font-extrabold text-slate-400 uppercase tracking-wider col-span-2 flex items-center justify-between pr-1 min-w-0">
+                              <span className="flex items-center gap-1 min-w-0 overflow-hidden">
+                                <span className="shrink-0">Opp Attacks</span>
+                                <span className="text-amber-300 font-extrabold text-[7.5px] font-mono normal-case truncate">
+                                  {abbrPoke3(activeOpponent.name, false)} {oppSlotHpPct[safeActiveOppSlot] ?? 100}% · {oppFastInfo.telemetry}
+                                </span>
+                              </span>
+                              <span className="flex items-center gap-1 shrink-0">
+                                <span
+                                  className={`text-[7px] font-mono font-black px-1 py-0.2 rounded border leading-none ${
+                                    !oppMoveTimingInfo.winsCmp
+                                      ? 'bg-emerald-500/25 border-emerald-400/80 text-slate-100'
+                                      : 'bg-red-500/25 border-red-400/80 text-slate-100'
+                                  }`}
+                                  title={!oppMoveTimingInfo.winsCmp ? 'Opponent wins CMP tie' : 'Opponent loses CMP tie'}
+                                >
+                                  CMP
+                                  <span className={!oppMoveTimingInfo.winsCmp ? 'text-emerald-400 ml-0.5' : 'text-red-400 ml-0.5'}>
+                                    {!oppMoveTimingInfo.winsCmp ? '✓' : '✗'}
+                                  </span>
+                                </span>
+                                <span
+                                  className={`font-mono font-extrabold text-[7px] px-1 py-0.2 rounded border leading-none transition-colors shrink-0 ${
+                                    !oppSwitchValidityLatched
+                                      ? 'text-cyan-300 bg-cyan-950/70 border-cyan-400/80 animate-pulse'
+                                      : oppSwapRemainingSec <= 0
+                                      ? 'text-[#FF3B30] bg-red-950/60 border-red-500/60 shadow-[0_0_6px_rgba(255,59,48,0.35)]'
+                                      : oppSwapRemainingSec < 10
+                                      ? 'text-[#FFD700] bg-amber-950/60 border-amber-400/60'
+                                      : 'text-white bg-black/45 border-white/40'
+                                  }`}
+                                  title={
+                                    !oppSwitchValidityLatched
+                                      ? 'Frame 1 Provisional Swap Detected — Awaiting Frame 2 OCR Validity Latch'
+                                      : 'Opponent Swap Countdown (50s midpoint countdown, resets on Manual Swap)'
+                                  }
+                                >
+                                  Swap: {oppSwapRemainingSec}s{!oppSwitchValidityLatched ? ' [1F]' : ''}
+                                </span>
                               </span>
                             </span>
                             <div className="grid grid-cols-3 w-[84px] text-center font-mono text-[7.5px] font-extrabold">
@@ -5216,9 +5219,27 @@ export default function App() {
 
                           {/* My Attacks Section Header + 3-Opponent Column Headers & Player Swap Clock */}
                           <div className="grid grid-cols-[44px_1fr_84px] items-center gap-1 px-1 pt-1">
-                            <span className="text-[7.5px] font-extrabold text-slate-400 uppercase tracking-wider col-span-2 flex items-center justify-between pr-1">
-                              <span className="flex items-center gap-1.5">
-                                <span>My Attacks</span>
+                            <span className="text-[7.5px] font-extrabold text-slate-400 uppercase tracking-wider col-span-2 flex items-center justify-between pr-1 min-w-0">
+                              <span className="flex items-center gap-1 min-w-0 overflow-hidden">
+                                <span className="shrink-0">My Attacks</span>
+                                <span className="text-sky-300 font-extrabold text-[7.5px] font-mono normal-case truncate">
+                                  {abbrPoke3(userLeadName, false)} {userSlotHpPct[activeUserSlotIndex] ?? 100}% · {userFastInfo.telemetry}
+                                </span>
+                              </span>
+                              <span className="flex items-center gap-1 shrink-0">
+                                <span
+                                  className={`text-[7px] font-mono font-black px-1 py-0.2 rounded border leading-none ${
+                                    oppMoveTimingInfo.winsCmp
+                                      ? 'bg-emerald-500/25 border-emerald-400/80 text-slate-100'
+                                      : 'bg-red-500/25 border-red-400/80 text-slate-100'
+                                  }`}
+                                  title={oppMoveTimingInfo.winsCmp ? 'Your Pokémon wins CMP tie' : 'Your Pokémon loses CMP tie'}
+                                >
+                                  CMP
+                                  <span className={oppMoveTimingInfo.winsCmp ? 'text-emerald-400 ml-0.5' : 'text-red-400 ml-0.5'}>
+                                    {oppMoveTimingInfo.winsCmp ? '✓' : '✗'}
+                                  </span>
+                                </span>
                                 <span
                                   className={`font-mono font-extrabold text-[7px] px-1 py-0.2 rounded border leading-none transition-colors shrink-0 ${
                                     !playerSwitchValidityLatched
@@ -5233,9 +5254,6 @@ export default function App() {
                                 >
                                   Swap: {playerSwapRemainingSec}s{!playerSwitchValidityLatched ? ' [1F]' : ''}
                                 </span>
-                              </span>
-                              <span className="text-sky-300 font-extrabold text-[7.5px] font-mono">
-                                {abbrPoke3(userLeadName, false)} {userSlotHpPct[activeUserSlotIndex] ?? 100}% · ({userFastInfo.telemetry})
                               </span>
                             </span>
                             <div className="grid grid-cols-3 w-[84px] text-center font-mono text-[7.5px] font-extrabold">

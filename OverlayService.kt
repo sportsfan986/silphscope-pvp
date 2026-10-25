@@ -7429,7 +7429,7 @@ class OverlayService : LifecycleService() {
     private var lastSteadyMoveButtonsSeenMs: Long = 0L
     private var lastChargedAttackLoggedMs: Long = 0L
 
-    // v3.50: 2 Hz / 1 Hz Locked Scan Pacer, Turn-Offset Indexer, Between-Scan Fast-Move HP Prediction & 6-Slot Energy Engine
+    // v3.51: 2 Hz / 1 Hz Locked Scan Pacer, Turn-Offset Indexer, Damage-Verified Fast-Move Energy Engine & Glitch Recovery
     private val playerSlotEnergy = IntArray(3) { 0 }
     private val oppSlotEnergy = IntArray(3) { 0 }
     private val playerSlotTurnsOnField = IntArray(3) { 0 }
@@ -7438,6 +7438,16 @@ class OverlayService : LifecycleService() {
     private val oppSlotCurrentMoveTurns = IntArray(3) { 0 }
     private val predictedPlayerSlotHpPct = IntArray(3) { 100 }
     private val predictedOppSlotHpPct = IntArray(3) { 100 }
+    private val lastScannedPlayerSlotHpPct = IntArray(3) { 100 }
+    private val lastScannedOppSlotHpPct = IntArray(3) { 100 }
+    private val playerFastWindowStartOppHp = IntArray(3) { 100 }
+    private val oppFastWindowStartPlayerHp = IntArray(3) { 100 }
+    private val playerCreditedFastsInWindow = IntArray(3) { 0 }
+    private val oppCreditedFastsInWindow = IntArray(3) { 0 }
+    private val playerWithheldFastsForGlitch = IntArray(3) { 0 }
+    private val oppWithheldFastsForGlitch = IntArray(3) { 0 }
+    private val playerPendingFastAppliedAtMs = LongArray(3) { 0L }
+    private val oppPendingFastAppliedAtMs = LongArray(3) { 0L }
     private val playerPredAheadScanFrames = IntArray(3) { 0 }
     private val oppPredAheadScanFrames = IntArray(3) { 0 }
     private val playerUnconfirmedPredFasts = IntArray(3) { 0 }
@@ -7445,6 +7455,8 @@ class OverlayService : LifecycleService() {
     private var battleTurnIndex: Int = 0
     private var scanTurnOffsetMs: Long = 0L
     private var lastTurnTickTimeMs: Long = 0L
+    private var turnResidualMs: Long = 0L
+    private var lastFrameWasNormalFastCombat: Boolean = false
     private var currentScanHzMode: String = "2HZ"
     private var lastScanDurationMs: Long = 220L
     private var needsPostSwapOrMoveTurnReindex: Boolean = false
@@ -8481,27 +8493,26 @@ class OverlayService : LifecycleService() {
                     delay(sleepMs)
                 } else {
                     currentScanHzMode = "1HZ"
-                    val toMidTurnMs = 500L - elapsedMs
-                    if (toMidTurnMs > 15L) {
-                        delay(toMidTurnMs)
-                    }
+                    val remTo1HzMs = (1000L - elapsedMs).coerceAtLeast(30L)
+                    val firstHalfSleepMs = (remTo1HzMs / 2L).coerceAtLeast(15L)
+                    delay(firstHalfSleepMs)
                     try {
                         extrapolateMidTurnHpAndEnergyTick()
                     } catch (_: Exception) {}
                     val totalElapsed = System.currentTimeMillis() - cycleStartMs
-                    val remTo1HzMs = (1000L - totalElapsed).coerceAtLeast(15L)
-                    delay(remTo1HzMs)
+                    val secondHalfSleepMs = (1000L - totalElapsed).coerceAtLeast(15L)
+                    delay(secondHalfSleepMs)
                 }
             }
         }
     }
 
     /**
-     * v3.50: When running in 1.00 Hz (1000ms = 2 turns) fallback mode, extrapolates the intermediate 0.5s
+     * v3.51: When running in 1.00 Hz (1000ms = 2 turns) fallback mode, extrapolates the intermediate 0.5s
      * GBL turn during active fast-move combat (frozen during charged move camera cuts).
      */
     private fun extrapolateMidTurnHpAndEnergyTick() {
-        if (isWaitingForOpponent || isAttackIncomingPromptActive || pendingChargedAttackActor.isNotEmpty() || isPostFaintSwitchPromptActive) {
+        if (!lastFrameWasNormalFastCombat || isWaitingForOpponent || isAttackIncomingPromptActive || pendingChargedAttackActor.isNotEmpty() || isPostFaintSwitchPromptActive) {
             return
         }
         val nowMs = System.currentTimeMillis()
@@ -8529,6 +8540,7 @@ class OverlayService : LifecycleService() {
         if (isWaitingForOpponent || isAttackIncomingPromptActive || pendingChargedAttackActor.isNotEmpty() || isPostFaintSwitchPromptActive) {
             return false
         }
+        val tickNowMs = System.currentTimeMillis()
         val preset = currentPreset
         val userSlot = preset?.pokemon?.getOrNull(activeUserIdx)
         val userMonName = activeUserPokemonName ?: userSlot?.name ?: "Dialga (Origin)"
@@ -8548,7 +8560,9 @@ class OverlayService : LifecycleService() {
             ?: DYNAMIC_FAST_TURNS[userFastName.lowercase().trim()]
             ?: userMeta.fastTurns).coerceIn(1, 5)
         val oppFastName = oppMeta.defaultFastMove
-        val oppFastTurns = oppMeta.fastTurns.coerceIn(1, 5)
+        val oppFastTurns = (FAST_MOVE_TURNS[oppFastName.lowercase().trim()]
+            ?: DYNAMIC_FAST_TURNS[oppFastName.lowercase().trim()]
+            ?: oppMeta.fastTurns).coerceIn(1, 5)
 
         val userFastEnergy = (FAST_MOVE_ENERGY[userFastName.lowercase().trim()]
             ?: DYNAMIC_FAST_ENERGY[userFastName.lowercase().trim()]
@@ -8575,12 +8589,17 @@ class OverlayService : LifecycleService() {
         )
 
         val turnsDelta = if (lastTurnTickTimeMs <= 0L) {
+            lastTurnTickTimeMs = tickNowMs
+            turnResidualMs = 0L
             1
         } else {
-            val dtMs = (nowMs - lastTurnTickTimeMs).coerceAtLeast(250L)
-            if (isMidTurnExtrapolation) 1 else (dtMs / 500.0).roundToInt().coerceIn(1, 2)
+            val rawElapsedMs = (tickNowMs - lastTurnTickTimeMs).coerceIn(0L, 2000L) + turnResidualMs
+            lastTurnTickTimeMs = tickNowMs
+            val wholeTurns = (rawElapsedMs / 500L).toInt()
+            turnResidualMs = rawElapsedMs % 500L
+            wholeTurns.coerceIn(0, 3)
         }
-        lastTurnTickTimeMs = nowMs
+        if (turnsDelta <= 0) return false
         battleTurnIndex += turnsDelta
         var stateChanged = false
 
@@ -8594,14 +8613,17 @@ class OverlayService : LifecycleService() {
                     playerSlotEnergy[activeUserIdx] = nextUserE
                     stateChanged = true
                 }
+                playerCreditedFastsInWindow[activeUserIdx] += 1
                 playerUnconfirmedPredFasts[activeUserIdx] = (playerUnconfirmedPredFasts[activeUserIdx] + 1).coerceAtMost(4)
+                if (playerPendingFastAppliedAtMs[activeUserIdx] <= 0L) {
+                    playerPendingFastAppliedAtMs[activeUserIdx] = tickNowMs
+                }
                 if (!oppFaintedSlots[activeOppIdx]) {
-                    val nextPredOppHp = (predictedOppSlotHpPct[activeOppIdx] - userFastDmgPct).coerceIn(1, 100)
+                    val minAllowedPredOppHp = (lastScannedOppSlotHpPct[activeOppIdx] - max(4, userFastDmgPct * 2)).coerceIn(1, 100)
+                    val nextPredOppHp = (predictedOppSlotHpPct[activeOppIdx] - userFastDmgPct).coerceIn(minAllowedPredOppHp, 100)
                     if (nextPredOppHp != predictedOppSlotHpPct[activeOppIdx]) {
                         predictedOppSlotHpPct[activeOppIdx] = nextPredOppHp
-                        if (oppPredAheadScanFrames[activeOppIdx] < 2 &&
-                            (oppSlotHpPct[activeOppIdx] - nextPredOppHp) in 1..max(8, userFastDmgPct * 2)
-                        ) {
+                        if (oppPredAheadScanFrames[activeOppIdx] < 2) {
                             oppSlotHpPct[activeOppIdx] = nextPredOppHp
                             stateChanged = true
                         }
@@ -8620,14 +8642,17 @@ class OverlayService : LifecycleService() {
                     oppSlotEnergy[activeOppIdx] = nextOppE
                     stateChanged = true
                 }
+                oppCreditedFastsInWindow[activeOppIdx] += 1
                 oppUnconfirmedPredFasts[activeOppIdx] = (oppUnconfirmedPredFasts[activeOppIdx] + 1).coerceAtMost(4)
+                if (oppPendingFastAppliedAtMs[activeOppIdx] <= 0L) {
+                    oppPendingFastAppliedAtMs[activeOppIdx] = tickNowMs
+                }
                 if (!playerFaintedSlots[activeUserIdx]) {
-                    val nextPredUserHp = (predictedPlayerSlotHpPct[activeUserIdx] - oppFastDmgPct).coerceIn(1, 100)
+                    val minAllowedPredUserHp = (lastScannedPlayerSlotHpPct[activeUserIdx] - max(4, oppFastDmgPct * 2)).coerceIn(1, 100)
+                    val nextPredUserHp = (predictedPlayerSlotHpPct[activeUserIdx] - oppFastDmgPct).coerceIn(minAllowedPredUserHp, 100)
                     if (nextPredUserHp != predictedPlayerSlotHpPct[activeUserIdx]) {
                         predictedPlayerSlotHpPct[activeUserIdx] = nextPredUserHp
-                        if (playerPredAheadScanFrames[activeUserIdx] < 2 &&
-                            (playerSlotHpPct[activeUserIdx] - nextPredUserHp) in 1..max(8, oppFastDmgPct * 2)
-                        ) {
+                        if (playerPredAheadScanFrames[activeUserIdx] < 2) {
                             playerSlotHpPct[activeUserIdx] = nextPredUserHp
                             stateChanged = true
                         }
@@ -9742,7 +9767,7 @@ class OverlayService : LifecycleService() {
             }
         }
 
-        // 1. v3.44, v3.50 & v3.51: Bi-Directional Live HP Gauge Update on Every Scan + Between-Scan Fast-Move HP & Energy Auto-Correction + 1 Extra Frame Confirmation
+        // 1. v3.51: Bi-Directional Live HP Gauge Update + Damage-Verified Fast-Move Energy Engine (1-Full-Turn Grace & Glitch Recovery) + 1 Extra Frame Confirmation
         val userSlotCfg = preset?.pokemon?.getOrNull(activeUserIdx)
         val userMonNameForStats = activeUserPokemonName ?: userSlotCfg?.name ?: "Dialga (Origin)"
         val isUserShadForStats = userMonNameForStats.contains("Shadow", ignoreCase = true)
@@ -9761,7 +9786,9 @@ class OverlayService : LifecycleService() {
             ?: DYNAMIC_FAST_TURNS[userFastNameForStats.lowercase().trim()]
             ?: userMetaForStats.fastTurns).coerceIn(1, 5)
         val oppFastNameForStats = oppMetaForStats.defaultFastMove
-        val oppFastTurnsForStats = oppMetaForStats.fastTurns.coerceIn(1, 5)
+        val oppFastTurnsForStats = (FAST_MOVE_TURNS[oppFastNameForStats.lowercase().trim()]
+            ?: DYNAMIC_FAST_TURNS[oppFastNameForStats.lowercase().trim()]
+            ?: oppMetaForStats.fastTurns).coerceIn(1, 5)
         val userFastEnergyForStats = (FAST_MOVE_ENERGY[userFastNameForStats.lowercase().trim()]
             ?: DYNAMIC_FAST_ENERGY[userFastNameForStats.lowercase().trim()]
             ?: (userFastTurnsForStats * 4).coerceAtLeast(3)).coerceIn(2, 20)
@@ -9791,43 +9818,68 @@ class OverlayService : LifecycleService() {
         if (!isPostFaintSwitchPromptActive && sampledPlayerHpPct in 1..100 && !playerFaintedSlots[activeUserIdx]) {
             playerFinalMissingHpFrames = 0
             val curHp = playerSlotHpPct[activeUserIdx].coerceIn(1, 100)
-            val rawDrop = curHp - sampledPlayerHpPct
-            if (rawDrop in 1..15) {
+            val lastScannedUserHp = lastScannedPlayerSlotHpPct[activeUserIdx].coerceIn(1, 100)
+            val realUserDrop = lastScannedUserHp - sampledPlayerHpPct
+
+            if (realUserDrop in 1..18) {
+                // Opponent fast move damage registered on Player HP bar
                 observedPlayerFastDrop = true
-                oppUnconfirmedPredFasts[activeOppIdx] = 0
-            }
-            // Check if between-scan predicted Player HP got ahead of the actual pixel scan (meaning Opponent's predicted fast move wasn't made in time)
-            if (predictedPlayerSlotHpPct[activeUserIdx] < sampledPlayerHpPct) {
-                playerPredAheadScanFrames[activeUserIdx] = (playerPredAheadScanFrames[activeUserIdx] + 1).coerceAtMost(5)
-                if (playerPredAheadScanFrames[activeUserIdx] >= 2 || (sampledPlayerHpPct - predictedPlayerSlotHpPct[activeUserIdx]) > 10) {
-                    val hpCorrectedUp = max(sampledPlayerHpPct - predictedPlayerSlotHpPct[activeUserIdx], sampledPlayerHpPct - curHp).coerceAtLeast(1)
-                    if (oppUnconfirmedPredFasts[activeOppIdx] > 0 || sampledPlayerHpPct > curHp) {
-                        val missedOppFasts = if (oppUnconfirmedPredFasts[activeOppIdx] > 0) {
-                            oppUnconfirmedPredFasts[activeOppIdx]
-                        } else {
-                            max(1, (hpCorrectedUp.toDouble() / max(1, oppFastDmgPctForStats).toDouble()).roundToInt()).coerceAtMost(2)
-                        }
-                        oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] - missedOppFasts * oppFastEnergyForStats).coerceIn(0, 100)
-                        oppSlotTurnsOnField[activeOppIdx] = (oppSlotTurnsOnField[activeOppIdx] - missedOppFasts * oppFastTurnsForStats).coerceAtLeast(0)
-                        oppUnconfirmedPredFasts[activeOppIdx] = 0
+                if (oppCreditedFastsInWindow[activeOppIdx] == 0 && (nowMs - lastChargedAttackLoggedMs) > 1500L) {
+                    oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] + oppFastEnergyForStats).coerceIn(0, 100)
+                    oppCreditedFastsInWindow[activeOppIdx] = 1
+                    oppSlotTurnsOnField[activeOppIdx] = max(oppSlotTurnsOnField[activeOppIdx], oppFastTurnsForStats)
+                    oppSlotCurrentMoveTurns[activeOppIdx] = 0
+                    hpChanged = true
+                } else if (oppWithheldFastsForGlitch[activeOppIdx] > 0) {
+                    val totalWindowDrop = (oppFastWindowStartPlayerHp[activeOppIdx] - sampledPlayerHpPct).coerceAtLeast(realUserDrop)
+                    val expectedDmg = max(1, oppFastDmgPctForStats)
+                    val glitchConfirmedByStep = realUserDrop >= max(2, (expectedDmg * 1.5).roundToInt())
+                    val glitchConfirmedByWindow = totalWindowDrop >= (oppCreditedFastsInWindow[activeOppIdx] + 1) * max(1, expectedDmg - 1)
+                    if (glitchConfirmedByStep || glitchConfirmedByWindow || oppFastDmgPctForStats <= 2) {
+                        val restoreCount = oppWithheldFastsForGlitch[activeOppIdx].coerceIn(1, 2)
+                        oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] + restoreCount * oppFastEnergyForStats).coerceIn(0, 100)
+                        oppCreditedFastsInWindow[activeOppIdx] += restoreCount
+                        oppSlotTurnsOnField[activeOppIdx] += restoreCount * oppFastTurnsForStats
                         hpChanged = true
                     }
+                    oppWithheldFastsForGlitch[activeOppIdx] = 0
+                }
+                oppUnconfirmedPredFasts[activeOppIdx] = 0
+                oppPendingFastAppliedAtMs[activeOppIdx] = 0L
+                playerPredAheadScanFrames[activeUserIdx] = 0
+                lastScannedPlayerSlotHpPct[activeUserIdx] = sampledPlayerHpPct
+                predictedPlayerSlotHpPct[activeUserIdx] = sampledPlayerHpPct
+            } else {
+                if (sampledPlayerHpPct > lastScannedUserHp) {
+                    lastScannedPlayerSlotHpPct[activeUserIdx] = sampledPlayerHpPct
+                    oppFastWindowStartPlayerHp[activeOppIdx] = max(oppFastWindowStartPlayerHp[activeOppIdx], sampledPlayerHpPct)
+                }
+                // Only withhold/roll back opponent fast move energy if damage is NOT registered a full turn (>=500ms) after damage should be applied
+                val oppGraceMs = if (oppFastDmgPctForStats <= 1) ((oppFastTurnsForStats + 1) * 500L).coerceAtLeast(1000L) else 500L
+                val fullTurnAfterOppDamage = oppUnconfirmedPredFasts[activeOppIdx] > 0 &&
+                    oppPendingFastAppliedAtMs[activeOppIdx] > 0L &&
+                    (nowMs - oppPendingFastAppliedAtMs[activeOppIdx]) >= oppGraceMs
+                if (fullTurnAfterOppDamage && predictedPlayerSlotHpPct[activeUserIdx] < sampledPlayerHpPct) {
+                    playerPredAheadScanFrames[activeUserIdx] = (playerPredAheadScanFrames[activeUserIdx] + 1).coerceAtMost(5)
+                    if (playerPredAheadScanFrames[activeUserIdx] >= 1) {
+                        val missedOppFasts = 1
+                        oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] - missedOppFasts * oppFastEnergyForStats).coerceIn(0, 100)
+                        oppSlotTurnsOnField[activeOppIdx] = (oppSlotTurnsOnField[activeOppIdx] - missedOppFasts * oppFastTurnsForStats).coerceAtLeast(0)
+                        oppCreditedFastsInWindow[activeOppIdx] = (oppCreditedFastsInWindow[activeOppIdx] - missedOppFasts).coerceAtLeast(0)
+                        oppUnconfirmedPredFasts[activeOppIdx] = (oppUnconfirmedPredFasts[activeOppIdx] - missedOppFasts).coerceAtLeast(0)
+                        oppWithheldFastsForGlitch[activeOppIdx] = (oppWithheldFastsForGlitch[activeOppIdx] + missedOppFasts).coerceAtMost(2)
+                        oppPendingFastAppliedAtMs[activeOppIdx] = if (oppUnconfirmedPredFasts[activeOppIdx] > 0) nowMs else 0L
+                        predictedPlayerSlotHpPct[activeUserIdx] = sampledPlayerHpPct
+                        playerPredAheadScanFrames[activeUserIdx] = 0
+                        hpChanged = true
+                    }
+                } else if (oppUnconfirmedPredFasts[activeOppIdx] == 0) {
                     predictedPlayerSlotHpPct[activeUserIdx] = sampledPlayerHpPct
                     playerPredAheadScanFrames[activeUserIdx] = 0
                 }
-            } else {
-                predictedPlayerSlotHpPct[activeUserIdx] = sampledPlayerHpPct
-                playerPredAheadScanFrames[activeUserIdx] = 0
-                oppUnconfirmedPredFasts[activeOppIdx] = 0
             }
 
             if (sampledPlayerHpPct != curHp) {
-                if (sampledPlayerHpPct > curHp && oppUnconfirmedPredFasts[activeOppIdx] > 0) {
-                    val missedOppFasts = oppUnconfirmedPredFasts[activeOppIdx]
-                    oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] - missedOppFasts * oppFastEnergyForStats).coerceIn(0, 100)
-                    oppSlotTurnsOnField[activeOppIdx] = (oppSlotTurnsOnField[activeOppIdx] - missedOppFasts * oppFastTurnsForStats).coerceAtLeast(0)
-                    oppUnconfirmedPredFasts[activeOppIdx] = 0
-                }
                 if (kotlin.math.abs(sampledPlayerHpPct - curHp) >= 8 && (nowMs - playerSlotLastBigJumpMs[activeUserIdx]) > 1400L) {
                     playerSlotPriorHpPct[activeUserIdx] = curHp
                     playerSlotLastBigJumpMs[activeUserIdx] = nowMs
@@ -9855,43 +9907,69 @@ class OverlayService : LifecycleService() {
         if (sampledOppHpPct in 1..100 && !oppFaintedSlots[activeOppIdx]) {
             oppFinalMissingHpFrames = 0
             val curHp = oppSlotHpPct[activeOppIdx].coerceIn(1, 100)
-            val rawDrop = curHp - sampledOppHpPct
-            if (rawDrop in 1..15) {
+            val lastScannedOppHp = lastScannedOppSlotHpPct[activeOppIdx].coerceIn(1, 100)
+            val realOppDrop = lastScannedOppHp - sampledOppHpPct
+
+            if (realOppDrop in 1..18) {
+                // Player fast move damage registered on Opponent HP bar
                 observedOppFastDrop = true
-                playerUnconfirmedPredFasts[activeUserIdx] = 0
-            }
-            // Check if between-scan predicted Opponent HP got ahead of the actual pixel scan (meaning Player's predicted fast move wasn't made in time)
-            if (predictedOppSlotHpPct[activeOppIdx] < sampledOppHpPct) {
-                oppPredAheadScanFrames[activeOppIdx] = (oppPredAheadScanFrames[activeOppIdx] + 1).coerceAtMost(5)
-                if (oppPredAheadScanFrames[activeOppIdx] >= 2 || (sampledOppHpPct - predictedOppSlotHpPct[activeOppIdx]) > 10) {
-                    val hpCorrectedUp = max(sampledOppHpPct - predictedOppSlotHpPct[activeOppIdx], sampledOppHpPct - curHp).coerceAtLeast(1)
-                    if (playerUnconfirmedPredFasts[activeUserIdx] > 0 || sampledOppHpPct > curHp) {
-                        val missedUserFasts = if (playerUnconfirmedPredFasts[activeUserIdx] > 0) {
-                            playerUnconfirmedPredFasts[activeUserIdx]
-                        } else {
-                            max(1, (hpCorrectedUp.toDouble() / max(1, userFastDmgPctForStats).toDouble()).roundToInt()).coerceAtMost(2)
-                        }
-                        playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] - missedUserFasts * userFastEnergyForStats).coerceIn(0, 100)
-                        playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] - missedUserFasts * userFastTurnsForStats).coerceAtLeast(0)
-                        playerUnconfirmedPredFasts[activeUserIdx] = 0
+                if (playerCreditedFastsInWindow[activeUserIdx] == 0 && (nowMs - lastChargedAttackLoggedMs) > 1500L) {
+                    playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] + userFastEnergyForStats).coerceIn(0, 100)
+                    playerCreditedFastsInWindow[activeUserIdx] = 1
+                    playerSlotTurnsOnField[activeUserIdx] = max(playerSlotTurnsOnField[activeUserIdx], userFastTurnsForStats)
+                    playerSlotCurrentMoveTurns[activeUserIdx] = 0
+                    hpChanged = true
+                } else if (playerWithheldFastsForGlitch[activeUserIdx] > 0) {
+                    // Momentary scan glitch recovery: restore withheld energy when next fast move damage confirms move landed
+                    val totalWindowDrop = (playerFastWindowStartOppHp[activeUserIdx] - sampledOppHpPct).coerceAtLeast(realOppDrop)
+                    val expectedDmg = max(1, userFastDmgPctForStats)
+                    val glitchConfirmedByStep = realOppDrop >= max(2, (expectedDmg * 1.5).roundToInt())
+                    val glitchConfirmedByWindow = totalWindowDrop >= (playerCreditedFastsInWindow[activeUserIdx] + 1) * max(1, expectedDmg - 1)
+                    if (glitchConfirmedByStep || glitchConfirmedByWindow || userFastDmgPctForStats <= 2) {
+                        val restoreCount = playerWithheldFastsForGlitch[activeUserIdx].coerceIn(1, 2)
+                        playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] + restoreCount * userFastEnergyForStats).coerceIn(0, 100)
+                        playerCreditedFastsInWindow[activeUserIdx] += restoreCount
+                        playerSlotTurnsOnField[activeUserIdx] += restoreCount * userFastTurnsForStats
                         hpChanged = true
                     }
+                    playerWithheldFastsForGlitch[activeUserIdx] = 0
+                }
+                playerUnconfirmedPredFasts[activeUserIdx] = 0
+                playerPendingFastAppliedAtMs[activeUserIdx] = 0L
+                oppPredAheadScanFrames[activeOppIdx] = 0
+                lastScannedOppSlotHpPct[activeOppIdx] = sampledOppHpPct
+                predictedOppSlotHpPct[activeOppIdx] = sampledOppHpPct
+            } else {
+                if (sampledOppHpPct > lastScannedOppHp) {
+                    lastScannedOppSlotHpPct[activeOppIdx] = sampledOppHpPct
+                    playerFastWindowStartOppHp[activeUserIdx] = max(playerFastWindowStartOppHp[activeUserIdx], sampledOppHpPct)
+                }
+                // Only withhold/roll back player fast move energy if damage is NOT registered a full turn (>=500ms) after damage should be applied
+                val userGraceMs = if (userFastDmgPctForStats <= 1) ((userFastTurnsForStats + 1) * 500L).coerceAtLeast(1000L) else 500L
+                val fullTurnAfterUserDamage = playerUnconfirmedPredFasts[activeUserIdx] > 0 &&
+                    playerPendingFastAppliedAtMs[activeUserIdx] > 0L &&
+                    (nowMs - playerPendingFastAppliedAtMs[activeUserIdx]) >= userGraceMs
+                if (fullTurnAfterUserDamage && predictedOppSlotHpPct[activeOppIdx] < sampledOppHpPct) {
+                    oppPredAheadScanFrames[activeOppIdx] = (oppPredAheadScanFrames[activeOppIdx] + 1).coerceAtMost(5)
+                    if (oppPredAheadScanFrames[activeOppIdx] >= 1) {
+                        val missedUserFasts = 1
+                        playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] - missedUserFasts * userFastEnergyForStats).coerceIn(0, 100)
+                        playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] - missedUserFasts * userFastTurnsForStats).coerceAtLeast(0)
+                        playerCreditedFastsInWindow[activeUserIdx] = (playerCreditedFastsInWindow[activeUserIdx] - missedUserFasts).coerceAtLeast(0)
+                        playerUnconfirmedPredFasts[activeUserIdx] = (playerUnconfirmedPredFasts[activeUserIdx] - missedUserFasts).coerceAtLeast(0)
+                        playerWithheldFastsForGlitch[activeUserIdx] = (playerWithheldFastsForGlitch[activeUserIdx] + missedUserFasts).coerceAtMost(2)
+                        playerPendingFastAppliedAtMs[activeUserIdx] = if (playerUnconfirmedPredFasts[activeUserIdx] > 0) nowMs else 0L
+                        predictedOppSlotHpPct[activeOppIdx] = sampledOppHpPct
+                        oppPredAheadScanFrames[activeOppIdx] = 0
+                        hpChanged = true
+                    }
+                } else if (playerUnconfirmedPredFasts[activeUserIdx] == 0) {
                     predictedOppSlotHpPct[activeOppIdx] = sampledOppHpPct
                     oppPredAheadScanFrames[activeOppIdx] = 0
                 }
-            } else {
-                predictedOppSlotHpPct[activeOppIdx] = sampledOppHpPct
-                oppPredAheadScanFrames[activeOppIdx] = 0
-                playerUnconfirmedPredFasts[activeUserIdx] = 0
             }
 
             if (sampledOppHpPct != curHp) {
-                if (sampledOppHpPct > curHp && playerUnconfirmedPredFasts[activeUserIdx] > 0) {
-                    val missedUserFasts = playerUnconfirmedPredFasts[activeUserIdx]
-                    playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] - missedUserFasts * userFastEnergyForStats).coerceIn(0, 100)
-                    playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] - missedUserFasts * userFastTurnsForStats).coerceAtLeast(0)
-                    playerUnconfirmedPredFasts[activeUserIdx] = 0
-                }
                 if (kotlin.math.abs(sampledOppHpPct - curHp) >= 8 && (nowMs - oppSlotLastBigJumpMs[activeOppIdx]) > 1400L) {
                     oppSlotPriorHpPct[activeOppIdx] = curHp
                     oppSlotLastBigJumpMs[activeOppIdx] = nowMs
@@ -9958,6 +10036,7 @@ class OverlayService : LifecycleService() {
             !hasUserChargedBannerText &&
             (sampledPlayerBalls in 1..3 || sampledOppBalls in 1..3) &&
             (sampledPlayerHpPct in 1..100 || sampledOppHpPct in 1..100)
+        lastFrameWasNormalFastCombat = isNormalFastCombatFrame
 
         // Track when the player's normal bottom charged move buttons were last visible during steady combat
         if (isNormalFastCombatFrame && playerMoveLines.any { it.text.trim().length >= 4 }) {
@@ -10004,16 +10083,22 @@ class OverlayService : LifecycleService() {
                 pendingChargedAttackPreOppShields = oppShieldsRemaining
                 pendingChargedAttackAttackerName = formatOpponentNameWithShadow(activeOpponentName)
                 pendingChargedAttackDefenderName = activeUserPokemonName ?: userSlotCfg?.name ?: "Player"
-                // Roll back any unconfirmed opponent fast move energy prediction and immediately deduct cheapestOppEnergy!
-                if (oppUnconfirmedPredFasts[activeOppIdx] > 0) {
-                    oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] - oppUnconfirmedPredFasts[activeOppIdx] * oppFastEnergyForStats).coerceIn(0, 100)
-                    oppUnconfirmedPredFasts[activeOppIdx] = 0
+                // Restore any glitch-withheld energy and deduct cheapestOppEnergy (do NOT delete completed fast-move energy!)
+                if (oppWithheldFastsForGlitch[activeOppIdx] > 0 && oppSlotEnergy[activeOppIdx] < cheapestOppEnergy) {
+                    val restore = oppWithheldFastsForGlitch[activeOppIdx]
+                    oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] + restore * oppFastEnergyForStats).coerceIn(0, 100)
                 }
+                oppWithheldFastsForGlitch[activeOppIdx] = 0
+                oppUnconfirmedPredFasts[activeOppIdx] = 0
+                oppPendingFastAppliedAtMs[activeOppIdx] = 0L
+                playerUnconfirmedPredFasts[activeUserIdx] = 0
+                playerPendingFastAppliedAtMs[activeUserIdx] = 0L
                 oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] - cheapestOppEnergy).coerceIn(0, 100)
                 pendingChargedAttackDeductedEnergy = cheapestOppEnergy
                 playerSlotCurrentMoveTurns[activeUserIdx] = 0
                 oppSlotCurrentMoveTurns[activeOppIdx] = 0
-                lastTurnTickTimeMs = nowMs
+                lastTurnTickTimeMs = System.currentTimeMillis()
+                turnResidualMs = 0L
                 hpChanged = true
             }
             if (!wasPromptActive || hpChanged) {
@@ -10044,16 +10129,22 @@ class OverlayService : LifecycleService() {
                 pendingChargedAttackPreOppShields = oppShieldsRemaining
                 pendingChargedAttackAttackerName = activeUserPokemonName ?: userSlotCfg?.name ?: "Player"
                 pendingChargedAttackDefenderName = formatOpponentNameWithShadow(activeOpponentName)
-                // Roll back any unconfirmed player fast move energy prediction and immediately deduct cheapestUserEnergy!
-                if (playerUnconfirmedPredFasts[activeUserIdx] > 0) {
-                    playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] - playerUnconfirmedPredFasts[activeUserIdx] * userFastEnergyForStats).coerceIn(0, 100)
-                    playerUnconfirmedPredFasts[activeUserIdx] = 0
+                // Restore any glitch-withheld energy and deduct cheapestUserEnergy (do NOT delete completed fast-move energy!)
+                if (playerWithheldFastsForGlitch[activeUserIdx] > 0 && playerSlotEnergy[activeUserIdx] < cheapestUserEnergy) {
+                    val restore = playerWithheldFastsForGlitch[activeUserIdx]
+                    playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] + restore * userFastEnergyForStats).coerceIn(0, 100)
                 }
+                playerWithheldFastsForGlitch[activeUserIdx] = 0
+                playerUnconfirmedPredFasts[activeUserIdx] = 0
+                playerPendingFastAppliedAtMs[activeUserIdx] = 0L
+                oppUnconfirmedPredFasts[activeOppIdx] = 0
+                oppPendingFastAppliedAtMs[activeOppIdx] = 0L
                 playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] - cheapestUserEnergy).coerceIn(0, 100)
                 pendingChargedAttackDeductedEnergy = cheapestUserEnergy
                 playerSlotCurrentMoveTurns[activeUserIdx] = 0
                 oppSlotCurrentMoveTurns[activeOppIdx] = 0
-                lastTurnTickTimeMs = nowMs
+                lastTurnTickTimeMs = System.currentTimeMillis()
+                turnResidualMs = 0L
                 hpChanged = true
                 showBattleToast("⚡ Charged Attack! (-${cheapestUserEnergy}E)")
             }
@@ -10062,7 +10153,8 @@ class OverlayService : LifecycleService() {
         }
 
         if (!isNormalFastCombatFrame) {
-            lastTurnTickTimeMs = nowMs
+            lastTurnTickTimeMs = System.currentTimeMillis()
+            turnResidualMs = 0L
             if (hpChanged) recalculateAndPushBattleData()
             return
         }
@@ -10106,13 +10198,24 @@ class OverlayService : LifecycleService() {
                     oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] - extraToDeduct).coerceIn(0, 100)
                 }
 
-                // Re-index turn offset and reset fast-move turn counters after charged move camera cut
+                // Re-index turn offset and reset fast-move window baselines after charged move camera cut
                 scanTurnOffsetMs = ((nowMs - battleClockAnchorMs).coerceAtLeast(0L)) % 500L
-                lastTurnTickTimeMs = nowMs
+                lastTurnTickTimeMs = System.currentTimeMillis()
+                turnResidualMs = 0L
                 playerSlotCurrentMoveTurns[activeUserIdx] = 0
                 oppSlotCurrentMoveTurns[activeOppIdx] = 0
                 playerUnconfirmedPredFasts[activeUserIdx] = 0
                 oppUnconfirmedPredFasts[activeOppIdx] = 0
+                playerPendingFastAppliedAtMs[activeUserIdx] = 0L
+                oppPendingFastAppliedAtMs[activeOppIdx] = 0L
+                playerCreditedFastsInWindow[activeUserIdx] = 0
+                oppCreditedFastsInWindow[activeOppIdx] = 0
+                playerWithheldFastsForGlitch[activeUserIdx] = 0
+                oppWithheldFastsForGlitch[activeOppIdx] = 0
+                lastScannedPlayerSlotHpPct[activeUserIdx] = playerSlotHpPct[activeUserIdx]
+                lastScannedOppSlotHpPct[activeOppIdx] = oppSlotHpPct[activeOppIdx]
+                playerFastWindowStartOppHp[activeUserIdx] = oppSlotHpPct[activeOppIdx]
+                oppFastWindowStartPlayerHp[activeOppIdx] = playerSlotHpPct[activeUserIdx]
                 predictedPlayerSlotHpPct[activeUserIdx] = playerSlotHpPct[activeUserIdx]
                 predictedOppSlotHpPct[activeOppIdx] = oppSlotHpPct[activeOppIdx]
                 needsPostSwapOrMoveTurnReindex = true
@@ -10182,13 +10285,24 @@ class OverlayService : LifecycleService() {
                     playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] - extraToDeduct).coerceIn(0, 100)
                 }
 
-                // Re-index turn offset after user charged move
+                // Re-index turn offset and reset fast-move window baselines after user charged move
                 scanTurnOffsetMs = ((nowMs - battleClockAnchorMs).coerceAtLeast(0L)) % 500L
-                lastTurnTickTimeMs = nowMs
+                lastTurnTickTimeMs = System.currentTimeMillis()
+                turnResidualMs = 0L
                 playerSlotCurrentMoveTurns[activeUserIdx] = 0
                 oppSlotCurrentMoveTurns[activeOppIdx] = 0
                 playerUnconfirmedPredFasts[activeUserIdx] = 0
                 oppUnconfirmedPredFasts[activeOppIdx] = 0
+                playerPendingFastAppliedAtMs[activeUserIdx] = 0L
+                oppPendingFastAppliedAtMs[activeOppIdx] = 0L
+                playerCreditedFastsInWindow[activeUserIdx] = 0
+                oppCreditedFastsInWindow[activeOppIdx] = 0
+                playerWithheldFastsForGlitch[activeUserIdx] = 0
+                oppWithheldFastsForGlitch[activeOppIdx] = 0
+                lastScannedPlayerSlotHpPct[activeUserIdx] = playerSlotHpPct[activeUserIdx]
+                lastScannedOppSlotHpPct[activeOppIdx] = oppSlotHpPct[activeOppIdx]
+                playerFastWindowStartOppHp[activeUserIdx] = oppSlotHpPct[activeOppIdx]
+                oppFastWindowStartPlayerHp[activeOppIdx] = playerSlotHpPct[activeUserIdx]
                 predictedPlayerSlotHpPct[activeUserIdx] = playerSlotHpPct[activeUserIdx]
                 predictedOppSlotHpPct[activeOppIdx] = oppSlotHpPct[activeOppIdx]
                 needsPostSwapOrMoveTurnReindex = true
@@ -10234,21 +10348,6 @@ class OverlayService : LifecycleService() {
             }
             if (observedPlayerFastDrop || observedOppFastDrop || needsPostSwapOrMoveTurnReindex) {
                 scanTurnOffsetMs = ((nowMs - battleClockAnchorMs).coerceAtLeast(0L)) % 500L
-                if (observedPlayerFastDrop) {
-                    // Opponent's fast move just landed damage on player -> align opponent's fast-move turn phase to 0
-                    oppSlotCurrentMoveTurns[activeOppIdx] = 0
-                    if (oppSlotTurnsOnField[activeOppIdx] < oppFastTurnsForStats) {
-                        oppSlotTurnsOnField[activeOppIdx] = oppFastTurnsForStats
-                    }
-                    if (oppSlotEnergy[activeOppIdx] < oppFastEnergyForStats && (nowMs - lastChargedAttackLoggedMs) > 2500L) {
-                        oppSlotEnergy[activeOppIdx] = oppFastEnergyForStats
-                        hpChanged = true
-                    }
-                }
-                if (observedOppFastDrop) {
-                    // Player's fast move just landed damage on opponent -> align player's fast-move turn phase to 0
-                    playerSlotCurrentMoveTurns[activeUserIdx] = 0
-                }
                 if (observedPlayerFastDrop || observedOppFastDrop) {
                     needsPostSwapOrMoveTurnReindex = false
                 }
@@ -10648,12 +10747,25 @@ class OverlayService : LifecycleService() {
                         if (prevOppSlotIdx in 0..2 && prevOppSlotIdx != newOppSlotIdx) {
                             oppFaintedSlots[prevOppSlotIdx] = true
                             oppSlotHpPct[prevOppSlotIdx] = 0
+                            lastScannedOppSlotHpPct[prevOppSlotIdx] = 0
                             oppSlotEnergy[prevOppSlotIdx] = 0
                         }
                         if (newOppSlotIdx in 0..2) {
                             oppSlotCurrentMoveTurns[newOppSlotIdx] = 0
+                            oppCreditedFastsInWindow[newOppSlotIdx] = 0
+                            oppWithheldFastsForGlitch[newOppSlotIdx] = 0
+                            oppUnconfirmedPredFasts[newOppSlotIdx] = 0
+                            oppPendingFastAppliedAtMs[newOppSlotIdx] = 0L
+                            lastScannedOppSlotHpPct[newOppSlotIdx] = oppSlotHpPct[newOppSlotIdx].coerceIn(1, 100)
                             predictedOppSlotHpPct[newOppSlotIdx] = oppSlotHpPct[newOppSlotIdx].coerceIn(1, 100)
+                            playerFastWindowStartOppHp.fill(oppSlotHpPct[newOppSlotIdx].coerceIn(1, 100))
+                            playerCreditedFastsInWindow.fill(0)
+                            playerWithheldFastsForGlitch.fill(0)
+                            playerUnconfirmedPredFasts.fill(0)
+                            playerPendingFastAppliedAtMs.fill(0L)
                         }
+                        lastTurnTickTimeMs = System.currentTimeMillis()
+                        turnResidualMs = 0L
                         scanTurnOffsetMs = ((currentFrameTimestampMs - battleClockAnchorMs).coerceAtLeast(0L)) % 500L
                         needsPostSwapOrMoveTurnReindex = true
                         if (effectiveOppBalls == 1) {
@@ -10661,6 +10773,7 @@ class OverlayService : LifecycleService() {
                                 if (idx != newOppSlotIdx) {
                                     oppFaintedSlots[idx] = true
                                     oppSlotHpPct[idx] = 0
+                                    lastScannedOppSlotHpPct[idx] = 0
                                     oppSlotEnergy[idx] = 0
                                 }
                             }
@@ -10711,6 +10824,7 @@ class OverlayService : LifecycleService() {
                             if (prevOppSlotIdx != newOppSlotIdx && (currentFrameTimestampMs - oppSlotLastBigJumpMs[prevOppSlotIdx]) <= 1800L) {
                                 oppSlotHpPct[prevOppSlotIdx] = oppSlotPriorHpPct[prevOppSlotIdx].coerceIn(1, 100)
                                 oppSlotPreFaintHpPct[prevOppSlotIdx] = oppSlotHpPct[prevOppSlotIdx]
+                                lastScannedOppSlotHpPct[prevOppSlotIdx] = oppSlotHpPct[prevOppSlotIdx]
                                 oppSlotLastBigJumpMs[prevOppSlotIdx] = 0L
                             }
                         }
@@ -10720,8 +10834,20 @@ class OverlayService : LifecycleService() {
                         }
                         if (newOppSlotIdx in 0..2) {
                             oppSlotCurrentMoveTurns[newOppSlotIdx] = 0
+                            oppCreditedFastsInWindow[newOppSlotIdx] = 0
+                            oppWithheldFastsForGlitch[newOppSlotIdx] = 0
+                            oppUnconfirmedPredFasts[newOppSlotIdx] = 0
+                            oppPendingFastAppliedAtMs[newOppSlotIdx] = 0L
+                            lastScannedOppSlotHpPct[newOppSlotIdx] = oppSlotHpPct[newOppSlotIdx].coerceIn(1, 100)
                             predictedOppSlotHpPct[newOppSlotIdx] = oppSlotHpPct[newOppSlotIdx].coerceIn(1, 100)
+                            playerFastWindowStartOppHp.fill(oppSlotHpPct[newOppSlotIdx].coerceIn(1, 100))
+                            playerCreditedFastsInWindow.fill(0)
+                            playerWithheldFastsForGlitch.fill(0)
+                            playerUnconfirmedPredFasts.fill(0)
+                            playerPendingFastAppliedAtMs.fill(0L)
                         }
+                        lastTurnTickTimeMs = System.currentTimeMillis()
+                        turnResidualMs = 0L
                         scanTurnOffsetMs = ((currentFrameTimestampMs - battleClockAnchorMs).coerceAtLeast(0L)) % 500L
                         needsPostSwapOrMoveTurnReindex = true
                         oppSwapEndTimeMs = swapStartMs + 50000L
@@ -10915,12 +11041,25 @@ class OverlayService : LifecycleService() {
             if (prevSlotIdx in 0..2 && prevSlotIdx != newSlotIdx) {
                 playerFaintedSlots[prevSlotIdx] = true
                 playerSlotHpPct[prevSlotIdx] = 0
+                lastScannedPlayerSlotHpPct[prevSlotIdx] = 0
                 playerSlotEnergy[prevSlotIdx] = 0
             }
             if (newSlotIdx in 0..2) {
                 playerSlotCurrentMoveTurns[newSlotIdx] = 0
+                playerCreditedFastsInWindow[newSlotIdx] = 0
+                playerWithheldFastsForGlitch[newSlotIdx] = 0
+                playerUnconfirmedPredFasts[newSlotIdx] = 0
+                playerPendingFastAppliedAtMs[newSlotIdx] = 0L
+                lastScannedPlayerSlotHpPct[newSlotIdx] = playerSlotHpPct[newSlotIdx].coerceIn(1, 100)
                 predictedPlayerSlotHpPct[newSlotIdx] = playerSlotHpPct[newSlotIdx].coerceIn(1, 100)
+                oppFastWindowStartPlayerHp.fill(playerSlotHpPct[newSlotIdx].coerceIn(1, 100))
+                oppCreditedFastsInWindow.fill(0)
+                oppWithheldFastsForGlitch.fill(0)
+                oppUnconfirmedPredFasts.fill(0)
+                oppPendingFastAppliedAtMs.fill(0L)
             }
+            lastTurnTickTimeMs = System.currentTimeMillis()
+            turnResidualMs = 0L
             scanTurnOffsetMs = ((nowMs - battleClockAnchorMs).coerceAtLeast(0L)) % 500L
             needsPostSwapOrMoveTurnReindex = true
             if (effectivePlayerBalls == 1 && newSlotIdx in 0..2) {
@@ -10928,6 +11067,7 @@ class OverlayService : LifecycleService() {
                     if (idx != newSlotIdx) {
                         playerFaintedSlots[idx] = true
                         playerSlotHpPct[idx] = 0
+                        lastScannedPlayerSlotHpPct[idx] = 0
                         playerSlotEnergy[idx] = 0
                     }
                 }
@@ -10978,6 +11118,7 @@ class OverlayService : LifecycleService() {
                 if (prevSlotIdx != newSlotIdx && (nowMs - playerSlotLastBigJumpMs[prevSlotIdx]) <= 1800L) {
                     playerSlotHpPct[prevSlotIdx] = playerSlotPriorHpPct[prevSlotIdx].coerceIn(1, 100)
                     playerSlotPreFaintHpPct[prevSlotIdx] = playerSlotHpPct[prevSlotIdx]
+                    lastScannedPlayerSlotHpPct[prevSlotIdx] = playerSlotHpPct[prevSlotIdx]
                     confirmedPlayerSlotHpPct[prevSlotIdx] = playerSlotHpPct[prevSlotIdx]
                     pendingConfirmPlayerSlotHpPct[prevSlotIdx] = playerSlotHpPct[prevSlotIdx]
                     playerSlotHpConfirmFrames[prevSlotIdx] = 2
@@ -10992,8 +11133,20 @@ class OverlayService : LifecycleService() {
             }
             if (newSlotIdx in 0..2) {
                 playerSlotCurrentMoveTurns[newSlotIdx] = 0
+                playerCreditedFastsInWindow[newSlotIdx] = 0
+                playerWithheldFastsForGlitch[newSlotIdx] = 0
+                playerUnconfirmedPredFasts[newSlotIdx] = 0
+                playerPendingFastAppliedAtMs[newSlotIdx] = 0L
+                lastScannedPlayerSlotHpPct[newSlotIdx] = playerSlotHpPct[newSlotIdx].coerceIn(1, 100)
                 predictedPlayerSlotHpPct[newSlotIdx] = playerSlotHpPct[newSlotIdx].coerceIn(1, 100)
+                oppFastWindowStartPlayerHp.fill(playerSlotHpPct[newSlotIdx].coerceIn(1, 100))
+                oppCreditedFastsInWindow.fill(0)
+                oppWithheldFastsForGlitch.fill(0)
+                oppUnconfirmedPredFasts.fill(0)
+                oppPendingFastAppliedAtMs.fill(0L)
             }
+            lastTurnTickTimeMs = System.currentTimeMillis()
+            turnResidualMs = 0L
             scanTurnOffsetMs = ((nowMs - battleClockAnchorMs).coerceAtLeast(0L)) % 500L
             needsPostSwapOrMoveTurnReindex = true
             playerSwapEndTimeMs = swapStartMs + 50000L
@@ -11805,6 +11958,16 @@ class OverlayService : LifecycleService() {
         oppSlotCurrentMoveTurns.fill(0)
         predictedPlayerSlotHpPct.fill(100)
         predictedOppSlotHpPct.fill(100)
+        lastScannedPlayerSlotHpPct.fill(100)
+        lastScannedOppSlotHpPct.fill(100)
+        playerFastWindowStartOppHp.fill(100)
+        oppFastWindowStartPlayerHp.fill(100)
+        playerCreditedFastsInWindow.fill(0)
+        oppCreditedFastsInWindow.fill(0)
+        playerWithheldFastsForGlitch.fill(0)
+        oppWithheldFastsForGlitch.fill(0)
+        playerPendingFastAppliedAtMs.fill(0L)
+        oppPendingFastAppliedAtMs.fill(0L)
         playerPredAheadScanFrames.fill(0)
         oppPredAheadScanFrames.fill(0)
         playerUnconfirmedPredFasts.fill(0)
@@ -11812,6 +11975,8 @@ class OverlayService : LifecycleService() {
         battleTurnIndex = 0
         scanTurnOffsetMs = 0L
         lastTurnTickTimeMs = 0L
+        turnResidualMs = 0L
+        lastFrameWasNormalFastCombat = false
         needsPostSwapOrMoveTurnReindex = false
         pendingPlayerLowHpSlot = -1
         pendingPlayerLowHpSample = -1
