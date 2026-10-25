@@ -123,14 +123,17 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official v3.53 Release (Attack Header HP, Shield & Energy Badges + 2-Row Pokémon Column Headers with HP%)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official v3.54 Release (Pending-Damage-Verified Turn-T Prediction, Multi-Move Damage Integration, Turn-Phased OCR & Post-KO Faint Freeze)
             
-            ### What's New in v3.53
-            - **HP, Shield & Energy Badges in `Opp Attacks` and `My Attacks` Headers (`overlay.html`)**:
-              - Adds live HP% and interactive Shield (`🛡️`) badges directly next to `Opp Attacks` and `My Attacks` on Line 1.
-              - Adds live Energy (`E` / `READY`) badges on the right side of Line 2 below the Swap timer.
-            - **2-Row Pokémon Column Headers (`overlay.html`)**:
-              - Shifts the 3-letter Pokémon abbreviations (`TIN`, `MIM`, `SWA`, `GLA`, etc.) up to Row 1 of each column header and prints each Pokémon's live `HP%` in Row 2 directly below it.
+            ### What's New in v3.54
+            - **Post-Charged-Move KO Faint Freeze (`OverlayService.kt`)**:
+              - Immediately detects when a charged move KOs the active opponent (`sampledOppHpPct == -1` while player HUD returns) and freezes fast-move energy generation until the next opponent Pokémon swaps in with a live HP bar.
+            - **Pending-Damage-Gated Turn-T Prediction & Multi-Move Damage Integration (`OverlayService.kt`)**:
+              - Removes unconditional free-running predictive HP/energy jumps when no attacks are thrown.
+              - For 2+ turn fast moves (2T/3T/4T/5T), predictive damage & energy are applied on Turn T ONLY when the orange pending-damage indicator is detected on the floating HP bar (and sampled across 2 scans on 3T+ moves).
+              - For 1-turn fast moves, damage and energy are applied only upon confirmed HP bar drops and verified via cumulative damage integration over multiple moves.
+            - **Turn-Phased OCR Capture (`OverlayService.kt`)**:
+              - Phase-locks the 2.00 Hz (500ms) OCR capture loop to observed GBL turn boundaries so damage and energy appear on the overlay at the exact moment energy becomes available for swap/catch warnings.
             
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)
