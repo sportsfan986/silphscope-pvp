@@ -3745,7 +3745,7 @@ class MainActivity : AppCompatActivity() {
             val followed = recEvents.count { it.followedRecommendation == true }
             val adherencePct = log.adherenceRatePct ?: if (recEvents.isNotEmpty()) ((followed * 100.0) / recEvents.size).toInt() else null
             val record = mapOf(
-                "schemaVersion" to "3.42",
+                "schemaVersion" to "3.43",
                 "battleId" to log.id,
                 "timestampMs" to log.timestampMs,
                 "league" to log.league,

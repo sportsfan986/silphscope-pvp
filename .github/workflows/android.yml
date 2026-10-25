@@ -123,18 +123,16 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official v3.42 Release (Unscaled 3x3 Visual Shield Matrix, Overlay-Occluded HP Bar Detection & Low-HP Swap Persistence Fix)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official v3.43 Release (Full 4-Sided Outer Border Rectangle HP Bar Scanner, Zero-Bias 100% Width & Bi-Directional Live HP Updates)
             
-            ### What's New in v3.42
-            - **Unscaled 3x3 Visual Shield Matrix + Live HP-Aware Pokémon Selection**:
-              - Keeps the visual 3x3 Shield Matrix dots and matchup ratings (`0S`, `1S`, `2S`) anchored to static 100%-HP / 0-energy baselines so unknown energy states do not distort visual shield ratings, while continuing to apply live & persisted remaining HP% to Pokémon swap/post-faint selection recommendations, KO range badges, and Shield vs. No-Shield callouts.
-            - **Overlay-Occluded Floating HP Bar Detection (`classifyHpPixel` + Expanded X-Anchor)**:
-              - Expands the Opponent HP bar left-edge X-anchor window (`0.500w..0.645w`) and adds alpha-composited pixel classification so HP bars partially or fully underneath the semi-transparent SilphScope overlay HUD (e.g., `Luxray` at 59% HP, `S-Magnezone` at 15% HP) are accurately tracked every frame.
-            - **Low-HP Manual Swap Persistence & Pre-Faint HP Backup**:
-              - Removes the false faint assumption on low-HP (`≤25%`) manual switches so Pokémon swapped out in the red zone (e.g., `Tinkaton` at 23% HP) preserve their exact remaining HP% on the bench instead of resetting to `0%` or `100%`.
-              - Adds `playerSlotPreFaintHpPct` and `oppSlotPreFaintHpPct` backups so any provisional faint rollback restores the Pokémon's true pre-faint HP%.
-            - **Removed False Final-Pokémon `0% HP` Forced Faint & Added Monotonic HP Guard**:
-              - Removes `oppFinalMissingHpFrames` so the final active opponent Pokémon is never falsely marked `0% HP` while still actively battling, and enforces a 2-frame confirmation guard on large non-charged-move HP drops.
+            ### What's New in v3.43
+            - **Full 4-Sided Outer Border Rectangle HP Bar Scanner (`detectFloatingHpBarPct`)**:
+              - Validates the complete 4-sided outer white/silver rectangle border (`leftBorderX`, `rightBorderX` at `0.274w..0.296w`, top horizontal border line, and bottom horizontal border line) and verifies that the interior between `xFillEnd` and `rightBorderX` is valid depleted dark track.
+              - Computes the `100%` HP interior width directly from the detected outer border rectangle (`(rightBorderX - leftBorderX) - padInset`), eliminating bias error and rejecting all non-capsule overlay UI badges (e.g., yellow shield buttons and green team chips).
+            - **Expanded Player HP Corridor for Flying/Tall Pokémon (`0.24h..0.69h`)**:
+              - Expands `playerHpCorridorRect` upward from `0.46h` to `0.24h` so high-hovering flying Pokémon (e.g., `Fearow` at `0.334h`) and `"Attack Incoming!"` camera angles are accurately tracked every frame.
+            - **Bi-Directional Live HP Gauge Updates on Every Scan**:
+              - Allows the active Player and Opponent HP gauges to move freely **up or down** on every valid scan so swapping to a Pokémon with higher remaining HP immediately updates the gauge while preserving outgoing bench Pokémon HP across 1-frame nameplate-vs-HP-bar transition overlaps.
             
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)
