@@ -2163,20 +2163,33 @@ export default function App() {
         minDmgPct: 30,
         maxMoveName: 'Charged Move',
         minMoveName: 'Bait Move',
+        thirdDmgPct: 0,
+        thirdMoveName: '',
+        fourthDmgPct: 0,
+        fourthMoveName: '',
         candidateMoves: [] as Array<{ name: string; damagePct: number }>
       };
     }
-    const sortedDesc = [...candidateMoves].sort((a, b) => b.damagePct - a.damagePct);
+    // Primary Shield Callouts are strictly based on the top 2 charged attacks (moves 1 & 2)
+    // Moves 3 & 4 are checked separately to append a KO warning if they can KO
+    const topTwo = candidateMoves.slice(0, 2);
+    const sortedTopTwoDesc = [...topTwo].sort((a, b) => b.damagePct - a.damagePct);
+    const move3 = candidateMoves[2];
+    const move4 = candidateMoves[3];
     return {
-      maxDmgPct: sortedDesc[0].damagePct,
-      minDmgPct: sortedDesc[sortedDesc.length - 1].damagePct,
-      maxMoveName: sortedDesc[0].name,
-      minMoveName: sortedDesc[sortedDesc.length - 1].name,
+      maxDmgPct: sortedTopTwoDesc[0].damagePct,
+      minDmgPct: sortedTopTwoDesc[sortedTopTwoDesc.length - 1].damagePct,
+      maxMoveName: sortedTopTwoDesc[0].name,
+      minMoveName: sortedTopTwoDesc[sortedTopTwoDesc.length - 1].name,
+      thirdDmgPct: move3?.damagePct ?? 0,
+      thirdMoveName: move3?.name ?? '',
+      fourthDmgPct: move4?.damagePct ?? 0,
+      fourthMoveName: move4?.name ?? '',
       candidateMoves
     };
   }, [activeOpponent, activePreset, activeUserSlotIndex, activeOpponentLeague, isOpponentShadow]);
 
-  // Lead, Swap, Post-Faint, Persistent-HP & Shield Callout Tactical Recommendation (v3.40)
+  // Lead, Swap, Post-Faint, Persistent-HP & Shield Callout Tactical Recommendation (v3.44)
   const activeTacticalRec: TacticalRecommendationResult | null = useMemo(() => {
     if (isWaitingOpponent || scannedOpponents.length === 0 || !activePreset?.pokemon?.length) {
       return null;
@@ -2203,6 +2216,10 @@ export default function App() {
       minOppMoveDmgPct: activeOppChargedMoveBounds.minDmgPct,
       maxOppMoveName: activeOppChargedMoveBounds.maxMoveName,
       minOppMoveName: activeOppChargedMoveBounds.minMoveName,
+      thirdOppMoveDmgPct: activeOppChargedMoveBounds.thirdDmgPct,
+      thirdOppMoveName: activeOppChargedMoveBounds.thirdMoveName,
+      fourthOppMoveDmgPct: activeOppChargedMoveBounds.fourthDmgPct,
+      fourthOppMoveName: activeOppChargedMoveBounds.fourthMoveName,
       league: activePreset.league
     });
     return rec && rec.visible ? rec : null;
@@ -2591,7 +2608,7 @@ export default function App() {
           oppSlotHpPct: ev.oppSlotHpPct ?? null
         }));
         return JSON.stringify({
-          schemaVersion: '3.43-ai-decision-tree',
+          schemaVersion: '3.44-ai-decision-tree',
           battleId: b.id,
           timestampMs: b.timestampMs,
           league: b.league,
@@ -3386,7 +3403,7 @@ export default function App() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'SilphScope_PvP_v3.32_Android_Project.zip';
+      a.download = 'SilphScope_PvP_v3.44_Android_Project.zip';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -3634,7 +3651,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v3.43 • Android Native Overlay
+                  v3.44 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -4298,14 +4315,14 @@ export default function App() {
                         </div>
                       )}
 
-                      {/* Action Toolbar: Start Battle, Swap Opponent, Shadow Toggle, Form Cycler, and Active Lead Switch */}
+                      {/* Action Toolbar: 2-Row Compact Buttons (Start\nBattle, Shadow:\nON/OFF, Form:\n[form], POK(3 letters):\nHP%) */}
                       <div
-                        className="flex items-center justify-between gap-1 p-1 rounded border border-white/10 my-1"
+                        className="flex items-stretch justify-between gap-0.5 p-1 rounded border border-white/10 my-1"
                         style={{
                           background: `rgba(0, 0, 0, ${(((100 - overlayTransparencyPct) / 100) * 0.65).toFixed(3)})`
                         }}
                       >
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-stretch gap-0.5">
                           <button
                             onClick={() => {
                               if (isBattleActive) {
@@ -4314,7 +4331,7 @@ export default function App() {
                                 handleStartBattle();
                               }
                             }}
-                            className={`font-bold text-[8px] px-1.5 py-0.5 rounded border transition active:scale-95 flex items-center gap-1 ${
+                            className={`font-bold text-[7px] leading-[1.05] px-1 py-0.5 rounded border transition active:scale-95 flex flex-col items-center justify-center text-center whitespace-pre-line ${
                               isBattleActive
                                 ? 'bg-red-600/60 hover:bg-red-600/75 text-white border-red-300 shadow-[0_0_5px_rgba(239,68,68,0.5)]'
                                 : 'bg-emerald-500/35 hover:bg-emerald-500/50 text-emerald-100 border-emerald-400/75'
@@ -4328,12 +4345,9 @@ export default function App() {
                             {startBattleToast ? (
                               <span>{startBattleToast}</span>
                             ) : isBattleActive ? (
-                              <span>🛑 Stop Battle</span>
+                              <span>{'🛑 Stop\nBattle'}</span>
                             ) : (
-                              <>
-                                {renderThemeOverlayIcon(activeTheme.id, 10)}
-                                <span>Start Battle</span>
-                              </>
+                              <span>{'Start\nBattle'}</span>
                             )}
                           </button>
                           <button
@@ -4341,56 +4355,66 @@ export default function App() {
                               setShowStartBattleMenu(false);
                               setShowOpponentPicker(!showOpponentPicker);
                             }}
-                            className={`font-bold text-[8px] px-1.5 py-0.5 rounded border transition active:scale-95 ${
+                            className={`font-bold text-[7px] leading-[1.05] px-1 py-0.5 rounded border transition active:scale-95 flex flex-col items-center justify-center text-center whitespace-pre-line ${
                               showOpponentPicker
                                 ? 'bg-amber-500/60 text-white border-amber-300 shadow-[0_0_5px_rgba(245,158,11,0.5)]'
                                 : 'bg-emerald-500/30 text-emerald-200 border-emerald-400/50 hover:bg-emerald-500/45'
                             }`}
                             title="Swap opponent from PvPoke Top 10 Meta"
                           >
-                            🔄 Swap ▾
+                            {'🔄\nSwap ▾'}
                           </button>
                           <button
                             onClick={() => setIsOpponentShadow(!isOpponentShadow)}
-                            className={`font-bold text-[8px] px-1.5 py-0.5 rounded border transition active:scale-95 ${
+                            className={`font-bold text-[7px] leading-[1.05] px-1 py-0.5 rounded border transition active:scale-95 flex flex-col items-center justify-center text-center whitespace-pre-line ${
                               isOpponentShadow
                                 ? 'bg-purple-600/60 text-white border-purple-300 shadow-[0_0_5px_rgba(168,85,247,0.5)]'
                                 : 'bg-purple-500/25 text-purple-200 border-purple-400/50 hover:bg-purple-500/35'
                             }`}
                             title="Toggle 1.2x Attack / 0.833x Defense Shadow modifier"
                           >
-                            Shadow: {isOpponentShadow ? 'ON' : 'OFF'}
+                            {`Shadow:\n${isOpponentShadow ? 'ON' : 'OFF'}`}
                           </button>
                           <button
                             onClick={handleCycleForm}
                             disabled={availableForms.length <= 1 || isWaitingOpponent}
-                            className={`font-bold text-[8px] px-1.5 py-0.5 rounded border transition ${
+                            className={`font-bold text-[7px] leading-[1.05] px-1 py-0.5 rounded border transition flex flex-col items-center justify-center text-center whitespace-pre-line ${
                               availableForms.length > 1 && !isWaitingOpponent
                                 ? 'bg-sky-500/30 hover:bg-sky-500/45 text-sky-100 border-sky-300/60 active:scale-95 cursor-pointer'
                                 : 'bg-slate-800/30 text-slate-500 border-slate-700/40 opacity-50 cursor-not-allowed'
                             }`}
                             title="Cycle regional or alternate form"
                           >
-                            Form: {activeOpponent.formLabel || 'Base'}
+                            {`Form:\n${(activeOpponent.formLabel || 'Base').slice(0, 6)}`}
                           </button>
                         </div>
-                        <div className="flex items-center gap-0.5">
+                        <div className="flex items-stretch gap-0.5">
                           {activePreset.pokemon.map((member, idx) => {
                             const slotHp = playerFaintedSlots[idx] ? 0 : (userSlotHpPct[idx] ?? 100);
+                            const cleanCode = member.name
+                              .replace(/^Shadow\s+/i, '')
+                              .replace(/^Kanto\s+/i, '')
+                              .replace(/^Alolan\s+/i, '')
+                              .replace(/^Galarian\s+/i, '')
+                              .replace(/^Hisuian\s+/i, '')
+                              .replace(/^Paldean\s+/i, '')
+                              .replace(/[^a-zA-Z0-9]/g, '')
+                              .slice(0, 3)
+                              .toUpperCase();
                             return (
                               <button
                                 key={member.id}
                                 onClick={() => handleSelectUserSlot(idx)}
-                                className={`text-[8px] font-bold px-1 py-0.5 rounded border transition flex items-center gap-0.5 ${
+                                className={`text-[7.5px] leading-[1.05] font-bold px-1 py-0.5 rounded border transition flex flex-col items-center justify-center text-center min-w-[27px] ${
                                   activeUserSlotIndex === idx && !playerFaintedSlots[idx]
                                     ? 'bg-emerald-500/40 text-white border-emerald-400'
                                     : playerFaintedSlots[idx]
                                     ? 'bg-slate-900/30 text-slate-500 border-white/10 opacity-35 line-through'
                                     : 'bg-slate-900/50 text-slate-200 border-white/20 hover:bg-slate-800'
                                 }`}
-                                title={`${member.name} (${playerFaintedSlots[idx] ? 'Fainted' : `${slotHp}% HP persisted`})`}
+                                title={`${member.name} (${playerFaintedSlots[idx] ? 'Fainted' : `${slotHp}% HP anchored`})`}
                               >
-                                <span>{member.name.replace(/^Shadow\s+/i, 'S-').replace(/^Kanto\s+/i, '').split(' ')[0].slice(0, 4)}</span>
+                                <span>{cleanCode}:</span>
                                 <span
                                   className={`text-[6.5px] font-mono ${
                                     playerFaintedSlots[idx]

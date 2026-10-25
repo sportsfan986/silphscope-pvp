@@ -10142,6 +10142,10 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
   minOppMoveDmgPct?: number;
   maxOppMoveName?: string;
   minOppMoveName?: string;
+  thirdOppMoveDmgPct?: number;
+  thirdOppMoveName?: string;
+  fourthOppMoveDmgPct?: number;
+  fourthOppMoveName?: string;
   league: string;
 }): TacticalRecommendationResult {
   const {
@@ -10166,6 +10170,10 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
     minOppMoveDmgPct = 30,
     maxOppMoveName = "Nuke",
     minOppMoveName = "Bait",
+    thirdOppMoveDmgPct = 0,
+    thirdOppMoveName = "",
+    fourthOppMoveDmgPct = 0,
+    fourthOppMoveName = "",
     league
   } = params;
 
@@ -10368,7 +10376,30 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
 
   // =========================================================================
   // CASE -1: IMMEDIATE "ATTACK INCOMING! USE A PROTECT SHIELD?" CALLOUT
+  // Primary shield decision is based on TOP 2 charged attacks only, with explicit
+  // warning if Attack 3 or Attack 4 could KO at current confirmed HP.
   // =========================================================================
+  const isM3Ko = Boolean(thirdOppMoveName) && thirdOppMoveDmgPct >= activeUserHp - 6;
+  const isM4Ko = Boolean(fourthOppMoveName) && fourthOppMoveDmgPct >= activeUserHp - 6;
+  const m3m4KoWarnBadge =
+    isM3Ko && isM4Ko
+      ? thirdOppMoveDmgPct >= fourthOppMoveDmgPct
+        ? ` ⚠️M3/M4 ${thirdOppMoveName} KO`
+        : ` ⚠️M3/M4 ${fourthOppMoveName} KO`
+      : isM3Ko
+      ? ` ⚠️M3 ${thirdOppMoveName} KO`
+      : isM4Ko
+      ? ` ⚠️M4 ${fourthOppMoveName} KO`
+      : "";
+  const m3m4KoWarnGoal =
+    isM3Ko && isM4Ko
+      ? ` • ⚠️M3/M4 ${thirdOppMoveName}(${thirdOppMoveDmgPct}%)/${fourthOppMoveName}(${fourthOppMoveDmgPct}%) can KO!`
+      : isM3Ko
+      ? ` • ⚠️M3 ${thirdOppMoveName}(${thirdOppMoveDmgPct}%) can KO!`
+      : isM4Ko
+      ? ` • ⚠️M4 ${fourthOppMoveName}(${fourthOppMoveDmgPct}%) can KO!`
+      : "";
+
   if (isAttackIncomingPrompt && uS > 0) {
     const isLethalMax = maxOppMoveDmgPct >= activeUserHp - 6;
     const isLethalMin = minOppMoveDmgPct >= activeUserHp - 4;
@@ -10395,10 +10426,10 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
       return makeRec(
         true,
         "SHIELD CALL",
-        `NO SHIELD (TANK IT • ${activeUserHp}% HP)`,
+        `NO SHIELD (TANK IT • ${activeUserHp}% HP)${m3m4KoWarnBadge}`,
         `Hold ${uS}S for Backline`,
-        `Survives ${maxOppMoveName} (${maxOppMoveDmgPct}% Dmg -> ~${Math.max(1, activeUserHp - maxOppMoveDmgPct)}% HP Left)`,
-        "sky",
+        `Survives Top 2 (${maxOppMoveName} ${maxOppMoveDmgPct}% -> ~${Math.max(1, activeUserHp - maxOppMoveDmgPct)}% HP)${m3m4KoWarnGoal}`,
+        isM3Ko || isM4Ko ? "amber" : "sky",
         null,
         null,
         candidateScores
@@ -10422,10 +10453,10 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
     return makeRec(
       true,
       "SHIELD CALL",
-      isLethalMax ? `SHIELD (1S) TO SURVIVE` : `TANK OR 1S (CALL BAIT)`,
+      isLethalMax ? `SHIELD (1S) TO SURVIVE` : `TANK OR 1S (CALL BAIT)${m3m4KoWarnBadge}`,
       isLethalMax ? `Commit 1S` : `Hold ${uS}S if Bait (${minOppMoveDmgPct}%)`,
-      `${maxOppMoveName}: ${maxOppMoveDmgPct}% vs ${curMember.name} ${activeUserHp}% HP`,
-      isLethalMax ? "amber" : "sky",
+      `${maxOppMoveName}: ${maxOppMoveDmgPct}% vs ${curMember.name} ${activeUserHp}% HP${m3m4KoWarnGoal}`,
+      isLethalMax || isM3Ko || isM4Ko ? "amber" : "sky",
       null,
       null,
       candidateScores
@@ -10648,14 +10679,14 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
         uS > 0 && isMaxMoveLethal
           ? `1S (KO @${activeUserHp}%)`
           : curBr00 >= 535 && isSafeToTank
-          ? "0S–1S (Tank OK)"
-          : "Match 1S";
+          ? `0S–1S (Tank OK)${m3m4KoWarnBadge}`
+          : `Match 1S${m3m4KoWarnBadge}`;
       return makeRec(
         true,
         tag,
         `STAY IN (${curMember.name})`,
         shieldAdvice,
-        `Win Lead (You ${activeUserHp}% vs Opp ${activeOppHp}%)`,
+        `Win Lead (You ${activeUserHp}% vs Opp ${activeOppHp}%)${m3m4KoWarnGoal}`,
         "emerald",
         null,
         null,
@@ -10668,8 +10699,10 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
           true,
           tag,
           `STAY IN (Soft Lose)`,
-          uS > 0 && isMaxMoveLethal && activeOppHp <= 45 ? `1S (KO @${activeUserHp}%)` : "0S (Force Opp 1S)",
-          `Win +1 Shield -> Farm w/ ${team[1].name} (You ${activeUserHp}% vs Opp ${activeOppHp}%)`,
+          uS > 0 && isMaxMoveLethal && activeOppHp <= 45
+            ? `1S (KO @${activeUserHp}%)`
+            : `0S (Force Opp 1S)${m3m4KoWarnBadge}`,
+          `Win +1 Shield -> Farm w/ ${team[1].name} (You ${activeUserHp}% vs Opp ${activeOppHp}%)${m3m4KoWarnGoal}`,
           "sky",
           null,
           null,
@@ -10802,11 +10835,11 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
         uS > 0 && maxOppMoveDmgPct >= activeUserHp - 5
           ? `1S (KO @${activeUserHp}%)`
           : curBr00 >= 515 && maxOppMoveDmgPct <= activeUserHp - 18
-          ? "0S–1S (Tank OK)"
-          : "1S",
+          ? `0S–1S (Tank OK)${m3m4KoWarnBadge}`
+          : `1S${m3m4KoWarnBadge}`,
         oppSwitchLockActive
-          ? `Exploit ${oppSwapRemainingSec}s Lock (You ${activeUserHp}% vs Opp ${activeOppHp}%)`
-          : `Win Switch Adv (You ${activeUserHp}% vs Opp ${activeOppHp}%)`,
+          ? `Exploit ${oppSwapRemainingSec}s Lock (You ${activeUserHp}% vs Opp ${activeOppHp}%)${m3m4KoWarnGoal}`
+          : `Win Switch Adv (You ${activeUserHp}% vs Opp ${activeOppHp}%)${m3m4KoWarnGoal}`,
         "emerald",
         null,
         null,
@@ -10841,18 +10874,18 @@ export function computeTacticalLeadAndSwapRecommendation(params: {
     uS > 0 && maxOppMoveDmgPct >= activeUserHp - 5 && curBr11 >= 475
       ? `1S (KO @${activeUserHp}%)`
       : curBr00 >= 525 && maxOppMoveDmgPct <= activeUserHp - 15
-      ? "0S (Tank)"
+      ? `0S (Tank)${m3m4KoWarnBadge}`
       : curBr11 >= 515 && uS >= 1
-      ? "1S to Secure"
+      ? `1S to Secure${m3m4KoWarnBadge}`
       : curBr22 >= 515 && uS >= 2
-      ? "Commit 2S"
-      : "0S Soft Lose";
+      ? `Commit 2S`
+      : `0S Soft Lose${m3m4KoWarnBadge}`;
   const goalText =
     curBrNow >= 520
       ? curIdx === 2 || oppAliveCount <= 2
-        ? `Close Out & Sweep Backline (You ${activeUserHp}% vs Opp ${activeOppHp}%)`
-        : `Farm Energy & Hold Tempo (You ${activeUserHp}% vs Opp ${activeOppHp}%)`
-      : `Chip Damage -> Set Up ${bestBenchName} (You ${activeUserHp}% vs Opp ${activeOppHp}%)`;
+        ? `Close Out & Sweep Backline (You ${activeUserHp}% vs Opp ${activeOppHp}%)${m3m4KoWarnGoal}`
+        : `Farm Energy & Hold Tempo (You ${activeUserHp}% vs Opp ${activeOppHp}%)${m3m4KoWarnGoal}`
+      : `Chip Damage -> Set Up ${bestBenchName} (You ${activeUserHp}% vs Opp ${activeOppHp}%)${m3m4KoWarnGoal}`;
 
   return makeRec(
     true,

@@ -340,33 +340,76 @@
             white-space: nowrap;
         }
 
-        /* Quick Action Toolbar & Active Team Chips */
+        /* Quick Action Toolbar & Active Team Chips (v3.44: 2-Row Uniform Stacked Buttons) */
         .action-toolbar {
             display: flex;
-            align-items: center;
+            align-items: stretch;
             justify-content: space-between;
-            gap: 3px;
+            gap: 2.5px;
             background: rgba(0, 0, 0, var(--subpanel-bg-alpha));
-            padding: 2.5px 4px;
+            padding: 2px 3px;
             border-radius: 4px;
             border: 1px solid rgba(255, 255, 255, 0.08);
         }
 
+        .toolbar-left-group {
+            display: flex;
+            align-items: stretch;
+            gap: 2px;
+            flex: 3.15 1 0;
+            min-width: 0;
+        }
+
         .team-chips-group {
             display: flex;
-            align-items: center;
+            align-items: stretch;
             gap: 2px;
-            overflow-x: auto;
+            flex: 2.85 1 0;
+            min-width: 0;
+            overflow: hidden;
+        }
+
+        .btn-row-top {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1.5px;
+            font-size: 7.4px;
+            font-weight: 800;
+            line-height: 1.05;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+        }
+
+        .btn-row-sub {
+            display: block;
+            font-size: 7.4px;
+            font-weight: 800;
+            line-height: 1.05;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
         }
 
         .chip-btn {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1 1 0;
+            min-width: 0;
             background: rgba(15, 23, 42, 0.45);
             border: 1px solid rgba(255, 255, 255, 0.22);
             color: #cbd5e1;
-            font-size: 8px;
+            font-size: 7.5px;
             font-weight: 700;
+            line-height: 1.06;
+            text-align: center;
             border-radius: 3px;
-            padding: 1.5px 3.5px;
+            padding: 1.5px 2px;
             cursor: pointer;
             white-space: nowrap;
             transition: all 0.1s ease;
@@ -380,13 +423,21 @@
         }
 
         .hud-btn {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1 1 0;
+            min-width: 0;
             background: rgba(255, 255, 255, 0.14);
             border: 1px solid rgba(255, 255, 255, 0.25);
             color: #ffffff;
-            font-size: 8px;
+            font-size: 7.5px;
             font-weight: 700;
+            line-height: 1.06;
+            text-align: center;
             border-radius: 3px;
-            padding: 1.5px 4px;
+            padding: 1.5px 2.5px;
             cursor: pointer;
             outline: none;
             transition: all 0.1s ease;
@@ -1073,21 +1124,21 @@
             <button id="sky-rec-swap-btn" type="button" class="tactical-rec-swap-btn hidden" onclick="applyRecommendedSwap()">Swap ➔</button>
         </div>
 
-        <!-- Toolbar: Start/Stop Battle Trigger, Shadow Toggle, Form Cycler, and Active Team Chips -->
+        <!-- Toolbar: 2-Row Start/Stop Battle Trigger, Shadow Toggle, Form Cycler, and 3-Letter Active Team Chips -->
         <div class="action-toolbar">
-            <div style="display:flex; gap:2.5px; align-items:center;">
+            <div class="toolbar-left-group">
                 <button id="btn-start-battle" class="hud-btn btn-battle" onclick="handleBattleButtonClick()" title="Start a new battle or Stop current battle to log Win/Loss">
-                    ⚔️ Start Battle
+                    <span class="btn-row-top">⚔️ Start</span><span class="btn-row-sub">Battle</span>
                 </button>
                 <button id="btn-toggle-shadow" class="hud-btn btn-shadow" onclick="toggleShadow()" title="Toggle 1.2x Atk / 0.833x Def Shadow modifier">
-                    Shadow: OFF
+                    <span class="btn-row-top">Shadow:</span><span class="btn-row-sub">OFF</span>
                 </button>
                 <button id="btn-cycle-form" class="hud-btn btn-form disabled" onclick="cycleForm()" disabled title="Cycle regional or alternate form">
-                    Form: Base
+                    <span class="btn-row-top">Form:</span><span class="btn-row-sub">Base</span>
                 </button>
             </div>
             <div id="sky-team-chips" class="team-chips-group">
-                <!-- Dynamically populated via JS: 1-tap active lead switch -->
+                <!-- Dynamically populated via JS: 2-row 3-letter active lead switch + HP% -->
             </div>
         </div>
 
@@ -1377,6 +1428,21 @@
                 .toUpperCase();
             const prefix = (isShadow || /^Shadow\s+/i.test(name)) ? "S" : "";
             return (prefix + clean).substring(0, 4);
+        }
+
+        function abbrPoke3Only(name) {
+            if (!name) return "POK";
+            const clean = String(name)
+                .replace(/^Shadow\s+/i, "")
+                .replace(/^Mega\s+/i, "")
+                .replace(/^Kanto\s+/i, "")
+                .replace(/^Alolan\s+/i, "")
+                .replace(/^Galarian\s+/i, "")
+                .replace(/^Hisuian\s+/i, "")
+                .replace(/^Paldean\s+/i, "")
+                .replace(/[^a-zA-Z0-9]/g, "")
+                .trim();
+            return (clean.substring(0, 3) || "POK").toUpperCase();
         }
 
         function abbrMoveSummary(summary) {
@@ -1831,9 +1897,11 @@
             if (buttonToastActive) return;
             const btn = document.getElementById("btn-start-battle");
             const horizonBtn = document.getElementById("btn-horizon-start-battle");
-            const iconSvg = getOverlayThemeIconSvg(activeOverlayThemeId, 10);
+            const iconSvg = getOverlayThemeIconSvg(activeOverlayThemeId, 8);
             if (btn) {
-                btn.innerHTML = isBattleActive ? "🛑 Stop Battle" : `${iconSvg} <span style="margin-left:2px;">Start Battle</span>`;
+                btn.innerHTML = isBattleActive
+                    ? `<span class="btn-row-top">🛑 Stop</span><span class="btn-row-sub">Battle</span>`
+                    : `<span class="btn-row-top">${iconSvg}<span>Start</span></span><span class="btn-row-sub">Battle</span>`;
                 if (isBattleActive) btn.classList.add("stop-mode");
                 else btn.classList.remove("stop-mode");
             }
@@ -1962,7 +2030,9 @@
             const btn = document.getElementById("btn-start-battle");
             if (btn) {
                 btn.classList.remove("stop-mode");
-                btn.textContent = resultStr === "WIN" ? "✓ WIN Logged" : "✓ LOSS Logged";
+                btn.innerHTML = resultStr === "WIN"
+                    ? `<span class="btn-row-top">✓ WIN</span><span class="btn-row-sub">Logged</span>`
+                    : `<span class="btn-row-top">✓ LOSS</span><span class="btn-row-sub">Logged</span>`;
                 setTimeout(() => {
                     buttonToastActive = false;
                     updateBattleButtonUi();
@@ -1981,7 +2051,9 @@
             const btn = document.getElementById("btn-start-battle");
             if (btn) {
                 btn.classList.remove("stop-mode");
-                btn.textContent = resultStr === "WIN" ? "✓ WIN Logged" : "✓ LOSS Logged";
+                btn.innerHTML = resultStr === "WIN"
+                    ? `<span class="btn-row-top">✓ WIN</span><span class="btn-row-sub">Logged</span>`
+                    : `<span class="btn-row-top">✓ LOSS</span><span class="btn-row-sub">Logged</span>`;
                 setTimeout(() => {
                     buttonToastActive = false;
                     updateBattleButtonUi();
@@ -2085,21 +2157,21 @@
             const isWaitingState = (battleData.activeOpponent === "Waiting..." || !battleData.activeOpponent);
 
             try {
-                // Update Shadow Toggle Button
+                // Update Shadow Toggle Button (2-row stacked: Shadow:\nON or OFF)
                 const shadowBtn = document.getElementById("btn-toggle-shadow");
                 if (shadowBtn) {
                     const isShad = !!battleData.isOpponentShadow;
-                    shadowBtn.textContent = `Shadow: ${isShad ? "ON" : "OFF"}`;
+                    shadowBtn.innerHTML = `<span class="btn-row-top">Shadow:</span><span class="btn-row-sub">${isShad ? "ON" : "OFF"}</span>`;
                     if (isShad) shadowBtn.classList.add("active");
                     else shadowBtn.classList.remove("active");
                 }
 
-                // Update Form Cycle Button
+                // Update Form Cycle Button (2-row stacked: Form:\n<form name>)
                 const formBtn = document.getElementById("btn-cycle-form");
                 if (formBtn) {
                     const forms = battleData.availableForms || [];
                     const formLabel = battleData.currentFormLabel || "Base";
-                    formBtn.textContent = `Form: ${formLabel}`;
+                    formBtn.innerHTML = `<span class="btn-row-top">Form:</span><span class="btn-row-sub">${formLabel}</span>`;
                     if (forms.length > 1 && !isWaitingState) {
                         formBtn.disabled = false;
                         formBtn.classList.remove("disabled");
@@ -2124,24 +2196,21 @@
                     if (startBattleBtn) startBattleBtn.classList.remove("hidden");
                 }
 
-                // Render active team chips for player switches with persistent slot HP% (always visible)
+                // Render active team chips for player switches as 2-row buttons: 3-letter code on top row, HP% on bottom row
                 const teamChipsContainer = document.getElementById("sky-team-chips");
                 if (teamChipsContainer && battleData.team) {
                     const pSlotHpArr = Array.isArray(battleData.playerSlotHpPct) ? battleData.playerSlotHpPct : [100, 100, 100];
                     teamChipsContainer.innerHTML = battleData.team.map((member, mIdx) => {
                         const fullName = member.name || "Pokemon";
-                        const shortName = fullName
-                            .replace(/^Shadow\s+/i, "S-")
-                            .replace(/^Kanto\s+/i, "")
-                            .split(" ")[0]
-                            .substring(0, 6);
+                        const rawCode = String(member.code || "").replace(/^S(?=[A-Z]{3})/i, "").trim();
+                        const poke3 = (rawCode.length === 3 ? rawCode.toUpperCase() : abbrPoke3Only(fullName));
                         const isActive = (fullName.toLowerCase() === (battleData.userActivePokemon || "").toLowerCase());
                         const rawHp = typeof member.hpPct === "number" ? member.hpPct : (typeof pSlotHpArr[mIdx] === "number" ? pSlotHpArr[mIdx] : 100);
                         const isFainted = (rawHp <= 0) || (!isActive && !!(battleData.playerFaintedSlots && battleData.playerFaintedSlots[mIdx]));
                         const slotHp = isFainted ? 0 : Math.max(0, Math.min(100, Math.round(rawHp)));
-                        const hpTag = ` ${slotHp}%`;
+                        const hpColor = isFainted ? "#64748b" : (slotHp > 50 ? "#4ade80" : (slotHp > 20 ? "#fbbf24" : "#f87171"));
                         const faintStyle = isFainted ? 'opacity:0.45; text-decoration:line-through;' : '';
-                        return `<button class="chip-btn ${isActive && !isFainted ? 'active' : ''} ${isFainted ? 'col-fainted' : ''}" style="${faintStyle}" onclick="selectUserPokemonByIndex(${mIdx})" title="Active lead: ${fullName}${isFainted ? ' (Fainted 0% HP)' : ' (' + slotHp + '% HP)'}">${shortName}${hpTag}</button>`;
+                        return `<button class="chip-btn ${isActive && !isFainted ? 'active' : ''} ${isFainted ? 'col-fainted' : ''}" style="${faintStyle}" onclick="selectUserPokemonByIndex(${mIdx})" title="Active lead: ${fullName}${isFainted ? ' (Fainted 0% HP)' : ' (' + slotHp + '% HP)'}"><span class="btn-row-top">${poke3}:</span><span class="btn-row-sub" style="color:${hpColor};">${slotHp}%</span></button>`;
                     }).join("");
                 }
             } catch (e) {
