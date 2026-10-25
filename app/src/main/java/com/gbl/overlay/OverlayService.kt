@@ -230,15 +230,6 @@ class OverlayService : LifecycleService() {
             val switchAdvantage: String? = null // "WON" | "LOST" | "NEUTRAL"
         )
 
-        data class AiTrainingLogRecord(
-            val battleId: String = "",
-            val timestampMs: Long = System.currentTimeMillis(),
-            val league: String = "GREAT LEAGUE",
-            val scanHzMode: String = "2HZ",
-            val turnOffsetMs: Long = 0L,
-            val timelineEvents: List<BattleTimelineEvent> = emptyList()
-        )
-
         fun deriveFirstSwapAndSwitchAdvantageStatic(
             events: List<BattleTimelineEvent>?,
             result: String
@@ -7522,6 +7513,15 @@ class OverlayService : LifecycleService() {
         val oppEnergy: Int? = null,
         val turnIndex: Int? = null,
         val scanTurnOffsetMs: Long? = null
+    )
+
+    data class AiTrainingLogRecord(
+        val battleId: String = "",
+        val timestampMs: Long = System.currentTimeMillis(),
+        val league: String = "GREAT LEAGUE",
+        val scanHzMode: String = "2HZ",
+        val turnOffsetMs: Long = 0L,
+        val timelineEvents: List<BattleTimelineEvent> = emptyList()
     )
 
     data class ExecutionIntervalSegment(
