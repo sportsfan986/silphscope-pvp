@@ -195,11 +195,73 @@ export interface WebBattleLogEntry {
   oppFaints?: number;
   userShieldsRemaining?: number;
   oppShieldsRemaining?: number;
+  finalUserHpPct?: number[];
+  finalOppHpPct?: number[];
+  firstSwapActor?: string;
+  switchAdvantage?: string;
   adherenceRatePct?: number | null;
   recommendationsIssuedCount?: number | null;
   recommendationsFollowedCount?: number | null;
   deviceId?: string;
   updatedAt?: number;
+}
+
+export interface WebAiTrainingLogRecord {
+  battleId: string;
+  timestampMs: number;
+  league: string;
+  userTeamName: string;
+  userPokemon: string[];
+  opponents: string[];
+  leadMatchup: string;
+  result: 'WIN' | 'LOSS';
+  battleDurationSec?: number;
+  adherenceRatePct?: number | null;
+  recommendationsIssuedCount?: number | null;
+  recommendationsFollowedCount?: number | null;
+  timelineEvents: BattleTimelineEvent[];
+}
+
+const AI_LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+function deriveFirstSwapAndSwitchAdvantageWeb(
+  events: BattleTimelineEvent[],
+  leadMatchup: string,
+  result: 'WIN' | 'LOSS',
+  opponentsSeenCount: number
+): { firstSwapActor: string; switchAdvantage: string } {
+  const swapEvents = (events || []).filter((e) => e.type === 'SWAP');
+  const firstSwap = swapEvents[0];
+  const firstSwapActor = firstSwap
+    ? firstSwap.actor === 'user'
+      ? 'USER'
+      : firstSwap.actor === 'opp'
+      ? 'OPPONENT'
+      : 'NONE'
+    : opponentsSeenCount >= 2
+    ? leadMatchup === 'NEGATIVE'
+      ? 'USER'
+      : leadMatchup === 'FAVORABLE'
+      ? 'OPPONENT'
+      : 'NONE'
+    : 'NONE';
+
+  const switchAdvantage =
+    firstSwapActor === 'NONE'
+      ? leadMatchup === 'FAVORABLE'
+        ? 'MAINTAINED'
+        : leadMatchup === 'NEGATIVE'
+        ? 'LOST'
+        : 'NEUTRAL'
+      : firstSwapActor === 'USER'
+      ? result === 'WIN'
+        ? 'GAINED'
+        : 'LOST'
+      : result === 'WIN'
+      ? 'MAINTAINED'
+      : 'LOST';
+
+  return { firstSwapActor, switchAdvantage };
 }
 
 export interface GblSeasonInfo {
@@ -694,6 +756,20 @@ export default function App() {
     return [];
   });
 
+  const [aiTrainingLogs, setAiTrainingLogs] = useState<WebAiTrainingLogRecord[]>(() => {
+    try {
+      const raw = localStorage.getItem('gbl_ai_training_logs_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const cutoff = Date.now() - AI_LOG_RETENTION_MS;
+          return parsed.filter((item: WebAiTrainingLogRecord) => item && item.timestampMs >= cutoff);
+        }
+      }
+    } catch {}
+    return [];
+  });
+
   const [deletedLogIds, setDeletedLogIds] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem('gbl_deleted_log_ids_v1');
@@ -829,11 +905,131 @@ export default function App() {
   const [importBundleText, setImportBundleText] = useState<string>('');
 
   const saveBattleLogsToStorage = (logs: WebBattleLogEntry[]) => {
-    const sorted = [...logs].sort((a, b) => b.timestampMs - a.timestampMs);
-    setBattleLogs(sorted);
+    // Keep Main Battle Logs permanently compact (timelineEvents live in 7-day AI Training Logs)
+    const compact = logs
+      .map((entry) =>
+        entry.timelineEvents && entry.timelineEvents.length > 0
+          ? { ...entry, timelineEvents: [] }
+          : entry
+      )
+      .sort((a, b) => b.timestampMs - a.timestampMs);
+    setBattleLogs(compact);
     try {
-      localStorage.setItem('gbl_battle_logs_v1', JSON.stringify(sorted));
+      localStorage.setItem('gbl_battle_logs_v1', JSON.stringify(compact));
     } catch {}
+  };
+
+  const saveAiTrainingLogsToStorage = (logs: WebAiTrainingLogRecord[]) => {
+    const cutoff = Date.now() - AI_LOG_RETENTION_MS;
+    const uniqueFresh = Array.from(
+      new Map(
+        logs
+          .filter((item) => item && item.timestampMs >= cutoff)
+          .sort((a, b) => b.timestampMs - a.timestampMs)
+          .map((item) => [item.battleId, item])
+      ).values()
+    ).slice(0, 250);
+    setAiTrainingLogs(uniqueFresh);
+    try {
+      localStorage.setItem('gbl_ai_training_logs_v1', JSON.stringify(uniqueFresh));
+    } catch {}
+  };
+
+  // v3.50 One-Time Legacy Log Split & 7-Day Auto-Purge Script
+  const runOneTimeAiLogSplitAndCleanup = (silent: boolean = false) => {
+    const now = Date.now();
+    const cutoff = now - AI_LOG_RETENTION_MS;
+    let splitCount = 0;
+    let purgedCount = 0;
+
+    const existingAiMap = new Map<string, WebAiTrainingLogRecord>();
+    aiTrainingLogs.forEach((item) => {
+      if (item.timestampMs >= cutoff) {
+        existingAiMap.set(item.battleId, item);
+      } else {
+        purgedCount++;
+      }
+    });
+
+    const updatedMain = battleLogs.map((entry) => {
+      const embedded = entry.timelineEvents || [];
+      const existingAi = existingAiMap.get(entry.id);
+      const eventsForDerive = embedded.length > 0 ? embedded : existingAi?.timelineEvents || [];
+
+      if (embedded.length > 0) {
+        if (entry.timestampMs >= cutoff) {
+          splitCount++;
+          existingAiMap.set(entry.id, {
+            battleId: entry.id,
+            timestampMs: entry.timestampMs,
+            league: entry.league,
+            userTeamName: entry.userTeamName,
+            userPokemon: entry.userPokemon,
+            opponents: entry.opponents,
+            leadMatchup: entry.leadMatchup,
+            result: entry.result,
+            battleDurationSec: entry.battleDurationSec,
+            adherenceRatePct: entry.adherenceRatePct,
+            recommendationsIssuedCount: entry.recommendationsIssuedCount,
+            recommendationsFollowedCount: entry.recommendationsFollowedCount,
+            timelineEvents: embedded
+          });
+        } else {
+          purgedCount++;
+        }
+      }
+
+      const derived =
+        entry.firstSwapActor && entry.switchAdvantage
+          ? { firstSwapActor: entry.firstSwapActor, switchAdvantage: entry.switchAdvantage }
+          : deriveFirstSwapAndSwitchAdvantageWeb(
+              eventsForDerive,
+              entry.leadMatchup,
+              entry.result,
+              entry.opponents?.length || 0
+            );
+
+      const lastEv = eventsForDerive[eventsForDerive.length - 1];
+      const finalUserHp =
+        entry.finalUserHpPct && entry.finalUserHpPct.length > 0
+          ? entry.finalUserHpPct
+          : lastEv?.userSlotHpPct && lastEv.userSlotHpPct.length > 0
+          ? lastEv.userSlotHpPct
+          : entry.result === 'WIN'
+          ? [45, 0, 100]
+          : [0, 0, 0];
+      const finalOppHp =
+        entry.finalOppHpPct && entry.finalOppHpPct.length > 0
+          ? entry.finalOppHpPct
+          : lastEv?.oppSlotHpPct && lastEv.oppSlotHpPct.length > 0
+          ? lastEv.oppSlotHpPct
+          : entry.result === 'WIN'
+          ? [0, 0, 0]
+          : [0, 35, 100];
+
+      return {
+        ...entry,
+        timelineEvents: [],
+        finalUserHpPct: finalUserHp,
+        finalOppHpPct: finalOppHp,
+        firstSwapActor: derived.firstSwapActor,
+        switchAdvantage: derived.switchAdvantage
+      };
+    });
+
+    const freshAiList = Array.from(existingAiMap.values()).sort((a, b) => b.timestampMs - a.timestampMs);
+    saveAiTrainingLogsToStorage(freshAiList);
+    saveBattleLogsToStorage(updatedMain);
+    try {
+      localStorage.setItem('gbl_ai_logs_split_v350_done', 'true');
+    } catch {}
+
+    if (!silent) {
+      setStartBattleToast(
+        `✅ AI Log Split & >7d Purge: ${updatedMain.length} main logs compacted • ${splitCount} split • ${purgedCount} >7d purged`
+      );
+      setTimeout(() => setStartBattleToast(null), 2600);
+    }
   };
 
   const addDeletedTombstone = (id: string) => {
@@ -1085,6 +1281,7 @@ export default function App() {
     if (migTrash.didMigrate) {
       setDeletedBattlesTrash(migTrash.logs);
     }
+    runOneTimeAiLogSplitAndCleanup(true);
   }, [presets]);
 
   // Battle Simulation State (Fixed Opponent Discovery Order: [1st seen, 2nd seen, 3rd seen])
@@ -1095,6 +1292,10 @@ export default function App() {
   const [oppTurnsElapsed, setOppTurnsElapsed] = useState<number>(0);
   const [userEnergy, setUserEnergy] = useState<number>(36);
   const [oppEnergy, setOppEnergy] = useState<number>(40);
+  const [userSlotEnergy, setUserSlotEnergy] = useState<number[]>([36, 0, 0]);
+  const [oppSlotEnergy, setOppSlotEnergy] = useState<number[]>([40, 0, 0]);
+  const [scanHzMode, setScanHzMode] = useState<'2Hz' | '1Hz'>('2Hz');
+  const [scanTurnOffsetMs, setScanTurnOffsetMs] = useState<number>(120);
   const [userShields, setUserShields] = useState<number>(2);
   const [oppShields, setOppShields] = useState<number>(2);
 
@@ -2262,6 +2463,19 @@ export default function App() {
       const nextShields = Math.max(0, userShields - 1);
       setUserShields(nextShields);
       setIsAttackIncomingPrompt(false);
+      // v3.50: Deduct cheapest charged move energy cost when opponent charged move is shielded
+      const cheapestOppCost = Math.min(
+        ...activeOpponent.chargedMoves.map((m) => m.energyCost || 40),
+        45
+      );
+      const nextOppE = Math.max(0, (oppSlotEnergy[safeActiveOppSlot] ?? oppEnergy) - cheapestOppCost);
+      setOppEnergy(nextOppE);
+      setOppSlotEnergy((prev) => {
+        const next = [...prev];
+        next[safeActiveOppSlot] = nextOppE;
+        return next;
+      });
+      setScanTurnOffsetMs(Date.now() % 500);
       if (!isWaitingOpponent) {
         const relT = getRelativeBattleSeconds();
         setBattleTimelineEvents((prevEv) => [
@@ -2295,7 +2509,7 @@ export default function App() {
           }
         ]);
       }
-      setStartBattleToast(`🛡️ Shielded ${activeOppMon} Charged Attack (${nextShields}S left)`);
+      setStartBattleToast(`🛡️ Shielded ${activeOppMon} (-${cheapestOppCost}E cheapest • ${nextOppE}E left)`);
       setTimeout(() => setStartBattleToast(null), 2000);
       return;
     }
@@ -2314,6 +2528,23 @@ export default function App() {
       false,
       activeOppChargedMoveBounds.candidateMoves
     );
+    // v3.50: Deduct exact move energy if identified by damage delta, or cheapest move energy if unknown
+    const matchedMoveObj = activeOpponent.chargedMoves.find(
+      (m) => inferredMove && m.name.toLowerCase() === inferredMove.toLowerCase()
+    );
+    const cheapestOppCost = Math.min(
+      ...activeOpponent.chargedMoves.map((m) => m.energyCost || 40),
+      45
+    );
+    const deductedEnergy = matchedMoveObj?.energyCost || cheapestOppCost;
+    const nextOppE = Math.max(0, (oppSlotEnergy[safeActiveOppSlot] ?? oppEnergy) - deductedEnergy);
+    setOppEnergy(nextOppE);
+    setOppSlotEnergy((prev) => {
+      const next = [...prev];
+      next[safeActiveOppSlot] = nextOppE;
+      return next;
+    });
+    setScanTurnOffsetMs(Date.now() % 500);
     const nextUserHp = [...userSlotHpPct];
     nextUserHp[activeUserSlotIndex] = hpAfter;
     setUserSlotHpPct(nextUserHp);
@@ -2534,8 +2765,22 @@ export default function App() {
     const recsFollowed = evalEvents.filter((e) => e.followedRecommendation === true).length;
     const adherencePct = recsIssued > 0 ? Math.round((recsFollowed * 100) / recsIssued) : null;
 
+    const { firstSwapActor, switchAdvantage } = deriveFirstSwapAndSwitchAdvantageWeb(
+      eventsToLog,
+      currentLeadMatchup,
+      result,
+      oppsToLog.length
+    );
+    const finalUserHpSnapshot = userSlotHpPct.map((hp, idx) =>
+      playerFaintedSlots[idx] ? 0 : Math.max(0, Math.min(100, Math.round(hp)))
+    );
+    const finalOppHpSnapshot = oppSlotHpPct.map((hp, idx) =>
+      oppFaintedSlots[idx] ? 0 : Math.max(0, Math.min(100, Math.round(hp)))
+    );
+    const battleId = `log-${now}-${Math.random().toString(36).slice(2, 7)}`;
+
     const newEntry: WebBattleLogEntry = {
-      id: `log-${now}-${Math.random().toString(36).slice(2, 7)}`,
+      id: battleId,
       timestampMs: now,
       league: activePreset.league,
       presetId: activePreset.id,
@@ -2549,12 +2794,16 @@ export default function App() {
       badges: qualityMeta ? [qualityMeta.badgeLabel] : [],
       flags: qualityMeta ? qualityMeta.contextualFlags : [],
       quality: qualityMeta,
-      timelineEvents: eventsToLog,
+      timelineEvents: [],
       battleDurationSec: durationSec,
       userFaints: userFaintsCount,
       oppFaints: oppFaintsCount,
       userShieldsRemaining: userShields,
       oppShieldsRemaining: oppShields,
+      finalUserHpPct: finalUserHpSnapshot,
+      finalOppHpPct: finalOppHpSnapshot,
+      firstSwapActor,
+      switchAdvantage,
       adherenceRatePct: adherencePct,
       recommendationsIssuedCount: recsIssued,
       recommendationsFollowedCount: recsFollowed,
@@ -2562,6 +2811,26 @@ export default function App() {
       updatedAt: now
     };
     saveBattleLogsToStorage([newEntry, ...battleLogs]);
+    if (eventsToLog.length > 0) {
+      saveAiTrainingLogsToStorage([
+        {
+          battleId,
+          timestampMs: now,
+          league: activePreset.league,
+          userTeamName: activePreset.name,
+          userPokemon: userMons,
+          opponents: oppsToLog,
+          leadMatchup: currentLeadMatchup,
+          result,
+          battleDurationSec: durationSec,
+          adherenceRatePct: adherencePct,
+          recommendationsIssuedCount: recsIssued,
+          recommendationsFollowedCount: recsFollowed,
+          timelineEvents: eventsToLog
+        },
+        ...aiTrainingLogs
+      ]);
+    }
     setLastClearedOpponents([]);
     setLastClearedTimelineEvents([]);
     setLastClearedBattleDurationSec(undefined);
@@ -2574,9 +2843,16 @@ export default function App() {
   };
 
   const buildAiTrainingDatasetJsonl = (entries: WebBattleLogEntry[] = battleLogs) => {
+    const aiMap = new Map<string, WebAiTrainingLogRecord>();
+    aiTrainingLogs.forEach((rec) => aiMap.set(rec.battleId, rec));
     return entries
       .map((b) => {
-        const events = (b.timelineEvents || []).map((ev) => ({
+        const aiRec = aiMap.get(b.id);
+        const sourceEvents =
+          aiRec && aiRec.timelineEvents.length > 0
+            ? aiRec.timelineEvents
+            : b.timelineEvents || [];
+        const events = sourceEvents.map((ev) => ({
           t: ev.t,
           actor: ev.actor,
           type: ev.type,
@@ -2608,7 +2884,7 @@ export default function App() {
           oppSlotHpPct: ev.oppSlotHpPct ?? null
         }));
         return JSON.stringify({
-          schemaVersion: '3.44-ai-decision-tree',
+          schemaVersion: '3.50-ai-decision-tree',
           battleId: b.id,
           timestampMs: b.timestampMs,
           league: b.league,
@@ -2619,14 +2895,19 @@ export default function App() {
           outcome: b.result,
           bmfScore: b.bmfScore ?? null,
           execWae: b.execWae ?? null,
-          battleDurationSec: b.battleDurationSec ?? null,
+          battleDurationSec: b.battleDurationSec ?? aiRec?.battleDurationSec ?? null,
           userFaints: b.userFaints ?? null,
           oppFaints: b.oppFaints ?? null,
           userShieldsRemaining: b.userShieldsRemaining ?? null,
           oppShieldsRemaining: b.oppShieldsRemaining ?? null,
-          recommendationsIssuedCount: b.recommendationsIssuedCount ?? 0,
-          recommendationsFollowedCount: b.recommendationsFollowedCount ?? 0,
-          adherenceRatePct: b.adherenceRatePct ?? null,
+          finalUserHpPct: b.finalUserHpPct ?? null,
+          finalOppHpPct: b.finalOppHpPct ?? null,
+          firstSwapActor: b.firstSwapActor ?? null,
+          switchAdvantage: b.switchAdvantage ?? null,
+          recommendationsIssuedCount: b.recommendationsIssuedCount ?? aiRec?.recommendationsIssuedCount ?? 0,
+          recommendationsFollowedCount: b.recommendationsFollowedCount ?? aiRec?.recommendationsFollowedCount ?? 0,
+          adherenceRatePct: b.adherenceRatePct ?? aiRec?.adherenceRatePct ?? null,
+          aiLogRetentionStatus: aiRec ? 'ACTIVE_7D' : 'PURGED_OVER_7D',
           decisionNodes: events
         });
       })
@@ -3651,7 +3932,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v3.46 • Android Native Overlay
+                  v3.50 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -4155,9 +4436,9 @@ export default function App() {
                                 ? 'text-amber-200 bg-amber-950/70 border-amber-400/70'
                                 : 'text-emerald-200 bg-emerald-950/70 border-emerald-400/70'
                             }`}
-                            title={`Active Player Pokémon HP: ${userSlotHpPct[activeUserSlotIndex] ?? 100}%`}
+                            title={`Active Player Pokémon HP: ${userSlotHpPct[activeUserSlotIndex] ?? 100}% • Energy: ${userSlotEnergy[activeUserSlotIndex] ?? userEnergy}E`}
                           >
-                            My:{userSlotHpPct[activeUserSlotIndex] ?? 100}%
+                            My:{userSlotHpPct[activeUserSlotIndex] ?? 100}% {userSlotEnergy[activeUserSlotIndex] ?? userEnergy}E
                           </span>
                           <button
                             type="button"
@@ -4181,22 +4462,30 @@ export default function App() {
                             <span className="text-[8px]">🛡️</span>
                             <span>{userShields}</span>
                           </button>
-                          {!isWaitingOpponent && scannedOpponents.length > 0 && (
-                            <span
-                              className={`px-1 py-0.5 rounded border leading-none shrink-0 ${
-                                (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 0
-                                  ? 'text-slate-400 bg-slate-900/60 border-slate-700 line-through'
-                                  : (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 22
-                                  ? 'text-rose-200 bg-rose-950/70 border-rose-400/70'
-                                  : (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 50
-                                  ? 'text-amber-200 bg-amber-950/70 border-amber-400/70'
-                                  : 'text-emerald-200 bg-emerald-950/70 border-emerald-400/70'
-                              }`}
-                              title={`Active Opponent Pokémon HP: ${oppSlotHpPct[safeActiveOppSlot] ?? 100}%`}
-                            >
-                              Opp:{oppSlotHpPct[safeActiveOppSlot] ?? 100}%
-                            </span>
-                          )}
+                          {!isWaitingOpponent && scannedOpponents.length > 0 && (() => {
+                            const activeOppE = oppSlotEnergy[safeActiveOppSlot] ?? oppEnergy;
+                            const cheapestOppCost = Math.min(
+                              ...activeOpponent.chargedMoves.map((m) => m.energyCost || 40),
+                              45
+                            );
+                            const oppRdy = activeOppE >= cheapestOppCost;
+                            return (
+                              <span
+                                className={`px-1 py-0.5 rounded border leading-none shrink-0 ${
+                                  (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 0
+                                    ? 'text-slate-400 bg-slate-900/60 border-slate-700 line-through'
+                                    : (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 22
+                                    ? 'text-rose-200 bg-rose-950/70 border-rose-400/70'
+                                    : (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 50
+                                    ? 'text-amber-200 bg-amber-950/70 border-amber-400/70'
+                                    : 'text-emerald-200 bg-emerald-950/70 border-emerald-400/70'
+                                }`}
+                                title={`Active Opponent Pokémon HP: ${oppSlotHpPct[safeActiveOppSlot] ?? 100}% • Energy: ${activeOppE}E${oppRdy ? ' READY' : ''}`}
+                              >
+                                Opp:{oppSlotHpPct[safeActiveOppSlot] ?? 100}% · {activeOppE}E{oppRdy ? ' READY' : ''}
+                              </span>
+                            );
+                          })()}
                           <button
                             type="button"
                             onClick={(e) => {
@@ -4522,7 +4811,7 @@ export default function App() {
                             </button>
                           </div>
                         </div>
-                        {/* Persistent Floating HP% Sliders for Active User & Active Opponent */}
+                        {/* Persistent Floating HP% & Energy Controls + 2Hz/1Hz Turn-Offset Telemetry */}
                         <div className="grid grid-cols-2 gap-1.5 pt-0.5 border-t border-white/10 items-center">
                           <div className="flex items-center gap-1" title="Adjust Active Player Pokémon HP% (persists when swapped to bench)">
                             <span className="text-emerald-300 font-bold shrink-0">
@@ -4551,6 +4840,39 @@ export default function App() {
                               onChange={(e) => handleUpdateOppActiveHp(Number(e.target.value))}
                               className="w-full h-1 accent-amber-400 cursor-pointer"
                             />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-1 pt-0.5 border-t border-white/10">
+                          <button
+                            type="button"
+                            onClick={() => setScanHzMode((prev) => (prev === '2Hz' ? '1Hz' : '2Hz'))}
+                            className="px-1 py-0.2 rounded bg-emerald-500/20 hover:bg-emerald-500/35 text-emerald-200 border border-emerald-400/40"
+                            title="Toggle Locked 2.00 Hz (500ms = 1 turn) vs 1.00 Hz (1000ms = 2 turns with 0.5s mid-turn extrapolation)"
+                          >
+                            ⏱️ {scanHzMode} Lock ({scanHzMode === '2Hz' ? '500ms/1t' : '1000ms/2t'}) • Δt={scanTurnOffsetMs}ms
+                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const gain = activeOpponent.defaultFastMove?.energyGain || 8;
+                                const nextE = Math.min(100, (oppSlotEnergy[safeActiveOppSlot] ?? oppEnergy) + gain);
+                                setOppEnergy(nextE);
+                                setOppSlotEnergy((prev) => {
+                                  const next = [...prev];
+                                  next[safeActiveOppSlot] = nextE;
+                                  return next;
+                                });
+                                const fDmg = Math.max(1, Math.round(oppFastInfo.damagePct || 3));
+                                const curMyHp = userSlotHpPct[activeUserSlotIndex] ?? 100;
+                                handleUpdateUserActiveHp(Math.max(1, curMyHp - fDmg));
+                                setScanTurnOffsetMs(Date.now() % 500);
+                              }}
+                              className="px-1 py-0.2 rounded bg-cyan-500/25 hover:bg-cyan-500/40 text-cyan-200 border border-cyan-400/40"
+                              title="Simulate 1 Opponent Fast Move (+Energy & Fast HP Prediction Drop)"
+                            >
+                              +1 Opp Fast ({oppSlotEnergy[safeActiveOppSlot] ?? oppEnergy}E)
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -4657,20 +4979,32 @@ export default function App() {
                             const p3Init = activePreset.pokemon[2]?.name.charAt(0) || 'K';
 
                             const isOppFainted = !!oppFaintedSlots[idx];
+                            const slotOppStats = POKEMON_DATABASE[oppName] || activeOpponent;
+                            const cheapestMoveE = Math.min(
+                              ...(slotOppStats?.chargedMoves || []).map((m) => m.energyCost || 40),
+                              45
+                            );
+                            const slotOppE = isOppFainted
+                              ? 0
+                              : idx === safeActiveOppSlot
+                              ? oppSlotEnergy[idx] ?? oppEnergy
+                              : oppSlotEnergy[idx] ?? 0;
+                            const isSlotMoveReady = !isOppFainted && slotOppE >= cheapestMoveE;
+                            const slotEnergyLabel = isSlotMoveReady ? `${slotOppE}E READY` : `${slotOppE}E`;
                             return (
                               <div
                                 key={`${oppName}-${idx}`}
                                 onClick={() => handleSwapActiveOpponent(oppName)}
-                                className={`flex items-center justify-start gap-1.5 px-1.5 py-0.5 rounded cursor-pointer transition ${
+                                className={`flex items-center justify-between gap-1.5 px-1.5 py-0.5 rounded cursor-pointer transition ${
                                   isOppFainted
                                     ? 'opacity-35 line-through bg-black/20'
                                     : isActiveSlot
                                     ? 'bg-sky-500/25 border border-sky-400/50 shadow-[0_0_8px_rgba(56,189,248,0.25)]'
                                     : 'hover:bg-white/10 border border-transparent'
                                 }`}
-                                title={isOppFainted ? `#${idx + 1} Seen: ${oppName} (Fainted)` : isActiveSlot ? `#${idx + 1} Seen: ${oppName} (Active on field)` : `Click to set #${idx + 1} (${oppName}) as active opponent (keeps fixed #1/#2/#3 order)`}
+                                title={isOppFainted ? `#${idx + 1} Seen: ${oppName} (Fainted)` : isActiveSlot ? `#${idx + 1} Seen: ${oppName} (Active on field • ${slotEnergyLabel})` : `Click to set #${idx + 1} (${oppName}) as active opponent (${slotEnergyLabel})`}
                               >
-                                <div className="flex items-center gap-1 w-[100px] min-w-[100px] max-w-[100px] shrink-0">
+                                <div className="flex items-center gap-1 min-w-[114px] max-w-[146px] flex-1 overflow-hidden">
                                   <span className={`text-[8px] font-bold shrink-0 ${isOppFainted ? 'text-slate-500' : isActiveSlot ? 'text-sky-300' : 'text-slate-400'}`}>
                                     #{idx + 1}
                                   </span>
@@ -4678,7 +5012,7 @@ export default function App() {
                                     {fullOppDisplay}
                                   </span>
                                   <span
-                                    className={`text-[7px] font-mono font-bold shrink-0 ml-auto ${
+                                    className={`text-[7px] font-mono font-bold shrink-0 ${
                                       isOppFainted
                                         ? 'text-slate-500 line-through'
                                         : (oppSlotHpPct[idx] ?? 100) > 50
@@ -4691,6 +5025,18 @@ export default function App() {
                                   >
                                     {isOppFainted ? 0 : (oppSlotHpPct[idx] ?? 100)}%
                                   </span>
+                                  {!isOppFainted && (
+                                    <span
+                                      className={`text-[6.5px] font-mono font-black px-1 py-0.2 rounded border shrink-0 leading-none ${
+                                        isSlotMoveReady
+                                          ? 'text-yellow-200 bg-amber-700/75 border-yellow-300/90 shadow-[0_0_4px_rgba(250,204,21,0.5)]'
+                                          : 'text-sky-200 bg-sky-950/70 border-sky-400/50'
+                                      }`}
+                                      title={`Opponent Energy: ${slotOppE}E (Cheapest Move: ${cheapestMoveE}E)`}
+                                    >
+                                      {slotEnergyLabel}
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-[1px] text-[9px] font-mono shrink-0">
                                   <span className="font-bold text-slate-300">{p1Init}:</span>
@@ -8966,6 +9312,14 @@ export default function App() {
                     </button>
                     <button
                       type="button"
+                      onClick={() => runOneTimeAiLogSplitAndCleanup(false)}
+                      className="px-3 py-1.5 rounded-xl bg-cyan-600/25 hover:bg-cyan-600/40 border border-cyan-400/50 text-cyan-200 text-xs font-bold transition"
+                      title="Run one-time split of embedded AI timeline logs into separate 7-day rolling store (gbl_ai_training_logs_v1) and purge AI logs older than 7 days"
+                    >
+                      ⚡ Split AI Logs &amp; Purge &gt;7d ({aiTrainingLogs.length} active)
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setActiveTab('settings')}
                       className="px-3 py-1.5 rounded-xl bg-purple-600/25 hover:bg-purple-600/40 border border-purple-400/50 text-purple-200 text-xs font-bold transition"
                     >
@@ -9381,6 +9735,18 @@ export default function App() {
                                       </span>
                                     )}
                                   </div>
+                                  {/* v3.50 Permanent Main Log Summary Badges: Final HP/Shields + First Swap Actor & Switch Advantage */}
+                                  <div className="pt-0.5 flex items-center gap-2 flex-wrap text-[10.5px] text-slate-300 font-mono">
+                                    <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800">
+                                      🛡️ End Shields: You {entry.userShieldsRemaining ?? 0}S vs Opp {entry.oppShieldsRemaining ?? 0}S
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800">
+                                      ❤️ End HP: You [{(entry.finalUserHpPct || [isWin ? 45 : 0, 0, 100]).join('% / ')}%] vs Opp [{(entry.finalOppHpPct || [0, isWin ? 0 : 40, 100]).join('% / ')}%]
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-sky-300">
+                                      🔄 1st Swap: {entry.firstSwapActor || 'NONE'} • Switch Adv: {entry.switchAdvantage || 'NEUTRAL'}
+                                    </span>
+                                  </div>
                                 </div>
 
                                 <div
@@ -9397,7 +9763,9 @@ export default function App() {
                                     }}
                                     className="px-2.5 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/35 border border-sky-400/50 text-sky-200 font-bold text-[11px] transition"
                                   >
-                                    🔍 Replay
+                                    {aiTrainingLogs.some((a) => a.battleId === entry.id)
+                                      ? '🎬 Full 7d Replay'
+                                      : '🔍 Summary Replay'}
                                   </button>
                                   <button
                                     type="button"
