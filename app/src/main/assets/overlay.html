@@ -157,6 +157,10 @@
             flex: 1;
         }
 
+        .sword-minimize-btn {
+            flex-shrink: 0;
+        }
+
         #sky-opp-name {
             overflow: hidden;
             text-overflow: ellipsis;
@@ -1115,8 +1119,8 @@
         <div id="overlay-watermark-bg" class="overlay-watermark-bg hidden"></div>
         <!-- Header: Upper-Left Sword Minimize Button, Opponent Name, Opponent Fast Move Telemetry & Opponent Swap Clock Badge -->
         <div class="header-row">
+            <button id="btn-minimize-sword" class="sword-minimize-btn" onclick="minimizeToBubble()" title="Minimize overlay to floating bubble & pause OCR">⚔️</button>
             <div class="opp-title" id="sky-title">
-                <button id="btn-minimize-sword" class="sword-minimize-btn" onclick="minimizeToBubble()" title="Minimize overlay to floating bubble & pause OCR">⚔️</button>
                 <span id="sky-opp-name">WAITING FOR OPPONENT...</span> 
                 <span class="opp-move-tag" id="sky-opp-fastmove">(1 Hz OCR Active)</span>
             </div>
@@ -1966,6 +1970,8 @@
             battleData.leadMatchup = preservedLead || "NEUTRAL";
             battleData.throwAlignmentText = "—";
             battleData.throwHorizonText = "—";
+            battleData.tacticalRec = null;
+            battleData.tacticalRecommendation = null;
             render();
         }
 
@@ -1980,8 +1986,13 @@
                     window.AndroidOverlay.startNewBattle();
                 }
             } else {
-                // STOP BATTLE: Pause OCR, keep opponents visible for logging, switch button to Start Battle, open Log Win/Loss menu
+                // STOP BATTLE: Pause OCR, clear AI tactical recommendation so minimize button & screen are unobstructed, switch button to Start Battle, open Log Win/Loss menu
                 isBattleActive = false;
+                battleData.isBattleActive = false;
+                battleData.tacticalRec = null;
+                battleData.tacticalRecommendation = null;
+                const recRowEl = document.getElementById("sky-tactical-rec-row");
+                if (recRowEl) recRowEl.classList.add("hidden");
                 updateBattleButtonUi();
                 if (window.AndroidOverlay && window.AndroidOverlay.stopBattle) {
                     window.AndroidOverlay.stopBattle();
@@ -2176,6 +2187,7 @@
 
         function render() {
             const isWaitingState = (battleData.activeOpponent === "Waiting..." || !battleData.activeOpponent);
+            const isReplay = !!battleData.isReplayMode || (window.location.search && window.location.search.includes("replay=1"));
 
             try {
                 // Update Shadow Toggle Button (2-row stacked: Shadow:\nON or OFF)
@@ -2206,7 +2218,6 @@
                 updateBattleButtonUi();
 
                 // Replay Mode adjustments
-                const isReplay = !!battleData.isReplayMode || (window.location.search && window.location.search.includes("replay=1"));
                 const swordMinBtn = document.getElementById("btn-minimize-sword");
                 const startBattleBtn = document.getElementById("btn-start-battle");
                 if (isReplay) {
@@ -2295,7 +2306,7 @@
             if (oppHpPillEl) {
                 const oCls = isWaitingState ? "hp-high" : (activeOppHpVal > 50 ? "hp-high" : (activeOppHpVal > 20 ? "hp-mid" : "hp-low"));
                 oppHpPillEl.className = `hp-slot-pill ${oCls}`;
-                oppHpPillEl.textContent = isWaitingState ? "Opp:—" : `Opp:${activeOppHpVal}% · ${activeOppEnergyLabel}`;
+                oppHpPillEl.textContent = isWaitingState ? "Opp:—" : `Opp:${activeOppHpVal}%`;
                 oppHpPillEl.title = isWaitingState ? "Waiting for opponent HP bar" : `Active Opponent HP: ${activeOppHpVal}% • Energy: ${activeOppEnergyLabel}`;
             }
 
@@ -2317,7 +2328,7 @@
                 if (timingRowsEl) timingRowsEl.innerHTML = "";
                 if (myTimingRowsEl) myTimingRowsEl.innerHTML = "";
                 const recRowWait = document.getElementById("sky-tactical-rec-row");
-                const showRecWait = battleData.showTacticalRec !== false && battleData.showTacticalRecommendations !== false;
+                const showRecWait = (isBattleActive || isReplay) && battleData.showTacticalRec !== false && battleData.showTacticalRecommendations !== false;
                 if (recRowWait) {
                     if (showRecWait) {
                         const archWait = String(battleData.teamArchetype || "ABC").toUpperCase();
@@ -2361,7 +2372,7 @@
                 // Render Lead & Swap Tactical Recommendation Row (between header-row and action-toolbar)
                 try {
                     const recRowEl = document.getElementById("sky-tactical-rec-row");
-                    const showRec = battleData.showTacticalRec !== false && battleData.showTacticalRecommendations !== false;
+                    const showRec = (isBattleActive || isReplay) && battleData.showTacticalRec !== false && battleData.showTacticalRecommendations !== false;
                     const rawRec = battleData.tacticalRec || battleData.tacticalRecommendation;
                     const arch = String((rawRec && rawRec.archetype) || battleData.teamArchetype || "ABC").toUpperCase();
 

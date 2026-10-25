@@ -157,6 +157,10 @@
             flex: 1;
         }
 
+        .sword-minimize-btn {
+            flex-shrink: 0;
+        }
+
         #sky-opp-name {
             overflow: hidden;
             text-overflow: ellipsis;
@@ -340,33 +344,76 @@
             white-space: nowrap;
         }
 
-        /* Quick Action Toolbar & Active Team Chips */
+        /* Quick Action Toolbar & Active Team Chips (v3.44: 2-Row Uniform Stacked Buttons) */
         .action-toolbar {
             display: flex;
-            align-items: center;
+            align-items: stretch;
             justify-content: space-between;
-            gap: 3px;
+            gap: 2.5px;
             background: rgba(0, 0, 0, var(--subpanel-bg-alpha));
-            padding: 2.5px 4px;
+            padding: 2px 3px;
             border-radius: 4px;
             border: 1px solid rgba(255, 255, 255, 0.08);
         }
 
+        .toolbar-left-group {
+            display: flex;
+            align-items: stretch;
+            gap: 2px;
+            flex: 3.15 1 0;
+            min-width: 0;
+        }
+
         .team-chips-group {
             display: flex;
-            align-items: center;
+            align-items: stretch;
             gap: 2px;
-            overflow-x: auto;
+            flex: 2.85 1 0;
+            min-width: 0;
+            overflow: hidden;
+        }
+
+        .btn-row-top {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1.5px;
+            font-size: 7.4px;
+            font-weight: 800;
+            line-height: 1.05;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+        }
+
+        .btn-row-sub {
+            display: block;
+            font-size: 7.4px;
+            font-weight: 800;
+            line-height: 1.05;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
         }
 
         .chip-btn {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1 1 0;
+            min-width: 0;
             background: rgba(15, 23, 42, 0.45);
             border: 1px solid rgba(255, 255, 255, 0.22);
             color: #cbd5e1;
-            font-size: 8px;
+            font-size: 7.5px;
             font-weight: 700;
+            line-height: 1.06;
+            text-align: center;
             border-radius: 3px;
-            padding: 1.5px 3.5px;
+            padding: 1.5px 2px;
             cursor: pointer;
             white-space: nowrap;
             transition: all 0.1s ease;
@@ -380,13 +427,21 @@
         }
 
         .hud-btn {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1 1 0;
+            min-width: 0;
             background: rgba(255, 255, 255, 0.14);
             border: 1px solid rgba(255, 255, 255, 0.25);
             color: #ffffff;
-            font-size: 8px;
+            font-size: 7.5px;
             font-weight: 700;
+            line-height: 1.06;
+            text-align: center;
             border-radius: 3px;
-            padding: 1.5px 4px;
+            padding: 1.5px 2.5px;
             cursor: pointer;
             outline: none;
             transition: all 0.1s ease;
@@ -474,15 +529,14 @@
         .matrix-opp-name {
             font-weight: 700;
             color: #f8fafc;
-            width: 100px;
-            min-width: 100px;
-            max-width: 100px;
+            min-width: 114px;
+            max-width: 146px;
+            flex: 1 1 auto;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             font-size: 9.5px;
-            flex-shrink: 0;
             display: flex;
             align-items: center;
         }
@@ -863,6 +917,28 @@
             background: rgba(136, 19, 55, 0.65);
             border: 1px solid rgba(251, 113, 133, 0.55);
         }
+        .energy-slot-pill {
+            font-size: 6.8px;
+            font-weight: 900;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            padding: 0 2.5px;
+            border-radius: 2.5px;
+            margin-left: 2px;
+            line-height: 1.15;
+            flex-shrink: 0;
+            letter-spacing: -0.2px;
+        }
+        .energy-slot-pill.building {
+            color: #7dd3fc;
+            background: rgba(12, 74, 110, 0.62);
+            border: 1px solid rgba(56, 189, 248, 0.52);
+        }
+        .energy-slot-pill.ready {
+            color: #fde047;
+            background: rgba(180, 83, 9, 0.72);
+            border: 1px solid rgba(250, 204, 21, 0.85);
+            box-shadow: 0 0 4px rgba(250, 204, 21, 0.45);
+        }
 
         .user-fast-badge {
             font-size: 8px;
@@ -1043,8 +1119,8 @@
         <div id="overlay-watermark-bg" class="overlay-watermark-bg hidden"></div>
         <!-- Header: Upper-Left Sword Minimize Button, Opponent Name, Opponent Fast Move Telemetry & Opponent Swap Clock Badge -->
         <div class="header-row">
+            <button id="btn-minimize-sword" class="sword-minimize-btn" onclick="minimizeToBubble()" title="Minimize overlay to floating bubble & pause OCR">⚔️</button>
             <div class="opp-title" id="sky-title">
-                <button id="btn-minimize-sword" class="sword-minimize-btn" onclick="minimizeToBubble()" title="Minimize overlay to floating bubble & pause OCR">⚔️</button>
                 <span id="sky-opp-name">WAITING FOR OPPONENT...</span> 
                 <span class="opp-move-tag" id="sky-opp-fastmove">(1 Hz OCR Active)</span>
             </div>
@@ -1073,21 +1149,21 @@
             <button id="sky-rec-swap-btn" type="button" class="tactical-rec-swap-btn hidden" onclick="applyRecommendedSwap()">Swap ➔</button>
         </div>
 
-        <!-- Toolbar: Start/Stop Battle Trigger, Shadow Toggle, Form Cycler, and Active Team Chips -->
+        <!-- Toolbar: 2-Row Start/Stop Battle Trigger, Shadow Toggle, Form Cycler, and 3-Letter Active Team Chips -->
         <div class="action-toolbar">
-            <div style="display:flex; gap:2.5px; align-items:center;">
+            <div class="toolbar-left-group">
                 <button id="btn-start-battle" class="hud-btn btn-battle" onclick="handleBattleButtonClick()" title="Start a new battle or Stop current battle to log Win/Loss">
-                    ⚔️ Start Battle
+                    <span class="btn-row-top">⚔️ Start</span><span class="btn-row-sub">Battle</span>
                 </button>
                 <button id="btn-toggle-shadow" class="hud-btn btn-shadow" onclick="toggleShadow()" title="Toggle 1.2x Atk / 0.833x Def Shadow modifier">
-                    Shadow: OFF
+                    <span class="btn-row-top">Shadow:</span><span class="btn-row-sub">OFF</span>
                 </button>
                 <button id="btn-cycle-form" class="hud-btn btn-form disabled" onclick="cycleForm()" disabled title="Cycle regional or alternate form">
-                    Form: Base
+                    <span class="btn-row-top">Form:</span><span class="btn-row-sub">Base</span>
                 </button>
             </div>
             <div id="sky-team-chips" class="team-chips-group">
-                <!-- Dynamically populated via JS: 1-tap active lead switch -->
+                <!-- Dynamically populated via JS: 2-row 3-letter active lead switch + HP% -->
             </div>
         </div>
 
@@ -1377,6 +1453,21 @@
                 .toUpperCase();
             const prefix = (isShadow || /^Shadow\s+/i.test(name)) ? "S" : "";
             return (prefix + clean).substring(0, 4);
+        }
+
+        function abbrPoke3Only(name) {
+            if (!name) return "POK";
+            const clean = String(name)
+                .replace(/^Shadow\s+/i, "")
+                .replace(/^Mega\s+/i, "")
+                .replace(/^Kanto\s+/i, "")
+                .replace(/^Alolan\s+/i, "")
+                .replace(/^Galarian\s+/i, "")
+                .replace(/^Hisuian\s+/i, "")
+                .replace(/^Paldean\s+/i, "")
+                .replace(/[^a-zA-Z0-9]/g, "")
+                .trim();
+            return (clean.substring(0, 3) || "POK").toUpperCase();
         }
 
         function abbrMoveSummary(summary) {
@@ -1831,9 +1922,11 @@
             if (buttonToastActive) return;
             const btn = document.getElementById("btn-start-battle");
             const horizonBtn = document.getElementById("btn-horizon-start-battle");
-            const iconSvg = getOverlayThemeIconSvg(activeOverlayThemeId, 10);
+            const iconSvg = getOverlayThemeIconSvg(activeOverlayThemeId, 8);
             if (btn) {
-                btn.innerHTML = isBattleActive ? "🛑 Stop Battle" : `${iconSvg} <span style="margin-left:2px;">Start Battle</span>`;
+                btn.innerHTML = isBattleActive
+                    ? `<span class="btn-row-top">🛑 Stop</span><span class="btn-row-sub">Battle</span>`
+                    : `<span class="btn-row-top">${iconSvg}<span>Start</span></span><span class="btn-row-sub">Battle</span>`;
                 if (isBattleActive) btn.classList.add("stop-mode");
                 else btn.classList.remove("stop-mode");
             }
@@ -1877,6 +1970,8 @@
             battleData.leadMatchup = preservedLead || "NEUTRAL";
             battleData.throwAlignmentText = "—";
             battleData.throwHorizonText = "—";
+            battleData.tacticalRec = null;
+            battleData.tacticalRecommendation = null;
             render();
         }
 
@@ -1891,8 +1986,13 @@
                     window.AndroidOverlay.startNewBattle();
                 }
             } else {
-                // STOP BATTLE: Pause OCR, keep opponents visible for logging, switch button to Start Battle, open Log Win/Loss menu
+                // STOP BATTLE: Pause OCR, clear AI tactical recommendation so minimize button & screen are unobstructed, switch button to Start Battle, open Log Win/Loss menu
                 isBattleActive = false;
+                battleData.isBattleActive = false;
+                battleData.tacticalRec = null;
+                battleData.tacticalRecommendation = null;
+                const recRowEl = document.getElementById("sky-tactical-rec-row");
+                if (recRowEl) recRowEl.classList.add("hidden");
                 updateBattleButtonUi();
                 if (window.AndroidOverlay && window.AndroidOverlay.stopBattle) {
                     window.AndroidOverlay.stopBattle();
@@ -1962,7 +2062,9 @@
             const btn = document.getElementById("btn-start-battle");
             if (btn) {
                 btn.classList.remove("stop-mode");
-                btn.textContent = resultStr === "WIN" ? "✓ WIN Logged" : "✓ LOSS Logged";
+                btn.innerHTML = resultStr === "WIN"
+                    ? `<span class="btn-row-top">✓ WIN</span><span class="btn-row-sub">Logged</span>`
+                    : `<span class="btn-row-top">✓ LOSS</span><span class="btn-row-sub">Logged</span>`;
                 setTimeout(() => {
                     buttonToastActive = false;
                     updateBattleButtonUi();
@@ -1981,7 +2083,9 @@
             const btn = document.getElementById("btn-start-battle");
             if (btn) {
                 btn.classList.remove("stop-mode");
-                btn.textContent = resultStr === "WIN" ? "✓ WIN Logged" : "✓ LOSS Logged";
+                btn.innerHTML = resultStr === "WIN"
+                    ? `<span class="btn-row-top">✓ WIN</span><span class="btn-row-sub">Logged</span>`
+                    : `<span class="btn-row-top">✓ LOSS</span><span class="btn-row-sub">Logged</span>`;
                 setTimeout(() => {
                     buttonToastActive = false;
                     updateBattleButtonUi();
@@ -2083,23 +2187,24 @@
 
         function render() {
             const isWaitingState = (battleData.activeOpponent === "Waiting..." || !battleData.activeOpponent);
+            const isReplay = !!battleData.isReplayMode || (window.location.search && window.location.search.includes("replay=1"));
 
             try {
-                // Update Shadow Toggle Button
+                // Update Shadow Toggle Button (2-row stacked: Shadow:\nON or OFF)
                 const shadowBtn = document.getElementById("btn-toggle-shadow");
                 if (shadowBtn) {
                     const isShad = !!battleData.isOpponentShadow;
-                    shadowBtn.textContent = `Shadow: ${isShad ? "ON" : "OFF"}`;
+                    shadowBtn.innerHTML = `<span class="btn-row-top">Shadow:</span><span class="btn-row-sub">${isShad ? "ON" : "OFF"}</span>`;
                     if (isShad) shadowBtn.classList.add("active");
                     else shadowBtn.classList.remove("active");
                 }
 
-                // Update Form Cycle Button
+                // Update Form Cycle Button (2-row stacked: Form:\n<form name>)
                 const formBtn = document.getElementById("btn-cycle-form");
                 if (formBtn) {
                     const forms = battleData.availableForms || [];
                     const formLabel = battleData.currentFormLabel || "Base";
-                    formBtn.textContent = `Form: ${formLabel}`;
+                    formBtn.innerHTML = `<span class="btn-row-top">Form:</span><span class="btn-row-sub">${formLabel}</span>`;
                     if (forms.length > 1 && !isWaitingState) {
                         formBtn.disabled = false;
                         formBtn.classList.remove("disabled");
@@ -2113,7 +2218,6 @@
                 updateBattleButtonUi();
 
                 // Replay Mode adjustments
-                const isReplay = !!battleData.isReplayMode || (window.location.search && window.location.search.includes("replay=1"));
                 const swordMinBtn = document.getElementById("btn-minimize-sword");
                 const startBattleBtn = document.getElementById("btn-start-battle");
                 if (isReplay) {
@@ -2124,24 +2228,21 @@
                     if (startBattleBtn) startBattleBtn.classList.remove("hidden");
                 }
 
-                // Render active team chips for player switches with persistent slot HP% (always visible)
+                // Render active team chips for player switches as 2-row buttons: 3-letter code on top row, HP% on bottom row
                 const teamChipsContainer = document.getElementById("sky-team-chips");
                 if (teamChipsContainer && battleData.team) {
                     const pSlotHpArr = Array.isArray(battleData.playerSlotHpPct) ? battleData.playerSlotHpPct : [100, 100, 100];
                     teamChipsContainer.innerHTML = battleData.team.map((member, mIdx) => {
                         const fullName = member.name || "Pokemon";
-                        const shortName = fullName
-                            .replace(/^Shadow\s+/i, "S-")
-                            .replace(/^Kanto\s+/i, "")
-                            .split(" ")[0]
-                            .substring(0, 6);
+                        const rawCode = String(member.code || "").replace(/^S(?=[A-Z]{3})/i, "").trim();
+                        const poke3 = (rawCode.length === 3 ? rawCode.toUpperCase() : abbrPoke3Only(fullName));
                         const isActive = (fullName.toLowerCase() === (battleData.userActivePokemon || "").toLowerCase());
                         const rawHp = typeof member.hpPct === "number" ? member.hpPct : (typeof pSlotHpArr[mIdx] === "number" ? pSlotHpArr[mIdx] : 100);
                         const isFainted = (rawHp <= 0) || (!isActive && !!(battleData.playerFaintedSlots && battleData.playerFaintedSlots[mIdx]));
                         const slotHp = isFainted ? 0 : Math.max(0, Math.min(100, Math.round(rawHp)));
-                        const hpTag = ` ${slotHp}%`;
+                        const hpColor = isFainted ? "#64748b" : (slotHp > 50 ? "#4ade80" : (slotHp > 20 ? "#fbbf24" : "#f87171"));
                         const faintStyle = isFainted ? 'opacity:0.45; text-decoration:line-through;' : '';
-                        return `<button class="chip-btn ${isActive && !isFainted ? 'active' : ''} ${isFainted ? 'col-fainted' : ''}" style="${faintStyle}" onclick="selectUserPokemonByIndex(${mIdx})" title="Active lead: ${fullName}${isFainted ? ' (Fainted 0% HP)' : ' (' + slotHp + '% HP)'}">${shortName}${hpTag}</button>`;
+                        return `<button class="chip-btn ${isActive && !isFainted ? 'active' : ''} ${isFainted ? 'col-fainted' : ''}" style="${faintStyle}" onclick="selectUserPokemonByIndex(${mIdx})" title="Active lead: ${fullName}${isFainted ? ' (Fainted 0% HP)' : ' (' + slotHp + '% HP)'}"><span class="btn-row-top">${poke3}:</span><span class="btn-row-sub" style="color:${hpColor};">${slotHp}%</span></button>`;
                     }).join("");
                 }
             } catch (e) {
@@ -2185,19 +2286,28 @@
                 ? Math.max(0, Math.min(100, Math.round(battleData.activeOppHpPct)))
                 : (typeof oSlotHpArr[activeOppSlotIdx] === "number" ? Math.max(0, Math.min(100, Math.round(oSlotHpArr[activeOppSlotIdx]))) : 100);
 
+            const activeUserEnergyVal = typeof battleData.activeUserEnergy === "number"
+                ? Math.max(0, Math.min(100, Math.round(battleData.activeUserEnergy)))
+                : 0;
+            const activeOppEnergyVal = typeof battleData.activeOppEnergy === "number"
+                ? Math.max(0, Math.min(100, Math.round(battleData.activeOppEnergy)))
+                : 0;
+            const activeOppEnergyLabel = battleData.activeOppEnergyLabel
+                || (battleData.activeOppMoveReady ? `${activeOppEnergyVal}E READY` : `${activeOppEnergyVal}E`);
+
             const playerHpPillEl = document.getElementById("sky-player-hp-pill");
             if (playerHpPillEl) {
                 const uCls = activeUserHpVal > 50 ? "hp-high" : (activeUserHpVal > 20 ? "hp-mid" : "hp-low");
                 playerHpPillEl.className = `hp-slot-pill ${uCls}`;
-                playerHpPillEl.textContent = `My:${activeUserHpVal}%`;
-                playerHpPillEl.title = `Your Active Pokémon HP: ${activeUserHpVal}%`;
+                playerHpPillEl.textContent = `My:${activeUserHpVal}% ${activeUserEnergyVal}E`;
+                playerHpPillEl.title = `Your Active Pokémon HP: ${activeUserHpVal}% • Energy: ${activeUserEnergyVal}E`;
             }
             const oppHpPillEl = document.getElementById("sky-opp-hp-pill");
             if (oppHpPillEl) {
                 const oCls = isWaitingState ? "hp-high" : (activeOppHpVal > 50 ? "hp-high" : (activeOppHpVal > 20 ? "hp-mid" : "hp-low"));
                 oppHpPillEl.className = `hp-slot-pill ${oCls}`;
                 oppHpPillEl.textContent = isWaitingState ? "Opp:—" : `Opp:${activeOppHpVal}%`;
-                oppHpPillEl.title = isWaitingState ? "Waiting for opponent HP bar" : `Active Opponent HP: ${activeOppHpVal}%`;
+                oppHpPillEl.title = isWaitingState ? "Waiting for opponent HP bar" : `Active Opponent HP: ${activeOppHpVal}% • Energy: ${activeOppEnergyLabel}`;
             }
 
             const my3Letter = abbrPoke(battleData.userActivePokemon || "Lead", false);
@@ -2218,7 +2328,7 @@
                 if (timingRowsEl) timingRowsEl.innerHTML = "";
                 if (myTimingRowsEl) myTimingRowsEl.innerHTML = "";
                 const recRowWait = document.getElementById("sky-tactical-rec-row");
-                const showRecWait = battleData.showTacticalRec !== false && battleData.showTacticalRecommendations !== false;
+                const showRecWait = (isBattleActive || isReplay) && battleData.showTacticalRec !== false && battleData.showTacticalRecommendations !== false;
                 if (recRowWait) {
                     if (showRecWait) {
                         const archWait = String(battleData.teamArchetype || "ABC").toUpperCase();
@@ -2262,7 +2372,7 @@
                 // Render Lead & Swap Tactical Recommendation Row (between header-row and action-toolbar)
                 try {
                     const recRowEl = document.getElementById("sky-tactical-rec-row");
-                    const showRec = battleData.showTacticalRec !== false && battleData.showTacticalRecommendations !== false;
+                    const showRec = (isBattleActive || isReplay) && battleData.showTacticalRec !== false && battleData.showTacticalRecommendations !== false;
                     const rawRec = battleData.tacticalRec || battleData.tacticalRecommendation;
                     const arch = String((rawRec && rawRec.archetype) || battleData.teamArchetype || "ABC").toUpperCase();
 
@@ -2366,17 +2476,30 @@
                             const hpBadgeHtml = oppFainted
                                 ? `<span class="hp-slot-pill hp-low">0%</span>`
                                 : `<span class="hp-slot-pill ${hpCls}">${oppSlotHp}%</span>`;
+                            const oppEnergyArr = Array.isArray(battleData.oppSlotEnergy) ? battleData.oppSlotEnergy : [];
+                            const rawOppE = typeof opp.energy === "number"
+                                ? opp.energy
+                                : (typeof oppEnergyArr[idx] === "number" ? oppEnergyArr[idx] : (isActiveOpp ? activeOppEnergyVal : 0));
+                            const oppSlotE = oppFainted ? 0 : Math.max(0, Math.min(100, Math.round(rawOppE)));
+                            const cheapestE = typeof opp.cheapestMoveEnergy === "number" ? opp.cheapestMoveEnergy : 35;
+                            const isMoveRdy = !oppFainted && ((opp.isMoveReady !== undefined) ? !!opp.isMoveReady : (oppSlotE >= cheapestE));
+                            const oppEnergyText = oppFainted
+                                ? "0E"
+                                : (opp.energyLabel || (isMoveRdy ? `${oppSlotE}E READY` : `${oppSlotE}E`));
+                            const energyBadgeHtml = oppFainted
+                                ? ""
+                                : `<span class="energy-slot-pill ${isMoveRdy ? 'ready' : 'building'}" title="Opponent Energy: ${oppSlotE}E (Cheapest Charged Move: ${cheapestE}E)">${oppEnergyText}</span>`;
                             const p1Dots = renderTierDots(opp.matrix ? opp.matrix.p1 : "W,N,L");
                             const p2Dots = renderTierDots(opp.matrix ? opp.matrix.p2 : "N,N,N");
                             const p3Dots = renderTierDots(opp.matrix ? opp.matrix.p3 : "SW,W,W");
                             const ordTag = ordLabels[idx] || `#${idx + 1}`;
                             const rowFaintStyle = oppFainted && !isActiveOpp ? "opacity:0.55;" : "";
                             return `
-                            <div class="matrix-row ${isActiveOpp ? 'active-lead' : ''}" onclick="swapOpponentByIndex(${idx})" style="cursor:pointer;${rowFaintStyle}" title="${isActiveOpp ? 'Active Opponent (' + ordTag + ' seen, ' + oppSlotHp + '% HP)' : 'Tap to inspect/activate (' + ordTag + ' seen, ' + oppSlotHp + '% HP)'}">
-                                <span class="matrix-opp-name" title="${fullOppDisplay} (${oppSlotHp}% HP)">
+                            <div class="matrix-row ${isActiveOpp ? 'active-lead' : ''}" onclick="swapOpponentByIndex(${idx})" style="cursor:pointer;${rowFaintStyle}" title="${isActiveOpp ? 'Active Opponent (' + ordTag + ' seen, ' + oppSlotHp + '% HP, ' + oppEnergyText + ')' : 'Tap to inspect/activate (' + ordTag + ' seen, ' + oppSlotHp + '% HP, ' + oppEnergyText + ')'}">
+                                <span class="matrix-opp-name" title="${fullOppDisplay} (${oppSlotHp}% HP • ${oppEnergyText})">
                                     <span style="color:${isActiveOpp ? '#38bdf8' : '#64748b'}; font-weight:700; font-size:7.5px; margin-right:3px;">${ordTag}</span>
                                     <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;${oppFainted ? 'text-decoration:line-through;' : ''}">${fullOppDisplay}</span>
-                                    ${hpBadgeHtml}
+                                    ${hpBadgeHtml}${energyBadgeHtml}
                                 </span>
                                 <div class="matrix-team-block">
                                     <span class="team-initial">${teamList[0].initial}:</span><span class="shield-dots">${p1Dots}</span>
