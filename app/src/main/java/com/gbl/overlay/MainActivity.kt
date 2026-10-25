@@ -2209,18 +2209,16 @@ class MainActivity : AppCompatActivity() {
                 val (derivedActor, derivedAdv) = if (entry.firstSwapActor.isNullOrBlank() || entry.switchAdvantage.isNullOrBlank()) {
                     OverlayService.deriveFirstSwapAndSwitchAdvantageStatic(
                         eventsForDerive,
-                        entry.leadMatchup,
-                        entry.result,
-                        entry.opponents.size
+                        entry.result
                     )
                 } else {
                     (entry.firstSwapActor ?: "NONE") to (entry.switchAdvantage ?: "NEUTRAL")
                 }
 
                 val lastEv = eventsForDerive.lastOrNull()
-                val resolvedUserHp = entry.finalUserHpPct?.takeIf { it.isNotEmpty() } ?: run {
+                val resolvedUserHp = entry.finalUserHpPct?.takeIf { it.isNotEmpty() } ?: lastEv?.userSlotHpPct?.takeIf { it.isNotEmpty() } ?: run {
                     val uFaints = (entry.userFaints ?: entry.quality?.userFaints ?: 0).coerceIn(0, 3)
-                    val activeEndHp = lastEv?.userHpPct ?: if (entry.result.equals("WIN", ignoreCase = true)) 45 else 0
+                    val activeEndHp = if (entry.result.equals("WIN", ignoreCase = true)) 45 else 0
                     List(3) { slot ->
                         when {
                             slot < uFaints -> 0
@@ -2229,9 +2227,9 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
-                val resolvedOppHp = entry.finalOppHpPct?.takeIf { it.isNotEmpty() } ?: run {
+                val resolvedOppHp = entry.finalOppHpPct?.takeIf { it.isNotEmpty() } ?: lastEv?.oppSlotHpPct?.takeIf { it.isNotEmpty() } ?: run {
                     val oFaints = (entry.oppFaints ?: entry.quality?.oppFaints ?: if (entry.result.equals("WIN", ignoreCase = true)) 3 else 1).coerceIn(0, 3)
-                    val activeEndHp = lastEv?.oppHpPct ?: if (entry.result.equals("WIN", ignoreCase = true)) 0 else 40
+                    val activeEndHp = if (entry.result.equals("WIN", ignoreCase = true)) 0 else 40
                     List(3) { slot ->
                         when {
                             slot < oFaints -> 0
@@ -4797,7 +4795,7 @@ class MainActivity : AppCompatActivity() {
             val swapInfoLine = "\n🛡️ End Shields: ${uSh}S vs ${oSh}S • 1st Swap: ${entry.firstSwapActor ?: "NONE"} (${entry.switchAdvantage ?: "NEUTRAL"})"
             val aiTimelineLine = if (replayEvents.isNotEmpty() && isWithin7Days) {
                 val sampleEvents = replayEvents.take(5).joinToString(" → ") { ev ->
-                    "t=${ev.tSec.toInt()}s ${ev.eventType}"
+                    "t=${ev.t.toInt()}s ${ev.type}"
                 }
                 "\n🤖 7-Day AI Timeline (${replayEvents.size} events): $sampleEvents"
             } else {
