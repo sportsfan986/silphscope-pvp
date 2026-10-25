@@ -3932,7 +3932,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v3.51 • Android Native Overlay
+                  v3.52 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -5031,49 +5031,49 @@ export default function App() {
                       {/* Opponent Attacks & My Attacks (Segmented Range Bars + 3-Column Damage Matrices with Vertical Highlight) */}
                       {!isWaitingOpponent && scannedOpponents.length > 0 && (
                         <div className="flex flex-col gap-0.5 my-1">
-                          {/* Opponent Attacks Section Header + 3-Team Column Headers & Opponent Swap Clock */}
-                          <div className="grid grid-cols-[44px_1fr_84px] items-center gap-1 px-1 pt-0.5">
-                            <span className="text-[7.5px] font-extrabold text-slate-400 uppercase tracking-wider col-span-2 flex items-center justify-between pr-1 min-w-0">
-                              <span className="flex items-center gap-1 min-w-0 overflow-hidden">
+                          {/* Opponent Attacks Section Header (2-Line) + 3-Team Column Headers & Opponent Swap Clock */}
+                          <div className="grid grid-cols-[minmax(0,1fr)_84px] items-end gap-1 px-1 pt-0.5">
+                            <div className="flex flex-col gap-0.5 pr-1 min-w-0">
+                              <div className="text-[7.5px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center justify-between gap-1 min-w-0">
                                 <span className="shrink-0">Opp Attacks</span>
-                                <span className="text-amber-300 font-extrabold text-[7.5px] font-mono normal-case truncate">
-                                  {abbrPoke3(activeOpponent.name, false)} {oppSlotHpPct[safeActiveOppSlot] ?? 100}% · {oppFastInfo.telemetry}
-                                </span>
-                              </span>
-                              <span className="flex items-center gap-1 shrink-0">
-                                <span
-                                  className={`text-[7px] font-mono font-black px-1 py-0.2 rounded border leading-none ${
-                                    !oppMoveTimingInfo.winsCmp
-                                      ? 'bg-emerald-500/25 border-emerald-400/80 text-slate-100'
-                                      : 'bg-red-500/25 border-red-400/80 text-slate-100'
-                                  }`}
-                                  title={!oppMoveTimingInfo.winsCmp ? 'Opponent wins CMP tie' : 'Opponent loses CMP tie'}
-                                >
-                                  CMP
-                                  <span className={!oppMoveTimingInfo.winsCmp ? 'text-emerald-400 ml-0.5' : 'text-red-400 ml-0.5'}>
-                                    {!oppMoveTimingInfo.winsCmp ? '✓' : '✗'}
+                                <span className="flex items-center gap-1 shrink-0">
+                                  <span
+                                    className={`text-[7px] font-mono font-black px-1 py-0.2 rounded border leading-none ${
+                                      !oppMoveTimingInfo.winsCmp
+                                        ? 'bg-emerald-500/25 border-emerald-400/80 text-slate-100'
+                                        : 'bg-red-500/25 border-red-400/80 text-slate-100'
+                                    }`}
+                                    title={!oppMoveTimingInfo.winsCmp ? 'Opponent wins CMP tie' : 'Opponent loses CMP tie'}
+                                  >
+                                    CMP
+                                    <span className={!oppMoveTimingInfo.winsCmp ? 'text-emerald-400 ml-0.5' : 'text-red-400 ml-0.5'}>
+                                      {!oppMoveTimingInfo.winsCmp ? '✓' : '✗'}
+                                    </span>
+                                  </span>
+                                  <span
+                                    className={`font-mono font-extrabold text-[7px] px-1 py-0.2 rounded border leading-none transition-colors shrink-0 ${
+                                      !oppSwitchValidityLatched
+                                        ? 'text-cyan-300 bg-cyan-950/70 border-cyan-400/80 animate-pulse'
+                                        : oppSwapRemainingSec <= 0
+                                        ? 'text-[#FF3B30] bg-red-950/60 border-red-500/60 shadow-[0_0_6px_rgba(255,59,48,0.35)]'
+                                        : oppSwapRemainingSec < 10
+                                        ? 'text-[#FFD700] bg-amber-950/60 border-amber-400/60'
+                                        : 'text-white bg-black/45 border-white/40'
+                                    }`}
+                                    title={
+                                      !oppSwitchValidityLatched
+                                        ? 'Frame 1 Provisional Swap Detected — Awaiting Frame 2 OCR Validity Latch'
+                                        : 'Opponent Swap Countdown (50s midpoint countdown, resets on Manual Swap)'
+                                    }
+                                  >
+                                    Swap: {oppSwapRemainingSec}s{!oppSwitchValidityLatched ? ' [1F]' : ''}
                                   </span>
                                 </span>
-                                <span
-                                  className={`font-mono font-extrabold text-[7px] px-1 py-0.2 rounded border leading-none transition-colors shrink-0 ${
-                                    !oppSwitchValidityLatched
-                                      ? 'text-cyan-300 bg-cyan-950/70 border-cyan-400/80 animate-pulse'
-                                      : oppSwapRemainingSec <= 0
-                                      ? 'text-[#FF3B30] bg-red-950/60 border-red-500/60 shadow-[0_0_6px_rgba(255,59,48,0.35)]'
-                                      : oppSwapRemainingSec < 10
-                                      ? 'text-[#FFD700] bg-amber-950/60 border-amber-400/60'
-                                      : 'text-white bg-black/45 border-white/40'
-                                  }`}
-                                  title={
-                                    !oppSwitchValidityLatched
-                                      ? 'Frame 1 Provisional Swap Detected — Awaiting Frame 2 OCR Validity Latch'
-                                      : 'Opponent Swap Countdown (50s midpoint countdown, resets on Manual Swap)'
-                                  }
-                                >
-                                  Swap: {oppSwapRemainingSec}s{!oppSwitchValidityLatched ? ' [1F]' : ''}
-                                </span>
-                              </span>
-                            </span>
+                              </div>
+                              <div className="text-amber-300 font-extrabold text-[7.5px] font-mono normal-case truncate leading-tight">
+                                {abbrPoke3(activeOpponent.name, false)} {oppSlotHpPct[safeActiveOppSlot] ?? 100}% · {oppFastInfo.telemetry}
+                              </div>
+                            </div>
                             <div className="grid grid-cols-3 w-[84px] text-center font-mono text-[7.5px] font-extrabold">
                               {[0, 1, 2].map((slotIdx) => {
                                 const memberName = activePreset.pokemon[slotIdx]?.name || '';
@@ -5217,45 +5217,45 @@ export default function App() {
                             })}
                           </div>
 
-                          {/* My Attacks Section Header + 3-Opponent Column Headers & Player Swap Clock */}
-                          <div className="grid grid-cols-[44px_1fr_84px] items-center gap-1 px-1 pt-1">
-                            <span className="text-[7.5px] font-extrabold text-slate-400 uppercase tracking-wider col-span-2 flex items-center justify-between pr-1 min-w-0">
-                              <span className="flex items-center gap-1 min-w-0 overflow-hidden">
+                          {/* My Attacks Section Header (2-Line) + 3-Opponent Column Headers & Player Swap Clock */}
+                          <div className="grid grid-cols-[minmax(0,1fr)_84px] items-end gap-1 px-1 pt-1">
+                            <div className="flex flex-col gap-0.5 pr-1 min-w-0">
+                              <div className="text-[7.5px] font-extrabold text-slate-400 uppercase tracking-wider flex items-center justify-between gap-1 min-w-0">
                                 <span className="shrink-0">My Attacks</span>
-                                <span className="text-sky-300 font-extrabold text-[7.5px] font-mono normal-case truncate">
-                                  {abbrPoke3(userLeadName, false)} {userSlotHpPct[activeUserSlotIndex] ?? 100}% · {userFastInfo.telemetry}
-                                </span>
-                              </span>
-                              <span className="flex items-center gap-1 shrink-0">
-                                <span
-                                  className={`text-[7px] font-mono font-black px-1 py-0.2 rounded border leading-none ${
-                                    oppMoveTimingInfo.winsCmp
-                                      ? 'bg-emerald-500/25 border-emerald-400/80 text-slate-100'
-                                      : 'bg-red-500/25 border-red-400/80 text-slate-100'
-                                  }`}
-                                  title={oppMoveTimingInfo.winsCmp ? 'Your Pokémon wins CMP tie' : 'Your Pokémon loses CMP tie'}
-                                >
-                                  CMP
-                                  <span className={oppMoveTimingInfo.winsCmp ? 'text-emerald-400 ml-0.5' : 'text-red-400 ml-0.5'}>
-                                    {oppMoveTimingInfo.winsCmp ? '✓' : '✗'}
+                                <span className="flex items-center gap-1 shrink-0">
+                                  <span
+                                    className={`text-[7px] font-mono font-black px-1 py-0.2 rounded border leading-none ${
+                                      oppMoveTimingInfo.winsCmp
+                                        ? 'bg-emerald-500/25 border-emerald-400/80 text-slate-100'
+                                        : 'bg-red-500/25 border-red-400/80 text-slate-100'
+                                    }`}
+                                    title={oppMoveTimingInfo.winsCmp ? 'Your Pokémon wins CMP tie' : 'Your Pokémon loses CMP tie'}
+                                  >
+                                    CMP
+                                    <span className={oppMoveTimingInfo.winsCmp ? 'text-emerald-400 ml-0.5' : 'text-red-400 ml-0.5'}>
+                                      {oppMoveTimingInfo.winsCmp ? '✓' : '✗'}
+                                    </span>
+                                  </span>
+                                  <span
+                                    className={`font-mono font-extrabold text-[7px] px-1 py-0.2 rounded border leading-none transition-colors shrink-0 ${
+                                      !playerSwitchValidityLatched
+                                        ? 'text-cyan-300 bg-cyan-950/70 border-cyan-400/80 animate-pulse'
+                                        : playerSwapRemainingSec <= 0
+                                        ? 'text-[#00FF00] bg-emerald-950/60 border-emerald-500/60 shadow-[0_0_6px_rgba(0,255,0,0.35)]'
+                                        : playerSwapRemainingSec < 10
+                                        ? 'text-[#FFD700] bg-amber-950/60 border-amber-400/60'
+                                        : 'text-white bg-black/45 border-white/40'
+                                    }`}
+                                    title="Player Swap Countdown (50s midpoint countdown, resets on Manual Swap)"
+                                  >
+                                    Swap: {playerSwapRemainingSec}s{!playerSwitchValidityLatched ? ' [1F]' : ''}
                                   </span>
                                 </span>
-                                <span
-                                  className={`font-mono font-extrabold text-[7px] px-1 py-0.2 rounded border leading-none transition-colors shrink-0 ${
-                                    !playerSwitchValidityLatched
-                                      ? 'text-cyan-300 bg-cyan-950/70 border-cyan-400/80 animate-pulse'
-                                      : playerSwapRemainingSec <= 0
-                                      ? 'text-[#00FF00] bg-emerald-950/60 border-emerald-500/60 shadow-[0_0_6px_rgba(0,255,0,0.35)]'
-                                      : playerSwapRemainingSec < 10
-                                      ? 'text-[#FFD700] bg-amber-950/60 border-amber-400/60'
-                                      : 'text-white bg-black/45 border-white/40'
-                                  }`}
-                                  title="Player Swap Countdown (50s midpoint countdown, resets on Manual Swap)"
-                                >
-                                  Swap: {playerSwapRemainingSec}s{!playerSwitchValidityLatched ? ' [1F]' : ''}
-                                </span>
-                              </span>
-                            </span>
+                              </div>
+                              <div className="text-sky-300 font-extrabold text-[7.5px] font-mono normal-case truncate leading-tight">
+                                {abbrPoke3(userLeadName, false)} {userSlotHpPct[activeUserSlotIndex] ?? 100}% · {userFastInfo.telemetry}
+                              </div>
+                            </div>
                             <div className="grid grid-cols-3 w-[84px] text-center font-mono text-[7.5px] font-extrabold">
                               {[0, 1, 2].map((oppIdx) => {
                                 const oppName = scannedOpponents[oppIdx] || '';

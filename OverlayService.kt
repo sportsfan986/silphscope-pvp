@@ -7958,6 +7958,7 @@ class OverlayService : LifecycleService() {
             flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                     WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
 
             format = PixelFormat.TRANSLUCENT
@@ -7966,6 +7967,11 @@ class OverlayService : LifecycleService() {
             y = (142 * density).toInt()
             width = (screenWidth * (overlayScalePct.coerceIn(50, 100) / 100f)).toInt()
             height = WindowManager.LayoutParams.WRAP_CONTENT
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
         }
 
         var initialX = 0
@@ -7989,9 +7995,10 @@ class OverlayService : LifecycleService() {
                     val deltaY = (event.rawY - initialTouchY).toInt()
                     if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
                         isDraggingTouch = true
+                        val minYOffset = -(12 * density).toInt()
                         val maxYOffset = if (isOverlayMinimized) screenHeight - (56 * density).toInt() else screenHeight - 200
                         layoutParams.x = max(0, min(initialX + deltaX, max(0, screenWidth - layoutParams.width)))
-                        layoutParams.y = max(16, min(initialY + deltaY, max(16, maxYOffset)))
+                        layoutParams.y = max(minYOffset, min(initialY + deltaY, max(0, maxYOffset)))
                         try {
                             windowManager.updateViewLayout(overlayView, layoutParams)
                         } catch (_: Exception) {}
@@ -8077,7 +8084,7 @@ class OverlayService : LifecycleService() {
             layoutParams.width = bubbleSize
             layoutParams.height = bubbleSize
             layoutParams.x = max(0, min(layoutParams.x, max(0, screenWidth - bubbleSize)))
-            layoutParams.y = max(16, min(layoutParams.y, max(16, screenHeight - bubbleSize - 24)))
+            layoutParams.y = max(0, min(layoutParams.y, max(0, screenHeight - bubbleSize - 24)))
             try {
                 if (overlayView != null) {
                     windowManager.updateViewLayout(overlayView, layoutParams)

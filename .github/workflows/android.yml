@@ -123,16 +123,14 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official v3.51 Release (Damage-Verified Fast-Move Energy Engine, Symmetric Attack Headers, CMP✓/CMP✗ Badges & Swap Timers)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official v3.52 Release (Full Top-of-Screen Overlay Slide, 2-Line Opp/My Attacks Headers & Locked 3-Column Alignment)
             
-            ### What's New in v3.51
-            - **Damage-Verified Fast-Move Energy Engine**:
-              - Assumes fast moves are thrown on proper turn timing (`500ms` per turn) and grants energy automatically on move completion unless fast move damage fails to register a full turn (`500ms+`) after expected damage application.
-              - Restores withheld fast-move energy automatically when the next fast move damage drop is observed to recover from momentary scan glitches or HP integer rounding lag.
-              - Never relies on charged move button fill indicators (which wrap around a second time when overcharging).
-            - **Symmetric Opponent & My Attacks Header Rows**:
-              - Removes opponent fast move telemetry and swap clock from the top header row for a cleaner battle header.
-              - Formats the **Opp Attacks** header row to match the **My Attacks** header row, displaying active Pokémon fast move info (`FER 85% · BS 3t/11e/3%`), a compact `CMP✓` (green) / `CMP✗` (red) priority indicator on both rows, and the `Swap: 0s` cooldown timer on both rows.
+            ### What's New in v3.52
+            - **Full Top-of-Screen Overlay Slide (`OverlayService.kt`)**:
+              - Enables `FLAG_LAYOUT_NO_LIMITS` and `LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS` (`LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES` on API 28+) and removes the `16px` top drag ceiling so the overlay can slide all the way to the very top edge of the screen.
+            - **2-Line `Opp Attacks` & `My Attacks` Headers with Locked 3-Column Alignment (`overlay.html`)**:
+              - Splits `Opp Attacks` and `My Attacks` header blocks into two compact lines (`Opp Attacks` + `CMP✓/✗` + `Swap: 0s` on line 1, and active Pokémon HP% + fast move telemetry on line 2).
+              - Locks the section header grid to `grid-template-columns: minmax(0, 1fr) 87px` so the 3 Pokémon column headers always align pixel-for-pixel above the 3 damage percentage columns.
             
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)
