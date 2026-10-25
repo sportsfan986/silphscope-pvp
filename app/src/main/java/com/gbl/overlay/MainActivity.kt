@@ -90,10 +90,6 @@ data class BattleLogEntry(
     val oppFaints: Int? = null,
     val userShieldsRemaining: Int? = null,
     val oppShieldsRemaining: Int? = null,
-    val finalUserHpPct: List<Int>? = null,
-    val finalOppHpPct: List<Int>? = null,
-    val firstSwapActor: String? = null,
-    val switchAdvantage: String? = null,
     val adherenceRatePct: Int? = null,
     val recommendationsIssuedCount: Int? = null,
     val recommendationsFollowedCount: Int? = null
@@ -167,6 +163,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textBattleToastsDesc: TextView
     private lateinit var btnToggleTacticalRec: Button
     private lateinit var textTacticalRecDesc: TextView
+    private lateinit var btnToggleHpTracking: Button
+    private lateinit var textHpTrackingDesc: TextView
+    private lateinit var btnToggleEnergyTracking: Button
+    private lateinit var textEnergyTrackingDesc: TextView
     private lateinit var seekbarOverlayScale: SeekBar
     private lateinit var textOverlayScaleValue: TextView
     private lateinit var textOverlayScaleDefaultTick: TextView
@@ -430,6 +430,9 @@ class MainActivity : AppCompatActivity() {
     private val PREFS_KEY_ENABLE_4_CHARGED_MOVES = OverlayService.PREFS_KEY_ENABLE_4_CHARGED_MOVES
     private val PREFS_KEY_DISABLE_BATTLE_TOASTS = OverlayService.PREFS_KEY_DISABLE_BATTLE_TOASTS
     private val PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS = OverlayService.PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS
+    private val PREFS_KEY_ENABLE_HP_TRACKING = OverlayService.PREFS_KEY_ENABLE_HP_TRACKING
+    private val PREFS_KEY_ENABLE_ENERGY_TRACKING = OverlayService.PREFS_KEY_ENABLE_ENERGY_TRACKING
+    private val PREFS_KEY_INSTALLED_VERSION_CODE = OverlayService.PREFS_KEY_INSTALLED_VERSION_CODE
     private val PREFS_KEY_LAST_SYNC_TIMESTAMP = OverlayService.PREFS_KEY_LAST_SYNC_TIMESTAMP
     private val PREFS_KEY_OVERLAY_SCALE_PCT = "overlay_scale_pct"
     private val DEFAULT_OVERLAY_SCALE_PCT = 78
@@ -497,14 +500,28 @@ class MainActivity : AppCompatActivity() {
         }
 
         prefs = getSharedPreferences("gbl_overlay_prefs", Context.MODE_PRIVATE)
+        // v3.60: Default HP & Energy tracking to OFF (false) for any user that has not installed 3.40 or higher
+        val prevInstalledVerCode = prefs.getInt(PREFS_KEY_INSTALLED_VERSION_CODE, 0)
+        if (prevInstalledVerCode < 340) {
+            val edit = prefs.edit()
+            if (!prefs.contains(PREFS_KEY_ENABLE_HP_TRACKING)) {
+                edit.putBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
+            }
+            if (!prefs.contains(PREFS_KEY_ENABLE_ENERGY_TRACKING)) {
+                edit.putBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
+            }
+            edit.putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 360).apply()
+        } else if (prevInstalledVerCode < 360) {
+            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 360).apply()
+        }
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? MediaProjectionManager
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "3.50"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "3.60"
         } catch (_: Exception) {
-            "3.50"
+            "3.60"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -517,7 +534,6 @@ class MainActivity : AppCompatActivity() {
         syncOverlayRunningUiState()
         handleIncomingNavigationAndTaskerIntent(intent)
         lifecycleScope.launch(Dispatchers.Default) {
-            runOneTimeAiLogSplitAndCleanup(silent = true)
             migrateExistingBattleLogs()
             recalculateAllPresetsWithSeasonMetaBlocking()
             withContext(Dispatchers.Main) {
@@ -1124,6 +1140,8 @@ class MainActivity : AppCompatActivity() {
         if (::btnToggleOppChargedMoves.isInitialized) updateOppChargedMovesUi()
         if (::btnToggleBattleToasts.isInitialized) updateBattleToastsUi()
         if (::btnToggleTacticalRec.isInitialized) updateTacticalRecUi()
+        if (::btnToggleHpTracking.isInitialized) updateHpTrackingUi()
+        if (::btnToggleEnergyTracking.isInitialized) updateEnergyTrackingUi()
         if (::presetsContainer.isInitialized && presetsContainer.childCount > 0) {
             refreshPresetsUi()
         }
@@ -1163,6 +1181,10 @@ class MainActivity : AppCompatActivity() {
         textBattleToastsDesc = findViewById(R.id.text_battle_toasts_desc)
         btnToggleTacticalRec = findViewById(R.id.btn_toggle_tactical_rec)
         textTacticalRecDesc = findViewById(R.id.text_tactical_rec_desc)
+        btnToggleHpTracking = findViewById(R.id.btn_toggle_hp_tracking)
+        textHpTrackingDesc = findViewById(R.id.text_hp_tracking_desc)
+        btnToggleEnergyTracking = findViewById(R.id.btn_toggle_energy_tracking)
+        textEnergyTrackingDesc = findViewById(R.id.text_energy_tracking_desc)
         seekbarOverlayScale = findViewById(R.id.seekbar_overlay_scale)
         textOverlayScaleValue = findViewById(R.id.text_overlay_scale_value)
         textOverlayScaleDefaultTick = findViewById(R.id.text_overlay_scale_default_tick)
@@ -1555,6 +1577,36 @@ class MainActivity : AppCompatActivity() {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
                     action = OverlayService.ACTION_UPDATE_SETTINGS
                     putExtra(OverlayService.EXTRA_SHOW_TACTICAL_RECOMMENDATIONS, nextShow)
+                }
+                startService(updateIntent)
+            }
+        }
+
+        btnToggleHpTracking.setOnClickListener {
+            val currentHp = prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
+            val nextHp = !currentHp
+            prefs.edit().putBoolean(PREFS_KEY_ENABLE_HP_TRACKING, nextHp).apply()
+            updateHpTrackingUi()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_ENABLE_HP_TRACKING, nextHp)
+                }
+                startService(updateIntent)
+            }
+        }
+
+        btnToggleEnergyTracking.setOnClickListener {
+            val currentEnergy = prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
+            val nextEnergy = !currentEnergy
+            prefs.edit().putBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, nextEnergy).apply()
+            updateEnergyTrackingUi()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_ENABLE_ENERGY_TRACKING, nextEnergy)
                 }
                 startService(updateIntent)
             }
@@ -2105,174 +2157,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveBattleLogs(logs: List<BattleLogEntry>) {
-        // Ensure Main Battle Logs remain compact (timelineEvents stored exclusively in 7-day AI Training Logs)
-        val compact = logs.map {
-            if (it.timelineEvents.isEmpty()) it else it.copy(timelineEvents = emptyList())
-        }.sortedByDescending { it.timestampMs }
-        prefs.edit().putString(PREFS_KEY_BATTLE_LOGS, gson.toJson(compact)).apply()
-    }
-
-    /**
-     * Loads 7-day rolling AI Training Logs (`gbl_ai_training_logs_v1`) and automatically purges
-     * any records older than 7 days (`OverlayService.AI_LOG_RETENTION_MS`).
-     */
-    private fun loadAiTrainingLogs(): List<OverlayService.AiTrainingLogRecord> {
-        val raw = prefs.getString(OverlayService.PREFS_KEY_AI_TRAINING_LOGS, null) ?: return emptyList()
-        return try {
-            val nowMs = System.currentTimeMillis()
-            val cutoffMs = nowMs - OverlayService.AI_LOG_RETENTION_MS
-            val type = object : TypeToken<List<OverlayService.AiTrainingLogRecord>>() {}.type
-            val parsed: List<OverlayService.AiTrainingLogRecord> = gson.fromJson<List<OverlayService.AiTrainingLogRecord>>(raw, type) ?: emptyList()
-            val deleted = loadDeletedLogIds().toSet()
-            val fresh = parsed.filter { it.timestampMs >= cutoffMs && it.battleId !in deleted }
-                .distinctBy { it.battleId }
-                .sortedByDescending { it.timestampMs }
-            if (fresh.size != parsed.size) {
-                prefs.edit().putString(OverlayService.PREFS_KEY_AI_TRAINING_LOGS, gson.toJson(fresh)).apply()
-            }
-            fresh
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
-
-    private fun saveAiTrainingLogs(logs: List<OverlayService.AiTrainingLogRecord>) {
-        val cutoffMs = System.currentTimeMillis() - OverlayService.AI_LOG_RETENTION_MS
-        val fresh = logs.filter { it.timestampMs >= cutoffMs }
-            .distinctBy { it.battleId }
-            .sortedByDescending { it.timestampMs }
-            .take(250)
-        prefs.edit().putString(OverlayService.PREFS_KEY_AI_TRAINING_LOGS, gson.toJson(fresh)).apply()
-    }
-
-    /**
-     * v3.50 One-Time AI Log Split & 7-Day Auto-Purge Script:
-     * 1. Extracts any embedded `timelineEvents` from Main Battle Logs (`gbl_battle_logs_v1`) into `gbl_ai_training_logs_v1`.
-     * 2. Purges any timestamped AI training logs older than 7 days (`AI_LOG_RETENTION_MS`).
-     * 3. Backfills `finalUserHpPct`, `finalOppHpPct`, `firstSwapActor`, and `switchAdvantage` onto Main Battle Logs
-     *    and strips `timelineEvents` from Main Battle Logs so meta-tracking records stay permanently lightweight.
-     */
-    private fun runOneTimeAiLogSplitAndCleanup(silent: Boolean = false) {
-        try {
-            val nowMs = System.currentTimeMillis()
-            val cutoffMs = nowMs - OverlayService.AI_LOG_RETENTION_MS
-            val rawMain = prefs.getString(PREFS_KEY_BATTLE_LOGS, null)
-            val mainType = object : TypeToken<List<BattleLogEntry>>() {}.type
-            val mainLogs: List<BattleLogEntry> = if (!rawMain.isNullOrBlank()) {
-                try { gson.fromJson<List<BattleLogEntry>>(rawMain, mainType) ?: emptyList() } catch (_: Exception) { emptyList() }
-            } else emptyList()
-
-            val rawAi = prefs.getString(OverlayService.PREFS_KEY_AI_TRAINING_LOGS, null)
-            val aiType = object : TypeToken<List<OverlayService.AiTrainingLogRecord>>() {}.type
-            val existingAiLogs: MutableList<OverlayService.AiTrainingLogRecord> = if (!rawAi.isNullOrBlank()) {
-                try { (gson.fromJson<List<OverlayService.AiTrainingLogRecord>>(rawAi, aiType) ?: emptyList()).toMutableList() } catch (_: Exception) { mutableListOf() }
-            } else mutableListOf()
-
-            val beforeAiCount = existingAiLogs.size
-            var splitFromMainCount = 0
-            var purgedOldAiCount = 0
-            var compactedMainCount = 0
-
-            val updatedMain = mainLogs.map { entry ->
-                val embeddedEvents = entry.timelineEvents
-                val hasEmbedded = embeddedEvents.isNotEmpty()
-                val existingAi = existingAiLogs.find { it.battleId == entry.id }
-                val eventsForDerive = if (hasEmbedded) embeddedEvents else (existingAi?.timelineEvents ?: emptyList())
-
-                if (hasEmbedded) {
-                    compactedMainCount++
-                    if (entry.timestampMs >= cutoffMs) {
-                        splitFromMainCount++
-                        existingAiLogs.removeAll { it.battleId == entry.id }
-                        existingAiLogs.add(
-                            OverlayService.AiTrainingLogRecord(
-                                battleId = entry.id,
-                                timestampMs = entry.timestampMs,
-                                league = entry.league,
-                                userTeamName = entry.userTeamName,
-                                userPokemon = entry.userPokemon,
-                                opponents = entry.opponents,
-                                leadMatchup = entry.leadMatchup,
-                                result = entry.result,
-                                battleDurationSec = entry.battleDurationSec,
-                                adherenceRatePct = entry.adherenceRatePct,
-                                recommendationsIssuedCount = entry.recommendationsIssuedCount,
-                                recommendationsFollowedCount = entry.recommendationsFollowedCount,
-                                timelineEvents = embeddedEvents
-                            )
-                        )
-                    } else {
-                        purgedOldAiCount++
-                    }
-                }
-
-                val (derivedActor, derivedAdv) = if (entry.firstSwapActor.isNullOrBlank() || entry.switchAdvantage.isNullOrBlank()) {
-                    OverlayService.deriveFirstSwapAndSwitchAdvantageStatic(
-                        eventsForDerive,
-                        entry.result
-                    )
-                } else {
-                    (entry.firstSwapActor ?: "NONE") to (entry.switchAdvantage ?: "NEUTRAL")
-                }
-
-                val lastEv = eventsForDerive.lastOrNull()
-                val resolvedUserHp = entry.finalUserHpPct?.takeIf { it.isNotEmpty() } ?: lastEv?.userSlotHpPct?.takeIf { it.isNotEmpty() } ?: run {
-                    val uFaints = (entry.userFaints ?: entry.quality?.userFaints ?: 0).coerceIn(0, 3)
-                    val activeEndHp = if (entry.result.equals("WIN", ignoreCase = true)) 45 else 0
-                    List(3) { slot ->
-                        when {
-                            slot < uFaints -> 0
-                            slot == uFaints -> activeEndHp
-                            else -> 100
-                        }
-                    }
-                }
-                val resolvedOppHp = entry.finalOppHpPct?.takeIf { it.isNotEmpty() } ?: lastEv?.oppSlotHpPct?.takeIf { it.isNotEmpty() } ?: run {
-                    val oFaints = (entry.oppFaints ?: entry.quality?.oppFaints ?: if (entry.result.equals("WIN", ignoreCase = true)) 3 else 1).coerceIn(0, 3)
-                    val activeEndHp = if (entry.result.equals("WIN", ignoreCase = true)) 0 else 40
-                    List(3) { slot ->
-                        when {
-                            slot < oFaints -> 0
-                            slot == oFaints -> activeEndHp
-                            else -> 100
-                        }
-                    }
-                }
-
-                entry.copy(
-                    timelineEvents = emptyList(),
-                    finalUserHpPct = resolvedUserHp,
-                    finalOppHpPct = resolvedOppHp,
-                    firstSwapActor = derivedActor,
-                    switchAdvantage = derivedAdv
-                )
-            }
-
-            val expiredInStore = existingAiLogs.count { it.timestampMs < cutoffMs }
-            purgedOldAiCount += expiredInStore
-            val retainedAiLogs = existingAiLogs
-                .filter { it.timestampMs >= cutoffMs }
-                .distinctBy { it.battleId }
-                .sortedByDescending { it.timestampMs }
-                .take(250)
-
-            prefs.edit()
-                .putString(PREFS_KEY_BATTLE_LOGS, gson.toJson(updatedMain.sortedByDescending { it.timestampMs }))
-                .putString(OverlayService.PREFS_KEY_AI_TRAINING_LOGS, gson.toJson(retainedAiLogs))
-                .putBoolean(OverlayService.PREFS_KEY_AI_LOGS_SPLIT_DONE, true)
-                .apply()
-
-            if (!silent) {
-                runOnUiThread {
-                    renderBattleLogPage()
-                    Toast.makeText(
-                        this,
-                        "✅ AI Log Split & Cleanup Complete: ${updatedMain.size} main logs compacted • $splitFromMainCount <7d AI logs split • $purgedOldAiCount >7d AI logs purged (${retainedAiLogs.size} active <7d AI logs)",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        } catch (_: Exception) {}
+        prefs.edit().putString(PREFS_KEY_BATTLE_LOGS, gson.toJson(logs.sortedByDescending { it.timestampMs })).apply()
     }
 
     /**
@@ -2503,8 +2388,7 @@ class MainActivity : AppCompatActivity() {
         val serviceSlots = matchedPreset?.pokemon?.map {
             OverlayService.TeamMember(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs)
         }
-        val aiLogEvents = loadAiTrainingLogs().find { it.battleId == entry.id }?.timelineEvents
-        val safeTimeline = (entry.timelineEvents ?: emptyList()).ifEmpty { aiLogEvents ?: emptyList() }
+        val safeTimeline = entry.timelineEvents ?: emptyList()
         val hasTimeline = safeTimeline.isNotEmpty()
         return OverlayService.calculateBattleQuality(
             myTeam = myMons,
@@ -3911,17 +3795,14 @@ class MainActivity : AppCompatActivity() {
         teamFilter: String,
         timeframeFilter: String
     ): String {
-        val aiLogById = loadAiTrainingLogs().associateBy { it.battleId }
         val filtered = filterBattleLogs(allLogs, leagueFilter, teamFilter, timeframeFilter)
         val gson = com.google.gson.Gson()
         return filtered.joinToString("\n") { log ->
-            val aiRecord = aiLogById[log.id]
-            val events = aiRecord?.timelineEvents?.takeIf { it.isNotEmpty() } ?: log.timelineEvents
-            val recEvents = events.filter { !it.recommendedAction.isNullOrBlank() }
+            val recEvents = log.timelineEvents.filter { !it.recommendedAction.isNullOrBlank() }
             val followed = recEvents.count { it.followedRecommendation == true }
-            val adherencePct = log.adherenceRatePct ?: aiRecord?.adherenceRatePct ?: if (recEvents.isNotEmpty()) ((followed * 100.0) / recEvents.size).toInt() else null
+            val adherencePct = log.adherenceRatePct ?: if (recEvents.isNotEmpty()) ((followed * 100.0) / recEvents.size).toInt() else null
             val record = mapOf(
-                "schemaVersion" to "3.50",
+                "schemaVersion" to "3.43",
                 "battleId" to log.id,
                 "timestampMs" to log.timestampMs,
                 "league" to log.league,
@@ -3930,20 +3811,15 @@ class MainActivity : AppCompatActivity() {
                 "opponents" to log.opponents,
                 "leadMatchup" to log.leadMatchup,
                 "result" to log.result,
-                "battleDurationSec" to (log.battleDurationSec ?: aiRecord?.battleDurationSec),
+                "battleDurationSec" to log.battleDurationSec,
                 "userFaints" to log.userFaints,
                 "oppFaints" to log.oppFaints,
                 "userShieldsRemaining" to log.userShieldsRemaining,
                 "oppShieldsRemaining" to log.oppShieldsRemaining,
-                "finalUserHpPct" to log.finalUserHpPct,
-                "finalOppHpPct" to log.finalOppHpPct,
-                "firstSwapActor" to log.firstSwapActor,
-                "switchAdvantage" to log.switchAdvantage,
                 "adherenceRatePct" to adherencePct,
-                "recommendationsIssuedCount" to (log.recommendationsIssuedCount ?: aiRecord?.recommendationsIssuedCount ?: recEvents.size),
-                "recommendationsFollowedCount" to (log.recommendationsFollowedCount ?: aiRecord?.recommendationsFollowedCount ?: followed),
-                "aiLogRetentionStatus" to if (aiRecord != null) "ACTIVE_7D" else "PURGED_OVER_7D",
-                "timelineEvents" to events
+                "recommendationsIssuedCount" to (log.recommendationsIssuedCount ?: recEvents.size),
+                "recommendationsFollowedCount" to (log.recommendationsFollowedCount ?: followed),
+                "timelineEvents" to log.timelineEvents
             )
             gson.toJson(record)
         }
@@ -4031,46 +3907,6 @@ class MainActivity : AppCompatActivity() {
 
         val activeTheme = getActiveAppTheme()
         val hasWatermark = prefs.getBoolean(OverlayService.PREFS_KEY_SHOW_THEME_WATERMARK, true) && activeTheme.emblemDrawableRes != null
-        val aiLogsById = loadAiTrainingLogs().associateBy { it.battleId }
-        val nowRenderMs = System.currentTimeMillis()
-
-        // v3.50 AI Training Log 7-Day Split & Cleanup Banner + One-Tap Cleanup Action
-        val aiBannerRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
-            setBackgroundColor(0xFF0F172A.toInt())
-            val pH = (8 * density).toInt()
-            val pV = (6 * density).toInt()
-            setPadding(pH, pV, pH, pV)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                bottomMargin = (6 * density).toInt()
-            }
-        }
-        val aiBannerTv = TextView(this).apply {
-            text = "🤖 7d AI Training Store: ${aiLogsById.size} active (<7d full replay) • Main Logs: ${allLogs.size} permanent"
-            setTextColor(0xFF94A3B8.toInt())
-            textSize = 10f
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        }
-        val aiSplitBtn = TextView(this).apply {
-            text = "⚡ Split & Purge >7d"
-            setTextColor(0xFF38BDF8.toInt())
-            textSize = 10f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            val pH = (7 * density).toInt()
-            val pV = (3 * density).toInt()
-            setPadding(pH, pV, pH, pV)
-            setBackgroundColor(0xFF1E293B.toInt())
-            setOnClickListener {
-                runOneTimeAiLogSplitAndCleanup(silent = false)
-            }
-        }
-        aiBannerRow.addView(aiBannerTv)
-        aiBannerRow.addView(aiSplitBtn)
-        battleLogContainer.addView(aiBannerRow)
 
         for ((dayStr, dayEntries) in groupedByDay) {
             val dWins = dayEntries.count { it.result.equals("WIN", ignoreCase = true) }
@@ -4362,50 +4198,15 @@ class MainActivity : AppCompatActivity() {
                     qualityRow.addView(unrankedTv)
                 }
 
-                // v3.50 Permanent Main Log Summary Row: Final HP/Shields + First Swap Actor & Switch Advantage
-                val uSh = entry.userShieldsRemaining ?: entry.quality?.userShieldsRemaining ?: 0
-                val oSh = entry.oppShieldsRemaining ?: entry.quality?.oppShieldsRemaining ?: 0
-                val uFinalHpStr = entry.finalUserHpPct?.takeIf { it.isNotEmpty() }?.joinToString("/") { "${it}%" }
-                    ?: "${if (isWin) 45 else 0}%"
-                val oFinalHpStr = entry.finalOppHpPct?.takeIf { it.isNotEmpty() }?.joinToString("/") { "${it}%" }
-                    ?: "${if (isWin) 0 else 40}%"
-                val swapActorCode = (entry.firstSwapActor ?: "NONE").uppercase()
-                val swapActorLabel = when (swapActorCode) {
-                    "USER" -> "You Swapped 1st"
-                    "OPPONENT" -> "Opp Swapped 1st"
-                    "SIMULTANEOUS" -> "Simultaneous Swap"
-                    else -> "No Mid-Match Swap"
-                }
-                val switchAdvCode = (entry.switchAdvantage ?: "NEUTRAL").uppercase()
-                val switchAdvLabel = when (switchAdvCode) {
-                    "GAINED" -> "Switch Adv: Gained ✓"
-                    "MAINTAINED" -> "Switch Adv: Held ✓"
-                    "LOST" -> "Switch Adv: Lost ✗"
-                    else -> "Switch Adv: Neutral"
-                }
-                val endgameSummaryTv = TextView(this).apply {
-                    text = "🛡️ End Shields: You ${uSh}S vs Opp ${oSh}S  •  ❤️ End HP: You [$uFinalHpStr] vs Opp [$oFinalHpStr]\n🔄 $swapActorLabel  •  $switchAdvLabel"
-                    setTextColor(0xFF94A3B8.toInt())
-                    textSize = 10f
-                    setPadding(0, (3 * density).toInt(), 0, (2 * density).toInt())
-                }
-                qualityRow.addView(endgameSummaryTv)
-
                 val actionsRow = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = android.view.Gravity.CENTER_VERTICAL
                     setPadding(0, (6 * density).toInt(), 0, 0)
                 }
 
-                val hasRecentAiLog = aiLogsById.containsKey(entry.id) ||
-                    (entry.timelineEvents.isNotEmpty() && (nowRenderMs - entry.timestampMs) <= OverlayService.AI_LOG_RETENTION_MS)
                 val replayHintBtn = TextView(this).apply {
-                    text = if (hasRecentAiLog) {
-                        "🎬 Replay Matrix + 7d AI Timeline"
-                    } else {
-                        "🔍 Summary Matrix Replay (>7d)"
-                    }
-                    setTextColor(if (hasRecentAiLog) 0xFF38BDF8.toInt() else 0xFF94A3B8.toInt())
+                    text = "🔍 Tap to Replay Overlay Matrix"
+                    setTextColor(0xFF38BDF8.toInt())
                     textSize = 11f
                     setTypeface(typeface, android.graphics.Typeface.BOLD)
                     layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -4787,28 +4588,13 @@ class MainActivity : AppCompatActivity() {
                 "\n${entryQuality.badgeLabel} • BMF: ${bmfInt}% • Exec WAE: $waeStr"
             } else ""
 
-            val aiRecord = loadAiTrainingLogs().find { it.battleId == entry.id }
-            val replayEvents = aiRecord?.timelineEvents?.takeIf { it.isNotEmpty() } ?: entry.timelineEvents
-            val isWithin7Days = (System.currentTimeMillis() - entry.timestampMs) <= OverlayService.AI_LOG_RETENTION_MS
-            val uSh = entry.userShieldsRemaining ?: entry.quality?.userShieldsRemaining ?: 0
-            val oSh = entry.oppShieldsRemaining ?: entry.quality?.oppShieldsRemaining ?: 0
-            val swapInfoLine = "\n🛡️ End Shields: ${uSh}S vs ${oSh}S • 1st Swap: ${entry.firstSwapActor ?: "NONE"} (${entry.switchAdvantage ?: "NEUTRAL"})"
-            val aiTimelineLine = if (replayEvents.isNotEmpty() && isWithin7Days) {
-                val sampleEvents = replayEvents.take(5).joinToString(" → ") { ev ->
-                    "t=${ev.t.toInt()}s ${ev.type}"
-                }
-                "\n🤖 7-Day AI Timeline (${replayEvents.size} events): $sampleEvents"
-            } else {
-                "\n📦 Summary Replay Mode (Detailed AI timestamp log >7 days auto-purged)"
-            }
-
             val hintTv = TextView(this).apply {
                 val leadTxt = when (safeLeadMatchup.uppercase()) {
                     "FAVORABLE" -> "Lead: Favorable"
                     "NEGATIVE" -> "Lead: Negative"
                     else -> "Lead: Neutral"
                 }
-                text = "🔍 Interactive Post-Game Overlay • $safeResult ($leadTxt)$qualityLine$swapInfoLine$aiTimelineLine\nTap any of your 3 Pokémon chips, opponent rows (1st/2nd/3rd), or Shadow/Form buttons to inspect matchup lines:"
+                text = "🔍 Interactive Post-Game Overlay • $safeResult ($leadTxt)$qualityLine\nTap any of your 3 Pokémon chips, opponent rows (1st/2nd/3rd), or Shadow/Form buttons to inspect matchup lines:"
                 setTextColor(0xFF94A3B8.toInt())
                 textSize = 11f
                 setPadding((4 * density).toInt(), 0, (4 * density).toInt(), (6 * density).toInt())
@@ -4934,6 +4720,40 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateHpTrackingUi() {
+        if (!::btnToggleHpTracking.isInitialized) return
+        val enabled = prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        if (enabled) {
+            btnToggleHpTracking.text = "HP On"
+            btnToggleHpTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            btnToggleHpTracking.setTextColor(0xFFFFFFFF.toInt())
+            textHpTrackingDesc.text = "Active: Live 2D floating HP bar scanning & per-slot HP% badges enabled"
+        } else {
+            btnToggleHpTracking.text = "HP Off"
+            btnToggleHpTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+            btnToggleHpTracking.setTextColor(theme.primaryTextColor)
+            textHpTrackingDesc.text = "Default: Disabled (Opt-in via Settings to scan floating HP bars)"
+        }
+    }
+
+    private fun updateEnergyTrackingUi() {
+        if (!::btnToggleEnergyTracking.isInitialized) return
+        val enabled = prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        if (enabled) {
+            btnToggleEnergyTracking.text = "Energy On"
+            btnToggleEnergyTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            btnToggleEnergyTracking.setTextColor(0xFFFFFFFF.toInt())
+            textEnergyTrackingDesc.text = "Active: Predictive + self-correcting bias-error energy & move readiness enabled"
+        } else {
+            btnToggleEnergyTracking.text = "Energy Off"
+            btnToggleEnergyTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+            btnToggleEnergyTracking.setTextColor(theme.primaryTextColor)
+            textEnergyTrackingDesc.text = "Default: Disabled (Opt-in for predictive + self-correcting energy loop)"
+        }
+    }
+
     /**
      * Checks notifications (Android 13+), SYSTEM_ALERT_WINDOW, and initiates overlay launch
      */
@@ -5056,6 +4876,8 @@ class MainActivity : AppCompatActivity() {
             putExtra(OverlayService.EXTRA_ENABLE_4_CHARGED_MOVES, prefs.getBoolean(PREFS_KEY_ENABLE_4_CHARGED_MOVES, false))
             putExtra(OverlayService.EXTRA_DISABLE_BATTLE_TOASTS, prefs.getBoolean(PREFS_KEY_DISABLE_BATTLE_TOASTS, false))
             putExtra(OverlayService.EXTRA_SHOW_TACTICAL_RECOMMENDATIONS, prefs.getBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, true))
+            putExtra(OverlayService.EXTRA_ENABLE_HP_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false))
+            putExtra(OverlayService.EXTRA_ENABLE_ENERGY_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false))
             putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt(PREFS_KEY_OVERLAY_SCALE_PCT, DEFAULT_OVERLAY_SCALE_PCT))
             putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, DEFAULT_OVERLAY_TRANSPARENCY_PCT))
             putExtra(OverlayService.EXTRA_APP_THEME_ID, prefs.getString(OverlayService.PREFS_KEY_APP_THEME_ID, "slate") ?: "slate")

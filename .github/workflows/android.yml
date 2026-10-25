@@ -123,16 +123,26 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official v3.55 Release (Smaller/Shifted Pokémon & Overlay-Occluded HP Bar Detection + 2Hz 2T+ Move-Duration Cooldown & Adaptive 1T Energy Feedback Loop)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official v3.60 Release (Predictive + Self-Correcting Bias-Error Energy Loop, Opt-In HP & Energy Tracking Settings, Streamlined Header Row & 2s Hold Minimize to Battle Log)
             
-            ### What's New in v3.55
-            - **Expanded Floating HP Bar Corridor & Overlay-Occluded / Text-Overlapped Detection (`OverlayService.kt`)**:
-              - Expands floating HP bar search corridors (`oppHpCorridorRect` & `playerHpCorridorRect`) and X-anchor bounds (`0.435w..0.665w` for Opponent, `0.035w..0.135w` for Player) so smaller, medium, and laterally shifted Pokémon (such as Solgaleo, Mimikyu, Plusle) are reliably detected.
-              - Detects HP bars partially or fully underneath the semi-transparent `#0B111E` overlay or overlapped by `"SUPER EFFECTIVE"` combat text without losing track of HP drops when opponent attack rows expand.
-            - **2Hz 2T+ Move-Duration Cooldown & Adaptive 1T Energy Feedback Loop (`OverlayService.kt`)**:
-              - Eliminates +1–2 fast move energy overcounting against opponents with suboptimal IVs or under-leveled CP (where each fast move deals a higher HP% drop than standard 2500/1500 CP templates).
-              - At 2 Hz sampling rate, 2-turn and longer fast moves enforce their physical move-duration cooldown (`fastTurns * 500ms - 160ms`) and elapsed-time window ceiling rather than dividing cumulative HP drop by static template damage.
-              - 1-turn fast moves use a self-calibrating feedback loop that blends expected damage per turn with observed damage per detected active turn over time.
+            > **⚠️ IMPORTANT NOTE (Default Settings)**: **Live HP Bar Tracking** and **Live Energy & Fast-Move Counting** are **DISABLED (OFF) by default** (including for any user upgrading from `< v3.40`). To enable live HP% or Energy tracking in the overlay, open **⚙️ Settings** in the app and opt in to **❤️ Live HP Bar Tracking** and/or **⚡ Live Energy & Fast-Move Counting**.
+            
+            ### What's New in v3.60
+            - **Predictive + Self-Correcting Bias-Error Energy & Turn Loop (`OverlayService.kt`)**:
+              - Combines **zero-lag feed-forward prediction** (advancing energy in sync with fast-move turn cadence and locking 2T+ move phase when a pending-damage flash is observed) with **closed-loop bias-error self-correction** (online EMA per-move damage calibration $\hat{d}$ for non-standard IVs/under-leveled CP plus damped $\pm 1$ move residual correction and automatic rollback if HP does not drop after `fastTurns * 500ms + 420ms`).
+              - Eliminates energy lag behind damage as well as overcounting, undercounting, and feedback-loop oscillation so charged-move `READY` warnings fire at the exact turn energy becomes usable.
+            - **Opt-In Settings to Enable/Disable HP Tracking & Energy Tracking (`MainActivity.kt`, `OverlayService.kt`, `overlay.html`)**:
+              - Added independent toggles in **⚙️ Settings**:
+                1. **❤️ Live HP Bar Tracking (Overlay)** — **Default: OFF** (opt-in via Settings).
+                2. **⚡ Live Energy & Fast-Move Counting (Overlay)** — **Default: OFF** (opt-in via Settings).
+              - Automatically defaults both settings to **OFF** for any new install or user upgrading from a version prior to `v3.40`.
+            - **Streamlined Overlay Header Row & 2-Second Hold to Stop Overlay & Open Battle Log (`overlay.html`, `OverlayService.kt`)**:
+              - Redesigned the top `.header-row` to display **ONLY**:
+                1. **Minimize / Pause OCR Icon** (`#btn-minimize-sword`)
+                2. **OCR Update Rate in `ms`** (`#sky-ocr-ms-badge`, e.g. `220ms`)
+                3. **My Health, Energy & Shield Badges** (`My 100%`, `0E`, `🛡️ 2`)
+                4. **Opp Shields, Health & Energy Badges** (`🛡️ 2`, `Opp 100%`, `0E`)
+              - **2-Second Long-Press on Minimize Icon**: Pressing and holding the top-left Minimize icon for **2 seconds (`2000ms`)** when not minimized immediately **stops the floating overlay and opens the main app directly to the 📜 Battle Log page**. A short tap (`< 2s`) minimizes to the floating bubble and pauses OCR as usual.
             
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)

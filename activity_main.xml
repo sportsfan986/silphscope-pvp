@@ -988,6 +988,96 @@
                     android:textColor="#ffffff" />
             </LinearLayout>
 
+            <!-- Live HP Tracking Setting (v3.60: Default OFF, Opt-In) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:paddingTop="8dp"
+                android:background="#0f172a"
+                android:paddingHorizontal="10dp"
+                android:paddingBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="❤️ Live HP Bar Tracking (Opt-In)"
+                        android:textColor="#e2e8f0"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_hp_tracking_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: Disabled (Opt-in via Settings to scan floating HP bars)"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_toggle_hp_tracking"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="HP Off"
+                    android:textSize="11sp"
+                    android:backgroundTint="#334155"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
+            <!-- Live Energy Tracking Setting (v3.60: Default OFF, Opt-In) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:paddingTop="8dp"
+                android:background="#0f172a"
+                android:paddingHorizontal="10dp"
+                android:paddingBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="⚡ Live Energy &amp; Fast-Move Counting (Opt-In)"
+                        android:textColor="#e2e8f0"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_energy_tracking_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: Disabled (Opt-in for predictive + self-correcting energy loop)"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_toggle_energy_tracking"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="Energy Off"
+                    android:textSize="11sp"
+                    android:backgroundTint="#334155"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
             <!-- 5-Tier 0s/1s/2s Matchup Rating Thresholds Card (SW, W, N, L, SL) -->
             <LinearLayout
                 android:layout_width="match_parent"

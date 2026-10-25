@@ -163,6 +163,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textBattleToastsDesc: TextView
     private lateinit var btnToggleTacticalRec: Button
     private lateinit var textTacticalRecDesc: TextView
+    private lateinit var btnToggleHpTracking: Button
+    private lateinit var textHpTrackingDesc: TextView
+    private lateinit var btnToggleEnergyTracking: Button
+    private lateinit var textEnergyTrackingDesc: TextView
     private lateinit var seekbarOverlayScale: SeekBar
     private lateinit var textOverlayScaleValue: TextView
     private lateinit var textOverlayScaleDefaultTick: TextView
@@ -426,6 +430,9 @@ class MainActivity : AppCompatActivity() {
     private val PREFS_KEY_ENABLE_4_CHARGED_MOVES = OverlayService.PREFS_KEY_ENABLE_4_CHARGED_MOVES
     private val PREFS_KEY_DISABLE_BATTLE_TOASTS = OverlayService.PREFS_KEY_DISABLE_BATTLE_TOASTS
     private val PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS = OverlayService.PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS
+    private val PREFS_KEY_ENABLE_HP_TRACKING = OverlayService.PREFS_KEY_ENABLE_HP_TRACKING
+    private val PREFS_KEY_ENABLE_ENERGY_TRACKING = OverlayService.PREFS_KEY_ENABLE_ENERGY_TRACKING
+    private val PREFS_KEY_INSTALLED_VERSION_CODE = OverlayService.PREFS_KEY_INSTALLED_VERSION_CODE
     private val PREFS_KEY_LAST_SYNC_TIMESTAMP = OverlayService.PREFS_KEY_LAST_SYNC_TIMESTAMP
     private val PREFS_KEY_OVERLAY_SCALE_PCT = "overlay_scale_pct"
     private val DEFAULT_OVERLAY_SCALE_PCT = 78
@@ -493,14 +500,28 @@ class MainActivity : AppCompatActivity() {
         }
 
         prefs = getSharedPreferences("gbl_overlay_prefs", Context.MODE_PRIVATE)
+        // v3.60: Default HP & Energy tracking to OFF (false) for any user that has not installed 3.40 or higher
+        val prevInstalledVerCode = prefs.getInt(PREFS_KEY_INSTALLED_VERSION_CODE, 0)
+        if (prevInstalledVerCode < 340) {
+            val edit = prefs.edit()
+            if (!prefs.contains(PREFS_KEY_ENABLE_HP_TRACKING)) {
+                edit.putBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
+            }
+            if (!prefs.contains(PREFS_KEY_ENABLE_ENERGY_TRACKING)) {
+                edit.putBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
+            }
+            edit.putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 360).apply()
+        } else if (prevInstalledVerCode < 360) {
+            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 360).apply()
+        }
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? MediaProjectionManager
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "3.16"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "3.60"
         } catch (_: Exception) {
-            "3.16"
+            "3.60"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -1119,6 +1140,8 @@ class MainActivity : AppCompatActivity() {
         if (::btnToggleOppChargedMoves.isInitialized) updateOppChargedMovesUi()
         if (::btnToggleBattleToasts.isInitialized) updateBattleToastsUi()
         if (::btnToggleTacticalRec.isInitialized) updateTacticalRecUi()
+        if (::btnToggleHpTracking.isInitialized) updateHpTrackingUi()
+        if (::btnToggleEnergyTracking.isInitialized) updateEnergyTrackingUi()
         if (::presetsContainer.isInitialized && presetsContainer.childCount > 0) {
             refreshPresetsUi()
         }
@@ -1158,6 +1181,10 @@ class MainActivity : AppCompatActivity() {
         textBattleToastsDesc = findViewById(R.id.text_battle_toasts_desc)
         btnToggleTacticalRec = findViewById(R.id.btn_toggle_tactical_rec)
         textTacticalRecDesc = findViewById(R.id.text_tactical_rec_desc)
+        btnToggleHpTracking = findViewById(R.id.btn_toggle_hp_tracking)
+        textHpTrackingDesc = findViewById(R.id.text_hp_tracking_desc)
+        btnToggleEnergyTracking = findViewById(R.id.btn_toggle_energy_tracking)
+        textEnergyTrackingDesc = findViewById(R.id.text_energy_tracking_desc)
         seekbarOverlayScale = findViewById(R.id.seekbar_overlay_scale)
         textOverlayScaleValue = findViewById(R.id.text_overlay_scale_value)
         textOverlayScaleDefaultTick = findViewById(R.id.text_overlay_scale_default_tick)
@@ -1550,6 +1577,36 @@ class MainActivity : AppCompatActivity() {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
                     action = OverlayService.ACTION_UPDATE_SETTINGS
                     putExtra(OverlayService.EXTRA_SHOW_TACTICAL_RECOMMENDATIONS, nextShow)
+                }
+                startService(updateIntent)
+            }
+        }
+
+        btnToggleHpTracking.setOnClickListener {
+            val currentHp = prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
+            val nextHp = !currentHp
+            prefs.edit().putBoolean(PREFS_KEY_ENABLE_HP_TRACKING, nextHp).apply()
+            updateHpTrackingUi()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_ENABLE_HP_TRACKING, nextHp)
+                }
+                startService(updateIntent)
+            }
+        }
+
+        btnToggleEnergyTracking.setOnClickListener {
+            val currentEnergy = prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
+            val nextEnergy = !currentEnergy
+            prefs.edit().putBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, nextEnergy).apply()
+            updateEnergyTrackingUi()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_ENABLE_ENERGY_TRACKING, nextEnergy)
                 }
                 startService(updateIntent)
             }
@@ -4663,6 +4720,40 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateHpTrackingUi() {
+        if (!::btnToggleHpTracking.isInitialized) return
+        val enabled = prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        if (enabled) {
+            btnToggleHpTracking.text = "HP On"
+            btnToggleHpTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            btnToggleHpTracking.setTextColor(0xFFFFFFFF.toInt())
+            textHpTrackingDesc.text = "Active: Live 2D floating HP bar scanning & per-slot HP% badges enabled"
+        } else {
+            btnToggleHpTracking.text = "HP Off"
+            btnToggleHpTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+            btnToggleHpTracking.setTextColor(theme.primaryTextColor)
+            textHpTrackingDesc.text = "Default: Disabled (Opt-in via Settings to scan floating HP bars)"
+        }
+    }
+
+    private fun updateEnergyTrackingUi() {
+        if (!::btnToggleEnergyTracking.isInitialized) return
+        val enabled = prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        if (enabled) {
+            btnToggleEnergyTracking.text = "Energy On"
+            btnToggleEnergyTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            btnToggleEnergyTracking.setTextColor(0xFFFFFFFF.toInt())
+            textEnergyTrackingDesc.text = "Active: Predictive + self-correcting bias-error energy & move readiness enabled"
+        } else {
+            btnToggleEnergyTracking.text = "Energy Off"
+            btnToggleEnergyTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+            btnToggleEnergyTracking.setTextColor(theme.primaryTextColor)
+            textEnergyTrackingDesc.text = "Default: Disabled (Opt-in for predictive + self-correcting energy loop)"
+        }
+    }
+
     /**
      * Checks notifications (Android 13+), SYSTEM_ALERT_WINDOW, and initiates overlay launch
      */
@@ -4785,6 +4876,8 @@ class MainActivity : AppCompatActivity() {
             putExtra(OverlayService.EXTRA_ENABLE_4_CHARGED_MOVES, prefs.getBoolean(PREFS_KEY_ENABLE_4_CHARGED_MOVES, false))
             putExtra(OverlayService.EXTRA_DISABLE_BATTLE_TOASTS, prefs.getBoolean(PREFS_KEY_DISABLE_BATTLE_TOASTS, false))
             putExtra(OverlayService.EXTRA_SHOW_TACTICAL_RECOMMENDATIONS, prefs.getBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, true))
+            putExtra(OverlayService.EXTRA_ENABLE_HP_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false))
+            putExtra(OverlayService.EXTRA_ENABLE_ENERGY_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false))
             putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt(PREFS_KEY_OVERLAY_SCALE_PCT, DEFAULT_OVERLAY_SCALE_PCT))
             putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, DEFAULT_OVERLAY_TRANSPARENCY_PCT))
             putExtra(OverlayService.EXTRA_APP_THEME_ID, prefs.getString(OverlayService.PREFS_KEY_APP_THEME_ID, "slate") ?: "slate")

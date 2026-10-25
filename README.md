@@ -1,4 +1,4 @@
-# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v3.01)
+# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v3.60)
 
 [![Live Web Simulator](https://img.shields.io/badge/🌐%20Live%20Web%20Simulator-Try%20in%20Browser-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white)](https://sportsfan986.github.io/silphscope-pvp/)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support%20the%20Project-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/sportsfan986)
@@ -127,37 +127,34 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## 📥 Download & Install Native Android APK (v3.01)
+## 📥 Download & Install Native Android APK (v3.60)
+
+> **⚠️ Note on Live HP & Energy Counting (Disabled by Default — Opt-In via Settings)**:
+> By default, **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting** are **DISABLED (OFF)** for all new installs and any user upgrading from a version prior to `v3.40`. To enable live HP% and/or live fast-move energy counting on the floating overlay, open **⚙️ Settings** in the app and toggle **Live HP Bar Tracking** and/or **Live Energy & Fast-Move Counting** to **ON**.
 
 1. Visit the **[Official GitHub Releases Page](https://github.com/sportsfan986/silphscope-pvp/releases)**.
-2. Download **`silphscope-pvp-v3.01.apk`** directly to your Android device.
+2. Download **`silphscope-pvp-v3.60.apk`** directly to your Android device.
 3. Tap the downloaded APK file to install (grant *"Install unknown apps"* permission if prompted).
 4. Launch **SilphScope PvP**:
-   - Select, reorder, or customize your **GBL Team Presets**, set **Opponent Move Count Basis** (`My Fasts` vs. `Their Fasts`), and adjust **Overlay Size** (`50%–100%` screen width slider) and **Background Transparency**.
-   - Grant **"Display over other apps"** (Floating Window permission) and **Screen Capture** permission (used strictly in-memory for 1 Hz ML Kit OCR).
+   - Select, reorder, or customize your **GBL Team Presets**, set **Opponent Move Count Basis** (`My Fasts` vs. `Their Fasts`), adjust **Overlay Size** (`50%–100%` screen width slider) and **Background Transparency**, and optionally opt in to **Live HP Bar Tracking** and **Live Energy & Fast-Move Counting** in **⚙️ Settings**.
+   - Grant **"Display over other apps"** (Floating Window permission) and **Screen Capture** permission (used strictly in-memory for ML Kit OCR).
    - Tap **"Start Battle Overlay"** (or trigger via Tasker intent hooks) and launch Pokémon GO!
+   - **Tip**: Tap the top-left overlay icon to minimize/pause OCR, or **press and hold the top-left icon for 2 seconds** when expanded to immediately stop the overlay and open the **📜 Battle Log** in the main app.
 
 ---
 
-## ✨ What's New in v3.00 & v3.01 (Consolidating All v2.9x Releases + User Documentation Enhancements)
+## ✨ Changelog — What's New in v3.60
 
-- **Phase 1 (v2.90) — Asymmetric 9-Shield Matrix & Blind Matchup Favorability (BMF)**:
-  - Evaluates all 9 discrete shield permutations ($0\text{v}0$ through $2\text{v}2$) for any matchup pair and computes Pre-Match Blind Matchup Favorability ($M = 0.40 \cdot S_{\text{lead}} + 0.60 \cdot S_{\text{back}}$, $P_{\text{pre}}$) with automatic handling of early forfeits ($w = 0.00$) and unrevealed 3rd closers ($w = 0.75$ Meta-Average Prior).
-- **Phase 2 (v2.91) — Battle Timeline Tracking & Dynamic Execution WAE Engine**:
-  - Records timestamped `SWAP`, `SHIELD`, and `FAINT` events during live overlay battles, partitions matches into head-to-head intervals weighted by fractional duration ($\sum \tau_k \cdot R_k$), and applies Faint Margin Scaling ($\times 1.10$) and Shield-in-Pocket Penalties ($-0.15 \times s_{\text{rem}}$).
-- **Phase 3 (v2.93) — 5-Stat Analytics Dashboard, Performance Badges, Event Pills & Historical Migration**:
-  - Upgrades the Battle Log dashboard to a 5-stat grid (`RECORD`, `LEAD MATCHUPS`, `WIN RATE`, `EXEC WAE`, `MATCHUP LUCK`), adds the 6 Primary Performance Badges + 5 Contextual Event Pills (`⚠️ Double Shield Pocket`, `⚠️ Shield in Pocket`, `🧹 Clean Sweep`, `🛡️ Shield Advantage`, `⚡ 75% Conf`), Interactive Battle Recap / Timeline Replay, and automatic retroactive migration of existing battle logs.
-- **v2.94–v2.96 — Faint Detection, Top Statusbar Toasts & Battle Recap Stability**:
-  - Reliable opponent faint detection, preserved swap clock timers on faint swap-ins, dedicated toast alerts for shields and faint swaps rendered in the top statusbar/clock strip (away from charged move buttons), and crash-free Battle Recap replay dialogs.
-- **v2.97–v3.00 — Standardized Go Battle Log Export Formatting, Share Row Format & Tasker Automation Hooks**:
-  - Standardized Pokémon name formatting in **Copy GBL** and **Share / Copy Summary** outputs (`basename_form`, `_` for spaces/hyphens, trailing `S` for Shadows such as `ninetales_alolanS` and `laprasS`, and `_MEGA` / `_MEGA_X` / `_MEGA_Y` / `_PRIMAL` suffixes such as `charizard_MEGA_Y`) while keeping in-app display names unchanged.
-  - Updated Share / Copy Summary individual battle output lines to `W/L (L->F/N/U, M->F/N/U) opponent1 opponent2 opponent3`.
-  - Added headless Tasker intent hooks (`com.gbl.overlay.ACTION_START_OVERLAY`, `com.gbl.overlay.ACTION_STOP_OVERLAY`, `com.gbl.overlay.ACTION_TOGGLE_OVERLAY`, and `com.gbl.overlay.ACTION_OPEN_BATTLE_LOG` / `BattleLogActivity`) to start/stop the overlay without switching apps or launch directly to the Battle Log page.
-- **Phase 4 (v3.00–v3.01) — In-App `Help & Metric Guide`, Dedicated `❓ Help` Page & Streamlined 3-Page Navigation**:
-  - Added interactive `(i)` info buttons next to `EXEC WAE` and `MATCHUP LUCK` on both Android and Web to open the **Help & Metric Guide**, documenting Execution WAE, Matchup Luck (BMF), and the full Badge & Event Pill Glossary.
-  - **v3.01 Further Documentation Enhancements for Users**:
-    - Added an in-app **❓ Help** button right in the **Start Battle Overlay / Status: [status]** top bar (removing redundant tip text below `Status: [status]`) that opens the full **📖 Help & Overlay Guide** page covering the general battle flow, how to switch teams in the main app's `⚔️ Teams` page, how to use the **3x3 Matchup & Shield Matrix** (single-number PvPoke ratings, 5-tier colored dots, `0S/1S/2S` shield flip tags, and 9-state `0v0–2v2` engine), how to read **Charged Move Damage `%` & `KO!` badges** in the bottom 3-column Opponent Attacks grid, **Dual 50s Swap Clocks** with faint swap-in preservation, multi-cycle fast move counting (`C1-C2-C3`), sneak prevention, and top statusbar toasts.
-    - Kept the main navigation bar as 3 clean page selectors (**⚔️ Teams • 📜 Battle Log • ⚙️ Settings**) so labels never wrap or truncate on narrow screens, with the top **❓ Help** button opening the full Help page directly.
+- **v3.60 — Predictive + Self-Correcting Bias-Error Energy Loop, Opt-In HP/Energy Settings, Streamlined Header Row & 2s Hold to Battle Log**:
+  - **Opt-In HP & Energy Tracking (Disabled by Default)**: Added separate settings in **⚙️ Settings** to enable or disable **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting**. Both settings default to **OFF (Disabled)** for any user who has not installed `v3.40` or higher — opt in anytime via **⚙️ Settings**.
+  - **Predictive + Self-Correcting Bias-Error Fast-Move & Energy Loop**: Combines zero-lag feed-forward turn prediction (with pending-damage flash phase locking on 2T+ fast moves and automatic rollback if HP does not drop after `fastTurns * 500ms + 420ms`) with an online EMA per-move damage estimator ($\hat{d}$) and damped $\pm 1$ move residual self-correction to eliminate energy lag, overcounting, undercounting, and loop oscillation.
+  - **Streamlined Overlay Header Row**: Updated the top header row to display **only** the **Minimize / Pause OCR icon**, **OCR update rate in `ms`** (e.g. `220ms`), **My Health, Energy & Shield badges**, and **Opp Shields, Health & Energy badges**.
+  - **2-Second Long-Press on Minimize Icon to Stop Overlay & Open Battle Log**: Pressing and holding the top-left minimize icon for **2 seconds** when the overlay is expanded stops the overlay service and navigates directly to the **📜 Battle Log** page in the main app (a short tap minimizes to the floating bubble and pauses OCR as before).
+- **v3.50–v3.55 — Expanded Floating HP Bar Detection, 2Hz Capture Phasing & 7-Day AI Log Split**:
+  - Expanded floating HP bar detection corridors and overlay-occluded/text-overlapped bar scanning so smaller or laterally shifted Pokémon (such as Solgaleo and Mimikyu) are reliably tracked.
+  - Added 7-day AI training log split & automatic cleanup to keep permanent Battle Logs fast and lightweight.
+- **Phase 1–4 (v2.90–v3.01) — Asymmetric 9-Shield Matrix, Blind Matchup Favorability (BMF), Dynamic Execution WAE & In-App Help Guide**:
+  - Evaluates all 9 discrete shield permutations ($0\text{v}0$ through $2\text{v}2$), computes Pre-Match Blind Matchup Favorability ($P_{\text{pre}}$) and duration-weighted Dynamic Execution WAE ($\Delta Q$), and provides a 5-stat analytics dashboard, 6 Primary Performance Badges, 5 Contextual Event Pills, Interactive Post-Game Replay, standardized Go Battle Log exports, Tasker automation intents, and an in-app **❓ Help & Metric Guide**.
 
 ---
 

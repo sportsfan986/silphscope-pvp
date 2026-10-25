@@ -143,42 +143,48 @@
             pointer-events: none;
         }
 
-        .opp-title {
+        .header-ocr-ms-badge {
+            font-size: 7.5px;
             font-weight: 800;
-            font-size: 11px;
-            color: #fef08a;
-            display: flex;
-            align-items: center;
-            gap: 3.5px;
+            padding: 0.5px 3.5px;
+            border-radius: 3px;
+            line-height: 1.15;
+            color: #67e8f9;
+            background: rgba(8, 51, 68, 0.72);
+            border: 1px solid rgba(56, 189, 248, 0.55);
+            font-variant-numeric: tabular-nums;
             white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            min-width: 0;
-            flex: 1;
-        }
-
-        .sword-minimize-btn {
             flex-shrink: 0;
         }
 
-        #sky-opp-name {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            min-width: 0;
-        }
-
-        .opp-move-tag {
-            color: var(--secondary-accent-hex);
-            font-weight: 700;
-            font-size: 9px;
-            flex-shrink: 0;
-        }
-
-        .header-right-cluster {
+        .header-badges-cluster {
             display: flex;
             align-items: center;
+            justify-content: space-between;
             gap: 2.5px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .header-side-group {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
             flex-shrink: 0;
+        }
+
+        .header-group-sep {
+            color: rgba(148, 163, 184, 0.45);
+            font-size: 8px;
+            font-weight: 700;
+            margin: 0 1px;
+            flex-shrink: 0;
+        }
+
+        .sword-minimize-btn.holding {
+            background: rgba(244, 63, 94, 0.45);
+            border-color: #fb7185;
+            box-shadow: 0 0 8px rgba(244, 63, 94, 0.75);
         }
 
         .hud-shield-btn {
@@ -1187,21 +1193,32 @@
     <!-- OPTION 1: Top-Left Sky Trench (Transparent, Full-Width Header, 3-Column Threat Matrices) -->
     <div id="mode-sky-trench" class="glass-panel">
         <div id="overlay-watermark-bg" class="overlay-watermark-bg hidden"></div>
-        <!-- Header: Upper-Left Sword Minimize Button, Opponent Name, Live HP/Energy Pills & Shield Counters -->
+        <!-- Header v3.60: Minimize/Pause OCR Icon (2s hold -> Stop Overlay & Battle Log), OCR Rate (ms), My [HP, Energy, Shield] Badges, Opp [Shield, HP, Energy] Badges -->
         <div class="header-row">
-            <button id="btn-minimize-sword" class="sword-minimize-btn" onclick="minimizeToBubble()" title="Minimize overlay to floating bubble & pause OCR">⚔️</button>
-            <div class="opp-title" id="sky-title">
-                <span id="sky-opp-name">WAITING FOR OPPONENT...</span>
-            </div>
-            <div class="header-right-cluster">
-                <span id="sky-player-hp-pill" class="hp-slot-pill hp-high" title="Your Active Pokémon Live HP%">My:100%</span>
-                <span id="sky-opp-hp-pill" class="hp-slot-pill hp-high" title="Opponent Active Pokémon Live HP%">Opp:100%</span>
-                <button id="btn-player-shields" type="button" class="hud-shield-btn player-shield" onclick="cyclePlayerShields(event)" title="Your shields remaining (Tap to cycle 2->1->0->2)">
-                    <span class="shield-glyph">🛡️</span><span id="txt-player-shields" class="shield-val">2</span>
-                </button>
-                <button id="btn-opp-shields" type="button" class="hud-shield-btn opp-shield" onclick="cycleOpponentShields(event)" title="Opponent shields remaining (Tap to cycle 2->1->0->2)">
-                    <span class="shield-glyph">🛡️</span><span id="txt-opp-shields" class="shield-val">2</span>
-                </button>
+            <button id="btn-minimize-sword" type="button" class="sword-minimize-btn"
+                onpointerdown="startMinimizeHold(event)"
+                onpointerup="endMinimizeHold(event)"
+                onpointercancel="cancelMinimizeHold(event)"
+                onpointerleave="cancelMinimizeHold(event)"
+                oncontextmenu="event.preventDefault(); return false;"
+                title="Tap: Minimize & pause OCR • Hold 2s: Stop overlay & open Battle Log">⚔️</button>
+            <span id="sky-ocr-ms-badge" class="header-ocr-ms-badge" title="OCR capture & scan update rate in milliseconds">220ms</span>
+            <div class="header-badges-cluster">
+                <div class="header-side-group">
+                    <span id="sky-player-hp-pill" class="hp-slot-pill hp-high hidden" title="Your Active Pokémon Live HP%">100%</span>
+                    <span id="sky-player-energy-pill" class="energy-slot-pill building hidden" title="Your Active Pokémon Energy">0E</span>
+                    <button id="btn-player-shields" type="button" class="hud-shield-btn player-shield" onclick="cyclePlayerShields(event)" title="Your shields remaining (Tap to cycle 2->1->0->2)">
+                        <span class="shield-glyph">🛡️</span><span id="txt-player-shields" class="shield-val">2</span>
+                    </button>
+                </div>
+                <span class="header-group-sep">•</span>
+                <div class="header-side-group">
+                    <button id="btn-opp-shields" type="button" class="hud-shield-btn opp-shield" onclick="cycleOpponentShields(event)" title="Opponent shields remaining (Tap to cycle 2->1->0->2)">
+                        <span class="shield-glyph">🛡️</span><span id="txt-opp-shields" class="shield-val">2</span>
+                    </button>
+                    <span id="sky-opp-hp-pill" class="hp-slot-pill hp-high hidden" title="Opponent Active Pokémon Live HP%">100%</span>
+                    <span id="sky-opp-energy-pill" class="energy-slot-pill building hidden" title="Opponent Active Pokémon Energy">0E</span>
+                </div>
             </div>
         </div>
 
@@ -1778,6 +1795,69 @@
             }
         }
 
+        let minimizeHoldTimer = null;
+        let minimizeLongPressTriggered = false;
+        let minimizePointerActive = false;
+
+        function stopOverlayAndGoToBattleLog() {
+            const minBtn = document.getElementById("btn-minimize-sword");
+            if (minBtn) minBtn.classList.remove("holding");
+            if (window.AndroidOverlay && window.AndroidOverlay.stopOverlayAndOpenBattleLog) {
+                window.AndroidOverlay.stopOverlayAndOpenBattleLog();
+            } else if (window.parent && window.parent !== window) {
+                try {
+                    window.parent.postMessage({ type: "SILPH_STOP_OVERLAY_OPEN_BATTLE_LOG" }, "*");
+                } catch (e) {}
+            }
+        }
+
+        function startMinimizeHold(e) {
+            if (isMinimized) return;
+            if (e && e.button !== undefined && e.button !== 0) return;
+            minimizePointerActive = true;
+            minimizeLongPressTriggered = false;
+            const minBtn = document.getElementById("btn-minimize-sword");
+            if (minBtn) minBtn.classList.add("holding");
+            if (minimizeHoldTimer) {
+                clearTimeout(minimizeHoldTimer);
+            }
+            minimizeHoldTimer = setTimeout(function() {
+                minimizeHoldTimer = null;
+                if (!isMinimized && minimizePointerActive) {
+                    minimizeLongPressTriggered = true;
+                    minimizePointerActive = false;
+                    stopOverlayAndGoToBattleLog();
+                }
+            }, 2000);
+        }
+
+        function endMinimizeHold(e) {
+            if (e) e.preventDefault();
+            const minBtn = document.getElementById("btn-minimize-sword");
+            if (minBtn) minBtn.classList.remove("holding");
+            if (minimizeHoldTimer) {
+                clearTimeout(minimizeHoldTimer);
+                minimizeHoldTimer = null;
+            }
+            if (!minimizePointerActive) return;
+            minimizePointerActive = false;
+            if (!minimizeLongPressTriggered && !isMinimized) {
+                minimizeToBubble();
+            }
+            minimizeLongPressTriggered = false;
+        }
+
+        function cancelMinimizeHold(e) {
+            const minBtn = document.getElementById("btn-minimize-sword");
+            if (minBtn) minBtn.classList.remove("holding");
+            if (minimizeHoldTimer) {
+                clearTimeout(minimizeHoldTimer);
+                minimizeHoldTimer = null;
+            }
+            minimizePointerActive = false;
+            minimizeLongPressTriggered = false;
+        }
+
         function minimizeToBubble() {
             setOverlayMinimizedState(true);
             if (window.AndroidOverlay && window.AndroidOverlay.minimizeOverlay) {
@@ -1888,6 +1968,16 @@
         window.setShowTacticalRecs = function(enabled) {
             battleData.showTacticalRec = !!enabled;
             battleData.showTacticalRecommendations = !!enabled;
+            render();
+        };
+
+        window.setEnableHpTracking = function(enabled) {
+            battleData.enableHpTracking = !!enabled;
+            render();
+        };
+
+        window.setEnableEnergyTracking = function(enabled) {
+            battleData.enableEnergyTracking = !!enabled;
             render();
         };
 
@@ -2339,8 +2429,9 @@
                     if (startBattleBtn) startBattleBtn.classList.remove("hidden");
                 }
 
-                // Render active team chips for player switches as 2-row buttons: 3-letter code on top row, HP% on bottom row
+                // Render active team chips for player switches as 2-row buttons: 3-letter code on top row, HP% on bottom row (when HP tracking enabled)
                 const teamChipsContainer = document.getElementById("sky-team-chips");
+                const hpTrackingOnForChips = !!battleData.enableHpTracking;
                 if (teamChipsContainer && battleData.team) {
                     const pSlotHpArr = Array.isArray(battleData.playerSlotHpPct) ? battleData.playerSlotHpPct : [100, 100, 100];
                     teamChipsContainer.innerHTML = battleData.team.map((member, mIdx) => {
@@ -2353,7 +2444,9 @@
                         const slotHp = isFainted ? 0 : Math.max(0, Math.min(100, Math.round(rawHp)));
                         const hpColor = isFainted ? "#64748b" : (slotHp > 50 ? "#4ade80" : (slotHp > 20 ? "#fbbf24" : "#f87171"));
                         const faintStyle = isFainted ? 'opacity:0.45; text-decoration:line-through;' : '';
-                        return `<button class="chip-btn ${isActive && !isFainted ? 'active' : ''} ${isFainted ? 'col-fainted' : ''}" style="${faintStyle}" onclick="selectUserPokemonByIndex(${mIdx})" title="Active lead: ${fullName}${isFainted ? ' (Fainted 0% HP)' : ' (' + slotHp + '% HP)'}"><span class="btn-row-top">${poke3}:</span><span class="btn-row-sub" style="color:${hpColor};">${slotHp}%</span></button>`;
+                        const subText = hpTrackingOnForChips ? `${slotHp}%` : (isFainted ? "0%" : (isActive ? "ACT" : "RDY"));
+                        const subColor = hpTrackingOnForChips || isFainted ? hpColor : (isActive ? "#67e8f9" : "#94a3b8");
+                        return `<button class="chip-btn ${isActive && !isFainted ? 'active' : ''} ${isFainted ? 'col-fainted' : ''}" style="${faintStyle}" onclick="selectUserPokemonByIndex(${mIdx})" title="Active lead: ${fullName}${isFainted ? ' (Fainted 0% HP)' : (hpTrackingOnForChips ? ' (' + slotHp + '% HP)' : '')}"><span class="btn-row-top">${poke3}:</span><span class="btn-row-sub" style="color:${subColor};">${subText}</span></button>`;
                     }).join("");
                 }
             } catch (e) {
@@ -2407,60 +2500,119 @@
             const activeOppEnergyLabel = battleData.activeOppEnergyLabel
                 || (battleData.activeOppMoveReady ? `${activeOppEnergyVal}E READY` : `${activeOppEnergyVal}E`);
 
-            const playerHpPillEl = document.getElementById("sky-player-hp-pill");
-            const uCls = activeUserHpVal > 50 ? "hp-high" : (activeUserHpVal > 20 ? "hp-mid" : "hp-low");
-            if (playerHpPillEl) {
-                playerHpPillEl.className = `hp-slot-pill ${uCls}`;
-                playerHpPillEl.textContent = `My:${activeUserHpVal}% ${activeUserEnergyVal}E`;
-                playerHpPillEl.title = `Your Active Pokémon HP: ${activeUserHpVal}% • Energy: ${activeUserEnergyVal}E`;
+            const hpTrackingEnabled = !!battleData.enableHpTracking;
+            const energyTrackingEnabled = !!battleData.enableEnergyTracking;
+
+            const ocrMsBadgeEl = document.getElementById("sky-ocr-ms-badge");
+            if (ocrMsBadgeEl) {
+                const scanMs = typeof battleData.lastScanDurationMs === "number" && battleData.lastScanDurationMs > 0
+                    ? Math.round(battleData.lastScanDurationMs)
+                    : 220;
+                ocrMsBadgeEl.textContent = `${scanMs}ms`;
+                ocrMsBadgeEl.title = `OCR Update Rate: ${scanMs}ms (${battleData.scanHzMode || "2HZ"})`;
             }
-            const myAtkHpPillEl = document.getElementById("sky-my-atk-hp-pill");
-            if (myAtkHpPillEl) {
-                myAtkHpPillEl.className = `hp-slot-pill ${uCls}`;
-                myAtkHpPillEl.textContent = `${activeUserHpVal}%`;
-                myAtkHpPillEl.title = `Your Active Pokémon HP: ${activeUserHpVal}%`;
-            }
+
             const myRowsForE = battleData.myMoveTimingRows || [];
             const myCheapestE = myRowsForE.length > 0
                 ? Math.min(...myRowsForE.map(r => typeof r.energy === "number" ? r.energy : 50))
                 : 35;
             const myMoveRdy = activeUserEnergyVal >= myCheapestE && myRowsForE.length > 0;
-            const myAtkEnergyPillEl = document.getElementById("sky-my-atk-energy-pill");
-            if (myAtkEnergyPillEl) {
-                myAtkEnergyPillEl.className = `energy-slot-pill ${myMoveRdy ? "ready" : "building"}`;
-                myAtkEnergyPillEl.textContent = myMoveRdy ? `${activeUserEnergyVal}E READY` : `${activeUserEnergyVal}E`;
-                myAtkEnergyPillEl.title = `Your Active Pokémon Energy: ${activeUserEnergyVal}E`;
-            }
 
-            const oppHpPillEl = document.getElementById("sky-opp-hp-pill");
-            const oCls = isWaitingState ? "hp-high" : (activeOppHpVal > 50 ? "hp-high" : (activeOppHpVal > 20 ? "hp-mid" : "hp-low"));
-            if (oppHpPillEl) {
-                oppHpPillEl.className = `hp-slot-pill ${oCls}`;
-                oppHpPillEl.textContent = isWaitingState ? "Opp:—" : `Opp:${activeOppHpVal}%`;
-                oppHpPillEl.title = isWaitingState ? "Waiting for opponent HP bar" : `Active Opponent HP: ${activeOppHpVal}% • Energy: ${activeOppEnergyLabel}`;
-            }
-            const oppAtkHpPillEl = document.getElementById("sky-opp-atk-hp-pill");
-            if (oppAtkHpPillEl) {
-                oppAtkHpPillEl.className = `hp-slot-pill ${oCls}`;
-                oppAtkHpPillEl.textContent = isWaitingState ? "—" : `${activeOppHpVal}%`;
-                oppAtkHpPillEl.title = isWaitingState ? "Waiting for opponent HP bar" : `Active Opponent HP: ${activeOppHpVal}%`;
-            }
             const oppRowsForE = battleData.oppMoveTimingRows || [];
             const oppCheapestE = oppRowsForE.length > 0
                 ? Math.min(...oppRowsForE.map(r => typeof r.energy === "number" ? r.energy : 50))
                 : 35;
             const oppMoveRdy = !isWaitingState && (!!battleData.activeOppMoveReady || activeOppEnergyVal >= oppCheapestE || String(activeOppEnergyLabel).includes("READY"));
+
+            const playerHpPillEl = document.getElementById("sky-player-hp-pill");
+            const uCls = activeUserHpVal > 50 ? "hp-high" : (activeUserHpVal > 20 ? "hp-mid" : "hp-low");
+            if (playerHpPillEl) {
+                if (hpTrackingEnabled) {
+                    playerHpPillEl.className = `hp-slot-pill ${uCls}`;
+                    playerHpPillEl.textContent = `${activeUserHpVal}%`;
+                    playerHpPillEl.title = `Your Active Pokémon HP: ${activeUserHpVal}%`;
+                } else {
+                    playerHpPillEl.className = "hp-slot-pill hidden";
+                }
+            }
+            const playerEnergyPillEl = document.getElementById("sky-player-energy-pill");
+            if (playerEnergyPillEl) {
+                if (energyTrackingEnabled) {
+                    playerEnergyPillEl.className = `energy-slot-pill ${myMoveRdy ? "ready" : "building"}`;
+                    playerEnergyPillEl.textContent = myMoveRdy ? `${activeUserEnergyVal}E!` : `${activeUserEnergyVal}E`;
+                    playerEnergyPillEl.title = `Your Active Pokémon Energy: ${activeUserEnergyVal}E`;
+                } else {
+                    playerEnergyPillEl.className = "energy-slot-pill hidden";
+                }
+            }
+            const myAtkHpPillEl = document.getElementById("sky-my-atk-hp-pill");
+            if (myAtkHpPillEl) {
+                if (hpTrackingEnabled) {
+                    myAtkHpPillEl.className = `hp-slot-pill ${uCls}`;
+                    myAtkHpPillEl.textContent = `${activeUserHpVal}%`;
+                    myAtkHpPillEl.title = `Your Active Pokémon HP: ${activeUserHpVal}%`;
+                } else {
+                    myAtkHpPillEl.className = "hp-slot-pill hidden";
+                }
+            }
+            const myAtkEnergyPillEl = document.getElementById("sky-my-atk-energy-pill");
+            if (myAtkEnergyPillEl) {
+                if (energyTrackingEnabled) {
+                    myAtkEnergyPillEl.className = `energy-slot-pill ${myMoveRdy ? "ready" : "building"}`;
+                    myAtkEnergyPillEl.textContent = myMoveRdy ? `${activeUserEnergyVal}E READY` : `${activeUserEnergyVal}E`;
+                    myAtkEnergyPillEl.title = `Your Active Pokémon Energy: ${activeUserEnergyVal}E`;
+                } else {
+                    myAtkEnergyPillEl.className = "energy-slot-pill hidden";
+                }
+            }
+
+            const oppHpPillEl = document.getElementById("sky-opp-hp-pill");
+            const oCls = isWaitingState ? "hp-high" : (activeOppHpVal > 50 ? "hp-high" : (activeOppHpVal > 20 ? "hp-mid" : "hp-low"));
+            if (oppHpPillEl) {
+                if (hpTrackingEnabled) {
+                    oppHpPillEl.className = `hp-slot-pill ${oCls}`;
+                    oppHpPillEl.textContent = isWaitingState ? "—" : `${activeOppHpVal}%`;
+                    oppHpPillEl.title = isWaitingState ? "Waiting for opponent HP bar" : `Active Opponent HP: ${activeOppHpVal}%`;
+                } else {
+                    oppHpPillEl.className = "hp-slot-pill hidden";
+                }
+            }
+            const oppEnergyPillEl = document.getElementById("sky-opp-energy-pill");
+            if (oppEnergyPillEl) {
+                if (energyTrackingEnabled) {
+                    oppEnergyPillEl.className = `energy-slot-pill ${oppMoveRdy ? "ready" : "building"}`;
+                    oppEnergyPillEl.textContent = isWaitingState ? "0E" : (oppMoveRdy ? `${activeOppEnergyVal}E!` : `${activeOppEnergyVal}E`);
+                    oppEnergyPillEl.title = isWaitingState ? "Waiting for opponent energy" : `Active Opponent Energy: ${activeOppEnergyLabel}`;
+                } else {
+                    oppEnergyPillEl.className = "energy-slot-pill hidden";
+                }
+            }
+            const oppAtkHpPillEl = document.getElementById("sky-opp-atk-hp-pill");
+            if (oppAtkHpPillEl) {
+                if (hpTrackingEnabled) {
+                    oppAtkHpPillEl.className = `hp-slot-pill ${oCls}`;
+                    oppAtkHpPillEl.textContent = isWaitingState ? "—" : `${activeOppHpVal}%`;
+                    oppAtkHpPillEl.title = isWaitingState ? "Waiting for opponent HP bar" : `Active Opponent HP: ${activeOppHpVal}%`;
+                } else {
+                    oppAtkHpPillEl.className = "hp-slot-pill hidden";
+                }
+            }
             const oppAtkEnergyPillEl = document.getElementById("sky-opp-atk-energy-pill");
             if (oppAtkEnergyPillEl) {
-                oppAtkEnergyPillEl.className = `energy-slot-pill ${oppMoveRdy ? "ready" : "building"}`;
-                oppAtkEnergyPillEl.textContent = isWaitingState ? "0E" : activeOppEnergyLabel;
-                oppAtkEnergyPillEl.title = isWaitingState ? "Waiting for opponent energy" : `Active Opponent Energy: ${activeOppEnergyLabel}`;
+                if (energyTrackingEnabled) {
+                    oppAtkEnergyPillEl.className = `energy-slot-pill ${oppMoveRdy ? "ready" : "building"}`;
+                    oppAtkEnergyPillEl.textContent = isWaitingState ? "0E" : activeOppEnergyLabel;
+                    oppAtkEnergyPillEl.title = isWaitingState ? "Waiting for opponent energy" : `Active Opponent Energy: ${activeOppEnergyLabel}`;
+                } else {
+                    oppAtkEnergyPillEl.className = "energy-slot-pill hidden";
+                }
             }
 
             const my3Letter = abbrPoke(battleData.userActivePokemon || "Lead", false);
             const userFastTelemetry = battleData.userFastTelemetry || `${abbrMove5(battleData.userFastMoveName || "Fast")} ${battleData.userFastMoveTurns || 2}t`;
             if (myShortEl) {
-                myShortEl.textContent = isWaitingState ? `${my3Letter} (${activeUserHpVal}%)` : `${my3Letter} ${activeUserHpVal}% · ${userFastTelemetry}`;
+                const myHpSuffix = hpTrackingEnabled ? ` ${activeUserHpVal}%` : "";
+                myShortEl.textContent = isWaitingState ? `${my3Letter}${myHpSuffix}` : `${my3Letter}${myHpSuffix} · ${userFastTelemetry}`;
             }
 
             if (isWaitingState) {
@@ -2513,7 +2665,8 @@
                 const opp3Letter = abbrPoke(battleData.activeOpponent || "Opp", false);
                 const oppFastTelemetry = battleData.oppFastTelemetry
                     || `${abbrMove5(battleData.activeOpponentFastMove || "Fast")} ${battleData.activeOpponentTurns || 2}t`;
-                if (oppMoveEl) oppMoveEl.textContent = `${opp3Letter} ${activeOppHpVal}% · ${oppFastTelemetry}`;
+                const oppHpSuffix = hpTrackingEnabled ? ` ${activeOppHpVal}%` : "";
+                if (oppMoveEl) oppMoveEl.textContent = `${opp3Letter}${oppHpSuffix} · ${oppFastTelemetry}`;
 
                 const winsCmp = battleData.winsCmp !== undefined ? !!battleData.winsCmp : true;
                 const oppWinsCmp = !winsCmp;
@@ -2638,7 +2791,7 @@
                             const hpCls = oppSlotHp > 50 ? "hp-high" : (oppSlotHp > 20 ? "hp-mid" : "hp-low");
                             const hpBadgeHtml = oppFainted
                                 ? `<span class="hp-slot-pill hp-low">0%</span>`
-                                : `<span class="hp-slot-pill ${hpCls}">${oppSlotHp}%</span>`;
+                                : (hpTrackingEnabled ? `<span class="hp-slot-pill ${hpCls}">${oppSlotHp}%</span>` : "");
                             const oppEnergyArr = Array.isArray(battleData.oppSlotEnergy) ? battleData.oppSlotEnergy : [];
                             const rawOppE = typeof opp.energy === "number"
                                 ? opp.energy
@@ -2649,7 +2802,7 @@
                             const oppEnergyText = oppFainted
                                 ? "0E"
                                 : (opp.energyLabel || (isMoveRdy ? `${oppSlotE}E READY` : `${oppSlotE}E`));
-                            const energyBadgeHtml = oppFainted
+                            const energyBadgeHtml = (oppFainted || !energyTrackingEnabled)
                                 ? ""
                                 : `<span class="energy-slot-pill ${isMoveRdy ? 'ready' : 'building'}" title="Opponent Energy: ${oppSlotE}E (Cheapest Charged Move: ${cheapestE}E)">${oppEnergyText}</span>`;
                             const p1Dots = renderTierDots(opp.matrix ? opp.matrix.p1 : "W,N,L");

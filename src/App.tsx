@@ -650,6 +650,48 @@ export default function App() {
     } catch {}
   };
 
+  // v3.60 Opt-In Settings: Live HP Bar Tracking & Live Energy Counting (Default OFF for users < v3.40)
+  const [enableHpTracking, setEnableHpTracking] = useState<boolean>(() => {
+    try {
+      const prevVer = Number(localStorage.getItem('gbl_installed_version_code') || '0');
+      if (prevVer < 340) {
+        localStorage.setItem('gbl_enable_hp_tracking', 'false');
+        localStorage.setItem('gbl_enable_energy_tracking', 'false');
+        localStorage.setItem('gbl_installed_version_code', '360');
+        return false;
+      }
+      localStorage.setItem('gbl_installed_version_code', '360');
+      return localStorage.getItem('gbl_enable_hp_tracking') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleSetEnableHpTracking = (enabled: boolean) => {
+    setEnableHpTracking(enabled);
+    try {
+      localStorage.setItem('gbl_enable_hp_tracking', String(enabled));
+    } catch {}
+  };
+
+  const [enableEnergyTracking, setEnableEnergyTracking] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('gbl_enable_energy_tracking') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleSetEnableEnergyTracking = (enabled: boolean) => {
+    setEnableEnergyTracking(enabled);
+    try {
+      localStorage.setItem('gbl_enable_energy_tracking', String(enabled));
+    } catch {}
+  };
+
+  const minimizeHoldTimerRef = useRef<number | null>(null);
+  const minimizeHoldTriggeredRef = useRef<boolean>(false);
+
   const [showArchetypePlaybook, setShowArchetypePlaybook] = useState<boolean>(false);
 
   // App-Level Setting: Overlay Screen Width Scale (50% - 100%, Default 78%, step 2%)
@@ -3932,7 +3974,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v3.55 • Android Native Overlay
+                  v3.60 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -4385,7 +4427,7 @@ export default function App() {
                         textShadow: '0 1px 2px rgba(0, 0, 0, 0.98), 0 0 4px rgba(0, 0, 0, 0.95)'
                       }}
                     >
-                      {/* Header row (Upper-left theme emblem icon minimizes to bubble & pauses OCR) */}
+                      {/* v3.60 Header row: ONLY Minimize/Pause OCR icon (2s hold -> Stop Overlay & Go to Battle Log) + OCR update rate in ms + My [Health, Energy, Shield] + Opp [Shields, Health, Energy] */}
                       <div
                         className="flex items-center justify-between pb-1 border-b gap-1 px-1 pt-0.5 rounded-t"
                         style={{
@@ -4393,49 +4435,88 @@ export default function App() {
                           background: `linear-gradient(90deg, rgba(${activeTheme.overlayHeaderRgb}, 0.16) 0%, rgba(0,0,0,0) 100%)`
                         }}
                       >
-                        <div className="font-extrabold text-[10.5px] text-amber-100 flex items-center gap-1 truncate min-w-0">
+                        <div className="flex items-center gap-1 shrink-0 font-mono text-[7.5px] font-extrabold">
                           <button
                             type="button"
-                            onClick={(e) => {
+                            onPointerDown={(e) => {
                               e.stopPropagation();
-                              setIsOverlayMinimized(true);
+                              minimizeHoldTriggeredRef.current = false;
+                              if (minimizeHoldTimerRef.current) {
+                                window.clearTimeout(minimizeHoldTimerRef.current);
+                              }
+                              minimizeHoldTimerRef.current = window.setTimeout(() => {
+                                minimizeHoldTriggeredRef.current = true;
+                                setIsOverlayVisible(false);
+                                setActiveTab('battle_log');
+                                setStartBattleToast('🛑 Overlay stopped (2s hold) • Opened Battle Log');
+                                setTimeout(() => setStartBattleToast(null), 2200);
+                              }, 2000);
+                            }}
+                            onPointerUp={(e) => {
+                              e.stopPropagation();
+                              if (minimizeHoldTimerRef.current) {
+                                window.clearTimeout(minimizeHoldTimerRef.current);
+                                minimizeHoldTimerRef.current = null;
+                              }
+                              if (!minimizeHoldTriggeredRef.current) {
+                                setIsOverlayMinimized(true);
+                              }
+                              minimizeHoldTriggeredRef.current = false;
+                            }}
+                            onPointerCancel={() => {
+                              if (minimizeHoldTimerRef.current) {
+                                window.clearTimeout(minimizeHoldTimerRef.current);
+                                minimizeHoldTimerRef.current = null;
+                              }
+                              minimizeHoldTriggeredRef.current = false;
+                            }}
+                            onPointerLeave={() => {
+                              if (minimizeHoldTimerRef.current) {
+                                window.clearTimeout(minimizeHoldTimerRef.current);
+                                minimizeHoldTimerRef.current = null;
+                              }
+                              minimizeHoldTriggeredRef.current = false;
                             }}
                             className="px-1 py-0.5 rounded text-white text-[10px] leading-tight shrink-0 shadow-sm active:scale-90 transition border flex items-center justify-center"
                             style={{
                               backgroundColor: `rgba(${activeTheme.overlayHeaderRgb}, 0.28)`,
                               borderColor: `rgba(${activeTheme.overlayHeaderRgb}, 0.75)`
                             }}
-                            title="Minimize overlay to floating theme-emblem bubble & pause OCR"
+                            title="Tap: Minimize overlay & pause OCR • Hold 2s: Stop overlay & go to Battle Log"
                           >
                             {renderThemeOverlayIcon(activeTheme.id, 13)}
                           </button>
-                          {isWaitingOpponent || scannedOpponents.length === 0 ? (
-                            <>
-                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block shrink-0" />
-                              <span className="text-emerald-200">WAITING FOR OPPONENT...</span>
-                            </>
-                          ) : (
-                            <>
-                              <span className="truncate">VS {isOpponentShadow ? 'S-' : ''}{activeOpponent.name.toUpperCase()}</span>
-                            </>
-                          )}
-                        </div>
-                        {/* Interactive Shield Counters & Live HP% Pills: You (My) & Opponent (Opp) */}
-                        <div className="flex items-center gap-1 shrink-0 font-mono text-[8px] font-extrabold">
                           <span
-                            className={`px-1 py-0.5 rounded border leading-none shrink-0 ${
-                              (userSlotHpPct[activeUserSlotIndex] ?? 100) <= 0
-                                ? 'text-slate-400 bg-slate-900/60 border-slate-700 line-through'
-                                : (userSlotHpPct[activeUserSlotIndex] ?? 100) <= 22
-                                ? 'text-rose-200 bg-rose-950/70 border-rose-400/70'
-                                : (userSlotHpPct[activeUserSlotIndex] ?? 100) <= 50
-                                ? 'text-amber-200 bg-amber-950/70 border-amber-400/70'
-                                : 'text-emerald-200 bg-emerald-950/70 border-emerald-400/70'
-                            }`}
-                            title={`Active Player Pokémon HP: ${userSlotHpPct[activeUserSlotIndex] ?? 100}% • Energy: ${userSlotEnergy[activeUserSlotIndex] ?? userEnergy}E`}
+                            className="px-1 py-0.5 rounded border border-cyan-400/55 bg-slate-900/75 text-cyan-200 leading-none shrink-0"
+                            title="OCR & Frame Capture Update Rate in ms"
                           >
-                            My:{userSlotHpPct[activeUserSlotIndex] ?? 100}% {userSlotEnergy[activeUserSlotIndex] ?? userEnergy}E
+                            {scanHzMode === '2Hz' ? '220ms' : '480ms'}
                           </span>
+                          {/* My Health, Energy, Shield badges */}
+                          {enableHpTracking && (
+                            <span
+                              className={`px-1 py-0.5 rounded border leading-none shrink-0 ${
+                                (userSlotHpPct[activeUserSlotIndex] ?? 100) <= 0
+                                  ? 'text-slate-400 bg-slate-900/60 border-slate-700 line-through'
+                                  : (userSlotHpPct[activeUserSlotIndex] ?? 100) <= 22
+                                  ? 'text-rose-200 bg-rose-950/70 border-rose-400/70'
+                                  : (userSlotHpPct[activeUserSlotIndex] ?? 100) <= 50
+                                  ? 'text-amber-200 bg-amber-950/70 border-amber-400/70'
+                                  : 'text-emerald-200 bg-emerald-950/70 border-emerald-400/70'
+                              }`}
+                              title={`My Active Pokémon HP: ${userSlotHpPct[activeUserSlotIndex] ?? 100}%`}
+                            >
+                              My {userSlotHpPct[activeUserSlotIndex] ?? 100}%
+                            </span>
+                          )}
+                          {enableEnergyTracking && (
+                            <span
+                              className="px-1 py-0.5 rounded border border-sky-400/60 bg-sky-950/75 text-sky-200 leading-none shrink-0"
+                              title={`My Active Pokémon Energy: ${userSlotEnergy[activeUserSlotIndex] ?? userEnergy}E`}
+                            >
+                              {userSlotEnergy[activeUserSlotIndex] ?? userEnergy}E
+                            </span>
+                          )}
                           <button
                             type="button"
                             onClick={(e) => {
@@ -4443,7 +4524,7 @@ export default function App() {
                               const next = userShields > 0 ? userShields - 1 : 2;
                               setUserShields(next);
                             }}
-                            className={`px-1.5 py-0.5 rounded border leading-none transition-all flex items-center gap-0.5 active:scale-95 cursor-pointer ${
+                            className={`px-1 py-0.5 rounded border leading-none transition-all flex items-center gap-0.5 active:scale-95 cursor-pointer shrink-0 ${
                               userShields === 0
                                 ? 'opacity-50 text-slate-400 bg-slate-900/60 border-slate-700 line-through'
                                 : 'text-sky-200 border-sky-400/50 hover:bg-sky-900/50'
@@ -4455,10 +4536,47 @@ export default function App() {
                             }}
                             title={`Your Shields: ${userShields}/2 remaining (Tap to cycle 2->1->0->2)`}
                           >
-                            <span className="text-[8px]">🛡️</span>
+                            <span className="text-[7.5px]">🛡️</span>
                             <span>{userShields}</span>
                           </button>
-                          {!isWaitingOpponent && scannedOpponents.length > 0 && (() => {
+                        </div>
+
+                        {/* Opp Shields, Health, Energy badges */}
+                        <div className="flex items-center gap-1 shrink-0 font-mono text-[7.5px] font-extrabold">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const next = oppShields > 0 ? oppShields - 1 : 2;
+                              setOppShields(next);
+                            }}
+                            className={`px-1 py-0.5 rounded border leading-none transition-all flex items-center gap-0.5 active:scale-95 cursor-pointer shrink-0 ${
+                              oppShields === 0
+                                ? 'opacity-50 text-slate-400 bg-slate-900/60 border-slate-700 line-through'
+                                : 'text-pink-300 bg-pink-950/60 border-pink-500/50 hover:bg-pink-900/50'
+                            }`}
+                            title={`Opponent Shields: ${oppShields}/2 remaining (Tap to cycle 2->1->0->2)`}
+                          >
+                            <span className="text-[7.5px]">🛡️</span>
+                            <span>{oppShields}</span>
+                          </button>
+                          {enableHpTracking && (
+                            <span
+                              className={`px-1 py-0.5 rounded border leading-none shrink-0 ${
+                                (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 0
+                                  ? 'text-slate-400 bg-slate-900/60 border-slate-700 line-through'
+                                  : (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 22
+                                  ? 'text-rose-200 bg-rose-950/70 border-rose-400/70'
+                                  : (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 50
+                                  ? 'text-amber-200 bg-amber-950/70 border-amber-400/70'
+                                  : 'text-emerald-200 bg-emerald-950/70 border-emerald-400/70'
+                              }`}
+                              title={`Active Opponent Pokémon HP: ${oppSlotHpPct[safeActiveOppSlot] ?? 100}%`}
+                            >
+                              Opp {oppSlotHpPct[safeActiveOppSlot] ?? 100}%
+                            </span>
+                          )}
+                          {enableEnergyTracking && (() => {
                             const activeOppE = oppSlotEnergy[safeActiveOppSlot] ?? oppEnergy;
                             const cheapestOppCost = Math.min(
                               ...activeOpponent.chargedMoves.map((m) => m.energyCost || 40),
@@ -4468,37 +4586,16 @@ export default function App() {
                             return (
                               <span
                                 className={`px-1 py-0.5 rounded border leading-none shrink-0 ${
-                                  (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 0
-                                    ? 'text-slate-400 bg-slate-900/60 border-slate-700 line-through'
-                                    : (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 22
-                                    ? 'text-rose-200 bg-rose-950/70 border-rose-400/70'
-                                    : (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 50
-                                    ? 'text-amber-200 bg-amber-950/70 border-amber-400/70'
-                                    : 'text-emerald-200 bg-emerald-950/70 border-emerald-400/70'
+                                  oppRdy
+                                    ? 'text-yellow-200 bg-amber-700/75 border-yellow-300/90'
+                                    : 'text-amber-200 bg-amber-950/75 border-amber-400/60'
                                 }`}
-                                title={`Active Opponent Pokémon HP: ${oppSlotHpPct[safeActiveOppSlot] ?? 100}% • Energy: ${activeOppE}E${oppRdy ? ' READY' : ''}`}
+                                title={`Active Opponent Energy: ${activeOppE}E${oppRdy ? ' (Move Ready)' : ''}`}
                               >
-                                Opp:{oppSlotHpPct[safeActiveOppSlot] ?? 100}% · {activeOppE}E{oppRdy ? ' READY' : ''}
+                                {activeOppE}E{oppRdy ? '!' : ''}
                               </span>
                             );
                           })()}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const next = oppShields > 0 ? oppShields - 1 : 2;
-                              setOppShields(next);
-                            }}
-                            className={`px-1.5 py-0.5 rounded border leading-none transition-all flex items-center gap-0.5 active:scale-95 cursor-pointer ${
-                              oppShields === 0
-                                ? 'opacity-50 text-slate-400 bg-slate-900/60 border-slate-700 line-through'
-                                : 'text-pink-300 bg-pink-950/60 border-pink-500/50 hover:bg-pink-900/50'
-                            }`}
-                            title={`Opponent Shields: ${oppShields}/2 remaining (Tap to cycle 2->1->0->2)`}
-                          >
-                            <span className="text-[8px]">🛡️</span>
-                            <span>{oppShields}</span>
-                          </button>
                         </div>
                       </div>
 
@@ -8431,6 +8528,83 @@ export default function App() {
                   }`}
                 >
                   Recommendations Off
+                </button>
+              </div>
+            </div>
+
+            {/* v3.60 Opt-In Settings: Live HP Bar Tracking & Live Energy Counting (Default OFF) */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+                  <span>❤️ Live HP Bar Tracking (Overlay)</span>
+                </h3>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
+                  {enableHpTracking ? 'ON (Opted In)' : 'OFF (Default)'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                <strong>Disabled by default</strong> (including for users upgrading from &lt; v3.40). Opt in to display live Player &amp; Opponent HP% badges on the floating overlay header, 3v3 matrix rows, and team buttons.
+              </p>
+              <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => handleSetEnableHpTracking(false)}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                    !enableHpTracking
+                      ? 'bg-slate-800 border border-slate-600 text-slate-200'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  HP Tracking: OFF (Default)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetEnableHpTracking(true)}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                    enableHpTracking
+                      ? 'bg-emerald-500/25 border border-emerald-400/70 text-emerald-200'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  HP Tracking: ON (Opt In)
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-bold text-sky-400 flex items-center gap-2">
+                  <span>⚡ Live Energy &amp; Fast-Move Counting (Overlay)</span>
+                </h3>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
+                  {enableEnergyTracking ? 'ON (Opted In)' : 'OFF (Default)'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                <strong>Disabled by default</strong> (including for users upgrading from &lt; v3.40). Opt in to run the v3.60 predictive + self-correcting bias-error fast-move energy loop and display live Energy &amp; Charged Move READY badges on the overlay.
+              </p>
+              <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => handleSetEnableEnergyTracking(false)}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                    !enableEnergyTracking
+                      ? 'bg-slate-800 border border-slate-600 text-slate-200'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Energy Counting: OFF (Default)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetEnableEnergyTracking(true)}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                    enableEnergyTracking
+                      ? 'bg-sky-500/25 border border-sky-400/70 text-sky-200'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Energy Counting: ON (Opt In)
                 </button>
               </div>
             </div>
