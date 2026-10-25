@@ -60,7 +60,7 @@
                 android:id="@+id/tv_app_main_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Real-Time PvP Floating Overlay • v3.15"
+                android:text="Real-Time PvP Floating Overlay • v3.60"
                 android:textSize="11sp"
                 android:textColor="#94a3b8"
                 android:layout_marginTop="1dp" />
@@ -985,6 +985,51 @@
                     android:text="Toasts On"
                     android:textSize="11sp"
                     android:backgroundTint="#0284c7"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
+            <!-- Lead & Swap Tactical Recommendations GUI Setting -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:paddingTop="8dp"
+                android:background="#0f172a"
+                android:paddingHorizontal="10dp"
+                android:paddingBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🧠 Lead &amp; Swap Tactical Recommendation Row"
+                        android:textColor="#34d399"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_tactical_rec_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: Enabled — 1-line Action, Shield Plan &amp; Goal row in Overlay"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_toggle_tactical_rec"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="Recs On"
+                    android:textSize="11sp"
+                    android:backgroundTint="#059669"
                     android:textColor="#ffffff" />
             </LinearLayout>
 
