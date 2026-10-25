@@ -156,7 +156,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "5/7/14",
     defaultIvsUl: "5/10/13",
-    defaultFastMove: { name: "Quick Attack", type: "normal", turns: 1, power: 5, energyGain: 7 },
+    defaultFastMove: { name: "Quick Attack", type: "normal", turns: 2, power: 5, energyGain: 8 },
     chargedMoves: [
       { name: "Close Combat", code: "CC", type: "fighting", power: 100, energyCost: 45 },
       { name: "Play Rough", code: "PR", type: "fairy", power: 90, energyCost: 60 },
@@ -210,7 +210,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "12/12/13",
     defaultIvsUl: "11/14/13",
-    defaultFastMove: { name: "Low Kick", type: "fighting", turns: 2, power: 4, energyGain: 7 },
+    defaultFastMove: { name: "Low Kick", type: "fighting", turns: 2, power: 6, energyGain: 8 },
     chargedMoves: [
       { name: "Secret Sword", code: "SS", type: "fighting", power: 70, energyCost: 35 },
       { name: "Aqua Jet", code: "AJ", type: "water", power: 70, energyCost: 40 },
@@ -228,7 +228,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "0/0/0",
     defaultIvsUl: "11/14/13",
-    defaultFastMove: { name: "Low Kick", type: "fighting", turns: 2, power: 4, energyGain: 7 },
+    defaultFastMove: { name: "Low Kick", type: "fighting", turns: 2, power: 6, energyGain: 8 },
     chargedMoves: [
       { name: "Sacred Sword", code: "ScS", type: "fighting", power: 60, energyCost: 35 },
       { name: "Aqua Jet", code: "AJ", type: "water", power: 70, energyCost: 40 },
@@ -246,7 +246,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "5/15/8",
     defaultIvsUl: "7/14/14",
-    defaultFastMove: { name: "Dragon Breath", type: "dragon", turns: 1, power: 4, energyGain: 3 },
+    defaultFastMove: { name: "Dragon Breath", type: "dragon", turns: 1, power: 3, energyGain: 4 },
     chargedMoves: [
       { name: "Roar of Time", code: "RoT", type: "dragon", power: 150, energyCost: 65 },
       { name: "Iron Head", code: "IH", type: "steel", power: 85, energyCost: 50 },
@@ -264,7 +264,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "5/13/12",
     defaultIvsUl: "5/13/12",
-    defaultFastMove: { name: "Dragon Tail", type: "dragon", turns: 3, power: 13, energyGain: 9 },
+    defaultFastMove: { name: "Dragon Tail", type: "dragon", turns: 3, power: 9, energyGain: 12 },
     chargedMoves: [
       { name: "Aeroblast", code: "AB", type: "flying", power: 170, energyCost: 75 },
       { name: "Earth Power", code: "EP", type: "ground", power: 90, energyCost: 50 },
@@ -282,7 +282,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "6/14/5",
     defaultIvsUl: "4/9/12",
-    defaultFastMove: { name: "Waterfall", type: "water", turns: 3, power: 12, energyGain: 8 },
+    defaultFastMove: { name: "Waterfall", type: "water", turns: 3, power: 11, energyGain: 10 },
     chargedMoves: [
       { name: "Origin Pulse", code: "OP", type: "water", power: 130, energyCost: 60 },
       { name: "Avalanche", code: "Av", type: "ice", power: 90, energyCost: 45 },
@@ -336,7 +336,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "0/0/0",
     defaultIvsUl: "13/10/15",
-    defaultFastMove: { name: "Dragon Tail", type: "dragon", turns: 3, power: 13, energyGain: 9 },
+    defaultFastMove: { name: "Dragon Tail", type: "dragon", turns: 3, power: 9, energyGain: 12 },
     chargedMoves: [
       { name: "Crunch", code: "Cr", type: "dark", power: 70, energyCost: 45 },
       { name: "Earthquake", code: "EQ", type: "ground", power: 120, energyCost: 65 },
@@ -390,7 +390,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "4/15/14",
     defaultIvsUl: "12/15/14",
-    defaultFastMove: { name: "Ember", type: "fire", turns: 2, power: 7, energyGain: 6 },
+    defaultFastMove: { name: "Ember", type: "fire", turns: 2, power: 4, energyGain: 9 },
     chargedMoves: [
       { name: "Weather Ball (Fire)", code: "WB-F", type: "fire", power: 60, energyCost: 35 },
       { name: "Energy Ball", code: "EB", type: "grass", power: 80, energyCost: 45 },
@@ -408,7 +408,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "4/15/14",
     defaultIvsUl: "12/15/15",
-    defaultFastMove: { name: "Fairy Wind", type: "fairy", turns: 2, power: 3, energyGain: 9 },
+    defaultFastMove: { name: "Fairy Wind", type: "fairy", turns: 2, power: 4, energyGain: 9 },
     chargedMoves: [
       { name: "Gigaton Hammer", code: "GH", type: "steel", power: 130, energyCost: 60 },
       { name: "Bulldoze", code: "BD", type: "ground", power: 80, energyCost: 55 },
@@ -426,7 +426,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "5/15/13",
     defaultIvsUl: "4/14/15",
-    defaultFastMove: { name: "Scratch", type: "normal", turns: 1, power: 4, energyGain: 2 },
+    defaultFastMove: { name: "Scratch", type: "normal", turns: 1, power: 3, energyGain: 4 },
     chargedMoves: [
       { name: "Drum Beating", code: "DB", type: "grass", power: 60, energyCost: 35 },
       { name: "Earth Power", code: "EP", type: "ground", power: 90, energyCost: 50 },
@@ -480,7 +480,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "4/15/13",
     defaultIvsUl: "15/15/15",
-    defaultFastMove: { name: "Peck", type: "flying", turns: 2, power: 6, energyGain: 7 },
+    defaultFastMove: { name: "Peck", type: "flying", turns: 2, power: 6, energyGain: 8 },
     chargedMoves: [
       { name: "Drill Run", code: "DR", type: "ground", power: 70, energyCost: 40 },
       { name: "Drill Peck", code: "DP", type: "flying", power: 70, energyCost: 40 },
@@ -498,7 +498,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "4/14/12",
     defaultIvsUl: "15/15/15",
-    defaultFastMove: { name: "Gust", type: "flying", turns: 4, power: 16, energyGain: 12 },
+    defaultFastMove: { name: "Gust", type: "flying", turns: 4, power: 16, energyGain: 14 },
     chargedMoves: [
       { name: "Twister", code: "Tw", type: "dragon", power: 70, energyCost: 40 },
       { name: "Brave Bird", code: "BB", type: "flying", power: 130, energyCost: 55 },
@@ -516,7 +516,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "6/12/11",
     defaultIvsUl: "5/13/13",
-    defaultFastMove: { name: "Thunder Shock", type: "electric", turns: 2, power: 3, energyGain: 9 },
+    defaultFastMove: { name: "Thunder Shock", type: "electric", turns: 2, power: 4, energyGain: 9 },
     chargedMoves: [
       { name: "Wild Charge", code: "WC", type: "electric", power: 100, energyCost: 45 },
       { name: "Shadow Ball", code: "SB", type: "ghost", power: 90, energyCost: 50 },
@@ -534,7 +534,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "7/9/11",
     defaultIvsUl: "6/12/12",
-    defaultFastMove: { name: "Fire Fang", type: "fire", turns: 2, power: 8, energyGain: 8 },
+    defaultFastMove: { name: "Fire Fang", type: "fire", turns: 2, power: 8, energyGain: 6 },
     chargedMoves: [
       { name: "Flame Charge", code: "FC", type: "fire", power: 65, energyCost: 50 },
       { name: "Overheat", code: "OH", type: "fire", power: 130, energyCost: 55 },
@@ -606,7 +606,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "7/10/8",
     defaultIvsUl: "9/13/14",
-    defaultFastMove: { name: "Dragon Breath", type: "dragon", turns: 1, power: 4, energyGain: 3 },
+    defaultFastMove: { name: "Dragon Breath", type: "dragon", turns: 1, power: 3, energyGain: 4 },
     chargedMoves: [
       { name: "Ice Burn", code: "IB", type: "ice", power: 120, energyCost: 60 },
       { name: "Fusion Flare", code: "FF", type: "fire", power: 90, energyCost: 45 },
@@ -624,7 +624,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "9/15/14",
     defaultIvsUl: "5/8/14",
-    defaultFastMove: { name: "Dragon Breath", type: "dragon", turns: 1, power: 4, energyGain: 3 },
+    defaultFastMove: { name: "Dragon Breath", type: "dragon", turns: 1, power: 3, energyGain: 4 },
     chargedMoves: [
       { name: "Glaciate", code: "Gl", type: "ice", power: 60, energyCost: 40 },
       { name: "Dragon Claw", code: "DC", type: "dragon", power: 80, energyCost: 50 },
@@ -642,7 +642,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "7/15/13",
     defaultIvsUl: "11/13/15",
-    defaultFastMove: { name: "Dragon Breath", type: "dragon", turns: 1, power: 4, energyGain: 3 },
+    defaultFastMove: { name: "Dragon Breath", type: "dragon", turns: 1, power: 3, energyGain: 4 },
     chargedMoves: [
       { name: "Spacial Rend", code: "SR", type: "dragon", power: 95, energyCost: 55 },
       { name: "Aqua Tail", code: "AT", type: "water", power: 55, energyCost: 35 },
@@ -732,7 +732,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "4/14/13",
     defaultIvsUl: "8/13/14",
-    defaultFastMove: { name: "Psycho Cut", type: "psychic", turns: 2, power: 3, energyGain: 9 },
+    defaultFastMove: { name: "Psycho Cut", type: "psychic", turns: 2, power: 4, energyGain: 9 },
     chargedMoves: [
       { name: "Psystrike", code: "PS", type: "psychic", power: 90, energyCost: 45 },
       { name: "Shadow Ball", code: "SB", type: "ghost", power: 90, energyCost: 50 },
@@ -750,7 +750,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "1/15/15",
     defaultIvsUl: "1/15/15",
-    defaultFastMove: { name: "Confusion", type: "psychic", turns: 4, power: 16, energyGain: 12 },
+    defaultFastMove: { name: "Confusion", type: "psychic", turns: 4, power: 16, energyGain: 14 },
     chargedMoves: [
       { name: "Psystrike", code: "PS", type: "psychic", power: 90, energyCost: 45 },
       { name: "Dynamic Punch", code: "DP", type: "fighting", power: 85, energyCost: 45 },
@@ -768,7 +768,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "1/15/15",
     defaultIvsUl: "1/15/15",
-    defaultFastMove: { name: "Confusion", type: "psychic", turns: 4, power: 16, energyGain: 12 },
+    defaultFastMove: { name: "Confusion", type: "psychic", turns: 4, power: 16, energyGain: 14 },
     chargedMoves: [
       { name: "Psystrike", code: "PS", type: "psychic", power: 90, energyCost: 45 },
       { name: "Dynamic Punch", code: "DP", type: "fighting", power: 85, energyCost: 45 },
@@ -822,7 +822,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "4/11/9",
     defaultIvsUl: "4/11/11",
-    defaultFastMove: { name: "Psycho Cut", type: "psychic", turns: 2, power: 3, energyGain: 9 },
+    defaultFastMove: { name: "Psycho Cut", type: "psychic", turns: 2, power: 4, energyGain: 9 },
     chargedMoves: [
       { name: "Grass Knot", code: "GK", type: "grass", power: 90, energyCost: 50 },
       { name: "Moonblast", code: "MB", type: "fairy", power: 90, energyCost: 50 },
@@ -876,7 +876,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "4/15/8",
     defaultIvsUl: "4/13/13",
-    defaultFastMove: { name: "Rollout", type: "rock", turns: 3, power: 8, energyGain: 13 },
+    defaultFastMove: { name: "Rollout", type: "rock", turns: 3, power: 7, energyGain: 13 },
     chargedMoves: [
       { name: "Body Slam", code: "BS", type: "normal", power: 65, energyCost: 40 },
       { name: "Shadow Ball", code: "SB", type: "ghost", power: 90, energyCost: 50 },
@@ -894,7 +894,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "4/13/13",
     defaultIvsUl: "5/14/15",
-    defaultFastMove: { name: "Counter", type: "fighting", turns: 2, power: 8, energyGain: 7 },
+    defaultFastMove: { name: "Counter", type: "fighting", turns: 2, power: 8, energyGain: 6 },
     chargedMoves: [
       { name: "Rage Fist", code: "RF", type: "ghost", power: 55, energyCost: 40 },
       { name: "Ice Punch", code: "IP", type: "ice", power: 60, energyCost: 40 },
@@ -930,7 +930,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "4/14/10",
     defaultIvsUl: "15/15/15",
-    defaultFastMove: { name: "Poison Sting", type: "poison", turns: 2, power: 3, energyGain: 9 },
+    defaultFastMove: { name: "Poison Sting", type: "poison", turns: 2, power: 4, energyGain: 9 },
     chargedMoves: [
       { name: "Earthquake", code: "EQ", type: "ground", power: 120, energyCost: 65 },
       { name: "Stone Edge", code: "SE", type: "rock", power: 100, energyCost: 55 },
@@ -966,7 +966,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "4/15/13",
     defaultIvsUl: "15/15/15",
-    defaultFastMove: { name: "Bubble", type: "water", turns: 3, power: 7, energyGain: 11 },
+    defaultFastMove: { name: "Bubble", type: "water", turns: 3, power: 8, energyGain: 11 },
     chargedMoves: [
       { name: "Ice Beam", code: "IB", type: "ice", power: 90, energyCost: 55 },
       { name: "Play Rough", code: "PR", type: "fairy", power: 90, energyCost: 60 },
@@ -1020,7 +1020,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "4/15/13",
     defaultIvsUl: "15/15/15",
-    defaultFastMove: { name: "Rollout", type: "rock", turns: 3, power: 8, energyGain: 13 },
+    defaultFastMove: { name: "Rollout", type: "rock", turns: 3, power: 7, energyGain: 13 },
     chargedMoves: [
       { name: "Rock Slide", code: "RS", type: "rock", power: 75, energyCost: 45 },
       { name: "Drill Run", code: "DR", type: "ground", power: 70, energyCost: 40 },
@@ -1038,7 +1038,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "4/13/15",
     defaultIvsUl: "4/12/15",
-    defaultFastMove: { name: "Powder Snow", type: "ice", turns: 2, power: 5, energyGain: 8 },
+    defaultFastMove: { name: "Powder Snow", type: "ice", turns: 2, power: 6, energyGain: 8 },
     chargedMoves: [
       { name: "Ice Punch", code: "IP", type: "ice", power: 60, energyCost: 40 },
       { name: "Drill Run", code: "DR", type: "ground", power: 70, energyCost: 40 },
@@ -1056,7 +1056,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "5/15/15",
     defaultIvsUl: "12/15/14",
-    defaultFastMove: { name: "Karate Chop", type: "fighting", turns: 2, power: 7, energyGain: 9 },
+    defaultFastMove: { name: "Karate Chop", type: "fighting", turns: 2, power: 5, energyGain: 9 },
     chargedMoves: [
       { name: "Rage Fist", code: "RF", type: "ghost", power: 55, energyCost: 40 },
       { name: "Close Combat", code: "CC", type: "fighting", power: 100, energyCost: 45 },
@@ -1074,7 +1074,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "5/14/15",
     defaultIvsUl: "15/15/15",
-    defaultFastMove: { name: "Thunder Shock", type: "electric", turns: 2, power: 3, energyGain: 9 },
+    defaultFastMove: { name: "Thunder Shock", type: "electric", turns: 2, power: 4, energyGain: 9 },
     chargedMoves: [
       { name: "Aura Wheel", code: "AW", type: "electric", power: 100, energyCost: 45 },
       { name: "Psychic Fangs", code: "PF", type: "psychic", power: 40, energyCost: 35 },
@@ -1092,7 +1092,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "4/13/14",
     defaultIvsUl: "4/12/15",
-    defaultFastMove: { name: "Fairy Wind", type: "fairy", turns: 2, power: 3, energyGain: 9 },
+    defaultFastMove: { name: "Fairy Wind", type: "fairy", turns: 2, power: 4, energyGain: 9 },
     chargedMoves: [
       { name: "Meteor Mash", code: "MM", type: "steel", power: 100, energyCost: 45 },
       { name: "Moonblast", code: "MB", type: "fairy", power: 90, energyCost: 50 },
@@ -1110,7 +1110,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "4/14/12",
     defaultIvsUl: "4/12/15",
-    defaultFastMove: { name: "Volt Switch", type: "electric", turns: 4, power: 12, energyGain: 16 },
+    defaultFastMove: { name: "Volt Switch", type: "electric", turns: 4, power: 14, energyGain: 16 },
     chargedMoves: [
       { name: "Brutal Swing", code: "BS", type: "dark", power: 55, energyCost: 35 },
       { name: "Trailblaze", code: "TB", type: "grass", power: 65, energyCost: 45 },
@@ -1128,7 +1128,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "4/15/15",
     defaultIvsUl: "15/15/15",
-    defaultFastMove: { name: "Charm", type: "fairy", turns: 3, power: 15, energyGain: 6 },
+    defaultFastMove: { name: "Charm", type: "fairy", turns: 3, power: 12, energyGain: 8 },
     chargedMoves: [
       { name: "Icy Wind", code: "IW", type: "ice", power: 60, energyCost: 45 },
       { name: "Disarming Voice", code: "DV", type: "fairy", power: 70, energyCost: 45 },
@@ -1146,7 +1146,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "6/13/13",
     defaultIvsUl: "4/12/10",
-    defaultFastMove: { name: "Dragon Tail", type: "dragon", turns: 3, power: 13, energyGain: 9 },
+    defaultFastMove: { name: "Dragon Tail", type: "dragon", turns: 3, power: 9, energyGain: 12 },
     chargedMoves: [
       { name: "Breaking Swipe", code: "BS", type: "dragon", power: 50, energyCost: 50 },
       { name: "Dragon Ascent", code: "DA", type: "flying", power: 110, energyCost: 45 },
@@ -1164,7 +1164,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "5/8/4",
     defaultIvsUl: "6/4/14",
-    defaultFastMove: { name: "Mud Shot", type: "ground", turns: 2, power: 4, energyGain: 8 },
+    defaultFastMove: { name: "Mud Shot", type: "ground", turns: 2, power: 3, energyGain: 9 },
     chargedMoves: [
       { name: "Precipice Blades", code: "PB", type: "ground", power: 130, energyCost: 60 },
       { name: "Fire Punch", code: "FP", type: "fire", power: 60, energyCost: 40 },
@@ -1182,7 +1182,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "5/8/4",
     defaultIvsUl: "6/4/14",
-    defaultFastMove: { name: "Waterfall", type: "water", turns: 3, power: 12, energyGain: 8 },
+    defaultFastMove: { name: "Waterfall", type: "water", turns: 3, power: 11, energyGain: 10 },
     chargedMoves: [
       { name: "Origin Pulse", code: "OP", type: "water", power: 130, energyCost: 60 },
       { name: "Surf", code: "Surf", type: "water", power: 75, energyCost: 45 },
@@ -1200,7 +1200,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "6/5/15",
     defaultIvsUl: "4/7/15",
-    defaultFastMove: { name: "Psycho Cut", type: "psychic", turns: 2, power: 3, energyGain: 9 },
+    defaultFastMove: { name: "Psycho Cut", type: "psychic", turns: 2, power: 4, energyGain: 9 },
     chargedMoves: [
       { name: "Psystrike", code: "PS", type: "psychic", power: 90, energyCost: 45 },
       { name: "Shadow Ball", code: "SB", type: "ghost", power: 90, energyCost: 50 },
@@ -1218,7 +1218,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "5/15/14",
     defaultIvsUl: "4/8/15",
-    defaultFastMove: { name: "Dragon Breath", type: "dragon", turns: 1, power: 4, energyGain: 3 },
+    defaultFastMove: { name: "Dragon Breath", type: "dragon", turns: 1, power: 3, energyGain: 4 },
     chargedMoves: [
       { name: "Aqua Tail", code: "AT", type: "water", power: 55, energyCost: 35 },
       { name: "Crunch", code: "Cr", type: "dark", power: 70, energyCost: 45 },
@@ -1236,7 +1236,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "5/13/15",
     defaultIvsUl: "7/15/14",
-    defaultFastMove: { name: "Mud Shot", type: "ground", turns: 2, power: 4, energyGain: 8 },
+    defaultFastMove: { name: "Mud Shot", type: "ground", turns: 2, power: 3, energyGain: 9 },
     chargedMoves: [
       { name: "Earth Power", code: "EP", type: "ground", power: 90, energyCost: 50 },
       { name: "Outrage", code: "OR", type: "dragon", power: 110, energyCost: 60 },
@@ -1254,7 +1254,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "5/14/15",
     defaultIvsUl: "6/14/14",
-    defaultFastMove: { name: "Charm", type: "fairy", turns: 3, power: 15, energyGain: 6 },
+    defaultFastMove: { name: "Charm", type: "fairy", turns: 3, power: 12, energyGain: 8 },
     chargedMoves: [
       { name: "Triple Axel", code: "TA", type: "ice", power: 60, energyCost: 45 },
       { name: "Shadow Ball", code: "SB", type: "ghost", power: 90, energyCost: 50 },
@@ -1272,7 +1272,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "6/15/14",
     defaultIvsUl: "4/14/14",
-    defaultFastMove: { name: "Bullet Punch", type: "steel", turns: 2, power: 8, energyGain: 7 },
+    defaultFastMove: { name: "Bullet Punch", type: "steel", turns: 2, power: 7, energyGain: 7 },
     chargedMoves: [
       { name: "Meteor Mash", code: "MM", type: "steel", power: 100, energyCost: 45 },
       { name: "Earthquake", code: "EQ", type: "ground", power: 120, energyCost: 65 },
@@ -1290,7 +1290,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "4/12/13",
     defaultIvsUl: "5/15/15",
-    defaultFastMove: { name: "Mud Shot", type: "ground", turns: 2, power: 4, energyGain: 8 },
+    defaultFastMove: { name: "Mud Shot", type: "ground", turns: 2, power: 3, energyGain: 9 },
     chargedMoves: [
       { name: "Hydro Cannon", code: "HC", type: "water", power: 80, energyCost: 40 },
       { name: "Earthquake", code: "EQ", type: "ground", power: 120, energyCost: 65 },
@@ -1308,7 +1308,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "8/15/15",
     defaultIvsUl: "4/15/13",
-    defaultFastMove: { name: "Dragon Breath", type: "dragon", turns: 1, power: 4, energyGain: 3 },
+    defaultFastMove: { name: "Dragon Breath", type: "dragon", turns: 1, power: 3, energyGain: 4 },
     chargedMoves: [
       { name: "Brutal Swing", code: "BS", type: "dark", power: 55, energyCost: 35 },
       { name: "Stone Edge", code: "SE", type: "rock", power: 100, energyCost: 55 },
@@ -1380,7 +1380,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "6/15/15",
     defaultIvsUl: "15/15/15",
-    defaultFastMove: { name: "Psycho Cut", type: "psychic", turns: 2, power: 1, energyGain: 9 },
+    defaultFastMove: { name: "Psycho Cut", type: "psychic", turns: 2, power: 4, energyGain: 9 },
     chargedMoves: [
       { name: "Shadow Ball", code: "SB", type: "ghost", power: 90, energyCost: 50 },
       { name: "Flash Cannon", code: "FC", type: "steel", power: 110, energyCost: 65 },
@@ -1398,7 +1398,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "4/15/15",
     defaultIvsUl: "15/15/15",
-    defaultFastMove: { name: "Wing Attack", type: "flying", turns: 2, power: 5, energyGain: 7 },
+    defaultFastMove: { name: "Wing Attack", type: "flying", turns: 2, power: 5, energyGain: 8 },
     chargedMoves: [
       { name: "Surf", code: "Surf", type: "water", power: 75, energyCost: 45 },
       { name: "Fly", code: "Fly", type: "flying", power: 80, energyCost: 45 },
@@ -1416,7 +1416,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "1/15/14",
     defaultIvsUl: "0/13/15",
-    defaultFastMove: { name: "Thunder Shock", type: "electric", turns: 2, power: 3, energyGain: 9 },
+    defaultFastMove: { name: "Thunder Shock", type: "electric", turns: 2, power: 4, energyGain: 9 },
     chargedMoves: [
       { name: "Double Iron Bash", code: "DIB", type: "steel", power: 50, energyCost: 35 },
       { name: "Superpower", code: "SP", type: "fighting", power: 85, energyCost: 40 },
@@ -1435,7 +1435,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "5/15/8",
     defaultIvsUl: "7/14/14",
-    defaultFastMove: { name: "Dragon Breath", type: "dragon", turns: 1, power: 4, energyGain: 3 },
+    defaultFastMove: { name: "Dragon Breath", type: "dragon", turns: 1, power: 3, energyGain: 4 },
     chargedMoves: [
       { name: "Iron Head", code: "IH", type: "steel", power: 85, energyCost: 50 },
       { name: "Draco Meteor", code: "DM", type: "dragon", power: 150, energyCost: 65 },
@@ -1453,7 +1453,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "7/15/13",
     defaultIvsUl: "11/13/15",
-    defaultFastMove: { name: "Dragon Breath", type: "dragon", turns: 1, power: 4, energyGain: 3 },
+    defaultFastMove: { name: "Dragon Breath", type: "dragon", turns: 1, power: 3, energyGain: 4 },
     chargedMoves: [
       { name: "Aqua Tail", code: "AT", type: "water", power: 55, energyCost: 35 },
       { name: "Fire Blast", code: "FB", type: "fire", power: 140, energyCost: 80 },
@@ -1489,7 +1489,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "1/15/15",
     defaultIvsUl: "2/15/15",
-    defaultFastMove: { name: "Dragon Tail", type: "dragon", turns: 3, power: 13, energyGain: 9 },
+    defaultFastMove: { name: "Dragon Tail", type: "dragon", turns: 3, power: 9, energyGain: 12 },
     chargedMoves: [
       { name: "Crunch", code: "Cr", type: "dark", power: 70, energyCost: 45 },
       { name: "Earthquake", code: "EQ", type: "ground", power: 120, energyCost: 65 },
@@ -1507,7 +1507,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "4/14/15",
     defaultIvsUl: "15/15/15",
-    defaultFastMove: { name: "Dragon Tail", type: "dragon", turns: 3, power: 13, energyGain: 9 },
+    defaultFastMove: { name: "Dragon Tail", type: "dragon", turns: 3, power: 9, energyGain: 12 },
     chargedMoves: [
       { name: "Crunch", code: "Cr", type: "dark", power: 70, energyCost: 45 },
       { name: "Earthquake", code: "EQ", type: "ground", power: 120, energyCost: 65 },
@@ -1525,7 +1525,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "5/14/15",
     defaultIvsUl: "15/15/15",
-    defaultFastMove: { name: "Thunder Shock", type: "electric", turns: 2, power: 3, energyGain: 9 },
+    defaultFastMove: { name: "Thunder Shock", type: "electric", turns: 2, power: 4, energyGain: 9 },
     chargedMoves: [
       { name: "Aura Wheel", code: "AW", type: "dark", power: 100, energyCost: 45 },
       { name: "Psychic Fangs", code: "PF", type: "psychic", power: 40, energyCost: 35 },
@@ -1543,7 +1543,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "4/15/14",
     defaultIvsUl: "4/15/15",
-    defaultFastMove: { name: "Psycho Cut", type: "psychic", turns: 2, power: 1, energyGain: 9 },
+    defaultFastMove: { name: "Psycho Cut", type: "psychic", turns: 2, power: 4, energyGain: 9 },
     chargedMoves: [
       { name: "Shadow Ball", code: "SB", type: "ghost", power: 90, energyCost: 50 },
       { name: "Flash Cannon", code: "FC", type: "steel", power: 110, energyCost: 65 },
@@ -1561,7 +1561,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "10/15/15",
     defaultIvsUl: "12/15/15",
-    defaultFastMove: { name: "Counter", type: "fighting", turns: 2, power: 8, energyGain: 7 },
+    defaultFastMove: { name: "Counter", type: "fighting", turns: 2, power: 8, energyGain: 6 },
     chargedMoves: [
       { name: "Psycho Boost", code: "PB", type: "psychic", power: 85, energyCost: 35 },
       { name: "Rock Slide", code: "RS", type: "rock", power: 75, energyCost: 45 },
@@ -1597,7 +1597,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "5/14/15",
     defaultIvsUl: "4/15/14",
-    defaultFastMove: { name: "Mud Shot", type: "ground", turns: 2, power: 4, energyGain: 8 },
+    defaultFastMove: { name: "Mud Shot", type: "ground", turns: 2, power: 3, energyGain: 9 },
     chargedMoves: [
       { name: "Precipice Blades", code: "PB", type: "ground", power: 130, energyCost: 60 },
       { name: "Fire Punch", code: "FP", type: "fire", power: 60, energyCost: 40 },
@@ -1615,7 +1615,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     isRawBaseStats: true,
     defaultIvsGl: "6/13/13",
     defaultIvsUl: "4/12/10",
-    defaultFastMove: { name: "Dragon Tail", type: "dragon", turns: 3, power: 13, energyGain: 9 },
+    defaultFastMove: { name: "Dragon Tail", type: "dragon", turns: 3, power: 9, energyGain: 12 },
     chargedMoves: [
       { name: "Breaking Swipe", code: "BS", type: "dragon", power: 50, energyCost: 50 },
       { name: "Dragon Ascent", code: "DA", type: "flying", power: 110, energyCost: 45 },
@@ -2745,74 +2745,106 @@ export function abbrMove5(name: string): string {
 }
 
 export const FAST_MOVE_STATS: Record<string, FastMove> = {
-  "dragon breath": { name: "Dragon Breath", type: "dragon", turns: 1, power: 4, energyGain: 3 },
+  "dragon breath": { name: "Dragon Breath", type: "dragon", turns: 1, power: 3, energyGain: 4 },
   "sand attack": { name: "Sand Attack", type: "ground", turns: 1, power: 2, energyGain: 4 },
-  "quick attack": { name: "Quick Attack", type: "normal", turns: 1, power: 5, energyGain: 7 },
+  "quick attack": { name: "Quick Attack", type: "normal", turns: 2, power: 5, energyGain: 8 },
   "lock-on": { name: "Lock-On", type: "normal", turns: 1, power: 1, energyGain: 5 },
   "water gun": { name: "Water Gun", type: "water", turns: 1, power: 3, energyGain: 3 },
   "lick": { name: "Lick", type: "ghost", turns: 1, power: 3, energyGain: 3 },
-  "bite": { name: "Bite", type: "dark", turns: 1, power: 4, energyGain: 2 },
+  "bite": { name: "Bite", type: "dark", turns: 1, power: 2, energyGain: 4 },
   "tackle": { name: "Tackle", type: "normal", turns: 1, power: 3, energyGain: 3 },
-  "fury cutter": { name: "Fury Cutter", type: "bug", turns: 1, power: 2, energyGain: 4 },
-  "bug bite": { name: "Bug Bite", type: "bug", turns: 1, power: 3, energyGain: 3 },
-  "scratch": { name: "Scratch", type: "normal", turns: 1, power: 4, energyGain: 2 },
+  "fury cutter": { name: "Fury Cutter", type: "bug", turns: 1, power: 3, energyGain: 4 },
+  "bug bite": { name: "Bug Bite", type: "bug", turns: 1, power: 4, energyGain: 3 },
+  "scratch": { name: "Scratch", type: "normal", turns: 1, power: 3, energyGain: 4 },
   "psywave": { name: "Psywave", type: "psychic", turns: 1, power: 3, energyGain: 4 },
-  "psycho cut": { name: "Psycho Cut", type: "psychic", turns: 2, power: 3, energyGain: 9 },
-  "mud shot": { name: "Mud Shot", type: "ground", turns: 2, power: 4, energyGain: 8 },
+  "psycho cut": { name: "Psycho Cut", type: "psychic", turns: 2, power: 4, energyGain: 9 },
+  "mud shot": { name: "Mud Shot", type: "ground", turns: 2, power: 3, energyGain: 9 },
   "shadow claw": { name: "Shadow Claw", type: "ghost", turns: 2, power: 6, energyGain: 8 },
   "counter": { name: "Counter", type: "fighting", turns: 2, power: 8, energyGain: 6 },
-  "powder snow": { name: "Powder Snow", type: "ice", turns: 2, power: 5, energyGain: 8 },
-  "wing attack": { name: "Wing Attack", type: "flying", turns: 2, power: 5, energyGain: 7 },
-  "peck": { name: "Peck", type: "flying", turns: 2, power: 6, energyGain: 6 },
+  "powder snow": { name: "Powder Snow", type: "ice", turns: 2, power: 6, energyGain: 8 },
+  "wing attack": { name: "Wing Attack", type: "flying", turns: 2, power: 5, energyGain: 8 },
+  "peck": { name: "Peck", type: "flying", turns: 2, power: 6, energyGain: 8 },
   "poison sting": { name: "Poison Sting", type: "poison", turns: 2, power: 4, energyGain: 9 },
-  "thunder shock": { name: "Thunder Shock", type: "electric", turns: 2, power: 3, energyGain: 9 },
+  "thunder shock": { name: "Thunder Shock", type: "electric", turns: 2, power: 4, energyGain: 9 },
   "fairy wind": { name: "Fairy Wind", type: "fairy", turns: 2, power: 4, energyGain: 9 },
-  "bullet punch": { name: "Bullet Punch", type: "steel", turns: 2, power: 6, energyGain: 7 },
+  "bullet punch": { name: "Bullet Punch", type: "steel", turns: 2, power: 7, energyGain: 7 },
   "fire fang": { name: "Fire Fang", type: "fire", turns: 2, power: 8, energyGain: 6 },
   "vine whip": { name: "Vine Whip", type: "grass", turns: 2, power: 5, energyGain: 8 },
   "karate chop": { name: "Karate Chop", type: "fighting", turns: 2, power: 5, energyGain: 9 },
-  "low kick": { name: "Low Kick", type: "fighting", turns: 2, power: 4, energyGain: 7 },
+  "low kick": { name: "Low Kick", type: "fighting", turns: 2, power: 6, energyGain: 8 },
   "ice fang": { name: "Ice Fang", type: "ice", turns: 2, power: 8, energyGain: 6 },
   "metal claw": { name: "Metal Claw", type: "steel", turns: 2, power: 5, energyGain: 7 },
   "sucker punch": { name: "Sucker Punch", type: "dark", turns: 2, power: 8, energyGain: 7 },
   "poison jab": { name: "Poison Jab", type: "poison", turns: 2, power: 7, energyGain: 7 },
   "spark": { name: "Spark", type: "electric", turns: 2, power: 5, energyGain: 7 },
-  "leafage": { name: "Leafage", type: "grass", turns: 2, power: 6, energyGain: 7 },
-  "steel wing": { name: "Steel Wing", type: "steel", turns: 2, power: 7, energyGain: 6 },
+  "leafage": { name: "Leafage", type: "grass", turns: 2, power: 6, energyGain: 8 },
+  "steel wing": { name: "Steel Wing", type: "steel", turns: 2, power: 7, energyGain: 5 },
   "rock throw": { name: "Rock Throw", type: "rock", turns: 2, power: 8, energyGain: 5 },
-  "ember": { name: "Ember", type: "fire", turns: 2, power: 7, energyGain: 6 },
+  "ember": { name: "Ember", type: "fire", turns: 2, power: 4, energyGain: 9 },
   "force palm": { name: "Force Palm", type: "fighting", turns: 3, power: 13, energyGain: 10 },
-  "dragon tail": { name: "Dragon Tail", type: "dragon", turns: 3, power: 13, energyGain: 9 },
-  "waterfall": { name: "Waterfall", type: "water", turns: 3, power: 12, energyGain: 8 },
+  "dragon tail": { name: "Dragon Tail", type: "dragon", turns: 3, power: 9, energyGain: 12 },
+  "waterfall": { name: "Waterfall", type: "water", turns: 3, power: 11, energyGain: 10 },
   "fire spin": { name: "Fire Spin", type: "fire", turns: 3, power: 11, energyGain: 10 },
   "snarl": { name: "Snarl", type: "dark", turns: 3, power: 5, energyGain: 13 },
-  "geomancy": { name: "Geomancy", type: "fairy", turns: 3, power: 4, energyGain: 13 },
-  "mud-slap": { name: "Mud-Slap", type: "ground", turns: 3, power: 12, energyGain: 10 },
-  "charm": { name: "Charm", type: "fairy", turns: 3, power: 15, energyGain: 6 },
+  "geomancy": { name: "Geomancy", type: "fairy", turns: 3, power: 8, energyGain: 13 },
+  "mud-slap": { name: "Mud-Slap", type: "ground", turns: 3, power: 11, energyGain: 10 },
+  "charm": { name: "Charm", type: "fairy", turns: 3, power: 12, energyGain: 8 },
   "double kick": { name: "Double Kick", type: "fighting", turns: 3, power: 8, energyGain: 12 },
   "air slash": { name: "Air Slash", type: "flying", turns: 3, power: 9, energyGain: 9 },
   "ice shard": { name: "Ice Shard", type: "ice", turns: 3, power: 9, energyGain: 10 },
-  "bubble": { name: "Bubble", type: "water", turns: 3, power: 7, energyGain: 11 },
-  "rollout": { name: "Rollout", type: "rock", turns: 3, power: 8, energyGain: 13 },
+  "bubble": { name: "Bubble", type: "water", turns: 3, power: 8, energyGain: 11 },
+  "rollout": { name: "Rollout", type: "rock", turns: 3, power: 7, energyGain: 13 },
   "smack down": { name: "Smack Down", type: "rock", turns: 3, power: 11, energyGain: 8 },
   "astonish": { name: "Astonish", type: "ghost", turns: 3, power: 12, energyGain: 10 },
-  "hex": { name: "Hex", type: "ghost", turns: 3, power: 8, energyGain: 12 },
+  "hex": { name: "Hex", type: "ghost", turns: 3, power: 7, energyGain: 13 },
   "magical leaf": { name: "Magical Leaf", type: "grass", turns: 3, power: 10, energyGain: 10 },
   "bullet seed": { name: "Bullet Seed", type: "grass", turns: 3, power: 5, energyGain: 13 },
   "water shuriken": { name: "Water Shuriken", type: "water", turns: 3, power: 6, energyGain: 14 },
-  "gust": { name: "Gust", type: "flying", turns: 4, power: 16, energyGain: 12 },
-  "confusion": { name: "Confusion", type: "psychic", turns: 4, power: 16, energyGain: 12 },
-  "volt switch": { name: "Volt Switch", type: "electric", turns: 4, power: 12, energyGain: 16 },
-  "incinerate": { name: "Incinerate", type: "fire", turns: 5, power: 20, energyGain: 20 }
+  "gust": { name: "Gust", type: "flying", turns: 4, power: 16, energyGain: 14 },
+  "confusion": { name: "Confusion", type: "psychic", turns: 4, power: 16, energyGain: 14 },
+  "volt switch": { name: "Volt Switch", type: "electric", turns: 4, power: 14, energyGain: 16 },
+  "incinerate": { name: "Incinerate", type: "fire", turns: 5, power: 20, energyGain: 20 },
+  "lock on": { name: "Lock-On", type: "normal", turns: 1, power: 1, energyGain: 5 },
+  "mud slap": { name: "Mud-Slap", type: "ground", turns: 3, power: 11, energyGain: 10 },
+  "acid": { name: "Acid", type: "poison", turns: 2, power: 6, energyGain: 8 },
+  "charge beam": { name: "Charge Beam", type: "electric", turns: 3, power: 6, energyGain: 11 },
+  "cut": { name: "Cut", type: "normal", turns: 1, power: 3, energyGain: 2 },
+  "extrasensory": { name: "Extrasensory", type: "psychic", turns: 3, power: 8, energyGain: 10 },
+  "feint attack": { name: "Feint Attack", type: "dark", turns: 2, power: 6, energyGain: 6 },
+  "frost breath": { name: "Frost Breath", type: "ice", turns: 2, power: 7, energyGain: 5 },
+  "hidden power": { name: "Hidden Power", type: "normal", turns: 3, power: 9, energyGain: 8 },
+  "infestation": { name: "Infestation", type: "bug", turns: 3, power: 10, energyGain: 12 },
+  "iron tail": { name: "Iron Tail", type: "steel", turns: 3, power: 10, energyGain: 7 },
+  "metal sound": { name: "Metal Sound", type: "steel", turns: 2, power: 5, energyGain: 8 },
+  "pound": { name: "Pound", type: "normal", turns: 2, power: 4, energyGain: 4 },
+  "present": { name: "Present", type: "normal", turns: 3, power: 3, energyGain: 12 },
+  "razor leaf": { name: "Razor Leaf", type: "grass", turns: 2, power: 9, energyGain: 4 },
+  "rock smash": { name: "Rock Smash", type: "fighting", turns: 3, power: 9, energyGain: 7 },
+  "splash": { name: "Splash", type: "water", turns: 4, power: 0, energyGain: 12 },
+  "struggle bug": { name: "Struggle Bug", type: "bug", turns: 3, power: 9, energyGain: 8 },
+  "take down": { name: "Take Down", type: "normal", turns: 3, power: 14, energyGain: 9 },
+  "thunder fang": { name: "Thunder Fang", type: "electric", turns: 2, power: 8, energyGain: 6 },
+  "yawn": { name: "Yawn", type: "normal", turns: 4, power: 0, energyGain: 12 },
+  "zen headbutt": { name: "Zen Headbutt", type: "psychic", turns: 3, power: 8, energyGain: 6 }
 };
 
 export function resolveFastMove(pokemon: PokemonStats, customFastMoveName?: string): FastMove {
   if (customFastMoveName) {
     const key = customFastMoveName.toLowerCase().trim();
-    if (FAST_MOVE_STATS[key]) return FAST_MOVE_STATS[key];
+    const spaceKey = key.replace(/-/g, " ");
+    const hyphenKey = key.replace(/\s+/g, "-");
+    const found = FAST_MOVE_STATS[key] || FAST_MOVE_STATS[spaceKey] || FAST_MOVE_STATS[hyphenKey];
+    if (found) return found;
   }
   const defKey = pokemon.defaultFastMove?.name?.toLowerCase()?.trim() || "";
-  return FAST_MOVE_STATS[defKey] || pokemon.defaultFastMove || { name: "Fast", type: "normal", turns: 2, power: 5, energyGain: 7 };
+  const defSpaceKey = defKey.replace(/-/g, " ");
+  const defHyphenKey = defKey.replace(/\s+/g, "-");
+  return (
+    FAST_MOVE_STATS[defKey] ||
+    FAST_MOVE_STATS[defSpaceKey] ||
+    FAST_MOVE_STATS[defHyphenKey] ||
+    pokemon.defaultFastMove || { name: "Fast", type: "normal", turns: 2, power: 5, energyGain: 7 }
+  );
 }
 
 /**
@@ -3849,7 +3881,7 @@ export function applyRankingMovesToPokemonStats(
     if (isSkeledirge) {
       return {
         ...pokemon,
-        defaultFastMove: FAST_MOVE_STATS["incinerate"] || pokemon.defaultFastMove,
+        defaultFastMove: FAST_MOVE_STATS["incinerate"] || resolveFastMove(pokemon),
         chargedMoves: [
           buildChargedMoveFromName("Torch Song", "fire", pokemon.chargedMoves),
           buildChargedMoveFromName("Shadow Ball", "ghost", pokemon.chargedMoves),
@@ -3857,12 +3889,15 @@ export function applyRankingMovesToPokemonStats(
         ]
       };
     }
-    return pokemon;
+    return {
+      ...pokemon,
+      defaultFastMove: resolveFastMove(pokemon)
+    };
   }
 
   const topFastId = entry.moveset?.[0] || entry.moves.fastMoves[0]?.moveId;
   const fastName = topFastId ? formatMoveIdToDisplayName(topFastId) : pokemon.defaultFastMove.name;
-  const resolvedFast = FAST_MOVE_STATS[fastName.toLowerCase()] || pokemon.defaultFastMove;
+  const resolvedFast = resolveFastMove(pokemon, fastName);
 
   if (isSkeledirge) {
     return {
@@ -3998,15 +4033,24 @@ export async function syncPvPokeDataAndRankings(): Promise<{
   if (gmRes && typeof gmRes === "object" && Array.isArray(gmRes.moves)) {
     for (const m of gmRes.moves) {
       if (m?.moveId && m?.name) {
-        MOVE_ID_TO_NAME[m.moveId] = m.name;
-        const rawTurns = typeof m.turns === "number" ? m.turns : 1;
-        const turns = rawTurns >= 500 ? Math.max(1, Math.round(rawTurns / 500)) : Math.max(1, rawTurns);
-        gmMoveDetails[m.moveId] = {
+        const moveIdStr = String(m.moveId);
+        MOVE_ID_TO_NAME[moveIdStr] = m.name;
+        const cooldownTurns =
+          typeof m.cooldown === "number" && m.cooldown > 0 ? Math.max(1, Math.round(m.cooldown / 500)) : undefined;
+        const rawTurns = typeof m.turns === "number" && m.turns > 0 ? m.turns : undefined;
+        const parsedTurns =
+          rawTurns !== undefined
+            ? rawTurns >= 500
+              ? Math.max(1, Math.round(rawTurns / 500))
+              : Math.max(1, rawTurns)
+            : undefined;
+        const turns = Math.max(1, Math.min(5, cooldownTurns ?? parsedTurns ?? 1));
+        gmMoveDetails[moveIdStr] = {
           name: m.name,
           type: typeof m.type === "string" ? m.type.toLowerCase() : "normal",
-          power: typeof m.power === "number" ? m.power : 50,
-          energy: typeof m.energy === "number" ? m.energy : 50,
-          energyGain: typeof m.energyGain === "number" ? m.energyGain : 6,
+          power: typeof m.power === "number" ? m.power : 0,
+          energy: typeof m.energy === "number" ? m.energy : 0,
+          energyGain: typeof m.energyGain === "number" ? m.energyGain : 0,
           turns
         };
         if (typeof m.energy === "number" && m.energy > 0) {
@@ -4082,13 +4126,23 @@ export async function syncPvPokeDataAndRankings(): Promise<{
             delete DYNAMIC_MOVE_BUFF_TABLE[lowerId];
           }
         } else if (typeof m.energyGain === "number" && m.energyGain > 0) {
-          FAST_MOVE_STATS[m.name.toLowerCase()] = {
+          const fastEntry: FastMove = {
             name: m.name,
             type: typeof m.type === "string" ? m.type.toLowerCase() : "normal",
             turns,
-            power: typeof m.power === "number" ? m.power : 4,
+            power: typeof m.power === "number" ? m.power : 0,
             energyGain: m.energyGain
           };
+          const idKey = String(m.moveId).toLowerCase().trim();
+          FAST_MOVE_STATS[idKey] = fastEntry;
+          if (!String(m.moveId).toUpperCase().startsWith("AEGISLASH_CHARGE_")) {
+            const nameKey = m.name.toLowerCase().trim();
+            const spaceKey = nameKey.replace(/-/g, " ");
+            const hyphenKey = nameKey.replace(/\s+/g, "-");
+            FAST_MOVE_STATS[nameKey] = fastEntry;
+            FAST_MOVE_STATS[spaceKey] = fastEntry;
+            FAST_MOVE_STATS[hyphenKey] = fastEntry;
+          }
         }
       }
     }
@@ -4257,6 +4311,7 @@ export async function syncPvPokeDataAndRankings(): Promise<{
             isRawBaseStats: true,
             defaultIvsGl,
             defaultIvsUl,
+            defaultFastMove: resolveFastMove(existingEntry),
             chargedMoves: updatedChargedMoves
           };
         }

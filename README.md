@@ -1,4 +1,4 @@
-# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v3.60)
+# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v3.61)
 
 [![Live Web Simulator](https://img.shields.io/badge/🌐%20Live%20Web%20Simulator-Try%20in%20Browser-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white)](https://sportsfan986.github.io/silphscope-pvp/)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support%20the%20Project-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/sportsfan986)
@@ -127,13 +127,13 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## 📥 Download & Install Native Android APK (v3.60)
+## 📥 Download & Install Native Android APK (v3.61)
 
 > **⚠️ Note on Live HP & Energy Counting (Disabled by Default — Opt-In via Settings)**:
 > By default, **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting** are **DISABLED (OFF)** for all new installs and any user upgrading from a version prior to `v3.40`. To enable live HP% and/or live fast-move energy counting on the floating overlay, open **⚙️ Settings** in the app and toggle **Live HP Bar Tracking** and/or **Live Energy & Fast-Move Counting** to **ON**.
 
 1. Visit the **[Official GitHub Releases Page](https://github.com/sportsfan986/silphscope-pvp/releases)**.
-2. Download **`silphscope-pvp-v3.60.apk`** directly to your Android device.
+2. Download **`silphscope-pvp-v3.61.apk`** directly to your Android device.
 3. Tap the downloaded APK file to install (grant *"Install unknown apps"* permission if prompted).
 4. Launch **SilphScope PvP**:
    - Select, reorder, or customize your **GBL Team Presets**, set **Opponent Move Count Basis** (`My Fasts` vs. `Their Fasts`), adjust **Overlay Size** (`50%–100%` screen width slider) and **Background Transparency**, and optionally opt in to **Live HP Bar Tracking** and **Live Energy & Fast-Move Counting** in **⚙️ Settings**.
@@ -143,8 +143,41 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## ✨ Changelog — What's New in v3.60
+## ✨ Changelog — What's New in v3.61
 
+- **v3.61 — Authoritative PvPoke GameMaster Fast-Move Precedence, Scratch Energy Fix (`1t/4e`) & Full Fast-Move Discrepancy Audit**:
+  - **Authoritative Dynamic GameMaster Lookup Precedence**: Fixed fast-move resolution in `OverlayService.kt` (`updateLiveHpAndEnergyFromFrame`, `captureAndRecognize`, `buildBattlePayloadJson`) and `src/App.tsx` / `src/data/gblData.ts` where static fallback maps (`FAST_MOVE_ENERGY`, `FAST_MOVE_TURNS`, `FAST_MOVE_TURN_LOOKUP`) were evaluated before the downloaded PvPoke `gamemaster.json` tables (`DYNAMIC_FAST_ENERGY`, `DYNAMIC_FAST_TURNS`, `FAST_MOVE_STATS`). Live downloaded `gamemaster.json` values now always take top priority across all battle simulations, move-timing horizons, and live OCR energy loops.
+  - **Aegislash Shield-Forme Move Collision Guard & Hyphen/Space Normalization**: Prevented `AEGISLASH_CHARGE_AIR_SLASH` and `AEGISLASH_CHARGE_PSYCHO_CUT` (`0p / 6e` at the end of PvPoke's `gamemaster.json`) from overwriting canonical `Air Slash` (`3t / 9p / 9e`) and `Psycho Cut` (`2t / 4p / 9e`), and normalized hyphen/space keys (`Lock-On` / `Lock On`, `Mud-Slap` / `Mud Slap`).
+  - **Full Fast-Move Discrepancy Audit & Sync Against Latest PvPoke `gamemaster.json`**:
+    - **Scratch** (e.g. Rillaboom): `1t / 4p / 2e` → **`1t / 3p / 4e`**
+    - **Dragon Breath**: `1t / 4p / 3e` → **`1t / 3p / 4e`**
+    - **Bite**: `1t / 4p / 2e` → **`1t / 2p / 4e`**
+    - **Quick Attack**: `1t / 5p / 7e` → **`2t / 5p / 8e`**
+    - **Fury Cutter**: `1t / 2p / 4e` → **`1t / 3p / 4e`**
+    - **Bug Bite**: `1t / 3p / 3e` → **`1t / 4p / 3e`**
+    - **Psycho Cut**: `2t / 3p / 9e` → **`2t / 4p / 9e`**
+    - **Mud Shot**: `2t / 4p / 8e` → **`2t / 3p / 9e`**
+    - **Powder Snow**: `2t / 5p / 8e` → **`2t / 6p / 8e`**
+    - **Wing Attack**: `2t / 5p / 7e` → **`2t / 5p / 8e`**
+    - **Peck**: `2t / 6p / 6e` → **`2t / 6p / 8e`**
+    - **Thunder Shock**: `2t / 3p / 9e` → **`2t / 4p / 9e`**
+    - **Bullet Punch**: `2t / 6–8p / 7e` → **`2t / 7p / 7e`**
+    - **Low Kick**: `2t / 4p / 7e` → **`2t / 6p / 8e`**
+    - **Metal Claw**: `2t / 6p / 7e` → **`2t / 5p / 7e`**
+    - **Leafage**: `2t / 6p / 7e` → **`2t / 6p / 8e`**
+    - **Steel Wing**: `2t / 7p / 6e` → **`2t / 7p / 5e`**
+    - **Ember**: `2t / 7p / 6e` → **`2t / 4p / 9e`**
+    - **Dragon Tail**: `3t / 13p / 9e` → **`3t / 9p / 12e`**
+    - **Waterfall**: `3t / 12p / 8e` → **`3t / 11p / 10e`**
+    - **Geomancy**: `3t / 4p / 13e` → **`3t / 8p / 13e`**
+    - **Mud-Slap**: `3t / 12p / 10e` → **`3t / 11p / 10e`**
+    - **Charm**: `3t / 15p / 6e` → **`3t / 12p / 8e`**
+    - **Bubble**: `3t / 7p / 11e` → **`3t / 8p / 11e`**
+    - **Rollout**: `3t / 8p / 13e` → **`3t / 7p / 13e`**
+    - **Hex**: `3t / 8p / 12e` → **`3t / 7p / 13e`**
+    - **Gust**: `4t / 16p / 12e` → **`4t / 16p / 14e`**
+    - **Confusion**: `4t / 16p / 12e` → **`4t / 16p / 14e`**
+    - **Volt Switch**: `4t / 12p / 16e` → **`4t / 14p / 16e`**
 - **v3.60 — Predictive + Self-Correcting Bias-Error Energy Loop, Opt-In HP/Energy Settings, Streamlined Header Row & 2s Hold to Battle Log**:
   - **Opt-In HP & Energy Tracking (Disabled by Default)**: Added separate settings in **⚙️ Settings** to enable or disable **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting**. Both settings default to **OFF (Disabled)** for any user who has not installed `v3.40` or higher — opt in anytime via **⚙️ Settings**.
   - **Predictive + Self-Correcting Bias-Error Fast-Move & Energy Loop**: Combines zero-lag feed-forward turn prediction (with pending-damage flash phase locking on 2T+ fast moves and automatic rollback if HP does not drop after `fastTurns * 500ms + 420ms`) with an online EMA per-move damage estimator ($\hat{d}$) and damped $\pm 1$ move residual self-correction to eliminate energy lag, overcounting, undercounting, and loop oscillation.

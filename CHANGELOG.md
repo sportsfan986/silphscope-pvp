@@ -1,5 +1,48 @@
 # SilphScope PvP Changelog
 
+## [v3.61] — 2026-10-25 — Authoritative PvPoke GameMaster Fast-Move Precedence, Scratch Energy Fix (`1t/4e`) & Full Fast-Move Discrepancy Audit
+- **Authoritative Dynamic GameMaster Lookup Precedence (`OverlayService.kt`, `src/data/gblData.ts`, `src/App.tsx`)**:
+  - Fixed fast-move resolution in `OverlayService.kt` (`updateLiveHpAndEnergyFromFrame`, `captureAndRecognize`, `buildBattlePayloadJson`) and `src/App.tsx` / `src/data/gblData.ts` where static fallback maps (`FAST_MOVE_ENERGY`, `FAST_MOVE_TURNS`, `FAST_MOVE_TURN_LOOKUP`) were evaluated before the downloaded PvPoke `gamemaster.json` tables (`DYNAMIC_FAST_ENERGY`, `DYNAMIC_FAST_TURNS`, `FAST_MOVE_STATS`).
+  - Added `resolveFastTurnsStatic`, `resolveFastEnergyStatic`, `resolveFastPowerStatic`, and `resolveFastTypeStatic` so live downloaded `gamemaster.json` values always take top priority across all battle simulations, move-timing horizons, and live OCR energy loops.
+- **Aegislash Shield-Forme Move Collision Guard & Hyphen/Space Normalization (`OverlayService.kt`, `src/data/gblData.ts`)**:
+  - Prevented `AEGISLASH_CHARGE_AIR_SLASH` and `AEGISLASH_CHARGE_PSYCHO_CUT` (`0p / 6e` at the end of PvPoke's `gamemaster.json`) from overwriting canonical `Air Slash` (`3t / 9p / 9e`) and `Psycho Cut` (`2t / 4p / 9e`), and normalized hyphen/space keys (`Lock-On` / `Lock On`, `Mud-Slap` / `Mud Slap`).
+  - Also ensured `syncPvPokeDataAndRankings` refreshes `defaultFastMove` on all existing `POKEMON_DATABASE` entries after syncing `gamemaster.json`.
+- **Full Fast-Move Discrepancy Audit & Sync Against Latest PvPoke `gamemaster.json`**:
+  - **Scratch** (e.g. Rillaboom): `1t / 4p / 2e` → **`1t / 3p / 4e`**
+  - **Dragon Breath**: `1t / 4p / 3e` → **`1t / 3p / 4e`**
+  - **Bite**: `1t / 4p / 2e` → **`1t / 2p / 4e`**
+  - **Quick Attack**: `1t / 5p / 7e` → **`2t / 5p / 8e`**
+  - **Fury Cutter**: `1t / 2p / 4e` → **`1t / 3p / 4e`**
+  - **Bug Bite**: `1t / 3p / 3e` → **`1t / 4p / 3e`**
+  - **Psycho Cut**: `2t / 3p / 9e` → **`2t / 4p / 9e`**
+  - **Mud Shot**: `2t / 4p / 8e` → **`2t / 3p / 9e`**
+  - **Powder Snow**: `2t / 5p / 8e` → **`2t / 6p / 8e`**
+  - **Wing Attack**: `2t / 5p / 7e` → **`2t / 5p / 8e`**
+  - **Peck**: `2t / 6p / 6e` → **`2t / 6p / 8e`**
+  - **Thunder Shock**: `2t / 3p / 9e` → **`2t / 4p / 9e`**
+  - **Bullet Punch**: `2t / 6–8p / 7e` → **`2t / 7p / 7e`**
+  - **Low Kick**: `2t / 4p / 7e` → **`2t / 6p / 8e`**
+  - **Metal Claw**: `2t / 6p / 7e` → **`2t / 5p / 7e`**
+  - **Leafage**: `2t / 6p / 7e` → **`2t / 6p / 8e`**
+  - **Steel Wing**: `2t / 7p / 6e` → **`2t / 7p / 5e`**
+  - **Ember**: `2t / 7p / 6e` → **`2t / 4p / 9e`**
+  - **Dragon Tail**: `3t / 13p / 9e` → **`3t / 9p / 12e`**
+  - **Waterfall**: `3t / 12p / 8e` → **`3t / 11p / 10e`**
+  - **Geomancy**: `3t / 4p / 13e` → **`3t / 8p / 13e`**
+  - **Mud-Slap**: `3t / 12p / 10e` → **`3t / 11p / 10e`**
+  - **Charm**: `3t / 15p / 6e` → **`3t / 12p / 8e`**
+  - **Bubble**: `3t / 7p / 11e` → **`3t / 8p / 11e`**
+  - **Rollout**: `3t / 8p / 13e` → **`3t / 7p / 13e`**
+  - **Hex**: `3t / 8p / 12e` → **`3t / 7p / 13e`**
+  - **Gust**: `4t / 16p / 12e` → **`4t / 16p / 14e`**
+  - **Confusion**: `4t / 16p / 12e` → **`4t / 16p / 14e`**
+  - **Volt Switch**: `4t / 12p / 16e` → **`4t / 14p / 16e`**
+
+## [v3.60] — 2026-10-25 — Predictive + Self-Correcting Bias-Error Energy Loop, Opt-In HP/Energy Settings, Streamlined Header Row & 2s Hold to Battle Log
+- **Opt-In HP & Energy Tracking (Disabled by Default)**: Added separate settings in **⚙️ Settings** to enable or disable **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting** (defaulting to **OFF** for any user who has not installed `v3.40` or higher).
+- **Predictive + Self-Correcting Bias-Error Fast-Move & Energy Loop**: Combines zero-lag feed-forward turn prediction with an online EMA per-move damage estimator ($\hat{d}$) and damped $\pm 1$ move residual self-correction.
+- **Streamlined Overlay Header Row & 2s Hold to Battle Log**: Displays only Minimize/Pause OCR icon, OCR update rate in `ms`, My Health/Energy/Shield badges, and Opp Shields/Health/Energy badges; holding the minimize icon for 2 seconds stops the overlay and opens the Battle Log.
+
 ## [v3.23] — 2026-10-22 — Key Threats/Core Breakers Per-Slot BRs, Anti-Meta Summary on Existing Teams & Editor, Top-50 Meta List with Meta BR, and Featured Rank Range Queries (`200-`, `-10`, `100-200`)
 - **Key Threats & Core Breakers Per-Slot Battle Ratings (`OverlayService.kt`, `gblData.ts`, `MainActivity.kt`, `App.tsx`)**:
   - Formatted every entry in **Key Threats** and **Core Breakers** with its Battle Rating against each of your 3 team slots in parentheses — e.g. `Key Threats: Corviknight(700/500/400), ...` (`Slot 1 Lead / Slot 2 Safe Swap / Slot 3 Closer`).

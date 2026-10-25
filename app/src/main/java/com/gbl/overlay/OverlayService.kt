@@ -1581,8 +1581,9 @@ class OverlayService : LifecycleService() {
             "ember" to 2,
             "dragon breath" to 1,
             "sand attack" to 1,
-            "quick attack" to 1,
+            "quick attack" to 2,
             "lock-on" to 1,
+            "lock on" to 1,
             "water gun" to 1,
             "lick" to 1,
             "bite" to 1,
@@ -1590,6 +1591,7 @@ class OverlayService : LifecycleService() {
             "fury cutter" to 1,
             "bug bite" to 1,
             "scratch" to 1,
+            "cut" to 1,
             "psycho cut" to 2,
             "mud shot" to 2,
             "shadow claw" to 2,
@@ -1606,11 +1608,19 @@ class OverlayService : LifecycleService() {
             "karate chop" to 2,
             "low kick" to 2,
             "ice fang" to 2,
+            "thunder fang" to 2,
             "metal claw" to 2,
+            "metal sound" to 2,
             "sucker punch" to 2,
             "poison jab" to 2,
             "spark" to 2,
             "leafage" to 2,
+            "steel wing" to 2,
+            "acid" to 2,
+            "feint attack" to 2,
+            "frost breath" to 2,
+            "pound" to 2,
+            "razor leaf" to 2,
             "psywave" to 1,
             "force palm" to 3,
             "dragon tail" to 3,
@@ -1619,6 +1629,7 @@ class OverlayService : LifecycleService() {
             "snarl" to 3,
             "geomancy" to 3,
             "mud-slap" to 3,
+            "mud slap" to 3,
             "charm" to 3,
             "double kick" to 3,
             "air slash" to 3,
@@ -1632,16 +1643,28 @@ class OverlayService : LifecycleService() {
             "bullet seed" to 3,
             "rock throw" to 2,
             "water shuriken" to 3,
+            "charge beam" to 3,
+            "extrasensory" to 3,
+            "hidden power" to 3,
+            "infestation" to 3,
+            "iron tail" to 3,
+            "present" to 3,
+            "rock smash" to 3,
+            "struggle bug" to 3,
+            "take down" to 3,
+            "zen headbutt" to 3,
             "gust" to 4,
             "confusion" to 4,
             "volt switch" to 4,
+            "splash" to 4,
+            "yawn" to 4,
             "incinerate" to 5
         )
 
         val POKEMON_META_DATABASE = listOf(
             // --- Multi-Form & Regional Variants ---
             PokemonMeta("Zacian (Crowned)", "zacian_crowned", "zacian", "Crowned", listOf("fairy", "steel"), 4620, "Metal Claw", 2, "Behemoth Blade", "Close Combat", 52, 48, atk = 332.0, def = 240.0, hp = 192, glRank = 400, ulRank = 300, mlRank = 2, chargedMove3 = "Play Rough", isRawBaseStats = true, defaultIvsGl = "7/9/12", defaultIvsUl = "6/13/15"),
-            PokemonMeta("Zacian (Hero)", "zacian_hero", "zacian", "Hero", listOf("fairy"), 4329, "Quick Attack", 1, "Close Combat", "Play Rough", 44, 42, atk = 254.0, def = 236.0, hp = 192, glRank = 420, ulRank = 310, mlRank = 18, chargedMove3 = "Wild Charge", isRawBaseStats = true, defaultIvsGl = "5/7/14", defaultIvsUl = "5/10/13"),
+            PokemonMeta("Zacian (Hero)", "zacian_hero", "zacian", "Hero", listOf("fairy"), 4329, "Quick Attack", 2, "Close Combat", "Play Rough", 44, 42, atk = 254.0, def = 236.0, hp = 192, glRank = 420, ulRank = 310, mlRank = 18, chargedMove3 = "Wild Charge", isRawBaseStats = true, defaultIvsGl = "5/7/14", defaultIvsUl = "5/10/13"),
             PokemonMeta("Zamazenta (Crowned)", "zamazenta_crowned", "zamazenta", "Crowned", listOf("fighting", "steel"), 4620, "Metal Claw", 2, "Behemoth Bash", "Close Combat", 46, 48, atk = 250.0, def = 292.0, hp = 192, glRank = 390, ulRank = 280, mlRank = 12, chargedMove3 = "Moonblast", isRawBaseStats = true, defaultIvsGl = "6/13/14", defaultIvsUl = "6/7/14"),
             PokemonMeta("Zamazenta (Hero)", "zamazenta_hero", "zamazenta", "Hero", listOf("fighting"), 4329, "Snarl", 3, "Close Combat", "Crunch", 46, 32, atk = 254.0, def = 236.0, hp = 192, glRank = 410, ulRank = 290, mlRank = 20, chargedMove3 = "Moonblast", isRawBaseStats = true, defaultIvsGl = "5/7/14", defaultIvsUl = "5/10/13"),
             PokemonMeta("Keldeo (Resolute)", "keldeo_resolute", "keldeo", "Resolute", listOf("water", "fighting"), 4181, "Low Kick", 2, "Secret Sword", "Aqua Jet", 42, 38, atk = 260.0, def = 192.0, hp = 209, glRank = 140, ulRank = 65, mlRank = 14, chargedMove3 = "Hydro Pump", isRawBaseStats = true, defaultIvsGl = "12/12/13", defaultIvsUl = "11/14/13"),
@@ -1716,7 +1739,7 @@ class OverlayService : LifecycleService() {
             PokemonMeta("Entei", "entei", "entei", "Base", listOf("fire"), 3926, "Fire Fang", 2, "Flame Charge", "Overheat", 28, 72, atk = 235.0, def = 171.0, hp = 251, glRank = 240, ulRank = 165, mlRank = 55, isRawBaseStats = true, defaultIvsGl = "7/9/11", defaultIvsUl = "6/12/12"),
             PokemonMeta("Suicune", "suicune", "suicune", "Base", listOf("water"), 3372, "Snarl", 3, "Ice Beam", "Hydro Pump", 36, 52, atk = 180.0, def = 235.0, hp = 225, glRank = 170, ulRank = 95, mlRank = 75, isRawBaseStats = true, defaultIvsGl = "5/14/14", defaultIvsUl = "5/15/12"),
             PokemonMeta("Zarude", "zarude", "zarude", "Base", listOf("dark", "grass"), 4334, "Vine Whip", 2, "Dark Pulse", "Power Whip", 40, 44, atk = 242.0, def = 215.0, hp = 233, glRank = 210, ulRank = 95, mlRank = 17, isRawBaseStats = true, defaultIvsGl = "13/11/12", defaultIvsUl = "11/12/10"),
-            PokemonMeta("Meloetta", "meloetta_aria", "meloetta", "Aria", listOf("normal", "psychic"), 4490, "Quick Attack", 1, "Psyshock", "Dazzling Gleam", 34, 46, atk = 250.0, def = 225.0, hp = 225, glRank = 260, ulRank = 110, mlRank = 16, isRawBaseStats = true, defaultIvsGl = "12/14/10", defaultIvsUl = "10/12/14"),
+            PokemonMeta("Meloetta", "meloetta_aria", "meloetta", "Aria", listOf("normal", "psychic"), 4490, "Quick Attack", 2, "Psyshock", "Dazzling Gleam", 34, 46, atk = 250.0, def = 225.0, hp = 225, glRank = 260, ulRank = 110, mlRank = 16, isRawBaseStats = true, defaultIvsGl = "12/14/10", defaultIvsUl = "10/12/14"),
             PokemonMeta("Ursaluna", "ursaluna", "ursaluna", "Base", listOf("ground", "normal"), 4358, "Tackle", 1, "Ice Punch", "High Horsepower", 30, 50, atk = 243.0, def = 181.0, hp = 277, glRank = 250, ulRank = 130, mlRank = 21, isRawBaseStats = true, defaultIvsGl = "4/13/7", defaultIvsUl = "4/10/15"),
             PokemonMeta("Togekiss", "togekiss", "togekiss", "Base", listOf("fairy", "flying"), 3767, "Charm", 3, "Ancient Power", "Aura Sphere", 30, 46, atk = 225.0, def = 217.0, hp = 198, glRank = 150, ulRank = 48, mlRank = 24, isRawBaseStats = true, defaultIvsGl = "4/15/15", defaultIvsUl = "5/13/15"),
             PokemonMeta("Gyarados", "gyarados", "gyarados", "Base", listOf("water", "flying"), 3834, "Dragon Breath", 1, "Aqua Tail", "Crunch", 28, 34, atk = 237.0, def = 186.0, hp = 216, glRank = 160, ulRank = 42, mlRank = 26, isRawBaseStats = true, defaultIvsGl = "4/14/7", defaultIvsUl = "5/13/15"),
@@ -1792,7 +1815,7 @@ class OverlayService : LifecycleService() {
             PokemonMeta("Machamp", "machamp", "machamp", "Base", listOf("fighting"), 2495, "Karate Chop", 2, "Cross Chop", "Stone Edge", 28, 44, atk = 234.0, def = 159.0, hp = 207, glRank = 73, ulRank = 51, mlRank = 120, isRawBaseStats = true, defaultIvsGl = "5/15/12", defaultIvsUl = "4/15/14"),
             PokemonMeta("Scrafty", "scrafty", "scrafty", "Base", listOf("dark", "fighting"), 2283, "Counter", 2, "Foul Play", "Power-Up Punch", 36, 20, atk = 163.0, def = 222.0, hp = 163, glRank = 82, ulRank = 58, mlRank = 340, isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "12/12/14"),
             PokemonMeta("Obstagoon", "obstagoon", "obstagoon", "Base", listOf("dark", "normal"), 2492, "Counter", 2, "Night Slash", "Cross Chop", 28, 28, atk = 180.0, def = 194.0, hp = 212, glRank = 84, ulRank = 56, mlRank = 210, isRawBaseStats = true, defaultIvsGl = "5/15/12", defaultIvsUl = "4/15/14"),
-            PokemonMeta("Diggersby", "diggersby", "diggersby", "Base", listOf("normal", "ground"), 1499, "Quick Attack", 1, "Scorching Sands", "Fire Punch", 40, 28, atk = 112.0, def = 155.0, hp = 198, glRank = 36, ulRank = 380, mlRank = 490, isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "15/15/15"),
+            PokemonMeta("Diggersby", "diggersby", "diggersby", "Base", listOf("normal", "ground"), 1499, "Quick Attack", 2, "Scorching Sands", "Fire Punch", 40, 28, atk = 112.0, def = 155.0, hp = 198, glRank = 36, ulRank = 380, mlRank = 490, isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "15/15/15"),
             PokemonMeta("Jellicent", "jellicent", "jellicent", "Base", listOf("water", "ghost"), 2488, "Hex", 3, "Surf", "Shadow Ball", 34, 46, atk = 159.0, def = 178.0, hp = 225, glRank = 61, ulRank = 28, mlRank = 270, isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "12/14/12"),
             PokemonMeta("Cofagrigus", "cofagrigus", "cofagrigus", "Base", listOf("ghost"), 2480, "Shadow Claw", 2, "Shadow Ball", "Dark Pulse", 46, 38, atk = 163.0, def = 237.0, hp = 151, glRank = 86, ulRank = 60, mlRank = 310, isRawBaseStats = true, defaultIvsGl = "6/13/14", defaultIvsUl = "12/12/15"),
             PokemonMeta("Runerigus", "runerigus", "runerigus", "Base", listOf("ground", "ghost"), 2480, "Shadow Claw", 2, "Sand Tomb", "Shadow Ball", 24, 46, atk = 163.0, def = 237.0, hp = 151, glRank = 89, ulRank = 62, mlRank = 315, isRawBaseStats = true, defaultIvsGl = "6/13/14", defaultIvsUl = "12/12/15"),
@@ -2001,25 +2024,27 @@ class OverlayService : LifecycleService() {
         )
 
         val FAST_MOVE_ENERGY: Map<String, Int> = mapOf(
-            "dragon breath" to 3,
+            "dragon breath" to 4,
             "sand attack" to 4,
             "quick attack" to 8,
             "lock-on" to 5,
+            "lock on" to 5,
             "water gun" to 3,
             "lick" to 3,
-            "bite" to 2,
+            "bite" to 4,
             "tackle" to 3,
             "fury cutter" to 4,
             "bug bite" to 3,
-            "scratch" to 2,
+            "scratch" to 4,
+            "cut" to 2,
             "psywave" to 4,
             "psycho cut" to 9,
-            "mud shot" to 8,
+            "mud shot" to 9,
             "shadow claw" to 8,
             "counter" to 6,
             "powder snow" to 8,
-            "wing attack" to 7,
-            "peck" to 6,
+            "wing attack" to 8,
+            "peck" to 8,
             "poison sting" to 9,
             "thunder shock" to 9,
             "fairy wind" to 9,
@@ -2027,23 +2052,31 @@ class OverlayService : LifecycleService() {
             "fire fang" to 6,
             "vine whip" to 8,
             "karate chop" to 9,
-            "low kick" to 7,
+            "low kick" to 8,
             "ice fang" to 6,
+            "thunder fang" to 6,
             "metal claw" to 7,
+            "metal sound" to 8,
             "sucker punch" to 7,
             "poison jab" to 7,
             "spark" to 7,
-            "leafage" to 7,
-            "steel wing" to 6,
+            "leafage" to 8,
+            "steel wing" to 5,
             "rock throw" to 5,
+            "acid" to 8,
+            "feint attack" to 6,
+            "frost breath" to 5,
+            "pound" to 4,
+            "razor leaf" to 4,
             "force palm" to 10,
-            "dragon tail" to 9,
-            "waterfall" to 8,
+            "dragon tail" to 12,
+            "waterfall" to 10,
             "fire spin" to 10,
             "snarl" to 13,
             "geomancy" to 13,
             "mud-slap" to 10,
-            "charm" to 6,
+            "mud slap" to 10,
+            "charm" to 8,
             "double kick" to 12,
             "air slash" to 9,
             "ice shard" to 10,
@@ -2051,16 +2084,86 @@ class OverlayService : LifecycleService() {
             "rollout" to 13,
             "smack down" to 8,
             "astonish" to 10,
-            "hex" to 12,
+            "hex" to 13,
             "magical leaf" to 10,
             "bullet seed" to 13,
             "water shuriken" to 14,
-            "gust" to 12,
-            "confusion" to 12,
+            "charge beam" to 11,
+            "extrasensory" to 10,
+            "hidden power" to 8,
+            "infestation" to 12,
+            "iron tail" to 7,
+            "present" to 12,
+            "rock smash" to 7,
+            "struggle bug" to 8,
+            "take down" to 9,
+            "zen headbutt" to 6,
+            "gust" to 14,
+            "confusion" to 14,
             "volt switch" to 16,
+            "splash" to 12,
+            "yawn" to 12,
             "incinerate" to 20,
-            "ember" to 6
+            "ember" to 9
         )
+
+        fun resolveFastTurnsStatic(moveName: String, fallback: Int = 2): Int {
+            val k = moveName.lowercase().trim()
+            if (k.isEmpty()) return fallback
+            val spaceK = k.replace("-", " ")
+            val hyphenK = k.replace(Regex("\\s+"), "-")
+            return DYNAMIC_FAST_TURNS[k]
+                ?: DYNAMIC_FAST_TURNS[spaceK]
+                ?: DYNAMIC_FAST_TURNS[hyphenK]
+                ?: FAST_MOVE_TURNS[k]
+                ?: FAST_MOVE_TURNS[spaceK]
+                ?: FAST_MOVE_TURNS[hyphenK]
+                ?: fallback
+        }
+
+        fun resolveFastEnergyStatic(moveName: String, fallbackTurns: Int = 2): Int {
+            val k = moveName.lowercase().trim()
+            val defaultEnergy = (fallbackTurns * 4).coerceAtLeast(3)
+            if (k.isEmpty()) return defaultEnergy
+            val spaceK = k.replace("-", " ")
+            val hyphenK = k.replace(Regex("\\s+"), "-")
+            return DYNAMIC_FAST_ENERGY[k]
+                ?: DYNAMIC_FAST_ENERGY[spaceK]
+                ?: DYNAMIC_FAST_ENERGY[hyphenK]
+                ?: FAST_MOVE_ENERGY[k]
+                ?: FAST_MOVE_ENERGY[spaceK]
+                ?: FAST_MOVE_ENERGY[hyphenK]
+                ?: defaultEnergy
+        }
+
+        fun resolveFastPowerStatic(moveName: String, fallbackTurns: Int = 2): Int {
+            val k = moveName.lowercase().trim()
+            val defaultPower = (fallbackTurns * 3).coerceAtLeast(3)
+            if (k.isEmpty()) return defaultPower
+            val spaceK = k.replace("-", " ")
+            val hyphenK = k.replace(Regex("\\s+"), "-")
+            return DYNAMIC_FAST_POWER[k]
+                ?: DYNAMIC_FAST_POWER[spaceK]
+                ?: DYNAMIC_FAST_POWER[hyphenK]
+                ?: fastMovePowerMapStatic[k]
+                ?: fastMovePowerMapStatic[spaceK]
+                ?: fastMovePowerMapStatic[hyphenK]
+                ?: defaultPower
+        }
+
+        fun resolveFastTypeStatic(moveName: String, fallbackType: String = "normal"): String {
+            val k = moveName.lowercase().trim()
+            if (k.isEmpty()) return fallbackType
+            val spaceK = k.replace("-", " ")
+            val hyphenK = k.replace(Regex("\\s+"), "-")
+            return DYNAMIC_FAST_TYPE[k]
+                ?: DYNAMIC_FAST_TYPE[spaceK]
+                ?: DYNAMIC_FAST_TYPE[hyphenK]
+                ?: fastMoveTypeMapStatic[k]
+                ?: fastMoveTypeMapStatic[spaceK]
+                ?: fastMoveTypeMapStatic[hyphenK]
+                ?: fallbackType
+        }
 
         val MOVE_ENERGY_COST: Map<String, Int> = mapOf(
             "Drum Beating" to 35,
@@ -2703,7 +2806,7 @@ class OverlayService : LifecycleService() {
                 cand.isNotBlank() && (effectiveFastPool.isNullOrEmpty() || effectiveFastPool.any { it.equals(cand, ignoreCase = true) })
             }
             val fastName = validFastCandidate ?: meta.defaultFastMove
-            val fastTurns = DYNAMIC_FAST_TURNS[fastName.lowercase()] ?: FAST_MOVE_TURNS[fastName.lowercase()] ?: meta.fastTurns
+            val fastTurns = resolveFastTurnsStatic(fastName, meta.fastTurns)
 
             if (isSkeledirge) {
                 return meta.copy(
@@ -3113,23 +3216,36 @@ class OverlayService : LifecycleService() {
                             val rawName = obj.optString("name")?.takeIf { it.isNotBlank() } ?: moveId
                             val name = CANONICAL_MOVE_ID_MAP[moveId.uppercase()] ?: rawName
                             val type = obj.optString("type")?.lowercase() ?: "normal"
-                            val power = obj.optInt("power") ?: 50
+                            val power = obj.optInt("power") ?: 0
                             val energyGain = obj.optInt("energyGain") ?: 0
                             val energyCost = obj.optInt("energy") ?: 50
-                            val turns = ((obj.optInt("cooldown") ?: 1000) / 500).coerceIn(1, 5)
+                            val turns = (obj.optInt("turns")?.takeIf { it in 1..5 }
+                                ?: ((obj.optInt("cooldown") ?: 1000) / 500)).coerceIn(1, 5)
                             DYNAMIC_MOVE_ID_TO_NAME[moveId] = name
                             if (energyGain > 0) {
                                 fastMoveNames[moveId] = name
-                                DYNAMIC_FAST_TURNS[name.lowercase()] = turns
-                                DYNAMIC_FAST_TURNS[moveId.lowercase()] = turns
-                                DYNAMIC_FAST_ENERGY[name.lowercase()] = energyGain
-                                DYNAMIC_FAST_ENERGY[moveId.lowercase()] = energyGain
-                                DYNAMIC_FAST_POWER[name.lowercase()] = power
-                                DYNAMIC_FAST_POWER[moveId.lowercase()] = power
-                                DYNAMIC_FAST_TYPE[name.lowercase()] = type
-                                DYNAMIC_FAST_TYPE[moveId.lowercase()] = type
+                                val idKey = moveId.lowercase().trim()
+                                DYNAMIC_FAST_TURNS[idKey] = turns
+                                DYNAMIC_FAST_ENERGY[idKey] = energyGain
+                                DYNAMIC_FAST_POWER[idKey] = power
+                                DYNAMIC_FAST_TYPE[idKey] = type
+                                if (!moveId.startsWith("AEGISLASH_CHARGE_", ignoreCase = true)) {
+                                    val nameKey = name.lowercase().trim()
+                                    val rawKey = rawName.lowercase().trim()
+                                    val spaceKey = nameKey.replace("-", " ")
+                                    val hyphenKey = nameKey.replace(Regex("\\s+"), "-")
+                                    for (k in listOf(nameKey, rawKey, spaceKey, hyphenKey).distinct()) {
+                                        if (k.isNotBlank()) {
+                                            DYNAMIC_FAST_TURNS[k] = turns
+                                            DYNAMIC_FAST_ENERGY[k] = energyGain
+                                            DYNAMIC_FAST_POWER[k] = power
+                                            DYNAMIC_FAST_TYPE[k] = type
+                                        }
+                                    }
+                                }
                             } else {
-                                DYNAMIC_MOVE_DATABASE[name] = MoveStats(name, type, power, energyCost)
+                                val chargedPower = if (power > 0) power else 50
+                                DYNAMIC_MOVE_DATABASE[name] = MoveStats(name, type, chargedPower, energyCost)
                                 val rawChance = obj.optDouble("buffApplyChance")
                                     ?: obj.optString("buffApplyChance")?.toDoubleOrNull()
                                     ?: 0.0
@@ -3279,8 +3395,7 @@ class OverlayService : LifecycleService() {
                             val firstFastId = orderedFastIds.firstOrNull() ?: "TACKLE"
                             val fastMoveName = fastMoveNames[firstFastId]
                                 ?: formatMoveIdDisplay(firstFastId)
-                            val fastTurns = DYNAMIC_FAST_TURNS[fastMoveName.lowercase()]
-                                ?: FAST_MOVE_TURNS[fastMoveName.lowercase()] ?: 2
+                            val fastTurns = resolveFastTurnsStatic(fastMoveName, 2)
 
                             val chargedArr = obj.optJsonArray("chargedMoves")
                             val orderedChargedIds = mutableListOf<String>()
@@ -3398,25 +3513,48 @@ class OverlayService : LifecycleService() {
             return multiplier
         }
 
+        private val fastMovePowerMapStatic = mapOf(
+            "dragon breath" to 3, "sand attack" to 2, "quick attack" to 5, "lock-on" to 1, "lock on" to 1,
+            "water gun" to 3, "lick" to 3, "bite" to 2, "tackle" to 3, "fury cutter" to 3, "bug bite" to 4,
+            "scratch" to 3, "cut" to 3, "psywave" to 3, "psycho cut" to 4, "mud shot" to 3, "shadow claw" to 6,
+            "counter" to 8, "powder snow" to 6, "wing attack" to 5, "peck" to 6, "poison sting" to 4,
+            "thunder shock" to 4, "fairy wind" to 4, "bullet punch" to 7, "fire fang" to 8, "vine whip" to 5,
+            "karate chop" to 5, "low kick" to 6, "ice fang" to 8, "thunder fang" to 8, "metal claw" to 5,
+            "metal sound" to 5, "sucker punch" to 8, "poison jab" to 7, "spark" to 5, "leafage" to 6,
+            "steel wing" to 7, "rock throw" to 8, "ember" to 4, "acid" to 6, "feint attack" to 6,
+            "frost breath" to 7, "pound" to 4, "razor leaf" to 9, "force palm" to 13, "dragon tail" to 9,
+            "waterfall" to 11, "fire spin" to 11, "snarl" to 5, "geomancy" to 8, "mud-slap" to 11,
+            "mud slap" to 11, "charm" to 12, "double kick" to 8, "air slash" to 9, "ice shard" to 9,
+            "bubble" to 8, "rollout" to 7, "smack down" to 11, "astonish" to 12, "hex" to 7,
+            "magical leaf" to 10, "bullet seed" to 5, "water shuriken" to 6, "charge beam" to 6,
+            "extrasensory" to 8, "hidden power" to 9, "infestation" to 10, "iron tail" to 10,
+            "present" to 3, "rock smash" to 9, "struggle bug" to 9, "take down" to 14, "zen headbutt" to 8,
+            "gust" to 16, "confusion" to 16, "volt switch" to 14, "splash" to 0, "yawn" to 0, "incinerate" to 20
+        )
+
         private val fastMoveTypeMapStatic = mapOf(
             "dragon breath" to "dragon", "sand attack" to "ground", "quick attack" to "normal",
-            "lock-on" to "normal", "water gun" to "water", "lick" to "ghost", "bite" to "dark",
-            "tackle" to "normal", "fury cutter" to "bug", "bug bite" to "bug", "scratch" to "normal",
+            "lock-on" to "normal", "lock on" to "normal", "water gun" to "water", "lick" to "ghost", "bite" to "dark",
+            "tackle" to "normal", "fury cutter" to "bug", "bug bite" to "bug", "scratch" to "normal", "cut" to "normal",
             "psywave" to "psychic", "psycho cut" to "psychic", "mud shot" to "ground",
             "shadow claw" to "ghost", "counter" to "fighting", "powder snow" to "ice",
             "wing attack" to "flying", "peck" to "flying", "poison sting" to "poison",
             "thunder shock" to "electric", "fairy wind" to "fairy", "bullet punch" to "steel",
             "fire fang" to "fire", "vine whip" to "grass", "karate chop" to "fighting",
-            "low kick" to "fighting", "ice fang" to "ice", "metal claw" to "steel",
-            "sucker punch" to "dark", "poison jab" to "poison", "spark" to "electric",
+            "low kick" to "fighting", "ice fang" to "ice", "thunder fang" to "electric", "metal claw" to "steel",
+            "metal sound" to "steel", "sucker punch" to "dark", "poison jab" to "poison", "spark" to "electric",
             "leafage" to "grass", "steel wing" to "steel", "rock throw" to "rock", "ember" to "fire",
+            "acid" to "poison", "feint attack" to "dark", "frost breath" to "ice", "pound" to "normal", "razor leaf" to "grass",
             "force palm" to "fighting", "dragon tail" to "dragon", "waterfall" to "water",
-            "fire spin" to "fire", "snarl" to "dark", "geomancy" to "fairy", "mud-slap" to "ground",
+            "fire spin" to "fire", "snarl" to "dark", "geomancy" to "fairy", "mud-slap" to "ground", "mud slap" to "ground",
             "charm" to "fairy", "double kick" to "fighting", "air slash" to "flying",
             "ice shard" to "ice", "bubble" to "water", "rollout" to "rock", "smack down" to "rock",
             "astonish" to "ghost", "hex" to "ghost", "magical leaf" to "grass",
-            "bullet seed" to "grass", "water shuriken" to "water", "gust" to "flying",
-            "confusion" to "psychic", "volt switch" to "electric", "incinerate" to "fire"
+            "bullet seed" to "grass", "water shuriken" to "water", "charge beam" to "electric",
+            "extrasensory" to "psychic", "hidden power" to "normal", "infestation" to "bug", "iron tail" to "steel",
+            "present" to "normal", "rock smash" to "fighting", "struggle bug" to "bug", "take down" to "normal",
+            "zen headbutt" to "psychic", "gust" to "flying", "confusion" to "psychic", "volt switch" to "electric",
+            "splash" to "water", "yawn" to "normal", "incinerate" to "fire"
         )
 
         private fun calculateChargedMoveDamagePctStatic(
@@ -3625,9 +3763,9 @@ class OverlayService : LifecycleService() {
             }
 
             val uFastKey = uFast.lowercase().trim()
-            val userFastType = DYNAMIC_FAST_TYPE[uFastKey] ?: fastMoveTypeMapStatic[uFastKey] ?: myMeta.types.firstOrNull() ?: "normal"
-            val userFastTurns = (DYNAMIC_FAST_TURNS[uFastKey] ?: FAST_MOVE_TURNS[uFastKey] ?: myMeta.fastTurns).coerceAtLeast(1)
-            val userFastEnergy = (DYNAMIC_FAST_ENERGY[uFastKey] ?: FAST_MOVE_ENERGY[uFastKey] ?: (userFastTurns * 3)).coerceAtLeast(1)
+            val userFastType = resolveFastTypeStatic(uFastKey, myMeta.types.firstOrNull() ?: "normal")
+            val userFastTurns = resolveFastTurnsStatic(uFastKey, myMeta.fastTurns).coerceAtLeast(1)
+            val userFastEnergy = resolveFastEnergyStatic(uFastKey, userFastTurns).coerceAtLeast(1)
             val userFastEpt = userFastEnergy.toDouble() / userFastTurns.toDouble()
             val rawUserFastEff = getTypeEffectivenessStatic(userFastType, oppMeta.types)
 
@@ -3729,9 +3867,9 @@ class OverlayService : LifecycleService() {
                 }
 
                 val oFastKey = oFastName.lowercase().trim()
-                val oppFastType = DYNAMIC_FAST_TYPE[oFastKey] ?: fastMoveTypeMapStatic[oFastKey] ?: oppMeta.types.firstOrNull() ?: "normal"
-                val oppFastTurns = (DYNAMIC_FAST_TURNS[oFastKey] ?: FAST_MOVE_TURNS[oFastKey] ?: oppMeta.fastTurns).coerceAtLeast(1)
-                val oppFastEnergy = (DYNAMIC_FAST_ENERGY[oFastKey] ?: FAST_MOVE_ENERGY[oFastKey] ?: (oppFastTurns * 3)).coerceAtLeast(1)
+                val oppFastType = resolveFastTypeStatic(oFastKey, oppMeta.types.firstOrNull() ?: "normal")
+                val oppFastTurns = resolveFastTurnsStatic(oFastKey, oppMeta.fastTurns).coerceAtLeast(1)
+                val oppFastEnergy = resolveFastEnergyStatic(oFastKey, oppFastTurns).coerceAtLeast(1)
                 val oppFastEpt = oppFastEnergy.toDouble() / oppFastTurns.toDouble()
                 val rawOppFastEff = getTypeEffectivenessStatic(oppFastType, myMeta.types)
                 val oppFastEff = if (oppIsAegislash) rawOppFastEff * getAegislashFastDmgMult(sOpp) else rawOppFastEff
@@ -4038,15 +4176,15 @@ class OverlayService : LifecycleService() {
             val bestOppCharged = max(oppC1Pct, oppC2Pct)
 
             val uFastKey = uFast.lowercase().trim()
-            val userFastType = DYNAMIC_FAST_TYPE[uFastKey] ?: fastMoveTypeMapStatic[uFastKey] ?: myMeta.types.firstOrNull() ?: "normal"
-            val userFastTurns = (DYNAMIC_FAST_TURNS[uFastKey] ?: FAST_MOVE_TURNS[uFastKey] ?: myMeta.fastTurns).coerceAtLeast(1)
-            val userFastEnergy = (DYNAMIC_FAST_ENERGY[uFastKey] ?: FAST_MOVE_ENERGY[uFastKey] ?: (userFastTurns * 3)).coerceAtLeast(1)
+            val userFastType = resolveFastTypeStatic(uFastKey, myMeta.types.firstOrNull() ?: "normal")
+            val userFastTurns = resolveFastTurnsStatic(uFastKey, myMeta.fastTurns).coerceAtLeast(1)
+            val userFastEnergy = resolveFastEnergyStatic(uFastKey, userFastTurns).coerceAtLeast(1)
             val userFastEpt = userFastEnergy.toDouble() / userFastTurns.toDouble()
 
             val oFastKey = oppMeta.defaultFastMove.lowercase().trim()
-            val oppFastType = DYNAMIC_FAST_TYPE[oFastKey] ?: fastMoveTypeMapStatic[oFastKey] ?: oppMeta.types.firstOrNull() ?: "normal"
-            val oppFastTurns = (DYNAMIC_FAST_TURNS[oFastKey] ?: FAST_MOVE_TURNS[oFastKey] ?: oppMeta.fastTurns).coerceAtLeast(1)
-            val oppFastEnergy = (DYNAMIC_FAST_ENERGY[oFastKey] ?: FAST_MOVE_ENERGY[oFastKey] ?: (oppFastTurns * 3)).coerceAtLeast(1)
+            val oppFastType = resolveFastTypeStatic(oFastKey, oppMeta.types.firstOrNull() ?: "normal")
+            val oppFastTurns = resolveFastTurnsStatic(oFastKey, oppMeta.fastTurns).coerceAtLeast(1)
+            val oppFastEnergy = resolveFastEnergyStatic(oFastKey, oppFastTurns).coerceAtLeast(1)
             val oppFastEpt = oppFastEnergy.toDouble() / oppFastTurns.toDouble()
 
             val userFastEff = getTypeEffectivenessStatic(userFastType, oppMeta.types)
@@ -8655,20 +8793,12 @@ class OverlayService : LifecycleService() {
             activeLeague
         )
         val userFastName = userSlot?.fastMove?.takeIf { it.isNotBlank() } ?: userMeta.defaultFastMove
-        val userFastTurns = (FAST_MOVE_TURNS[userFastName.lowercase().trim()]
-            ?: DYNAMIC_FAST_TURNS[userFastName.lowercase().trim()]
-            ?: userMeta.fastTurns).coerceIn(1, 5)
+        val userFastTurns = resolveFastTurnsStatic(userFastName, userMeta.fastTurns).coerceIn(1, 5)
         val oppFastName = oppMeta.defaultFastMove
-        val oppFastTurns = (FAST_MOVE_TURNS[oppFastName.lowercase().trim()]
-            ?: DYNAMIC_FAST_TURNS[oppFastName.lowercase().trim()]
-            ?: oppMeta.fastTurns).coerceIn(1, 5)
+        val oppFastTurns = resolveFastTurnsStatic(oppFastName, oppMeta.fastTurns).coerceIn(1, 5)
 
-        val userFastEnergy = (FAST_MOVE_ENERGY[userFastName.lowercase().trim()]
-            ?: DYNAMIC_FAST_ENERGY[userFastName.lowercase().trim()]
-            ?: (userFastTurns * 4).coerceAtLeast(3)).coerceIn(2, 20)
-        val oppFastEnergy = (FAST_MOVE_ENERGY[oppFastName.lowercase().trim()]
-            ?: DYNAMIC_FAST_ENERGY[oppFastName.lowercase().trim()]
-            ?: (oppFastTurns * 4).coerceAtLeast(3)).coerceIn(2, 20)
+        val userFastEnergy = resolveFastEnergyStatic(userFastName, userFastTurns).coerceIn(2, 20)
+        val oppFastEnergy = resolveFastEnergyStatic(oppFastName, oppFastTurns).coerceIn(2, 20)
 
         val userFastDmgPct = calculateFastMoveDamagePercent(
             attacker = userMeta,
@@ -9972,19 +10102,11 @@ class OverlayService : LifecycleService() {
             activeLeague
         )
         val userFastNameForStats = userSlotCfg?.fastMove?.takeIf { it.isNotBlank() } ?: userMetaForStats.defaultFastMove
-        val userFastTurnsForStats = (FAST_MOVE_TURNS[userFastNameForStats.lowercase().trim()]
-            ?: DYNAMIC_FAST_TURNS[userFastNameForStats.lowercase().trim()]
-            ?: userMetaForStats.fastTurns).coerceIn(1, 5)
+        val userFastTurnsForStats = resolveFastTurnsStatic(userFastNameForStats, userMetaForStats.fastTurns).coerceIn(1, 5)
         val oppFastNameForStats = oppMetaForStats.defaultFastMove
-        val oppFastTurnsForStats = (FAST_MOVE_TURNS[oppFastNameForStats.lowercase().trim()]
-            ?: DYNAMIC_FAST_TURNS[oppFastNameForStats.lowercase().trim()]
-            ?: oppMetaForStats.fastTurns).coerceIn(1, 5)
-        val userFastEnergyForStats = (FAST_MOVE_ENERGY[userFastNameForStats.lowercase().trim()]
-            ?: DYNAMIC_FAST_ENERGY[userFastNameForStats.lowercase().trim()]
-            ?: (userFastTurnsForStats * 4).coerceAtLeast(3)).coerceIn(2, 20)
-        val oppFastEnergyForStats = (FAST_MOVE_ENERGY[oppFastNameForStats.lowercase().trim()]
-            ?: DYNAMIC_FAST_ENERGY[oppFastNameForStats.lowercase().trim()]
-            ?: (oppFastTurnsForStats * 4).coerceAtLeast(3)).coerceIn(2, 20)
+        val oppFastTurnsForStats = resolveFastTurnsStatic(oppFastNameForStats, oppMetaForStats.fastTurns).coerceIn(1, 5)
+        val userFastEnergyForStats = resolveFastEnergyStatic(userFastNameForStats, userFastTurnsForStats).coerceIn(2, 20)
+        val oppFastEnergyForStats = resolveFastEnergyStatic(oppFastNameForStats, oppFastTurnsForStats).coerceIn(2, 20)
         val userExactDmgPct = calculateFastMoveExactDamagePercent(
             attacker = userMetaForStats,
             defender = oppMetaForStats,
@@ -13468,129 +13590,9 @@ class OverlayService : LifecycleService() {
         "Chilling Water" to "ChW"
     )
 
-    private val fastMovePowerMap = mapOf(
-        "dragon breath" to 4,
-        "sand attack" to 2,
-        "quick attack" to 5,
-        "lock-on" to 1,
-        "water gun" to 3,
-        "lick" to 3,
-        "bite" to 4,
-        "tackle" to 3,
-        "fury cutter" to 2,
-        "bug bite" to 3,
-        "scratch" to 4,
-        "psywave" to 3,
-        "psycho cut" to 3,
-        "mud shot" to 4,
-        "shadow claw" to 6,
-        "counter" to 8,
-        "powder snow" to 6,
-        "wing attack" to 5,
-        "peck" to 6,
-        "poison sting" to 4,
-        "thunder shock" to 3,
-        "fairy wind" to 4,
-        "bullet punch" to 8,
-        "fire fang" to 8,
-        "vine whip" to 5,
-        "karate chop" to 5,
-        "low kick" to 4,
-        "ice fang" to 8,
-        "metal claw" to 6,
-        "sucker punch" to 8,
-        "poison jab" to 7,
-        "spark" to 5,
-        "leafage" to 6,
-        "steel wing" to 7,
-        "rock throw" to 8,
-        "ember" to 7,
-        "force palm" to 13,
-        "dragon tail" to 13,
-        "waterfall" to 12,
-        "fire spin" to 11,
-        "snarl" to 5,
-        "geomancy" to 4,
-        "mud-slap" to 12,
-        "charm" to 15,
-        "double kick" to 8,
-        "air slash" to 9,
-        "ice shard" to 9,
-        "bubble" to 7,
-        "rollout" to 8,
-        "smack down" to 11,
-        "astonish" to 12,
-        "hex" to 7,
-        "magical leaf" to 10,
-        "bullet seed" to 5,
-        "water shuriken" to 6,
-        "gust" to 16,
-        "confusion" to 16,
-        "volt switch" to 12,
-        "incinerate" to 20
-    )
+    private val fastMovePowerMap get() = fastMovePowerMapStatic
 
-    private val fastMoveTypeMap = mapOf(
-        "dragon breath" to "dragon",
-        "sand attack" to "ground",
-        "quick attack" to "normal",
-        "lock-on" to "normal",
-        "water gun" to "water",
-        "lick" to "ghost",
-        "bite" to "dark",
-        "tackle" to "normal",
-        "fury cutter" to "bug",
-        "bug bite" to "bug",
-        "scratch" to "normal",
-        "psywave" to "psychic",
-        "psycho cut" to "psychic",
-        "mud shot" to "ground",
-        "shadow claw" to "ghost",
-        "counter" to "fighting",
-        "powder snow" to "ice",
-        "wing attack" to "flying",
-        "peck" to "flying",
-        "poison sting" to "poison",
-        "thunder shock" to "electric",
-        "fairy wind" to "fairy",
-        "bullet punch" to "steel",
-        "fire fang" to "fire",
-        "vine whip" to "grass",
-        "karate chop" to "fighting",
-        "low kick" to "fighting",
-        "ice fang" to "ice",
-        "metal claw" to "steel",
-        "sucker punch" to "dark",
-        "poison jab" to "poison",
-        "spark" to "electric",
-        "leafage" to "grass",
-        "steel wing" to "steel",
-        "rock throw" to "rock",
-        "ember" to "fire",
-        "force palm" to "fighting",
-        "dragon tail" to "dragon",
-        "waterfall" to "water",
-        "fire spin" to "fire",
-        "snarl" to "dark",
-        "geomancy" to "fairy",
-        "mud-slap" to "ground",
-        "charm" to "fairy",
-        "double kick" to "fighting",
-        "air slash" to "flying",
-        "ice shard" to "ice",
-        "bubble" to "water",
-        "rollout" to "rock",
-        "smack down" to "rock",
-        "astonish" to "ghost",
-        "hex" to "ghost",
-        "magical leaf" to "grass",
-        "bullet seed" to "grass",
-        "water shuriken" to "water",
-        "gust" to "flying",
-        "confusion" to "psychic",
-        "volt switch" to "electric",
-        "incinerate" to "fire"
-    )
+    private val fastMoveTypeMap get() = fastMoveTypeMapStatic
 
     private fun abbrMove5(moveName: String): String {
         if (moveName.isBlank()) return "Move"
@@ -13630,8 +13632,8 @@ class OverlayService : LifecycleService() {
         isDefenderShadow: Boolean
     ): Double {
         val key = fastMoveName.lowercase().trim()
-        val power = DYNAMIC_FAST_POWER[key] ?: fastMovePowerMap[key] ?: (fastTurns * 3).coerceAtLeast(3)
-        val moveType = DYNAMIC_FAST_TYPE[key] ?: fastMoveTypeMap[key] ?: attacker.types.firstOrNull() ?: "normal"
+        val power = resolveFastPowerStatic(key, fastTurns)
+        val moveType = resolveFastTypeStatic(key, attacker.types.firstOrNull() ?: "normal")
         val stab = if (attacker.types.any { it.equals(moveType, ignoreCase = true) }) 1.2 else 1.0
         val typeEff = getTypeEffectiveness(moveType, defender.types)
 
@@ -13834,18 +13836,12 @@ class OverlayService : LifecycleService() {
         val myMove2Summary = "${abbrMove5(userMove2Name)} ($myMove2Pct%)"
 
         val userFastMoveName = activeSlot?.fastMove?.takeIf { it.isNotBlank() } ?: userMeta.defaultFastMove
-        val userFastTurns = FAST_MOVE_TURNS[userFastMoveName.lowercase().trim()]
-            ?: DYNAMIC_FAST_TURNS[userFastMoveName.lowercase().trim()]
-            ?: userMeta.fastTurns
+        val userFastTurns = resolveFastTurnsStatic(userFastMoveName, userMeta.fastTurns)
         val oppFastMoveName = oppMeta.defaultFastMove
-        val oppFastTurns = oppMeta.fastTurns
+        val oppFastTurns = resolveFastTurnsStatic(oppFastMoveName, oppMeta.fastTurns)
 
-        val oppFastEnergy = FAST_MOVE_ENERGY[oppFastMoveName.lowercase().trim()]
-            ?: DYNAMIC_FAST_ENERGY[oppFastMoveName.lowercase().trim()]
-            ?: (oppFastTurns * 4).coerceAtLeast(3)
-        val userFastEnergy = FAST_MOVE_ENERGY[userFastMoveName.lowercase().trim()]
-            ?: DYNAMIC_FAST_ENERGY[userFastMoveName.lowercase().trim()]
-            ?: (userFastTurns * 4).coerceAtLeast(3)
+        val oppFastEnergy = resolveFastEnergyStatic(oppFastMoveName, oppFastTurns)
+        val userFastEnergy = resolveFastEnergyStatic(userFastMoveName, userFastTurns)
 
         val oppFastDmgPct = calculateFastMoveDamagePercent(
             attacker = oppMeta,

@@ -39,6 +39,7 @@ import {
   TeamArchetype,
   LeagueType,
   calculateTurnAlignment,
+  resolveFastMove,
   calculateFastDamage,
   calculateChargedDamage,
   calculateShieldMatrix,
@@ -2981,12 +2982,21 @@ export default function App() {
     handleSelectOpponent(nextForm);
   };
 
-  // Calculations (respecting custom fast move turns if edited)
+  // Calculations (respecting live PvPoke GameMaster FAST_MOVE_STATS and custom fast move turns if edited)
   const FAST_MOVE_TURN_LOOKUP: Record<string, number> = {
     'dragon breath': 1,
     'sand attack': 1,
-    'quick attack': 1,
+    'quick attack': 2,
     'lock-on': 1,
+    'lock on': 1,
+    'scratch': 1,
+    'bite': 1,
+    'tackle': 1,
+    'water gun': 1,
+    'lick': 1,
+    'fury cutter': 1,
+    'bug bite': 1,
+    'psywave': 1,
     'psycho cut': 2,
     'mud shot': 2,
     'shadow claw': 2,
@@ -3011,8 +3021,10 @@ export default function App() {
   };
 
   const userFastMoveName = activeUserSlot?.fastMove || userActivePokemon?.defaultFastMove?.name || 'Fast Move';
-  const userFastTurns = FAST_MOVE_TURN_LOOKUP[userFastMoveName.toLowerCase().trim()] || userActivePokemon?.defaultFastMove?.turns || 3;
-  const oppFastTurns = activeOpponent?.defaultFastMove?.turns || 2;
+  const resolvedUserFastMove = resolveFastMove(userActivePokemon, userFastMoveName);
+  const resolvedOppFastMove = resolveFastMove(activeOpponent);
+  const userFastTurns = resolvedUserFastMove?.turns || FAST_MOVE_TURN_LOOKUP[userFastMoveName.toLowerCase().trim()] || userActivePokemon?.defaultFastMove?.turns || 2;
+  const oppFastTurns = resolvedOppFastMove?.turns || activeOpponent?.defaultFastMove?.turns || 2;
   const turnAlignInfo = calculateTurnAlignment(userFastTurns, oppFastTurns);
 
   const oppFastInfo = useMemo(() => {
@@ -3096,9 +3108,10 @@ export default function App() {
 
   // Damage Calculations (Opponent -> Player & Player -> Opponent with Shadow modifiers & custom moves)
   const oppDamageData = useMemo(() => {
+    const oppFastGain = resolveFastMove(activeOpponent)?.energyGain || activeOpponent.defaultFastMove.energyGain || 8;
     return activeOpponent.chargedMoves.map(move => {
       const calc = calculateChargedDamage(activeOpponent, userActivePokemon, move, isOpponentShadow, isUserShadow);
-      const tapsNeeded = Math.max(0, Math.ceil((move.energyCost - oppEnergy) / (activeOpponent.defaultFastMove.energyGain || 8)));
+      const tapsNeeded = Math.max(0, Math.ceil((move.energyCost - oppEnergy) / oppFastGain));
       return {
         move,
         ...calc,
@@ -3154,11 +3167,13 @@ export default function App() {
   const handleFastAttack = () => {
     const newTurns = userTurnsElapsed + 1;
     setUserTurnsElapsed(newTurns);
-    setUserEnergy(prev => Math.min(100, prev + (userActivePokemon.defaultFastMove.energyGain || 8)));
+    const uFastGain = resolveFastMove(userActivePokemon, activeUserSlot?.fastMove)?.energyGain || userActivePokemon.defaultFastMove.energyGain || 8;
+    const oFastGain = resolveFastMove(activeOpponent)?.energyGain || activeOpponent.defaultFastMove.energyGain || 8;
+    setUserEnergy(prev => Math.min(100, prev + uFastGain));
 
     // Opponent also attacks
     setOppTurnsElapsed(prev => prev + 1);
-    setOppEnergy(prev => Math.min(100, prev + (activeOpponent.defaultFastMove.energyGain || 8)));
+    setOppEnergy(prev => Math.min(100, prev + oFastGain));
   };
 
   const applyLeagueTop3TemplateToForm = (league: LeagueType) => {
@@ -4926,7 +4941,7 @@ export default function App() {
                             <button
                               type="button"
                               onClick={() => {
-                                const gain = activeOpponent.defaultFastMove?.energyGain || 8;
+                                const gain = resolveFastMove(activeOpponent)?.energyGain || activeOpponent.defaultFastMove?.energyGain || 8;
                                 const nextE = Math.min(100, (oppSlotEnergy[safeActiveOppSlot] ?? oppEnergy) + gain);
                                 setOppEnergy(nextE);
                                 setOppSlotEnergy((prev) => {
@@ -10328,7 +10343,7 @@ export default function App() {
                   (replayLogEntry.league as LeagueType) || 'GREAT LEAGUE'
                 );
                 const userFast = recUser?.fastMove || 'Dragon Breath';
-                const userTurns = FAST_MOVE_TURN_LOOKUP[userFast.toLowerCase()] || 2;
+                const userTurns = resolveFastMove(activeReplayUserMon, userFast)?.turns || FAST_MOVE_TURN_LOOKUP[userFast.toLowerCase()] || 2;
                 const userCharged = [recUser?.chargedMove1 || 'Aqua Tail', recUser?.chargedMove2 || 'Spacial Rend'];
                 const replayOppTiming = calculateOpponentMoveTimingRows(
                   effOpp,
@@ -12493,7 +12508,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v3.31 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, and ML Kit Text Recognition.
+        SilphScope PvP v3.61 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, and ML Kit Text Recognition.
       </footer>
     </div>
   );
