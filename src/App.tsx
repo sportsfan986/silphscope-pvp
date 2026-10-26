@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Shield,
   Zap,
@@ -4952,7 +4952,7 @@ export default function App() {
                                   next[safeActiveOppSlot] = nextE;
                                   return next;
                                 });
-                                const fDmg = Math.max(1, Math.round(oppFastInfo.damagePct || 3));
+                                const fDmg = Math.max(1, Math.round(oppFastInfo.percentage || 3));
                                 const curMyHp = userSlotHpPct[activeUserSlotIndex] ?? 100;
                                 handleUpdateUserActiveHp(Math.max(1, curMyHp - fDmg));
                                 setScanTurnOffsetMs(Date.now() % 500);
@@ -6372,7 +6372,7 @@ export default function App() {
                             <p className="text-[11px] font-semibold text-slate-200">{pb.subtitle}</p>
                             <p className="text-[10.5px] text-slate-400 leading-relaxed">{pb.howToPlay}</p>
                             <ul className="space-y-1 text-[10px] text-slate-300 list-disc pl-4">
-                              {pb.tacticalPillars.map((pillar, pIdx) => (
+                              {pb.proTactics.map((pillar, pIdx) => (
                                 <li key={pIdx}>{pillar}</li>
                               ))}
                             </ul>
@@ -10346,7 +10346,8 @@ export default function App() {
                   (replayLogEntry.league as LeagueType) || 'GREAT LEAGUE'
                 );
                 const userFast = recUser?.fastMove || 'Dragon Breath';
-                const userTurns = resolveFastMove(activeReplayUserMon, userFast)?.turns || FAST_MOVE_TURN_LOOKUP[userFast.toLowerCase()] || 2;
+                const rawUserStats = POKEMON_DATABASE[activeReplayUserMon] || Object.values(POKEMON_DATABASE).find((p) => p.name.toLowerCase() === activeReplayUserMon.toLowerCase()) || POKEMON_DATABASE['Palkia (Origin)'];
+                const userTurns = resolveFastMove(rawUserStats, userFast)?.turns || FAST_MOVE_TURN_LOOKUP[userFast.toLowerCase()] || 2;
                 const userCharged = [recUser?.chargedMove1 || 'Aqua Tail', recUser?.chargedMove2 || 'Spacial Rend'];
                 const replayOppTiming = calculateOpponentMoveTimingRows(
                   effOpp,
@@ -12511,7 +12512,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v3.61 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, and ML Kit Text Recognition.
+        SilphScope PvP v3.62 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, and ML Kit Text Recognition.
       </footer>
     </div>
   );

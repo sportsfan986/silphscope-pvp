@@ -40,6 +40,7 @@ export interface TeamMember {
 }
 
 export type LeagueType = "MEGA MASTER LEAGUE" | "MASTER LEAGUE" | "ULTRA LEAGUE" | "GREAT LEAGUE";
+export type TeamArchetype = "ABB" | "ABC" | "DUO";
 
 export interface MoveUsage {
   moveId: string;
@@ -73,7 +74,7 @@ export interface TeamPreset {
   league: LeagueType;
   pokemon: TeamMember[];
   isSelected?: boolean;
-  archetype?: "ABB" | "ABC";
+  archetype?: TeamArchetype;
   isArchetypeManual?: boolean;
   leadAggBr?: number;
   machineAggBr?: number;
@@ -2005,12 +2006,27 @@ export const FORM_CHANGE_SPECIAL_POKEMON: FormChangeComparisonGroup[] = [
   }
 ];
 
+export function findPokemonByName(name: string): PokemonStats | undefined {
+  if (!name) return undefined;
+  const trimmed = name.trim();
+  const clean = trimmed.replace(/^Shadow\s+/i, "").trim();
+  return (
+    POKEMON_DATABASE[trimmed] ||
+    POKEMON_DATABASE[clean] ||
+    Object.values(POKEMON_DATABASE).find(
+      (p) =>
+        p.name.toLowerCase() === trimmed.toLowerCase() ||
+        p.name.toLowerCase() === clean.toLowerCase()
+    )
+  );
+}
+
 export function getPvPokeStyleKeyMatchupsForPokemon(
   name: string,
   league: string = "GREAT LEAGUE"
 ): PvPokeMatchupCardData {
   const normLg = (league || "GREAT LEAGUE").toUpperCase();
-  const dbEntry = POKEMON_DATABASE[name] || Object.values(POKEMON_DATABASE).find((p) => p.name.toLowerCase() === name.toLowerCase());
+  const dbEntry = findPokemonByName(name);
   const rec = getRecommendedMovesForPokemon(name, normLg);
   const fast = rec?.fastMove || dbEntry?.defaultFastMove?.name || "Counter";
   const c1 = rec?.chargedMove1 || dbEntry?.chargedMoves?.[0]?.name || "Body Slam";
@@ -7501,8 +7517,6 @@ export const INITIAL_PRESETS: TeamPreset[] = recalculateAllPresetsMetrics([
   }
 ]);
 
-export type TeamArchetype = "ABB" | "ABC" | "DUO";
-
 export interface RoleUpgradeSuggestion {
   roleIndex: 0 | 1 | 2;
   roleLabel: string;
@@ -9236,6 +9250,7 @@ export function generateAntiMetaTeamOptions(
   interface SlotCandidateEval {
     member: TeamMember;
     baseSpecies: string;
+    types: string[];
     weaknesses: string[];
     doubleWeaknesses: string[];
     resistances: string[];
@@ -9250,7 +9265,8 @@ export function generateAntiMetaTeamOptions(
     baseSpecies: string,
     weaknesses: string[],
     doubleWeaknesses: string[],
-    resistances: string[]
+    resistances: string[],
+    types: string[] = []
   ): SlotCandidateEval => {
     const pwByOpp = new Map<string, PositionWeightedMatchupRatings>();
     for (const oppName of allMetaOpps) {
@@ -9282,6 +9298,7 @@ export function generateAntiMetaTeamOptions(
     return {
       member,
       baseSpecies,
+      types,
       weaknesses,
       doubleWeaknesses,
       resistances,
@@ -9319,7 +9336,7 @@ export function generateAntiMetaTeamOptions(
 
     slotEvalCache.set(
       key,
-      evaluateMemberAgainstRoleMeta(cand, baseSpecies, weaknesses, doubleWeaknesses, resistances)
+      evaluateMemberAgainstRoleMeta(cand, baseSpecies, weaknesses, doubleWeaknesses, resistances, types)
     );
   }
 
@@ -9873,7 +9890,8 @@ export function generateAntiMetaTeamOptions(
       baseEval.baseSpecies,
       baseEval.weaknesses,
       baseEval.doubleWeaknesses,
-      baseEval.resistances
+      baseEval.resistances,
+      baseEval.types
     );
     movesetVariantEvalCache.set(cacheKey, computed);
     return computed;

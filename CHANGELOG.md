@@ -1,5 +1,18 @@
 # SilphScope PvP Changelog
 
+## [v3.62] — 2026-10-25 — Codebase Cleanup & Regression Testing Build
+- **Codebase Cleanup & Self-Healing (Chat History Recovery)**:
+  - Cleaned up syntax and typing inconsistencies caused by corrupt chat history in AI Studio.
+  - Restored React `useRef` import in `src/App.tsx`.
+  - Harmonized `TeamPreset.archetype` type definition with `TeamArchetype` (`"ABB" | "ABC" | "DUO"`), resolving type checks across presets, modal forms, and tactical playbooks.
+  - Restored and exported `findPokemonByName` utility in `src/data/gblData.ts` for species and shadow lookups.
+  - Added species typing metadata to `SlotCandidateEval` and candidate moveset evaluation loops in `src/data/gblData.ts`.
+  - Aligned simulated fast-move damage lookup (`oppFastInfo.percentage`) and archetype playbook tactics (`pb.proTactics`) in `src/App.tsx`.
+  - Resolved `PokemonStats` before calling `resolveFastMove` in post-game replay inspector.
+- **Regression Testing**:
+  - Validated 100% clean TypeScript type check (`npm run lint` / `tsc --noEmit`).
+  - Validated clean Vite production bundle compilation (`npm run build`).
+
 ## [v3.61] — 2026-10-25 — Authoritative PvPoke GameMaster Fast & Charged Move Precedence, Scratch Energy Fix (`1t/4e`) & Full Move Discrepancy Audit
 - **Comprehensive Charged Move Validation & Discrepancy Fixes (`OverlayService.kt`, `src/data/gblData.ts`, `src/App.tsx`)**:
   - Validated all 251 PvPoke charged moves against internal code tables; identified and resolved the same static fallback discrepancy issue that affected fast moves:

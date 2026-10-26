@@ -1,6 +1,8 @@
 {
-  "name": "BattleMatrix GBL",
-  "description": "Real-Time 3x3 matchup Matrix, Damage Calculations, & Turn Pacing HUD for Poekmon Go PVP",
+  "name": "SilphScope PvP - Real-Time Battle Matrix & Pokémon GO Overlay",
+  "description": "Real-time floating battle analysis overlay for Pokémon GO Battle League with ML Kit OCR, PvPoke gamemaster stats, turn alignment, and 3v3 matchup matrix.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

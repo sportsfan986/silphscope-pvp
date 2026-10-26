@@ -1,4 +1,4 @@
-# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v3.61)
+# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v3.62)
 
 [![Live Web Simulator](https://img.shields.io/badge/🌐%20Live%20Web%20Simulator-Try%20in%20Browser-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white)](https://sportsfan986.github.io/silphscope-pvp/)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support%20the%20Project-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/sportsfan986)
@@ -127,13 +127,13 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## 📥 Download & Install Native Android APK (v3.61)
+## 📥 Download & Install Native Android APK (v3.62)
 
 > **⚠️ Note on Live HP & Energy Counting (Disabled by Default — Opt-In via Settings)**:
 > By default, **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting** are **DISABLED (OFF)** for all new installs and any user upgrading from a version prior to `v3.40`. To enable live HP% and/or live fast-move energy counting on the floating overlay, open **⚙️ Settings** in the app and toggle **Live HP Bar Tracking** and/or **Live Energy & Fast-Move Counting** to **ON**.
 
 1. Visit the **[Official GitHub Releases Page](https://github.com/sportsfan986/silphscope-pvp/releases)**.
-2. Download **`silphscope-pvp-v3.61.apk`** directly to your Android device.
+2. Download **`silphscope-pvp-v3.62.apk`** directly to your Android device.
 3. Tap the downloaded APK file to install (grant *"Install unknown apps"* permission if prompted).
 4. Launch **SilphScope PvP**:
    - Select, reorder, or customize your **GBL Team Presets**, set **Opponent Move Count Basis** (`My Fasts` vs. `Their Fasts`), adjust **Overlay Size** (`50%–100%` screen width slider) and **Background Transparency**, and optionally opt in to **Live HP Bar Tracking** and **Live Energy & Fast-Move Counting** in **⚙️ Settings**.
@@ -143,7 +143,11 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## ✨ Changelog — What's New in v3.61
+## ✨ Changelog — What's New in v3.62
+
+- **v3.62 — Codebase Cleanup & Regression Testing Build**:
+  - **Codebase Cleanup & Self-Healing**: Cleaned up syntax and typing issues caused by corrupt chat history in AI Studio; restored React `useRef` import in `src/App.tsx`; synchronized `TeamPreset.archetype` type definition with `TeamArchetype` (`"ABB" | "ABC" | "DUO"`); restored `findPokemonByName` utility in `src/data/gblData.ts`; added species typing to `SlotCandidateEval` and moveset evaluation variants; aligned fast-move damage lookup (`oppFastInfo.percentage`) and archetype playbook tactics (`pb.proTactics`); and corrected `resolveFastMove` argument typing in the post-game replay inspector.
+  - **Regression Testing**: Passed complete TypeScript check (`tsc --noEmit`) and Vite bundle compilation (`npm run build`).
 
 - **v3.61 — Authoritative PvPoke GameMaster Fast & Charged Move Precedence, Scratch Energy Fix (`1t/4e`) & Full Move Discrepancy Audit**:
   - **Comprehensive Charged Move Audit & Synchronization**: Validated all 251 PvPoke charged moves against internal code tables; corrected 29 outdated energy values in `MOVE_ENERGY_COST` (including Bulldoze `45` → `55`, Body Slam `35` → `40`, Aura Sphere `55` → `40`, Rage Fist `35` → `40`, Dynamic Punch `50` → `45`, Dazzling Gleam `70` → `55`, Aerial Ace `40` → `45`, Shadow Sneak `45` → `50`, Energy Ball `55` → `45`, Seed Bomb `45` → `40`, Discharge `45` → `40`, Scald `55` → `50`, Sand Tomb `40` → `45`, Rock Tomb `60` → `50`, Gyro Ball `60` → `50`, Bubble Beam `40` → `50`, Brine `50` → `60`, Foul Play `45` → `40`, Hurricane `65` → `60`, Psyshock `45` → `40`), corrected `MOVE_DATABASE` (Bulldoze `80p/55e`, Dive `50p/40e`, Springtide Storm `60p/45e`), corrected static `POKEMON_DATABASE` entries (Earthquake `120p`, Dynamic Punch `90p`, Gyro Ball `50e`, Double Iron Bash `70p`, Psyshock `40e`, Surf `75p/45e`), and normalized dynamic lookup across all key variants (`nameKey`, `idKey`, `spaceKey`, `hyphenKey`, `underscoreKey`). Automated comparison confirms 0 discrepancies against live PvPoke `gamemaster.json`.
