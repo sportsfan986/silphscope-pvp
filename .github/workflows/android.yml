@@ -127,19 +127,20 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (100ms/10Hz Pixel Sampling, 2-Sample Debounce & Unified 1T-5T Fast Move Engine)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Turn-Scaled Debounce, 3T+ Sliver Latch, Adaptive Damage Filtering & Low-Damage Move Energy Multi-Credit)
 
-            ### What's New in v3.65
-            - **100ms / 10Hz Ultra-Fast Pixel HP HUD Sampling (`OverlayService.kt`)**:
-              - Boosted pixel HUD sampling frequency to 100ms (10 Hz), delivering 5 screen samples per 0.5s Pokémon GO PvP turn (10 samples for 2-turn moves).
-              - Updated header scan rate badge to display `HP:100ms/OCR:xxxms`.
-            - **Two-Successive-Matching-Sample Confirmation Debounce (`OverlayService.kt`)**:
-              - Required two consecutive identical HP readings before accepting an HP decrement or triggering energy increments, completely filtering out transient 1-2% anti-aliasing noise and jitter spikes.
-            - **Unified 1-Turn & 2-Turn Fast Move Engine (`OverlayService.kt`)**:
-              - 1-turn and 2-turn fast moves now follow the exact same pending-damage sliver latch-and-lock and confirmed solid drop logic as 3T-5T moves.
-              - Immediate energy credit upon pending sliver appearance followed by latch-lock until solid HP drops, preventing missed or over-counted fast move turns.
-            - **Damage PID Loop Setting (`OverlayService.kt`, `src/App.tsx`)**:
-              - Maintained configurable Damage PID Loop toggle in Settings (default enabled) with updated 100ms telemetry.
+            ### What's New in v3.66
+            - **Adaptive Fast-Move Damage Filter & 50% Threshold**:
+              - For 3T+ heavy fast moves, enforces a minimum damage threshold of >= 50% expected fast move damage (min 2%) to filter out transient 1-2% post-swap/charge attack glitches.
+              - Prevents 3T fast moves from advancing an extra move ahead after swapping and throwing a charged attack.
+            - **Direct Damage Detection for 1-Turn & 2-Turn Fast Moves**:
+              - 1-turn and 2-turn fast moves bypass pending sliver latching (which do not render visibly in Pokémon GO) and rely strictly on confirmed direct damage drops.
+              - Pending sliver latch-and-lock is exclusively reserved for 3-turn, 4-turn, and 5-turn fast moves.
+            - **Turn-Scaled HP Debounce (+100ms per turn count)**:
+              - Scaled confirmation debounce frames smoothly per turn count: 1T = 2 scans (200ms), 2T = 3 scans (300ms), 3T = 4 scans (400ms), 4T = 5 scans (500ms), 5T = 6 scans (600ms).
+            - **Low-Damage Move Multi-Move Credit & Expanded Charged Move Reconciliation**:
+              - Low-damage moves (<= 3.5% damage per move or 1T/2T) accept 1% drops and dynamically credit multiple moves when a multi-percent drop represents multiple elapsed turns (`min(dmgDerivedMoves, elapsedDerivedMoves)`), preventing low-damage moves from under-counting energy.
+              - Pre-charged attack reconciliation window allows up to +3 moves of catchup during the ~10s stable pause.
 
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)

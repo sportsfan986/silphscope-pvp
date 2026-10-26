@@ -8799,19 +8799,21 @@ class OverlayService : LifecycleService() {
      * moment energy becomes available to use (enabling immediate swap/catch warnings).
      */
     /**
-     * v3.65: 100MS / 10HZ HP PIXEL SAMPLING + 2-MATCHING-SAMPLE DEBOUNCE + UNIFIED 1T-5T SLIVER/DROP ENGINE
-     * 1. Ultra-Fast 100ms (10 Hz) Pixel HUD Loop:
-     *    - Every ~100ms, acquires the VirtualDisplay frame and runs pure-pixel HUD scans
-     *      (detectFloatingHpBarPct + pending-damage sliver extraction + detectActivePokeballCount + detectActiveShieldCount).
-     *    - Guarantees 5 samples per 0.5s GBL turn so 1-turn (5 samples) and 2-turn (10 samples) fast moves
-     *      have ample temporal resolution.
-     *    - Debounces single-frame 1-2% HP jitter by requiring TWO successive matching samples before
-     *      decrementing HP or incrementing energy.
-     *    - Allows 1-turn and 2-turn fast moves to follow the exact same pending-damage sliver latch-and-lock
-     *      and confirmed solid drop logic as slower moves.
-     * 2. Asynchronous ~750ms ML Kit OCR Loop:
-     *    - Every ~750ms (when !isOcrInFlight), builds the composite nameplate/move/banner bitmap and runs
-     *      textRecognizer.process() asynchronously without blocking the 100ms pixel HP loop.
+     * v3.66: TURN-SCALED DEBOUNCE + 3T+ SLIVER LATCH + LOW-DAMAGE MOVE MULTI-CREDIT + STABLE CHARGED RECONCILIATION
+     * 1. Turn-Scaled Debounce (+100ms per turn count):
+     *    - 1-turn (500ms): 2 scans (200ms)
+     *    - 2-turn (1000ms): 3 scans (300ms)
+     *    - 3-turn (1500ms): 4 scans (400ms)
+     *    - 4-turn (2000ms): 5 scans (500ms)
+     *    - 5-turn (2500ms): 6 scans (600ms)
+     * 2. Pending Damage Sliver Latch-and-Lock:
+     *    - Restricted to 3T, 4T, and 5T fast moves (1T and 2T fast moves do not show visible pending indicators in Pokémon GO).
+     * 3. Adaptive Fast-Move Damage Filter:
+     *    - For 3T+ heavy moves, requires >= 50% of expected move damage (min 2%) to filter out transient 1-2% post-swap glitches.
+     *    - For 1T/2T and low-damage moves (<= 3.5%), accepts 1% drops and multi-move credits drops (min(dmgDerivedMoves, elapsedDerivedMoves))
+     *      so low-damage moves never under-count energy.
+     * 4. Charged-Move Reconcile Window:
+     *    - Expanded catchup during the ~10s stable charged attack pause to reconcile up to +3 missed moves.
      */
     private fun startBattleOcrLoop() {
         if (battleLoopJob?.isActive == true) return
@@ -10120,29 +10122,39 @@ class OverlayService : LifecycleService() {
             !hasUserChargedBannerText &&
             (nowMs - lastChargedAttackLoggedMs) > 900L
 
-        // 1A. Player HP Bar Scan -> Opponent Fast Move Pending-Sliver Latch-and-Lock + 2-Sample Debounce + 3-Tier PID Observer
+        // 1A. Player HP Bar Scan -> Opponent Fast Move Pending-Sliver Latch-and-Lock + Turn-Scaled Debounce + 3-Tier PID Observer
         if (!isPostFaintSwitchPromptActive && sampledPlayerHpPct in 1..100 && !playerFaintedSlots[activeUserIdx]) {
             playerFinalMissingHpFrames = 0
             val curHp = playerSlotHpPct[activeUserIdx].coerceIn(1, 100)
             val lastScannedUserHp = lastScannedPlayerSlotHpPct[activeUserIdx].coerceIn(1, 100)
-            val minOppMoveCooldownMs = (oppFastTurnsForStats * 500L - 110L).coerceAtLeast(350L)
+            val minOppMoveCooldownMs = (oppFastTurnsForStats * 500L - 100L).coerceAtLeast(390L)
             val elapsedSinceLastOppCreditMs = if (oppLastFastCreditedAtMs[activeOppIdx] > 0L) {
                 (nowMs - oppLastFastCreditedAtMs[activeOppIdx]).coerceAtLeast(0L)
             } else Long.MAX_VALUE
 
-            // v3.65: Require two successive matching samples before decrementing HP or incrementing energy
+            // v3.66: Turn-scaled debounce: 1T = 2 scans (200ms), an extra +100ms (1 scan) per additional turn count
             if (sampledPlayerHpPct == pendingConfirmPlayerSlotHpPct[activeUserIdx]) {
                 playerSlotHpConfirmFrames[activeUserIdx] = (playerSlotHpConfirmFrames[activeUserIdx] + 1).coerceAtMost(10)
             } else {
                 pendingConfirmPlayerSlotHpPct[activeUserIdx] = sampledPlayerHpPct
                 playerSlotHpConfirmFrames[activeUserIdx] = 1
             }
-            val isPlayerHpConfirmed = playerSlotHpConfirmFrames[activeUserIdx] >= 2
+            val requiredPlayerConfirmFrames = (1 + oppFastTurnsForStats).coerceIn(2, 6)
+            val isPlayerHpConfirmed = playerSlotHpConfirmFrames[activeUserIdx] >= requiredPlayerConfirmFrames
             val confirmedPlayerHp = pendingConfirmPlayerSlotHpPct[activeUserIdx]
 
             if (isPlayerHpConfirmed) {
                 val realUserDrop = lastScannedUserHp - confirmedPlayerHp
-                if (realUserDrop in 1..25) {
+                // v3.66: Adaptive Fast-Move Damage Filter:
+                // For 3T+ heavy moves, require at least 50% of expected fast move damage (min 2%) to filter out post-swap transient glitches.
+                // For 1T/2T and low-damage moves (<= 3.5%), accept 1% drops so low-damage moves never under-count energy.
+                val minOppFastDmgThreshold = if (oppFastTurnsForStats <= 2 || oppExactDmgPct <= 3.5) {
+                    1
+                } else {
+                    max(2, (oppExactDmgPct * 0.50).roundToInt())
+                }
+
+                if (realUserDrop in minOppFastDmgThreshold..25) {
                     // Confirmed solid HP drop on Player HP bar -> Unlocks Opponent Sliver Latch
                     observedPlayerFastDrop = true
                     turnPhaseAnchorMs = captureAnchorMs
@@ -10154,20 +10166,24 @@ class OverlayService : LifecycleService() {
                         }
                         val totalWindowDrop = (oppFastWindowStartPlayerHp[activeOppIdx] - confirmedPlayerHp).coerceAtLeast(realUserDrop)
 
-                        // Step 1: If already credited on pending sliver (LOCKED_UNTIL_HP_DROP), baseNewMoves = 0;
-                        // otherwise credit +1 move if cooldown has elapsed.
+                        // Step 1: Credit moves from drop. For low-damage moves (<= 3.5%), a multi-percent drop can represent multiple moves!
+                        val dmgDerivedMoves = if (oppExactDmgPct <= 3.5) {
+                            (realUserDrop.toDouble() / oppExactDmgPct.coerceAtLeast(0.6)).roundToInt().coerceAtLeast(1)
+                        } else {
+                            1
+                        }
+                        val elapsedDerivedMoves = (elapsedSinceLastOppCreditMs / minOppMoveCooldownMs).toInt().coerceAtLeast(1)
                         val baseNewMoves = if (wasLockedBySliver) {
                             0
-                        } else if (elapsedSinceLastOppCreditMs >= minOppMoveCooldownMs) {
-                            1
                         } else {
-                            0
+                            min(dmgDerivedMoves, elapsedDerivedMoves).coerceIn(1, 3)
                         }
 
                         // Step 2: Online EMA estimator of actual per-move damage
+                        val perMoveDrop = realUserDrop.toDouble() / baseNewMoves.coerceAtLeast(1)
                         val prevHatD = oppAdaptiveFastDmgPct[activeOppIdx].takeIf { it > 0.4 } ?: oppExactDmgPct.coerceAtLeast(0.75)
-                        val updatedHatD = if (realUserDrop.toDouble() in (oppExactDmgPct * 0.45)..(oppExactDmgPct * 1.65)) {
-                            ((0.65 * prevHatD) + (0.35 * realUserDrop.toDouble()))
+                        val updatedHatD = if (perMoveDrop in (oppExactDmgPct * 0.45)..(oppExactDmgPct * 1.65)) {
+                            ((0.65 * prevHatD) + (0.35 * perMoveDrop))
                                 .coerceIn(oppExactDmgPct * 0.65, oppExactDmgPct * 1.45)
                                 .coerceAtLeast(0.75)
                         } else {
@@ -10190,8 +10206,8 @@ class OverlayService : LifecycleService() {
                             0
                         }
 
-                        // Strict single-scan clamp: never jump +2 moves in a single scan unless 2 full cooldowns elapsed
-                        val maxSingleScanAdd = if (canAddExtraPidMove) 2 else 1
+                        // Strict single-scan clamp: allow up to max(2, baseNewMoves)
+                        val maxSingleScanAdd = if (canAddExtraPidMove) max(2, baseNewMoves) else baseNewMoves
                         val netMovesDelta = (baseNewMoves + biasCorrection).coerceIn(-1, maxSingleScanAdd)
                         if (netMovesDelta != 0) {
                             oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] + netMovesDelta * oppFastEnergyForStats).coerceIn(0, 100)
@@ -10212,7 +10228,7 @@ class OverlayService : LifecycleService() {
                             val playerHatD = playerAdaptiveFastDmgPct[activeUserIdx].takeIf { it > 0.4 } ?: userExactDmgPct.coerceAtLeast(0.75)
                             val totalOppWindowDrop = (playerFastWindowStartOppHp[activeUserIdx] - (if (oppSlotHpConfirmFrames[activeOppIdx] >= 2) pendingConfirmOppSlotHpPct[activeOppIdx] else lastScannedOppSlotHpPct[activeOppIdx])).coerceAtLeast(0)
                             val dmgSupportedUserMoves = (totalOppWindowDrop.toDouble() / playerHatD).roundToInt()
-                            val minUserCooldownMs = (userFastTurnsForStats * 500L - 110L).coerceAtLeast(350L)
+                            val minUserCooldownMs = (userFastTurnsForStats * 500L - 100L).coerceAtLeast(390L)
                             val userElapsedMs = if (playerLastFastCreditedAtMs[activeUserIdx] > 0L) (nowMs - playerLastFastCreditedAtMs[activeUserIdx]) else Long.MAX_VALUE
                             if (playerCreditedFastsInWindow[activeUserIdx] < expectedUserMovesByOppClock &&
                                 playerCreditedFastsInWindow[activeUserIdx] < dmgSupportedUserMoves &&
@@ -10243,6 +10259,15 @@ class OverlayService : LifecycleService() {
                     pendingPlayerLowHpSlot = -1
                     pendingPlayerLowHpSample = -1
                     hpChanged = true
+                } else if (realUserDrop in 1 until minOppFastDmgThreshold) {
+                    // Minor chip or post-charge/swap transient drop (< 50% of expected fast move damage):
+                    // Update HP display so health remains accurate, but DO NOT count as a fast move or increment energy!
+                    lastScannedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
+                    confirmedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
+                    playerSlotHpPct[activeUserIdx] = confirmedPlayerHp
+                    playerSlotPreFaintHpPct[activeUserIdx] = confirmedPlayerHp
+                    predictedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
+                    hpChanged = true
                 } else if (confirmedPlayerHp > lastScannedUserHp) {
                     lastScannedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     oppFastWindowStartPlayerHp[activeOppIdx] = max(oppFastWindowStartPlayerHp[activeOppIdx], confirmedPlayerHp)
@@ -10256,12 +10281,13 @@ class OverlayService : LifecycleService() {
                 }
             }
 
-            // Steady / Pending Sliver State: 1T..5T Opponent Fast Moves follow same sliver latch-and-lock logic!
+            // Steady / Pending Sliver State: 3T..5T Opponent Fast Moves follow sliver latch-and-lock logic!
+            // (1-turn and 2-turn fast moves do not have pending indicators in Pokémon GO, damage applies right away)
             if (!observedPlayerFastDrop) {
-                // Pending-Damage Sliver Latch-and-Lock State Machine for 1T..5T Opponent Fast Moves:
+                // Pending-Damage Sliver Latch-and-Lock State Machine for 3T..5T Opponent Fast Moves:
                 // Credit +1 move immediately on pending sliver when ARMED (!oppSliverLockedUntilDrop), then LOCK until solid HP drops.
                 if (sampledPlayerHasPendingDmg &&
-                    oppFastTurnsForStats >= 1 &&
+                    oppFastTurnsForStats >= 3 &&
                     canAccumulateFastEnergy
                 ) {
                     if (playerPendingDmgScans == 0) {
@@ -10326,7 +10352,7 @@ class OverlayService : LifecycleService() {
                     playerPredAheadScanFrames[activeUserIdx] = 0
                 }
 
-                // If locked by sliver, display the predicted HP immediately, otherwise keep the 2-frame confirmed stable HP
+                // If locked by sliver, display the predicted HP immediately, otherwise keep the confirmed stable HP
                 if (enableHpTracking && oppUnconfirmedPredFasts[activeOppIdx] > 0) {
                     val targetDisplayPlayerHp = predictedPlayerSlotHpPct[activeUserIdx].coerceIn(1, 100)
                     if (targetDisplayPlayerHp != curHp) {
@@ -10342,29 +10368,39 @@ class OverlayService : LifecycleService() {
             playerSlotHpConfirmFrames[activeUserIdx] = 0
         }
 
-        // 1B. Opponent HP Bar Scan -> Player Fast Move Pending-Sliver Latch-and-Lock + 2-Sample Debounce + 3-Tier PID Observer
+        // 1B. Opponent HP Bar Scan -> Player Fast Move Pending-Sliver Latch-and-Lock + Turn-Scaled Debounce + 3-Tier PID Observer
         if (sampledOppHpPct in 1..100 && !oppFaintedSlots[activeOppIdx]) {
             oppFinalMissingHpFrames = 0
             val curHp = oppSlotHpPct[activeOppIdx].coerceIn(1, 100)
             val lastScannedOppHp = lastScannedOppSlotHpPct[activeOppIdx].coerceIn(1, 100)
-            val minUserMoveCooldownMs = (userFastTurnsForStats * 500L - 110L).coerceAtLeast(350L)
+            val minUserMoveCooldownMs = (userFastTurnsForStats * 500L - 100L).coerceAtLeast(390L)
             val elapsedSinceLastUserCreditMs = if (playerLastFastCreditedAtMs[activeUserIdx] > 0L) {
                 (nowMs - playerLastFastCreditedAtMs[activeUserIdx]).coerceAtLeast(0L)
             } else Long.MAX_VALUE
 
-            // v3.65: Require two successive matching samples before decrementing HP or incrementing energy
+            // v3.66: Turn-scaled debounce: 1T = 2 scans (200ms), an extra +100ms (1 scan) per additional turn count
             if (sampledOppHpPct == pendingConfirmOppSlotHpPct[activeOppIdx]) {
                 oppSlotHpConfirmFrames[activeOppIdx] = (oppSlotHpConfirmFrames[activeOppIdx] + 1).coerceAtMost(10)
             } else {
                 pendingConfirmOppSlotHpPct[activeOppIdx] = sampledOppHpPct
                 oppSlotHpConfirmFrames[activeOppIdx] = 1
             }
-            val isOppHpConfirmed = oppSlotHpConfirmFrames[activeOppIdx] >= 2
+            val requiredOppConfirmFrames = (1 + userFastTurnsForStats).coerceIn(2, 6)
+            val isOppHpConfirmed = oppSlotHpConfirmFrames[activeOppIdx] >= requiredOppConfirmFrames
             val confirmedOppHp = pendingConfirmOppSlotHpPct[activeOppIdx]
 
             if (isOppHpConfirmed) {
                 val realOppDrop = lastScannedOppHp - confirmedOppHp
-                if (realOppDrop in 1..25) {
+                // v3.66: Adaptive Fast-Move Damage Filter:
+                // For 3T+ heavy moves, require at least 50% of expected fast move damage (min 2%) to filter out post-swap transient glitches.
+                // For 1T/2T and low-damage moves (<= 3.5%), accept 1% drops so low-damage moves never under-count energy.
+                val minUserFastDmgThreshold = if (userFastTurnsForStats <= 2 || userExactDmgPct <= 3.5) {
+                    1
+                } else {
+                    max(2, (userExactDmgPct * 0.50).roundToInt())
+                }
+
+                if (realOppDrop in minUserFastDmgThreshold..25) {
                     // Confirmed solid HP drop on Opponent HP bar -> Unlocks Player Sliver Latch
                     observedOppFastDrop = true
                     turnPhaseAnchorMs = captureAnchorMs
@@ -10376,20 +10412,24 @@ class OverlayService : LifecycleService() {
                         }
                         val totalWindowDrop = (playerFastWindowStartOppHp[activeUserIdx] - confirmedOppHp).coerceAtLeast(realOppDrop)
 
-                        // Step 1: If already credited on pending sliver (LOCKED_UNTIL_HP_DROP), baseNewMoves = 0;
-                        // otherwise credit +1 move if cooldown has elapsed.
+                        // Step 1: Credit moves from drop. For low-damage moves (<= 3.5%), a multi-percent drop can represent multiple moves!
+                        val userDmgDerivedMoves = if (userExactDmgPct <= 3.5) {
+                            (realOppDrop.toDouble() / userExactDmgPct.coerceAtLeast(0.6)).roundToInt().coerceAtLeast(1)
+                        } else {
+                            1
+                        }
+                        val userElapsedDerivedMoves = (elapsedSinceLastUserCreditMs / minUserMoveCooldownMs).toInt().coerceAtLeast(1)
                         val baseNewMoves = if (wasLockedBySliver) {
                             0
-                        } else if (elapsedSinceLastUserCreditMs >= minUserMoveCooldownMs) {
-                            1
                         } else {
-                            0
+                            min(userDmgDerivedMoves, userElapsedDerivedMoves).coerceIn(1, 3)
                         }
 
                         // Step 2: Online EMA estimator of actual per-move damage
+                        val perMoveDrop = realOppDrop.toDouble() / baseNewMoves.coerceAtLeast(1)
                         val prevHatD = playerAdaptiveFastDmgPct[activeUserIdx].takeIf { it > 0.4 } ?: userExactDmgPct.coerceAtLeast(0.75)
-                        val updatedHatD = if (realOppDrop.toDouble() in (userExactDmgPct * 0.45)..(userExactDmgPct * 1.65)) {
-                            ((0.65 * prevHatD) + (0.35 * realOppDrop.toDouble()))
+                        val updatedHatD = if (perMoveDrop in (userExactDmgPct * 0.45)..(userExactDmgPct * 1.65)) {
+                            ((0.65 * prevHatD) + (0.35 * perMoveDrop))
                                 .coerceIn(userExactDmgPct * 0.65, userExactDmgPct * 1.45)
                                 .coerceAtLeast(0.75)
                         } else {
@@ -10412,8 +10452,8 @@ class OverlayService : LifecycleService() {
                             0
                         }
 
-                        // Strict single-scan clamp: never jump +2 moves in a single scan unless 2 full cooldowns elapsed
-                        val maxSingleScanAdd = if (canAddExtraPidMove) 2 else 1
+                        // Strict single-scan clamp: allow up to max(2, baseNewMoves)
+                        val maxSingleScanAdd = if (canAddExtraPidMove) max(2, baseNewMoves) else baseNewMoves
                         val netMovesDelta = (baseNewMoves + biasCorrection).coerceIn(-1, maxSingleScanAdd)
                         if (netMovesDelta != 0) {
                             playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] + netMovesDelta * userFastEnergyForStats).coerceIn(0, 100)
@@ -10443,6 +10483,15 @@ class OverlayService : LifecycleService() {
                     pendingOppLowHpSlot = -1
                     pendingOppLowHpSample = -1
                     hpChanged = true
+                } else if (realOppDrop in 1 until minUserFastDmgThreshold) {
+                    // Minor chip or post-charge/swap transient drop (< 50% of expected fast move damage):
+                    // Update HP display so health remains accurate, but DO NOT count as a fast move or increment energy!
+                    lastScannedOppSlotHpPct[activeOppIdx] = confirmedOppHp
+                    confirmedOppSlotHpPct[activeOppIdx] = confirmedOppHp
+                    oppSlotHpPct[activeOppIdx] = confirmedOppHp
+                    oppSlotPreFaintHpPct[activeOppIdx] = confirmedOppHp
+                    predictedOppSlotHpPct[activeOppIdx] = confirmedOppHp
+                    hpChanged = true
                 } else if (confirmedOppHp > lastScannedOppHp) {
                     lastScannedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     playerFastWindowStartOppHp[activeUserIdx] = max(playerFastWindowStartOppHp[activeUserIdx], confirmedOppHp)
@@ -10456,12 +10505,13 @@ class OverlayService : LifecycleService() {
                 }
             }
 
-            // Steady / Pending Sliver State: 1T..5T Player Fast Moves follow same sliver latch-and-lock logic!
+            // Steady / Pending Sliver State: 3T..5T Player Fast Moves follow sliver latch-and-lock logic!
+            // (1-turn and 2-turn fast moves do not have pending indicators in Pokémon GO, damage applies right away)
             if (!observedOppFastDrop) {
-                // Pending-Damage Sliver Latch-and-Lock State Machine for 1T..5T Player Fast Moves:
+                // Pending-Damage Sliver Latch-and-Lock State Machine for 3T..5T Player Fast Moves:
                 // Credit +1 move immediately on pending sliver when ARMED (!playerSliverLockedUntilDrop), then LOCK until solid HP drops.
                 if (sampledOppHasPendingDmg &&
-                    userFastTurnsForStats >= 1 &&
+                    userFastTurnsForStats >= 3 &&
                     canAccumulateFastEnergy
                 ) {
                     if (oppPendingDmgScans == 0) {
@@ -10526,7 +10576,7 @@ class OverlayService : LifecycleService() {
                     oppPredAheadScanFrames[activeOppIdx] = 0
                 }
 
-                // If locked by sliver, display the predicted HP immediately, otherwise keep the 2-frame confirmed stable HP
+                // If locked by sliver, display the predicted HP immediately, otherwise keep the confirmed stable HP
                 if (enableHpTracking && playerUnconfirmedPredFasts[activeUserIdx] > 0) {
                     val targetDisplayOppHp = predictedOppSlotHpPct[activeOppIdx].coerceIn(1, 100)
                     if (targetDisplayOppHp != curHp) {
@@ -10634,7 +10684,7 @@ class OverlayService : LifecycleService() {
                 val playerHatD = playerAdaptiveFastDmgPct[activeUserIdx].takeIf { it > 0.4 } ?: userExactDmgPct.coerceAtLeast(0.75)
                 val maxUserMovesByClock = 1 + (((nowMs - playerFastWindowStartMs[activeUserIdx]).coerceAtLeast(0L) + 150L) / (userFastTurnsForStats * 500L)).toInt()
                 val estUserMoves = (totalOppDrop.toDouble() / playerHatD).roundToInt().coerceIn(0, maxUserMovesByClock)
-                val userDiff = (estUserMoves - playerCreditedFastsInWindow[activeUserIdx]).coerceIn(-1, 1)
+                val userDiff = (estUserMoves - playerCreditedFastsInWindow[activeUserIdx]).coerceIn(-1, 3)
                 if (userDiff != 0) {
                     playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] + userDiff * userFastEnergyForStats).coerceIn(0, 100)
                     playerCreditedFastsInWindow[activeUserIdx] = (playerCreditedFastsInWindow[activeUserIdx] + userDiff).coerceAtLeast(0)
@@ -10648,7 +10698,7 @@ class OverlayService : LifecycleService() {
                 val oppHatD = oppAdaptiveFastDmgPct[activeOppIdx].takeIf { it > 0.4 } ?: oppExactDmgPct.coerceAtLeast(0.75)
                 val maxOppMovesByClock = 1 + (((nowMs - oppFastWindowStartMs[activeOppIdx]).coerceAtLeast(0L) + 150L) / (oppFastTurnsForStats * 500L)).toInt()
                 val estOppMoves = (totalUserDrop.toDouble() / oppHatD).roundToInt().coerceIn(0, maxOppMovesByClock)
-                val oppDiff = (estOppMoves - oppCreditedFastsInWindow[activeOppIdx]).coerceIn(-1, 1)
+                val oppDiff = (estOppMoves - oppCreditedFastsInWindow[activeOppIdx]).coerceIn(-1, 3)
                 if (oppDiff != 0) {
                     oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] + oppDiff * oppFastEnergyForStats).coerceIn(0, 100)
                     oppCreditedFastsInWindow[activeOppIdx] = (oppCreditedFastsInWindow[activeOppIdx] + oppDiff).coerceAtLeast(0)
