@@ -129,24 +129,19 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Countdown Move 1 Anchor, Dynamic Turn-Gated Makeup Energy, Overcharge Wrap-Around & Universal Fast-Move Registration)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Grass Saturation Immunity, 96% vs 100% Meniscus Priority, Dual-Button Overcharge Tracking & 600ms Charged Move Detection)
 
-            ### What's New in v3.69
-            - **Move 1 First Dragon Breath Registration**:
-              - Charge attack button empty-state detection now returns 0% baseline (instead of -1) during the "3, 2, 1, GO" pre-battle countdown.
-              - Eliminates the missed first Dragon Breath (Move 1) by establishing an accurate 0% baseline so the first 4% direct energy / damage increase instantly registers.
-            - **Overcharge 48E → 52E Wrap-Around Protection**:
-              - Expanded icon-mask half-height (`0.0285h`) and outer flank sampling (16%..84%) prevents charge attack icon horns from causing false empty readings.
-              - Meniscus detection prioritized ahead of outer ring clamps so wrap-around slices reliably register 52% energy instead of sticking at 100%.
-            - **Turn-Gated Opponent Makeup Energy**:
-              - Opponent optimal energy tracker loop is now gated strictly by turns instead of every single tick.
-              - Makeup energy is only credited when opponent turns lag behind user confirmed turns by a full fast-move duration (`turnsBehind >= oppTurnDuration`).
-            - **Pre-Battle HP Flicker Protection**:
-              - Explicit `hasBattleStarted` flag prevents any energy or turn credits before battle start.
-              - Filters transient HP flickers `< (fastMoveDamage / 2)` and requires `(2 + fastMoveTurns)` consecutive frames of decreased HP before confirming damage drops.
-            - **Universal Fast-Move Turn Registration & Phase Reset**:
-              - Implements PvPoke fast move registration mechanics across all mismatched turn matchups.
-              - Incomplete moves cut off by charge attack priority freeze award 0 energy and 0 damage; full turn-0 phase reset occurs on charged attacks and switches.
+            ### What's New in v3.70
+            - **Grass Stadium Saturation Immunity**:
+              - Expanded `isUnfilledAbove` and empty-baseline saturation tolerance from `< 34` to `< 85` so translucent charge attack buttons over green stadium turf or dirt are never blinded by arena background coloration.
+              - Eliminates missed Move 1 (`0E -> 4E`) and missed Move 13 (`48E -> 52E`) on grassy GBL battlefields.
+            - **First Charge Move Boundary (48E → 52E) & 96% Pre-Glow Fix**:
+              - Prioritizes visible meniscus detection at 82%..98% fill ahead of outer ring glow, preventing a 96% full button from prematurely clamping to 100% and stalling.
+              - Full dual-button overcharge step tracking ensures that when the primary button hits 100%, the secondary button (and overcharge wrap) seamlessly credits the fast move.
+            - **Low-Damage Move 1 Registration (Dragon Breath into Zacian)**:
+              - Confirms 1% HP drops on the very first attack when held stable for `(2 + fastMoveTurns)` frames, perfectly aligning with PvPoke double-resisted damage.
+            - **Ultra-Responsive 600ms Charged Attack Deductions**:
+              - Calibrated charged move camera cut detection from 800ms down to 600ms, and broadened banner OCR keywords to guarantee prompt energy deduction on every charged attack.
 
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)
