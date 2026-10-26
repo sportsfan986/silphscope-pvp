@@ -753,8 +753,8 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     defaultFastMove: { name: "Confusion", type: "psychic", turns: 4, power: 16, energyGain: 14 },
     chargedMoves: [
       { name: "Psystrike", code: "PS", type: "psychic", power: 90, energyCost: 45 },
-      { name: "Dynamic Punch", code: "DP", type: "fighting", power: 85, energyCost: 45 },
-      { name: "Earthquake", code: "EQ", type: "ground", power: 110, energyCost: 65 }
+      { name: "Dynamic Punch", code: "DP", type: "fighting", power: 90, energyCost: 45 },
+      { name: "Earthquake", code: "EQ", type: "ground", power: 120, energyCost: 65 }
     ],
     color: "#9333ea"
   },
@@ -771,8 +771,8 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     defaultFastMove: { name: "Confusion", type: "psychic", turns: 4, power: 16, energyGain: 14 },
     chargedMoves: [
       { name: "Psystrike", code: "PS", type: "psychic", power: 90, energyCost: 45 },
-      { name: "Dynamic Punch", code: "DP", type: "fighting", power: 85, energyCost: 45 },
-      { name: "Earthquake", code: "EQ", type: "ground", power: 110, energyCost: 65 }
+      { name: "Dynamic Punch", code: "DP", type: "fighting", power: 90, energyCost: 45 },
+      { name: "Earthquake", code: "EQ", type: "ground", power: 120, energyCost: 65 }
     ],
     color: "#9333ea"
   },
@@ -788,9 +788,9 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     defaultIvsUl: "0/14/15",
     defaultFastMove: { name: "Shadow Claw", type: "ghost", turns: 2, power: 6, energyGain: 8 },
     chargedMoves: [
-      { name: "Psyshock", code: "PS", type: "psychic", power: 70, energyCost: 45 },
+      { name: "Psyshock", code: "PS", type: "psychic", power: 70, energyCost: 40 },
       { name: "Wild Charge", code: "WC", type: "electric", power: 100, energyCost: 45 },
-      { name: "Surf", code: "Su", type: "water", power: 65, energyCost: 40 }
+      { name: "Surf", code: "Su", type: "water", power: 75, energyCost: 45 }
     ],
     color: "#f472b6"
   },
@@ -1384,7 +1384,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     chargedMoves: [
       { name: "Shadow Ball", code: "SB", type: "ghost", power: 90, energyCost: 50 },
       { name: "Flash Cannon", code: "FC", type: "steel", power: 110, energyCost: 65 },
-      { name: "Gyro Ball", code: "GB", type: "steel", power: 80, energyCost: 60 }
+      { name: "Gyro Ball", code: "GB", type: "steel", power: 80, energyCost: 50 }
     ],
     color: "#64748b"
   },
@@ -1418,7 +1418,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     defaultIvsUl: "0/13/15",
     defaultFastMove: { name: "Thunder Shock", type: "electric", turns: 2, power: 4, energyGain: 9 },
     chargedMoves: [
-      { name: "Double Iron Bash", code: "DIB", type: "steel", power: 50, energyCost: 35 },
+      { name: "Double Iron Bash", code: "DIB", type: "steel", power: 70, energyCost: 35 },
       { name: "Superpower", code: "SP", type: "fighting", power: 85, energyCost: 40 },
       { name: "Rock Slide", code: "RS", type: "rock", power: 75, energyCost: 45 },
       { name: "Thunderbolt", code: "TB", type: "electric", power: 90, energyCost: 55 }
@@ -1547,7 +1547,7 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
     chargedMoves: [
       { name: "Shadow Ball", code: "SB", type: "ghost", power: 90, energyCost: 50 },
       { name: "Flash Cannon", code: "FC", type: "steel", power: 110, energyCost: 65 },
-      { name: "Gyro Ball", code: "GB", type: "steel", power: 80, energyCost: 60 }
+      { name: "Gyro Ball", code: "GB", type: "steel", power: 80, energyCost: 50 }
     ],
     color: "#dc2626"
   },
@@ -3309,7 +3309,7 @@ const CHARGED_MOVE_FALLBACK_STATS: Record<string, { type: string; power: number;
   "high horsepower": { type: "ground", power: 100, energyCost: 55, code: "HH" },
   "mud bomb": { type: "ground", power: 65, energyCost: 45, code: "MB" },
   "bone club": { type: "ground", power: 55, energyCost: 35, code: "BC" },
-  "bulldoze": { type: "ground", power: 45, energyCost: 45, code: "BD" },
+  "bulldoze": { type: "ground", power: 80, energyCost: 55, code: "BD" },
   "sky attack": { type: "flying", power: 75, energyCost: 50, code: "SA" },
   "brave bird": { type: "flying", power: 130, energyCost: 55, code: "BB" },
   "fly": { type: "flying", power: 80, energyCost: 45, code: "Fly" },
@@ -3366,7 +3366,7 @@ const CHARGED_MOVE_FALLBACK_STATS: Record<string, { type: string; power: number;
   "aqua tail": { type: "water", power: 55, energyCost: 35, code: "AT" },
   "hydro pump": { type: "water", power: 130, energyCost: 75, code: "HP" },
   "liquidation": { type: "water", power: 70, energyCost: 45, code: "Liq" },
-  "dive": { type: "water", power: 80, energyCost: 45, code: "Dv" },
+  "dive": { type: "water", power: 50, energyCost: 40, code: "Dv" },
   "gyro ball": { type: "steel", power: 80, energyCost: 50, code: "GB" },
   "gigaton hammer": { type: "steel", power: 130, energyCost: 60, code: "GH" }
 };
@@ -3825,18 +3825,40 @@ function formatMoveIdToDisplayName(moveId: string): string {
 
 export function buildChargedMoveFromName(moveName: string, fallbackType: string, existingMoves: ChargedMove[]): ChargedMove {
   const lower = moveName.toLowerCase().trim();
-  if (DYNAMIC_CHARGED_MOVE_MAP[lower]) return DYNAMIC_CHARGED_MOVE_MAP[lower];
-  const existing = existingMoves.find((m) => m.name.toLowerCase() === lower);
-  if (existing) return existing;
-  const fb = CHARGED_MOVE_FALLBACK_STATS[lower];
-  if (fb) {
-    return {
-      name: moveName,
-      code: fb.code,
-      type: fb.type,
-      power: fb.power,
-      energyCost: fb.energyCost
-    };
+  const spaceKey = lower.replace(/-/g, " ");
+  const hyphenKey = lower.replace(/\s+/g, "-");
+  const idKey = lower.replace(/[\s-]+/g, "_");
+  for (const k of [lower, spaceKey, hyphenKey, idKey]) {
+    if (DYNAMIC_CHARGED_MOVE_MAP[k]) return DYNAMIC_CHARGED_MOVE_MAP[k];
+  }
+  const existing = existingMoves.find((m) => {
+    const ml = m.name.toLowerCase().trim();
+    return ml === lower || ml === spaceKey || ml === hyphenKey;
+  });
+  if (existing) {
+    for (const k of [lower, spaceKey, hyphenKey, idKey]) {
+      if (DYNAMIC_CHARGED_MOVE_MAP[k]) {
+        return {
+          ...existing,
+          power: DYNAMIC_CHARGED_MOVE_MAP[k].power,
+          energyCost: DYNAMIC_CHARGED_MOVE_MAP[k].energyCost,
+          type: DYNAMIC_CHARGED_MOVE_MAP[k].type
+        };
+      }
+    }
+    return existing;
+  }
+  for (const k of [lower, spaceKey, hyphenKey]) {
+    const fb = CHARGED_MOVE_FALLBACK_STATS[k];
+    if (fb) {
+      return {
+        name: moveName,
+        code: fb.code,
+        type: fb.type,
+        power: fb.power,
+        energyCost: fb.energyCost
+      };
+    }
   }
   return {
     name: moveName,
@@ -3845,6 +3867,10 @@ export function buildChargedMoveFromName(moveName: string, fallbackType: string,
     power: 75,
     energyCost: 50
   };
+}
+
+export function resolveChargedMove(moveName: string, fallbackType: string = "normal"): ChargedMove {
+  return buildChargedMoveFromName(moveName, fallbackType, []);
 }
 
 export function applyRankingMovesToPokemonStats(
@@ -4054,13 +4080,21 @@ export async function syncPvPokeDataAndRankings(): Promise<{
           turns
         };
         if (typeof m.energy === "number" && m.energy > 0) {
-          DYNAMIC_CHARGED_MOVE_MAP[m.name.toLowerCase()] = {
+          const chargedEntry: ChargedMove = {
             name: m.name,
             code: abbrMove5(m.name),
             type: typeof m.type === "string" ? m.type.toLowerCase() : "normal",
             power: typeof m.power === "number" ? m.power : 50,
             energyCost: m.energy
           };
+          const nameKey = m.name.toLowerCase().trim();
+          const idKey = String(m.moveId).toLowerCase().trim();
+          const spaceKey = nameKey.replace(/-/g, " ");
+          const hyphenKey = nameKey.replace(/\s+/g, "-");
+          const underscoreKey = nameKey.replace(/[\s-]+/g, "_");
+          for (const k of [nameKey, idKey, spaceKey, hyphenKey, underscoreKey]) {
+            DYNAMIC_CHARGED_MOVE_MAP[k] = chargedEntry;
+          }
           const rawChance =
             typeof m.buffApplyChance === "number"
               ? m.buffApplyChance
@@ -4290,9 +4324,11 @@ export async function syncPvPokeDataAndRankings(): Promise<{
       // Update any existing static keys that match either displayName or speciesId (e.g., "Zygarde" -> "zygarde_complete")
       for (const [k, existingEntry] of Object.entries(POKEMON_DATABASE)) {
         if (k === displayName || existingEntry.speciesId.toLowerCase() === speciesId.toLowerCase()) {
-          let updatedChargedMoves = existingEntry.chargedMoves;
+          let updatedChargedMoves = existingEntry.chargedMoves.map((cm) =>
+            buildChargedMoveFromName(cm.name, types[0] || "normal", existingEntry.chargedMoves)
+          );
           if (gmChargedNames.length > 0) {
-            const validExisting = existingEntry.chargedMoves.filter((cm) =>
+            const validExisting = updatedChargedMoves.filter((cm) =>
               gmChargedNames.some((gm) => gm.toLowerCase() === cm.name.toLowerCase())
             );
             for (const gmName of gmChargedNames) {

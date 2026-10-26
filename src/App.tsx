@@ -40,6 +40,7 @@ import {
   LeagueType,
   calculateTurnAlignment,
   resolveFastMove,
+  resolveChargedMove,
   calculateFastDamage,
   calculateChargedDamage,
   calculateShieldMatrix,
@@ -2508,7 +2509,7 @@ export default function App() {
       setIsAttackIncomingPrompt(false);
       // v3.50: Deduct cheapest charged move energy cost when opponent charged move is shielded
       const cheapestOppCost = Math.min(
-        ...activeOpponent.chargedMoves.map((m) => m.energyCost || 40),
+        ...activeOpponent.chargedMoves.map((m) => resolveChargedMove(m.name, activeOpponent.types[0]).energyCost || m.energyCost || 40),
         45
       );
       const nextOppE = Math.max(0, (oppSlotEnergy[safeActiveOppSlot] ?? oppEnergy) - cheapestOppCost);
@@ -2575,11 +2576,12 @@ export default function App() {
     const matchedMoveObj = activeOpponent.chargedMoves.find(
       (m) => inferredMove && m.name.toLowerCase() === inferredMove.toLowerCase()
     );
+    const resolvedInferredCost = inferredMove ? resolveChargedMove(inferredMove, activeOpponent.types[0]).energyCost : undefined;
     const cheapestOppCost = Math.min(
-      ...activeOpponent.chargedMoves.map((m) => m.energyCost || 40),
+      ...activeOpponent.chargedMoves.map((m) => resolveChargedMove(m.name, activeOpponent.types[0]).energyCost || m.energyCost || 40),
       45
     );
-    const deductedEnergy = matchedMoveObj?.energyCost || cheapestOppCost;
+    const deductedEnergy = resolvedInferredCost || matchedMoveObj?.energyCost || cheapestOppCost;
     const nextOppE = Math.max(0, (oppSlotEnergy[safeActiveOppSlot] ?? oppEnergy) - deductedEnergy);
     setOppEnergy(nextOppE);
     setOppSlotEnergy((prev) => {
@@ -3148,12 +3150,13 @@ export default function App() {
       const existingMove = userActivePokemon.chargedMoves.find(m => m.name.toLowerCase() === mName.toLowerCase()) ||
         userActivePokemon.chargedMoves[idx];
       const override = CUSTOM_MOVE_STATS[mName];
+      const resolved = resolveChargedMove(mName, userActivePokemon.types[0] || 'normal');
       const moveObj = {
         name: mName,
-        code: mName.slice(0, 2).toUpperCase(),
-        type: override?.type || existingMove?.type || userActivePokemon.types[0] || 'normal',
-        power: override?.power || existingMove?.power || 80,
-        energyCost: existingMove?.energyCost || 50
+        code: resolved.code || mName.slice(0, 2).toUpperCase(),
+        type: override?.type || resolved.type || existingMove?.type || userActivePokemon.types[0] || 'normal',
+        power: override?.power || resolved.power || existingMove?.power || 80,
+        energyCost: resolved.energyCost || existingMove?.energyCost || 50
       };
       const calc = calculateChargedDamage(userActivePokemon, activeOpponent, moveObj, isUserShadow, isOpponentShadow);
       return {
@@ -4594,7 +4597,7 @@ export default function App() {
                           {enableEnergyTracking && (() => {
                             const activeOppE = oppSlotEnergy[safeActiveOppSlot] ?? oppEnergy;
                             const cheapestOppCost = Math.min(
-                              ...activeOpponent.chargedMoves.map((m) => m.energyCost || 40),
+                              ...activeOpponent.chargedMoves.map((m) => resolveChargedMove(m.name, activeOpponent.types[0]).energyCost || m.energyCost || 40),
                               45
                             );
                             const oppRdy = activeOppE >= cheapestOppCost;
@@ -5067,7 +5070,7 @@ export default function App() {
                             const isOppFainted = !!oppFaintedSlots[idx];
                             const slotOppStats = POKEMON_DATABASE[oppName] || activeOpponent;
                             const cheapestMoveE = Math.min(
-                              ...(slotOppStats?.chargedMoves || []).map((m) => m.energyCost || 40),
+                              ...(slotOppStats?.chargedMoves || []).map((m) => resolveChargedMove(m.name, slotOppStats?.types?.[0] || 'normal').energyCost || m.energyCost || 40),
                               45
                             );
                             const slotOppE = isOppFainted
@@ -5222,7 +5225,7 @@ export default function App() {
                                 {(() => {
                                   const activeOppE = oppSlotEnergy[safeActiveOppSlot] ?? oppEnergy;
                                   const cheapestOppCost = Math.min(
-                                    ...activeOpponent.chargedMoves.map((m) => m.energyCost || 40),
+                                    ...activeOpponent.chargedMoves.map((m) => resolveChargedMove(m.name, activeOpponent.types[0]).energyCost || m.energyCost || 40),
                                     45
                                   );
                                   const oppRdy = activeOppE >= cheapestOppCost;

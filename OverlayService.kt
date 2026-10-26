@@ -1407,7 +1407,7 @@ class OverlayService : LifecycleService() {
             "Double Iron Bash" to MoveStats("Double Iron Bash", "steel", 70, 35),
             "Bleakwind Storm" to MoveStats("Bleakwind Storm", "flying", 60, 45),
             "Wildbolt Storm" to MoveStats("Wildbolt Storm", "electric", 60, 45),
-            "Springtide Storm" to MoveStats("Springtide Storm", "fairy", 60),
+            "Springtide Storm" to MoveStats("Springtide Storm", "fairy", 60, 45),
             "Roar of Time" to MoveStats("Roar of Time", "dragon", 150, 65),
             "Iron Head" to MoveStats("Iron Head", "steel", 85, 50),
             "Draco Meteor" to MoveStats("Draco Meteor", "dragon", 150, 65),
@@ -1544,7 +1544,7 @@ class OverlayService : LifecycleService() {
             "Super Power" to MoveStats("Superpower", "fighting", 85, 40),
             "Drum Beating" to MoveStats("Drum Beating", "grass", 60, 35),
             "Gigaton Hammer" to MoveStats("Gigaton Hammer", "steel", 130, 60),
-            "Bulldoze" to MoveStats("Bulldoze", "ground", 45, 45),
+            "Bulldoze" to MoveStats("Bulldoze", "ground", 80, 55),
             "Air Cutter" to MoveStats("Air Cutter", "flying", 60, 40),
             "Rock Tomb" to MoveStats("Rock Tomb", "rock", 75, 50),
             "Sand Tomb" to MoveStats("Sand Tomb", "ground", 55, 45),
@@ -1565,16 +1565,29 @@ class OverlayService : LifecycleService() {
             "Petal Blizzard" to MoveStats("Petal Blizzard", "grass", 110, 65),
             "Mystical Fire" to MoveStats("Mystical Fire", "fire", 60, 45),
             "Gyro Ball" to MoveStats("Gyro Ball", "steel", 80, 50),
-            "Dive" to MoveStats("Dive", "water", 80, 45)
+            "Dive" to MoveStats("Dive", "water", 50, 40)
         )
 
         fun resolveChargedMoveStatsStatic(moveName: String, fallbackType: String = "normal"): MoveStats {
             val trimmed = moveName.trim()
-            DYNAMIC_MOVE_DATABASE[trimmed]?.let { return it }
+            val lower = trimmed.lowercase()
+            val spaceKey = lower.replace("-", " ")
+            val hyphenKey = lower.replace(Regex("\\s+"), "-")
+            val underscoreKey = lower.replace(Regex("[\\s-]+"), "_")
+            for (k in listOf(trimmed, lower, spaceKey, hyphenKey, underscoreKey).distinct()) {
+                DYNAMIC_MOVE_DATABASE[k]?.let { return it }
+            }
             DYNAMIC_MOVE_DATABASE.entries.firstOrNull { it.key.equals(trimmed, ignoreCase = true) }?.value?.let { return it }
-            MOVE_DATABASE[trimmed]?.let { return it }
+            for (k in listOf(trimmed, lower, spaceKey, hyphenKey, underscoreKey).distinct()) {
+                MOVE_DATABASE[k]?.let { return it }
+            }
             MOVE_DATABASE.entries.firstOrNull { it.key.equals(trimmed, ignoreCase = true) }?.value?.let { return it }
-            return MoveStats(trimmed, fallbackType.lowercase().ifBlank { "normal" }, 80, 50)
+            val fallbackCost = MOVE_ENERGY_COST[trimmed]
+                ?: MOVE_ENERGY_COST[lower]
+                ?: MOVE_ENERGY_COST[spaceKey]
+                ?: MOVE_ENERGY_COST[hyphenKey]
+                ?: 50
+            return MoveStats(trimmed, fallbackType.lowercase().ifBlank { "normal" }, 80, fallbackCost)
         }
 
         val FAST_MOVE_TURNS: Map<String, Int> = mapOf(
@@ -2166,9 +2179,10 @@ class OverlayService : LifecycleService() {
         }
 
         val MOVE_ENERGY_COST: Map<String, Int> = mapOf(
+
             "Drum Beating" to 35,
             "Gigaton Hammer" to 60,
-            "Bulldoze" to 45,
+            "Bulldoze" to 55,
             "Air Cutter" to 40,
             "Behemoth Blade" to 55,
             "Behemoth Bash" to 45,
@@ -2238,27 +2252,27 @@ class OverlayService : LifecycleService() {
             "Weather Ball (Water)" to 35,
             "Weather Ball (Rock)" to 35,
             "Chilling Water" to 45,
-            "Dazzling Gleam" to 70,
+            "Dazzling Gleam" to 55,
             "Scorching Sands" to 50,
             "Psycho Boost" to 35,
             "Thunderbolt" to 55,
             "Grass Knot" to 50,
             "Leaf Blade" to 35,
-            "Aerial Ace" to 40,
+            "Aerial Ace" to 45,
             "Fly" to 45,
             "Flame Charge" to 50,
             "Blast Burn" to 50,
             "Feather Dance" to 50,
-            "Shadow Sneak" to 45,
-            "Twister" to 45,
-            "Air Cutter" to 45,
+            "Shadow Sneak" to 50,
+            "Twister" to 40,
+            "Air Cutter" to 40,
             "Payback" to 60,
-            "Body Slam" to 35,
-            "Foul Play" to 45,
+            "Body Slam" to 40,
+            "Foul Play" to 40,
             "Night Slash" to 35,
             "Cross Chop" to 35,
-            "Dynamic Punch" to 50,
-            "Aura Sphere" to 55,
+            "Dynamic Punch" to 45,
+            "Aura Sphere" to 40,
             "Focus Blast" to 75,
             "Sludge Bomb" to 50,
             "Sludge Wave" to 65,
@@ -2266,71 +2280,71 @@ class OverlayService : LifecycleService() {
             "Poison Fang" to 40,
             "Cross Poison" to 35,
             "Gunk Shot" to 75,
-            "Mud Bomb" to 40,
+            "Mud Bomb" to 45,
             "Bone Club" to 35,
             "Shadow Bone" to 45,
-            "Hurricane" to 65,
+            "Hurricane" to 60,
             "Acrobatics" to 55,
             "Drill Peck" to 40,
             "Psychic" to 55,
-            "Psyshock" to 45,
+            "Psyshock" to 40,
             "Psychic Fangs" to 35,
             "Lunge" to 45,
             "Megahorn" to 55,
             "X-Scissor" to 40,
             "Power Gem" to 50,
             "Meteor Beam" to 60,
-            "Night Shade" to 55,
+            "Night Shade" to 45,
             "Icy Wind" to 45,
             "Triple Axel" to 45,
             "Icicle Spear" to 40,
             "Freeze Shock" to 60,
             "Ice Burn" to 60,
-            "Dragon Pulse" to 60,
-            "Brutal Swing" to 40,
-            "Flash Cannon" to 70,
+            "Dragon Pulse" to 55,
+            "Brutal Swing" to 35,
+            "Flash Cannon" to 65,
             "Heavy Slam" to 50,
-            "Magnet Bomb" to 45,
+            "Magnet Bomb" to 40,
             "Mirror Shot" to 35,
             "Doom Desire" to 40,
             "Frenzy Plant" to 45,
-            "Energy Ball" to 55,
-            "Seed Bomb" to 45,
+            "Energy Ball" to 45,
+            "Seed Bomb" to 40,
             "Power Whip" to 50,
             "Trailblaze" to 45,
             "Solar Beam" to 80,
-            "Discharge" to 45,
+            "Discharge" to 40,
             "Zap Cannon" to 80,
-            "Scald" to 55,
+            "Scald" to 50,
             "Liquidation" to 45,
             "Muddy Water" to 35,
-            "Water Pulse" to 55,
+            "Water Pulse" to 50,
             "Nature's Madness" to 50,
             "Swift" to 35,
             "Hyper Beam" to 80,
             "Aura Wheel" to 45,
-            "Rage Fist" to 35,
+            "Rage Fist" to 40,
             "Torch Song" to 45,
             "Super Power" to 40,
-            "Rock Tomb" to 60,
-            "Sand Tomb" to 40,
+            "Rock Tomb" to 50,
+            "Sand Tomb" to 45,
             "Thunder Punch" to 40,
             "Flamethrower" to 55,
             "Fire Blast" to 80,
             "Last Resort" to 55,
-            "Brine" to 50,
+            "Brine" to 60,
             "Dig" to 50,
             "Shadow Punch" to 35,
             "Spirit Shackle" to 40,
             "Darkest Lariat" to 60,
             "Power-Up Punch" to 35,
-            "Bubble Beam" to 40,
+            "Bubble Beam" to 50,
             "Bug Buzz" to 60,
             "Leaf Tornado" to 40,
             "Stomp" to 40,
             "Petal Blizzard" to 65,
             "Mystical Fire" to 45,
-            "Gyro Ball" to 60
+            "Gyro Ball" to 50
         )
 
         @Volatile
@@ -3245,7 +3259,19 @@ class OverlayService : LifecycleService() {
                                 }
                             } else {
                                 val chargedPower = if (power > 0) power else 50
-                                DYNAMIC_MOVE_DATABASE[name] = MoveStats(name, type, chargedPower, energyCost)
+                                val chargedStats = MoveStats(name, type, chargedPower, energyCost)
+                                DYNAMIC_MOVE_DATABASE[name] = chargedStats
+                                val nameKey = name.lowercase().trim()
+                                val rawKey = rawName.lowercase().trim()
+                                val idKey = moveId.lowercase().trim()
+                                val spaceKey = nameKey.replace("-", " ")
+                                val hyphenKey = nameKey.replace(Regex("\\s+"), "-")
+                                val underscoreKey = nameKey.replace(Regex("[\\s-]+"), "_")
+                                for (k in listOf(nameKey, rawKey, idKey, spaceKey, hyphenKey, underscoreKey).distinct()) {
+                                    if (k.isNotBlank()) {
+                                        DYNAMIC_MOVE_DATABASE[k] = chargedStats
+                                    }
+                                }
                                 val rawChance = obj.optDouble("buffApplyChance")
                                     ?: obj.optString("buffApplyChance")?.toDoubleOrNull()
                                     ?: 0.0
