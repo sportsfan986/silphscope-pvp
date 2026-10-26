@@ -10957,7 +10957,7 @@ class OverlayService : LifecycleService() {
             }
         }
 
-        // 5. v3.54: Evaluate Pending-Damage-Verified Turn-T completions ONLY during active normal fast combat when neither Pokémon is fainted
+        // 5. v3.64: Advance 0.5s battle turn counter during active normal fast combat when neither Pokémon is fainted
         if (isNormalFastCombatFrame &&
             !playerFaintedSlots[activeUserIdx] &&
             !oppFaintedSlots[activeOppIdx] &&
@@ -10965,8 +10965,20 @@ class OverlayService : LifecycleService() {
             !isAttackIncomingPromptActive &&
             !isPostFaintSwitchPromptActive
         ) {
-            if (advanceFastMoveTurnAndEnergyEngine(nowMs, activeUserIdx, activeOppIdx, activeLeague, isMidTurnExtrapolation = false)) {
-                hpChanged = true
+            val tickNowMs = System.currentTimeMillis()
+            val turnsDelta = if (lastTurnTickTimeMs <= 0L) {
+                lastTurnTickTimeMs = tickNowMs
+                turnResidualMs = 0L
+                1
+            } else {
+                val rawElapsedMs = (tickNowMs - lastTurnTickTimeMs).coerceIn(0L, 2000L) + turnResidualMs
+                lastTurnTickTimeMs = tickNowMs
+                val wholeTurns = (rawElapsedMs / 500L).toInt()
+                turnResidualMs = rawElapsedMs % 500L
+                wholeTurns.coerceIn(0, 3)
+            }
+            if (turnsDelta > 0) {
+                battleTurnIndex += turnsDelta
             }
             if (observedPlayerFastDrop || observedOppFastDrop || needsPostSwapOrMoveTurnReindex) {
                 scanTurnOffsetMs = ((nowMs - battleClockAnchorMs).coerceAtLeast(0L)) % 500L
