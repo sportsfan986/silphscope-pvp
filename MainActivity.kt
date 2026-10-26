@@ -512,17 +512,17 @@ class MainActivity : AppCompatActivity() {
                 .putBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
                 .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 367)
                 .apply()
-        } else if (prevInstalledVerCode < 368) {
-            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 368).apply()
+        } else if (prevInstalledVerCode < 369) {
+            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 369).apply()
         }
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? MediaProjectionManager
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "3.68"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "3.69"
         } catch (_: Exception) {
-            "3.68"
+            "3.69"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()

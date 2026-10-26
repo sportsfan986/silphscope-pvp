@@ -3992,7 +3992,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v3.68 • Android Native Overlay
+                  v3.69 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -4449,7 +4449,7 @@ export default function App() {
                       <div
                         className="flex items-center justify-between gap-1 px-1 py-0.5 mb-0.5 rounded border"
                         style={{
-                          backgroundColor: `rgba(2, 6, 23, ${Math.min(0.95, Math.max(0.22, (overlayOpacityPct / 100) * 0.72))})`,
+                          backgroundColor: `rgba(2, 6, 23, ${Math.min(0.95, Math.max(0.22, ((100 - overlayTransparencyPct) / 100) * 0.72))})`,
                           borderColor: 'rgba(148, 163, 184, 0.16)'
                         }}
                       >
