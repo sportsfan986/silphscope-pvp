@@ -1,4 +1,4 @@
-# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v3.62)
+# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v3.63)
 
 [![Live Web Simulator](https://img.shields.io/badge/🌐%20Live%20Web%20Simulator-Try%20in%20Browser-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white)](https://sportsfan986.github.io/silphscope-pvp/)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support%20the%20Project-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/sportsfan986)
@@ -127,13 +127,13 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## 📥 Download & Install Native Android APK (v3.62)
+## 📥 Download & Install Native Android APK (v3.63)
 
 > **⚠️ Note on Live HP & Energy Counting (Disabled by Default — Opt-In via Settings)**:
 > By default, **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting** are **DISABLED (OFF)** for all new installs and any user upgrading from a version prior to `v3.40`. To enable live HP% and/or live fast-move energy counting on the floating overlay, open **⚙️ Settings** in the app and toggle **Live HP Bar Tracking** and/or **Live Energy & Fast-Move Counting** to **ON**.
 
 1. Visit the **[Official GitHub Releases Page](https://github.com/sportsfan986/silphscope-pvp/releases)**.
-2. Download **`silphscope-pvp-v3.62.apk`** directly to your Android device.
+2. Download **`silphscope-pvp-v3.63.apk`** directly to your Android device.
 3. Tap the downloaded APK file to install (grant *"Install unknown apps"* permission if prompted).
 4. Launch **SilphScope PvP**:
    - Select, reorder, or customize your **GBL Team Presets**, set **Opponent Move Count Basis** (`My Fasts` vs. `Their Fasts`), adjust **Overlay Size** (`50%–100%` screen width slider) and **Background Transparency**, and optionally opt in to **Live HP Bar Tracking** and **Live Energy & Fast-Move Counting** in **⚙️ Settings**.
@@ -143,7 +143,13 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## ✨ Changelog — What's New in v3.62
+## ✨ Changelog — What's New in v3.63
+
+- **v3.63 — Minimize Button Fix, Pre-Sync OCR Performance & ANR Fix, Expanded Battle Matrix Replay & Dynamic OCR Rate Badge**:
+  - **Minimize Overlay Button Fix**: Resolved a synthetic click / resize race when tapping the top-left overlay emblem so the overlay cleanly minimizes into the floating bubble (and pauses OCR) without immediately restoring or shrinking/clipping the panel.
+  - **First-Run / Pre-PvPoke-Sync Performance & ANR Fix**: Pre-indexed $O(1)$ static move and base-species lookup tables (`STATIC_MOVE_DATABASE_LOOKUP`, `STATIC_MOVE_ENERGY_LOOKUP`, `BASE_SPECIES_CACHE`) and moved startup ranking/gamemaster cache parsing off the main UI thread, eliminating pre-sync OCR frame slowdowns and `"SilphScope PvP isn't responding"` ANRs.
+  - **Expanded Battle Matrix Replay Container**: Dynamically expands the post-game Battle Matrix Replay `WebView` height and wraps the dialog in a smooth `ScrollView` so all rows of `MY ATTACKS` are visible without cutoff.
+  - **Dynamic OCR Frame Rate Badge (`--- ms` Initial & Between-Battle Average)**: Displays `--- ms` on initial launch before OCR has measured a real frame rate, and displays the average frame rate of the last scanned battle between matches until live OCR scanning resumes.
 
 - **v3.62 — Codebase Cleanup & Regression Testing Build**:
   - **Codebase Cleanup & Self-Healing**: Cleaned up syntax and typing issues caused by corrupt chat history in AI Studio; restored React `useRef` import in `src/App.tsx`; synchronized `TeamPreset.archetype` type definition with `TeamArchetype` (`"ABB" | "ABC" | "DUO"`); restored `findPokemonByName` utility in `src/data/gblData.ts`; added species typing to `SlotCandidateEval` and moveset evaluation variants; aligned fast-move damage lookup (`oppFastInfo.percentage`) and archetype playbook tactics (`pb.proTactics`); and corrected `resolveFastMove` argument typing in the post-game replay inspector.

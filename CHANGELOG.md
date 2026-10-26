@@ -1,5 +1,18 @@
 # SilphScope PvP Changelog
 
+## [v3.63] — 2026-10-26 — Minimize Button Fix, Pre-Sync OCR Performance & ANR Fix, Expanded Battle Matrix Replay & Dynamic OCR Rate Badge
+- **Minimize Overlay Button Fix (`overlay.html`, `OverlayService.kt`)**:
+  - Fixed a touch-event race where tapping the top-left overlay emblem (`#btn-minimize-sword`) immediately triggered a synthetic click on `#minimized-bubble` at `(0, 0)`, causing the overlay to instantly restore while `WindowManager` was resizing the view to `48dp` (leaving the overlay clipped/shrunk at 45% scale).
+  - Added a `400ms` minimize-to-restore debounce guard, disabled pointer events on `#minimized-bubble` during the transition frame, locked `applyProportionalScale()` against transient `<120px` bubble viewports, and removed premature `onpointerleave` cancellation so single taps reliably minimize into the floating bubble and pause OCR.
+- **First-Run / Pre-PvPoke-Sync Performance & ANR Elimination (`OverlayService.kt`, `MainActivity.kt`)**:
+  - Eliminated per-call `Regex` compilation and linear `.entries.firstOrNull` / `.find` table scans inside `resolveChargedMoveStatsStatic`, `resolveFastTurnsStatic`, `resolveFastEnergyStatic`, `resolveFastPowerStatic`, `resolveFastTypeStatic`, and `FormResolver.extractBaseSpecies` by introducing pre-indexed $O(1)$ lookup maps (`STATIC_MOVE_DATABASE_LOOKUP`, `STATIC_MOVE_ENERGY_LOOKUP`, `STATIC_EXACT_BASE_SPECIES_MAP`, and `BASE_SPECIES_CACHE`).
+  - Removed synchronous main-thread JSON file I/O (`loadCachedRankingsSynchronously()`) from `OverlayService.onCreate()` and sequenced `MainActivity` startup preset recalculation to run on background threads after Gamemaster cache checks, preventing `"SilphScope PvP isn't responding"` ANRs and pre-sync frame rate slowdowns.
+- **Expanded Battle Matrix Replay Container (`MainActivity.kt`, `overlay.html`)**:
+  - Wired `ReplayJavascriptBridge.updateContentHeight(heightDp)` to dynamically size the replay `WebView` to the full rendered height of the overlay and wrapped the replay dialog in a smooth vertical `ScrollView`, ensuring all rows of `MY ATTACKS` are completely visible without being clipped or stuck behind a non-scrolling inner scrollbar.
+- **Dynamic OCR Frame Rate Badge (`--- ms` Initial & Between-Battle Average) (`OverlayService.kt`, `overlay.html`, `src/App.tsx`)**:
+  - Replaced the hardcoded `220ms` startup default with `--- ms` until the first real OCR scan completes.
+  - Added per-battle scan duration tracking (`lastBattleAvgScanMs`) so that between battles (after stopping or logging a battle and while waiting for the next battle), the header badge displays the average frame rate of the last scanned battle until live OCR scans resume.
+
 ## [v3.62] — 2026-10-25 — Codebase Cleanup & Regression Testing Build
 - **Codebase Cleanup & Self-Healing (Chat History Recovery)**:
   - Cleaned up syntax and typing inconsistencies caused by corrupt chat history in AI Studio.

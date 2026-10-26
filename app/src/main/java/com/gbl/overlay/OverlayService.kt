@@ -1568,24 +1568,51 @@ class OverlayService : LifecycleService() {
             "Dive" to MoveStats("Dive", "water", 50, 40)
         )
 
+        private val WHITESPACE_REGEX = Regex("\\s+")
+        private val WHITESPACE_OR_HYPHEN_REGEX = Regex("[\\s-]+")
+
+        private val STATIC_MOVE_DATABASE_LOOKUP: Map<String, MoveStats> by lazy {
+            val map = HashMap<String, MoveStats>(MOVE_DATABASE.size * 4)
+            for ((k, v) in MOVE_DATABASE) {
+                val trimmed = k.trim()
+                val lower = trimmed.lowercase()
+                val spaceKey = lower.replace('-', ' ')
+                val hyphenKey = lower.replace(WHITESPACE_REGEX, "-")
+                val underscoreKey = lower.replace(WHITESPACE_OR_HYPHEN_REGEX, "_")
+                map[trimmed] = v
+                map[lower] = v
+                map[spaceKey] = v
+                map[hyphenKey] = v
+                map[underscoreKey] = v
+            }
+            map
+        }
+
         fun resolveChargedMoveStatsStatic(moveName: String, fallbackType: String = "normal"): MoveStats {
             val trimmed = moveName.trim()
+            if (trimmed.isEmpty()) {
+                return MoveStats(trimmed, fallbackType.lowercase().ifBlank { "normal" }, 80, 50)
+            }
             val lower = trimmed.lowercase()
-            val spaceKey = lower.replace("-", " ")
-            val hyphenKey = lower.replace(Regex("\\s+"), "-")
-            val underscoreKey = lower.replace(Regex("[\\s-]+"), "_")
-            for (k in listOf(trimmed, lower, spaceKey, hyphenKey, underscoreKey).distinct()) {
-                DYNAMIC_MOVE_DATABASE[k]?.let { return it }
+            val spaceKey = lower.replace('-', ' ')
+            val hyphenKey = lower.replace(' ', '-')
+            val underscoreKey = spaceKey.replace(' ', '_')
+            if (DYNAMIC_MOVE_DATABASE.isNotEmpty()) {
+                DYNAMIC_MOVE_DATABASE[trimmed]?.let { return it }
+                DYNAMIC_MOVE_DATABASE[lower]?.let { return it }
+                DYNAMIC_MOVE_DATABASE[spaceKey]?.let { return it }
+                DYNAMIC_MOVE_DATABASE[hyphenKey]?.let { return it }
+                DYNAMIC_MOVE_DATABASE[underscoreKey]?.let { return it }
             }
-            DYNAMIC_MOVE_DATABASE.entries.firstOrNull { it.key.equals(trimmed, ignoreCase = true) }?.value?.let { return it }
-            for (k in listOf(trimmed, lower, spaceKey, hyphenKey, underscoreKey).distinct()) {
-                MOVE_DATABASE[k]?.let { return it }
-            }
-            MOVE_DATABASE.entries.firstOrNull { it.key.equals(trimmed, ignoreCase = true) }?.value?.let { return it }
+            MOVE_DATABASE[trimmed]?.let { return it }
+            STATIC_MOVE_DATABASE_LOOKUP[lower]?.let { return it }
+            STATIC_MOVE_DATABASE_LOOKUP[spaceKey]?.let { return it }
+            STATIC_MOVE_DATABASE_LOOKUP[hyphenKey]?.let { return it }
+            STATIC_MOVE_DATABASE_LOOKUP[underscoreKey]?.let { return it }
             val fallbackCost = MOVE_ENERGY_COST[trimmed]
-                ?: MOVE_ENERGY_COST[lower]
-                ?: MOVE_ENERGY_COST[spaceKey]
-                ?: MOVE_ENERGY_COST[hyphenKey]
+                ?: STATIC_MOVE_ENERGY_LOOKUP[lower]
+                ?: STATIC_MOVE_ENERGY_LOOKUP[spaceKey]
+                ?: STATIC_MOVE_ENERGY_LOOKUP[hyphenKey]
                 ?: 50
             return MoveStats(trimmed, fallbackType.lowercase().ifBlank { "normal" }, 80, fallbackCost)
         }
@@ -2123,8 +2150,8 @@ class OverlayService : LifecycleService() {
         fun resolveFastTurnsStatic(moveName: String, fallback: Int = 2): Int {
             val k = moveName.lowercase().trim()
             if (k.isEmpty()) return fallback
-            val spaceK = k.replace("-", " ")
-            val hyphenK = k.replace(Regex("\\s+"), "-")
+            val spaceK = k.replace('-', ' ')
+            val hyphenK = spaceK.replace(' ', '-')
             return DYNAMIC_FAST_TURNS[k]
                 ?: DYNAMIC_FAST_TURNS[spaceK]
                 ?: DYNAMIC_FAST_TURNS[hyphenK]
@@ -2138,8 +2165,8 @@ class OverlayService : LifecycleService() {
             val k = moveName.lowercase().trim()
             val defaultEnergy = (fallbackTurns * 4).coerceAtLeast(3)
             if (k.isEmpty()) return defaultEnergy
-            val spaceK = k.replace("-", " ")
-            val hyphenK = k.replace(Regex("\\s+"), "-")
+            val spaceK = k.replace('-', ' ')
+            val hyphenK = spaceK.replace(' ', '-')
             return DYNAMIC_FAST_ENERGY[k]
                 ?: DYNAMIC_FAST_ENERGY[spaceK]
                 ?: DYNAMIC_FAST_ENERGY[hyphenK]
@@ -2153,8 +2180,8 @@ class OverlayService : LifecycleService() {
             val k = moveName.lowercase().trim()
             val defaultPower = (fallbackTurns * 3).coerceAtLeast(3)
             if (k.isEmpty()) return defaultPower
-            val spaceK = k.replace("-", " ")
-            val hyphenK = k.replace(Regex("\\s+"), "-")
+            val spaceK = k.replace('-', ' ')
+            val hyphenK = spaceK.replace(' ', '-')
             return DYNAMIC_FAST_POWER[k]
                 ?: DYNAMIC_FAST_POWER[spaceK]
                 ?: DYNAMIC_FAST_POWER[hyphenK]
@@ -2167,8 +2194,8 @@ class OverlayService : LifecycleService() {
         fun resolveFastTypeStatic(moveName: String, fallbackType: String = "normal"): String {
             val k = moveName.lowercase().trim()
             if (k.isEmpty()) return fallbackType
-            val spaceK = k.replace("-", " ")
-            val hyphenK = k.replace(Regex("\\s+"), "-")
+            val spaceK = k.replace('-', ' ')
+            val hyphenK = spaceK.replace(' ', '-')
             return DYNAMIC_FAST_TYPE[k]
                 ?: DYNAMIC_FAST_TYPE[spaceK]
                 ?: DYNAMIC_FAST_TYPE[hyphenK]
@@ -2346,6 +2373,17 @@ class OverlayService : LifecycleService() {
             "Mystical Fire" to 45,
             "Gyro Ball" to 50
         )
+
+        private val STATIC_MOVE_ENERGY_LOOKUP: Map<String, Int> by lazy {
+            val map = HashMap<String, Int>(MOVE_ENERGY_COST.size * 3)
+            for ((k, v) in MOVE_ENERGY_COST) {
+                val lower = k.trim().lowercase()
+                map[lower] = v
+                map[lower.replace('-', ' ')] = v
+                map[lower.replace(' ', '-')] = v
+            }
+            map
+        }
 
         @Volatile
         private var CACHED_ALL_POKEMON_META: List<PokemonMeta>? = null
@@ -2525,26 +2563,42 @@ class OverlayService : LifecycleService() {
                 return resolveBestDefaultFormAndShadow(detectedMeta, rawText, activeLeague).first
             }
 
+            private val PARENS_REGEX = Regex("\\(.*?\\)")
+            private val FORM_MODIFIERS_REGEX = Regex(
+                "\\b(?:shadow|purified|kanto|kantonian|alolan|alola|galarian|galar|hisuian|hisui|paldean|paldea|unovan|unova|mega|primal|armored|origin|origine|altered|therian|incarnate|crowned|hero|resolute|ordinary|defense|attack|speed|normal|black|white|complete|unbound|confined|sky|land|bloodmoon|apex|dusk|mane|dawn|wings|single|rapid|strike|ice|rider|baile|pau|sensu|zen|standard|combat|blaze|aqua|wash|heat|frost|mow|fan|sunny|rainy|snowy|plant|trash|sandy|burn|chill|douse|shock)\\b"
+            )
+            private val MULTI_SPACE_REGEX = Regex("\\s+")
+            private val BASE_SPECIES_CACHE = java.util.concurrent.ConcurrentHashMap<String, String>()
+            private val STATIC_EXACT_BASE_SPECIES_MAP: Map<String, String> by lazy {
+                val map = HashMap<String, String>(POKEMON_META_DATABASE.size * 2)
+                for (m in POKEMON_META_DATABASE) {
+                    map[m.name.lowercase()] = m.baseSpecies.lowercase()
+                }
+                map
+            }
+
             fun extractBaseSpecies(name: String): String {
                 val trimmed = name.trim()
-                val exact = POKEMON_META_DATABASE.find { it.name.equals(trimmed, ignoreCase = true) }
-                if (exact != null) return exact.baseSpecies.lowercase()
+                if (trimmed.isEmpty()) return ""
+                val lowerTrimmed = trimmed.lowercase()
+                BASE_SPECIES_CACHE[lowerTrimmed]?.let { return it }
 
-                val cleaned = trimmed.lowercase()
-                    .replace(Regex("\\(.*?\\)"), " ")
-                    .replace(
-                        Regex(
-                            "\\b(?:shadow|purified|kanto|kantonian|alolan|alola|galarian|galar|hisuian|hisui|paldean|paldea|unovan|unova|mega|primal|armored|origin|origine|altered|therian|incarnate|crowned|hero|resolute|ordinary|defense|attack|speed|normal|black|white|complete|unbound|confined|sky|land|bloodmoon|apex|dusk|mane|dawn|wings|single|rapid|strike|ice|rider|baile|pau|sensu|zen|standard|combat|blaze|aqua|wash|heat|frost|mow|fan|sunny|rainy|snowy|plant|trash|sandy|burn|chill|douse|shock)\\b"
-                        ),
-                        " "
-                    )
-                    .replace(Regex("\\s+"), " ")
-                    .trim()
+                val computed = STATIC_EXACT_BASE_SPECIES_MAP[lowerTrimmed] ?: run {
+                    val cleaned = lowerTrimmed
+                        .replace(PARENS_REGEX, " ")
+                        .replace(FORM_MODIFIERS_REGEX, " ")
+                        .replace(MULTI_SPACE_REGEX, " ")
+                        .trim()
 
-                if (cleaned.startsWith("tapu ")) return cleaned
-                val token = cleaned.split(" ").firstOrNull()?.takeIf { it.isNotBlank() }
-                if (token != null) return token
-                return trimmed.lowercase().replace(Regex("\\(.*?\\)"), "").trim().split(" ").lastOrNull() ?: trimmed.lowercase()
+                    if (cleaned.startsWith("tapu ")) {
+                        cleaned
+                    } else {
+                        val token = cleaned.split(" ").firstOrNull()?.takeIf { it.isNotBlank() }
+                        token ?: (lowerTrimmed.replace(PARENS_REGEX, "").trim().split(" ").lastOrNull() ?: lowerTrimmed)
+                    }
+                }
+                BASE_SPECIES_CACHE[lowerTrimmed] = computed
+                return computed
             }
         }
 
@@ -7490,6 +7544,7 @@ class OverlayService : LifecycleService() {
     private var overlayTransparencyPct = 72
     private var appThemeId = "dialga_shiny_midnight"
     private var isOverlayMinimized = false
+    private var lastMinimizeTimestampMs: Long = 0L
     private var cachedScreenBitmap: Bitmap? = null
     private val captureLock = Any()
 
@@ -7649,7 +7704,10 @@ class OverlayService : LifecycleService() {
     private var turnResidualMs: Long = 0L
     private var lastFrameWasNormalFastCombat: Boolean = false
     private var currentScanHzMode: String = "2HZ"
-    private var lastScanDurationMs: Long = 220L
+    private var lastScanDurationMs: Long = 0L
+    private var lastBattleAvgScanMs: Long = 0L
+    private var currentBattleScanDurationSumMs: Long = 0L
+    private var currentBattleScanCount: Int = 0
     private var needsPostSwapOrMoveTurnReindex: Boolean = false
     private var enableHpTracking: Boolean = false
     private var enableEnergyTracking: Boolean = false
@@ -7876,7 +7934,6 @@ class OverlayService : LifecycleService() {
 
         createNotificationChannel()
         setupDefaultPresetsIfNeeded()
-        loadCachedRankingsSynchronously()
         loadOrFetchGamemasterInBackground()
         setupOverlayView()
         startBattleOcrLoop()
@@ -8027,6 +8084,7 @@ class OverlayService : LifecycleService() {
                 var didDownloadAny = false
                 for ((leagueKey, fileName, url) in rankingTargets) {
                     try {
+                        if (!LIVE_RANKINGS_MAP[leagueKey].isNullOrEmpty()) continue
                         val rFile = File(filesDir, fileName)
                         val rJson = if (rFile.exists() && rFile.length() > 200) {
                             rFile.readText()
@@ -8047,25 +8105,27 @@ class OverlayService : LifecycleService() {
                     } catch (_: Exception) {}
                 }
 
-                val mainCache = File(filesDir, "pvpoke_gamemaster.json")
-                val cacheFile = if (mainCache.exists() && mainCache.length() > 1000) mainCache else File(filesDir, "pvpoke_gamemaster_cache.json")
-                val jsonStr = if (cacheFile.exists() && cacheFile.length() > 1000) {
-                    cacheFile.readText()
-                } else {
-                    val req = Request.Builder()
-                        .url("https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/gamemaster.json")
-                        .build()
-                    client.newCall(req).execute().use { resp ->
-                        val body = resp.body?.string()
-                        if (resp.isSuccessful && !body.isNullOrBlank()) {
-                            cacheFile.writeText(body)
-                            didDownloadAny = true
-                            body
-                        } else null
+                if (DYNAMIC_POKEMON_DATABASE.isEmpty() || DYNAMIC_MOVE_DATABASE.isEmpty()) {
+                    val mainCache = File(filesDir, "pvpoke_gamemaster.json")
+                    val cacheFile = if (mainCache.exists() && mainCache.length() > 1000) mainCache else File(filesDir, "pvpoke_gamemaster_cache.json")
+                    val jsonStr = if (cacheFile.exists() && cacheFile.length() > 1000) {
+                        cacheFile.readText()
+                    } else {
+                        val req = Request.Builder()
+                            .url("https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/gamemaster.json")
+                            .build()
+                        client.newCall(req).execute().use { resp ->
+                            val body = resp.body?.string()
+                            if (resp.isSuccessful && !body.isNullOrBlank()) {
+                                cacheFile.writeText(body)
+                                didDownloadAny = true
+                                body
+                            } else null
+                        }
                     }
-                }
-                if (!jsonStr.isNullOrBlank()) {
-                    parseGamemasterJson(jsonStr)
+                    if (!jsonStr.isNullOrBlank()) {
+                        parseGamemasterJson(jsonStr)
+                    }
                 }
                 if (didDownloadAny || prefs.getLong(PREFS_KEY_LAST_SYNC_TIMESTAMP, 0L) == 0L) {
                     prefs.edit().putLong(PREFS_KEY_LAST_SYNC_TIMESTAMP, System.currentTimeMillis()).apply()
@@ -8272,7 +8332,9 @@ class OverlayService : LifecycleService() {
     private fun minimizeOverlayToBubble() {
         if (isOverlayMinimized) return
         isOverlayMinimized = true
+        lastMinimizeTimestampMs = System.currentTimeMillis()
         stopBattleOcrLoop()
+        overlayView?.evaluateJavascript("if (window.setOverlayMinimizedState) setOverlayMinimizedState(true);", null)
         val density = resources.displayMetrics.density
         val bubbleSize = (48 * density).toInt()
         if (::layoutParams.isInitialized) {
@@ -8286,13 +8348,13 @@ class OverlayService : LifecycleService() {
                 }
             } catch (_: Exception) {}
         }
-        overlayView?.evaluateJavascript("if (window.setOverlayMinimizedState) setOverlayMinimizedState(true);", null)
         startForegroundNotification()
         showStatusBarToast("Overlay minimized (OCR paused). Tap bubble to resume.", Toast.LENGTH_SHORT)
     }
 
     private fun restoreOverlayFromBubble() {
         if (!isOverlayMinimized) return
+        if (System.currentTimeMillis() - lastMinimizeTimestampMs < 400L) return
         isOverlayMinimized = false
         if (::layoutParams.isInitialized) {
             val targetWidth = (screenWidth * (overlayScalePct.coerceIn(50, 100) / 100f)).toInt()
@@ -8305,8 +8367,11 @@ class OverlayService : LifecycleService() {
                 }
             } catch (_: Exception) {}
         }
-        overlayView?.evaluateJavascript("if (window.setOverlayMinimizedState) setOverlayMinimizedState(false);", null)
-        if (mediaProjection != null) {
+        overlayView?.evaluateJavascript(
+            "if (window.setOverlayMinimizedState) setOverlayMinimizedState(false); if (window.setOverlayScalePct) setOverlayScalePct($overlayScalePct);",
+            null
+        )
+        if (mediaProjection != null && isBattleActive) {
             startBattleOcrLoop()
         }
         recalculateAndPushBattleData()
@@ -8717,6 +8782,11 @@ class OverlayService : LifecycleService() {
                 val nowAfterScan = System.currentTimeMillis()
                 val elapsedMs = (nowAfterScan - cycleStartMs).coerceAtLeast(1L)
                 lastScanDurationMs = elapsedMs
+                if (isBattleActive) {
+                    currentBattleScanDurationSumMs += elapsedMs
+                    currentBattleScanCount += 1
+                    lastBattleAvgScanMs = (currentBattleScanDurationSumMs / currentBattleScanCount).coerceAtLeast(1L)
+                }
                 if (elapsedMs <= 480L) {
                     currentScanHzMode = "2HZ"
                     val defaultSleepMs = (500L - elapsedMs).coerceAtLeast(15L)
@@ -12619,6 +12689,12 @@ class OverlayService : LifecycleService() {
         playerPendingDmgBaselineHp = 100
         turnPhaseAnchorMs = 0L
         lastCaptureStartMs = 0L
+        if (currentBattleScanCount > 0) {
+            lastBattleAvgScanMs = (currentBattleScanDurationSumMs / currentBattleScanCount).coerceAtLeast(1L)
+        }
+        currentBattleScanDurationSumMs = 0L
+        currentBattleScanCount = 0
+        lastScanDurationMs = 0L
         postUserChargedMissingOppHpFrames = 0
         postOppChargedMissingPlayerHpFrames = 0
         battleTurnIndex = 0
@@ -12677,6 +12753,12 @@ class OverlayService : LifecycleService() {
             lastClearedOppShieldsRemaining = oppShieldsRemaining
             lastClearedFinalUserHpPct = (0..2).map { i -> if (playerFaintedSlots[i]) 0 else playerSlotHpPct[i].coerceIn(0, 100) }
             lastClearedFinalOppHpPct = (0..2).map { i -> if (oppFaintedSlots[i]) 0 else oppSlotHpPct[i].coerceIn(0, 100) }
+        }
+        if (currentBattleScanCount > 0) {
+            lastBattleAvgScanMs = (currentBattleScanDurationSumMs / currentBattleScanCount).coerceAtLeast(1L)
+        }
+        if (lastBattleAvgScanMs > 0L) {
+            lastScanDurationMs = lastBattleAvgScanMs
         }
         isBattleActive = false
         isAttackIncomingPromptActive = false
@@ -12909,6 +12991,12 @@ class OverlayService : LifecycleService() {
         manualShadowOverrides.clear()
         manualLeadMatchupOverride = null
         currentLeadMatchup = "NEUTRAL"
+        if (currentBattleScanCount > 0) {
+            lastBattleAvgScanMs = (currentBattleScanDurationSumMs / currentBattleScanCount).coerceAtLeast(1L)
+        }
+        if (lastBattleAvgScanMs > 0L) {
+            lastScanDurationMs = lastBattleAvgScanMs
+        }
         isWaitingForOpponent = true
         isBattleActive = false
         activeOpponentName = "Waiting..."
@@ -13758,6 +13846,13 @@ class OverlayService : LifecycleService() {
         val waitingActiveUserHp = if (playerFaintedSlots[activeUserSlotIndex.coerceIn(0, 2)]) 0 else playerSlotHpPct[activeUserSlotIndex.coerceIn(0, 2)].coerceIn(0, 100)
 
         if (isWaitingForOpponent || activeOpponentName == "Waiting...") {
+            val effectiveWaitingScanMs = if (isBattleActive && lastScanDurationMs > 0L) {
+                lastScanDurationMs
+            } else if (lastBattleAvgScanMs > 0L) {
+                lastBattleAvgScanMs
+            } else {
+                lastScanDurationMs
+            }
             val waitingPayload = mapOf(
                 "activeOpponent" to "Waiting...",
                 "activeOpponentFastMove" to "Scanning Header...",
@@ -13771,7 +13866,16 @@ class OverlayService : LifecycleService() {
                 "activeUserSlotIndex" to activeUserSlotIndex,
                 "activeOpponentSlotIndex" to 0,
                 "leadMatchup" to (manualLeadMatchupOverride ?: lastClearedLeadMatchupSnapshot.ifBlank { currentLeadMatchup }),
+                "isBattleActive" to isBattleActive,
                 "isReplayMode" to isReplayMode,
+                "overlayTransparencyPct" to overlayTransparencyPct,
+                "appThemeId" to appThemeId,
+                "isOverlayMinimized" to isOverlayMinimized,
+                "scanHzMode" to currentScanHzMode,
+                "lastScanDurationMs" to effectiveWaitingScanMs,
+                "lastBattleAvgScanMs" to lastBattleAvgScanMs,
+                "enableHpTracking" to enableHpTracking,
+                "enableEnergyTracking" to enableEnergyTracking,
                 "myMove1Summary" to "—",
                 "myMove2Summary" to "—",
                 "throwAlignmentText" to "Waiting for Opponent spawn",
@@ -13793,9 +13897,9 @@ class OverlayService : LifecycleService() {
                 "activeUserHpPct" to waitingActiveUserHp,
                 "activeOppHpPct" to 100,
                 "teamArchetype" to (currentPreset?.archetype ?: "ABC"),
-                "showTacticalRec" to showTacticalRecommendations,
-                "showTacticalRecommendations" to showTacticalRecommendations,
-                "tacticalRec" to mapOf(
+                "showTacticalRec" to (showTacticalRecommendations && (isBattleActive || isReplayMode)),
+                "showTacticalRecommendations" to (showTacticalRecommendations && (isBattleActive || isReplayMode)),
+                "tacticalRec" to if (isBattleActive || isReplayMode) mapOf(
                     "phase" to "WAITING",
                     "archetype" to (currentPreset?.archetype ?: "ABC"),
                     "action" to "AWAITING LEAD",
@@ -13806,8 +13910,8 @@ class OverlayService : LifecycleService() {
                     "tone" to "neutral",
                     "urgencyColor" to "sky",
                     "recommendedSwapSlotIndex" to -1
-                ),
-                "tacticalRecommendation" to mapOf(
+                ) else null,
+                "tacticalRecommendation" to if (isBattleActive || isReplayMode) mapOf(
                     "phase" to "WAITING",
                     "archetype" to (currentPreset?.archetype ?: "ABC"),
                     "action" to "AWAITING LEAD",
@@ -13818,7 +13922,7 @@ class OverlayService : LifecycleService() {
                     "tone" to "neutral",
                     "urgencyColor" to "sky",
                     "recommendedSwapSlotIndex" to -1
-                ),
+                ) else null,
                 "team" to teamData,
                 "scannedOpponents" to emptyList<Map<String, Any>>(),
                 "oppMoveTimingRows" to emptyList<Map<String, Any>>(),
@@ -14859,7 +14963,8 @@ class OverlayService : LifecycleService() {
             "activeOppMoveReady" to ((scannedOpponentsData.getOrNull(activeOppSlotSafe)?.get("isMoveReady") as? Boolean) ?: false),
             "activeOppEnergyLabel" to ((scannedOpponentsData.getOrNull(activeOppSlotSafe)?.get("energyLabel") as? String) ?: "0E"),
             "scanHzMode" to currentScanHzMode,
-            "lastScanDurationMs" to lastScanDurationMs,
+            "lastScanDurationMs" to (if (isBattleActive && lastScanDurationMs > 0L) lastScanDurationMs else if (lastBattleAvgScanMs > 0L) lastBattleAvgScanMs else lastScanDurationMs),
+            "lastBattleAvgScanMs" to lastBattleAvgScanMs,
             "scanTurnOffsetMs" to scanTurnOffsetMs,
             "battleTurnIndex" to battleTurnIndex,
             "teamArchetype" to teamArchetype,

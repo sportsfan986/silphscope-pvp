@@ -510,11 +510,11 @@ class MainActivity : AppCompatActivity() {
             prefs.edit()
                 .putBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
                 .putBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
-                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 362)
+                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 363)
                 .apply()
-        } else if (prevInstalledVerCode < 362) {
+        } else if (prevInstalledVerCode < 363) {
             prefs.edit()
-                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 362)
+                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 363)
                 .apply()
         }
         OverlayService.syncTierThresholdsFromPrefs(prefs)
@@ -522,9 +522,9 @@ class MainActivity : AppCompatActivity() {
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "3.62"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "3.63"
         } catch (_: Exception) {
-            "3.62"
+            "3.63"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -536,15 +536,6 @@ class MainActivity : AppCompatActivity() {
         fetchSeasonsFromScrapedDuck()
         syncOverlayRunningUiState()
         handleIncomingNavigationAndTaskerIntent(intent)
-        lifecycleScope.launch(Dispatchers.Default) {
-            runOneTimeAiLogSplitAndCleanup(silent = true)
-            migrateExistingBattleLogs()
-            recalculateAllPresetsWithSeasonMetaBlocking()
-            withContext(Dispatchers.Main) {
-                refreshPresetsUi()
-                renderBattleLogPage()
-            }
-        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -4710,7 +4701,8 @@ class MainActivity : AppCompatActivity() {
 
     inner class ReplayJavascriptBridge(
         private val replayEngine: OverlayService,
-        private val pushReplayStateToWeb: () -> Unit
+        private val pushReplayStateToWeb: () -> Unit,
+        private val onContentHeightUpdated: (Int) -> Unit = {}
     ) {
         @android.webkit.JavascriptInterface
         fun selectActiveUserPokemon(pokemonName: String) {
@@ -4753,7 +4745,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         @android.webkit.JavascriptInterface
-        fun updateContentHeight(heightDp: Int) {}
+        fun updateContentHeight(heightDp: Int) {
+            runOnUiThread {
+                try {
+                    onContentHeightUpdated(heightDp)
+                } catch (_: Exception) {}
+            }
+        }
 
         @android.webkit.JavascriptInterface
         fun onOverlayReady() {
@@ -4876,10 +4874,12 @@ class MainActivity : AppCompatActivity() {
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.allowFileAccess = true
+                isVerticalScrollBarEnabled = false
+                isHorizontalScrollBarEnabled = false
                 setBackgroundColor(0x00000000)
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
-                    (390 * density).toInt()
+                    (540 * density).toInt()
                 )
             }
 
@@ -4895,13 +4895,26 @@ class MainActivity : AppCompatActivity() {
                             replayWebView.evaluateJavascript("if (window.setOverlayTheme) setOverlayTheme('$activeThemeId');", null)
                             replayWebView.evaluateJavascript("if (window.setOverlayWatermark) setOverlayWatermark($showWatermark);", null)
                             replayWebView.evaluateJavascript("if (window.updateBattleData) updateBattleData($payloadJson);", null)
+                            replayWebView.evaluateJavascript("if (window.notifyHeight) notifyHeight();", null)
                         } catch (_: Exception) {}
                     }
                 } catch (_: Exception) {}
                 Unit
             }
 
-            val replayBridge = ReplayJavascriptBridge(replayEngine, pushReplayStateToWeb)
+            val replayBridge = ReplayJavascriptBridge(
+                replayEngine = replayEngine,
+                pushReplayStateToWeb = pushReplayStateToWeb,
+                onContentHeightUpdated = { heightDp ->
+                    val targetHeightPx = (kotlin.math.max(480, heightDp + 20) * density).toInt()
+                    val lp = replayWebView.layoutParams
+                    if (lp != null && kotlin.math.abs(lp.height - targetHeightPx) > (2 * density).toInt()) {
+                        lp.height = targetHeightPx
+                        replayWebView.layoutParams = lp
+                        replayWebView.requestLayout()
+                    }
+                }
+            )
 
             replayWebView.webViewClient = object : android.webkit.WebViewClient() {
                 override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
@@ -4914,7 +4927,12 @@ class MainActivity : AppCompatActivity() {
 
             dialogContainer.addView(hintTv)
             dialogContainer.addView(replayWebView)
-            val themedReplayRoot = wrapViewWithThemeWatermark(dialogContainer, watermarkSizeDp = 250)
+            val replayScrollView = ScrollView(this).apply {
+                isFillViewport = true
+                setBackgroundColor(0xFF0F172A.toInt())
+                addView(dialogContainer)
+            }
+            val themedReplayRoot = wrapViewWithThemeWatermark(replayScrollView, watermarkSizeDp = 250)
 
             val dialog = AlertDialog.Builder(this)
                 .setTitle("🎬 Battle Matrix Replay • $safeLeague")
@@ -6974,7 +6992,9 @@ class MainActivity : AppCompatActivity() {
                     for ((leagueKey, fileName, url) in RANKINGS_ENDPOINTS) {
                         val rFile = File(filesDir, fileName)
                         if (rFile.exists() && rFile.length() > 200) {
-                            OverlayService.parseRankingsJsonStatic(leagueKey, rFile.readText())
+                            if (OverlayService.LIVE_RANKINGS_MAP[leagueKey].isNullOrEmpty()) {
+                                OverlayService.parseRankingsJsonStatic(leagueKey, rFile.readText())
+                            }
                         } else {
                             try {
                                 val rReq = Request.Builder().url(url).build()
@@ -6989,18 +7009,28 @@ class MainActivity : AppCompatActivity() {
                             } catch (_: Exception) {}
                         }
                     }
-                    OverlayService.parseGamemasterJsonStatic(cacheFile.readText())
+                    if (OverlayService.DYNAMIC_POKEMON_DATABASE.isEmpty() || OverlayService.DYNAMIC_MOVE_DATABASE.isEmpty()) {
+                        OverlayService.parseGamemasterJsonStatic(cacheFile.readText())
+                    }
                     if (didDownloadMissing || prefs.getLong(PREFS_KEY_LAST_SYNC_TIMESTAMP, 0L) == 0L) {
                         prefs.edit().putLong(PREFS_KEY_LAST_SYNC_TIMESTAMP, cacheFile.lastModified().takeIf { it > 0L } ?: System.currentTimeMillis()).apply()
                     }
                 } catch (_: Exception) {}
+                runOneTimeAiLogSplitAndCleanup(silent = true)
+                migrateExistingBattleLogs()
+                recalculateAllPresetsWithSeasonMetaBlocking()
                 withContext(Dispatchers.Main) {
                     dbStatusText.text = formatDbAndLeagueStatusText()
-                    recalculateAllPresetsWithSeasonMetaAsync()
+                    refreshPresetsUi()
+                    renderBattleLogPage()
                 }
             }
         } else {
             dbStatusText.text = "PvPoke Database: Not cached (syncing all 4 leagues...)"
+            lifecycleScope.launch(Dispatchers.Default) {
+                runOneTimeAiLogSplitAndCleanup(silent = true)
+                migrateExistingBattleLogs()
+            }
             downloadPvPokeGamemaster()
         }
     }

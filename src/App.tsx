@@ -4508,7 +4508,9 @@ export default function App() {
                             className="px-1 py-0.5 rounded border border-cyan-400/55 bg-slate-900/75 text-cyan-200 leading-none shrink-0"
                             title="OCR & Frame Capture Update Rate in ms"
                           >
-                            {scanHzMode === '2Hz' ? '220ms' : '480ms'}
+                            {isBattleActive
+                              ? (scanHzMode === '2Hz' ? '220ms' : '480ms')
+                              : (scannedOpponents.length > 0 ? (scanHzMode === '2Hz' ? '220ms' : '480ms') : '--- ms')}
                           </span>
                           {/* My Health, Energy, Shield badges */}
                           {enableHpTracking && (
@@ -12512,7 +12514,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v3.62 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, and ML Kit Text Recognition.
+        SilphScope PvP v3.63 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, and ML Kit Text Recognition.
       </footer>
     </div>
   );

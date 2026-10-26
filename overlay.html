@@ -1199,10 +1199,10 @@
                 onpointerdown="startMinimizeHold(event)"
                 onpointerup="endMinimizeHold(event)"
                 onpointercancel="cancelMinimizeHold(event)"
-                onpointerleave="cancelMinimizeHold(event)"
+                onclick="handleMinimizeSwordClick(event)"
                 oncontextmenu="event.preventDefault(); return false;"
                 title="Tap: Minimize & pause OCR • Hold 2s: Stop overlay & open Battle Log">⚔️</button>
-            <span id="sky-ocr-ms-badge" class="header-ocr-ms-badge" title="OCR capture & scan update rate in milliseconds">220ms</span>
+            <span id="sky-ocr-ms-badge" class="header-ocr-ms-badge" title="OCR capture & scan update rate in milliseconds">--- ms</span>
             <div class="header-badges-cluster">
                 <div class="header-side-group">
                     <span id="sky-player-hp-pill" class="hp-slot-pill hp-high hidden" title="Your Active Pokémon Live HP%">100%</span>
@@ -1625,11 +1625,19 @@
 
         let currentZoomFactor = 1.0;
         const BASE_DESIGN_WIDTH = 300.0;
+        let lastValidViewportWidth = BASE_DESIGN_WIDTH;
+        let isMinimized = false;
+        let lastMinimizeTransitionMs = 0;
 
         function applyProportionalScale() {
+            if (isMinimized) return;
             try {
-                const viewportW = document.documentElement.clientWidth || window.innerWidth || BASE_DESIGN_WIDTH;
-                currentZoomFactor = Math.max(0.45, Math.min(2.2, viewportW / BASE_DESIGN_WIDTH));
+                const rawViewportW = document.documentElement.clientWidth || window.innerWidth || BASE_DESIGN_WIDTH;
+                if (rawViewportW >= 120) {
+                    lastValidViewportWidth = rawViewportW;
+                }
+                const effectiveW = rawViewportW >= 120 ? rawViewportW : lastValidViewportWidth;
+                currentZoomFactor = Math.max(0.45, Math.min(2.2, effectiveW / BASE_DESIGN_WIDTH));
                 const skyEl = document.getElementById("mode-sky-trench");
                 const horizEl = document.getElementById("mode-horizon-belt");
                 if (skyEl) {
@@ -1644,8 +1652,6 @@
                 }
             } catch (e) {}
         }
-
-        let isMinimized = false;
 
         function setOverlayScalePct(scalePct) {
             if (isMinimized) return;
@@ -1773,16 +1779,31 @@
         };
 
         function setOverlayMinimizedState(minimized) {
-            isMinimized = !!minimized;
+            const nextMin = !!minimized;
+            if (nextMin && !isMinimized) {
+                lastMinimizeTransitionMs = Date.now();
+            }
+            isMinimized = nextMin;
             const bubbleEl = document.getElementById("minimized-bubble");
             const skyEl = document.getElementById("mode-sky-trench");
             const horizEl = document.getElementById("mode-horizon-belt");
             if (isMinimized) {
                 if (skyEl) skyEl.classList.add("hidden");
                 if (horizEl) horizEl.classList.add("hidden");
-                if (bubbleEl) bubbleEl.classList.remove("hidden");
+                if (bubbleEl) {
+                    bubbleEl.classList.remove("hidden");
+                    bubbleEl.style.pointerEvents = "none";
+                    setTimeout(function() {
+                        if (isMinimized && bubbleEl) {
+                            bubbleEl.style.pointerEvents = "auto";
+                        }
+                    }, 380);
+                }
             } else {
-                if (bubbleEl) bubbleEl.classList.add("hidden");
+                if (bubbleEl) {
+                    bubbleEl.classList.add("hidden");
+                    bubbleEl.style.pointerEvents = "auto";
+                }
                 if (currentMode === "option2") {
                     if (skyEl) skyEl.classList.add("hidden");
                     if (horizEl) horizEl.classList.remove("hidden");
@@ -1791,7 +1812,14 @@
                     if (skyEl) skyEl.classList.remove("hidden");
                 }
                 applyProportionalScale();
-                setTimeout(notifyHeight, 30);
+                setTimeout(function() {
+                    applyProportionalScale();
+                    notifyHeight();
+                }, 50);
+                setTimeout(function() {
+                    applyProportionalScale();
+                    notifyHeight();
+                }, 160);
             }
         }
 
@@ -1832,7 +1860,10 @@
         }
 
         function endMinimizeHold(e) {
-            if (e) e.preventDefault();
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
             const minBtn = document.getElementById("btn-minimize-sword");
             if (minBtn) minBtn.classList.remove("holding");
             if (minimizeHoldTimer) {
@@ -1847,6 +1878,21 @@
             minimizeLongPressTriggered = false;
         }
 
+        function handleMinimizeSwordClick(e) {
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            if (isMinimized || minimizeLongPressTriggered) return;
+            if (Date.now() - lastMinimizeTransitionMs < 380) return;
+            minimizePointerActive = false;
+            if (minimizeHoldTimer) {
+                clearTimeout(minimizeHoldTimer);
+                minimizeHoldTimer = null;
+            }
+            minimizeToBubble();
+        }
+
         function cancelMinimizeHold(e) {
             const minBtn = document.getElementById("btn-minimize-sword");
             if (minBtn) minBtn.classList.remove("holding");
@@ -1859,6 +1905,7 @@
         }
 
         function minimizeToBubble() {
+            lastMinimizeTransitionMs = Date.now();
             setOverlayMinimizedState(true);
             if (window.AndroidOverlay && window.AndroidOverlay.minimizeOverlay) {
                 window.AndroidOverlay.minimizeOverlay();
@@ -1866,6 +1913,7 @@
         }
 
         function restoreFromBubble() {
+            if (Date.now() - lastMinimizeTransitionMs < 420) return;
             setOverlayMinimizedState(false);
             if (window.AndroidOverlay && window.AndroidOverlay.restoreOverlay) {
                 window.AndroidOverlay.restoreOverlay();
@@ -1924,7 +1972,7 @@
                 applyProportionalScale();
                 const el = document.getElementById(currentMode === "option1" ? "mode-sky-trench" : "mode-horizon-belt");
                 const rectH = el ? el.getBoundingClientRect().height : (document.body.scrollHeight * currentZoomFactor);
-                const h = rectH + 8;
+                const h = rectH + 10;
                 if (window.AndroidOverlay && window.AndroidOverlay.updateContentHeight) {
                     window.AndroidOverlay.updateContentHeight(Math.max(48, Math.ceil(h)));
                 }
@@ -2138,7 +2186,12 @@
             }
         }
 
+        let cachedLastBattleAvgScanMs = 0;
+
         function clearOverlayMatrixImmediate(preservedLead) {
+            const preservedAvgMs = (typeof battleData.lastBattleAvgScanMs === "number" && battleData.lastBattleAvgScanMs > 0)
+                ? battleData.lastBattleAvgScanMs
+                : (cachedLastBattleAvgScanMs > 0 ? cachedLastBattleAvgScanMs : 0);
             battleData.activeOpponent = "Waiting...";
             battleData.activeOpponentFastMove = "1 Hz OCR Active";
             battleData.activeOpponentTurns = 0;
@@ -2173,6 +2226,10 @@
             battleData.throwHorizonText = "—";
             battleData.tacticalRec = null;
             battleData.tacticalRecommendation = null;
+            if (preservedAvgMs > 0) {
+                battleData.lastBattleAvgScanMs = preservedAvgMs;
+                battleData.lastScanDurationMs = preservedAvgMs;
+            }
             render();
         }
 
@@ -2359,6 +2416,11 @@
         function updateBattleData(dataJson) {
             try {
                 const data = typeof dataJson === "string" ? JSON.parse(dataJson) : dataJson;
+                if (typeof data.lastBattleAvgScanMs === "number" && data.lastBattleAvgScanMs > 0) {
+                    cachedLastBattleAvgScanMs = data.lastBattleAvgScanMs;
+                } else if (cachedLastBattleAvgScanMs > 0 && !data.lastBattleAvgScanMs) {
+                    data.lastBattleAvgScanMs = cachedLastBattleAvgScanMs;
+                }
                 battleData = data;
                 if (data.isBattleActive !== undefined) {
                     isBattleActive = !!data.isBattleActive;
@@ -2505,11 +2567,25 @@
 
             const ocrMsBadgeEl = document.getElementById("sky-ocr-ms-badge");
             if (ocrMsBadgeEl) {
-                const scanMs = typeof battleData.lastScanDurationMs === "number" && battleData.lastScanDurationMs > 0
+                const liveScanMs = (typeof battleData.lastScanDurationMs === "number" && battleData.lastScanDurationMs > 0)
                     ? Math.round(battleData.lastScanDurationMs)
-                    : 220;
-                ocrMsBadgeEl.textContent = `${scanMs}ms`;
-                ocrMsBadgeEl.title = `OCR Update Rate: ${scanMs}ms (${battleData.scanHzMode || "2HZ"})`;
+                    : 0;
+                const avgScanMs = (typeof battleData.lastBattleAvgScanMs === "number" && battleData.lastBattleAvgScanMs > 0)
+                    ? Math.round(battleData.lastBattleAvgScanMs)
+                    : (cachedLastBattleAvgScanMs > 0 ? Math.round(cachedLastBattleAvgScanMs) : 0);
+                const displayScanMs = isBattleActive
+                    ? (liveScanMs > 0 ? liveScanMs : avgScanMs)
+                    : (avgScanMs > 0 ? avgScanMs : liveScanMs);
+                if (displayScanMs > 0) {
+                    ocrMsBadgeEl.textContent = `${displayScanMs}ms`;
+                    const isAvgLabel = (!isBattleActive && avgScanMs > 0) || (isBattleActive && liveScanMs <= 0 && avgScanMs > 0);
+                    ocrMsBadgeEl.title = isAvgLabel
+                        ? `Last Battle Avg OCR Rate: ${displayScanMs}ms (${battleData.scanHzMode || "2HZ"})`
+                        : `Live OCR Update Rate: ${displayScanMs}ms (${battleData.scanHzMode || "2HZ"})`;
+                } else {
+                    ocrMsBadgeEl.textContent = "--- ms";
+                    ocrMsBadgeEl.title = "OCR Update Rate: awaiting first scan";
+                }
             }
 
             const myRowsForE = battleData.myMoveTimingRows || [];
@@ -3090,6 +3166,9 @@
         });
 
         window.onload = function() {
+            if (window.location.search && window.location.search.includes("replay=1")) {
+                document.body.style.overflowY = "visible";
+            }
             applyProportionalScale();
             render();
             if (window.AndroidOverlay && window.AndroidOverlay.onOverlayReady) {
