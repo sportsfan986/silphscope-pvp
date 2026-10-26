@@ -691,6 +691,23 @@ export default function App() {
     } catch {}
   };
 
+  // v3.64 Temporary Setting: Enable/Disable 3-Tier Damage PID Loop (Default Enabled)
+  const [enableDamagePidLoop, setEnableDamagePidLoop] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('gbl_enable_damage_pid_loop');
+      return saved === null ? true : saved === 'true';
+    } catch {
+      return true;
+    }
+  });
+
+  const handleSetEnableDamagePidLoop = (enabled: boolean) => {
+    setEnableDamagePidLoop(enabled);
+    try {
+      localStorage.setItem('gbl_enable_damage_pid_loop', String(enabled));
+    } catch {}
+  };
+
   const minimizeHoldTimerRef = useRef<number | null>(null);
   const minimizeHoldTriggeredRef = useRef<boolean>(false);
 
@@ -3992,7 +4009,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v3.60 • Android Native Overlay
+                  v3.64 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -4445,15 +4462,15 @@ export default function App() {
                         textShadow: '0 1px 2px rgba(0, 0, 0, 0.98), 0 0 4px rgba(0, 0, 0, 0.95)'
                       }}
                     >
-                      {/* v3.60 Header row: ONLY Minimize/Pause OCR icon (2s hold -> Stop Overlay & Go to Battle Log) + OCR update rate in ms + My [Health, Energy, Shield] + Opp [Shields, Health, Energy] */}
+                      {/* v3.64 Header row: Dark charged-move row background + Minimize/Pause OCR icon + Dual HP:xxxms/OCR:xxxms badge + Right-aligned My [Health, Energy, Shield] | Opp [Shields, Health, Energy] */}
                       <div
-                        className="flex items-center justify-between pb-1 border-b gap-1 px-1 pt-0.5 rounded-t"
+                        className="flex items-center justify-between gap-1 px-1 py-0.5 mb-0.5 rounded border"
                         style={{
-                          borderColor: `rgba(${activeTheme.overlayHeaderRgb}, 0.35)`,
-                          background: `linear-gradient(90deg, rgba(${activeTheme.overlayHeaderRgb}, 0.16) 0%, rgba(0,0,0,0) 100%)`
+                          backgroundColor: `rgba(2, 6, 23, ${Math.min(0.95, Math.max(0.22, (overlayOpacityPct / 100) * 0.72))})`,
+                          borderColor: 'rgba(148, 163, 184, 0.16)'
                         }}
                       >
-                        <div className="flex items-center gap-1 shrink-0 font-mono text-[7.5px] font-extrabold">
+                        <div className="flex items-center gap-1 shrink-0 font-mono text-[7px] font-extrabold">
                           <button
                             type="button"
                             onPointerDown={(e) => {
@@ -4488,13 +4505,6 @@ export default function App() {
                               }
                               minimizeHoldTriggeredRef.current = false;
                             }}
-                            onPointerLeave={() => {
-                              if (minimizeHoldTimerRef.current) {
-                                window.clearTimeout(minimizeHoldTimerRef.current);
-                                minimizeHoldTimerRef.current = null;
-                              }
-                              minimizeHoldTriggeredRef.current = false;
-                            }}
                             className="px-1 py-0.5 rounded text-white text-[10px] leading-tight shrink-0 shadow-sm active:scale-90 transition border flex items-center justify-center"
                             style={{
                               backgroundColor: `rgba(${activeTheme.overlayHeaderRgb}, 0.28)`,
@@ -4505,13 +4515,19 @@ export default function App() {
                             {renderThemeOverlayIcon(activeTheme.id, 13)}
                           </button>
                           <span
-                            className="px-1 py-0.5 rounded border border-cyan-400/55 bg-slate-900/75 text-cyan-200 leading-none shrink-0"
-                            title="OCR & Frame Capture Update Rate in ms"
+                            className="px-1 py-0.5 rounded border border-cyan-400/55 bg-slate-900/80 text-cyan-200 leading-none shrink-0"
+                            title="Pixel HP Scan Loop & ML Kit OCR Loop Update Rates in ms"
                           >
                             {isBattleActive
-                              ? (scanHzMode === '2Hz' ? '220ms' : '480ms')
-                              : (scannedOpponents.length > 0 ? (scanHzMode === '2Hz' ? '220ms' : '480ms') : '--- ms')}
+                              ? `HP:200ms/OCR:${scanHzMode === '2Hz' ? '750ms' : '950ms'}`
+                              : scannedOpponents.length > 0
+                              ? `HP:200ms/OCR:${scanHzMode === '2Hz' ? '750ms' : '950ms'}`
+                              : 'HP:---ms/OCR:---ms'}
                           </span>
+                        </div>
+
+                        {/* Right-aligned cluster: My [Health, Energy, Shield] | Opp [Shields, Health, Energy] */}
+                        <div className="flex items-center justify-end gap-0.5 ml-auto shrink-0 font-mono text-[7px] font-extrabold">
                           {/* My Health, Energy, Shield badges */}
                           {enableHpTracking && (
                             <span
@@ -4526,7 +4542,7 @@ export default function App() {
                               }`}
                               title={`My Active Pokémon HP: ${userSlotHpPct[activeUserSlotIndex] ?? 100}%`}
                             >
-                              My {userSlotHpPct[activeUserSlotIndex] ?? 100}%
+                              {userSlotHpPct[activeUserSlotIndex] ?? 100}%
                             </span>
                           )}
                           {enableEnergyTracking && (
@@ -4556,13 +4572,14 @@ export default function App() {
                             }}
                             title={`Your Shields: ${userShields}/2 remaining (Tap to cycle 2->1->0->2)`}
                           >
-                            <span className="text-[7.5px]">🛡️</span>
+                            <span className="text-[7px]">🛡️</span>
                             <span>{userShields}</span>
                           </button>
-                        </div>
 
-                        {/* Opp Shields, Health, Energy badges */}
-                        <div className="flex items-center gap-1 shrink-0 font-mono text-[7.5px] font-extrabold">
+                          {/* Small vertical bar separator between My badges and Opponent badges */}
+                          <span className="text-slate-400/75 px-0.5 select-none leading-none font-bold">|</span>
+
+                          {/* Opp Shields, Health, Energy badges */}
                           <button
                             type="button"
                             onClick={(e) => {
@@ -4577,7 +4594,7 @@ export default function App() {
                             }`}
                             title={`Opponent Shields: ${oppShields}/2 remaining (Tap to cycle 2->1->0->2)`}
                           >
-                            <span className="text-[7.5px]">🛡️</span>
+                            <span className="text-[7px]">🛡️</span>
                             <span>{oppShields}</span>
                           </button>
                           {enableHpTracking && (
@@ -4593,7 +4610,7 @@ export default function App() {
                               }`}
                               title={`Active Opponent Pokémon HP: ${oppSlotHpPct[safeActiveOppSlot] ?? 100}%`}
                             >
-                              Opp {oppSlotHpPct[safeActiveOppSlot] ?? 100}%
+                              {oppSlotHpPct[safeActiveOppSlot] ?? 100}%
                             </span>
                           )}
                           {enableEnergyTracking && (() => {
@@ -8624,8 +8641,46 @@ export default function App() {
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  Energy Counting: ON (Opt In)
+                    Energy Counting: ON (Opt In)
                 </button>
+              </div>
+
+              <div className="pt-2 border-t border-slate-800 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-emerald-400">
+                    🎯 Temporary Setting: Damage PID Loop (3-Tier Energy Observer)
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
+                    {enableDamagePidLoop ? 'ENABLED (Default)' : 'DISABLED (200ms Scan Only)'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  <strong>Enabled by default.</strong> Runs per-turn PID micro-adjustments, 3T+ opponent slow-move pacing reconciliation, and charged-move stable HP window reconciliation. Disable temporarily to test if the 200ms pixel HP scan + pending sliver latch alone resolves energy counting.
+                </p>
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => handleSetEnableDamagePidLoop(true)}
+                    className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                      enableDamagePidLoop
+                        ? 'bg-emerald-500/25 border border-emerald-400/70 text-emerald-200'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Damage PID Loop: ENABLED (Default)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetEnableDamagePidLoop(false)}
+                    className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                      !enableDamagePidLoop
+                        ? 'bg-slate-800 border border-slate-600 text-slate-200'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Damage PID Loop: DISABLED (200ms Only)
+                  </button>
+                </div>
               </div>
             </div>
 

@@ -80,14 +80,16 @@
             z-index: 1;
         }
 
-        /* Header Row (Full Width for Opponent Name & Fast Move) */
+        /* Header Row (Matched to Charged Move Row Background for High Readability) */
         .header-row {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 4px;
-            border-bottom: 1px solid rgba(var(--header-accent-rgb), 0.32);
-            padding-bottom: 3px;
+            gap: 3px;
+            background: rgba(2, 6, 23, var(--row-bg-alpha));
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            border-radius: 4px;
+            padding: 2px 4px;
         }
 
         .sword-minimize-btn {
@@ -144,24 +146,25 @@
         }
 
         .header-ocr-ms-badge {
-            font-size: 7.5px;
+            font-size: 6.8px;
             font-weight: 800;
-            padding: 0.5px 3.5px;
+            padding: 0.5px 2.5px;
             border-radius: 3px;
             line-height: 1.15;
             color: #67e8f9;
-            background: rgba(8, 51, 68, 0.72);
+            background: rgba(8, 51, 68, 0.78);
             border: 1px solid rgba(56, 189, 248, 0.55);
             font-variant-numeric: tabular-nums;
             white-space: nowrap;
             flex-shrink: 0;
+            letter-spacing: -0.2px;
         }
 
         .header-badges-cluster {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            gap: 2.5px;
+            justify-content: flex-end;
+            gap: 3px;
             flex: 1;
             min-width: 0;
         }
@@ -174,10 +177,11 @@
         }
 
         .header-group-sep {
-            color: rgba(148, 163, 184, 0.45);
-            font-size: 8px;
-            font-weight: 700;
-            margin: 0 1px;
+            color: rgba(226, 232, 240, 0.65);
+            font-size: 8.5px;
+            font-weight: 900;
+            margin: 0 1.5px;
+            line-height: 1;
             flex-shrink: 0;
         }
 
@@ -1202,7 +1206,7 @@
                 onclick="handleMinimizeSwordClick(event)"
                 oncontextmenu="event.preventDefault(); return false;"
                 title="Tap: Minimize & pause OCR • Hold 2s: Stop overlay & open Battle Log">⚔️</button>
-            <span id="sky-ocr-ms-badge" class="header-ocr-ms-badge" title="OCR capture & scan update rate in milliseconds">--- ms</span>
+            <span id="sky-ocr-ms-badge" class="header-ocr-ms-badge" title="Pixel HP scan loop & ML Kit OCR update rates in milliseconds">HP:---ms/OCR:---ms</span>
             <div class="header-badges-cluster">
                 <div class="header-side-group">
                     <span id="sky-player-hp-pill" class="hp-slot-pill hp-high hidden" title="Your Active Pokémon Live HP%">100%</span>
@@ -1211,7 +1215,7 @@
                         <span class="shield-glyph">🛡️</span><span id="txt-player-shields" class="shield-val">2</span>
                     </button>
                 </div>
-                <span class="header-group-sep">•</span>
+                <span class="header-group-sep">|</span>
                 <div class="header-side-group">
                     <button id="btn-opp-shields" type="button" class="hud-shield-btn opp-shield" onclick="cycleOpponentShields(event)" title="Opponent shields remaining (Tap to cycle 2->1->0->2)">
                         <span class="shield-glyph">🛡️</span><span id="txt-opp-shields" class="shield-val">2</span>
@@ -2187,15 +2191,19 @@
         }
 
         let cachedLastBattleAvgScanMs = 0;
+        let cachedLastBattleAvgHpScanMs = 0;
 
         function clearOverlayMatrixImmediate(preservedLead) {
             const preservedAvgMs = (typeof battleData.lastBattleAvgScanMs === "number" && battleData.lastBattleAvgScanMs > 0)
                 ? battleData.lastBattleAvgScanMs
                 : (cachedLastBattleAvgScanMs > 0 ? cachedLastBattleAvgScanMs : 0);
+            const preservedAvgHpMs = (typeof battleData.lastBattleAvgHpScanMs === "number" && battleData.lastBattleAvgHpScanMs > 0)
+                ? battleData.lastBattleAvgHpScanMs
+                : (cachedLastBattleAvgHpScanMs > 0 ? cachedLastBattleAvgHpScanMs : 0);
             battleData.activeOpponent = "Waiting...";
-            battleData.activeOpponentFastMove = "1 Hz OCR Active";
+            battleData.activeOpponentFastMove = "200ms HP + 750ms OCR";
             battleData.activeOpponentTurns = 0;
-            battleData.oppFastTelemetry = "1 Hz OCR Active";
+            battleData.oppFastTelemetry = "200ms HP + 750ms OCR";
             battleData.isOpponentShadow = false;
             battleData.currentFormLabel = "Base";
             battleData.availableForms = [];
@@ -2229,6 +2237,10 @@
             if (preservedAvgMs > 0) {
                 battleData.lastBattleAvgScanMs = preservedAvgMs;
                 battleData.lastScanDurationMs = preservedAvgMs;
+            }
+            if (preservedAvgHpMs > 0) {
+                battleData.lastBattleAvgHpScanMs = preservedAvgHpMs;
+                battleData.lastHpScanDurationMs = preservedAvgHpMs;
             }
             render();
         }
@@ -2421,6 +2433,11 @@
                 } else if (cachedLastBattleAvgScanMs > 0 && !data.lastBattleAvgScanMs) {
                     data.lastBattleAvgScanMs = cachedLastBattleAvgScanMs;
                 }
+                if (typeof data.lastBattleAvgHpScanMs === "number" && data.lastBattleAvgHpScanMs > 0) {
+                    cachedLastBattleAvgHpScanMs = data.lastBattleAvgHpScanMs;
+                } else if (cachedLastBattleAvgHpScanMs > 0 && !data.lastBattleAvgHpScanMs) {
+                    data.lastBattleAvgHpScanMs = cachedLastBattleAvgHpScanMs;
+                }
                 battleData = data;
                 if (data.isBattleActive !== undefined) {
                     isBattleActive = !!data.isBattleActive;
@@ -2573,18 +2590,30 @@
                 const avgScanMs = (typeof battleData.lastBattleAvgScanMs === "number" && battleData.lastBattleAvgScanMs > 0)
                     ? Math.round(battleData.lastBattleAvgScanMs)
                     : (cachedLastBattleAvgScanMs > 0 ? Math.round(cachedLastBattleAvgScanMs) : 0);
-                const displayScanMs = isBattleActive
+                const displayOcrMs = isBattleActive
                     ? (liveScanMs > 0 ? liveScanMs : avgScanMs)
                     : (avgScanMs > 0 ? avgScanMs : liveScanMs);
-                if (displayScanMs > 0) {
-                    ocrMsBadgeEl.textContent = `${displayScanMs}ms`;
-                    const isAvgLabel = (!isBattleActive && avgScanMs > 0) || (isBattleActive && liveScanMs <= 0 && avgScanMs > 0);
+
+                const liveHpMs = (typeof battleData.lastHpScanDurationMs === "number" && battleData.lastHpScanDurationMs > 0)
+                    ? Math.round(battleData.lastHpScanDurationMs)
+                    : 0;
+                const avgHpMs = (typeof battleData.lastBattleAvgHpScanMs === "number" && battleData.lastBattleAvgHpScanMs > 0)
+                    ? Math.round(battleData.lastBattleAvgHpScanMs)
+                    : (cachedLastBattleAvgHpScanMs > 0 ? Math.round(cachedLastBattleAvgHpScanMs) : 0);
+                const displayHpMs = isBattleActive
+                    ? (liveHpMs > 0 ? liveHpMs : avgHpMs)
+                    : (avgHpMs > 0 ? avgHpMs : liveHpMs);
+
+                const hpPart = displayHpMs > 0 ? `${displayHpMs}ms` : "---ms";
+                const ocrPart = displayOcrMs > 0 ? `${displayOcrMs}ms` : "---ms";
+                ocrMsBadgeEl.textContent = `HP:${hpPart}/OCR:${ocrPart}`;
+                if (displayHpMs > 0 || displayOcrMs > 0) {
+                    const isAvgLabel = (!isBattleActive && (avgHpMs > 0 || avgScanMs > 0));
                     ocrMsBadgeEl.title = isAvgLabel
-                        ? `Last Battle Avg OCR Rate: ${displayScanMs}ms (${battleData.scanHzMode || "2HZ"})`
-                        : `Live OCR Update Rate: ${displayScanMs}ms (${battleData.scanHzMode || "2HZ"})`;
+                        ? `Last Battle Avg — Pixel HP Loop: ${hpPart} • ML Kit OCR: ${ocrPart}`
+                        : `Live Scan Rate — Pixel HP Loop: ${hpPart} • ML Kit OCR: ${ocrPart}`;
                 } else {
-                    ocrMsBadgeEl.textContent = "--- ms";
-                    ocrMsBadgeEl.title = "OCR Update Rate: awaiting first scan";
+                    ocrMsBadgeEl.title = "HP & OCR Update Rates: awaiting first scan";
                 }
             }
 

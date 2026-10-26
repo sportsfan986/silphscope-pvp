@@ -1,5 +1,22 @@
 # SilphScope PvP Changelog
 
+## [v3.64] — 2026-10-26 — 200ms Pixel HP + 750ms Async OCR Dual-Rate Loop, Pending-Damage Sliver Latch, 3-Tier PID Energy Observer & Compact Right-Aligned Header Row
+- **Dual-Rate Screen Sampling Architecture (`200ms` Pixel HP Loop + `~750ms` Async ML Kit OCR Loop) (`OverlayService.kt`)**:
+  - Decoupled lightweight pixel-only HUD scanning (`detectFloatingHpBarPct` + pending-damage sliver extraction + `detectActivePokeballCount` + `detectActiveShieldCount`) onto a dedicated **`200ms` (`5 Hz`)** loop so every `0.5s` Pokémon GO PvP turn is sampled ~2.5 times per turn with `<5ms` frame-read overhead.
+  - Moved heavy ML Kit Text Recognition (`textRecognizer.process()`) onto an asynchronous **`~750ms`** background cadence with an `@Volatile var isOcrPassInFlight` guard so OCR never blocks the 200ms HP/energy loop.
+- **Pending-Damage Sliver Latch-and-Lock State Machine (`OverlayService.kt`)**:
+  - For 2-turn and 3–5-turn fast moves, the energy state machine immediately credits **+1 fast move's energy** as soon as a valid orange pending-damage sliver appears while `ARMED`, and locks into `LOCKED_UNTIL_HP_DROP` (`playerSliverLockedUntilDrop` / `oppSliverLockedUntilDrop`) until the solid HP bar physically drops—eliminating multi-frame double-counting while auto-rolling back if interrupted by a charged move or swap.
+- **Three-Tier Closed-Loop PID Energy Observer (`OverlayService.kt`)**:
+  - **Tier 1 (Per-Turn PID Micro-Adjustments)**: Integrates floating-point expected vs. observed HP damage on every confirmed HP drop and applies bounded `±1 move` micro-adjustments, clamping single-step increments to at most `+1 move` unless 2 full move cooldowns elapsed (fixing the v3.53 Mimikyu Shadow Claw `+16E` double-count bug).
+  - **Tier 2 (Cross-Pacing Against 3T+ Opponent Fast Moves)**: When the opponent uses a 3T/4T/5T fast move (`oppFastTurns >= 3`), uses confirmed opponent fast-move turn counts (`oppCreditedMoves * oppFastTurns`) as an authoritative turn clock to reconcile missed 1T/2T player fast moves.
+  - **Tier 3 (Charged-Move Stable HP Window Reconciliation)**: Reconciles cumulative fast-move energy in the preceding combat window against settled pre-charged-move HP loss during the ~10s Charged Move camera zoom / shield prompt window, while preserving strict freeze gates during swaps and faints.
+- **Temporary Setting to Enable/Disable Damage PID Loop (Default Enabled) (`MainActivity.kt`, `activity_main.xml`, `OverlayService.kt`, `src/App.tsx`)**:
+  - Added a toggle in Settings (**`🎯 Damage PID Loop: ENABLED (Default)`** / **`DISABLED (200ms Scan Only)`**) so the 3-tier PID loop can be toggled on or off to isolate and test whether the `200ms` pixel HP scan + pending sliver latch alone resolves energy resolution.
+- **Top Overlay Header Row Enhancements (`overlay.html`, `OverlayService.kt`, `src/App.tsx`)**:
+  - **Dual Scan Rate Badge**: Updated `#sky-ocr-ms-badge` to display **`HP:xxxms/OCR:xxxms`** (with `HP:---ms/OCR:---ms` before the first scan and last-battle averages between battles).
+  - **Dark Charged-Move Row Background**: Styled `.header-row` with `background: rgba(2, 6, 23, var(--row-bg-alpha)); border: 1px solid rgba(148, 163, 184, 0.16); border-radius: 4px;` matching the charged move rows for crisp readability.
+  - **Right-Aligned Player & Opponent Badges with `|` Separator**: Right-aligned both My (`HP%`, `E`, `🛡️`) and Opponent (`🛡️`, `HP%`, `E`) badge groups in `.header-badges-cluster` separated by a compact vertical bar (`|`) so all live combat telemetry can be read in a single glance.
+
 ## [v3.63] — 2026-10-26 — Minimize Button Fix, Pre-Sync OCR Performance & ANR Fix, Expanded Battle Matrix Replay & Dynamic OCR Rate Badge
 - **Minimize Overlay Button Fix (`overlay.html`, `OverlayService.kt`)**:
   - Fixed a touch-event race where tapping the top-left overlay emblem (`#btn-minimize-sword`) immediately triggered a synthetic click on `#minimized-bubble` at `(0, 0)`, causing the overlay to instantly restore while `WindowManager` was resizing the view to `48dp` (leaving the overlay clipped/shrunk at 45% scale).
