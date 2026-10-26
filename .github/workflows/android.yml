@@ -1,7 +1,7 @@
 name: Build Android APK
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: "android-build"
   cancel-in-progress: true
 
 on:
@@ -38,6 +38,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Resolve Release Version
         id: version
@@ -118,32 +120,28 @@ jobs:
 
       - name: Publish Official GitHub Release
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        id: create_release
+        continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official v3.60 Release (Predictive + Self-Correcting Bias-Error Energy Loop, Opt-In HP & Energy Tracking Settings, Streamlined Header Row & 2s Hold Minimize to Battle Log)
-            
-            > **⚠️ IMPORTANT NOTE (Default Settings)**: **Live HP Bar Tracking** and **Live Energy & Fast-Move Counting** are **DISABLED (OFF) by default** (including for any user upgrading from `< v3.40`). To enable live HP% or Energy tracking in the overlay, open **⚙️ Settings** in the app and opt in to **❤️ Live HP Bar Tracking** and/or **⚡ Live Energy & Fast-Move Counting**.
-            
-            ### What's New in v3.60
-            - **Predictive + Self-Correcting Bias-Error Energy & Turn Loop (`OverlayService.kt`)**:
-              - Combines **zero-lag feed-forward prediction** (advancing energy in sync with fast-move turn cadence and locking 2T+ move phase when a pending-damage flash is observed) with **closed-loop bias-error self-correction** (online EMA per-move damage calibration $\hat{d}$ for non-standard IVs/under-leveled CP plus damped $\pm 1$ move residual correction and automatic rollback if HP does not drop after `fastTurns * 500ms + 420ms`).
-              - Eliminates energy lag behind damage as well as overcounting, undercounting, and feedback-loop oscillation so charged-move `READY` warnings fire at the exact turn energy becomes usable.
-            - **Opt-In Settings to Enable/Disable HP Tracking & Energy Tracking (`MainActivity.kt`, `OverlayService.kt`, `overlay.html`)**:
-              - Added independent toggles in **⚙️ Settings**:
-                1. **❤️ Live HP Bar Tracking (Overlay)** — **Default: OFF** (opt-in via Settings).
-                2. **⚡ Live Energy & Fast-Move Counting (Overlay)** — **Default: OFF** (opt-in via Settings).
-              - Automatically defaults both settings to **OFF** for any new install or user upgrading from a version prior to `v3.40`.
-            - **Streamlined Overlay Header Row & 2-Second Hold to Stop Overlay & Open Battle Log (`overlay.html`, `OverlayService.kt`)**:
-              - Redesigned the top `.header-row` to display **ONLY**:
-                1. **Minimize / Pause OCR Icon** (`#btn-minimize-sword`)
-                2. **OCR Update Rate in `ms`** (`#sky-ocr-ms-badge`, e.g. `220ms`)
-                3. **My Health, Energy & Shield Badges** (`My 100%`, `0E`, `🛡️ 2`)
-                4. **Opp Shields, Health & Energy Badges** (`🛡️ 2`, `Opp 100%`, `0E`)
-              - **2-Second Long-Press on Minimize Icon**: Pressing and holding the top-left Minimize icon for **2 seconds (`2000ms`)** when not minimized immediately **stops the floating overlay and opens the main app directly to the 📜 Battle Log page**. A short tap (`< 2s`) minimizes to the floating bubble and pauses OCR as usual.
-            
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Minimize Button Fix, Pre-Sync OCR Performance & ANR Fix, Expanded Battle Matrix Replay & Dynamic OCR Rate Badge)
+
+            ### What's New in v3.63
+            - **Minimize Overlay Button Fix (`overlay.html`, `OverlayService.kt`)**:
+              - Fixed a touch-event race where tapping the top-left overlay emblem (`#btn-minimize-sword`) immediately triggered a synthetic click on `#minimized-bubble` at `(0, 0)`, causing the overlay to instantly restore while `WindowManager` was resizing the view to `48dp` (leaving the overlay clipped/shrunk at 45% scale).
+              - Added a `400ms` minimize-to-restore debounce guard, disabled pointer events on `#minimized-bubble` during the transition frame, locked `applyProportionalScale()` against transient `<120px` bubble viewports, and removed premature `onpointerleave` cancellation so single taps reliably minimize into the floating bubble and pause OCR.
+            - **First-Run / Pre-PvPoke-Sync Performance & ANR Elimination (`OverlayService.kt`, `MainActivity.kt`)**:
+              - Eliminated per-call `Regex` compilation and linear `.entries.firstOrNull` / `.find` table scans inside move and form lookups by introducing pre-indexed $O(1)$ lookup maps (`STATIC_MOVE_DATABASE_LOOKUP`, `STATIC_MOVE_ENERGY_LOOKUP`, `STATIC_EXACT_BASE_SPECIES_MAP`, and `BASE_SPECIES_CACHE`).
+              - Removed synchronous main-thread JSON file I/O (`loadCachedRankingsSynchronously()`) from `OverlayService.onCreate()` and sequenced `MainActivity` startup preset recalculation to run on background threads after Gamemaster cache checks, preventing `"SilphScope PvP isn't responding"` ANRs and pre-sync frame rate slowdowns.
+            - **Expanded Battle Matrix Replay Container (`MainActivity.kt`, `overlay.html`)**:
+              - Wired `ReplayJavascriptBridge.updateContentHeight(heightDp)` to dynamically size the replay `WebView` to the full rendered height of the overlay and wrapped the replay dialog in a smooth vertical `ScrollView`, ensuring all rows of `MY ATTACKS` are completely visible without being clipped or stuck behind a non-scrolling inner scrollbar.
+            - **Dynamic OCR Frame Rate Badge (`--- ms` Initial & Between-Battle Average) (`OverlayService.kt`, `overlay.html`, `src/App.tsx`)**:
+              - Replaced the hardcoded `220ms` startup default with `--- ms` until the first real OCR scan completes.
+              - Added per-battle scan duration tracking (`lastBattleAvgScanMs`) so that between battles (after stopping or logging a battle and while waiting for the next battle), the header badge displays the average frame rate of the last scanned battle until live OCR scans resume.
+
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)
             - **Android APK**: Download **`silphscope-pvp-${{ steps.version.outputs.tag }}.apk`** from the **Assets** section below and install on your Android device.
@@ -155,4 +153,17 @@ jobs:
           overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Ensure Release Asset Uploaded (Fallback)
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          APK_FILE="app/build/outputs/apk/release/named/silphscope-pvp-${TAG}.apk"
+          if [ -f "$APK_FILE" ]; then
+            echo "Ensuring release asset is attached to $TAG via gh CLI..."
+            gh release upload "$TAG" "$APK_FILE" --clobber || echo "Asset already up to date"
+          fi
+
 
