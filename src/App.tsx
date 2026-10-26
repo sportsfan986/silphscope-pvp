@@ -4009,7 +4009,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v3.64 • Android Native Overlay
+                  v3.65 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -4519,9 +4519,9 @@ export default function App() {
                             title="Pixel HP Scan Loop & ML Kit OCR Loop Update Rates in ms"
                           >
                             {isBattleActive
-                              ? `HP:200ms/OCR:${scanHzMode === '2Hz' ? '750ms' : '950ms'}`
+                              ? `HP:100ms/OCR:${scanHzMode === '2Hz' ? '750ms' : '950ms'}`
                               : scannedOpponents.length > 0
-                              ? `HP:200ms/OCR:${scanHzMode === '2Hz' ? '750ms' : '950ms'}`
+                              ? `HP:100ms/OCR:${scanHzMode === '2Hz' ? '750ms' : '950ms'}`
                               : 'HP:---ms/OCR:---ms'}
                           </span>
                         </div>
@@ -8651,11 +8651,11 @@ export default function App() {
                     🎯 Temporary Setting: Damage PID Loop (3-Tier Energy Observer)
                   </span>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
-                    {enableDamagePidLoop ? 'ENABLED (Default)' : 'DISABLED (200ms Scan Only)'}
+                    {enableDamagePidLoop ? 'ENABLED (Default)' : 'DISABLED (100ms Scan Only)'}
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  <strong>Enabled by default.</strong> Runs per-turn PID micro-adjustments, 3T+ opponent slow-move pacing reconciliation, and charged-move stable HP window reconciliation. Disable temporarily to test if the 200ms pixel HP scan + pending sliver latch alone resolves energy counting.
+                  <strong>Enabled by default.</strong> Runs per-turn PID micro-adjustments, 3T+ opponent slow-move pacing reconciliation, and charged-move stable HP window reconciliation. Disable temporarily to test if the 100ms pixel HP scan + 2-sample debounce + pending sliver latch alone resolves energy counting.
                 </p>
                 <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
                   <button
@@ -8678,7 +8678,7 @@ export default function App() {
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    Damage PID Loop: DISABLED (200ms Only)
+                    Damage PID Loop: DISABLED (100ms Only)
                   </button>
                 </div>
               </div>
