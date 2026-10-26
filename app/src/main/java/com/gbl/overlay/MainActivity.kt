@@ -171,8 +171,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textHpTrackingDesc: TextView
     private lateinit var btnToggleEnergyTracking: Button
     private lateinit var textEnergyTrackingDesc: TextView
-    private lateinit var btnToggleDamagePidLoop: Button
-    private lateinit var textDamagePidLoopDesc: TextView
     private lateinit var seekbarOverlayScale: SeekBar
     private lateinit var textOverlayScaleValue: TextView
     private lateinit var textOverlayScaleDefaultTick: TextView
@@ -438,7 +436,6 @@ class MainActivity : AppCompatActivity() {
     private val PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS = OverlayService.PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS
     private val PREFS_KEY_ENABLE_HP_TRACKING = OverlayService.PREFS_KEY_ENABLE_HP_TRACKING
     private val PREFS_KEY_ENABLE_ENERGY_TRACKING = OverlayService.PREFS_KEY_ENABLE_ENERGY_TRACKING
-    private val PREFS_KEY_ENABLE_DAMAGE_PID_LOOP = OverlayService.PREFS_KEY_ENABLE_DAMAGE_PID_LOOP
     private val PREFS_KEY_INSTALLED_VERSION_CODE = OverlayService.PREFS_KEY_INSTALLED_VERSION_CODE
     private val PREFS_KEY_LAST_SYNC_TIMESTAMP = OverlayService.PREFS_KEY_LAST_SYNC_TIMESTAMP
     private val PREFS_KEY_OVERLAY_SCALE_PCT = "overlay_scale_pct"
@@ -513,24 +510,19 @@ class MainActivity : AppCompatActivity() {
             prefs.edit()
                 .putBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
                 .putBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
-                .putBoolean(PREFS_KEY_ENABLE_DAMAGE_PID_LOOP, true)
-                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 364)
+                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 367)
                 .apply()
-        } else if (prevInstalledVerCode < 364) {
-            val editor = prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 364)
-            if (!prefs.contains(PREFS_KEY_ENABLE_DAMAGE_PID_LOOP)) {
-                editor.putBoolean(PREFS_KEY_ENABLE_DAMAGE_PID_LOOP, true)
-            }
-            editor.apply()
+        } else if (prevInstalledVerCode < 367) {
+            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 367).apply()
         }
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? MediaProjectionManager
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "3.64"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "3.67"
         } catch (_: Exception) {
-            "3.64"
+            "3.67"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -1143,7 +1135,6 @@ class MainActivity : AppCompatActivity() {
         if (::btnToggleTacticalRec.isInitialized) updateTacticalRecUi()
         if (::btnToggleHpTracking.isInitialized) updateHpTrackingUi()
         if (::btnToggleEnergyTracking.isInitialized) updateEnergyTrackingUi()
-        if (::btnToggleDamagePidLoop.isInitialized) updateDamagePidLoopUi()
         if (::presetsContainer.isInitialized && presetsContainer.childCount > 0) {
             refreshPresetsUi()
         }
@@ -1187,8 +1178,6 @@ class MainActivity : AppCompatActivity() {
         textHpTrackingDesc = findViewById(R.id.text_hp_tracking_desc)
         btnToggleEnergyTracking = findViewById(R.id.btn_toggle_energy_tracking)
         textEnergyTrackingDesc = findViewById(R.id.text_energy_tracking_desc)
-        btnToggleDamagePidLoop = findViewById(R.id.btn_toggle_damage_pid_loop)
-        textDamagePidLoopDesc = findViewById(R.id.text_damage_pid_loop_desc)
         seekbarOverlayScale = findViewById(R.id.seekbar_overlay_scale)
         textOverlayScaleValue = findViewById(R.id.text_overlay_scale_value)
         textOverlayScaleDefaultTick = findViewById(R.id.text_overlay_scale_default_tick)
@@ -1314,7 +1303,6 @@ class MainActivity : AppCompatActivity() {
         updateTacticalRecUi()
         updateHpTrackingUi()
         updateEnergyTrackingUi()
-        updateDamagePidLoopUi()
 
         editSyncGithubToken.setText(prefs.getString(PREFS_KEY_SYNC_GITHUB_TOKEN, "") ?: "")
         editSyncGistId.setText(prefs.getString(PREFS_KEY_SYNC_GIST_ID, "") ?: "")
@@ -1614,21 +1602,6 @@ class MainActivity : AppCompatActivity() {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
                     action = OverlayService.ACTION_UPDATE_SETTINGS
                     putExtra(OverlayService.EXTRA_ENABLE_ENERGY_TRACKING, nextEnableEnergy)
-                }
-                startService(updateIntent)
-            }
-        }
-
-        btnToggleDamagePidLoop.setOnClickListener {
-            val currentEnablePid = prefs.getBoolean(PREFS_KEY_ENABLE_DAMAGE_PID_LOOP, true)
-            val nextEnablePid = !currentEnablePid
-            prefs.edit().putBoolean(PREFS_KEY_ENABLE_DAMAGE_PID_LOOP, nextEnablePid).apply()
-            updateDamagePidLoopUi()
-
-            if (isOverlayRunning) {
-                val updateIntent = Intent(this, OverlayService::class.java).apply {
-                    action = OverlayService.ACTION_UPDATE_SETTINGS
-                    putExtra(OverlayService.EXTRA_ENABLE_DAMAGE_PID_LOOP, nextEnablePid)
                 }
                 startService(updateIntent)
             }
@@ -5060,29 +5033,12 @@ class MainActivity : AppCompatActivity() {
             btnToggleEnergyTracking.text = "Energy On"
             btnToggleEnergyTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
             btnToggleEnergyTracking.setTextColor(0xFFFFFFFF.toInt())
-            textEnergyTrackingDesc.text = "Active: 200ms HP/Sliver Latch-and-Lock + PID energy loop enabled"
+            textEnergyTrackingDesc.text = "Active: 100ms HP + Charge Move Bar dual-source energy tracking enabled"
         } else {
             btnToggleEnergyTracking.text = "Energy Off"
             btnToggleEnergyTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
             btnToggleEnergyTracking.setTextColor(theme.primaryTextColor)
-            textEnergyTrackingDesc.text = "Default: Disabled (Opt-in for 200ms HP/Sliver + PID energy loop)"
-        }
-    }
-
-    private fun updateDamagePidLoopUi() {
-        if (!::btnToggleDamagePidLoop.isInitialized) return
-        val enabled = prefs.getBoolean(PREFS_KEY_ENABLE_DAMAGE_PID_LOOP, true)
-        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
-        if (enabled) {
-            btnToggleDamagePidLoop.text = "PID Loop On"
-            btnToggleDamagePidLoop.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-            btnToggleDamagePidLoop.setTextColor(0xFFFFFFFF.toInt())
-            textDamagePidLoopDesc.text = "Default: Enabled (3-Tier PID residual & charged-move reconciliation active)"
-        } else {
-            btnToggleDamagePidLoop.text = "PID Loop Off"
-            btnToggleDamagePidLoop.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
-            btnToggleDamagePidLoop.setTextColor(theme.primaryTextColor)
-            textDamagePidLoopDesc.text = "Active: Disabled (Testing 200ms HP/Sliver scan rate alone without PID corrections)"
+            textEnergyTrackingDesc.text = "Default: Disabled (Opt-in for 100ms HP + Charge Move Bar energy loop)"
         }
     }
 
@@ -5210,7 +5166,6 @@ class MainActivity : AppCompatActivity() {
             putExtra(OverlayService.EXTRA_SHOW_TACTICAL_RECOMMENDATIONS, prefs.getBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, true))
             putExtra(OverlayService.EXTRA_ENABLE_HP_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false))
             putExtra(OverlayService.EXTRA_ENABLE_ENERGY_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false))
-            putExtra(OverlayService.EXTRA_ENABLE_DAMAGE_PID_LOOP, prefs.getBoolean(PREFS_KEY_ENABLE_DAMAGE_PID_LOOP, true))
             putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt(PREFS_KEY_OVERLAY_SCALE_PCT, DEFAULT_OVERLAY_SCALE_PCT))
             putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, DEFAULT_OVERLAY_TRANSPARENCY_PCT))
             putExtra(OverlayService.EXTRA_APP_THEME_ID, prefs.getString(OverlayService.PREFS_KEY_APP_THEME_ID, "slate") ?: "slate")

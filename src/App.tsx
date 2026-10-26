@@ -691,23 +691,6 @@ export default function App() {
     } catch {}
   };
 
-  // v3.64 Temporary Setting: Enable/Disable 3-Tier Damage PID Loop (Default Enabled)
-  const [enableDamagePidLoop, setEnableDamagePidLoop] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('gbl_enable_damage_pid_loop');
-      return saved === null ? true : saved === 'true';
-    } catch {
-      return true;
-    }
-  });
-
-  const handleSetEnableDamagePidLoop = (enabled: boolean) => {
-    setEnableDamagePidLoop(enabled);
-    try {
-      localStorage.setItem('gbl_enable_damage_pid_loop', String(enabled));
-    } catch {}
-  };
-
   const minimizeHoldTimerRef = useRef<number | null>(null);
   const minimizeHoldTriggeredRef = useRef<boolean>(false);
 
@@ -4009,7 +3992,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v3.66 • Android Native Overlay
+                  v3.67 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -8643,44 +8626,6 @@ export default function App() {
                 >
                     Energy Counting: ON (Opt In)
                 </button>
-              </div>
-
-              <div className="pt-2 border-t border-slate-800 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold text-emerald-400">
-                    🎯 Temporary Setting: Damage PID Loop (3-Tier Energy Observer)
-                  </span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
-                    {enableDamagePidLoop ? 'ENABLED (Default)' : 'DISABLED (100ms Scan Only)'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-400">
-                  <strong>Enabled by default.</strong> Runs per-turn PID micro-adjustments, 3T+ opponent slow-move pacing reconciliation, and charged-move stable HP window reconciliation. Disable temporarily to test if the 100ms pixel HP scan + 2-sample debounce + pending sliver latch alone resolves energy counting.
-                </p>
-                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => handleSetEnableDamagePidLoop(true)}
-                    className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
-                      enableDamagePidLoop
-                        ? 'bg-emerald-500/25 border border-emerald-400/70 text-emerald-200'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    Damage PID Loop: ENABLED (Default)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSetEnableDamagePidLoop(false)}
-                    className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
-                      !enableDamagePidLoop
-                        ? 'bg-slate-800 border border-slate-600 text-slate-200'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    Damage PID Loop: DISABLED (100ms Only)
-                  </button>
-                </div>
               </div>
             </div>
 
