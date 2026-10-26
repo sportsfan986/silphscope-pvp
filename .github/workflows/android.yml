@@ -50,6 +50,8 @@ jobs:
             RAW_VER="${{ github.ref_name }}"
           elif [ -f VERSION ]; then
             RAW_VER=$(cat VERSION | tr -d '[:space:]')
+          elif [ -f app/build.gradle.kts ] && grep -q 'versionName' app/build.gradle.kts; then
+            RAW_VER=$(grep -E 'versionName\s*=\s*' app/build.gradle.kts | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
           else
             RAW_VER="v1.00"
           fi
@@ -127,20 +129,24 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Turn-Scaled Debounce, 3T+ Sliver Latch, Adaptive Damage Filtering & Low-Damage Move Energy Multi-Credit)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Countdown Move 1 Anchor, Dynamic Turn-Gated Makeup Energy, Overcharge Wrap-Around & Universal Fast-Move Registration)
 
-            ### What's New in v3.66
-            - **Adaptive Fast-Move Damage Filter & 50% Threshold**:
-              - For 3T+ heavy fast moves, enforces a minimum damage threshold of >= 50% expected fast move damage (min 2%) to filter out transient 1-2% post-swap/charge attack glitches.
-              - Prevents 3T fast moves from advancing an extra move ahead after swapping and throwing a charged attack.
-            - **Direct Damage Detection for 1-Turn & 2-Turn Fast Moves**:
-              - 1-turn and 2-turn fast moves bypass pending sliver latching (which do not render visibly in Pokémon GO) and rely strictly on confirmed direct damage drops.
-              - Pending sliver latch-and-lock is exclusively reserved for 3-turn, 4-turn, and 5-turn fast moves.
-            - **Turn-Scaled HP Debounce (+100ms per turn count)**:
-              - Scaled confirmation debounce frames smoothly per turn count: 1T = 2 scans (200ms), 2T = 3 scans (300ms), 3T = 4 scans (400ms), 4T = 5 scans (500ms), 5T = 6 scans (600ms).
-            - **Low-Damage Move Multi-Move Credit & Expanded Charged Move Reconciliation**:
-              - Low-damage moves (<= 3.5% damage per move or 1T/2T) accept 1% drops and dynamically credit multiple moves when a multi-percent drop represents multiple elapsed turns (`min(dmgDerivedMoves, elapsedDerivedMoves)`), preventing low-damage moves from under-counting energy.
-              - Pre-charged attack reconciliation window allows up to +3 moves of catchup during the ~10s stable pause.
+            ### What's New in v3.69
+            - **Move 1 First Dragon Breath Registration**:
+              - Charge attack button empty-state detection now returns 0% baseline (instead of -1) during the "3, 2, 1, GO" pre-battle countdown.
+              - Eliminates the missed first Dragon Breath (Move 1) by establishing an accurate 0% baseline so the first 4% direct energy / damage increase instantly registers.
+            - **Overcharge 48E → 52E Wrap-Around Protection**:
+              - Expanded icon-mask half-height (`0.0285h`) and outer flank sampling (16%..84%) prevents charge attack icon horns from causing false empty readings.
+              - Meniscus detection prioritized ahead of outer ring clamps so wrap-around slices reliably register 52% energy instead of sticking at 100%.
+            - **Turn-Gated Opponent Makeup Energy**:
+              - Opponent optimal energy tracker loop is now gated strictly by turns instead of every single tick.
+              - Makeup energy is only credited when opponent turns lag behind user confirmed turns by a full fast-move duration (`turnsBehind >= oppTurnDuration`).
+            - **Pre-Battle HP Flicker Protection**:
+              - Explicit `hasBattleStarted` flag prevents any energy or turn credits before battle start.
+              - Filters transient HP flickers `< (fastMoveDamage / 2)` and requires `(2 + fastMoveTurns)` consecutive frames of decreased HP before confirming damage drops.
+            - **Universal Fast-Move Turn Registration & Phase Reset**:
+              - Implements PvPoke fast move registration mechanics across all mismatched turn matchups.
+              - Incomplete moves cut off by charge attack priority freeze award 0 energy and 0 damage; full turn-0 phase reset occurs on charged attacks and switches.
 
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)
