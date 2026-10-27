@@ -60,7 +60,7 @@
                 android:id="@+id/tv_app_main_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Real-Time PvP Floating Overlay • v3.86"
+                android:text="Real-Time PvP Floating Overlay • v3.87"
                 android:textSize="11sp"
                 android:textColor="#94a3b8"
                 android:layout_marginTop="1dp" />
@@ -1123,7 +1123,7 @@
                     android:textColor="#ffffff" />
             </LinearLayout>
 
-            <!-- v3.86: Energy Meter Debounce & Slowest Move Snap Card -->
+            <!-- v3.87: Energy Meter Debounce & Slowest Move Snap Card -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -1135,7 +1135,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="⚡ Energy Meter Debounce &amp; Slowest Move Snap (v3.86)"
+                    android:text="⚡ Energy Meter Debounce &amp; Slowest Move Snap (v3.87)"
                     android:textColor="#38bdf8"
                     android:textSize="12sp"
                     android:textStyle="bold" />

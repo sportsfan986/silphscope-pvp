@@ -4045,7 +4045,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v3.86 • Android Native Overlay
+                  v3.87 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -8762,7 +8762,7 @@ export default function App() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <h3 className="text-sm font-bold text-sky-400 flex items-center gap-2">
-                    <span>⚡ Energy Meter Debounce &amp; Slowest Move Snap (v3.86)</span>
+                    <span>⚡ Energy Meter Debounce &amp; Slowest Move Snap (v3.87)</span>
                   </h3>
                   <p className="text-xs text-slate-400 mt-1">
                     Replaces the Kalman filter with a low-latency <strong>N-sample circle fill debounce</strong> (<code>±2%</code> tolerance) on your slowest charge move (<code>max(cost1, cost2)</code>), snapping on <code>≥1E</code> differences while allowing turn ticks above the <code>200%</code> circle cap up to <code>100E</code>.

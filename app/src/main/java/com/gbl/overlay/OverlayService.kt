@@ -7764,14 +7764,29 @@ class OverlayService : LifecycleService() {
     private var lastOppChargeDeductedEnergySnapshot: Int = 0
     private var lastMicroCorrectionTimeMs: Long = 0L
     private var missingBottomCirclesWithOppHpFrames: Int = 0
+    private val CALIBRATION_REQUIRED_CYCLES: Int = 6
     private var prescanCircleCalibrated: Boolean = false
     private var prescanCalibConfirmFrames: Int = 0
+    private var isCountdownDimmedState: Boolean = false
+    private var prescanAccumLeftCxSum: Double = 0.0
+    private var prescanAccumRightCxSum: Double = 0.0
+    private var prescanAccumSingleCxSum: Double = 0.0
+    private var prescanAccumLeftCount: Int = 0
+    private var prescanAccumRightCount: Int = 0
+    private var prescanAccumSingleCount: Int = 0
+    private var prescanAccumCySum: Double = 0.0
+    private var prescanAccumYTopSum: Double = 0.0
+    private var prescanAccumYBotSum: Double = 0.0
+    private var prescanAccumEmptyLumaLeftSum: Double = 0.0
+    private var prescanAccumEmptySatLeftSum: Double = 0.0
+    private var prescanAccumEmptyLumaRightSum: Double = 0.0
+    private var prescanAccumEmptySatRightSum: Double = 0.0
     private var calibratedLeftCxFrac: Float = 0.3095f
     private var calibratedRightCxFrac: Float = 0.6900f
     private var calibratedSingleCxFrac: Float = 0.5000f
-    private var calibratedCyFrac: Float = 0.8955f
-    private var calibratedYTopFrac: Float = 0.8630f
-    private var calibratedYBotFrac: Float = 0.9285f
+    private var calibratedCyFrac: Float = 0.8930f
+    private var calibratedYTopFrac: Float = 0.8584f
+    private var calibratedYBotFrac: Float = 0.9276f
     private var calibratedRadiusWFrac: Float = 0.0806f
     private var prescanEmptyLumaLeft: Double = 52.0
     private var prescanEmptySatLeft: Double = 22.0
@@ -9580,17 +9595,60 @@ class OverlayService : LifecycleService() {
      * - Checks an 8-direction radial perimeter band (`rFrac ∈ [1.03, 1.24]`) for Pokémon GO's bright white 100% ready ring
      *   (`luma >= 210, sat <= 42`), locking `fillPct >= 100` whenever >= 5 perimeter arcs glow white and the top interior cap is lit.
      */
+    /**
+     * v3.87: Rejects pre-battle full-screen white transition flashes so circle calibration
+     * and energy scanning never trigger on an unstable white screen.
+     */
+    private fun isWhiteScreenFlash(screen: Bitmap, w: Int, h: Int): Boolean {
+        return try {
+            val samplePts = arrayOf(
+                Pair(0.55f, 0.25f), Pair(0.80f, 0.25f),
+                Pair(0.25f, 0.55f), Pair(0.50f, 0.55f), Pair(0.75f, 0.55f),
+                Pair(0.25f, 0.72f), Pair(0.50f, 0.72f), Pair(0.75f, 0.72f),
+                Pair(0.15f, 0.88f), Pair(0.50f, 0.88f), Pair(0.85f, 0.88f),
+                Pair(0.50f, 0.95f)
+            )
+            var whitePts = 0
+            for ((fx, fy) in samplePts) {
+                val px = (w * fx).toInt().coerceIn(0, w - 1)
+                val py = (h * fy).toInt().coerceIn(0, h - 1)
+                val c = screen.getPixel(px, py)
+                val r = Color.red(c)
+                val g = Color.green(c)
+                val b = Color.blue(c)
+                val luma = 0.299 * r + 0.587 * g + 0.114 * b
+                val sat = max(r, max(g, b)) - min(r, min(g, b))
+                if (luma >= 210.0 && sat <= 28) {
+                    whitePts++
+                }
+            }
+            whitePts >= 8
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     private fun detectChargedMoveButtonFillLevels(screen: Bitmap, w: Int, h: Int) {
-        if (w < 200 || h < 400) {
+        if (w < 200 || h < 400 || isWhiteScreenFlash(screen, w, h)) {
             sampledLeftChargeBtnFillPct = -1
             sampledRightChargeBtnFillPct = -1
+            isCountdownDimmedState = false
             return
         }
 
-        // Run 3-2-1-GO prescan geometry & empty-baseline calibration while waiting for battle start or at 0E
+        // v3.87: Run 6-cycle 3-2-1-GO dark-grey border circle calibration while waiting for battle start or at 0E
         val activeUserIdx = (currentPreset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) } ?: 0).coerceIn(0, 2)
-        if (!prescanCircleCalibrated && (isWaitingForOpponent || !hasBattleStarted || playerSlotEnergy[activeUserIdx] == 0)) {
+        if (!prescanCircleCalibrated || isWaitingForOpponent || !hasBattleStarted || playerSlotEnergy[activeUserIdx] == 0) {
             tryPrescanCalibrateChargeCircles(screen, w, h)
+        } else {
+            isCountdownDimmedState = false
+        }
+
+        if (isCountdownDimmedState) {
+            // Hold strictly at 0% / 0E while the 3-2-1 dimmed dark-grey countdown state is active on screen
+            sampledLeftChargeBtnFillPct = 0
+            sampledRightChargeBtnFillPct = 0
+            return
         }
 
         val cy = (h * calibratedCyFrac).toInt()
@@ -9631,13 +9689,16 @@ class OverlayService : LifecycleService() {
     }
 
     /**
-     * Dynamically calibrates the Charge Move Circle centers `(cx, cy)`, interior vertical span `(yTop, yBot)`,
-     * and unfilled dark-gray flank baseline (`prescanEmptyLuma`, `prescanEmptySat`) during the 3-2-1-GO prescan.
+     * v3.87: 6-Cycle Multi-Frame Dark-Grey Border Circle Calibrator during 3-2-1-GO.
+     * - Detects the dark grey perimeter ring (`rBorderIn = 0.0735w` vs `rBorderOut = 0.0850w`) around empty 0% circles
+     *   during both the dimmed 3-2-1 countdown (`peakIconLuma in 48..125`) and un-dimmed 0E state (`peakIconLuma >= 125`).
+     * - Averages circle center `(cx, cy)`, vertical bounds `(yTop, yBot)`, and empty interior baseline (`prescanEmptyLuma`, `prescanEmptySat`)
+     *   over 6 stable cycles (~600ms) for maximum countdown filtering.
      */
     private fun tryPrescanCalibrateChargeCircles(screen: Bitmap, w: Int, h: Int) {
         try {
             val step = (h / 1000).coerceAtLeast(2)
-            val nominalCy = (h * 0.8950f).toInt()
+            val nominalCy = (h * 0.8930f).toInt()
             val flankDx = (w * 0.050f).toInt().coerceAtLeast(14)
 
             data class CirclePrescanProbe(
@@ -9646,16 +9707,13 @@ class OverlayService : LifecycleService() {
                 val yTop: Int,
                 val yBot: Int,
                 val emptyLuma: Double,
-                val emptySat: Double
+                val emptySat: Double,
+                val isDimmedCountdown: Boolean
             )
 
             fun probeEmptyCircleAt(nomCx: Int): CirclePrescanProbe? {
-                // 1. Locate bright white central move-type emblem centroid within [nomCx +- 0.022w, nominalCy +- 0.018h]
                 val rx = (w * 0.022f).toInt().coerceAtLeast(8)
-                val ry = (h * 0.018f).toInt().coerceAtLeast(12)
-                var weightedX = 0.0
-                var weightedY = 0.0
-                var weightSum = 0.0
+                val ry = (h * 0.015f).toInt().coerceAtLeast(10)
                 var peakIconLuma = 0.0
                 var py = (nominalCy - ry).coerceAtLeast(10)
                 val pyMax = (nominalCy + ry).coerceAtMost(h - 10)
@@ -9669,9 +9727,32 @@ class OverlayService : LifecycleService() {
                         val b = Color.blue(c)
                         val luma = 0.299 * r + 0.587 * g + 0.114 * b
                         val sat = (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
-                        if (luma > peakIconLuma) peakIconLuma = luma
-                        if (luma >= 145.0 && sat <= 65.0) {
-                            val wgt = luma - 130.0
+                        if (sat <= 65.0 && luma > peakIconLuma) {
+                            peakIconLuma = luma
+                        }
+                        px += step
+                    }
+                    py += step
+                }
+                if (peakIconLuma < 48.0) return null
+
+                val iconThresh = max(44.0, peakIconLuma - max(8.0, peakIconLuma * 0.18))
+                var weightedX = 0.0
+                var weightedY = 0.0
+                var weightSum = 0.0
+                py = (nominalCy - ry).coerceAtLeast(10)
+                while (py <= pyMax) {
+                    var px = (nomCx - rx).coerceAtLeast(10)
+                    val pxMax = (nomCx + rx).coerceAtMost(w - 10)
+                    while (px <= pxMax) {
+                        val c = screen.getPixel(px, py)
+                        val r = Color.red(c)
+                        val g = Color.green(c)
+                        val b = Color.blue(c)
+                        val luma = 0.299 * r + 0.587 * g + 0.114 * b
+                        val sat = (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
+                        if (luma >= iconThresh && sat <= 65.0) {
+                            val wgt = luma - iconThresh + 2.0
                             weightedX += px * wgt
                             weightedY += py * wgt
                             weightSum += wgt
@@ -9680,18 +9761,18 @@ class OverlayService : LifecycleService() {
                     }
                     py += step
                 }
-                if (peakIconLuma < 140.0 || weightSum <= 0.0) return null
-                val foundCx = ((weightedX / weightSum).roundToInt() * 0.65 + nomCx * 0.35).roundToInt()
+                if (weightSum <= 0.0) return null
+                val foundCx = (((weightedX / weightSum) * 0.55) + (nomCx * 0.45)).roundToInt()
                 val rawIconCy = (weightedY / weightSum).roundToInt()
-                val seedCy = ((rawIconCy * 0.55) + (nominalCy * 0.45)).roundToInt()
+                val seedCy = ((rawIconCy * 0.45) + (nominalCy * 0.55)).roundToInt().coerceIn((h * 0.880f).toInt(), (h * 0.908f).toInt())
 
-                // 2. Sample left & right outer annulus flanks at y = seedCy +- 0.013h to verify uniform 0% dark-gray circle interior
-                val flankSamplesLuma = ArrayList<Double>(12)
-                val flankSamplesSat = ArrayList<Double>(12)
-                val dyCheck = (h * 0.013f).toInt().coerceAtLeast(6)
-                for (dy in intArrayOf(-dyCheck, 0, dyCheck)) {
+                // 2. Sample upper & mid outer annulus flanks to verify uniform 0% dark-gray circle interior
+                val flankSamplesLuma = ArrayList<Double>(16)
+                val flankSamplesSat = ArrayList<Double>(16)
+                val dyCheck = (h * 0.012f).toInt().coerceAtLeast(6)
+                for (dy in intArrayOf(-dyCheck * 2, -dyCheck, 0, dyCheck)) {
                     val sy = (seedCy + dy).coerceIn(10, h - 10)
-                    for (dx in intArrayOf(-flankDx, -(flankDx + step * 2), flankDx, flankDx + step * 2)) {
+                    for (dx in intArrayOf(-(flankDx + step * 2), -flankDx, flankDx, flankDx + step * 2)) {
                         val sx = (foundCx + dx).coerceIn(10, w - 10)
                         val c = screen.getPixel(sx, sy)
                         val r = Color.red(c)
@@ -9707,58 +9788,51 @@ class OverlayService : LifecycleService() {
                 flankSamplesSat.sort()
                 val medLuma = flankSamplesLuma[flankSamplesLuma.size / 2]
                 val medSat = flankSamplesSat[flankSamplesSat.size / 2]
-                val topVsBotDiff = kotlin.math.abs(flankSamplesLuma.first() - flankSamplesLuma.last())
-                // During 3-2-1-GO (0% empty circle), flank luma is dark translucent gray (18..92) and uniform from top to bottom
-                if (medLuma !in 18.0..92.0 || medSat > 75.0 || topVsBotDiff > 28.0) return null
+                val iqrLuma = flankSamplesLuma[(flankSamplesLuma.size * 0.80).toInt()] - flankSamplesLuma[(flankSamplesLuma.size * 0.20).toInt()]
+                if (medLuma !in 24.0..88.0 || medSat > 32.0 || iqrLuma > 22.0) return null
+                if (peakIconLuma < medLuma + 6.0) return null
 
-                // 3. Trace vertically upward and downward outside the central icon (x = foundCx +- 0.048w) to locate top & bottom circle rim edges
-                val chordDx = (w * 0.048f).toInt().coerceAtLeast(12)
-                val minSearchHalfH = (w * 0.060f).toInt().coerceAtLeast(24)
-                val maxSearchHalfH = (w * 0.092f).toInt().coerceAtLeast(38)
-
-                var detectedTopY = (seedCy - (w * 0.080f).toInt())
-                var yUp = seedCy - minSearchHalfH
-                val yUpMin = (seedCy - maxSearchHalfH).coerceAtLeast(10)
-                while (yUp >= yUpMin) {
-                    var lDiffSum = 0.0
-                    for (dx in intArrayOf(-chordDx, chordDx)) {
-                        val c = screen.getPixel((foundCx + dx).coerceIn(0, w - 1), yUp)
-                        val l = 0.299 * Color.red(c) + 0.587 * Color.green(c) + 0.114 * Color.blue(c)
-                        lDiffSum += kotlin.math.abs(l - medLuma)
+                // 3. Verify the Dark Grey Circular Border around the 7 upper/side perimeter arcs
+                val rBorderIn = w * 0.0735
+                val rBorderOut = w * 0.0850
+                val borderDirs = arrayOf(
+                    Pair(0.0, -1.0),
+                    Pair(-0.707, -0.707),
+                    Pair(0.707, -0.707),
+                    Pair(-1.0, 0.0),
+                    Pair(1.0, 0.0),
+                    Pair(-0.866, -0.50),
+                    Pair(0.866, -0.50)
+                )
+                var darkGreyBorderArcs = 0
+                for ((ux, uy) in borderDirs) {
+                    val xIn = (foundCx + ux * rBorderIn).roundToInt().coerceIn(0, w - 1)
+                    val yIn = (seedCy + uy * rBorderIn).roundToInt().coerceIn(0, h - 1)
+                    val xOut = (foundCx + ux * rBorderOut).roundToInt().coerceIn(0, w - 1)
+                    val yOut = (seedCy + uy * rBorderOut).roundToInt().coerceIn(0, h - 1)
+                    val cIn = screen.getPixel(xIn, yIn)
+                    val cOut = screen.getPixel(xOut, yOut)
+                    val rIn = Color.red(cIn); val gIn = Color.green(cIn); val bIn = Color.blue(cIn)
+                    val rOut = Color.red(cOut); val gOut = Color.green(cOut); val bOut = Color.blue(cOut)
+                    val lIn = 0.299 * rIn + 0.587 * gIn + 0.114 * bIn
+                    val sIn = (max(rIn, max(gIn, bIn)) - min(rIn, min(gIn, bIn))).toDouble()
+                    val lOut = 0.299 * rOut + 0.587 * gOut + 0.114 * bOut
+                    val rimContrast = kotlin.math.abs(lOut - lIn)
+                    if (lIn in 28.0..92.0 && sIn <= 32.0 && lOut < 185.0 && rimContrast >= 5.0) {
+                        darkGreyBorderArcs++
                     }
-                    if (lDiffSum * 0.5 > 18.0) {
-                        detectedTopY = yUp + step * 2
-                        break
-                    }
-                    yUp -= step
                 }
+                if (darkGreyBorderArcs < 5) return null
 
-                var detectedBotY = (seedCy + (w * 0.080f).toInt())
-                var yDn = seedCy + minSearchHalfH
-                val yDnMax = (seedCy + maxSearchHalfH).coerceAtMost(h - 10)
-                while (yDn <= yDnMax) {
-                    var lDiffSum = 0.0
-                    for (dx in intArrayOf(-chordDx, chordDx)) {
-                        val c = screen.getPixel((foundCx + dx).coerceIn(0, w - 1), yDn)
-                        val l = 0.299 * Color.red(c) + 0.587 * Color.green(c) + 0.114 * Color.blue(c)
-                        lDiffSum += kotlin.math.abs(l - medLuma)
-                    }
-                    if (lDiffSum * 0.5 > 18.0) {
-                        detectedBotY = yDn - step * 2
-                        break
-                    }
-                    yDn += step
-                }
-
-                val refinedCy = ((detectedTopY + detectedBotY) / 2).coerceIn((h * 0.875f).toInt(), (h * 0.912f).toInt())
-                val halfSpan = ((detectedBotY - detectedTopY) / 2).coerceIn((w * 0.072f).toInt(), (w * 0.085f).toInt())
+                val halfSpan = (w * 0.0750f).roundToInt().coerceIn((w * 0.070f).toInt(), (w * 0.082f).toInt())
                 return CirclePrescanProbe(
                     cx = foundCx,
-                    cy = refinedCy,
-                    yTop = refinedCy - halfSpan,
-                    yBot = refinedCy + halfSpan,
+                    cy = seedCy,
+                    yTop = seedCy - halfSpan,
+                    yBot = seedCy + halfSpan,
                     emptyLuma = medLuma,
-                    emptySat = medSat
+                    emptySat = medSat,
+                    isDimmedCountdown = peakIconLuma < 125.0
                 )
             }
 
@@ -9766,39 +9840,71 @@ class OverlayService : LifecycleService() {
             val rightProbe = probeEmptyCircleAt((w * 0.6900f).toInt())
             val singleProbe = if (leftProbe == null && rightProbe == null) probeEmptyCircleAt((w * 0.5000f).toInt()) else null
 
-            val primaryProbe = leftProbe ?: rightProbe ?: singleProbe ?: return
-            val combinedCy = if (leftProbe != null && rightProbe != null) {
-                (leftProbe.cy + rightProbe.cy) / 2
-            } else primaryProbe.cy
-            val combinedYTop = if (leftProbe != null && rightProbe != null) {
-                (leftProbe.yTop + rightProbe.yTop) / 2
-            } else primaryProbe.yTop
-            val combinedYBot = if (leftProbe != null && rightProbe != null) {
-                (leftProbe.yBot + rightProbe.yBot) / 2
-            } else primaryProbe.yBot
+            val primaryProbe = leftProbe ?: rightProbe ?: singleProbe
+            if (primaryProbe == null) {
+                isCountdownDimmedState = false
+                return
+            }
 
-            if (leftProbe != null) {
-                calibratedLeftCxFrac = (leftProbe.cx.toFloat() / w.toFloat()).coerceIn(0.285f, 0.335f)
-                prescanEmptyLumaLeft = leftProbe.emptyLuma
-                prescanEmptySatLeft = leftProbe.emptySat
-            }
-            if (rightProbe != null) {
-                calibratedRightCxFrac = (rightProbe.cx.toFloat() / w.toFloat()).coerceIn(0.665f, 0.715f)
-                prescanEmptyLumaRight = rightProbe.emptyLuma
-                prescanEmptySatRight = rightProbe.emptySat
-            }
-            if (singleProbe != null) {
-                calibratedSingleCxFrac = (singleProbe.cx.toFloat() / w.toFloat()).coerceIn(0.475f, 0.525f)
-                prescanEmptyLumaLeft = singleProbe.emptyLuma
-                prescanEmptySatLeft = singleProbe.emptySat
-            }
-            calibratedCyFrac = (combinedCy.toFloat() / h.toFloat()).coerceIn(0.880f, 0.910f)
-            calibratedYTopFrac = (combinedYTop.toFloat() / h.toFloat()).coerceIn(0.848f, 0.872f)
-            calibratedYBotFrac = (combinedYBot.toFloat() / h.toFloat()).coerceIn(0.918f, 0.942f)
+            isCountdownDimmedState = (leftProbe?.isDimmedCountdown == true) ||
+                (rightProbe?.isDimmedCountdown == true) ||
+                (singleProbe?.isDimmedCountdown == true)
 
-            prescanCalibConfirmFrames++
-            if (prescanCalibConfirmFrames >= 2) {
-                prescanCircleCalibrated = true
+            if (prescanCalibConfirmFrames < CALIBRATION_REQUIRED_CYCLES) {
+                val combinedCy = if (leftProbe != null && rightProbe != null) {
+                    (leftProbe.cy + rightProbe.cy) / 2.0
+                } else primaryProbe.cy.toDouble()
+                val combinedYTop = if (leftProbe != null && rightProbe != null) {
+                    (leftProbe.yTop + rightProbe.yTop) / 2.0
+                } else primaryProbe.yTop.toDouble()
+                val combinedYBot = if (leftProbe != null && rightProbe != null) {
+                    (leftProbe.yBot + rightProbe.yBot) / 2.0
+                } else primaryProbe.yBot.toDouble()
+
+                prescanCalibConfirmFrames++
+                prescanAccumCySum += combinedCy
+                prescanAccumYTopSum += combinedYTop
+                prescanAccumYBotSum += combinedYBot
+
+                val avgCy = prescanAccumCySum / prescanCalibConfirmFrames
+                val avgYTop = prescanAccumYTopSum / prescanCalibConfirmFrames
+                val avgYBot = prescanAccumYBotSum / prescanCalibConfirmFrames
+
+                calibratedCyFrac = (avgCy.toFloat() / h.toFloat()).coerceIn(0.880f, 0.908f)
+                calibratedYTopFrac = (avgYTop.toFloat() / h.toFloat()).coerceIn(0.848f, 0.870f)
+                calibratedYBotFrac = (avgYBot.toFloat() / h.toFloat()).coerceIn(0.916f, 0.940f)
+
+                if (leftProbe != null) {
+                    prescanAccumLeftCount++
+                    prescanAccumLeftCxSum += leftProbe.cx
+                    prescanAccumEmptyLumaLeftSum += leftProbe.emptyLuma
+                    prescanAccumEmptySatLeftSum += leftProbe.emptySat
+                    calibratedLeftCxFrac = ((prescanAccumLeftCxSum / prescanAccumLeftCount).toFloat() / w.toFloat()).coerceIn(0.285f, 0.335f)
+                    prescanEmptyLumaLeft = prescanAccumEmptyLumaLeftSum / prescanAccumLeftCount
+                    prescanEmptySatLeft = prescanAccumEmptySatLeftSum / prescanAccumLeftCount
+                }
+                if (rightProbe != null) {
+                    prescanAccumRightCount++
+                    prescanAccumRightCxSum += rightProbe.cx
+                    prescanAccumEmptyLumaRightSum += rightProbe.emptyLuma
+                    prescanAccumEmptySatRightSum += rightProbe.emptySat
+                    calibratedRightCxFrac = ((prescanAccumRightCxSum / prescanAccumRightCount).toFloat() / w.toFloat()).coerceIn(0.665f, 0.715f)
+                    prescanEmptyLumaRight = prescanAccumEmptyLumaRightSum / prescanAccumRightCount
+                    prescanEmptySatRight = prescanAccumEmptySatRightSum / prescanAccumRightCount
+                }
+                if (singleProbe != null) {
+                    prescanAccumSingleCount++
+                    prescanAccumSingleCxSum += singleProbe.cx
+                    prescanAccumEmptyLumaLeftSum += singleProbe.emptyLuma
+                    prescanAccumEmptySatLeftSum += singleProbe.emptySat
+                    calibratedSingleCxFrac = ((prescanAccumSingleCxSum / prescanAccumSingleCount).toFloat() / w.toFloat()).coerceIn(0.475f, 0.525f)
+                    prescanEmptyLumaLeft = prescanAccumEmptyLumaLeftSum / prescanAccumSingleCount
+                    prescanEmptySatLeft = prescanAccumEmptySatLeftSum / prescanAccumSingleCount
+                }
+
+                if (prescanCalibConfirmFrames >= CALIBRATION_REQUIRED_CYCLES) {
+                    prescanCircleCalibrated = true
+                }
             }
         } catch (_: Exception) {}
     }
@@ -9814,12 +9920,10 @@ class OverlayService : LifecycleService() {
     ): Int {
         return try {
             val stepY = (h / 1100).coerceAtLeast(2)
-            // Sample the clean outer annulus (0.0485w .. 0.0565w) strictly outside the central white move-type icon (including Dragon tail)
             val flankDx1 = (w * 0.0485f).toInt().coerceAtLeast(14)
             val flankDx2 = (w * 0.0565f).toInt().coerceAtLeast(18)
             val capDx = (w * 0.0185f).toInt().coerceAtLeast(6)
 
-            // Non-deterministic adaptive emblem center refinement (±0.012h) if prescan did not lock yet
             var actualCx = cx
             var actualCy = cy
             var maxCenterIconLuma = 0.0
@@ -9847,18 +9951,29 @@ class OverlayService : LifecycleService() {
                     }
                 }
             }
-            if (maxCenterIconLuma < 55.0) {
+            if (maxCenterIconLuma < 48.0) {
                 return -1
+            }
+            // v3.87: If the 3-2-1 countdown dimming curtain is active (maxCenterIconLuma < 125.0),
+            // never allow false 1..99% meniscus triggers; return 0 if dark-grey empty circle, else -1.
+            if (maxCenterIconLuma < 125.0) {
+                val cL = screen.getPixel((actualCx - flankDx1).coerceIn(0, w - 1), actualCy.coerceIn(0, h - 1))
+                val cR = screen.getPixel((actualCx + flankDx1).coerceIn(0, w - 1), actualCy.coerceIn(0, h - 1))
+                val lL = 0.299 * Color.red(cL) + 0.587 * Color.green(cL) + 0.114 * Color.blue(cL)
+                val sL = max(Color.red(cL), max(Color.green(cL), Color.blue(cL))) - min(Color.red(cL), min(Color.green(cL), Color.blue(cL)))
+                val lR = 0.299 * Color.red(cR) + 0.587 * Color.green(cR) + 0.114 * Color.blue(cR)
+                val sR = max(Color.red(cR), max(Color.green(cR), Color.blue(cR))) - min(Color.red(cR), min(Color.green(cR), Color.blue(cR)))
+                return if (lL in 24.0..88.0 && sL <= 32 && lR in 24.0..88.0 && sR <= 32) 0 else -1
             }
             if (!prescanCircleCalibrated && iconWSum > 0.0) {
                 actualCx = (((iconWx / iconWSum) * 0.50) + (cx * 0.50)).roundToInt()
                 actualCy = (((iconWy / iconWSum) * 0.50) + (cy * 0.50)).roundToInt().coerceIn((h * 0.882f).toInt(), (h * 0.908f).toInt())
             }
 
-            // Charge Move Circle is a true geometric circle in pixel space (radius ≈ 0.0805 * w)
-            val defaultCircleRadPx = (w * 0.0805f).toInt().coerceIn((h * 0.032f).toInt(), (h * 0.041f).toInt())
+            // Standard <100% un-enlarged circle radius (~0.0750 * w = 81px on 1080p)
+            val defaultCircleRadPx = (w * 0.0750f).roundToInt().coerceIn((w * 0.070f).toInt(), (w * 0.082f).toInt())
             val halfSpanPx = if (prescanCircleCalibrated) {
-                (((calibratedYBotFrac - calibratedYTopFrac) * 0.5f) * h).toInt().coerceIn((w * 0.072f).toInt(), (w * 0.085f).toInt())
+                (((calibratedYBotFrac - calibratedYTopFrac) * 0.5f) * h).roundToInt().coerceIn((w * 0.070f).toInt(), (w * 0.082f).toInt())
             } else {
                 defaultCircleRadPx
             }
@@ -9870,7 +9985,7 @@ class OverlayService : LifecycleService() {
             val iconHalfH = (radiusY * 0.58).toInt().coerceAtLeast(16)
 
             // 1. Check 8-Direction Radial White Ready Ring FIRST (`rMult ∈ [0.98, 1.24]` around circle perimeter):
-            //    Also check `rMult2 ∈ [1.32, 1.46]` for the outer concentric 200% double-stacked ring!
+            //    Also check `rMult2 ∈ [1.34, 1.46]` for the outer concentric 200% double-stacked ring!
             val ringDirs = arrayOf(
                 Pair(0.0, -1.0),       // Top
                 Pair(0.0, 1.0),        // Bottom
@@ -9883,14 +9998,13 @@ class OverlayService : LifecycleService() {
             )
             var whiteRingArcs = 0
             var outerSecondRingArcs = 0
-            val ringRadX = radiusPx
-            val ringRadY = radiusY
+            var exteriorWhiteArcs = 0
             for ((ux, uy) in ringDirs) {
                 var arcHasWhite = false
                 var rMult = 0.98
                 while (rMult <= 1.24) {
-                    val rx = (actualCx + ux * ringRadX * rMult).roundToInt().coerceIn(0, w - 1)
-                    val ry = (actualCy + uy * ringRadY * rMult).roundToInt().coerceIn(0, h - 1)
+                    val rx = (actualCx + ux * radiusPx * rMult).roundToInt().coerceIn(0, w - 1)
+                    val ry = (actualCy + uy * radiusPx * rMult).roundToInt().coerceIn(0, h - 1)
                     val c = screen.getPixel(rx, ry)
                     val r = Color.red(c)
                     val g = Color.green(c)
@@ -9903,18 +10017,28 @@ class OverlayService : LifecycleService() {
                     }
                     rMult += 0.035
                 }
+                // Guard against full-screen white flash: check exterior just outside the white ring (rMult = 1.28)
+                val extX = (actualCx + ux * radiusPx * 1.28).roundToInt().coerceIn(0, w - 1)
+                val extY = (actualCy + uy * radiusPx * 1.28).roundToInt().coerceIn(0, h - 1)
+                val extC = screen.getPixel(extX, extY)
+                val extR = Color.red(extC); val extG = Color.green(extC); val extB = Color.blue(extC)
+                val extL = 0.299 * extR + 0.587 * extG + 0.114 * extB
+                val extS = max(extR, max(extG, extB)) - min(extR, min(extG, extB))
+                if (extL >= 205.0 && extS <= 30) {
+                    exteriorWhiteArcs++
+                }
                 if (arcHasWhite) {
                     whiteRingArcs++
-                    // Check for dark gap at rMult ≈ 1.24 followed by second concentric outer ring at rMult ∈ [1.32, 1.46]
-                    val gx = (actualCx + ux * ringRadX * 1.24).roundToInt().coerceIn(0, w - 1)
-                    val gy = (actualCy + uy * ringRadY * 1.24).roundToInt().coerceIn(0, h - 1)
+                    // Check for dark gap at rMult ≈ 1.26 followed by second concentric outer ring at rMult ∈ [1.34, 1.46]
+                    val gx = (actualCx + ux * radiusPx * 1.26).roundToInt().coerceIn(0, w - 1)
+                    val gy = (actualCy + uy * radiusPx * 1.26).roundToInt().coerceIn(0, h - 1)
                     val gc = screen.getPixel(gx, gy)
                     val gapL = 0.299 * Color.red(gc) + 0.587 * Color.green(gc) + 0.114 * Color.blue(gc)
-                    if (gapL <= 115.0) {
-                        var rMult2 = 1.32
+                    if (gapL <= 120.0) {
+                        var rMult2 = 1.34
                         while (rMult2 <= 1.46) {
-                            val rx2 = (actualCx + ux * ringRadX * rMult2).roundToInt().coerceIn(0, w - 1)
-                            val ry2 = (actualCy + uy * ringRadY * rMult2).roundToInt().coerceIn(0, h - 1)
+                            val rx2 = (actualCx + ux * radiusPx * rMult2).roundToInt().coerceIn(0, w - 1)
+                            val ry2 = (actualCy + uy * radiusPx * rMult2).roundToInt().coerceIn(0, h - 1)
                             val c2 = screen.getPixel(rx2, ry2)
                             val r2 = Color.red(c2)
                             val g2 = Color.green(c2)
@@ -9929,6 +10053,9 @@ class OverlayService : LifecycleService() {
                         }
                     }
                 }
+            }
+            if (exteriorWhiteArcs >= 5) {
+                return -1
             }
 
             // Measure top interior cap (`yTop + stepY * 2 .. yTop + stepY * 4`) to verify it is filled (not dark unfilled gray)
@@ -9958,59 +10085,90 @@ class OverlayService : LifecycleService() {
                 avgTopSat > (emptyBaseSat + 12.0).coerceAtLeast(22.0)
 
             // Authoritative 100%+ Ready Ring (White Border Active):
-            // Grounded in v3.86 battle screenshots:
-            // 1. White border surrounds the perimeter when >= 100% full.
-            // 2. On the 2nd fill (100%-200%), a distinctive advancing bright white meniscus line/arc sweeps upward from the bottom!
+            // v3.87: Combines white meniscus ridge + 1st-to-2nd fill downward luminance/color step along the
+            // curved inner liquid track (avoiding the outer white border at r=96..102px and center icon)
             if (whiteRingArcs >= 5 && isTopCapFilled) {
-                val yTopOver = yTop
-                val yBotOver = yBot
-                val overSpan = (yBotOver - yTopOver).coerceAtLeast(1)
+                if (outerSecondRingArcs >= 4) {
+                    return 200
+                }
+                val rOverInterior = w * 0.0852
+                val yTopOverScan = (actualCy - rOverInterior + stepY * 4).roundToInt().coerceIn(8, h - 16)
+                val yBotOverScan = (actualCy + rOverInterior - stepY * 4).roundToInt().coerceIn(yTopOverScan + 10, h - 8)
+                val yBotOverUv = actualCy + (w * 0.0985f).roundToInt()
+                val overUvSpan = (w * 0.1920f).roundToInt().coerceAtLeast(1)
+                val vDelta = stepY * 2
+
                 var bestOverY = -1
                 var bestOverScore = 0.0
-                var oy = yTopOver + stepY * 3
-                while (oy <= yBotOver - stepY * 3) {
-                    val dyNorm = ((oy - actualCy).toDouble() / radiusY).coerceIn(-0.96, 0.96)
-                    val chordHalfW = (radiusPx * kotlin.math.sqrt((1.0 - dyNorm * dyNorm).coerceAtLeast(0.06))).toInt()
-                    val maxInsideDx = (chordHalfW - (w * 0.0085f).toInt()).coerceAtLeast(6)
-                    val xOffs = if (kotlin.math.abs(oy - actualCy) <= iconHalfH) {
-                        val innerFlank = min(flankDx1, (maxInsideDx - 4).coerceAtLeast(10))
-                        val outerFlank = min(flankDx2, maxInsideDx.coerceAtLeast(innerFlank + 2))
-                        intArrayOf(-outerFlank, -innerFlank, innerFlank, outerFlank)
-                    } else {
-                        val oxOff = min(capDx, max(3, maxInsideDx / 2))
-                        val oxOuter = min((w * 0.032f).toInt(), maxInsideDx)
-                        intArrayOf(-oxOuter, -oxOff, 0, oxOff, oxOuter)
-                    }
-                    var rSum = 0.0; var gSum = 0.0; var bSum = 0.0
-                    var sampleCount = 0
-                    for (dx in xOffs) {
-                        val px = (actualCx + dx).coerceIn(0, w - 1)
-                        val c = screen.getPixel(px, oy)
-                        rSum += Color.red(c)
-                        gSum += Color.green(c)
-                        bSum += Color.blue(c)
-                        sampleCount++
-                    }
-                    if (sampleCount > 0) {
-                        val rAvg = rSum / sampleCount
-                        val gAvg = gSum / sampleCount
-                        val bAvg = bSum / sampleCount
-                        val lineLuma = 0.299 * rAvg + 0.587 * gAvg + 0.114 * bAvg
-                        val lineSat = (max(rAvg, max(gAvg, bAvg)) - min(rAvg, min(gAvg, bAvg))).toDouble()
-                        // Advancing second-fill meniscus line is a high-luminance, low-saturation white arc:
-                        if (lineLuma >= 165.0 && lineSat <= 55.0 && lineLuma > bestOverScore) {
-                            bestOverScore = lineLuma
-                            bestOverY = oy
+                var oy = yTopOverScan
+                while (oy <= yBotOverScan) {
+                    val maxAbsDy = max(kotlin.math.abs((oy - vDelta) - actualCy), kotlin.math.abs((oy + vDelta) - actualCy)).toDouble()
+                    val chordHalfW = kotlin.math.sqrt((rOverInterior * rOverInterior - maxAbsDy * maxAbsDy).coerceAtLeast(1.0))
+                    val safeOuterDx = (chordHalfW - max(9, (w * 0.0095f).roundToInt())).toInt()
+                    if (safeOuterDx >= 14) {
+                        val safeInnerDx = max(10, safeOuterDx - max(6, (w * 0.006f).roundToInt()))
+                        val xOffs = intArrayOf(-safeOuterDx, -safeInnerDx, safeInnerDx, safeOuterDx)
+                        val yU = (oy - vDelta).coerceIn(0, h - 1)
+                        val yM = oy.coerceIn(0, h - 1)
+                        val yD = (oy + vDelta).coerceIn(0, h - 1)
+
+                        var rUp = 0.0; var gUp = 0.0; var bUp = 0.0; var lUpL = 0.0; var lUpR = 0.0
+                        var rMid = 0.0; var gMid = 0.0; var bMid = 0.0; var sMid = 0.0
+                        var rDn = 0.0; var gDn = 0.0; var bDn = 0.0; var lDnL = 0.0; var lDnR = 0.0
+                        for (dx in xOffs) {
+                            val px = (actualCx + dx).coerceIn(0, w - 1)
+                            val cU = screen.getPixel(px, yU)
+                            val cM = screen.getPixel(px, yM)
+                            val cD = screen.getPixel(px, yD)
+                            val ru = Color.red(cU); val gu = Color.green(cU); val bu = Color.blue(cU)
+                            val rm = Color.red(cM); val gm = Color.green(cM); val bm = Color.blue(cM)
+                            val rd = Color.red(cD); val gd = Color.green(cD); val bd = Color.blue(cD)
+                            val lu = 0.299 * ru + 0.587 * gu + 0.114 * bu
+                            val ld = 0.299 * rd + 0.587 * gd + 0.114 * bd
+                            val sm = (max(rm, max(gm, bm)) - min(rm, min(gm, bm))).toDouble()
+                            rUp += ru; gUp += gu; bUp += bu
+                            rMid += rm; gMid += gm; bMid += bm; sMid += sm
+                            rDn += rd; gDn += gd; bDn += bd
+                            if (dx < 0) {
+                                lUpL += lu
+                                lDnL += ld
+                            } else {
+                                lUpR += lu
+                                lDnR += ld
+                            }
+                        }
+                        val n = xOffs.size.toDouble()
+                        rUp /= n; gUp /= n; bUp /= n
+                        rMid /= n; gMid /= n; bMid /= n; sMid /= n
+                        rDn /= n; gDn /= n; bDn /= n
+                        lUpL *= 0.5; lUpR *= 0.5; lDnL *= 0.5; lDnR *= 0.5
+
+                        val lumaUp = 0.299 * rUp + 0.587 * gUp + 0.114 * bUp
+                        val lumaMid = 0.299 * rMid + 0.587 * gMid + 0.114 * bMid
+                        val lumaDn = 0.299 * rDn + 0.587 * gDn + 0.114 * bDn
+
+                        val isSymmetric = kotlin.math.abs(lUpL - lUpR) <= 28.0 && kotlin.math.abs(lDnL - lDnR) <= 28.0
+                        val bothFlanksDrop = (lUpL - lDnL >= 16.0) && (lUpR - lDnR >= 16.0)
+                        val lumaDrop = lumaUp - lumaDn
+                        val rgbDiff = kotlin.math.abs(rUp - rDn) + kotlin.math.abs(gUp - gDn) + kotlin.math.abs(bUp - bDn)
+                        val meniscusRidge = max(0.0, lumaMid - max(lumaUp, lumaDn))
+                        val hasWhiteMeniscus = lumaMid >= 165.0 && sMid <= 65.0 && meniscusRidge >= 15.0
+                        val midTarget = 0.5 * (lumaUp + lumaDn)
+                        val midCenterBonus = max(0.0, 12.0 - kotlin.math.abs(lumaMid - midTarget) * 0.5)
+
+                        if (isSymmetric && bothFlanksDrop && lumaDrop >= 20.0 && rgbDiff >= 50.0) {
+                            val score = lumaDrop * 2.0 + rgbDiff * 0.8 + midCenterBonus + (if (hasWhiteMeniscus) meniscusRidge * 1.5 else 0.0)
+                            if (score > bestOverScore) {
+                                bestOverScore = score
+                                bestOverY = oy
+                            }
                         }
                     }
                     oy += stepY
                 }
                 if (bestOverY != -1) {
-                    val overPct = (((yBotOver - bestOverY) * 100.0) / overSpan).roundToInt().coerceIn(1, 99)
+                    val overPct = (((yBotOverUv - bestOverY) * 100.0) / overUvSpan).roundToInt().coerceIn(1, 99)
                     return 100 + overPct
-                }
-                if (outerSecondRingArcs >= 4) {
-                    return 200
                 }
                 return 100
             }
@@ -10032,7 +10190,7 @@ class OverlayService : LifecycleService() {
             var y = yTop + stepY * 2
             while (y <= yBot - stepY * 2) {
                 val dyNorm = ((y - actualCy).toDouble() / radiusY).coerceIn(-0.96, 0.96)
-                val chordHalfW = (radiusPx * kotlin.math.sqrt((1.0 - dyNorm * dyNorm).coerceAtLeast(0.06))).toInt()
+                val chordHalfW = (halfSpanPx * kotlin.math.sqrt((1.0 - dyNorm * dyNorm).coerceAtLeast(0.06))).toInt()
                 val maxInsideDx = (chordHalfW - (w * 0.0085f).toInt()).coerceAtLeast(6)
                 val xOffsets = if (kotlin.math.abs(y - actualCy) <= iconHalfH) {
                     val innerFlank = min(flankDx1, (maxInsideDx - 4).coerceAtLeast(10))
@@ -10095,7 +10253,6 @@ class OverlayService : LifecycleService() {
                     kotlin.math.abs(lUp - rUpFlank) <= 45.0 && kotlin.math.abs(lDn - rDnFlank) <= 45.0
                 } else true
 
-                // Above meniscus must match the prescanned dark unfilled circle interior AND top interior cap must also be unfilled
                 val isUnfilledAbove = lumaUp in 16.0..maxAllowedUnfilledLuma &&
                     satUp < maxAllowedUnfilledSat &&
                     avgTopLuma <= maxAllowedUnfilledLuma + 8.0
@@ -10133,8 +10290,6 @@ class OverlayService : LifecycleService() {
             if (emptySamples > 0) {
                 val avgEmptyLuma = emptyLumaSum / emptySamples
                 val avgEmptySat = emptySatSum / emptySamples
-                // v3.83: Require bright unobstructed move-type center icon (maxCenterIconLuma >= 150.0) and no white ready ring
-                // so disappearing or dimmed circles during charged move animations return -1 (missing) instead of 0%
                 if (avgEmptyLuma in 16.0..(maxAllowedUnfilledLuma + 10.0) &&
                     avgEmptySat < (maxAllowedUnfilledSat + 8.0) &&
                     maxCenterIconLuma >= 150.0 &&
@@ -10147,129 +10302,6 @@ class OverlayService : LifecycleService() {
         } catch (_: Exception) {
             -1
         }
-    }
-
-    /**
-     * Computes authoritative player energy (0..100, or -1 if invalid) from the Left Charge Move Circle (ALWAYS Move 1 = cost1)
-     * and Right Charge Move Circle (ALWAYS Move 2 = cost2).
-     * - Primary layer readings (0..96%) are direct linear measurements against the dark unfilled top background.
-     * - v3.85: Once a meter has filled twice and is filling a third time (`leftInThirdFill` / `rightInThirdFill`),
-     *   confidence in that meter is reduced and the slower (higher-energy-cost) charge move meter is prioritized as higher value.
-     */
-    private fun computeAuthoritativeCircleEnergy(
-        leftFillPct: Int,
-        rightFillPct: Int,
-        cost1: Int,
-        cost2: Int,
-        hasSecondMove: Boolean,
-        leftInThirdFill: Boolean = false,
-        rightInThirdFill: Boolean = false
-    ): Int {
-        val validLeft = leftFillPct in 0..200
-        val validRight = hasSecondMove && rightFillPct in 0..200 && cost2 > 0
-        if (!validLeft && !validRight) return -1
-
-        val c1 = cost1.coerceIn(35, 100)
-        val c2 = if (validRight) cost2.coerceIn(35, 100) else c1
-        val leftIsSlowerMove = validRight && c1 > c2
-        val rightIsSlowerMove = validRight && c2 > c1
-
-        if ((validLeft && leftFillPct == 0) && (!validRight || rightFillPct == 0)) {
-            return 0
-        }
-        if ((validRight && rightFillPct == 0) && (!validLeft || leftFillPct == 0)) {
-            return 0
-        }
-
-        var minPossible = 0
-        var maxPossible = 100
-        if (validLeft) {
-            if (leftFillPct == 0) maxPossible = min(maxPossible, 2)
-            else if (leftFillPct in 1..95) maxPossible = min(maxPossible, c1 - 1)
-            else if (leftFillPct >= 99) minPossible = max(minPossible, (if (leftInThirdFill) min(100, 2 * c1) else c1) - 2)
-        }
-        if (validRight) {
-            if (rightFillPct == 0) maxPossible = min(maxPossible, 2)
-            else if (rightFillPct in 1..95) maxPossible = min(maxPossible, c2 - 1)
-            else if (rightFillPct >= 99) minPossible = max(minPossible, (if (rightInThirdFill) min(100, 2 * c2) else c2) - 2)
-        }
-        if (maxPossible < minPossible) {
-            maxPossible = max(minPossible, maxPossible)
-        }
-
-        val leftIsPrimary = validLeft && leftFillPct in 1..96
-        val rightIsPrimary = validRight && rightFillPct in 1..96
-
-        val eLeftPrimary = if (leftIsPrimary) (leftFillPct.toDouble() * c1.toDouble()) / 100.0 else -1.0
-        val eRightPrimary = if (rightIsPrimary) (rightFillPct.toDouble() * c2.toDouble()) / 100.0 else -1.0
-
-        // Case A: Both Left (Move 1) and Right (Move 2) are in their clean primary layer (1..96%)
-        // v3.85: Base energy off the highest-energy charge move meter (`leftIsSlowerMove` vs `rightIsSlowerMove`)
-        if (leftIsPrimary && rightIsPrimary) {
-            val leftInIconBand = leftFillPct in 43..57
-            val rightInIconBand = rightFillPct in 43..57
-            val chosen = when {
-                rightIsSlowerMove && (!rightInIconBand || leftInIconBand) -> eRightPrimary
-                leftIsSlowerMove && (!leftInIconBand || rightInIconBand) -> eLeftPrimary
-                leftInIconBand && !rightInIconBand -> eRightPrimary
-                rightInIconBand && !leftInIconBand -> eLeftPrimary
-                rightIsSlowerMove -> eRightPrimary * 0.75 + eLeftPrimary * 0.25
-                leftIsSlowerMove -> eLeftPrimary * 0.75 + eRightPrimary * 0.25
-                else -> (eLeftPrimary + eRightPrimary) * 0.50
-            }.coerceIn(minPossible.toDouble(), maxPossible.toDouble())
-            return chosen.roundToInt().coerceIn(0, 100)
-        }
-
-        // Case B: Left (Move 1) is saturated (>= 97%) and Right (Move 2) is in its clean primary layer (1..96%)
-        if (rightIsPrimary && (!validLeft || leftFillPct >= 97)) {
-            val clamped = eRightPrimary.coerceIn(minPossible.toDouble(), maxPossible.toDouble())
-            return clamped.roundToInt().coerceIn(0, 100)
-        }
-
-        // Case C: Right (Move 2) is saturated (>= 97%) and Left (Move 1) is in its clean primary layer (1..96%)
-        if (leftIsPrimary && (!validRight || rightFillPct >= 97)) {
-            val clamped = eLeftPrimary.coerceIn(minPossible.toDouble(), maxPossible.toDouble())
-            return clamped.roundToInt().coerceIn(0, 100)
-        }
-
-        // Case D: Both circles are >= 97% (saturated / overcharging)
-        // v3.85: Prioritize the slower charge move meter and reduce confidence in any meter that has filled twice and is filling a 3rd time!
-        val e1Over = if (validLeft && leftFillPct in 101..200) {
-            if (leftInThirdFill && leftFillPct in 101..180) {
-                (2.0 * c1.toDouble() + ((leftFillPct - 100).toDouble() * c1.toDouble()) / 100.0).coerceIn(minPossible.toDouble(), 100.0)
-            } else {
-                ((leftFillPct.toDouble() * c1.toDouble()) / 100.0).coerceIn(minPossible.toDouble(), 100.0)
-            }
-        } else -1.0
-
-        val e2Over = if (validRight && rightFillPct in 101..200) {
-            if (rightInThirdFill && rightFillPct in 101..180) {
-                (2.0 * c2.toDouble() + ((rightFillPct - 100).toDouble() * c2.toDouble()) / 100.0).coerceIn(minPossible.toDouble(), 100.0)
-            } else {
-                ((rightFillPct.toDouble() * c2.toDouble()) / 100.0).coerceIn(minPossible.toDouble(), 100.0)
-            }
-        } else -1.0
-
-        if (e1Over >= 0.0 && e2Over >= 0.0) {
-            val w1 = when {
-                leftInThirdFill && !rightInThirdFill -> 0.15
-                leftIsSlowerMove -> 1.65
-                else -> 0.75
-            }
-            val w2 = when {
-                rightInThirdFill && !leftInThirdFill -> 0.15
-                rightIsSlowerMove -> 1.65
-                else -> 0.75
-            }
-            val weightedOver = ((e1Over * w1 + e2Over * w2) / (w1 + w2)).coerceIn(minPossible.toDouble(), 100.0)
-            return weightedOver.roundToInt().coerceIn(minPossible, 100)
-        } else if (e2Over >= 0.0) {
-            return e2Over.roundToInt().coerceIn(minPossible, 100)
-        } else if (e1Over >= 0.0) {
-            return e1Over.roundToInt().coerceIn(minPossible, 100)
-        }
-
-        return minPossible.coerceIn(0, 100)
     }
 
     private fun detectFloatingHpBarPct(
@@ -11032,8 +11064,15 @@ class OverlayService : LifecycleService() {
         } else userMove1Energy
         val maxUserMoveEnergyEarly = max(userMove1Energy, userMove2Energy).coerceIn(35, 100)
 
-        // v3.86 PRE-BATTLE & 3-2-1-GO COUNTDOWN STATIC CHARGE CIRCLE LOCK-IN (with N-Sample ±2% Fill Debounce):
+        // v3.87 PRE-BATTLE & 3-2-1-GO COUNTDOWN STATIC CHARGE CIRCLE LOCK-IN (with 0E Countdown Lock & N-Sample ±2% Fill Debounce):
         if (isWaitingForOpponent) {
+            if (isCountdownDimmedState) {
+                playerSlotEnergy[activeUserIdx] = 0
+                candidateSlowestFillPct[activeUserIdx] = 0
+                slowestFillDebounceCount[activeUserIdx] = 0
+                confirmedSlowestFillPct[activeUserIdx] = 0
+                return
+            }
             if (enableEnergyTracking && (sampledLeftChargeBtnFillPct in 0..200 || sampledRightChargeBtnFillPct in 0..200)) {
                 val userMoveDurationEarlyMs = (userFastTurnsForStats * 500L).coerceAtLeast(500L)
                 val slowestIsRightEarly = hasSecondUserMove && userMove2Energy > userMove1Energy
@@ -11376,7 +11415,12 @@ class OverlayService : LifecycleService() {
         //     - Snaps on ≥1E difference to slowest move energy while allowing turn ticks above 200% circle cap up to 100E.
         //     - Verifies provisional post-throw move cost as soon as the post-throw circle debounce clears.
         val userMoveDurationMs = (userFastTurnsForStats * 500L).coerceAtLeast(500L)
-        if (canAccumulateFastEnergy &&
+        if (isCountdownDimmedState) {
+            playerSlotEnergy[activeUserIdx] = 0
+            candidateSlowestFillPct[activeUserIdx] = 0
+            slowestFillDebounceCount[activeUserIdx] = 0
+            confirmedSlowestFillPct[activeUserIdx] = 0
+        } else if (canAccumulateFastEnergy &&
             !playerFaintedSlots[activeUserIdx] &&
             !oppFaintedSlots[activeOppIdx] &&
             (sampledLeftChargeBtnFillPct in 0..200 || sampledRightChargeBtnFillPct in 0..200)
@@ -11458,10 +11502,17 @@ class OverlayService : LifecycleService() {
                         if (sampledRightChargeBtnFillPct in 0..200) lastStableRightChargeFillPct = sampledRightChargeBtnFillPct
                     }
 
-                    val measuredEnergy = if (debouncedFillPct > 100) {
+                    val fasterMoveCost = if (slowestIsRight) userMove1Energy else userMove2Energy
+                    val fasterFillPct = if (slowestIsRight) sampledLeftChargeBtnFillPct else sampledRightChargeBtnFillPct
+                    val rawMeasuredEnergy = if (debouncedFillPct > 100) {
                         (slowestMoveCost + (((debouncedFillPct - 100) * slowestMoveCost) / 100.0).roundToInt()).coerceIn(slowestMoveCost, maxCircleEnergyCap)
                     } else {
                         (((debouncedFillPct * slowestMoveCost) / 100.0).roundToInt()).coerceIn(0, slowestMoveCost)
+                    }
+                    val measuredEnergy = if (rawMeasuredEnergy >= 98 && hasSecondUserMove && fasterFillPct >= 200 && fasterMoveCost * 2 >= 100) {
+                        100
+                    } else {
+                        rawMeasuredEnergy
                     }
 
                     // Post-Throw Circle Verification: verify provisional thrown move cost and snap immediately to post-throw circle!
@@ -14017,6 +14068,20 @@ class OverlayService : LifecycleService() {
         pllValidatedThisShieldDelay = false
         prescanCircleCalibrated = false
         prescanCalibConfirmFrames = 0
+        isCountdownDimmedState = false
+        prescanAccumLeftCxSum = 0.0
+        prescanAccumRightCxSum = 0.0
+        prescanAccumSingleCxSum = 0.0
+        prescanAccumLeftCount = 0
+        prescanAccumRightCount = 0
+        prescanAccumSingleCount = 0
+        prescanAccumCySum = 0.0
+        prescanAccumYTopSum = 0.0
+        prescanAccumYBotSum = 0.0
+        prescanAccumEmptyLumaLeftSum = 0.0
+        prescanAccumEmptySatLeftSum = 0.0
+        prescanAccumEmptyLumaRightSum = 0.0
+        prescanAccumEmptySatRightSum = 0.0
         lastMicroCorrectionTimeMs = 0L
         missingBottomCirclesWithOppHpFrames = 0
         isPlayerInIdleFallback = false
