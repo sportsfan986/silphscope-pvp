@@ -1,5 +1,15 @@
 # SilphScope PvP Changelog
 
+## [v3.84] — 2026-10-27 — 2-Channel Kalman Filter Energy Meter Smoothing, 3rd-Fill Cycle Confidence Reduction & Slower Charge Move Meter Prioritization
+- **2-Channel Kalman Filter Energy Meter Smoothing (`OverlayService.kt`)**:
+  - Replaced the fixed `300ms` charge circle debounce with a state-space Kalman Filter (`updatePlayerEnergyKalmanFilter`) that fuses predicted fast-move turn timestamp energy deltas (`+fastEnergy` at each `500ms * fastMoveTurns` boundary) with observed Left (`Move 1`) and Right (`Move 2`) charge circle fill percentages (`0..200%`).
+  - **Animation Lag Compensation**: Within `0..340ms` after a fast move turn boundary, inflates measurement noise covariance $R$ (`4.5x`) for negative innovations (`innov < -2.0`) so rising fill animation lag never drags tracked energy backward while immediately accepting corroborated upward steps with low latency.
+  - **Transient OCR & Meniscus Noise Suppression**: Dynamically inflates $R$ in the central move-type icon crossing band (`43..57%` and `143..157%`) and applies a quadratic Huber outlier penalty (`(absInnov / 18.0)^2`) to uncorroborated single-frame spikes while tightening $R$ (`0.45x`) when both meters step in agreement.
+  - **Zero-Drop Immunity**: Never allows disappearing (`-1`) or `0%` circles during Charged Move animations or camera transitions to pull non-zero combat energy down to zero.
+- **3rd-Fill Cycle Confidence Reduction & Slower Charge Move Prioritization (`OverlayService.kt`)**:
+  - Tracks per-slot double-fill latches (`leftMeterFilledTwiceLatched`, `rightMeterFilledTwiceLatched`) once a charge move meter has filled twice (`>= 2 * cost` or `>= 188%` on its second cycle) and enters a 3rd fill cycle.
+  - Once a faster meter has filled twice and is filling a 3rd time (`leftInThirdFill` / `rightInThirdFill`), its confidence weight is reduced (`0.15x..0.25x`, measurement variance $R$ inflated `~5.5x`) and the **slower (higher-energy-cost) charge move meter** is elevated as higher value (`1.65x..2.25x` confidence weight) across `updatePlayerEnergyKalmanFilter`, `computeAuthoritativeCircleEnergy`, and `evaluateTwoOutOfThreePllVote` (including a Slower-Meter High-Value Override when the faster meter saturates in its 3rd fill).
+
 ## [v3.83] — 2026-10-27 — 2-out-of-3 Majority-Vote PLL (Integrated Opponent HP + Charge Move 1 + Charge Move 2), 3-Sample / 300ms Meter Debounce, Phase-Locked Fast-Move Auto-Increment & Wider Tinkaton HP Bounds
 - **2-out-of-3 Majority-Vote PLL (Phase-Locked Loop) Sensor Fusion (`OverlayService.kt`)**:
   - Combines 3 independent sources of truth for player fast moves and energy:
