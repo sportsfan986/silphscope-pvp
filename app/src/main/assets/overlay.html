@@ -551,23 +551,53 @@
             align-items: center;
         }
 
+        .matrix-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 6px;
+            padding: 1px 3px 2px 3px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+            margin-bottom: 1px;
+        }
+
         .matrix-team-block {
             display: flex;
             align-items: center;
             gap: 1px;
             font-size: 9px;
             flex-shrink: 0;
+            margin-left: auto;
+        }
+
+        .matrix-col-slot {
+            width: 34px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
         }
 
         .team-initial {
-            font-weight: 700;
+            font-weight: 800;
             color: #cbd5e1;
-            margin-right: 0.5px;
+            font-size: 8.5px;
+            letter-spacing: -0.2px;
+            white-space: nowrap;
+        }
+
+        .team-initial.has-energy {
+            color: #fde047;
+        }
+
+        .team-initial.unseen-energy {
+            color: #94a3b8;
         }
 
         .shield-dots {
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 1px;
         }
 
@@ -2932,10 +2962,45 @@
                 } catch (e) {}
 
                 // 1. Render 3v3 Battle Matrix FIRST in FIXED [1st seen, 2nd seen, 3rd seen] order
+                //    v3.88: Top row shows player banked energy (e.g. D:60E | L:0E | K:-E) directly above each 3-dot column
                 try {
                     if (matrixBody && battleData.scannedOpponents && battleData.scannedOpponents.length > 0) {
                         const ordLabels = ["1st", "2nd", "3rd"];
-                        matrixBody.innerHTML = battleData.scannedOpponents.map((opp, idx) => {
+                        const pSlotEnergyArr = Array.isArray(battleData.playerSlotEnergy) ? battleData.playerSlotEnergy : [0, 0, 0];
+                        const pSlotEverArr = Array.isArray(battleData.playerSlotEverOnField) ? battleData.playerSlotEverOnField : [true, false, false];
+                        const pFaintedArr = Array.isArray(battleData.playerFaintedSlots) ? battleData.playerFaintedSlots : [false, false, false];
+                        const buildPlayerColHeaderHtml = (slotIdx) => {
+                            const member = teamList[slotIdx] || { initial: "P" + (slotIdx + 1) };
+                            const init = member.initial || (member.name ? member.name.charAt(0).toUpperCase() : ("P" + (slotIdx + 1)));
+                            const isFainted = !!pFaintedArr[slotIdx] || (typeof member.hpPct === "number" && member.hpPct <= 0);
+                            const rawE = typeof member.energy === "number"
+                                ? member.energy
+                                : (typeof pSlotEnergyArr[slotIdx] === "number" ? pSlotEnergyArr[slotIdx] : (slotIdx === activeSlotIdx ? activeUserEnergyVal : 0));
+                            const clampedE = isFainted ? 0 : Math.max(0, Math.min(100, Math.round(rawE)));
+                            const hasEntered = (member.hasEnteredField !== undefined)
+                                ? !!member.hasEnteredField
+                                : (!!pSlotEverArr[slotIdx] || slotIdx === activeSlotIdx || clampedE > 0 || isFainted);
+                            const eSuffix = member.bankedEnergyLabel
+                                ? member.bankedEnergyLabel
+                                : (isFainted ? "0E" : (hasEntered ? `${clampedE}E` : "-E"));
+                            const cls = eSuffix === "-E"
+                                ? "unseen-energy"
+                                : (clampedE > 0 && !isFainted ? "has-energy" : "");
+                            return `<span class="matrix-col-slot"><span class="team-initial ${cls}" title="${member.name || init}: ${eSuffix === '-E' ? 'Never entered field (-E)' : ('Banked Energy ' + eSuffix)}">${init}:${eSuffix}</span></span>`;
+                        };
+                        const matrixHeaderHtml = `
+                        <div class="matrix-header-row">
+                            <span class="matrix-opp-name" style="font-size:7.5px; color:#94a3b8; font-weight:700; letter-spacing:0.2px;">OPP / MY BANKED E</span>
+                            <div class="matrix-team-block">
+                                ${buildPlayerColHeaderHtml(0)}
+                                <span class="divider">|</span>
+                                ${buildPlayerColHeaderHtml(1)}
+                                <span class="divider">|</span>
+                                ${buildPlayerColHeaderHtml(2)}
+                            </div>
+                        </div>
+                        `;
+                        matrixBody.innerHTML = matrixHeaderHtml + battleData.scannedOpponents.map((opp, idx) => {
                             const isActiveOpp = (opp.isActive !== undefined) ? !!opp.isActive : (idx === activeOppSlotIdx);
                             const isOppShad = (opp.isShadow !== undefined) ? !!opp.isShadow : (isActiveOpp && battleData.isOpponentShadow);
                             const fullOppDisplay = (isOppShad ? "S-" : "") + (opp.name || opp.code);
@@ -2972,11 +3037,11 @@
                                     ${hpBadgeHtml}${energyBadgeHtml}
                                 </span>
                                 <div class="matrix-team-block">
-                                    <span class="team-initial">${teamList[0].initial}:</span><span class="shield-dots">${p1Dots}</span>
+                                    <span class="matrix-col-slot"><span class="shield-dots">${p1Dots}</span></span>
                                     <span class="divider">|</span>
-                                    <span class="team-initial">${teamList[1].initial}:</span><span class="shield-dots">${p2Dots}</span>
+                                    <span class="matrix-col-slot"><span class="shield-dots">${p2Dots}</span></span>
                                     <span class="divider">|</span>
-                                    <span class="team-initial">${teamList[2].initial}:</span><span class="shield-dots">${p3Dots}</span>
+                                    <span class="matrix-col-slot"><span class="shield-dots">${p3Dots}</span></span>
                                 </div>
                             </div>
                             `;

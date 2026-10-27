@@ -7803,6 +7803,12 @@ class OverlayService : LifecycleService() {
     private val leftMeterFilledTwiceLatched = BooleanArray(3) { false }
     private val rightMeterFilledTwiceLatched = BooleanArray(3) { false }
 
+    // v3.88: Player Energy-to-Turns Conversion, 500ms Multi-Turn Interpolation, Post-Charge Recounting & Ever-On-Field Tracking
+    private val playerSlotEverOnField = BooleanArray(3) { it == 0 }
+    private var phaseStartPlayerEnergy: Int = 0
+    private var confirmedPhasePlayerTurns: Int = 0
+    private var lastConfirmedPlayerFastMoveMs: Long = 0L
+
     private var pllValidatedThisShieldDelay = false
     private var observedPlayerChargeBarStep = false
 
@@ -11527,12 +11533,22 @@ class OverlayService : LifecycleService() {
         val cheapestUserEnergy = min(userMove1Energy, userMove2Energy).coerceIn(35, 100)
         val maxUserMoveEnergy = max(userMove1Energy, userMove2Energy).coerceIn(35, 100)
 
-        // 1C. v3.86: Low-Latency Debounced Energy Tracking (2..4 Samples, ±2% Fill Tolerance) on Slowest Charge Move
-        //     - Snaps on ≥1E difference to slowest move energy while allowing turn ticks above 200% circle cap up to 100E.
-        //     - Verifies provisional post-throw move cost as soon as the post-throw circle debounce clears.
+        // 1C. v3.88: Player Energy-to-Turns Conversion & Post-Charge Turn Recounting (Decoupled from Micro-Adjustments)
+        //     - Converts confirmed player energy gain into player fast-move turns (`confirmedPhasePlayerTurns`).
+        //     - Approximates single-turn timing in 500ms intervals between confirmed fast moves when `userFastTurns > 1`.
+        //     - Decouples post-charge circle micro-adjustments from energy gain and recounts turns from `newEnergy - (oldEnergy - chargeMoveEnergy)`.
+        //     - No idle timer fallback (prevents false opponent energy gain during charged move animations or pauses).
         val userMoveDurationMs = (userFastTurnsForStats * 500L).coerceAtLeast(500L)
+        val microAdjustThreshold = (userFastEnergyForStats * 0.65).roundToInt().coerceAtLeast(2)
+        if (activeUserIdx in 0..2) {
+            playerSlotEverOnField[activeUserIdx] = true
+        }
         if (isCountdownDimmedState) {
             playerSlotEnergy[activeUserIdx] = 0
+            phaseStartPlayerEnergy = 0
+            confirmedPhasePlayerTurns = 0
+            phasePlayerTurns = 0
+            lastConfirmedPlayerFastMoveMs = 0L
             candidateSlowestFillPct[activeUserIdx] = 0
             slowestFillDebounceCount[activeUserIdx] = 0
             confirmedSlowestFillPct[activeUserIdx] = 0
@@ -11548,46 +11564,7 @@ class OverlayService : LifecycleService() {
             val slowestOnline = slowestFillPct in 0..200
             val maxCircleEnergyCap = min(100, 2 * slowestMoveCost)
 
-            // 1. Phase-Locked Fast-Move Turn Auto-Increment (500ms * userFastTurnsForStats):
-            val curAnchor = playerAutoIncrementAnchorMs[activeUserIdx]
-            if (hasBattleStarted &&
-                curAnchor > 0L &&
-                userFastMovesCreditedThisFrame == 0 &&
-                (nowMs - curAnchor) >= userMoveDurationMs
-            ) {
-                var nextAnchor = curAnchor + userMoveDurationMs
-                if (nowMs - nextAnchor >= userMoveDurationMs) {
-                    nextAnchor = nowMs - ((nowMs - curAnchor) % userMoveDurationMs)
-                }
-                playerAutoIncrementAnchorMs[activeUserIdx] = nextAnchor
-                userFastMovesCreditedThisFrame += 1
-                turnPhaseAnchorMs = captureAnchorMs
-                val oldE = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
-                val newE = (oldE + userFastEnergyForStats).coerceIn(0, 100)
-                playerSlotEnergy[activeUserIdx] = newE
-                playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + userFastTurnsForStats).coerceAtLeast(0)
-                phasePlayerTurns += userFastTurnsForStats
-                playerSlotCurrentMoveTurns[activeUserIdx] = 0
-                playerLastFastCreditedAtMs[activeUserIdx] = nextAnchor
-                isPlayerInIdleFallback = false
-                lastIdleFallbackOppCreditMs = 0L
-                hpChanged = true
-
-                val displayPct = if (confirmedSlowestFillPct[activeUserIdx] in 0..200) {
-                    confirmedSlowestFillPct[activeUserIdx]
-                } else {
-                    slowestFillPct
-                }
-                emitEnergyUpdateToastIfEnabled(
-                    slotIdx = activeUserIdx,
-                    moveName = slowestMoveName,
-                    moveCost = slowestMoveCost,
-                    circleFillPct = displayPct,
-                    newEnergy = newE
-                )
-            }
-
-            // 2. Slowest Charge Move Direct Energy Measurement & N-Sample Debounce (±2% circle fill tolerance):
+            // Slowest Charge Move Direct Energy Measurement & N-Sample Debounce (±2% circle fill tolerance):
             if (slowestOnline) {
                 if (sampledLeftChargeBtnFillPct in 0..200) {
                     lastScannedLeftChargeFillPct[activeUserIdx] = sampledLeftChargeBtnFillPct
@@ -11631,7 +11608,7 @@ class OverlayService : LifecycleService() {
                         rawMeasuredEnergy
                     }
 
-                    // Post-Throw Circle Verification: verify provisional thrown move cost and snap immediately to post-throw circle!
+                    // Post-Throw Circle Verification & Turn Recounting from `newEnergy - (oldEnergy - chargeMoveEnergy)`:
                     if (awaitingPostUserChargeCircleSync && debouncedFillPct in 0..195) {
                         awaitingPostUserChargeCircleSync = false
                         if (hasSecondUserMove && userMove1Energy != userMove2Energy && lastUserChargePreEnergySnapshot >= max(userMove1Energy, userMove2Energy)) {
@@ -11657,6 +11634,31 @@ class OverlayService : LifecycleService() {
                                 }
                             }
                         }
+
+                        // v3.88 Requirement #5: Decouple micro-adjustments after charge move from energy gain
+                        // and base turn recounting strictly upon `newEnergy - (oldEnergy - chargeMoveEnergy)`!
+                        val postChargeBaseEnergy = (lastUserChargePreEnergySnapshot - lastUserChargeDeductedEnergySnapshot).coerceIn(0, 100)
+                        val netGainAfterCharge = measuredEnergy - postChargeBaseEnergy
+                        if (netGainAfterCharge >= microAdjustThreshold) {
+                            val recountedMoves = (netGainAfterCharge.toDouble() / userFastEnergyForStats.toDouble()).roundToInt().coerceAtLeast(1)
+                            val recountedTurns = recountedMoves * userFastTurnsForStats
+                            confirmedPhasePlayerTurns = recountedTurns
+                            phasePlayerTurns = recountedTurns
+                            phaseStartPlayerEnergy = (measuredEnergy - recountedMoves * userFastEnergyForStats).coerceIn(0, 100)
+                            playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + recountedTurns).coerceAtLeast(0)
+                            lastConfirmedPlayerFastMoveMs = nowMs
+                            playerLastFastCreditedAtMs[activeUserIdx] = nowMs
+                            userFastMovesCreditedThisFrame = recountedMoves
+                            observedPlayerChargeBarStep = true
+                        } else {
+                            // Micro-adjustment only: update energy & baseline without adding turns
+                            confirmedPhasePlayerTurns = 0
+                            phasePlayerTurns = 0
+                            phaseStartPlayerEnergy = measuredEnergy
+                            lastConfirmedPlayerFastMoveMs = nowMs
+                            lastMicroCorrectionTimeMs = nowMs
+                        }
+
                         playerSlotEnergy[activeUserIdx] = measuredEnergy
                         playerAutoIncrementAnchorMs[activeUserIdx] = nowMs
                         emitEnergyUpdateToastIfEnabled(
@@ -11668,7 +11670,6 @@ class OverlayService : LifecycleService() {
                         )
                         hpChanged = true
                     } else {
-                        // Allow turn ticks to continue past 200% circle cap up to 100E when slowestMoveCost < 50E
                         val curE = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
                         val isOverchargingPast200Cap = debouncedFillPct >= 198 &&
                             maxCircleEnergyCap < 100 &&
@@ -11683,14 +11684,38 @@ class OverlayService : LifecycleService() {
                                     battleClockAnchorMs = nowMs - userMoveDurationMs
                                     lastTurnTickTimeMs = nowMs
                                     turnResidualMs = 0L
-                                    battleTurnIndex = userFastTurnsForStats
-                                    playerSlotTurnsOnField[activeUserIdx] = userFastTurnsForStats
-                                    phasePlayerTurns = userFastTurnsForStats
+                                    phaseStartPlayerEnergy = 0
+                                    confirmedPhasePlayerTurns = 0
+                                    phasePlayerTurns = 0
                                 }
-                                playerSlotEnergy[activeUserIdx] = measuredEnergy
-                                if (measuredEnergy > curE || playerAutoIncrementAnchorMs[activeUserIdx] <= 0L) {
+
+                                // v3.88 Requirement #1 & #5: Convert player energy gain to turns while decoupling micro-adjustments
+                                val confirmedMovesSoFar = confirmedPhasePlayerTurns / userFastTurnsForStats
+                                val expectedEnergyAtConfirmedTurns = (phaseStartPlayerEnergy + confirmedMovesSoFar * userFastEnergyForStats).coerceIn(0, 100)
+                                val uncreditedEnergyGain = measuredEnergy - expectedEnergyAtConfirmedTurns
+                                val deltaFromCurrent = measuredEnergy - curE
+
+                                if (uncreditedEnergyGain >= microAdjustThreshold) {
+                                    val newMoves = (uncreditedEnergyGain.toDouble() / userFastEnergyForStats.toDouble()).roundToInt().coerceAtLeast(1)
+                                    val addedTurns = newMoves * userFastTurnsForStats
+                                    confirmedPhasePlayerTurns += addedTurns
+                                    phasePlayerTurns = max(phasePlayerTurns, confirmedPhasePlayerTurns)
+                                    playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + addedTurns).coerceAtLeast(0)
+                                    if (battleTurnIndex < confirmedPhasePlayerTurns) {
+                                        battleTurnIndex = confirmedPhasePlayerTurns
+                                    }
+                                    lastConfirmedPlayerFastMoveMs = nowMs
+                                    playerLastFastCreditedAtMs[activeUserIdx] = nowMs
                                     playerAutoIncrementAnchorMs[activeUserIdx] = nowMs
+                                    userFastMovesCreditedThisFrame = newMoves
+                                    observedPlayerChargeBarStep = true
+                                } else if (kotlin.math.abs(deltaFromCurrent) < microAdjustThreshold) {
+                                    // Micro-adjustment (circle rounding ±1-2E): shift baseline so turns are unaffected
+                                    phaseStartPlayerEnergy = (phaseStartPlayerEnergy + deltaFromCurrent).coerceIn(0, 100)
+                                    lastMicroCorrectionTimeMs = nowMs
                                 }
+
+                                playerSlotEnergy[activeUserIdx] = measuredEnergy
                                 emitEnergyUpdateToastIfEnabled(
                                     slotIdx = activeUserIdx,
                                     moveName = slowestMoveName,
@@ -11729,13 +11754,29 @@ class OverlayService : LifecycleService() {
             }
         }
 
-        // 1D. v3.85: Universal Opponent Fast Move Registration Mapped from Player Fast-Move Turns + Player-Idle (>2 Fast Moves) Fallback
+        // 1D. v3.88: Opponent Fast Move Energy Indexed Directly to Player Turns
+        //     - When player uses a multi-turn fast move (`userFastTurnsForStats > 1`), approximates single-turn timing
+        //       in 500ms intervals (`0 .. userFastTurnsForStats - 1`) between each confirmed player fast move.
+        //     - Charges opponent energy meter based on their fast move turn count (`oppFastTurnsForStats`).
+        //     - No idle timer (prevents false energy accumulation during animations or pauses).
         if (hasBattleStarted &&
             canAccumulateFastEnergy &&
             !playerFaintedSlots[activeUserIdx] &&
             !oppFaintedSlots[activeOppIdx]
         ) {
-            if (userFastMovesCreditedThisFrame > 0) {
+            if (userFastTurnsForStats > 1 && lastConfirmedPlayerFastMoveMs > 0L && userFastMovesCreditedThisFrame == 0) {
+                val elapsedSinceLastConfirmedMoveMs = (nowMs - lastConfirmedPlayerFastMoveMs).coerceAtLeast(0L)
+                val interpolatedSubTurns = (elapsedSinceLastConfirmedMoveMs / 500L).toInt().coerceIn(0, userFastTurnsForStats - 1)
+                val interpolatedTotalTurns = confirmedPhasePlayerTurns + interpolatedSubTurns
+                if (interpolatedTotalTurns > phasePlayerTurns) {
+                    phasePlayerTurns = interpolatedTotalTurns
+                }
+                playerSlotCurrentMoveTurns[activeUserIdx] = interpolatedSubTurns
+            } else if (userFastMovesCreditedThisFrame > 0) {
+                playerSlotCurrentMoveTurns[activeUserIdx] = 0
+            }
+
+            if (phasePlayerTurns > 0) {
                 val totalCompletedOppMovesInPhase = phasePlayerTurns / oppFastTurnsForStats
                 val alreadyCreditedOppMovesInPhase = phaseOppTurns / oppFastTurnsForStats
                 val makeupOppMoves = (totalCompletedOppMovesInPhase - alreadyCreditedOppMovesInPhase).coerceAtLeast(0)
@@ -11749,49 +11790,6 @@ class OverlayService : LifecycleService() {
                     hpChanged = true
                 }
                 oppSlotCurrentMoveTurns[activeOppIdx] = (phasePlayerTurns - phaseOppTurns).coerceIn(0, oppFastTurnsForStats - 1)
-            } else {
-                // Player-Idle (> 2 player fast move durations) OR Confirmed 100E Cap Fallback:
-                val idleWindowMs = (2 * userFastTurnsForStats * 500L).coerceAtLeast(1000L)
-                val elapsedSinceLastUserFastMs = if (playerLastFastCreditedAtMs[activeUserIdx] > 0L) {
-                    (nowMs - playerLastFastCreditedAtMs[activeUserIdx]).coerceAtLeast(0L)
-                } else 0L
-                val isUserAt100Cap = playerSlotEnergy[activeUserIdx] >= 100
-                val shouldIdleFallback = (playerLastFastCreditedAtMs[activeUserIdx] > 0L && elapsedSinceLastUserFastMs >= idleWindowMs) || isUserAt100Cap
-
-                if (shouldIdleFallback) {
-                    if (!isPlayerInIdleFallback) {
-                        isPlayerInIdleFallback = true
-                        if (elapsedSinceLastUserFastMs >= idleWindowMs) {
-                            val backCreditTurns = (elapsedSinceLastUserFastMs / 500L).toInt().coerceIn(2 * userFastTurnsForStats, 12)
-                            phasePlayerTurns += backCreditTurns
-                            val completedOppAfterIdle = phasePlayerTurns / oppFastTurnsForStats
-                            val creditedOppBeforeIdle = phaseOppTurns / oppFastTurnsForStats
-                            val backCreditOppMoves = (completedOppAfterIdle - creditedOppBeforeIdle).coerceAtLeast(0)
-                            if (backCreditOppMoves > 0) {
-                                oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] + backCreditOppMoves * oppFastEnergyForStats).coerceIn(0, 100)
-                                oppSlotTurnsOnField[activeOppIdx] = (oppSlotTurnsOnField[activeOppIdx] + backCreditOppMoves * oppFastTurnsForStats).coerceAtLeast(0)
-                                phaseOppTurns += backCreditOppMoves * oppFastTurnsForStats
-                                oppLastFastCreditedAtMs[activeOppIdx] = nowMs
-                                hpChanged = true
-                            }
-                        }
-                        lastIdleFallbackOppCreditMs = nowMs
-                    } else {
-                        // Ongoing Time-Based Opponent Fast-Move Duration Fallback while player is idle or at 100E (decoupled from HP)
-                        val oppMoveIntervalMs = (oppFastTurnsForStats * 500L).coerceAtLeast(500L)
-                        val anchorMs = if (lastIdleFallbackOppCreditMs > 0L) lastIdleFallbackOppCreditMs else nowMs
-                        if (nowMs - anchorMs >= oppMoveIntervalMs) {
-                            val steps = ((nowMs - anchorMs) / oppMoveIntervalMs).toInt().coerceIn(1, 2)
-                            oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] + steps * oppFastEnergyForStats).coerceIn(0, 100)
-                            oppSlotTurnsOnField[activeOppIdx] = (oppSlotTurnsOnField[activeOppIdx] + steps * oppFastTurnsForStats).coerceAtLeast(0)
-                            phaseOppTurns += steps * oppFastTurnsForStats
-                            phasePlayerTurns = max(phasePlayerTurns, phaseOppTurns)
-                            lastIdleFallbackOppCreditMs = anchorMs + steps * oppMoveIntervalMs
-                            oppLastFastCreditedAtMs[activeOppIdx] = nowMs
-                            hpChanged = true
-                        }
-                    }
-                }
             }
         }
 
@@ -11986,11 +11984,16 @@ class OverlayService : LifecycleService() {
             if (pendingChargedAttackActor != "opp" && (nowMs - lastChargedAttackLoggedMs) > 2200L) {
                 hasBattleStarted = true
                 // Opponent shield prompt confirmed
-                // Reconcile completed opponent moves up to the throw boundary (assuming opponent throws on optimal timing if energy < cheapestOppEnergy)
-                if (phasePlayerTurns > 0) {
-                    val completedOppByThrow = phasePlayerTurns / oppFastTurnsForStats
+                // v3.88 Requirement #4: Always credit opponent with the most amount of fast-move energy they could have earned
+                // assuming they throw all charge moves on optimal timing to avoid any energy leak!
+                val maxTurnBeforeNextPlayerSample = max(
+                    phasePlayerTurns,
+                    confirmedPhasePlayerTurns + (userFastTurnsForStats - 1).coerceAtLeast(0)
+                )
+                if (maxTurnBeforeNextPlayerSample > 0) {
+                    val maxOptimalOppMoves = ceil(maxTurnBeforeNextPlayerSample.toDouble() / oppFastTurnsForStats.toDouble()).toInt()
                     val creditedOppSoFar = phaseOppTurns / oppFastTurnsForStats
-                    val missingFullOppMoves = (completedOppByThrow - creditedOppSoFar).coerceAtLeast(0)
+                    val missingFullOppMoves = (maxOptimalOppMoves - creditedOppSoFar).coerceAtLeast(0)
                     if (missingFullOppMoves > 0) {
                         oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] + missingFullOppMoves * oppFastEnergyForStats).coerceIn(0, 100)
                         oppSlotTurnsOnField[activeOppIdx] = (oppSlotTurnsOnField[activeOppIdx] + missingFullOppMoves * oppFastTurnsForStats).coerceAtLeast(0)
@@ -12011,6 +12014,9 @@ class OverlayService : LifecycleService() {
                 pendingChargedAttackDefenderName = activeUserPokemonName ?: userSlotCfg?.name ?: "Player"
                 oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] - cheapestOppEnergy).coerceIn(0, 100)
                 pendingChargedAttackDeductedEnergy = cheapestOppEnergy
+                phaseStartPlayerEnergy = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
+                confirmedPhasePlayerTurns = 0
+                lastConfirmedPlayerFastMoveMs = 0L
                 phasePlayerTurns = 0
                 phaseOppTurns = 0
                 playerSlotCurrentMoveTurns[activeUserIdx] = 0
@@ -12071,19 +12077,19 @@ class OverlayService : LifecycleService() {
                     val missingUserFasts = ceil((minReadyEnergy - playerSlotEnergy[activeUserIdx]).toDouble() / userFastEnergyForStats.toDouble()).toInt().coerceIn(1, 5)
                     playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] + missingUserFasts * userFastEnergyForStats).coerceIn(minReadyEnergy, 100)
                     playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + missingUserFasts * userFastTurnsForStats).coerceAtLeast(0)
-                    phasePlayerTurns += missingUserFasts * userFastTurnsForStats
+                    confirmedPhasePlayerTurns += missingUserFasts * userFastTurnsForStats
+                    phasePlayerTurns = max(phasePlayerTurns, confirmedPhasePlayerTurns)
                 }
 
                 preChargeUserEnergy = playerSlotEnergy[activeUserIdx].coerceIn(cheapestUserEnergy, 100)
 
-                if (phasePlayerTurns > 0) {
-                    val maxCompletedOppMovesBeforeThrow = phasePlayerTurns / oppFastTurnsForStats
+                // v3.88 Requirement #4: Credit opponent with the maximum fast-move energy they could have earned
+                // up to the throw boundary (`ceil`) without ever subtracting opponent energy!
+                val effectivePlayerThrowTurns = max(phasePlayerTurns, confirmedPhasePlayerTurns)
+                if (effectivePlayerThrowTurns > 0) {
+                    val maxCompletedOppMovesBeforeThrow = ceil(effectivePlayerThrowTurns.toDouble() / oppFastTurnsForStats.toDouble()).toInt()
                     val creditedOppMovesInPhase = phaseOppTurns / oppFastTurnsForStats
-                    if (creditedOppMovesInPhase > maxCompletedOppMovesBeforeThrow) {
-                        val excessMoves = creditedOppMovesInPhase - maxCompletedOppMovesBeforeThrow
-                        oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] - excessMoves * oppFastEnergyForStats).coerceIn(0, 100)
-                        oppSlotTurnsOnField[activeOppIdx] = (oppSlotTurnsOnField[activeOppIdx] - excessMoves * oppFastTurnsForStats).coerceAtLeast(0)
-                    } else if (creditedOppMovesInPhase < maxCompletedOppMovesBeforeThrow) {
+                    if (creditedOppMovesInPhase < maxCompletedOppMovesBeforeThrow) {
                         val completedDelta = maxCompletedOppMovesBeforeThrow - creditedOppMovesInPhase
                         oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] + completedDelta * oppFastEnergyForStats).coerceIn(0, 100)
                         oppSlotTurnsOnField[activeOppIdx] = (oppSlotTurnsOnField[activeOppIdx] + completedDelta * oppFastTurnsForStats).coerceAtLeast(0)
@@ -12107,6 +12113,11 @@ class OverlayService : LifecycleService() {
                 val postProvisionalEnergy = (preChargeUserEnergy - initialProvisionalCost).coerceIn(0, 100)
                 playerSlotEnergy[activeUserIdx] = postProvisionalEnergy
                 pendingChargedAttackDeductedEnergy = initialProvisionalCost
+                lastUserChargePreEnergySnapshot = preChargeUserEnergy
+                lastUserChargeDeductedEnergySnapshot = initialProvisionalCost
+                phaseStartPlayerEnergy = postProvisionalEnergy
+                confirmedPhasePlayerTurns = 0
+                lastConfirmedPlayerFastMoveMs = 0L
                 awaitingPostUserChargeCircleSync = true
                 resetSlotEnergyTracking(activeUserIdx, postProvisionalEnergy)
                 phasePlayerTurns = 0
@@ -12220,6 +12231,9 @@ class OverlayService : LifecycleService() {
                 turnPhaseAnchorMs = captureAnchorMs
                 lastTurnTickTimeMs = System.currentTimeMillis()
                 turnResidualMs = 0L
+                phaseStartPlayerEnergy = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
+                confirmedPhasePlayerTurns = 0
+                lastConfirmedPlayerFastMoveMs = 0L
                 phasePlayerTurns = 0
                 phaseOppTurns = 0
                 playerSlotCurrentMoveTurns[activeUserIdx] = 0
@@ -12411,6 +12425,9 @@ class OverlayService : LifecycleService() {
                 turnPhaseAnchorMs = captureAnchorMs
                 lastTurnTickTimeMs = System.currentTimeMillis()
                 turnResidualMs = 0L
+                phaseStartPlayerEnergy = computedResidualEnergy
+                confirmedPhasePlayerTurns = 0
+                lastConfirmedPlayerFastMoveMs = 0L
                 phasePlayerTurns = 0
                 phaseOppTurns = 0
                 playerSlotCurrentMoveTurns[activeUserIdx] = 0
@@ -12938,6 +12955,10 @@ class OverlayService : LifecycleService() {
                             playerLastSelfCorrectionAtMs.fill(0L)
                         }
                         postUserChargedMissingOppHpFrames = 0
+                        val activeUIdx = currentPreset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) }?.takeIf { it in 0..2 } ?: 0
+                        phaseStartPlayerEnergy = playerSlotEnergy[activeUIdx].coerceIn(0, 100)
+                        confirmedPhasePlayerTurns = 0
+                        lastConfirmedPlayerFastMoveMs = currentFrameTimestampMs
                         phasePlayerTurns = 0
                         phaseOppTurns = 0
                         lastTurnTickTimeMs = System.currentTimeMillis()
@@ -13019,6 +13040,10 @@ class OverlayService : LifecycleService() {
                             playerLastSelfCorrectionAtMs.fill(0L)
                         }
                         postUserChargedMissingOppHpFrames = 0
+                        val activeUIdx = currentPreset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) }?.takeIf { it in 0..2 } ?: 0
+                        phaseStartPlayerEnergy = playerSlotEnergy[activeUIdx].coerceIn(0, 100)
+                        confirmedPhasePlayerTurns = 0
+                        lastConfirmedPlayerFastMoveMs = currentFrameTimestampMs
                         phasePlayerTurns = 0
                         phaseOppTurns = 0
                         lastTurnTickTimeMs = System.currentTimeMillis()
@@ -13200,6 +13225,9 @@ class OverlayService : LifecycleService() {
         playerSwitchValidityLatched = !fromOcrFrame
         isPostFaintSwitchPromptActive = false
         activeUserPokemonName = newSlotName
+        if (newSlotIdx in 0..2) {
+            playerSlotEverOnField[newSlotIdx] = true
+        }
         isPlayerTurnOne = false
         lastConfirmedPlayerFrameTimeMs = nowMs
 
@@ -13236,12 +13264,15 @@ class OverlayService : LifecycleService() {
                 resetSlotEnergyTracking(newSlotIdx, playerSlotEnergy[newSlotIdx].coerceIn(0, 100),
                     clearThirdFillLatches = false
                 )
+                phaseStartPlayerEnergy = playerSlotEnergy[newSlotIdx].coerceIn(0, 100)
                 lastScannedPlayerSlotHpPct[newSlotIdx] = playerSlotHpPct[newSlotIdx].coerceIn(1, 100)
                 predictedPlayerSlotHpPct[newSlotIdx] = playerSlotHpPct[newSlotIdx].coerceIn(1, 100)
                 oppLastFastCreditedAtMs.fill(0L)
                 oppCreditedByOptimalTimerAtMs.fill(0L)
             }
             postOppChargedMissingPlayerHpFrames = 0
+            confirmedPhasePlayerTurns = 0
+            lastConfirmedPlayerFastMoveMs = nowMs
             phasePlayerTurns = 0
             phaseOppTurns = 0
             lastTurnTickTimeMs = System.currentTimeMillis()
@@ -13334,6 +13365,7 @@ class OverlayService : LifecycleService() {
                 resetSlotEnergyTracking(newSlotIdx, playerSlotEnergy[newSlotIdx].coerceIn(0, 100),
                     clearThirdFillLatches = false
                 )
+                phaseStartPlayerEnergy = playerSlotEnergy[newSlotIdx].coerceIn(0, 100)
                 lastStableNormalCombatEnergy = playerSlotEnergy[newSlotIdx]
                 prevStableNormalCombatEnergy = playerSlotEnergy[newSlotIdx]
                 lastStableLeftChargeFillPct = 0
@@ -13345,6 +13377,8 @@ class OverlayService : LifecycleService() {
                 oppCreditedByOptimalTimerAtMs.fill(0L)
             }
             postOppChargedMissingPlayerHpFrames = 0
+            confirmedPhasePlayerTurns = 0
+            lastConfirmedPlayerFastMoveMs = nowMs
             phasePlayerTurns = 0
             phaseOppTurns = 0
             lastTurnTickTimeMs = System.currentTimeMillis()
@@ -14200,6 +14234,12 @@ class OverlayService : LifecycleService() {
         prescanAccumEmptySatRightSum = 0.0
         lastMicroCorrectionTimeMs = 0L
         missingBottomCirclesWithOppHpFrames = 0
+        playerSlotEverOnField[0] = true
+        playerSlotEverOnField[1] = false
+        playerSlotEverOnField[2] = false
+        phaseStartPlayerEnergy = 0
+        confirmedPhasePlayerTurns = 0
+        lastConfirmedPlayerFastMoveMs = 0L
         isPlayerInIdleFallback = false
         lastIdleFallbackOppCreditMs = 0L
         lastDetectedBannerMoveName = ""
@@ -15403,11 +15443,37 @@ class OverlayService : LifecycleService() {
             if (oppFaintedSlots[i]) oppSlotHpPct[i] = 0
         }
 
-        val teamData = listOf(
-            mapOf("initial" to (p1Name.firstOrNull()?.uppercase() ?: "P1"), "code" to abbrPokemon3(p1Name), "name" to p1Name, "hpPct" to if (playerFaintedSlots[0]) 0 else playerSlotHpPct[0].coerceIn(0, 100)),
-            mapOf("initial" to (p2Name.firstOrNull()?.uppercase() ?: "P2"), "code" to abbrPokemon3(p2Name), "name" to p2Name, "hpPct" to if (playerFaintedSlots[1]) 0 else playerSlotHpPct[1].coerceIn(0, 100)),
-            mapOf("initial" to (p3Name.firstOrNull()?.uppercase() ?: "P3"), "code" to abbrPokemon3(p3Name), "name" to p3Name, "hpPct" to if (playerFaintedSlots[2]) 0 else playerSlotHpPct[2].coerceIn(0, 100))
-        )
+        if (activeUserSlotIndex in 0..2 && playerSwitchValidityLatched) {
+            playerSlotEverOnField[activeUserSlotIndex] = true
+        }
+
+        val teamData = (0..2).map { i ->
+            val pName = teamNames[i]
+            val slotEverOnField = playerSlotEverOnField[i] ||
+                i == activeUserSlotIndex ||
+                playerSlotTurnsOnField[i] > 0 ||
+                playerSlotEnergy[i] > 0 ||
+                playerFaintedSlots[i]
+            if (slotEverOnField) {
+                playerSlotEverOnField[i] = true
+            }
+            val slotHpVal = if (playerFaintedSlots[i]) 0 else playerSlotHpPct[i].coerceIn(0, 100)
+            val slotEnergyVal = if (playerFaintedSlots[i]) 0 else playerSlotEnergy[i].coerceIn(0, 100)
+            val bankedEnergyLabel = when {
+                playerFaintedSlots[i] -> "0E"
+                !slotEverOnField -> "-E"
+                else -> "${slotEnergyVal}E"
+            }
+            mapOf(
+                "initial" to (pName.firstOrNull()?.uppercase() ?: "P${i + 1}"),
+                "code" to abbrPokemon3(pName),
+                "name" to pName,
+                "hpPct" to slotHpVal,
+                "energy" to slotEnergyVal,
+                "hasEnteredField" to slotEverOnField,
+                "bankedEnergyLabel" to bankedEnergyLabel
+            )
+        }
 
         val nowMs = System.currentTimeMillis()
         val playerSwapRemainingSec = if (playerSwapEndTimeMs > nowMs) ((playerSwapEndTimeMs - nowMs + 999L) / 1000L).toInt() else 0
@@ -15475,6 +15541,9 @@ class OverlayService : LifecycleService() {
                 "oppFaintedSlots" to oppFaintedSlots.toList(),
                 "playerSlotHpPct" to playerSlotHpPct.toList(),
                 "oppSlotHpPct" to oppSlotHpPct.toList(),
+                "playerSlotEnergy" to playerSlotEnergy.toList(),
+                "oppSlotEnergy" to oppSlotEnergy.toList(),
+                "playerSlotEverOnField" to playerSlotEverOnField.toList(),
                 "activeUserHpPct" to waitingActiveUserHp,
                 "activeOppHpPct" to 100,
                 "teamArchetype" to (currentPreset?.archetype ?: "ABC"),
@@ -16568,6 +16637,7 @@ class OverlayService : LifecycleService() {
             "oppSlotHpPct" to oppSlotHpPct.toList(),
             "playerSlotEnergy" to playerSlotEnergy.toList(),
             "oppSlotEnergy" to oppSlotEnergy.toList(),
+            "playerSlotEverOnField" to playerSlotEverOnField.toList(),
             "activeUserHpPct" to activeUserHp,
             "activeOppHpPct" to activeOppHp,
             "activeUserEnergy" to playerSlotEnergy.getOrElse(activeSlotIdxSafe) { 0 }.coerceIn(0, 100),

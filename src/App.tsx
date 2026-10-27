@@ -1391,6 +1391,7 @@ export default function App() {
   const [oppEnergy, setOppEnergy] = useState<number>(40);
   const [userSlotEnergy, setUserSlotEnergy] = useState<number[]>([36, 0, 0]);
   const [oppSlotEnergy, setOppSlotEnergy] = useState<number[]>([40, 0, 0]);
+  const [playerSlotEverOnField, setPlayerSlotEverOnField] = useState<boolean[]>([true, false, false]);
   const [scanHzMode, setScanHzMode] = useState<'2Hz' | '1Hz'>('2Hz');
   const [scanTurnOffsetMs, setScanTurnOffsetMs] = useState<number>(120);
   const [userShields, setUserShields] = useState<number>(2);
@@ -2005,6 +2006,12 @@ export default function App() {
     setPlayerSwitchValidityLatched(true);
     setIsPostFaintPromptActive(false);
     setIsPlayerTurnOne(false);
+    setPlayerSlotEverOnField((prev) => {
+      if (prev[slotIdx]) return prev;
+      const next = [...prev];
+      next[slotIdx] = true;
+      return next;
+    });
     setActiveUserSlotIndex(slotIdx);
   };
 
@@ -4045,7 +4052,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v3.87 • Android Native Overlay
+                  v3.88 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -5133,92 +5140,124 @@ export default function App() {
                             <span className="text-[8px] text-amber-300 font-mono">Standby</span>
                           </div>
                         ) : (
-                          scannedOpponents.map((oppName, idx) => {
-                            const isActiveSlot = idx === safeActiveOppSlot;
-                            const matrix = calculateShieldMatrix(
-                              oppName,
-                              activePreset.pokemon,
-                              isActiveSlot && isOpponentShadow,
-                              activePreset.league
-                            );
-                            const fullOppDisplay = (isActiveSlot && isOpponentShadow ? 'S-' : '') + oppName;
-                            const p1Init = activePreset.pokemon[0]?.name.charAt(0) || 'D';
-                            const p2Init = activePreset.pokemon[1]?.name.charAt(0) || 'L';
-                            const p3Init = activePreset.pokemon[2]?.name.charAt(0) || 'K';
-
-                            const isOppFainted = !!oppFaintedSlots[idx];
-                            const slotOppStats = POKEMON_DATABASE[oppName] || activeOpponent;
-                            const cheapestMoveE = Math.min(
-                              ...(slotOppStats?.chargedMoves || []).map((m) => resolveChargedMove(m.name, slotOppStats?.types?.[0] || 'normal').energyCost || m.energyCost || 40),
-                              45
-                            );
-                            const slotOppE = isOppFainted
-                              ? 0
-                              : idx === safeActiveOppSlot
-                              ? oppSlotEnergy[idx] ?? oppEnergy
-                              : oppSlotEnergy[idx] ?? 0;
-                            const isSlotMoveReady = !isOppFainted && slotOppE >= cheapestMoveE;
-                            const slotEnergyLabel = isSlotMoveReady ? `${slotOppE}E READY` : `${slotOppE}E`;
-                            return (
-                              <div
-                                key={`${oppName}-${idx}`}
-                                onClick={() => handleSwapActiveOpponent(oppName)}
-                                className={`flex items-center justify-between gap-1.5 px-1.5 py-0.5 rounded cursor-pointer transition ${
-                                  isOppFainted
-                                    ? 'opacity-35 line-through bg-black/20'
-                                    : isActiveSlot
-                                    ? 'bg-sky-500/25 border border-sky-400/50 shadow-[0_0_8px_rgba(56,189,248,0.25)]'
-                                    : 'hover:bg-white/10 border border-transparent'
-                                }`}
-                                title={isOppFainted ? `#${idx + 1} Seen: ${oppName} (Fainted)` : isActiveSlot ? `#${idx + 1} Seen: ${oppName} (Active on field • ${slotEnergyLabel})` : `Click to set #${idx + 1} (${oppName}) as active opponent (${slotEnergyLabel})`}
-                              >
-                                <div className="flex items-center gap-1 min-w-[114px] max-w-[146px] flex-1 overflow-hidden">
-                                  <span className={`text-[8px] font-bold shrink-0 ${isOppFainted ? 'text-slate-500' : isActiveSlot ? 'text-sky-300' : 'text-slate-400'}`}>
-                                    #{idx + 1}
-                                  </span>
-                                  <span className={`font-bold truncate text-[9.5px] ${isOppFainted ? 'text-slate-400 line-through' : 'text-slate-100'}`} title={fullOppDisplay}>
-                                    {fullOppDisplay}
-                                  </span>
-                                  <span
-                                    className={`text-[7px] font-mono font-bold shrink-0 ${
-                                      isOppFainted
-                                        ? 'text-slate-500 line-through'
-                                        : (oppSlotHpPct[idx] ?? 100) > 50
-                                        ? 'text-emerald-300'
-                                        : (oppSlotHpPct[idx] ?? 100) > 20
-                                        ? 'text-amber-300'
-                                        : 'text-rose-300'
-                                    }`}
-                                    title={`Persisted Opponent HP: ${isOppFainted ? 0 : (oppSlotHpPct[idx] ?? 100)}%`}
-                                  >
-                                    {isOppFainted ? 0 : (oppSlotHpPct[idx] ?? 100)}%
-                                  </span>
-                                  {!isOppFainted && (
-                                    <span
-                                      className={`text-[6.5px] font-mono font-black px-1 py-0.2 rounded border shrink-0 leading-none ${
-                                        isSlotMoveReady
-                                          ? 'text-yellow-200 bg-amber-700/75 border-yellow-300/90 shadow-[0_0_4px_rgba(250,204,21,0.5)]'
-                                          : 'text-sky-200 bg-sky-950/70 border-sky-400/50'
-                                      }`}
-                                      title={`Opponent Energy: ${slotOppE}E (Cheapest Move: ${cheapestMoveE}E)`}
-                                    >
-                                      {slotEnergyLabel}
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-[1px] text-[9px] font-mono shrink-0">
-                                  <span className="font-bold text-slate-300">{p1Init}:</span>
-                                  {renderTierDots(matrix.p1)}
-                                  <span className="text-white/25 mx-[1.5px] text-[8px]">|</span>
-                                  <span className="font-bold text-slate-300">{p2Init}:</span>
-                                  {renderTierDots(matrix.p2)}
-                                  <span className="text-white/25 mx-[1.5px] text-[8px]">|</span>
-                                  <span className="font-bold text-slate-300">{p3Init}:</span>
-                                  {renderTierDots(matrix.p3)}
-                                </div>
+                          <>
+                            <div className="flex items-center justify-between gap-1.5 px-1.5 pb-1 mb-0.5 border-b border-white/10">
+                              <span className="text-[7.5px] font-bold text-slate-400 tracking-tight truncate">
+                                OPP / MY BANKED E
+                              </span>
+                              <div className="flex items-center gap-[1px] text-[8.5px] font-mono shrink-0">
+                                {[0, 1, 2].map((slotIdx) => {
+                                  const pMon = activePreset.pokemon[slotIdx];
+                                  const pInit = pMon?.name.charAt(0).toUpperCase() || `P${slotIdx + 1}`;
+                                  const isFainted = !!playerFaintedSlots[slotIdx] || (userSlotHpPct[slotIdx] ?? 100) <= 0;
+                                  const slotE = isFainted
+                                    ? 0
+                                    : slotIdx === activeUserSlotIndex
+                                    ? userSlotEnergy[slotIdx] ?? userEnergy
+                                    : userSlotEnergy[slotIdx] ?? 0;
+                                  const hasEntered = !!playerSlotEverOnField[slotIdx] || slotIdx === activeUserSlotIndex || slotE > 0 || isFainted;
+                                  const eSuffix = isFainted ? '0E' : hasEntered ? `${slotE}E` : '-E';
+                                  return (
+                                    <React.Fragment key={`banked-hdr-${slotIdx}`}>
+                                      {slotIdx > 0 && <span className="text-white/25 mx-[1.5px] text-[8px]">|</span>}
+                                      <span
+                                        className={`w-[34px] inline-flex items-center justify-center font-extrabold tracking-tighter ${
+                                          eSuffix === '-E'
+                                            ? 'text-slate-400'
+                                            : slotE > 0 && !isFainted
+                                            ? 'text-yellow-300'
+                                            : 'text-slate-300'
+                                        }`}
+                                        title={`${pMon?.name || pInit}: ${eSuffix === '-E' ? 'Never entered field (-E)' : `Banked Energy ${eSuffix}`}`}
+                                      >
+                                        {pInit}:{eSuffix}
+                                      </span>
+                                    </React.Fragment>
+                                  );
+                                })}
                               </div>
-                            );
-                          })
+                            </div>
+                            {scannedOpponents.map((oppName, idx) => {
+                              const isActiveSlot = idx === safeActiveOppSlot;
+                              const matrix = calculateShieldMatrix(
+                                oppName,
+                                activePreset.pokemon,
+                                isActiveSlot && isOpponentShadow,
+                                activePreset.league
+                              );
+                              const fullOppDisplay = (isActiveSlot && isOpponentShadow ? 'S-' : '') + oppName;
+
+                              const isOppFainted = !!oppFaintedSlots[idx];
+                              const slotOppStats = POKEMON_DATABASE[oppName] || activeOpponent;
+                              const cheapestMoveE = Math.min(
+                                ...(slotOppStats?.chargedMoves || []).map((m) => resolveChargedMove(m.name, slotOppStats?.types?.[0] || 'normal').energyCost || m.energyCost || 40),
+                                45
+                              );
+                              const slotOppE = isOppFainted
+                                ? 0
+                                : idx === safeActiveOppSlot
+                                ? oppSlotEnergy[idx] ?? oppEnergy
+                                : oppSlotEnergy[idx] ?? 0;
+                              const isSlotMoveReady = !isOppFainted && slotOppE >= cheapestMoveE;
+                              const slotEnergyLabel = isSlotMoveReady ? `${slotOppE}E READY` : `${slotOppE}E`;
+                              return (
+                                <div
+                                  key={`${oppName}-${idx}`}
+                                  onClick={() => handleSwapActiveOpponent(oppName)}
+                                  className={`flex items-center justify-between gap-1.5 px-1.5 py-0.5 rounded cursor-pointer transition ${
+                                    isOppFainted
+                                      ? 'opacity-35 line-through bg-black/20'
+                                      : isActiveSlot
+                                      ? 'bg-sky-500/25 border border-sky-400/50 shadow-[0_0_8px_rgba(56,189,248,0.25)]'
+                                      : 'hover:bg-white/10 border border-transparent'
+                                  }`}
+                                  title={isOppFainted ? `#${idx + 1} Seen: ${oppName} (Fainted)` : isActiveSlot ? `#${idx + 1} Seen: ${oppName} (Active on field • ${slotEnergyLabel})` : `Click to set #${idx + 1} (${oppName}) as active opponent (${slotEnergyLabel})`}
+                                >
+                                  <div className="flex items-center gap-1 min-w-[114px] max-w-[146px] flex-1 overflow-hidden">
+                                    <span className={`text-[8px] font-bold shrink-0 ${isOppFainted ? 'text-slate-500' : isActiveSlot ? 'text-sky-300' : 'text-slate-400'}`}>
+                                      #{idx + 1}
+                                    </span>
+                                    <span className={`font-bold truncate text-[9.5px] ${isOppFainted ? 'text-slate-400 line-through' : 'text-slate-100'}`} title={fullOppDisplay}>
+                                      {fullOppDisplay}
+                                    </span>
+                                    <span
+                                      className={`text-[7px] font-mono font-bold shrink-0 ${
+                                        isOppFainted
+                                          ? 'text-slate-500 line-through'
+                                          : (oppSlotHpPct[idx] ?? 100) > 50
+                                          ? 'text-emerald-300'
+                                          : (oppSlotHpPct[idx] ?? 100) > 20
+                                          ? 'text-amber-300'
+                                          : 'text-rose-300'
+                                      }`}
+                                      title={`Persisted Opponent HP: ${isOppFainted ? 0 : (oppSlotHpPct[idx] ?? 100)}%`}
+                                    >
+                                      {isOppFainted ? 0 : (oppSlotHpPct[idx] ?? 100)}%
+                                    </span>
+                                    {!isOppFainted && (
+                                      <span
+                                        className={`text-[6.5px] font-mono font-black px-1 py-0.2 rounded border shrink-0 leading-none ${
+                                          isSlotMoveReady
+                                            ? 'text-yellow-200 bg-amber-700/75 border-yellow-300/90 shadow-[0_0_4px_rgba(250,204,21,0.5)]'
+                                            : 'text-sky-200 bg-sky-950/70 border-sky-400/50'
+                                        }`}
+                                        title={`Opponent Energy: ${slotOppE}E (Cheapest Move: ${cheapestMoveE}E)`}
+                                      >
+                                        {slotEnergyLabel}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-[1px] text-[9px] font-mono shrink-0">
+                                    <span className="w-[34px] inline-flex items-center justify-center">{renderTierDots(matrix.p1)}</span>
+                                    <span className="text-white/25 mx-[1.5px] text-[8px]">|</span>
+                                    <span className="w-[34px] inline-flex items-center justify-center">{renderTierDots(matrix.p2)}</span>
+                                    <span className="text-white/25 mx-[1.5px] text-[8px]">|</span>
+                                    <span className="w-[34px] inline-flex items-center justify-center">{renderTierDots(matrix.p3)}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </>
                         )}
                       </div>
 

@@ -1,3 +1,10 @@
+## v3.88 (2026-10-27)
+- **Player Energy-to-Turns Conversion & Turn-Indexed Opponent Energy**: Converts confirmed player energy gains into fast-move turns (`confirmedPhasePlayerTurns`) and indexes opponent energy gain directly to player turns based on the opponent's fast move turn count (`oppFastTurns`) without any autonomous idle timer fallback.
+- **500ms Sub-Turn Interpolation for Multi-Turn Player Fast Moves**: When using a non-1-turn fast move (`userFastTurns > 1`), approximates single-turn timing in `500ms` intervals (`0 .. userFastTurns - 1`) between each confirmed player fast move so opponent fast moves credit smoothly on their exact turn boundaries.
+- **Maximum Optimal-Timing Opponent Energy Credit (Zero Energy Leak)**: Credits the opponent with the maximum fast-move energy they could have earned assuming optimal charge-move throw timing (`ceil` across active fast-move windows) before any charged move resets the phase.
+- **Post-Charge Micro-Adjustment Decoupling & Turn Recounting**: Decouples small post-charge circle micro-adjustments from turn counting and bases post-charge turn recounting strictly upon `newEnergy - (oldEnergy - chargeMoveEnergy)`.
+- **Shield Matrix Top Banked Energy Row (`D:60E | L:0E | K:-E`)**: Added a new header row along the top of the Shield Matrix directly above each Pokémon's 3-dot column displaying live banked energy (`60E`), `0E` when truly zero, or `-E` when a Pokémon has not yet entered the field, while keeping opponent banked energy on the left of each opponent row.
+
 ## v3.87 (2026-10-27)
 - **Pre-Battle White Flash Guard (`isWhiteScreenFlash`)**: Rejects full-screen white transition flashes before the `3-2-1-GO` countdown so circle calibration and energy tracking never trigger on an unstable white screen.
 - **6-Cycle Dark-Grey Border Circle Calibration & `0E` Countdown Lock**: Detects the dark grey perimeter ring around empty `0%` circles during the `3-2-1-GO` countdown (supporting both dimmed countdown emblems and un-dimmed `0E` circles), averages geometry and empty interior baselines over 6 stable cycles (`~600ms`), and locks energy at `0E` while the dimmed `3-2-1` countdown is active.
