@@ -8941,18 +8941,18 @@ class OverlayService : LifecycleService() {
             (h * 0.125f).toInt().coerceIn(1, h)
         )
 
-        // v3.55: Expanded 2D Floating HP Bar Corridors
+        // v3.82: Expanded 2D Floating HP Bar Corridors for Tall (0.075h..0.14h) and Small (0.60h..0.85h) Pokémon
         val oppHpCorridorRect = Rect(
-            (w * 0.420f).toInt().coerceIn(0, w - 1),
-            (h * 0.12f).toInt().coerceIn(0, h - 1),
-            (w * 0.960f).toInt().coerceIn(1, w),
-            (h * 0.66f).toInt().coerceIn(1, h)
+            (w * 0.400f).toInt().coerceIn(0, w - 1),
+            (h * 0.075f).toInt().coerceIn(0, h - 1),
+            (w * 0.975f).toInt().coerceIn(1, w),
+            (h * 0.80f).toInt().coerceIn(1, h)
         )
         val playerHpCorridorRect = Rect(
-            (w * 0.025f).toInt().coerceIn(0, w - 1),
-            (h * 0.12f).toInt().coerceIn(0, h - 1),
-            (w * 0.445f).toInt().coerceIn(1, w),
-            (h * 0.78f).toInt().coerceIn(1, h)
+            (w * 0.015f).toInt().coerceIn(0, w - 1),
+            (h * 0.075f).toInt().coerceIn(0, h - 1),
+            (w * 0.485f).toInt().coerceIn(1, w),
+            (h * 0.85f).toInt().coerceIn(1, h)
         )
 
         // 1. Run 200ms (5 Hz) Pixel HUD Scan immediately on every frame
@@ -10232,28 +10232,29 @@ class OverlayService : LifecycleService() {
             val ch = bottom - top
             if (cw <= 24 || ch <= 14) return -1
 
-            val minOuterW = (fullScreenWidth * 0.274f).toInt().coerceAtLeast(60)
-            val maxOuterW = (fullScreenWidth * 0.296f).toInt().coerceAtLeast(minOuterW + 6)
+            val minOuterW = (fullScreenWidth * 0.268f).toInt().coerceAtLeast(56)
+            val maxOuterW = (fullScreenWidth * 0.302f).toInt().coerceAtLeast(minOuterW + 8)
             val padInset = max(4, (fullScreenWidth * 0.0085f).roundToInt())
             val padSide = max(3, padInset / 2)
-            val minOuterH = max(20, (fullScreenWidth * 0.023f).toInt())
-            val maxOuterH = max(minOuterH + 6, (fullScreenWidth * 0.032f).toInt())
-            val minFillH = max(6, (fullScreenWidth * 0.006f).toInt())
-            val maxFillH = max(16, (fullScreenWidth * 0.020f).toInt())
+            val minOuterH = max(18, (fullScreenWidth * 0.019f).toInt())
+            val maxOuterH = max(minOuterH + 10, (fullScreenWidth * 0.036f).toInt())
+            val minFillH = max(4, (fullScreenWidth * 0.004f).toInt())
+            val maxFillH = max(22, (fullScreenWidth * 0.024f).toInt())
 
             // Expected left-edge X anchor in full-screen coordinates (relX = absX - left)
             val absAnchorMinX = if (isOpponent) {
-                (fullScreenWidth * 0.435f).toInt()
+                (fullScreenWidth * 0.410f).toInt()
             } else {
-                (fullScreenWidth * 0.035f).toInt()
+                (fullScreenWidth * 0.025f).toInt()
             }
             val absAnchorMaxX = if (isOpponent) {
-                (fullScreenWidth * 0.665f).toInt()
+                (fullScreenWidth * 0.690f).toInt()
             } else {
-                (fullScreenWidth * 0.135f).toInt()
+                (fullScreenWidth * 0.180f).toInt()
             }
             val relAnchorMinX = (absAnchorMinX - left).coerceIn(0, cw - 1)
             val relAnchorMaxX = (absAnchorMaxX - left).coerceIn(relAnchorMinX, cw - 1)
+            val minAllowedAbsFillY = (screen.height * 0.084f).toInt()
 
             val pixels = IntArray(cw * ch)
             screen.getPixels(pixels, 0, cw, left, top, cw, ch)
@@ -10305,14 +10306,14 @@ class OverlayService : LifecycleService() {
                 if (borderLuma < 185) {
                     if (g in 38..210 && r <= 95 && b in 30..205 && (g - r) >= 15 && (b - r) >= 8 && kotlin.math.abs(g - b) <= 72) return 1
                     if (r in 58..215 && g in 48..200 && b <= 88 && r >= g - 14 && (r - g) <= 55 && (r - b) >= 24 && (g - b) >= 18) return 2
-                    if (r in 62..210 && g in 16..125 && b in 16..130 && (r - g) >= 24 && (r - b) >= 20 && kotlin.math.abs(g - b) <= 42) return 3
+                    if (r in 45..210 && g in 14..125 && b in 14..130 && (r - g) >= 18 && (r - b) >= 14 && kotlin.math.abs(g - b) <= 42) return 3
                 }
                 // 3. Orange Pending-Damage Sliver (r >> g >> b) & Depleted Dark Translucent Track:
                 if (r >= 130 && g in 60..172 && b <= 68 && (r - g) >= 55 && (g - b) >= 38) return 4
                 val maxCh = max(r, max(g, b))
                 val minCh = min(r, min(g, b))
                 val luma = (r + g + b) / 3
-                if (luma in 8..145 && maxCh <= 175 && (maxCh - minCh) <= 98) return 4
+                if (luma in 8..162 && maxCh <= 190 && (maxCh - minCh) <= 108) return 4
                 return 0
             }
 
@@ -10330,7 +10331,7 @@ class OverlayService : LifecycleService() {
             )
             val candidates = mutableListOf<ScanlineBarCandidate>()
 
-            var ry = 0
+            var ry = max(0, minAllowedAbsFillY - top)
             while (ry < ch) {
                 val rowOffset = ry * cw
                 var rx = relAnchorMinX
@@ -10502,7 +10503,7 @@ class OverlayService : LifecycleService() {
                                     }
 
                                     val wFill = xEnd - xStart + 1
-                                    if (wFill >= 4) {
+                                    if (wFill >= 2) {
                                         var darkPx = 0
                                         var brightWhitePx = 0
                                         val totalRem = max(0, trackEndX - (xEnd + 1) + 1)
@@ -10511,12 +10512,12 @@ class OverlayService : LifecycleService() {
                                             val p = pixels[rowOffset + dx]
                                             val cls = classifyHpPixel(p, borderLuma)
                                             val pLuma = pixelLuma(p)
-                                            if (cls in 1..4 || pLuma <= 168) darkPx++
-                                            if (pLuma >= 185) brightWhitePx++
+                                            if (cls in 1..4 || pLuma <= 176) darkPx++
+                                            if (pLuma >= 192) brightWhitePx++
                                             dx++
                                         }
-                                        val maxAllowedBright = max(14, (totalRem * 0.45f).toInt())
-                                        if (brightWhitePx <= maxAllowedBright && (totalRem <= 10 || (darkPx.toFloat() / max(1, totalRem).toFloat()) >= 0.45f)) {
+                                        val maxAllowedBright = max(18, (totalRem * 0.55f).toInt())
+                                        if (brightWhitePx <= maxAllowedBright && (totalRem <= 10 || (darkPx.toFloat() / max(1, totalRem).toFloat()) >= 0.40f)) {
                                             candidates.add(
                                                 ScanlineBarCandidate(
                                                     ry = ry,
@@ -10545,20 +10546,20 @@ class OverlayService : LifecycleService() {
                 ry += 2
             }
 
-            if (candidates.size < 3) return -1
+            if (candidates.size < 2) return -1
 
-            // v3.55: Fixed-Height Enclosed Rectangle Verification & Exterior Color-Bleed Rejection:
+            // v3.82: Fixed-Height Enclosed Rectangle Verification & Exterior Color-Bleed Rejection:
             var bestCluster: List<ScanlineBarCandidate>? = null
             for (i in candidates.indices) {
                 val anchor = candidates[i]
                 val cluster = candidates.filter { c ->
-                    kotlin.math.abs(c.ry - anchor.ry) <= 26 &&
+                    kotlin.math.abs(c.ry - anchor.ry) <= 28 &&
                         kotlin.math.abs(c.leftBorderX - anchor.leftBorderX) <= 4 &&
                         kotlin.math.abs(c.rightBorderX - anchor.rightBorderX) <= 4 &&
                         kotlin.math.abs(c.wFill - anchor.wFill) <= 8 &&
                         c.leftBand == anchor.leftBand
                 }
-                if (cluster.size in 3..10) {
+                if (cluster.size in 2..14) {
                     val yMinC = cluster.minOf { it.ry }
                     val yMaxC = cluster.maxOf { it.ry }
                     val fillH = yMaxC - yMinC
@@ -10577,7 +10578,7 @@ class OverlayService : LifecycleService() {
                         val midY = (yMinC + yMaxC) / 2
 
                         val topBorders = mutableListOf<Int>()
-                        var by = max(0, yMinC - 11)
+                        var by = max(0, yMinC - 18)
                         while (by < yMinC) {
                             val bRowOffset = by * cw
                             val innerPadY1 = min(ch - 1, max(by + 1, yMinC - 1))
@@ -10595,7 +10596,7 @@ class OverlayService : LifecycleService() {
                                 if (isBorderPixel(pixels[bRowOffset + sbx], refDark)) bCnt++
                                 sbx += 3
                             }
-                            if (bCnt >= (spanSamples * 0.48f).toInt()) {
+                            if (bCnt >= (spanSamples * 0.45f).toInt()) {
                                 topBorders.add(by)
                             }
                             by++
@@ -10603,7 +10604,7 @@ class OverlayService : LifecycleService() {
 
                         val botBorders = mutableListOf<Int>()
                         by = yMaxC + 1
-                        val maxBy = min(ch - 1, yMaxC + 11)
+                        val maxBy = min(ch - 1, yMaxC + 18)
                         while (by <= maxBy) {
                             val bRowOffset = by * cw
                             val innerPadY1 = max(0, min(by - 1, yMaxC + 1))
@@ -10621,7 +10622,7 @@ class OverlayService : LifecycleService() {
                                 if (isBorderPixel(pixels[bRowOffset + sbx], refDark)) bCnt++
                                 sbx += 3
                             }
-                            if (bCnt >= (spanSamples * 0.48f).toInt()) {
+                            if (bCnt >= (spanSamples * 0.45f).toInt()) {
                                 botBorders.add(by)
                             }
                             by++
@@ -11267,6 +11268,16 @@ class OverlayService : LifecycleService() {
                     playerSlotPreFaintHpPct[activeUserIdx] = confirmedPlayerHp
                     predictedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     hpChanged = true
+                } else if (realUserDrop > 25 && playerSlotHpConfirmFrames[activeUserIdx] >= requiredPlayerConfirmFrames + 1) {
+                    // v3.82: Sync large (>25%) HP drops when HP bar is re-acquired or after unshielded damage
+                    lastScannedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
+                    confirmedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
+                    playerSlotHpPct[activeUserIdx] = confirmedPlayerHp
+                    playerSlotPreFaintHpPct[activeUserIdx] = confirmedPlayerHp
+                    predictedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
+                    pendingPlayerLowHpSlot = -1
+                    pendingPlayerLowHpSample = -1
+                    hpChanged = true
                 }
             }
         } else if (sampledPlayerHpPct == -1) {
@@ -11356,6 +11367,16 @@ class OverlayService : LifecycleService() {
                     oppSlotHpPct[activeOppIdx] = confirmedOppHp
                     oppSlotPreFaintHpPct[activeOppIdx] = confirmedOppHp
                     predictedOppSlotHpPct[activeOppIdx] = confirmedOppHp
+                    hpChanged = true
+                } else if (realOppDrop > 25 && oppSlotHpConfirmFrames[activeOppIdx] >= requiredOppConfirmFrames + 1) {
+                    // v3.82: Sync large (>25%) opponent HP drops when HP bar is re-acquired or after unshielded damage
+                    lastScannedOppSlotHpPct[activeOppIdx] = confirmedOppHp
+                    confirmedOppSlotHpPct[activeOppIdx] = confirmedOppHp
+                    oppSlotHpPct[activeOppIdx] = confirmedOppHp
+                    oppSlotPreFaintHpPct[activeOppIdx] = confirmedOppHp
+                    predictedOppSlotHpPct[activeOppIdx] = confirmedOppHp
+                    pendingOppLowHpSlot = -1
+                    pendingOppLowHpSample = -1
                     hpChanged = true
                 }
             }
