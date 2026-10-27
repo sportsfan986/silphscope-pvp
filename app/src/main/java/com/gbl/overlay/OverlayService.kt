@@ -7770,6 +7770,197 @@ class OverlayService : LifecycleService() {
     private var lastClearedFinalUserHpPct: List<Int> = listOf(100, 100, 100)
     private var lastClearedFinalOppHpPct: List<Int> = listOf(100, 100, 100)
 
+    // v3.83: 2-out-of-3 PLL (Opponent Fast-Move HP Integrator + Charge Move 1 + Charge Move 2)
+    private val playerStintStartEnergy = IntArray(3) { 0 }
+    private val playerStintOppFastDmgPct = DoubleArray(3) { 0.0 }
+    private val playerStintStartMs = LongArray(3) { 0L }
+    private var pllStintPairKey: String = ""
+    private var pllValidatedThisShieldDelay: Boolean = false
+
+    /**
+     * v3.83 2-out-of-3 Majority-Vote PLL (Phase-Locked Loop) Sensor Fusion:
+     * Combines 3 independent sources of truth for player fast moves & energy:
+     *   1. Opponent Fast-Move HP Integrator (integrated over turns in the current combat stint, ignoring Charged Move damage)
+     *   2. Charge Move 1 Circle (Left Button, 3-sample & >= 300ms debounced)
+     *   3. Charge Move 2 Circle (Right Button, 3-sample & >= 300ms debounced)
+     * Returns:
+     *   +1 -> Step UP by +1 fast move (+fastEnergy)
+     *   -1 -> Step DOWN by -1 fast move (-fastEnergy)
+     *    0 -> Hold current PLL state (in lock)
+     */
+    private fun evaluateTwoOutOfThreePllVote(
+        curEnergy: Int,
+        fastEnergy: Int,
+        userExactDmgPct: Double,
+        stintStartEnergy: Int,
+        stintOppFastDmgPct: Double,
+        hpSensorOnline: Boolean,
+        leftFillPct: Int,
+        leftSensorOnline: Boolean,
+        cost1: Int,
+        rightFillPct: Int,
+        rightSensorOnline: Boolean,
+        cost2: Int,
+        hasSecondMove: Boolean
+    ): Int {
+        val minDisagree = max(fastEnergy, 4)
+        val upCandidate = (curEnergy + fastEnergy).coerceIn(0, 100)
+        val downCandidate = (curEnergy - fastEnergy).coerceIn(1, 100)
+
+        // --- Sensor 1: Integrated Opponent Fast-Move HP (ignores Charged Move damage) ---
+        var voteHp = 0
+        var sensorHpEnergy = -1
+        val hpQuantBand = ceil((1.0 / userExactDmgPct.coerceAtLeast(0.75)) * fastEnergy.toDouble())
+            .toInt()
+            .coerceIn(fastEnergy, 12)
+        if (hpSensorOnline && userExactDmgPct >= 0.75) {
+            val impliedMoves = (stintOppFastDmgPct / userExactDmgPct.coerceAtLeast(0.75)).roundToInt().coerceAtLeast(0)
+            sensorHpEnergy = (stintStartEnergy + impliedMoves * fastEnergy).coerceIn(0, 100)
+            val hpThreshold = max(minDisagree, hpQuantBand)
+            voteHp = when {
+                sensorHpEnergy - curEnergy >= hpThreshold -> 1
+                curEnergy - sensorHpEnergy >= hpThreshold -> -1
+                else -> 0
+            }
+        }
+
+        // --- Sensor 2: Charge Move 1 Circle (Left Button) ---
+        var voteC1 = 0
+        var sensorC1Energy = -1
+        var c1SaturatedReady = false
+        val c1Valid = leftSensorOnline && leftFillPct > 0
+        if (c1Valid) {
+            when {
+                leftFillPct in 1..92 -> {
+                    sensorC1Energy = ((leftFillPct * cost1) / 100.0).roundToInt().coerceIn(1, cost1 - 1)
+                    voteC1 = when {
+                        curEnergy >= cost1 -> -1
+                        sensorC1Energy - curEnergy >= minDisagree -> 1
+                        curEnergy - sensorC1Energy >= minDisagree -> -1
+                        else -> 0
+                    }
+                }
+                leftFillPct in 93..99 -> {
+                    sensorC1Energy = ((leftFillPct * cost1) / 100.0).roundToInt().coerceIn(1, cost1)
+                    voteC1 = if (sensorC1Energy - curEnergy >= minDisagree) 1 else 0
+                }
+                leftFillPct == 100 -> {
+                    c1SaturatedReady = true
+                    sensorC1Energy = max(curEnergy, cost1)
+                    voteC1 = if (curEnergy < cost1) 1 else 0
+                }
+                leftFillPct in 101..200 -> {
+                    sensorC1Energy = ((leftFillPct * cost1) / 100.0).roundToInt().coerceIn(cost1 + 1, min(100, cost1 * 2))
+                    voteC1 = when {
+                        curEnergy < cost1 -> 1
+                        sensorC1Energy - curEnergy >= minDisagree -> 1
+                        leftFillPct in 104..192 && curEnergy - sensorC1Energy >= minDisagree -> -1
+                        else -> 0
+                    }
+                }
+            }
+        }
+
+        // --- Sensor 3: Charge Move 2 Circle (Right Button) ---
+        var voteC2 = 0
+        var sensorC2Energy = -1
+        var c2SaturatedReady = false
+        val c2Valid = hasSecondMove && rightSensorOnline && rightFillPct > 0
+        if (c2Valid) {
+            when {
+                rightFillPct in 1..92 -> {
+                    sensorC2Energy = ((rightFillPct * cost2) / 100.0).roundToInt().coerceIn(1, cost2 - 1)
+                    voteC2 = when {
+                        curEnergy >= cost2 -> -1
+                        sensorC2Energy - curEnergy >= minDisagree -> 1
+                        curEnergy - sensorC2Energy >= minDisagree -> -1
+                        else -> 0
+                    }
+                }
+                rightFillPct in 93..99 -> {
+                    sensorC2Energy = ((rightFillPct * cost2) / 100.0).roundToInt().coerceIn(1, cost2)
+                    voteC2 = if (sensorC2Energy - curEnergy >= minDisagree) 1 else 0
+                }
+                rightFillPct == 100 -> {
+                    c2SaturatedReady = true
+                    sensorC2Energy = max(curEnergy, cost2)
+                    voteC2 = if (curEnergy < cost2) 1 else 0
+                }
+                rightFillPct in 101..200 -> {
+                    sensorC2Energy = ((rightFillPct * cost2) / 100.0).roundToInt().coerceIn(cost2 + 1, min(100, cost2 * 2))
+                    voteC2 = when {
+                        curEnergy < cost2 -> 1
+                        sensorC2Energy - curEnergy >= minDisagree -> 1
+                        rightFillPct in 104..192 && curEnergy - sensorC2Energy >= minDisagree -> -1
+                        else -> 0
+                    }
+                }
+            }
+        }
+
+        val requiredReadyFloor = max(
+            if (c1Valid && leftFillPct >= 100) cost1 else 0,
+            if (c2Valid && rightFillPct >= 100) cost2 else 0
+        )
+        val maxUnreadyCeiling = min(
+            if (c1Valid && leftFillPct in 1..92) cost1 - 1 else 100,
+            if (c2Valid && rightFillPct in 1..92) cost2 - 1 else 100
+        )
+
+        // 1. Direct 2-out-of-3 Majority Vote across (HP, Circle 1, Circle 2)
+        val votes = mutableListOf<Int>()
+        if (sensorHpEnergy >= 0) votes.add(voteHp)
+        if (c1Valid) votes.add(voteC1)
+        if (c2Valid) votes.add(voteC2)
+
+        val upVotes = votes.count { it > 0 }
+        val downVotes = votes.count { it < 0 }
+
+        if (upVotes >= 2 && upCandidate <= maxUnreadyCeiling + 1) {
+            return 1
+        }
+        if (downVotes >= 2 && curEnergy > fastEnergy && downCandidate >= requiredReadyFloor) {
+            return -1
+        }
+
+        // 2. Closest-Agreeing Pair (2 out of 3 that agree most closely in energy space, including saturated 100% ring compatibility):
+        val pairTol = max(fastEnergy + 2, 6)
+        if (c1Valid && c2Valid) {
+            val c1CompatibleWithC2 = (!c1SaturatedReady && !c2SaturatedReady && kotlin.math.abs(sensorC1Energy - sensorC2Energy) <= pairTol) ||
+                (c1SaturatedReady && !c2SaturatedReady && sensorC2Energy >= cost1 - 2) ||
+                (c2SaturatedReady && !c1SaturatedReady && sensorC1Energy >= cost2 - 2)
+            if (c1CompatibleWithC2) {
+                val pairTarget = when {
+                    !c1SaturatedReady && !c2SaturatedReady -> ((sensorC1Energy + sensorC2Energy) / 2.0).roundToInt()
+                    !c1SaturatedReady -> sensorC1Energy
+                    !c2SaturatedReady -> sensorC2Energy
+                    else -> max(curEnergy, requiredReadyFloor)
+                }
+                if (pairTarget - curEnergy >= minDisagree && upCandidate <= maxUnreadyCeiling + 1) return 1
+                if (curEnergy - pairTarget >= minDisagree && curEnergy > fastEnergy && (!c1SaturatedReady || !c2SaturatedReady) && downCandidate >= requiredReadyFloor) return -1
+            }
+        }
+        if (c1Valid && sensorHpEnergy >= 0 && !c1SaturatedReady) {
+            if (kotlin.math.abs(sensorC1Energy - sensorHpEnergy) <= max(pairTol, hpQuantBand)) {
+                val pairTarget = ((sensorC1Energy + sensorHpEnergy) / 2.0).roundToInt()
+                if (pairTarget - curEnergy >= minDisagree && upCandidate <= maxUnreadyCeiling + 1) return 1
+                if (curEnergy - pairTarget >= minDisagree && curEnergy > fastEnergy && downCandidate >= requiredReadyFloor) return -1
+            }
+        }
+        if (c2Valid && sensorHpEnergy >= 0 && !c2SaturatedReady) {
+            if (kotlin.math.abs(sensorC2Energy - sensorHpEnergy) <= max(pairTol, hpQuantBand)) {
+                val pairTarget = ((sensorC2Energy + sensorHpEnergy) / 2.0).roundToInt()
+                if (pairTarget - curEnergy >= minDisagree && upCandidate <= maxUnreadyCeiling + 1) return 1
+                if (curEnergy - pairTarget >= minDisagree && curEnergy > fastEnergy && downCandidate >= requiredReadyFloor) return -1
+            }
+        }
+
+        if (requiredReadyFloor > 0 && curEnergy < requiredReadyFloor) {
+            return 1
+        }
+        return 0
+    }
+
     // Phase 2: Battle Clock Synchronization (t0) & Live Timeline Event Logger
     private var battleClockAnchorMs: Long = 0L
     private val battleTimelineEvents = mutableListOf<BattleTimelineEvent>()
@@ -11332,9 +11523,16 @@ class OverlayService : LifecycleService() {
             playerSlotHpConfirmFrames[activeUserIdx] = 0
         }
 
-        // 1B. Opponent HP Bar Scan -> Tracks opponent HP%.
-        //     In Charge Circle Only mode (`chargeCircleOnlyMode == true`), player energy/turns are NEVER incremented by opponent HP drops
-        //     (preventing jitter or phantom HP changes from incrementing energy when the player stops clicking).
+        // 1B. Opponent HP Bar Scan -> Tracks opponent HP% & integrates non-charged-move fast damage over turns for the 2-out-of-3 PLL.
+        val currentStintPairKey = "${activeUserIdx}_${activeOppIdx}_${activeOpponentName.trim().lowercase()}"
+        if (pllStintPairKey != currentStintPairKey) {
+            pllStintPairKey = currentStintPairKey
+            playerStintStartEnergy[activeUserIdx] = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
+            playerStintOppFastDmgPct[activeUserIdx] = 0.0
+            playerStintStartMs[activeUserIdx] = if (hasBattleStarted) nowMs else 0L
+        }
+        val maxFastSingleDrop = max(12, (userExactDmgPct * 2.5).roundToInt()).coerceIn(6, 25)
+
         if (sampledOppHpPct in 1..100 && !oppFaintedSlots[activeOppIdx]) {
             oppFinalMissingHpFrames = 0
             val lastScannedOppHp = lastScannedOppSlotHpPct[activeOppIdx].coerceIn(1, 100)
@@ -11356,10 +11554,24 @@ class OverlayService : LifecycleService() {
                 val realOppDrop = lastScannedOppHp - confirmedOppHp
                 val halfUserDmg = max(1, (userExactDmgPct * 0.50).roundToInt())
                 val minUserFastDmgThreshold = halfUserDmg
+                val isFastMoveCombatWindow = pendingChargedAttackActor.isEmpty() &&
+                    !isAttackIncomingPromptActive &&
+                    !hasAttackIncomingText &&
+                    !hasUserChargedBannerText &&
+                    (nowMs - lastChargedAttackLoggedMs) >= 1100L
 
                 if (realOppDrop in minUserFastDmgThreshold..25) {
                     observedOppFastDrop = true
                     turnPhaseAnchorMs = captureAnchorMs
+
+                    // Integrate fast-move HP damage over turns for Sensor 1 of the 2-out-of-3 PLL (strictly ignoring charged move damage)
+                    if (isFastMoveCombatWindow && realOppDrop <= maxFastSingleDrop) {
+                        if (playerStintStartMs[activeUserIdx] <= 0L) {
+                            playerStintStartEnergy[activeUserIdx] = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
+                            playerStintStartMs[activeUserIdx] = nowMs - (userFastTurnsForStats * 500L)
+                        }
+                        playerStintOppFastDmgPct[activeUserIdx] += realOppDrop.toDouble()
+                    }
 
                     if (canAccumulateFastEnergy && !chargeCircleOnlyMode) {
                         if (!hasBattleStarted) {
@@ -11402,6 +11614,13 @@ class OverlayService : LifecycleService() {
                     pendingOppLowHpSample = -1
                     hpChanged = true
                 } else if (realOppDrop in 1 until minUserFastDmgThreshold && hasBattleStarted) {
+                    if (isFastMoveCombatWindow) {
+                        if (playerStintStartMs[activeUserIdx] <= 0L) {
+                            playerStintStartEnergy[activeUserIdx] = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
+                            playerStintStartMs[activeUserIdx] = nowMs - (userFastTurnsForStats * 500L)
+                        }
+                        playerStintOppFastDmgPct[activeUserIdx] += realOppDrop.toDouble()
+                    }
                     lastScannedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     confirmedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     oppSlotHpPct[activeOppIdx] = confirmedOppHp
@@ -11414,14 +11633,20 @@ class OverlayService : LifecycleService() {
                     oppSlotHpPct[activeOppIdx] = confirmedOppHp
                     oppSlotPreFaintHpPct[activeOppIdx] = confirmedOppHp
                     predictedOppSlotHpPct[activeOppIdx] = confirmedOppHp
+                    playerStintStartEnergy[activeUserIdx] = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
+                    playerStintOppFastDmgPct[activeUserIdx] = 0.0
+                    playerStintStartMs[activeUserIdx] = nowMs
                     hpChanged = true
                 } else if (realOppDrop > 25 && oppSlotHpConfirmFrames[activeOppIdx] >= requiredOppConfirmFrames + 1) {
-                    // v3.82: Sync large (>25%) opponent HP drops when HP bar is re-acquired or after unshielded damage
+                    // v3.82: Sync large (>25%) opponent HP drops when HP bar is re-acquired or after unshielded damage (ignored by fast-move HP integrator)
                     lastScannedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     confirmedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     oppSlotHpPct[activeOppIdx] = confirmedOppHp
                     oppSlotPreFaintHpPct[activeOppIdx] = confirmedOppHp
                     predictedOppSlotHpPct[activeOppIdx] = confirmedOppHp
+                    playerStintStartEnergy[activeUserIdx] = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
+                    playerStintOppFastDmgPct[activeUserIdx] = 0.0
+                    playerStintStartMs[activeUserIdx] = nowMs
                     pendingOppLowHpSlot = -1
                     pendingOppLowHpSample = -1
                     hpChanged = true
@@ -11628,6 +11853,7 @@ class OverlayService : LifecycleService() {
                     if (trueThrownMove != null && trueThrownMove.second != lastUserChargeDeductedEnergySnapshot) {
                         val costDiff = lastUserChargeDeductedEnergySnapshot - trueThrownMove.second
                         playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] + costDiff).coerceIn(0, 100)
+                        playerStintStartEnergy[activeUserIdx] = (playerStintStartEnergy[activeUserIdx] + costDiff).coerceIn(0, 100)
                         lastUserChargeDeductedEnergySnapshot = trueThrownMove.second
                         lastUserChargeResolvedMoveName = trueThrownMove.first
                         hpChanged = true
@@ -11707,60 +11933,49 @@ class OverlayService : LifecycleService() {
                 hpChanged = true
             }
 
-            // 3. ±1 Fast-Move Self-Correction when a valid reading for over 300ms (>= 3 samples) on BOTH meters disagrees:
+            // 3. v3.83 2-out-of-3 Majority-Vote PLL Self-Correction (Opponent Fast-Move HP Integrator + Charge Move 1 + Charge Move 2):
             //    - Rate-limited to at most 1 fast move adjustment per fast move duration (userMoveDurationMs).
-            //    - Evaluated >= 300ms after the last auto-increment anchor so if the meter didn't move 300ms later or is an
-            //      energy interval off, it adjusts up or down by ONE fast move of energy (±userFastEnergyForStats) while
-            //      preserving any leftover charged move energy deltas!
+            //    - Evaluated >= 300ms after the last auto-increment anchor using the 2 out of 3 sources of truth that agree most:
+            //      (1) Opponent Fast-Move HP integrated over turns (ignoring Charged Move damage),
+            //      (2) Debounced Left Charge Move 1 meter (>= 3 samples & >= 300ms),
+            //      (3) Debounced Right Charge Move 2 meter (>= 3 samples & >= 300ms).
+            //    - Never allows disappearing/zero circles to pull non-zero combat energy down to 0, and preserves leftover charged move energy deltas!
             val canSelfCorrectThisDuration = (nowMs - playerLastSelfCorrectionAtMs[activeUserIdx]) >= userMoveDurationMs
             val elapsedSinceAutoAnchorMs = if (playerAutoIncrementAnchorMs[activeUserIdx] > 0L) {
                 (nowMs - playerAutoIncrementAnchorMs[activeUserIdx]).coerceAtLeast(0L)
             } else 300L
-            if (hasBattleStarted && bothMetersDebounced300ms && canSelfCorrectThisDuration && elapsedSinceAutoAnchorMs >= 300L) {
+            val activeSensorCount = (if (leftDebouncedValid) 1 else 0) +
+                (if (hasSecondUserMove && rightDebouncedValid) 1 else 0) +
+                (if (sampledOppHpPct in 1..100 && (playerStintOppFastDmgPct[activeUserIdx] > 0.0 || (playerStintStartMs[activeUserIdx] > 0L && (nowMs - playerStintStartMs[activeUserIdx]) >= userMoveDurationMs))) 1 else 0)
+
+            if (hasBattleStarted && (bothMetersDebounced300ms || activeSensorCount >= 2) && canSelfCorrectThisDuration && elapsedSinceAutoAnchorMs >= 300L) {
                 val curEnergy = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
-                val debouncedL = pendingConfirmLeftChargeFillPct[activeUserIdx]
-                val debouncedR = if (hasSecondUserMove) pendingConfirmRightChargeFillPct[activeUserIdx] else debouncedL
-                // Never allow 0% on circles to pull non-zero combat energy down to 0
+                val debouncedL = if (leftDebouncedValid) pendingConfirmLeftChargeFillPct[activeUserIdx] else -1
+                val debouncedR = if (hasSecondUserMove && rightDebouncedValid) pendingConfirmRightChargeFillPct[activeUserIdx] else -1
                 val isZeroCircleReading = debouncedL <= 0 && (!hasSecondUserMove || debouncedR <= 0)
                 if (!isZeroCircleReading) {
-                    val leftReady = debouncedL >= 100
-                    val rightReady = hasSecondUserMove && debouncedR >= 100
-                    val leftPrimaryUnready = debouncedL in 1..92
-                    val rightPrimaryUnready = hasSecondUserMove && debouncedR in 1..92
+                    val hpSensorOnline = sampledOppHpPct in 1..100 &&
+                        !oppFaintedSlots[activeOppIdx] &&
+                        (playerStintOppFastDmgPct[activeUserIdx] > 0.0 ||
+                            (playerStintStartMs[activeUserIdx] > 0L && (nowMs - playerStintStartMs[activeUserIdx]) >= userMoveDurationMs))
 
-                    val requiredReadyFloor = max(
-                        if (leftReady) userMove1Energy else 0,
-                        if (rightReady) userMove2Energy else 0
-                    )
-                    val maxUnreadyCeiling = min(
-                        if (leftPrimaryUnready) userMove1Energy - 1 else 100,
-                        if (rightPrimaryUnready) userMove2Energy - 1 else 100
-                    )
-                    val debouncedAuthEnergy = computeAuthoritativeCircleEnergy(
+                    val pllVote = evaluateTwoOutOfThreePllVote(
+                        curEnergy = curEnergy,
+                        fastEnergy = userFastEnergyForStats,
+                        userExactDmgPct = userExactDmgPct,
+                        stintStartEnergy = playerStintStartEnergy[activeUserIdx],
+                        stintOppFastDmgPct = playerStintOppFastDmgPct[activeUserIdx],
+                        hpSensorOnline = hpSensorOnline,
                         leftFillPct = debouncedL,
-                        rightFillPct = debouncedR,
+                        leftSensorOnline = leftDebouncedValid,
                         cost1 = userMove1Energy,
+                        rightFillPct = debouncedR,
+                        rightSensorOnline = rightDebouncedValid,
                         cost2 = userMove2Energy,
                         hasSecondMove = hasSecondUserMove
                     )
-                    val drift = if (debouncedAuthEnergy in 1..100) (debouncedAuthEnergy - curEnergy) else 0
-                    val minDisagreeThreshold = max(userFastEnergyForStats, 4)
 
-                    val shouldAdjustUpOneMove = (requiredReadyFloor > 0 && curEnergy < requiredReadyFloor) ||
-                        (debouncedAuthEnergy in 1..100 &&
-                            drift >= minDisagreeThreshold &&
-                            curEnergy + userFastEnergyForStats <= maxUnreadyCeiling + 1)
-
-                    // Only adjust down when at least one meter is in its clean primary unready range (1..92%) and never drop energy to 0
-                    val shouldAdjustDownOneMove = !shouldAdjustUpOneMove &&
-                        curEnergy > userFastEnergyForStats &&
-                        (leftPrimaryUnready || rightPrimaryUnready) &&
-                        ((maxUnreadyCeiling < 100 && curEnergy > maxUnreadyCeiling) ||
-                            (debouncedAuthEnergy in 1..95 &&
-                                drift <= -minDisagreeThreshold &&
-                                (curEnergy - userFastEnergyForStats) >= requiredReadyFloor))
-
-                    if (shouldAdjustUpOneMove && curEnergy < 100) {
+                    if (pllVote > 0 && curEnergy < 100) {
                         playerSlotEnergy[activeUserIdx] = (curEnergy + userFastEnergyForStats).coerceIn(0, 100)
                         userFastMovesCreditedThisFrame += 1
                         playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + userFastTurnsForStats).coerceAtLeast(0)
@@ -11768,7 +11983,7 @@ class OverlayService : LifecycleService() {
                         playerLastSelfCorrectionAtMs[activeUserIdx] = nowMs
                         lastMicroCorrectionTimeMs = nowMs
                         hpChanged = true
-                    } else if (shouldAdjustDownOneMove) {
+                    } else if (pllVote < 0 && curEnergy > userFastEnergyForStats) {
                         playerSlotEnergy[activeUserIdx] = (curEnergy - userFastEnergyForStats).coerceIn(1, 100)
                         playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] - userFastTurnsForStats).coerceAtLeast(0)
                         phasePlayerTurns = (phasePlayerTurns - userFastTurnsForStats).coerceAtLeast(0)
@@ -12058,6 +12273,43 @@ class OverlayService : LifecycleService() {
             predictedOppSlotHpPct[activeOppIdx] = oppSlotHpPct[activeOppIdx]
             if (pendingChargedAttackActor != "opp" && (nowMs - lastChargedAttackLoggedMs) > 2200L) {
                 hasBattleStarted = true
+                // Validate settled pre-shield-delay Opponent HP & run 2-out-of-3 PLL check during shield choice delay!
+                if (sampledOppHpPct in 1..100 && oppSlotHpConfirmFrames[activeOppIdx] >= 2) {
+                    val settledFastDrop = lastScannedOppSlotHpPct[activeOppIdx] - sampledOppHpPct
+                    if (settledFastDrop in 1..maxFastSingleDrop) {
+                        playerStintOppFastDmgPct[activeUserIdx] += settledFastDrop.toDouble()
+                        lastScannedOppSlotHpPct[activeOppIdx] = sampledOppHpPct
+                        confirmedOppSlotHpPct[activeOppIdx] = sampledOppHpPct
+                        oppSlotHpPct[activeOppIdx] = sampledOppHpPct
+                    }
+                }
+                if (!pllValidatedThisShieldDelay) {
+                    pllValidatedThisShieldDelay = true
+                    val shieldDelayVote = evaluateTwoOutOfThreePllVote(
+                        curEnergy = playerSlotEnergy[activeUserIdx].coerceIn(0, 100),
+                        fastEnergy = userFastEnergyForStats,
+                        userExactDmgPct = userExactDmgPct,
+                        stintStartEnergy = playerStintStartEnergy[activeUserIdx],
+                        stintOppFastDmgPct = playerStintOppFastDmgPct[activeUserIdx],
+                        hpSensorOnline = playerStintOppFastDmgPct[activeUserIdx] > 0.0,
+                        leftFillPct = lastStableLeftChargeFillPct,
+                        leftSensorOnline = lastStableLeftChargeFillPct > 0,
+                        cost1 = userMove1Energy,
+                        rightFillPct = lastStableRightChargeFillPct,
+                        rightSensorOnline = hasSecondUserMove && lastStableRightChargeFillPct > 0,
+                        cost2 = userMove2Energy,
+                        hasSecondMove = hasSecondUserMove
+                    )
+                    if (shieldDelayVote > 0 && playerSlotEnergy[activeUserIdx] < 100) {
+                        playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] + userFastEnergyForStats).coerceIn(0, 100)
+                        playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + userFastTurnsForStats).coerceAtLeast(0)
+                        phasePlayerTurns += userFastTurnsForStats
+                    } else if (shieldDelayVote < 0 && playerSlotEnergy[activeUserIdx] > userFastEnergyForStats) {
+                        playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] - userFastEnergyForStats).coerceIn(1, 100)
+                        playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] - userFastTurnsForStats).coerceAtLeast(0)
+                        phasePlayerTurns = (phasePlayerTurns - userFastTurnsForStats).coerceAtLeast(0)
+                    }
+                }
                 // Reconcile completed opponent moves up to the throw boundary (assuming opponent throws on optimal timing if energy < cheapestOppEnergy)
                 if (phasePlayerTurns > 0) {
                     val completedOppByThrow = phasePlayerTurns / oppFastTurnsForStats
@@ -12110,6 +12362,7 @@ class OverlayService : LifecycleService() {
             return
         } else if (isAttackIncomingPromptActive && (isNormalFastCombatFrame || postOppChargedMissingPlayerHpFrames >= 6 || (nowMs - attackIncomingDetectedAtMs) > 4500L)) {
             isAttackIncomingPromptActive = false
+            pllValidatedThisShieldDelay = false
             hpChanged = true
         }
 
@@ -12144,19 +12397,31 @@ class OverlayService : LifecycleService() {
                 preChargeLeftFillPct = if (lastStableLeftChargeFillPct > 0) lastStableLeftChargeFillPct else lastScannedLeftChargeFillPct[activeUserIdx].coerceAtLeast(0)
                 preChargeRightFillPct = if (lastStableRightChargeFillPct > 0) lastStableRightChargeFillPct else lastScannedRightChargeFillPct[activeUserIdx].coerceAtLeast(0)
 
-                // Cross-validate pre-throw energy against the last stable Left (Move 1) & Right (Move 2) circle fill readings
-                val authPreThrowE = computeAuthoritativeCircleEnergy(
+                // Validate pre-throw energy using 2-out-of-3 PLL (Integrated Opponent Fast-Move HP + Pre-Throw Circle 1 + Pre-Throw Circle 2)
+                // during the opponent's shield choice delay before the charged move damage lands!
+                val preThrowPllVote = evaluateTwoOutOfThreePllVote(
+                    curEnergy = playerSlotEnergy[activeUserIdx].coerceIn(0, 100),
+                    fastEnergy = userFastEnergyForStats,
+                    userExactDmgPct = userExactDmgPct,
+                    stintStartEnergy = playerStintStartEnergy[activeUserIdx],
+                    stintOppFastDmgPct = playerStintOppFastDmgPct[activeUserIdx],
+                    hpSensorOnline = playerStintOppFastDmgPct[activeUserIdx] > 0.0,
                     leftFillPct = preChargeLeftFillPct,
-                    rightFillPct = preChargeRightFillPct,
+                    leftSensorOnline = preChargeLeftFillPct > 0,
                     cost1 = userMove1Energy,
+                    rightFillPct = preChargeRightFillPct,
+                    rightSensorOnline = hasSecondUserMove && preChargeRightFillPct > 0,
                     cost2 = userMove2Energy,
                     hasSecondMove = hasSecondUserMove
                 )
-                if (authPreThrowE >= cheapestUserEnergy) {
-                    val snappedPreE = (((authPreThrowE.toDouble() / userFastEnergyForStats.toDouble()).roundToInt()) * userFastEnergyForStats).coerceIn(cheapestUserEnergy, 100)
-                    if (playerSlotEnergy[activeUserIdx] > snappedPreE + userFastEnergyForStats) {
-                        playerSlotEnergy[activeUserIdx] = snappedPreE
-                    }
+                if (preThrowPllVote > 0 && playerSlotEnergy[activeUserIdx] < 100) {
+                    playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] + userFastEnergyForStats).coerceIn(0, 100)
+                    playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + userFastTurnsForStats).coerceAtLeast(0)
+                    phasePlayerTurns += userFastTurnsForStats
+                } else if (preThrowPllVote < 0 && playerSlotEnergy[activeUserIdx] - userFastEnergyForStats >= cheapestUserEnergy) {
+                    playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] - userFastEnergyForStats).coerceIn(cheapestUserEnergy, 100)
+                    playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] - userFastTurnsForStats).coerceAtLeast(0)
+                    phasePlayerTurns = (phasePlayerTurns - userFastTurnsForStats).coerceAtLeast(0)
                 }
 
                 // If player threw a charged move on time but energy was < cheapestUserEnergy (missed turn), reconcile missed turns first!
@@ -12310,6 +12575,10 @@ class OverlayService : LifecycleService() {
                 playerLastFastCreditedAtMs[activeUserIdx] = 0L
                 playerAutoIncrementAnchorMs[activeUserIdx] = 0L
                 playerLastSelfCorrectionAtMs[activeUserIdx] = 0L
+                playerStintStartEnergy[activeUserIdx] = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
+                playerStintOppFastDmgPct[activeUserIdx] = 0.0
+                playerStintStartMs[activeUserIdx] = nowMs
+                pllValidatedThisShieldDelay = false
                 oppLastFastCreditedAtMs[activeOppIdx] = 0L
                 oppCreditedByOptimalTimerAtMs[activeOppIdx] = 0L
                 isPlayerInIdleFallback = false
@@ -12493,6 +12762,10 @@ class OverlayService : LifecycleService() {
                 playerLastFastCreditedAtMs[activeUserIdx] = 0L
                 playerAutoIncrementAnchorMs[activeUserIdx] = 0L
                 playerLastSelfCorrectionAtMs[activeUserIdx] = 0L
+                playerStintStartEnergy[activeUserIdx] = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
+                playerStintOppFastDmgPct[activeUserIdx] = 0.0
+                playerStintStartMs[activeUserIdx] = nowMs
+                pllValidatedThisShieldDelay = false
                 oppLastFastCreditedAtMs[activeOppIdx] = 0L
                 oppCreditedByOptimalTimerAtMs[activeOppIdx] = 0L
                 isPlayerInIdleFallback = false
@@ -14241,6 +14514,11 @@ class OverlayService : LifecycleService() {
         rightChargeFillDebounceStartMs.fill(0L)
         playerAutoIncrementAnchorMs.fill(0L)
         playerLastSelfCorrectionAtMs.fill(0L)
+        playerStintStartEnergy.fill(0)
+        playerStintOppFastDmgPct.fill(0.0)
+        playerStintStartMs.fill(0L)
+        pllStintPairKey = ""
+        pllValidatedThisShieldDelay = false
         prescanCircleCalibrated = false
         prescanCalibConfirmFrames = 0
         lastMicroCorrectionTimeMs = 0L

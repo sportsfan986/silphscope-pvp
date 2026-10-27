@@ -1,5 +1,25 @@
 # SilphScope PvP Changelog
 
+## [v3.83] — 2026-10-27 — 2-out-of-3 Majority-Vote PLL (Integrated Opponent HP + Charge Move 1 + Charge Move 2), 3-Sample / 300ms Meter Debounce, Phase-Locked Fast-Move Auto-Increment & Wider Tinkaton HP Bounds
+- **2-out-of-3 Majority-Vote PLL (Phase-Locked Loop) Sensor Fusion (`OverlayService.kt`)**:
+  - Combines 3 independent sources of truth for player fast moves and energy:
+    1. **Opponent Fast-Move HP Integrator**: Integrates confirmed fast-move HP drops (`1..maxFastSingleDrop%`) over turns within each combat stint (`playerStintOppFastDmgPct / userExactDmgPct`) to eliminate single-turn integer `%` quantization jitter while strictly ignoring Charged Move damage (`> 25%` drops and active charged move windows).
+    2. **Charge Move 1 Circle (Left Button)**: 3-sample and `>= 300ms` debounced fill reading (`1..92%` primary fill, `100%` ready ring, and `101..200%` overcharge ring).
+    3. **Charge Move 2 Circle (Right Button)**: 3-sample and `>= 300ms` debounced fill reading (`1..92%` primary fill, `100%` ready ring, and `101..200%` overcharge ring).
+  - Evaluates both direct 2-out-of-3 directional votes and the closest-agreeing pair (including saturated `100%` ready-ring compatibility when one move is full and the second move + Opponent HP track overcharge up to `100E`), adjusting energy by at most `±1` fast move per fast-move duration (`500ms * fastMoveTurns`) while preserving leftover charged move energy deltas.
+  - **Shield Choice Delay Validation**: Validates settled Opponent fast-move HP drops alongside pre-prompt Charge Move 1 & 2 circle readings right at the start of Opponent (`"Attack incoming!"` / `"No Protect Shields remaining!"`) and Player shield choice delays before charged move damage is applied.
+- **3-Sample & `>= 300ms` Charge Circle Debounce + Zero-Drop Protection (`OverlayService.kt`)**:
+  - Requires at least 3 consecutive consistent samples and `>= 300ms` stability before accepting a Charge Move meter reading.
+  - Prevents disappearing or dimmed Charge Move circles (`-1` or `0%`) during Charged Move animations or camera cuts from ever resetting or dropping combat energy to zero.
+- **Phase-Locked End-of-Fast-Move Auto-Increment & Opponent Turn Mapping (`OverlayService.kt`)**:
+  - Anchors the fast-move auto-increment oscillator (`500ms * fastMoveTurns`) to the start timestamp of the last successful `300ms` meter debounce so player energy increments in phase with the meter moving at the end of each fast move duration (not every 0.5s turn unless using a 1-turn move).
+  - Maps confirmed player fast-move energy increments directly to battle turns (`phasePlayerTurns`) for counting opponent fast moves and energy.
+- **Expanded Floating HP Bar Vertical Corridors & Tinkaton Border Classifier (`OverlayService.kt`)**:
+  - Widened floating HP bar vertical scan corridors (`0.055h..0.14h` for tall opponents and `0.60h..0.88h` for small/low player Pokémon) and relaxed capsule border chroma tolerances to reliably detect Tinkaton's floating HP bar across devices.
+- **0-Shield Prompt Attribution (`"No Protect Shields remaining!"`) & Adaptive 3-2-1-GO Circle Calibration (`OverlayService.kt`)**:
+  - Treats `"No Protect Shields remaining!"` (and the 0-shield hidden-bottom-circles + visible-opponent-HP visual signature) as an incoming opponent Charged Attack targeting the player.
+  - Added adaptive 3-2-1-GO prescan circle geometry and empty-interior luma/saturation baseline calibration across multi-device aspect ratios.
+
 ## [v3.64] — 2026-10-26 — 200ms Pixel HP + 750ms Async OCR Dual-Rate Loop, Pending-Damage Sliver Latch, 3-Tier PID Energy Observer & Compact Right-Aligned Header Row
 - **Dual-Rate Screen Sampling Architecture (`200ms` Pixel HP Loop + `~750ms` Async ML Kit OCR Loop) (`OverlayService.kt`)**:
   - Decoupled lightweight pixel-only HUD scanning (`detectFloatingHpBarPct` + pending-damage sliver extraction + `detectActivePokeballCount` + `detectActiveShieldCount`) onto a dedicated **`200ms` (`5 Hz`)** loop so every `0.5s` Pokémon GO PvP turn is sampled ~2.5 times per turn with `<5ms` frame-read overhead.
