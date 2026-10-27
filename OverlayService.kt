@@ -7718,19 +7718,22 @@ class OverlayService : LifecycleService() {
     private var chargeCircleOnlyMode: Boolean = true
     private var fastDetectTurnOffset: Int = 0
     private var isPlayerInIdleFallback: Boolean = false
+    private var lastIdleFallbackOppCreditMs: Long = 0L
     private val confirmedOppChargedMoves = Array(3) { linkedSetOf<String>() }
     private val detectedOppFastMoveOverride = arrayOfNulls<String>(3)
     private val oppFastMoveStatus = Array(3) { "UNCONFIRMED" } // "UNCONFIRMED" | "CONFIRMED_STD" | "CONFIRMED_NONSTD"
+    private val oppFastMoveConfirmed = BooleanArray(3) { false }
+    private val oppCumulativeFastDmgPct = IntArray(3) { 0 }
     private val oppFastTurnHpHistory = mutableMapOf<Int, Int>()
     private var oppFastEvalAnchorPlayerHp: Int = 100
     private var oppFastEvalAnchorOppTurns: Int = 0
     private var oppFastEvalAnchorPlayerTurns: Int = 0
     private var oppFastEvalActiveSlotKey: String = ""
     private var lastDetectedBannerMoveName: String = ""
-    private var lastDetectedBannerActor: String = "" // "opp" | "user" | ""
-    private var lastDetectedBannerTimeMs: Long = 0L
-    private var preThrowLeftFillPct: Int = 0
-    private var preThrowRightFillPct: Int = 0
+    private var lastDetectedBannerMoveActor: String = "" // "opp" | "user" | ""
+    private var lastDetectedBannerMoveTimeMs: Long = 0L
+    private var preChargeLeftFillPct: Int = 0
+    private var preChargeRightFillPct: Int = 0
     private var lastClearedFinalUserHpPct: List<Int> = listOf(100, 100, 100)
     private var lastClearedFinalOppHpPct: List<Int> = listOf(100, 100, 100)
 
@@ -10566,7 +10569,7 @@ class OverlayService : LifecycleService() {
             getPokemonMeta(activeOpponentName, activeLeague, isOpponentShadow),
             activeLeague
         )
-        val oppFastNameForStats = detectedOppFastMoveOverride[activeOppIdx].takeIf { it.isNotBlank() }
+        val oppFastNameForStats = detectedOppFastMoveOverride[activeOppIdx]?.takeIf { it.isNotBlank() }
             ?: oppMetaForStats.defaultFastMove
         val oppFastTurnsForStats = resolveFastTurnsStatic(oppFastNameForStats, oppMetaForStats.fastTurns).coerceIn(1, 5)
         val oppFastEnergyForStats = resolveFastEnergyStatic(oppFastNameForStats, oppFastTurnsForStats).coerceIn(2, 20)
