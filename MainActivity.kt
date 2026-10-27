@@ -171,8 +171,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textHpTrackingDesc: TextView
     private lateinit var btnToggleEnergyTracking: Button
     private lateinit var textEnergyTrackingDesc: TextView
-    private lateinit var btnToggleChargeCircleMode: Button
-    private lateinit var textChargeCircleModeDesc: TextView
+    private lateinit var textKalmanTuningSummary: TextView
+    private lateinit var editKalmanQScale: EditText
+    private lateinit var editKalmanMeasNoise: EditText
+    private lateinit var editKalmanMinStep: EditText
+    private lateinit var editKalmanPllBlend: EditText
+    private lateinit var btnSaveKalmanTuning: Button
+    private lateinit var btnRestoreKalmanTuning: Button
     private lateinit var btnCycleFastDetectOffset: Button
     private lateinit var textFastDetectOffsetDesc: TextView
     private lateinit var seekbarOverlayScale: SeekBar
@@ -440,7 +445,6 @@ class MainActivity : AppCompatActivity() {
     private val PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS = OverlayService.PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS
     private val PREFS_KEY_ENABLE_HP_TRACKING = OverlayService.PREFS_KEY_ENABLE_HP_TRACKING
     private val PREFS_KEY_ENABLE_ENERGY_TRACKING = OverlayService.PREFS_KEY_ENABLE_ENERGY_TRACKING
-    private val PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE = OverlayService.PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE
     private val PREFS_KEY_FAST_DETECT_TURN_OFFSET = OverlayService.PREFS_KEY_FAST_DETECT_TURN_OFFSET
     private val PREFS_KEY_INSTALLED_VERSION_CODE = OverlayService.PREFS_KEY_INSTALLED_VERSION_CODE
     private val PREFS_KEY_LAST_SYNC_TIMESTAMP = OverlayService.PREFS_KEY_LAST_SYNC_TIMESTAMP
@@ -1103,6 +1107,14 @@ class MainActivity : AppCompatActivity() {
             btnRestoreTierThresholds.backgroundTintList = elevatedBtnTint
             btnRestoreTierThresholds.setTextColor(theme.secondaryAccentColor)
         }
+        if (::btnSaveKalmanTuning.isInitialized) {
+            btnSaveKalmanTuning.backgroundTintList = primaryBtnTint
+            btnSaveKalmanTuning.setTextColor(0xFFFFFFFF.toInt())
+        }
+        if (::btnRestoreKalmanTuning.isInitialized) {
+            btnRestoreKalmanTuning.backgroundTintList = elevatedBtnTint
+            btnRestoreKalmanTuning.setTextColor(theme.secondaryAccentColor)
+        }
         if (::btnGithubLoginSettings.isInitialized) {
             updateSyncStatusUi()
         }
@@ -1141,7 +1153,6 @@ class MainActivity : AppCompatActivity() {
         if (::btnToggleTacticalRec.isInitialized) updateTacticalRecUi()
         if (::btnToggleHpTracking.isInitialized) updateHpTrackingUi()
         if (::btnToggleEnergyTracking.isInitialized) updateEnergyTrackingUi()
-        if (::btnToggleChargeCircleMode.isInitialized) updateChargeCircleModeUi()
         if (::btnCycleFastDetectOffset.isInitialized) updateFastDetectOffsetUi()
         if (::presetsContainer.isInitialized && presetsContainer.childCount > 0) {
             refreshPresetsUi()
@@ -1186,8 +1197,13 @@ class MainActivity : AppCompatActivity() {
         textHpTrackingDesc = findViewById(R.id.text_hp_tracking_desc)
         btnToggleEnergyTracking = findViewById(R.id.btn_toggle_energy_tracking)
         textEnergyTrackingDesc = findViewById(R.id.text_energy_tracking_desc)
-        btnToggleChargeCircleMode = findViewById(R.id.btn_toggle_charge_circle_mode)
-        textChargeCircleModeDesc = findViewById(R.id.text_charge_circle_mode_desc)
+        textKalmanTuningSummary = findViewById(R.id.text_kalman_tuning_summary)
+        editKalmanQScale = findViewById(R.id.edit_kalman_q_scale)
+        editKalmanMeasNoise = findViewById(R.id.edit_kalman_meas_noise)
+        editKalmanMinStep = findViewById(R.id.edit_kalman_min_step)
+        editKalmanPllBlend = findViewById(R.id.edit_kalman_pll_blend)
+        btnSaveKalmanTuning = findViewById(R.id.btn_save_kalman_tuning)
+        btnRestoreKalmanTuning = findViewById(R.id.btn_restore_kalman_tuning)
         btnCycleFastDetectOffset = findViewById(R.id.btn_cycle_fast_detect_offset)
         textFastDetectOffsetDesc = findViewById(R.id.text_fast_detect_offset_desc)
         seekbarOverlayScale = findViewById(R.id.seekbar_overlay_scale)
@@ -1315,7 +1331,6 @@ class MainActivity : AppCompatActivity() {
         updateTacticalRecUi()
         updateHpTrackingUi()
         updateEnergyTrackingUi()
-        updateChargeCircleModeUi()
         updateFastDetectOffsetUi()
 
         editSyncGithubToken.setText(prefs.getString(PREFS_KEY_SYNC_GITHUB_TOKEN, "") ?: "")
@@ -1337,6 +1352,14 @@ class MainActivity : AppCompatActivity() {
 
         btnSyncBundleSettings.setOnClickListener {
             showSyncBundleDialog()
+        }
+
+        loadAndRenderKalmanTuningUi()
+        btnSaveKalmanTuning.setOnClickListener {
+            saveKalmanTuningFromInputs(showToast = true)
+        }
+        btnRestoreKalmanTuning.setOnClickListener {
+            restoreDefaultKalmanTuning()
         }
 
         loadAndRenderTierThresholdsUi()
@@ -1616,21 +1639,6 @@ class MainActivity : AppCompatActivity() {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
                     action = OverlayService.ACTION_UPDATE_SETTINGS
                     putExtra(OverlayService.EXTRA_ENABLE_ENERGY_TRACKING, nextEnableEnergy)
-                }
-                startService(updateIntent)
-            }
-        }
-
-        btnToggleChargeCircleMode.setOnClickListener {
-            val currentCircleOnly = prefs.getBoolean(PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE, true)
-            val nextCircleOnly = !currentCircleOnly
-            prefs.edit().putBoolean(PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE, nextCircleOnly).apply()
-            updateChargeCircleModeUi()
-
-            if (isOverlayRunning) {
-                val updateIntent = Intent(this, OverlayService::class.java).apply {
-                    action = OverlayService.ACTION_UPDATE_SETTINGS
-                    putExtra(OverlayService.EXTRA_CHARGE_CIRCLE_ONLY_MODE, nextCircleOnly)
                 }
                 startService(updateIntent)
             }
@@ -3434,6 +3442,82 @@ class MainActivity : AppCompatActivity() {
         return sb.toString().trim()
     }
 
+    private fun loadAndRenderKalmanTuningUi() {
+        if (!::editKalmanQScale.isInitialized) return
+        OverlayService.syncTierThresholdsFromPrefs(prefs)
+        val qScale = OverlayService.activeKalmanQScalePct
+        val measR = OverlayService.activeKalmanMeasNoise
+        val minStep = OverlayService.activeKalmanMinStepPct
+        val pllBlend = OverlayService.activeKalmanPllBlendPct
+        editKalmanQScale.setText(qScale.toString())
+        editKalmanMeasNoise.setText(measR.toString())
+        editKalmanMinStep.setText(minStep.toString())
+        editKalmanPllBlend.setText(pllBlend.toString())
+        if (::textKalmanTuningSummary.isInitialized) {
+            textKalmanTuningSummary.text =
+                "• Highest-Energy Charge Move Meter Priority (Decoupled from HP)\n" +
+                "• Q Scale: ${qScale}% (Def: 100%) • Meas Noise R: $measR (Def: 11)\n" +
+                "• Min Step: ${minStep}% (Def: 4%) • PLL Phase Blend: ${pllBlend}% (Def: 30%)"
+        }
+    }
+
+    private fun saveKalmanTuningFromInputs(showToast: Boolean) {
+        val rawQ = editKalmanQScale.text.toString().trim().toIntOrNull() ?: OverlayService.DEFAULT_KALMAN_Q_SCALE_PCT
+        val rawR = editKalmanMeasNoise.text.toString().trim().toIntOrNull() ?: OverlayService.DEFAULT_KALMAN_MEAS_NOISE
+        val rawStep = editKalmanMinStep.text.toString().trim().toIntOrNull() ?: OverlayService.DEFAULT_KALMAN_MIN_STEP_PCT
+        val rawBlend = editKalmanPllBlend.text.toString().trim().toIntOrNull() ?: OverlayService.DEFAULT_KALMAN_PLL_BLEND_PCT
+
+        val qScale = rawQ.coerceIn(20, 300)
+        val measR = rawR.coerceIn(3, 40)
+        val minStep = rawStep.coerceIn(2, 12)
+        val pllBlend = rawBlend.coerceIn(5, 80)
+
+        prefs.edit()
+            .putInt(OverlayService.PREFS_KEY_KALMAN_Q_SCALE_PCT, qScale)
+            .putInt(OverlayService.PREFS_KEY_KALMAN_MEAS_NOISE, measR)
+            .putInt(OverlayService.PREFS_KEY_KALMAN_MIN_STEP_PCT, minStep)
+            .putInt(OverlayService.PREFS_KEY_KALMAN_PLL_BLEND_PCT, pllBlend)
+            .apply()
+        OverlayService.syncTierThresholdsFromPrefs(prefs)
+        loadAndRenderKalmanTuningUi()
+
+        if (isOverlayRunning) {
+            val updateIntent = Intent(this, OverlayService::class.java).apply {
+                action = OverlayService.ACTION_UPDATE_SETTINGS
+            }
+            startService(updateIntent)
+        }
+        if (showToast) {
+            Toast.makeText(
+                this,
+                "Saved Kalman Filter Tuning: Q=${qScale}%, R=$measR, Step=${minStep}%, PLL=${pllBlend}%",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    private fun restoreDefaultKalmanTuning() {
+        prefs.edit()
+            .putInt(OverlayService.PREFS_KEY_KALMAN_Q_SCALE_PCT, OverlayService.DEFAULT_KALMAN_Q_SCALE_PCT)
+            .putInt(OverlayService.PREFS_KEY_KALMAN_MEAS_NOISE, OverlayService.DEFAULT_KALMAN_MEAS_NOISE)
+            .putInt(OverlayService.PREFS_KEY_KALMAN_MIN_STEP_PCT, OverlayService.DEFAULT_KALMAN_MIN_STEP_PCT)
+            .putInt(OverlayService.PREFS_KEY_KALMAN_PLL_BLEND_PCT, OverlayService.DEFAULT_KALMAN_PLL_BLEND_PCT)
+            .apply()
+        OverlayService.syncTierThresholdsFromPrefs(prefs)
+        loadAndRenderKalmanTuningUi()
+        if (isOverlayRunning) {
+            val updateIntent = Intent(this, OverlayService::class.java).apply {
+                action = OverlayService.ACTION_UPDATE_SETTINGS
+            }
+            startService(updateIntent)
+        }
+        Toast.makeText(
+            this,
+            "Restored default Kalman Filter Tuning (Q=100%, R=11, Step=4%, PLL=30%)",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
     private fun loadAndRenderTierThresholdsUi() {
         if (!::editTierSwMin.isInitialized) return
         OverlayService.syncTierThresholdsFromPrefs(prefs)
@@ -5077,29 +5161,12 @@ class MainActivity : AppCompatActivity() {
             btnToggleEnergyTracking.text = "Energy On"
             btnToggleEnergyTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
             btnToggleEnergyTracking.setTextColor(0xFFFFFFFF.toInt())
-            textEnergyTrackingDesc.text = "Active: 100ms Charge Move Meter + HP energy tracking enabled"
+            textEnergyTrackingDesc.text = "Active: Highest-Energy Charge Move Meter Kalman Filter enabled (decoupled from HP)"
         } else {
             btnToggleEnergyTracking.text = "Energy Off"
             btnToggleEnergyTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
             btnToggleEnergyTracking.setTextColor(theme.primaryTextColor)
-            textEnergyTrackingDesc.text = "Default: Disabled (Opt-in for 100ms Charge Move Meter energy loop)"
-        }
-    }
-
-    private fun updateChargeCircleModeUi() {
-        if (!::btnToggleChargeCircleMode.isInitialized) return
-        val circleOnly = prefs.getBoolean(PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE, true)
-        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
-        if (circleOnly) {
-            btnToggleChargeCircleMode.text = "Circle Only"
-            btnToggleChargeCircleMode.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-            btnToggleChargeCircleMode.setTextColor(0xFFFFFFFF.toInt())
-            textChargeCircleModeDesc.text = "Default: Charge Circle Only (Dual-meter cross-check + >2-move idle back-credit & fallback)"
-        } else {
-            btnToggleChargeCircleMode.text = "HP Legacy"
-            btnToggleChargeCircleMode.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
-            btnToggleChargeCircleMode.setTextColor(theme.primaryTextColor)
-            textChargeCircleModeDesc.text = "Active: Legacy HP-Based + Charge Circle Hybrid Mode (with pre-battle circle lock-in)"
+            textEnergyTrackingDesc.text = "Default: Disabled (Opt-in for Highest-Energy Charge Move Meter Kalman loop)"
         }
     }
 
@@ -5253,7 +5320,6 @@ class MainActivity : AppCompatActivity() {
             putExtra(OverlayService.EXTRA_SHOW_TACTICAL_RECOMMENDATIONS, prefs.getBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, true))
             putExtra(OverlayService.EXTRA_ENABLE_HP_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false))
             putExtra(OverlayService.EXTRA_ENABLE_ENERGY_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false))
-            putExtra(OverlayService.EXTRA_CHARGE_CIRCLE_ONLY_MODE, prefs.getBoolean(PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE, true))
             putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2))
             putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt(PREFS_KEY_OVERLAY_SCALE_PCT, DEFAULT_OVERLAY_SCALE_PCT))
             putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, DEFAULT_OVERLAY_TRANSPARENCY_PCT))
@@ -7325,7 +7391,6 @@ class TaskerOverlayActivity : Activity() {
             putExtra(OverlayService.EXTRA_OPP_COUNT_MODE, prefs.getString("opp_count_mode", "my_fasts") ?: "my_fasts")
             putExtra(OverlayService.EXTRA_ENABLE_4_CHARGED_MOVES, prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_4_CHARGED_MOVES, false))
             putExtra(OverlayService.EXTRA_DISABLE_BATTLE_TOASTS, prefs.getBoolean(OverlayService.PREFS_KEY_DISABLE_BATTLE_TOASTS, false))
-            putExtra(OverlayService.EXTRA_CHARGE_CIRCLE_ONLY_MODE, prefs.getBoolean(OverlayService.PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE, true))
             putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, prefs.getInt(OverlayService.PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2))
             putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt("overlay_scale_pct", 78))
             putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(OverlayService.PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 72))
@@ -7429,7 +7494,6 @@ class TaskerBroadcastReceiver : BroadcastReceiver() {
                         putExtra(OverlayService.EXTRA_OPP_COUNT_MODE, prefs.getString("opp_count_mode", "my_fasts") ?: "my_fasts")
                         putExtra(OverlayService.EXTRA_ENABLE_4_CHARGED_MOVES, prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_4_CHARGED_MOVES, false))
                         putExtra(OverlayService.EXTRA_DISABLE_BATTLE_TOASTS, prefs.getBoolean(OverlayService.PREFS_KEY_DISABLE_BATTLE_TOASTS, false))
-                        putExtra(OverlayService.EXTRA_CHARGE_CIRCLE_ONLY_MODE, prefs.getBoolean(OverlayService.PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE, true))
                         putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, prefs.getInt(OverlayService.PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2))
                         putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt("overlay_scale_pct", 78))
                         putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(OverlayService.PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 72))

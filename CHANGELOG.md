@@ -1,6 +1,6 @@
 # SilphScope PvP Changelog
 
-## [v3.84] — 2026-10-27 — 2-Channel Kalman Filter Energy Meter Smoothing, 3rd-Fill Cycle Confidence Reduction & Slower Charge Move Meter Prioritization
+## [v3.85] — 2026-10-27 — 2-Channel Kalman Filter Energy Meter Smoothing, 3rd-Fill Cycle Confidence Reduction & Slower Charge Move Meter Prioritization
 - **2-Channel Kalman Filter Energy Meter Smoothing (`OverlayService.kt`)**:
   - Replaced the fixed `300ms` charge circle debounce with a state-space Kalman Filter (`updatePlayerEnergyKalmanFilter`) that fuses predicted fast-move turn timestamp energy deltas (`+fastEnergy` at each `500ms * fastMoveTurns` boundary) with observed Left (`Move 1`) and Right (`Move 2`) charge circle fill percentages (`0..200%`).
   - **Animation Lag Compensation**: Within `0..340ms` after a fast move turn boundary, inflates measurement noise covariance $R$ (`4.5x`) for negative innovations (`innov < -2.0`) so rising fill animation lag never drags tracked energy backward while immediately accepting corroborated upward steps with low latency.

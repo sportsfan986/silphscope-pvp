@@ -691,20 +691,38 @@ export default function App() {
     } catch {}
   };
 
-  // v3.80 Settings: Charge Move Energy Circle Only Mode (default true) & Non-Standard Fast Move Detection Offset (0/1/2)
-  const [chargeCircleOnlyMode, setChargeCircleOnlyMode] = useState<boolean>(() => {
+  // v3.85 Settings: Charge Meter Kalman Filter Tuning (Highest-Energy Meter Priority, Decoupled from HP) & Non-Standard Fast Move Detection Offset (0/1/2)
+  const DEFAULT_KALMAN_TUNING = { qScalePct: 100, measNoise: 11, minStepPct: 4, pllBlendPct: 30 };
+  const [kalmanTuning, setKalmanTuning] = useState<{ qScalePct: number; measNoise: number; minStepPct: number; pllBlendPct: number }>(() => {
     try {
-      const saved = localStorage.getItem('gbl_charge_circle_only_mode');
-      return saved === null ? true : saved !== 'false';
-    } catch {
-      return true;
-    }
+      const saved = localStorage.getItem('gbl_kalman_filter_tuning_v385');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          qScalePct: Math.min(300, Math.max(20, Number(parsed.qScalePct) || 100)),
+          measNoise: Math.min(40, Math.max(3, Number(parsed.measNoise) || 11)),
+          minStepPct: Math.min(12, Math.max(2, Number(parsed.minStepPct) || 4)),
+          pllBlendPct: Math.min(80, Math.max(5, Number(parsed.pllBlendPct) || 30)),
+        };
+      }
+    } catch {}
+    return DEFAULT_KALMAN_TUNING;
   });
 
-  const handleSetChargeCircleOnlyMode = (circleOnly: boolean) => {
-    setChargeCircleOnlyMode(circleOnly);
+  const updateKalmanTuningField = (field: 'qScalePct' | 'measNoise' | 'minStepPct' | 'pllBlendPct', rawVal: number) => {
+    setKalmanTuning((prev) => {
+      const next = { ...prev, [field]: rawVal };
+      try {
+        localStorage.setItem('gbl_kalman_filter_tuning_v385', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const restoreDefaultKalmanTuning = () => {
+    setKalmanTuning(DEFAULT_KALMAN_TUNING);
     try {
-      localStorage.setItem('gbl_charge_circle_only_mode', String(circleOnly));
+      localStorage.setItem('gbl_kalman_filter_tuning_v385', JSON.stringify(DEFAULT_KALMAN_TUNING));
     } catch {}
   };
 
@@ -4028,7 +4046,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v3.84 • Android Native Overlay
+                  v3.85 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -8740,42 +8758,86 @@ export default function App() {
               </div>
             </div>
 
-            {/* v3.80 Charge Move Energy Circle Mode vs Legacy HP-Based Mode Toggle */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-bold text-sky-400 flex items-center gap-2">
-                  <span>🎯 Turn &amp; Energy Detection Mode (v3.80)</span>
-                </h3>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/15 border border-sky-500/40 text-sky-300">
-                  {chargeCircleOnlyMode ? 'Charge Circle Only (Default)' : 'HP-Based (Legacy)'}
-                </span>
+            {/* v3.85 Charge Meter Kalman Filter Tuning Card (Highest-Energy Meter Priority, Decoupled from HP) */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-sky-400 flex items-center gap-2">
+                    <span>⚡ Charge Meter Kalman Filter Tuning (v3.85)</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Decouples HP and energy, basing turn detection and self-correction on the <strong>highest-energy charge move meter</strong> (<code>max(cost1, cost2)</code>) to minimize wrap-arounds and avoid 3rd-fill ambiguity.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={restoreDefaultKalmanTuning}
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sky-300 text-xs font-bold transition shrink-0"
+                >
+                  ↺ Restore Defaults (100% / 11 / 4% / 30%)
+                </button>
               </div>
-              <p className="text-xs text-slate-400">
-                <strong>Charge Circle Only (Default):</strong> Locks in static Charge Move 1 &amp; 2 circles during the <code>3-2-1-GO</code> countdown (capturing the very first <code>0→4E</code> fast move and <code>48→52E</code> wrap-around), cross-validates both meters to reconcile missed turns, caps energy at <code>100E</code>, and back-credits + falls back when player is idle for <code>&gt; 2</code> fast moves or at <code>100E</code>. Switch to <strong>HP-Based (Legacy)</strong> to revert to hybrid HP-bar + circle turn detection.
-              </p>
-              <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => handleSetChargeCircleOnlyMode(true)}
-                  className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
-                    chargeCircleOnlyMode
-                      ? 'bg-sky-500/25 border border-sky-400/70 text-sky-200'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  Charge Circle Only (Default)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSetChargeCircleOnlyMode(false)}
-                  className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
-                    !chargeCircleOnlyMode
-                      ? 'bg-slate-800 border border-slate-600 text-slate-200'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  HP-Based (Legacy)
-                </button>
+
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300 space-y-1">
+                <div>• <strong className="text-sky-400">Process Noise Q Scale</strong> = {kalmanTuning.qScalePct}% <span className="text-slate-500">(Default: 100%, Range: 20–300%)</span></div>
+                <div>• <strong className="text-emerald-300">Measurement Noise R</strong> = {kalmanTuning.measNoise} <span className="text-slate-500">(Default: 11, Range: 3–40)</span></div>
+                <div>• <strong className="text-amber-300">Min Step Threshold</strong> = {kalmanTuning.minStepPct}% <span className="text-slate-500">(Default: 4%, Range: 2–12%)</span></div>
+                <div>• <strong className="text-violet-300">PLL Phase Blend</strong> = {kalmanTuning.pllBlendPct}% <span className="text-slate-500">(Default: 30%, Range: 5–80%)</span></div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-sky-400 mb-1">
+                    Process Noise Q % (100)
+                  </label>
+                  <input
+                    type="number"
+                    min={20}
+                    max={300}
+                    value={kalmanTuning.qScalePct}
+                    onChange={(e) => updateKalmanTuningField('qScalePct', Math.min(300, Math.max(20, Number(e.target.value) || 100)))}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-emerald-300 mb-1">
+                    Meas Noise R (11)
+                  </label>
+                  <input
+                    type="number"
+                    min={3}
+                    max={40}
+                    value={kalmanTuning.measNoise}
+                    onChange={(e) => updateKalmanTuningField('measNoise', Math.min(40, Math.max(3, Number(e.target.value) || 11)))}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-amber-300 mb-1">
+                    Min Step % (4)
+                  </label>
+                  <input
+                    type="number"
+                    min={2}
+                    max={12}
+                    value={kalmanTuning.minStepPct}
+                    onChange={(e) => updateKalmanTuningField('minStepPct', Math.min(12, Math.max(2, Number(e.target.value) || 4)))}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-violet-300 mb-1">
+                    PLL Blend % (30)
+                  </label>
+                  <input
+                    type="number"
+                    min={5}
+                    max={80}
+                    value={kalmanTuning.pllBlendPct}
+                    onChange={(e) => updateKalmanTuningField('pllBlendPct', Math.min(80, Math.max(5, Number(e.target.value) || 30)))}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs font-mono"
+                  />
+                </div>
               </div>
             </div>
 

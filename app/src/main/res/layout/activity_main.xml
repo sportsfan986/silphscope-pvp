@@ -1123,47 +1123,198 @@
                     android:textColor="#ffffff" />
             </LinearLayout>
 
-            <!-- v3.80: Charge Move Circle Only Mode vs HP-Based Mode (Main App Settings Only) -->
+            <!-- v3.85: Charge Meter Kalman Filter Tuning Card (Highest-Energy Meter Priority, Decoupled from HP) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
+                android:orientation="vertical"
                 android:layout_marginTop="8dp"
                 android:background="#0f172a"
                 android:padding="10dp">
 
-                <LinearLayout
-                    android:layout_width="0dp"
+                <TextView
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                    android:text="⚡ Charge Meter Kalman Filter Tuning (v3.85)"
+                    android:textColor="#38bdf8"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="🎯 Turn &amp; Energy Source Mode (v3.80)"
-                        android:textColor="#e2e8f0"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/text_kalman_tuning_summary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="• Highest-Energy Charge Move Meter Priority (Decoupled from HP)
+• Q Scale: 100% (Def: 100%) • Meas Noise R: 11 (Def: 11)
+• Min Step: 4% (Def: 4%) • PLL Phase Blend: 30% (Def: 30%)"
+                    android:textColor="#94a3b8"
+                    android:textSize="10sp"
+                    android:layout_marginTop="3dp" />
 
-                    <TextView
-                        android:id="@+id/text_charge_circle_mode_desc"
-                        android:layout_width="wrap_content"
+                <!-- Row 1: Process Noise Q Scale % & Measurement Noise R -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:text="Default: Charge Move Circle Only (Meter 1 &amp; 2 cross-validation + idle fallback)"
-                        android:textColor="#94a3b8"
-                        android:textSize="10sp" />
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:layout_marginEnd="6dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Process Noise Q % (100)"
+                            android:textColor="#38bdf8"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <EditText
+                            android:id="@+id/edit_kalman_q_scale"
+                            android:layout_width="match_parent"
+                            android:layout_height="36dp"
+                            android:layout_marginTop="2dp"
+                            android:background="#1e293b"
+                            android:paddingHorizontal="8dp"
+                            android:hint="(100)"
+                            android:text="100"
+                            android:textColor="#f8fafc"
+                            android:textColorHint="#64748b"
+                            android:textSize="11.5sp"
+                            android:inputType="number"
+                            android:singleLine="true" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Meas Noise R (11)"
+                            android:textColor="#a7f3d0"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <EditText
+                            android:id="@+id/edit_kalman_meas_noise"
+                            android:layout_width="match_parent"
+                            android:layout_height="36dp"
+                            android:layout_marginTop="2dp"
+                            android:background="#1e293b"
+                            android:paddingHorizontal="8dp"
+                            android:hint="(11)"
+                            android:text="11"
+                            android:textColor="#f8fafc"
+                            android:textColorHint="#64748b"
+                            android:textSize="11.5sp"
+                            android:inputType="number"
+                            android:singleLine="true" />
+                    </LinearLayout>
                 </LinearLayout>
 
-                <Button
-                    android:id="@+id/btn_toggle_charge_circle_mode"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:text="Circle Only"
-                    android:textSize="11sp"
-                    android:backgroundTint="#0284c7"
-                    android:textColor="#ffffff" />
+                <!-- Row 2: Min Step Threshold % & PLL Phase Blend % -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:layout_marginEnd="6dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Min Step % (4)"
+                            android:textColor="#fde68a"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <EditText
+                            android:id="@+id/edit_kalman_min_step"
+                            android:layout_width="match_parent"
+                            android:layout_height="36dp"
+                            android:layout_marginTop="2dp"
+                            android:background="#1e293b"
+                            android:paddingHorizontal="8dp"
+                            android:hint="(4)"
+                            android:text="4"
+                            android:textColor="#f8fafc"
+                            android:textColorHint="#64748b"
+                            android:textSize="11.5sp"
+                            android:inputType="number"
+                            android:singleLine="true" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="PLL Phase Blend % (30)"
+                            android:textColor="#c4b5fd"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <EditText
+                            android:id="@+id/edit_kalman_pll_blend"
+                            android:layout_width="match_parent"
+                            android:layout_height="36dp"
+                            android:layout_marginTop="2dp"
+                            android:background="#1e293b"
+                            android:paddingHorizontal="8dp"
+                            android:hint="(30)"
+                            android:text="30"
+                            android:textColor="#f8fafc"
+                            android:textColorHint="#64748b"
+                            android:textSize="11.5sp"
+                            android:inputType="number"
+                            android:singleLine="true" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="8dp">
+
+                    <Button
+                        android:id="@+id/btn_save_kalman_tuning"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="💾 Save Filter Tuning"
+                        android:textSize="11sp"
+                        android:backgroundTint="#0284c7"
+                        android:textColor="#ffffff"
+                        android:layout_marginEnd="6dp" />
+
+                    <Button
+                        android:id="@+id/btn_restore_kalman_tuning"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:text="↺ Restore Defaults"
+                        android:textSize="11sp"
+                        android:backgroundTint="#334155"
+                        android:textColor="#38bdf8" />
+                </LinearLayout>
             </LinearLayout>
 
             <!-- v3.80: Non-Standard Fast Move Detection Turn Offset (0 / +1 / +2 Turns) -->

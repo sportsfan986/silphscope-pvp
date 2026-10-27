@@ -124,7 +124,6 @@ class OverlayService : LifecycleService() {
         const val EXTRA_SHOW_TACTICAL_RECOMMENDATIONS = "extra_show_tactical_recommendations"
         const val EXTRA_ENABLE_HP_TRACKING = "extra_enable_hp_tracking"
         const val EXTRA_ENABLE_ENERGY_TRACKING = "extra_enable_energy_tracking"
-        const val EXTRA_CHARGE_CIRCLE_ONLY_MODE = "extra_charge_circle_only_mode"
         const val EXTRA_FAST_DETECT_TURN_OFFSET = "extra_fast_detect_turn_offset"
 
         const val PREFS_KEY_ENABLE_4_CHARGED_MOVES = "enable_4_charged_moves"
@@ -132,7 +131,6 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS = "show_tactical_recommendations"
         const val PREFS_KEY_ENABLE_HP_TRACKING = "enable_hp_tracking"
         const val PREFS_KEY_ENABLE_ENERGY_TRACKING = "enable_energy_tracking"
-        const val PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE = "charge_circle_only_mode"
         const val PREFS_KEY_FAST_DETECT_TURN_OFFSET = "fast_detect_turn_offset"
         const val PREFS_KEY_INSTALLED_VERSION_CODE = "gbl_last_installed_version_code"
         const val PREFS_KEY_OVERLAY_TRANSPARENCY_PCT = "overlay_transparency_pct"
@@ -168,6 +166,16 @@ class OverlayService : LifecycleService() {
         const val DEFAULT_MACH_PLAYABLE_MIN = 580
         const val DEFAULT_MACH_RISKY_MIN = 540
 
+        // v3.85: Kalman Energy Filter Tuning Parameters & Defaults
+        const val PREFS_KEY_KALMAN_Q_SCALE_PCT = "gbl_kalman_q_scale_pct"
+        const val PREFS_KEY_KALMAN_MEAS_NOISE = "gbl_kalman_meas_noise"
+        const val PREFS_KEY_KALMAN_MIN_STEP_PCT = "gbl_kalman_min_step_pct"
+        const val PREFS_KEY_KALMAN_PLL_BLEND_PCT = "gbl_kalman_pll_blend_pct"
+        const val DEFAULT_KALMAN_Q_SCALE_PCT = 100
+        const val DEFAULT_KALMAN_MEAS_NOISE = 11
+        const val DEFAULT_KALMAN_MIN_STEP_PCT = 4
+        const val DEFAULT_KALMAN_PLL_BLEND_PCT = 30
+
         @Volatile var activeTierSwMin: Int = DEFAULT_TIER_SW_MIN
         @Volatile var activeTierWMin: Int = DEFAULT_TIER_W_MIN
         @Volatile var activeTierLMax: Int = DEFAULT_TIER_L_MAX
@@ -178,6 +186,11 @@ class OverlayService : LifecycleService() {
         @Volatile var activeMachPlayableMin: Int = DEFAULT_MACH_PLAYABLE_MIN
         @Volatile var activeMachRiskyMin: Int = DEFAULT_MACH_RISKY_MIN
 
+        @Volatile var activeKalmanQScalePct: Int = DEFAULT_KALMAN_Q_SCALE_PCT
+        @Volatile var activeKalmanMeasNoise: Int = DEFAULT_KALMAN_MEAS_NOISE
+        @Volatile var activeKalmanMinStepPct: Int = DEFAULT_KALMAN_MIN_STEP_PCT
+        @Volatile var activeKalmanPllBlendPct: Int = DEFAULT_KALMAN_PLL_BLEND_PCT
+
         fun syncTierThresholdsFromPrefs(prefs: SharedPreferences) {
             activeTierSwMin = prefs.getInt(PREFS_KEY_TIER_SW_MIN, DEFAULT_TIER_SW_MIN).coerceIn(150, 950)
             activeTierWMin = prefs.getInt(PREFS_KEY_TIER_W_MIN, DEFAULT_TIER_W_MIN).coerceIn(150, 950)
@@ -187,6 +200,10 @@ class OverlayService : LifecycleService() {
             activeMachSolidMin = prefs.getInt(PREFS_KEY_MACH_SOLID_MIN, DEFAULT_MACH_SOLID_MIN).coerceIn(420, 820)
             activeMachPlayableMin = prefs.getInt(PREFS_KEY_MACH_PLAYABLE_MIN, DEFAULT_MACH_PLAYABLE_MIN).coerceIn(390, 800)
             activeMachRiskyMin = prefs.getInt(PREFS_KEY_MACH_RISKY_MIN, DEFAULT_MACH_RISKY_MIN).coerceIn(350, 780)
+            activeKalmanQScalePct = prefs.getInt(PREFS_KEY_KALMAN_Q_SCALE_PCT, DEFAULT_KALMAN_Q_SCALE_PCT).coerceIn(20, 300)
+            activeKalmanMeasNoise = prefs.getInt(PREFS_KEY_KALMAN_MEAS_NOISE, DEFAULT_KALMAN_MEAS_NOISE).coerceIn(3, 40)
+            activeKalmanMinStepPct = prefs.getInt(PREFS_KEY_KALMAN_MIN_STEP_PCT, DEFAULT_KALMAN_MIN_STEP_PCT).coerceIn(2, 12)
+            activeKalmanPllBlendPct = prefs.getInt(PREFS_KEY_KALMAN_PLL_BLEND_PCT, DEFAULT_KALMAN_PLL_BLEND_PCT).coerceIn(5, 80)
         }
         const val PREFS_KEY_SYNC_GIST_ID = "gbl_sync_gist_id"
         const val PREFS_KEY_SYNC_LAST_AT = "gbl_sync_last_at"
@@ -7718,8 +7735,7 @@ class OverlayService : LifecycleService() {
     private var needsPostSwapOrMoveTurnReindex: Boolean = false
     private var enableHpTracking: Boolean = false
     private var enableEnergyTracking: Boolean = false
-    // v3.80: Charge Move Circle Only Mode (default true), Idle Back-Credit/Fallback, Banner Move OCR & Non-Standard Fast Move Detector
-    private var chargeCircleOnlyMode: Boolean = true
+    // v3.85: Charge Move Meter Only Mode (highest-energy meter priority, decoupled from HP), Idle Back-Credit/Fallback, Banner Move OCR & Non-Standard Fast Move Detector
     private var fastDetectTurnOffset: Int = 0
     private var isPlayerInIdleFallback: Boolean = false
     private var lastIdleFallbackOppCreditMs: Long = 0L
@@ -7770,14 +7786,10 @@ class OverlayService : LifecycleService() {
     private var lastClearedFinalUserHpPct: List<Int> = listOf(100, 100, 100)
     private var lastClearedFinalOppHpPct: List<Int> = listOf(100, 100, 100)
 
-    // v3.83/v3.84: 2-out-of-3 PLL (Opponent Fast-Move HP Integrator + Charge Move 1 + Charge Move 2) & Kalman Filter Energy Estimator
-    private val playerStintStartEnergy = IntArray(3) { 0 }
-    private val playerStintOppFastDmgPct = DoubleArray(3) { 0.0 }
-    private val playerStintStartMs = LongArray(3) { 0L }
-    private var pllStintPairKey: String = ""
+    // v3.85: Charge-Meter-Only Kalman Filter & Highest-Energy Meter PLL (decoupled from HP)
     private var pllValidatedThisShieldDelay: Boolean = false
 
-    // v3.84: Per-Slot Kalman Filter State for Energy & Dual Charge Move Meters + 3rd-Fill Cycle Confidence Latches
+    // v3.85: Per-Slot Kalman Filter State for Energy & Charge Move Meters + 3rd-Fill Cycle Confidence Latches
     private val kalmanEnergyState = DoubleArray(3) { 0.0 }
     private val kalmanEnergyVar = DoubleArray(3) { 12.0 }
     private val kalmanLeftFillState = DoubleArray(3) { 0.0 }
@@ -7830,15 +7842,11 @@ class OverlayService : LifecycleService() {
     }
 
     /**
-     * v3.84 Dual-Meter & Turn-Timestamp Kalman Filter:
-     * - Replaces the hard 300ms debounce to reduce latency while maintaining accuracy against transient OCR/meniscus noise and animation lag.
-     * - Predicts state forward using the energy delta from fast move turn timestamps (`turnEnergyDelta`) and elapsed frame time (`dtMs`).
-     * - Updates each Charge Move meter (`sampledLeftFillPct`, `sampledRightFillPct`) with an innovation-gated Kalman gain that:
-     *   1. Ignores disappearing/0% circles during active combat (Zero-Drop Guard).
-     *   2. Compensates for rising circle animation lag in the first 350ms after a fast move turn boundary.
-     *   3. Suppresses single-frame meniscus/icon-crossing spikes via Huber innovation variance scaling.
-     *   4. Tracks when a meter has filled twice (`>= 2 * cost`) and is filling a third time, reducing confidence in that 3rd-fill meter
-     *      while elevating the slower (higher-energy-cost) charge move meter as higher value.
+     * v3.85 Highest-Energy Charge Move Meter & Turn-Timestamp Kalman Filter (Decoupled from HP):
+     * - Uses only the Charge Move Meters, basing turn detection and energy state fusion off the highest-energy
+     *   (highest cost) charge move meter (`max(cost1, cost2)`) to minimize wrap-arounds and prevent a meter from wrapping 3 times.
+     * - Incorporates user-configurable Kalman Filter tuning parameters from Settings (`activeKalmanQScalePct`,
+     *   `activeKalmanMeasNoise`, `activeKalmanMinStepPct`, `activeKalmanPllBlendPct`).
      */
     private fun updatePlayerEnergyKalmanFilter(
         slot: Int,
@@ -7856,6 +7864,7 @@ class OverlayService : LifecycleService() {
     ): KalmanMeterFilterResult {
         val c1 = cost1.coerceIn(35, 100)
         val c2 = (if (hasSecondMove) cost2 else cost1).coerceIn(35, 100)
+        val primaryIsRight = hasSecondMove && c2 > c1
         val dtMs = if (kalmanLastUpdateMs[slot] > 0L) {
             (nowMs - kalmanLastUpdateMs[slot]).coerceIn(30L, 1500L)
         } else 100L
@@ -7869,8 +7878,13 @@ class OverlayService : LifecycleService() {
             if (hasSecondMove && rawRightFillPct in 0..200) kalmanRightFillState[slot] = rawRightFillPct.toDouble()
         }
 
+        // User-tunable Kalman Filter parameters (with defaults: Q=100%, R=11, MinStep=4%)
+        val qScale = (activeKalmanQScalePct.coerceIn(20, 300).toDouble() / 100.0)
+        val baseMeasR = activeKalmanMeasNoise.coerceIn(3, 40).toDouble()
+        val configuredMinStepPct = activeKalmanMinStepPct.coerceIn(2, 12)
+
         // 1. Process Prediction Step from Fast Move Turn Timestamps:
-        val processQ = (1.6 * (dtMs.toDouble() / 500.0)).coerceIn(0.4, 6.0) + (if (turnEnergyDelta > 0) 2.5 else 0.0)
+        val processQ = (1.6 * qScale * (dtMs.toDouble() / 500.0)).coerceIn(0.25, 10.0) + (if (turnEnergyDelta > 0) 2.5 * qScale else 0.0)
         if (turnEnergyDelta > 0) {
             kalmanEnergyState[slot] = (kalmanEnergyState[slot] + turnEnergyDelta.toDouble()).coerceIn(0.0, 100.0)
             val dFill1 = (turnEnergyDelta.toDouble() * 100.0) / c1.toDouble()
@@ -7895,11 +7909,11 @@ class OverlayService : LifecycleService() {
 
         // Check whether both meters corroborate a simultaneous upward step this frame
         val rawLeftUp = rawLeftFillPct > 0 && prevSmoothedLeft >= 0 && (
-            (rawLeftFillPct - prevSmoothedLeft) >= 4 ||
+            (rawLeftFillPct - prevSmoothedLeft) >= configuredMinStepPct ||
                 (prevSmoothedLeft in 84..100 && (rawLeftFillPct in 1..45 || rawLeftFillPct in 101..200))
             )
         val rawRightUp = hasSecondMove && rawRightFillPct > 0 && prevSmoothedRight >= 0 && (
-            (rawRightFillPct - prevSmoothedRight) >= 4 ||
+            (rawRightFillPct - prevSmoothedRight) >= configuredMinStepPct ||
                 (prevSmoothedRight in 84..100 && (rawRightFillPct in 1..45 || rawRightFillPct in 101..200))
             )
         val dualCorroboratedStep = rawLeftUp && (!hasSecondMove || rawRightUp)
@@ -7916,15 +7930,13 @@ class OverlayService : LifecycleService() {
             val expectedStepPct1 = ((fastEnergy.toDouble() * 100.0) / c1.toDouble()).coerceAtLeast(5.0)
             val innov1 = unwrappedLeft - kalmanLeftFillState[slot]
             var rFill1 = when {
-                rawLeftFillPct in 43..57 -> 26.0 // Central move-type emblem crossing band
-                unwrappedLeft > 100.0 -> 28.0    // Second-layer darker overcharge shade
-                else -> 11.0                     // Clean primary meniscus
+                rawLeftFillPct in 43..57 -> baseMeasR * 2.35 // Central move-type emblem crossing band
+                unwrappedLeft > 100.0 -> baseMeasR * 2.55    // Second-layer darker overcharge shade
+                else -> baseMeasR                            // Clean primary meniscus
             }
-            // Animation lag tolerance: don't let lagging fill animation pull estimate down right after a turn increment
             if (inRisingAnimationWindow && innov1 < -2.0) {
                 rFill1 *= 4.5
             }
-            // Fast response when corroborated by both meters or turn boundary; Huber penalty for uncorroborated single-frame spikes
             if (dualCorroboratedStep || (nearTurnBoundaryWindow && innov1 in 3.0..(expectedStepPct1 * 2.1))) {
                 rFill1 *= 0.45
             } else if (kotlin.math.abs(innov1) > expectedStepPct1 * 2.2) {
@@ -7953,9 +7965,9 @@ class OverlayService : LifecycleService() {
             val expectedStepPct2 = ((fastEnergy.toDouble() * 100.0) / c2.toDouble()).coerceAtLeast(5.0)
             val innov2 = unwrappedRight - kalmanRightFillState[slot]
             var rFill2 = when {
-                rawRightFillPct in 43..57 -> 26.0
-                unwrappedRight > 100.0 -> 28.0
-                else -> 11.0
+                rawRightFillPct in 43..57 -> baseMeasR * 2.35
+                unwrappedRight > 100.0 -> baseMeasR * 2.55
+                else -> baseMeasR
             }
             if (inRisingAnimationWindow && innov2 < -2.0) {
                 rFill2 *= 4.5
@@ -7981,7 +7993,6 @@ class OverlayService : LifecycleService() {
         val smoothedRightPct = if (rightOnline) kalmanRightFillState[slot].roundToInt().coerceIn(0, 200) else lastScannedRightChargeFillPct[slot]
 
         // 3. Latch 3rd-Fill Cycle State ("Once a meter has filled twice and is filling a third time"):
-        //    A meter has filled twice once energy reaches >= 2 * cost (or fill reaches >= 188% on the 2nd fill).
         val refEnergy = max(curTrackedEnergy.toDouble(), kalmanEnergyState[slot])
         if (leftOnline && (kalmanLeftFillState[slot] >= 188.0 || rawLeftFillPct >= 192 || refEnergy >= (2 * c1).toDouble())) {
             leftMeterFilledTwiceLatched[slot] = true
@@ -8002,37 +8013,20 @@ class OverlayService : LifecycleService() {
         val leftInThirdFill = leftMeterFilledTwiceLatched[slot] || refEnergy >= (2 * c1 - fastEnergy / 2).toDouble()
         val rightInThirdFill = hasSecondMove && (rightMeterFilledTwiceLatched[slot] || refEnergy >= (2 * c2 - fastEnergy / 2).toDouble())
 
-        val leftIsSlowerMove = hasSecondMove && c1 > c2
-        val rightIsSlowerMove = hasSecondMove && c2 > c1
-
-        // 4. Confidence Weighting & Measurement Noise Variance R for Energy Fusion:
-        //    - Once a meter has filled twice and is filling a third time, confidence in that meter is sharply reduced (weight = 0.18).
-        //    - The slower (higher energy cost) charge move meter is considered higher value (weight boosted up to 2.25).
-        var leftConfWeight = 1.0
-        var rightConfWeight = if (hasSecondMove) 1.0 else 0.0
-        if (leftInThirdFill) {
-            leftConfWeight *= 0.18
-            if (rightIsSlowerMove) rightConfWeight *= 2.25
+        // 4. Highest-Energy Charge Move Meter Priority for Energy State Update:
+        //    Base tracking off the highest-energy charge move meter (`primaryIsRight = hasSecondMove && c2 > c1`)
+        //    to minimize wrap-arounds and avoid 3rd-fill ambiguity.
+        val leftConfWeight = when {
+            leftInThirdFill -> 0.18
+            !primaryIsRight -> 1.85
+            else -> 0.55
         }
-        if (rightInThirdFill) {
-            rightConfWeight *= 0.18
-            if (leftIsSlowerMove) leftConfWeight *= 2.25
-        }
-        // Even before the 3rd fill, when the faster meter wraps into its 2nd fill (>= 97%) while the slower meter has more headroom,
-        // give the slower charge move meter higher confidence weight.
-        if (hasSecondMove && c1 != c2) {
-            if (rightIsSlowerMove && smoothedLeftPct >= 97 && !rightInThirdFill) {
-                rightConfWeight *= 1.45
-                leftConfWeight *= 0.72
-            } else if (leftIsSlowerMove && smoothedRightPct >= 97 && !leftInThirdFill) {
-                leftConfWeight *= 1.45
-                rightConfWeight *= 0.72
-            }
+        val rightConfWeight = if (!hasSecondMove) 0.0 else when {
+            rightInThirdFill -> 0.18
+            primaryIsRight -> 1.85
+            else -> 0.55
         }
 
-        // Convert each online meter into an energy observation (z_i, R_i)
-        var fusedZ = -1.0
-        var fusedR = 16.0
         val z1Valid = leftOnline && smoothedLeftPct > 0 && !(smoothedLeftPct == 100 && kalmanEnergyState[slot] >= c1.toDouble()) &&
             !(leftInThirdFill && smoothedLeftPct >= 185 && kalmanEnergyState[slot] >= (2 * c1).toDouble())
         val z2Valid = rightOnline && smoothedRightPct > 0 && !(smoothedRightPct == 100 && kalmanEnergyState[slot] >= c2.toDouble()) &&
@@ -8041,7 +8035,6 @@ class OverlayService : LifecycleService() {
         val z1Energy = if (z1Valid) {
             val rawE1 = (kalmanLeftFillState[slot] * c1.toDouble()) / 100.0
             if (leftInThirdFill && kalmanLeftFillState[slot] in 101.0..180.0 && refEnergy >= (2 * c1).toDouble()) {
-                // 3rd fill wrap-around: 2 * c1 + (fill - 100)% * c1
                 (2.0 * c1.toDouble() + ((kalmanLeftFillState[slot] - 100.0) * c1.toDouble()) / 100.0).coerceIn((2 * c1).toDouble(), 100.0)
             } else {
                 rawE1.coerceIn(0.0, 100.0)
@@ -8057,21 +8050,30 @@ class OverlayService : LifecycleService() {
             }
         } else -1.0
 
-        val r1Energy = if (z1Valid) (10.0 / leftConfWeight.coerceAtLeast(0.10)) else Double.POSITIVE_INFINITY
-        val r2Energy = if (z2Valid) (10.0 / rightConfWeight.coerceAtLeast(0.10)) else Double.POSITIVE_INFINITY
-
-        if (z1Valid && z2Valid) {
-            val invR1 = 1.0 / r1Energy
-            val invR2 = 1.0 / r2Energy
-            val sumInvR = invR1 + invR2
-            fusedZ = (z1Energy * invR1 + z2Energy * invR2) / sumInvR
-            fusedR = 1.0 / sumInvR
-        } else if (z1Valid) {
-            fusedZ = z1Energy
-            fusedR = r1Energy
-        } else if (z2Valid) {
-            fusedZ = z2Energy
-            fusedR = r2Energy
+        var fusedZ = -1.0
+        var fusedR = baseMeasR
+        if (primaryIsRight) {
+            if (z2Valid && !rightInThirdFill) {
+                fusedZ = z2Energy
+                fusedR = baseMeasR / rightConfWeight.coerceAtLeast(0.15)
+            } else if (z1Valid && !leftInThirdFill) {
+                fusedZ = z1Energy
+                fusedR = baseMeasR / leftConfWeight.coerceAtLeast(0.15)
+            } else if (z2Valid) {
+                fusedZ = z2Energy
+                fusedR = baseMeasR / rightConfWeight.coerceAtLeast(0.15)
+            }
+        } else {
+            if (z1Valid && !leftInThirdFill) {
+                fusedZ = z1Energy
+                fusedR = baseMeasR / leftConfWeight.coerceAtLeast(0.15)
+            } else if (z2Valid && !rightInThirdFill) {
+                fusedZ = z2Energy
+                fusedR = baseMeasR / rightConfWeight.coerceAtLeast(0.15)
+            } else if (z1Valid) {
+                fusedZ = z1Energy
+                fusedR = baseMeasR / leftConfWeight.coerceAtLeast(0.15)
+            }
         }
 
         if (fusedZ >= 0.0) {
@@ -8094,47 +8096,37 @@ class OverlayService : LifecycleService() {
             kalmanEnergyState[slot] = readyFloor.toDouble()
         }
 
-        // 5. Low-Latency Kalman Step Detection (replaces 300ms debounce, weighted by 3rd-fill confidence):
+        // 5. Low-Latency Step Detection Based Off the Highest-Energy Charge Move Meter:
         val maxMoveCost = max(c1, c2)
-        val minFillStepPct = max(3, ((fastEnergy * 100) / (maxMoveCost + 30)).coerceIn(3, 8))
-        val effectiveMinStepLeft = if (leftInThirdFill && hasSecondMove && c2 > c1) {
-            (minFillStepPct + 3).coerceAtMost(12)
-        } else {
-            minFillStepPct
-        }
-        val effectiveMinStepRight = if (rightInThirdFill && hasSecondMove && c1 > c2) {
-            (minFillStepPct + 3).coerceAtMost(12)
-        } else {
-            minFillStepPct
-        }
-        var stepDetected = false
+        val minFillStepPct = max(configuredMinStepPct, ((fastEnergy * 100) / (maxMoveCost + 35)).coerceIn(2, 9))
+        val prevStepLeft = lastScannedLeftChargeFillPct[slot]
+        val prevStepRight = lastScannedRightChargeFillPct[slot]
+        var leftStepped = false
+        var rightStepped = false
 
         if (leftOnline) {
             if (smoothedLeftPct == 0 && curTrackedEnergy == 0) {
                 lastScannedLeftChargeFillPct[slot] = 0
             } else if (smoothedLeftPct > 0) {
-                val prevL = lastScannedLeftChargeFillPct[slot]
-                if (prevL <= 0) {
-                    if (smoothedLeftPct >= effectiveMinStepLeft) {
-                        stepDetected = true
+                if (prevStepLeft <= 0) {
+                    if (smoothedLeftPct >= minFillStepPct) {
+                        leftStepped = true
                     }
                     lastScannedLeftChargeFillPct[slot] = smoothedLeftPct
                 } else {
-                    val directDelta = smoothedLeftPct - prevL
+                    val directDelta = smoothedLeftPct - prevStepLeft
                     val wrappedDelta = when {
-                        prevL in 84..100 && smoothedLeftPct in 1..45 -> (100 - prevL) + smoothedLeftPct
-                        prevL in 84..100 && smoothedLeftPct in 101..200 -> (smoothedLeftPct - 100) + (100 - prevL)
-                        prevL in 84..98 && smoothedLeftPct == 100 -> (100 - prevL).coerceAtLeast(effectiveMinStepLeft)
-                        prevL == 100 && smoothedLeftPct in 101..200 -> (smoothedLeftPct - 100).coerceAtLeast(effectiveMinStepLeft)
+                        prevStepLeft in 84..100 && smoothedLeftPct in 1..45 -> (100 - prevStepLeft) + smoothedLeftPct
+                        prevStepLeft in 84..100 && smoothedLeftPct in 101..200 -> (smoothedLeftPct - 100) + (100 - prevStepLeft)
+                        prevStepLeft in 84..98 && smoothedLeftPct == 100 -> (100 - prevStepLeft).coerceAtLeast(minFillStepPct)
+                        prevStepLeft == 100 && smoothedLeftPct in 101..200 -> (smoothedLeftPct - 100).coerceAtLeast(minFillStepPct)
                         else -> 0
                     }
                     val effDelta = max(directDelta, wrappedDelta)
-                    if (effDelta >= effectiveMinStepLeft) {
-                        if (!leftInThirdFill || !hasSecondMove || rightOnline) {
-                            stepDetected = true
-                        }
+                    if (effDelta >= minFillStepPct) {
+                        leftStepped = true
                         lastScannedLeftChargeFillPct[slot] = smoothedLeftPct
-                    } else if (directDelta < -4 && !(prevL in 84..100 && (smoothedLeftPct in 1..45 || smoothedLeftPct in 101..200))) {
+                    } else if (directDelta < -4 && !(prevStepLeft in 84..100 && (smoothedLeftPct in 1..45 || smoothedLeftPct in 101..200))) {
                         lastScannedLeftChargeFillPct[slot] = smoothedLeftPct
                     }
                 }
@@ -8145,31 +8137,43 @@ class OverlayService : LifecycleService() {
             if (smoothedRightPct == 0 && curTrackedEnergy == 0) {
                 lastScannedRightChargeFillPct[slot] = 0
             } else if (smoothedRightPct > 0) {
-                val prevR = lastScannedRightChargeFillPct[slot]
-                if (prevR <= 0) {
-                    if (smoothedRightPct >= effectiveMinStepRight) {
-                        stepDetected = true
+                if (prevStepRight <= 0) {
+                    if (smoothedRightPct >= minFillStepPct) {
+                        rightStepped = true
                     }
                     lastScannedRightChargeFillPct[slot] = smoothedRightPct
                 } else {
-                    val directDelta = smoothedRightPct - prevR
+                    val directDelta = smoothedRightPct - prevStepRight
                     val wrappedDelta = when {
-                        prevR in 84..100 && smoothedRightPct in 1..45 -> (100 - prevR) + smoothedRightPct
-                        prevR in 84..100 && smoothedRightPct in 101..200 -> (smoothedRightPct - 100) + (100 - prevR)
-                        prevR in 84..98 && smoothedRightPct == 100 -> (100 - prevR).coerceAtLeast(effectiveMinStepRight)
-                        prevR == 100 && smoothedRightPct in 101..200 -> (smoothedRightPct - 100).coerceAtLeast(effectiveMinStepRight)
+                        prevStepRight in 84..100 && smoothedRightPct in 1..45 -> (100 - prevStepRight) + smoothedRightPct
+                        prevStepRight in 84..100 && smoothedRightPct in 101..200 -> (smoothedRightPct - 100) + (100 - prevStepRight)
+                        prevStepRight in 84..98 && smoothedRightPct == 100 -> (100 - prevStepRight).coerceAtLeast(minFillStepPct)
+                        prevStepRight == 100 && smoothedRightPct in 101..200 -> (smoothedRightPct - 100).coerceAtLeast(minFillStepPct)
                         else -> 0
                     }
                     val effDelta = max(directDelta, wrappedDelta)
-                    if (effDelta >= effectiveMinStepRight) {
-                        if (!rightInThirdFill || leftOnline) {
-                            stepDetected = true
-                        }
+                    if (effDelta >= minFillStepPct) {
+                        rightStepped = true
                         lastScannedRightChargeFillPct[slot] = smoothedRightPct
-                    } else if (directDelta < -4 && !(prevR in 84..100 && (smoothedRightPct in 1..45 || smoothedRightPct in 101..200))) {
+                    } else if (directDelta < -4 && !(prevStepRight in 84..100 && (smoothedRightPct in 1..45 || smoothedRightPct in 101..200))) {
                         lastScannedRightChargeFillPct[slot] = smoothedRightPct
                     }
                 }
+            }
+        }
+
+        // Base turn step detection off the highest-energy charge move meter (falling back to secondary only if primary is offline or sitting flat on 100%)
+        val stepDetected = if (primaryIsRight) {
+            if (rightOnline && !(smoothedRightPct == 100 && prevStepRight == 100) && !rightInThirdFill) {
+                rightStepped
+            } else {
+                leftStepped && !leftInThirdFill
+            }
+        } else {
+            if (leftOnline && !(smoothedLeftPct == 100 && prevStepLeft == 100) && !leftInThirdFill) {
+                leftStepped
+            } else {
+                rightStepped && !rightInThirdFill
             }
         }
 
@@ -8190,14 +8194,11 @@ class OverlayService : LifecycleService() {
     }
 
     /**
-     * v3.84 Kalman-Weighted 2-out-of-3 Majority-Vote PLL (Phase-Locked Loop) Sensor Fusion:
-     * Combines 3 independent sources of truth for player fast moves & energy:
-     *   1. Opponent Fast-Move HP Integrator (integrated over turns in the current combat stint, ignoring Charged Move damage)
-     *   2. Charge Move 1 Circle (Left Button, Kalman-smoothed)
-     *   3. Charge Move 2 Circle (Right Button, Kalman-smoothed)
-     * - Once a meter has filled twice and is filling a third time (`leftInThirdFill` / `rightInThirdFill`),
-     *   confidence in that meter is reduced (`0.22x`) and the slower (higher-energy-cost) charge move meter is
-     *   prioritized as higher value (`1.85x`).
+     * v3.85 Charge-Meter-Only Self-Correction PLL Based on the Highest-Energy Charge Move Meter (Decoupled from HP):
+     * - Completely removes HP-based turn/energy integration.
+     * - Bases player energy self-correction on the highest-energy (highest cost) charge move meter (`max(cost1, cost2)`)
+     *   to minimize wrap-arounds and avoid 3rd-fill ambiguity, using the secondary meter only for readiness bounds
+     *   (`requiredReadyFloor` / `maxUnreadyCeiling`) or when the primary meter is sitting on a flat 100% ring.
      * Returns:
      *   +1 -> Step UP by +1 fast move (+fastEnergy)
      *   -1 -> Step DOWN by -1 fast move (-fastEnergy)
@@ -8206,10 +8207,6 @@ class OverlayService : LifecycleService() {
     private fun evaluateTwoOutOfThreePllVote(
         curEnergy: Int,
         fastEnergy: Int,
-        userExactDmgPct: Double,
-        stintStartEnergy: Int,
-        stintOppFastDmgPct: Double,
-        hpSensorOnline: Boolean,
         leftFillPct: Int,
         leftSensorOnline: Boolean,
         cost1: Int,
@@ -8224,28 +8221,9 @@ class OverlayService : LifecycleService() {
         val minDisagree = max(fastEnergy, 4)
         val upCandidate = (curEnergy + fastEnergy).coerceIn(0, 100)
         val downCandidate = (curEnergy - fastEnergy).coerceIn(1, 100)
+        val primaryIsRight = hasSecondMove && cost2 > cost1
 
-        val leftIsSlowerMove = hasSecondMove && cost1 > cost2
-        val rightIsSlowerMove = hasSecondMove && cost2 > cost1
-
-        // --- Sensor 1: Integrated Opponent Fast-Move HP (ignores Charged Move damage) ---
-        var voteHp = 0
-        var sensorHpEnergy = -1
-        val hpQuantBand = ceil((1.0 / userExactDmgPct.coerceAtLeast(0.75)) * fastEnergy.toDouble())
-            .toInt()
-            .coerceIn(fastEnergy, 12)
-        if (hpSensorOnline && userExactDmgPct >= 0.75) {
-            val impliedMoves = (stintOppFastDmgPct / userExactDmgPct.coerceAtLeast(0.75)).roundToInt().coerceAtLeast(0)
-            sensorHpEnergy = (stintStartEnergy + impliedMoves * fastEnergy).coerceIn(0, 100)
-            val hpThreshold = max(minDisagree, hpQuantBand)
-            voteHp = when {
-                sensorHpEnergy - curEnergy >= hpThreshold -> 1
-                curEnergy - sensorHpEnergy >= hpThreshold -> -1
-                else -> 0
-            }
-        }
-
-        // --- Sensor 2: Charge Move 1 Circle (Left Button, Kalman-smoothed) ---
+        // --- Charge Move 1 Circle (Left Button, Kalman-smoothed) ---
         var voteC1 = 0
         var sensorC1Energy = -1
         var c1SaturatedReady = false
@@ -8272,7 +8250,6 @@ class OverlayService : LifecycleService() {
                 }
                 leftFillPct in 101..200 -> {
                     if (leftInThirdFill && curEnergy >= 2 * cost1 - fastEnergy) {
-                        // Meter 1 has filled twice and is filling a third time: treat as saturated >= 2*cost1 floor with reduced confidence
                         c1SaturatedReady = leftFillPct >= 185
                         sensorC1Energy = if (leftFillPct in 101..180 && curEnergy >= 2 * cost1) {
                             (2 * cost1 + ((leftFillPct - 100) * cost1) / 100.0).roundToInt().coerceIn(2 * cost1, 100)
@@ -8293,7 +8270,7 @@ class OverlayService : LifecycleService() {
             }
         }
 
-        // --- Sensor 3: Charge Move 2 Circle (Right Button, Kalman-smoothed) ---
+        // --- Charge Move 2 Circle (Right Button, Kalman-smoothed) ---
         var voteC2 = 0
         var sensorC2Energy = -1
         var c2SaturatedReady = false
@@ -8320,7 +8297,6 @@ class OverlayService : LifecycleService() {
                 }
                 rightFillPct in 101..200 -> {
                     if (rightInThirdFill && curEnergy >= 2 * cost2 - fastEnergy) {
-                        // Meter 2 has filled twice and is filling a third time: treat as saturated >= 2*cost2 floor with reduced confidence
                         c2SaturatedReady = rightFillPct >= 185
                         sensorC2Energy = if (rightFillPct in 101..180 && curEnergy >= 2 * cost2) {
                             (2 * cost2 + ((rightFillPct - 100) * cost2) / 100.0).roundToInt().coerceIn(2 * cost2, 100)
@@ -8350,88 +8326,31 @@ class OverlayService : LifecycleService() {
             if (c2Valid && rightFillPct in 1..92) cost2 - 1 else 100
         )
 
-        // 0. Slower-Meter High-Value Override when faster meter has filled twice and is filling a 3rd time:
-        if (leftInThirdFill && rightIsSlowerMove && c2Valid && !c2SaturatedReady && !rightInThirdFill) {
-            if (voteC2 > 0 && (voteHp >= 0 || kalmanPosteriorEnergy >= curEnergy + minDisagree * 0.75) && upCandidate <= maxUnreadyCeiling + 1) {
+        val primaryValid = if (primaryIsRight) c2Valid else c1Valid
+        val primarySaturated = if (primaryIsRight) c2SaturatedReady else c1SaturatedReady
+        val primaryThirdFill = if (primaryIsRight) rightInThirdFill else leftInThirdFill
+        val primaryVote = if (primaryIsRight) voteC2 else voteC1
+
+        val secondaryValid = if (primaryIsRight) c1Valid else c2Valid
+        val secondarySaturated = if (primaryIsRight) c1SaturatedReady else c2SaturatedReady
+        val secondaryThirdFill = if (primaryIsRight) leftInThirdFill else rightInThirdFill
+        val secondaryVote = if (primaryIsRight) voteC1 else voteC2
+
+        // 1. Primary (Highest-Energy) Charge Move Meter Authority:
+        if (primaryValid && !primarySaturated && !primaryThirdFill) {
+            if (primaryVote > 0 && (kalmanPosteriorEnergy < 0.0 || kalmanPosteriorEnergy >= curEnergy + minDisagree * 0.65) && upCandidate <= maxUnreadyCeiling + 1) {
                 return 1
             }
-            if (voteC2 < 0 && (voteHp <= 0 || (kalmanPosteriorEnergy >= 0.0 && kalmanPosteriorEnergy <= curEnergy - minDisagree * 0.75)) && curEnergy > fastEnergy && downCandidate >= requiredReadyFloor) {
+            if (primaryVote < 0 && (kalmanPosteriorEnergy < 0.0 || kalmanPosteriorEnergy <= curEnergy - minDisagree * 0.65) && curEnergy > fastEnergy && downCandidate >= requiredReadyFloor) {
                 return -1
             }
-        }
-        if (rightInThirdFill && leftIsSlowerMove && c1Valid && !c1SaturatedReady && !leftInThirdFill) {
-            if (voteC1 > 0 && (voteHp >= 0 || kalmanPosteriorEnergy >= curEnergy + minDisagree * 0.75) && upCandidate <= maxUnreadyCeiling + 1) {
+        } else if (secondaryValid && !secondarySaturated && !secondaryThirdFill) {
+            // 2. Fallback to Secondary Meter only if Primary is offline, sitting at flat 100%, or in 3rd fill:
+            if (secondaryVote > 0 && (kalmanPosteriorEnergy < 0.0 || kalmanPosteriorEnergy >= curEnergy + minDisagree * 0.65) && upCandidate <= maxUnreadyCeiling + 1) {
                 return 1
             }
-            if (voteC1 < 0 && (voteHp <= 0 || (kalmanPosteriorEnergy >= 0.0 && kalmanPosteriorEnergy <= curEnergy - minDisagree * 0.75)) && curEnergy > fastEnergy && downCandidate >= requiredReadyFloor) {
+            if (secondaryVote < 0 && (kalmanPosteriorEnergy < 0.0 || kalmanPosteriorEnergy <= curEnergy - minDisagree * 0.65) && curEnergy > fastEnergy && downCandidate >= requiredReadyFloor) {
                 return -1
-            }
-        }
-
-        // 1. Confidence-Weighted 2-out-of-3 Majority Vote across (HP, Circle 1, Circle 2)
-        val wHp = if (sensorHpEnergy >= 0) 1.0 else 0.0
-        val wC1 = if (c1Valid) {
-            when {
-                leftInThirdFill -> 0.25
-                leftIsSlowerMove && rightInThirdFill -> 1.80
-                leftIsSlowerMove && rightFillPct >= 97 -> 1.25
-                else -> 1.0
-            }
-        } else 0.0
-        val wC2 = if (c2Valid) {
-            when {
-                rightInThirdFill -> 0.25
-                rightIsSlowerMove && leftInThirdFill -> 1.80
-                rightIsSlowerMove && leftFillPct >= 97 -> 1.25
-                else -> 1.0
-            }
-        } else 0.0
-
-        val upWeight = (if (voteHp > 0) wHp else 0.0) + (if (voteC1 > 0) wC1 else 0.0) + (if (voteC2 > 0) wC2 else 0.0)
-        val downWeight = (if (voteHp < 0) wHp else 0.0) + (if (voteC1 < 0) wC1 else 0.0) + (if (voteC2 < 0) wC2 else 0.0)
-
-        if (upWeight >= 1.75 && upCandidate <= maxUnreadyCeiling + 1) {
-            return 1
-        }
-        if (downWeight >= 1.75 && curEnergy > fastEnergy && downCandidate >= requiredReadyFloor) {
-            return -1
-        }
-
-        // 2. Closest-Agreeing Pair (2 out of 3 that agree most closely in energy space, weighted by slower-move value):
-        val pairTol = max(fastEnergy + 2, 6)
-        if (c1Valid && c2Valid) {
-            val c1CompatibleWithC2 = (!c1SaturatedReady && !c2SaturatedReady && kotlin.math.abs(sensorC1Energy - sensorC2Energy) <= pairTol) ||
-                (c1SaturatedReady && !c2SaturatedReady && sensorC2Energy >= cost1 - 2) ||
-                (c2SaturatedReady && !c1SaturatedReady && sensorC1Energy >= cost2 - 2) ||
-                (leftInThirdFill && rightIsSlowerMove && !c2SaturatedReady && sensorC2Energy >= 2 * cost1 - fastEnergy) ||
-                (rightInThirdFill && leftIsSlowerMove && !c1SaturatedReady && sensorC1Energy >= 2 * cost2 - fastEnergy)
-            if (c1CompatibleWithC2) {
-                val pairTarget = when {
-                    leftInThirdFill && rightIsSlowerMove && !c2SaturatedReady -> sensorC2Energy
-                    rightInThirdFill && leftIsSlowerMove && !c1SaturatedReady -> sensorC1Energy
-                    !c1SaturatedReady && !c2SaturatedReady -> {
-                        ((sensorC1Energy * wC1 + sensorC2Energy * wC2) / (wC1 + wC2).coerceAtLeast(0.1)).roundToInt()
-                    }
-                    !c1SaturatedReady -> sensorC1Energy
-                    !c2SaturatedReady -> sensorC2Energy
-                    else -> max(curEnergy, requiredReadyFloor)
-                }
-                if (pairTarget - curEnergy >= minDisagree && upCandidate <= maxUnreadyCeiling + 1) return 1
-                if (curEnergy - pairTarget >= minDisagree && curEnergy > fastEnergy && (!c1SaturatedReady || !c2SaturatedReady) && downCandidate >= requiredReadyFloor) return -1
-            }
-        }
-        if (c1Valid && sensorHpEnergy >= 0 && !c1SaturatedReady) {
-            if (kotlin.math.abs(sensorC1Energy - sensorHpEnergy) <= max(pairTol, hpQuantBand)) {
-                val pairTarget = ((sensorC1Energy * wC1 + sensorHpEnergy * wHp) / (wC1 + wHp).coerceAtLeast(0.1)).roundToInt()
-                if (pairTarget - curEnergy >= minDisagree && upCandidate <= maxUnreadyCeiling + 1) return 1
-                if (curEnergy - pairTarget >= minDisagree && curEnergy > fastEnergy && downCandidate >= requiredReadyFloor) return -1
-            }
-        }
-        if (c2Valid && sensorHpEnergy >= 0 && !c2SaturatedReady) {
-            if (kotlin.math.abs(sensorC2Energy - sensorHpEnergy) <= max(pairTol, hpQuantBand)) {
-                val pairTarget = ((sensorC2Energy * wC2 + sensorHpEnergy * wHp) / (wC2 + wHp).coerceAtLeast(0.1)).roundToInt()
-                if (pairTarget - curEnergy >= minDisagree && upCandidate <= maxUnreadyCeiling + 1) return 1
-                if (curEnergy - pairTarget >= minDisagree && curEnergy > fastEnergy && downCandidate >= requiredReadyFloor) return -1
             }
         }
 
@@ -9187,19 +9106,13 @@ class OverlayService : LifecycleService() {
                 }
                 overlayView?.evaluateJavascript("if (window.setEnableEnergyTracking) setEnableEnergyTracking($enableEnergyTracking);", null)
 
-                chargeCircleOnlyMode = if (intent?.hasExtra(EXTRA_CHARGE_CIRCLE_ONLY_MODE) == true) {
-                    intent.getBooleanExtra(EXTRA_CHARGE_CIRCLE_ONLY_MODE, true)
-                } else {
-                    prefs.getBoolean(PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE, true)
-                }
-                overlayView?.evaluateJavascript("if (window.setChargeCircleOnlyMode) setChargeCircleOnlyMode($chargeCircleOnlyMode);", null)
-
                 fastDetectTurnOffset = if (intent?.hasExtra(EXTRA_FAST_DETECT_TURN_OFFSET) == true) {
                     intent.getIntExtra(EXTRA_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2)
                 } else {
                     prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2)
                 }
                 overlayView?.evaluateJavascript("if (window.setFastDetectTurnOffset) setFastDetectTurnOffset($fastDetectTurnOffset);", null)
+                syncTierThresholdsFromPrefs(prefs)
 
                 val requestedTeamName = intent?.getStringExtra(EXTRA_TEAM_NAME)
                     ?: intent?.getStringExtra("preset")
@@ -9288,12 +9201,6 @@ class OverlayService : LifecycleService() {
                     enableEnergyTracking = prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, enableEnergyTracking)
                 }
                 overlayView?.evaluateJavascript("if (window.setEnableEnergyTracking) setEnableEnergyTracking($enableEnergyTracking);", null)
-                if (intent?.hasExtra(EXTRA_CHARGE_CIRCLE_ONLY_MODE) == true) {
-                    chargeCircleOnlyMode = intent.getBooleanExtra(EXTRA_CHARGE_CIRCLE_ONLY_MODE, true)
-                } else {
-                    chargeCircleOnlyMode = prefs.getBoolean(PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE, chargeCircleOnlyMode)
-                }
-                overlayView?.evaluateJavascript("if (window.setChargeCircleOnlyMode) setChargeCircleOnlyMode($chargeCircleOnlyMode);", null)
                 if (intent?.hasExtra(EXTRA_FAST_DETECT_TURN_OFFSET) == true) {
                     fastDetectTurnOffset = intent.getIntExtra(EXTRA_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2)
                 } else {
@@ -10804,7 +10711,7 @@ class OverlayService : LifecycleService() {
      * Computes authoritative player energy (0..100, or -1 if invalid) from the Left Charge Move Circle (ALWAYS Move 1 = cost1)
      * and Right Charge Move Circle (ALWAYS Move 2 = cost2).
      * - Primary layer readings (0..96%) are direct linear measurements against the dark unfilled top background.
-     * - v3.84: Once a meter has filled twice and is filling a third time (`leftInThirdFill` / `rightInThirdFill`),
+     * - v3.85: Once a meter has filled twice and is filling a third time (`leftInThirdFill` / `rightInThirdFill`),
      *   confidence in that meter is reduced and the slower (higher-energy-cost) charge move meter is prioritized as higher value.
      */
     private fun computeAuthoritativeCircleEnergy(
@@ -10855,19 +10762,20 @@ class OverlayService : LifecycleService() {
         val eRightPrimary = if (rightIsPrimary) (rightFillPct.toDouble() * c2.toDouble()) / 100.0 else -1.0
 
         // Case A: Both Left (Move 1) and Right (Move 2) are in their clean primary layer (1..96%)
+        // v3.85: Base energy off the highest-energy charge move meter (`leftIsSlowerMove` vs `rightIsSlowerMove`)
         if (leftIsPrimary && rightIsPrimary) {
-            val diff = kotlin.math.abs(eLeftPrimary - eRightPrimary)
             val leftInIconBand = leftFillPct in 43..57
             val rightInIconBand = rightFillPct in 43..57
-            val w1 = if (leftIsSlowerMove) 0.58 else if (rightIsSlowerMove) 0.42 else 0.50
-            val w2 = 1.0 - w1
-            val combined = when {
-                diff <= 6.5 -> eLeftPrimary * w1 + eRightPrimary * w2
+            val chosen = when {
+                rightIsSlowerMove && (!rightInIconBand || leftInIconBand) -> eRightPrimary
+                leftIsSlowerMove && (!leftInIconBand || rightInIconBand) -> eLeftPrimary
                 leftInIconBand && !rightInIconBand -> eRightPrimary
                 rightInIconBand && !leftInIconBand -> eLeftPrimary
-                else -> eLeftPrimary * w1 + eRightPrimary * w2
+                rightIsSlowerMove -> eRightPrimary * 0.75 + eLeftPrimary * 0.25
+                leftIsSlowerMove -> eLeftPrimary * 0.75 + eRightPrimary * 0.25
+                else -> (eLeftPrimary + eRightPrimary) * 0.50
             }.coerceIn(minPossible.toDouble(), maxPossible.toDouble())
-            return combined.roundToInt().coerceIn(0, 100)
+            return chosen.roundToInt().coerceIn(0, 100)
         }
 
         // Case B: Left (Move 1) is saturated (>= 97%) and Right (Move 2) is in its clean primary layer (1..96%)
@@ -10883,7 +10791,7 @@ class OverlayService : LifecycleService() {
         }
 
         // Case D: Both circles are >= 97% (saturated / overcharging)
-        // v3.84: Prioritize the slower charge move meter and reduce confidence in any meter that has filled twice and is filling a 3rd time!
+        // v3.85: Prioritize the slower charge move meter and reduce confidence in any meter that has filled twice and is filling a 3rd time!
         val e1Over = if (validLeft && leftFillPct in 101..200) {
             if (leftInThirdFill && leftFillPct in 101..180) {
                 (2.0 * c1.toDouble() + ((leftFillPct - 100).toDouble() * c1.toDouble()) / 100.0).coerceIn(minPossible.toDouble(), 100.0)
@@ -11682,7 +11590,7 @@ class OverlayService : LifecycleService() {
         } else userMove1Energy
         val maxUserMoveEnergyEarly = max(userMove1Energy, userMove2Energy).coerceIn(35, 100)
 
-        // v3.84 PRE-BATTLE & 3-2-1-GO COUNTDOWN STATIC CHARGE CIRCLE LOCK-IN (with Low-Latency Kalman Filter):
+        // v3.85 PRE-BATTLE & 3-2-1-GO COUNTDOWN STATIC CHARGE CIRCLE LOCK-IN (with Low-Latency Kalman Filter):
         // Do NOT wait for async ML Kit opponent OCR (`isWaitingForOpponent == false`) before locking in the player's
         // static Charge Move Circles (0% empty baseline) or registering Move 1 at "GO!"!
         if (isWaitingForOpponent) {
@@ -11842,17 +11750,12 @@ class OverlayService : LifecycleService() {
             isDefenderShadow = isUserShadForStats
         )
 
-        var observedPlayerFastDrop = false
-        var observedOppFastDrop = false
         var userFastMovesCreditedThisFrame = 0
-        var oppFastMovesCreditedByHpThisFrame = 0
         val captureAnchorMs = lastCaptureStartMs.takeIf { it > 0L } ?: nowMs
 
         // CRITICAL LOCKOUT FOR CHARGED MOVE CAMERA ZOOM ANIMATIONS:
         // Once the battle has started, fast-move energy can ONLY accumulate when normal combat HUD elements
         // (at least one floating HP bar AND top Pokéball indicators) are actually visible on screen.
-        // During the camera zoom-in of a Charged Move throw (before "Get ready!" appears), floating HP bars
-        // disappear on Frame 1 — locking out fast energy immediately prevents spurious energy registration during the throw animation!
         val hasVisibleCombatHud = !hasBattleStarted ||
             ((sampledPlayerHpPct in 1..100 || sampledOppHpPct in 1..100) &&
                 (sampledPlayerBalls in 1..3 || sampledOppBalls in 1..3))
@@ -11871,16 +11774,11 @@ class OverlayService : LifecycleService() {
             missingBottomCirclesWithOppHpFrames == 0 &&
             (nowMs - lastChargedAttackLoggedMs) > 950L
 
-        // 1A. Player HP Bar Scan -> Tracks player HP% & cumulative opponent fast-move damage (for Non-Standard Fast Move Detector).
-        //     In Charge Circle Only mode (`chargeCircleOnlyMode == true`), only credits opponent energy via HP drops when the player
-        //     is in Idle Fallback (`isPlayerInIdleFallback == true`) AND opponent's fast move deals >= 3% damage (`oppExactDmgPct >= 3.0`).
+        // 1A. v3.85: Player HP Bar Scan (Decoupled from Energy & Turn Counting):
+        //     Tracks player HP% and cumulative opponent fast-move damage (solely for Non-Standard Opponent Fast Move Detector 1E).
         if (!isPostFaintSwitchPromptActive && sampledPlayerHpPct in 1..100 && !playerFaintedSlots[activeUserIdx]) {
             playerFinalMissingHpFrames = 0
             val lastScannedUserHp = lastScannedPlayerSlotHpPct[activeUserIdx].coerceIn(1, 100)
-            val minOppMoveCooldownMs = (oppFastTurnsForStats * 500L - 100L).coerceAtLeast(390L)
-            val elapsedSinceLastOppCreditMs = if (oppLastFastCreditedAtMs[activeOppIdx] > 0L) {
-                (nowMs - oppLastFastCreditedAtMs[activeOppIdx]).coerceAtLeast(0L)
-            } else Long.MAX_VALUE
 
             if (sampledPlayerHpPct == pendingConfirmPlayerSlotHpPct[activeUserIdx]) {
                 playerSlotHpConfirmFrames[activeUserIdx] = (playerSlotHpConfirmFrames[activeUserIdx] + 1).coerceAtMost(10)
@@ -11901,57 +11799,12 @@ class OverlayService : LifecycleService() {
                     halfOppDmg
                 }
 
-                // Accumulate fast-move damage dealt by this opponent for the Non-Standard Opponent Fast Move Detector
+                // Accumulate fast-move damage dealt by this opponent for the Non-Standard Opponent Fast Move Detector (1E)
                 if (realUserDrop in 1..25 && (hasBattleStarted || realUserDrop >= 2) && canAccumulateFastEnergy) {
                     oppCumulativeFastDmgPct[activeOppIdx] = (oppCumulativeFastDmgPct[activeOppIdx] + realUserDrop).coerceIn(0, 300)
                 }
 
                 if (realUserDrop in minOppFastDmgThreshold..25) {
-                    observedPlayerFastDrop = true
-                    turnPhaseAnchorMs = captureAnchorMs
-
-                    val allowHpOppEnergyCredit = !chargeCircleOnlyMode || (isPlayerInIdleFallback && oppExactDmgPct >= 3.0)
-                    if (canAccumulateFastEnergy && allowHpOppEnergyCredit) {
-                        if (!hasBattleStarted) {
-                            hasBattleStarted = true
-                            battleClockAnchorMs = nowMs - (oppFastTurnsForStats * 500L)
-                            lastTurnTickTimeMs = nowMs
-                            turnResidualMs = 0L
-                            battleTurnIndex = oppFastTurnsForStats
-                        }
-                        val alreadyCreditedByPhaseGate = oppCreditedByOptimalTimerAtMs[activeOppIdx] > 0L &&
-                            (nowMs - oppCreditedByOptimalTimerAtMs[activeOppIdx]) < (oppFastTurnsForStats * 500L - 80L)
-
-                        val dmgDerivedMoves = if (oppExactDmgPct <= 3.5) {
-                            (realUserDrop.toDouble() / oppExactDmgPct.coerceAtLeast(0.6)).roundToInt().coerceAtLeast(1)
-                        } else {
-                            1
-                        }
-                        val elapsedDerivedMoves = (elapsedSinceLastOppCreditMs / minOppMoveCooldownMs).toInt().coerceAtLeast(1)
-                        val baseNewMoves = if (alreadyCreditedByPhaseGate || elapsedSinceLastOppCreditMs < minOppMoveCooldownMs) {
-                            0
-                        } else {
-                            min(dmgDerivedMoves, elapsedDerivedMoves).coerceIn(1, 3)
-                        }
-
-                        if (baseNewMoves > 0) {
-                            oppFastMovesCreditedByHpThisFrame = baseNewMoves
-                            oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] + baseNewMoves * oppFastEnergyForStats).coerceIn(0, 100)
-                            oppSlotTurnsOnField[activeOppIdx] = (oppSlotTurnsOnField[activeOppIdx] + baseNewMoves * oppFastTurnsForStats).coerceAtLeast(0)
-                            phaseOppTurns += baseNewMoves * oppFastTurnsForStats
-                            if (isPlayerInIdleFallback) {
-                                phasePlayerTurns = max(phasePlayerTurns, phaseOppTurns)
-                                lastIdleFallbackOppCreditMs = nowMs
-                            }
-                            oppLastFastCreditedAtMs[activeOppIdx] = nowMs
-                            hpChanged = true
-                        } else if (alreadyCreditedByPhaseGate) {
-                            oppLastFastCreditedAtMs[activeOppIdx] = nowMs
-                            oppCreditedByOptimalTimerAtMs[activeOppIdx] = 0L
-                        }
-                        oppSlotCurrentMoveTurns[activeOppIdx] = (phasePlayerTurns - phaseOppTurns).coerceIn(0, oppFastTurnsForStats - 1)
-                    }
-
                     lastScannedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     predictedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     confirmedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
@@ -11975,7 +11828,7 @@ class OverlayService : LifecycleService() {
                     predictedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     hpChanged = true
                 } else if (realUserDrop > 25 && playerSlotHpConfirmFrames[activeUserIdx] >= requiredPlayerConfirmFrames + 1) {
-                    // v3.82: Sync large (>25%) HP drops when HP bar is re-acquired or after unshielded damage
+                    // Sync large (>25%) HP drops when HP bar is re-acquired or after unshielded damage
                     lastScannedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     confirmedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     playerSlotHpPct[activeUserIdx] = confirmedPlayerHp
@@ -11991,22 +11844,11 @@ class OverlayService : LifecycleService() {
             playerSlotHpConfirmFrames[activeUserIdx] = 0
         }
 
-        // 1B. Opponent HP Bar Scan -> Tracks opponent HP% & integrates non-charged-move fast damage over turns for the 2-out-of-3 PLL.
-        val currentStintPairKey = "${activeUserIdx}_${activeOppIdx}_${activeOpponentName.trim().lowercase()}"
-        if (pllStintPairKey != currentStintPairKey) {
-            pllStintPairKey = currentStintPairKey
-            playerStintStartEnergy[activeUserIdx] = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
-            playerStintOppFastDmgPct[activeUserIdx] = 0.0
-            playerStintStartMs[activeUserIdx] = if (hasBattleStarted) nowMs else 0L
-        }
-        val maxFastSingleDrop = max(12, (userExactDmgPct * 2.5).roundToInt()).coerceIn(6, 25)
-
+        // 1B. v3.85: Opponent HP Bar Scan (Decoupled from Energy & Turn Counting):
+        //     Tracks opponent HP% only; never credits fast-move turns or adjusts player energy.
         if (sampledOppHpPct in 1..100 && !oppFaintedSlots[activeOppIdx]) {
             oppFinalMissingHpFrames = 0
             val lastScannedOppHp = lastScannedOppSlotHpPct[activeOppIdx].coerceIn(1, 100)
-            val elapsedSinceLastUserCreditMs = if (playerLastFastCreditedAtMs[activeUserIdx] > 0L) {
-                (nowMs - playerLastFastCreditedAtMs[activeUserIdx]).coerceAtLeast(0L)
-            } else Long.MAX_VALUE
 
             if (sampledOppHpPct == pendingConfirmOppSlotHpPct[activeOppIdx]) {
                 oppSlotHpConfirmFrames[activeOppIdx] = (oppSlotHpConfirmFrames[activeOppIdx] + 1).coerceAtMost(10)
@@ -12022,57 +11864,8 @@ class OverlayService : LifecycleService() {
                 val realOppDrop = lastScannedOppHp - confirmedOppHp
                 val halfUserDmg = max(1, (userExactDmgPct * 0.50).roundToInt())
                 val minUserFastDmgThreshold = halfUserDmg
-                val isFastMoveCombatWindow = pendingChargedAttackActor.isEmpty() &&
-                    !isAttackIncomingPromptActive &&
-                    !hasAttackIncomingText &&
-                    !hasUserChargedBannerText &&
-                    (nowMs - lastChargedAttackLoggedMs) >= 1100L
 
                 if (realOppDrop in minUserFastDmgThreshold..25) {
-                    observedOppFastDrop = true
-                    turnPhaseAnchorMs = captureAnchorMs
-
-                    // Integrate fast-move HP damage over turns for Sensor 1 of the 2-out-of-3 PLL (strictly ignoring charged move damage)
-                    if (isFastMoveCombatWindow && realOppDrop <= maxFastSingleDrop) {
-                        if (playerStintStartMs[activeUserIdx] <= 0L) {
-                            playerStintStartEnergy[activeUserIdx] = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
-                            playerStintStartMs[activeUserIdx] = nowMs - (userFastTurnsForStats * 500L)
-                        }
-                        playerStintOppFastDmgPct[activeUserIdx] += realOppDrop.toDouble()
-                    }
-
-                    if (canAccumulateFastEnergy && !chargeCircleOnlyMode) {
-                        if (!hasBattleStarted) {
-                            hasBattleStarted = true
-                            battleClockAnchorMs = nowMs - (userFastTurnsForStats * 500L)
-                            lastTurnTickTimeMs = nowMs
-                            turnResidualMs = 0L
-                            battleTurnIndex = userFastTurnsForStats
-                        }
-                        val userDmgDerivedMoves = if (userExactDmgPct <= 3.5) {
-                            (realOppDrop.toDouble() / userExactDmgPct.coerceAtLeast(0.6)).roundToInt().coerceAtLeast(1)
-                        } else {
-                            1
-                        }
-                        val userElapsedDerivedMoves = (elapsedSinceLastUserCreditMs / minUserMoveCooldownMs).toInt().coerceAtLeast(1)
-                        val baseNewMoves = if (elapsedSinceLastUserCreditMs < minUserMoveCooldownMs) {
-                            0
-                        } else {
-                            min(userDmgDerivedMoves, userElapsedDerivedMoves).coerceIn(1, 3)
-                        }
-
-                        if (baseNewMoves > 0) {
-                            userFastMovesCreditedThisFrame += baseNewMoves
-                            playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] + baseNewMoves * userFastEnergyForStats).coerceIn(0, 100)
-                            playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + baseNewMoves * userFastTurnsForStats).coerceAtLeast(0)
-                            phasePlayerTurns += baseNewMoves * userFastTurnsForStats
-                            playerLastFastCreditedAtMs[activeUserIdx] = nowMs
-                            isPlayerInIdleFallback = false
-                            hpChanged = true
-                        }
-                        playerSlotCurrentMoveTurns[activeUserIdx] = 0
-                    }
-
                     lastScannedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     predictedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     confirmedOppSlotHpPct[activeOppIdx] = confirmedOppHp
@@ -12082,13 +11875,6 @@ class OverlayService : LifecycleService() {
                     pendingOppLowHpSample = -1
                     hpChanged = true
                 } else if (realOppDrop in 1 until minUserFastDmgThreshold && hasBattleStarted) {
-                    if (isFastMoveCombatWindow) {
-                        if (playerStintStartMs[activeUserIdx] <= 0L) {
-                            playerStintStartEnergy[activeUserIdx] = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
-                            playerStintStartMs[activeUserIdx] = nowMs - (userFastTurnsForStats * 500L)
-                        }
-                        playerStintOppFastDmgPct[activeUserIdx] += realOppDrop.toDouble()
-                    }
                     lastScannedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     confirmedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     oppSlotHpPct[activeOppIdx] = confirmedOppHp
@@ -12101,20 +11887,13 @@ class OverlayService : LifecycleService() {
                     oppSlotHpPct[activeOppIdx] = confirmedOppHp
                     oppSlotPreFaintHpPct[activeOppIdx] = confirmedOppHp
                     predictedOppSlotHpPct[activeOppIdx] = confirmedOppHp
-                    playerStintStartEnergy[activeUserIdx] = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
-                    playerStintOppFastDmgPct[activeUserIdx] = 0.0
-                    playerStintStartMs[activeUserIdx] = nowMs
                     hpChanged = true
                 } else if (realOppDrop > 25 && oppSlotHpConfirmFrames[activeOppIdx] >= requiredOppConfirmFrames + 1) {
-                    // v3.82: Sync large (>25%) opponent HP drops when HP bar is re-acquired or after unshielded damage (ignored by fast-move HP integrator)
                     lastScannedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     confirmedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     oppSlotHpPct[activeOppIdx] = confirmedOppHp
                     oppSlotPreFaintHpPct[activeOppIdx] = confirmedOppHp
                     predictedOppSlotHpPct[activeOppIdx] = confirmedOppHp
-                    playerStintStartEnergy[activeUserIdx] = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
-                    playerStintOppFastDmgPct[activeUserIdx] = 0.0
-                    playerStintStartMs[activeUserIdx] = nowMs
                     pendingOppLowHpSlot = -1
                     pendingOppLowHpSample = -1
                     hpChanged = true
@@ -12146,7 +11925,7 @@ class OverlayService : LifecycleService() {
         val cheapestUserEnergy = min(userMove1Energy, userMove2Energy).coerceIn(35, 100)
         val maxUserMoveEnergy = max(userMove1Energy, userMove2Energy).coerceIn(35, 100)
 
-        // 1C. v3.84: 2-Channel Kalman Filter Energy Meter Smoothing + Phase-Locked Fast-Move Auto-Increment (500ms * fastMoveTurns)
+        // 1C. v3.85: 2-Channel Kalman Filter Energy Meter Smoothing + Phase-Locked Fast-Move Auto-Increment (500ms * fastMoveTurns)
         //     - Replaces the hard 300ms debounce with a state-space Kalman Filter that processes the energy delta from fast move
         //       turn timestamps (`turnEnergyDelta`) and observed circle fill levels (`sampledLeftChargeBtnFillPct`, `sampledRightChargeBtnFillPct`),
         //       effectively handling transient OCR/meniscus noise and animation lag to reduce latency while maintaining accuracy.
@@ -12161,18 +11940,12 @@ class OverlayService : LifecycleService() {
             !oppFaintedSlots[activeOppIdx] &&
             (sampledLeftChargeBtnFillPct in 0..200 || sampledRightChargeBtnFillPct in 0..200)
         ) {
-            val minFillStepPct = max(3, ((userFastEnergyForStats * 100) / (maxUserMoveEnergy + 30)).coerceIn(3, 8))
-            val alreadyCreditedByHpThisFrame = !chargeCircleOnlyMode && observedOppFastDrop
-
             // 1. Phase-Locked Fast-Move Turn Timestamp Prediction (500ms * userFastTurnsForStats):
-            //    Compute whether a fast move turn boundary has elapsed since the phase-locked anchor, feeding `turnEnergyDelta`
-            //    directly into the Kalman Filter's prediction step so rising circle animation lag is predicted in real time.
             var turnEnergyDeltaForKalman = 0
             val curAnchorBeforeKalman = playerAutoIncrementAnchorMs[activeUserIdx]
             if (hasBattleStarted &&
                 curAnchorBeforeKalman > 0L &&
                 userFastMovesCreditedThisFrame == 0 &&
-                !alreadyCreditedByHpThisFrame &&
                 (nowMs - curAnchorBeforeKalman) >= userMoveDurationMs
             ) {
                 var nextAnchor = curAnchorBeforeKalman + userMoveDurationMs
@@ -12192,11 +11965,9 @@ class OverlayService : LifecycleService() {
                 lastIdleFallbackOppCreditMs = 0L
                 turnEnergyDeltaForKalman = userFastEnergyForStats
                 hpChanged = true
-            } else if (alreadyCreditedByHpThisFrame) {
-                turnEnergyDeltaForKalman = userFastEnergyForStats
             }
 
-            // 2. Run 2-Channel Kalman Filter Measurement Update on Left (Move 1) & Right (Move 2) Charge Move Circles:
+            // 2. Run Highest-Energy Charge Move Meter Kalman Filter Update:
             val kalmanRes = updatePlayerEnergyKalmanFilter(
                 slot = activeUserIdx,
                 nowMs = nowMs,
@@ -12254,7 +12025,6 @@ class OverlayService : LifecycleService() {
                     if (trueThrownMove != null && trueThrownMove.second != lastUserChargeDeductedEnergySnapshot) {
                         val costDiff = lastUserChargeDeductedEnergySnapshot - trueThrownMove.second
                         playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] + costDiff).coerceIn(0, 100)
-                        playerStintStartEnergy[activeUserIdx] = (playerStintStartEnergy[activeUserIdx] + costDiff).coerceIn(0, 100)
                         kalmanEnergyState[activeUserIdx] = playerSlotEnergy[activeUserIdx].toDouble()
                         lastUserChargeDeductedEnergySnapshot = trueThrownMove.second
                         lastUserChargeResolvedMoveName = trueThrownMove.first
@@ -12264,8 +12034,8 @@ class OverlayService : LifecycleService() {
                 }
             }
 
-            // 3. Low-Latency Phase-Lock Anchor Update from Kalman-Filtered Meter Step (no 300ms lag!):
-            if (chargeBarStepDetected && !alreadyCreditedByHpThisFrame) {
+            // 3. Low-Latency Phase-Lock Anchor Update from Highest-Energy Meter Step (using configurable PLL Phase Blend %):
+            if (chargeBarStepDetected) {
                 val stepAnchorMs = stepTimestampMs.takeIf { it > 0L } ?: nowMs
                 val curAnchorMs = playerAutoIncrementAnchorMs[activeUserIdx]
                 if (!hasBattleStarted || curAnchorMs <= 0L) {
@@ -12292,7 +12062,6 @@ class OverlayService : LifecycleService() {
                         hpChanged = true
                     }
                 } else if (userFastMovesCreditedThisFrame == 0 && stepAnchorMs >= curAnchorMs + (userMoveDurationMs * 65L) / 100L) {
-                    // Kalman-smoothed meter stepped for the next fast move slightly ahead of timer: credit +1 fast move now and phase-lock
                     playerAutoIncrementAnchorMs[activeUserIdx] = stepAnchorMs
                     observedPlayerChargeBarStep = true
                     userFastMovesCreditedThisFrame += 1
@@ -12307,44 +12076,27 @@ class OverlayService : LifecycleService() {
                     kalmanEnergyState[activeUserIdx] = playerSlotEnergy[activeUserIdx].toDouble()
                     hpChanged = true
                 } else {
-                    // Smoothly blend phase anchor (70% prior timer anchor, 30% observed step) to absorb animation jitter
-                    playerAutoIncrementAnchorMs[activeUserIdx] = ((curAnchorMs * 7L + stepAnchorMs * 3L) / 10L)
+                    val blendPct = activeKalmanPllBlendPct.coerceIn(5, 80).toLong()
+                    playerAutoIncrementAnchorMs[activeUserIdx] = ((curAnchorMs * (100L - blendPct) + stepAnchorMs * blendPct) / 100L)
                 }
             }
 
-            // 4. v3.84 Kalman-Fused 2-out-of-3 PLL Self-Correction + Slower Charge Move Prioritization on 3rd Fill:
-            //    - Rate-limited to at most 1 fast move adjustment per fast move duration (userMoveDurationMs).
-            //    - Evaluated with low latency (>= 140ms after turn anchor instead of 300ms debounce) using:
-            //      (1) Opponent Fast-Move HP integrated over turns (ignoring Charged Move damage),
-            //      (2) Kalman-filtered Left Charge Move 1 meter (with 0.25x confidence reduction if in 3rd fill),
-            //      (3) Kalman-filtered Right Charge Move 2 meter (with 1.80x higher-value priority if slower move while faster move is in 3rd fill).
-            //    - Never allows disappearing/zero circles to pull non-zero combat energy down to 0, and preserves leftover charged move energy deltas!
+            // 4. v3.85 Charge-Meter-Only Self-Correction Based on the Highest-Energy Charge Move Meter:
             val canSelfCorrectThisDuration = (nowMs - playerLastSelfCorrectionAtMs[activeUserIdx]) >= userMoveDurationMs
             val elapsedSinceAutoAnchorMs = if (playerAutoIncrementAnchorMs[activeUserIdx] > 0L) {
                 (nowMs - playerAutoIncrementAnchorMs[activeUserIdx]).coerceAtLeast(0L)
             } else 150L
-            val activeSensorCount = (if (leftKalmanValid) 1 else 0) +
-                (if (hasSecondUserMove && rightKalmanValid) 1 else 0) +
-                (if (sampledOppHpPct in 1..100 && (playerStintOppFastDmgPct[activeUserIdx] > 0.0 || (playerStintStartMs[activeUserIdx] > 0L && (nowMs - playerStintStartMs[activeUserIdx]) >= userMoveDurationMs))) 1 else 0)
+            val primaryMeterValid = if (hasSecondUserMove && userMove2Energy > userMove1Energy) rightKalmanValid else leftKalmanValid
 
-            if (hasBattleStarted && (bothMetersKalmanValid || activeSensorCount >= 2) && canSelfCorrectThisDuration && elapsedSinceAutoAnchorMs >= 140L) {
+            if (hasBattleStarted && (primaryMeterValid || bothMetersKalmanValid) && canSelfCorrectThisDuration && elapsedSinceAutoAnchorMs >= 140L) {
                 val curEnergy = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
                 val kalmanL = if (leftKalmanValid) confirmedLeftForSnap else -1
                 val kalmanR = if (hasSecondUserMove && rightKalmanValid) confirmedRightForSnap else -1
                 val isZeroCircleReading = kalmanL <= 0 && (!hasSecondUserMove || kalmanR <= 0)
                 if (!isZeroCircleReading) {
-                    val hpSensorOnline = sampledOppHpPct in 1..100 &&
-                        !oppFaintedSlots[activeOppIdx] &&
-                        (playerStintOppFastDmgPct[activeUserIdx] > 0.0 ||
-                            (playerStintStartMs[activeUserIdx] > 0L && (nowMs - playerStintStartMs[activeUserIdx]) >= userMoveDurationMs))
-
                     val pllVote = evaluateTwoOutOfThreePllVote(
                         curEnergy = curEnergy,
                         fastEnergy = userFastEnergyForStats,
-                        userExactDmgPct = userExactDmgPct,
-                        stintStartEnergy = playerStintStartEnergy[activeUserIdx],
-                        stintOppFastDmgPct = playerStintOppFastDmgPct[activeUserIdx],
-                        hpSensorOnline = hpSensorOnline,
                         leftFillPct = kalmanL,
                         leftSensorOnline = leftKalmanValid,
                         cost1 = userMove1Energy,
@@ -12400,7 +12152,7 @@ class OverlayService : LifecycleService() {
             }
         }
 
-        // 1D. v3.80: Universal PvPoke Fast Move Registration, Turn-Lag Makeup & Player-Idle (>2 Fast Moves) Back-Credit + Fallback
+        // 1D. v3.85: Universal Opponent Fast Move Registration Mapped from Player Fast-Move Turns + Player-Idle (>2 Fast Moves) Fallback
         if (hasBattleStarted &&
             canAccumulateFastEnergy &&
             !playerFaintedSlots[activeUserIdx] &&
@@ -12411,7 +12163,7 @@ class OverlayService : LifecycleService() {
                 val alreadyCreditedOppMovesInPhase = phaseOppTurns / oppFastTurnsForStats
                 val makeupOppMoves = (totalCompletedOppMovesInPhase - alreadyCreditedOppMovesInPhase).coerceAtLeast(0)
 
-                if (makeupOppMoves > 0 && oppFastMovesCreditedByHpThisFrame == 0) {
+                if (makeupOppMoves > 0) {
                     oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] + makeupOppMoves * oppFastEnergyForStats).coerceIn(0, 100)
                     oppSlotTurnsOnField[activeOppIdx] = (oppSlotTurnsOnField[activeOppIdx] + makeupOppMoves * oppFastTurnsForStats).coerceAtLeast(0)
                     phaseOppTurns += makeupOppMoves * oppFastTurnsForStats
@@ -12431,7 +12183,6 @@ class OverlayService : LifecycleService() {
 
                 if (shouldIdleFallback) {
                     if (!isPlayerInIdleFallback) {
-                        // 1. Immediate Back-Credit for the 2-fast-move idle detection window before ongoing fallback kicks in!
                         isPlayerInIdleFallback = true
                         if (elapsedSinceLastUserFastMs >= idleWindowMs) {
                             val backCreditTurns = (elapsedSinceLastUserFastMs / 500L).toInt().coerceIn(2 * userFastTurnsForStats, 12)
@@ -12448,8 +12199,8 @@ class OverlayService : LifecycleService() {
                             }
                         }
                         lastIdleFallbackOppCreditMs = nowMs
-                    } else if (oppExactDmgPct < 3.0) {
-                        // 2. Ongoing Time-Based Fallback when opponent fast move deals < 3% damage (while >= 3% uses 1A HP drops)
+                    } else {
+                        // Ongoing Time-Based Opponent Fast-Move Duration Fallback while player is idle or at 100E (decoupled from HP)
                         val oppMoveIntervalMs = (oppFastTurnsForStats * 500L).coerceAtLeast(500L)
                         val anchorMs = if (lastIdleFallbackOppCreditMs > 0L) lastIdleFallbackOppCreditMs else nowMs
                         if (nowMs - anchorMs >= oppMoveIntervalMs) {
@@ -12657,25 +12408,11 @@ class OverlayService : LifecycleService() {
             predictedOppSlotHpPct[activeOppIdx] = oppSlotHpPct[activeOppIdx]
             if (pendingChargedAttackActor != "opp" && (nowMs - lastChargedAttackLoggedMs) > 2200L) {
                 hasBattleStarted = true
-                // Validate settled pre-shield-delay Opponent HP & run 2-out-of-3 PLL check during shield choice delay!
-                if (sampledOppHpPct in 1..100 && oppSlotHpConfirmFrames[activeOppIdx] >= 2) {
-                    val settledFastDrop = lastScannedOppSlotHpPct[activeOppIdx] - sampledOppHpPct
-                    if (settledFastDrop in 1..maxFastSingleDrop) {
-                        playerStintOppFastDmgPct[activeUserIdx] += settledFastDrop.toDouble()
-                        lastScannedOppSlotHpPct[activeOppIdx] = sampledOppHpPct
-                        confirmedOppSlotHpPct[activeOppIdx] = sampledOppHpPct
-                        oppSlotHpPct[activeOppIdx] = sampledOppHpPct
-                    }
-                }
                 if (!pllValidatedThisShieldDelay) {
                     pllValidatedThisShieldDelay = true
                     val shieldDelayVote = evaluateTwoOutOfThreePllVote(
                         curEnergy = playerSlotEnergy[activeUserIdx].coerceIn(0, 100),
                         fastEnergy = userFastEnergyForStats,
-                        userExactDmgPct = userExactDmgPct,
-                        stintStartEnergy = playerStintStartEnergy[activeUserIdx],
-                        stintOppFastDmgPct = playerStintOppFastDmgPct[activeUserIdx],
-                        hpSensorOnline = playerStintOppFastDmgPct[activeUserIdx] > 0.0,
                         leftFillPct = lastStableLeftChargeFillPct,
                         leftSensorOnline = lastStableLeftChargeFillPct > 0,
                         cost1 = userMove1Energy,
@@ -12786,15 +12523,10 @@ class OverlayService : LifecycleService() {
                 preChargeLeftFillPct = if (lastStableLeftChargeFillPct > 0) lastStableLeftChargeFillPct else lastScannedLeftChargeFillPct[activeUserIdx].coerceAtLeast(0)
                 preChargeRightFillPct = if (lastStableRightChargeFillPct > 0) lastStableRightChargeFillPct else lastScannedRightChargeFillPct[activeUserIdx].coerceAtLeast(0)
 
-                // Validate pre-throw energy using 2-out-of-3 PLL (Integrated Opponent Fast-Move HP + Pre-Throw Circle 1 + Pre-Throw Circle 2)
-                // during the opponent's shield choice delay before the charged move damage lands!
+                // Validate pre-throw energy using Highest-Energy Charge Move Meter PLL
                 val preThrowPllVote = evaluateTwoOutOfThreePllVote(
                     curEnergy = playerSlotEnergy[activeUserIdx].coerceIn(0, 100),
                     fastEnergy = userFastEnergyForStats,
-                    userExactDmgPct = userExactDmgPct,
-                    stintStartEnergy = playerStintStartEnergy[activeUserIdx],
-                    stintOppFastDmgPct = playerStintOppFastDmgPct[activeUserIdx],
-                    hpSensorOnline = playerStintOppFastDmgPct[activeUserIdx] > 0.0,
                     leftFillPct = preChargeLeftFillPct,
                     leftSensorOnline = preChargeLeftFillPct > 0,
                     cost1 = userMove1Energy,
@@ -12969,9 +12701,6 @@ class OverlayService : LifecycleService() {
                 playerLastFastCreditedAtMs[activeUserIdx] = 0L
                 playerAutoIncrementAnchorMs[activeUserIdx] = 0L
                 playerLastSelfCorrectionAtMs[activeUserIdx] = 0L
-                playerStintStartEnergy[activeUserIdx] = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
-                playerStintOppFastDmgPct[activeUserIdx] = 0.0
-                playerStintStartMs[activeUserIdx] = nowMs
                 pllValidatedThisShieldDelay = false
                 oppLastFastCreditedAtMs[activeOppIdx] = 0L
                 oppCreditedByOptimalTimerAtMs[activeOppIdx] = 0L
@@ -13139,7 +12868,7 @@ class OverlayService : LifecycleService() {
                     else -> userMoveEnergyMap[resolvedUserMove] ?: cheapestUserEnergy
                 }
 
-                // v3.83/v3.84: Preserve exact leftover charged move energy delta (`effectivePreEnergy - totalUserEnergy`)
+                // v3.83/v3.85: Preserve exact leftover charged move energy delta (`effectivePreEnergy - totalUserEnergy`)
                 // instead of snapping away residual energy or allowing missing post-throw circles to zero out energy!
                 val computedResidualEnergy = (effectivePreEnergy - totalUserEnergy).coerceIn(0, 100)
                 playerSlotEnergy[activeUserIdx] = computedResidualEnergy
@@ -13165,9 +12894,6 @@ class OverlayService : LifecycleService() {
                 playerLastFastCreditedAtMs[activeUserIdx] = 0L
                 playerAutoIncrementAnchorMs[activeUserIdx] = 0L
                 playerLastSelfCorrectionAtMs[activeUserIdx] = 0L
-                playerStintStartEnergy[activeUserIdx] = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
-                playerStintOppFastDmgPct[activeUserIdx] = 0.0
-                playerStintStartMs[activeUserIdx] = nowMs
                 pllValidatedThisShieldDelay = false
                 oppLastFastCreditedAtMs[activeOppIdx] = 0L
                 oppCreditedByOptimalTimerAtMs[activeOppIdx] = 0L
@@ -13263,9 +12989,9 @@ class OverlayService : LifecycleService() {
             if (turnsDelta > 0) {
                 battleTurnIndex += turnsDelta
             }
-            if (observedPlayerFastDrop || observedOppFastDrop || observedPlayerChargeBarStep || needsPostSwapOrMoveTurnReindex) {
+            if (observedPlayerChargeBarStep || needsPostSwapOrMoveTurnReindex) {
                 scanTurnOffsetMs = ((nowMs - battleClockAnchorMs).coerceAtLeast(0L)) % 500L
-                if (observedPlayerFastDrop || observedOppFastDrop || observedPlayerChargeBarStep) {
+                if (observedPlayerChargeBarStep) {
                     needsPostSwapOrMoveTurnReindex = false
                 }
             }
@@ -14927,7 +14653,7 @@ class OverlayService : LifecycleService() {
         oppCreditedByOptimalTimerAtMs.fill(0L)
         sampledLeftChargeBtnFillPct = -1
         sampledRightChargeBtnFillPct = -1
-        // v3.84: Lock Charge Move Circle baseline to 0% empty at battle start and reset Kalman Filter & phase-locked auto-increment
+        // v3.85: Lock Charge Move Circle baseline to 0% empty at battle start and reset Kalman Filter & phase-locked auto-increment
         lastScannedLeftChargeFillPct.fill(0)
         lastScannedRightChargeFillPct.fill(0)
         pendingConfirmLeftChargeFillPct.fill(0)
@@ -14941,10 +14667,6 @@ class OverlayService : LifecycleService() {
         }
         playerAutoIncrementAnchorMs.fill(0L)
         playerLastSelfCorrectionAtMs.fill(0L)
-        playerStintStartEnergy.fill(0)
-        playerStintOppFastDmgPct.fill(0.0)
-        playerStintStartMs.fill(0L)
-        pllStintPairKey = ""
         pllValidatedThisShieldDelay = false
         prescanCircleCalibrated = false
         prescanCalibConfirmFrames = 0
@@ -16204,7 +15926,6 @@ class OverlayService : LifecycleService() {
                 "lastBattleAvgHpScanMs" to lastBattleAvgHpScanMs,
                 "enableHpTracking" to enableHpTracking,
                 "enableEnergyTracking" to enableEnergyTracking,
-                "chargeCircleOnlyMode" to chargeCircleOnlyMode,
                 "fastDetectTurnOffset" to fastDetectTurnOffset,
                 "oppFastMoveStatus" to "unconfirmed",
                 "confirmedOppChargedMoves" to emptyList<String>(),
@@ -17278,7 +16999,6 @@ class OverlayService : LifecycleService() {
             "userFastTelemetry" to userFastTelemetry,
             "oppCountMode" to oppCountMode,
             "enable4ChargedMoves" to enable4ChargedMoves,
-            "chargeCircleOnlyMode" to chargeCircleOnlyMode,
             "fastDetectTurnOffset" to fastDetectTurnOffset,
             "overlayTransparencyPct" to overlayTransparencyPct,
             "appThemeId" to appThemeId,
