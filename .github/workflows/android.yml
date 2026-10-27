@@ -137,9 +137,10 @@ jobs:
               - Includes non-deterministic runtime emblem center refinement when joining mid-battle.
             - **8-Direction White Ready-Ring Priority & Relative Meniscus Detection**:
               - Evaluates the 8-direction radial white ready ring (`whiteRingArcs >= 5`) and top interior cap (`isTopCapFilled`) before primary meniscus scanning so 100% full buttons (including low-saturation Steel/Normal/Rock moves like Iron Head) are never misread as `< 100%`.
-            - **Discrete Fast-Move Energy Stepping + Bounded `±1–2` Move Micro-Corrections**:
-              - Steps player energy strictly by discrete `+fastMoveEnergy` increments on each detected fast move.
-              - Uses calibrated absolute circle values only for bounded `1–2` move micro-corrections on `100%` ready-ring floor/ceiling enforcement or stable primary-layer drift.
+            - **Discrete Fast-Move Energy Stepping + Full-Range `0..100E` Self-Biasing (`Bounded Micro-Corrections`)**:
+              - Steps player energy strictly by discrete `+fastMoveEnergy` increments on each detected fast move across the full `0..100E` range (removed the `>55%` overcharge transition step deadlock).
+              - Outer-annulus flank sampling (`0.0485w..0.0565w`) avoids wide move emblems (such as Dragon tail on *Roar of Time*) so overcharge fill (`102..200%`) and double-stacked `200%` concentric rings are cleanly resolved up to `100E`.
+              - Preserves post-charged-move modular fast-move phase and self-biases `±1–2` fast moves per cooldown across both primary (`5..94%`) and overcharge (`102..200%`) ranges all the way to `100E`.
             - **`"No Protect Shields remaining!"` & 0-Shield Prompt Detection**:
               - Treats `"No Protect Shields remaining!"` and 0-shield hidden bottom circles identically to an opponent shield prompt (`hadShieldPromptBeforeCurrentCharge = true`, `pendingChargedAttackActor = "opp"`, `"⚡ Attack Incoming (No Shields)! (-XE)"` toast).
 
