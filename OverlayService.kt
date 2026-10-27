@@ -10304,7 +10304,123 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private fun detectFloatingHpBarPct(
+    private fun computeAuthoritativeCircleEnergy(
+        leftFillPct: Int,
+        rightFillPct: Int,
+        cost1: Int,
+        cost2: Int,
+        hasSecondMove: Boolean,
+        leftInThirdFill: Boolean = false,
+        rightInThirdFill: Boolean = false
+    ): Int {
+        val validLeft = leftFillPct in 0..200
+        val validRight = hasSecondMove && rightFillPct in 0..200 && cost2 > 0
+        if (!validLeft && !validRight) return -1
+
+        val c1 = cost1.coerceIn(35, 100)
+        val c2 = if (validRight) cost2.coerceIn(35, 100) else c1
+        val leftIsSlowerMove = validRight && c1 > c2
+        val rightIsSlowerMove = validRight && c2 > c1
+
+        if ((validLeft && leftFillPct == 0) && (!validRight || rightFillPct == 0)) {
+            return 0
+        }
+        if ((validRight && rightFillPct == 0) && (!validLeft || leftFillPct == 0)) {
+            return 0
+        }
+
+        var minPossible = 0
+        var maxPossible = 100
+        if (validLeft) {
+            if (leftFillPct == 0) maxPossible = min(maxPossible, 2)
+            else if (leftFillPct in 1..95) maxPossible = min(maxPossible, c1 - 1)
+            else if (leftFillPct >= 99) minPossible = max(minPossible, (if (leftInThirdFill) min(100, 2 * c1) else c1) - 2)
+        }
+        if (validRight) {
+            if (rightFillPct == 0) maxPossible = min(maxPossible, 2)
+            else if (rightFillPct in 1..95) maxPossible = min(maxPossible, c2 - 1)
+            else if (rightFillPct >= 99) minPossible = max(minPossible, (if (rightInThirdFill) min(100, 2 * c2) else c2) - 2)
+        }
+        if (maxPossible < minPossible) {
+            maxPossible = max(minPossible, maxPossible)
+        }
+
+        val leftIsPrimary = validLeft && leftFillPct in 1..96
+        val rightIsPrimary = validRight && rightFillPct in 1..96
+
+        val eLeftPrimary = if (leftIsPrimary) (leftFillPct.toDouble() * c1.toDouble()) / 100.0 else -1.0
+        val eRightPrimary = if (rightIsPrimary) (rightFillPct.toDouble() * c2.toDouble()) / 100.0 else -1.0
+
+        // Case A: Both Left (Move 1) and Right (Move 2) are in their clean primary layer (1..96%)
+        // v3.85: Base energy off the highest-energy charge move meter (`leftIsSlowerMove` vs `rightIsSlowerMove`)
+        if (leftIsPrimary && rightIsPrimary) {
+            val leftInIconBand = leftFillPct in 43..57
+            val rightInIconBand = rightFillPct in 43..57
+            val chosen = when {
+                rightIsSlowerMove && (!rightInIconBand || leftInIconBand) -> eRightPrimary
+                leftIsSlowerMove && (!leftInIconBand || rightInIconBand) -> eLeftPrimary
+                leftInIconBand && !rightInIconBand -> eRightPrimary
+                rightInIconBand && !leftInIconBand -> eLeftPrimary
+                rightIsSlowerMove -> eRightPrimary * 0.75 + eLeftPrimary * 0.25
+                leftIsSlowerMove -> eLeftPrimary * 0.75 + eRightPrimary * 0.25
+                else -> (eLeftPrimary + eRightPrimary) * 0.50
+            }.coerceIn(minPossible.toDouble(), maxPossible.toDouble())
+            return chosen.roundToInt().coerceIn(0, 100)
+        }
+
+        // Case B: Left (Move 1) is saturated (>= 97%) and Right (Move 2) is in its clean primary layer (1..96%)
+        if (rightIsPrimary && (!validLeft || leftFillPct >= 97)) {
+            val clamped = eRightPrimary.coerceIn(minPossible.toDouble(), maxPossible.toDouble())
+            return clamped.roundToInt().coerceIn(0, 100)
+        }
+
+        // Case C: Right (Move 2) is saturated (>= 97%) and Left (Move 1) is in its clean primary layer (1..96%)
+        if (leftIsPrimary && (!validRight || rightFillPct >= 97)) {
+            val clamped = eLeftPrimary.coerceIn(minPossible.toDouble(), maxPossible.toDouble())
+            return clamped.roundToInt().coerceIn(0, 100)
+        }
+
+        // Case D: Both circles are >= 97% (saturated / overcharging)
+        // v3.85: Prioritize the slower charge move meter and reduce confidence in any meter that has filled twice and is filling a 3rd time!
+        val e1Over = if (validLeft && leftFillPct in 101..200) {
+            if (leftInThirdFill && leftFillPct in 101..180) {
+                (2.0 * c1.toDouble() + ((leftFillPct - 100).toDouble() * c1.toDouble()) / 100.0).coerceIn(minPossible.toDouble(), 100.0)
+            } else {
+                ((leftFillPct.toDouble() * c1.toDouble()) / 100.0).coerceIn(minPossible.toDouble(), 100.0)
+            }
+        } else -1.0
+
+        val e2Over = if (validRight && rightFillPct in 101..200) {
+            if (rightInThirdFill && rightFillPct in 101..180) {
+                (2.0 * c2.toDouble() + ((rightFillPct - 100).toDouble() * c2.toDouble()) / 100.0).coerceIn(minPossible.toDouble(), 100.0)
+            } else {
+                ((rightFillPct.toDouble() * c2.toDouble()) / 100.0).coerceIn(minPossible.toDouble(), 100.0)
+            }
+        } else -1.0
+
+        if (e1Over >= 0.0 && e2Over >= 0.0) {
+            val w1 = when {
+                leftInThirdFill && !rightInThirdFill -> 0.15
+                leftIsSlowerMove -> 1.65
+                else -> 0.75
+            }
+            val w2 = when {
+                rightInThirdFill && !leftInThirdFill -> 0.15
+                rightIsSlowerMove -> 1.65
+                else -> 0.75
+            }
+            val weightedOver = ((e1Over * w1 + e2Over * w2) / (w1 + w2)).coerceIn(minPossible.toDouble(), 100.0)
+            return weightedOver.roundToInt().coerceIn(minPossible, 100)
+        } else if (e2Over >= 0.0) {
+            return e2Over.roundToInt().coerceIn(minPossible, 100)
+        } else if (e1Over >= 0.0) {
+            return e1Over.roundToInt().coerceIn(minPossible, 100)
+        }
+
+        return minPossible.coerceIn(0, 100)
+    }
+
+        private fun detectFloatingHpBarPct(
         screen: Bitmap,
         searchRect: Rect,
         fullScreenWidth: Int,
