@@ -7734,6 +7734,20 @@ class OverlayService : LifecycleService() {
     private var lastDetectedBannerMoveTimeMs: Long = 0L
     private var preChargeLeftFillPct: Int = 0
     private var preChargeRightFillPct: Int = 0
+    private var preChargeUserEnergy: Int = 0
+    private var lastStableNormalCombatEnergy: Int = 0
+    private var prevStableNormalCombatEnergy: Int = 0
+    private var lastStableLeftChargeFillPct: Int = 0
+    private var lastStableRightChargeFillPct: Int = 0
+    private var lastStableNormalCombatMs: Long = 0L
+    private var hadShieldPromptBeforeCurrentCharge: Boolean = false
+    private var lastChargedPromptActor: String = "" // "opp" | "user" | ""
+    private var lastChargedPromptTimeMs: Long = 0L
+    private var awaitingPostUserChargeCircleSync: Boolean = false
+    private var lastUserChargeResolvedMoveName: String = ""
+    private var lastUserChargePreEnergySnapshot: Int = 0
+    private var lastUserChargeDeductedEnergySnapshot: Int = 0
+    private var lastOppChargeDeductedEnergySnapshot: Int = 0
     private var lastClearedFinalUserHpPct: List<Int> = listOf(100, 100, 100)
     private var lastClearedFinalOppHpPct: List<Int> = listOf(100, 100, 100)
 
@@ -8958,9 +8972,13 @@ class OverlayService : LifecycleService() {
             sampledRightChargeBtnFillPct = -1
         }
 
-        // Check whether to launch the ~750ms asynchronous ML Kit OCR pass on this frame
+        // Check whether to launch the asynchronous ML Kit OCR pass on this frame (accelerated to 300ms during Charged Moves)
         val nowMs = System.currentTimeMillis()
-        val shouldStartOcr = !isOcrInFlight && (lastOcrStartMs == 0L || (nowMs - lastOcrStartMs) >= 750L)
+        val isChargedWindowForFastOcr = pendingChargedAttackActor.isNotEmpty() ||
+            isAttackIncomingPromptActive ||
+            (lastChargedAttackLoggedMs > 0L && (nowMs - lastChargedAttackLoggedMs) <= 2200L)
+        val targetOcrIntervalMs = if (isChargedWindowForFastOcr) 300L else 750L
+        val shouldStartOcr = !isOcrInFlight && (lastOcrStartMs == 0L || (nowMs - lastOcrStartMs) >= targetOcrIntervalMs)
 
         var compositeForOcr: Bitmap? = null
         var ocrOppZoneH = 0
@@ -8988,9 +9006,9 @@ class OverlayService : LifecycleService() {
                 (h * 0.97f).toInt().coerceIn(1, h)
             )
             val srcMidBanner = Rect(
-                (w * 0.12f).toInt().coerceIn(0, w - 1),
-                (h * 0.25f).toInt().coerceIn(0, h - 1),
-                (w * 0.88f).toInt().coerceIn(1, w),
+                (w * 0.10f).toInt().coerceIn(0, w - 1),
+                (h * 0.24f).toInt().coerceIn(0, h - 1),
+                (w * 0.90f).toInt().coerceIn(1, w),
                 (h * 0.54f).toInt().coerceIn(1, h)
             )
 
@@ -9005,7 +9023,7 @@ class OverlayService : LifecycleService() {
             val dstPlayerH = (srcPlayer.height() * scale).toInt().coerceAtLeast(1)
             val movesW = srcMoves.width().coerceAtLeast(1)
             val movesH = srcMoves.height().coerceAtLeast(1)
-            val midScale = 0.75f
+            val midScale = 1.0f
             val dstMidW = (srcMidBanner.width() * midScale).toInt().coerceAtLeast(1)
             val dstMidH = (srcMidBanner.height() * midScale).toInt().coerceAtLeast(1)
             val ocrMidZoneH = dstMidH + gap + dstMidH
@@ -9524,6 +9542,26 @@ class OverlayService : LifecycleService() {
             val iconHalfH = (h * 0.0285f).toInt().coerceAtLeast(18)
             val stepY = (h / 1100).coerceAtLeast(2)
 
+            // Verify central white move-type emblem presence so non-circle frames during Charged Attack camera zooms return -1
+            val centerProbePoints = listOf(
+                Pair(cx, cy),
+                Pair(cx - flankDx1 / 3, cy),
+                Pair(cx + flankDx1 / 3, cy),
+                Pair(cx - flankDx1 / 2, cy),
+                Pair(cx + flankDx1 / 2, cy),
+                Pair(cx, cy - stepY * 2),
+                Pair(cx, cy + stepY * 2),
+                Pair(cx, cy - stepY * 4),
+                Pair(cx, cy + stepY * 4)
+            )
+            val maxCenterIconLuma = centerProbePoints.maxOf { (px, py) ->
+                val c = screen.getPixel(px.coerceIn(0, w - 1), py.coerceIn(0, h - 1))
+                0.299 * Color.red(c) + 0.587 * Color.green(c) + 0.114 * Color.blue(c)
+            }
+            if (maxCenterIconLuma < 55.0) {
+                return -1
+            }
+
             // 1. Primary Fill Layer (1..99%): Scan vertically from yTop to yBot using chord-clamped horizontal offsets
             //    Run this first so a 94%..98% fill (e.g. 48E on a 50E move where the outer ring pre-glows) is accurately
             //    measured at its top meniscus instead of prematurely clamping to 100%!
@@ -9552,18 +9590,34 @@ class OverlayService : LifecycleService() {
                 val yD2 = (y + stepY * 2).coerceIn(yTop + 1, yBot - 1)
                 var rUp = 0.0; var gUp = 0.0; var bUp = 0.0
                 var rDn = 0.0; var gDn = 0.0; var bDn = 0.0
+                var leftFlankDnLuma = 0.0; var rightFlankDnLuma = 0.0
+                var leftFlankUpLuma = 0.0; var rightFlankUpLuma = 0.0
+                var leftCnt = 0; var rightCnt = 0
                 for (dx in xOffsets) {
                     val px = (cx + dx).coerceIn(0, w - 1)
                     val cu1 = screen.getPixel(px, yU1)
                     val cu2 = screen.getPixel(px, yU2)
                     val cd1 = screen.getPixel(px, yD1)
                     val cd2 = screen.getPixel(px, yD2)
-                    rUp += Color.red(cu1) + Color.red(cu2)
-                    gUp += Color.green(cu1) + Color.green(cu2)
-                    bUp += Color.blue(cu1) + Color.blue(cu2)
-                    rDn += Color.red(cd1) + Color.red(cd2)
-                    gDn += Color.green(cd1) + Color.green(cd2)
-                    bDn += Color.blue(cd1) + Color.blue(cd2)
+                    val ru = Color.red(cu1) + Color.red(cu2)
+                    val gu = Color.green(cu1) + Color.green(cu2)
+                    val bu = Color.blue(cu1) + Color.blue(cu2)
+                    val rd = Color.red(cd1) + Color.red(cd2)
+                    val gd = Color.green(cd1) + Color.green(cd2)
+                    val bd = Color.blue(cd1) + Color.blue(cd2)
+                    rUp += ru; gUp += gu; bUp += bu
+                    rDn += rd; gDn += gd; bDn += bd
+                    val lu = (0.299 * ru + 0.587 * gu + 0.114 * bu) * 0.5
+                    val ld = (0.299 * rd + 0.587 * gd + 0.114 * bd) * 0.5
+                    if (dx < 0) {
+                        leftFlankUpLuma += lu
+                        leftFlankDnLuma += ld
+                        leftCnt++
+                    } else if (dx > 0) {
+                        rightFlankUpLuma += lu
+                        rightFlankDnLuma += ld
+                        rightCnt++
+                    }
                 }
                 val denom = (xOffsets.size * 2).toDouble()
                 rUp /= denom; gUp /= denom; bUp /= denom
@@ -9574,6 +9628,13 @@ class OverlayService : LifecycleService() {
                 val satUp = max(rUp, max(gUp, bUp)) - min(rUp, min(gUp, bUp))
                 val satDn = max(rDn, max(gDn, bDn)) - min(rDn, min(gDn, bDn))
                 val grad = kotlin.math.abs(rDn - rUp) + kotlin.math.abs(gDn - gUp) + kotlin.math.abs(bDn - bUp)
+                val isHorizontallySymmetric = if (leftCnt > 0 && rightCnt > 0) {
+                    val lUp = leftFlankUpLuma / leftCnt
+                    val rUpFlank = rightFlankUpLuma / rightCnt
+                    val lDn = leftFlankDnLuma / leftCnt
+                    val rDnFlank = rightFlankDnLuma / rightCnt
+                    kotlin.math.abs(lUp - rUpFlank) <= 45.0 && kotlin.math.abs(lDn - rDnFlank) <= 45.0
+                } else true
 
                 // Above meniscus: unfilled translucent dark gray button interior
                 // Over green stadium turf or dirt, background saturation can reach 70-80
@@ -9582,7 +9643,7 @@ class OverlayService : LifecycleService() {
                 val isBottomCrescent = y >= yBot - (span * 0.18).toInt()
                 val minGrad = if (isBottomCrescent) 18.0 else 24.0
                 val isFilledBelow = (lumaDn > lumaUp + 2.5) || (satDn > satUp + 4.0) || (grad >= 30.0 && lumaDn >= 28.0)
-                if (isUnfilledAbove && isFilledBelow && grad >= minGrad && grad > bestScore) {
+                if (isHorizontallySymmetric && isUnfilledAbove && isFilledBelow && grad >= minGrad && grad > bestScore) {
                     bestScore = grad
                     bestY = y
                 }
@@ -9656,6 +9717,9 @@ class OverlayService : LifecycleService() {
                     }
                     var rUp = 0.0; var gUp = 0.0; var bUp = 0.0
                     var rDn = 0.0; var gDn = 0.0; var bDn = 0.0
+                    var leftOverDn = 0.0; var rightOverDn = 0.0
+                    var leftOverUp = 0.0; var rightOverUp = 0.0
+                    var lOverCnt = 0; var rOverCnt = 0
                     val yU1 = (oy - stepY * 2).coerceIn(yTopOver, yBotOver - 1)
                     val yU2 = (oy - stepY).coerceIn(yTopOver, yBotOver - 1)
                     val yD1 = (oy + stepY).coerceIn(yTopOver + 1, yBotOver - 1)
@@ -9666,12 +9730,25 @@ class OverlayService : LifecycleService() {
                         val cu2 = screen.getPixel(px, yU2)
                         val cd1 = screen.getPixel(px, yD1)
                         val cd2 = screen.getPixel(px, yD2)
-                        rUp += Color.red(cu1) + Color.red(cu2)
-                        gUp += Color.green(cu1) + Color.green(cu2)
-                        bUp += Color.blue(cu1) + Color.blue(cu2)
-                        rDn += Color.red(cd1) + Color.red(cd2)
-                        gDn += Color.green(cd1) + Color.green(cd2)
-                        bDn += Color.blue(cd1) + Color.blue(cd2)
+                        val ru = Color.red(cu1) + Color.red(cu2)
+                        val gu = Color.green(cu1) + Color.green(cu2)
+                        val bu = Color.blue(cu1) + Color.blue(cu2)
+                        val rd = Color.red(cd1) + Color.red(cd2)
+                        val gd = Color.green(cd1) + Color.green(cd2)
+                        val bd = Color.blue(cd1) + Color.blue(cd2)
+                        rUp += ru; gUp += gu; bUp += bu
+                        rDn += rd; gDn += gd; bDn += bd
+                        val lu = (0.299 * ru + 0.587 * gu + 0.114 * bu) * 0.5
+                        val ld = (0.299 * rd + 0.587 * gd + 0.114 * bd) * 0.5
+                        if (dx < 0) {
+                            leftOverUp += lu
+                            leftOverDn += ld
+                            lOverCnt++
+                        } else if (dx > 0) {
+                            rightOverUp += lu
+                            rightOverDn += ld
+                            rOverCnt++
+                        }
                     }
                     val denom = (xOffs.size * 2).toDouble()
                     rUp /= denom; gUp /= denom; bUp /= denom
@@ -9680,11 +9757,15 @@ class OverlayService : LifecycleService() {
                     val lumaDn = 0.299 * rDn + 0.587 * gDn + 0.114 * bDn
                     val satDn = max(rDn, max(gDn, bDn)) - min(rDn, min(gDn, bDn))
                     val grad = kotlin.math.abs(rDn - rUp) + kotlin.math.abs(gDn - gUp) + kotlin.math.abs(bDn - bUp)
+                    val isOverSymmetric = if (lOverCnt > 0 && rOverCnt > 0) {
+                        kotlin.math.abs((leftOverUp / lOverCnt) - (rightOverUp / rOverCnt)) <= 38.0 &&
+                            kotlin.math.abs((leftOverDn / lOverCnt) - (rightOverDn / rOverCnt)) <= 38.0
+                    } else true
                     val isBottomOverCrescent = oy >= yBotOver - (overSpan * 0.22).toInt()
                     val minOverGrad = if (isBottomOverCrescent) 14.0 else 22.0
                     // v3.80: Relaxed satDn >= 6.0 and lumaDn < lumaUp - 6.0 so low-saturation Steel/Dragon moves (e.g. 48E -> 52E wraparound)
                     // reliably detect the second-layer overcharge meniscus at the bottom of the charge circle!
-                    if (lumaDn < lumaUp - 6.0 && lumaDn < avgTopLuma - 7.5 && satDn >= 6.0 && grad >= minOverGrad && grad > bestOverScore) {
+                    if (isOverSymmetric && lumaDn < lumaUp - 6.0 && lumaDn < avgTopLuma - 7.5 && satDn >= 6.0 && grad >= minOverGrad && grad > bestOverScore) {
                         bestOverScore = grad
                         bestOverY = oy
                     }
@@ -9724,19 +9805,7 @@ class OverlayService : LifecycleService() {
             if (emptySamples > 0) {
                 val avgEmptyLuma = emptyLumaSum / emptySamples
                 val avgEmptySat = emptySatSum / emptySamples
-                // Check central white move-type icon presence (multi-point cross)
-                val centerPoints = listOf(
-                    Pair(cx, cy),
-                    Pair(cx - flankDx1 / 2, cy),
-                    Pair(cx + flankDx1 / 2, cy),
-                    Pair(cx, cy - stepY * 2),
-                    Pair(cx, cy + stepY * 2)
-                )
-                val maxCenterLuma = centerPoints.maxOf { (px, py) ->
-                    val c = screen.getPixel(px.coerceIn(0, w - 1), py.coerceIn(0, h - 1))
-                    0.299 * Color.red(c) + 0.587 * Color.green(c) + 0.114 * Color.blue(c)
-                }
-                if (avgEmptyLuma in 18.0..110.0 && avgEmptySat < 85.0 && maxCenterLuma >= 55.0) {
+                if (avgEmptyLuma in 18.0..110.0 && avgEmptySat < 85.0 && maxCenterIconLuma >= 55.0) {
                     return 0
                 }
             }
@@ -9744,6 +9813,136 @@ class OverlayService : LifecycleService() {
         } catch (_: Exception) {
             -1
         }
+    }
+
+    private data class CircleEnergyValidation(
+        val impliedEnergy: Int,
+        val rawEnergyDouble: Double,
+        val highConfidence: Boolean,
+        val maxPossibleEnergy: Int,
+        val minPossibleEnergy: Int
+    )
+
+    /**
+     * Computes authoritative player energy (0..100) from the Left Charge Move Circle (ALWAYS Move 1 = cost1)
+     * and Right Charge Move Circle (ALWAYS Move 2 = cost2).
+     * - Primary layer readings (0..96%) are direct linear measurements against the dark unfilled top background.
+     * - When one circle is saturated (>= 97%) and the higher-cost circle is in its primary layer (1..96%),
+     *   the higher-cost circle provides the exact energy in [minCost, maxCost) without overcharge noise.
+     */
+    private fun computeAuthoritativeCircleEnergy(
+        leftFillPct: Int,
+        rightFillPct: Int,
+        cost1: Int,
+        cost2: Int,
+        hasSecondMove: Boolean
+    ): CircleEnergyValidation? {
+        val validLeft = leftFillPct in 0..200
+        val validRight = hasSecondMove && rightFillPct in 0..200 && cost2 > 0
+        if (!validLeft && !validRight) return null
+
+        val c1 = cost1.coerceIn(35, 100)
+        val c2 = if (validRight) cost2.coerceIn(35, 100) else c1
+
+        if ((validLeft && leftFillPct == 0) && (!validRight || rightFillPct == 0)) {
+            return CircleEnergyValidation(0, 0.0, true, 0, 0)
+        }
+        if ((validRight && rightFillPct == 0) && (!validLeft || leftFillPct == 0)) {
+            return CircleEnergyValidation(0, 0.0, true, 0, 0)
+        }
+
+        var minPossible = 0
+        var maxPossible = 100
+        if (validLeft) {
+            if (leftFillPct == 0) maxPossible = min(maxPossible, 2)
+            else if (leftFillPct in 1..95) maxPossible = min(maxPossible, c1 - 1)
+            else if (leftFillPct >= 99) minPossible = max(minPossible, c1 - 2)
+        }
+        if (validRight) {
+            if (rightFillPct == 0) maxPossible = min(maxPossible, 2)
+            else if (rightFillPct in 1..95) maxPossible = min(maxPossible, c2 - 1)
+            else if (rightFillPct >= 99) minPossible = max(minPossible, c2 - 2)
+        }
+        if (maxPossible < minPossible) {
+            maxPossible = max(minPossible, maxPossible)
+        }
+
+        val leftIsPrimary = validLeft && leftFillPct in 1..96
+        val rightIsPrimary = validRight && rightFillPct in 1..96
+
+        val eLeftPrimary = if (leftIsPrimary) (leftFillPct.toDouble() * c1.toDouble()) / 100.0 else -1.0
+        val eRightPrimary = if (rightIsPrimary) (rightFillPct.toDouble() * c2.toDouble()) / 100.0 else -1.0
+
+        // Case A: Both Left (Move 1) and Right (Move 2) are in their clean primary layer (1..96%)
+        if (leftIsPrimary && rightIsPrimary) {
+            val diff = kotlin.math.abs(eLeftPrimary - eRightPrimary)
+            val leftInIconBand = leftFillPct in 43..57
+            val rightInIconBand = rightFillPct in 43..57
+            val combined = when {
+                diff <= 6.5 -> (eLeftPrimary + eRightPrimary) * 0.5
+                leftInIconBand && !rightInIconBand -> eRightPrimary
+                rightInIconBand && !leftInIconBand -> eLeftPrimary
+                else -> (eLeftPrimary + eRightPrimary) * 0.5
+            }.coerceIn(minPossible.toDouble(), maxPossible.toDouble())
+            return CircleEnergyValidation(
+                impliedEnergy = combined.roundToInt().coerceIn(0, 100),
+                rawEnergyDouble = combined,
+                highConfidence = diff <= 8.5,
+                maxPossibleEnergy = maxPossible,
+                minPossibleEnergy = minPossible
+            )
+        }
+
+        // Case B: Left (Move 1) is saturated (>= 97%) and Right (Move 2) is in its clean primary layer (1..96%)
+        if (rightIsPrimary && (!validLeft || leftFillPct >= 97)) {
+            val clamped = eRightPrimary.coerceIn(minPossible.toDouble(), maxPossible.toDouble())
+            return CircleEnergyValidation(
+                impliedEnergy = clamped.roundToInt().coerceIn(0, 100),
+                rawEnergyDouble = clamped,
+                highConfidence = true,
+                maxPossibleEnergy = maxPossible,
+                minPossibleEnergy = minPossible
+            )
+        }
+
+        // Case C: Right (Move 2) is saturated (>= 97%) and Left (Move 1) is in its clean primary layer (1..96%)
+        if (leftIsPrimary && (!validRight || rightFillPct >= 97)) {
+            val clamped = eLeftPrimary.coerceIn(minPossible.toDouble(), maxPossible.toDouble())
+            return CircleEnergyValidation(
+                impliedEnergy = clamped.roundToInt().coerceIn(0, 100),
+                rawEnergyDouble = clamped,
+                highConfidence = true,
+                maxPossibleEnergy = maxPossible,
+                minPossibleEnergy = minPossible
+            )
+        }
+
+        // Case D: Both circles are >= 97% (saturated / overcharging)
+        val overCandidates = mutableListOf<Double>()
+        if (validLeft && leftFillPct in 101..198) {
+            overCandidates.add(((leftFillPct.toDouble() * c1.toDouble()) / 100.0).coerceIn(minPossible.toDouble(), 100.0))
+        }
+        if (validRight && rightFillPct in 101..198) {
+            overCandidates.add(((rightFillPct.toDouble() * c2.toDouble()) / 100.0).coerceIn(minPossible.toDouble(), 100.0))
+        }
+        if (overCandidates.isNotEmpty()) {
+            val avgOver = overCandidates.average().coerceIn(minPossible.toDouble(), 100.0)
+            return CircleEnergyValidation(
+                impliedEnergy = avgOver.roundToInt().coerceIn(minPossible, 100),
+                rawEnergyDouble = avgOver,
+                highConfidence = overCandidates.size == 2 && kotlin.math.abs(overCandidates[0] - overCandidates[1]) <= 8.0,
+                maxPossibleEnergy = 100,
+                minPossibleEnergy = minPossible
+            )
+        }
+
+        return CircleEnergyValidation(
+            impliedEnergy = minPossible.coerceIn(0, 100),
+            rawEnergyDouble = minPossible.toDouble(),
+            highConfidence = false,
+            maxPossibleEnergy = 100,
+            minPossibleEnergy = minPossible
+        )
     }
 
     private fun detectFloatingHpBarPct(
@@ -10338,10 +10537,9 @@ class OverlayService : LifecycleService() {
             getPokemonMeta(activeOpponentName, activeLeague, isOpponentShadow)
         } else null
 
-        val userCandidateMoves = listOfNotNull(
-            userSlotCfg?.chargedMove1?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove1,
-            userSlotCfg?.chargedMove2?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove2
-        ).filter { it.isNotBlank() }.distinct()
+        val userMove1Name = userSlotCfg?.chargedMove1?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove1
+        val userMove2Name = userSlotCfg?.chargedMove2?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove2
+        val userCandidateMoves = listOfNotNull(userMove1Name, userMove2Name).filter { it.isNotBlank() }.distinct()
 
         val oppPoolCharged = if (oppMeta != null) {
             val pool = getAvailableMovePoolForSpeciesStatic(oppMeta.name, activeLeague).second
@@ -10352,6 +10550,16 @@ class OverlayService : LifecycleService() {
                 .filter { it.isNotBlank() }
                 .distinct()
         } else emptyList()
+
+        // Shield-Prompt Gate: Who throws charged attacks is strictly gated by whether there was a shield prompt
+        // ("Attack incoming! Use a Protect Shield?" / "NOT NOW" / "No Protect Shields remaining!") before the attack!
+        val hasRecentShieldPrompt = isAttackIncomingPromptActive ||
+            pendingChargedAttackActor == "opp" ||
+            (hadShieldPromptBeforeCurrentCharge && (nowMs - lastChargedPromptTimeMs) <= 8500L) ||
+            (lastChargedPromptActor == "opp" && (nowMs - lastChargedPromptTimeMs) <= 8500L)
+
+        val hasRecentUserPrompt = pendingChargedAttackActor == "user" ||
+            (!hadShieldPromptBeforeCurrentCharge && lastChargedPromptActor == "user" && (nowMs - lastChargedPromptTimeMs) <= 8500L)
 
         val usedRegex = Regex("(?i)(.+?)\\s+used\\s+([a-zA-Z0-9'\\s-]+?)[!.?]*$")
         for (line in midBannerLines) {
@@ -10367,12 +10575,15 @@ class OverlayService : LifecycleService() {
             val oppBaseNorm = if (oppMeta != null) normalizeOcrToken(oppMeta.baseSpecies) else ""
             val userBaseNorm = normalizeOcrToken(userMeta.baseSpecies)
             val normActor = normalizeOcrToken(rawActorPart)
+            val isMirrorMatch = oppBaseNorm.isNotEmpty() && oppBaseNorm == userBaseNorm
 
+            // Prioritize shield-prompt / minigame state FIRST so mirror matchups (e.g. Dialga vs Dialga)
+            // NEVER misattribute the player's Charged Attack to the opponent!
             val actorHint = when {
-                oppBaseNorm.length >= 3 && normActor.contains(oppBaseNorm) -> "opp"
-                userBaseNorm.length >= 3 && normActor.contains(userBaseNorm) -> "user"
-                isAttackIncomingPromptActive || pendingChargedAttackActor == "opp" -> "opp"
-                pendingChargedAttackActor == "user" -> "user"
+                hasRecentShieldPrompt -> "opp"
+                hasRecentUserPrompt -> "user"
+                !isMirrorMatch && oppBaseNorm.length >= 3 && normActor.contains(oppBaseNorm) -> "opp"
+                !isMirrorMatch && userBaseNorm.length >= 3 && normActor.contains(userBaseNorm) -> "user"
                 else -> ""
             }
 
@@ -10399,12 +10610,13 @@ class OverlayService : LifecycleService() {
             val userMatched = matchBestMove(userCandidateMoves)
 
             val resolvedPair: Pair<String, String>? = when (actorHint) {
-                "opp" -> if (oppMatched != null) "opp" to oppMatched.first else if (userMatched != null) "user" to userMatched.first else null
-                "user" -> if (userMatched != null) "user" to userMatched.first else if (oppMatched != null) "opp" to oppMatched.first else null
+                "opp" -> if (oppMatched != null) "opp" to oppMatched.first else null
+                "user" -> if (userMatched != null) "user" to userMatched.first else null
                 else -> {
                     when {
-                        oppMatched != null && (userMatched == null || oppMatched.second <= userMatched.second) -> "opp" to oppMatched.first
+                        !isMirrorMatch && oppMatched != null && (userMatched == null || oppMatched.second < userMatched.second) && hadShieldPromptBeforeCurrentCharge -> "opp" to oppMatched.first
                         userMatched != null -> "user" to userMatched.first
+                        oppMatched != null && hadShieldPromptBeforeCurrentCharge -> "opp" to oppMatched.first
                         else -> null
                     }
                 }
@@ -10415,10 +10627,34 @@ class OverlayService : LifecycleService() {
                 lastDetectedBannerMoveActor = actorRole
                 lastDetectedBannerMoveName = moveName
                 lastDetectedBannerMoveTimeMs = nowMs
-                if (actorRole == "opp" && activeOppIdx in 0..2) {
+
+                // Only highlight/confirm an opponent charged move if an opponent shield prompt preceded the throw!
+                if (actorRole == "opp" && hasRecentShieldPrompt && activeOppIdx in 0..2) {
                     val added = confirmedOppChargedMoves[activeOppIdx].add(moveName)
+                    if (pendingChargedAttackActor.isEmpty() && (nowMs - lastChargedAttackLoggedMs) <= 2500L && lastChargedPromptActor == "opp") {
+                        val mStats = resolveChargedMoveStatsStatic(moveName, oppMeta?.types?.firstOrNull() ?: "normal")
+                        val trueCost = (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[moveName] ?: 50).coerceIn(35, 100)
+                        val diff = trueCost - lastOppChargeDeductedEnergySnapshot
+                        if (diff != 0 && lastOppChargeDeductedEnergySnapshot > 0) {
+                            oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] - diff).coerceIn(0, 100)
+                            lastOppChargeDeductedEnergySnapshot = trueCost
+                        }
+                    }
                     if (added) {
                         recalculateAndPushBattleData()
+                    }
+                } else if (actorRole == "user") {
+                    if (pendingChargedAttackActor.isEmpty() && (nowMs - lastChargedAttackLoggedMs) <= 2500L && lastChargedPromptActor == "user") {
+                        val mStats = resolveChargedMoveStatsStatic(moveName, userMeta.types.firstOrNull() ?: "normal")
+                        val trueCost = (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[moveName] ?: 50).coerceIn(35, 100)
+                        if (trueCost != lastUserChargeDeductedEnergySnapshot && lastUserChargeDeductedEnergySnapshot > 0) {
+                            val diff = trueCost - lastUserChargeDeductedEnergySnapshot
+                            playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] - diff).coerceIn(0, 100)
+                            lastUserChargeDeductedEnergySnapshot = trueCost
+                            lastUserChargeResolvedMoveName = moveName
+                            recalculateAndPushBattleData()
+                            showBattleToast("⚡ Used $moveName (-${trueCost}E)")
+                        }
                     }
                 }
                 break
@@ -10427,10 +10663,10 @@ class OverlayService : LifecycleService() {
     }
 
     /**
-     * v3.80: Reconciles live Charge Move Circle meters (Locked-In Static Coordinates + Dual-Meter Cross-Validation),
-     * Pre-Battle 3-2-1-GO 0% empty baseline lock-in, Player-Idle (>2 fast moves) back-credit & fallback,
-     * Banner Charged Move OCR ("<Pokemon> used <Move>!") 3-tier energy depletion, Confirmed Opponent Moveset locking,
-     * and Non-Standard Opponent Fast Move detection (>=10% damage threshold + 0/1/2 turn offset).
+     * v3.80: Reconciles live Charge Move Circle meters (Left = Move 1, Right = Move 2; Bi-Directional Upward & Downward Validation Every Fast Move),
+     * Pre-Battle 3-2-1-GO 0% empty baseline lock-in, Shield-Prompt Gated Charged Move Attribution,
+     * Player-Idle (>2 fast moves) back-credit & fallback, Banner Charged Move OCR ("<Pokemon> used <Move>!") 3-tier energy depletion,
+     * Confirmed Opponent Moveset locking, and Non-Standard Opponent Fast Move detection (>=10% damage threshold + 0/1/2 turn offset).
      */
     private fun updateLiveHpAndChargedAttackState(
         oppLines: List<Text.Line>,
@@ -10456,11 +10692,13 @@ class OverlayService : LifecycleService() {
         val userFastEnergyForStats = resolveFastEnergyStatic(userFastNameForStats, userFastTurnsForStats).coerceIn(2, 20)
         val minUserMoveCooldownMs = (userFastTurnsForStats * 500L - 100L).coerceAtLeast(390L)
 
+        // Explicit rule: Left Circle is ALWAYS Move 1 (chargedMove1), Right Circle is ALWAYS Move 2 (chargedMove2)
         val userMove1NameEarly = userSlotCfg?.chargedMove1?.takeIf { it.isNotBlank() } ?: userMetaForStats.chargedMove1
         val userMove2NameEarly = userSlotCfg?.chargedMove2?.takeIf { it.isNotBlank() } ?: userMetaForStats.chargedMove2
+        val hasSecondUserMove = userMove2NameEarly.isNotBlank() && !userMove2NameEarly.equals(userMove1NameEarly, ignoreCase = true)
         val userMove1Energy = (resolveChargedMoveStatsStatic(userMove1NameEarly, userMetaForStats.types.firstOrNull() ?: "normal").energyCost
             .takeIf { it > 0 } ?: MOVE_ENERGY_COST[userMove1NameEarly] ?: 50).coerceIn(35, 100)
-        val userMove2Energy = if (userMove2NameEarly.isNotBlank()) {
+        val userMove2Energy = if (hasSecondUserMove) {
             (resolveChargedMoveStatsStatic(userMove2NameEarly, userMetaForStats.types.firstOrNull() ?: "normal").energyCost
                 .takeIf { it > 0 } ?: MOVE_ENERGY_COST[userMove2NameEarly] ?: 50).coerceIn(35, 100)
         } else userMove1Energy
@@ -10510,11 +10748,49 @@ class OverlayService : LifecycleService() {
                     playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + userFastTurnsForStats).coerceAtLeast(0)
                     phasePlayerTurns += userFastTurnsForStats
                     playerLastFastCreditedAtMs[activeUserIdx] = nowMs
+                    lastStableNormalCombatEnergy = playerSlotEnergy[activeUserIdx]
+                    prevStableNormalCombatEnergy = playerSlotEnergy[activeUserIdx]
+                    lastStableLeftChargeFillPct = lastScannedLeftChargeFillPct[activeUserIdx].coerceAtLeast(0)
+                    lastStableRightChargeFillPct = lastScannedRightChargeFillPct[activeUserIdx].coerceAtLeast(0)
+                    lastStableNormalCombatMs = nowMs
                     isPlayerInIdleFallback = false
                     recalculateAndPushBattleData()
                 }
             }
             return
+        }
+
+        val bottomLower = playerMoveLines.joinToString(" ") { it.text.lowercase() }
+        val midBannerLower = midBannerLines.joinToString(" ") { it.text.lowercase() }
+        val combinedBannerLower = "$bottomLower $midBannerLower"
+
+        // Opponent Charged Attack prompt text ("Attack incoming! Use a Protect Shield?", "NOT NOW", or "No Protect Shields remaining!")
+        val hasAttackIncomingText = combinedBannerLower.contains("attack incoming") ||
+            combinedBannerLower.contains("protect shield") ||
+            combinedBannerLower.contains("use a protect") ||
+            combinedBannerLower.contains("not now") ||
+            combinedBannerLower.contains("no protect") ||
+            combinedBannerLower.contains("shields remaining")
+
+        // Player Charged Attack minigame banner text ("Get ready!", "GREAT!", "EXCELLENT!", "NICE!", "Charge your attack!", "Swipe!")
+        val hasUserChargedBannerText = !hasAttackIncomingText && (
+            combinedBannerLower.contains("get ready") ||
+            combinedBannerLower.contains("great") ||
+            combinedBannerLower.contains("excellent") ||
+            combinedBannerLower.contains("nice") ||
+            combinedBannerLower.contains("charge your") ||
+            combinedBannerLower.contains("swipe")
+        )
+
+        // Update Shield-Prompt Gate state BEFORE parsing mid-banner "<Pokemon> used <Move>!" lines
+        if (hasAttackIncomingText) {
+            hadShieldPromptBeforeCurrentCharge = true
+            lastChargedPromptActor = "opp"
+            lastChargedPromptTimeMs = nowMs
+        } else if (hasUserChargedBannerText && !isAttackIncomingPromptActive && pendingChargedAttackActor != "opp") {
+            hadShieldPromptBeforeCurrentCharge = false
+            lastChargedPromptActor = "user"
+            lastChargedPromptTimeMs = nowMs
         }
 
         if (midBannerLines.isNotEmpty()) {
@@ -10590,35 +10866,23 @@ class OverlayService : LifecycleService() {
             isDefenderShadow = isUserShadForStats
         )
 
-        val bottomLower = playerMoveLines.joinToString(" ") { it.text.lowercase() }
-        val midBannerLower = midBannerLines.joinToString(" ") { it.text.lowercase() }
-        val combinedBannerLower = "$bottomLower $midBannerLower"
-
-        // Opponent Charged Attack prompt text ("Attack incoming! Use a Protect Shield?", "NOT NOW", or "No Protect Shields remaining!")
-        val hasAttackIncomingText = combinedBannerLower.contains("attack incoming") ||
-            combinedBannerLower.contains("protect shield") ||
-            combinedBannerLower.contains("use a protect") ||
-            combinedBannerLower.contains("not now") ||
-            combinedBannerLower.contains("no protect") ||
-            combinedBannerLower.contains("shields remaining")
-
-        // Player Charged Attack minigame banner text ("Get ready!", "GREAT!", "EXCELLENT!", "NICE!", "Charge your attack!", "Swipe!")
-        val hasUserChargedBannerText = !hasAttackIncomingText && (
-            combinedBannerLower.contains("get ready") ||
-            combinedBannerLower.contains("great") ||
-            combinedBannerLower.contains("excellent") ||
-            combinedBannerLower.contains("nice") ||
-            combinedBannerLower.contains("charge your") ||
-            combinedBannerLower.contains("swipe")
-        )
-
         var observedPlayerFastDrop = false
         var observedOppFastDrop = false
         var userFastMovesCreditedThisFrame = 0
         var oppFastMovesCreditedByHpThisFrame = 0
         val captureAnchorMs = lastCaptureStartMs.takeIf { it > 0L } ?: nowMs
 
+        // CRITICAL LOCKOUT FOR CHARGED MOVE CAMERA ZOOM ANIMATIONS:
+        // Once the battle has started, fast-move energy can ONLY accumulate when normal combat HUD elements
+        // (at least one floating HP bar AND top Pokéball indicators) are actually visible on screen.
+        // During the camera zoom-in of a Charged Move throw (before "Get ready!" appears), floating HP bars
+        // disappear on Frame 1 — locking out fast energy immediately prevents spurious energy registration during the throw animation!
+        val hasVisibleCombatHud = !hasBattleStarted ||
+            ((sampledPlayerHpPct in 1..100 || sampledOppHpPct in 1..100) &&
+                (sampledPlayerBalls in 1..3 || sampledOppBalls in 1..3))
+
         val canAccumulateFastEnergy = enableEnergyTracking &&
+            hasVisibleCombatHud &&
             !isPostFaintSwitchPromptActive &&
             !playerFaintedSlots[activeUserIdx] &&
             !oppFaintedSlots[activeOppIdx] &&
@@ -10626,7 +10890,9 @@ class OverlayService : LifecycleService() {
             !isAttackIncomingPromptActive &&
             !hasAttackIncomingText &&
             !hasUserChargedBannerText &&
-            (nowMs - lastChargedAttackLoggedMs) > 900L
+            missingBothHpBarsFrames == 0 &&
+            missingTopBallsWithHpBarsFrames == 0 &&
+            (nowMs - lastChargedAttackLoggedMs) > 950L
 
         // 1A. Player HP Bar Scan -> Tracks player HP% & cumulative opponent fast-move damage (for Non-Standard Fast Move Detector).
         //     In Charge Circle Only mode (`chargeCircleOnlyMode == true`), only credits opponent energy via HP drops when the player
@@ -10846,27 +11112,28 @@ class OverlayService : LifecycleService() {
             val mStats = resolveChargedMoveStatsStatic(mName, userMetaForStats.types.firstOrNull() ?: "normal")
             (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[mName] ?: 50).coerceIn(35, 100)
         }
-        val cheapestUserEnergy = userMoveEnergyMap.values.minOrNull() ?: 45
-        val maxUserMoveEnergy = (userMoveEnergyMap.values.maxOrNull() ?: 65).coerceIn(35, 100)
+        val cheapestUserEnergy = min(userMove1Energy, userMove2Energy).coerceIn(35, 100)
+        val maxUserMoveEnergy = max(userMove1Energy, userMove2Energy).coerceIn(35, 100)
 
-        // 1C. v3.80: Dual Charge Move Energy Circles (Left Meter 1 & Right Meter 2 Cross-Validation)
-        //     - Credits a turn if EITHER Meter 1 or Meter 2 steps by expected move energy (including 0->4E and 48->52E wraparound)
-        //     - Snaps implied energy to the nearest multiple of `userFastEnergyForStats`
-        //     - Reconciles missed turns on every meter step for both player and opponent
+        // 1C. v3.80: Dual Charge Move Energy Circles (Left Meter 1 = Move 1, Right Meter 2 = Move 2)
+        //     - Credits a turn if EITHER Left Meter 1 or Right Meter 2 steps by expected move energy
+        //     - Validates player energy on EVERY fast move (both UPWARD and DOWNWARD correction) against Left & Right circles!
         var observedPlayerChargeBarStep = false
         if (canAccumulateFastEnergy &&
             !playerFaintedSlots[activeUserIdx] &&
             !oppFaintedSlots[activeOppIdx] &&
-            (sampledPlayerHpPct in 1..100 || sampledOppHpPct in 1..100 || sampledPlayerBalls in 1..3 || sampledOppBalls in 1..3 || sampledLeftChargeBtnFillPct in 0..200 || sampledRightChargeBtnFillPct in 0..200)
+            (sampledLeftChargeBtnFillPct in 0..200 || sampledRightChargeBtnFillPct in 0..200)
         ) {
-            val requiredChargeConfirmFrames = if (userFastTurnsForStats == 1) 1 else (1 + userFastTurnsForStats).coerceIn(2, 5)
+            val requiredChargeConfirmFrames = if (userFastTurnsForStats == 1) 1 else (1 + userFastTurnsForStats).coerceIn(2, 4)
             val minFillStepPct = max(3, ((userFastEnergyForStats * 100) / (maxUserMoveEnergy + 30)).coerceIn(3, 8))
 
             var chargeBarStepDetected = false
             var confirmedLeftForSnap = -1
             var confirmedRightForSnap = -1
+            var leftStableFrames = 0
+            var rightStableFrames = 0
 
-            // Left Charge Move Button (Meter 1) debounce & step check (including 0% empty baseline & 96%->104% overcharge)
+            // Left Charge Move Button (Meter 1 = Move 1 / userMove1Energy) debounce & step check
             if (sampledLeftChargeBtnFillPct in 0..200) {
                 if (kotlin.math.abs(sampledLeftChargeBtnFillPct - pendingConfirmLeftChargeFillPct[activeUserIdx]) <= 2) {
                     leftChargeFillConfirmFrames[activeUserIdx] = (leftChargeFillConfirmFrames[activeUserIdx] + 1).coerceAtMost(10)
@@ -10874,6 +11141,7 @@ class OverlayService : LifecycleService() {
                     pendingConfirmLeftChargeFillPct[activeUserIdx] = sampledLeftChargeBtnFillPct
                     leftChargeFillConfirmFrames[activeUserIdx] = 1
                 }
+                leftStableFrames = leftChargeFillConfirmFrames[activeUserIdx]
                 val neededLeftFrames = if (pendingConfirmLeftChargeFillPct[activeUserIdx] == 0) 1 else requiredChargeConfirmFrames
                 if (leftChargeFillConfirmFrames[activeUserIdx] >= neededLeftFrames) {
                     val confirmedLeftFill = pendingConfirmLeftChargeFillPct[activeUserIdx]
@@ -10904,7 +11172,7 @@ class OverlayService : LifecycleService() {
                         if (effectiveDelta in minFillStepPct..55) {
                             chargeBarStepDetected = true
                             lastScannedLeftChargeFillPct[activeUserIdx] = confirmedLeftFill
-                        } else if (directDelta < -6 && !(prevLeftFill in 84..100 && (confirmedLeftFill in 1..45 || confirmedLeftFill in 101..199))) {
+                        } else if (directDelta < -4 && !(prevLeftFill in 84..100 && (confirmedLeftFill in 1..45 || confirmedLeftFill in 101..199))) {
                             lastScannedLeftChargeFillPct[activeUserIdx] = confirmedLeftFill
                         }
                     }
@@ -10914,7 +11182,7 @@ class OverlayService : LifecycleService() {
                 leftChargeFillConfirmFrames[activeUserIdx] = 0
             }
 
-            // Right Charge Move Button (Meter 2) debounce & step check (including 0% empty baseline & 96%->104% overcharge)
+            // Right Charge Move Button (Meter 2 = Move 2 / userMove2Energy) debounce & step check
             if (sampledRightChargeBtnFillPct in 0..200) {
                 if (kotlin.math.abs(sampledRightChargeBtnFillPct - pendingConfirmRightChargeFillPct[activeUserIdx]) <= 2) {
                     rightChargeFillConfirmFrames[activeUserIdx] = (rightChargeFillConfirmFrames[activeUserIdx] + 1).coerceAtMost(10)
@@ -10922,6 +11190,7 @@ class OverlayService : LifecycleService() {
                     pendingConfirmRightChargeFillPct[activeUserIdx] = sampledRightChargeBtnFillPct
                     rightChargeFillConfirmFrames[activeUserIdx] = 1
                 }
+                rightStableFrames = rightChargeFillConfirmFrames[activeUserIdx]
                 val neededRightFrames = if (pendingConfirmRightChargeFillPct[activeUserIdx] == 0) 1 else requiredChargeConfirmFrames
                 if (rightChargeFillConfirmFrames[activeUserIdx] >= neededRightFrames) {
                     val confirmedRightFill = pendingConfirmRightChargeFillPct[activeUserIdx]
@@ -10952,7 +11221,7 @@ class OverlayService : LifecycleService() {
                         if (effectiveDelta in minFillStepPct..55) {
                             chargeBarStepDetected = true
                             lastScannedRightChargeFillPct[activeUserIdx] = confirmedRightFill
-                        } else if (directDelta < -6 && !(prevRightFill in 84..100 && (confirmedRightFill in 1..45 || confirmedRightFill in 101..199))) {
+                        } else if (directDelta < -4 && !(prevRightFill in 84..100 && (confirmedRightFill in 1..45 || confirmedRightFill in 101..199))) {
                             lastScannedRightChargeFillPct[activeUserIdx] = confirmedRightFill
                         }
                     }
@@ -10962,38 +11231,66 @@ class OverlayService : LifecycleService() {
                 rightChargeFillConfirmFrames[activeUserIdx] = 0
             }
 
-            // Dual-Meter Cross-Validation & Missed-Turn Reconciliation:
-            // Compute implied energy from Meter 1 (userMove1Energy) and Meter 2 (userMove2Energy) and snap to nearest multiple of userFastEnergyForStats.
+            val lFill = if (confirmedLeftForSnap >= 0) confirmedLeftForSnap else lastScannedLeftChargeFillPct[activeUserIdx]
+            val rFill = if (confirmedRightForSnap >= 0) confirmedRightForSnap else lastScannedRightChargeFillPct[activeUserIdx]
+            val authCircleEnergyRaw = computeAuthoritativeCircleEnergy(
+                leftFillPct = lFill,
+                rightFillPct = rFill,
+                cost1 = userMove1Energy,
+                cost2 = userMove2Energy,
+                hasSecondMove = hasSecondUserMove
+            )
+            val authCircleEnergySnapped = if (authCircleEnergyRaw >= 0) {
+                (((authCircleEnergyRaw.toDouble() / userFastEnergyForStats.toDouble()).roundToInt()) * userFastEnergyForStats).coerceIn(0, 100)
+            } else -1
+
+            // Post-Throw Circle Sync: on the first confirmed circle reading after a player Charged Move finishes,
+            // verify whether Left (Move 1) or Right (Move 2) was thrown and snap residual player energy!
+            if (awaitingPostUserChargeCircleSync && authCircleEnergySnapped in 0..95 && (confirmedLeftForSnap in 0..96 || confirmedRightForSnap in 0..96)) {
+                awaitingPostUserChargeCircleSync = false
+                if (hasSecondUserMove && userMove1Energy != userMove2Energy && lastUserChargePreEnergySnapshot > 0) {
+                    val expectedAfterMove1 = (lastUserChargePreEnergySnapshot - userMove1Energy).coerceIn(0, 100)
+                    val expectedAfterMove2 = (lastUserChargePreEnergySnapshot - userMove2Energy).coerceIn(0, 100)
+                    val errMove1 = min(
+                        kotlin.math.abs(authCircleEnergySnapped - expectedAfterMove1),
+                        kotlin.math.abs(authCircleEnergySnapped - (expectedAfterMove1 + userFastEnergyForStats))
+                    )
+                    val errMove2 = min(
+                        kotlin.math.abs(authCircleEnergySnapped - expectedAfterMove2),
+                        kotlin.math.abs(authCircleEnergySnapped - (expectedAfterMove2 + userFastEnergyForStats))
+                    )
+                    val trueThrownMove = when {
+                        errMove2 + 3 < errMove1 && lastUserChargePreEnergySnapshot >= userMove2Energy -> userMove2NameEarly to userMove2Energy
+                        errMove1 + 3 < errMove2 && lastUserChargePreEnergySnapshot >= userMove1Energy -> userMove1NameEarly to userMove1Energy
+                        else -> null
+                    }
+                    if (trueThrownMove != null && trueThrownMove.second != lastUserChargeDeductedEnergySnapshot) {
+                        lastUserChargeDeductedEnergySnapshot = trueThrownMove.second
+                        lastUserChargeResolvedMoveName = trueThrownMove.first
+                        showBattleToast("⚡ Verified ${trueThrownMove.first} (-${trueThrownMove.second}E)")
+                    }
+                }
+                if (playerSlotEnergy[activeUserIdx] != authCircleEnergySnapped) {
+                    playerSlotEnergy[activeUserIdx] = authCircleEnergySnapped
+                    hpChanged = true
+                }
+            }
+
+            // Dual-Meter Cross-Validation & Every-Fast-Move Energy Validation (Both Upward AND Downward):
             val latestUserElapsedMs = if (playerLastFastCreditedAtMs[activeUserIdx] > 0L) {
                 (nowMs - playerLastFastCreditedAtMs[activeUserIdx]).coerceAtLeast(0L)
             } else Long.MAX_VALUE
             val alreadyCreditedByHpThisFrame = !chargeCircleOnlyMode && observedOppFastDrop
             if (chargeBarStepDetected && !alreadyCreditedByHpThisFrame && latestUserElapsedMs >= minUserMoveCooldownMs) {
                 val curEnergyBefore = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
-                val snapCandidates = mutableListOf<Int>()
-                val lFill = if (confirmedLeftForSnap > 0) confirmedLeftForSnap else lastScannedLeftChargeFillPct[activeUserIdx]
-                val rFill = if (confirmedRightForSnap > 0) confirmedRightForSnap else lastScannedRightChargeFillPct[activeUserIdx]
-                if (lFill in 1..199 && lFill != 100) {
-                    val rawE1 = (lFill.toDouble() * userMove1Energy.toDouble()) / 100.0
-                    val snapE1 = ((rawE1 / userFastEnergyForStats.toDouble()).roundToInt() * userFastEnergyForStats).coerceIn(userFastEnergyForStats, 100)
-                    snapCandidates.add(snapE1)
-                }
-                if (rFill in 1..199 && rFill != 100) {
-                    val rawE2 = (rFill.toDouble() * userMove2Energy.toDouble()) / 100.0
-                    val snapE2 = ((rawE2 / userFastEnergyForStats.toDouble()).roundToInt() * userFastEnergyForStats).coerceIn(userFastEnergyForStats, 100)
-                    snapCandidates.add(snapE2)
-                }
-
-                // Determine how many fast moves occurred (1 move normally, or 2..3 if a prior move was missed and dual meters cross-validate higher energy)
                 val maxElapsedMoves = if (latestUserElapsedMs == Long.MAX_VALUE) 2 else (latestUserElapsedMs / minUserMoveCooldownMs).toInt().coerceIn(1, 3)
-                val consensusSnappedEnergy = if (snapCandidates.isNotEmpty()) {
-                    // Prefer the meter reading that is > curEnergyBefore (especially when one meter wrapped 48E->52E and the other is still <100% on a 65E/75E move)
-                    snapCandidates.maxOrNull() ?: (curEnergyBefore + userFastEnergyForStats)
+
+                // Compute how many fast moves elapsed (1 normally, or 2..3 if a prior turn was missed and circle meters show higher energy)
+                val movesToCredit = if (authCircleEnergySnapped > curEnergyBefore) {
+                    (((authCircleEnergySnapped - curEnergyBefore).toDouble() / userFastEnergyForStats.toDouble()).roundToInt()).coerceIn(1, maxElapsedMoves)
                 } else {
-                    curEnergyBefore + userFastEnergyForStats
+                    1
                 }
-                val impliedMovesDelta = ((consensusSnappedEnergy - curEnergyBefore) / userFastEnergyForStats).coerceIn(1, maxElapsedMoves)
-                val movesToCredit = impliedMovesDelta.coerceIn(1, 3)
 
                 if (!hasBattleStarted) {
                     hasBattleStarted = true
@@ -11005,9 +11302,25 @@ class OverlayService : LifecycleService() {
                 observedPlayerChargeBarStep = true
                 userFastMovesCreditedThisFrame += movesToCredit
                 turnPhaseAnchorMs = captureAnchorMs
-                val rawNewEnergy = (curEnergyBefore + movesToCredit * userFastEnergyForStats).coerceIn(0, 100)
-                val snappedFinalEnergy = (((rawNewEnergy.toDouble() / userFastEnergyForStats.toDouble()).roundToInt()) * userFastEnergyForStats).coerceIn(0, 100)
-                playerSlotEnergy[activeUserIdx] = snappedFinalEnergy
+
+                val steppedEnergy = (((curEnergyBefore + movesToCredit * userFastEnergyForStats).toDouble() / userFastEnergyForStats.toDouble()).roundToInt() * userFastEnergyForStats).coerceIn(0, 100)
+
+                // VALIDATE ENERGY ON EVERY FAST MOVE (UPWARD & DOWNWARD):
+                // If Left (Move 1) & Right (Move 2) circles report an authoritative energy that is LOWER or HIGHER than steppedEnergy,
+                // snap directly to `authCircleEnergySnapped` so extra energy from any prior animation or wrong move deduction immediately corrects back down!
+                val validatedEnergy = if (authCircleEnergySnapped in 0..100) {
+                    if (authCircleEnergySnapped < steppedEnergy) {
+                        authCircleEnergySnapped
+                    } else if (authCircleEnergySnapped > steppedEnergy && (authCircleEnergySnapped - steppedEnergy) <= userFastEnergyForStats * 2) {
+                        authCircleEnergySnapped
+                    } else {
+                        steppedEnergy
+                    }
+                } else {
+                    steppedEnergy
+                }
+
+                playerSlotEnergy[activeUserIdx] = validatedEnergy
                 playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + movesToCredit * userFastTurnsForStats).coerceAtLeast(0)
                 phasePlayerTurns += movesToCredit * userFastTurnsForStats
                 playerSlotCurrentMoveTurns[activeUserIdx] = 0
@@ -11015,6 +11328,53 @@ class OverlayService : LifecycleService() {
                 isPlayerInIdleFallback = false
                 lastIdleFallbackOppCreditMs = 0L
                 hpChanged = true
+            } else if (authCircleEnergySnapped in 0..96) {
+                // Continuous Bi-Directional Circle Validation even on non-step frames when circles are stably read (>= 2 frames):
+                // Ensures that if tracked energy is ever too high (e.g. after a charge move or animation), it corrects down immediately!
+                val bothStable = leftStableFrames >= 2 && (!hasSecondUserMove || rightStableFrames >= 2)
+                val onePrimaryStable = (leftStableFrames >= 2 && lFill in 0..95) || (hasSecondUserMove && rightStableFrames >= 2 && rFill in 0..95)
+                if (bothStable || onePrimaryStable) {
+                    val curEnergy = playerSlotEnergy[activeUserIdx]
+                    if (curEnergy > authCircleEnergySnapped + (userFastEnergyForStats / 2)) {
+                        // Downward correction to match Left (Move 1) & Right (Move 2) circles
+                        playerSlotEnergy[activeUserIdx] = authCircleEnergySnapped
+                        hpChanged = true
+                    } else if (hasBattleStarted && authCircleEnergySnapped > curEnergy + (userFastEnergyForStats / 2) &&
+                        (authCircleEnergySnapped - curEnergy) <= userFastEnergyForStats * 2 &&
+                        latestUserElapsedMs >= minUserMoveCooldownMs
+                    ) {
+                        // Upward missed-turn reconciliation when circles stably show 1-2 more fast moves
+                        val missedMoves = (((authCircleEnergySnapped - curEnergy).toDouble() / userFastEnergyForStats.toDouble()).roundToInt()).coerceIn(1, 2)
+                        playerSlotEnergy[activeUserIdx] = authCircleEnergySnapped
+                        playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + missedMoves * userFastTurnsForStats).coerceAtLeast(0)
+                        phasePlayerTurns += missedMoves * userFastTurnsForStats
+                        userFastMovesCreditedThisFrame += missedMoves
+                        playerLastFastCreditedAtMs[activeUserIdx] = nowMs
+                        isPlayerInIdleFallback = false
+                        hpChanged = true
+                    }
+                }
+            }
+        }
+
+        // Snapshot stable normal-combat energy whenever both floating HP bars and top Pokéballs are visible
+        if (hasVisibleCombatHud &&
+            (sampledPlayerHpPct in 1..100 && sampledOppHpPct in 1..100) &&
+            pendingChargedAttackActor.isEmpty() &&
+            !isAttackIncomingPromptActive &&
+            !hasAttackIncomingText &&
+            !hasUserChargedBannerText
+        ) {
+            if (nowMs - lastStableNormalCombatMs >= 450L) {
+                prevStableNormalCombatEnergy = lastStableNormalCombatEnergy
+                lastStableNormalCombatMs = nowMs
+            }
+            lastStableNormalCombatEnergy = playerSlotEnergy[activeUserIdx]
+            if (lastScannedLeftChargeFillPct[activeUserIdx] in 0..200) {
+                lastStableLeftChargeFillPct = lastScannedLeftChargeFillPct[activeUserIdx]
+            }
+            if (lastScannedRightChargeFillPct[activeUserIdx] in 0..200) {
+                lastStableRightChargeFillPct = lastScannedRightChargeFillPct[activeUserIdx]
             }
         }
 
@@ -11242,11 +11602,15 @@ class OverlayService : LifecycleService() {
         }
 
         // 2. Detect Opponent Charged Attack ("Attack incoming!", "No Protect Shields remaining!", or top Pokéballs hidden for >= 600ms while HP bars remain visible)
+        //    Gated by shield prompt state (`hadShieldPromptBeforeCurrentCharge = true`) so mirror matchups unambiguously attribute to opponent!
         val isOpponentChargedScreen = hasAttackIncomingText || (missingTopBallsWithHpBarsFrames >= 6 && pendingChargedAttackActor != "user")
         if (isOpponentChargedScreen) {
             val wasPromptActive = isAttackIncomingPromptActive
             isAttackIncomingPromptActive = true
             attackIncomingDetectedAtMs = nowMs
+            hadShieldPromptBeforeCurrentCharge = true
+            lastChargedPromptActor = "opp"
+            lastChargedPromptTimeMs = nowMs
             predictedPlayerSlotHpPct[activeUserIdx] = playerSlotHpPct[activeUserIdx]
             predictedOppSlotHpPct[activeOppIdx] = oppSlotHpPct[activeOppIdx]
             if (pendingChargedAttackActor != "opp" && (nowMs - lastChargedAttackLoggedMs) > 2200L) {
@@ -11288,9 +11652,6 @@ class OverlayService : LifecycleService() {
             }
             if (!wasPromptActive || hpChanged) {
                 recalculateAndPushBattleData()
-                if (!wasPromptActive) {
-                    showBattleToast("⚡ Attack Incoming! (-${cheapestOppEnergy}E)")
-                }
             }
             return
         } else if (isAttackIncomingPromptActive && (isNormalFastCombatFrame || postOppChargedMissingPlayerHpFrames >= 6 || (nowMs - attackIncomingDetectedAtMs) > 4500L)) {
@@ -11299,18 +11660,50 @@ class OverlayService : LifecycleService() {
         }
 
         // 3. Detect Player Charged Attack Minigame ("Get ready!" / "GREAT!" / "EXCELLENT!" / "NICE!" or both floating HP bars & Charge Move buttons hidden for >= 600ms)
-        //    v3.80: Player throwing charged moves on time is the truth basis for turn counting — reconciles any uncredited fast moves
-        //    required to reach the thrown move energy and credits the opponent for completed turns up to the throw boundary!
+        //    Gated by NO shield prompt before the attack (`hadShieldPromptBeforeCurrentCharge = false`, `lastChargedPromptActor = "user"`).
+        //    Rolls back any spurious energy registered during the throw zoom-in animation, and waits for Section 4 to show the toast with the ACTUAL move used!
         val isPlayerChargedScreen = hasUserChargedBannerText ||
-            (missingBothHpBarsFrames >= 6 && pendingChargedAttackActor != "opp" &&
+            (missingBothHpBarsFrames >= 6 && pendingChargedAttackActor != "opp" && !isAttackIncomingPromptActive &&
                 (sampledOppBalls in 1..3 || sampledPlayerBalls in 1..3 || (lastSteadyMoveButtonsSeenMs > 0L && (nowMs - lastSteadyMoveButtonsSeenMs) <= 6000L)))
         if (isPlayerChargedScreen && !isPostFaintSwitchPromptActive) {
+            hadShieldPromptBeforeCurrentCharge = false
+            lastChargedPromptActor = "user"
+            lastChargedPromptTimeMs = nowMs
             predictedPlayerSlotHpPct[activeUserIdx] = playerSlotHpPct[activeUserIdx]
             predictedOppSlotHpPct[activeOppIdx] = oppSlotHpPct[activeOppIdx]
             if (pendingChargedAttackActor != "user" && (nowMs - lastChargedAttackLoggedMs) > 2200L) {
                 hasBattleStarted = true
-                preChargeLeftFillPct = lastScannedLeftChargeFillPct[activeUserIdx].coerceAtLeast(0)
-                preChargeRightFillPct = lastScannedRightChargeFillPct[activeUserIdx].coerceAtLeast(0)
+
+                // Roll back any spurious fast move energy that might have been credited during the camera zoom-in transition (within last 750ms)
+                if (playerLastFastCreditedAtMs[activeUserIdx] > 0L &&
+                    (nowMs - playerLastFastCreditedAtMs[activeUserIdx]) <= 750L &&
+                    lastStableNormalCombatEnergy >= cheapestUserEnergy &&
+                    playerSlotEnergy[activeUserIdx] > lastStableNormalCombatEnergy
+                ) {
+                    val rollbackDelta = playerSlotEnergy[activeUserIdx] - lastStableNormalCombatEnergy
+                    val rollbackMoves = (rollbackDelta / userFastEnergyForStats).coerceAtLeast(1)
+                    playerSlotEnergy[activeUserIdx] = lastStableNormalCombatEnergy
+                    playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] - rollbackMoves * userFastTurnsForStats).coerceAtLeast(0)
+                    phasePlayerTurns = (phasePlayerTurns - rollbackMoves * userFastTurnsForStats).coerceAtLeast(0)
+                }
+
+                preChargeLeftFillPct = if (lastStableLeftChargeFillPct > 0) lastStableLeftChargeFillPct else lastScannedLeftChargeFillPct[activeUserIdx].coerceAtLeast(0)
+                preChargeRightFillPct = if (lastStableRightChargeFillPct > 0) lastStableRightChargeFillPct else lastScannedRightChargeFillPct[activeUserIdx].coerceAtLeast(0)
+
+                // Cross-validate pre-throw energy against the last stable Left (Move 1) & Right (Move 2) circle fill readings
+                val authPreThrowE = computeAuthoritativeCircleEnergy(
+                    leftFillPct = preChargeLeftFillPct,
+                    rightFillPct = preChargeRightFillPct,
+                    cost1 = userMove1Energy,
+                    cost2 = userMove2Energy,
+                    hasSecondMove = hasSecondUserMove
+                )
+                if (authPreThrowE >= cheapestUserEnergy) {
+                    val snappedPreE = (((authPreThrowE.toDouble() / userFastEnergyForStats.toDouble()).roundToInt()) * userFastEnergyForStats).coerceIn(cheapestUserEnergy, 100)
+                    if (playerSlotEnergy[activeUserIdx] > snappedPreE + userFastEnergyForStats) {
+                        playerSlotEnergy[activeUserIdx] = snappedPreE
+                    }
+                }
 
                 // If player threw a charged move on time but energy was < cheapestUserEnergy (missed turn), reconcile missed turns first!
                 if (playerSlotEnergy[activeUserIdx] < cheapestUserEnergy) {
@@ -11319,6 +11712,8 @@ class OverlayService : LifecycleService() {
                     playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + missingUserFasts * userFastTurnsForStats).coerceAtLeast(0)
                     phasePlayerTurns += missingUserFasts * userFastTurnsForStats
                 }
+
+                preChargeUserEnergy = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
 
                 if (phasePlayerTurns > 0) {
                     val maxCompletedOppMovesBeforeThrow = phasePlayerTurns / oppFastTurnsForStats
@@ -11341,8 +11736,15 @@ class OverlayService : LifecycleService() {
                 pendingChargedAttackPreOppShields = oppShieldsRemaining
                 pendingChargedAttackAttackerName = activeUserPokemonName ?: userSlotCfg?.name ?: "Player"
                 pendingChargedAttackDefenderName = formatOpponentNameWithShadow(activeOpponentName)
-                playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] - cheapestUserEnergy).coerceIn(0, 100)
-                pendingChargedAttackDeductedEnergy = cheapestUserEnergy
+
+                // Provisional deduction during minigame (reconciled to exact Move 1 vs Move 2 energy in Section 4; NO premature -50E toast here!)
+                val initialProvisionalCost = when {
+                    hasSecondUserMove && preChargeRightFillPct >= 95 && preChargeLeftFillPct < 92 -> userMove2Energy
+                    preChargeLeftFillPct >= 95 && (!hasSecondUserMove || preChargeRightFillPct < 92) -> userMove1Energy
+                    else -> cheapestUserEnergy
+                }
+                playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] - initialProvisionalCost).coerceIn(0, 100)
+                pendingChargedAttackDeductedEnergy = initialProvisionalCost
                 phasePlayerTurns = 0
                 phaseOppTurns = 0
                 playerSlotCurrentMoveTurns[activeUserIdx] = 0
@@ -11352,7 +11754,6 @@ class OverlayService : LifecycleService() {
                 lastTurnTickTimeMs = System.currentTimeMillis()
                 turnResidualMs = 0L
                 hpChanged = true
-                showBattleToast("⚡ Charged Attack! (-${cheapestUserEnergy}E)")
             }
             if (hpChanged) recalculateAndPushBattleData()
             return
@@ -11369,12 +11770,12 @@ class OverlayService : LifecycleService() {
         }
 
         // 4. Reconcile Pending Charged Attack once defender's HP bar returns or KO is confirmed
-        //    v3.80: 3-Tier Energy Depletion (1: Banner OCR "<Pokemon> used <Move>!", 2: Unshielded HP Best-Guess, 3: Cheapest Viable Move Fallback)
-        //    + Confirmed Opponent Charged Move Tracking + Player Post-Throw Dual-Meter Validation!
+        //    v3.80: Shield-Prompt Gated Attribution + 3-Tier Energy Depletion + Left (Move 1) / Right (Move 2) Post-Throw Circle Verification!
         val isDefenderHpReadyAfterCharge = (pendingChargedAttackActor == "opp" && sampledPlayerHpPct in 1..100) ||
             (pendingChargedAttackActor == "user" && sampledOppHpPct in 1..100)
         if (pendingChargedAttackActor.isNotEmpty() && (nowMs - pendingChargedAttackStartMs) >= 1100L && (isDefenderHpReadyAfterCharge || isPostChargedKoReady)) {
-            val actor = pendingChargedAttackActor
+            // Enforce Shield-Prompt Gate on actor: opponent charged attack ONLY if there was a shield prompt before the attack
+            val actor = if (hadShieldPromptBeforeCurrentCharge) "opp" else pendingChargedAttackActor
             val eventT = getElapsedBattleSeconds(pendingChargedAttackStartMs)
             val playerRemSec = if (playerSwapEndTimeMs > nowMs) ceil((playerSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
             val oppRemSec = if (oppSwapEndTimeMs > nowMs) ceil((oppSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
@@ -11419,7 +11820,7 @@ class OverlayService : LifecycleService() {
                 val bestGuessHpMove = if (!shielded) inferBestGuessChargedMoveByHp(hpDelta, candPairs) else null
 
                 val resolvedOppMove = bannerOppMove ?: strictHpMove ?: bestGuessHpMove
-                // Record confirmed opponent charged move in per-slot moveset memory (if detected via Banner OCR or strict HP match)
+                // Record confirmed opponent charged move in per-slot moveset memory ONLY when opponent threw (gated by shield prompt)
                 val confirmedMoveToRemember = bannerOppMove ?: strictHpMove
                 if (confirmedMoveToRemember != null && activeOppIdx in 0..2) {
                     confirmedOppChargedMoves[activeOppIdx].add(confirmedMoveToRemember)
@@ -11437,6 +11838,7 @@ class OverlayService : LifecycleService() {
                 if (extraToDeduct > 0) {
                     oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] - extraToDeduct).coerceIn(0, 100)
                 }
+                lastOppChargeDeductedEnergySnapshot = totalTargetEnergy
                 if (lastDetectedBannerMoveActor == "opp") {
                     lastDetectedBannerMoveActor = ""
                     lastDetectedBannerMoveName = ""
@@ -11456,10 +11858,14 @@ class OverlayService : LifecycleService() {
                 oppCreditedByOptimalTimerAtMs[activeOppIdx] = 0L
                 isPlayerInIdleFallback = false
                 lastIdleFallbackOppCreditMs = 0L
-                lastScannedLeftChargeFillPct[activeUserIdx] = if (sampledLeftChargeBtnFillPct in 0..200) sampledLeftChargeBtnFillPct else 0
-                lastScannedRightChargeFillPct[activeUserIdx] = if (sampledRightChargeBtnFillPct in 0..200) sampledRightChargeBtnFillPct else 0
-                pendingConfirmLeftChargeFillPct[activeUserIdx] = lastScannedLeftChargeFillPct[activeUserIdx]
-                pendingConfirmRightChargeFillPct[activeUserIdx] = lastScannedRightChargeFillPct[activeUserIdx]
+                if (sampledLeftChargeBtnFillPct in 0..200) {
+                    lastScannedLeftChargeFillPct[activeUserIdx] = sampledLeftChargeBtnFillPct
+                    pendingConfirmLeftChargeFillPct[activeUserIdx] = sampledLeftChargeBtnFillPct
+                }
+                if (sampledRightChargeBtnFillPct in 0..200) {
+                    lastScannedRightChargeFillPct[activeUserIdx] = sampledRightChargeBtnFillPct
+                    pendingConfirmRightChargeFillPct[activeUserIdx] = sampledRightChargeBtnFillPct
+                }
                 leftChargeFillConfirmFrames[activeUserIdx] = 0
                 rightChargeFillConfirmFrames[activeUserIdx] = 0
                 lastScannedPlayerSlotHpPct[activeUserIdx] = playerSlotHpPct[activeUserIdx]
@@ -11499,6 +11905,7 @@ class OverlayService : LifecycleService() {
                 lastChargedAttackLoggedMs = nowMs
                 pendingChargedAttackActor = ""
                 pendingChargedAttackDeductedEnergy = 0
+                hadShieldPromptBeforeCurrentCharge = false
                 hpChanged = true
                 val moveLabel = resolvedOppMove ?: "Charged Attack"
                 val outcomeLabel = if (shielded) "Shielded (-${totalTargetEnergy}E)" else "-${hpDelta}% HP (-${totalTargetEnergy}E)"
@@ -11520,6 +11927,7 @@ class OverlayService : LifecycleService() {
                 val shieldDropped = oppShieldsRemaining < pendingChargedAttackPreOppShields
                 val shielded = shieldDropped || (hpDelta <= 3 && pendingChargedAttackPreOppShields > 0 && !oppFaintedSlots[activeOppIdx])
 
+                // 1. Mid-screen Banner OCR ("<PlayerPokemon> used <Move>!")
                 val bannerUserMove = if (lastDetectedBannerMoveActor == "user" &&
                     (nowMs - lastDetectedBannerMoveTimeMs) <= 7500L &&
                     lastDetectedBannerMoveName.isNotBlank()
@@ -11527,6 +11935,55 @@ class OverlayService : LifecycleService() {
                     lastDetectedBannerMoveName
                 } else null
 
+                // 2. Post-Throw Left (Move 1) & Right (Move 2) Charge Circle Residual Energy Disambiguation:
+                //    Compare the actual post-throw circle energy reading against (preChargeUserEnergy - userMove1Energy)
+                //    vs (preChargeUserEnergy - userMove2Energy) so throwing Roar of Time (65E) vs Iron Head (50E) is immediately distinguished!
+                val postCircleEnergyRaw = computeAuthoritativeCircleEnergy(
+                    leftFillPct = sampledLeftChargeBtnFillPct,
+                    rightFillPct = sampledRightChargeBtnFillPct,
+                    cost1 = userMove1Energy,
+                    cost2 = userMove2Energy,
+                    hasSecondMove = hasSecondUserMove
+                )
+                val postCircleEnergySnapped = if (postCircleEnergyRaw >= 0) {
+                    (((postCircleEnergyRaw.toDouble() / userFastEnergyForStats.toDouble()).roundToInt()) * userFastEnergyForStats).coerceIn(0, 100)
+                } else -1
+
+                // Ensure preChargeUserEnergy is at least as high as any move that was visibly ready (>= 95% fill) or thrown
+                val effectivePreEnergy = max(
+                    preChargeUserEnergy,
+                    when {
+                        bannerUserMove != null -> userMoveEnergyMap[bannerUserMove] ?: cheapestUserEnergy
+                        hasSecondUserMove && preChargeRightFillPct >= 95 -> userMove2Energy
+                        preChargeLeftFillPct >= 95 -> userMove1Energy
+                        else -> cheapestUserEnergy
+                    }
+                ).coerceIn(cheapestUserEnergy, 100)
+
+                val postCircleInferredMove: String? = if (hasSecondUserMove && userMove1Energy != userMove2Energy && postCircleEnergySnapped in 0..90) {
+                    val remIfMove1 = (effectivePreEnergy - userMove1Energy).coerceIn(0, 100)
+                    val remIfMove2 = (effectivePreEnergy - userMove2Energy).coerceIn(0, 100)
+                    val err1 = kotlin.math.abs(postCircleEnergySnapped - remIfMove1)
+                    val err2 = kotlin.math.abs(postCircleEnergySnapped - remIfMove2)
+                    when {
+                        err2 + 3 < err1 && effectivePreEnergy >= userMove2Energy -> userMove2NameEarly
+                        err1 + 3 < err2 && effectivePreEnergy >= userMove1Energy -> userMove1NameEarly
+                        else -> null
+                    }
+                } else null
+
+                // 3. Pre-Throw Single-Circle Readiness Disambiguation (Left = Move 1, Right = Move 2)
+                val preCircleInferredMove: String? = if (hasSecondUserMove && userMove1Energy != userMove2Energy) {
+                    when {
+                        preChargeRightFillPct >= 95 && preChargeLeftFillPct < 92 -> userMove2NameEarly
+                        preChargeLeftFillPct >= 95 && preChargeRightFillPct < 92 -> userMove1NameEarly
+                        effectivePreEnergy >= userMove1Energy && effectivePreEnergy < userMove2Energy -> userMove1NameEarly
+                        effectivePreEnergy >= userMove2Energy && effectivePreEnergy < userMove1Energy -> userMove2NameEarly
+                        else -> null
+                    }
+                } else userMove1NameEarly
+
+                // 4. Unshielded Opponent HP Drop Disambiguation
                 val candPairs = userMoveNames.map { mName ->
                     mName to calculateChargedMoveDamagePercent(
                         attacker = userMetaForStats,
@@ -11540,40 +11997,30 @@ class OverlayService : LifecycleService() {
                     inferUnshieldedChargedMoveName(hpDelta, candPairs) ?: inferBestGuessChargedMoveByHp(hpDelta, candPairs)
                 } else null
 
-                // Dual-meter post-throw validation: check if post-throw charge circle fill readings disambiguate Move 1 vs Move 2
-                val gaugeInferredUserMove = if (userMoveNames.size >= 2 && (preChargeLeftFillPct >= 95 || preChargeRightFillPct >= 95)) {
-                    when {
-                        preChargeRightFillPct >= 95 && preChargeLeftFillPct < 92 -> userMoveNames[1]
-                        preChargeLeftFillPct >= 95 && preChargeRightFillPct < 92 -> userMoveNames[0]
-                        else -> null
-                    }
-                } else null
+                val resolvedUserMove = bannerUserMove
+                    ?: postCircleInferredMove
+                    ?: preCircleInferredMove
+                    ?: hpInferredUserMove
+                    ?: userMove1NameEarly
 
-                val resolvedUserMove = bannerUserMove ?: hpInferredUserMove ?: gaugeInferredUserMove
-                val totalUserEnergy = if (resolvedUserMove != null) {
-                    userMoveEnergyMap[resolvedUserMove] ?: cheapestUserEnergy
+                val totalUserEnergy = when {
+                    resolvedUserMove.equals(userMove2NameEarly, ignoreCase = true) -> userMove2Energy
+                    resolvedUserMove.equals(userMove1NameEarly, ignoreCase = true) -> userMove1Energy
+                    else -> userMoveEnergyMap[resolvedUserMove] ?: cheapestUserEnergy
+                }
+
+                // Recompute post-throw energy directly from `effectivePreEnergy - totalUserEnergy` and snap to post-throw circles if visible
+                val computedResidualEnergy = (effectivePreEnergy - totalUserEnergy).coerceIn(0, 100)
+                val finalPostUserEnergy = if (postCircleEnergySnapped in 0..90) {
+                    postCircleEnergySnapped
                 } else {
-                    cheapestUserEnergy
+                    computedResidualEnergy
                 }
-                val alreadyDeducted = pendingChargedAttackDeductedEnergy.coerceAtLeast(0)
-                val extraToDeduct = (totalUserEnergy - alreadyDeducted).coerceAtLeast(0)
-                if (extraToDeduct > 0) {
-                    playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] - extraToDeduct).coerceIn(0, 100)
-                }
-
-                // Cross-check residual player energy against post-throw Charge Move Circles if visible (0..99%)
-                if (sampledLeftChargeBtnFillPct in 0..95 || sampledRightChargeBtnFillPct in 0..95) {
-                    val postE1 = if (sampledLeftChargeBtnFillPct in 0..95) {
-                        (((sampledLeftChargeBtnFillPct.toDouble() * userMove1Energy.toDouble()) / 100.0) / userFastEnergyForStats.toDouble()).roundToInt() * userFastEnergyForStats
-                    } else -1
-                    val postE2 = if (sampledRightChargeBtnFillPct in 0..95) {
-                        (((sampledRightChargeBtnFillPct.toDouble() * userMove2Energy.toDouble()) / 100.0) / userFastEnergyForStats.toDouble()).roundToInt() * userFastEnergyForStats
-                    } else -1
-                    val postGaugeEnergy = max(postE1, postE2)
-                    if (postGaugeEnergy in 0..100 && kotlin.math.abs(postGaugeEnergy - playerSlotEnergy[activeUserIdx]) <= userFastEnergyForStats * 2) {
-                        playerSlotEnergy[activeUserIdx] = postGaugeEnergy.coerceIn(0, 100)
-                    }
-                }
+                playerSlotEnergy[activeUserIdx] = finalPostUserEnergy
+                lastUserChargePreEnergySnapshot = effectivePreEnergy
+                lastUserChargeDeductedEnergySnapshot = totalUserEnergy
+                lastUserChargeResolvedMoveName = resolvedUserMove
+                awaitingPostUserChargeCircleSync = (postCircleEnergySnapped < 0)
 
                 if (lastDetectedBannerMoveActor == "user") {
                     lastDetectedBannerMoveActor = ""
@@ -11594,8 +12041,12 @@ class OverlayService : LifecycleService() {
                 oppCreditedByOptimalTimerAtMs[activeOppIdx] = 0L
                 isPlayerInIdleFallback = false
                 lastIdleFallbackOppCreditMs = 0L
+                lastStableNormalCombatEnergy = playerSlotEnergy[activeUserIdx]
+                prevStableNormalCombatEnergy = playerSlotEnergy[activeUserIdx]
                 lastScannedLeftChargeFillPct[activeUserIdx] = if (sampledLeftChargeBtnFillPct in 0..200) sampledLeftChargeBtnFillPct else 0
                 lastScannedRightChargeFillPct[activeUserIdx] = if (sampledRightChargeBtnFillPct in 0..200) sampledRightChargeBtnFillPct else 0
+                lastStableLeftChargeFillPct = lastScannedLeftChargeFillPct[activeUserIdx]
+                lastStableRightChargeFillPct = lastScannedRightChargeFillPct[activeUserIdx]
                 pendingConfirmLeftChargeFillPct[activeUserIdx] = lastScannedLeftChargeFillPct[activeUserIdx]
                 pendingConfirmRightChargeFillPct[activeUserIdx] = lastScannedRightChargeFillPct[activeUserIdx]
                 leftChargeFillConfirmFrames[activeUserIdx] = 0
@@ -11637,7 +12088,11 @@ class OverlayService : LifecycleService() {
                 lastChargedAttackLoggedMs = nowMs
                 pendingChargedAttackActor = ""
                 pendingChargedAttackDeductedEnergy = 0
+                hadShieldPromptBeforeCurrentCharge = false
                 hpChanged = true
+                val userMoveLabel = resolvedUserMove.ifBlank { "Charged Attack" }
+                val userOutcomeLabel = if (shielded) "Shielded (-${totalUserEnergy}E)" else "-${hpDelta}% HP (-${totalUserEnergy}E)"
+                showBattleToast("⚡ Used $userMoveLabel ($userOutcomeLabel)")
             }
         }
 
@@ -12472,6 +12927,11 @@ class OverlayService : LifecycleService() {
                 pendingConfirmRightChargeFillPct[newSlotIdx] = -1
                 leftChargeFillConfirmFrames[newSlotIdx] = 0
                 rightChargeFillConfirmFrames[newSlotIdx] = 0
+                lastStableNormalCombatEnergy = playerSlotEnergy[newSlotIdx]
+                prevStableNormalCombatEnergy = playerSlotEnergy[newSlotIdx]
+                lastStableLeftChargeFillPct = 0
+                lastStableRightChargeFillPct = 0
+                awaitingPostUserChargeCircleSync = false
                 lastScannedPlayerSlotHpPct[newSlotIdx] = playerSlotHpPct[newSlotIdx].coerceIn(1, 100)
                 predictedPlayerSlotHpPct[newSlotIdx] = playerSlotHpPct[newSlotIdx].coerceIn(1, 100)
                 oppLastFastCreditedAtMs.fill(0L)
@@ -13319,8 +13779,22 @@ class OverlayService : LifecycleService() {
             oppFastMoveConfirmed[i] = false
             oppCumulativeFastDmgPct[i] = 0
         }
-        preChargeLeftFillPct = -1
-        preChargeRightFillPct = -1
+        preChargeLeftFillPct = 0
+        preChargeRightFillPct = 0
+        preChargeUserEnergy = 0
+        lastStableNormalCombatEnergy = 0
+        prevStableNormalCombatEnergy = 0
+        lastStableLeftChargeFillPct = 0
+        lastStableRightChargeFillPct = 0
+        lastStableNormalCombatMs = 0L
+        hadShieldPromptBeforeCurrentCharge = false
+        lastChargedPromptActor = ""
+        lastChargedPromptTimeMs = 0L
+        awaitingPostUserChargeCircleSync = false
+        lastUserChargeResolvedMoveName = ""
+        lastUserChargePreEnergySnapshot = 0
+        lastUserChargeDeductedEnergySnapshot = 0
+        lastOppChargeDeductedEnergySnapshot = 0
         sampledOppHasPendingDmg = false
         sampledPlayerHasPendingDmg = false
         sampledOppPendingDmgPct = 0
