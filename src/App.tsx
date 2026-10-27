@@ -691,39 +691,38 @@ export default function App() {
     } catch {}
   };
 
-  // v3.85 Settings: Charge Meter Kalman Filter Tuning (Highest-Energy Meter Priority, Decoupled from HP) & Non-Standard Fast Move Detection Offset (0/1/2)
-  const DEFAULT_KALMAN_TUNING = { qScalePct: 100, measNoise: 11, minStepPct: 4, pllBlendPct: 30 };
-  const [kalmanTuning, setKalmanTuning] = useState<{ qScalePct: number; measNoise: number; minStepPct: number; pllBlendPct: number }>(() => {
+  // v3.86 Settings: Low-Latency Energy Meter Debounce (2..4 matching samples, ±2% circle fill tolerance) & Live Energy Update Toasts
+  const [energyDebounceSamples, setEnergyDebounceSamples] = useState<2 | 3 | 4>(() => {
     try {
-      const saved = localStorage.getItem('gbl_kalman_filter_tuning_v385');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return {
-          qScalePct: Math.min(300, Math.max(20, Number(parsed.qScalePct) || 100)),
-          measNoise: Math.min(40, Math.max(3, Number(parsed.measNoise) || 11)),
-          minStepPct: Math.min(12, Math.max(2, Number(parsed.minStepPct) || 4)),
-          pllBlendPct: Math.min(80, Math.max(5, Number(parsed.pllBlendPct) || 30)),
-        };
-      }
+      const saved = Number(localStorage.getItem('gbl_energy_debounce_samples'));
+      if (saved === 2 || saved === 3 || saved === 4) return saved;
     } catch {}
-    return DEFAULT_KALMAN_TUNING;
+    return 2;
   });
 
-  const updateKalmanTuningField = (field: 'qScalePct' | 'measNoise' | 'minStepPct' | 'pllBlendPct', rawVal: number) => {
-    setKalmanTuning((prev) => {
-      const next = { ...prev, [field]: rawVal };
+  const updateEnergyDebounceSamples = (samples: 2 | 3 | 4) => {
+    setEnergyDebounceSamples(samples);
+    try {
+      localStorage.setItem('gbl_energy_debounce_samples', String(samples));
+    } catch {}
+  };
+
+  const [energyUpdateToasts, setEnergyUpdateToasts] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('gbl_energy_update_toasts');
+      if (saved !== null) return saved === 'true';
+    } catch {}
+    return true;
+  });
+
+  const toggleEnergyUpdateToasts = () => {
+    setEnergyUpdateToasts((prev) => {
+      const next = !prev;
       try {
-        localStorage.setItem('gbl_kalman_filter_tuning_v385', JSON.stringify(next));
+        localStorage.setItem('gbl_energy_update_toasts', String(next));
       } catch {}
       return next;
     });
-  };
-
-  const restoreDefaultKalmanTuning = () => {
-    setKalmanTuning(DEFAULT_KALMAN_TUNING);
-    try {
-      localStorage.setItem('gbl_kalman_filter_tuning_v385', JSON.stringify(DEFAULT_KALMAN_TUNING));
-    } catch {}
   };
 
   const [fastDetectTurnOffset, setFastDetectTurnOffset] = useState<0 | 1 | 2>(() => {
@@ -4046,7 +4045,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v3.85 • Android Native Overlay
+                  v3.86 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -8758,86 +8757,63 @@ export default function App() {
               </div>
             </div>
 
-            {/* v3.85 Charge Meter Kalman Filter Tuning Card (Highest-Energy Meter Priority, Decoupled from HP) */}
+            {/* v3.86 Energy Meter Debounce & Slowest Move Snap Card */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <h3 className="text-sm font-bold text-sky-400 flex items-center gap-2">
-                    <span>⚡ Charge Meter Kalman Filter Tuning (v3.85)</span>
+                    <span>⚡ Energy Meter Debounce &amp; Slowest Move Snap (v3.86)</span>
                   </h3>
                   <p className="text-xs text-slate-400 mt-1">
-                    Decouples HP and energy, basing turn detection and self-correction on the <strong>highest-energy charge move meter</strong> (<code>max(cost1, cost2)</code>) to minimize wrap-arounds and avoid 3rd-fill ambiguity.
+                    Replaces the Kalman filter with a low-latency <strong>N-sample circle fill debounce</strong> (<code>±2%</code> tolerance) on your slowest charge move (<code>max(cost1, cost2)</code>), snapping on <code>≥1E</code> differences while allowing turn ticks above the <code>200%</code> circle cap up to <code>100E</code>.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={restoreDefaultKalmanTuning}
-                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sky-300 text-xs font-bold transition shrink-0"
-                >
-                  ↺ Restore Defaults (100% / 11 / 4% / 30%)
-                </button>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300 space-y-1">
-                <div>• <strong className="text-sky-400">Process Noise Q Scale</strong> = {kalmanTuning.qScalePct}% <span className="text-slate-500">(Default: 100%, Range: 20–300%)</span></div>
-                <div>• <strong className="text-emerald-300">Measurement Noise R</strong> = {kalmanTuning.measNoise} <span className="text-slate-500">(Default: 11, Range: 3–40)</span></div>
-                <div>• <strong className="text-amber-300">Min Step Threshold</strong> = {kalmanTuning.minStepPct}% <span className="text-slate-500">(Default: 4%, Range: 2–12%)</span></div>
-                <div>• <strong className="text-violet-300">PLL Phase Blend</strong> = {kalmanTuning.pllBlendPct}% <span className="text-slate-500">(Default: 30%, Range: 5–80%)</span></div>
+                <div>• <strong className="text-sky-400">Active Debounce</strong> = {energyDebounceSamples} Matching Samples <span className="text-slate-500">(Default: 2 • ±2% Circle Fill Tolerance)</span></div>
+                <div>• <strong className="text-emerald-300">Dual-Fill Detection</strong> = 0%–100% Base Fill + 100%–200% White Border &amp; Advancing White Meniscus Line</div>
+                <div>• <strong className="text-amber-300">Post-Charge Lock</strong> = Deducts provisional move cost from banked energy, verifies via post-throw circle snap</div>
+                <div>• <strong className="text-violet-300">Live Energy Update Toasts</strong> = {energyUpdateToasts ? 'Enabled (⚡ [Move] ([Cost]E) • Circle [X]% → [Y]E)' : 'Muted'}</div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-3 gap-2">
+                {([2, 3, 4] as const).map((cnt) => (
+                  <button
+                    key={cnt}
+                    type="button"
+                    onClick={() => updateEnergyDebounceSamples(cnt)}
+                    className={`px-3 py-2.5 rounded-xl text-xs font-bold border transition whitespace-nowrap ${
+                      energyDebounceSamples === cnt
+                        ? 'bg-sky-600 border-sky-400 text-white shadow-lg shadow-sky-900/30'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                    }`}
+                  >
+                    {cnt === 2 ? '2 Samples (Default)' : cnt === 3 ? '3 Samples (Balanced)' : '4 Samples (Strict)'}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-800">
                 <div>
-                  <label className="block text-[11px] font-bold text-sky-400 mb-1">
-                    Process Noise Q % (100)
-                  </label>
-                  <input
-                    type="number"
-                    min={20}
-                    max={300}
-                    value={kalmanTuning.qScalePct}
-                    onChange={(e) => updateKalmanTuningField('qScalePct', Math.min(300, Math.max(20, Number(e.target.value) || 100)))}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs font-mono"
-                  />
+                  <div className="text-xs font-bold text-slate-200">⚡ Live Energy &amp; Circle % Battle Toasts</div>
+                  <div className="text-[11px] text-slate-400">
+                    {energyUpdateToasts
+                      ? 'Active: Displays ⚡ [Move] ([Cost]E) • Circle [X]% → [Y]E on every energy change'
+                      : 'Muted: Hides diagnostic energy update toasts during battle'}
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-emerald-300 mb-1">
-                    Meas Noise R (11)
-                  </label>
-                  <input
-                    type="number"
-                    min={3}
-                    max={40}
-                    value={kalmanTuning.measNoise}
-                    onChange={(e) => updateKalmanTuningField('measNoise', Math.min(40, Math.max(3, Number(e.target.value) || 11)))}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-amber-300 mb-1">
-                    Min Step % (4)
-                  </label>
-                  <input
-                    type="number"
-                    min={2}
-                    max={12}
-                    value={kalmanTuning.minStepPct}
-                    onChange={(e) => updateKalmanTuningField('minStepPct', Math.min(12, Math.max(2, Number(e.target.value) || 4)))}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-violet-300 mb-1">
-                    PLL Blend % (30)
-                  </label>
-                  <input
-                    type="number"
-                    min={5}
-                    max={80}
-                    value={kalmanTuning.pllBlendPct}
-                    onChange={(e) => updateKalmanTuningField('pllBlendPct', Math.min(80, Math.max(5, Number(e.target.value) || 30)))}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-100 text-xs font-mono"
-                  />
-                </div>
+                <button
+                  type="button"
+                  onClick={toggleEnergyUpdateToasts}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition shrink-0 whitespace-nowrap ${
+                    energyUpdateToasts
+                      ? 'bg-emerald-600 border-emerald-400 text-white'
+                      : 'bg-slate-800 border-slate-700 text-slate-400'
+                  }`}
+                >
+                  {energyUpdateToasts ? 'Toasts On' : 'Toasts Off'}
+                </button>
               </div>
             </div>
 

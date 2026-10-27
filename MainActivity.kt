@@ -171,13 +171,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textHpTrackingDesc: TextView
     private lateinit var btnToggleEnergyTracking: Button
     private lateinit var textEnergyTrackingDesc: TextView
-    private lateinit var textKalmanTuningSummary: TextView
-    private lateinit var editKalmanQScale: EditText
-    private lateinit var editKalmanMeasNoise: EditText
-    private lateinit var editKalmanMinStep: EditText
-    private lateinit var editKalmanPllBlend: EditText
-    private lateinit var btnSaveKalmanTuning: Button
-    private lateinit var btnRestoreKalmanTuning: Button
+    private lateinit var tvEnergyDebounceSummary: TextView
+    private lateinit var btnDebounce2Samples: Button
+    private lateinit var btnDebounce3Samples: Button
+    private lateinit var btnDebounce4Samples: Button
+    private lateinit var btnToggleEnergyUpdateToasts: Button
+    private lateinit var textEnergyUpdateToastsDesc: TextView
     private lateinit var btnCycleFastDetectOffset: Button
     private lateinit var textFastDetectOffsetDesc: TextView
     private lateinit var seekbarOverlayScale: SeekBar
@@ -520,19 +519,19 @@ class MainActivity : AppCompatActivity() {
             prefs.edit()
                 .putBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
                 .putBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
-                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 380)
+                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 386)
                 .apply()
-        } else if (prevInstalledVerCode < 380) {
-            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 380).apply()
+        } else if (prevInstalledVerCode < 386) {
+            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 386).apply()
         }
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? MediaProjectionManager
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "3.80"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "3.86"
         } catch (_: Exception) {
-            "3.80"
+            "3.86"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -1107,13 +1106,8 @@ class MainActivity : AppCompatActivity() {
             btnRestoreTierThresholds.backgroundTintList = elevatedBtnTint
             btnRestoreTierThresholds.setTextColor(theme.secondaryAccentColor)
         }
-        if (::btnSaveKalmanTuning.isInitialized) {
-            btnSaveKalmanTuning.backgroundTintList = primaryBtnTint
-            btnSaveKalmanTuning.setTextColor(0xFFFFFFFF.toInt())
-        }
-        if (::btnRestoreKalmanTuning.isInitialized) {
-            btnRestoreKalmanTuning.backgroundTintList = elevatedBtnTint
-            btnRestoreKalmanTuning.setTextColor(theme.secondaryAccentColor)
+        if (::btnDebounce2Samples.isInitialized) {
+            loadAndRenderEnergyDebounceUi()
         }
         if (::btnGithubLoginSettings.isInitialized) {
             updateSyncStatusUi()
@@ -1197,13 +1191,12 @@ class MainActivity : AppCompatActivity() {
         textHpTrackingDesc = findViewById(R.id.text_hp_tracking_desc)
         btnToggleEnergyTracking = findViewById(R.id.btn_toggle_energy_tracking)
         textEnergyTrackingDesc = findViewById(R.id.text_energy_tracking_desc)
-        textKalmanTuningSummary = findViewById(R.id.text_kalman_tuning_summary)
-        editKalmanQScale = findViewById(R.id.edit_kalman_q_scale)
-        editKalmanMeasNoise = findViewById(R.id.edit_kalman_meas_noise)
-        editKalmanMinStep = findViewById(R.id.edit_kalman_min_step)
-        editKalmanPllBlend = findViewById(R.id.edit_kalman_pll_blend)
-        btnSaveKalmanTuning = findViewById(R.id.btn_save_kalman_tuning)
-        btnRestoreKalmanTuning = findViewById(R.id.btn_restore_kalman_tuning)
+        tvEnergyDebounceSummary = findViewById(R.id.tv_energy_debounce_summary)
+        btnDebounce2Samples = findViewById(R.id.btn_debounce_2_samples)
+        btnDebounce3Samples = findViewById(R.id.btn_debounce_3_samples)
+        btnDebounce4Samples = findViewById(R.id.btn_debounce_4_samples)
+        btnToggleEnergyUpdateToasts = findViewById(R.id.btn_toggle_energy_update_toasts)
+        textEnergyUpdateToastsDesc = findViewById(R.id.text_energy_update_toasts_desc)
         btnCycleFastDetectOffset = findViewById(R.id.btn_cycle_fast_detect_offset)
         textFastDetectOffsetDesc = findViewById(R.id.text_fast_detect_offset_desc)
         seekbarOverlayScale = findViewById(R.id.seekbar_overlay_scale)
@@ -1354,12 +1347,22 @@ class MainActivity : AppCompatActivity() {
             showSyncBundleDialog()
         }
 
-        loadAndRenderKalmanTuningUi()
-        btnSaveKalmanTuning.setOnClickListener {
-            saveKalmanTuningFromInputs(showToast = true)
+        loadAndRenderEnergyDebounceUi()
+        btnDebounce2Samples.setOnClickListener {
+            saveEnergyDebounceSamples(2, showToast = true)
         }
-        btnRestoreKalmanTuning.setOnClickListener {
-            restoreDefaultKalmanTuning()
+        btnDebounce3Samples.setOnClickListener {
+            saveEnergyDebounceSamples(3, showToast = true)
+        }
+        btnDebounce4Samples.setOnClickListener {
+            saveEnergyDebounceSamples(4, showToast = true)
+        }
+        btnToggleEnergyUpdateToasts.setOnClickListener {
+            val currentEnabled = prefs.getBoolean(OverlayService.PREFS_KEY_ENERGY_UPDATE_TOASTS, OverlayService.DEFAULT_ENERGY_UPDATE_TOASTS)
+            val nextEnabled = !currentEnabled
+            prefs.edit().putBoolean(OverlayService.PREFS_KEY_ENERGY_UPDATE_TOASTS, nextEnabled).apply()
+            OverlayService.syncTierThresholdsFromPrefs(prefs)
+            loadAndRenderEnergyDebounceUi()
         }
 
         loadAndRenderTierThresholdsUi()
@@ -3442,80 +3445,66 @@ class MainActivity : AppCompatActivity() {
         return sb.toString().trim()
     }
 
-    private fun loadAndRenderKalmanTuningUi() {
-        if (!::editKalmanQScale.isInitialized) return
+    private fun loadAndRenderEnergyDebounceUi() {
+        if (!::btnDebounce2Samples.isInitialized) return
         OverlayService.syncTierThresholdsFromPrefs(prefs)
-        val qScale = OverlayService.activeKalmanQScalePct
-        val measR = OverlayService.activeKalmanMeasNoise
-        val minStep = OverlayService.activeKalmanMinStepPct
-        val pllBlend = OverlayService.activeKalmanPllBlendPct
-        editKalmanQScale.setText(qScale.toString())
-        editKalmanMeasNoise.setText(measR.toString())
-        editKalmanMinStep.setText(minStep.toString())
-        editKalmanPllBlend.setText(pllBlend.toString())
-        if (::textKalmanTuningSummary.isInitialized) {
-            textKalmanTuningSummary.text =
-                "• Highest-Energy Charge Move Meter Priority (Decoupled from HP)\n" +
-                "• Q Scale: ${qScale}% (Def: 100%) • Meas Noise R: $measR (Def: 11)\n" +
-                "• Min Step: ${minStep}% (Def: 4%) • PLL Phase Blend: ${pllBlend}% (Def: 30%)"
+        val samples = OverlayService.activeEnergyDebounceSamples.coerceIn(2, 4)
+        val toastsOn = OverlayService.activeEnergyUpdateToasts
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        val activeTint = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+        val inactiveTint = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+
+        val pairs = listOf(
+            2 to btnDebounce2Samples,
+            3 to btnDebounce3Samples,
+            4 to btnDebounce4Samples
+        )
+        for ((count, btn) in pairs) {
+            val isSelected = (samples == count)
+            btn.backgroundTintList = if (isSelected) activeTint else inactiveTint
+            btn.setTextColor(if (isSelected) 0xFFFFFFFF.toInt() else theme.secondaryTextColor)
+        }
+
+        if (::btnToggleEnergyUpdateToasts.isInitialized && ::textEnergyUpdateToastsDesc.isInitialized) {
+            if (toastsOn) {
+                btnToggleEnergyUpdateToasts.text = "Toasts On"
+                btnToggleEnergyUpdateToasts.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
+                btnToggleEnergyUpdateToasts.setTextColor(0xFFFFFFFF.toInt())
+                textEnergyUpdateToastsDesc.text = "Active: Shows ⚡ [Move] ([Cost]E) • Circle [X]% → [Y]E on every energy change"
+            } else {
+                btnToggleEnergyUpdateToasts.text = "Toasts Off"
+                btnToggleEnergyUpdateToasts.backgroundTintList = inactiveTint
+                btnToggleEnergyUpdateToasts.setTextColor(theme.secondaryTextColor)
+                textEnergyUpdateToastsDesc.text = "Muted: Live energy & circle % update toasts hidden during battle"
+            }
+        }
+
+        if (::tvEnergyDebounceSummary.isInitialized) {
+            val modeDesc = when (samples) {
+                2 -> "2 Matching Samples (Default • Fastest Response, ±2% Fill Tolerance)"
+                3 -> "3 Matching Samples (Balanced Noise Rejection, ±2% Fill Tolerance)"
+                else -> "4 Matching Samples (Strict Filtering, ±2% Fill Tolerance)"
+            }
+            val toastStatus = if (toastsOn) "Enabled" else "Muted"
+            tvEnergyDebounceSummary.text =
+                "• Active: $modeDesc\n" +
+                "• Snaps on ≥1E diff to slowest Charge Move (100%–200% White Border + Meniscus)\n" +
+                "• Live Energy & Circle % Battle Toasts: $toastStatus"
         }
     }
 
-    private fun saveKalmanTuningFromInputs(showToast: Boolean) {
-        val rawQ = editKalmanQScale.text.toString().trim().toIntOrNull() ?: OverlayService.DEFAULT_KALMAN_Q_SCALE_PCT
-        val rawR = editKalmanMeasNoise.text.toString().trim().toIntOrNull() ?: OverlayService.DEFAULT_KALMAN_MEAS_NOISE
-        val rawStep = editKalmanMinStep.text.toString().trim().toIntOrNull() ?: OverlayService.DEFAULT_KALMAN_MIN_STEP_PCT
-        val rawBlend = editKalmanPllBlend.text.toString().trim().toIntOrNull() ?: OverlayService.DEFAULT_KALMAN_PLL_BLEND_PCT
-
-        val qScale = rawQ.coerceIn(20, 300)
-        val measR = rawR.coerceIn(3, 40)
-        val minStep = rawStep.coerceIn(2, 12)
-        val pllBlend = rawBlend.coerceIn(5, 80)
-
-        prefs.edit()
-            .putInt(OverlayService.PREFS_KEY_KALMAN_Q_SCALE_PCT, qScale)
-            .putInt(OverlayService.PREFS_KEY_KALMAN_MEAS_NOISE, measR)
-            .putInt(OverlayService.PREFS_KEY_KALMAN_MIN_STEP_PCT, minStep)
-            .putInt(OverlayService.PREFS_KEY_KALMAN_PLL_BLEND_PCT, pllBlend)
-            .apply()
+    private fun saveEnergyDebounceSamples(samples: Int, showToast: Boolean) {
+        val clamped = samples.coerceIn(2, 4)
+        prefs.edit().putInt(OverlayService.PREFS_KEY_ENERGY_DEBOUNCE_SAMPLES, clamped).apply()
         OverlayService.syncTierThresholdsFromPrefs(prefs)
-        loadAndRenderKalmanTuningUi()
-
-        if (isOverlayRunning) {
-            val updateIntent = Intent(this, OverlayService::class.java).apply {
-                action = OverlayService.ACTION_UPDATE_SETTINGS
-            }
-            startService(updateIntent)
-        }
+        loadAndRenderEnergyDebounceUi()
         if (showToast) {
             Toast.makeText(
                 this,
-                "Saved Kalman Filter Tuning: Q=${qScale}%, R=$measR, Step=${minStep}%, PLL=${pllBlend}%",
+                "Saved Energy Meter Debounce: $clamped matching samples (±2% circle fill tolerance)",
                 Toast.LENGTH_SHORT
             ).show()
         }
-    }
-
-    private fun restoreDefaultKalmanTuning() {
-        prefs.edit()
-            .putInt(OverlayService.PREFS_KEY_KALMAN_Q_SCALE_PCT, OverlayService.DEFAULT_KALMAN_Q_SCALE_PCT)
-            .putInt(OverlayService.PREFS_KEY_KALMAN_MEAS_NOISE, OverlayService.DEFAULT_KALMAN_MEAS_NOISE)
-            .putInt(OverlayService.PREFS_KEY_KALMAN_MIN_STEP_PCT, OverlayService.DEFAULT_KALMAN_MIN_STEP_PCT)
-            .putInt(OverlayService.PREFS_KEY_KALMAN_PLL_BLEND_PCT, OverlayService.DEFAULT_KALMAN_PLL_BLEND_PCT)
-            .apply()
-        OverlayService.syncTierThresholdsFromPrefs(prefs)
-        loadAndRenderKalmanTuningUi()
-        if (isOverlayRunning) {
-            val updateIntent = Intent(this, OverlayService::class.java).apply {
-                action = OverlayService.ACTION_UPDATE_SETTINGS
-            }
-            startService(updateIntent)
-        }
-        Toast.makeText(
-            this,
-            "Restored default Kalman Filter Tuning (Q=100%, R=11, Step=4%, PLL=30%)",
-            Toast.LENGTH_SHORT
-        ).show()
     }
 
     private fun loadAndRenderTierThresholdsUi() {
@@ -5161,12 +5150,12 @@ class MainActivity : AppCompatActivity() {
             btnToggleEnergyTracking.text = "Energy On"
             btnToggleEnergyTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
             btnToggleEnergyTracking.setTextColor(0xFFFFFFFF.toInt())
-            textEnergyTrackingDesc.text = "Active: Highest-Energy Charge Move Meter Kalman Filter enabled (decoupled from HP)"
+            textEnergyTrackingDesc.text = "Active: Slowest Charge Move Meter Debounce & Direct Snap enabled"
         } else {
             btnToggleEnergyTracking.text = "Energy Off"
             btnToggleEnergyTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
             btnToggleEnergyTracking.setTextColor(theme.primaryTextColor)
-            textEnergyTrackingDesc.text = "Default: Disabled (Opt-in for Highest-Energy Charge Move Meter Kalman loop)"
+            textEnergyTrackingDesc.text = "Default: Disabled (Opt-in for Slowest Charge Move Meter Debounce & Snap)"
         }
     }
 

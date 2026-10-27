@@ -1,3 +1,10 @@
+## v3.86 (2026-10-27)
+- **Removed Kalman Filter & Replaced with Low-Latency N-Sample Circle Debounce**: Removed all Kalman filter state and tuning parameters. Added a clean **Energy Meter Debounce** selector (`2 Samples [Default]`, `3 Samples`, `4 Samples`) using a `±2%` circle fill matching tolerance.
+- **Direct Slowest Charge Move Energy Snap & >200% Cap Overcharge Progression**: Automatically tracks the player's slowest (highest-energy) charge move circle for maximum pixel resolution, snapping immediately on `≥1E` differences while allowing fast-move turn ticks to continue counting up to `100E` when a `<50E` move caps visually at `200%`.
+- **100%–200% White Border & Advancing White Meniscus Detection**: Distinguishes `0%–100%` single fill from `100%–200%` second fill using the outer glowing white border and a bottom-to-top scan for the advancing bright white meniscus line/arc.
+- **Banked Energy Deduction & Post-Throw Circle Verification**: Eliminates false drops to zero during charged move animations by preserving banked pre-throw energy, deducting provisional move cost on throw, and verifying/snapping to the post-throw circle reading as soon as debounce clears.
+- **Toggleable Live Energy & Circle % Battle Toasts**: Emits `⚡ [Move Name] ([Cost]E) • Circle [X]% → [Y]E` (with `[White Border]` when `>100%`) on every energy change, with a Settings toggle (Default: On).
+
 # SilphScope PvP Changelog
 
 ## [v3.85] — 2026-10-27 — 2-Channel Kalman Filter Energy Meter Smoothing, 3rd-Fill Cycle Confidence Reduction & Slower Charge Move Meter Prioritization
