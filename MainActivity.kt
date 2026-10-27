@@ -169,6 +169,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textTacticalRecDesc: TextView
     private lateinit var btnToggleHpTracking: Button
     private lateinit var textHpTrackingDesc: TextView
+    private lateinit var tvHpDebounceSummary: TextView
+    private lateinit var btnHpDebounce2Samples: Button
+    private lateinit var btnHpDebounce3Samples: Button
+    private lateinit var btnHpDebounce4Samples: Button
     private lateinit var btnToggleEnergyTracking: Button
     private lateinit var textEnergyTrackingDesc: TextView
     private lateinit var tvEnergyDebounceSummary: TextView
@@ -519,19 +523,19 @@ class MainActivity : AppCompatActivity() {
             prefs.edit()
                 .putBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
                 .putBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
-                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 388)
+                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 389)
                 .apply()
-        } else if (prevInstalledVerCode < 388) {
-            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 388).apply()
+        } else if (prevInstalledVerCode < 389) {
+            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 389).apply()
         }
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? MediaProjectionManager
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "3.88"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "3.89"
         } catch (_: Exception) {
-            "3.88"
+            "3.89"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -1106,6 +1110,9 @@ class MainActivity : AppCompatActivity() {
             btnRestoreTierThresholds.backgroundTintList = elevatedBtnTint
             btnRestoreTierThresholds.setTextColor(theme.secondaryAccentColor)
         }
+        if (::btnHpDebounce2Samples.isInitialized) {
+            loadAndRenderHpDebounceUi()
+        }
         if (::btnDebounce2Samples.isInitialized) {
             loadAndRenderEnergyDebounceUi()
         }
@@ -1189,6 +1196,10 @@ class MainActivity : AppCompatActivity() {
         textTacticalRecDesc = findViewById(R.id.text_tactical_rec_desc)
         btnToggleHpTracking = findViewById(R.id.btn_toggle_hp_tracking)
         textHpTrackingDesc = findViewById(R.id.text_hp_tracking_desc)
+        tvHpDebounceSummary = findViewById(R.id.tv_hp_debounce_summary)
+        btnHpDebounce2Samples = findViewById(R.id.btn_hp_debounce_2_samples)
+        btnHpDebounce3Samples = findViewById(R.id.btn_hp_debounce_3_samples)
+        btnHpDebounce4Samples = findViewById(R.id.btn_hp_debounce_4_samples)
         btnToggleEnergyTracking = findViewById(R.id.btn_toggle_energy_tracking)
         textEnergyTrackingDesc = findViewById(R.id.text_energy_tracking_desc)
         tvEnergyDebounceSummary = findViewById(R.id.tv_energy_debounce_summary)
@@ -1345,6 +1356,17 @@ class MainActivity : AppCompatActivity() {
 
         btnSyncBundleSettings.setOnClickListener {
             showSyncBundleDialog()
+        }
+
+        loadAndRenderHpDebounceUi()
+        btnHpDebounce2Samples.setOnClickListener {
+            saveHpDebounceSamples(2, showToast = true)
+        }
+        btnHpDebounce3Samples.setOnClickListener {
+            saveHpDebounceSamples(3, showToast = true)
+        }
+        btnHpDebounce4Samples.setOnClickListener {
+            saveHpDebounceSamples(4, showToast = true)
         }
 
         loadAndRenderEnergyDebounceUi()
@@ -3445,6 +3467,52 @@ class MainActivity : AppCompatActivity() {
         return sb.toString().trim()
     }
 
+    private fun loadAndRenderHpDebounceUi() {
+        if (!::btnHpDebounce2Samples.isInitialized) return
+        OverlayService.syncTierThresholdsFromPrefs(prefs)
+        val samples = OverlayService.activeHpDebounceSamples.coerceIn(2, 4)
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        val activeTint = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+        val inactiveTint = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+
+        val pairs = listOf(
+            2 to btnHpDebounce2Samples,
+            3 to btnHpDebounce3Samples,
+            4 to btnHpDebounce4Samples
+        )
+        for ((count, btn) in pairs) {
+            val isSelected = (samples == count)
+            btn.backgroundTintList = if (isSelected) activeTint else inactiveTint
+            btn.setTextColor(if (isSelected) 0xFFFFFFFF.toInt() else theme.secondaryTextColor)
+        }
+
+        if (::tvHpDebounceSummary.isInitialized) {
+            val modeDesc = when (samples) {
+                2 -> "2 Matching Samples (Default • Fastest Response, ±2% HP Tolerance)"
+                3 -> "3 Matching Samples (Balanced Noise Rejection, ±2% HP Tolerance)"
+                else -> "4 Matching Samples (Strict Filtering, ±2% HP Tolerance)"
+            }
+            tvHpDebounceSummary.text =
+                "• Active: $modeDesc\n" +
+                "• Upward Self-Correction: Enabled (Recovers from low glitch readings)\n" +
+                "• Shield Call Prompts: Always corrects with clean stable HP meters"
+        }
+    }
+
+    private fun saveHpDebounceSamples(samples: Int, showToast: Boolean) {
+        val clamped = samples.coerceIn(2, 4)
+        prefs.edit().putInt(OverlayService.PREFS_KEY_HP_DEBOUNCE_SAMPLES, clamped).apply()
+        OverlayService.syncTierThresholdsFromPrefs(prefs)
+        loadAndRenderHpDebounceUi()
+        if (showToast) {
+            Toast.makeText(
+                this,
+                "Saved HP Bar Debounce: $clamped matching samples (±2% HP tolerance)",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
     private fun loadAndRenderEnergyDebounceUi() {
         if (!::btnDebounce2Samples.isInitialized) return
         OverlayService.syncTierThresholdsFromPrefs(prefs)
@@ -5133,7 +5201,7 @@ class MainActivity : AppCompatActivity() {
             btnToggleHpTracking.text = "HP On"
             btnToggleHpTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
             btnToggleHpTracking.setTextColor(0xFFFFFFFF.toInt())
-            textHpTrackingDesc.text = "Active: Live 2D floating HP bar scanning & per-slot HP% badges enabled"
+            textHpTrackingDesc.text = "Active: Live 2D floating HP bar scanning & N-sample (±2%) upward self-correction enabled"
         } else {
             btnToggleHpTracking.text = "HP Off"
             btnToggleHpTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)

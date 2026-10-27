@@ -172,8 +172,13 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_ENERGY_UPDATE_TOASTS = "gbl_energy_update_toasts"
         const val DEFAULT_ENERGY_UPDATE_TOASTS = true
 
+        // v3.89: Independent HP Bar Meter Debounce Samples (2 / 3 / 4 Samples, ±2% HP Tolerance)
+        const val PREFS_KEY_HP_DEBOUNCE_SAMPLES = "gbl_hp_debounce_samples"
+        const val DEFAULT_HP_DEBOUNCE_SAMPLES = 2
+
         @Volatile var activeEnergyDebounceSamples: Int = DEFAULT_ENERGY_DEBOUNCE_SAMPLES
         @Volatile var activeEnergyUpdateToasts: Boolean = DEFAULT_ENERGY_UPDATE_TOASTS
+        @Volatile var activeHpDebounceSamples: Int = DEFAULT_HP_DEBOUNCE_SAMPLES
 
         @Volatile var activeTierSwMin: Int = DEFAULT_TIER_SW_MIN
         @Volatile var activeTierWMin: Int = DEFAULT_TIER_W_MIN
@@ -198,6 +203,7 @@ class OverlayService : LifecycleService() {
             activeMachRiskyMin = prefs.getInt(PREFS_KEY_MACH_RISKY_MIN, DEFAULT_MACH_RISKY_MIN).coerceIn(350, 780)
             activeEnergyDebounceSamples = prefs.getInt(PREFS_KEY_ENERGY_DEBOUNCE_SAMPLES, DEFAULT_ENERGY_DEBOUNCE_SAMPLES).coerceIn(2, 4)
             activeEnergyUpdateToasts = prefs.getBoolean(PREFS_KEY_ENERGY_UPDATE_TOASTS, DEFAULT_ENERGY_UPDATE_TOASTS)
+            activeHpDebounceSamples = prefs.getInt(PREFS_KEY_HP_DEBOUNCE_SAMPLES, DEFAULT_HP_DEBOUNCE_SAMPLES).coerceIn(2, 4)
         }
         const val PREFS_KEY_SYNC_GIST_ID = "gbl_sync_gist_id"
         const val PREFS_KEY_SYNC_LAST_AT = "gbl_sync_last_at"
@@ -11382,21 +11388,48 @@ class OverlayService : LifecycleService() {
             missingBottomCirclesWithOppHpFrames == 0 &&
             (nowMs - lastChargedAttackLoggedMs) > 950L
 
-        // 1A. v3.85: Player HP Bar Scan (Decoupled from Energy & Turn Counting):
+        // v3.89: N-Sample (±2% Tolerance) HP Bar Debounce, Upward Self-Correction & Shield-Call Clean HP Sync
+        val reqHpDebounce = activeHpDebounceSamples.coerceIn(2, 4)
+        val isShieldCallWindowEarly = hasAttackIncomingText ||
+            isAttackIncomingPromptActive ||
+            (missingTopBallsWithHpBarsFrames >= 6 && pendingChargedAttackActor != "user") ||
+            (missingBottomCirclesWithOppHpFrames >= 5 && pendingChargedAttackActor != "user")
+        val isPostChargeReturnWindow = pendingChargedAttackActor.isNotEmpty() &&
+            !isShieldCallWindowEarly &&
+            !hasUserChargedBannerText &&
+            missingBothHpBarsFrames == 0 &&
+            hasVisibleCombatHud &&
+            (nowMs - pendingChargedAttackStartMs) >= 1400L
+        val isCleanCombatHpWindow = hasVisibleCombatHud &&
+            !isPostFaintSwitchPromptActive &&
+            !hasUserChargedBannerText &&
+            pendingChargedAttackActor != "user" &&
+            !isShieldCallWindowEarly &&
+            missingBothHpBarsFrames == 0 &&
+            (nowMs - lastChargedAttackLoggedMs) > 650L
+        val isCleanShieldCallHpWindow = isShieldCallWindowEarly &&
+            !isPostFaintSwitchPromptActive &&
+            !hasUserChargedBannerText &&
+            missingBothHpBarsFrames == 0
+        val canSampleStableHpBars = isCleanCombatHpWindow || isCleanShieldCallHpWindow || isPostChargeReturnWindow
+
+        // 1A. v3.89: Player HP Bar Scan (N-Sample ±2% Debounce + Upward Self-Correction + Shield-Call Clean HP Sync):
         //     Tracks player HP% and cumulative opponent fast-move damage (solely for Non-Standard Opponent Fast Move Detector 1E).
-        if (!isPostFaintSwitchPromptActive && sampledPlayerHpPct in 1..100 && !playerFaintedSlots[activeUserIdx]) {
+        if (!isPostFaintSwitchPromptActive && sampledPlayerHpPct in 1..100 && !playerFaintedSlots[activeUserIdx] && canSampleStableHpBars) {
             playerFinalMissingHpFrames = 0
             val lastScannedUserHp = lastScannedPlayerSlotHpPct[activeUserIdx].coerceIn(1, 100)
+            val currentPlayerHp = playerSlotHpPct[activeUserIdx].coerceIn(1, 100)
 
-            if (sampledPlayerHpPct == pendingConfirmPlayerSlotHpPct[activeUserIdx]) {
+            val prevPendingPlayerHp = pendingConfirmPlayerSlotHpPct[activeUserIdx]
+            if (prevPendingPlayerHp in 1..100 && kotlin.math.abs(sampledPlayerHpPct - prevPendingPlayerHp) <= 2) {
                 playerSlotHpConfirmFrames[activeUserIdx] = (playerSlotHpConfirmFrames[activeUserIdx] + 1).coerceAtMost(10)
+                pendingConfirmPlayerSlotHpPct[activeUserIdx] = ((prevPendingPlayerHp + sampledPlayerHpPct) / 2.0).roundToInt().coerceIn(1, 100)
             } else {
                 pendingConfirmPlayerSlotHpPct[activeUserIdx] = sampledPlayerHpPct
                 playerSlotHpConfirmFrames[activeUserIdx] = 1
             }
-            val requiredPlayerConfirmFrames = (2 + oppFastTurnsForStats).coerceIn(3, 7)
-            val isPlayerHpConfirmed = playerSlotHpConfirmFrames[activeUserIdx] >= requiredPlayerConfirmFrames
-            val confirmedPlayerHp = pendingConfirmPlayerSlotHpPct[activeUserIdx]
+            val isPlayerHpConfirmed = playerSlotHpConfirmFrames[activeUserIdx] >= reqHpDebounce
+            val confirmedPlayerHp = pendingConfirmPlayerSlotHpPct[activeUserIdx].coerceIn(1, 100)
 
             if (isPlayerHpConfirmed) {
                 val realUserDrop = lastScannedUserHp - confirmedPlayerHp
@@ -11412,12 +11445,28 @@ class OverlayService : LifecycleService() {
                     oppCumulativeFastDmgPct[activeOppIdx] = (oppCumulativeFastDmgPct[activeOppIdx] + realUserDrop).coerceIn(0, 300)
                 }
 
-                if (realUserDrop in minOppFastDmgThreshold..25) {
+                if (confirmedPlayerHp > currentPlayerHp || confirmedPlayerHp > lastScannedUserHp) {
+                    // Immediate upward self-correction when N debounced samples (±2%) confirm a higher HP% (including during Shield Call prompts)
+                    lastScannedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
+                    confirmedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
+                    playerSlotHpPct[activeUserIdx] = confirmedPlayerHp
+                    playerSlotPreFaintHpPct[activeUserIdx] = confirmedPlayerHp
+                    predictedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
+                    if (isCleanShieldCallHpWindow || (pendingChargedAttackActor == "opp" && isAttackIncomingPromptActive)) {
+                        pendingChargedAttackPreUserHp = confirmedPlayerHp
+                    }
+                    pendingPlayerLowHpSlot = -1
+                    pendingPlayerLowHpSample = -1
+                    hpChanged = true
+                } else if (realUserDrop in minOppFastDmgThreshold..25) {
                     lastScannedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     predictedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     confirmedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     playerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     playerSlotPreFaintHpPct[activeUserIdx] = confirmedPlayerHp
+                    if (isCleanShieldCallHpWindow || (pendingChargedAttackActor == "opp" && isAttackIncomingPromptActive)) {
+                        pendingChargedAttackPreUserHp = confirmedPlayerHp
+                    }
                     pendingPlayerLowHpSlot = -1
                     pendingPlayerLowHpSample = -1
                     hpChanged = true
@@ -11427,16 +11476,12 @@ class OverlayService : LifecycleService() {
                     playerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     playerSlotPreFaintHpPct[activeUserIdx] = confirmedPlayerHp
                     predictedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
+                    if (isCleanShieldCallHpWindow || (pendingChargedAttackActor == "opp" && isAttackIncomingPromptActive)) {
+                        pendingChargedAttackPreUserHp = confirmedPlayerHp
+                    }
                     hpChanged = true
-                } else if (confirmedPlayerHp > lastScannedUserHp) {
-                    lastScannedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
-                    confirmedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
-                    playerSlotHpPct[activeUserIdx] = confirmedPlayerHp
-                    playerSlotPreFaintHpPct[activeUserIdx] = confirmedPlayerHp
-                    predictedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
-                    hpChanged = true
-                } else if (realUserDrop > 25 && playerSlotHpConfirmFrames[activeUserIdx] >= requiredPlayerConfirmFrames + 1) {
-                    // Sync large (>25%) HP drops when HP bar is re-acquired or after unshielded damage
+                } else if (realUserDrop > 25 && !isCleanShieldCallHpWindow) {
+                    // Sync large (>25%) unshielded HP drops in clean combat / post-charge return (never during pre-impact Shield Call prompt)
                     lastScannedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     confirmedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     playerSlotHpPct[activeUserIdx] = confirmedPlayerHp
@@ -11447,38 +11492,56 @@ class OverlayService : LifecycleService() {
                     hpChanged = true
                 }
             }
-        } else if (sampledPlayerHpPct == -1) {
+        } else if (sampledPlayerHpPct == -1 || !canSampleStableHpBars) {
             pendingConfirmPlayerSlotHpPct[activeUserIdx] = -1
             playerSlotHpConfirmFrames[activeUserIdx] = 0
         }
 
-        // 1B. v3.85: Opponent HP Bar Scan (Decoupled from Energy & Turn Counting):
+        // 1B. v3.89: Opponent HP Bar Scan (N-Sample ±2% Debounce + Upward Self-Correction + Shield-Call Clean HP Sync):
         //     Tracks opponent HP% only; never credits fast-move turns or adjusts player energy.
-        if (sampledOppHpPct in 1..100 && !oppFaintedSlots[activeOppIdx]) {
+        if (sampledOppHpPct in 1..100 && !oppFaintedSlots[activeOppIdx] && canSampleStableHpBars) {
             oppFinalMissingHpFrames = 0
             val lastScannedOppHp = lastScannedOppSlotHpPct[activeOppIdx].coerceIn(1, 100)
+            val currentOppHp = oppSlotHpPct[activeOppIdx].coerceIn(1, 100)
 
-            if (sampledOppHpPct == pendingConfirmOppSlotHpPct[activeOppIdx]) {
+            val prevPendingOppHp = pendingConfirmOppSlotHpPct[activeOppIdx]
+            if (prevPendingOppHp in 1..100 && kotlin.math.abs(sampledOppHpPct - prevPendingOppHp) <= 2) {
                 oppSlotHpConfirmFrames[activeOppIdx] = (oppSlotHpConfirmFrames[activeOppIdx] + 1).coerceAtMost(10)
+                pendingConfirmOppSlotHpPct[activeOppIdx] = ((prevPendingOppHp + sampledOppHpPct) / 2.0).roundToInt().coerceIn(1, 100)
             } else {
                 pendingConfirmOppSlotHpPct[activeOppIdx] = sampledOppHpPct
                 oppSlotHpConfirmFrames[activeOppIdx] = 1
             }
-            val requiredOppConfirmFrames = (2 + userFastTurnsForStats).coerceIn(3, 7)
-            val isOppHpConfirmed = oppSlotHpConfirmFrames[activeOppIdx] >= requiredOppConfirmFrames
-            val confirmedOppHp = pendingConfirmOppSlotHpPct[activeOppIdx]
+            val isOppHpConfirmed = oppSlotHpConfirmFrames[activeOppIdx] >= reqHpDebounce
+            val confirmedOppHp = pendingConfirmOppSlotHpPct[activeOppIdx].coerceIn(1, 100)
 
             if (isOppHpConfirmed) {
                 val realOppDrop = lastScannedOppHp - confirmedOppHp
                 val halfUserDmg = max(1, (userExactDmgPct * 0.50).roundToInt())
                 val minUserFastDmgThreshold = halfUserDmg
 
-                if (realOppDrop in minUserFastDmgThreshold..25) {
+                if (confirmedOppHp > currentOppHp || confirmedOppHp > lastScannedOppHp) {
+                    // Immediate upward self-correction when N debounced samples (±2%) confirm a higher HP% (including during Shield Call prompts)
+                    lastScannedOppSlotHpPct[activeOppIdx] = confirmedOppHp
+                    confirmedOppSlotHpPct[activeOppIdx] = confirmedOppHp
+                    oppSlotHpPct[activeOppIdx] = confirmedOppHp
+                    oppSlotPreFaintHpPct[activeOppIdx] = confirmedOppHp
+                    predictedOppSlotHpPct[activeOppIdx] = confirmedOppHp
+                    if (isCleanShieldCallHpWindow || (pendingChargedAttackActor == "opp" && isAttackIncomingPromptActive)) {
+                        pendingChargedAttackPreOppHp = confirmedOppHp
+                    }
+                    pendingOppLowHpSlot = -1
+                    pendingOppLowHpSample = -1
+                    hpChanged = true
+                } else if (realOppDrop in minUserFastDmgThreshold..25) {
                     lastScannedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     predictedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     confirmedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     oppSlotHpPct[activeOppIdx] = confirmedOppHp
                     oppSlotPreFaintHpPct[activeOppIdx] = confirmedOppHp
+                    if (isCleanShieldCallHpWindow || (pendingChargedAttackActor == "opp" && isAttackIncomingPromptActive)) {
+                        pendingChargedAttackPreOppHp = confirmedOppHp
+                    }
                     pendingOppLowHpSlot = -1
                     pendingOppLowHpSample = -1
                     hpChanged = true
@@ -11488,15 +11551,11 @@ class OverlayService : LifecycleService() {
                     oppSlotHpPct[activeOppIdx] = confirmedOppHp
                     oppSlotPreFaintHpPct[activeOppIdx] = confirmedOppHp
                     predictedOppSlotHpPct[activeOppIdx] = confirmedOppHp
+                    if (isCleanShieldCallHpWindow || (pendingChargedAttackActor == "opp" && isAttackIncomingPromptActive)) {
+                        pendingChargedAttackPreOppHp = confirmedOppHp
+                    }
                     hpChanged = true
-                } else if (confirmedOppHp > lastScannedOppHp) {
-                    lastScannedOppSlotHpPct[activeOppIdx] = confirmedOppHp
-                    confirmedOppSlotHpPct[activeOppIdx] = confirmedOppHp
-                    oppSlotHpPct[activeOppIdx] = confirmedOppHp
-                    oppSlotPreFaintHpPct[activeOppIdx] = confirmedOppHp
-                    predictedOppSlotHpPct[activeOppIdx] = confirmedOppHp
-                    hpChanged = true
-                } else if (realOppDrop > 25 && oppSlotHpConfirmFrames[activeOppIdx] >= requiredOppConfirmFrames + 1) {
+                } else if (realOppDrop > 25 && !isCleanShieldCallHpWindow) {
                     lastScannedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     confirmedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     oppSlotHpPct[activeOppIdx] = confirmedOppHp
@@ -11507,7 +11566,7 @@ class OverlayService : LifecycleService() {
                     hpChanged = true
                 }
             }
-        } else if (sampledOppHpPct == -1) {
+        } else if (sampledOppHpPct == -1 || !canSampleStableHpBars) {
             pendingConfirmOppSlotHpPct[activeOppIdx] = -1
             oppSlotHpConfirmFrames[activeOppIdx] = 0
         }
@@ -12148,8 +12207,12 @@ class OverlayService : LifecycleService() {
         //    v3.80: Shield-Prompt Gated Attribution + 3-Tier Energy Depletion + Left (Move 1) / Right (Move 2) Post-Throw Circle Verification!
         val hasReturnedCombatCircles = (sampledLeftChargeBtnFillPct in 0..200 || sampledRightChargeBtnFillPct in 0..200) &&
             (sampledPlayerBalls in 1..3 || sampledOppBalls in 1..3)
-        val isDefenderHpReadyAfterCharge = (pendingChargedAttackActor == "opp" && (sampledPlayerHpPct in 1..100 || hasReturnedCombatCircles)) ||
-            (pendingChargedAttackActor == "user" && (sampledOppHpPct in 1..100 || hasReturnedCombatCircles))
+        val isDefenderHpReadyAfterCharge = (pendingChargedAttackActor == "opp" &&
+            ((sampledPlayerHpPct in 1..100 && playerSlotHpConfirmFrames[activeUserIdx] >= reqHpDebounce) ||
+                (hasReturnedCombatCircles && (nowMs - pendingChargedAttackStartMs) >= 2400L))) ||
+            (pendingChargedAttackActor == "user" &&
+                ((sampledOppHpPct in 1..100 && oppSlotHpConfirmFrames[activeOppIdx] >= reqHpDebounce) ||
+                    (hasReturnedCombatCircles && (nowMs - pendingChargedAttackStartMs) >= 2400L)))
         if (pendingChargedAttackActor.isNotEmpty() &&
             (nowMs - pendingChargedAttackStartMs) >= 1800L &&
             !hasUserChargedBannerText &&
@@ -13026,8 +13089,8 @@ class OverlayService : LifecycleService() {
                             }
                         }
                         if (newOppSlotIdx in 0..2 && sampledOppHpPct in 1..100) {
-                            oppSlotHpPct[newOppSlotIdx] = sampledOppHpPct
-                            oppSlotPreFaintHpPct[newOppSlotIdx] = sampledOppHpPct
+                            pendingConfirmOppSlotHpPct[newOppSlotIdx] = sampledOppHpPct
+                            oppSlotHpConfirmFrames[newOppSlotIdx] = 1
                         }
                         if (newOppSlotIdx in 0..2) {
                             oppSlotCurrentMoveTurns[newOppSlotIdx] = 0
@@ -13344,8 +13407,6 @@ class OverlayService : LifecycleService() {
                 }
             }
             if (newSlotIdx in 0..2 && sampledPlayerHpPct in 1..100) {
-                playerSlotHpPct[newSlotIdx] = sampledPlayerHpPct
-                playerSlotPreFaintHpPct[newSlotIdx] = sampledPlayerHpPct
                 pendingConfirmPlayerSlotHpPct[newSlotIdx] = sampledPlayerHpPct
                 playerSlotHpConfirmFrames[newSlotIdx] = 1
             }

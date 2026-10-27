@@ -691,6 +691,22 @@ export default function App() {
     } catch {}
   };
 
+  // v3.89 Settings: Independent HP Bar Meter Debounce (2..4 matching samples, ±2% HP tolerance)
+  const [hpDebounceSamples, setHpDebounceSamples] = useState<2 | 3 | 4>(() => {
+    try {
+      const saved = Number(localStorage.getItem('gbl_hp_debounce_samples'));
+      if (saved === 2 || saved === 3 || saved === 4) return saved;
+    } catch {}
+    return 2;
+  });
+
+  const updateHpDebounceSamples = (samples: 2 | 3 | 4) => {
+    setHpDebounceSamples(samples);
+    try {
+      localStorage.setItem('gbl_hp_debounce_samples', String(samples));
+    } catch {}
+  };
+
   // v3.86 Settings: Low-Latency Energy Meter Debounce (2..4 matching samples, ±2% circle fill tolerance) & Live Energy Update Toasts
   const [energyDebounceSamples, setEnergyDebounceSamples] = useState<2 | 3 | 4>(() => {
     try {
@@ -4052,7 +4068,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v3.88 • Android Native Overlay
+                  v3.89 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -8755,6 +8771,50 @@ export default function App() {
                 >
                   HP Tracking: ON (Opt In)
                 </button>
+              </div>
+            </div>
+
+            {/* v3.89 HP Bar Meter Debounce & Upward Self-Correction Card */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+                    <span>❤️ HP Bar Meter Debounce &amp; Upward Self-Correction (v3.89)</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Requires <strong>N consecutive matching HP bar samples</strong> (<code>±2%</code> tolerance) before updating, locks out noisy charged-move animation frames, and immediately <strong>self-corrects upward</strong> on clean stable HP bars (including during Shield Call prompts).
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3 font-mono text-[11px] text-emerald-200 space-y-1">
+                <div>
+                  • Active: {hpDebounceSamples} Matching Samples ({hpDebounceSamples === 2 ? 'Default • Fastest Response' : hpDebounceSamples === 3 ? 'Balanced Noise Rejection' : 'Strict Filtering'}, ±2% HP Tolerance)
+                </div>
+                <div>• Upward Self-Correction: Enabled (Recovers from artificially low glitch readings)</div>
+                <div>• Shield Call Prompts: Always corrects with clean stable HP meters</div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-300 block">
+                  Matching HP Samples Required (±2% Tolerance)
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {([2, 3, 4] as const).map((cnt) => (
+                    <button
+                      key={cnt}
+                      type="button"
+                      onClick={() => updateHpDebounceSamples(cnt)}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold border transition ${
+                        hpDebounceSamples === cnt
+                          ? 'bg-emerald-500/25 border-emerald-400 text-emerald-200 shadow'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {cnt} Samples {cnt === 2 ? '(Def)' : ''}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 

@@ -60,7 +60,7 @@
                 android:id="@+id/tv_app_main_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Real-Time PvP Floating Overlay • v3.88"
+                android:text="Real-Time PvP Floating Overlay • v3.89"
                 android:textSize="11sp"
                 android:textColor="#94a3b8"
                 android:layout_marginTop="1dp" />
@@ -1076,6 +1076,95 @@
                     android:textSize="11sp"
                     android:backgroundTint="#334155"
                     android:textColor="#ffffff" />
+            </LinearLayout>
+
+            <!-- v3.89: HP Bar Meter Debounce & Upward Self-Correction Card -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="8dp"
+                android:padding="10dp"
+                android:background="#0f172a">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="❤️ HP Bar Meter Debounce &amp; Upward Self-Correction (v3.89)"
+                    android:textColor="#34d399"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="Requires N consecutive matching HP bar samples (±2% tolerance) before updating, locks out noisy charged-move animation frames, and immediately self-corrects upward on clean stable HP bars (including during Shield Call prompts)."
+                    android:textColor="#94a3b8"
+                    android:textSize="10sp" />
+
+                <TextView
+                    android:id="@+id/tv_hp_debounce_summary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:padding="8dp"
+                    android:background="#090d16"
+                    android:text="• Active: 2 Matching Samples (Default • Fastest Response, ±2% HP Tolerance)\n• Upward Self-Correction: Enabled (Recovers from low glitch readings)\n• Shield Call Prompts: Always corrects with clean stable HP meters"
+                    android:textColor="#a7f3d0"
+                    android:textSize="10sp"
+                    android:fontFamily="monospace" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Matching HP Samples Required (±2% Tolerance)"
+                    android:textColor="#cbd5e1"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="4dp">
+
+                    <Button
+                        android:id="@+id/btn_hp_debounce_2_samples"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="2 Samples (Def)"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#10b981"
+                        android:textColor="#ffffff"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_hp_debounce_3_samples"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="3 Samples"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#e2e8f0"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_hp_debounce_4_samples"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="4 Samples"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#e2e8f0" />
+                </LinearLayout>
             </LinearLayout>
 
             <!-- Live Energy Tracking Setting (v3.60: Default OFF, Opt-In) -->
