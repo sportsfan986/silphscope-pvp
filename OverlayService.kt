@@ -7788,14 +7788,28 @@ class OverlayService : LifecycleService() {
     private val leftMeterFilledTwiceLatched = BooleanArray(3) { false }
     private val rightMeterFilledTwiceLatched = BooleanArray(3) { false }
 
-    private fun resetSlotEnergyTracking(slotIdx: Int, initialEnergy: Int = 0) {
+    private var pllValidatedThisShieldDelay = false
+    private var observedPlayerChargeBarStep = false
+
+    private fun resetSlotEnergyTracking(
+        slotIdx: Int,
+        initialEnergy: Int = 0,
+        cost1: Int = 50,
+        cost2: Int = 50,
+        clearThirdFillLatches: Boolean = false
+    ) {
         if (slotIdx !in 0..2) return
         candidateSlowestFillPct[slotIdx] = -1
         slowestFillDebounceCount[slotIdx] = 0
         confirmedSlowestFillPct[slotIdx] = -1
         lastToastedSlotEnergy[slotIdx] = initialEnergy.coerceIn(0, 100)
-        leftMeterFilledTwiceLatched[slotIdx] = initialEnergy >= 100
-        rightMeterFilledTwiceLatched[slotIdx] = initialEnergy >= 100
+        if (clearThirdFillLatches) {
+            leftMeterFilledTwiceLatched[slotIdx] = false
+            rightMeterFilledTwiceLatched[slotIdx] = false
+        } else {
+            leftMeterFilledTwiceLatched[slotIdx] = initialEnergy >= 2 * cost1
+            rightMeterFilledTwiceLatched[slotIdx] = initialEnergy >= 2 * cost2
+        }
     }
 
     private fun emitEnergyUpdateToastIfEnabled(
@@ -12063,7 +12077,7 @@ class OverlayService : LifecycleService() {
                 rightChargeFillConfirmFrames[activeUserIdx] = 0
                 leftChargeFillDebounceStartMs[activeUserIdx] = 0L
                 rightChargeFillDebounceStartMs[activeUserIdx] = 0L
-                resetSlotEnergyTracking(activeUserIdx, playerSlotEnergy[activeUserIdx].coerceIn(0),
+                resetSlotEnergyTracking(activeUserIdx, playerSlotEnergy[activeUserIdx].coerceIn(0, 100),
                     cost1 = userMove1Energy,
                     cost2 = userMove2Energy,
                     clearThirdFillLatches = playerFaintedSlots[activeUserIdx]
@@ -13052,7 +13066,7 @@ class OverlayService : LifecycleService() {
                 rightChargeFillConfirmFrames[newSlotIdx] = 0
                 leftChargeFillDebounceStartMs[newSlotIdx] = 0L
                 rightChargeFillDebounceStartMs[newSlotIdx] = 0L
-                resetSlotEnergyTracking(newSlotIdx, playerSlotEnergy[newSlotIdx].coerceIn(0),
+                resetSlotEnergyTracking(newSlotIdx, playerSlotEnergy[newSlotIdx].coerceIn(0, 100),
                     clearThirdFillLatches = false
                 )
                 lastScannedPlayerSlotHpPct[newSlotIdx] = playerSlotHpPct[newSlotIdx].coerceIn(1, 100)
@@ -13150,7 +13164,7 @@ class OverlayService : LifecycleService() {
                 rightChargeFillConfirmFrames[newSlotIdx] = 0
                 leftChargeFillDebounceStartMs[newSlotIdx] = 0L
                 rightChargeFillDebounceStartMs[newSlotIdx] = 0L
-                resetSlotEnergyTracking(newSlotIdx, playerSlotEnergy[newSlotIdx].coerceIn(0),
+                resetSlotEnergyTracking(newSlotIdx, playerSlotEnergy[newSlotIdx].coerceIn(0, 100),
                     clearThirdFillLatches = false
                 )
                 lastStableNormalCombatEnergy = playerSlotEnergy[newSlotIdx]
