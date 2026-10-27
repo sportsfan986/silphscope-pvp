@@ -129,19 +129,19 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Grass Saturation Immunity, 96% vs 100% Meniscus Priority, Dual-Button Overcharge Tracking & 600ms Charged Move Detection)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (3-2-1-GO Prescan Circle Calibration, Discrete Fast-Move Stepping & Bounded Micro-Corrections, 0-Shield Incoming Attack Detection)
 
-            ### What's New in v3.70
-            - **Grass Stadium Saturation Immunity**:
-              - Expanded `isUnfilledAbove` and empty-baseline saturation tolerance from `< 34` to `< 85` so translucent charge attack buttons over green stadium turf or dirt are never blinded by arena background coloration.
-              - Eliminates missed Move 1 (`0E -> 4E`) and missed Move 13 (`48E -> 52E`) on grassy GBL battlefields.
-            - **First Charge Move Boundary (48E → 52E) & 96% Pre-Glow Fix**:
-              - Prioritizes visible meniscus detection at 82%..98% fill ahead of outer ring glow, preventing a 96% full button from prematurely clamping to 100% and stalling.
-              - Full dual-button overcharge step tracking ensures that when the primary button hits 100%, the secondary button (and overcharge wrap) seamlessly credits the fast move.
-            - **Low-Damage Move 1 Registration (Dragon Breath into Zacian)**:
-              - Confirms 1% HP drops on the very first attack when held stable for `(2 + fastMoveTurns)` frames, perfectly aligning with PvPoke double-resisted damage.
-            - **Ultra-Responsive 600ms Charged Attack Deductions**:
-              - Calibrated charged move camera cut detection from 800ms down to 600ms, and broadened banner OCR keywords to guarantee prompt energy deduction on every charged attack.
+            ### What's New in v3.81
+            - **Adaptive `3-2-1-GO` Prescan Circle Calibration (`tryPrescanCalibrateChargeCircles`)**:
+              - Dynamically locks onto Left and Right Charge Move Circle geometry (`cx`, `cy`, `yTop`, `yBot`, `radius`) and empty interior color (`prescanEmptyLuma`, `prescanEmptySat`) during the pre-battle countdown across all phone aspect ratios (`1080×2342`, `960×2142`, etc.).
+              - Includes non-deterministic runtime emblem center refinement when joining mid-battle.
+            - **8-Direction White Ready-Ring Priority & Relative Meniscus Detection**:
+              - Evaluates the 8-direction radial white ready ring (`whiteRingArcs >= 5`) and top interior cap (`isTopCapFilled`) before primary meniscus scanning so 100% full buttons (including low-saturation Steel/Normal/Rock moves like Iron Head) are never misread as `< 100%`.
+            - **Discrete Fast-Move Energy Stepping + Bounded `±1–2` Move Micro-Corrections**:
+              - Steps player energy strictly by discrete `+fastMoveEnergy` increments on each detected fast move.
+              - Uses calibrated absolute circle values only for bounded `1–2` move micro-corrections on `100%` ready-ring floor/ceiling enforcement or stable primary-layer drift.
+            - **`"No Protect Shields remaining!"` & 0-Shield Prompt Detection**:
+              - Treats `"No Protect Shields remaining!"` and 0-shield hidden bottom circles identically to an opponent shield prompt (`hadShieldPromptBeforeCurrentCharge = true`, `pendingChargedAttackActor = "opp"`, `"⚡ Attack Incoming (No Shields)! (-XE)"` toast).
 
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)
