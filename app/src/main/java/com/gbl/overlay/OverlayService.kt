@@ -9815,16 +9815,8 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private data class CircleEnergyValidation(
-        val impliedEnergy: Int,
-        val rawEnergyDouble: Double,
-        val highConfidence: Boolean,
-        val maxPossibleEnergy: Int,
-        val minPossibleEnergy: Int
-    )
-
     /**
-     * Computes authoritative player energy (0..100) from the Left Charge Move Circle (ALWAYS Move 1 = cost1)
+     * Computes authoritative player energy (0..100, or -1 if invalid) from the Left Charge Move Circle (ALWAYS Move 1 = cost1)
      * and Right Charge Move Circle (ALWAYS Move 2 = cost2).
      * - Primary layer readings (0..96%) are direct linear measurements against the dark unfilled top background.
      * - When one circle is saturated (>= 97%) and the higher-cost circle is in its primary layer (1..96%),
@@ -9836,19 +9828,19 @@ class OverlayService : LifecycleService() {
         cost1: Int,
         cost2: Int,
         hasSecondMove: Boolean
-    ): CircleEnergyValidation? {
+    ): Int {
         val validLeft = leftFillPct in 0..200
         val validRight = hasSecondMove && rightFillPct in 0..200 && cost2 > 0
-        if (!validLeft && !validRight) return null
+        if (!validLeft && !validRight) return -1
 
         val c1 = cost1.coerceIn(35, 100)
         val c2 = if (validRight) cost2.coerceIn(35, 100) else c1
 
         if ((validLeft && leftFillPct == 0) && (!validRight || rightFillPct == 0)) {
-            return CircleEnergyValidation(0, 0.0, true, 0, 0)
+            return 0
         }
         if ((validRight && rightFillPct == 0) && (!validLeft || leftFillPct == 0)) {
-            return CircleEnergyValidation(0, 0.0, true, 0, 0)
+            return 0
         }
 
         var minPossible = 0
@@ -9884,37 +9876,19 @@ class OverlayService : LifecycleService() {
                 rightInIconBand && !leftInIconBand -> eLeftPrimary
                 else -> (eLeftPrimary + eRightPrimary) * 0.5
             }.coerceIn(minPossible.toDouble(), maxPossible.toDouble())
-            return CircleEnergyValidation(
-                impliedEnergy = combined.roundToInt().coerceIn(0, 100),
-                rawEnergyDouble = combined,
-                highConfidence = diff <= 8.5,
-                maxPossibleEnergy = maxPossible,
-                minPossibleEnergy = minPossible
-            )
+            return combined.roundToInt().coerceIn(0, 100)
         }
 
         // Case B: Left (Move 1) is saturated (>= 97%) and Right (Move 2) is in its clean primary layer (1..96%)
         if (rightIsPrimary && (!validLeft || leftFillPct >= 97)) {
             val clamped = eRightPrimary.coerceIn(minPossible.toDouble(), maxPossible.toDouble())
-            return CircleEnergyValidation(
-                impliedEnergy = clamped.roundToInt().coerceIn(0, 100),
-                rawEnergyDouble = clamped,
-                highConfidence = true,
-                maxPossibleEnergy = maxPossible,
-                minPossibleEnergy = minPossible
-            )
+            return clamped.roundToInt().coerceIn(0, 100)
         }
 
         // Case C: Right (Move 2) is saturated (>= 97%) and Left (Move 1) is in its clean primary layer (1..96%)
         if (leftIsPrimary && (!validRight || rightFillPct >= 97)) {
             val clamped = eLeftPrimary.coerceIn(minPossible.toDouble(), maxPossible.toDouble())
-            return CircleEnergyValidation(
-                impliedEnergy = clamped.roundToInt().coerceIn(0, 100),
-                rawEnergyDouble = clamped,
-                highConfidence = true,
-                maxPossibleEnergy = maxPossible,
-                minPossibleEnergy = minPossible
-            )
+            return clamped.roundToInt().coerceIn(0, 100)
         }
 
         // Case D: Both circles are >= 97% (saturated / overcharging)
@@ -9927,22 +9901,10 @@ class OverlayService : LifecycleService() {
         }
         if (overCandidates.isNotEmpty()) {
             val avgOver = overCandidates.average().coerceIn(minPossible.toDouble(), 100.0)
-            return CircleEnergyValidation(
-                impliedEnergy = avgOver.roundToInt().coerceIn(minPossible, 100),
-                rawEnergyDouble = avgOver,
-                highConfidence = overCandidates.size == 2 && kotlin.math.abs(overCandidates[0] - overCandidates[1]) <= 8.0,
-                maxPossibleEnergy = 100,
-                minPossibleEnergy = minPossible
-            )
+            return avgOver.roundToInt().coerceIn(minPossible, 100)
         }
 
-        return CircleEnergyValidation(
-            impliedEnergy = minPossible.coerceIn(0, 100),
-            rawEnergyDouble = minPossible.toDouble(),
-            highConfidence = false,
-            maxPossibleEnergy = 100,
-            minPossibleEnergy = minPossible
-        )
+        return minPossible.coerceIn(0, 100)
     }
 
     private fun detectFloatingHpBarPct(
