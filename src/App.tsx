@@ -691,6 +691,42 @@ export default function App() {
     } catch {}
   };
 
+  // v3.80 Settings: Charge Move Energy Circle Only Mode (default true) & Non-Standard Fast Move Detection Offset (0/1/2)
+  const [chargeCircleOnlyMode, setChargeCircleOnlyMode] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('gbl_charge_circle_only_mode');
+      return saved === null ? true : saved !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  const handleSetChargeCircleOnlyMode = (circleOnly: boolean) => {
+    setChargeCircleOnlyMode(circleOnly);
+    try {
+      localStorage.setItem('gbl_charge_circle_only_mode', String(circleOnly));
+    } catch {}
+  };
+
+  const [fastDetectTurnOffset, setFastDetectTurnOffset] = useState<0 | 1 | 2>(() => {
+    try {
+      const saved = Number(localStorage.getItem('gbl_fast_detect_turn_offset'));
+      if (saved === 1 || saved === 2) return saved;
+    } catch {}
+    return 0;
+  });
+
+  const handleSetFastDetectTurnOffset = (offset: 0 | 1 | 2) => {
+    setFastDetectTurnOffset(offset);
+    try {
+      localStorage.setItem('gbl_fast_detect_turn_offset', String(offset));
+    } catch {}
+  };
+
+  // v3.80 Simulator Interactive State: Opponent Fast Move Confirmation Status & Confirmed Used Opponent Charged Moves
+  const [simOppFastMoveStatus, setSimOppFastMoveStatus] = useState<'unconfirmed' | 'confirmed_standard' | 'confirmed_non_standard'>('unconfirmed');
+  const [simConfirmedOppMoves, setSimConfirmedOppMoves] = useState<string[]>([]);
+
   const minimizeHoldTimerRef = useRef<number | null>(null);
   const minimizeHoldTriggeredRef = useRef<boolean>(false);
 
@@ -3992,11 +4028,11 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v3.70 • Android Native Overlay
+                  v3.80 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
-                Real-Time 3x3 Matchup Matrix, Lead Tracking, Interactive Replay &amp; Multi-Device Delta Sync for Pokémon GO PvP
+                Charge Move Meter Turn Detection, On-Screen Move Recognition &amp; Non-Standard Fast Move Detector for Pokémon GO PvP
               </p>
             </div>
           </div>
@@ -4956,13 +4992,37 @@ export default function App() {
                                 });
                                 const fDmg = Math.max(1, Math.round(oppFastInfo.percentage || 3));
                                 const curMyHp = userSlotHpPct[activeUserSlotIndex] ?? 100;
-                                handleUpdateUserActiveHp(Math.max(1, curMyHp - fDmg));
+                                const nextHp = Math.max(1, curMyHp - fDmg);
+                                handleUpdateUserActiveHp(nextHp);
+                                if (100 - nextHp >= 10 && simOppFastMoveStatus === 'unconfirmed') {
+                                  setSimOppFastMoveStatus('confirmed_standard');
+                                }
                                 setScanTurnOffsetMs(Date.now() % 500);
                               }}
                               className="px-1 py-0.2 rounded bg-cyan-500/25 hover:bg-cyan-500/40 text-cyan-200 border border-cyan-400/40"
-                              title="Simulate 1 Opponent Fast Move (+Energy & Fast HP Prediction Drop)"
+                              title="Simulate 1 Opponent Fast Move (+Energy & >=10% HP Fast Move Confirmation)"
                             >
                               +1 Opp Fast ({oppSlotEnergy[safeActiveOppSlot] ?? oppEnergy}E)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSimOppFastMoveStatus((prev) =>
+                                  prev === 'unconfirmed'
+                                    ? 'confirmed_standard'
+                                    : prev === 'confirmed_standard'
+                                    ? 'confirmed_non_standard'
+                                    : 'unconfirmed'
+                                )
+                              }
+                              className="px-1 py-0.2 rounded bg-amber-500/25 hover:bg-amber-500/40 text-amber-200 border border-amber-400/40"
+                              title="Cycle v3.80 Opponent Fast Move Status: Unconfirmed (Italic) -> Confirmed Standard (Bold) -> Confirmed Non-Standard (Theme Badge)"
+                            >
+                              {simOppFastMoveStatus === 'confirmed_non_standard'
+                                ? 'Fast: Non-Std'
+                                : simOppFastMoveStatus === 'confirmed_standard'
+                                ? 'Fast: Std ✓'
+                                : 'Fast: Unconf'}
                             </button>
                           </div>
                         </div>
@@ -5222,7 +5282,28 @@ export default function App() {
                               </div>
                               <div className="flex items-center justify-between gap-1 min-w-0 leading-tight">
                                 <span className="text-amber-300 font-extrabold text-[7.5px] font-mono normal-case truncate min-w-0 flex-1">
-                                  {abbrPoke3(activeOpponent.name, false)} {oppSlotHpPct[safeActiveOppSlot] ?? 100}% · {oppFastInfo.telemetry}
+                                  {abbrPoke3(activeOpponent.name, false)} {oppSlotHpPct[safeActiveOppSlot] ?? 100}% ·{' '}
+                                  {simOppFastMoveStatus === 'confirmed_non_standard' ? (
+                                    <span
+                                      className="inline-block font-black not-italic rounded px-1 py-0"
+                                      style={{
+                                        backgroundColor: `${activeTheme.accentSecondaryHex}3D`,
+                                        border: `1px solid ${activeTheme.accentSecondaryHex}`,
+                                        color: activeTheme.accentSecondaryHex
+                                      }}
+                                      title="Confirmed Non-Standard Fast Move (>=10% HP damage check)"
+                                    >
+                                      {oppFastInfo.telemetry}
+                                    </span>
+                                  ) : simOppFastMoveStatus === 'confirmed_standard' ? (
+                                    <span className="font-black not-italic" title="Confirmed Standard Fast Move (>=10% HP damage check)">
+                                      {oppFastInfo.telemetry}
+                                    </span>
+                                  ) : (
+                                    <span className="italic font-bold opacity-90" title="Unconfirmed Standard Fast Move (awaiting >=10% HP damage check)">
+                                      {oppFastInfo.telemetry}
+                                    </span>
+                                  )}
                                 </span>
                                 {(() => {
                                   const activeOppE = oppSlotEnergy[safeActiveOppSlot] ?? oppEnergy;
@@ -5285,8 +5366,15 @@ export default function App() {
 
                           {/* Opponent Attack Rows (Turn-Aligned Proportional Bars + Multi-Cycle Support) */}
                           <div className="flex flex-col gap-[2px]">
-                            {(oppMoveTimingInfo?.rows || []).map((row, rIdx, rowArr) => {
+                            {(oppMoveTimingInfo?.rows || [])
+                              .filter((row) =>
+                                simConfirmedOppMoves.length >= 2
+                                  ? simConfirmedOppMoves.includes(row.name)
+                                  : true
+                              )
+                              .map((row, rIdx, rowArr) => {
                               const isLastRow = rIdx === rowArr.length - 1;
+                              const isConfirmedUsed = simConfirmedOppMoves.includes(row.name);
                               const threatLevel =
                                 row.activeDmgPct >= 60 || row.activeEff >= 1.5
                                   ? 'high'
@@ -5305,9 +5393,32 @@ export default function App() {
                                   key={row.name}
                                   className="bg-slate-950/55 border border-slate-400/20 rounded px-1 py-0.5 grid grid-cols-[44px_1fr_84px] items-center gap-1 tabular-nums"
                                 >
-                                  {/* Left: <=5 Char Move Name (Top) & Energy/Turns (Bottom) */}
-                                  <div className="flex flex-col leading-tight min-w-0">
-                                    <span className={`text-[8.5px] font-extrabold truncate ${titleColor}`} title={row.name}>
+                                  {/* Left: <=5 Char Move Name (Top, inside theme-aware badge if confirmed used) & Energy/Turns (Bottom) */}
+                                  <div
+                                    className="flex flex-col leading-tight min-w-0 cursor-pointer"
+                                    onClick={() =>
+                                      setSimConfirmedOppMoves((prev) =>
+                                        prev.includes(row.name)
+                                          ? prev.filter((m) => m !== row.name)
+                                          : [...prev, row.name].slice(0, 2)
+                                      )
+                                    }
+                                    title={`${row.name}${isConfirmedUsed ? ' (Confirmed Used — Tap to toggle)' : ' (Tap to simulate "' + activeOpponent.name + ' used ' + row.name + '!" OCR confirmation)'}`}
+                                  >
+                                    <span
+                                      className={`text-[8.5px] font-extrabold truncate self-start max-w-full ${titleColor} ${
+                                        isConfirmedUsed ? 'px-1 rounded' : ''
+                                      }`}
+                                      style={
+                                        isConfirmedUsed
+                                          ? {
+                                              backgroundColor: `rgba(${activeTheme.overlayHeaderRgb}, 0.24)`,
+                                              border: `1px solid ${activeTheme.accentHex}`,
+                                              boxShadow: `0 0 4px rgba(${activeTheme.overlayHeaderRgb}, 0.35)`
+                                            }
+                                          : undefined
+                                      }
+                                    >
                                       {row.shortName}
                                     </span>
                                     <span className="text-[7.5px] text-slate-300 font-mono truncate">
@@ -8626,6 +8737,76 @@ export default function App() {
                 >
                     Energy Counting: ON (Opt In)
                 </button>
+              </div>
+            </div>
+
+            {/* v3.80 Charge Move Energy Circle Mode vs Legacy HP-Based Mode Toggle */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-bold text-sky-400 flex items-center gap-2">
+                  <span>🎯 Turn &amp; Energy Detection Mode (v3.80)</span>
+                </h3>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/15 border border-sky-500/40 text-sky-300">
+                  {chargeCircleOnlyMode ? 'Charge Circle Only (Default)' : 'HP-Based (Legacy)'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                <strong>Charge Circle Only (Default):</strong> Locks in static Charge Move 1 &amp; 2 circles during the <code>3-2-1-GO</code> countdown (capturing the very first <code>0→4E</code> fast move and <code>48→52E</code> wrap-around), cross-validates both meters to reconcile missed turns, caps energy at <code>100E</code>, and back-credits + falls back when player is idle for <code>&gt; 2</code> fast moves or at <code>100E</code>. Switch to <strong>HP-Based (Legacy)</strong> to revert to hybrid HP-bar + circle turn detection.
+              </p>
+              <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => handleSetChargeCircleOnlyMode(true)}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                    chargeCircleOnlyMode
+                      ? 'bg-sky-500/25 border border-sky-400/70 text-sky-200'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Charge Circle Only (Default)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetChargeCircleOnlyMode(false)}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                    !chargeCircleOnlyMode
+                      ? 'bg-slate-800 border border-slate-600 text-slate-200'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  HP-Based (Legacy)
+                </button>
+              </div>
+            </div>
+
+            {/* v3.80 Non-Standard Opponent Fast Move Detection Turn Offset (0 / +1 / +2 Turns) */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-bold text-amber-400 flex items-center gap-2">
+                  <span>🔍 Non-Standard Fast Move Detection Offset (v3.80)</span>
+                </h3>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300">
+                  +{fastDetectTurnOffset} {fastDetectTurnOffset === 1 ? 'Turn' : 'Turns'} {fastDetectTurnOffset === 0 ? '(Default)' : 'Delay'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Controls when SilphScope samples player HP to confirm or override the opponent&apos;s fast move once the standard moveset should deal <code>&ge; 10%</code> HP damage. Default <code>+0 Turns</code> samples at the first damage-registration turn (e.g., turn <code>3/6/9/12</code> for a 3-turn move); choose <code>+1 Turn</code> or <code>+2 Turns</code> to delay sampling without recompiling.
+              </p>
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
+                {([0, 1, 2] as const).map((offsetVal) => (
+                  <button
+                    key={offsetVal}
+                    type="button"
+                    onClick={() => handleSetFastDetectTurnOffset(offsetVal)}
+                    className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                      fastDetectTurnOffset === offsetVal
+                        ? 'bg-amber-500/25 border border-amber-400/70 text-amber-200'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    +{offsetVal} {offsetVal === 1 ? 'Turn' : 'Turns'}{offsetVal === 0 ? ' (Default)' : ''}
+                  </button>
+                ))}
               </div>
             </div>
 

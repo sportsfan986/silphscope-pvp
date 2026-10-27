@@ -781,6 +781,42 @@
         .move-title-line.threat-mid  { color: #fde047; }
         .move-title-line.threat-low  { color: #6ee7b7; }
 
+        /* v3.80 Confirmed Used Opponent Charged Move Badge (Theme-Aware, Preserves Threat Text Color) */
+        .move-title-line.move-confirmed-badge {
+            display: inline-flex;
+            align-items: center;
+            align-self: flex-start;
+            max-width: 100%;
+            background: rgba(var(--header-accent-rgb), 0.24);
+            border: 1px solid var(--header-accent-hex);
+            border-radius: 3px;
+            padding: 0 3px;
+            box-shadow: 0 0 4px rgba(var(--header-accent-rgb), 0.35);
+        }
+
+        /* v3.80 3-State Opponent Fast Move Typography (Theme-Aware) */
+        .opp-fast-unconfirmed {
+            font-style: italic;
+            font-weight: 700;
+            opacity: 0.92;
+        }
+        .opp-fast-confirmed-std {
+            font-style: normal;
+            font-weight: 900;
+        }
+        .opp-fast-nonstd-badge {
+            display: inline-block;
+            font-style: normal;
+            font-weight: 900;
+            background: rgba(var(--secondary-accent-rgb), 0.24);
+            border: 1px solid var(--secondary-accent-hex);
+            color: var(--secondary-accent-hex);
+            border-radius: 3px;
+            padding: 0 3px;
+            line-height: 1.15;
+            box-shadow: 0 0 4px rgba(var(--secondary-accent-rgb), 0.35);
+        }
+
         .move-sub-line {
             font-size: 7.5px;
             font-weight: 700;
@@ -2204,6 +2240,8 @@
             battleData.activeOpponentFastMove = "200ms HP + 750ms OCR";
             battleData.activeOpponentTurns = 0;
             battleData.oppFastTelemetry = "200ms HP + 750ms OCR";
+            battleData.oppFastMoveStatus = "unconfirmed";
+            battleData.confirmedOppChargedMoves = [];
             battleData.isOpponentShadow = false;
             battleData.currentFormLabel = "Base";
             battleData.availableForms = [];
@@ -2771,7 +2809,18 @@
                 const oppFastTelemetry = battleData.oppFastTelemetry
                     || `${abbrMove5(battleData.activeOpponentFastMove || "Fast")} ${battleData.activeOpponentTurns || 2}t`;
                 const oppHpSuffix = hpTrackingEnabled ? ` ${activeOppHpVal}%` : "";
-                if (oppMoveEl) oppMoveEl.textContent = `${opp3Letter}${oppHpSuffix} · ${oppFastTelemetry}`;
+                const oppFastStatus = String(battleData.oppFastMoveStatus || "unconfirmed");
+                const oppFastSpanCls = oppFastStatus === "confirmed_non_standard"
+                    ? "opp-fast-nonstd-badge"
+                    : (oppFastStatus === "confirmed_standard" ? "opp-fast-confirmed-std" : "opp-fast-unconfirmed");
+                const oppFastTitle = oppFastStatus === "confirmed_non_standard"
+                    ? "Confirmed Non-Standard Fast Move (>=10% HP damage check)"
+                    : (oppFastStatus === "confirmed_standard"
+                        ? "Confirmed Standard Fast Move (>=10% HP damage check)"
+                        : "Unconfirmed Standard Fast Move (awaiting >=10% HP damage check)");
+                if (oppMoveEl) {
+                    oppMoveEl.innerHTML = `${opp3Letter}${oppHpSuffix} · <span class="${oppFastSpanCls}" title="${oppFastTitle}">${oppFastTelemetry}</span>`;
+                }
 
                 const winsCmp = battleData.winsCmp !== undefined ? !!battleData.winsCmp : true;
                 const oppWinsCmp = !winsCmp;
@@ -3019,10 +3068,16 @@
                                 return `<div class="dmg-cell ${tierCls} ${isAct && !isFainted ? 'active-col' : ''} ${faintCls} ${koCls}" title="${td.code || ''}: ${td.dmgPct}% dmg vs ${targetHp}% HP">${labelTxt}</div>`;
                             }).join("");
 
+                            const isConfirmedMove = !!row.isConfirmedMove || (
+                                Array.isArray(battleData.confirmedOppChargedMoves) &&
+                                battleData.confirmedOppChargedMoves.some(m => String(m).toLowerCase() === String(row.name || "").toLowerCase())
+                            );
+                            const confirmedBadgeCls = isConfirmedMove ? " move-confirmed-badge" : "";
+                            const confirmedTitleSuffix = isConfirmedMove ? " (Confirmed Used in Battle)" : "";
                             return `
                                 <div class="move-timing-row">
                                     <div class="move-col-left">
-                                        <div class="move-title-line threat-${threatClass}" title="${row.name || ''}">${shortMove}</div>
+                                        <div class="move-title-line threat-${threatClass}${confirmedBadgeCls}" title="${row.name || ''}${confirmedTitleSuffix}">${shortMove}</div>
                                         <div class="move-sub-line">${row.energy || 50}e/${displayReadyCount}f</div>
                                     </div>
                                     <div class="move-col-center">${centerHtml}</div>

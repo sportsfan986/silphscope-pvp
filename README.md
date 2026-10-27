@@ -1,4 +1,4 @@
-# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v3.64)
+# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v3.80)
 
 [![Live Web Simulator](https://img.shields.io/badge/🌐%20Live%20Web%20Simulator-Try%20in%20Browser-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white)](https://sportsfan986.github.io/silphscope-pvp/)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support%20the%20Project-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/sportsfan986)
@@ -127,13 +127,13 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## 📥 Download & Install Native Android APK (v3.63)
+## 📥 Download & Install Native Android APK (v3.80)
 
 > **⚠️ Note on Live HP & Energy Counting (Disabled by Default — Opt-In via Settings)**:
 > By default, **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting** are **DISABLED (OFF)** for all new installs and any user upgrading from a version prior to `v3.40`. To enable live HP% and/or live fast-move energy counting on the floating overlay, open **⚙️ Settings** in the app and toggle **Live HP Bar Tracking** and/or **Live Energy & Fast-Move Counting** to **ON**.
 
 1. Visit the **[Official GitHub Releases Page](https://github.com/sportsfan986/silphscope-pvp/releases)**.
-2. Download **`silphscope-pvp-v3.63.apk`** directly to your Android device.
+2. Download **`silphscope-pvp-v3.80.apk`** directly to your Android device.
 3. Tap the downloaded APK file to install (grant *"Install unknown apps"* permission if prompted).
 4. Launch **SilphScope PvP**:
    - Select, reorder, or customize your **GBL Team Presets**, set **Opponent Move Count Basis** (`My Fasts` vs. `Their Fasts`), adjust **Overlay Size** (`50%–100%` screen width slider) and **Background Transparency**, and optionally opt in to **Live HP Bar Tracking** and **Live Energy & Fast-Move Counting** in **⚙️ Settings**.
@@ -143,8 +143,13 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## ✨ Changelog — What's New in v3.63
+## ✨ Changelog — What's New in v3.80
 
+- **v3.80 — Charge Move Meter Based Turn Detection, 3-Tier Charged Move Depletion & Non-Standard Opponent Fast Move Detector**:
+  - **Pre-Battle & `3-2-1` Countdown Static Charge Circle Lock-In (`0 -> 4E` & `48 -> 52E` Wrap-Around Fix)**: Pre-anchors Charge Move 1 and Charge Move 2 circular gauges at static coordinates (`leftCx = 0.3083w`, `rightCx = 0.6898w`, `cy = 0.8932h`, `R = 0.0806w`) at `0%` baseline before battle begins and during the `3-2-1-GO` countdown so the very first fast move (`0 -> 4E` Dragon Breath) and `48 -> 52E` (`96% -> 104%`) overcharge wrap-around always register.
+  - **Charge Move Energy Circle Only Mode (Default, with Main App Settings Toggle)**: Ties fast-move energy generation and turn counting purely to Charge Move 1 & 2 gauges using dual-meter cross-validation, snapping to exact fast-move multiples, and missed-turn reconciliation. Includes a `100E` hard cap and automatic `> 2` fast-move player-idle back-credit + fallback (`>= 3%` HP-drop or `< 3%` optimal timer).
+  - **On-Screen Charged Move Recognition (`"<Pokemon> used <Move>!"`) & Confirmed Move Badges**: Recognizes white-text mid-screen attack banners to deplete exact move energy (falling back to HP-delta inference when unshielded or cheapest viable move when shielded), places confirmed used opponent charged moves inside a theme-aware badge while preserving semantic threat colors, and locks the opponent's moveset once 2 distinct charged moves are revealed.
+  - **Non-Standard Opponent Fast Move Detector (`>= 10%` Damage Threshold + `0 / +1 / +2` Turn Offset)**: Evaluates all legal candidate fast moves at the first damage-registration turn after the standard fast move should deal `>= 10%` HP damage (with a configurable `+0 / +1 / +2` turn offset in Main App Settings), automatically switching to a confirmed non-standard fast move, retroactively adjusting opponent energy, firing a toast alert, and styling the opponent fast move as italic (unconfirmed), bold (confirmed standard), or a theme-aware badge (confirmed non-standard).
 - **v3.63 — Minimize Button Fix, Pre-Sync OCR Performance & ANR Fix, Expanded Battle Matrix Replay & Dynamic OCR Rate Badge**:
   - **Minimize Overlay Button Fix**: Resolved a synthetic click / resize race when tapping the top-left overlay emblem so the overlay cleanly minimizes into the floating bubble (and pauses OCR) without immediately restoring or shrinking/clipping the panel.
   - **First-Run / Pre-PvPoke-Sync Performance & ANR Fix**: Pre-indexed $O(1)$ static move and base-species lookup tables (`STATIC_MOVE_DATABASE_LOOKUP`, `STATIC_MOVE_ENERGY_LOOKUP`, `BASE_SPECIES_CACHE`) and moved startup ranking/gamemaster cache parsing off the main UI thread, eliminating pre-sync OCR frame slowdowns and `"SilphScope PvP isn't responding"` ANRs.

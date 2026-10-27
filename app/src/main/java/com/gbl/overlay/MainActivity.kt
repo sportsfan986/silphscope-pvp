@@ -171,6 +171,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textHpTrackingDesc: TextView
     private lateinit var btnToggleEnergyTracking: Button
     private lateinit var textEnergyTrackingDesc: TextView
+    private lateinit var btnToggleChargeCircleMode: Button
+    private lateinit var textChargeCircleModeDesc: TextView
+    private lateinit var btnCycleFastDetectOffset: Button
+    private lateinit var textFastDetectOffsetDesc: TextView
     private lateinit var seekbarOverlayScale: SeekBar
     private lateinit var textOverlayScaleValue: TextView
     private lateinit var textOverlayScaleDefaultTick: TextView
@@ -436,6 +440,8 @@ class MainActivity : AppCompatActivity() {
     private val PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS = OverlayService.PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS
     private val PREFS_KEY_ENABLE_HP_TRACKING = OverlayService.PREFS_KEY_ENABLE_HP_TRACKING
     private val PREFS_KEY_ENABLE_ENERGY_TRACKING = OverlayService.PREFS_KEY_ENABLE_ENERGY_TRACKING
+    private val PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE = OverlayService.PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE
+    private val PREFS_KEY_FAST_DETECT_TURN_OFFSET = OverlayService.PREFS_KEY_FAST_DETECT_TURN_OFFSET
     private val PREFS_KEY_INSTALLED_VERSION_CODE = OverlayService.PREFS_KEY_INSTALLED_VERSION_CODE
     private val PREFS_KEY_LAST_SYNC_TIMESTAMP = OverlayService.PREFS_KEY_LAST_SYNC_TIMESTAMP
     private val PREFS_KEY_OVERLAY_SCALE_PCT = "overlay_scale_pct"
@@ -510,19 +516,19 @@ class MainActivity : AppCompatActivity() {
             prefs.edit()
                 .putBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
                 .putBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
-                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 367)
+                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 380)
                 .apply()
-        } else if (prevInstalledVerCode < 369) {
-            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 369).apply()
+        } else if (prevInstalledVerCode < 380) {
+            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 380).apply()
         }
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? MediaProjectionManager
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "3.69"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "3.80"
         } catch (_: Exception) {
-            "3.69"
+            "3.80"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -1135,6 +1141,8 @@ class MainActivity : AppCompatActivity() {
         if (::btnToggleTacticalRec.isInitialized) updateTacticalRecUi()
         if (::btnToggleHpTracking.isInitialized) updateHpTrackingUi()
         if (::btnToggleEnergyTracking.isInitialized) updateEnergyTrackingUi()
+        if (::btnToggleChargeCircleMode.isInitialized) updateChargeCircleModeUi()
+        if (::btnCycleFastDetectOffset.isInitialized) updateFastDetectOffsetUi()
         if (::presetsContainer.isInitialized && presetsContainer.childCount > 0) {
             refreshPresetsUi()
         }
@@ -1178,6 +1186,10 @@ class MainActivity : AppCompatActivity() {
         textHpTrackingDesc = findViewById(R.id.text_hp_tracking_desc)
         btnToggleEnergyTracking = findViewById(R.id.btn_toggle_energy_tracking)
         textEnergyTrackingDesc = findViewById(R.id.text_energy_tracking_desc)
+        btnToggleChargeCircleMode = findViewById(R.id.btn_toggle_charge_circle_mode)
+        textChargeCircleModeDesc = findViewById(R.id.text_charge_circle_mode_desc)
+        btnCycleFastDetectOffset = findViewById(R.id.btn_cycle_fast_detect_offset)
+        textFastDetectOffsetDesc = findViewById(R.id.text_fast_detect_offset_desc)
         seekbarOverlayScale = findViewById(R.id.seekbar_overlay_scale)
         textOverlayScaleValue = findViewById(R.id.text_overlay_scale_value)
         textOverlayScaleDefaultTick = findViewById(R.id.text_overlay_scale_default_tick)
@@ -1303,6 +1315,8 @@ class MainActivity : AppCompatActivity() {
         updateTacticalRecUi()
         updateHpTrackingUi()
         updateEnergyTrackingUi()
+        updateChargeCircleModeUi()
+        updateFastDetectOffsetUi()
 
         editSyncGithubToken.setText(prefs.getString(PREFS_KEY_SYNC_GITHUB_TOKEN, "") ?: "")
         editSyncGistId.setText(prefs.getString(PREFS_KEY_SYNC_GIST_ID, "") ?: "")
@@ -1602,6 +1616,36 @@ class MainActivity : AppCompatActivity() {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
                     action = OverlayService.ACTION_UPDATE_SETTINGS
                     putExtra(OverlayService.EXTRA_ENABLE_ENERGY_TRACKING, nextEnableEnergy)
+                }
+                startService(updateIntent)
+            }
+        }
+
+        btnToggleChargeCircleMode.setOnClickListener {
+            val currentCircleOnly = prefs.getBoolean(PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE, true)
+            val nextCircleOnly = !currentCircleOnly
+            prefs.edit().putBoolean(PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE, nextCircleOnly).apply()
+            updateChargeCircleModeUi()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_CHARGE_CIRCLE_ONLY_MODE, nextCircleOnly)
+                }
+                startService(updateIntent)
+            }
+        }
+
+        btnCycleFastDetectOffset.setOnClickListener {
+            val currentOffset = prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2)
+            val nextOffset = (currentOffset + 1) % 3
+            prefs.edit().putInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, nextOffset).apply()
+            updateFastDetectOffsetUi()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, nextOffset)
                 }
                 startService(updateIntent)
             }
@@ -5033,12 +5077,55 @@ class MainActivity : AppCompatActivity() {
             btnToggleEnergyTracking.text = "Energy On"
             btnToggleEnergyTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
             btnToggleEnergyTracking.setTextColor(0xFFFFFFFF.toInt())
-            textEnergyTrackingDesc.text = "Active: 100ms HP + Charge Move Bar dual-source energy tracking enabled"
+            textEnergyTrackingDesc.text = "Active: 100ms Charge Move Meter + HP energy tracking enabled"
         } else {
             btnToggleEnergyTracking.text = "Energy Off"
             btnToggleEnergyTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
             btnToggleEnergyTracking.setTextColor(theme.primaryTextColor)
-            textEnergyTrackingDesc.text = "Default: Disabled (Opt-in for 100ms HP + Charge Move Bar energy loop)"
+            textEnergyTrackingDesc.text = "Default: Disabled (Opt-in for 100ms Charge Move Meter energy loop)"
+        }
+    }
+
+    private fun updateChargeCircleModeUi() {
+        if (!::btnToggleChargeCircleMode.isInitialized) return
+        val circleOnly = prefs.getBoolean(PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE, true)
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        if (circleOnly) {
+            btnToggleChargeCircleMode.text = "Circle Only"
+            btnToggleChargeCircleMode.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            btnToggleChargeCircleMode.setTextColor(0xFFFFFFFF.toInt())
+            textChargeCircleModeDesc.text = "Default: Charge Circle Only (Dual-meter cross-check + >2-move idle back-credit & fallback)"
+        } else {
+            btnToggleChargeCircleMode.text = "HP Legacy"
+            btnToggleChargeCircleMode.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+            btnToggleChargeCircleMode.setTextColor(theme.primaryTextColor)
+            textChargeCircleModeDesc.text = "Active: Legacy HP-Based + Charge Circle Hybrid Mode (with pre-battle circle lock-in)"
+        }
+    }
+
+    private fun updateFastDetectOffsetUi() {
+        if (!::btnCycleFastDetectOffset.isInitialized) return
+        val offset = prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2)
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        when (offset) {
+            0 -> {
+                btnCycleFastDetectOffset.text = "+0 Turns"
+                btnCycleFastDetectOffset.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+                btnCycleFastDetectOffset.setTextColor(0xFFFFFFFF.toInt())
+                textFastDetectOffsetDesc.text = "Default: +0 Turns (Samples at first damage-registration turn >= 10% standard HP damage)"
+            }
+            1 -> {
+                btnCycleFastDetectOffset.text = "+1 Turn"
+                btnCycleFastDetectOffset.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
+                btnCycleFastDetectOffset.setTextColor(0xFFFFFFFF.toInt())
+                textFastDetectOffsetDesc.text = "Active: +1 Turn Delay (Samples 1 turn after >= 10% damage-registration turn)"
+            }
+            else -> {
+                btnCycleFastDetectOffset.text = "+2 Turns"
+                btnCycleFastDetectOffset.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
+                btnCycleFastDetectOffset.setTextColor(0xFFFFFFFF.toInt())
+                textFastDetectOffsetDesc.text = "Active: +2 Turns Delay (Samples 2 turns after >= 10% damage-registration turn)"
+            }
         }
     }
 
@@ -5166,6 +5253,8 @@ class MainActivity : AppCompatActivity() {
             putExtra(OverlayService.EXTRA_SHOW_TACTICAL_RECOMMENDATIONS, prefs.getBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, true))
             putExtra(OverlayService.EXTRA_ENABLE_HP_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false))
             putExtra(OverlayService.EXTRA_ENABLE_ENERGY_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false))
+            putExtra(OverlayService.EXTRA_CHARGE_CIRCLE_ONLY_MODE, prefs.getBoolean(PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE, true))
+            putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2))
             putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt(PREFS_KEY_OVERLAY_SCALE_PCT, DEFAULT_OVERLAY_SCALE_PCT))
             putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, DEFAULT_OVERLAY_TRANSPARENCY_PCT))
             putExtra(OverlayService.EXTRA_APP_THEME_ID, prefs.getString(OverlayService.PREFS_KEY_APP_THEME_ID, "slate") ?: "slate")
@@ -7236,6 +7325,8 @@ class TaskerOverlayActivity : Activity() {
             putExtra(OverlayService.EXTRA_OPP_COUNT_MODE, prefs.getString("opp_count_mode", "my_fasts") ?: "my_fasts")
             putExtra(OverlayService.EXTRA_ENABLE_4_CHARGED_MOVES, prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_4_CHARGED_MOVES, false))
             putExtra(OverlayService.EXTRA_DISABLE_BATTLE_TOASTS, prefs.getBoolean(OverlayService.PREFS_KEY_DISABLE_BATTLE_TOASTS, false))
+            putExtra(OverlayService.EXTRA_CHARGE_CIRCLE_ONLY_MODE, prefs.getBoolean(OverlayService.PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE, true))
+            putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, prefs.getInt(OverlayService.PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2))
             putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt("overlay_scale_pct", 78))
             putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(OverlayService.PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 72))
             putExtra(OverlayService.EXTRA_APP_THEME_ID, prefs.getString(OverlayService.PREFS_KEY_APP_THEME_ID, "slate") ?: "slate")
@@ -7338,6 +7429,8 @@ class TaskerBroadcastReceiver : BroadcastReceiver() {
                         putExtra(OverlayService.EXTRA_OPP_COUNT_MODE, prefs.getString("opp_count_mode", "my_fasts") ?: "my_fasts")
                         putExtra(OverlayService.EXTRA_ENABLE_4_CHARGED_MOVES, prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_4_CHARGED_MOVES, false))
                         putExtra(OverlayService.EXTRA_DISABLE_BATTLE_TOASTS, prefs.getBoolean(OverlayService.PREFS_KEY_DISABLE_BATTLE_TOASTS, false))
+                        putExtra(OverlayService.EXTRA_CHARGE_CIRCLE_ONLY_MODE, prefs.getBoolean(OverlayService.PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE, true))
+                        putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, prefs.getInt(OverlayService.PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2))
                         putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt("overlay_scale_pct", 78))
                         putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(OverlayService.PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 72))
                         putExtra(OverlayService.EXTRA_APP_THEME_ID, prefs.getString(OverlayService.PREFS_KEY_APP_THEME_ID, "slate") ?: "slate")

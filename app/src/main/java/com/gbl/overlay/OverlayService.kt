@@ -124,12 +124,16 @@ class OverlayService : LifecycleService() {
         const val EXTRA_SHOW_TACTICAL_RECOMMENDATIONS = "extra_show_tactical_recommendations"
         const val EXTRA_ENABLE_HP_TRACKING = "extra_enable_hp_tracking"
         const val EXTRA_ENABLE_ENERGY_TRACKING = "extra_enable_energy_tracking"
+        const val EXTRA_CHARGE_CIRCLE_ONLY_MODE = "extra_charge_circle_only_mode"
+        const val EXTRA_FAST_DETECT_TURN_OFFSET = "extra_fast_detect_turn_offset"
 
         const val PREFS_KEY_ENABLE_4_CHARGED_MOVES = "enable_4_charged_moves"
         const val PREFS_KEY_DISABLE_BATTLE_TOASTS = "disable_battle_toasts"
         const val PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS = "show_tactical_recommendations"
         const val PREFS_KEY_ENABLE_HP_TRACKING = "enable_hp_tracking"
         const val PREFS_KEY_ENABLE_ENERGY_TRACKING = "enable_energy_tracking"
+        const val PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE = "charge_circle_only_mode"
+        const val PREFS_KEY_FAST_DETECT_TURN_OFFSET = "fast_detect_turn_offset"
         const val PREFS_KEY_INSTALLED_VERSION_CODE = "gbl_last_installed_version_code"
         const val PREFS_KEY_OVERLAY_TRANSPARENCY_PCT = "overlay_transparency_pct"
         const val PREFS_KEY_APP_THEME_ID = "gbl_app_theme_id"
@@ -7677,12 +7681,12 @@ class OverlayService : LifecycleService() {
     private val oppCreditedByOptimalTimerAtMs = LongArray(3) { 0L }
     private var sampledLeftChargeBtnFillPct: Int = -1
     private var sampledRightChargeBtnFillPct: Int = -1
-    private val lastScannedLeftChargeFillPct = IntArray(3) { -1 }
-    private val lastScannedRightChargeFillPct = IntArray(3) { -1 }
-    private val pendingConfirmLeftChargeFillPct = IntArray(3) { -1 }
-    private val pendingConfirmRightChargeFillPct = IntArray(3) { -1 }
-    private val leftChargeFillConfirmFrames = IntArray(3) { 0 }
-    private val rightChargeFillConfirmFrames = IntArray(3) { 0 }
+    private val lastScannedLeftChargeFillPct = IntArray(3) { 0 }
+    private val lastScannedRightChargeFillPct = IntArray(3) { 0 }
+    private val pendingConfirmLeftChargeFillPct = IntArray(3) { 0 }
+    private val pendingConfirmRightChargeFillPct = IntArray(3) { 0 }
+    private val leftChargeFillConfirmFrames = IntArray(3) { 1 }
+    private val rightChargeFillConfirmFrames = IntArray(3) { 1 }
     private var hasBattleStarted: Boolean = false
     private var phasePlayerTurns: Int = 0
     private var phaseOppTurns: Int = 0
@@ -7710,6 +7714,23 @@ class OverlayService : LifecycleService() {
     private var needsPostSwapOrMoveTurnReindex: Boolean = false
     private var enableHpTracking: Boolean = false
     private var enableEnergyTracking: Boolean = false
+    // v3.80: Charge Move Circle Only Mode (default true), Idle Back-Credit/Fallback, Banner Move OCR & Non-Standard Fast Move Detector
+    private var chargeCircleOnlyMode: Boolean = true
+    private var fastDetectTurnOffset: Int = 0
+    private var isPlayerInIdleFallback: Boolean = false
+    private val confirmedOppChargedMoves = Array(3) { linkedSetOf<String>() }
+    private val detectedOppFastMoveOverride = arrayOfNulls<String>(3)
+    private val oppFastMoveStatus = Array(3) { "UNCONFIRMED" } // "UNCONFIRMED" | "CONFIRMED_STD" | "CONFIRMED_NONSTD"
+    private val oppFastTurnHpHistory = mutableMapOf<Int, Int>()
+    private var oppFastEvalAnchorPlayerHp: Int = 100
+    private var oppFastEvalAnchorOppTurns: Int = 0
+    private var oppFastEvalAnchorPlayerTurns: Int = 0
+    private var oppFastEvalActiveSlotKey: String = ""
+    private var lastDetectedBannerMoveName: String = ""
+    private var lastDetectedBannerActor: String = "" // "opp" | "user" | ""
+    private var lastDetectedBannerTimeMs: Long = 0L
+    private var preThrowLeftFillPct: Int = 0
+    private var preThrowRightFillPct: Int = 0
     private var lastClearedFinalUserHpPct: List<Int> = listOf(100, 100, 100)
     private var lastClearedFinalOppHpPct: List<Int> = listOf(100, 100, 100)
 
@@ -8459,6 +8480,20 @@ class OverlayService : LifecycleService() {
                 }
                 overlayView?.evaluateJavascript("if (window.setEnableEnergyTracking) setEnableEnergyTracking($enableEnergyTracking);", null)
 
+                chargeCircleOnlyMode = if (intent?.hasExtra(EXTRA_CHARGE_CIRCLE_ONLY_MODE) == true) {
+                    intent.getBooleanExtra(EXTRA_CHARGE_CIRCLE_ONLY_MODE, true)
+                } else {
+                    prefs.getBoolean(PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE, true)
+                }
+                overlayView?.evaluateJavascript("if (window.setChargeCircleOnlyMode) setChargeCircleOnlyMode($chargeCircleOnlyMode);", null)
+
+                fastDetectTurnOffset = if (intent?.hasExtra(EXTRA_FAST_DETECT_TURN_OFFSET) == true) {
+                    intent.getIntExtra(EXTRA_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2)
+                } else {
+                    prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2)
+                }
+                overlayView?.evaluateJavascript("if (window.setFastDetectTurnOffset) setFastDetectTurnOffset($fastDetectTurnOffset);", null)
+
                 val requestedTeamName = intent?.getStringExtra(EXTRA_TEAM_NAME)
                     ?: intent?.getStringExtra("preset")
                 if (!requestedTeamName.isNullOrBlank()) {
@@ -8546,6 +8581,18 @@ class OverlayService : LifecycleService() {
                     enableEnergyTracking = prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, enableEnergyTracking)
                 }
                 overlayView?.evaluateJavascript("if (window.setEnableEnergyTracking) setEnableEnergyTracking($enableEnergyTracking);", null)
+                if (intent?.hasExtra(EXTRA_CHARGE_CIRCLE_ONLY_MODE) == true) {
+                    chargeCircleOnlyMode = intent.getBooleanExtra(EXTRA_CHARGE_CIRCLE_ONLY_MODE, true)
+                } else {
+                    chargeCircleOnlyMode = prefs.getBoolean(PREFS_KEY_CHARGE_CIRCLE_ONLY_MODE, chargeCircleOnlyMode)
+                }
+                overlayView?.evaluateJavascript("if (window.setChargeCircleOnlyMode) setChargeCircleOnlyMode($chargeCircleOnlyMode);", null)
+                if (intent?.hasExtra(EXTRA_FAST_DETECT_TURN_OFFSET) == true) {
+                    fastDetectTurnOffset = intent.getIntExtra(EXTRA_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2)
+                } else {
+                    fastDetectTurnOffset = prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, fastDetectTurnOffset).coerceIn(0, 2)
+                }
+                overlayView?.evaluateJavascript("if (window.setFastDetectTurnOffset) setFastDetectTurnOffset($fastDetectTurnOffset);", null)
                 syncTierThresholdsFromPrefs(prefs)
                 val updatedScalePct = intent?.getIntExtra(
                     EXTRA_OVERLAY_SCALE_PCT,
@@ -8946,6 +8993,7 @@ class OverlayService : LifecycleService() {
 
             val bwOppBitmap = createHighContrastWhiteTextBitmap(screen, srcOpp)
             val bwPlayerBitmap = createHighContrastWhiteTextBitmap(screen, srcPlayer)
+            val bwMidBannerBitmap = createHighContrastWhiteTextBitmap(screen, srcMidBanner)
 
             val scale = 1.8f
             val dstOppW = (srcOpp.width() * scale).toInt().coerceAtLeast(1)
@@ -8954,15 +9002,16 @@ class OverlayService : LifecycleService() {
             val dstPlayerH = (srcPlayer.height() * scale).toInt().coerceAtLeast(1)
             val movesW = srcMoves.width().coerceAtLeast(1)
             val movesH = srcMoves.height().coerceAtLeast(1)
-            val midScale = 0.55f
+            val midScale = 0.75f
             val dstMidW = (srcMidBanner.width() * midScale).toInt().coerceAtLeast(1)
             val dstMidH = (srcMidBanner.height() * midScale).toInt().coerceAtLeast(1)
+            val ocrMidZoneH = dstMidH + gap + dstMidH
 
             val compW = max(max(max(dstOppW, dstPlayerW), movesW), dstMidW).coerceAtLeast(100)
             ocrOppZoneH = dstOppH + gap + dstOppH
             ocrPlayerZoneH = dstPlayerH + gap + dstPlayerH
             ocrMovesBottomY = ocrOppZoneH + gap + ocrPlayerZoneH + gap + movesH
-            val compH = ocrMovesBottomY + gap + dstMidH
+            val compH = ocrMovesBottomY + gap + ocrMidZoneH
 
             compositeForOcr = try {
                 Bitmap.createBitmap(compW, compH, Bitmap.Config.ARGB_8888)
@@ -8980,7 +9029,8 @@ class OverlayService : LifecycleService() {
                 val dstPlayerRaw = Rect(0, ocrOppZoneH + gap, dstPlayerW, ocrOppZoneH + gap + dstPlayerH)
                 val dstPlayerBw = Rect(0, ocrOppZoneH + gap + dstPlayerH + gap, dstPlayerW, ocrOppZoneH + gap + ocrPlayerZoneH)
                 val dstMoves = Rect(0, ocrOppZoneH + gap + ocrPlayerZoneH + gap, movesW, ocrMovesBottomY)
-                val dstMidBanner = Rect(0, ocrMovesBottomY + gap, dstMidW, compH)
+                val dstMidBannerRaw = Rect(0, ocrMovesBottomY + gap, dstMidW, ocrMovesBottomY + gap + dstMidH)
+                val dstMidBannerBw = Rect(0, ocrMovesBottomY + gap + dstMidH + gap, dstMidW, compH)
 
                 canvas.drawBitmap(screen, srcOpp, dstOppRaw, filterPaint)
                 if (bwOppBitmap != null) {
@@ -8991,10 +9041,14 @@ class OverlayService : LifecycleService() {
                     canvas.drawBitmap(bwPlayerBitmap, null, dstPlayerBw, filterPaint)
                 }
                 canvas.drawBitmap(screen, srcMoves, dstMoves, null)
-                canvas.drawBitmap(screen, srcMidBanner, dstMidBanner, filterPaint)
+                canvas.drawBitmap(screen, srcMidBanner, dstMidBannerRaw, filterPaint)
+                if (bwMidBannerBitmap != null) {
+                    canvas.drawBitmap(bwMidBannerBitmap, null, dstMidBannerBw, filterPaint)
+                }
             }
             bwOppBitmap?.recycle()
             bwPlayerBitmap?.recycle()
+            bwMidBannerBitmap?.recycle()
         }
 
         screen.recycle()
@@ -9070,6 +9124,7 @@ class OverlayService : LifecycleService() {
                         if (!isBattleMenuScreen(oppLines, playerTopLines, playerMoveLines)) {
                             handleOpponentLines(oppLines)
                             handlePlayerSwitchLines(playerTopLines, playerMoveLines)
+                            handleMidBannerUsedMoveLines(midBannerLines)
                         }
                     }
                 } catch (_: Exception) {
@@ -9622,10 +9677,11 @@ class OverlayService : LifecycleService() {
                     val lumaDn = 0.299 * rDn + 0.587 * gDn + 0.114 * bDn
                     val satDn = max(rDn, max(gDn, bDn)) - min(rDn, min(gDn, bDn))
                     val grad = kotlin.math.abs(rDn - rUp) + kotlin.math.abs(gDn - gUp) + kotlin.math.abs(bDn - bUp)
-                    val isBottomOverCrescent = oy >= yBotOver - (overSpan * 0.18).toInt()
-                    val minOverGrad = if (isBottomOverCrescent) 18.0 else 25.0
-                    // Overcharge fill at bottom is darker/more saturated than the 100% lit layer above it
-                    if (lumaDn < lumaUp - 8.5 && lumaDn < avgTopLuma - 10.0 && satDn >= 18.0 && grad >= minOverGrad && grad > bestOverScore) {
+                    val isBottomOverCrescent = oy >= yBotOver - (overSpan * 0.22).toInt()
+                    val minOverGrad = if (isBottomOverCrescent) 14.0 else 22.0
+                    // v3.80: Relaxed satDn >= 6.0 and lumaDn < lumaUp - 6.0 so low-saturation Steel/Dragon moves (e.g. 48E -> 52E wraparound)
+                    // reliably detect the second-layer overcharge meniscus at the bottom of the charge circle!
+                    if (lumaDn < lumaUp - 6.0 && lumaDn < avgTopLuma - 7.5 && satDn >= 6.0 && grad >= minOverGrad && grad > bestOverScore) {
                         bestOverScore = grad
                         bestOverY = oy
                     }
@@ -10237,9 +10293,141 @@ class OverlayService : LifecycleService() {
     }
 
     /**
-     * v3.41: Reconciles live floating HP bar readings, detects Opponent ("Attack incoming! Use a Protect Shield?")
-     * and Player charged-attack camera cuts, enforces 0% HP on fainted slots, and logs CHARGED_ATTACK timeline events
-     * with persistent per-slot HP memory.
+     * v3.80: Best-guess unshielded Charged Move attribution when Banner OCR fails to read "<Pokemon> used <Move>!".
+     * Picks the closest expected-damage move within ±16% so energy depletion matches the most likely thrown move.
+     */
+    private fun inferBestGuessChargedMoveByHp(
+        hpDeltaPct: Int,
+        candidateMoves: List<Pair<String, Int>>
+    ): String? {
+        if (hpDeltaPct <= 3 || candidateMoves.isEmpty()) return null
+        val sorted = candidateMoves
+            .filter { it.first.isNotBlank() && it.second > 0 }
+            .distinctBy { it.first.lowercase() }
+            .map { Triple(it.first, it.second, kotlin.math.abs(hpDeltaPct - it.second)) }
+            .sortedBy { it.third }
+        val best = sorted.firstOrNull() ?: return null
+        return if (best.third <= 16) best.first else null
+    }
+
+    /**
+     * v3.80: Parses the mid-screen translucent banner ("<Pokemon> used <Move>!", calibrated from screenshots
+     * e.g. "Flareon used Fire Blast!" / "U1Tinkaton+ used Bulldoze!") and matches <Move> against the active
+     * opponent's and player's charged move pools using normalized + Levenshtein matching.
+     */
+    private fun handleMidBannerUsedMoveLines(midBannerLines: List<Text.Line>) {
+        if (midBannerLines.isEmpty()) return
+        val nowMs = System.currentTimeMillis()
+        val preset = currentPreset
+        val activeLeague = preset?.league ?: "MASTER LEAGUE"
+        val activeUserIdx = (preset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) } ?: 0).coerceIn(0, 2)
+        val activeOppBase = FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
+        val activeOppIdx = if (detectedOpponents.isNotEmpty()) {
+            detectedOpponents.indexOfFirst {
+                FormResolver.extractBaseSpecies(it).equals(activeOppBase, ignoreCase = true)
+            }.let { if (it in 0..2) it else 0 }
+        } else 0
+
+        val userSlotCfg = preset?.pokemon?.getOrNull(activeUserIdx)
+        val userMonName = activeUserPokemonName ?: userSlotCfg?.name ?: "Dialga (Origin)"
+        val userMeta = getPokemonMeta(userMonName, activeLeague, userMonName.contains("Shadow", ignoreCase = true))
+        val oppMeta = if (!isWaitingForOpponent && activeOpponentName != "Waiting...") {
+            getPokemonMeta(activeOpponentName, activeLeague, isOpponentShadow)
+        } else null
+
+        val userCandidateMoves = listOfNotNull(
+            userSlotCfg?.chargedMove1?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove1,
+            userSlotCfg?.chargedMove2?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove2
+        ).filter { it.isNotBlank() }.distinct()
+
+        val oppPoolCharged = if (oppMeta != null) {
+            val pool = getAvailableMovePoolForSpeciesStatic(oppMeta.name, activeLeague).second
+            val third = oppMeta.chargedMove3.takeIf { it.isNotBlank() }
+                ?: COMMON_THIRD_CHARGED_MOVE[oppMeta.name]
+                ?: ""
+            (listOf(oppMeta.chargedMove1, oppMeta.chargedMove2, third, oppMeta.chargedMove4) + pool)
+                .filter { it.isNotBlank() }
+                .distinct()
+        } else emptyList()
+
+        val usedRegex = Regex("(?i)(.+?)\\s+used\\s+([a-zA-Z0-9'\\s-]+?)[!.?]*$")
+        for (line in midBannerLines) {
+            val raw = line.text.trim()
+            if (raw.length < 7) continue
+            val m = usedRegex.find(raw) ?: continue
+            val rawActorPart = m.groupValues[1].trim()
+            val rawMovePart = m.groupValues[2].trim()
+            if (rawMovePart.length < 3) continue
+            val normMove = normalizeOcrToken(rawMovePart)
+            if (normMove.length < 3) continue
+
+            val oppBaseNorm = if (oppMeta != null) normalizeOcrToken(oppMeta.baseSpecies) else ""
+            val userBaseNorm = normalizeOcrToken(userMeta.baseSpecies)
+            val normActor = normalizeOcrToken(rawActorPart)
+
+            val actorHint = when {
+                oppBaseNorm.length >= 3 && normActor.contains(oppBaseNorm) -> "opp"
+                userBaseNorm.length >= 3 && normActor.contains(userBaseNorm) -> "user"
+                isAttackIncomingPromptActive || pendingChargedAttackActor == "opp" -> "opp"
+                pendingChargedAttackActor == "user" -> "user"
+                else -> ""
+            }
+
+            fun matchBestMove(pool: List<String>): Pair<String, Int>? {
+                var bestName = ""
+                var bestDist = Int.MAX_VALUE
+                for (cand in pool) {
+                    val cNorm = normalizeOcrToken(cand)
+                    if (cNorm.isEmpty()) continue
+                    if (cNorm == normMove || normMove.contains(cNorm) || cNorm.contains(normMove)) {
+                        return cand to 0
+                    }
+                    val d = levenshteinDistance(normMove, cNorm)
+                    val maxAllowed = if (cNorm.length >= 8) 3 else 2
+                    if (d <= maxAllowed && d < bestDist) {
+                        bestDist = d
+                        bestName = cand
+                    }
+                }
+                return if (bestName.isNotEmpty()) bestName to bestDist else null
+            }
+
+            val oppMatched = matchBestMove(oppPoolCharged)
+            val userMatched = matchBestMove(userCandidateMoves)
+
+            val resolvedPair: Pair<String, String>? = when (actorHint) {
+                "opp" -> if (oppMatched != null) "opp" to oppMatched.first else if (userMatched != null) "user" to userMatched.first else null
+                "user" -> if (userMatched != null) "user" to userMatched.first else if (oppMatched != null) "opp" to oppMatched.first else null
+                else -> {
+                    when {
+                        oppMatched != null && (userMatched == null || oppMatched.second <= userMatched.second) -> "opp" to oppMatched.first
+                        userMatched != null -> "user" to userMatched.first
+                        else -> null
+                    }
+                }
+            }
+
+            if (resolvedPair != null) {
+                val (actorRole, moveName) = resolvedPair
+                lastDetectedBannerMoveActor = actorRole
+                lastDetectedBannerMoveName = moveName
+                lastDetectedBannerMoveTimeMs = nowMs
+                if (actorRole == "opp" && activeOppIdx in 0..2) {
+                    val added = confirmedOppChargedMoves[activeOppIdx].add(moveName)
+                    if (added) {
+                        recalculateAndPushBattleData()
+                    }
+                }
+                break
+            }
+        }
+    }
+
+    /**
+     * v3.80: Reconciles live Charge Move Circle meters (Locked-In Static Coordinates + Dual-Meter Cross-Validation),
+     * Pre-Battle 3-2-1-GO 0% empty baseline lock-in, Player-Idle (>2 fast moves) back-credit & fallback,
+     * Banner Charged Move OCR ("<Pokemon> used <Move>!") 3-tier energy depletion, Confirmed Opponent Moveset locking,
+     * and Non-Standard Opponent Fast Move detection (>=10% damage threshold + 0/1/2 turn offset).
      */
     private fun updateLiveHpAndChargedAttackState(
         oppLines: List<Text.Line>,
@@ -10247,11 +10435,89 @@ class OverlayService : LifecycleService() {
         playerMoveLines: List<Text.Line>,
         midBannerLines: List<Text.Line> = emptyList()
     ) {
-        if (isWaitingForOpponent) return
         val nowMs = currentFrameTimestampMs.takeIf { it > 0L } ?: System.currentTimeMillis()
         val preset = currentPreset
         val activeLeague = preset?.league ?: "MASTER LEAGUE"
         val activeUserIdx = (preset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) } ?: 0).coerceIn(0, 2)
+        val userSlotCfg = preset?.pokemon?.getOrNull(activeUserIdx)
+        val userMonNameForStats = activeUserPokemonName ?: userSlotCfg?.name ?: "Dialga (Origin)"
+        val isUserShadForStats = userMonNameForStats.contains("Shadow", ignoreCase = true)
+        val userMetaForStats = computeEffectiveCombatStats(
+            getPokemonMeta(userMonNameForStats, activeLeague, isUserShadForStats),
+            activeLeague,
+            userSlotCfg?.cp,
+            userSlotCfg?.ivs
+        )
+        val userFastNameForStats = userSlotCfg?.fastMove?.takeIf { it.isNotBlank() } ?: userMetaForStats.defaultFastMove
+        val userFastTurnsForStats = resolveFastTurnsStatic(userFastNameForStats, userMetaForStats.fastTurns).coerceIn(1, 5)
+        val userFastEnergyForStats = resolveFastEnergyStatic(userFastNameForStats, userFastTurnsForStats).coerceIn(2, 20)
+        val minUserMoveCooldownMs = (userFastTurnsForStats * 500L - 100L).coerceAtLeast(390L)
+
+        val userMove1NameEarly = userSlotCfg?.chargedMove1?.takeIf { it.isNotBlank() } ?: userMetaForStats.chargedMove1
+        val userMove2NameEarly = userSlotCfg?.chargedMove2?.takeIf { it.isNotBlank() } ?: userMetaForStats.chargedMove2
+        val userMove1Energy = (resolveChargedMoveStatsStatic(userMove1NameEarly, userMetaForStats.types.firstOrNull() ?: "normal").energyCost
+            .takeIf { it > 0 } ?: MOVE_ENERGY_COST[userMove1NameEarly] ?: 50).coerceIn(35, 100)
+        val userMove2Energy = if (userMove2NameEarly.isNotBlank()) {
+            (resolveChargedMoveStatsStatic(userMove2NameEarly, userMetaForStats.types.firstOrNull() ?: "normal").energyCost
+                .takeIf { it > 0 } ?: MOVE_ENERGY_COST[userMove2NameEarly] ?: 50).coerceIn(35, 100)
+        } else userMove1Energy
+        val maxUserMoveEnergyEarly = max(userMove1Energy, userMove2Energy).coerceIn(35, 100)
+
+        // v3.80 PRE-BATTLE & 3-2-1-GO COUNTDOWN STATIC CHARGE CIRCLE LOCK-IN:
+        // Do NOT wait for async ML Kit opponent OCR (`isWaitingForOpponent == false`) before locking in the player's
+        // static Charge Move Circles (0% empty baseline) or registering Move 1 (0 -> 4E Dragon Breath) at "GO!"!
+        if (isWaitingForOpponent) {
+            if (enableEnergyTracking && (sampledLeftChargeBtnFillPct in 0..200 || sampledRightChargeBtnFillPct in 0..200)) {
+                val minStepEarly = max(3, ((userFastEnergyForStats * 100) / (maxUserMoveEnergyEarly + 30)).coerceIn(3, 8))
+                var earlyStep = false
+                if (sampledLeftChargeBtnFillPct in 0..200) {
+                    if (sampledLeftChargeBtnFillPct == 0) {
+                        lastScannedLeftChargeFillPct[activeUserIdx] = 0
+                        pendingConfirmLeftChargeFillPct[activeUserIdx] = 0
+                        leftChargeFillConfirmFrames[activeUserIdx] = 2
+                    } else if (sampledLeftChargeBtnFillPct in minStepEarly..45 && lastScannedLeftChargeFillPct[activeUserIdx] <= 0) {
+                        earlyStep = true
+                        lastScannedLeftChargeFillPct[activeUserIdx] = sampledLeftChargeBtnFillPct
+                        pendingConfirmLeftChargeFillPct[activeUserIdx] = sampledLeftChargeBtnFillPct
+                    }
+                }
+                if (sampledRightChargeBtnFillPct in 0..200) {
+                    if (sampledRightChargeBtnFillPct == 0) {
+                        lastScannedRightChargeFillPct[activeUserIdx] = 0
+                        pendingConfirmRightChargeFillPct[activeUserIdx] = 0
+                        rightChargeFillConfirmFrames[activeUserIdx] = 2
+                    } else if (sampledRightChargeBtnFillPct in minStepEarly..45 && lastScannedRightChargeFillPct[activeUserIdx] <= 0) {
+                        earlyStep = true
+                        lastScannedRightChargeFillPct[activeUserIdx] = sampledRightChargeBtnFillPct
+                        pendingConfirmRightChargeFillPct[activeUserIdx] = sampledRightChargeBtnFillPct
+                    }
+                }
+                val elapsedEarlyMs = if (playerLastFastCreditedAtMs[activeUserIdx] > 0L) {
+                    (nowMs - playerLastFastCreditedAtMs[activeUserIdx]).coerceAtLeast(0L)
+                } else Long.MAX_VALUE
+                if (earlyStep && elapsedEarlyMs >= minUserMoveCooldownMs) {
+                    if (!hasBattleStarted) {
+                        hasBattleStarted = true
+                        battleClockAnchorMs = nowMs - (userFastTurnsForStats * 500L)
+                        lastTurnTickTimeMs = nowMs
+                        turnResidualMs = 0L
+                        battleTurnIndex = userFastTurnsForStats
+                    }
+                    playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] + userFastEnergyForStats).coerceIn(0, 100)
+                    playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + userFastTurnsForStats).coerceAtLeast(0)
+                    phasePlayerTurns += userFastTurnsForStats
+                    playerLastFastCreditedAtMs[activeUserIdx] = nowMs
+                    isPlayerInIdleFallback = false
+                    recalculateAndPushBattleData()
+                }
+            }
+            return
+        }
+
+        if (midBannerLines.isNotEmpty()) {
+            handleMidBannerUsedMoveLines(midBannerLines)
+        }
+
         val activeOppBase = FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
         val activeOppIdx = if (detectedOpponents.isNotEmpty()) {
             detectedOpponents.indexOfFirst {
@@ -10295,25 +10561,14 @@ class OverlayService : LifecycleService() {
             }
         }
 
-        // 1. v3.54: Bi-Directional Live HP Gauge Update + Damage-Integrated Fast-Move Energy Engine + Pending-Damage Tracking
-        val userSlotCfg = preset?.pokemon?.getOrNull(activeUserIdx)
-        val userMonNameForStats = activeUserPokemonName ?: userSlotCfg?.name ?: "Dialga (Origin)"
-        val isUserShadForStats = userMonNameForStats.contains("Shadow", ignoreCase = true)
-        val userMetaForStats = computeEffectiveCombatStats(
-            getPokemonMeta(userMonNameForStats, activeLeague, isUserShadForStats),
-            activeLeague,
-            userSlotCfg?.cp,
-            userSlotCfg?.ivs
-        )
+        // 1. v3.80: Bi-Directional Live HP Gauge Update + Charge Move Circle Only Mode + Non-Standard Fast Move Override
         val oppMetaForStats = computeEffectiveCombatStats(
             getPokemonMeta(activeOpponentName, activeLeague, isOpponentShadow),
             activeLeague
         )
-        val userFastNameForStats = userSlotCfg?.fastMove?.takeIf { it.isNotBlank() } ?: userMetaForStats.defaultFastMove
-        val userFastTurnsForStats = resolveFastTurnsStatic(userFastNameForStats, userMetaForStats.fastTurns).coerceIn(1, 5)
-        val oppFastNameForStats = oppMetaForStats.defaultFastMove
+        val oppFastNameForStats = detectedOppFastMoveOverride[activeOppIdx].takeIf { it.isNotBlank() }
+            ?: oppMetaForStats.defaultFastMove
         val oppFastTurnsForStats = resolveFastTurnsStatic(oppFastNameForStats, oppMetaForStats.fastTurns).coerceIn(1, 5)
-        val userFastEnergyForStats = resolveFastEnergyStatic(userFastNameForStats, userFastTurnsForStats).coerceIn(2, 20)
         val oppFastEnergyForStats = resolveFastEnergyStatic(oppFastNameForStats, oppFastTurnsForStats).coerceIn(2, 20)
         val userExactDmgPct = calculateFastMoveExactDamagePercent(
             attacker = userMetaForStats,
@@ -10331,8 +10586,6 @@ class OverlayService : LifecycleService() {
             isAttackerShadow = isOpponentShadow,
             isDefenderShadow = isUserShadForStats
         )
-        val userFastDmgPctForStats = userExactDmgPct.roundToInt().coerceIn(1, 100)
-        val oppFastDmgPctForStats = oppExactDmgPct.roundToInt().coerceIn(1, 100)
 
         val bottomLower = playerMoveLines.joinToString(" ") { it.text.lowercase() }
         val midBannerLower = midBannerLines.joinToString(" ") { it.text.lowercase() }
@@ -10372,8 +10625,9 @@ class OverlayService : LifecycleService() {
             !hasUserChargedBannerText &&
             (nowMs - lastChargedAttackLoggedMs) > 900L
 
-        // 1A. Player HP Bar Scan -> Opponent Fast Move Turn-Scaled Debounce & Transient Flicker Filter
-        //     v3.69: Ignores drops < (oppExactDmgPct / 2) and requires (2 + oppFastTurns) consecutive frames at decreased HP.
+        // 1A. Player HP Bar Scan -> Tracks player HP% & cumulative opponent fast-move damage (for Non-Standard Fast Move Detector).
+        //     In Charge Circle Only mode (`chargeCircleOnlyMode == true`), only credits opponent energy via HP drops when the player
+        //     is in Idle Fallback (`isPlayerInIdleFallback == true`) AND opponent's fast move deals >= 3% damage (`oppExactDmgPct >= 3.0`).
         if (!isPostFaintSwitchPromptActive && sampledPlayerHpPct in 1..100 && !playerFaintedSlots[activeUserIdx]) {
             playerFinalMissingHpFrames = 0
             val lastScannedUserHp = lastScannedPlayerSlotHpPct[activeUserIdx].coerceIn(1, 100)
@@ -10382,7 +10636,6 @@ class OverlayService : LifecycleService() {
                 (nowMs - oppLastFastCreditedAtMs[activeOppIdx]).coerceAtLeast(0L)
             } else Long.MAX_VALUE
 
-            // Turn-scaled debounce: (2 + oppFastTurns) frames at the decreased HP before confirming
             if (sampledPlayerHpPct == pendingConfirmPlayerSlotHpPct[activeUserIdx]) {
                 playerSlotHpConfirmFrames[activeUserIdx] = (playerSlotHpConfirmFrames[activeUserIdx] + 1).coerceAtMost(10)
             } else {
@@ -10395,8 +10648,6 @@ class OverlayService : LifecycleService() {
 
             if (isPlayerHpConfirmed) {
                 val realUserDrop = lastScannedUserHp - confirmedPlayerHp
-                // Ignore changes < (fast move damage) / 2, and during pre-battle intro (!hasBattleStarted) ignore 1% camera-pan shimmer
-                // if expected fast move damage is < 2.0% unless corroborated by an active battle start.
                 val halfOppDmg = max(1, (oppExactDmgPct * 0.50).roundToInt())
                 val minOppFastDmgThreshold = if (!hasBattleStarted && oppExactDmgPct < 2.0) {
                     max(2, halfOppDmg)
@@ -10404,11 +10655,17 @@ class OverlayService : LifecycleService() {
                     halfOppDmg
                 }
 
+                // Accumulate fast-move damage dealt by this opponent for the Non-Standard Opponent Fast Move Detector
+                if (realUserDrop in 1..25 && (hasBattleStarted || realUserDrop >= 2) && canAccumulateFastEnergy) {
+                    oppCumulativeFastDmgPct[activeOppIdx] = (oppCumulativeFastDmgPct[activeOppIdx] + realUserDrop).coerceIn(0, 300)
+                }
+
                 if (realUserDrop in minOppFastDmgThreshold..25) {
                     observedPlayerFastDrop = true
                     turnPhaseAnchorMs = captureAnchorMs
 
-                    if (canAccumulateFastEnergy) {
+                    val allowHpOppEnergyCredit = !chargeCircleOnlyMode || (isPlayerInIdleFallback && oppExactDmgPct >= 3.0)
+                    if (canAccumulateFastEnergy && allowHpOppEnergyCredit) {
                         if (!hasBattleStarted) {
                             hasBattleStarted = true
                             battleClockAnchorMs = nowMs - (oppFastTurnsForStats * 500L)
@@ -10436,6 +10693,10 @@ class OverlayService : LifecycleService() {
                             oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] + baseNewMoves * oppFastEnergyForStats).coerceIn(0, 100)
                             oppSlotTurnsOnField[activeOppIdx] = (oppSlotTurnsOnField[activeOppIdx] + baseNewMoves * oppFastTurnsForStats).coerceAtLeast(0)
                             phaseOppTurns += baseNewMoves * oppFastTurnsForStats
+                            if (isPlayerInIdleFallback) {
+                                phasePlayerTurns = max(phasePlayerTurns, phaseOppTurns)
+                                lastIdleFallbackOppCreditMs = nowMs
+                            }
                             oppLastFastCreditedAtMs[activeOppIdx] = nowMs
                             hpChanged = true
                         } else if (alreadyCreditedByPhaseGate) {
@@ -10474,9 +10735,9 @@ class OverlayService : LifecycleService() {
             playerSlotHpConfirmFrames[activeUserIdx] = 0
         }
 
-        // 1B. Opponent HP Bar Scan -> Player Fast Move Turn-Scaled Debounce & Transient Flicker Filter
-        //     v3.69: Ignores drops < (userExactDmgPct / 2) and requires (2 + userFastTurns) consecutive frames at decreased HP.
-        val minUserMoveCooldownMs = (userFastTurnsForStats * 500L - 100L).coerceAtLeast(390L)
+        // 1B. Opponent HP Bar Scan -> Tracks opponent HP%.
+        //     In Charge Circle Only mode (`chargeCircleOnlyMode == true`), player energy/turns are NEVER incremented by opponent HP drops
+        //     (preventing jitter or phantom HP changes from incrementing energy when the player stops clicking).
         if (sampledOppHpPct in 1..100 && !oppFaintedSlots[activeOppIdx]) {
             oppFinalMissingHpFrames = 0
             val lastScannedOppHp = lastScannedOppSlotHpPct[activeOppIdx].coerceIn(1, 100)
@@ -10484,7 +10745,6 @@ class OverlayService : LifecycleService() {
                 (nowMs - playerLastFastCreditedAtMs[activeUserIdx]).coerceAtLeast(0L)
             } else Long.MAX_VALUE
 
-            // Turn-scaled debounce: (2 + userFastTurns) frames at the decreased HP before confirming
             if (sampledOppHpPct == pendingConfirmOppSlotHpPct[activeOppIdx]) {
                 oppSlotHpConfirmFrames[activeOppIdx] = (oppSlotHpConfirmFrames[activeOppIdx] + 1).coerceAtMost(10)
             } else {
@@ -10497,7 +10757,6 @@ class OverlayService : LifecycleService() {
 
             if (isOppHpConfirmed) {
                 val realOppDrop = lastScannedOppHp - confirmedOppHp
-                // Ignore changes < (fast move damage) / 2, requiring (2 + userFastTurns) consecutive stable frames
                 val halfUserDmg = max(1, (userExactDmgPct * 0.50).roundToInt())
                 val minUserFastDmgThreshold = halfUserDmg
 
@@ -10505,7 +10764,7 @@ class OverlayService : LifecycleService() {
                     observedOppFastDrop = true
                     turnPhaseAnchorMs = captureAnchorMs
 
-                    if (canAccumulateFastEnergy) {
+                    if (canAccumulateFastEnergy && !chargeCircleOnlyMode) {
                         if (!hasBattleStarted) {
                             hasBattleStarted = true
                             battleClockAnchorMs = nowMs - (userFastTurnsForStats * 500L)
@@ -10531,6 +10790,7 @@ class OverlayService : LifecycleService() {
                             playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + baseNewMoves * userFastTurnsForStats).coerceAtLeast(0)
                             phasePlayerTurns += baseNewMoves * userFastTurnsForStats
                             playerLastFastCreditedAtMs[activeUserIdx] = nowMs
+                            isPlayerInIdleFallback = false
                             hpChanged = true
                         }
                         playerSlotCurrentMoveTurns[activeUserIdx] = 0
@@ -10565,7 +10825,7 @@ class OverlayService : LifecycleService() {
             oppSlotHpConfirmFrames[activeOppIdx] = 0
         }
 
-        // Helper for opponent & player move energy lookup (used by both Section 1C charge step scaling and Sections 2/3/4)
+        // Helper for opponent & player move energy lookup (used by Section 1C Dual-Meter Cross-Validation and Sections 2/3/4)
         val oppThirdMove = oppMetaForStats.chargedMove3.takeIf { it.isNotBlank() }
             ?: COMMON_THIRD_CHARGED_MOVE[oppMetaForStats.name]
             ?: "Outrage"
@@ -10578,10 +10838,7 @@ class OverlayService : LifecycleService() {
         }
         val cheapestOppEnergy = oppMoveEnergyMap.values.minOrNull() ?: 45
 
-        val userMoveNames = listOf(
-            userSlotCfg?.chargedMove1 ?: userMetaForStats.chargedMove1,
-            userSlotCfg?.chargedMove2 ?: userMetaForStats.chargedMove2
-        ).filter { it.isNotBlank() }.distinct()
+        val userMoveNames = listOf(userMove1NameEarly, userMove2NameEarly).filter { it.isNotBlank() }.distinct()
         val userMoveEnergyMap = userMoveNames.associateWith { mName ->
             val mStats = resolveChargedMoveStatsStatic(mName, userMetaForStats.types.firstOrNull() ?: "normal")
             (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[mName] ?: 50).coerceIn(35, 100)
@@ -10589,21 +10846,24 @@ class OverlayService : LifecycleService() {
         val cheapestUserEnergy = userMoveEnergyMap.values.minOrNull() ?: 45
         val maxUserMoveEnergy = (userMoveEnergyMap.values.maxOrNull() ?: 65).coerceIn(35, 100)
 
-        // 1C. v3.69: Second Source of Truth — Dual Charge Move Energy Bars (Left & Right Buttons)
-        //     - Locks onto explicit 0% empty baseline during pre-battle countdown so Move 1 (0->4E, 6-8% fill) always registers!
-        //     - Tracks both Left and Right charge buttons in parallel across 96%->100%->104%+ overcharge wrap boundaries!
+        // 1C. v3.80: Dual Charge Move Energy Circles (Left Meter 1 & Right Meter 2 Cross-Validation)
+        //     - Credits a turn if EITHER Meter 1 or Meter 2 steps by expected move energy (including 0->4E and 48->52E wraparound)
+        //     - Snaps implied energy to the nearest multiple of `userFastEnergyForStats`
+        //     - Reconciles missed turns on every meter step for both player and opponent
         var observedPlayerChargeBarStep = false
         if (canAccumulateFastEnergy &&
             !playerFaintedSlots[activeUserIdx] &&
             !oppFaintedSlots[activeOppIdx] &&
-            (sampledPlayerHpPct in 1..100 || sampledOppHpPct in 1..100 || sampledPlayerBalls in 1..3 || sampledOppBalls in 1..3)
+            (sampledPlayerHpPct in 1..100 || sampledOppHpPct in 1..100 || sampledPlayerBalls in 1..3 || sampledOppBalls in 1..3 || sampledLeftChargeBtnFillPct in 0..200 || sampledRightChargeBtnFillPct in 0..200)
         ) {
-            val requiredChargeConfirmFrames = (1 + userFastTurnsForStats).coerceIn(2, 6)
+            val requiredChargeConfirmFrames = if (userFastTurnsForStats == 1) 1 else (1 + userFastTurnsForStats).coerceIn(2, 5)
             val minFillStepPct = max(3, ((userFastEnergyForStats * 100) / (maxUserMoveEnergy + 30)).coerceIn(3, 8))
 
             var chargeBarStepDetected = false
+            var confirmedLeftForSnap = -1
+            var confirmedRightForSnap = -1
 
-            // Left Charge Move Button debounce & step check (including 0% empty baseline)
+            // Left Charge Move Button (Meter 1) debounce & step check (including 0% empty baseline & 96%->104% overcharge)
             if (sampledLeftChargeBtnFillPct in 0..200) {
                 if (kotlin.math.abs(sampledLeftChargeBtnFillPct - pendingConfirmLeftChargeFillPct[activeUserIdx]) <= 2) {
                     leftChargeFillConfirmFrames[activeUserIdx] = (leftChargeFillConfirmFrames[activeUserIdx] + 1).coerceAtMost(10)
@@ -10611,20 +10871,22 @@ class OverlayService : LifecycleService() {
                     pendingConfirmLeftChargeFillPct[activeUserIdx] = sampledLeftChargeBtnFillPct
                     leftChargeFillConfirmFrames[activeUserIdx] = 1
                 }
-                val neededLeftFrames = if (pendingConfirmLeftChargeFillPct[activeUserIdx] == 0) 2 else requiredChargeConfirmFrames
+                val neededLeftFrames = if (pendingConfirmLeftChargeFillPct[activeUserIdx] == 0) 1 else requiredChargeConfirmFrames
                 if (leftChargeFillConfirmFrames[activeUserIdx] >= neededLeftFrames) {
                     val confirmedLeftFill = pendingConfirmLeftChargeFillPct[activeUserIdx]
+                    confirmedLeftForSnap = confirmedLeftFill
                     val prevLeftFill = lastScannedLeftChargeFillPct[activeUserIdx]
                     if (confirmedLeftFill == 0) {
                         lastScannedLeftChargeFillPct[activeUserIdx] = 0
                     } else if (prevLeftFill == 0) {
-                        // Confirmed 0% baseline -> first fast move stepped into 1..45%
                         if (confirmedLeftFill in minFillStepPct..45) {
                             chargeBarStepDetected = true
                         }
                         lastScannedLeftChargeFillPct[activeUserIdx] = confirmedLeftFill
                     } else if (prevLeftFill < 0) {
-                        // Uninitialized or occluded state: adopt current fill without false step
+                        if (playerSlotEnergy[activeUserIdx] == 0 && confirmedLeftFill in minFillStepPct..45) {
+                            chargeBarStepDetected = true
+                        }
                         lastScannedLeftChargeFillPct[activeUserIdx] = confirmedLeftFill
                     } else {
                         val directDelta = confirmedLeftFill - prevLeftFill
@@ -10636,7 +10898,7 @@ class OverlayService : LifecycleService() {
                             else -> 0
                         }
                         val effectiveDelta = max(directDelta, wrappedOverchargeDelta)
-                        if (effectiveDelta in minFillStepPct..52) {
+                        if (effectiveDelta in minFillStepPct..55) {
                             chargeBarStepDetected = true
                             lastScannedLeftChargeFillPct[activeUserIdx] = confirmedLeftFill
                         } else if (directDelta < -6 && !(prevLeftFill in 84..100 && (confirmedLeftFill in 1..45 || confirmedLeftFill in 101..199))) {
@@ -10649,7 +10911,7 @@ class OverlayService : LifecycleService() {
                 leftChargeFillConfirmFrames[activeUserIdx] = 0
             }
 
-            // Right Charge Move Button debounce & step check (including 0% empty baseline)
+            // Right Charge Move Button (Meter 2) debounce & step check (including 0% empty baseline & 96%->104% overcharge)
             if (sampledRightChargeBtnFillPct in 0..200) {
                 if (kotlin.math.abs(sampledRightChargeBtnFillPct - pendingConfirmRightChargeFillPct[activeUserIdx]) <= 2) {
                     rightChargeFillConfirmFrames[activeUserIdx] = (rightChargeFillConfirmFrames[activeUserIdx] + 1).coerceAtMost(10)
@@ -10657,20 +10919,22 @@ class OverlayService : LifecycleService() {
                     pendingConfirmRightChargeFillPct[activeUserIdx] = sampledRightChargeBtnFillPct
                     rightChargeFillConfirmFrames[activeUserIdx] = 1
                 }
-                val neededRightFrames = if (pendingConfirmRightChargeFillPct[activeUserIdx] == 0) 2 else requiredChargeConfirmFrames
+                val neededRightFrames = if (pendingConfirmRightChargeFillPct[activeUserIdx] == 0) 1 else requiredChargeConfirmFrames
                 if (rightChargeFillConfirmFrames[activeUserIdx] >= neededRightFrames) {
                     val confirmedRightFill = pendingConfirmRightChargeFillPct[activeUserIdx]
+                    confirmedRightForSnap = confirmedRightFill
                     val prevRightFill = lastScannedRightChargeFillPct[activeUserIdx]
                     if (confirmedRightFill == 0) {
                         lastScannedRightChargeFillPct[activeUserIdx] = 0
                     } else if (prevRightFill == 0) {
-                        // Confirmed 0% baseline -> first fast move stepped into 1..45%
                         if (confirmedRightFill in minFillStepPct..45) {
                             chargeBarStepDetected = true
                         }
                         lastScannedRightChargeFillPct[activeUserIdx] = confirmedRightFill
                     } else if (prevRightFill < 0) {
-                        // Uninitialized or occluded state: adopt current fill without false step
+                        if (playerSlotEnergy[activeUserIdx] == 0 && confirmedRightFill in minFillStepPct..45) {
+                            chargeBarStepDetected = true
+                        }
                         lastScannedRightChargeFillPct[activeUserIdx] = confirmedRightFill
                     } else {
                         val directDelta = confirmedRightFill - prevRightFill
@@ -10682,7 +10946,7 @@ class OverlayService : LifecycleService() {
                             else -> 0
                         }
                         val effectiveDelta = max(directDelta, wrappedOverchargeDelta)
-                        if (effectiveDelta in minFillStepPct..52) {
+                        if (effectiveDelta in minFillStepPct..55) {
                             chargeBarStepDetected = true
                             lastScannedRightChargeFillPct[activeUserIdx] = confirmedRightFill
                         } else if (directDelta < -6 && !(prevRightFill in 84..100 && (confirmedRightFill in 1..45 || confirmedRightFill in 101..199))) {
@@ -10695,54 +10959,230 @@ class OverlayService : LifecycleService() {
                 rightChargeFillConfirmFrames[activeUserIdx] = 0
             }
 
-            // Credit player energy from Charge Move Energy Bar if not already credited by HP drop within cooldown!
+            // Dual-Meter Cross-Validation & Missed-Turn Reconciliation:
+            // Compute implied energy from Meter 1 (userMove1Energy) and Meter 2 (userMove2Energy) and snap to nearest multiple of userFastEnergyForStats.
             val latestUserElapsedMs = if (playerLastFastCreditedAtMs[activeUserIdx] > 0L) {
                 (nowMs - playerLastFastCreditedAtMs[activeUserIdx]).coerceAtLeast(0L)
             } else Long.MAX_VALUE
-            if (chargeBarStepDetected && !observedOppFastDrop && latestUserElapsedMs >= minUserMoveCooldownMs) {
+            val alreadyCreditedByHpThisFrame = !chargeCircleOnlyMode && observedOppFastDrop
+            if (chargeBarStepDetected && !alreadyCreditedByHpThisFrame && latestUserElapsedMs >= minUserMoveCooldownMs) {
+                val curEnergyBefore = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
+                val snapCandidates = mutableListOf<Int>()
+                val lFill = if (confirmedLeftForSnap > 0) confirmedLeftForSnap else lastScannedLeftChargeFillPct[activeUserIdx]
+                val rFill = if (confirmedRightForSnap > 0) confirmedRightForSnap else lastScannedRightChargeFillPct[activeUserIdx]
+                if (lFill in 1..199 && lFill != 100) {
+                    val rawE1 = (lFill.toDouble() * userMove1Energy.toDouble()) / 100.0
+                    val snapE1 = ((rawE1 / userFastEnergyForStats.toDouble()).roundToInt() * userFastEnergyForStats).coerceIn(userFastEnergyForStats, 100)
+                    snapCandidates.add(snapE1)
+                }
+                if (rFill in 1..199 && rFill != 100) {
+                    val rawE2 = (rFill.toDouble() * userMove2Energy.toDouble()) / 100.0
+                    val snapE2 = ((rawE2 / userFastEnergyForStats.toDouble()).roundToInt() * userFastEnergyForStats).coerceIn(userFastEnergyForStats, 100)
+                    snapCandidates.add(snapE2)
+                }
+
+                // Determine how many fast moves occurred (1 move normally, or 2..3 if a prior move was missed and dual meters cross-validate higher energy)
+                val maxElapsedMoves = if (latestUserElapsedMs == Long.MAX_VALUE) 2 else (latestUserElapsedMs / minUserMoveCooldownMs).toInt().coerceIn(1, 3)
+                val consensusSnappedEnergy = if (snapCandidates.isNotEmpty()) {
+                    // Prefer the meter reading that is > curEnergyBefore (especially when one meter wrapped 48E->52E and the other is still <100% on a 65E/75E move)
+                    snapCandidates.maxOrNull() ?: (curEnergyBefore + userFastEnergyForStats)
+                } else {
+                    curEnergyBefore + userFastEnergyForStats
+                }
+                val impliedMovesDelta = ((consensusSnappedEnergy - curEnergyBefore) / userFastEnergyForStats).coerceIn(1, maxElapsedMoves)
+                val movesToCredit = impliedMovesDelta.coerceIn(1, 3)
+
                 if (!hasBattleStarted) {
                     hasBattleStarted = true
-                    battleClockAnchorMs = nowMs - (userFastTurnsForStats * 500L)
+                    battleClockAnchorMs = nowMs - (movesToCredit * userFastTurnsForStats * 500L)
                     lastTurnTickTimeMs = nowMs
                     turnResidualMs = 0L
-                    battleTurnIndex = userFastTurnsForStats
+                    battleTurnIndex = movesToCredit * userFastTurnsForStats
                 }
                 observedPlayerChargeBarStep = true
-                userFastMovesCreditedThisFrame += 1
+                userFastMovesCreditedThisFrame += movesToCredit
                 turnPhaseAnchorMs = captureAnchorMs
-                playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] + userFastEnergyForStats).coerceIn(0, 100)
-                playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + userFastTurnsForStats).coerceAtLeast(0)
-                phasePlayerTurns += userFastTurnsForStats
+                val rawNewEnergy = (curEnergyBefore + movesToCredit * userFastEnergyForStats).coerceIn(0, 100)
+                val snappedFinalEnergy = (((rawNewEnergy.toDouble() / userFastEnergyForStats.toDouble()).roundToInt()) * userFastEnergyForStats).coerceIn(0, 100)
+                playerSlotEnergy[activeUserIdx] = snappedFinalEnergy
+                playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + movesToCredit * userFastTurnsForStats).coerceAtLeast(0)
+                phasePlayerTurns += movesToCredit * userFastTurnsForStats
                 playerSlotCurrentMoveTurns[activeUserIdx] = 0
                 playerLastFastCreditedAtMs[activeUserIdx] = nowMs
+                isPlayerInIdleFallback = false
+                lastIdleFallbackOppCreditMs = 0L
                 hpChanged = true
             }
         }
 
-        // 1D. v3.69: Universal PvPoke Fast Move Registration & Turn-Lag Makeup Engine (1T-5T vs 1T-5T)
-        //     - Strictly gated by confirmed game turns (never a free-running wall-clock timer).
-        //     - An N-turn opponent fast move only registers its damage and energy on its final turn N (O, 2O, 3O...).
-        //     - At phase turn `phasePlayerTurns`, the opponent has completed `floor(phasePlayerTurns / O)` full moves
-        //       and has `phasePlayerTurns % O` uncommitted animation turns in flight (which award 0 energy).
+        // 1D. v3.80: Universal PvPoke Fast Move Registration, Turn-Lag Makeup & Player-Idle (>2 Fast Moves) Back-Credit + Fallback
         if (hasBattleStarted &&
             canAccumulateFastEnergy &&
             !playerFaintedSlots[activeUserIdx] &&
-            !oppFaintedSlots[activeOppIdx] &&
-            userFastMovesCreditedThisFrame > 0
+            !oppFaintedSlots[activeOppIdx]
         ) {
-            val totalCompletedOppMovesInPhase = phasePlayerTurns / oppFastTurnsForStats
-            val alreadyCreditedOppMovesInPhase = phaseOppTurns / oppFastTurnsForStats
-            val makeupOppMoves = (totalCompletedOppMovesInPhase - alreadyCreditedOppMovesInPhase).coerceAtLeast(0)
+            if (userFastMovesCreditedThisFrame > 0) {
+                val totalCompletedOppMovesInPhase = phasePlayerTurns / oppFastTurnsForStats
+                val alreadyCreditedOppMovesInPhase = phaseOppTurns / oppFastTurnsForStats
+                val makeupOppMoves = (totalCompletedOppMovesInPhase - alreadyCreditedOppMovesInPhase).coerceAtLeast(0)
 
-            if (makeupOppMoves > 0 && oppFastMovesCreditedByHpThisFrame == 0) {
-                oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] + makeupOppMoves * oppFastEnergyForStats).coerceIn(0, 100)
-                oppSlotTurnsOnField[activeOppIdx] = (oppSlotTurnsOnField[activeOppIdx] + makeupOppMoves * oppFastTurnsForStats).coerceAtLeast(0)
-                phaseOppTurns += makeupOppMoves * oppFastTurnsForStats
-                oppLastFastCreditedAtMs[activeOppIdx] = nowMs
-                oppCreditedByOptimalTimerAtMs[activeOppIdx] = nowMs
+                if (makeupOppMoves > 0 && oppFastMovesCreditedByHpThisFrame == 0) {
+                    oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] + makeupOppMoves * oppFastEnergyForStats).coerceIn(0, 100)
+                    oppSlotTurnsOnField[activeOppIdx] = (oppSlotTurnsOnField[activeOppIdx] + makeupOppMoves * oppFastTurnsForStats).coerceAtLeast(0)
+                    phaseOppTurns += makeupOppMoves * oppFastTurnsForStats
+                    oppLastFastCreditedAtMs[activeOppIdx] = nowMs
+                    oppCreditedByOptimalTimerAtMs[activeOppIdx] = nowMs
+                    hpChanged = true
+                }
+                oppSlotCurrentMoveTurns[activeOppIdx] = (phasePlayerTurns - phaseOppTurns).coerceIn(0, oppFastTurnsForStats - 1)
+            } else {
+                // Player-Idle (> 2 player fast move durations) OR Confirmed 100E Cap Fallback:
+                val idleWindowMs = (2 * userFastTurnsForStats * 500L).coerceAtLeast(1000L)
+                val elapsedSinceLastUserFastMs = if (playerLastFastCreditedAtMs[activeUserIdx] > 0L) {
+                    (nowMs - playerLastFastCreditedAtMs[activeUserIdx]).coerceAtLeast(0L)
+                } else 0L
+                val isUserAt100Cap = playerSlotEnergy[activeUserIdx] >= 100
+                val shouldIdleFallback = (playerLastFastCreditedAtMs[activeUserIdx] > 0L && elapsedSinceLastUserFastMs >= idleWindowMs) || isUserAt100Cap
+
+                if (shouldIdleFallback) {
+                    if (!isPlayerInIdleFallback) {
+                        // 1. Immediate Back-Credit for the 2-fast-move idle detection window before ongoing fallback kicks in!
+                        isPlayerInIdleFallback = true
+                        if (elapsedSinceLastUserFastMs >= idleWindowMs) {
+                            val backCreditTurns = (elapsedSinceLastUserFastMs / 500L).toInt().coerceIn(2 * userFastTurnsForStats, 12)
+                            phasePlayerTurns += backCreditTurns
+                            val completedOppAfterIdle = phasePlayerTurns / oppFastTurnsForStats
+                            val creditedOppBeforeIdle = phaseOppTurns / oppFastTurnsForStats
+                            val backCreditOppMoves = (completedOppAfterIdle - creditedOppBeforeIdle).coerceAtLeast(0)
+                            if (backCreditOppMoves > 0) {
+                                oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] + backCreditOppMoves * oppFastEnergyForStats).coerceIn(0, 100)
+                                oppSlotTurnsOnField[activeOppIdx] = (oppSlotTurnsOnField[activeOppIdx] + backCreditOppMoves * oppFastTurnsForStats).coerceAtLeast(0)
+                                phaseOppTurns += backCreditOppMoves * oppFastTurnsForStats
+                                oppLastFastCreditedAtMs[activeOppIdx] = nowMs
+                                hpChanged = true
+                            }
+                        }
+                        lastIdleFallbackOppCreditMs = nowMs
+                    } else if (oppExactDmgPct < 3.0) {
+                        // 2. Ongoing Time-Based Fallback when opponent fast move deals < 3% damage (while >= 3% uses 1A HP drops)
+                        val oppMoveIntervalMs = (oppFastTurnsForStats * 500L).coerceAtLeast(500L)
+                        val anchorMs = if (lastIdleFallbackOppCreditMs > 0L) lastIdleFallbackOppCreditMs else nowMs
+                        if (nowMs - anchorMs >= oppMoveIntervalMs) {
+                            val steps = ((nowMs - anchorMs) / oppMoveIntervalMs).toInt().coerceIn(1, 2)
+                            oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] + steps * oppFastEnergyForStats).coerceIn(0, 100)
+                            oppSlotTurnsOnField[activeOppIdx] = (oppSlotTurnsOnField[activeOppIdx] + steps * oppFastTurnsForStats).coerceAtLeast(0)
+                            phaseOppTurns += steps * oppFastTurnsForStats
+                            phasePlayerTurns = max(phasePlayerTurns, phaseOppTurns)
+                            lastIdleFallbackOppCreditMs = anchorMs + steps * oppMoveIntervalMs
+                            oppLastFastCreditedAtMs[activeOppIdx] = nowMs
+                            hpChanged = true
+                        }
+                    }
+                }
+            }
+        }
+
+        // 1E. v3.80: Non-Standard Opponent Fast Move Detector (>= 10% Damage Threshold + 0/1/2 Turn Offset Setting)
+        if (hasBattleStarted &&
+            activeOppIdx in 0..2 &&
+            !oppFastMoveConfirmed[activeOppIdx] &&
+            !oppFaintedSlots[activeOppIdx] &&
+            !playerFaintedSlots[activeUserIdx]
+        ) {
+            val stdFastName = oppMetaForStats.defaultFastMove
+            val stdFastTurns = resolveFastTurnsStatic(stdFastName, oppMetaForStats.fastTurns).coerceIn(1, 5)
+            val stdExactDmg = calculateFastMoveExactDamagePercent(
+                attacker = oppMetaForStats,
+                defender = userMetaForStats,
+                fastMoveName = stdFastName,
+                fastTurns = stdFastTurns,
+                isAttackerShadow = isOpponentShadow,
+                isDefenderShadow = isUserShadForStats
+            )
+            // Number of turns for standard moveset to deal >= 10% damage to player's active Pokémon
+            val stdMovesFor10Pct = ceil(10.0 / max(0.4, stdExactDmg)).toInt().coerceIn(1, 14)
+            val turnsFor10Pct = (stdMovesFor10Pct * stdFastTurns).coerceIn(2, 30)
+            val offsetTurns = fastDetectTurnOffset.coerceIn(0, 2)
+
+            val rawPoolFast = getAvailableMovePoolForSpeciesStatic(oppMetaForStats.name, activeLeague).first
+            val candidateFastMoves = (listOf(stdFastName) + rawPoolFast)
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinctBy { it.lowercase() }
+
+            // For each valid move M_i (duration N_i), sample at first multiple of N_i >= turnsFor10Pct + offsetTurns
+            var maxRequiredSampleTurn = turnsFor10Pct + offsetTurns
+            for (cand in candidateFastMoves) {
+                val cTurns = resolveFastTurnsStatic(cand, stdFastTurns).coerceIn(1, 5)
+                val firstRegTurn = ceil(turnsFor10Pct.toDouble() / cTurns.toDouble()).toInt().coerceAtLeast(1) * cTurns + offsetTurns
+                if (firstRegTurn > maxRequiredSampleTurn) {
+                    maxRequiredSampleTurn = firstRegTurn
+                }
+            }
+
+            val elapsedEvalTurns = max(oppSlotTurnsOnField[activeOppIdx], phasePlayerTurns)
+            if (elapsedEvalTurns >= maxRequiredSampleTurn) {
+                val effectiveTurnsForDamage = (elapsedEvalTurns - offsetTurns).coerceAtLeast(1)
+                val observedDmgPct = if (oppCumulativeFastDmgPct[activeOppIdx] > 0) {
+                    oppCumulativeFastDmgPct[activeOppIdx].toDouble()
+                } else {
+                    max(0, 100 - playerSlotHpPct[activeUserIdx]).toDouble()
+                }
+
+                data class FastMoveEval(
+                    val moveName: String,
+                    val turns: Int,
+                    val energy: Int,
+                    val expectedDmg: Double,
+                    val absError: Double,
+                    val confidence: Double
+                )
+
+                val evals = candidateFastMoves.map { cand ->
+                    val cTurns = resolveFastTurnsStatic(cand, stdFastTurns).coerceIn(1, 5)
+                    val cEnergy = resolveFastEnergyStatic(cand, cTurns).coerceIn(2, 20)
+                    val cDmg = calculateFastMoveExactDamagePercent(
+                        attacker = oppMetaForStats,
+                        defender = userMetaForStats,
+                        fastMoveName = cand,
+                        fastTurns = cTurns,
+                        isAttackerShadow = isOpponentShadow,
+                        isDefenderShadow = isUserShadForStats
+                    )
+                    val completedMoves = (effectiveTurnsForDamage / cTurns).coerceAtLeast(1)
+                    val expDmg = completedMoves * cDmg
+                    val err = kotlin.math.abs(observedDmgPct - expDmg)
+                    val denom = max(2.5, expDmg * 0.35)
+                    val conf = 1.0 / (1.0 + (err / denom) * (err / denom))
+                    FastMoveEval(cand, cTurns, cEnergy, expDmg, err, conf)
+                }
+
+                val stdEval = evals.firstOrNull { it.moveName.equals(stdFastName, ignoreCase = true) } ?: evals.first()
+                val bestEval = evals.maxByOrNull { it.confidence } ?: stdEval
+
+                // Tie-break to standard move if confidence is close (< 0.14 gap or <= 2.2% damage error difference)
+                val isNonStandardWinner = !bestEval.moveName.equals(stdFastName, ignoreCase = true) &&
+                    (bestEval.confidence - stdEval.confidence) >= 0.14 &&
+                    (stdEval.absError - bestEval.absError) >= 2.2 &&
+                    bestEval.confidence >= 0.52
+
+                oppFastMoveConfirmed[activeOppIdx] = true
+                if (isNonStandardWinner) {
+                    detectedOppFastMoveOverride[activeOppIdx] = bestEval.moveName
+                    oppFastMoveStatus[activeOppIdx] = "confirmed_non_standard"
+                    // Retroactively adjust opponent energy & turns for the newly confirmed fast move (capped at 100E)
+                    val newCompletedMoves = (effectiveTurnsForDamage / bestEval.turns).coerceAtLeast(0)
+                    oppSlotEnergy[activeOppIdx] = (newCompletedMoves * bestEval.energy).coerceIn(0, 100)
+                    oppSlotTurnsOnField[activeOppIdx] = newCompletedMoves * bestEval.turns
+                    phaseOppTurns = (phasePlayerTurns / bestEval.turns) * bestEval.turns
+                    oppSlotCurrentMoveTurns[activeOppIdx] = (phasePlayerTurns - phaseOppTurns).coerceIn(0, bestEval.turns - 1)
+                    showBattleToast("⚠️ Non-Standard Fast: ${oppMetaForStats.name} has ${bestEval.moveName} (${bestEval.turns}t/${bestEval.energy}e)!")
+                } else {
+                    detectedOppFastMoveOverride[activeOppIdx] = ""
+                    oppFastMoveStatus[activeOppIdx] = "confirmed_standard"
+                }
                 hpChanged = true
             }
-            oppSlotCurrentMoveTurns[activeOppIdx] = (phasePlayerTurns - phaseOppTurns).coerceIn(0, oppFastTurnsForStats - 1)
         }
 
         // Track consecutive frames of Charged Move HUD signatures calibrated for 10Hz (100ms) scan rate:
@@ -10785,8 +11225,6 @@ class OverlayService : LifecycleService() {
             postOppChargedMissingPlayerHpFrames = 0
         }
 
-        // v3.69: Normal Fast-Move Combat remains active even when "NOT VERY EFFECTIVE" / "SUPER EFFECTIVE" hides sampledOppHpPct,
-        // as long as the player HP bar or bottom Charge Move buttons are visible and neither Pokémon is fainted.
         val isNormalFastCombatFrame = !isPostFaintSwitchPromptActive &&
             !hasAttackIncomingText &&
             !hasUserChargedBannerText &&
@@ -10796,14 +11234,11 @@ class OverlayService : LifecycleService() {
             (sampledOppHpPct in 1..100 || sampledPlayerHpPct in 1..100 || sampledLeftChargeBtnFillPct in 0..200 || sampledRightChargeBtnFillPct in 0..200)
         lastFrameWasNormalFastCombat = isNormalFastCombatFrame
 
-        // Track when the player's normal bottom charged move buttons were last visible during steady combat
         if (isNormalFastCombatFrame && (playerMoveLines.any { it.text.trim().length >= 4 } || sampledLeftChargeBtnFillPct in 0..200 || sampledRightChargeBtnFillPct in 0..200)) {
             lastSteadyMoveButtonsSeenMs = nowMs
         }
 
         // 2. Detect Opponent Charged Attack ("Attack incoming!", "No Protect Shields remaining!", or top Pokéballs hidden for >= 600ms while HP bars remain visible)
-        //    v3.69: Enforces PvPoke Charged Move Phase Reset — any incomplete in-flight player fast move (phaseOppTurns % U > 0)
-        //    fails to register (0E, 0 dmg), and both Pokémon reset to Turn 0 (phasePlayerTurns = 0, phaseOppTurns = 0).
         val isOpponentChargedScreen = hasAttackIncomingText || (missingTopBallsWithHpBarsFrames >= 6 && pendingChargedAttackActor != "user")
         if (isOpponentChargedScreen) {
             val wasPromptActive = isAttackIncomingPromptActive
@@ -10813,8 +11248,7 @@ class OverlayService : LifecycleService() {
             predictedOppSlotHpPct[activeOppIdx] = oppSlotHpPct[activeOppIdx]
             if (pendingChargedAttackActor != "opp" && (nowMs - lastChargedAttackLoggedMs) > 2200L) {
                 hasBattleStarted = true
-                // If opponent had not yet been credited for the final fast move that reached their charged move energy,
-                // reconcile completed opponent moves up to the throw boundary and wipe any partial player fast move turns.
+                // Reconcile completed opponent moves up to the throw boundary (assuming opponent throws on optimal timing if energy < cheapestOppEnergy)
                 if (phasePlayerTurns > 0) {
                     val completedOppByThrow = phasePlayerTurns / oppFastTurnsForStats
                     val creditedOppSoFar = phaseOppTurns / oppFastTurnsForStats
@@ -10823,6 +11257,11 @@ class OverlayService : LifecycleService() {
                         oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] + missingFullOppMoves * oppFastEnergyForStats).coerceIn(0, 100)
                         oppSlotTurnsOnField[activeOppIdx] = (oppSlotTurnsOnField[activeOppIdx] + missingFullOppMoves * oppFastTurnsForStats).coerceAtLeast(0)
                     }
+                }
+                if (oppSlotEnergy[activeOppIdx] < cheapestOppEnergy) {
+                    val neededOppMoves = ceil((cheapestOppEnergy - oppSlotEnergy[activeOppIdx]).toDouble() / oppFastEnergyForStats.toDouble()).toInt().coerceIn(1, 4)
+                    oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] + neededOppMoves * oppFastEnergyForStats).coerceIn(0, 100)
+                    oppSlotTurnsOnField[activeOppIdx] = (oppSlotTurnsOnField[activeOppIdx] + neededOppMoves * oppFastTurnsForStats).coerceAtLeast(0)
                 }
                 pendingChargedAttackActor = "opp"
                 pendingChargedAttackStartMs = nowMs
@@ -10834,11 +11273,12 @@ class OverlayService : LifecycleService() {
                 pendingChargedAttackDefenderName = activeUserPokemonName ?: userSlotCfg?.name ?: "Player"
                 oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] - cheapestOppEnergy).coerceIn(0, 100)
                 pendingChargedAttackDeductedEnergy = cheapestOppEnergy
-                // Reset both Pokémon to Turn 0 (wiping any uncommitted partial fast-move animation turns)
                 phasePlayerTurns = 0
                 phaseOppTurns = 0
                 playerSlotCurrentMoveTurns[activeUserIdx] = 0
                 oppSlotCurrentMoveTurns[activeOppIdx] = 0
+                isPlayerInIdleFallback = false
+                lastIdleFallbackOppCreditMs = 0L
                 lastTurnTickTimeMs = System.currentTimeMillis()
                 turnResidualMs = 0L
                 hpChanged = true
@@ -10856,9 +11296,8 @@ class OverlayService : LifecycleService() {
         }
 
         // 3. Detect Player Charged Attack Minigame ("Get ready!" / "GREAT!" / "EXCELLENT!" / "NICE!" or both floating HP bars & Charge Move buttons hidden for >= 600ms)
-        //    v3.69: Enforces PvPoke Charged Move Interruption & Turn-0 Phase Reset — only opponent fast moves that completed all O turns
-        //    on or before `phasePlayerTurns` (floor(phasePlayerTurns / O)) register; any in-flight opponent move with
-        //    `(phasePlayerTurns % O) > 0` (e.g. Turn 3 of 5 on Incinerate) is cut short with 0 energy and 0 damage, and both reset to Turn 0!
+        //    v3.80: Player throwing charged moves on time is the truth basis for turn counting — reconciles any uncredited fast moves
+        //    required to reach the thrown move energy and credits the opponent for completed turns up to the throw boundary!
         val isPlayerChargedScreen = hasUserChargedBannerText ||
             (missingBothHpBarsFrames >= 6 && pendingChargedAttackActor != "opp" &&
                 (sampledOppBalls in 1..3 || sampledPlayerBalls in 1..3 || (lastSteadyMoveButtonsSeenMs > 0L && (nowMs - lastSteadyMoveButtonsSeenMs) <= 6000L)))
@@ -10867,11 +11306,21 @@ class OverlayService : LifecycleService() {
             predictedOppSlotHpPct[activeOppIdx] = oppSlotHpPct[activeOppIdx]
             if (pendingChargedAttackActor != "user" && (nowMs - lastChargedAttackLoggedMs) > 2200L) {
                 hasBattleStarted = true
+                preChargeLeftFillPct = lastScannedLeftChargeFillPct[activeUserIdx].coerceAtLeast(0)
+                preChargeRightFillPct = lastScannedRightChargeFillPct[activeUserIdx].coerceAtLeast(0)
+
+                // If player threw a charged move on time but energy was < cheapestUserEnergy (missed turn), reconcile missed turns first!
+                if (playerSlotEnergy[activeUserIdx] < cheapestUserEnergy) {
+                    val missingUserFasts = ceil((cheapestUserEnergy - playerSlotEnergy[activeUserIdx]).toDouble() / userFastEnergyForStats.toDouble()).toInt().coerceIn(1, 4)
+                    playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] + missingUserFasts * userFastEnergyForStats).coerceIn(0, 100)
+                    playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + missingUserFasts * userFastTurnsForStats).coerceAtLeast(0)
+                    phasePlayerTurns += missingUserFasts * userFastTurnsForStats
+                }
+
                 if (phasePlayerTurns > 0) {
                     val maxCompletedOppMovesBeforeThrow = phasePlayerTurns / oppFastTurnsForStats
                     val creditedOppMovesInPhase = phaseOppTurns / oppFastTurnsForStats
                     if (creditedOppMovesInPhase > maxCompletedOppMovesBeforeThrow) {
-                        // Roll back any incomplete opponent move that had not reached its final turn O before player's Charged Move froze the field
                         val excessMoves = creditedOppMovesInPhase - maxCompletedOppMovesBeforeThrow
                         oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] - excessMoves * oppFastEnergyForStats).coerceIn(0, 100)
                         oppSlotTurnsOnField[activeOppIdx] = (oppSlotTurnsOnField[activeOppIdx] - excessMoves * oppFastTurnsForStats).coerceAtLeast(0)
@@ -10891,11 +11340,12 @@ class OverlayService : LifecycleService() {
                 pendingChargedAttackDefenderName = formatOpponentNameWithShadow(activeOpponentName)
                 playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] - cheapestUserEnergy).coerceIn(0, 100)
                 pendingChargedAttackDeductedEnergy = cheapestUserEnergy
-                // Reset both Pokémon to Turn 0 (erasing all uncommitted partial fast-move animation turns)
                 phasePlayerTurns = 0
                 phaseOppTurns = 0
                 playerSlotCurrentMoveTurns[activeUserIdx] = 0
                 oppSlotCurrentMoveTurns[activeOppIdx] = 0
+                isPlayerInIdleFallback = false
+                lastIdleFallbackOppCreditMs = 0L
                 lastTurnTickTimeMs = System.currentTimeMillis()
                 turnResidualMs = 0L
                 hpChanged = true
@@ -10916,6 +11366,8 @@ class OverlayService : LifecycleService() {
         }
 
         // 4. Reconcile Pending Charged Attack once defender's HP bar returns or KO is confirmed
+        //    v3.80: 3-Tier Energy Depletion (1: Banner OCR "<Pokemon> used <Move>!", 2: Unshielded HP Best-Guess, 3: Cheapest Viable Move Fallback)
+        //    + Confirmed Opponent Charged Move Tracking + Player Post-Throw Dual-Meter Validation!
         val isDefenderHpReadyAfterCharge = (pendingChargedAttackActor == "opp" && sampledPlayerHpPct in 1..100) ||
             (pendingChargedAttackActor == "user" && sampledOppHpPct in 1..100)
         if (pendingChargedAttackActor.isNotEmpty() && (nowMs - pendingChargedAttackStartMs) >= 1100L && (isDefenderHpReadyAfterCharge || isPostChargedKoReady)) {
@@ -10941,28 +11393,50 @@ class OverlayService : LifecycleService() {
                 val shieldDropped = playerShieldsRemaining < pendingChargedAttackPreUserShields
                 val shielded = shieldDropped || (hpDelta <= 3 && pendingChargedAttackPreUserShields > 0 && !playerFaintedSlots[activeUserIdx])
 
-                val inferredMove: String? = if (!shielded) {
-                    val candPairs = oppMoveNames.map { mName ->
-                        mName to calculateChargedMoveDamagePercent(
-                            attacker = oppMetaForStats,
-                            defender = userMetaForStats,
-                            moveName = mName,
-                            isAttackerShadow = isOpponentShadow,
-                            isDefenderShadow = isUserShadForStats
-                        )
-                    }
-                    inferUnshieldedChargedMoveName(hpDelta, candPairs)
+                // Tier 1: Mid-screen Banner OCR ("<Opponent> used <Move>!")
+                val bannerOppMove = if (lastDetectedBannerMoveActor == "opp" &&
+                    (nowMs - lastDetectedBannerMoveTimeMs) <= 7500L &&
+                    lastDetectedBannerMoveName.isNotBlank()
+                ) {
+                    lastDetectedBannerMoveName
                 } else null
 
-                val totalTargetEnergy = if (!shielded && inferredMove != null) {
-                    oppMoveEnergyMap[inferredMove] ?: cheapestOppEnergy
+                val candPairs = oppMoveNames.map { mName ->
+                    mName to calculateChargedMoveDamagePercent(
+                        attacker = oppMetaForStats,
+                        defender = userMetaForStats,
+                        moveName = mName,
+                        isAttackerShadow = isOpponentShadow,
+                        isDefenderShadow = isUserShadForStats
+                    )
+                }
+
+                // Tier 2: Unshielded HP drop best-guess if Banner OCR missed it
+                val strictHpMove = if (!shielded) inferUnshieldedChargedMoveName(hpDelta, candPairs) else null
+                val bestGuessHpMove = if (!shielded) inferBestGuessChargedMoveByHp(hpDelta, candPairs) else null
+
+                val resolvedOppMove = bannerOppMove ?: strictHpMove ?: bestGuessHpMove
+                // Record confirmed opponent charged move in per-slot moveset memory (if detected via Banner OCR or strict HP match)
+                val confirmedMoveToRemember = bannerOppMove ?: strictHpMove
+                if (confirmedMoveToRemember != null && activeOppIdx in 0..2) {
+                    confirmedOppChargedMoves[activeOppIdx].add(confirmedMoveToRemember)
+                }
+
+                val totalTargetEnergy = if (resolvedOppMove != null) {
+                    val mStats = resolveChargedMoveStatsStatic(resolvedOppMove, oppMetaForStats.types.firstOrNull() ?: "normal")
+                    oppMoveEnergyMap[resolvedOppMove] ?: (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[resolvedOppMove] ?: cheapestOppEnergy).coerceIn(35, 100)
                 } else {
+                    // Tier 3 Fallback: Lowest energy viable opponent move to err on the side of opponent having more energy
                     cheapestOppEnergy
                 }
                 val alreadyDeducted = pendingChargedAttackDeductedEnergy.coerceAtLeast(0)
                 val extraToDeduct = (totalTargetEnergy - alreadyDeducted).coerceAtLeast(0)
                 if (extraToDeduct > 0) {
                     oppSlotEnergy[activeOppIdx] = (oppSlotEnergy[activeOppIdx] - extraToDeduct).coerceIn(0, 100)
+                }
+                if (lastDetectedBannerMoveActor == "opp") {
+                    lastDetectedBannerMoveActor = ""
+                    lastDetectedBannerMoveName = ""
                 }
 
                 // Re-index turn offset and reset fast-move phase to Turn 0 after charged move camera cut
@@ -10977,10 +11451,12 @@ class OverlayService : LifecycleService() {
                 playerLastFastCreditedAtMs[activeUserIdx] = 0L
                 oppLastFastCreditedAtMs[activeOppIdx] = 0L
                 oppCreditedByOptimalTimerAtMs[activeOppIdx] = 0L
-                lastScannedLeftChargeFillPct[activeUserIdx] = -1
-                lastScannedRightChargeFillPct[activeUserIdx] = -1
-                pendingConfirmLeftChargeFillPct[activeUserIdx] = -1
-                pendingConfirmRightChargeFillPct[activeUserIdx] = -1
+                isPlayerInIdleFallback = false
+                lastIdleFallbackOppCreditMs = 0L
+                lastScannedLeftChargeFillPct[activeUserIdx] = if (sampledLeftChargeBtnFillPct in 0..200) sampledLeftChargeBtnFillPct else 0
+                lastScannedRightChargeFillPct[activeUserIdx] = if (sampledRightChargeBtnFillPct in 0..200) sampledRightChargeBtnFillPct else 0
+                pendingConfirmLeftChargeFillPct[activeUserIdx] = lastScannedLeftChargeFillPct[activeUserIdx]
+                pendingConfirmRightChargeFillPct[activeUserIdx] = lastScannedRightChargeFillPct[activeUserIdx]
                 leftChargeFillConfirmFrames[activeUserIdx] = 0
                 rightChargeFillConfirmFrames[activeUserIdx] = 0
                 lastScannedPlayerSlotHpPct[activeUserIdx] = playerSlotHpPct[activeUserIdx]
@@ -11001,7 +11477,7 @@ class OverlayService : LifecycleService() {
                         hpBeforePct = hpBefore,
                         hpAfterPct = if (shielded) max(1, hpBefore - 1) else postHp,
                         hpDeltaPct = if (shielded) 1 else hpDelta,
-                        inferredMoveName = inferredMove,
+                        inferredMoveName = resolvedOppMove,
                         userSlotHpPct = playerSlotHpPct.toList(),
                         oppSlotHpPct = oppSlotHpPct.toList(),
                         userShieldsRemaining = playerShieldsRemaining,
@@ -11021,7 +11497,7 @@ class OverlayService : LifecycleService() {
                 pendingChargedAttackActor = ""
                 pendingChargedAttackDeductedEnergy = 0
                 hpChanged = true
-                val moveLabel = inferredMove ?: "Charged Attack"
+                val moveLabel = resolvedOppMove ?: "Charged Attack"
                 val outcomeLabel = if (shielded) "Shielded (-${totalTargetEnergy}E)" else "-${hpDelta}% HP (-${totalTargetEnergy}E)"
                 showBattleToast("⚡ Opp $moveLabel ($outcomeLabel)")
             } else if (actor == "user") {
@@ -11041,21 +11517,38 @@ class OverlayService : LifecycleService() {
                 val shieldDropped = oppShieldsRemaining < pendingChargedAttackPreOppShields
                 val shielded = shieldDropped || (hpDelta <= 3 && pendingChargedAttackPreOppShields > 0 && !oppFaintedSlots[activeOppIdx])
 
-                val inferredMove: String? = if (!shielded && hpDelta >= 4) {
-                    val candPairs = userMoveNames.map { mName ->
-                        mName to calculateChargedMoveDamagePercent(
-                            attacker = userMetaForStats,
-                            defender = oppMetaForStats,
-                            moveName = mName,
-                            isAttackerShadow = isUserShadForStats,
-                            isDefenderShadow = isOpponentShadow
-                        )
-                    }
-                    inferUnshieldedChargedMoveName(hpDelta, candPairs)
+                val bannerUserMove = if (lastDetectedBannerMoveActor == "user" &&
+                    (nowMs - lastDetectedBannerMoveTimeMs) <= 7500L &&
+                    lastDetectedBannerMoveName.isNotBlank()
+                ) {
+                    lastDetectedBannerMoveName
                 } else null
 
-                val totalUserEnergy = if (!shielded && inferredMove != null) {
-                    userMoveEnergyMap[inferredMove] ?: cheapestUserEnergy
+                val candPairs = userMoveNames.map { mName ->
+                    mName to calculateChargedMoveDamagePercent(
+                        attacker = userMetaForStats,
+                        defender = oppMetaForStats,
+                        moveName = mName,
+                        isAttackerShadow = isUserShadForStats,
+                        isDefenderShadow = isOpponentShadow
+                    )
+                }
+                val hpInferredUserMove = if (!shielded && hpDelta >= 4) {
+                    inferUnshieldedChargedMoveName(hpDelta, candPairs) ?: inferBestGuessChargedMoveByHp(hpDelta, candPairs)
+                } else null
+
+                // Dual-meter post-throw validation: check if post-throw charge circle fill readings disambiguate Move 1 vs Move 2
+                val gaugeInferredUserMove = if (userMoveNames.size >= 2 && (preChargeLeftFillPct >= 95 || preChargeRightFillPct >= 95)) {
+                    when {
+                        preChargeRightFillPct >= 95 && preChargeLeftFillPct < 92 -> userMoveNames[1]
+                        preChargeLeftFillPct >= 95 && preChargeRightFillPct < 92 -> userMoveNames[0]
+                        else -> null
+                    }
+                } else null
+
+                val resolvedUserMove = bannerUserMove ?: hpInferredUserMove ?: gaugeInferredUserMove
+                val totalUserEnergy = if (resolvedUserMove != null) {
+                    userMoveEnergyMap[resolvedUserMove] ?: cheapestUserEnergy
                 } else {
                     cheapestUserEnergy
                 }
@@ -11063,6 +11556,25 @@ class OverlayService : LifecycleService() {
                 val extraToDeduct = (totalUserEnergy - alreadyDeducted).coerceAtLeast(0)
                 if (extraToDeduct > 0) {
                     playerSlotEnergy[activeUserIdx] = (playerSlotEnergy[activeUserIdx] - extraToDeduct).coerceIn(0, 100)
+                }
+
+                // Cross-check residual player energy against post-throw Charge Move Circles if visible (0..99%)
+                if (sampledLeftChargeBtnFillPct in 0..95 || sampledRightChargeBtnFillPct in 0..95) {
+                    val postE1 = if (sampledLeftChargeBtnFillPct in 0..95) {
+                        (((sampledLeftChargeBtnFillPct.toDouble() * userMove1Energy.toDouble()) / 100.0) / userFastEnergyForStats.toDouble()).roundToInt() * userFastEnergyForStats
+                    } else -1
+                    val postE2 = if (sampledRightChargeBtnFillPct in 0..95) {
+                        (((sampledRightChargeBtnFillPct.toDouble() * userMove2Energy.toDouble()) / 100.0) / userFastEnergyForStats.toDouble()).roundToInt() * userFastEnergyForStats
+                    } else -1
+                    val postGaugeEnergy = max(postE1, postE2)
+                    if (postGaugeEnergy in 0..100 && kotlin.math.abs(postGaugeEnergy - playerSlotEnergy[activeUserIdx]) <= userFastEnergyForStats * 2) {
+                        playerSlotEnergy[activeUserIdx] = postGaugeEnergy.coerceIn(0, 100)
+                    }
+                }
+
+                if (lastDetectedBannerMoveActor == "user") {
+                    lastDetectedBannerMoveActor = ""
+                    lastDetectedBannerMoveName = ""
                 }
 
                 // Re-index turn offset and reset fast-move phase to Turn 0 after user charged move
@@ -11077,10 +11589,12 @@ class OverlayService : LifecycleService() {
                 playerLastFastCreditedAtMs[activeUserIdx] = 0L
                 oppLastFastCreditedAtMs[activeOppIdx] = 0L
                 oppCreditedByOptimalTimerAtMs[activeOppIdx] = 0L
-                lastScannedLeftChargeFillPct[activeUserIdx] = -1
-                lastScannedRightChargeFillPct[activeUserIdx] = -1
-                pendingConfirmLeftChargeFillPct[activeUserIdx] = -1
-                pendingConfirmRightChargeFillPct[activeUserIdx] = -1
+                isPlayerInIdleFallback = false
+                lastIdleFallbackOppCreditMs = 0L
+                lastScannedLeftChargeFillPct[activeUserIdx] = if (sampledLeftChargeBtnFillPct in 0..200) sampledLeftChargeBtnFillPct else 0
+                lastScannedRightChargeFillPct[activeUserIdx] = if (sampledRightChargeBtnFillPct in 0..200) sampledRightChargeBtnFillPct else 0
+                pendingConfirmLeftChargeFillPct[activeUserIdx] = lastScannedLeftChargeFillPct[activeUserIdx]
+                pendingConfirmRightChargeFillPct[activeUserIdx] = lastScannedRightChargeFillPct[activeUserIdx]
                 leftChargeFillConfirmFrames[activeUserIdx] = 0
                 rightChargeFillConfirmFrames[activeUserIdx] = 0
                 lastScannedPlayerSlotHpPct[activeUserIdx] = playerSlotHpPct[activeUserIdx]
@@ -11101,7 +11615,7 @@ class OverlayService : LifecycleService() {
                         hpBeforePct = hpBefore,
                         hpAfterPct = if (shielded) max(1, hpBefore - 1) else postHp,
                         hpDeltaPct = if (shielded) 1 else hpDelta,
-                        inferredMoveName = inferredMove,
+                        inferredMoveName = resolvedUserMove,
                         userSlotHpPct = playerSlotHpPct.toList(),
                         oppSlotHpPct = oppSlotHpPct.toList(),
                         userShieldsRemaining = playerShieldsRemaining,
@@ -11124,7 +11638,7 @@ class OverlayService : LifecycleService() {
             }
         }
 
-        // 5. v3.69: Advance 0.5s battle turn counter ONLY after hasBattleStarted is confirmed by the 1st attack!
+        // 5. v3.80: Advance 0.5s battle turn counter ONLY after hasBattleStarted is confirmed by the 1st attack!
         if (hasBattleStarted &&
             isNormalFastCombatFrame &&
             !playerFaintedSlots[activeUserIdx] &&
@@ -11470,10 +11984,23 @@ class OverlayService : LifecycleService() {
                 }
 
                 if (wasWaitingForOpponent) {
-                    battleClockAnchorMs = System.currentTimeMillis()
-                    hasBattleStarted = false
-                    phasePlayerTurns = 0
-                    phaseOppTurns = 0
+                    // v3.80: If the player already registered Move 1 (0 -> 4E) on the static Charge Circle before async ML Kit OCR
+                    // finished reading the opponent lead name, preserve `hasBattleStarted`, `phasePlayerTurns`, and `playerSlotEnergy`
+                    // and immediately catch up the newly identified opponent's turns/energy!
+                    if (!hasBattleStarted) {
+                        battleClockAnchorMs = System.currentTimeMillis()
+                        phasePlayerTurns = 0
+                        phaseOppTurns = 0
+                    } else if (phasePlayerTurns > 0) {
+                        val leadOppFastTurns = resolveFastTurnsStatic(matched.defaultFastMove, matched.fastTurns).coerceIn(1, 5)
+                        val leadOppFastEnergy = resolveFastEnergyStatic(matched.defaultFastMove, leadOppFastTurns).coerceIn(2, 20)
+                        val completedLeadOppMoves = phasePlayerTurns / leadOppFastTurns
+                        if (completedLeadOppMoves > 0) {
+                            oppSlotEnergy[0] = (completedLeadOppMoves * leadOppFastEnergy).coerceIn(0, 100)
+                            oppSlotTurnsOnField[0] = completedLeadOppMoves * leadOppFastTurns
+                            phaseOppTurns = completedLeadOppMoves * leadOppFastTurns
+                        }
+                    }
                     battleTimelineEvents.clear()
                     oppPokeballCount = 3
                     oppFaintedSlots.fill(false)
@@ -12770,12 +13297,27 @@ class OverlayService : LifecycleService() {
         oppCreditedByOptimalTimerAtMs.fill(0L)
         sampledLeftChargeBtnFillPct = -1
         sampledRightChargeBtnFillPct = -1
-        lastScannedLeftChargeFillPct.fill(-1)
-        lastScannedRightChargeFillPct.fill(-1)
-        pendingConfirmLeftChargeFillPct.fill(-1)
-        pendingConfirmRightChargeFillPct.fill(-1)
-        leftChargeFillConfirmFrames.fill(0)
-        rightChargeFillConfirmFrames.fill(0)
+        // v3.80: Lock Charge Move Circle baseline to 0% empty at battle start so Move 1 (0->4E) always registers immediately!
+        lastScannedLeftChargeFillPct.fill(0)
+        lastScannedRightChargeFillPct.fill(0)
+        pendingConfirmLeftChargeFillPct.fill(0)
+        pendingConfirmRightChargeFillPct.fill(0)
+        leftChargeFillConfirmFrames.fill(2)
+        rightChargeFillConfirmFrames.fill(2)
+        isPlayerInIdleFallback = false
+        lastIdleFallbackOppCreditMs = 0L
+        lastDetectedBannerMoveName = ""
+        lastDetectedBannerMoveActor = ""
+        lastDetectedBannerMoveTimeMs = 0L
+        for (i in 0..2) {
+            confirmedOppChargedMoves[i].clear()
+            detectedOppFastMoveOverride[i] = ""
+            oppFastMoveStatus[i] = "unconfirmed"
+            oppFastMoveConfirmed[i] = false
+            oppCumulativeFastDmgPct[i] = 0
+        }
+        preChargeLeftFillPct = -1
+        preChargeRightFillPct = -1
         sampledOppHasPendingDmg = false
         sampledPlayerHasPendingDmg = false
         sampledOppPendingDmgPct = 0
@@ -14002,6 +14544,10 @@ class OverlayService : LifecycleService() {
                 "lastBattleAvgHpScanMs" to lastBattleAvgHpScanMs,
                 "enableHpTracking" to enableHpTracking,
                 "enableEnergyTracking" to enableEnergyTracking,
+                "chargeCircleOnlyMode" to chargeCircleOnlyMode,
+                "fastDetectTurnOffset" to fastDetectTurnOffset,
+                "oppFastMoveStatus" to "unconfirmed",
+                "confirmedOppChargedMoves" to emptyList<String>(),
                 "myMove1Summary" to "—",
                 "myMove2Summary" to "—",
                 "throwAlignmentText" to "Waiting for Opponent spawn",
@@ -14070,6 +14616,25 @@ class OverlayService : LifecycleService() {
             activeSlot?.ivs
         )
 
+        // FIXED DISCOVERY ORDER: [1st seen, 2nd seen, 3rd seen] — never reorder on switch!
+        val displayList = mutableListOf<String>()
+        val seenSpecies = mutableSetOf<String>()
+        val sourceList = if (detectedOpponents.isNotEmpty()) detectedOpponents else listOf(activeOpponentName)
+        for (opp in sourceList) {
+            val base = FormResolver.extractBaseSpecies(opp).lowercase()
+            if (seenSpecies.add(base)) {
+                displayList.add(opp)
+            }
+            if (displayList.size >= 3) break
+        }
+        val activeBase = FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
+        val activeOpponentSlotIndex = displayList.indexOfFirst {
+            FormResolver.extractBaseSpecies(it).equals(activeBase, ignoreCase = true)
+        }.let { if (it >= 0) it else 0 }
+        if (activeOpponentSlotIndex in 0..2 && oppSlotHpPct[activeOpponentSlotIndex] > 0) {
+            oppFaintedSlots[activeOpponentSlotIndex] = false
+        }
+
         val userMove1Name = activeSlot?.chargedMove1?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove1
         val userMove2Name = activeSlot?.chargedMove2?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove2
 
@@ -14093,8 +14658,11 @@ class OverlayService : LifecycleService() {
 
         val userFastMoveName = activeSlot?.fastMove?.takeIf { it.isNotBlank() } ?: userMeta.defaultFastMove
         val userFastTurns = resolveFastTurnsStatic(userFastMoveName, userMeta.fastTurns)
-        val oppFastMoveName = oppMeta.defaultFastMove
+        val activeOppSlotClamped = activeOpponentSlotIndex.coerceIn(0, 2)
+        val activeOppFastOverride = detectedOppFastMoveOverride.getOrNull(activeOppSlotClamped)?.takeIf { it.isNotBlank() }
+        val oppFastMoveName = activeOppFastOverride ?: oppMeta.defaultFastMove
         val oppFastTurns = resolveFastTurnsStatic(oppFastMoveName, oppMeta.fastTurns)
+        val activeOppFastStatus = oppFastMoveStatus.getOrElse(activeOppSlotClamped) { "unconfirmed" }
 
         val oppFastEnergy = resolveFastEnergyStatic(oppFastMoveName, oppFastTurns)
         val userFastEnergy = resolveFastEnergyStatic(userFastMoveName, userFastTurns)
@@ -14130,25 +14698,6 @@ class OverlayService : LifecycleService() {
         val zeroSneakAttacks = calculateZeroSneakThrows(userFastTurns, oppFastTurns)
         val throwAlignmentText = zeroSneakAttacks.joinToString(", ") { formatOrdinal(it) }
         val throwHorizonText = throwAlignmentText
-
-        // FIXED DISCOVERY ORDER: [1st seen, 2nd seen, 3rd seen] — never reorder on switch!
-        val displayList = mutableListOf<String>()
-        val seenSpecies = mutableSetOf<String>()
-        val sourceList = if (detectedOpponents.isNotEmpty()) detectedOpponents else listOf(activeOpponentName)
-        for (opp in sourceList) {
-            val base = FormResolver.extractBaseSpecies(opp).lowercase()
-            if (seenSpecies.add(base)) {
-                displayList.add(opp)
-            }
-            if (displayList.size >= 3) break
-        }
-        val activeBase = FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
-        val activeOpponentSlotIndex = displayList.indexOfFirst {
-            FormResolver.extractBaseSpecies(it).equals(activeBase, ignoreCase = true)
-        }.let { if (it >= 0) it else 0 }
-        if (activeOpponentSlotIndex in 0..2 && oppSlotHpPct[activeOpponentSlotIndex] > 0) {
-            oppFaintedSlots[activeOpponentSlotIndex] = false
-        }
 
         val scannedOpponentsData = displayList.mapIndexed { idx, opp ->
             val rawBaseKey = FormResolver.extractBaseSpecies(opp).lowercase()
@@ -14215,15 +14764,25 @@ class OverlayService : LifecycleService() {
             val matrix = calculate3v3Matrix(meta, isThisOppShadow, p1, p2, p3, idx)
             val thisOppHpPct = if (idx in 0..2 && oppFaintedSlots[idx]) 0 else oppSlotHpPct.getOrElse(idx) { 100 }.coerceIn(0, 100)
             val thisOppEnergy = if (idx in 0..2 && oppFaintedSlots[idx]) 0 else oppSlotEnergy.getOrElse(idx) { 0 }.coerceIn(0, 100)
-            val thisOppMoveNames = listOf(meta.chargedMove1, meta.chargedMove2, thirdMoveName, fourthMoveName)
+            val slotConfirmedSet = confirmedOppChargedMoves.getOrNull(idx) ?: emptySet()
+            val rawThisOppMoveNames = (listOf(meta.chargedMove1, meta.chargedMove2, thirdMoveName, fourthMoveName) + slotConfirmedSet)
                 .filter { it.isNotBlank() }
-                .distinct()
+                .distinctBy { it.lowercase() }
+            val thisOppMoveNames = if (slotConfirmedSet.size >= 2) {
+                rawThisOppMoveNames.filter { m -> slotConfirmedSet.any { c -> c.equals(m, ignoreCase = true) } }.ifEmpty { rawThisOppMoveNames }
+            } else {
+                rawThisOppMoveNames
+            }
             val cheapestOppMoveEnergy = thisOppMoveNames.map { mName ->
                 val mStats = resolveChargedMoveStatsStatic(mName, meta.types.firstOrNull() ?: "normal")
                 (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[mName] ?: 50).coerceIn(35, 100)
             }.minOrNull() ?: 45
             val isThisOppMoveReady = thisOppHpPct > 0 && thisOppEnergy >= cheapestOppMoveEnergy
             val thisOppEnergyLabel = if (isThisOppMoveReady) "${thisOppEnergy}E READY" else "${thisOppEnergy}E"
+            val slotFastOverride = detectedOppFastMoveOverride.getOrNull(idx)?.takeIf { it.isNotBlank() }
+            val slotFastMove = slotFastOverride ?: meta.defaultFastMove
+            val slotFastTurns = resolveFastTurnsStatic(slotFastMove, meta.fastTurns)
+            val slotFastStatus = oppFastMoveStatus.getOrElse(idx) { "unconfirmed" }
             mapOf(
                 "name" to meta.name,
                 "code" to abbrPokemon3(meta.name, isThisOppShadow),
@@ -14235,7 +14794,10 @@ class OverlayService : LifecycleService() {
                 "cheapestMoveEnergy" to cheapestOppMoveEnergy,
                 "isMoveReady" to isThisOppMoveReady,
                 "energyLabel" to thisOppEnergyLabel,
-                "turns" to meta.fastTurns,
+                "turns" to slotFastTurns,
+                "fastMove" to slotFastMove,
+                "oppFastMoveStatus" to slotFastStatus,
+                "confirmedChargedMoves" to slotConfirmedSet.toList(),
                 "c1" to "${abbrMove5(meta.chargedMove1)} ($oppC1Pct%)",
                 "c2" to "${abbrMove5(meta.chargedMove2)} ($oppC2Pct%)",
                 "c3" to "${abbrMove5(thirdMoveName)} ($oppC3Pct%)",
@@ -14261,7 +14823,7 @@ class OverlayService : LifecycleService() {
         // CMP Tie Evaluation: True if player's active Pokémon wins CMP (higher or equal Attack)
         val winsCmp = userMeta.atk >= oppMeta.atk
 
-        // Active opponent's 3 (or 4) charged moves
+        // Active opponent's 3 (or 4) charged moves — v3.80: filter to confirmed moves once 2 distinct charged moves are known
         val activeOppThirdMove = oppMeta.chargedMove3.takeIf { it.isNotBlank() }
             ?: COMMON_THIRD_CHARGED_MOVE[oppMeta.name]
             ?: COMMON_THIRD_CHARGED_MOVE.entries.firstOrNull { it.key.equals(oppMeta.name, ignoreCase = true) }?.value
@@ -14272,13 +14834,22 @@ class OverlayService : LifecycleService() {
                 !it.equals(oppMeta.chargedMove2, ignoreCase = true) &&
                 !it.equals(activeOppThirdMove, ignoreCase = true)
         } ?: ""
-        val oppChargedMoveNames = (if (enable4ChargedMoves && activeOppFourthMove.isNotBlank()) {
+        val activeOppConfirmedSet = confirmedOppChargedMoves.getOrNull(activeOppSlotClamped) ?: emptySet()
+        val rawOppChargedMoveNames = (if (enable4ChargedMoves && activeOppFourthMove.isNotBlank()) {
             listOf(oppMeta.chargedMove1, oppMeta.chargedMove2, activeOppThirdMove, activeOppFourthMove)
         } else {
             listOf(oppMeta.chargedMove1, oppMeta.chargedMove2, activeOppThirdMove)
-        })
+        } + activeOppConfirmedSet.toList())
             .filter { it.isNotBlank() }
-            .distinct()
+            .distinctBy { it.lowercase() }
+        val oppChargedMoveNames = if (activeOppConfirmedSet.size >= 2) {
+            val knownTwo = rawOppChargedMoveNames.filter { m ->
+                activeOppConfirmedSet.any { c -> c.equals(m, ignoreCase = true) }
+            }
+            if (knownTwo.size >= 2) knownTwo.take(2) else rawOppChargedMoveNames
+        } else {
+            rawOppChargedMoveNames
+        }
 
         val myChargedMoveNames = listOf(userMove1Name, userMove2Name).filter { it.isNotBlank() }.distinct()
 
@@ -14424,6 +14995,7 @@ class OverlayService : LifecycleService() {
 
             val safeEnd = max(1, displayReadyCount - 1)
             val safeRangeLabel = if (safeEnd <= 1) "1" else "1–$safeEnd"
+            val isConfirmedMove = activeOppConfirmedSet.any { it.equals(moveName, ignoreCase = true) }
 
             mapOf(
                 "name" to moveName,
@@ -14436,6 +15008,7 @@ class OverlayService : LifecycleService() {
                 "myCapTap" to myCapTap,
                 "coAligned" to coAligned,
                 "winsCmp" to winsCmp,
+                "isConfirmedMove" to isConfirmedMove,
                 "activeName" to activePlayerName,
                 "activeDmgPct" to activeDmgPct,
                 "activeEff" to activeEff,
@@ -14654,8 +15227,8 @@ class OverlayService : LifecycleService() {
         val maxOppMoveDmgPct = top2OppDmgPcts.maxOrNull() ?: 55
         val minOppMoveDmgPct = top2OppDmgPcts.minOrNull() ?: 35
 
-        // Evaluate Attack 3 & Attack 4 specifically for coverage KO warning against confirmedUserHp
-        val oppMove3DmgPct = if (activeOppThirdMove.isNotBlank()) {
+        // Evaluate Attack 3 & Attack 4 specifically for coverage KO warning against confirmedUserHp (only if <2 confirmed moves are known)
+        val oppMove3DmgPct = if (activeOppConfirmedSet.size < 2 && activeOppThirdMove.isNotBlank()) {
             calculateChargedMoveDamagePercent(
                 attacker = oppMeta,
                 defender = userMeta,
@@ -14664,7 +15237,7 @@ class OverlayService : LifecycleService() {
                 isDefenderShadow = isUserShadow
             )
         } else 0
-        val oppMove4DmgPct = if (activeOppFourthMove.isNotBlank()) {
+        val oppMove4DmgPct = if (activeOppConfirmedSet.size < 2 && activeOppFourthMove.isNotBlank()) {
             calculateChargedMoveDamagePercent(
                 attacker = oppMeta,
                 defender = userMeta,
@@ -15036,12 +15609,17 @@ class OverlayService : LifecycleService() {
 
         val battlePayload = mapOf(
             "activeOpponent" to oppMeta.name,
-            "activeOpponentFastMove" to oppMeta.defaultFastMove,
-            "activeOpponentTurns" to oppMeta.fastTurns,
+            "activeOpponentFastMove" to oppFastMoveName,
+            "activeOpponentTurns" to oppFastTurns,
             "oppFastTelemetry" to oppFastTelemetry,
+            "oppFastMoveStatus" to activeOppFastStatus,
+            "oppFastMoveConfirmed" to oppFastMoveConfirmed.getOrElse(activeOppSlotSafe) { false },
+            "confirmedOppChargedMoves" to activeOppConfirmedSet.toList(),
             "userFastTelemetry" to userFastTelemetry,
             "oppCountMode" to oppCountMode,
             "enable4ChargedMoves" to enable4ChargedMoves,
+            "chargeCircleOnlyMode" to chargeCircleOnlyMode,
+            "fastDetectTurnOffset" to fastDetectTurnOffset,
             "overlayTransparencyPct" to overlayTransparencyPct,
             "appThemeId" to appThemeId,
             "isOverlayMinimized" to isOverlayMinimized,
