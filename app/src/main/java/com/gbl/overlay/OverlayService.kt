@@ -7803,18 +7803,30 @@ class OverlayService : LifecycleService() {
         val stepAnchorMs: Long
     )
 
-    private fun resetSlotKalmanState(slot: Int, initialEnergy: Int = 0) {
-        if (slot !in 0..2) return
+    private fun resetSlotKalmanState(
+        slotIdx: Int,
+        initialEnergy: Int = 0,
+        cost1: Int = 50,
+        cost2: Int = 50,
+        clearThirdFillLatches: Boolean = true
+    ) {
+        if (slotIdx !in 0..2) return
         val e = initialEnergy.coerceIn(0, 100).toDouble()
-        kalmanEnergyState[slot] = e
-        kalmanEnergyVar[slot] = 10.0
-        kalmanLeftFillState[slot] = 0.0
-        kalmanLeftFillVar[slot] = 18.0
-        kalmanRightFillState[slot] = 0.0
-        kalmanRightFillVar[slot] = 18.0
-        kalmanLastUpdateMs[slot] = 0L
-        leftMeterFilledTwiceLatched[slot] = false
-        rightMeterFilledTwiceLatched[slot] = false
+        val c1 = cost1.coerceIn(35, 100).toDouble()
+        val c2 = cost2.coerceIn(35, 100).toDouble()
+        kalmanEnergyState[slotIdx] = e
+        kalmanEnergyVar[slotIdx] = 10.0
+        kalmanLeftFillState[slotIdx] = ((e * 100.0) / c1).coerceIn(0.0, 200.0)
+        kalmanLeftFillVar[slotIdx] = 18.0
+        kalmanRightFillState[slotIdx] = ((e * 100.0) / c2).coerceIn(0.0, 200.0)
+        kalmanRightFillVar[slotIdx] = 18.0
+        kalmanLastUpdateMs[slotIdx] = 0L
+        if (clearThirdFillLatches || initialEnergy < 2 * cost1.coerceIn(35, 100)) {
+            leftMeterFilledTwiceLatched[slotIdx] = false
+        }
+        if (clearThirdFillLatches || initialEnergy < 2 * cost2.coerceIn(35, 100)) {
+            rightMeterFilledTwiceLatched[slotIdx] = false
+        }
     }
 
     /**
@@ -8082,9 +8094,19 @@ class OverlayService : LifecycleService() {
             kalmanEnergyState[slot] = readyFloor.toDouble()
         }
 
-        // 5. Low-Latency Kalman Step Detection (replaces 300ms debounce):
+        // 5. Low-Latency Kalman Step Detection (replaces 300ms debounce, weighted by 3rd-fill confidence):
         val maxMoveCost = max(c1, c2)
         val minFillStepPct = max(3, ((fastEnergy * 100) / (maxMoveCost + 30)).coerceIn(3, 8))
+        val effectiveMinStepLeft = if (leftInThirdFill && hasSecondMove && c2 > c1) {
+            (minFillStepPct + 3).coerceAtMost(12)
+        } else {
+            minFillStepPct
+        }
+        val effectiveMinStepRight = if (rightInThirdFill && hasSecondMove && c1 > c2) {
+            (minFillStepPct + 3).coerceAtMost(12)
+        } else {
+            minFillStepPct
+        }
         var stepDetected = false
 
         if (leftOnline) {
@@ -8093,7 +8115,7 @@ class OverlayService : LifecycleService() {
             } else if (smoothedLeftPct > 0) {
                 val prevL = lastScannedLeftChargeFillPct[slot]
                 if (prevL <= 0) {
-                    if (smoothedLeftPct >= minFillStepPct) {
+                    if (smoothedLeftPct >= effectiveMinStepLeft) {
                         stepDetected = true
                     }
                     lastScannedLeftChargeFillPct[slot] = smoothedLeftPct
@@ -8102,12 +8124,12 @@ class OverlayService : LifecycleService() {
                     val wrappedDelta = when {
                         prevL in 84..100 && smoothedLeftPct in 1..45 -> (100 - prevL) + smoothedLeftPct
                         prevL in 84..100 && smoothedLeftPct in 101..200 -> (smoothedLeftPct - 100) + (100 - prevL)
-                        prevL in 84..98 && smoothedLeftPct == 100 -> (100 - prevL).coerceAtLeast(minFillStepPct)
-                        prevL == 100 && smoothedLeftPct in 101..200 -> (smoothedLeftPct - 100).coerceAtLeast(minFillStepPct)
+                        prevL in 84..98 && smoothedLeftPct == 100 -> (100 - prevL).coerceAtLeast(effectiveMinStepLeft)
+                        prevL == 100 && smoothedLeftPct in 101..200 -> (smoothedLeftPct - 100).coerceAtLeast(effectiveMinStepLeft)
                         else -> 0
                     }
                     val effDelta = max(directDelta, wrappedDelta)
-                    if (effDelta >= minFillStepPct) {
+                    if (effDelta >= effectiveMinStepLeft) {
                         if (!leftInThirdFill || !hasSecondMove || rightOnline) {
                             stepDetected = true
                         }
@@ -8125,7 +8147,7 @@ class OverlayService : LifecycleService() {
             } else if (smoothedRightPct > 0) {
                 val prevR = lastScannedRightChargeFillPct[slot]
                 if (prevR <= 0) {
-                    if (smoothedRightPct >= minFillStepPct) {
+                    if (smoothedRightPct >= effectiveMinStepRight) {
                         stepDetected = true
                     }
                     lastScannedRightChargeFillPct[slot] = smoothedRightPct
@@ -8134,12 +8156,12 @@ class OverlayService : LifecycleService() {
                     val wrappedDelta = when {
                         prevR in 84..100 && smoothedRightPct in 1..45 -> (100 - prevR) + smoothedRightPct
                         prevR in 84..100 && smoothedRightPct in 101..200 -> (smoothedRightPct - 100) + (100 - prevR)
-                        prevR in 84..98 && smoothedRightPct == 100 -> (100 - prevR).coerceAtLeast(minFillStepPct)
-                        prevR == 100 && smoothedRightPct in 101..200 -> (smoothedRightPct - 100).coerceAtLeast(minFillStepPct)
+                        prevR in 84..98 && smoothedRightPct == 100 -> (100 - prevR).coerceAtLeast(effectiveMinStepRight)
+                        prevR == 100 && smoothedRightPct in 101..200 -> (smoothedRightPct - 100).coerceAtLeast(effectiveMinStepRight)
                         else -> 0
                     }
                     val effDelta = max(directDelta, wrappedDelta)
-                    if (effDelta >= minFillStepPct) {
+                    if (effDelta >= effectiveMinStepRight) {
                         if (!rightInThirdFill || leftOnline) {
                             stepDetected = true
                         }
@@ -12176,13 +12198,13 @@ class OverlayService : LifecycleService() {
 
             // 2. Run 2-Channel Kalman Filter Measurement Update on Left (Move 1) & Right (Move 2) Charge Move Circles:
             val kalmanRes = updatePlayerEnergyKalmanFilter(
-                slotIdx = activeUserIdx,
+                slot = activeUserIdx,
                 nowMs = nowMs,
+                captureAnchorMs = captureAnchorMs,
                 curTrackedEnergy = playerSlotEnergy[activeUserIdx].coerceIn(0, 100),
-                turnEnergyDelta = turnEnergyDeltaForKalman,
                 fastEnergy = userFastEnergyForStats,
-                fastDurationMs = userMoveDurationMs,
-                lastFastAnchorMs = playerAutoIncrementAnchorMs[activeUserIdx],
+                fastMoveDurationMs = userMoveDurationMs,
+                turnEnergyDelta = turnEnergyDeltaForKalman,
                 rawLeftFillPct = sampledLeftChargeBtnFillPct,
                 cost1 = userMove1Energy,
                 rawRightFillPct = sampledRightChargeBtnFillPct,
@@ -12190,84 +12212,12 @@ class OverlayService : LifecycleService() {
                 hasSecondMove = hasSecondUserMove
             )
 
-            var chargeBarStepDetected = false
-            var stepTimestampMs = 0L
-            val confirmedLeftForSnap = kalmanRes.filteredLeftFillPct
-            val confirmedRightForSnap = kalmanRes.filteredRightFillPct
-            val leftKalmanValid = kalmanRes.leftObservationValid && confirmedLeftForSnap >= 0
-            val rightKalmanValid = kalmanRes.rightObservationValid && confirmedRightForSnap >= 0
-
-            // Detect low-latency Kalman-filtered step on Left Charge Move Circle (weighted by 3rd-fill confidence)
-            if (leftKalmanValid && (confirmedLeftForSnap > 0 || playerSlotEnergy[activeUserIdx] == 0)) {
-                val prevLeftFill = lastScannedLeftChargeFillPct[activeUserIdx]
-                val effectiveMinStepLeft = if (kalmanRes.leftInThirdFill && hasSecondUserMove && userMove2Energy > userMove1Energy) {
-                    (minFillStepPct + 3).coerceAtMost(12)
-                } else {
-                    minFillStepPct
-                }
-                if (confirmedLeftForSnap == 0) {
-                    lastScannedLeftChargeFillPct[activeUserIdx] = 0
-                } else if (prevLeftFill <= 0) {
-                    if (confirmedLeftForSnap >= effectiveMinStepLeft) {
-                        chargeBarStepDetected = true
-                        stepTimestampMs = nowMs
-                    }
-                    lastScannedLeftChargeFillPct[activeUserIdx] = confirmedLeftForSnap
-                } else {
-                    val directDelta = confirmedLeftForSnap - prevLeftFill
-                    val wrappedOverchargeDelta = when {
-                        prevLeftFill in 84..100 && confirmedLeftForSnap in 1..45 -> (100 - prevLeftFill) + confirmedLeftForSnap
-                        prevLeftFill in 84..100 && confirmedLeftForSnap in 101..200 -> (confirmedLeftForSnap - 100) + (100 - prevLeftFill)
-                        prevLeftFill in 84..98 && confirmedLeftForSnap == 100 -> (100 - prevLeftFill).coerceAtLeast(effectiveMinStepLeft)
-                        prevLeftFill == 100 && confirmedLeftForSnap in 101..200 -> (confirmedLeftForSnap - 100).coerceAtLeast(effectiveMinStepLeft)
-                        else -> 0
-                    }
-                    val effectiveDelta = max(directDelta, wrappedOverchargeDelta)
-                    if (effectiveDelta >= effectiveMinStepLeft) {
-                        chargeBarStepDetected = true
-                        stepTimestampMs = nowMs
-                        lastScannedLeftChargeFillPct[activeUserIdx] = confirmedLeftForSnap
-                    } else if (directDelta < -4 && !(prevLeftFill in 84..100 && (confirmedLeftForSnap in 1..45 || confirmedLeftForSnap in 101..200))) {
-                        lastScannedLeftChargeFillPct[activeUserIdx] = confirmedLeftForSnap
-                    }
-                }
-            }
-
-            // Detect low-latency Kalman-filtered step on Right Charge Move Circle (weighted by 3rd-fill confidence)
-            if (rightKalmanValid && (confirmedRightForSnap > 0 || playerSlotEnergy[activeUserIdx] == 0)) {
-                val prevRightFill = lastScannedRightChargeFillPct[activeUserIdx]
-                val effectiveMinStepRight = if (kalmanRes.rightInThirdFill && userMove1Energy > userMove2Energy) {
-                    (minFillStepPct + 3).coerceAtMost(12)
-                } else {
-                    minFillStepPct
-                }
-                if (confirmedRightForSnap == 0) {
-                    lastScannedRightChargeFillPct[activeUserIdx] = 0
-                } else if (prevRightFill <= 0) {
-                    if (confirmedRightForSnap >= effectiveMinStepRight) {
-                        chargeBarStepDetected = true
-                        if (stepTimestampMs <= 0L) stepTimestampMs = nowMs
-                    }
-                    lastScannedRightChargeFillPct[activeUserIdx] = confirmedRightForSnap
-                } else {
-                    val directDelta = confirmedRightForSnap - prevRightFill
-                    val wrappedOverchargeDelta = when {
-                        prevRightFill in 84..100 && confirmedRightForSnap in 1..45 -> (100 - prevRightFill) + confirmedRightForSnap
-                        prevRightFill in 84..100 && confirmedRightForSnap in 101..200 -> (confirmedRightForSnap - 100) + (100 - prevRightFill)
-                        prevRightFill in 84..98 && confirmedRightForSnap == 100 -> (100 - prevRightFill).coerceAtLeast(effectiveMinStepRight)
-                        prevRightFill == 100 && confirmedRightForSnap in 101..200 -> (confirmedRightForSnap - 100).coerceAtLeast(effectiveMinStepRight)
-                        else -> 0
-                    }
-                    val effectiveDelta = max(directDelta, wrappedOverchargeDelta)
-                    if (effectiveDelta >= effectiveMinStepRight) {
-                        chargeBarStepDetected = true
-                        if (stepTimestampMs <= 0L) stepTimestampMs = nowMs
-                        lastScannedRightChargeFillPct[activeUserIdx] = confirmedRightForSnap
-                    } else if (directDelta < -4 && !(prevRightFill in 84..100 && (confirmedRightFill in 1..45 || confirmedRightForSnap in 101..200))) {
-                        lastScannedRightChargeFillPct[activeUserIdx] = confirmedRightForSnap
-                    }
-                }
-            }
+            val chargeBarStepDetected = kalmanRes.stepDetected
+            val stepTimestampMs = kalmanRes.stepAnchorMs
+            val confirmedLeftForSnap = if (kalmanRes.leftSensorOnline) kalmanRes.smoothedLeftFillPct else -1
+            val confirmedRightForSnap = if (kalmanRes.rightSensorOnline) kalmanRes.smoothedRightFillPct else -1
+            val leftKalmanValid = kalmanRes.leftSensorOnline && confirmedLeftForSnap >= 0
+            val rightKalmanValid = kalmanRes.rightSensorOnline && confirmedRightForSnap >= 0
 
             val lFill = if (confirmedLeftForSnap >= 0) confirmedLeftForSnap else lastScannedLeftChargeFillPct[activeUserIdx]
             val rFill = if (confirmedRightForSnap >= 0) confirmedRightForSnap else lastScannedRightChargeFillPct[activeUserIdx]
