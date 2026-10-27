@@ -129,16 +129,17 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Expanded Tall & Small Pokémon HP Vertical Windows, Low-Sliver HP Detection & Full-Range 0..100E Overcharge Self-Biasing)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (3-Sample 300ms Energy Meter Debounce, Phase-Locked Fast-Move Auto-Increment, ±1 Move Self-Correction & Wider Tinkaton HP Detection)
 
-            ### What's New in v3.82
-            - **Expanded Vertical & Horizontal HP Bar Corridors (`oppHpCorridorRect` & `playerHpCorridorRect`)**:
-              - Expanded Opponent HP corridor vertically from `0.12h..0.66h` to **`0.075h..0.80h`** (`x: 0.400w..0.975w`) and Player HP corridor from `0.12h..0.78h` to **`0.075h..0.85h`** (`x: 0.015w..0.485w`) so both tall/flying Pokémon (e.g., Dialga Origin, Lugia, Giratina, Jellicent) and small/low Pokémon (e.g., Tinkaton, Carbink, Diglett, Azumarill) are reliably detected across all camera zoom states.
-            - **Wider Capsule Border Search & Low-Sliver (`1–3%` Red HP) Detection (`detectFloatingHpBarPct`)**:
-              - Expanded vertical top/bottom capsule border search windows (`±18 px` around detected fill scanlines) and capsule height tolerances (`minOuterH..maxOuterH`, `minFillH..maxFillH`) to handle vertical shading gradients under `#0B111E` overlay dimming.
-              - Lowered minimum horizontal fill width to `2 px` and relaxed translucent depleted-track thresholds so `1–3%` red HP slivers over bright Pokémon bodies (such as Tinkaton's pink ears/hammer) are accurately captured, and added automatic live resync on `>25%` HP drops.
-            - **Full-Range `0..100E` Self-Biasing & Adaptive `3-2-1-GO` Prescan Circle Calibration**:
-              - Outer-annulus flank sampling (`0.0485w..0.0565w`) avoids wide move emblems so overcharge fill (`102..200%`) and double-stacked `200%` rings self-bias cleanly all the way to `100E`.
+            ### What's New in v3.83
+            - **3-Sample & ≥300 ms Energy Meter Debounce + Disappearing Circle Guard**:
+              - Requires at least **3 consecutive samples and ≥300 ms** on Charged Move circular energy meters before accepting readings, and prevents disappearing or dimmed circles during Charged Move animations from ever dropping energy to `0`.
+            - **Phase-Locked Fast-Move Auto-Increment (`500 ms × fastMoveTurns`) & ±1 Fast-Move Self-Correction**:
+              - Auto-increments player energy at the end of each fast move duration (`500 ms × fastMoveTurns`, never every 500 ms turn unless using a 1-turn move) anchored to the **start of the last successful 300 ms debounce** so energy updates in phase with the meter moving.
+              - If a valid reading for over **300 ms on both meters** disagrees with tracked energy (or if the meter did not move 300 ms after an auto-increment), adjusts energy up or down by **one fast move of energy** (at most once per fast move duration) while preserving leftover Charged Move energy deltas.
+              - Maps confirmed user energy increases to battle turns so opponent energy also increments strictly at the completion of each opponent fast move duration.
+            - **Slightly Wider Vertical & Horizontal HP Detection Bounds for Tinkaton**:
+              - Expanded floating HP bar corridors (`0.055h..0.88h` for player, `0.055h..0.84h` for opponent) and capsule border search tolerances (`±22 px`) so small/low Pokémon like Tinkaton are reliably detected.
 
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)
