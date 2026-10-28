@@ -9054,8 +9054,8 @@ class OverlayService : LifecycleService() {
             lastObservedLowOppBalls = sampledOppBalls
             lastObservedLowOppBallsTimeMs = currentFrameTimestampMs
         }
-        sampledPlayerShields = if (sampledPlayerBalls in 1..3) detectActiveShieldCount(screen, playerShieldRect) else -1
-        sampledOppShields = if (sampledOppBalls in 1..3) detectActiveShieldCount(screen, oppShieldRect) else -1
+        sampledPlayerShields = detectActiveShieldCount(screen, playerShieldRect)
+        sampledOppShields = detectActiveShieldCount(screen, oppShieldRect)
         if (enableHpTracking || enableEnergyTracking) {
             sampledOppHpPct = detectFloatingHpBarPct(screen, oppHpCorridorRect, w, isOpponent = true)
             sampledPlayerHpPct = detectFloatingHpBarPct(screen, playerHpCorridorRect, w, isOpponent = false)
@@ -9360,8 +9360,8 @@ class OverlayService : LifecycleService() {
                 }
             }
 
-            // If HUD is hidden during Charged Move camera zoom or switch animation, return -1 (unknown)
-            if (bestRy < 0 || maxBandRed < 12) return -1
+            // If HUD is hidden during Charged Move camera zoom or switch animation, return 0 (missing overlay)
+            if (bestRy < 0 || maxBandRed < 12) return 0
 
             val yStart = (bestRy - bandRadiusY).coerceAtLeast(0)
             val yEnd = (bestRy + bandRadiusY).coerceAtMost(ch - 1)
@@ -9455,10 +9455,10 @@ class OverlayService : LifecycleService() {
             when {
                 redBalls == 3 -> 3
                 redBalls in 1..2 && (greyBalls >= 1 || (whiteCardCols >= minLobeWidth && maxBandRed >= 22)) -> redBalls
-                else -> -1
+                else -> 0
             }
         } catch (_: Exception) {
-            -1
+            0
         }
     }
 
@@ -12030,7 +12030,7 @@ class OverlayService : LifecycleService() {
         }
 
         // Track consecutive frames of Charged Move HUD signatures calibrated for 10Hz (100ms) scan rate:
-        if (!isPostFaintSwitchPromptActive && sampledPlayerBalls == -1 && sampledOppBalls == -1 && (sampledPlayerHpPct in 1..100 || sampledOppHpPct in 1..100)) {
+        if (!isPostFaintSwitchPromptActive && sampledPlayerBalls <= 0 && sampledOppBalls <= 0 && (sampledPlayerHpPct in 1..100 || sampledOppHpPct in 1..100)) {
             missingTopBallsWithHpBarsFrames = (missingTopBallsWithHpBarsFrames + 1).coerceAtMost(20)
         } else {
             missingTopBallsWithHpBarsFrames = 0
@@ -13595,8 +13595,14 @@ class OverlayService : LifecycleService() {
         val frameTimeMs = currentFrameTimestampMs.takeIf { it > 0L } ?: System.currentTimeMillis()
         val eventT = getElapsedBattleSeconds(frameTimeMs)
 
+        // v3.91: When opponent (or player) throws charged attacks, the top corner overlay goes away.
+        // When overlay is missing (detected by shields <= 0 and pokeballs <= 0, or pokeballs <= 0),
+        // do NOT decrement shield counts!
+        val isPlayerTopOverlayMissing = (sampledPlayerShields <= 0 && sampledPlayerBalls <= 0) || (sampledPlayerBalls <= 0)
+        val isOppTopOverlayMissing = (sampledOppShields <= 0 && sampledOppBalls <= 0) || (sampledOppBalls <= 0)
+
         // Shield count transitions + 2-frame continual self-healing restoration (if a shield was not actually used)
-        if (sampledPlayerShields in 0..1 && sampledPlayerShields < playerShieldsRemaining) {
+        if (!isPlayerTopOverlayMissing && sampledPlayerShields in 0..1 && sampledPlayerShields < playerShieldsRemaining) {
             playerShieldRestoreFrames = 0
             playerShieldDropFrames++
             if (playerShieldDropFrames >= 2) {
@@ -13622,7 +13628,7 @@ class OverlayService : LifecycleService() {
                 changed = true
                 showBattleToast("🛡️ Player Shield Used ($playerShieldsRemaining left)")
             }
-        } else if (sampledPlayerShields in 1..2 && sampledPlayerShields > playerShieldsRemaining) {
+        } else if (!isPlayerTopOverlayMissing && sampledPlayerShields in 1..2 && sampledPlayerShields > playerShieldsRemaining) {
             playerShieldDropFrames = 0
             playerShieldRestoreFrames++
             if (playerShieldRestoreFrames >= 2) {
@@ -13641,12 +13647,12 @@ class OverlayService : LifecycleService() {
                 changed = true
                 showBattleToast("🛡️ Player Shield Restored ($playerShieldsRemaining left)")
             }
-        } else if (sampledPlayerShields == playerShieldsRemaining) {
+        } else {
             playerShieldDropFrames = 0
             playerShieldRestoreFrames = 0
         }
 
-        if (sampledOppShields in 0..1 && sampledOppShields < oppShieldsRemaining) {
+        if (!isOppTopOverlayMissing && sampledOppShields in 0..1 && sampledOppShields < oppShieldsRemaining) {
             oppShieldRestoreFrames = 0
             oppShieldDropFrames++
             if (oppShieldDropFrames >= 2) {
@@ -13672,7 +13678,7 @@ class OverlayService : LifecycleService() {
                 changed = true
                 showBattleToast("🛡️ Opponent Shield Used ($oppShieldsRemaining left)")
             }
-        } else if (sampledOppShields in 1..2 && sampledOppShields > oppShieldsRemaining) {
+        } else if (!isOppTopOverlayMissing && sampledOppShields in 1..2 && sampledOppShields > oppShieldsRemaining) {
             oppShieldDropFrames = 0
             oppShieldRestoreFrames++
             if (oppShieldRestoreFrames >= 2) {
@@ -13691,7 +13697,7 @@ class OverlayService : LifecycleService() {
                 changed = true
                 showBattleToast("🛡️ Opponent Shield Restored ($oppShieldsRemaining left)")
             }
-        } else if (sampledOppShields == oppShieldsRemaining) {
+        } else {
             oppShieldDropFrames = 0
             oppShieldRestoreFrames = 0
         }

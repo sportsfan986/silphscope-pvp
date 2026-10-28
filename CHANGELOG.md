@@ -1,3 +1,7 @@
+## v3.91 (2026-10-27)
+- **Top Corner Overlay Missing Shield Decrement Guard**: When opponent (or player) throws a charged attack, Pokémon GO fades or zooms away the top corner battle HUD (Pokéballs and shield icons). When the overlay is missing (detected by shields $\le 0$ and Pokéballs $\le 0$, or Pokéballs $\le 0$), SilphScope now suppresses shield drop processing and resets drop frame counters, preventing false shield decrements during charged attacks.
+- **Release Version Bump**: Bumped to `v3.91` (versionCode `391`) across Gradle build scripts, manifests, and version trackers.
+
 ## v3.90 (2026-10-27)
 - **Solgaleo Body Anti-False-Trigger (`detectFloatingHpBarPct`)**: Hardens floating HP bar detection against large, bright Pokémon models (e.g., Solgaleo's white mane, front legs, and chest). Requires genuine dark track interior pixels matching $(100\% - \text{HP}\%) \pm 10\%$ in the depleted remainder, rejects candidates where bright body pixels ($luma \ge 145$) bleed into the depleted track, and enforces a minimum interior width floor ($w \ge 0.245 \times \text{fullScreenWidth}$).
 - **Authoritative Candidate Proximity Prioritization**: When multiple candidate bars are detected on screen, prioritizes the candidate cluster whose computed HP% is closest to the previous stable reading (`confirmedPlayerSlotHpPct[activeUserIdx]` / `confirmedOppSlotHpPct[activeOppIdx]`), breaking ties by cluster scanline count.

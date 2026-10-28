@@ -11,8 +11,8 @@ android {
         applicationId = "com.gbl.overlay"
         minSdk = 26
         targetSdk = 35
-        versionCode = 390
-        versionName = "3.90"
+        versionCode = 391
+        versionName = "3.91"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
