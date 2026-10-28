@@ -37,6 +37,7 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
@@ -122,6 +123,7 @@ class OverlayService : LifecycleService() {
         const val EXTRA_ENABLE_4_CHARGED_MOVES = "extra_enable_4_charged_moves"
         const val EXTRA_DISABLE_BATTLE_TOASTS = "extra_disable_battle_toasts"
         const val EXTRA_SHOW_TACTICAL_RECOMMENDATIONS = "extra_show_tactical_recommendations"
+        const val EXTRA_SHOW_SHIELD_DECISION_OVERLAY = "extra_show_shield_decision_overlay"
         const val EXTRA_ENABLE_HP_TRACKING = "extra_enable_hp_tracking"
         const val EXTRA_ENABLE_ENERGY_TRACKING = "extra_enable_energy_tracking"
         const val EXTRA_FAST_DETECT_TURN_OFFSET = "extra_fast_detect_turn_offset"
@@ -129,6 +131,7 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_ENABLE_4_CHARGED_MOVES = "enable_4_charged_moves"
         const val PREFS_KEY_DISABLE_BATTLE_TOASTS = "disable_battle_toasts"
         const val PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS = "show_tactical_recommendations"
+        const val PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY = "show_shield_decision_overlay"
         const val PREFS_KEY_ENABLE_HP_TRACKING = "enable_hp_tracking"
         const val PREFS_KEY_ENABLE_ENERGY_TRACKING = "enable_energy_tracking"
         const val PREFS_KEY_FAST_DETECT_TURN_OFFSET = "fast_detect_turn_offset"
@@ -7519,11 +7522,18 @@ class OverlayService : LifecycleService() {
     private lateinit var layoutParams: WindowManager.LayoutParams
     private var statusToastView: TextView? = null
     private var statusToastParams: WindowManager.LayoutParams? = null
+    private var shieldDecisionOverlayView: LinearLayout? = null
+    private var shieldDecisionOverlayParams: WindowManager.LayoutParams? = null
+    private var shieldDecisionOverlayShownAtMs: Long = 0L
+    private var isShieldDecisionOverlayVisible: Boolean = false
     private val mainToastHandler = Handler(Looper.getMainLooper())
     private val hideStatusToastRunnable = Runnable {
         try {
             statusToastView?.visibility = View.GONE
         } catch (_: Exception) {}
+    }
+    private val hideShieldDecisionOverlayRunnable = Runnable {
+        hideShieldDecisionOverlay()
     }
     private lateinit var prefs: SharedPreferences
     private val gson = Gson()
@@ -7567,6 +7577,7 @@ class OverlayService : LifecycleService() {
     private var enable4ChargedMoves = false
     private var disableBattleToasts = false
     private var showTacticalRecommendations = true
+    private var showShieldDecisionOverlay = true
     private var overlayScalePct = 78
     private var overlayTransparencyPct = 72
     private var appThemeId = "dialga_shiny_midnight"
@@ -7863,8 +7874,72 @@ class OverlayService : LifecycleService() {
     private var confirmedPhasePlayerTurns: Int = 0
     private var lastConfirmedPlayerFastMoveMs: Long = 0L
 
+    // v4.00: Fast-Move Turn Energy Increment Snapping with Post-Throw Discharge Anchor + Pre-Throw Opponent Energy Snapshot for Shield Decision Overlay
+    private val playerSlotEnergyAnchor = IntArray(3) { 0 }
+    private var pendingChargedAttackPreOppEnergy: Int = 0
+
     private var pllValidatedThisShieldDelay = false
     private var observedPlayerChargeBarStep = false
+
+    /**
+     * v4.00: Snaps raw pixel-measured player energy to the nearest valid fast-move turn increment
+     * (`anchorE + k * fastMoveEnergy`, capped at `100E`) relative to the slot's post-throw discharge anchor
+     * (`playerSlotEnergyAnchor[slotIdx]`, initialized to `0E`).
+     * Eliminates 1–2E pixel width / rounding offsets on the slower charged move circle meter.
+     */
+    private fun snapPlayerEnergyToValidStep(
+        slotIdx: Int,
+        rawEnergy: Int,
+        fastMoveEnergy: Int,
+        minBound: Int = 0,
+        maxBound: Int = 100
+    ): Int {
+        val lo = minBound.coerceIn(0, 100)
+        val hi = maxBound.coerceIn(lo, 100)
+        val clampedRaw = rawEnergy.coerceIn(lo, hi)
+        if (clampedRaw <= 0) return 0
+        if (clampedRaw >= 100) return 100
+        val fastE = fastMoveEnergy.coerceIn(2, 25)
+        val rawAnchor = playerSlotEnergyAnchor.getOrElse(slotIdx) { 0 }.coerceIn(0, 100)
+        val anchorToUse = if (rawAnchor <= clampedRaw + 2) rawAnchor else 0
+
+        val candidates = mutableSetOf<Int>()
+        for (k in 0..50) {
+            val step = (anchorToUse + k * fastE).coerceAtMost(100)
+            if (step in lo..hi) {
+                candidates.add(step)
+            }
+            if (step >= 100) break
+        }
+        if (rawAnchor > 0) {
+            // Also include pure 0-based fast-move multiples if anchor was above lo..hi
+            if (candidates.isEmpty()) {
+                for (k in 0..50) {
+                    val step = (k * fastE).coerceAtMost(100)
+                    if (step in lo..hi) {
+                        candidates.add(step)
+                    }
+                    if (step >= 100) break
+                }
+            }
+        }
+        if (100 in lo..hi) {
+            candidates.add(100)
+        }
+        if (candidates.isEmpty()) return clampedRaw
+
+        // Pick candidate with smallest distance to clampedRaw (ties broken toward clampedRaw or higher)
+        val bestStep = candidates.minWithOrNull(
+            compareBy<Int> { kotlin.math.abs(it - clampedRaw) }.thenByDescending { it }
+        ) ?: return clampedRaw
+
+        val maxAllowedSnapDist = max(3, fastE - 1)
+        return if (kotlin.math.abs(bestStep - clampedRaw) <= maxAllowedSnapDist) {
+            bestStep.coerceIn(lo, hi)
+        } else {
+            clampedRaw
+        }
+    }
 
     private fun resolvePlayerSlotMoveCosts(slotIdx: Int): Pair<Int, Int> {
         val slotCfg = currentPreset?.pokemon?.getOrNull(slotIdx)
@@ -8164,6 +8239,7 @@ class OverlayService : LifecycleService() {
         enable4ChargedMoves = prefs.getBoolean(PREFS_KEY_ENABLE_4_CHARGED_MOVES, false)
         disableBattleToasts = prefs.getBoolean(PREFS_KEY_DISABLE_BATTLE_TOASTS, false)
         showTacticalRecommendations = prefs.getBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, true)
+        showShieldDecisionOverlay = prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true)
         enableHpTracking = prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
         enableEnergyTracking = prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
         overlayScalePct = prefs.getInt("overlay_scale_pct", 78).coerceIn(50, 100)
@@ -8289,6 +8365,314 @@ class OverlayService : LifecycleService() {
                 toast.setGravity(Gravity.TOP or Gravity.START, 16, 4)
                 toast.show()
             }
+        }
+    }
+
+    private data class ShieldOverlayMoveRow(
+        val moveName: String,
+        val energyCost: Int,
+        val dmgPct: Int,
+        val remHpPct: Int,
+        val isKo: Boolean,
+        val isFunded: Boolean
+    )
+
+    private fun hideShieldDecisionOverlay() {
+        isShieldDecisionOverlayVisible = false
+        shieldDecisionOverlayShownAtMs = 0L
+        mainToastHandler.removeCallbacks(hideShieldDecisionOverlayRunnable)
+        mainToastHandler.post {
+            try {
+                shieldDecisionOverlayView?.visibility = View.GONE
+            } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * v4.00: Displays the themed "Attack incoming!" Shield Decision Overlay directly above
+     * Pokémon GO's "Attack incoming! Use a Protect Shield?" text:
+     * - 2a: Lists all charged move candidates the opponent has enough energy to throw (`preThrowOppEnergy >= moveCost`),
+     *       showing whether each move will KO or your remaining HP% if unshielded.
+     * - 2b: Lists all remaining unfunded candidate moves in italics and muted font with move name and
+     *       banked/required energy (`30e/40e`).
+     * - 2c: 4-tier background color coding:
+     *       • RED: All funded moves in 2a will KO your Pokémon
+     *       • ORANGE: At least one funded move in 2a KOs and at least one funded move in 2a does NOT KO
+     *       • YELLOW: No funded move in 2a KOs, but at least one unfunded move in 2b would KO
+     *       • GREEN: No moves in 2a or 2b will KO your Pokémon
+     * - 2d: If Charged Moves 1 and 2 are already determined and locked (`confirmedOppChargedMoves[oppSlotIdx].size >= 2`),
+     *       excludes Moves 3 and 4 from the overlay and its color evaluation.
+     * - 2e: Anchored just above "Attack incoming! Use a Protect Shield?" (`Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL`, `y = 0.295 * screenHeight`)
+     *       and auto-hides immediately when the text disappears or after 5.0s, whichever comes first.
+     */
+    private fun showOrUpdateShieldDecisionOverlay(
+        oppSlotIdx: Int,
+        userSlotIdx: Int,
+        preThrowOppEnergy: Int
+    ) {
+        if (!showShieldDecisionOverlay || !isBattleActive || isWaitingForOpponent) {
+            hideShieldDecisionOverlay()
+            return
+        }
+        val activeLeague = currentPreset?.league ?: "MASTER LEAGUE"
+        val clampedOppIdx = oppSlotIdx.coerceIn(0, 2)
+        val clampedUserIdx = userSlotIdx.coerceIn(0, 2)
+
+        val oppRawName = detectedOpponents.getOrNull(clampedOppIdx)
+            ?: pendingChargedAttackOppRawName.ifBlank { activeOpponentName }
+        if (oppRawName.isBlank() || oppRawName.equals("Waiting...", ignoreCase = true)) {
+            hideShieldDecisionOverlay()
+            return
+        }
+        val oppBaseKey = FormResolver.extractBaseSpecies(oppRawName).lowercase()
+        val isOppShad = manualShadowOverrides[oppBaseKey] ?: (if (clampedOppIdx == oppSlotIdx) isOpponentShadow else oppRawName.contains("Shadow", ignoreCase = true))
+        val oppMeta = computeEffectiveCombatStats(getPokemonMeta(oppRawName, activeLeague, isOppShad), activeLeague)
+
+        val userSlotCfg = currentPreset?.pokemon?.getOrNull(clampedUserIdx)
+        val userMonName = userSlotCfg?.name ?: activeUserPokemonName ?: "Dialga (Origin)"
+        val isUserShad = userMonName.contains("Shadow", ignoreCase = true)
+        val userMeta = computeEffectiveCombatStats(
+            getPokemonMeta(userMonName, activeLeague, isUserShad),
+            activeLeague,
+            userSlotCfg?.cp,
+            userSlotCfg?.ivs
+        )
+        val userHpPct = playerSlotHpPct[clampedUserIdx].coerceIn(1, 100)
+
+        val thirdMoveName = oppMeta.chargedMove3.takeIf { it.isNotBlank() }
+            ?: COMMON_THIRD_CHARGED_MOVE[oppMeta.name]
+            ?: COMMON_THIRD_CHARGED_MOVE.entries.firstOrNull { it.key.equals(oppMeta.name, ignoreCase = true) }?.value
+            ?: "Outrage"
+        val fourthMoveName = oppMeta.chargedMove4.takeIf {
+            it.isNotBlank() &&
+                !it.equals(oppMeta.chargedMove1, ignoreCase = true) &&
+                !it.equals(oppMeta.chargedMove2, ignoreCase = true) &&
+                !it.equals(thirdMoveName, ignoreCase = true)
+        } ?: ""
+
+        val confirmedSet = confirmedOppChargedMoves.getOrNull(clampedOppIdx) ?: emptySet()
+        val twoMovesLocked = confirmedSet.size >= 2
+
+        // Requirement 2d: If Charged Moves 1 & 2 are already determined and locked for opponent, exclude Moves 3 & 4
+        val candidateMoveNames: List<String> = if (twoMovesLocked) {
+            confirmedSet.filter { it.isNotBlank() }.distinctBy { it.lowercase() }.take(2)
+        } else {
+            val baseList = if (enable4ChargedMoves && fourthMoveName.isNotBlank()) {
+                listOf(oppMeta.chargedMove1, oppMeta.chargedMove2, thirdMoveName, fourthMoveName)
+            } else {
+                listOf(oppMeta.chargedMove1, oppMeta.chargedMove2, thirdMoveName)
+            }
+            (baseList + confirmedSet.toList())
+                .filter { it.isNotBlank() }
+                .distinctBy { it.lowercase() }
+        }
+
+        if (candidateMoveNames.isEmpty()) {
+            hideShieldDecisionOverlay()
+            return
+        }
+
+        val allMoveRows = candidateMoveNames.map { mName ->
+            val mStats = resolveChargedMoveStatsStatic(mName, oppMeta.types.firstOrNull() ?: "normal")
+            val cost = (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[mName] ?: 50).coerceIn(35, 100)
+            val dmg = calculateChargedMoveDamagePercent(
+                attacker = oppMeta,
+                defender = userMeta,
+                moveName = mName,
+                isAttackerShadow = isOppShad,
+                isDefenderShadow = isUserShad
+            )
+            val remHp = (userHpPct - dmg).coerceAtLeast(0)
+            val isKo = dmg >= userHpPct
+            val isFunded = preThrowOppEnergy >= cost
+            ShieldOverlayMoveRow(
+                moveName = mName,
+                energyCost = cost,
+                dmgPct = dmg,
+                remHpPct = remHp,
+                isKo = isKo,
+                isFunded = isFunded
+            )
+        }
+
+        val cheapestCost = allMoveRows.minOfOrNull { it.energyCost } ?: 35
+        val effectiveBankedE = max(preThrowOppEnergy, cheapestCost).coerceIn(0, 100)
+        val normalizedRows = allMoveRows.map { row ->
+            row.copy(isFunded = effectiveBankedE >= row.energyCost)
+        }
+
+        val fundedMoves = normalizedRows.filter { it.isFunded }.sortedByDescending { it.dmgPct }
+        val unfundedMoves = normalizedRows.filter { !it.isFunded }.sortedBy { it.energyCost }
+
+        // Requirement 2c + User Revision (Red / Orange / Yellow / Green):
+        // - RED: All funded moves in 2a will KO
+        // - ORANGE: At least one funded move in 2a KOs AND at least one funded move in 2a does NOT KO
+        // - YELLOW: No funded move in 2a KOs, but at least one unfunded move in 2b would KO
+        // - GREEN: No moves in 2a or 2b will KO
+        val allFundedKo = fundedMoves.isNotEmpty() && fundedMoves.all { it.isKo }
+        val someFundedKo = fundedMoves.any { it.isKo } && fundedMoves.any { !it.isKo }
+        val unfundedKo = fundedMoves.none { it.isKo } && unfundedMoves.any { it.isKo }
+
+        val (bgColor, strokeColor, headerVerdictText) = when {
+            allFundedKo -> Triple(
+                Color.parseColor("#F07F1D1D"), // Deep Crimson Red
+                Color.parseColor("#EF4444"),   // Bright Red border
+                "🛡️ SHIELD CALL: ALL FUNDED KO!"
+            )
+            someFundedKo -> Triple(
+                Color.parseColor("#F07C2D12"), // Deep Burnt Orange
+                Color.parseColor("#F97316"),   // Bright Orange border
+                "🛡️ SHIELD CALL: DANGER / BAIT MIX"
+            )
+            unfundedKo -> Triple(
+                Color.parseColor("#F0713F12"), // Deep Amber Yellow
+                Color.parseColor("#EAB308"),   // Bright Yellow border
+                "🛡️ SHIELD CALL: FUNDED SURVIVES (UNFUNDED KO)"
+            )
+            else -> Triple(
+                Color.parseColor("#F0064E3B"), // Deep Emerald Green
+                Color.parseColor("#10B981"),   // Bright Green border
+                "🛡️ SHIELD CALL: SAFE TO TANK"
+            )
+        }
+
+        val oppShort = formatOpponentNameWithShadow(oppMeta.name)
+        val lockedTag = if (twoMovesLocked) " • 2 Moves Locked" else ""
+        val headerLineText = "$headerVerdictText  •  $oppShort (${effectiveBankedE}e) vs ${userMeta.name} (${userHpPct}% HP)$lockedTag"
+
+        val nowMs = System.currentTimeMillis()
+        val isFirstShow = !isShieldDecisionOverlayVisible
+        if (isFirstShow) {
+            isShieldDecisionOverlayVisible = true
+            shieldDecisionOverlayShownAtMs = nowMs
+            mainToastHandler.removeCallbacks(hideShieldDecisionOverlayRunnable)
+            mainToastHandler.postDelayed(hideShieldDecisionOverlayRunnable, 5000L)
+        }
+
+        mainToastHandler.post {
+            try {
+                if (!isShieldDecisionOverlayVisible) return@post
+                val density = resources.displayMetrics.density
+                val targetWidth = (screenWidth * 0.88f).toInt()
+                val bottomOffsetY = (screenHeight * 0.295f).toInt()
+
+                if (shieldDecisionOverlayView == null) {
+                    val container = LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setPadding(
+                            (12 * density).toInt(),
+                            (8 * density).toInt(),
+                            (12 * density).toInt(),
+                            (8 * density).toInt()
+                        )
+                    }
+                    val params = WindowManager.LayoutParams().apply {
+                        type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                        } else {
+                            @Suppress("DEPRECATION")
+                            WindowManager.LayoutParams.TYPE_PHONE
+                        }
+                        flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
+                        format = PixelFormat.TRANSLUCENT
+                        gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                        x = 0
+                        y = bottomOffsetY
+                        width = targetWidth
+                        height = WindowManager.LayoutParams.WRAP_CONTENT
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                        }
+                    }
+                    windowManager.addView(container, params)
+                    shieldDecisionOverlayView = container
+                    shieldDecisionOverlayParams = params
+                }
+
+                shieldDecisionOverlayView?.let { container ->
+                    container.removeAllViews()
+                    container.background = GradientDrawable().apply {
+                        shape = GradientDrawable.RECTANGLE
+                        cornerRadius = 12f * density
+                        setColor(bgColor)
+                        setStroke(max(2, (2.2f * density).toInt()), strokeColor)
+                    }
+
+                    // Header Row
+                    val headerTv = TextView(this).apply {
+                        text = headerLineText
+                        setTextColor(Color.parseColor("#FFFFFF"))
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+                        typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+                        setPadding(0, 0, 0, (4 * density).toInt())
+                    }
+                    container.addView(headerTv)
+
+                    // Divider
+                    val divider = View(this).apply {
+                        layoutParams = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            max(1, (1f * density).toInt())
+                        ).apply {
+                            bottomMargin = (4 * density).toInt()
+                        }
+                        setBackgroundColor(Color.argb(95, 255, 255, 255))
+                    }
+                    container.addView(divider)
+
+                    // 2a: Funded Candidate Moves (individual rows, bold primary text: will it KO or remaining HP%)
+                    for (m in fundedMoves) {
+                        val impactLabel = if (m.isKo) {
+                            "💥 KO! (0% HP left  •  -${m.dmgPct}% dmg)"
+                        } else {
+                            "✅ ${m.remHpPct}% HP left (-${m.dmgPct}% dmg)"
+                        }
+                        val rowTv = TextView(this).apply {
+                            text = "⚡ ${m.moveName} (${m.energyCost}e)  →  $impactLabel"
+                            setTextColor(if (m.isKo) Color.parseColor("#FFE4E6") else Color.parseColor("#F8FAFC"))
+                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+                            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+                            setPadding(0, (1.5f * density).toInt(), 0, (1.5f * density).toInt())
+                        }
+                        container.addView(rowTv)
+                    }
+
+                    // 2b: Remaining Unfunded Candidate Moves (italics & muted font: move name, banked/req energy e.g. 30e/40e)
+                    for (m in unfundedMoves) {
+                        val impactSuffix = if (m.isKo) {
+                            "would KO (-${m.dmgPct}%)"
+                        } else {
+                            "${m.remHpPct}% HP left (-${m.dmgPct}%)"
+                        }
+                        val rowTv = TextView(this).apply {
+                            text = "• ${m.moveName} (${effectiveBankedE}e/${m.energyCost}e)  —  $impactSuffix"
+                            setTextColor(if (m.isKo) Color.parseColor("#FDE68A") else Color.parseColor("#CBD5E1"))
+                            alpha = 0.82f
+                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.2f)
+                            typeface = Typeface.create("sans-serif", Typeface.ITALIC)
+                            setPadding(0, (1f * density).toInt(), 0, (1f * density).toInt())
+                        }
+                        container.addView(rowTv)
+                    }
+
+                    container.visibility = View.VISIBLE
+                    shieldDecisionOverlayParams?.let { p ->
+                        if (p.y != bottomOffsetY || p.width != targetWidth) {
+                            p.y = bottomOffsetY
+                            p.width = targetWidth
+                            try {
+                                windowManager.updateViewLayout(container, p)
+                            } catch (_: Exception) {}
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
         }
     }
 
@@ -8694,6 +9078,15 @@ class OverlayService : LifecycleService() {
                 }
                 overlayView?.evaluateJavascript("if (window.setShowTacticalRecs) setShowTacticalRecs($showTacticalRecommendations);", null)
 
+                showShieldDecisionOverlay = if (intent?.hasExtra(EXTRA_SHOW_SHIELD_DECISION_OVERLAY) == true) {
+                    intent.getBooleanExtra(EXTRA_SHOW_SHIELD_DECISION_OVERLAY, true)
+                } else {
+                    prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, showShieldDecisionOverlay)
+                }
+                if (!showShieldDecisionOverlay) {
+                    hideShieldDecisionOverlay()
+                }
+
                 enableHpTracking = if (intent?.hasExtra(EXTRA_ENABLE_HP_TRACKING) == true) {
                     intent.getBooleanExtra(EXTRA_ENABLE_HP_TRACKING, false)
                 } else {
@@ -8791,6 +9184,14 @@ class OverlayService : LifecycleService() {
                     showTacticalRecommendations = prefs.getBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, showTacticalRecommendations)
                 }
                 overlayView?.evaluateJavascript("if (window.setShowTacticalRecs) setShowTacticalRecs($showTacticalRecommendations);", null)
+                if (intent?.hasExtra(EXTRA_SHOW_SHIELD_DECISION_OVERLAY) == true) {
+                    showShieldDecisionOverlay = intent.getBooleanExtra(EXTRA_SHOW_SHIELD_DECISION_OVERLAY, true)
+                } else {
+                    showShieldDecisionOverlay = prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, showShieldDecisionOverlay)
+                }
+                if (!showShieldDecisionOverlay) {
+                    hideShieldDecisionOverlay()
+                }
                 if (intent?.hasExtra(EXTRA_ENABLE_HP_TRACKING) == true) {
                     enableHpTracking = intent.getBooleanExtra(EXTRA_ENABLE_HP_TRACKING, false)
                 } else {
@@ -10696,8 +11097,15 @@ class OverlayService : LifecycleService() {
             peakFastestSecondFillPct[slotIdx] = 0
             leftMeterFilledTwiceLatched[slotIdx] = false
             rightMeterFilledTwiceLatched[slotIdx] = false
-            val r1E = (((debouncedSlowestPct * slowCost) / 100.0).roundToInt()).coerceIn(0, slowCost - 1)
-            return min(r1E, maxAllowedSingleJumpE).coerceIn(0, slowCost - 1)
+            val r1RawE = (((debouncedSlowestPct * slowCost) / 100.0).roundToInt()).coerceIn(0, slowCost - 1)
+            val r1SnappedE = snapPlayerEnergyToValidStep(
+                slotIdx = slotIdx,
+                rawEnergy = r1RawE,
+                fastMoveEnergy = userFastEnergy,
+                minBound = 0,
+                maxBound = slowCost - 1
+            )
+            return min(r1SnappedE, maxAllowedSingleJumpE).coerceIn(0, slowCost - 1)
         }
 
         if (debouncedSlowestPct in 100..199) {
@@ -10706,8 +11114,17 @@ class OverlayService : LifecycleService() {
                 peakSecondFillPct[slotIdx] = debouncedSlowestPct
             }
             val r2Max = min(100, 2 * slowCost)
-            val r2E = (slowCost + (((debouncedSlowestPct - 100) * slowCost) / 100.0).roundToInt()).coerceIn(slowCost, r2Max)
-            return min(r2E, maxAllowedSingleJumpE).coerceIn(slowCost, r2Max)
+            val r2RawE = (slowCost + (((debouncedSlowestPct - 100) * slowCost) / 100.0).roundToInt()).coerceIn(slowCost, r2Max)
+            val r2SnappedE = snapPlayerEnergyToValidStep(
+                slotIdx = slotIdx,
+                rawEnergy = r2RawE,
+                fastMoveEnergy = userFastEnergy,
+                minBound = slowCost,
+                maxBound = r2Max
+            )
+            val clampedR2 = min(r2SnappedE, maxAllowedSingleJumpE).coerceIn(slowCost, r2Max)
+            if (clampedR2 >= 100) playerSlotEnergyAnchor[slotIdx] = 100
+            return clampedR2
         }
 
         // debouncedSlowestPct in 200..300 (3rd Fill: second concentric outer circle detected outside main white circle)
@@ -10717,14 +11134,23 @@ class OverlayService : LifecycleService() {
         if (debouncedSlowestPct > peakSecondFillPct[slotIdx]) {
             peakSecondFillPct[slotIdx] = debouncedSlowestPct
         }
-        val r3E = (2 * slowCost + (((debouncedSlowestPct - 200) * slowCost) / 100.0).roundToInt()).coerceIn(r3Floor, 100)
-        return min(r3E, maxAllowedSingleJumpE).coerceIn(r3Floor, 100)
+        val r3RawE = (2 * slowCost + (((debouncedSlowestPct - 200) * slowCost) / 100.0).roundToInt()).coerceIn(r3Floor, 100)
+        val r3SnappedE = snapPlayerEnergyToValidStep(
+            slotIdx = slotIdx,
+            rawEnergy = r3RawE,
+            fastMoveEnergy = userFastEnergy,
+            minBound = r3Floor,
+            maxBound = 100
+        )
+        val clampedR3 = min(r3SnappedE, maxAllowedSingleJumpE).coerceIn(r3Floor, 100)
+        if (clampedR3 >= 100) playerSlotEnergyAnchor[slotIdx] = 100
+        return clampedR3
     }
 
     /**
-     * v3.99: Pure Visual 3-Ring Single-Bar Post-Throw Energy & Round Resync Solver:
+     * v3.99 / v4.00: Pure Visual 3-Ring Single-Bar Post-Throw Energy & Round Resync Solver + Post-Throw Discharge Anchor Snap:
      * Reads post-throw energy directly from the slower charge move bar (`0..99%`, `100..199%`, `200..300%`)
-     * with zero assumed / timer-based energy gains!
+     * and snaps to the nearest valid fast-move increment (`expectedPostEnergy + k * userFastEnergy`).
      */
     private fun resolvePostThrowCircleEnergyAndResyncRound(
         slotIdx: Int,
@@ -10740,22 +11166,29 @@ class OverlayService : LifecycleService() {
     ): Int {
         val slowCost = slowestMoveCost.coerceIn(35, 100)
         val fastCost = fasterMoveCost.coerceIn(35, 100)
+        val dischargeAnchor = expectedPostEnergy.coerceIn(0, 100)
+        playerSlotEnergyAnchor[slotIdx] = dischargeAnchor
 
         val resolvedPostE = when {
             debouncedSlowestPct in 0..99 -> {
-                (((debouncedSlowestPct * slowCost) / 100.0).roundToInt()).coerceIn(0, slowCost - 1)
+                val rawE = (((debouncedSlowestPct * slowCost) / 100.0).roundToInt()).coerceIn(0, slowCost - 1)
+                snapPlayerEnergyToValidStep(slotIdx, rawE, userFastEnergy, 0, slowCost - 1)
             }
             debouncedSlowestPct in 100..199 -> {
-                (slowCost + (((debouncedSlowestPct - 100) * slowCost) / 100.0).roundToInt()).coerceIn(slowCost, min(100, 2 * slowCost))
+                val r2Max = min(100, 2 * slowCost)
+                val rawE = (slowCost + (((debouncedSlowestPct - 100) * slowCost) / 100.0).roundToInt()).coerceIn(slowCost, r2Max)
+                snapPlayerEnergyToValidStep(slotIdx, rawE, userFastEnergy, slowCost, r2Max)
             }
             debouncedSlowestPct in 200..300 -> {
                 val r3Floor = min(100, 2 * slowCost)
-                (2 * slowCost + (((debouncedSlowestPct - 200) * slowCost) / 100.0).roundToInt()).coerceIn(r3Floor, 100)
+                val rawE = (2 * slowCost + (((debouncedSlowestPct - 200) * slowCost) / 100.0).roundToInt()).coerceIn(r3Floor, 100)
+                snapPlayerEnergyToValidStep(slotIdx, rawE, userFastEnergy, r3Floor, 100)
             }
-            else -> expectedPostEnergy.coerceIn(0, 100)
+            else -> dischargeAnchor
         }
 
         val finalPostE = resolvedPostE.coerceIn(0, 100)
+        playerSlotEnergyAnchor[slotIdx] = finalPostE
         resetSlotEnergyTracking(
             slotIdx = slotIdx,
             initialEnergy = finalPostE,
@@ -12786,6 +13219,7 @@ class OverlayService : LifecycleService() {
                 pendingChargedAttackPreOppShields = oppShieldsRemaining
                 pendingChargedAttackAttackerName = formatOpponentNameWithShadow(pendingChargedAttackOppRawName)
                 pendingChargedAttackDefenderName = activeUserPokemonName ?: userSlotCfg?.name ?: "Player"
+                pendingChargedAttackPreOppEnergy = oppSlotEnergy[throwerOppIdx].coerceIn(cheapestOppEnergy, 100)
                 oppSlotEnergy[throwerOppIdx] = (oppSlotEnergy[throwerOppIdx] - cheapestOppEnergy).coerceIn(0, 100)
                 pendingChargedAttackDeductedEnergy = cheapestOppEnergy
                 if (!playerFaintedSlots[activeUserIdx] && lastStableNormalCombatEnergy > playerSlotEnergy[activeUserIdx]) {
@@ -12804,10 +13238,10 @@ class OverlayService : LifecycleService() {
                 turnResidualMs = 0L
                 hpChanged = true
             }
+            val isZeroShieldPrompt = playerShieldsRemaining == 0 ||
+                combinedBannerLower.contains("no protect") ||
+                combinedBannerLower.contains("shields remaining")
             if (!wasPromptActive) {
-                val isZeroShieldPrompt = playerShieldsRemaining == 0 ||
-                    combinedBannerLower.contains("no protect") ||
-                    combinedBannerLower.contains("shields remaining")
                 val toastMsg = if (isZeroShieldPrompt) {
                     "⚡ Attack Incoming (No Shields)! (-${cheapestOppEnergy}E)"
                 } else {
@@ -12815,14 +13249,36 @@ class OverlayService : LifecycleService() {
                 }
                 showBattleToast(toastMsg)
             }
+            // v4.00: Show/Update Shield Decision Overlay ONLY while "Attack incoming!" text is on screen and < 5.0s elapsed
+            val shieldOverlayElapsedMs = if (shieldDecisionOverlayShownAtMs > 0L) (nowMs - shieldDecisionOverlayShownAtMs) else 0L
+            if (hasAttackIncomingText && !isZeroShieldPrompt && showShieldDecisionOverlay && shieldOverlayElapsedMs < 5000L) {
+                val oppIdxForOverlay = if (pendingChargedAttackOppSlotIdx in 0..2) pendingChargedAttackOppSlotIdx else activeOppIdx.coerceIn(0, 2)
+                val preThrowE = if (pendingChargedAttackPreOppEnergy > 0) {
+                    pendingChargedAttackPreOppEnergy
+                } else {
+                    (oppSlotEnergy[oppIdxForOverlay] + pendingChargedAttackDeductedEnergy).coerceIn(cheapestOppEnergy, 100)
+                }
+                showOrUpdateShieldDecisionOverlay(
+                    oppSlotIdx = oppIdxForOverlay,
+                    userSlotIdx = activeUserIdx.coerceIn(0, 2),
+                    preThrowOppEnergy = preThrowE
+                )
+            } else if (isShieldDecisionOverlayVisible) {
+                hideShieldDecisionOverlay()
+            }
             if (!wasPromptActive || hpChanged) {
                 recalculateAndPushBattleData()
             }
             return
-        } else if (isAttackIncomingPromptActive && (isNormalFastCombatFrame || postOppChargedMissingPlayerHpFrames >= 6 || (nowMs - attackIncomingDetectedAtMs) > 4500L)) {
-            isAttackIncomingPromptActive = false
-            pllValidatedThisShieldDelay = false
-            hpChanged = true
+        } else {
+            if (isShieldDecisionOverlayVisible) {
+                hideShieldDecisionOverlay()
+            }
+            if (isAttackIncomingPromptActive && (isNormalFastCombatFrame || postOppChargedMissingPlayerHpFrames >= 6 || (nowMs - attackIncomingDetectedAtMs) > 4500L)) {
+                isAttackIncomingPromptActive = false
+                pllValidatedThisShieldDelay = false
+                hpChanged = true
+            }
         }
 
         // 3. Detect Player Charged Attack Minigame ("Get ready!" / "GREAT!" / "EXCELLENT!" / "NICE!" or both floating HP bars & Charge Move buttons hidden for >= 600ms)
@@ -12906,6 +13362,7 @@ class OverlayService : LifecycleService() {
                 }
                 val postProvisionalEnergy = (preChargeUserEnergy - initialProvisionalCost).coerceIn(0, 100)
                 playerSlotEnergy[activeUserIdx] = postProvisionalEnergy
+                playerSlotEnergyAnchor[activeUserIdx] = postProvisionalEnergy
                 pendingChargedAttackDeductedEnergy = initialProvisionalCost
                 lastUserChargePreEnergySnapshot = preChargeUserEnergy
                 lastUserChargeDeductedEnergySnapshot = initialProvisionalCost
@@ -13197,11 +13654,13 @@ class OverlayService : LifecycleService() {
                 lastChargedAttackLoggedMs = nowMs
                 pendingChargedAttackActor = ""
                 pendingChargedAttackDeductedEnergy = 0
+                pendingChargedAttackPreOppEnergy = 0
                 pendingChargedAttackOppSlotIdx = -1
                 pendingChargedAttackUserSlotIdx = -1
                 pendingChargedAttackOppRawName = ""
                 pendingChargedAttackWasOppCatch = false
                 hadShieldPromptBeforeCurrentCharge = false
+                hideShieldDecisionOverlay()
                 hpChanged = true
                 val moveLabel = resolvedOppMove ?: "Charged Attack"
                 val catchSuffix = if (playerCaughtMove) " [Caught by $defenderUserName]" else ""
@@ -13405,10 +13864,11 @@ class OverlayService : LifecycleService() {
                     else -> userMoveEnergyMap[resolvedUserMove] ?: cheapestUserEnergy
                 }
 
-                // v3.83/v3.95: Preserve exact leftover charged move energy delta (`effectivePreEnergy - totalUserEnergy`)
-                // and resync fill round (Round 1 / Round 2 / Round 3) to post-throw bars!
+                // v3.83/v3.95/v4.00: Preserve exact leftover charged move energy delta (`effectivePreEnergy - totalUserEnergy`),
+                // update the slot's post-throw discharge anchor (`playerSlotEnergyAnchor`), and resync fill round to post-throw bars!
                 val computedResidualEnergy = (effectivePreEnergy - totalUserEnergy).coerceIn(0, 100)
                 playerSlotEnergy[activeUserIdx] = computedResidualEnergy
+                playerSlotEnergyAnchor[activeUserIdx] = computedResidualEnergy
                 lastUserChargePreEnergySnapshot = effectivePreEnergy
                 lastUserChargeDeductedEnergySnapshot = totalUserEnergy
                 lastUserChargeResolvedMoveName = resolvedUserMove
@@ -15409,8 +15869,11 @@ class OverlayService : LifecycleService() {
         leftChargeFillDebounceStartMs.fill(0L)
         rightChargeFillDebounceStartMs.fill(0L)
         for (slotIdx in 0..2) {
+            playerSlotEnergyAnchor[slotIdx] = 0
             resetSlotEnergyTracking(slotIdx, 0)
         }
+        pendingChargedAttackPreOppEnergy = 0
+        hideShieldDecisionOverlay()
         playerAutoIncrementAnchorMs.fill(0L)
         playerLastSelfCorrectionAtMs.fill(0L)
         pllValidatedThisShieldDelay = false
@@ -15573,6 +16036,8 @@ class OverlayService : LifecycleService() {
         isPostFaintSwitchPromptActive = false
         pendingChargedAttackActor = ""
         pendingChargedAttackDeductedEnergy = 0
+        pendingChargedAttackPreOppEnergy = 0
+        hideShieldDecisionOverlay()
         lastRecommendedAction = ""
         lastRecommendedGoal = ""
         lastRecommendedSwapSlotIdx = -1
@@ -18031,11 +18496,19 @@ class OverlayService : LifecycleService() {
         } catch (_: Exception) {}
 
         mainToastHandler.removeCallbacks(hideStatusToastRunnable)
+        mainToastHandler.removeCallbacks(hideShieldDecisionOverlayRunnable)
         if (statusToastView != null) {
             try {
                 windowManager.removeView(statusToastView)
             } catch (_: Exception) {}
             statusToastView = null
+        }
+
+        if (shieldDecisionOverlayView != null) {
+            try {
+                windowManager.removeView(shieldDecisionOverlayView)
+            } catch (_: Exception) {}
+            shieldDecisionOverlayView = null
         }
 
         if (overlayView != null) {

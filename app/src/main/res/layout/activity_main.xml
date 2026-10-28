@@ -1033,6 +1033,51 @@
                     android:textColor="#ffffff" />
             </LinearLayout>
 
+            <!-- v4.00: Attack Incoming! Shield Decision Overlay Setting (Default ON) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:paddingTop="8dp"
+                android:background="#0f172a"
+                android:paddingHorizontal="10dp"
+                android:paddingBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🛡️ Attack Incoming! Shield Decision Overlay"
+                        android:textColor="#34d399"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_shield_decision_overlay_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: Enabled — Red/Orange/Yellow/Green KO &amp; HP summary above Attack incoming!"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_toggle_shield_decision_overlay"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="Shield HUD On"
+                    android:textSize="11sp"
+                    android:backgroundTint="#059669"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
             <!-- Live HP Tracking Setting (v3.60: Default OFF, Opt-In) -->
             <LinearLayout
                 android:layout_width="match_parent"
@@ -1287,7 +1332,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="⚡ Energy Meter Debounce &amp; Slowest Move Snap (v3.87)"
+                    android:text="⚡ 3-Ring Energy Meter &amp; Fast-Move Increment Snap (v4.00)"
                     android:textColor="#38bdf8"
                     android:textSize="12sp"
                     android:textStyle="bold" />
@@ -1297,7 +1342,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="• Active: 2 Matching Samples (Default • Fastest Response, ±2% Fill Tolerance)
-• Snaps on ≥1E diff to slowest Charge Move (100%–200% White Border + Meniscus)
+• Snaps pixel fill (0–300% 3-Ring) to nearest Fast-Move step &amp; Post-Throw Discharge Anchor
 • Live Energy &amp; Circle % Battle Toasts: Enabled"
                     android:textColor="#94a3b8"
                     android:textSize="10sp"

@@ -167,6 +167,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textBattleToastsDesc: TextView
     private lateinit var btnToggleTacticalRec: Button
     private lateinit var textTacticalRecDesc: TextView
+    private lateinit var btnToggleShieldDecisionOverlay: Button
+    private lateinit var textShieldDecisionOverlayDesc: TextView
     private lateinit var btnToggleHpTracking: Button
     private lateinit var textHpTrackingDesc: TextView
     private lateinit var tvHpDebounceSummary: TextView
@@ -450,6 +452,7 @@ class MainActivity : AppCompatActivity() {
     private val PREFS_KEY_ENABLE_4_CHARGED_MOVES = OverlayService.PREFS_KEY_ENABLE_4_CHARGED_MOVES
     private val PREFS_KEY_DISABLE_BATTLE_TOASTS = OverlayService.PREFS_KEY_DISABLE_BATTLE_TOASTS
     private val PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS = OverlayService.PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS
+    private val PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY = OverlayService.PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY
     private val PREFS_KEY_ENABLE_HP_TRACKING = OverlayService.PREFS_KEY_ENABLE_HP_TRACKING
     private val PREFS_KEY_ENABLE_ENERGY_TRACKING = OverlayService.PREFS_KEY_ENABLE_ENERGY_TRACKING
     private val PREFS_KEY_FAST_DETECT_TURN_OFFSET = OverlayService.PREFS_KEY_FAST_DETECT_TURN_OFFSET
@@ -1156,6 +1159,7 @@ class MainActivity : AppCompatActivity() {
         if (::btnToggleOppChargedMoves.isInitialized) updateOppChargedMovesUi()
         if (::btnToggleBattleToasts.isInitialized) updateBattleToastsUi()
         if (::btnToggleTacticalRec.isInitialized) updateTacticalRecUi()
+        if (::btnToggleShieldDecisionOverlay.isInitialized) updateShieldDecisionOverlayUi()
         if (::btnToggleHpTracking.isInitialized) updateHpTrackingUi()
         if (::btnToggleEnergyTracking.isInitialized) updateEnergyTrackingUi()
         if (::btnCycleFastDetectOffset.isInitialized) updateFastDetectOffsetUi()
@@ -1198,6 +1202,8 @@ class MainActivity : AppCompatActivity() {
         textBattleToastsDesc = findViewById(R.id.text_battle_toasts_desc)
         btnToggleTacticalRec = findViewById(R.id.btn_toggle_tactical_rec)
         textTacticalRecDesc = findViewById(R.id.text_tactical_rec_desc)
+        btnToggleShieldDecisionOverlay = findViewById(R.id.btn_toggle_shield_decision_overlay)
+        textShieldDecisionOverlayDesc = findViewById(R.id.text_shield_decision_overlay_desc)
         btnToggleHpTracking = findViewById(R.id.btn_toggle_hp_tracking)
         textHpTrackingDesc = findViewById(R.id.text_hp_tracking_desc)
         tvHpDebounceSummary = findViewById(R.id.tv_hp_debounce_summary)
@@ -1341,6 +1347,7 @@ class MainActivity : AppCompatActivity() {
         updateOppChargedMovesUi()
         updateBattleToastsUi()
         updateTacticalRecUi()
+        updateShieldDecisionOverlayUi()
         updateHpTrackingUi()
         updateEnergyTrackingUi()
         updateFastDetectOffsetUi()
@@ -1654,6 +1661,21 @@ class MainActivity : AppCompatActivity() {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
                     action = OverlayService.ACTION_UPDATE_SETTINGS
                     putExtra(OverlayService.EXTRA_SHOW_TACTICAL_RECOMMENDATIONS, nextShow)
+                }
+                startService(updateIntent)
+            }
+        }
+
+        btnToggleShieldDecisionOverlay.setOnClickListener {
+            val currentShow = prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true)
+            val nextShow = !currentShow
+            prefs.edit().putBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, nextShow).apply()
+            updateShieldDecisionOverlayUi()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_SHOW_SHIELD_DECISION_OVERLAY, nextShow)
                 }
                 startService(updateIntent)
             }
@@ -5243,6 +5265,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateShieldDecisionOverlayUi() {
+        if (!::btnToggleShieldDecisionOverlay.isInitialized) return
+        val showShieldHud = prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true)
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        if (showShieldHud) {
+            btnToggleShieldDecisionOverlay.text = "Shield HUD On"
+            btnToggleShieldDecisionOverlay.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            btnToggleShieldDecisionOverlay.setTextColor(0xFFFFFFFF.toInt())
+            textShieldDecisionOverlayDesc.text = "Default: Red/Orange/Yellow/Green KO & HP summary above Attack incoming! (Auto-hides <= 5s)"
+        } else {
+            btnToggleShieldDecisionOverlay.text = "Shield HUD Off"
+            btnToggleShieldDecisionOverlay.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+            btnToggleShieldDecisionOverlay.setTextColor(theme.primaryTextColor)
+            textShieldDecisionOverlayDesc.text = "Active: Attack Incoming! Shield Decision Overlay disabled"
+        }
+    }
+
     private fun updateHpTrackingUi() {
         if (!::btnToggleHpTracking.isInitialized) return
         val enabled = prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
@@ -5425,6 +5464,7 @@ class MainActivity : AppCompatActivity() {
             putExtra(OverlayService.EXTRA_ENABLE_4_CHARGED_MOVES, prefs.getBoolean(PREFS_KEY_ENABLE_4_CHARGED_MOVES, false))
             putExtra(OverlayService.EXTRA_DISABLE_BATTLE_TOASTS, prefs.getBoolean(PREFS_KEY_DISABLE_BATTLE_TOASTS, false))
             putExtra(OverlayService.EXTRA_SHOW_TACTICAL_RECOMMENDATIONS, prefs.getBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, true))
+            putExtra(OverlayService.EXTRA_SHOW_SHIELD_DECISION_OVERLAY, prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true))
             putExtra(OverlayService.EXTRA_ENABLE_HP_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false))
             putExtra(OverlayService.EXTRA_ENABLE_ENERGY_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false))
             putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2))
@@ -7498,6 +7538,7 @@ class TaskerOverlayActivity : Activity() {
             putExtra(OverlayService.EXTRA_OPP_COUNT_MODE, prefs.getString("opp_count_mode", "my_fasts") ?: "my_fasts")
             putExtra(OverlayService.EXTRA_ENABLE_4_CHARGED_MOVES, prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_4_CHARGED_MOVES, false))
             putExtra(OverlayService.EXTRA_DISABLE_BATTLE_TOASTS, prefs.getBoolean(OverlayService.PREFS_KEY_DISABLE_BATTLE_TOASTS, false))
+            putExtra(OverlayService.EXTRA_SHOW_SHIELD_DECISION_OVERLAY, prefs.getBoolean(OverlayService.PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true))
             putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, prefs.getInt(OverlayService.PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2))
             putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt("overlay_scale_pct", 78))
             putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(OverlayService.PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 72))
@@ -7601,6 +7642,7 @@ class TaskerBroadcastReceiver : BroadcastReceiver() {
                         putExtra(OverlayService.EXTRA_OPP_COUNT_MODE, prefs.getString("opp_count_mode", "my_fasts") ?: "my_fasts")
                         putExtra(OverlayService.EXTRA_ENABLE_4_CHARGED_MOVES, prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_4_CHARGED_MOVES, false))
                         putExtra(OverlayService.EXTRA_DISABLE_BATTLE_TOASTS, prefs.getBoolean(OverlayService.PREFS_KEY_DISABLE_BATTLE_TOASTS, false))
+                        putExtra(OverlayService.EXTRA_SHOW_SHIELD_DECISION_OVERLAY, prefs.getBoolean(OverlayService.PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true))
                         putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, prefs.getInt(OverlayService.PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2))
                         putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt("overlay_scale_pct", 78))
                         putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(OverlayService.PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 72))

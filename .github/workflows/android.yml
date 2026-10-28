@@ -129,19 +129,26 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Three-Ring Visual Charge Meter Detection 0–300% & Zero Assumed Energy Gains)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Fast-Move Energy Increment Snapping & 4-Tier "Attack Incoming!" Shield Decision Overlay)
 
-            ### Release Series Context (`v3.95` – `v3.99`)
-            *Functionally grouped release series introducing multi-round (`0–100E`) energy tracking for Pokémon with `<50E` charged moves, single-bar slower-move authority, and three-ring visual charge circle detection.*
+            ### Release Series Context (`v4.00`)
+            *Introduces fast-move turn increment snapping with post-throw discharge anchoring on the player energy tracker and the new 4-tier color-coded (Red / Orange / Yellow / Green) "Attack incoming!" Shield Decision Overlay positioned directly above the shield prompt.*
 
-            ### Key Feature in `${{ steps.version.outputs.tag }}`
-            - **Three-Ring Visual Charge Meter Detection (`0%..300%` in `detectSingleChargeButtonFillPct`)**:
-              - **1st Fill (`0%..100%`)**: Thin/translucent circle border with interior liquid filling `0% -> 100%`.
-              - **2nd Fill (`100%..200%`)**: Solid thick bright-white circle border (`r = 0.90R..1.05R`) with interior liquid filling `100% -> 200%`.
-              - **3rd Fill (`200%..300%`)**: Second outer white concentric ring outside the main circle (`r = 1.11R..1.25R` separated by a darker annular gap at `r = 1.04R..1.11R`) with interior meniscus read directly as `200%..300%`.
-            - **Zero Assumed Energy Gains (`resolveSub50AndMultiRoundEnergy`)**:
-              - Removed all timer/cadence-based energy stepping (`overchargeSaturationStepAnchorMs`), wrap-around latches, and top-cap darkening memory heuristics.
-              - Keys strictly off the slower, higher-cost charge move meter (`round(slowPct / 100.0 * slowCost).coerceIn(0, 100)`).
+            ### Key Features in `${{ steps.version.outputs.tag }}`
+            - **Fast-Move Energy Increment & Post-Throw Discharge Snapping (`snapPlayerEnergyToValidStep`)**:
+              - Snaps raw pixel-measured player energy values (from the slower charged move meter) to the nearest valid fast-move turn step (`anchorE + k * fastMoveEnergy`, capped at `100E`) relative to the slot's post-throw residual anchor (`playerSlotEnergyAnchor`).
+              - Eliminates `1–2E` pixel width/rounding offsets (e.g., `53E` snapping cleanly to `54E` on `9E Ember`) and re-anchors `playerSlotEnergyAnchor` whenever a charged move is thrown (`preThrowE - moveCost`).
+            - **New Themed "Attack Incoming!" Shield Decision Overlay (`showOrUpdateShieldDecisionOverlay`)**:
+              - Appears directly above the `"Attack incoming! Use a Protect Shield?"` prompt (when player has `>= 1` shield) and auto-hides immediately when the text disappears or after `5.0s`, whichever comes first.
+              - **2a (Funded Moves)**: Lists every charged move candidate the opponent has enough energy to throw (`bankedE >= moveCost`) individually with exact **KO** status or **remaining HP%** if unshielded.
+              - **2b (Unfunded Moves)**: Lists remaining candidate moves in *italics and muted font* showing move name, `${bankedE}e/${moveCost}e` (e.g. `30e/40e`), and KO / remaining HP% impact.
+              - **2c (4-Tier Color-Coded Background)**:
+                - **RED**: **All** funded moves in **2a** will KO your active Pokémon.
+                - **ORANGE**: **At least one** funded move in **2a** will KO and **at least one** funded move in **2a** will **not** KO (bait vs. nuke).
+                - **YELLOW**: **No** funded move in **2a** KOs, but **at least one** unfunded move in **2b** would KO.
+                - **GREEN**: **No** moves in **2a** or **2b** will KO your active Pokémon.
+              - **2d (Locked 2-Move Filtering)**: Automatically excludes Moves 3 and 4 once Charged Moves 1 and 2 are confirmed/locked for that opponent Pokémon.
+              - **2f (Settings Toggle)**: Configurable toggle in **Settings -> Overlay -> Attack Incoming! Shield Decision Overlay**.
 
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)

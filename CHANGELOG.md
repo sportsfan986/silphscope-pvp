@@ -1,4 +1,25 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v3.99`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v4.00`)
+
+---
+
+## v4.00 (2026-10-28) — Fast-Move Energy Increment Snapping & 4-Tier "Attack Incoming!" Shield Decision Overlay
+*Major milestone release adding fast-move turn increment snapping with post-throw discharge anchoring on the player energy tracker and a dedicated 4-tier color-coded (Red / Orange / Yellow / Green) "Attack incoming!" Shield Decision Overlay positioned directly above the shield prompt.*
+
+- **v4.00 — Key Feature: Fast-Move Energy Increment Snapping (`snapPlayerEnergyToValidStep`) & 4-Tier "Attack Incoming!" Shield Decision Overlay (`showOrUpdateShieldDecisionOverlay`)**:
+  - **Fast-Move Energy Increment & Post-Throw Discharge Snapping (`snapPlayerEnergyToValidStep`)**:
+    - Snaps raw pixel-measured player energy values (from the slower charged move meter) to the nearest valid fast-move turn step (`anchorE + k * fastMoveEnergy`, capped at `100E`) relative to the slot's post-throw residual anchor (`playerSlotEnergyAnchor`).
+    - Eliminates `1–2E` pixel width and rounding offsets (e.g., `53E` snapping cleanly to `54E` on `9E Ember`) and updates `playerSlotEnergyAnchor` whenever a charged move is thrown (`preThrowE - moveCost`).
+  - **New Themed "Attack Incoming!" Shield Decision Overlay (`showOrUpdateShieldDecisionOverlay` & `hideShieldDecisionOverlay`)**:
+    - Renders a dedicated tactical card directly above `"Attack incoming! Use a Protect Shield?"` (`Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL`, `y = 29.5%` screen height) while the shield prompt is on screen (and player has `>= 1` shield), and auto-hides immediately as soon as the text disappears or after `5.0s`, whichever comes first.
+    - **2a (Funded Moves)**: Lists all charged move candidates that the opponent has enough banked energy to throw (`preThrowOppEnergy >= moveCost`) individually, displaying whether each move will **KO** your active Pokémon or what your **remaining HP%** will be if you don't shield.
+    - **2b (Unfunded Moves)**: Lists all remaining candidate moves (`preThrowOppEnergy < moveCost`) in *italics and muted font*, showing move name, `${bankedE}e/${moveCost}e` (e.g., `30e/40e`), and KO / remaining HP% impact.
+    - **2c (4-Tier Color-Coded Background)**:
+      - **RED**: **All** funded moves in **2a** will KO your active Pokémon (`fundedMoves.all { it.isKo }`).
+      - **ORANGE**: **At least one** funded move in **2a** will KO and **at least one** funded move in **2a** will **not** KO (`fundedMoves.any { it.isKo } && fundedMoves.any { !it.isKo }`).
+      - **YELLOW**: **No** move in **2a** KOs, **but at least one** unfunded move in **2b** would KO your active Pokémon (`fundedMoves.none { it.isKo } && unfundedMoves.any { it.isKo }`).
+      - **GREEN**: **No** moves in **2a** or **2b** will KO your active Pokémon (`fundedMoves.none { it.isKo } && unfundedMoves.none { it.isKo }`).
+    - **2d (Confirmed 2-Move Filtering)**: Automatically excludes Moves 3 and 4 from the Shield Decision Overlay and its color calculation once Charged Moves 1 and 2 are determined and locked for that opponent Pokémon.
+    - **2f (Settings Toggle)**: Added `"🛡️ Attack Incoming! Shield Decision Overlay"` toggle in **Settings -> Overlay** (`PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY`, default enabled) with full Tasker intent support (`EXTRA_SHOW_SHIELD_DECISION_OVERLAY`).
 
 ---
 
