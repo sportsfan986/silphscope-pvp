@@ -1,298 +1,247 @@
-## v3.93 (2026-10-27)
-- **Used Charged Move Marking Fix & Pre-Charge Attacker Lifecycle Reset**: Clears `pendingChargedAttackOppSlotIdx`, `pendingChargedAttackUserSlotIdx`, `pendingChargedAttackOppRawName`, and `pendingChargedAttackWasOppCatch` after Section 4 reconciles each charged attack, and tracks a dedicated opponent-thrower snapshot (`lastOppChargedAttackerSlotIdx` / `lastOppChargedAttackerRawName`) so stale slot indices from earlier turns never block move pool matching.
-- **Resilient `<Name> used <Move>!` Banner Fallback to Pre-Charge Active Opponent Slot**: Allows clipped/missing `<name>` prefixes (`"used <Move>!"`) to parse, requires `>= 4` normalized characters for reverse substring `<name>` slot matching (preventing 2–3 character OCR fragments from matching the wrong slot), and falls back to testing and marking the move on the pre-charge active opponent slot whenever `<name>` is garbled or fails to match a slot's move pool.
-- **Strict & Best-Guess Unshielded HP-Drop Move Confirmation**: Marks both strict (`±8%` / `>=12%` separation) and best-guess (`±16%`) unshielded HP-delta move matches in `confirmedOppChargedMoves[attackerOppSlotIdx]` whenever the mid-screen banner is missed by async OCR.
-- **2-Pokéball Faint Invariant & Double-Faint Prevention**: Includes `preferredPreKoSlot` in `resolveFaintedOpponentSlotIdx` even when already marked fainted so post-charged-move KOs never spill over and mark a second healthy bench slot fainted; resets `oppSwapEndTimeMs = 0L` on faint replacements; gates swap-timer faint fallback on `effectiveOppBalls`; and adds continuous 2-Pokéball self-healing in `updateSteadyFrameBallAndShieldState()` so at most 1 Pokémon can ever be marked fainted while 2 Pokéballs are visible.
-- **Release Version Bump**: Bumped to `v3.93` (versionCode `393`) across Gradle build scripts and version trackers.
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v3.95`)
 
-## v3.92 (2026-10-27)
-- **Charged Move Mapping Gated by `<Name> used <Move>!` & Pre-Throw Attacker Lock**: Locks the attacking opponent slot (`pendingChargedAttackOppSlotIdx`) and raw species (`pendingChargedAttackOppRawName`) at the start of every charged attack before camera zoom or post-move swaps occur. Matches `<name>` in `"<name> used <move>!"` against all known opponent slots (`detectedOpponents`) and the locked pre-charge attacker so post-charged-move swaps never register the charged move or deduct energy on the incoming second Pokémon. If OCR misses the banner text, unshielded HP-delta fallback remains strictly bound to `pendingChargedAttackOppSlotIdx`.
-- **Bidirectional Charged Move Catch Accounting (Player Catch & Opponent Catch)**: Detects when either the Player or Opponent swaps on the exact turn a charged move is thrown (`catcherSlotIdx != preChargeDefenderSlotIdx`). Preserves the swapped-out Pokémon's pre-catch HP (`pendingChargedAttackPreUserSlotHp` / `pendingChargedAttackPreOppSlotHp`), starts/preserves the 50s swap timer on the catching side (even if the catching Pokémon is one-shot KO'd by the charged move), and evaluates unshielded HP-delta move disambiguation against the catching defender's stats and typing.
-- **Pre-KO Active Slot Lock & Lowest-HP History Faint Attribution (`resolveFaintedOpponentSlotIdx`)**: Fixes all three root causes of misattributed opponent faints: (1) prevents post-charged-move KOs already marked fainted (`prevAlreadyMarkedFainted`) from falling into the manual-swap branch and clearing their faint flag when 2Hz OCR reads the replacement Pokémon's name; (2) prevents `sampledOppBalls == 2` from falsely marking `lastOppPrevSlotIdx` from an older confirmed manual swap before OCR reads the new Pokémon's name; and (3) cross-checks pre-KO active slot (`pendingChargedAttackOppSlotIdx` / `lastNormalCombatOppSlotIdx`) with `oppSlotPriorHpPct` and `oppSlotLowestHpPct` history when 10Hz HP bar scanning sees a replacement's 100% HP bar before 2Hz OCR updates the species name.
-- **Release Version Bump**: Bumped to `v3.92` (versionCode `392`) across Gradle build scripts and version trackers.
+---
 
-## v3.91 (2026-10-27)
-- **Top Corner Overlay Missing Shield Decrement Guard**: When opponent (or player) throws a charged attack, Pokémon GO fades or zooms away the top corner battle HUD (Pokéballs and shield icons). When the overlay is missing (detected by shields $\le 0$ and Pokéballs $\le 0$, or Pokéballs $\le 0$), SilphScope now suppresses shield drop processing and resets drop frame counters, preventing false shield decrements during charged attacks.
-- **Release Version Bump**: Bumped to `v3.91` (versionCode `391`) across Gradle build scripts, manifests, and version trackers.
+## v3.95 (2026-10-28) — Sub-50E Multi-Round Energy Tracking up to 100E (Matched & Unmatched Charged Moves) & Post-Throw Round Resync
+- **Dual-Bar N-Sample (`±2%`) Circle Debounce (`OverlayService.kt`)**:
+  - Debounces both the slower (higher-energy) and faster (lower-energy) charge move circles independently using the configurable N-sample (`default 2`, `±2%` fill tolerance) rolling confirmation filter (`candidateFastestFillPct`, `fastestFillDebounceCount`, `confirmedFastestFillPct`).
+- **Unmatched Sub-50E Moves (`cost1 != cost2`, both `<50E`, e.g., `35E + 45E`, `35E + 40E`, `40E + 45E`)**:
+  - Tracks player energy directly from the **slower charge move meter** during Round 1 (`0 .. slowCost`) and Round 2 (`slowCost .. 2 * slowCost`).
+  - Once energy reaches `2 * slowCost` (or the dual-bar percentage combination proves Round 3 wrap-around), switches to a **Dual-Bar Percentage Match Solver** across both bars up to `100E`, with turn-monotonic fast-move progression if both bars are simultaneously at the `200%` double-ring cap.
+- **Matched Sub-50E Moves (`cost1 == cost2 < 50E` or Single `<50E` Move, e.g., `35E + 35E`, `40E + 40E`, `45E + 45E`)**:
+  - Tracks peak Round 2 fill percentage (`peakSecondFillPct`) and latches `slowestMeterInThirdFill` when the meniscus wraps from high Round 2 (`>= 158%` or `>= 195%`) back down into Round 3 (`101% .. peak - 18%`), combining Round 3 meniscus readings with turn-monotonic fast-move progression up to `100E`.
+- **Post-Throw Energy Deduction, Dual-Bar Move Disambiguation & Fill-Round Resync (`resolvePostThrowCircleEnergyAndResyncRound` & `scorePostThrowCircleFit`)**:
+  - Deducts the thrown charged move's energy cost (`preThrowEnergy - thrownMoveCost`), scores both post-throw charge meters via `scorePostThrowCircleFit` to disambiguate Move 1 vs. Move 2 throws, and resyncs the active fill round (`Round 1`, `Round 2`, or `Round 3`) and per-slot wrap latches to the observed post-throw bars.
 
-## v3.90 (2026-10-27)
-- **Solgaleo Body Anti-False-Trigger (`detectFloatingHpBarPct`)**: Hardens floating HP bar detection against large, bright Pokémon models (e.g., Solgaleo's white mane, front legs, and chest). Requires genuine dark track interior pixels matching $(100\% - \text{HP}\%) \pm 10\%$ in the depleted remainder, rejects candidates where bright body pixels ($luma \ge 145$) bleed into the depleted track, and enforces a minimum interior width floor ($w \ge 0.245 \times \text{fullScreenWidth}$).
-- **Authoritative Candidate Proximity Prioritization**: When multiple candidate bars are detected on screen, prioritizes the candidate cluster whose computed HP% is closest to the previous stable reading (`confirmedPlayerSlotHpPct[activeUserIdx]` / `confirmedOppSlotHpPct[activeOppIdx]`), breaking ties by cluster scanline count.
-- **Configurable Debounce Error Tolerance (`0 / 1 / 2 / 3%`, Default `1%`)**: Added a dedicated `Debounce Error Tolerance (±%)` selector in Settings (`gbl_debounce_tolerance_pct`, default `±1%`, choices `±0%`, `±1%`, `±2%`, `±3%`) applying across all HP and energy rolling debounce filters.
-- **Release Version Bump**: Bumped to `v3.90` (versionCode `390`) across Gradle, manifests, and UI badges.
+---
 
-## v3.89 (2026-10-27)
-- **Independent HP Bar Meter Debounce Setting (`2 / 3 / 4 Samples`, Default `2`)**: Added a dedicated `HP Bar Meter Debounce & Upward Self-Correction (v3.89)` selector in Settings (`gbl_hp_debounce_samples`, default `2` samples with `±2%` HP tolerance), independent of the Energy Meter Debounce setting.
-- **Low-Latency `±2%` Tolerance HP Debounce & Upward Self-Correction**: Replaced the rigid `3–7` frame exact-integer equality confirmation filter (`sampledHpPct == pendingConfirmHpPct`) with an N-sample (`default 2`) `±2%` tolerance rolling confirmation window in both Player and Opponent HP pipelines, allowing HP to immediately self-correct upward whenever `N` clean stable samples confirm a higher HP% than an artificially low reading.
-- **Charged-Move Animation Lockout + Clean Stable HP Correction During Shield Call Prompts**: Locks out noisy HP bar readings during charged-move animations and camera cuts while allowing clean, stable debounced HP bars during **Shield Call prompts** (`isShieldCallWindowEarly` / `"Attack incoming!"`) to self-correct upward or update true pre-impact HP (and sync `pendingChargedAttackPreUserHp` / `pendingChargedAttackPreOppHp`) so KO% badges and `Tank vs Shield` recommendations use accurate HP%.
-- **Switch-Frame & Post-Charge HP Debounce Protection**: Seeds the N-sample HP debounce buffer on manual switch frames and post-charge-move camera returns instead of immediately latching a single un-debounced frame.
+## v3.91 – v3.94 (2026-10-27 – 2026-10-28) — Shield & Pokéball HUD Debouncing, All-HUD-Gone Lockout, Pre-KO Faint Attribution & Charged Move Catch Accounting
+*Functionally grouped release series hardening top-corner HUD (Pokéball & Protect Shield) tracking, charged-move camera zoom immunity, and opponent faint/move attribution.*
 
-## v3.88 (2026-10-27)
-- **Player Energy-to-Turns Conversion & Turn-Indexed Opponent Energy**: Converts confirmed player energy gains into fast-move turns (`confirmedPhasePlayerTurns`) and indexes opponent energy gain directly to player turns based on the opponent's fast move turn count (`oppFastTurns`) without any autonomous idle timer fallback.
-- **500ms Sub-Turn Interpolation for Multi-Turn Player Fast Moves**: When using a non-1-turn fast move (`userFastTurns > 1`), approximates single-turn timing in `500ms` intervals (`0 .. userFastTurns - 1`) between each confirmed player fast move so opponent fast moves credit smoothly on their exact turn boundaries.
-- **Maximum Optimal-Timing Opponent Energy Credit (Zero Energy Leak)**: Credits the opponent with the maximum fast-move energy they could have earned assuming optimal charge-move throw timing (`ceil` across active fast-move windows) before any charged move resets the phase.
-- **Post-Charge Micro-Adjustment Decoupling & Turn Recounting**: Decouples small post-charge circle micro-adjustments from turn counting and bases post-charge turn recounting strictly upon `newEnergy - (oldEnergy - chargeMoveEnergy)`.
-- **Shield Matrix Top Banked Energy Row (`D:60E | L:0E | K:-E`)**: Added a new header row along the top of the Shield Matrix directly above each Pokémon's 3-dot column displaying live banked energy (`60E`), `0E` when truly zero, or `-E` when a Pokémon has not yet entered the field, while keeping opponent banked energy on the left of each opponent row.
+- **v3.94 — Key Feature: Symmetric Shield & Pokéball Debouncing, All-HUD-Gone Camera-Zoom Lockout & `-1` Shield Drop Cap per Charged Attack**:
+  - Added N-frame confirmation debouncing (`>= 2` frames normal combat, `>= 3` frames post-charged-attack cooldown) for both player and opponent Pokéball and Protect Shield counts.
+  - Added an **All-HUD-Gone Lockout** (`userHudGone || oppHudGone`) when Pokémon GO hides the top-corner status bars during charged attack camera zooms, suppressing any shield decrement or faint registration while the HUD is absent and capping shield usage to at most `-1` shield per charged attack.
+- **v3.93 — Key Feature: Used Charged Move Marking Fix, Resilient `<Name> used <Move>!` Banner Fallback & 2-Pokéball Faint Invariant**:
+  - Clears `pendingChargedAttackOppSlotIdx` / `pendingChargedAttackUserSlotIdx` after each charged attack reconciliation, allows clipped `"used <Move>!"` banners to fall back to the pre-charge active opponent slot, confirms unshielded HP-delta moves in `confirmedOppChargedMoves`, and enforces a continuous **2-Pokéball invariant** so at most 1 opponent Pokémon can ever be marked fainted while 2 Pokéballs remain visible.
+- **v3.92 — Key Feature: Pre-Throw Attacker Slot Lock, Bidirectional Charged Move Catch Accounting & Pre-KO Faint Slot Lock**:
+  - Locks `pendingChargedAttackOppSlotIdx` at the start of every charged attack so post-move swaps never credit the charged move to the incoming Pokémon; detects **Player and Opponent Charged Move Catches** (preserving swapped-out HP and starting the 50s swap clock on the catching side); and cross-checks pre-KO active slot + lowest-HP history in `resolveFaintedOpponentSlotIdx`.
+- **v3.91 — Key Feature: Top-Corner Overlay Missing Shield Decrement Guard**:
+  - Suppresses shield drop processing and resets drop frame counters whenever top-corner Pokéball and shield icons fade out (`shields <= 0` and `balls <= 0`) during charged move animations.
 
-## v3.87 (2026-10-27)
-- **Pre-Battle White Flash Guard (`isWhiteScreenFlash`)**: Rejects full-screen white transition flashes before the `3-2-1-GO` countdown so circle calibration and energy tracking never trigger on an unstable white screen.
-- **6-Cycle Dark-Grey Border Circle Calibration & `0E` Countdown Lock**: Detects the dark grey perimeter ring around empty `0%` circles during the `3-2-1-GO` countdown (supporting both dimmed countdown emblems and un-dimmed `0E` circles), averages geometry and empty interior baselines over 6 stable cycles (`~600ms`), and locks energy at `0E` while the dimmed `3-2-1` countdown is active.
-- **Curved Inner Track `100%–200%` Second-Fill Detector**: Samples strictly inside the curved inner liquid flanks of the enlarged `100%+` ready circle (avoiding the outer white border ring at `r = 96..102px` that previously caused `104%` clipping and avoiding the center white move-type icon), combining the downward 1st-to-2nd fill luminance/color step with the white meniscus ridge so 100E max gauges on moves like Lugia's Aeroblast (`75E` -> `133%` = `100E`) and Dialga's Roar of Time (`65E` -> `154%` = `100E`) read `100E` accurately.
+---
 
-## v3.86 (2026-10-27)
-- **Removed Kalman Filter & Replaced with Low-Latency N-Sample Circle Debounce**: Removed all Kalman filter state and tuning parameters. Added a clean **Energy Meter Debounce** selector (`2 Samples [Default]`, `3 Samples`, `4 Samples`) using a `±2%` circle fill matching tolerance.
-- **Direct Slowest Charge Move Energy Snap & >200% Cap Overcharge Progression**: Automatically tracks the player's slowest (highest-energy) charge move circle for maximum pixel resolution, snapping immediately on `≥1E` differences while allowing fast-move turn ticks to continue counting up to `100E` when a `<50E` move caps visually at `200%`.
-- **100%–200% White Border & Advancing White Meniscus Detection**: Distinguishes `0%–100%` single fill from `100%–200%` second fill using the outer glowing white border and a bottom-to-top scan for the advancing bright white meniscus line/arc.
-- **Banked Energy Deduction & Post-Throw Circle Verification**: Eliminates false drops to zero during charged move animations by preserving banked pre-throw energy, deducting provisional move cost on throw, and verifying/snapping to the post-throw circle reading as soon as debounce clears.
-- **Toggleable Live Energy & Circle % Battle Toasts**: Emits `⚡ [Move Name] ([Cost]E) • Circle [X]% → [Y]E` (with `[White Border]` when `>100%`) on every energy change, with a Settings toggle (Default: On).
+## v3.89 – v3.90 (2026-10-27) — Low-Latency HP Bar Debouncing, Upward HP Self-Correction & Solgaleo Body False-Bar Rejection
+*Functionally grouped release series upgrading floating HP bar pixel accuracy and debounce filtering.*
 
-# SilphScope PvP Changelog
+- **v3.90 — Key Feature: Solgaleo Body Anti-False-Trigger (`detectFloatingHpBarPct`), Candidate Proximity Ranking & Configurable Debounce Tolerance (`0 / 1 / 2 / 3%`)**:
+  - Rejects bright Pokémon body parts (such as Solgaleo's white mane/chest) by requiring genuine dark depleted-track interior pixels matching `(100% - HP%) ± 10%` and minimum width `w >= 0.245 * screenWidth`, ranks multi-candidate HP bar clusters by proximity to the prior confirmed HP%, and adds a `Debounce Error Tolerance (±0% / ±1% / ±2% / ±3%)` setting.
+- **v3.89 — Key Feature: Independent HP Bar Meter Debounce Setting (`2 / 3 / 4 Samples`) & Upward HP Self-Correction During Shield Prompts**:
+  - Replaced rigid exact-integer HP frame matching with a dedicated N-sample (`default 2`, `±2%` tolerance) rolling HP confirmation window that immediately self-corrects upward on clean readings and updates pre-impact HP during `"Attack incoming!"` shield prompts.
 
-## [v3.85] — 2026-10-27 — 2-Channel Kalman Filter Energy Meter Smoothing, 3rd-Fill Cycle Confidence Reduction & Slower Charge Move Meter Prioritization
-- **2-Channel Kalman Filter Energy Meter Smoothing (`OverlayService.kt`)**:
-  - Replaced the fixed `300ms` charge circle debounce with a state-space Kalman Filter (`updatePlayerEnergyKalmanFilter`) that fuses predicted fast-move turn timestamp energy deltas (`+fastEnergy` at each `500ms * fastMoveTurns` boundary) with observed Left (`Move 1`) and Right (`Move 2`) charge circle fill percentages (`0..200%`).
-  - **Animation Lag Compensation**: Within `0..340ms` after a fast move turn boundary, inflates measurement noise covariance $R$ (`4.5x`) for negative innovations (`innov < -2.0`) so rising fill animation lag never drags tracked energy backward while immediately accepting corroborated upward steps with low latency.
-  - **Transient OCR & Meniscus Noise Suppression**: Dynamically inflates $R$ in the central move-type icon crossing band (`43..57%` and `143..157%`) and applies a quadratic Huber outlier penalty (`(absInnov / 18.0)^2`) to uncorroborated single-frame spikes while tightening $R$ (`0.45x`) when both meters step in agreement.
-  - **Zero-Drop Immunity**: Never allows disappearing (`-1`) or `0%` circles during Charged Move animations or camera transitions to pull non-zero combat energy down to zero.
-- **3rd-Fill Cycle Confidence Reduction & Slower Charge Move Prioritization (`OverlayService.kt`)**:
-  - Tracks per-slot double-fill latches (`leftMeterFilledTwiceLatched`, `rightMeterFilledTwiceLatched`) once a charge move meter has filled twice (`>= 2 * cost` or `>= 188%` on its second cycle) and enters a 3rd fill cycle.
-  - Once a faster meter has filled twice and is filling a 3rd time (`leftInThirdFill` / `rightInThirdFill`), its confidence weight is reduced (`0.15x..0.25x`, measurement variance $R$ inflated `~5.5x`) and the **slower (higher-energy-cost) charge move meter** is elevated as higher value (`1.65x..2.25x` confidence weight) across `updatePlayerEnergyKalmanFilter`, `computeAuthoritativeCircleEnergy`, and `evaluateTwoOutOfThreePllVote` (including a Slower-Meter High-Value Override when the faster meter saturates in its 3rd fill).
+---
 
-## [v3.83] — 2026-10-27 — 2-out-of-3 Majority-Vote PLL (Integrated Opponent HP + Charge Move 1 + Charge Move 2), 3-Sample / 300ms Meter Debounce, Phase-Locked Fast-Move Auto-Increment & Wider Tinkaton HP Bounds
-- **2-out-of-3 Majority-Vote PLL (Phase-Locked Loop) Sensor Fusion (`OverlayService.kt`)**:
-  - Combines 3 independent sources of truth for player fast moves and energy:
-    1. **Opponent Fast-Move HP Integrator**: Integrates confirmed fast-move HP drops (`1..maxFastSingleDrop%`) over turns within each combat stint (`playerStintOppFastDmgPct / userExactDmgPct`) to eliminate single-turn integer `%` quantization jitter while strictly ignoring Charged Move damage (`> 25%` drops and active charged move windows).
-    2. **Charge Move 1 Circle (Left Button)**: 3-sample and `>= 300ms` debounced fill reading (`1..92%` primary fill, `100%` ready ring, and `101..200%` overcharge ring).
-    3. **Charge Move 2 Circle (Right Button)**: 3-sample and `>= 300ms` debounced fill reading (`1..92%` primary fill, `100%` ready ring, and `101..200%` overcharge ring).
-  - Evaluates both direct 2-out-of-3 directional votes and the closest-agreeing pair (including saturated `100%` ready-ring compatibility when one move is full and the second move + Opponent HP track overcharge up to `100E`), adjusting energy by at most `±1` fast move per fast-move duration (`500ms * fastMoveTurns`) while preserving leftover charged move energy deltas.
-  - **Shield Choice Delay Validation**: Validates settled Opponent fast-move HP drops alongside pre-prompt Charge Move 1 & 2 circle readings right at the start of Opponent (`"Attack incoming!"` / `"No Protect Shields remaining!"`) and Player shield choice delays before charged move damage is applied.
-- **3-Sample & `>= 300ms` Charge Circle Debounce + Zero-Drop Protection (`OverlayService.kt`)**:
-  - Requires at least 3 consecutive consistent samples and `>= 300ms` stability before accepting a Charge Move meter reading.
-  - Prevents disappearing or dimmed Charge Move circles (`-1` or `0%`) during Charged Move animations or camera cuts from ever resetting or dropping combat energy to zero.
-- **Phase-Locked End-of-Fast-Move Auto-Increment & Opponent Turn Mapping (`OverlayService.kt`)**:
-  - Anchors the fast-move auto-increment oscillator (`500ms * fastMoveTurns`) to the start timestamp of the last successful `300ms` meter debounce so player energy increments in phase with the meter moving at the end of each fast move duration (not every 0.5s turn unless using a 1-turn move).
-  - Maps confirmed player fast-move energy increments directly to battle turns (`phasePlayerTurns`) for counting opponent fast moves and energy.
-- **Expanded Floating HP Bar Vertical Corridors & Tinkaton Border Classifier (`OverlayService.kt`)**:
-  - Widened floating HP bar vertical scan corridors (`0.055h..0.14h` for tall opponents and `0.60h..0.88h` for small/low player Pokémon) and relaxed capsule border chroma tolerances to reliably detect Tinkaton's floating HP bar across devices.
-- **0-Shield Prompt Attribution (`"No Protect Shields remaining!"`) & Adaptive 3-2-1-GO Circle Calibration (`OverlayService.kt`)**:
-  - Treats `"No Protect Shields remaining!"` (and the 0-shield hidden-bottom-circles + visible-opponent-HP visual signature) as an incoming opponent Charged Attack targeting the player.
-  - Added adaptive 3-2-1-GO prescan circle geometry and empty-interior luma/saturation baseline calibration across multi-device aspect ratios.
+## v3.86 – v3.88 (2026-10-27) — Low-Latency N-Sample Charge Circle Debounce, Curved Inner-Track 100–200% Meniscus Scanner & Turn-Indexed Opponent Energy
+*Functionally grouped release series replacing complex filter state with direct N-sample charge circle debouncing, 3-2-1-GO ring calibration, and player-turn-indexed opponent energy.*
 
-## [v3.64] — 2026-10-26 — 200ms Pixel HP + 750ms Async OCR Dual-Rate Loop, Pending-Damage Sliver Latch, 3-Tier PID Energy Observer & Compact Right-Aligned Header Row
-- **Dual-Rate Screen Sampling Architecture (`200ms` Pixel HP Loop + `~750ms` Async ML Kit OCR Loop) (`OverlayService.kt`)**:
-  - Decoupled lightweight pixel-only HUD scanning (`detectFloatingHpBarPct` + pending-damage sliver extraction + `detectActivePokeballCount` + `detectActiveShieldCount`) onto a dedicated **`200ms` (`5 Hz`)** loop so every `0.5s` Pokémon GO PvP turn is sampled ~2.5 times per turn with `<5ms` frame-read overhead.
-  - Moved heavy ML Kit Text Recognition (`textRecognizer.process()`) onto an asynchronous **`~750ms`** background cadence with an `@Volatile var isOcrPassInFlight` guard so OCR never blocks the 200ms HP/energy loop.
-- **Pending-Damage Sliver Latch-and-Lock State Machine (`OverlayService.kt`)**:
-  - For 2-turn and 3–5-turn fast moves, the energy state machine immediately credits **+1 fast move's energy** as soon as a valid orange pending-damage sliver appears while `ARMED`, and locks into `LOCKED_UNTIL_HP_DROP` (`playerSliverLockedUntilDrop` / `oppSliverLockedUntilDrop`) until the solid HP bar physically drops—eliminating multi-frame double-counting while auto-rolling back if interrupted by a charged move or swap.
-- **Three-Tier Closed-Loop PID Energy Observer (`OverlayService.kt`)**:
-  - **Tier 1 (Per-Turn PID Micro-Adjustments)**: Integrates floating-point expected vs. observed HP damage on every confirmed HP drop and applies bounded `±1 move` micro-adjustments, clamping single-step increments to at most `+1 move` unless 2 full move cooldowns elapsed (fixing the v3.53 Mimikyu Shadow Claw `+16E` double-count bug).
-  - **Tier 2 (Cross-Pacing Against 3T+ Opponent Fast Moves)**: When the opponent uses a 3T/4T/5T fast move (`oppFastTurns >= 3`), uses confirmed opponent fast-move turn counts (`oppCreditedMoves * oppFastTurns`) as an authoritative turn clock to reconcile missed 1T/2T player fast moves.
-  - **Tier 3 (Charged-Move Stable HP Window Reconciliation)**: Reconciles cumulative fast-move energy in the preceding combat window against settled pre-charged-move HP loss during the ~10s Charged Move camera zoom / shield prompt window, while preserving strict freeze gates during swaps and faints.
-- **Temporary Setting to Enable/Disable Damage PID Loop (Default Enabled) (`MainActivity.kt`, `activity_main.xml`, `OverlayService.kt`, `src/App.tsx`)**:
-  - Added a toggle in Settings (**`🎯 Damage PID Loop: ENABLED (Default)`** / **`DISABLED (200ms Scan Only)`**) so the 3-tier PID loop can be toggled on or off to isolate and test whether the `200ms` pixel HP scan + pending sliver latch alone resolves energy resolution.
-- **Top Overlay Header Row Enhancements (`overlay.html`, `OverlayService.kt`, `src/App.tsx`)**:
-  - **Dual Scan Rate Badge**: Updated `#sky-ocr-ms-badge` to display **`HP:xxxms/OCR:xxxms`** (with `HP:---ms/OCR:---ms` before the first scan and last-battle averages between battles).
-  - **Dark Charged-Move Row Background**: Styled `.header-row` with `background: rgba(2, 6, 23, var(--row-bg-alpha)); border: 1px solid rgba(148, 163, 184, 0.16); border-radius: 4px;` matching the charged move rows for crisp readability.
-  - **Right-Aligned Player & Opponent Badges with `|` Separator**: Right-aligned both My (`HP%`, `E`, `🛡️`) and Opponent (`🛡️`, `HP%`, `E`) badge groups in `.header-badges-cluster` separated by a compact vertical bar (`|`) so all live combat telemetry can be read in a single glance.
+- **v3.88 — Key Feature: Player Energy-to-Turns Conversion, 500ms Sub-Turn Interpolation & Shield Matrix Top Banked Energy Row**:
+  - Converts confirmed player energy gains into fast-move turns (`confirmedPhasePlayerTurns`) to index opponent energy directly to player turns (with `500ms` sub-turn interpolation on multi-turn player fast moves and optimal-timing ceiling credit), and adds a top Banked Energy header row (`D:60E | L:0E | K:-E`) above the 3x3 Shield Matrix.
+- **v3.87 — Key Feature: 6-Cycle Dark-Grey Border `3-2-1-GO` Calibration, White Screen Flash Guard & Curved Inner-Track `100%–200%` Meniscus Detector**:
+  - Rejects pre-battle white screen flashes (`isWhiteScreenFlash`), calibrates empty `0%` circle geometry across 6 countdown cycles, and samples strictly inside the curved inner liquid flanks (`100%–200%`) so moves like Aeroblast (`75E -> 133%`) and Roar of Time (`65E -> 154%`) read up to `100E` without outer white-ring clipping.
+- **v3.86 — Key Feature: Kalman Filter Removal, N-Sample (`2 / 3 / 4`) Circle Debounce, Banked Post-Throw Deduction & Live Energy Toasts**:
+  - Replaced the Kalman filter with a low-latency N-sample (`±2%`) circle debounce on the slowest charge move, added outer white border + advancing white meniscus `100%–200%` detection, preserved banked pre-throw energy across charged move animations, and added toggleable live energy toast notifications.
 
-## [v3.63] — 2026-10-26 — Minimize Button Fix, Pre-Sync OCR Performance & ANR Fix, Expanded Battle Matrix Replay & Dynamic OCR Rate Badge
-- **Minimize Overlay Button Fix (`overlay.html`, `OverlayService.kt`)**:
-  - Fixed a touch-event race where tapping the top-left overlay emblem (`#btn-minimize-sword`) immediately triggered a synthetic click on `#minimized-bubble` at `(0, 0)`, causing the overlay to instantly restore while `WindowManager` was resizing the view to `48dp` (leaving the overlay clipped/shrunk at 45% scale).
-  - Added a `400ms` minimize-to-restore debounce guard, disabled pointer events on `#minimized-bubble` during the transition frame, locked `applyProportionalScale()` against transient `<120px` bubble viewports, and removed premature `onpointerleave` cancellation so single taps reliably minimize into the floating bubble and pause OCR.
-- **First-Run / Pre-PvPoke-Sync Performance & ANR Elimination (`OverlayService.kt`, `MainActivity.kt`)**:
-  - Eliminated per-call `Regex` compilation and linear `.entries.firstOrNull` / `.find` table scans inside `resolveChargedMoveStatsStatic`, `resolveFastTurnsStatic`, `resolveFastEnergyStatic`, `resolveFastPowerStatic`, `resolveFastTypeStatic`, and `FormResolver.extractBaseSpecies` by introducing pre-indexed $O(1)$ lookup maps (`STATIC_MOVE_DATABASE_LOOKUP`, `STATIC_MOVE_ENERGY_LOOKUP`, `STATIC_EXACT_BASE_SPECIES_MAP`, and `BASE_SPECIES_CACHE`).
-  - Removed synchronous main-thread JSON file I/O (`loadCachedRankingsSynchronously()`) from `OverlayService.onCreate()` and sequenced `MainActivity` startup preset recalculation to run on background threads after Gamemaster cache checks, preventing `"SilphScope PvP isn't responding"` ANRs and pre-sync frame rate slowdowns.
-- **Expanded Battle Matrix Replay Container (`MainActivity.kt`, `overlay.html`)**:
-  - Wired `ReplayJavascriptBridge.updateContentHeight(heightDp)` to dynamically size the replay `WebView` to the full rendered height of the overlay and wrapped the replay dialog in a smooth vertical `ScrollView`, ensuring all rows of `MY ATTACKS` are completely visible without being clipped or stuck behind a non-scrolling inner scrollbar.
-- **Dynamic OCR Frame Rate Badge (`--- ms` Initial & Between-Battle Average) (`OverlayService.kt`, `overlay.html`, `src/App.tsx`)**:
-  - Replaced the hardcoded `220ms` startup default with `--- ms` until the first real OCR scan completes.
-  - Added per-battle scan duration tracking (`lastBattleAvgScanMs`) so that between battles (after stopping or logging a battle and while waiting for the next battle), the header badge displays the average frame rate of the last scanned battle until live OCR scans resume.
+---
 
-## [v3.62] — 2026-10-25 — Codebase Cleanup & Regression Testing Build
-- **Codebase Cleanup & Self-Healing (Chat History Recovery)**:
-  - Cleaned up syntax and typing inconsistencies caused by corrupt chat history in AI Studio.
-  - Restored React `useRef` import in `src/App.tsx`.
-  - Harmonized `TeamPreset.archetype` type definition with `TeamArchetype` (`"ABB" | "ABC" | "DUO"`), resolving type checks across presets, modal forms, and tactical playbooks.
-  - Restored and exported `findPokemonByName` utility in `src/data/gblData.ts` for species and shadow lookups.
-  - Added species typing metadata to `SlotCandidateEval` and candidate moveset evaluation loops in `src/data/gblData.ts`.
-  - Aligned simulated fast-move damage lookup (`oppFastInfo.percentage`) and archetype playbook tactics (`pb.proTactics`) in `src/App.tsx`.
-  - Resolved `PokemonStats` before calling `resolveFastMove` in post-game replay inspector.
-- **Regression Testing**:
-  - Validated 100% clean TypeScript type check (`npm run lint` / `tsc --noEmit`).
-  - Validated clean Vite production bundle compilation (`npm run build`).
+## v3.80 – v3.85 (2026-10-27) — Charge Move Circle Turn Detection, 3-Tier Banner Move Depletion, Non-Standard Fast Move Detector & Sensor Fusion Experiments
+*Functionally grouped release series introducing circular charge move meter energy tracking, mid-screen attack banner OCR, and experimental PLL / Kalman sensor fusion.*
 
-## [v3.61] — 2026-10-25 — Authoritative PvPoke GameMaster Fast & Charged Move Precedence, Scratch Energy Fix (`1t/4e`) & Full Move Discrepancy Audit
-- **Comprehensive Charged Move Validation & Discrepancy Fixes (`OverlayService.kt`, `src/data/gblData.ts`, `src/App.tsx`)**:
-  - Validated all 251 PvPoke charged moves against internal code tables; identified and resolved the same static fallback discrepancy issue that affected fast moves:
-    - **`MOVE_ENERGY_COST` in `OverlayService.kt`**: Corrected 29 outdated energy values to 100% align with live PvPoke `gamemaster.json` (Bulldoze: `45` → **`55`**, Body Slam: `35` → **`40`**, Aura Sphere: `55` → **`40`**, Rage Fist: `35` → **`40`**, Dynamic Punch: `50` → **`45`**, Dazzling Gleam: `70` → **`55`**, Aerial Ace: `40` → **`45`**, Shadow Sneak: `45` → **`50`**, Energy Ball: `55` → **`45`**, Seed Bomb: `45` → **`40`**, Discharge: `45` → **`40`**, Scald: `55` → **`50`**, Sand Tomb: `40` → **`45`**, Rock Tomb: `60` → **`50`**, Gyro Ball: `60` → **`50`**, Bubble Beam: `40` → **`50`**, Brine: `50` → **`60`**, Foul Play: `45` → **`40`**, Hurricane: `65` → **`60`**, Psyshock: `45` → **`40`**, Night Shade: `55` → **`45`**, Dragon Pulse: `60` → **`55`**, Brutal Swing: `40` → **`35`**, Flash Cannon: `70` → **`65`**, Magnet Bomb: `45` → **`40`**, Water Pulse: `55` → **`50`**, Twister: `45` → **`40`**, Air Cutter: `45` → **`40`**).
-    - **`MOVE_DATABASE` in `OverlayService.kt`**: Corrected Bulldoze (`45p / 45e` → **`80p / 55e`**), Dive (`80p / 45e` → **`50p / 40e`**), and Springtide Storm (`60p / 50e` → **`60p / 45e`**).
-    - **`CHARGED_MOVE_FALLBACK_STATS` in `src/data/gblData.ts`**: Corrected Bulldoze (`80p / 55e`) and Dive (`50p / 40e`).
-    - **`POKEMON_DATABASE` static entries in `src/data/gblData.ts`**: Corrected Earthquake (`110p` → **`120p / 65e`** on Armored Mewtwo), Dynamic Punch (`85p` → **`90p / 45e`** on Armored Mewtwo), Gyro Ball (`60e` → **`50e / 80p`** on Aegislash), Double Iron Bash (`50p` → **`70p / 35e`** on Melmetal), Psyshock (`45e` → **`40e / 70p`** on Mew), and Surf (`65p / 40e` → **`75p / 45e`** on Mew).
-  - **Dynamic Charged Move Ingestion & Multi-Key Normalization**:
-    - `DYNAMIC_MOVE_DATABASE` in `OverlayService.kt` and `DYNAMIC_CHARGED_MOVE_MAP` in `src/data/gblData.ts` now index all normalized key representations (`nameKey`, `idKey`, `spaceKey`, `hyphenKey`, `underscoreKey`), guaranteeing dynamic PvPoke GameMaster precedence over static tables regardless of casing, hyphens, or underscores.
-    - Updated `resolveChargedMoveStatsStatic` in `OverlayService.kt` and `buildChargedMoveFromName` in `src/data/gblData.ts` to query dynamic tables across all normalized key variations before falling back to static tables.
-    - Exported `resolveChargedMove` in `src/data/gblData.ts` and integrated it across `src/App.tsx` for shield deductions, unshielded damage inferences, and telemetry badges.
-    - `syncPvPokeDataAndRankings` now actively refreshes all charged moves on `POKEMON_DATABASE` entries with live GameMaster data.
-  - Automated verification script confirmed **0 discrepancies** across all 251 charged moves against live PvPoke `gamemaster.json`.
-- **Authoritative Dynamic GameMaster Lookup Precedence for Fast Moves (`OverlayService.kt`, `src/data/gblData.ts`, `src/App.tsx`)**:
-  - Fixed fast-move resolution in `OverlayService.kt` (`updateLiveHpAndEnergyFromFrame`, `captureAndRecognize`, `buildBattlePayloadJson`) and `src/App.tsx` / `src/data/gblData.ts` where static fallback maps (`FAST_MOVE_ENERGY`, `FAST_MOVE_TURNS`, `FAST_MOVE_TURN_LOOKUP`) were evaluated before the downloaded PvPoke `gamemaster.json` tables (`DYNAMIC_FAST_ENERGY`, `DYNAMIC_FAST_TURNS`, `FAST_MOVE_STATS`).
-  - Added `resolveFastTurnsStatic`, `resolveFastEnergyStatic`, `resolveFastPowerStatic`, and `resolveFastTypeStatic` so live downloaded `gamemaster.json` values always take top priority across all battle simulations, move-timing horizons, and live OCR energy loops.
-- **Aegislash Shield-Forme Move Collision Guard & Hyphen/Space Normalization (`OverlayService.kt`, `src/data/gblData.ts`)**:
-  - Prevented `AEGISLASH_CHARGE_AIR_SLASH` and `AEGISLASH_CHARGE_PSYCHO_CUT` (`0p / 6e` at the end of PvPoke's `gamemaster.json`) from overwriting canonical `Air Slash` (`3t / 9p / 9e`) and `Psycho Cut` (`2t / 4p / 9e`), and normalized hyphen/space keys (`Lock-On` / `Lock On`, `Mud-Slap` / `Mud Slap`).
-  - Also ensured `syncPvPokeDataAndRankings` refreshes `defaultFastMove` on all existing `POKEMON_DATABASE` entries after syncing `gamemaster.json`.
-- **Full Fast-Move Discrepancy Audit & Sync Against Latest PvPoke `gamemaster.json`**:
-  - **Scratch** (e.g. Rillaboom): `1t / 4p / 2e` → **`1t / 3p / 4e`**
-  - **Dragon Breath**: `1t / 4p / 3e` → **`1t / 3p / 4e`**
-  - **Bite**: `1t / 4p / 2e` → **`1t / 2p / 4e`**
-  - **Quick Attack**: `1t / 5p / 7e` → **`2t / 5p / 8e`**
-  - **Fury Cutter**: `1t / 2p / 4e` → **`1t / 3p / 4e`**
-  - **Bug Bite**: `1t / 3p / 3e` → **`1t / 4p / 3e`**
-  - **Psycho Cut**: `2t / 3p / 9e` → **`2t / 4p / 9e`**
-  - **Mud Shot**: `2t / 4p / 8e` → **`2t / 3p / 9e`**
-  - **Powder Snow**: `2t / 5p / 8e` → **`2t / 6p / 8e`**
-  - **Wing Attack**: `2t / 5p / 7e` → **`2t / 5p / 8e`**
-  - **Peck**: `2t / 6p / 6e` → **`2t / 6p / 8e`**
-  - **Thunder Shock**: `2t / 3p / 9e` → **`2t / 4p / 9e`**
-  - **Bullet Punch**: `2t / 6–8p / 7e` → **`2t / 7p / 7e`**
-  - **Low Kick**: `2t / 4p / 7e` → **`2t / 6p / 8e`**
-  - **Metal Claw**: `2t / 6p / 7e` → **`2t / 5p / 7e`**
-  - **Leafage**: `2t / 6p / 7e` → **`2t / 6p / 8e`**
-  - **Steel Wing**: `2t / 7p / 6e` → **`2t / 7p / 5e`**
-  - **Ember**: `2t / 7p / 6e` → **`2t / 4p / 9e`**
-  - **Dragon Tail**: `3t / 13p / 9e` → **`3t / 9p / 12e`**
-  - **Waterfall**: `3t / 12p / 8e` → **`3t / 11p / 10e`**
-  - **Geomancy**: `3t / 4p / 13e` → **`3t / 8p / 13e`**
-  - **Mud-Slap**: `3t / 12p / 10e` → **`3t / 11p / 10e`**
-  - **Charm**: `3t / 15p / 6e` → **`3t / 12p / 8e`**
-  - **Bubble**: `3t / 7p / 11e` → **`3t / 8p / 11e`**
-  - **Rollout**: `3t / 8p / 13e` → **`3t / 7p / 13e`**
-  - **Hex**: `3t / 8p / 12e` → **`3t / 7p / 13e`**
-  - **Gust**: `4t / 16p / 12e` → **`4t / 16p / 14e`**
-  - **Confusion**: `4t / 16p / 12e` → **`4t / 16p / 14e`**
-  - **Volt Switch**: `4t / 12p / 16e` → **`4t / 14p / 16e`**
+- **v3.84 – v3.85 — Key Feature: 2-Channel Kalman Filter Energy Smoothing, 3rd-Fill Confidence Reduction & Slower Charge Meter Prioritization**:
+  - **v3.85**: Decoupled HP & energy loops, prioritized the highest-energy (slower) charge move meter (`1.65x..2.25x` weight) while reducing confidence on faster meters in their 3rd fill cycle, and added filter tuning controls in Settings.
+  - **v3.84**: Introduced the 2-channel state-space Kalman filter fusing fast-move turn predictions with Left/Right charge circle fill percentages and zero-drop animation immunity.
+- **v3.83 — Key Feature: 2-out-of-3 Majority-Vote PLL (Opponent HP Integrator + Charge Move 1 + Charge Move 2) & 300ms Meter Debounce**:
+  - Combined integrated opponent fast-move HP drops with 3-sample / `>= 300ms` debounced Left and Right charge move circles in a 2-out-of-3 phase-locked loop, plus phase-locked end-of-fast-move auto-increment and wider Tinkaton HP bar scan corridors.
+- **v3.81 – v3.82 — Key Feature: `3-2-1-GO` Prescan Circle Calibration, Full-Range `0..100E` Overcharge Self-Biasing & Expanded Tall/Small Pokémon HP Windows**:
+  - **v3.82**: Expanded vertical floating HP bar scan corridors for tall and small Pokémon, improved low-sliver red HP detection, and added `>25%` HP resync.
+  - **v3.81**: Added `3-2-1-GO` countdown prescan circle calibration, outer-annulus meniscus detection for `0..100E` overcharge self-biasing, and 0-shield `"No Protect Shields remaining!"` incoming attack prompt detection.
+- **v3.80 — Key Feature: Static Charge Move Circle Turn Detection, `"<Pokemon> used <Move>!"` Banner Recognition & Non-Standard Opponent Fast Move Detector**:
+  - Locked Charge Move 1 & 2 circular gauges at pre-battle coordinates, introduced **Charge Move Energy Circle Only Mode**, added white-text `"<Pokemon> used <Move>!"` banner OCR for 3-tier charged move energy depletion + confirmed move badges, and added the **Non-Standard Opponent Fast Move Detector** (`>= 10%` damage threshold with `0 / +1 / +2` turn offset).
 
-## [v3.60] — 2026-10-25 — Predictive + Self-Correcting Bias-Error Energy Loop, Opt-In HP/Energy Settings, Streamlined Header Row & 2s Hold to Battle Log
-- **Opt-In HP & Energy Tracking (Disabled by Default)**: Added separate settings in **⚙️ Settings** to enable or disable **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting** (defaulting to **OFF** for any user who has not installed `v3.40` or higher).
-- **Predictive + Self-Correcting Bias-Error Fast-Move & Energy Loop**: Combines zero-lag feed-forward turn prediction with an online EMA per-move damage estimator ($\hat{d}$) and damped $\pm 1$ move residual self-correction.
-- **Streamlined Overlay Header Row & 2s Hold to Battle Log**: Displays only Minimize/Pause OCR icon, OCR update rate in `ms`, My Health/Energy/Shield badges, and Opp Shields/Health/Energy badges; holding the minimize icon for 2 seconds stops the overlay and opens the Battle Log.
+---
 
-## [v3.23] — 2026-10-22 — Key Threats/Core Breakers Per-Slot BRs, Anti-Meta Summary on Existing Teams & Editor, Top-50 Meta List with Meta BR, and Featured Rank Range Queries (`200-`, `-10`, `100-200`)
-- **Key Threats & Core Breakers Per-Slot Battle Ratings (`OverlayService.kt`, `gblData.ts`, `MainActivity.kt`, `App.tsx`)**:
-  - Formatted every entry in **Key Threats** and **Core Breakers** with its Battle Rating against each of your 3 team slots in parentheses — e.g. `Key Threats: Corviknight(700/500/400), ...` (`Slot 1 Lead / Slot 2 Safe Swap / Slot 3 Closer`).
-- **Anti-Meta Generator Look & Feel + Team Summary on Existing Teams (Viewer & Editor) & Auto-Detect Refresh (`MainActivity.kt`, `OverlayService.kt`, `App.tsx`, `gblData.ts`)**:
-  - Unified the **Team Presets Viewer** and **Edit Team Screen/Modal** with the Anti-Meta Generator card look and feel (`Core BR`, `Lead BR`, `Swap BR`, `Closer BR`, `Beats X/25 Top Meta`, `⚡ Alt Moveset` badges, and the 3-box `✅ Key Wins` / `⚠️ Key Threats (Slot 1/2/3 BR)` / `🚨 Core Breakers (Slot 1/2/3 BR)` breakdown + full `synergySummary`), while preserving all controls to edit Pokémon, moves, IVs, and CP.
-  - Automatically computes the full summary for existing teams and refreshes it whenever you click **`⚡ Auto-Detect Style & Order Swap`**.
-- **Expanded Bottom SilphScope Meta List from Top 25 to Top 50 with Meta Battle Ranking in Parentheses**:
-  - Expanded the SilphScope meta reference list at the bottom of the Anti-Meta Team Builder card to the **Top 50 Meta Pokémon** (`#1` to `#50`) and included each Pokémon's **Meta Battle Ranking (`BR`)** in parentheses alongside its field usage share (e.g. `#1 Clodsire (548 BR • 3.2%)`).
-- **Rank Range Option in Featured Pokémon Slots (`200-`, `-10`, `100-200`)**:
-  - Added rank-range constraint support in Featured Pokémon #1 and #2:
-    - `200-` — requires a spice Pokémon ranked **`#200` or lower**
-    - `-10` — requires a Pokémon ranked in the **Top 10 (`#1–#10`)**
-    - `100-200` — requires a Pokémon ranked **between `#100` and `#200`**
+## v3.64 – v3.70 (2026-10-26 – 2026-10-27) — High-Frequency 100ms–200ms Pixel HP Loop, 750ms Async OCR Split & Charge Bar Second Source of Truth
+*Functionally grouped release series decoupling fast pixel HUD scanning (`5Hz–10Hz`) from asynchronous ML Kit text recognition and introducing dual HP + Charge Bar verification.*
 
-## [v3.22] — 2026-10-22 — Top-100 Role-Weighted Anti-Meta Team Builder, 3-Slot Alternate Moveset Simulation, Key Wins / Key Threats / Core Breakers & Top-25 SilphScope Meta Audit
-- **Top-100 Flattened Role-Weighted Synthetic Meta Blended with Season Logs (`gblData.ts`, `OverlayService.kt`)**:
-  - Upgraded the Anti-Meta Team Builder (`ABB` / `ABC`) to build and score all candidate lineups (`Core BR`, `Lead BR`, `Swap BR`, `Closer BR`) against a **Top-100 flattened synthetic meta** ($\exp(-0.022 \cdot i)$) weighted heaviest on the most common Pokémon for each role (`Lead`, `Safe Swap`, `Closer`) and blended with your current-season battle logs (`wHist` + `wMeta`).
-  - Expanded the candidate team generation pool to the **Top 60+ Meta Pokémon** per league while enforcing GBL species-clause and Mega Master League constraints.
-- **`Beats X/25 Top Meta` Target Depth & Bottom Top 25 SilphScope Meta Reference Card (`App.tsx`, `MainActivity.kt`, `gblData.ts`, `OverlayService.kt`)**:
-  - Increased the Top Meta target audit depth displayed on each generated ABB and ABC team card from `/15` to **`/25` (`Beats X/25 Top Meta`)**.
-  - Added a **"🎯 Top 25 <League> Meta Determined by SilphScope (Target Audit Pool for /25 Wins)"** reference section at the bottom of the Anti-Meta Team Builder card listing `#1` through `#25` with species name and field weight percentage (`%`).
-- **3-Slot Alternate Moveset Simulation & `⚡ Alt Moveset` Highlighting**:
-  - Simulates legal Fast + Charged move combinations across all 3 team members on top ABB and ABC candidate lineups against the Top-100 role-weighted meta.
-  - Highlights any non-standard moveset on generated team cards with an **`⚡ Alt Moveset (+X BR)`** badge, violet move name styling, and a comparison to the standard PvPoke moveset, and carries those optimized moves directly into the Edit Team modal on selection.
-- **Key Wins, Key Threats & Core Breakers Breakdown**:
-  - Every generated ABB and ABC team card now displays **`✅ Key Wins`**, **`⚠️ Key Threats`** (Top-25 Pokémon that beat your Lead and pressure your backline), and **`🚨 Core Breakers`** (Top-25 Pokémon that beat all 3 team members `BR < 490`) in both the visual breakdown badges and the team synergy description.
+- **v3.69 – v3.70 — Key Feature: Countdown Move 1 `0%` Baseline Anchor, Grass Stadium Saturation Immunity & `96% vs 100%` Meniscus Priority**:
+  - **v3.70**: Added grass-stadium background saturation immunity, `96% vs 100%` meniscus priority so near-full bars never prematurely snap to `100%`, and a `600ms` charged attack deduction window.
+  - **v3.69**: Fixed Move 1 `0%` empty-button baseline during countdown, resolved the `48E -> 52E` (`96% -> 104%`) central icon mask wrap-around, and enforced Turn-0 charged move resets.
+- **v3.67 – v3.68 — Key Feature: PID Loop Removal, Type-Agnostic Charge Move Bar 2nd Source of Truth & NVE/SE Text Occlusion Immunity**:
+  - **v3.68**: Removed sliver auto-rollback and PID window state, hardened Charge Move Bar scanning under `"Not very effective..."` / `"Super effective!"` text occlusion, and calibrated 10Hz HUD thresholds.
+  - **v3.67**: Replaced the 3-tier PID loop with a type-agnostic Charge Move Bar 2nd source of truth (with overcharge wrap) and synced `<3%` damage opponent fast moves at the optimal `500ms/turn` rate.
+- **v3.65 – v3.66 — Key Feature: `100ms` (`10Hz`) Pixel HP Sampling, Turn-Scaled Debounce & Unified `1T–5T` Fast Move Engine**:
+  - **v3.66**: Added turn-scaled debounce windows, `3T+` pending-damage sliver latching, adaptive damage filtering, and low-damage move multi-credit.
+  - **v3.65**: Accelerated lightweight pixel HP/ball/shield scanning to `100ms` (`10Hz`) with a 2-successive-sample debounce across all `1T–5T` fast moves.
+- **v3.64 — Key Feature: Dual-Rate `200ms` Pixel HP + `750ms` Async ML Kit OCR Architecture & Compact Right-Aligned Header Badges**:
+  - Decoupled pixel HUD scanning (`200ms`) from asynchronous ML Kit OCR (`~750ms`), added the dual `HP:xxxms/OCR:xxxms` scan-rate badge, and right-aligned player and opponent telemetry badges (`HP%`, `E`, `🛡️`) separated by `|`.
 
-## [v3.21] — 2026-10-22 — Native Android & Web Anti-Meta Team Builder (`ABB` / `ABC`) on Team Presets Page
-- **Anti-Meta Team Builder on Team Presets Page (`MainActivity.kt`, `OverlayService.kt`, `activity_main.xml`, `App.tsx`, `gblData.ts`)**:
-  - **2a — League & Featured Pokémon Selection**: Added an **Anti-Meta Team Builder (`ABB` / `ABC`)** panel and header button (`🧪 Anti-Meta`) directly on the **Team Presets** page where you can select any **League** (`GREAT LEAGUE`, `ULTRA LEAGUE`, `MASTER LEAGUE`, `MEGA MASTER LEAGUE`) and enter **0, 1, or 2 Featured Pokémon** with live autocomplete and GBL species-clause checks.
-  - **2b — Best 5 ABB & Best 5 ABC Team Options**: Generates and ranks the **Best 5 ABB** and **Best 5 ABC** anti-meta team options that must include your selected Featured Pokémon, displaying `Core BR`, `Lead BR`, `Swap BR`, `Closer BR`, and key Top-Meta targets countered.
-  - **2c — One-Tap Team Creation & Immediate Edit Screen**: Selecting any generated ABB or ABC option creates the team with the default name **`<LeagueAbbreviation> Anti-Meta <YYYY-MM-DD>`** (e.g., `GL Anti-Meta 2026-10-22`) and immediately opens the **Edit Team** screen (`showPresetEditorDialog` / `openEditPresetModal`) so you can customize moves, IVs, or role upgrades like any other team.
+---
 
-## [v3.20] — 2026-10-22 — Top-200 Precomputed 9x9 Overlay Shield Matrix, Anti-Meta Team Builder (ABB/ABC) & Special Mechanics Validator Audit
-- **Precomputed 9x9 Shield Matrix for Active Team vs. Top-200 League Meta (`gblData.ts`, `App.tsx`, `OverlayService.kt`)**:
-  - Precomputes the full 9x9 weighted move-combo shield matrix (`0v0` through `2v2`) for the 3 members of the active team against the **Top 200 League Meta** before launching the overlay (and automatically on team/league switch).
-  - Real-time overlay battling now serves Top-200 meta matchups in **O(1) time** from the precomputed 9x9 matrix cache, while falling back to fast single-moveset real-time rough math (`evaluateFastRoughShieldBattleRating` / `calculateFastRoughMatchupRatingStatic`) for non-Top-200 spice matchups.
-- **Anti-Meta Team Builder on Team Presets Page (`generateAntiMetaTeamOptions` & `App.tsx`)**:
-  - **2a**: Select any **League** and enter **0, 1, or 2 Featured Pokémon** (with live autocomplete and GBL species-clause validation).
-  - **2b**: Generates and ranks the **Best 5 ABB** and **Best 5 ABC** anti-meta team options that must include your selected Featured Pokémon, displaying `Core BR`, `Lead BR`, `Swap BR`, `Closer BR`, and key Top-Meta targets countered.
-  - **2c**: Selecting any generated ABB or ABC team option creates the preset with default name **`<LeagueAbbreviation> Anti-Meta <YYYY-MM-DD>`** (e.g., `GL Anti-Meta 2026-10-22`) and immediately opens the **Edit Team** modal so you can customize moves, IVs, or role upgrades like any other team.
-- **Special Mechanics Math Validator & Double-Bonus Elimination (`FORM_CHANGE_SPECIAL_POKEMON`, `gblData.ts`, `OverlayService.kt`)**:
-  - Scoped the Special Mechanics Math Validator exclusively to Pokémon with **in-battle special mechanics**: **Morpeko** (`Hunger Switch` + `Aura Wheel`), **Cramorant** (`Gulp Missile` Gulping/Gorging forms), **Aegislash** (`Stance Change` Shield ⇄ Blade Forme), and **Mimikyu** (`Disguise` + Busted Form). Removed static pre-battle form Pokémon (`Zygarde`, `Giratina`, `Palkia`, `Dialga`, `Zacian`, `Zamazenta`, `Necrozma`, `Kyurem`, `Mewtwo`, `Deoxys`).
-  - Eliminated double-bonus multipliers (`Aegislash` `2.85x -> 1.22x` Stance Change factor and duplicate flat BR deltas) so Aegislash Shield Forme is no longer artificially inflated in Team Builder or Overlay matrices.
-  - Strictly sourced all Top-Meta pools and Top-5 DB Scores from live PvPoke rankings (`1500` / `2500` / `10000`) rather than static Gamemaster order.
+## v3.60 – v3.63 (2026-10-25 – 2026-10-26) — Full PvPoke GameMaster Move Audit (251 Charged & All Fast Moves), Minimize & Pre-Sync ANR Fixes, and Opt-In Live HP/Energy Settings
+*Functionally grouped release series auditing every fast and charged move against live PvPoke `gamemaster.json`, eliminating startup ANRs, and streamlining the overlay header.*
 
-## [v3.16] — 2026-10-22 — Strict Legal Move Pool Enforcement & Dynamic Alternate Move-Combo Matrix Normalization
-- **Strict Legal Move Pool Enforcement & Audit (`OverlayService.kt` & `gblData.ts`)**:
-  - Eliminated illegal moves from species pools (e.g. Mimikyu only learns `Play Rough`, `Shadow Sneak`, `Thunder` in Pokémon GO — fixed invalid `Shadow Ball` recommendations; Cramorant fast moves are `Peck` / `Water Gun` and charged moves `Surf` / `Fly` / `Dive` / `Hydro Pump`; Tinkaton charged moves are `Gigaton Hammer` / `Play Rough` / `Bulldoze` / `Heavy Slam` / `Flash Cannon`; Kyogre fast move is only `Waterfall`; Melmetal fast move is only `Thunder Shock`).
-  - Purged illegal type fallbacks (`Tackle`, `Struggle`, `Frustration`, generic type placeholders) and enforced strict validation against authoritative Gamemaster and curated fallback pools across rankings ingestion, battle rating calculations, and autocomplete suggestions.
-- **Dynamic 9x9 Shield Matrix Move-Combo Normalization (`calculateMatchupRatingStatic` & `evaluateDiscreteShieldBattleRating`)**:
-  - Replaced hardcoded 5-combo weighting with dynamic alternate combo filtering for Pokémon lacking a 4th charged move, 3rd charged move, or 2nd fast move.
-  - The 25% alternate weight is now distributed equally across all valid, distinct alternate combinations that actually exist for the species (`fast1/charge1/charge3`, `fast1/charge1/charge4`, `fast1/charge2/charge3`, `fast1/charge2/charge4`, `fast2/charge1/charge2`). If no alternate combos exist (e.g. single fast move and <= 2 charged moves), 100% of the rating is assigned to the base combo, eliminating skewed weights and duplicate simulation overhead.
-- **Team Moveset Optimizer Robustness (`recommendTop3MovesetsForTeamStatic` & `recommendTop3AlternateMovesetsForTeam`)**:
-  - Moveset simulation now strictly pairs legal charged moves ($\binom{N}{2}$ combinations or single pair if $N \le 1$) and evaluates only legal fast moves, preventing phantom recommendations for constrained-move Pokémon.
+- **v3.63 — Key Feature: Minimize Bubble Touch-Race Fix, Pre-Indexed $O(1)$ Move Lookup Tables (ANR Fix) & Expanded Battle Matrix Replay**:
+  - Fixed the top-left emblem minimize-to-restore touch race (`400ms` debounce guard), eliminated pre-sync ANRs via pre-indexed $O(1)$ static move/species maps and background thread cache loading, expanded the post-game Battle Matrix Replay `ScrollView`, and added the dynamic `--- ms` / last-battle average OCR badge.
+- **v3.62 — Key Feature: Codebase Self-Healing & TypeScript/Kotlin Regression Verification Build**:
+  - Restored strict type alignment across `TeamPreset.archetype`, `SlotCandidateEval`, `findPokemonByName`, and replay fast-move resolution with full TypeScript and Vite production build verification.
+- **v3.61 — Key Feature: Authoritative PvPoke `gamemaster.json` Precedence & Zero-Discrepancy Fast/Charged Move Audit**:
+  - Corrected 29 outdated charged move energy costs in `MOVE_ENERGY_COST` (including Body Slam `40e`, Rage Fist `40e`, Dynamic Punch `45e`, Aura Sphere `40e`, Brutal Swing `35e`, Surf `75p/45e`) and 29 fast moves (including Scratch `1t/3p/4e`, Dragon Breath `1t/3p/4e`, Mud Shot `2t/3p/9e`, Dragon Tail `3t/9p/12e`, Rollout `3t/7p/13e`, Hex `3t/7p/13e`), gave downloaded `gamemaster.json` top lookup priority, and guarded against `AEGISLASH_CHARGE_*` move collisions.
+- **v3.60 — Key Feature: Opt-In Live HP & Energy Toggles (Default OFF), Predictive Bias-Error Energy Loop & 2s Hold Minimize to Battle Log**:
+  - Added independent opt-in Settings toggles for **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting**, streamlined the top overlay header row, and added a **2-second long-press** on the top-left minimize icon to stop the overlay and open the Battle Log.
 
-## [v3.15] — 2026-10-22 — Weighted Move-Combo 9x9 Shield Matrix Math (75% Default + 25% Alternate Combos) & Team Moveset Optimizer (Best 3 Alternate Movesets)
-- **Weighted Move-Combo 9x9 Shield Matrix Math (`calculateMatchupRatingStatic` & `evaluateDiscreteShieldBattleRating`)**:
-  - Updated all 9 shield conditions (`0v0`, `0v1`, `0v2`, `1v0`, `1v1`, `1v2`, `2v0`, `2v1`, `2v2`) to simulate and compute a weighted average across opponent PvPoke move combinations:
-    - **1a (`75%` weight)**: Default PvPoke moveset (`fast1 / charge1 / charge2`).
-    - **1b (`25%` weight split equally = `5%` each)**: Alternate PvPoke move combinations (`fast1 / charge1 / charge3`, `fast1 / charge1 / charge4`, `fast1 / charge2 / charge3`, `fast1 / charge2 / charge4`, and `fast2 / charge1 / charge2`).
-  - Unified live overlay win/loss/neutral determination (`SW`, `W`, `N`, `L`, `SL` in `calculate3v3Matrix` and `calculateShieldMatrix`) and all team-building / battle-quality `0–1000` (`500` neutral) Battle Rating (`BR`) calculations to use the new weighted move-combo math.
-- **Current Team Moveset Optimizer (`🎯 Simulate Moves & Propose Best 3 Alternate Movesets`)**:
-  - Added a new button to the Team Edit page/dialog (Android & Web) right alongside the Role Upgrades button that keeps your current 3 Pokémon fixed, simulates all legal Fast + Charged move combinations for your team against the blended meta, and proposes the **Best 3 Alternate Movesets** (per slot and top 3 overall) with exact **Team Rating (`Core BR` & `Lead Agg BR` deltas)** and **Positional Ranking (`Lead BR`, `Safe Swap BR`, `Closer BR` deltas)** plus one-tap apply buttons.
+---
 
-## [v3.14] — 2026-10-22 — Single-Screen Scanner Mode Unmasked Capture, Best-Match-Across-Team Player Switch OCR & Single-Tap Stop Overlay Button Fix
-- **Single-Screen Scanner Mode Unmasked Capture (`captureAndProcessBattleRegions`)**:
-  - Removed all black-rectangle screen masking (`overlayView` and `statusToastView`) and overlay chip-bar filtering so single-screen (single-app) scanner mode never masks out Pokémon GO HUD or move button pixels underneath the floating overlay or status toasts.
-- **Best-Match-Across-Team Player Switch OCR (`scoreTeamMemberOnLine` & `handlePlayerSwitchLines`)**:
-  - Replaced sequential slot-order matching (which checked Slot 0 / Lead first and immediately returned on any fuzzy edit-distance-2 or shared-CP match such as `Tinkaton` 2499 & `Swampert` 2499) with simultaneous scoring across all 3 team Pokémon to select the strictly best match (`score 0` exact/confusable-normalized > `score 1` 1-edit/5+ char prefix > `score 2` 2-edit) regardless of team order (`Tinkaton / Mimikyu / Swampert` or `Swampert / Mimikyu / Tinkaton`).
-  - Added High-Contrast B&W nameplate extraction (`createHighContrastWhiteTextBitmap`) for the top-left player nameplate (`srcPlayer`) alongside 5-variant OCR confusable normalization (`rn -> m`, `1 -> i/l`, `0 -> o`, `v -> y`, `vv -> w`) so `"Swarnpert"` normalizes directly to `"swampert"` (exact match, score `0`).
-  - Updated CP and bottom Charged Move button fallbacks to require a strictly unique match across all 3 team members so shared CPs (`2499`) or shared moves never default to Slot 0 (Lead).
-- **Single-Tap "Stop Battle Overlay" Button Restoration (`MainActivity` & `OverlayService`)**:
-  - Fixed `stopOverlayService()` where `syncOverlayRunningUiState()` read `OverlayService.isInstanceRunning` before the asynchronous stop intent was processed, requiring two taps on **Stop Battle Overlay** to restore **Start Battle Overlay**.
+## v3.40 – v3.55 (2026-10-24 – 2026-10-25) — Real-Time Floating HP Bar Scanner, 3-Slot Bench HP Memory, Symmetric Attack Headers & 7-Day AI Training Log Split
+*Functionally grouped release series introducing in-memory floating HP bar pixel detection, per-slot bench HP persistence, live KO-threshold shield callouts, and turn-indexed energy.*
 
-## [v3.13] — 2026-10-22 — Best-Match-Across-Team Player Switch OCR Fix & Single-Tap Stop Overlay Button Fix
-- **Best-Match-Across-Team Player Switch OCR (`scoreTeamMemberOnLine` & `handlePlayerSwitchLines`)**:
-  - Replaced sequential slot-order matching (which checked Slot 0 / Lead first and immediately returned on any fuzzy edit-distance-2 or shared-CP match) with simultaneous scoring across all 3 team Pokémon to select the strictly best match (`score 0` exact/confusable-normalized > `score 1` 1-edit/7+ char prefix > `score 2` 2-edit) regardless of team order (`Tinkaton / Mimikyu / Swampert` or `Swampert / Mimikyu / Tinkaton`).
-  - Added High-Contrast B&W nameplate extraction (`createHighContrastWhiteTextBitmap`) for the top-left player nameplate (`srcPlayer`) alongside 5-variant OCR confusable normalization (`rn -> m`, `1 -> i/l`, `0 -> o`, `v -> y`, `vv -> w`) so `"Swarnpert"` normalizes directly to `"swampert"` (exact match, score `0`).
-  - Added horizontal team-chip-bar rejection and length guards so 6-character overlay team chips (`Tinkat`, `Mimiky`, `Swampe`) or shared default CPs (`1500` / `2500`) never pull the active Pokémon back to Slot 0 (Lead).
-  - Updated bottom Charged Move button fallback to require a strictly unique best score across all 3 team members (`bestScore >= 3 && bestScore > secondBestScore`) so shared moves (e.g., `Play Rough`) or ties never default to Lead.
-- **Single-Tap "Stop Battle Overlay" Button Restoration (`MainActivity` & `OverlayService`)**:
-  - Fixed `stopOverlayService()` where `syncOverlayRunningUiState()` read `OverlayService.isInstanceRunning` before the asynchronous stop intent was processed, requiring two taps on **Stop Battle Overlay** to restore **Start Battle Overlay**.
+- **v3.54 – v3.55 — Key Feature: Overlay-Occluded & Shifted Pokémon HP Bar Detection + Post-KO Faint Energy Freeze**:
+  - **v3.55**: Expanded floating HP bar detection corridors under overlay/text occlusion for smaller or laterally shifted Pokémon (e.g., Solgaleo and Mimikyu) and added a `2T+` move-duration cooldown.
+  - **v3.54**: Added pending-damage-verified Turn-T fast move prediction, multi-move damage integration, turn-phased OCR capture, and post-KO faint energy freeze.
+- **v3.51 – v3.53 — Key Feature: Symmetric `OPP ATTACKS` / `MY ATTACKS` Headers with Live Badges, `CMP✓/CMP✗` Indicators & Full Top-of-Screen Overlay Slide**:
+  - **v3.53**: Added live HP/shield/energy badges to the `OPP ATTACKS` and `MY ATTACKS` section headers and 2-row Pokémon column headers with live `HP%`.
+  - **v3.52**: Allowed the floating overlay to slide all the way to the top edge of the screen and locked 3-column matrix alignment.
+  - **v3.51**: Introduced the damage-verified fast-move energy engine, symmetric attack headers, `CMP✓/CMP✗` tie indicators, and live swap countdown timers.
+- **v3.50 — Key Feature: 2Hz/1Hz Turn-Indexed HP & Energy Engine, Shield Matrix Opponent Energy Readout & 7-Day AI Training Log Split**:
+  - Introduced the turn-indexed HP & energy loop, added opponent energy readouts to the Shield Matrix, depleted player/opponent energy on charged moves, and split detailed AI training logs into a self-pruning 7-day store so permanent Battle Logs stay lightweight.
+- **v3.43 – v3.46 — Key Feature: Full 4-Sided Outer Border Rectangle HP Scanner, Fuzzy Green/Yellow/Red Matching & Top-2 Shield Callouts with `M3/M4` KO Warnings**:
+  - **v3.46**: Tightened HP bar border/color matching and fixed-height rectangle geometry to reject exterior color bleed from moving Pokémon models.
+  - **v3.45**: Added fuzzy Green/Yellow/Red HP fill matching, left-border-keyed leftmost fill locking, and orange pending-damage sliver rejection.
+  - **v3.44**: Added the 2-row top toolbar, 3-anchor HP tracking, fast-attack switch confirmation, charged-zoom guard, and top-2 shield callouts with `M3/M4` KO warnings.
+  - **v3.43**: Implemented full 4-sided outer border rectangle HP bar measurement, expanded the player HP vertical corridor (`0.24h..0.69h`), and enabled bi-directional HP gauge updates on every scan.
+- **v3.40 – v3.42 — Key Feature: Real-Time Floating HP Bar Scanner, Persistent 3-Slot HP Memory & KO-Threshold Shield Logic**:
+  - **v3.42**: Kept the visual 3x3 shield matrix unscaled by HP while using live HP for active Pokémon selection and low-HP swap persistence.
+  - **v3.41**: Calibrated floating HP bar scanner, added live My/Opp HP HUD pills, enforced `0%` HP on faints, and wired KO-threshold shield logic.
+  - **v3.40**: Introduced the initial real-time floating HP bar scanner, persistent 3-slot bench HP memory, and charged attack tracking.
 
-## [v3.12] — 2026-10-21 — Top-5 Role Upgrades (Top-200 Candidates vs. Top-100 Meta), Core Coverage BR (Core BR), Enhanced Mimikyu 2-Strategy Disguise Math & Aegislash Shield/Sword Energy + Damage Shift
-- **Top-5 Role Upgrade Recommendations (`Top-200` Candidate Pool vs. `Top-100` Blended Meta)**:
-  - Expanded role upgrade recommendations in both the Android and Web Team Editors to display the **Top 5 distinct-species alternatives per role** (`#1 Lead`, `#2 Safe Swap`, `#3 Closer`) with one-tap replacement chips.
-  - Increased candidate simulation depth to the **Top 200 Meta Pokémon** for the active league (including eligible Shadow variants and enforcing the GBL species clause) evaluated against the **Top 100** blended current-season meta distribution.
-- **Renamed `Mach BR` (`Machine Aggregate BR`) → `Core BR` (`Core Coverage BR`)**:
-  - Renamed unclear `Mach BR` / `Machine Aggregate BR` labels to **`Core BR`** / **`Core Coverage BR (Core BR — 3-Mon Team Ceiling)`** across all team preset cards, Team Editor badges, role upgrade chips, and Settings threshold scales while preserving backward-compatible preference keys.
-- **Enhanced Mimikyu `Disguise` Simulation (Two-Strategy Shield Ordering Average + Opponent Fastest Charged Move Baiting)**:
-  - Updated Mimikyu's discrete shield battle rating math (`0v0` through `2v2`) to compute the exact average of **(a) using all Protect Shields before busting Disguise** (preserving `100%` Defense longer) and **(b) busting Disguise first before using Protect Shields** (absorbing the first throw for `0 HP` and dropping to Busted Form `-1 Defense` stage / `1.20x` incoming damage).
-  - Models intelligent opponent baiting: while Mimikyu's Disguise is intact, the opponent always throws their **fastest (lowest-energy) Charged Attack** knowing it will be negated by either a Protect Shield or Disguise.
-- **Enhanced Aegislash `Stance Change` Simulation (Shield ⇄ Sword Forme Damage AND Energy Generation Shift)**:
-  - Explicitly models the shift in **both Fast/Charged Move damage AND Fast Move energy generation** between **Shield Forme** (`97 Atk / 291 Def`, `1 HP` fast damage, boosted `1.28x` high energy generation) and **Sword/Blade Forme** (`291 Atk / 97 Def`, full `291 Atk` fast & charged damage, `0.78x` lower energy generation rate and `97 Def` vulnerability until reverting to Shield Forme via a Protect Shield).
+---
 
-## [v3.11] — 2026-10-21 — Top-100 Role Upgrade Recommendations, Unique Ability Battle Ranking Math (Morpeko / Mimikyu / Aegislash / Cramorant), ABB/ABC Auto-Detection & Position-Weighted Shield Ratings
-- **Top-100 Role Upgrade Recommendation Engine (`#1 Lead`, `#2 Safe Swap`, `#3 Closer`)**:
-  - Added an on-demand **`✨ Suggest Top-100 Role Upgrades (3 Per Role)`** button inside the Create Team and Edit Team dialogs (Android & Web) with **3 one-tap replacement chips** beneath Slot 1, Slot 2, and Slot 3.
-  - Simulates the **Top 100 Meta Pokémon** for the selected league (including eligible Shadow variants) against your blended current-season meta distribution while enforcing the **GBL species clause** (no duplicate base species across your 3 slots and at most 1 Mega in Mega Master League).
-  - Ranks candidates for each slot by combining **Full Team Synergy (`ΔTeamMachBR`)** and **Role Rating Delta (`ΔRoleBR`)** plus defensive coverage bonuses ($0.55 \cdot \Delta\text{MachBR} + 0.45 \cdot \Delta\text{RoleBR} + \text{CoverageBonus}$), and immediately populates the Pokémon, PvPoke recommended moveset, CP, and updated team ratings on a single tap.
-- **Unique Form-Change & Signature Ability Battle Ranking Math (`Morpeko`, `Mimikyu`, `Aegislash`, `Cramorant`)**:
-  - **Morpeko (`Hunger Switch` + `Aura Wheel`)**: Models alternating Full Belly (Electric) and Hangry (Dark) STAB `Aura Wheel` cycles with its guaranteed `+1 Attack` stage self-buff (`1.25x` compounding up to `+4` stages / `2.0x`) across every charged move cycle.
-  - **Mimikyu (`Disguise`)**: Models the intact Disguise absorbing the first unshielded incoming Charged Attack for `1 HP` (acting as a free extra shield in 0s/1s/2s scenarios), followed by the Busted Form `-1 Defense` stage drop (`0.8x` Defense multiplier).
-  - **Aegislash (`Stance Change: Shield Forme ⇄ Blade Forme`)**: Models Shield Forme (`97 Atk / 291 Def`) tanking incoming damage while generating energy with 1-damage fast moves, transforming into Blade Forme (`291 Atk / 97 Def`, ~`2.98x` Attack) right before executing Charged Attacks (`Shadow Ball` / `Flash Cannon` / `Gyro Ball`), and reverting to Shield Forme when spending a Protect Shield.
-  - **Cramorant (`Gulp Missile: Gulping / Gorging Form`)**: Models `Surf` loading Arrokuda (`> 50% HP`) or Pikachu (`≤ 50% HP`), dealing automatic `12.5%` max-HP retaliation counter-damage when attacked and inflicting a guaranteed `-1 Defense` stage drop (`0.8x` Defense) in Gulping Form or `-1 Attack` stage drop (`0.8x` Attack) in Gorging Form.
-- **Non-Blocking Background Evaluation & Instant Team Switching**:
-  - Eliminated UI thread stalls and redundant recalculation loops when switching teams or editing presets by moving heavy team evaluation and Top-100 recommendation simulations onto background worker threads (`Dispatchers.Default`) and memoizing per-preset battle rating metrics.
-  - Restricted manual slot reordering buttons (`#1 ⇄ #2`, `#2 ⇄ #3`) and `⚡ Auto-Detect Style & Order Swap` exclusively to the **Team Editor** modal so the main Team Select screen stays fast and uncluttered.
-- **Auto Team Style Classification (`ABB` vs. `ABC`) & Smart Slot Reordering**:
-  - Evaluates pairwise defensive type vulnerabilities across all 3 team members and tests whether the candidate Lead resists shared backline weaknesses (`≥ 2` shared weaknesses or `1` critical meta weakness):
-    - **`ABB` Lineups**: Automatically moves the resisting `A` Pokémon to **Slot 1 (Lead)**, places the higher bait-pressure / faster energy `B` Pokémon into **Slot 2 (`Bait Swap B1`)**, and places the higher closing-power `B` Pokémon into **Slot 3 (`Sweeper B2`)**.
-    - **`ABC` Lineups**: Keeps **Slot 1 (Lead)** fixed, places the backline Pokémon with the highest volatility-adjusted `Swap BR` ($\mu - 0.5\sigma$) into **Slot 2 (`Safe Swap`)**, and places the remaining Pokémon into **Slot 3 (`Closer`)**.
-- **Current-Season Blended Meta & Exponential Recency Decay (`0–50` Match Ramp)**:
-  - Calculates expected opponent probability distributions $P_{\text{lead}}(p)$ (from opponent leads) and $P_{\text{field}}(p)$ (from all 3 opponent Pokémon) strictly from **current GBL season** battle logs blended with active league PvPoke rankings.
-  - Scales historical battle log weight linearly from `0%` at `0` matches up to `70%` at `50+` current-season matches ($w_{\text{hist}} = 0.70 \times \min(1, N / 50)$, $w_{\text{meta}} = 1 - w_{\text{hist}}$) and weights more recent logs exponentially higher ($W(k) = e^{-0.05 \cdot (k - 1)}$).
-- **Position-Weighted Shield Scenario Ratings & Per-Slot Battle Rating Badges**:
-  - **Slot 1 (`Lead`)**: $0.50 \cdot BR_{2v2} + 0.50 \cdot BR_{1v1}$ (`Lead Agg BR` color-coded by `SW / W / N / L / SL` thresholds).
-  - **Slot 2 (`Safe Swap / Pivot`)**: $0.60 \cdot BR_{1v1} + 0.25 \cdot BR_{2v1} + 0.15 \cdot BR_{1v0}$ with volatility penalty $\mu_{\text{Swap}} - 0.5\sigma_{\text{Swap}}$.
-  - **Slot 3 (`Closer / Sweeper`)**: $0.60 \cdot BR_{0v0} + 0.25 \cdot BR_{1v0} + 0.15 \cdot BR_{0v1}$, plus side-by-side **Swap BR** badges on both Slot 2 and Slot 3 and customizable **Machine Aggregate BR (`Mach BR`)** 5-tier thresholds in **⚙️ Settings**.
+## v3.30 – v3.34 (2026-10-23 – 2026-10-24) — Duo-Core Team Builder, Turn-by-Turn Energy Cycle Simulator & Live Tactical Lead/Swap/Post-Faint Recommendations
+*Functionally grouped release series adding real-time tactical battle recommendations (Lead, Swap, Counter-Swap Minimax, Post-Faint), Duo-Core team building, and turn-by-turn energy cycle simulation.*
+
+- **v3.34 — Key Feature: Post-Faint Switch Recommendations, Counter-Swap Minimax, Midpoint Swap Clock & AI Training Log Export**:
+  - Added post-faint optimal switch-in recommendations, Counter-Swap Minimax evaluation when the opponent swaps first, a 1st-frame midpoint swap clock with 2nd-frame validity latch, endgame shield/energy awareness, and AI training log export.
+- **v3.33 — Key Feature: Turn-by-Turn Energy Cycle Battle Rating Simulator, Dynamic GameMaster Buff/Debuff Tables & Dominated Move Pruning**:
+  - Replaced static DPS approximations in the BR engine with a turn-by-turn energy cycle simulator, ingested dynamic GameMaster move buff/debuff probabilities and stages (e.g., 100% Bulldoze `-1 DEF`), and pruned strictly dominated same-type moves.
+- **v3.31 – v3.32 — Key Feature: Top-50 Core Breaker/Threat Analysis Depth, Streamlined Team Summary Cards & 2-Line Recommendation Row**:
+  - **v3.32**: Added dynamic font resizing and intelligent 2-line wrapping for the live Battle Recommendation row on the floating overlay.
+  - **v3.31**: Expanded Core Breaker and Key Threat analysis depth to the Top 50 Meta Pokémon, streamlined Team Summary cards, and fixed the Overlay Battle Recommendation row layout.
+- **v3.30 — Key Feature: `DUO` (Duo-Core + Safe Pivot) Team Builder & Auto-Detection, Live Lead/Swap Tactical Recommendations Module & 2-Frame Shield Restoration Fix**:
+  - Added `DUO` archetype classification and generation alongside `ABB` and `ABC`, introduced the live Lead & Swap Tactical Recommendations banner on the overlay, and fixed 2-frame false shield restoration.
+
+---
+
+## v3.10 – v3.23 (2026-10-21 – 2026-10-22) — Anti-Meta Team Builder (`ABB` / `ABC`), Top-200 Precomputed 9x9 Shield Matrix, Role Upgrades & Signature Form-Change Math
+*Functionally grouped release series introducing the Anti-Meta Team Builder, O(1) precomputed Top-200 9x9 overlay shield matrix, Top-200 Role Upgrade engine, and special mechanics math (`Morpeko`, `Mimikyu`, `Aegislash`, `Cramorant`).*
+
+- **v3.20 – v3.23 — Key Feature: Native Android & Web Anti-Meta Team Builder (`ABB` / `ABC`), Top-200 Precomputed 9x9 Shield Matrix & Featured Rank-Range Queries**:
+  - **v3.23**: Added per-slot Battle Ratings (`Slot 1/2/3 BR`) on every Key Threat and Core Breaker, unified the Anti-Meta summary card across existing teams and the Team Editor, expanded the bottom SilphScope Meta reference list to the **Top 50** with Meta BR in parentheses, and added rank-range queries (`200-`, `-10`, `100-200`) in Featured Pokémon slots.
+  - **v3.22**: Upgraded the Anti-Meta Team Builder to score against a **Top-100 role-weighted synthetic meta** blended with season battle logs, added 3-slot alternate moveset simulation (`⚡ Alt Moveset (+X BR)`), and added `✅ Key Wins` / `⚠️ Key Threats` / `🚨 Core Breakers` (`Beats X/25 Top Meta`).
+  - **v3.21**: Brought the full interactive **Anti-Meta Team Builder (`ABB` / `ABC`)** to the native Android Team Presets page with one-tap team creation (`<League> Anti-Meta <YYYY-MM-DD>`).
+  - **v3.20**: Precomputed the 9x9 weighted move-combo shield matrix for the active 3-Pokémon team against the **Top 200 League Meta** for $O(1)$ real-time overlay lookups, and scoped the Special Mechanics Math Validator strictly to in-battle form-changing Pokémon (`Morpeko`, `Cramorant`, `Aegislash`, `Mimikyu`).
+- **v3.15 – v3.16 — Key Feature: Weighted Move-Combo 9x9 Shield Matrix Math (`75%` Default + `25%` Alternate Combos), Strict Legal Move Pool Audit & Team Moveset Optimizer**:
+  - **v3.16**: Enforced strict legal move pools per species (fixing Mimikyu, Cramorant, Tinkaton, Kyogre, and Melmetal move pools) and dynamically normalized the 25% alternate move-combo weight across valid existing combos.
+  - **v3.15**: Updated all 9 shield states (`0v0`–`2v2`) to weight `75%` default PvPoke moveset and `25%` across up to 5 alternate move combinations, and added the **`🎯 Simulate Moves & Propose Best 3 Alternate Movesets`** button in the Team Editor.
+- **v3.13 – v3.14 — Key Feature: Single-Screen Unmasked Capture, Simultaneous Best-Match-Across-Team Player Switch OCR & Single-Tap Stop Overlay Fix**:
+  - **v3.14**: Removed black-rectangle overlay/toast screen masking in single-screen scanner mode so HUD pixels underneath the floating overlay are never occluded.
+  - **v3.13**: Replaced sequential Slot-0-first player switch matching with simultaneous best-match scoring across all 3 team members (with High-Contrast B&W nameplate extraction and `rn -> m` normalization so `"Swarnpert"` matches `"Swampert"` over `"Tinkaton"`), and fixed the **Stop Battle Overlay** button to restore on a single tap.
+- **v3.10 – v3.12 — Key Feature: Top-5 Role Upgrade Recommendations (`Top-200` vs. `Top-100`), `Core BR` Rating Engine, `ABB`/`ABC` Auto-Detection & Signature Ability Math**:
+  - **v3.12**: Expanded role upgrade suggestions to the **Top 5 per role** from the Top 200 candidate pool, renamed `Mach BR` to **`Core BR` (`Core Coverage BR`)**, and refined Mimikyu 2-strategy Disguise math and Aegislash Shield/Blade energy + damage shifts.
+  - **v3.11**: Added the on-demand **`✨ Suggest Top-100 Role Upgrades`** engine in the Team Editor and implemented signature ability battle math for **Morpeko** (`Hunger Switch` + `Aura Wheel`), **Mimikyu** (`Disguise`), **Aegislash** (`Stance Change`), and **Cramorant** (`Gulp Missile`).
+  - **v3.10**: Introduced automatic **`ABB` vs. `ABC`** team style classification with smart slot reordering, current-season blended meta weighting with exponential recency decay, and position-weighted Lead/Swap/Closer shield ratings.
+
+---
+
+## v3.02 – v3.08 (2026-10-19 – 2026-10-20) — 10-Theme Visual Engine, Interactive Overlay Shield Counters, League-Rated Form Autocomplete & Compact Battle Log Summaries
+*Functionally grouped release series introducing the 10-theme customizer with Pokémon GO faction watermarks, interactive live shield counters on the overlay, and Battle Log usability refinements.*
+
+- **v3.07 – v3.08 — Key Feature: League-Rated Default Form/Shadow Autocomplete, Strict Mew/Mewtwo Disambiguation, Repeated Daily Lead Highlighting & Compact Lead Matchup Box**:
+  - **v3.08**: Added the compact `#+ / #o / #- / #u` Lead Matchups summary box and tightened daily summary row spacing in the Battle Log.
+  - **v3.07**: Ordered Pokémon autocomplete suggestions by active-league PvPoke rating (automatically selecting the highest-rated form/Shadow variant), enforced strict word-boundary disambiguation between `Mew` and `Mewtwo`, highlighted repeated same-day opponent leads with unique lead counts, and added the **Yesterday** Battle Log filter.
+- **v3.05 – v3.06 — Key Feature: Interactive Overlay Header Shield Counters (`0–2`) & Dual-Accent Themes (Including Shiny Origin Dialga Midnight)**:
+  - **v3.06**: Added dual-accent theme tokens, the **Shiny Origin Dialga Midnight** theme, full modal/button/replay theming, and configurable page card transparency.
+  - **v3.05**: Made the player and opponent shield badges in the floating overlay header interactive (`tap to cycle 2 -> 1 -> 0 -> 2`) with instant live 3x3 matrix recalculation.
+- **v3.02 – v3.03 — Key Feature: 10-Theme Visual Engine with Faction/Sylveon Emblem Watermarks & Dynamic Floating Overlay Emblem Icons**:
+  - **v3.03**: Extended theme styling across all modals, cards, and floating overlay headers, and added dynamic per-theme emblem icons on the minimized and expanded floating overlay.
+  - **v3.02**: Introduced the 10-theme customization engine (Mystic, Valor, Instinct, Harmony, Sylveon Pink/Shiny, Origin Dialga, Dark/Light Slate) with watermark emblems and reorganized Settings.
+
+---
+
+## v2.90 – v3.01 (2026-10-17 – 2026-10-19) — SilphScope PvP v3.00 Milestone: Asymmetric 9-Shield Matrix (`0v0`–`2v2`), Blind Matchup Favorability (BMF), Dynamic Execution WAE & In-App Help Guide
+*Functionally grouped 4-phase milestone series culminating in the `v3.00`/`v3.01` analytics release.*
+
+- **v3.00 – v3.01 — Key Feature: Official `v3.00` Analytics Consolidation, Dedicated In-App `❓ Help & Metric Guide` Tab & Overlay HUD Help Modal**:
+  - **v3.01**: Added the dedicated **❓ Help** navigation tab (`Teams / Battle Logs / Settings / Help`) and an interactive Help button/modal for the Overlay HUD.
+  - **v3.00**: Consolidated Phases 1–4 of the v3.00 analytics architecture, added the in-app **Help & Metric Guide**, updated the standardized Share row format, and published the complete BMF & Dynamic Execution WAE documentation.
+- **v2.96 – v2.97 — Key Feature: Standardized Go Battle Log Name Formatting, Tasker Automation Intent Hooks & Battle Recap Stability Fixes**:
+  - **v2.97**: Standardized exported Pokémon names to match Go Battle Log conventions and added Android **Tasker** broadcast/activity intent hooks (`START_OVERLAY`, `STOP_OVERLAY`, `SET_TEAM_PRESET`).
+  - **v2.96**: Resolved `UninitializedPropertyAccessException` on `prefs` when launching the post-game Battle Recap dialog and hardened replay bridge callback typing.
+- **v2.94 – v2.95 — Key Feature: Top Status-Bar Battle Toasts, Reliable Opponent Faint Detection & Swap Clock Preservation on Faint**:
+  - **v2.95**: Moved live battle toast notifications into the top status-bar/clock strip so they never cover bottom Charged Move buttons.
+  - **v2.94**: Improved opponent faint detection accuracy, preserved the active 50s swap clock when a replacement Pokémon enters after a faint, and added shield/faint-swap toast alerts.
+- **v2.90 – v2.93 — Key Feature: Phases 1–3 of v3.00 (Asymmetric 9-Shield Matrix, Timeline-Weighted Dynamic Execution WAE & 5-Stat Analytics Dashboard)**:
+  - **v2.93 (Phase 3/4)**: Added the 5-stat Battle Log Analytics Dashboard (`WIN RATE`, `EXEC WAE`, `MATCHUP LUCK`, `CLUTCH WINS`, `BLUNDER LOSS`), 6 Primary Performance Badges, 5 Contextual Event Pills, and historical log migration.
+  - **v2.91 (Phase 2/4)**: Added in-battle timeline event recording (`SWAP`, `SHIELD`, `FAINT`) and the duration-weighted **Dynamic Execution WAE** engine ($\sum \tau_k \cdot R_k$, faint margin scaling, and shield-in-pocket penalties).
+  - **v2.90 (Phase 1/4)**: Introduced the **Asymmetric 9-Shield Matrix** (`0v0` through `2v2`), **Blind Matchup Favorability (BMF)** ($M = 0.40 \cdot S_{\text{lead}} + 0.60 \cdot S_{\text{back}}$), and 75%-confidence meta-prior handling for unrevealed 3rd opponent Pokémon.
+
+---
+
+## v2.30 – v2.36 (2026-10-15 – 2026-10-17) — Swap Clock Timers, Pokéball Lobe Faint Detection, Shield Tracking & Configurable 5-Tier Matchup Thresholds
+*Functionally grouped release series introducing live 50-second swap timers, top-corner Pokéball & shield pixel detection, and customizable 5-tier rating thresholds.*
+
+- **v2.36 — Key Feature: Per-Team Daily Log Share Format, `Copy GBL` Clipboard Export & Configurable 5-Tier Matchup Thresholds (`SW / W / N / L / SL`)**:
+  - Added per-team grouped daily log sharing, one-tap `Copy GBL` clipboard export, and user-configurable 5-tier matchup rating thresholds in Settings.
+- **v2.34 – v2.35 — Key Feature: 36px Pokéball Lobe Segmentation, Dual Red+Grey Faint Verification & Faint Resurrection Guard**:
+  - **v2.35**: Calibrated 36px Pokéball upper/lower lobe sampling, dual red+grey faint verification, and swap clock preservation across faints.
+  - **v2.34**: Added Pokéball lobe segmentation, 3-Pokémon swap clock reset at battle start, and a faint resurrection guard.
+- **v2.32 – v2.33 — Key Feature: 50s Swap Clock Timers, Live Protect Shield Tracking & Fainted Column Dimming**:
+  - **v2.33**: Integrated live swap clock timers, automatic shield icon tracking, and fainted Pokémon column dimming on the floating overlay.
+  - **v2.32**: Introduced initial swap clock countdown timers, dynamic threshold alerts, and faint state visual dimming.
+- **v2.30 – v2.31 — Key Feature: Battle Toast Notification Toggle & Clean v2.15 Re-Baseline**:
+  - Added a Settings toggle to enable or disable on-screen Battle Toast messages and re-baselined the clean release pipeline.
+
+---
+
+## v2.00 – v2.27 (2026-10-12 – 2026-10-15) — SilphScope PvP Rebrand, Per-League Battle Logging, Multi-Device GitHub Cloud Delta Sync, Battle Quality WAE & Post-Game Interactive Replay
+*Functionally grouped release series introducing the Battle Log system, N-device GitHub Cloud Delta Sync, interactive post-game overlay replay, and the rebrand to SilphScope PvP.*
+
+- **v2.20 – v2.27 — Key Feature: Experimental HUD Telemetry Prototypes (Subsequently Re-Baselined in `v2.31`)**:
+  - Explored early experimental HUD layout and OCR prototypes between `v2.20` and `v2.27` before re-baselining cleanly onto the stable `v2.15` core in `v2.31`.
+- **v2.13 – v2.15 — Key Feature: Dual-Type Effectiveness & CP/IV Stat Scaling Fix, Ice Punch Damage Calibration & Reparse Completed Battles Tool**:
+  - **v2.15**: Fixed Ultra League Zygarde / Shadow Annihilape charged move damage scaling, removed stale root-file overwrites in CI, and added a Settings action to **Reparse All Completed Battles**.
+  - **v2.13**: Resolved dual-type effectiveness multiplication, CP/IV combat stat scaling, and Shadow status persistence across battles.
+- **v2.10 – v2.12 — Key Feature: Initial Battle Quality (WAE) Metrics, Streamlined `W/L(ExpectedWin%)` Log Sharing & Post-Stop Battle Logging Prompt**:
+  - **v2.12**: Unified the Start/Stop Battle button with an optional prompt to log the battle when stopping the overlay.
+  - **v2.11**: Streamlined text log sharing into a summary header plus `W/L(ExpectedWin%) MyTeam vs. Opp1,Opp2,Opp3` rows.
+  - **v2.10**: Introduced initial Battle Quality (WAE) metrics, performance badges, and retroactive battle log migration.
+- **v2.03 – v2.05 — Key Feature: Official Rebrand to `SilphScope PvP`, Deleted Battle Log Trash Bin + Undo Restoration, Go Battle Log Export & Instant Start-Battle Reset**:
+  - **v2.05**: Immediately resets the detected opponent list and 3x3 matrix when tapping **Start Battle**.
+  - **v2.04**: Rebranded the GitHub repository and GitHub Pages simulator to **SilphScope PvP** and fixed Battle Log header wrapping.
+  - **v2.03**: Renamed the app from *BattleMatrix GBL* to **SilphScope PvP**, blocked menu words (`Battle` / `Party`) from triggering OCR, added a **Trash Bin + Undo** restoration modal for deleted logs, and added **Go Battle Log** CSV/JSON export.
+- **v2.00 – v2.02 — Key Feature: Per-League & Per-Team Battle Logging, Interactive Post-Game Overlay Replay & In-App GitHub OAuth Multi-Device Cloud Delta Sync**:
+  - **v2.02**: Added in-app **GitHub OAuth Device Login** for isolated per-user cloud sync without hardcoded tokens.
+  - **v2.01**: Upgraded cloud sync to automatic **N-device multi-device delta sync** on app open with optimistic concurrency retry.
+  - **v2.00**: Introduced per-league/per-team Battle Logging, lead matchup tracking, ScrapedDuck GBL season integration, log edit/delete controls, **Interactive Post-Game Overlay Replay**, and 2-device cloud delta sync.
+
+---
+
+## v1.00 – v1.30 (2026-10-08 – 2026-10-12) — Foundation Releases: 3x3 Damage Matrix Overlay, Live PvPoke Rankings Sync, 4-League Team Builder & Floating Minimize Bubble
+*Functionally grouped foundational release series establishing the Android floating overlay, ML Kit OCR pipeline, PvPoke GameMaster/rankings sync, and interactive Web Simulator.*
+
+- **v1.30 — Key Feature: 3-Page Main App Navigation (`Teams / Settings / Battle Log`), Background Transparency Slider & Draggable App-Icon Minimize Bubble**:
+  - Split the main Android app into dedicated `Teams`, `Settings`, and `Battle Log` pages, added the floating overlay background glass transparency slider, and added the draggable app-icon minimize bubble.
+- **v1.20 – v1.23 — Key Feature: Live PvPoke League Rankings Sync (`1500 / 2500 / 10000 / Mega`), Regional/Alternate Form Autocomplete & 4-Charged-Move Overlay Option**:
+  - **v1.23**: Added the optional 4-Charged-Move overlay display mode, 4-league pre-flight gate, live GameMaster/rankings sync telemetry, and fixed null move-usage parsing in GL/UL rankings.
+  - **v1.21 – v1.22**: Applied live PvPoke league rankings movesets (primary moveset + top-usage 3rd charged move) to OCR-detected opponents and fixed regional form moveset resolution (e.g., Alolan Ninetales, UL Snorlax, Greninja, Skeledirge).
+  - **v1.20**: Added live PvPoke rankings synchronization, Mega Master League support, Team Builder regional/alternate/Shadow form autocomplete, and drag-and-drop team presets.
+- **v1.00 – v1.11 — Key Feature: Initial Public Release, Turn-Aligned Multi-Cycle Move Bars, `50%–100%` Overlay Scale Slider & Persistent League Teams**:
+  - **v1.11**: Added persistent team presets across app updates, PvPoke Top-3 default league teams, auto-filled moves, and League CP/IV stat scaling.
+  - **v1.10**: Added the custom app icon, status bar inset alignment, Buy Me a Coffee support link, and the `50%–100%` overlay width scale slider (`78%` default tick).
+  - **v1.00**: Initial release featuring the real-time 3x3 damage matrix floating overlay, turn-aligned multi-cycle move timing bars, `My Fasts` vs. `Their Fasts` move count basis toggle, and automated GitHub Release APK publishing.

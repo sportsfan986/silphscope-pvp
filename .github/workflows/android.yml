@@ -129,20 +129,22 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (3-Sample 300ms Energy Meter Debounce, Phase-Locked Fast-Move Auto-Increment, ±1 Move Self-Correction & Wider Tinkaton HP Detection)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Sub-50E Multi-Round Energy Tracking up to 100E for Matched & Unmatched Charged Moves + Post-Throw Round Resync)
 
-            ### What's New in v3.83
-            - **3-Sample & ≥300 ms Energy Meter Debounce + Disappearing Circle Guard**:
-              - Requires at least **3 consecutive samples and ≥300 ms** on Charged Move circular energy meters before accepting readings, and prevents disappearing or dimmed circles during Charged Move animations from ever dropping energy to `0`.
-            - **Phase-Locked Fast-Move Auto-Increment (`500 ms × fastMoveTurns`) & ±1 Fast-Move Self-Correction**:
-              - Auto-increments player energy at the end of each fast move duration (`500 ms × fastMoveTurns`, never every 500 ms turn unless using a 1-turn move) anchored to the **start of the last successful 300 ms debounce** so energy updates in phase with the meter moving.
-              - If a valid reading for over **300 ms on both meters** disagrees with tracked energy (or if the meter did not move 300 ms after an auto-increment), adjusts energy up or down by **one fast move of energy** (at most once per fast move duration) while preserving leftover Charged Move energy deltas.
-              - Maps confirmed user energy increases to battle turns so opponent energy also increments strictly at the completion of each opponent fast move duration.
-            - **Slightly Wider Vertical & Horizontal HP Detection Bounds for Tinkaton**:
-              - Expanded floating HP bar corridors (`0.055h..0.88h` for player, `0.055h..0.84h` for opponent) and capsule border search tolerances (`±22 px`) so small/low Pokémon like Tinkaton are reliably detected.
+            ### What's New in ${{ steps.version.outputs.tag }}
+            - **Dual-Bar N-Sample (`±2%`) Circle Debounce (`OverlayService.kt`)**:
+              - Independently debounces both the slower (higher-energy) and faster (lower-energy) charge move circles across `N` samples (`default 2`, `±2%` fill tolerance).
+            - **Unmatched Sub-50E Moves (`cost1 != cost2`, both `<50E`, e.g., `35E + 45E`, `35E + 40E`, `40E + 45E`)**:
+              - Tracks player energy directly from the **slower charge move meter** during Round 1 (`0 .. slowCost`) and Round 2 (`slowCost .. 2 * slowCost`).
+              - Once energy reaches `2 * slowCost` (or the dual-bar percentage combination proves Round 3 wrap-around), switches to a **Dual-Bar Percentage Match Solver** across both bars up to `100E`, with turn-monotonic fast-move progression if both bars are simultaneously at the `200%` double-ring cap.
+            - **Matched Sub-50E Moves (`cost1 == cost2 < 50E` or Single `<50E` Move, e.g., `35E + 35E`, `40E + 40E`, `45E + 45E`)**:
+              - Tracks peak Round 2 fill percentage (`peakSecondFillPct`) and latches `slowestMeterInThirdFill` when the meniscus wraps from high Round 2 (`>= 158%` or `>= 195%`) back down into Round 3 (`101% .. peak - 18%`), combining Round 3 meniscus readings with turn-monotonic fast-move progression up to `100E`.
+            - **Post-Throw Energy Deduction, Dual-Bar Move Disambiguation & Fill-Round Resync**:
+              - Deducts the thrown charged move's energy cost (`preThrowEnergy - thrownMoveCost`), scores both post-throw charge meters via `scorePostThrowCircleFit` to disambiguate Move 1 vs. Move 2 throws, and resyncs the active fill round (`Round 1`, `Round 2`, or `Round 3`) and per-slot wrap latches to the observed post-throw bars.
 
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)
+            - **Full Release History**: [CHANGELOG.md](https://github.com/sportsfan986/silphscope-pvp/blob/main/CHANGELOG.md)
             - **Android APK**: Download **`silphscope-pvp-${{ steps.version.outputs.tag }}.apk`** from the **Assets** section below and install on your Android device.
           files: |
             app/build/outputs/apk/release/named/silphscope-pvp-${{ steps.version.outputs.tag }}.apk
