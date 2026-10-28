@@ -12563,8 +12563,10 @@ class OverlayService : LifecycleService() {
                 val defenderUserShadow = defenderUserName.contains("Shadow", ignoreCase = true)
                 val defenderUserMeta = if (defenderUserIdx != activeUserIdx || playerCaughtMove) {
                     computeEffectiveCombatStats(
-                        getPokemonMeta(defenderUserName, activeLeague, defenderUserShadow, defenderUserCfg?.cp, defenderUserCfg?.ivs),
-                        activeLeague
+                        getPokemonMeta(defenderUserName, activeLeague, defenderUserShadow),
+                        activeLeague,
+                        defenderUserCfg?.cp,
+                        defenderUserCfg?.ivs
                     )
                 } else {
                     userMetaForStats
