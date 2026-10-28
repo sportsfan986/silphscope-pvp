@@ -48,10 +48,10 @@ jobs:
             RAW_VER="${{ github.event.inputs.workflow_version }}"
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             RAW_VER="${{ github.ref_name }}"
-          elif [ -f VERSION ]; then
-            RAW_VER=$(cat VERSION | tr -d '[:space:]')
           elif [ -f app/build.gradle.kts ] && grep -q 'versionName' app/build.gradle.kts; then
             RAW_VER=$(grep -E 'versionName\s*=\s*' app/build.gradle.kts | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
+          elif [ -f VERSION ]; then
+            RAW_VER=$(cat VERSION | tr -d '[:space:]')
           else
             RAW_VER="v1.00"
           fi
@@ -129,20 +129,19 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Single-Bar Slower Charge Meter Authority, Unrestricted Top-Cap Scan Above 169% & 3rd-Fill Detection via Top-Cap Darkening Memory + Turn Cadence)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Three-Ring Visual Charge Meter Detection 0–300% & Zero Assumed Energy Gains)
 
-            ### Release Series Context (`v3.95` – `v3.98`)
-            *Functionally grouped release series introducing multi-round (`0–100E`) energy tracking for Pokémon with `<50E` charged moves, single-bar slower-move authority, and 2nd-vs-3rd charge ring disambiguation.*
+            ### Release Series Context (`v3.95` – `v3.99`)
+            *Functionally grouped release series introducing multi-round (`0–100E`) energy tracking for Pokémon with `<50E` charged moves, single-bar slower-move authority, and three-ring visual charge circle detection.*
 
             ### Key Feature in `${{ steps.version.outputs.tag }}`
-            - **Single-Bar Authority on the Slower (Higher-Cost) Charge Move (`resolveSub50AndMultiRoundEnergy`)**:
-              - Undoes dual-bar fusion and keys player energy strictly off the single slower, higher-cost charge move bar (e.g., `45E Energy Ball` on Ninetales), eliminating cross-bar wrap-around clamping that previously held Ninetales at `76E`.
-            - **Unrestricted Top-Cap Chord Geometry Above `169%` (`170%..196%` / `77E..88E` on `45E` Moves)**:
-              - Scales the horizontal chord sample width above the center move-type icon (`minSafeDx = 4px` outside `inIconBand`) up to `91%` circle radius so upper-cap meniscuses (`170%..196%`) are scanned cleanly instead of cutting off at `169%` (`76E`).
-            - **Three-Tier 3rd-Fill Detection Strategy (`76E -> 90E -> 100E`)**:
-              - **Top-Cap Darkening Memory (`firstFillTopCapLuma` & `secondFillBotCapLuma`)**: Calibrates the bright 1st-fill top-cap luminance (`78..86%` height) and darker 2nd-fill bottom-cap luminance (`12..20%` height) per Pokémon slot/button so a saturated `200%` 2nd-fill circle (`90E` on `45E`) is immediately distinguished from a `100%` 1st-fill circle (`45E`).
-              - **Meniscus Wrap-Around Latch**: Latches `[3rd Fill]` when a 3rd-fill meniscus wraps back to the lower/mid circle (`101%..(peak - 18)%`) after reaching an upper-circle 2nd-fill peak (`>= 165%`).
-              - **Fast-Move Turn Cadence Progression**: Steps energy forward by `+userFastEnergy` every `userMoveDurationMs` during active fast-move combat whenever the meniscus enters the narrow upper cap (`>= 165%`) or saturates at `>= 2 * slowCost` up to `100E`.
+            - **Three-Ring Visual Charge Meter Detection (`0%..300%` in `detectSingleChargeButtonFillPct`)**:
+              - **1st Fill (`0%..100%`)**: Thin/translucent circle border with interior liquid filling `0% -> 100%`.
+              - **2nd Fill (`100%..200%`)**: Solid thick bright-white circle border (`r = 0.90R..1.05R`) with interior liquid filling `100% -> 200%`.
+              - **3rd Fill (`200%..300%`)**: Second outer white concentric ring outside the main circle (`r = 1.11R..1.25R` separated by a darker annular gap at `r = 1.04R..1.11R`) with interior meniscus read directly as `200%..300%`.
+            - **Zero Assumed Energy Gains (`resolveSub50AndMultiRoundEnergy`)**:
+              - Removed all timer/cadence-based energy stepping (`overchargeSaturationStepAnchorMs`), wrap-around latches, and top-cap darkening memory heuristics.
+              - Keys strictly off the slower, higher-cost charge move meter (`round(slowPct / 100.0 * slowCost).coerceIn(0, 100)`).
 
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)

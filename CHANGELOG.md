@@ -1,10 +1,13 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v3.98`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v3.99`)
 
 ---
 
-## v3.95 – v3.98 (2026-10-28) — Sub-50E Multi-Round Energy Tracking up to 100E, Single-Bar Slower-Move Authority & 3rd-Fill Detection
-*Functionally grouped release series introducing multi-round (`0–100E`) energy tracking for Pokémon with `<50E` charged moves, single-bar slower-move authority, and 2nd-vs-3rd charge ring disambiguation.*
+## v3.95 – v3.99 (2026-10-28) — Sub-50E Multi-Round Energy Tracking up to 100E, Three-Ring Visual Charge Meter Detection & Zero Assumed Energy Gains
+*Functionally grouped release series introducing multi-round (`0–100E`) energy tracking for Pokémon with `<50E` charged moves, single-bar slower-move authority, and three-ring visual charge circle detection.*
 
+- **v3.99 — Key Feature: Three-Ring Visual Charge Meter Detection (`0%..300%`) & Zero Assumed Energy Gains**:
+  - **Three-Ring Visual Charge Meter Detection (`detectSingleChargeButtonFillPct`)**: Detects 1st fill (`0%..100%`, thin border), 2nd fill (`100%..200%`, solid filled white border at `r = 0.90R..1.05R`), and 3rd fill (`200%..300%`, second concentric outer white ring at `r = 1.11R..1.25R` outside a darker annular gap at `r = 1.04R..1.11R`), reading the interior liquid meniscus directly across all three fills.
+  - **Zero Assumed Energy Gains (`resolveSub50AndMultiRoundEnergy`)**: Removed all assumed fast-move cadence stepping (`overchargeSaturationStepAnchorMs`), wrap-around latches, and top-cap darkening heuristics; keys strictly off the slower, higher-cost charge move meter (`round(slowPct / 100.0 * slowCost).coerceIn(0, 100)`).
 - **v3.98 — Key Feature: Single-Bar Slower Charge Meter Authority, Unrestricted Top-Cap Scan Above `169%` (`76E`) & 3rd-Fill Detection via Top-Cap Darkening Memory + Wrap-Around + Turn Cadence**:
   - **Single-Bar Authority (Undo Dual-Bar Fusion in `resolveSub50AndMultiRoundEnergy`)**: Keys player energy tracking strictly off the single slower, higher-cost charge move bar (e.g., `45E Energy Ball` on Ninetales), eliminating cross-bar wrap-around clamping that previously stalled Ninetales at `76E`.
   - **Unrestricted Top-Cap Chord Geometry Above `169%` (`detectSingleChargeButtonFillPct`)**: Scales the horizontal chord sample width above the center move-type icon (`minSafeDx = 4px` outside `inIconBand`) up to `91%` circle radius so upper-cap meniscuses (`170%..196%`, i.e., `77E..88E` on `45E` moves) are scanned cleanly without cutting off at `169%` (`76E`).
