@@ -173,6 +173,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnHpDebounce2Samples: Button
     private lateinit var btnHpDebounce3Samples: Button
     private lateinit var btnHpDebounce4Samples: Button
+    private lateinit var btnDebounceTol0: Button
+    private lateinit var btnDebounceTol1: Button
+    private lateinit var btnDebounceTol2: Button
+    private lateinit var btnDebounceTol3: Button
     private lateinit var btnToggleEnergyTracking: Button
     private lateinit var textEnergyTrackingDesc: TextView
     private lateinit var tvEnergyDebounceSummary: TextView
@@ -1200,6 +1204,10 @@ class MainActivity : AppCompatActivity() {
         btnHpDebounce2Samples = findViewById(R.id.btn_hp_debounce_2_samples)
         btnHpDebounce3Samples = findViewById(R.id.btn_hp_debounce_3_samples)
         btnHpDebounce4Samples = findViewById(R.id.btn_hp_debounce_4_samples)
+        btnDebounceTol0 = findViewById(R.id.btn_debounce_tol_0)
+        btnDebounceTol1 = findViewById(R.id.btn_debounce_tol_1)
+        btnDebounceTol2 = findViewById(R.id.btn_debounce_tol_2)
+        btnDebounceTol3 = findViewById(R.id.btn_debounce_tol_3)
         btnToggleEnergyTracking = findViewById(R.id.btn_toggle_energy_tracking)
         textEnergyTrackingDesc = findViewById(R.id.text_energy_tracking_desc)
         tvEnergyDebounceSummary = findViewById(R.id.tv_energy_debounce_summary)
@@ -1367,6 +1375,18 @@ class MainActivity : AppCompatActivity() {
         }
         btnHpDebounce4Samples.setOnClickListener {
             saveHpDebounceSamples(4, showToast = true)
+        }
+        btnDebounceTol0.setOnClickListener {
+            saveDebounceTolerancePct(0, showToast = true)
+        }
+        btnDebounceTol1.setOnClickListener {
+            saveDebounceTolerancePct(1, showToast = true)
+        }
+        btnDebounceTol2.setOnClickListener {
+            saveDebounceTolerancePct(2, showToast = true)
+        }
+        btnDebounceTol3.setOnClickListener {
+            saveDebounceTolerancePct(3, showToast = true)
         }
 
         loadAndRenderEnergyDebounceUi()
@@ -3471,6 +3491,7 @@ class MainActivity : AppCompatActivity() {
         if (!::btnHpDebounce2Samples.isInitialized) return
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         val samples = OverlayService.activeHpDebounceSamples.coerceIn(2, 4)
+        val tol = OverlayService.activeDebounceTolerancePct.coerceIn(0, 3)
         val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
         val activeTint = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
         val inactiveTint = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
@@ -3486,28 +3507,57 @@ class MainActivity : AppCompatActivity() {
             btn.setTextColor(if (isSelected) 0xFFFFFFFF.toInt() else theme.secondaryTextColor)
         }
 
+        if (::btnDebounceTol0.isInitialized) {
+            val tolPairs = listOf(
+                0 to btnDebounceTol0,
+                1 to btnDebounceTol1,
+                2 to btnDebounceTol2,
+                3 to btnDebounceTol3
+            )
+            for ((t, btn) in tolPairs) {
+                val isSelected = (tol == t)
+                btn.backgroundTintList = if (isSelected) activeTint else inactiveTint
+                btn.setTextColor(if (isSelected) 0xFFFFFFFF.toInt() else theme.secondaryTextColor)
+            }
+        }
+
         if (::tvHpDebounceSummary.isInitialized) {
             val modeDesc = when (samples) {
-                2 -> "2 Matching Samples (Default • Fastest Response, ±2% HP Tolerance)"
-                3 -> "3 Matching Samples (Balanced Noise Rejection, ±2% HP Tolerance)"
-                else -> "4 Matching Samples (Strict Filtering, ±2% HP Tolerance)"
+                2 -> "2 Matching Samples (Default • Fastest Response)"
+                3 -> "3 Matching Samples (Balanced Noise Rejection)"
+                else -> "4 Matching Samples (Strict Filtering)"
             }
             tvHpDebounceSummary.text =
-                "• Active: $modeDesc\n" +
+                "• Active: $modeDesc (±$tol% Error Tolerance)\n" +
                 "• Upward Self-Correction: Enabled (Recovers from low glitch readings)\n" +
                 "• Shield Call Prompts: Always corrects with clean stable HP meters"
         }
     }
 
+    private fun saveDebounceTolerancePct(tol: Int, showToast: Boolean) {
+        val clamped = tol.coerceIn(0, 3)
+        prefs.edit().putInt(OverlayService.PREFS_KEY_DEBOUNCE_TOLERANCE_PCT, clamped).apply()
+        OverlayService.syncTierThresholdsFromPrefs(prefs)
+        loadAndRenderHpDebounceUi()
+        if (showToast) {
+            Toast.makeText(
+                this,
+                "Saved Debounce Error Tolerance: ±$clamped%",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
     private fun saveHpDebounceSamples(samples: Int, showToast: Boolean) {
         val clamped = samples.coerceIn(2, 4)
+        val tol = OverlayService.activeDebounceTolerancePct.coerceIn(0, 3)
         prefs.edit().putInt(OverlayService.PREFS_KEY_HP_DEBOUNCE_SAMPLES, clamped).apply()
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         loadAndRenderHpDebounceUi()
         if (showToast) {
             Toast.makeText(
                 this,
-                "Saved HP Bar Debounce: $clamped matching samples (±2% HP tolerance)",
+                "Saved HP Bar Debounce: $clamped matching samples (±$tol% tolerance)",
                 Toast.LENGTH_SHORT
             ).show()
         }

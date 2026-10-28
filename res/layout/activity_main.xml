@@ -1119,7 +1119,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="Matching HP Samples Required (±2% Tolerance)"
+                    android:text="Matching HP Samples Required"
                     android:textColor="#cbd5e1"
                     android:textSize="10sp"
                     android:textStyle="bold" />
@@ -1160,6 +1160,69 @@
                         android:layout_height="36dp"
                         android:layout_weight="1"
                         android:text="4 Samples"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#e2e8f0" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Debounce Error Tolerance (±%):"
+                    android:textColor="#cbd5e1"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="4dp">
+
+                    <Button
+                        android:id="@+id/btn_debounce_tol_0"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="±0%"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#e2e8f0"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_debounce_tol_1"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="±1% (Def)"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#10b981"
+                        android:textColor="#ffffff"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_debounce_tol_2"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="±2%"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#e2e8f0"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_debounce_tol_3"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="±3%"
                         android:textSize="10sp"
                         android:textStyle="bold"
                         android:backgroundTint="#334155"

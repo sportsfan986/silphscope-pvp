@@ -172,13 +172,18 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_ENERGY_UPDATE_TOASTS = "gbl_energy_update_toasts"
         const val DEFAULT_ENERGY_UPDATE_TOASTS = true
 
-        // v3.89: Independent HP Bar Meter Debounce Samples (2 / 3 / 4 Samples, ±2% HP Tolerance)
+        // v3.89: Independent HP Bar Meter Debounce Samples (2 / 3 / 4 Samples)
         const val PREFS_KEY_HP_DEBOUNCE_SAMPLES = "gbl_hp_debounce_samples"
         const val DEFAULT_HP_DEBOUNCE_SAMPLES = 2
+
+        // v3.90: Configurable Debounce Error Tolerance (0 / 1 / 2 / 3%, Default 1%)
+        const val PREFS_KEY_DEBOUNCE_TOLERANCE_PCT = "gbl_debounce_tolerance_pct"
+        const val DEFAULT_DEBOUNCE_TOLERANCE_PCT = 1
 
         @Volatile var activeEnergyDebounceSamples: Int = DEFAULT_ENERGY_DEBOUNCE_SAMPLES
         @Volatile var activeEnergyUpdateToasts: Boolean = DEFAULT_ENERGY_UPDATE_TOASTS
         @Volatile var activeHpDebounceSamples: Int = DEFAULT_HP_DEBOUNCE_SAMPLES
+        @Volatile var activeDebounceTolerancePct: Int = DEFAULT_DEBOUNCE_TOLERANCE_PCT
 
         @Volatile var activeTierSwMin: Int = DEFAULT_TIER_SW_MIN
         @Volatile var activeTierWMin: Int = DEFAULT_TIER_W_MIN
@@ -204,6 +209,7 @@ class OverlayService : LifecycleService() {
             activeEnergyDebounceSamples = prefs.getInt(PREFS_KEY_ENERGY_DEBOUNCE_SAMPLES, DEFAULT_ENERGY_DEBOUNCE_SAMPLES).coerceIn(2, 4)
             activeEnergyUpdateToasts = prefs.getBoolean(PREFS_KEY_ENERGY_UPDATE_TOASTS, DEFAULT_ENERGY_UPDATE_TOASTS)
             activeHpDebounceSamples = prefs.getInt(PREFS_KEY_HP_DEBOUNCE_SAMPLES, DEFAULT_HP_DEBOUNCE_SAMPLES).coerceIn(2, 4)
+            activeDebounceTolerancePct = prefs.getInt(PREFS_KEY_DEBOUNCE_TOLERANCE_PCT, DEFAULT_DEBOUNCE_TOLERANCE_PCT).coerceIn(0, 3)
         }
         const val PREFS_KEY_SYNC_GIST_ID = "gbl_sync_gist_id"
         const val PREFS_KEY_SYNC_LAST_AT = "gbl_sync_last_at"
@@ -10725,21 +10731,53 @@ class OverlayService : LifecycleService() {
                                     }
 
                                     val wFill = xEnd - xStart + 1
-                                    if (wFill >= 2) {
+                                    val minRequiredInteriorW = (fullScreenWidth * 0.245f).toInt()
+                                    if (wFill >= 2 && fullInteriorW >= minRequiredInteriorW) {
+                                        val candHpFraction = (wFill.toFloat() / fullInteriorW.toFloat()).coerceIn(0.01f, 1.0f)
+                                        val expectedDarkFraction = (1.0f - candHpFraction).coerceIn(0.0f, 1.0f)
+
+                                        val darkTrackStartX = xEnd + pendingW + 1
+                                        val darkTrackSpan = max(0, trackEndX - darkTrackStartX + 1)
                                         var darkPx = 0
                                         var brightWhitePx = 0
-                                        val totalRem = max(0, trackEndX - (xEnd + 1) + 1)
-                                        var dx = xEnd + 1
+                                        var dx = darkTrackStartX
                                         while (dx <= trackEndX) {
                                             val p = pixels[rowOffset + dx]
-                                            val cls = classifyHpPixel(p, borderLuma)
-                                            val pLuma = pixelLuma(p)
-                                            if (cls in 1..4 || pLuma <= 176) darkPx++
-                                            if (pLuma >= 192) brightWhitePx++
+                                            val r = (p shr 16) and 0xFF
+                                            val g = (p shr 8) and 0xFF
+                                            val b = p and 0xFF
+                                            val pLuma = (r + g + b) / 3
+                                            val maxCh = max(r, max(g, b))
+                                            val minCh = min(r, min(g, b))
+                                            val chroma = maxCh - minCh
+                                            // Genuine depleted dark track pixel in Pokémon GO (neutral dark grey/black):
+                                            val isDarkTrack = (pLuma <= 85 && chroma <= 45) ||
+                                                (borderLuma < 185 && pLuma <= 65) ||
+                                                (classifyHpPixel(p, borderLuma) == 4 && pLuma <= 95)
+                                            if (isDarkTrack) darkPx++
+                                            // Bright Pokémon body pixel (e.g. Solgaleo white mane/chest/legs):
+                                            if (pLuma >= 145 || (pLuma >= 130 && (chroma > 45 || r > 150))) brightWhitePx++
                                             dx++
                                         }
-                                        val maxAllowedBright = max(24, (totalRem * 0.65f).toInt())
-                                        if (brightWhitePx <= maxAllowedBright && (totalRem <= 10 || (darkPx.toFloat() / max(1, totalRem).toFloat()) >= 0.34f)) {
+
+                                        // v3.90: Solgaleo Body Rejection & Dark Track Interior Verification:
+                                        // 1. Minimum interior width floor enforced (fullInteriorW >= 0.245 * fullScreenWidth).
+                                        // 2. Bright Pokémon body pixels (pLuma >= 145) must not bleed into the depleted track.
+                                        // 3. Dark track interior must match (100% - HP%) ± 10%.
+                                        val maxAllowedBright = max(3, (darkTrackSpan * 0.10f).toInt())
+                                        val darkFraction = (darkPx + pendingW).toFloat() / fullInteriorW.toFloat()
+                                        val darkDiff = kotlin.math.abs(darkFraction - expectedDarkFraction)
+
+                                        val isValidDarkTrack = if (darkTrackSpan > 10) {
+                                            brightWhitePx <= maxAllowedBright &&
+                                                (darkPx.toFloat() / max(1, darkTrackSpan).toFloat()) >= 0.75f &&
+                                                darkDiff <= 0.10f
+                                        } else {
+                                            // Nearly full bar (HP >= ~95%): remainder span is <= 10px
+                                            brightWhitePx <= 3 && (darkDiff <= 0.10f || (expectedDarkFraction <= 0.08f && darkFraction <= 0.08f))
+                                        }
+
+                                        if (isValidDarkTrack) {
                                             candidates.add(
                                                 ScanlineBarCandidate(
                                                     ry = ry,
@@ -10770,8 +10808,24 @@ class OverlayService : LifecycleService() {
 
             if (candidates.size < 2) return -1
 
-            // v3.83: Fixed-Height Enclosed Rectangle Verification & Exterior Color-Bleed Rejection (with expanded vertical search for Tinkaton):
+            // v3.90: Previous stable HP% lookup for multi-candidate proximity prioritization
+            val prevStableHp = if (isOpponent) {
+                val activeOppBase = FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
+                val oppIdx = if (detectedOpponents.isNotEmpty()) {
+                    detectedOpponents.indexOfFirst {
+                        FormResolver.extractBaseSpecies(it).equals(activeOppBase, ignoreCase = true)
+                    }.let { if (it in 0..2) it else 0 }
+                } else 0
+                confirmedOppSlotHpPct.getOrElse(oppIdx) { 100 }.coerceIn(1, 100)
+            } else {
+                val userIdx = (currentPreset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) } ?: 0).coerceIn(0, 2)
+                confirmedPlayerSlotHpPct.getOrElse(userIdx) { 100 }.coerceIn(1, 100)
+            }
+
+            // v3.83/v3.90: Fixed-Height Enclosed Rectangle Verification, Exterior Color-Bleed Rejection & Candidate Proximity Prioritization:
             var bestCluster: List<ScanlineBarCandidate>? = null
+            var bestDeltaHp = Int.MAX_VALUE
+            var bestClusterSize = 0
             for (i in candidates.indices) {
                 val anchor = candidates[i]
                 val cluster = candidates.filter { c ->
@@ -10909,8 +10963,24 @@ class OverlayService : LifecycleService() {
                             val bleedsLeft = leftSamples > 0 && (leftSameColor.toFloat() / leftSamples.toFloat()) > 0.45f
 
                             if (!bleedsVertically && !bleedsLeft) {
-                                if (bestCluster == null || cluster.size > bestCluster!!.size) {
+                                val clusterSortedWidths = cluster.map { it.wFill }.sorted()
+                                val clusterSortedFullWidths = cluster.map { it.fullInteriorW }.sorted()
+                                val clusterMedWFill = clusterSortedWidths[clusterSortedWidths.size / 2]
+                                val clusterMedFullW = clusterSortedFullWidths[clusterSortedFullWidths.size / 2].coerceAtLeast(1)
+                                val candClusterHp = ((clusterMedWFill.toFloat() / clusterMedFullW.toFloat()) * 100f).roundToInt().coerceIn(1, 100)
+                                val deltaHp = kotlin.math.abs(candClusterHp - prevStableHp)
+
+                                val isBetter = when {
+                                    bestCluster == null -> true
+                                    deltaHp < bestDeltaHp -> true
+                                    deltaHp == bestDeltaHp && cluster.size > bestClusterSize -> true
+                                    else -> false
+                                }
+
+                                if (isBetter) {
                                     bestCluster = cluster
+                                    bestDeltaHp = deltaHp
+                                    bestClusterSize = cluster.size
                                 }
                             }
                         }
@@ -11208,7 +11278,8 @@ class OverlayService : LifecycleService() {
                 val slowestMoveCostEarly = if (slowestIsRightEarly) userMove2Energy else userMove1Energy
                 val slowestFillEarly = if (slowestIsRightEarly) sampledRightChargeBtnFillPct else sampledLeftChargeBtnFillPct
                 if (slowestFillEarly in 1..200) {
-                    if (candidateSlowestFillPct[activeUserIdx] >= 0 && kotlin.math.abs(slowestFillEarly - candidateSlowestFillPct[activeUserIdx]) <= 2) {
+                    val tol = activeDebounceTolerancePct.coerceIn(0, 3)
+                    if (candidateSlowestFillPct[activeUserIdx] >= 0 && kotlin.math.abs(slowestFillEarly - candidateSlowestFillPct[activeUserIdx]) <= tol) {
                         slowestFillDebounceCount[activeUserIdx]++
                         candidateSlowestFillPct[activeUserIdx] = ((candidateSlowestFillPct[activeUserIdx] + slowestFillEarly) / 2.0).roundToInt()
                     } else {
@@ -11421,7 +11492,8 @@ class OverlayService : LifecycleService() {
             val currentPlayerHp = playerSlotHpPct[activeUserIdx].coerceIn(1, 100)
 
             val prevPendingPlayerHp = pendingConfirmPlayerSlotHpPct[activeUserIdx]
-            if (prevPendingPlayerHp in 1..100 && kotlin.math.abs(sampledPlayerHpPct - prevPendingPlayerHp) <= 2) {
+            val tol = activeDebounceTolerancePct.coerceIn(0, 3)
+            if (prevPendingPlayerHp in 1..100 && kotlin.math.abs(sampledPlayerHpPct - prevPendingPlayerHp) <= tol) {
                 playerSlotHpConfirmFrames[activeUserIdx] = (playerSlotHpConfirmFrames[activeUserIdx] + 1).coerceAtMost(10)
                 pendingConfirmPlayerSlotHpPct[activeUserIdx] = ((prevPendingPlayerHp + sampledPlayerHpPct) / 2.0).roundToInt().coerceIn(1, 100)
             } else {
@@ -11505,7 +11577,8 @@ class OverlayService : LifecycleService() {
             val currentOppHp = oppSlotHpPct[activeOppIdx].coerceIn(1, 100)
 
             val prevPendingOppHp = pendingConfirmOppSlotHpPct[activeOppIdx]
-            if (prevPendingOppHp in 1..100 && kotlin.math.abs(sampledOppHpPct - prevPendingOppHp) <= 2) {
+            val tol = activeDebounceTolerancePct.coerceIn(0, 3)
+            if (prevPendingOppHp in 1..100 && kotlin.math.abs(sampledOppHpPct - prevPendingOppHp) <= tol) {
                 oppSlotHpConfirmFrames[activeOppIdx] = (oppSlotHpConfirmFrames[activeOppIdx] + 1).coerceAtMost(10)
                 pendingConfirmOppSlotHpPct[activeOppIdx] = ((prevPendingOppHp + sampledOppHpPct) / 2.0).roundToInt().coerceIn(1, 100)
             } else {
@@ -11634,7 +11707,8 @@ class OverlayService : LifecycleService() {
                     if (sampledRightChargeBtnFillPct >= 195) rightMeterFilledTwiceLatched[activeUserIdx] = true
                 }
 
-                if (candidateSlowestFillPct[activeUserIdx] >= 0 && kotlin.math.abs(slowestFillPct - candidateSlowestFillPct[activeUserIdx]) <= 2) {
+                val tol = activeDebounceTolerancePct.coerceIn(0, 3)
+                if (candidateSlowestFillPct[activeUserIdx] >= 0 && kotlin.math.abs(slowestFillPct - candidateSlowestFillPct[activeUserIdx]) <= tol) {
                     slowestFillDebounceCount[activeUserIdx]++
                     candidateSlowestFillPct[activeUserIdx] = ((candidateSlowestFillPct[activeUserIdx] + slowestFillPct) / 2.0).roundToInt()
                 } else {
