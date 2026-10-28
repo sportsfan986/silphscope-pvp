@@ -1,10 +1,19 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v4.02`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v4.03`)
 
 ---
 
-## v4.00 – v4.02 (2026-10-28) — Fast-Move Energy Increment Snapping, 100E Ceiling Step Latch, 4-Tier "Attack Incoming!" Shield Decision Overlay & Focused Cross-Device Used-Move Recognition
-*Major milestone release series adding fast-move turn increment snapping with post-throw discharge anchoring, 100E ceiling step latching after 1 fast-move duration, the 4-tier color-coded (Red / Orange / Yellow / Green) "Attack incoming!" Shield Decision Overlay with a pure 5s timer / combat-return lifecycle, widened cross-device used-move banner OCR (`0.15h..0.52h`), pre-attack HP ratchet lock against mid-drain HP overwrites, and full restoration of `v3.93` opponent used charged move badges.*
+## v4.00 – v4.03 (2026-10-28) — Fast-Move Energy Increment Snapping, 100E Ceiling Step Latch, Cutscene-Gated 4-Tier "Attack Incoming!" Shield Decision Overlay & Focused Cross-Device Used-Move Recognition
+*Major milestone release series adding fast-move turn increment snapping with post-throw discharge anchoring, 100E ceiling step latching after 1 fast-move duration, the 4-tier color-coded (Red / Orange / Yellow / Green) "Attack incoming!" Shield Decision Overlay with a pure 5s timer / combat-return lifecycle and strict cutscene HUD gating, widened cross-device used-move banner OCR (`0.15h..0.52h`), pre-attack HP ratchet lock against mid-drain HP overwrites, and full restoration of `v3.93` opponent used charged move badges.*
 
+- **v4.03 — Key Feature: Cutscene-Gated Shield Call Overlay, Player Charged Move Suppression, 3-Part Protect-Shield + `"NOT NOW"` Verification & Mirror-Safe Move Attribution**:
+  - **Strict Cutscene HUD Gate (`isCutsceneHudHiddenForShieldPrompt` & `isHudHiddenForOpponentPrompt`)**:
+    - Prevents `sampledShieldHexagonVisible`, `hasAttackIncomingText`, and `isOpponentChargedScreen` from evaluating or triggering while top Pokéballs (`sampledPlayerBalls in 1..3 || sampledOppBalls in 1..3`) or bottom charge circles (`sampledLeftChargeBtnFillPct in 0..300 || sampledRightChargeBtnFillPct in 0..300`) are visible on screen, making false triggers during normal combat with pink/violet Pokémon (such as Tinkaton) impossible.
+  - **3-Part Protect-Shield Hexagon + `"NOT NOW"` Signature (`detectAttackIncomingShieldHexagonPixels`)**:
+    - Requires 2 consecutive `100ms` cutscene frames verifying (1) left-right symmetric violet/magenta Protect Shield pixels in the center (`0.43w..0.57w, 0.79h..0.88h`), (2) zero pink/purple sprite bleed in the outer left/right wings (`0.20w..0.34w` & `0.66w..0.80w`), and (3) the crisp white `"NOT NOW"` pill/text signature directly beneath the shield hexagon (`0.41w..0.59w, 0.905h..0.955h`).
+  - **Player Charged Move Minigame Suppression, Cutscene-Only Bottom Prompt OCR & Mirror-Safe Actor Attribution**:
+    - Removes generic `missingTopBallsWithHpBarsFrames` from triggering `isOpponentChargedScreen` when `playerShieldsRemaining > 0` so camera zooms during player charged moves never trigger the Shield Decision Overlay.
+    - Includes a compact bottom prompt OCR strip (`0.71h..0.96h`) **only** when the normal combat HUD is hidden and `pendingChargedAttackActor.isEmpty()` (keeping bottom OCR completely disabled during normal combat and during `"<Pokemon> used <Move>!"` banners), and immediately rolls back any tentative opponent prompt and hides the Shield Decision Overlay if player minigame text (`"Get ready!"`, `"Swipe!"`, `"NICE!"`, `"GREAT!"`, `"EXCELLENT!"`) appears.
+    - Ensures `"<Pokemon> used <Move>!"` never guesses *who* threw the charged move in mirror matchups (`isMirrorMatch`), relying strictly on the pre-move cutscene state (`hasRecentShieldPrompt` vs `hasRecentUserPrompt`) for actor attribution.
 - **v4.02 — Key Feature: 5.0s Timer / Combat-Return Shield Decision Overlay (Zero OCR Dependency), Widened Cross-Device Used-Move Banner OCR (`0.15h..0.52h`) & Pre-Attack HP Ratchet Lock**:
   - **5.0s Timer / Combat-Return Shield Decision Overlay (`showOrUpdateShieldDecisionOverlay` & `hideShieldDecisionOverlay`)**:
     - Triggers the Shield Decision Overlay purely from 100ms pixel detection when an opponent charged move begins and keeps it visible until **5.0 seconds elapse or normal combat circles return (`hasReturnedCombatCircles`)**, whichever comes first.

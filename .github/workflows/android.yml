@@ -129,20 +129,20 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (5s Timer Shield Call Overlay, Focused Cross-Device Used-Move OCR & Pre-Attack HP Ratchet Lock)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Cutscene-Gated Shield Call Overlay, Player Charged Move Suppression & Mirror-Safe Move Attribution)
 
-            ### Release Series Context (`v4.00` – `v4.02`)
-            *Introduces fast-move turn increment snapping with post-throw discharge anchoring, the 4-tier color-coded (Red / Orange / Yellow / Green) "Attack incoming!" Shield Decision Overlay with pure 5s timer / combat-return lifecycle, focused cross-device "<Pokemon> used <Move>!" OCR (`0.15h..0.52h`), pre-attack HP ratchet lock against mid-drain HP overwrites, and 100E ceiling step latching after 1 fast-move duration.*
+            ### Release Series Context (`v4.00` – `v4.03`)
+            *Introduces fast-move turn increment snapping with post-throw discharge anchoring, the 4-tier color-coded (Red / Orange / Yellow / Green) "Attack incoming!" Shield Decision Overlay with pure 5s timer / combat-return lifecycle, strict cutscene HUD gating and player-minigame suppression so the Shield Call Overlay never triggers on player charged moves or pink/purple Pokémon sprites, focused cross-device "<Pokemon> used <Move>!" OCR (`0.15h..0.52h`), pre-attack HP ratchet lock against mid-drain HP overwrites, and 100E ceiling step latching after 1 fast-move duration.*
 
             ### Key Features in `${{ steps.version.outputs.tag }}`
-            - **5.0s Timer / Combat-Return Shield Decision Overlay (Zero OCR Dependency)**:
-              - Triggers the Shield Decision Overlay purely from 100ms pixel detection when an opponent charged move begins and keeps it visible until **5.0 seconds elapse or normal combat circles return (`hasReturnedCombatCircles`)**, freeing 100% of ML Kit OCR bandwidth for `"<Pokemon> used <Move>!"` and Pokémon nameplates.
-            - **Focused & Widened Cross-Device Used-Move Banner OCR (`0.15h..0.52h` at `1.35x` Scale)**:
-              - Widens `srcMidBanner` vertically (`0.15h..0.52h`) and horizontally (`0.08w..0.92w`) at `1.35x` scale to capture `"<Pokemon> used <Move>!"` across all phone aspect ratios (including tall displays where the banner sits at `18%–27%` screen height), and omits bottom move-button OCR (`srcMoves`) during active battles so the bottom overlay table is never scanned.
-            - **Pre-Attack HP Ratchet Lock (`pendingChargedAttackPreUserHp`) & Retroactive Move Upgrade**:
-              - Locks `pendingChargedAttackPreUserHp` as an upward-only ratchet during the pre-impact shield window and removes downward overwrites during HP drain animations so heavy unshielded moves (e.g., Shadow Pangoro's `37%` Iron Head draining Tinkaton `97% -> 81% -> 65%`) never match a smaller bait move (`16%` Night Slash) on an intermediate drain frame.
-            - **Carried Forward from `v4.00`–`v4.01`**:
-              - Fast-move energy increment snapping (`snapPlayerEnergyToValidStep`), `100E` ceiling step latch after `1` fast-move duration, 4-tier Red / Orange / Yellow / Green Shield Decision Overlay, and `v3.93` opponent used-move badges.
+            - **Strict Cutscene HUD Gate & 3-Part Protect-Shield Prompt Verification (`detectAttackIncomingShieldHexagonPixels`)**:
+              - Prevents `sampledShieldHexagonVisible`, `hasAttackIncomingText`, and `isOpponentChargedScreen` from evaluating or triggering while top Pokéballs (`sampledPlayerBalls in 1..3 || sampledOppBalls in 1..3`) or bottom charge circles (`sampledLeftChargeBtnFillPct in 0..300 || sampledRightChargeBtnFillPct in 0..300`) are visible on screen.
+              - Tightens `detectAttackIncomingShieldHexagonPixels` to require left-right violet hexagon symmetry in the center (`0.43w..0.57w, 0.79h..0.88h`), zero pink/purple sprite bleed in the outer left/right wings (`0.20w..0.34w` & `0.66w..0.80w`), and the crisp white `"NOT NOW"` button signature directly below (`0.41w..0.59w, 0.905h..0.955h`) across 2 consecutive frames, eliminating false triggers on pink/violet Pokémon sprites (like Tinkaton) and charge minigame bubbles.
+            - **Eliminated False Shield Call Overlay Triggers on Player Charged Moves & Mirror-Safe Attribution**:
+              - Removes generic `missingTopBallsWithHpBarsFrames` from triggering `isOpponentChargedScreen` when `playerShieldsRemaining > 0`, adds cutscene-only bottom prompt OCR (`0.71h..0.96h` only while normal combat HUD is hidden and `pendingChargedAttackActor.isEmpty()`), and immediately rolls back any tentative opponent prompt and hides the Shield Decision Overlay if player minigame indicators (`"Get ready!"`, `"Swipe!"`, `"NICE!"`, `"GREAT!"`, `"EXCELLENT!"`) appear.
+              - Ensures `"<Pokemon> used <Move>!"` never guesses *who* threw the charged move in mirror matchups (`isMirrorMatch`), relying strictly on the pre-move cutscene state for actor attribution.
+            - **Carried Forward from `v4.00`–`v4.02`**:
+              - 5.0s timer / combat-return Shield Decision Overlay, widened cross-device used-move banner OCR (`0.15h..0.52h`), pre-attack HP ratchet lock, fast-move energy increment snapping, `100E` ceiling step latch, and `v3.93` opponent used-move badges.
 
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)
