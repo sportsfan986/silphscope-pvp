@@ -1,17 +1,23 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v3.95`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v3.96`)
 
 ---
 
-## v3.95 (2026-10-28) — Sub-50E Multi-Round Energy Tracking up to 100E (Matched & Unmatched Charged Moves) & Post-Throw Round Resync
-- **Dual-Bar N-Sample (`±2%`) Circle Debounce (`OverlayService.kt`)**:
-  - Debounces both the slower (higher-energy) and faster (lower-energy) charge move circles independently using the configurable N-sample (`default 2`, `±2%` fill tolerance) rolling confirmation filter (`candidateFastestFillPct`, `fastestFillDebounceCount`, `confirmedFastestFillPct`).
-- **Unmatched Sub-50E Moves (`cost1 != cost2`, both `<50E`, e.g., `35E + 45E`, `35E + 40E`, `40E + 45E`)**:
-  - Tracks player energy directly from the **slower charge move meter** during Round 1 (`0 .. slowCost`) and Round 2 (`slowCost .. 2 * slowCost`).
-  - Once energy reaches `2 * slowCost` (or the dual-bar percentage combination proves Round 3 wrap-around), switches to a **Dual-Bar Percentage Match Solver** across both bars up to `100E`, with turn-monotonic fast-move progression if both bars are simultaneously at the `200%` double-ring cap.
-- **Matched Sub-50E Moves (`cost1 == cost2 < 50E` or Single `<50E` Move, e.g., `35E + 35E`, `40E + 40E`, `45E + 45E`)**:
-  - Tracks peak Round 2 fill percentage (`peakSecondFillPct`) and latches `slowestMeterInThirdFill` when the meniscus wraps from high Round 2 (`>= 158%` or `>= 195%`) back down into Round 3 (`101% .. peak - 18%`), combining Round 3 meniscus readings with turn-monotonic fast-move progression up to `100E`.
-- **Post-Throw Energy Deduction, Dual-Bar Move Disambiguation & Fill-Round Resync (`resolvePostThrowCircleEnergyAndResyncRound` & `scorePostThrowCircleFit`)**:
-  - Deducts the thrown charged move's energy cost (`preThrowEnergy - thrownMoveCost`), scores both post-throw charge meters via `scorePostThrowCircleFit` to disambiguate Move 1 vs. Move 2 throws, and resyncs the active fill round (`Round 1`, `Round 2`, or `Round 3`) and per-slot wrap latches to the observed post-throw bars.
+## v3.95 – v3.96 (2026-10-28) — Sub-50E Multi-Round Energy Tracking up to 100E, Strict 3rd-Ring Energy Prerequisite & Dual-Bar Consistency
+*Functionally grouped release series introducing multi-round (`0–100E`) energy tracking for Pokémon with two `<50E` charged moves and hardening 2nd-vs-3rd charge ring disambiguation.*
+
+- **v3.96 — Key Feature: Strict 3rd-Ring Energy Prerequisite, Inner-Liquid Meniscus Geometry Fix & Dual-Bar Round 2 Cross-Check**:
+  - **Inner-Liquid Meniscus Geometry Fix (`detectSingleChargeButtonFillPct`)**: Constrained the `100%–199%` overcharge meniscus scan strictly inside the calibrated circle interior (`halfSpanPx * 0.88`), avoided the central move-type icon and outer drop-shadow/battlefield lines, and required genuine colored liquid pixels on both sides of the meniscus so a uniform `100%` 1st ring (e.g., Ninetales's `45E Energy Ball` at `45E`) never produces false `122%..200%` readings.
+  - **Mandatory Tracked Energy Prerequisite (`canEnterSlowThirdFill`)**: A `<50E` charge move bar can **never** latch into `[3rd Fill]` unless tracked energy (`clampedCurE`) is already within one fast-move step of `2 * slowCost` (`>= 2 * slowCost - maxFastStep`), and wrap-around detection now requires **`&&` (AND)** across `canEnterSlowThirdFill`, step-validated `peakSecondFillPct >= 168%`, and a `>= 20%` meniscus drop.
+  - **Unmatched `<50E` Dual-Bar Round 2 Consistency & Single-Step Jump Guard (`resolveSub50AndMultiRoundEnergy`)**: Cross-checks both `<50E` bars against the single shared energy pool `E` in Round 2 (e.g., `35E Weather Ball` + `45E Energy Ball` on Ninetales) before allowing any Round 3 transition, and caps single-update energy/turn jumps so an early ring never spikes player or opponent energy to `100E`.
+- **v3.95 — Key Feature: Sub-50E Multi-Round Energy Tracking up to 100E (Matched & Unmatched Charged Moves) & Post-Throw Round Resync**:
+  - **Dual-Bar N-Sample (`±2%`) Circle Debounce (`OverlayService.kt`)**:
+    - Debounces both the slower (higher-energy) and faster (lower-energy) charge move circles independently using the configurable N-sample (`default 2`, `±2%` fill tolerance) rolling confirmation filter (`candidateFastestFillPct`, `fastestFillDebounceCount`, `confirmedFastestFillPct`).
+  - **Unmatched Sub-50E Moves (`cost1 != cost2`, both `<50E`, e.g., `35E + 45E`, `35E + 40E`, `40E + 45E`)**:
+    - Tracks player energy directly from the **slower charge move meter** during Round 1 (`0 .. slowCost`) and Round 2 (`slowCost .. 2 * slowCost`), then switches to a **Dual-Bar Percentage Match Solver** across both bars up to `100E` in Round 3.
+  - **Matched Sub-50E Moves (`cost1 == cost2 < 50E` or Single `<50E` Move, e.g., `35E + 35E`, `40E + 40E`, `45E + 45E`)**:
+    - Combines a **Wrap-Around State Latch** (`peakSecondFillPct` drop detection at the 2nd-to-3rd fill boundary) with turn-monotonic fast-move progression up to `100E`.
+  - **Post-Throw Energy Deduction, Dual-Bar Move Disambiguation & Fill-Round Resync (`resolvePostThrowCircleEnergyAndResyncRound` & `scorePostThrowCircleFit`)**:
+    - Deducts the thrown charged move's energy cost (`preThrowEnergy - thrownMoveCost`), scores both post-throw charge meters via `scorePostThrowCircleFit` to disambiguate Move 1 vs. Move 2 throws, and resyncs the active fill round (`Round 1`, `Round 2`, or `Round 3`) and per-slot wrap latches to the observed post-throw bars.
 
 ---
 

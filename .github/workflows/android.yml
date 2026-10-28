@@ -129,18 +129,18 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Sub-50E Multi-Round Energy Tracking up to 100E for Matched & Unmatched Charged Moves + Post-Throw Round Resync)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Sub-50E 3rd-Ring Disambiguation Fix, Inner-Liquid Meniscus Geometry & Dual-Bar Round 2 Consistency)
 
-            ### What's New in ${{ steps.version.outputs.tag }}
-            - **Dual-Bar N-Sample (`±2%`) Circle Debounce (`OverlayService.kt`)**:
-              - Independently debounces both the slower (higher-energy) and faster (lower-energy) charge move circles across `N` samples (`default 2`, `±2%` fill tolerance).
-            - **Unmatched Sub-50E Moves (`cost1 != cost2`, both `<50E`, e.g., `35E + 45E`, `35E + 40E`, `40E + 45E`)**:
-              - Tracks player energy directly from the **slower charge move meter** during Round 1 (`0 .. slowCost`) and Round 2 (`slowCost .. 2 * slowCost`).
-              - Once energy reaches `2 * slowCost` (or the dual-bar percentage combination proves Round 3 wrap-around), switches to a **Dual-Bar Percentage Match Solver** across both bars up to `100E`, with turn-monotonic fast-move progression if both bars are simultaneously at the `200%` double-ring cap.
-            - **Matched Sub-50E Moves (`cost1 == cost2 < 50E` or Single `<50E` Move, e.g., `35E + 35E`, `40E + 40E`, `45E + 45E`)**:
-              - Tracks peak Round 2 fill percentage (`peakSecondFillPct`) and latches `slowestMeterInThirdFill` when the meniscus wraps from high Round 2 (`>= 158%` or `>= 195%`) back down into Round 3 (`101% .. peak - 18%`), combining Round 3 meniscus readings with turn-monotonic fast-move progression up to `100E`.
-            - **Post-Throw Energy Deduction, Dual-Bar Move Disambiguation & Fill-Round Resync**:
-              - Deducts the thrown charged move's energy cost (`preThrowEnergy - thrownMoveCost`), scores both post-throw charge meters via `scorePostThrowCircleFit` to disambiguate Move 1 vs. Move 2 throws, and resyncs the active fill round (`Round 1`, `Round 2`, or `Round 3`) and per-slot wrap latches to the observed post-throw bars.
+            ### Release Series Context (`v3.95` – `v3.96`)
+            *Functionally grouped release series introducing multi-round (`0–100E`) energy tracking for Pokémon with two `<50E` charged moves and hardening 2nd-vs-3rd charge ring disambiguation.*
+
+            ### Key Feature in `${{ steps.version.outputs.tag }}`
+            - **Strict 3rd-Ring Energy Prerequisite (`canEnterSlowThirdFill`)**:
+              - A `<50E` charge move bar can **never** latch into `[3rd Fill]` unless tracked energy (`clampedCurE`) is already within one fast-move step of `2 * slowCost` (`>= 2 * slowCost - maxFastStep`), and wrap-around detection now requires **`&&` (AND)** across `canEnterSlowThirdFill`, step-validated `peakSecondFillPct >= 168%`, and a `>= 20%` meniscus drop.
+            - **Inner-Liquid Meniscus Geometry Fix (`detectSingleChargeButtonFillPct`)**:
+              - Constrained the `100%–199%` overcharge meniscus scan strictly inside the calibrated circle interior (`halfSpanPx * 0.88`), avoided the central move-type icon and outer drop-shadow/battlefield lines, and required genuine colored liquid pixels on both sides of the meniscus so a uniform `100%` 1st ring (e.g., Ninetales's `45E Energy Ball` at `45E`) never produces false `122%..200%` readings.
+            - **Unmatched `<50E` Dual-Bar Round 2 Cross-Check & Single-Step Jump Guard (`resolveSub50AndMultiRoundEnergy`)**:
+              - Cross-checks both `<50E` bars against the single shared energy pool `E` in Round 2 (e.g., `35E Weather Ball` + `45E Energy Ball` on Ninetales) before allowing any Round 3 transition, and caps single-update energy/turn jumps so an early ring never spikes player or opponent energy to `100E`.
 
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)

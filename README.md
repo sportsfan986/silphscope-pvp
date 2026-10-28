@@ -1,4 +1,4 @@
-# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v3.95)
+# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v3.96)
 
 [![Live Web Simulator](https://img.shields.io/badge/🌐%20Live%20Web%20Simulator-Try%20in%20Browser-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white)](https://sportsfan986.github.io/silphscope-pvp/)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support%20the%20Project-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/sportsfan986)
@@ -127,13 +127,13 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## 📥 Download & Install Native Android APK (v3.95)
+## 📥 Download & Install Native Android APK (v3.96)
 
 > **⚠️ Note on Live HP & Energy Counting (Disabled by Default — Opt-In via Settings)**:
 > By default, **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting** are **DISABLED (OFF)** for all new installs and any user upgrading from a version prior to `v3.40`. To enable live HP% and/or live fast-move energy counting on the floating overlay, open **⚙️ Settings** in the app and toggle **Live HP Bar Tracking** and/or **Live Energy & Fast-Move Counting** to **ON**.
 
 1. Visit the **[Official GitHub Releases Page](https://github.com/sportsfan986/silphscope-pvp/releases)**.
-2. Download **`silphscope-pvp-v3.95.apk`** directly to your Android device.
+2. Download **`silphscope-pvp-v3.96.apk`** directly to your Android device.
 3. Tap the downloaded APK file to install (grant *"Install unknown apps"* permission if prompted).
 4. Launch **SilphScope PvP**:
    - Select, reorder, or customize your **GBL Team Presets**, set **Opponent Move Count Basis** (`My Fasts` vs. `Their Fasts`), adjust **Overlay Size** (`50%–100%` screen width slider) and **Background Transparency**, and optionally opt in to **Live HP Bar Tracking** and **Live Energy & Fast-Move Counting** in **⚙️ Settings**.
@@ -143,15 +143,13 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## ✨ Changelog — Complete Release History (`v1.00` – `v3.95`)
+## ✨ Changelog — Complete Release History (`v1.00` – `v3.96`)
 
 *(See [CHANGELOG.md](./CHANGELOG.md) for full technical notes on every release.)*
 
-- **v3.95 — Sub-50E Multi-Round Energy Tracking up to 100E (Matched & Unmatched Charged Moves) & Post-Throw Round Resync**:
-  - **Dual-Bar N-Sample (`±2%`) Circle Debounce**: Independently debounces both the slower and faster charge move circles across `N` samples (`default 2`, `±2%` fill tolerance).
-  - **Unmatched Sub-50E Moves (`cost1 != cost2`, both `<50E`, e.g., `35E + 45E`, `35E + 40E`, `40E + 45E`)**: Tracks energy from the slower charge bar until `2 * slowestMoveCost`, then switches to a **Dual-Bar Percentage Match Solver** across both bars in Round 3 up to `100E` (with turn-monotonic progression if both bars hit the `200%` double-ring cap).
-  - **Matched Sub-50E Moves (`cost1 == cost2 < 50E` or single `<50E` move, e.g., `35E + 35E`, `40E + 40E`, `45E + 45E`)**: Combines a **Wrap-Around State Latch** (`peakSecondFillPct` drop detection at the 2nd-to-3rd fill boundary) with turn-monotonic fast-move progression up to `100E`.
-  - **Post-Throw Energy Deduction & Fill-Round Resync**: Deducts thrown move energy, disambiguates Move 1 vs. Move 2 via dual-bar fit (`scorePostThrowCircleFit`), and resyncs the active fill round (`Round 1 / 2 / 3`) to the post-throw bars.
+- **v3.95 – v3.96 — Sub-50E Multi-Round Energy Tracking up to 100E, Strict 3rd-Ring Energy Prerequisite & Dual-Bar Consistency**:
+  - **v3.96**: Fixed false `[3rd Fill]` classification and energy jumps on `<50E` moves (such as Ninetales with `35E Weather Ball` + `45E Energy Ball`) by constraining the `100%–199%` meniscus scan strictly inside the liquid interior (`halfSpanPx * 0.88`), requiring tracked energy (`clampedCurE >= 2 * slowCost - maxFastStep`) before any 3rd-ring latch, cross-checking both `<50E` bars in Round 2, and clamping single-step energy/turn gains.
+  - **v3.95**: Added **Dual-Bar N-Sample (`±2%`) Circle Debounce**, multi-round (`0–100E`) energy tracking for **Unmatched `<50E` Moves** (slower bar until `2x`, then Dual-Bar Percentage Match Solver in Round 3) and **Matched `<50E` Moves** (Wrap-Around State Latch + turn-monotonic progression), and **Post-Throw Energy Deduction & Fill-Round Resync**.
 
 - **v3.91 – v3.94 — Shield & Pokéball HUD Debouncing, All-HUD-Gone Lockout, Pre-KO Faint Attribution & Charged Move Catch Accounting**:
   - **v3.94**: Added symmetric N-frame shield & Pokéball debouncing, an **All-HUD-Gone Lockout** when Pokémon GO hides the top-corner status bars during charged attack camera zooms (preventing false shield drops to 0 or false faints), and a `-1` shield drop cap per charged attack.
