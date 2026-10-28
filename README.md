@@ -1,4 +1,4 @@
-# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v3.96)
+# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v3.97)
 
 [![Live Web Simulator](https://img.shields.io/badge/🌐%20Live%20Web%20Simulator-Try%20in%20Browser-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white)](https://sportsfan986.github.io/silphscope-pvp/)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support%20the%20Project-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/sportsfan986)
@@ -143,11 +143,12 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## ✨ Changelog — Complete Release History (`v1.00` – `v3.96`)
+## ✨ Changelog — Complete Release History (`v1.00` – `v3.97`)
 
 *(See [CHANGELOG.md](./CHANGELOG.md) for full technical notes on every release.)*
 
-- **v3.95 – v3.96 — Sub-50E Multi-Round Energy Tracking up to 100E, Strict 3rd-Ring Energy Prerequisite & Dual-Bar Consistency**:
+- **v3.95 – v3.97 — Sub-50E Multi-Round Energy Tracking up to 100E, Joint Dual-Bar Sensor Fusion & 2-Layer Overcharge Meniscus Verification**:
+  - **v3.97**: Added **Unmatched `<50E` Joint Dual-Bar Sensor Fusion** across all `0–100E` rounds (so whichever bar is outside the central icon zone drives energy up to `100E`), **Matched `<50E` Dual-Bar Consensus & Turn-0 Step Clamping** (preventing `0E -> 40E` single-frame spikes and `76%` icon-tip latches on moves like Fearow `40E + 40E`), **2-Layer Reference Band Overcharge Verification & Colored Top-Cap Gating**, and a **Post-Opponent-Charged-Move Player Energy Floor Lock** so player banked energy never drops after shielding an opponent's charged move.
   - **v3.96**: Fixed false `[3rd Fill]` classification and energy jumps on `<50E` moves (such as Ninetales with `35E Weather Ball` + `45E Energy Ball`) by constraining the `100%–199%` meniscus scan strictly inside the liquid interior (`halfSpanPx * 0.88`), requiring tracked energy (`clampedCurE >= 2 * slowCost - maxFastStep`) before any 3rd-ring latch, cross-checking both `<50E` bars in Round 2, and clamping single-step energy/turn gains.
   - **v3.95**: Added **Dual-Bar N-Sample (`±2%`) Circle Debounce**, multi-round (`0–100E`) energy tracking for **Unmatched `<50E` Moves** (slower bar until `2x`, then Dual-Bar Percentage Match Solver in Round 3) and **Matched `<50E` Moves** (Wrap-Around State Latch + turn-monotonic progression), and **Post-Throw Energy Deduction & Fill-Round Resync**.
 

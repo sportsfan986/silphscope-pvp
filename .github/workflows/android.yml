@@ -129,18 +129,20 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Sub-50E 3rd-Ring Disambiguation Fix, Inner-Liquid Meniscus Geometry & Dual-Bar Round 2 Consistency)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Sub-50E Joint Dual-Bar Sensor Fusion, 2-Layer Overcharge Meniscus Verification & Post-Shield Energy Floor Lock)
 
-            ### Release Series Context (`v3.95` – `v3.96`)
-            *Functionally grouped release series introducing multi-round (`0–100E`) energy tracking for Pokémon with two `<50E` charged moves and hardening 2nd-vs-3rd charge ring disambiguation.*
+            ### Release Series Context (`v3.95` – `v3.97`)
+            *Functionally grouped release series introducing multi-round (`0–100E`) energy tracking for Pokémon with two `<50E` charged moves, joint dual-bar sensor fusion, and 2nd-vs-3rd charge ring disambiguation.*
 
             ### Key Feature in `${{ steps.version.outputs.tag }}`
-            - **Strict 3rd-Ring Energy Prerequisite (`canEnterSlowThirdFill`)**:
-              - A `<50E` charge move bar can **never** latch into `[3rd Fill]` unless tracked energy (`clampedCurE`) is already within one fast-move step of `2 * slowCost` (`>= 2 * slowCost - maxFastStep`), and wrap-around detection now requires **`&&` (AND)** across `canEnterSlowThirdFill`, step-validated `peakSecondFillPct >= 168%`, and a `>= 20%` meniscus drop.
-            - **Inner-Liquid Meniscus Geometry Fix (`detectSingleChargeButtonFillPct`)**:
-              - Constrained the `100%–199%` overcharge meniscus scan strictly inside the calibrated circle interior (`halfSpanPx * 0.88`), avoided the central move-type icon and outer drop-shadow/battlefield lines, and required genuine colored liquid pixels on both sides of the meniscus so a uniform `100%` 1st ring (e.g., Ninetales's `45E Energy Ball` at `45E`) never produces false `122%..200%` readings.
-            - **Unmatched `<50E` Dual-Bar Round 2 Cross-Check & Single-Step Jump Guard (`resolveSub50AndMultiRoundEnergy`)**:
-              - Cross-checks both `<50E` bars against the single shared energy pool `E` in Round 2 (e.g., `35E Weather Ball` + `45E Energy Ball` on Ninetales) before allowing any Round 3 transition, and caps single-update energy/turn jumps so an early ring never spikes player or opponent energy to `100E`.
+            - **Unmatched `<50E` Joint Dual-Bar Sensor Fusion Across All `0–100E` Rounds (`resolveSub50AndMultiRoundEnergy`)**:
+              - Fuses both `<50E` charge meters across Rounds 1, 2, and 3 (e.g., Ninetales `45E Energy Ball` + `35E Weather Ball`) so whenever one bar's meniscus crosses the central move-type icon (`40..58%`, `73..81%`, `140..169%`) or fails to detect a softer 2nd-fill step, the companion bar outside the icon zone seamlessly drives player energy (`54E -> 63E -> 72E -> 81E -> 90E -> 99E`) with a cross-bar saturation floor (`fastSaturatedFloor`).
+            - **Matched `<50E` Dual-Bar Consensus & Initial Turn-0 Step Clamp (`resolveSub50AndMultiRoundEnergy`)**:
+              - Enforces dual-bar consensus for equal-cost `<50E` moves (e.g., Fearow `40E Drill Run + 40E Drill Peck`), rejecting single-bar `>= 100%` white-ring outliers when the companion bar is `< 92%` and clamping initial `0E` jumps so a single noisy frame never spikes a fresh Pokémon to `40E`.
+            - **White-Ring Upper-Arc & Colored Top-Cap Gating, 2-Layer Reference Band Overcharge Verification & Lower-Flank Continuity (`detectSingleChargeButtonFillPct`)**:
+              - Requires upper-half white ring arcs (`upperWhiteRingArcs >= 2`) and genuine colored top-cap liquid (`isTopCapFilled`) before classifying `>= 100%` ready state; verifies 2nd-fill (`105%..195%`) meniscuses against unobstructed Top (`78..86%`) and Bottom (`12..20%`) Reference Bands (`hasTwoLayerCapSeparation`); and verifies lower-quarter liquid continuity (`isLowerQuarterFilled`) in Round 1 (`1%..97%`).
+            - **Post-Opponent-Charged-Move Player Energy Floor Lock**:
+              - Preserves player banked overcharge energy across opponent charged attacks and shield prompts (`max(curE, rawMeasuredEnergy)`) so player energy never drops after shielding or taking an opponent charged move.
 
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)
