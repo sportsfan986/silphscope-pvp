@@ -1,10 +1,20 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v4.01`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v4.02`)
 
 ---
 
-## v4.00 – v4.01 (2026-10-28) — Fast-Move Energy Increment Snapping, 100E Ceiling Step Latch, 4-Tier "Attack Incoming!" Shield Decision Overlay & Restored `v3.93` Opponent Used-Move Badges
-*Major milestone release series adding fast-move turn increment snapping with post-throw discharge anchoring, 100E ceiling step latching after 1 fast-move duration, the 4-tier color-coded (Red / Orange / Yellow / Green) "Attack incoming!" Shield Decision Overlay, and full restoration of `v3.93` opponent used charged move badges across both shielded and unshielded attacks.*
+## v4.00 – v4.02 (2026-10-28) — Fast-Move Energy Increment Snapping, 100E Ceiling Step Latch, 4-Tier "Attack Incoming!" Shield Decision Overlay & Focused Cross-Device Used-Move Recognition
+*Major milestone release series adding fast-move turn increment snapping with post-throw discharge anchoring, 100E ceiling step latching after 1 fast-move duration, the 4-tier color-coded (Red / Orange / Yellow / Green) "Attack incoming!" Shield Decision Overlay with a pure 5s timer / combat-return lifecycle, widened cross-device used-move banner OCR (`0.15h..0.52h`), pre-attack HP ratchet lock against mid-drain HP overwrites, and full restoration of `v3.93` opponent used charged move badges.*
 
+- **v4.02 — Key Feature: 5.0s Timer / Combat-Return Shield Decision Overlay (Zero OCR Dependency), Widened Cross-Device Used-Move Banner OCR (`0.15h..0.52h`) & Pre-Attack HP Ratchet Lock**:
+  - **5.0s Timer / Combat-Return Shield Decision Overlay (`showOrUpdateShieldDecisionOverlay` & `hideShieldDecisionOverlay`)**:
+    - Triggers the Shield Decision Overlay purely from 100ms pixel detection when an opponent charged move begins and keeps it visible until **5.0 seconds elapse or normal combat circles return (`hasReturnedCombatCircles`)**, whichever comes first.
+    - Eliminates all OCR checks for `"Attack incoming!"` / `"NOT NOW"` disappearing so 100% of ML Kit OCR bandwidth is dedicated to reading `"<Pokemon> used <Move>!"` and top Pokémon nameplates.
+  - **Focused & Widened Cross-Device Used-Move Banner OCR (`0.15h..0.52h` at `1.35x` Scale) & Removal of In-Battle Bottom Move-Button OCR (`srcMoves`)**:
+    - Widens `srcMidBanner` vertically from `0.24h..0.54h` to **`0.15h..0.52h`** and horizontally to **`0.08w..0.92w`** at `1.35x` scale to account for per-device variance in `"<Pokemon> used <Move>!"` placement across tall phones (`18%–27%` screen height) and shorter/wider phones (`28%–52%` screen height).
+    - Omits `srcMoves` (`0.68h..0.97h`) from `compositeForOcr` during active battles (`isBattleActive && !isWaitingForOpponent`) so ML Kit OCR focuses exclusively on the top Pokémon nameplates and the used-move banner and never scans the bottom overlay's `OPP ATTACKS` / `MY ATTACKS` table.
+  - **Pre-Attack HP Ratchet Lock (`pendingChargedAttackPreUserHp`) & Retroactive Move Upgrade**:
+    - Locks `pendingChargedAttackPreUserHp` as an upward-only ratchet during the pre-impact shield window and removes downward overwrites from `Section 1A`'s `realUserDrop` branches so intermediate HP drain frames (e.g., Shadow Pangoro's `37%` Iron Head draining Tinkaton `97% -> 81% -> 65%`) never overwrite `pendingChargedAttackPreUserHp` downward and misclassify a heavy hit (`32%` drop) as a smaller bait move (`16%` Night Slash).
+    - Waits for `!sampledPlayerHasPendingDmg` before reconciling `Section 4`, and upgrades any intermediate HP-inferred move badge in `confirmedOppChargedMoves` if a larger settled HP drop or banner OCR confirmation arrives immediately after Section 4.
 - **v4.01 — Key Feature: Restored `v3.93` Opponent Used Charged Move Badges (`✓` Badge & 2-Move Lock) Across Shielded & Unshielded Moves + `100E` Ceiling Step Latch**:
   - **Restored `v3.93` Opponent Used Charged Move Marking (`confirmedOppChargedMoves`)**:
     - **100ms Pixel Shield-Prompt Dismissal (`detectAttackIncomingShieldHexagonPixels`)**: Samples the bright purple/magenta Protect Shield hexagon (`x = 0.42w..0.58w`, `y = 0.78h..0.89h`) at `100ms` (10 Hz) so the Shield Decision Overlay hides within `<100ms` the instant the player taps Shield or `"NOT NOW"`—well before the `"<Opponent> used <Move>!"` banner appears and is captured by ML Kit OCR—and keeps the card below `srcMidBanner` (`0.24h..0.54h`) with tinted text ignored by `isWhiteGlyph`.
