@@ -1,10 +1,17 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v4.00`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v4.01`)
 
 ---
 
-## v4.00 (2026-10-28) — Fast-Move Energy Increment Snapping & 4-Tier "Attack Incoming!" Shield Decision Overlay
-*Major milestone release adding fast-move turn increment snapping with post-throw discharge anchoring on the player energy tracker and a dedicated 4-tier color-coded (Red / Orange / Yellow / Green) "Attack incoming!" Shield Decision Overlay positioned directly above the shield prompt.*
+## v4.00 – v4.01 (2026-10-28) — Fast-Move Energy Increment Snapping, 100E Ceiling Step Latch, 4-Tier "Attack Incoming!" Shield Decision Overlay & Restored `v3.93` Opponent Used-Move Badges
+*Major milestone release series adding fast-move turn increment snapping with post-throw discharge anchoring, 100E ceiling step latching after 1 fast-move duration, the 4-tier color-coded (Red / Orange / Yellow / Green) "Attack incoming!" Shield Decision Overlay, and full restoration of `v3.93` opponent used charged move badges across both shielded and unshielded attacks.*
 
+- **v4.01 — Key Feature: Restored `v3.93` Opponent Used Charged Move Badges (`✓` Badge & 2-Move Lock) Across Shielded & Unshielded Moves + `100E` Ceiling Step Latch**:
+  - **Restored `v3.93` Opponent Used Charged Move Marking (`confirmedOppChargedMoves`)**:
+    - **100ms Pixel Shield-Prompt Dismissal (`detectAttackIncomingShieldHexagonPixels`)**: Samples the bright purple/magenta Protect Shield hexagon (`x = 0.42w..0.58w`, `y = 0.78h..0.89h`) at `100ms` (10 Hz) so the Shield Decision Overlay hides within `<100ms` the instant the player taps Shield or `"NOT NOW"`—well before the `"<Opponent> used <Move>!"` banner appears and is captured by ML Kit OCR—and keeps the card below `srcMidBanner` (`0.24h..0.54h`) with tinted text ignored by `isWhiteGlyph`.
+    - **Debounced Post-Charge HP Sync & Retroactive Unshielded HP-Delta Move Confirmation**: Prevents `hasReturnedCombatCircles` from prematurely reconciling Section 4 on Frame 1 before Frame 2 confirms the player's post-hit HP drop (`hpDelta > 0`), and adds retroactive unshielded HP-delta move confirmation (`strictHpMove ?: bestGuessHpMove`) if a player HP drop is debounced within `2.8s` after Section 4.
+    - **Canonicalized Banner Move Matching (`handleMidBannerUsedMoveLines`)**: Scans both `midBannerLines` and `playerMoveLines` for `"<Opponent> used <Move>!"`, falls back to the pre-charge active opponent slot when `<Opponent>` is clipped, canonicalizes the matched move against the slot's 4 displayed moves, and updates `confirmedOppChargedMoves` both during and up to `4.5s` after Section 4 reconciliation.
+  - **`100E` vs `99E` Energy Ceiling Latch After 1 Fast-Move Duration (`snapPlayerEnergyToValidStep` & `nearCeilingStepStartMs`)**:
+    - Removes the unconditional `100E` tie-break candidate from `snapPlayerEnergyToValidStep` when uncapped fast-move steps land at `96–99E` (e.g., `99E` on `9E Ember` where step 12 would be `108E`), snapping cleanly to `99E` first and latching to `100E` after `1` fast-move duration (`userMoveDurationMs`) of active combat if no energy has been deducted.
 - **v4.00 — Key Feature: Fast-Move Energy Increment Snapping (`snapPlayerEnergyToValidStep`) & 4-Tier "Attack Incoming!" Shield Decision Overlay (`showOrUpdateShieldDecisionOverlay`)**:
   - **Fast-Move Energy Increment & Post-Throw Discharge Snapping (`snapPlayerEnergyToValidStep`)**:
     - Snaps raw pixel-measured player energy values (from the slower charged move meter) to the nearest valid fast-move turn step (`anchorE + k * fastMoveEnergy`, capped at `100E`) relative to the slot's post-throw residual anchor (`playerSlotEnergyAnchor`).

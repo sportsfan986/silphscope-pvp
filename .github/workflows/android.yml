@@ -129,26 +129,20 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Fast-Move Energy Increment Snapping & 4-Tier "Attack Incoming!" Shield Decision Overlay)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (v3.93 Opponent Used-Move Badge Restoration & 100E Ceiling Step Latch)
 
-            ### Release Series Context (`v4.00`)
-            *Introduces fast-move turn increment snapping with post-throw discharge anchoring on the player energy tracker and the new 4-tier color-coded (Red / Orange / Yellow / Green) "Attack incoming!" Shield Decision Overlay positioned directly above the shield prompt.*
+            ### Release Series Context (`v4.00` – `v4.01`)
+            *Introduces fast-move turn increment snapping with post-throw discharge anchoring, the 4-tier color-coded (Red / Orange / Yellow / Green) "Attack incoming!" Shield Decision Overlay, v4.01 restoration of v3.93 opponent used charged move badges across both shielded and unshielded attacks, and 100E ceiling step latching after 1 fast-move duration.*
 
             ### Key Features in `${{ steps.version.outputs.tag }}`
-            - **Fast-Move Energy Increment & Post-Throw Discharge Snapping (`snapPlayerEnergyToValidStep`)**:
-              - Snaps raw pixel-measured player energy values (from the slower charged move meter) to the nearest valid fast-move turn step (`anchorE + k * fastMoveEnergy`, capped at `100E`) relative to the slot's post-throw residual anchor (`playerSlotEnergyAnchor`).
-              - Eliminates `1–2E` pixel width/rounding offsets (e.g., `53E` snapping cleanly to `54E` on `9E Ember`) and re-anchors `playerSlotEnergyAnchor` whenever a charged move is thrown (`preThrowE - moveCost`).
-            - **New Themed "Attack Incoming!" Shield Decision Overlay (`showOrUpdateShieldDecisionOverlay`)**:
-              - Appears directly above the `"Attack incoming! Use a Protect Shield?"` prompt (when player has `>= 1` shield) and auto-hides immediately when the text disappears or after `5.0s`, whichever comes first.
-              - **2a (Funded Moves)**: Lists every charged move candidate the opponent has enough energy to throw (`bankedE >= moveCost`) individually with exact **KO** status or **remaining HP%** if unshielded.
-              - **2b (Unfunded Moves)**: Lists remaining candidate moves in *italics and muted font* showing move name, `${bankedE}e/${moveCost}e` (e.g. `30e/40e`), and KO / remaining HP% impact.
-              - **2c (4-Tier Color-Coded Background)**:
-                - **RED**: **All** funded moves in **2a** will KO your active Pokémon.
-                - **ORANGE**: **At least one** funded move in **2a** will KO and **at least one** funded move in **2a** will **not** KO (bait vs. nuke).
-                - **YELLOW**: **No** funded move in **2a** KOs, but **at least one** unfunded move in **2b** would KO.
-                - **GREEN**: **No** moves in **2a** or **2b** will KO your active Pokémon.
-              - **2d (Locked 2-Move Filtering)**: Automatically excludes Moves 3 and 4 once Charged Moves 1 and 2 are confirmed/locked for that opponent Pokémon.
-              - **2f (Settings Toggle)**: Configurable toggle in **Settings -> Overlay -> Attack Incoming! Shield Decision Overlay**.
+            - **Restored `v3.93` Opponent Used Charged Move Badges (`✓` Badge & 2-Move Lock) Across Shielded & Unshielded Moves**:
+              - **100ms Pixel Shield-Prompt Dismissal (`detectAttackIncomingShieldHexagonPixels`)**: Detects the instant the purple Protect Shield hexagon disappears when the player taps Shield or `"NOT NOW"` so the Shield Decision Overlay hides in `<100ms` (before `"<Opponent> used <Move>!"` appears for OCR) and keeps its bounds below `srcMidBanner`.
+              - **Debounced Post-Charge HP Sync & Retroactive HP-Delta Move Confirmation**: Prevents premature Frame-1 post-charge reconciliation before the player's post-hit HP is debounced (`hpDelta > 0`), and retroactively confirms `strictHpMove ?: bestGuessHpMove` if a player HP drop arrives immediately after Section 4.
+              - **Canonicalized Banner Move Matching (`handleMidBannerUsedMoveLines`)**: Matches `"<Opponent> used <Move>!"` across both `midBannerLines` and `playerMoveLines`, canonicalizes the move name against the opponent slot's 4 displayed moves, and updates `confirmedOppChargedMoves` both during and up to `4.5s` after Section 4 reconciliation.
+            - **100E vs 99E Energy Ceiling Latch After 1 Fast-Move Duration (`snapPlayerEnergyToValidStep` & `nearCeilingStepStartMs`)**:
+              - When a valid fast-move step lands below `100E` such that the next uncapped step (`step + fastMoveEnergy`) would exceed `100E` (e.g., `99E` on `9E Ember` where step 12 would be `108E`), snaps to `99E` first and latches onto `100E` after `1` fast-move duration (`userMoveDurationMs`) of active combat if no energy has been deducted.
+            - **Carried Forward from `v4.00` — Fast-Move Increment Snapping & 4-Tier "Attack Incoming!" Shield Decision Overlay**:
+              - Snaps player energy to valid fast-move turn increments relative to the post-throw discharge anchor (`playerSlotEnergyAnchor`) and displays the Red / Orange / Yellow / Green Shield Decision Overlay above `"Attack incoming! Use a Protect Shield?"`.
 
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)
