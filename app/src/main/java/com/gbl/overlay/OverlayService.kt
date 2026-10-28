@@ -7723,6 +7723,8 @@ class OverlayService : LifecycleService() {
     private var postOppChargedMissingPlayerHpFrames: Int = 0
     private var lastSteadyMoveButtonsSeenMs: Long = 0L
     private var lastChargedAttackLoggedMs: Long = 0L
+    private var lastChargedAttackLoggedActor: String = ""
+    private var lastUserChargedMoveBannerResolvedMs: Long = 0L
 
     // v3.68: Turn-Phased OCR Capture, Charge-Bar 2nd Source of Truth & Monotonic Fast-Move Energy Engine
     private var sampledOppHasPendingDmg: Boolean = false
@@ -12463,10 +12465,10 @@ class OverlayService : LifecycleService() {
             if (hasAttackOrShieldContext) {
                 for (tok in tokens) {
                     if (tok.length in 6..11 && (
-                            FormResolver.levenshtein(tok, "incoming") <= 2 ||
-                            FormResolver.levenshtein(tok, "incomming") <= 2 ||
-                            FormResolver.levenshtein(tok, "protect") <= 1 ||
-                            FormResolver.levenshtein(tok, "shield") <= 1
+                            levenshteinDistance(tok, "incoming") <= 2 ||
+                            levenshteinDistance(tok, "incomming") <= 2 ||
+                            levenshteinDistance(tok, "protect") <= 1 ||
+                            levenshteinDistance(tok, "shield") <= 1
                         )
                     ) {
                         return true
