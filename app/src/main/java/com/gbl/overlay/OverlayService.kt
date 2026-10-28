@@ -7838,8 +7838,9 @@ class OverlayService : LifecycleService() {
     private var lastClearedFinalUserHpPct: List<Int> = listOf(100, 100, 100)
     private var lastClearedFinalOppHpPct: List<Int> = listOf(100, 100, 100)
 
-    // v3.86 / v3.95: Low-Latency Debounced Energy Tracking on Both Charge Move Circles (±2% Circle Fill Tolerance)
-    // + Sub-50E Multi-Round (Round 1 / Round 2 / Round 3 up to 100E) Dual-Bar & Wrap-Around State Tracking
+    // v3.86 / v3.98: Low-Latency Debounced Energy Tracking on Slower Charge Move Circle (±2% Circle Fill Tolerance)
+    // + Single-Bar Sub-50E Multi-Round (Round 1 / Round 2 / Round 3 up to 100E) with Top-Cap Darkening Memory,
+    //   Meniscus Wrap-Around Latch & Turn-Cadence Progression
     private val candidateSlowestFillPct = IntArray(3) { -1 }
     private val slowestFillDebounceCount = IntArray(3) { 0 }
     private val confirmedSlowestFillPct = IntArray(3) { -1 }
@@ -7854,6 +7855,8 @@ class OverlayService : LifecycleService() {
     private val peakSecondFillPct = IntArray(3) { 0 }
     private val peakFastestSecondFillPct = IntArray(3) { 0 }
     private val overchargeSaturationStepAnchorMs = LongArray(3) { 0L }
+    private val firstFillTopCapLuma = DoubleArray(6) { -1.0 }
+    private val secondFillBotCapLuma = DoubleArray(6) { -1.0 }
 
     // v3.88: Player Energy-to-Turns Conversion, 500ms Multi-Turn Interpolation, Post-Charge Recounting & Ever-On-Field Tracking
     private val playerSlotEverOnField = BooleanArray(3) { it == 0 }
@@ -7908,6 +7911,13 @@ class OverlayService : LifecycleService() {
         lastToastedSlotEnergy[slotIdx] = clampedE
         overchargeSaturationStepAnchorMs[slotIdx] = 0L
 
+        if (clampedE == 0) {
+            firstFillTopCapLuma[slotIdx * 2] = -1.0
+            firstFillTopCapLuma[slotIdx * 2 + 1] = -1.0
+            secondFillBotCapLuma[slotIdx * 2] = -1.0
+            secondFillBotCapLuma[slotIdx * 2 + 1] = -1.0
+        }
+
         if (clearThirdFillLatches || clampedE == 0) {
             leftMeterFilledTwiceLatched[slotIdx] = false
             rightMeterFilledTwiceLatched[slotIdx] = false
@@ -7947,6 +7957,7 @@ class OverlayService : LifecycleService() {
         if (!activeEnergyUpdateToasts) return
         val roundTag = when {
             slowestMeterInThirdFill[slotIdx] && moveCost < 50 && clampedE > 2 * moveCost -> " [3rd Fill]"
+            circleFillPct >= 200 || (moveCost < 50 && clampedE == 2 * moveCost) -> " [2nd Full]"
             circleFillPct > 100 -> " [White Border]"
             else -> ""
         }
@@ -9805,6 +9816,7 @@ class OverlayService : LifecycleService() {
             return
         }
 
+        val activeUserIdx = (currentPreset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) } ?: 0).coerceIn(0, 2)
         val cy = (h * calibratedCyFrac).toInt()
         val leftCx = (w * calibratedLeftCxFrac).toInt()
         val rightCx = (w * calibratedRightCxFrac).toInt()
@@ -9815,7 +9827,8 @@ class OverlayService : LifecycleService() {
             w = w,
             h = h,
             emptyBaseLuma = prescanEmptyLumaLeft,
-            emptyBaseSat = prescanEmptySatLeft
+            emptyBaseSat = prescanEmptySatLeft,
+            btnSlotKey = activeUserIdx * 2
         )
         val rightFill = detectSingleChargeButtonFillPct(
             screen = screen,
@@ -9824,7 +9837,8 @@ class OverlayService : LifecycleService() {
             w = w,
             h = h,
             emptyBaseLuma = prescanEmptyLumaRight,
-            emptyBaseSat = prescanEmptySatRight
+            emptyBaseSat = prescanEmptySatRight,
+            btnSlotKey = activeUserIdx * 2 + 1
         )
         if (leftFill == -1 && rightFill == -1) {
             // Fallback for single-charged-move Pokémon where the button is centered at x ≈ 0.50w
@@ -9835,7 +9849,8 @@ class OverlayService : LifecycleService() {
                 w = w,
                 h = h,
                 emptyBaseLuma = prescanEmptyLumaLeft,
-                emptyBaseSat = prescanEmptySatLeft
+                emptyBaseSat = prescanEmptySatLeft,
+                btnSlotKey = activeUserIdx * 2
             )
         }
         sampledLeftChargeBtnFillPct = leftFill
@@ -10070,7 +10085,8 @@ class OverlayService : LifecycleService() {
         w: Int,
         h: Int,
         emptyBaseLuma: Double = 52.0,
-        emptyBaseSat: Double = 22.0
+        emptyBaseSat: Double = 22.0,
+        btnSlotKey: Int = -1
     ): Int {
         return try {
             val stepY = (h / 1100).coerceAtLeast(2)
@@ -10246,14 +10262,15 @@ class OverlayService : LifecycleService() {
                 avgTopSat > (emptyBaseSat + 10.0).coerceAtLeast(24.0)
 
             // Authoritative 100%+ Ready Ring (White Border Active + Colored Top Cap Verified):
-            // v3.97: Sample clean Top Reference (78..86% height, above center icon) and Bottom Reference (12..20% height, below center icon).
-            // Require 2-layer band separation whenever scanning across the central move-type icon band (28..72% height)
-            // so a 100% single-filled circle NEVER triggers a false 148% or 169% meniscus on the center icon,
-            // while detecting genuine 2nd-fill meniscuses across 105..195% reliably.
+            // v3.98:
+            // 1. Unrestricted Upper/Lower Cap Chord Geometry (`minSafeDx = 4px` outside `inIconBand`) so scan lines
+            //    above 169% (`170%..196%`, i.e., `77E..88E` on a 45E move) are never skipped due to circle curvature.
+            // 2. Per-Slot Top-Cap Darkening Memory (`firstFillTopCapLuma` & `secondFillBotCapLuma`) to distinguish
+            //    a 100% 1st-fill circle (`45E`) from a 200% saturated 2nd-fill circle (`90E`) when `bestOverY == -1`.
             if (hasAuthoritativeWhiteRing && isTopCapFilled) {
-                val rOverInterior = halfSpanPx * 0.88
-                val yTopOverScan = (actualCy - (halfSpanPx * 0.84)).roundToInt().coerceIn(8, h - 16)
-                val yBotOverScan = (actualCy + (halfSpanPx * 0.84)).roundToInt().coerceIn(yTopOverScan + 10, h - 8)
+                val rOverInterior = halfSpanPx * 0.91
+                val yTopOverScan = (actualCy - (halfSpanPx * 0.89)).roundToInt().coerceIn(8, h - 16)
+                val yBotOverScan = (actualCy + (halfSpanPx * 0.89)).roundToInt().coerceIn(yTopOverScan + 10, h - 8)
                 val yBotOverUv = actualCy + halfSpanPx
                 val overUvSpan = (halfSpanPx * 2).coerceAtLeast(1)
                 val vDelta = stepY * 2
@@ -10262,7 +10279,7 @@ class OverlayService : LifecycleService() {
 
                 var topRefR = 0.0; var topRefG = 0.0; var topRefB = 0.0; var topRefLuma = 0.0; var topRefSat = 0.0; var topRefN = 0
                 var botRefR = 0.0; var botRefG = 0.0; var botRefB = 0.0; var botRefLuma = 0.0; var botRefSat = 0.0; var botRefN = 0
-                val refDx = (halfSpanPx * 0.42).roundToInt().coerceAtLeast(12)
+                val refDx = (halfSpanPx * 0.40).roundToInt().coerceAtLeast(10)
                 for (pct in intArrayOf(78, 82, 86)) {
                     val ry = (yBotOverUv - (pct * overUvSpan) / 100.0).roundToInt().coerceIn(8, h - 8)
                     for (dx in intArrayOf(-refDx, refDx)) {
@@ -10297,7 +10314,10 @@ class OverlayService : LifecycleService() {
                 }
                 val topBotLumaDiff = topRefLuma - botRefLuma
                 val topBotRgbDiff = kotlin.math.abs(topRefR - botRefR) + kotlin.math.abs(topRefG - botRefG) + kotlin.math.abs(topRefB - botRefB)
-                val hasTwoLayerCapSeparation = topRefN > 0 && botRefN > 0 && (topBotLumaDiff >= 7.5 || topBotRgbDiff >= 20.0)
+                val hasTwoLayerCapSeparation = topRefN > 0 && botRefN > 0 && (topBotLumaDiff >= 6.5 || topBotRgbDiff >= 18.0)
+
+                val memRef1 = if (btnSlotKey in 0..5) firstFillTopCapLuma[btnSlotKey] else -1.0
+                val memRef2 = if (btnSlotKey in 0..5) secondFillBotCapLuma[btnSlotKey] else -1.0
 
                 var bestOverY = -1
                 var bestOverScore = 0.0
@@ -10307,10 +10327,15 @@ class OverlayService : LifecycleService() {
                     if (!inIconBand || hasTwoLayerCapSeparation) {
                         val maxAbsDy = max(kotlin.math.abs((oy - vDelta) - actualCy), kotlin.math.abs((oy + vDelta) - actualCy)).toDouble()
                         val chordHalfW = kotlin.math.sqrt((rOverInterior * rOverInterior - maxAbsDy * maxAbsDy).coerceAtLeast(1.0))
-                        val safeOuterDx = (chordHalfW - max(8, (w * 0.0085f).roundToInt())).toInt()
-                        val minSafeDx = if (inIconBand) iconSafeFlankDx else 14
-                        if (safeOuterDx >= minSafeDx + 3) {
-                            val safeInnerDx = max(minSafeDx, safeOuterDx - max(5, (w * 0.0055f).roundToInt()))
+                        val rimMarginPx = if (inIconBand) max(8, (w * 0.0085f).roundToInt()) else max(5, (w * 0.0055f).roundToInt())
+                        val safeOuterDx = (chordHalfW - rimMarginPx).toInt()
+                        val minSafeDx = if (inIconBand) iconSafeFlankDx else max(4, (w * 0.005f).roundToInt())
+                        if (safeOuterDx >= minSafeDx + 2) {
+                            val safeInnerDx = if (inIconBand) {
+                                max(minSafeDx, safeOuterDx - max(5, (w * 0.0055f).roundToInt()))
+                            } else {
+                                max(minSafeDx, safeOuterDx / 2)
+                            }
                             val xOffs = intArrayOf(-safeOuterDx, -safeInnerDx, safeInnerDx, safeOuterDx)
                             val yU = (oy - vDelta).coerceIn(0, h - 1)
                             val yM = oy.coerceIn(0, h - 1)
@@ -10360,23 +10385,37 @@ class OverlayService : LifecycleService() {
                                 val satUp = max(rUp, max(gUp, bUp)) - min(rUp, min(gUp, bUp))
                                 val satDn = max(rDn, max(gDn, bDn)) - min(rDn, min(gDn, bDn))
 
-                                val matchesRefBands = if (inIconBand && topRefN > 0 && botRefN > 0) {
-                                    kotlin.math.abs(lumaUp - topRefLuma) <= 18.0 &&
+                                val candOverPct = (((yBotOverUv - oy) * 100.0) / overUvSpan).roundToInt().coerceIn(1, 99)
+                                val matchesRefBands = when {
+                                    inIconBand && topRefN > 0 && botRefN > 0 -> {
+                                        kotlin.math.abs(lumaUp - topRefLuma) <= 18.0 &&
+                                            kotlin.math.abs(lumaDn - botRefLuma) <= 18.0
+                                    }
+                                    candOverPct >= 72 && memRef1 > 0.0 && memRef2 > 0.0 -> {
+                                        kotlin.math.abs(lumaUp - memRef1) <= 20.0 &&
+                                            kotlin.math.abs(lumaDn - memRef2) <= 20.0
+                                    }
+                                    candOverPct >= 72 && botRefN > 0 -> {
                                         kotlin.math.abs(lumaDn - botRefLuma) <= 18.0
-                                } else true
+                                    }
+                                    else -> true
+                                }
 
-                                val bothAreColoredLiquid = lumaUp in 72.0..208.0 &&
-                                    lumaDn in 68.0..200.0 &&
-                                    satUp >= 18.0 &&
-                                    satDn >= 22.0
+                                val bothAreColoredLiquid = lumaUp in 70.0..208.0 &&
+                                    lumaDn in 65.0..200.0 &&
+                                    satUp >= 16.0 &&
+                                    satDn >= 20.0
                                 val isSymmetric = kotlin.math.abs(lUpL - lUpR) <= 24.0 && kotlin.math.abs(lDnL - lDnR) <= 24.0
                                 val lumaDrop = lumaUp - lumaDn
                                 val rgbDiff = kotlin.math.abs(rUp - rDn) + kotlin.math.abs(gUp - gDn) + kotlin.math.abs(bUp - bDn)
                                 val meniscusRidge = max(0.0, lumaMid - max(lumaUp, lumaDn))
-                                val hasWhiteMeniscus = lumaMid >= 158.0 && sMid <= 70.0 && meniscusRidge >= 10.0
-                                val bothFlanksDrop = (lUpL - lDnL >= 9.5) && (lUpR - lDnR >= 9.5)
-                                val passesStep = (bothFlanksDrop && lumaDrop >= 11.5 && rgbDiff >= 26.0) ||
-                                    (hasWhiteMeniscus && lumaDrop >= 6.5 && rgbDiff >= 18.0 && (lUpL - lDnL >= 5.0) && (lUpR - lDnR >= 5.0))
+                                val hasWhiteMeniscus = lumaMid >= 156.0 && sMid <= 72.0 && meniscusRidge >= 9.0
+                                val minFlankDrop = if (inIconBand) 9.5 else 6.8
+                                val minLumaDrop = if (inIconBand) 11.5 else 8.2
+                                val minRgbDiff = if (inIconBand) 26.0 else 19.0
+                                val bothFlanksDrop = (lUpL - lDnL >= minFlankDrop) && (lUpR - lDnR >= minFlankDrop)
+                                val passesStep = (bothFlanksDrop && lumaDrop >= minLumaDrop && rgbDiff >= minRgbDiff) ||
+                                    (hasWhiteMeniscus && lumaDrop >= 5.2 && rgbDiff >= 15.0 && (lUpL - lDnL >= 4.0) && (lUpR - lDnR >= 4.0))
 
                                 if (matchesRefBands && bothAreColoredLiquid && isSymmetric && passesStep) {
                                     val midTarget = 0.5 * (lumaUp + lumaDn)
@@ -10395,10 +10434,41 @@ class OverlayService : LifecycleService() {
                 }
                 if (bestOverY != -1) {
                     val overPct = (((yBotOverUv - bestOverY) * 100.0) / overUvSpan).roundToInt().coerceIn(1, 99)
+                    // Calibrate 1st-fill top-cap luma and 2nd-fill bottom-cap luma whenever the meniscus is in 108..164%
+                    if (btnSlotKey in 0..5 && overPct in 8..64 && topRefN > 0 && botRefN > 0 && topBotLumaDiff >= 7.5) {
+                        val prev1 = firstFillTopCapLuma[btnSlotKey]
+                        val prev2 = secondFillBotCapLuma[btnSlotKey]
+                        firstFillTopCapLuma[btnSlotKey] = if (prev1 < 0.0) topRefLuma else (prev1 * 0.65 + topRefLuma * 0.35)
+                        secondFillBotCapLuma[btnSlotKey] = if (prev2 < 0.0) botRefLuma else (prev2 * 0.65 + botRefLuma * 0.35)
+                    }
                     return 100 + overPct
                 }
                 if (outerSecondRingArcs >= 4) {
                     return 200
+                }
+                // Top-Cap Darkening Memory check when the circle interior has no internal meniscus step (`bestOverY == -1`)
+                if (btnSlotKey in 0..5 && topRefN > 0) {
+                    val slotIdx = (btnSlotKey / 2).coerceIn(0, 2)
+                    val peakR2 = peakSecondFillPct[slotIdx]
+                    val ref1 = firstFillTopCapLuma[btnSlotKey]
+                    val ref2 = secondFillBotCapLuma[btnSlotKey]
+                    if (peakR2 < 140) {
+                        // Circle is at 100% 1st fill: calibrate bright 1st-fill top-cap baseline
+                        if (botRefN == 0 || kotlin.math.abs(topRefLuma - botRefLuma) <= 7.5) {
+                            firstFillTopCapLuma[btnSlotKey] = if (ref1 < 0.0) topRefLuma else (ref1 * 0.75 + topRefLuma * 0.25)
+                        }
+                    } else if (peakR2 >= 150) {
+                        val darkenedFromFirstFill = ref1 > 0.0 && (ref1 - topRefLuma) >= 7.5
+                        val matchesSecondFillLuma = ref2 > 0.0 &&
+                            kotlin.math.abs(topRefLuma - ref2) <= 7.5 &&
+                            (botRefN == 0 || kotlin.math.abs(topRefLuma - botRefLuma) <= 6.5)
+                        val uniformAfterHighSecondFill = peakR2 >= 165 &&
+                            botRefN > 0 &&
+                            kotlin.math.abs(topRefLuma - botRefLuma) <= 6.0
+                        if (darkenedFromFirstFill || matchesSecondFillLuma || uniformAfterHighSecondFill) {
+                            return 200
+                        }
+                    }
                 }
                 return 100
             }
@@ -10595,18 +10665,16 @@ class OverlayService : LifecycleService() {
     }
 
     /**
-     * v3.97: Joint Dual-Bar Sub-50E Energy Solver (0..100E) with All-Round Sensor Fusion & Step Clamping:
-     * 1. When max(cost1, cost2) >= 50: Standard 0..2*slowestMoveCost measurement (capped at 100E),
-     *    cross-checking companion bar when slower bar is in the center-icon zone.
-     * 2. Mandatory 3rd-Ring Tracked Energy Prerequisite (`canEnterSlowThirdFill`):
-     *    - A slower charge bar (`slowCost < 50`, e.g., 45E Energy Ball) can NEVER latch into Round 3 (`[3rd Fill]`)
-     *      unless tracked energy `clampedCurE` is already within one fast-move step of `2 * slowCost`.
-     * 3. Unmatched Sub-50E Moves (`cost1 != cost2`, e.g., 35E Weather Ball + 45E Energy Ball):
-     *    - Fuses BOTH bars across Round 1 (`0..fastCost`, `fastCost..slowCost`), Round 2 (`slowCost..2*slowCost`),
-     *      and Round 3 (`2*slowCost..100E`), dynamically down-weighting whichever bar sits in the center-icon dead zone
-     *      (`40..58%`, `73..81%`, `140..162%`) or reads a flat `100%` when the companion bar shows active overcharge.
-     * 4. Matched Sub-50E Moves (`cost1 == cost2 < 50`, e.g., 40E Drill Run + 40E Drill Peck):
-     *    - Requires dual-bar consensus for `>= 100%` when `clampedCurE < slowCost - userFastEnergy` and rejects single-bar icon spikes.
+     * v3.98: Single-Bar Sub-50E & Multi-Round Energy Solver (0..100E):
+     * - Undoes dual-bar fusion and keys STRICTLY off the single slower (higher-cost) charge move bar (`debouncedSlowestPct`, `slowestMoveCost`).
+     * - Combines three coordinated strategies on the single slower bar to track 2nd-fill completion (76E..90E) and 3rd fill (2*slowCost..100E):
+     *   1. Top-Cap Darkening Memory (`200%` Full 2nd Fill): Distinguishes a 100% 1st-fill circle (`slowCost`) from a 200% saturated
+     *      2nd-fill circle (`2 * slowCost`) when the top cap darkens to the 2nd-fill liquid shade.
+     *   2. Meniscus Wrap-Around Latch (`wrappedToThirdFill`): Latches `slowestMeterInThirdFill` when the meniscus wraps from an
+     *      upper-circle 2nd-fill peak (`>= 165%`) back down into `101..(peak - 18)%` while `canEnterSlowThirdFill` holds.
+     *   3. Fast-Move Turn Cadence Progression (`overchargeSaturationStepAnchorMs`): Smoothly steps energy by `+userFastEnergy`
+     *      every `userMoveDurationMs` during active fast combat whenever the meniscus enters the narrow upper cap (`>= 165%`) or
+     *      saturates at `>= 2 * slowCost` up to `100E`.
      */
     private fun resolveSub50AndMultiRoundEnergy(
         slotIdx: Int,
@@ -10623,7 +10691,6 @@ class OverlayService : LifecycleService() {
         canAdvanceMonotonically: Boolean
     ): Int {
         val slowCost = slowestMoveCost.coerceIn(35, 100)
-        val fastCost = fasterMoveCost.coerceIn(35, 100)
         val clampedCurE = curE.coerceIn(0, 100)
         val maxFastStep = max(14, userFastEnergy * 2)
         val maxAllowedSingleJumpE = if (clampedCurE > 0) {
@@ -10637,14 +10704,12 @@ class OverlayService : LifecycleService() {
         // Reset 3rd-fill latches if the slower bar clearly dropped back into Round 1 (0..98% without white border)
         if (debouncedSlowestPct in 0..98) {
             slowestMeterInThirdFill[slotIdx] = false
-            peakSecondFillPct[slotIdx] = 0
-            overchargeSaturationStepAnchorMs[slotIdx] = 0L
-            if (slowestIsRight) rightMeterFilledTwiceLatched[slotIdx] = false else leftMeterFilledTwiceLatched[slotIdx] = false
-        }
-        if (debouncedFasterPct in 0..98) {
             fasterMeterInThirdFill[slotIdx] = false
+            peakSecondFillPct[slotIdx] = 0
             peakFastestSecondFillPct[slotIdx] = 0
-            if (slowestIsRight) leftMeterFilledTwiceLatched[slotIdx] = false else rightMeterFilledTwiceLatched[slotIdx] = false
+            overchargeSaturationStepAnchorMs[slotIdx] = 0L
+            leftMeterFilledTwiceLatched[slotIdx] = false
+            rightMeterFilledTwiceLatched[slotIdx] = false
         }
 
         // Case 0: Standard Moveset where slowestMoveCost >= 50 (2 * slowCost >= 100)
@@ -10654,297 +10719,104 @@ class OverlayService : LifecycleService() {
             } else {
                 (((debouncedSlowestPct * slowCost) / 100.0).roundToInt()).coerceIn(0, slowCost)
             }
-            return if (rawE >= 98 && hasSecondUserMove && debouncedFasterPct >= 195 && fastCost * 2 >= 100) {
-                100
-            } else {
-                rawE.coerceIn(0, 100)
-            }
+            return min(rawE, maxAllowedSingleJumpE).coerceIn(0, 100)
         }
 
-        // v3.96/v3.97: Mandatory Tracked Energy Prerequisite for Round 3 (3rd charge ring)
-        val canEnterSlowThirdFill = clampedCurE >= (2 * slowCost - maxFastStep)
-        val canEnterFastThirdFill = clampedCurE >= (2 * fastCost - maxFastStep)
+        // Case 1: Sub-50E Slower Charge Bar (`slowCost < 50`, e.g., 45E Energy Ball, 40E Drill Run, 35E Weather Ball)
+        //         Keyed STRICTLY off the single slower bar (`debouncedSlowestPct`)!
+        if (debouncedSlowestPct < 100) {
+            overchargeSaturationStepAnchorMs[slotIdx] = 0L
+            val r1E = (((debouncedSlowestPct.coerceIn(0, 99) * slowCost) / 100.0).roundToInt()).coerceIn(0, slowCost - 1)
+            return min(r1E, maxAllowedSingleJumpE).coerceIn(0, slowCost - 1)
+        }
 
+        // Mandatory Tracked Energy Prerequisite for Round 3 (3rd charge ring: 2 * slowCost .. 100E)
+        val canEnterSlowThirdFill = clampedCurE >= (2 * slowCost - maxFastStep)
         if (!canEnterSlowThirdFill && slowestMeterInThirdFill[slotIdx]) {
             slowestMeterInThirdFill[slotIdx] = false
-            overchargeSaturationStepAnchorMs[slotIdx] = 0L
             if (slowestIsRight) rightMeterFilledTwiceLatched[slotIdx] = false else leftMeterFilledTwiceLatched[slotIdx] = false
         }
-        if (!canEnterFastThirdFill && fasterMeterInThirdFill[slotIdx]) {
-            fasterMeterInThirdFill[slotIdx] = false
-            if (slowestIsRight) leftMeterFilledTwiceLatched[slotIdx] = false else rightMeterFilledTwiceLatched[slotIdx] = false
-        }
 
-        // Track step-validated peak Round 2 fill percentages (101..195%) for wrap-around detection on both bars
-        if (debouncedSlowestPct in 101..195 && !slowestMeterInThirdFill[slotIdx]) {
-            val eSlowR2Candidate = (slowCost + ((debouncedSlowestPct - 100) * slowCost) / 100.0).roundToInt()
-            if (eSlowR2Candidate <= maxAllowedSingleJumpE + 2) {
+        // Track step-validated peak Round 2 fill percentage (101..200%) on the single slower bar
+        if (debouncedSlowestPct in 101..200 && !slowestMeterInThirdFill[slotIdx]) {
+            val eR2Candidate = (slowCost + ((debouncedSlowestPct - 100) * slowCost) / 100.0).roundToInt()
+            if (eR2Candidate <= maxAllowedSingleJumpE + 3) {
                 if (debouncedSlowestPct > peakSecondFillPct[slotIdx]) {
                     peakSecondFillPct[slotIdx] = debouncedSlowestPct
-                }
-            }
-        }
-        if (debouncedFasterPct in 101..195 && !fasterMeterInThirdFill[slotIdx]) {
-            val eFastR2Candidate = (fastCost + ((debouncedFasterPct - 100) * fastCost) / 100.0).roundToInt()
-            if (eFastR2Candidate <= maxAllowedSingleJumpE + 2) {
-                if (debouncedFasterPct > peakFastestSecondFillPct[slotIdx]) {
-                    peakFastestSecondFillPct[slotIdx] = debouncedFasterPct
-                }
-            }
-        }
-
-        // Detect faster bar transition into Round 3 (2 * fastCost .. 100E) ONLY when tracked energy allows it
-        if (!fasterMeterInThirdFill[slotIdx] && canEnterFastThirdFill && debouncedFasterPct in 101..200) {
-            val fastWrappedDown = peakFastestSecondFillPct[slotIdx] >= 165 &&
-                debouncedFasterPct in 101..(peakFastestSecondFillPct[slotIdx] - 18)
-            if (debouncedFasterPct >= 195 || fastWrappedDown || clampedCurE >= 2 * fastCost) {
-                fasterMeterInThirdFill[slotIdx] = true
-                if (slowestIsRight) leftMeterFilledTwiceLatched[slotIdx] = true else rightMeterFilledTwiceLatched[slotIdx] = true
-            }
-        }
-
-        val isUnmatchedSub50 = hasSecondUserMove && slowCost != fastCost && debouncedFasterPct in 0..200
-
-        // Case 1: Unmatched Sub-50E Moves (e.g., 35E Weather Ball + 45E Energy Ball, 35E + 40E, 40E + 45E)
-        //         v3.97 Joint Dual-Bar Sensor Fusion Across All 0..100E Rounds!
-        if (isUnmatchedSub50) {
-            val eSlowR1 = ((debouncedSlowestPct.coerceIn(0, 100) * slowCost) / 100.0)
-            val eFastR1 = ((debouncedFasterPct.coerceIn(0, 100) * fastCost) / 100.0)
-            val eSlowR2 = slowCost + ((debouncedSlowestPct - 100).coerceIn(0, 100) * slowCost) / 100.0
-            val eSlowR3 = (2.0 * slowCost + ((debouncedSlowestPct - 100).coerceIn(0, 100) * slowCost) / 100.0).coerceAtMost(100.0)
-            val eFastR2 = fastCost + ((debouncedFasterPct - 100).coerceIn(0, 100) * fastCost) / 100.0
-            val eFastR3 = (2.0 * fastCost + ((debouncedFasterPct - 100).coerceIn(0, 100) * fastCost) / 100.0).coerceAtMost(100.0)
-
-            // Sub-Case 1A: Both bars are in Round 1 (< 100%, no white border on either bar -> E in 0 .. fastCost - 1)
-            if (debouncedSlowestPct < 100 && debouncedFasterPct < 100) {
-                overchargeSaturationStepAnchorMs[slotIdx] = 0L
-                val slowInIconR1 = debouncedSlowestPct in 40..58 || debouncedSlowestPct in 73..81
-                val fastInIconR1 = debouncedFasterPct in 40..58 || debouncedFasterPct in 73..81
-                val expectedNextE = if (clampedCurE > 0) (clampedCurE + userFastEnergy).toDouble() else -1.0
-                val fusedR1 = when {
-                    slowInIconR1 && !fastInIconR1 -> eFastR1
-                    fastInIconR1 && !slowInIconR1 -> eSlowR1
-                    kotlin.math.abs(eSlowR1 - eFastR1) <= 5.0 -> 0.55 * eSlowR1 + 0.45 * eFastR1
-                    expectedNextE > 0.0 -> {
-                        if (kotlin.math.abs(eFastR1 - expectedNextE) + 2.0 < kotlin.math.abs(eSlowR1 - expectedNextE)) eFastR1 else eSlowR1
+                    if (debouncedSlowestPct >= 165) {
+                        overchargeSaturationStepAnchorMs[slotIdx] = nowMs
                     }
-                    else -> min(eSlowR1, eFastR1)
-                }
-                return fusedR1.roundToInt().coerceIn(0, min(fastCost - 1, maxAllowedSingleJumpE))
-            }
-
-            // Sub-Case 1B: Faster bar has white border (>= 100%) while slower bar is still in Round 1 (< 100%) -> E in fastCost .. slowCost - 1
-            if (debouncedSlowestPct < 100 && debouncedFasterPct >= 100) {
-                overchargeSaturationStepAnchorMs[slotIdx] = 0L
-                val slowInIconR1 = debouncedSlowestPct in 40..58 || debouncedSlowestPct in 73..81
-                val fastInIconR2 = debouncedFasterPct in 140..162
-                val fusedMid = when {
-                    debouncedFasterPct == 100 && !slowInIconR1 -> max(fastCost.toDouble(), eSlowR1)
-                    slowInIconR1 && !fastInIconR2 -> eFastR2
-                    fastInIconR2 && !slowInIconR1 -> eSlowR1
-                    else -> 0.50 * eSlowR1 + 0.50 * eFastR2
-                }
-                return fusedMid.roundToInt().coerceIn(fastCost, min(slowCost - 1, maxAllowedSingleJumpE))
-            }
-
-            // If slower bar reads >= 100% while faster bar is still clearly in Round 1 (< 90%) and clampedCurE < fastCost:
-            // Slower bar cannot have a white border before the cheaper faster bar!
-            if (debouncedSlowestPct >= 100 && debouncedFasterPct in 1..89 && clampedCurE < slowCost - userFastEnergy) {
-                overchargeSaturationStepAnchorMs[slotIdx] = 0L
-                return eFastR1.roundToInt().coerceIn(0, min(fastCost - 1, maxAllowedSingleJumpE))
-            }
-
-            val errRound2 = min(kotlin.math.abs(eSlowR2 - eFastR2), kotlin.math.abs(eSlowR2 - eFastR3))
-            val errRound3 = kotlin.math.abs(eSlowR3 - eFastR3)
-
-            // If both bars are in 101..194% and they match in Round 2 (or faster bar is still below 2*slowCost even in R3),
-            // the slower bar is definitively in Round 2 (2nd ring), NEVER Round 3!
-            val dualBarMatchesRound2 = debouncedSlowestPct in 100..194 &&
-                debouncedFasterPct in 101..194 &&
-                (errRound2 + 2.0 <= errRound3 || eFastR3 < (2 * slowCost - 4))
-
-            if (dualBarMatchesRound2 && slowestMeterInThirdFill[slotIdx] && clampedCurE < 2 * slowCost) {
-                slowestMeterInThirdFill[slotIdx] = false
-                if (slowestIsRight) rightMeterFilledTwiceLatched[slotIdx] = false else leftMeterFilledTwiceLatched[slotIdx] = false
-            }
-
-            val slowWrappedDown = !slowestMeterInThirdFill[slotIdx] &&
-                canEnterSlowThirdFill &&
-                !dualBarMatchesRound2 &&
-                peakSecondFillPct[slotIdx] >= 168 &&
-                debouncedSlowestPct in 101..(peakSecondFillPct[slotIdx] - 20)
-
-            var dualBarProvesThirdFill = false
-            if (!slowestMeterInThirdFill[slotIdx] &&
-                canEnterSlowThirdFill &&
-                !dualBarMatchesRound2 &&
-                debouncedSlowestPct in 101..188 &&
-                debouncedFasterPct in 101..200
-            ) {
-                if (errRound3 <= 5.0 &&
-                    errRound3 + 3.5 < errRound2 &&
-                    eSlowR3 >= clampedCurE - 2 &&
-                    eSlowR3.roundToInt() <= maxAllowedSingleJumpE
-                ) {
-                    dualBarProvesThirdFill = true
-                }
-            }
-
-            if (canEnterSlowThirdFill &&
-                !dualBarMatchesRound2 &&
-                ((debouncedSlowestPct >= 195 && debouncedFasterPct >= 175) || slowWrappedDown || dualBarProvesThirdFill || clampedCurE >= 2 * slowCost)
-            ) {
-                slowestMeterInThirdFill[slotIdx] = true
-                fasterMeterInThirdFill[slotIdx] = true
-                leftMeterFilledTwiceLatched[slotIdx] = true
-                rightMeterFilledTwiceLatched[slotIdx] = true
-            }
-
-            // Sub-Case 1C: Below 2x of slowest bar (slowCost .. 2 * slowCost): Joint Dual-Bar Fusion in Round 2
-            if (!slowestMeterInThirdFill[slotIdx] && clampedCurE < 2 * slowCost) {
-                overchargeSaturationStepAnchorMs[slotIdx] = 0L
-                val fastSaturatedFloor = if (debouncedFasterPct >= 193 || fasterMeterInThirdFill[slotIdx]) {
-                    min(2 * slowCost, 2 * fastCost)
-                } else {
-                    slowCost
-                }
-                val r2Floor = max(slowCost, min(2 * slowCost, max(clampedCurE, fastSaturatedFloor)))
-
-                // When slower bar reads flat 100% (meniscus near bottom or occluded), drive energy from companion faster bar + floor!
-                if (debouncedSlowestPct == 100) {
-                    if (debouncedFasterPct in 101..194) {
-                        val candFastE = if (canEnterFastThirdFill && clampedCurE >= 2 * fastCost - userFastEnergy) {
-                            if (kotlin.math.abs(eFastR3 - clampedCurE) <= kotlin.math.abs(eFastR2 - clampedCurE)) eFastR3.roundToInt() else eFastR2.roundToInt()
-                        } else {
-                            eFastR2.roundToInt()
-                        }
-                        return max(r2Floor, candFastE).coerceIn(slowCost, min(2 * slowCost, maxAllowedSingleJumpE))
-                    }
-                    return r2Floor.coerceIn(slowCost, min(2 * slowCost, maxAllowedSingleJumpE))
-                }
-
-                // Both bars in overcharge (101..199%): fuse slower bar R2 with faster bar R2/R3 while down-weighting icon band (140..162%)
-                val slowInIconR2 = debouncedSlowestPct in 140..162
-                val fastInIconR2 = debouncedFasterPct in 140..162
-                var r2Energy = eSlowR2.roundToInt().coerceIn(slowCost, 2 * slowCost)
-                if (debouncedFasterPct in 101..194) {
-                    val bestFastE = if (canEnterFastThirdFill && kotlin.math.abs(eSlowR2 - eFastR3) + 2.0 < kotlin.math.abs(eSlowR2 - eFastR2)) {
-                        eFastR3
-                    } else {
-                        eFastR2
-                    }
-                    val diffBars = kotlin.math.abs(eSlowR2 - bestFastE)
-                    r2Energy = when {
-                        slowInIconR2 && !fastInIconR2 && bestFastE >= slowCost - 2 -> bestFastE.roundToInt()
-                        fastInIconR2 && !slowInIconR2 -> eSlowR2.roundToInt()
-                        diffBars <= 6.5 -> (0.55 * eSlowR2 + 0.45 * bestFastE).roundToInt()
-                        clampedCurE > 0 && r2Energy > maxAllowedSingleJumpE && bestFastE.roundToInt() in slowCost..maxAllowedSingleJumpE ->
-                            bestFastE.roundToInt()
-                        else -> min(eSlowR2, bestFastE).roundToInt()
-                    }
-                }
-                return max(r2Floor, r2Energy).coerceIn(slowCost, min(2 * slowCost, maxAllowedSingleJumpE))
-            }
-
-            // Sub-Case 1D: At or above 2x of slowest bar (2 * slowCost .. 100E): Dual-Bar Percentage Match Solver
-            val slowIsRisingR3 = debouncedSlowestPct in 101..194
-            val fastIsRisingR3 = debouncedFasterPct in 101..194
-
-            if (slowIsRisingR3 || fastIsRisingR3) {
-                overchargeSaturationStepAnchorMs[slotIdx] = nowMs
-                val solvedE = when {
-                    slowIsRisingR3 && fastIsRisingR3 -> (0.55 * eSlowR3 + 0.45 * eFastR3).roundToInt()
-                    slowIsRisingR3 -> {
-                        val floorFromFast = if (debouncedFasterPct >= 195) min(100, 2 * fastCost) else 2 * slowCost
-                        max(floorFromFast, eSlowR3.roundToInt())
-                    }
-                    else -> max(2 * slowCost, eFastR3.roundToInt())
-                }
-                val targetR3 = max(clampedCurE, max(2 * slowCost, solvedE)).coerceIn(2 * slowCost, 100)
-                if (clampedCurE > 0 && targetR3 > maxAllowedSingleJumpE) {
-                    slowestMeterInThirdFill[slotIdx] = false
-                    if (slowestIsRight) rightMeterFilledTwiceLatched[slotIdx] = false else leftMeterFilledTwiceLatched[slotIdx] = false
-                    return max(clampedCurE, eSlowR2.roundToInt()).coerceIn(slowCost, min(2 * slowCost, maxAllowedSingleJumpE))
-                }
-                return targetR3
-            }
-
-            // Both bars are visually saturated (>= 195%): step monotonically by fast move turns up to 100E
-            val baseFloor = max(clampedCurE, 2 * slowCost)
-            if (overchargeSaturationStepAnchorMs[slotIdx] <= 0L) {
-                overchargeSaturationStepAnchorMs[slotIdx] = nowMs
-                return baseFloor.coerceIn(2 * slowCost, 100)
-            }
-            if (canAdvanceMonotonically && baseFloor < 100 && (nowMs - overchargeSaturationStepAnchorMs[slotIdx]) >= userMoveDurationMs) {
-                val steps = ((nowMs - overchargeSaturationStepAnchorMs[slotIdx]) / userMoveDurationMs).toInt().coerceIn(1, 2)
-                overchargeSaturationStepAnchorMs[slotIdx] += steps * userMoveDurationMs
-                return (baseFloor + steps * userFastEnergy).coerceIn(2 * slowCost, 100)
-            }
-            return baseFloor.coerceIn(2 * slowCost, 100)
-        }
-
-        // Case 2: Matched Sub-50E Moves (cost1 == cost2 < 50 or single move < 50, e.g., 35E + 35E, 40E + 40E, 45E + 45E)
-        //         v3.97 Dual-Bar Consensus + Wrap-Around State Latch + Turn-Monotonic Energy Progression up to 100E!
-        val effPct = if (hasSecondUserMove && slowCost == fastCost && debouncedFasterPct in 0..200) {
-            val oneBarBelowWhiteRing = (debouncedSlowestPct < 92 && debouncedFasterPct >= 100) ||
-                (debouncedFasterPct < 92 && debouncedSlowestPct >= 100)
-            val slowInIcon = debouncedSlowestPct in 40..58 || debouncedSlowestPct in 73..81 || debouncedSlowestPct in 140..169
-            val fastInIcon = debouncedFasterPct in 40..58 || debouncedFasterPct in 73..81 || debouncedFasterPct in 140..169
-            when {
-                oneBarBelowWhiteRing && clampedCurE < slowCost - userFastEnergy -> min(debouncedSlowestPct, debouncedFasterPct)
-                slowInIcon && !fastInIcon -> debouncedFasterPct
-                fastInIcon && !slowInIcon -> debouncedSlowestPct
-                kotlin.math.abs(debouncedSlowestPct - debouncedFasterPct) <= 12 ->
-                    ((debouncedSlowestPct + debouncedFasterPct) / 2.0).roundToInt()
-                else -> min(debouncedSlowestPct, debouncedFasterPct)
-            }
-        } else {
-            debouncedSlowestPct
-        }
-
-        if (effPct in 101..200 && !slowestMeterInThirdFill[slotIdx]) {
-            val eR2Candidate = (slowCost + ((effPct - 100) * slowCost) / 100.0).roundToInt()
-            if (eR2Candidate <= maxAllowedSingleJumpE + 2) {
-                if (effPct > peakSecondFillPct[slotIdx]) {
-                    peakSecondFillPct[slotIdx] = effPct
                 }
             }
             val wrappedToThirdFill = canEnterSlowThirdFill &&
-                peakSecondFillPct[slotIdx] >= 168 &&
-                effPct in 101..(peakSecondFillPct[slotIdx] - 20)
-            if (canEnterSlowThirdFill && (effPct >= 195 || wrappedToThirdFill || clampedCurE >= 2 * slowCost)) {
+                peakSecondFillPct[slotIdx] >= 165 &&
+                debouncedSlowestPct in 101..(peakSecondFillPct[slotIdx] - 18)
+            if (canEnterSlowThirdFill && (debouncedSlowestPct >= 195 || wrappedToThirdFill || clampedCurE >= 2 * slowCost)) {
                 slowestMeterInThirdFill[slotIdx] = true
-                fasterMeterInThirdFill[slotIdx] = true
-                leftMeterFilledTwiceLatched[slotIdx] = true
-                rightMeterFilledTwiceLatched[slotIdx] = true
+                if (slowestIsRight) rightMeterFilledTwiceLatched[slotIdx] = true else leftMeterFilledTwiceLatched[slotIdx] = true
+                if (overchargeSaturationStepAnchorMs[slotIdx] <= 0L) {
+                    overchargeSaturationStepAnchorMs[slotIdx] = nowMs
+                }
             }
         }
 
+        // Round 2 (slowCost .. 2 * slowCost):
         if (!slowestMeterInThirdFill[slotIdx] && clampedCurE < 2 * slowCost) {
-            overchargeSaturationStepAnchorMs[slotIdx] = 0L
-            return if (effPct > 100) {
-                val r2E = (slowCost + (((effPct - 100) * slowCost) / 100.0).roundToInt()).coerceIn(slowCost, 2 * slowCost)
-                max(clampedCurE, min(r2E, maxAllowedSingleJumpE)).coerceIn(slowCost, 2 * slowCost)
+            val directR2E = if (debouncedSlowestPct in 101..199) {
+                (slowCost + (((debouncedSlowestPct - 100) * slowCost) / 100.0).roundToInt()).coerceIn(slowCost, 2 * slowCost)
+            } else if (debouncedSlowestPct >= 200 && canEnterSlowThirdFill) {
+                2 * slowCost
             } else {
-                val r1E = (((effPct * slowCost) / 100.0).roundToInt()).coerceIn(0, slowCost)
-                min(r1E, maxAllowedSingleJumpE).coerceIn(0, slowCost)
+                slowCost
             }
+            val clampedDirectR2 = max(clampedCurE, min(directR2E, maxAllowedSingleJumpE)).coerceIn(slowCost, 2 * slowCost)
+
+            // If we already reached >= 165% in Round 2 (e.g. 76E on 45E) and the top cap narrows/occludes the meniscus
+            // on subsequent fast moves (`clampedDirectR2 == clampedCurE`), bridge via fast-move turn cadence up to 2 * slowCost -> 100E!
+            if (peakSecondFillPct[slotIdx] >= 165) {
+                if (clampedDirectR2 > clampedCurE) {
+                    overchargeSaturationStepAnchorMs[slotIdx] = nowMs
+                    return clampedDirectR2
+                }
+                if (overchargeSaturationStepAnchorMs[slotIdx] <= 0L) {
+                    overchargeSaturationStepAnchorMs[slotIdx] = nowMs
+                    return clampedDirectR2
+                }
+                if (canAdvanceMonotonically && (nowMs - overchargeSaturationStepAnchorMs[slotIdx]) >= userMoveDurationMs) {
+                    val steps = ((nowMs - overchargeSaturationStepAnchorMs[slotIdx]) / userMoveDurationMs).toInt().coerceIn(1, 2)
+                    overchargeSaturationStepAnchorMs[slotIdx] += steps * userMoveDurationMs
+                    val steppedE = (clampedCurE + steps * userFastEnergy).coerceIn(slowCost, 100)
+                    if (steppedE >= 2 * slowCost) {
+                        slowestMeterInThirdFill[slotIdx] = true
+                        peakSecondFillPct[slotIdx] = 200
+                        if (slowestIsRight) rightMeterFilledTwiceLatched[slotIdx] = true else leftMeterFilledTwiceLatched[slotIdx] = true
+                    }
+                    return steppedE
+                }
+            } else {
+                overchargeSaturationStepAnchorMs[slotIdx] = 0L
+            }
+            return clampedDirectR2
         }
 
-        // In Round 3 (2 * slowCost .. 100E) for Matched Sub-50E Moves:
-        if (effPct in 101..194) {
-            overchargeSaturationStepAnchorMs[slotIdx] = nowMs
-            val eRound3 = (2 * slowCost + (((effPct - 100) * slowCost) / 100.0).roundToInt()).coerceIn(2 * slowCost, 100)
+        // Round 3 (2 * slowCost .. 100E) on the single slower bar:
+        // 1. If a 3rd-fill meniscus wrapped around into 101..194%, map directly to `2 * slowCost + (pct - 100)% * slowCost`
+        if (debouncedSlowestPct in 101..194) {
+            val eRound3 = (2 * slowCost + (((debouncedSlowestPct - 100) * slowCost) / 100.0).roundToInt()).coerceIn(2 * slowCost, 100)
             val targetR3 = max(clampedCurE, eRound3).coerceIn(2 * slowCost, 100)
             if (clampedCurE > 0 && targetR3 > maxAllowedSingleJumpE) {
                 slowestMeterInThirdFill[slotIdx] = false
                 if (slowestIsRight) rightMeterFilledTwiceLatched[slotIdx] = false else leftMeterFilledTwiceLatched[slotIdx] = false
-                val r2Fallback = (slowCost + (((effPct - 100) * slowCost) / 100.0).roundToInt()).coerceIn(slowCost, 2 * slowCost)
+                val r2Fallback = (slowCost + (((debouncedSlowestPct - 100) * slowCost) / 100.0).roundToInt()).coerceIn(slowCost, 2 * slowCost)
                 return max(clampedCurE, min(r2Fallback, maxAllowedSingleJumpE)).coerceIn(slowCost, 2 * slowCost)
             }
-            return targetR3
+            if (targetR3 > clampedCurE) {
+                overchargeSaturationStepAnchorMs[slotIdx] = nowMs
+                return targetR3
+            }
         }
 
+        // 2. Turn-Cadence Progression from `2 * slowCost` up to `100E` while the slower bar remains saturated
         val baseFloor = max(clampedCurE, 2 * slowCost)
         if (overchargeSaturationStepAnchorMs[slotIdx] <= 0L) {
             overchargeSaturationStepAnchorMs[slotIdx] = nowMs
@@ -10959,9 +10831,9 @@ class OverlayService : LifecycleService() {
     }
 
     /**
-     * v3.95: Post-Throw Energy & Round Resync Solver:
+     * v3.98: Single-Bar Post-Throw Energy & Round Resync Solver:
      * Deducts thrown move energy (`expectedPostEnergy = preThrowEnergy - thrownMoveCost`) and resyncs the active fill round
-     * (Round 1: 0..C, Round 2: C..2C, or Round 3: 2C..100E) to the observed post-throw charge bars!
+     * (Round 1: 0..C, Round 2: C..2C, or Round 3: 2C..100E) strictly to the slower charge move bar!
      */
     private fun resolvePostThrowCircleEnergyAndResyncRound(
         slotIdx: Int,
@@ -10979,8 +10851,8 @@ class OverlayService : LifecycleService() {
         val fastCost = fasterMoveCost.coerceIn(35, 100)
         val expE = expectedPostEnergy.coerceIn(0, 100)
 
-        // If slowest bar has no white border (0..100%), we are definitively in Round 1 (0 .. slowCost)
-        if (debouncedSlowestPct in 0..100) {
+        // If slowest bar has no white border (0..99%), or is 100% when expectedPostEnergy <= slowCost, we are in Round 1 (0 .. slowCost)
+        if (debouncedSlowestPct in 0..99 || (debouncedSlowestPct == 100 && expE <= slowCost)) {
             val r1E = (((debouncedSlowestPct * slowCost) / 100.0).roundToInt()).coerceIn(0, slowCost)
             resetSlotEnergyTracking(
                 slotIdx = slotIdx,
@@ -10994,47 +10866,21 @@ class OverlayService : LifecycleService() {
             return r1E
         }
 
-        // Slowest bar has a white border (101..200%) after throwing!
+        // Slowest bar has a white border (100..200%) after throwing!
         val eSlowRound2 = (slowCost + (((debouncedSlowestPct - 100) * slowCost) / 100.0).roundToInt()).coerceIn(slowCost, min(100, 2 * slowCost))
         val eSlowRound3 = if (slowCost < 50) {
             (2 * slowCost + (((debouncedSlowestPct - 100) * slowCost) / 100.0).roundToInt()).coerceIn(2 * slowCost, 100)
         } else eSlowRound2
 
-        val resolvedPostE = if (slowCost < 50 && hasSecondUserMove && slowCost != fastCost && debouncedFasterPct in 101..200) {
-            // Unmatched <50E: evaluate Round 2 vs Round 3 against both bars and expectedPostEnergy
-            val eFastRound2 = (fastCost + (((debouncedFasterPct - 100) * fastCost) / 100.0).roundToInt()).coerceIn(fastCost, min(100, 2 * fastCost))
-            val eFastRound3 = (2 * fastCost + (((debouncedFasterPct - 100) * fastCost) / 100.0).roundToInt()).coerceIn(2 * fastCost, 100)
-            val candidates = mutableListOf<Int>()
-            candidates.add(eSlowRound2)
-            if (kotlin.math.abs(eSlowRound2 - eFastRound2) <= 6) {
-                candidates.add(((eSlowRound2 * 0.55 + eFastRound2 * 0.45)).roundToInt())
+        val resolvedPostE = when {
+            debouncedSlowestPct == 100 && expE > slowCost -> expE.coerceIn(slowCost, min(100, 2 * slowCost))
+            slowCost < 50 && expE >= 2 * slowCost - userFastEnergy && debouncedSlowestPct in 101..194 -> {
+                val errR2 = kotlin.math.abs(eSlowRound2 - expE)
+                val errR3 = kotlin.math.abs(eSlowRound3 - expE)
+                if (errR3 < errR2) eSlowRound3 else eSlowRound2
             }
-            if (kotlin.math.abs(eSlowRound2 - eFastRound3) <= 6) {
-                candidates.add(((eSlowRound2 * 0.55 + eFastRound3 * 0.45)).roundToInt())
-            }
-            if (expE >= 2 * slowCost - userFastEnergy && debouncedSlowestPct < 195) {
-                candidates.add(((eSlowRound3 * 0.55 + eFastRound3 * 0.45)).roundToInt())
-            }
-            candidates.minByOrNull { cand ->
-                val diffFromExp = kotlin.math.abs(cand - expE)
-                val dualFit = scorePostThrowCircleFit(
-                    leftFillPct = if (slowestIsRight) debouncedFasterPct else debouncedSlowestPct,
-                    rightFillPct = if (slowestIsRight) debouncedSlowestPct else debouncedFasterPct,
-                    cost1 = if (slowestIsRight) fastCost else slowCost,
-                    cost2 = if (slowestIsRight) slowCost else fastCost,
-                    hasSecondMove = hasSecondUserMove,
-                    candidateEnergy = cand
-                )
-                diffFromExp * 0.65 + dualFit * 0.35
-            } ?: eSlowRound2
-        } else if (slowCost < 50 && expE >= 2 * slowCost && debouncedSlowestPct < 195) {
-            val errR2 = kotlin.math.abs(eSlowRound2 - expE)
-            val errR3 = kotlin.math.abs(eSlowRound3 - expE)
-            if (errR3 < errR2) eSlowRound3 else eSlowRound2
-        } else if (debouncedSlowestPct >= 195 && expE > 2 * slowCost) {
-            expE
-        } else {
-            eSlowRound2
+            debouncedSlowestPct >= 195 && expE > 2 * slowCost -> expE
+            else -> eSlowRound2
         }
 
         val finalPostE = resolvedPostE.coerceIn(0, 100)
@@ -11043,15 +10889,12 @@ class OverlayService : LifecycleService() {
             initialEnergy = finalPostE,
             cost1 = if (slowestIsRight) fastCost else slowCost,
             cost2 = if (slowestIsRight) slowCost else fastCost,
-            clearThirdFillLatches = finalPostE < 2 * min(slowCost, fastCost)
+            clearThirdFillLatches = finalPostE < 2 * slowCost
         )
         if (finalPostE in slowCost until (2 * slowCost) && debouncedSlowestPct in 101..200) {
             peakSecondFillPct[slotIdx] = max(peakSecondFillPct[slotIdx], debouncedSlowestPct)
         }
-        if (finalPostE in fastCost until (2 * fastCost) && debouncedFasterPct in 101..200) {
-            peakFastestSecondFillPct[slotIdx] = max(peakFastestSecondFillPct[slotIdx], debouncedFasterPct)
-        }
-        overchargeSaturationStepAnchorMs[slotIdx] = if (finalPostE >= 2 * slowCost) nowMs else 0L
+        overchargeSaturationStepAnchorMs[slotIdx] = if (finalPostE >= 2 * slowCost || peakSecondFillPct[slotIdx] >= 165) nowMs else 0L
         confirmedSlowestFillPct[slotIdx] = debouncedSlowestPct
         if (debouncedFasterPct in 0..200) confirmedFastestFillPct[slotIdx] = debouncedFasterPct
         return finalPostE
@@ -12833,10 +12676,9 @@ class OverlayService : LifecycleService() {
                             }
 
                             playerSlotEnergy[activeUserIdx] = measuredEnergy
-                            val displayCirclePct = if (slowestMoveCost < 50 && debouncedFillPct == 100 && measuredEnergy > slowestMoveCost) {
-                                computeExpectedCirclePctForEnergy(measuredEnergy, slowestMoveCost).first
-                            } else if (hasSecondUserMove && slowestMoveCost == fasterMoveCost && debouncedFasterPct in 0..200 && kotlin.math.abs(debouncedFillPct - debouncedFasterPct) > 12) {
-                                min(debouncedFillPct, debouncedFasterPct)
+                            val displayCirclePct = if (slowestMoveCost < 50 && measuredEnergy > slowestMoveCost && (debouncedFillPct == 100 || debouncedFillPct == 200 || debouncedFillPct == peakSecondFillPct[activeUserIdx])) {
+                                val (expPct, isThird) = computeExpectedCirclePctForEnergy(measuredEnergy, slowestMoveCost)
+                                if (isThird) expPct else if (measuredEnergy >= 2 * slowestMoveCost) 200 else expPct
                             } else {
                                 debouncedFillPct
                             }

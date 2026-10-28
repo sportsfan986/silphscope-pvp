@@ -1,10 +1,15 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v3.97`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v3.98`)
 
 ---
 
-## v3.95 – v3.97 (2026-10-28) — Sub-50E Multi-Round Energy Tracking up to 100E, Joint Dual-Bar Sensor Fusion & 2-Layer Overcharge Meniscus Verification
-*Functionally grouped release series introducing multi-round (`0–100E`) energy tracking for Pokémon with two `<50E` charged moves, joint dual-bar sensor fusion, and 2nd-vs-3rd charge ring disambiguation.*
+## v3.95 – v3.98 (2026-10-28) — Sub-50E Multi-Round Energy Tracking up to 100E, Single-Bar Slower-Move Authority & 3rd-Fill Detection
+*Functionally grouped release series introducing multi-round (`0–100E`) energy tracking for Pokémon with `<50E` charged moves, single-bar slower-move authority, and 2nd-vs-3rd charge ring disambiguation.*
 
+- **v3.98 — Key Feature: Single-Bar Slower Charge Meter Authority, Unrestricted Top-Cap Scan Above `169%` (`76E`) & 3rd-Fill Detection via Top-Cap Darkening Memory + Wrap-Around + Turn Cadence**:
+  - **Single-Bar Authority (Undo Dual-Bar Fusion in `resolveSub50AndMultiRoundEnergy`)**: Keys player energy tracking strictly off the single slower, higher-cost charge move bar (e.g., `45E Energy Ball` on Ninetales), eliminating cross-bar wrap-around clamping that previously stalled Ninetales at `76E`.
+  - **Unrestricted Top-Cap Chord Geometry Above `169%` (`detectSingleChargeButtonFillPct`)**: Scales the horizontal chord sample width above the center move-type icon (`minSafeDx = 4px` outside `inIconBand`) up to `91%` circle radius so upper-cap meniscuses (`170%..196%`, i.e., `77E..88E` on `45E` moves) are scanned cleanly without cutting off at `169%` (`76E`).
+  - **Top-Cap Darkening Memory (`firstFillTopCapLuma` & `secondFillBotCapLuma`)**: Calibrates the bright 1st-fill top-cap luminance (`78..86%` height) and darker 2nd-fill bottom-cap luminance (`12..20%` height) per Pokémon slot/button so a saturated `200%` 2nd-fill circle (`90E` on `45E`) is immediately distinguished from a `100%` 1st-fill circle (`45E`).
+  - **Meniscus Wrap-Around Latch & Fast-Move Turn Cadence (`90E -> 100E`)**: Latches `[3rd Fill]` on meniscus wrap-around (`101%..(peak - 18)%` after `>= 165%` 2nd-fill peak) and steps energy by `+userFastEnergy` every `userMoveDurationMs` during active fast combat whenever the meniscus enters the narrow upper cap (`>= 165%`) or saturates at `>= 2 * slowCost` up to `100E`.
 - **v3.97 — Key Feature: Unmatched `<50E` Joint Dual-Bar Sensor Fusion (`0–100E`), Matched `<50E` Dual-Bar Consensus, 2-Layer Reference Band Overcharge Verification & Post-Shield Energy Floor Lock**:
   - **Unmatched `<50E` Joint Dual-Bar Sensor Fusion Across All `0–100E` Rounds (`resolveSub50AndMultiRoundEnergy`)**: Fuses both `<50E` charge meters across Rounds 1, 2, and 3 (e.g., Ninetales `45E Energy Ball` + `35E Weather Ball`) so whenever one bar's meniscus crosses the central move-type icon (`40..58%`, `73..81%`, `140..169%`) or misses a softer 2nd-fill step, the companion bar outside the icon zone drives player energy (`54E -> 63E -> 72E -> 81E -> 90E -> 99E`) with a cross-bar saturation floor (`fastSaturatedFloor = 2 * fastCost`).
   - **Matched `<50E` Dual-Bar Consensus & Initial Turn-0 Step Clamp (`resolveSub50AndMultiRoundEnergy`)**: Enforces dual-bar consensus for equal-cost `<50E` moves (e.g., Fearow `40E Drill Run + 40E Drill Peck`), rejecting single-bar `>= 100%` white-ring outliers when the companion bar is `< 92%` and clamping initial `0E` step jumps (`maxAllowedSingleJumpE`) so a single noisy frame never spikes a fresh Pokémon from `0E` to `40E`.

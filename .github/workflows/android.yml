@@ -129,20 +129,20 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Sub-50E Joint Dual-Bar Sensor Fusion, 2-Layer Overcharge Meniscus Verification & Post-Shield Energy Floor Lock)
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Single-Bar Slower Charge Meter Authority, Unrestricted Top-Cap Scan Above 169% & 3rd-Fill Detection via Top-Cap Darkening Memory + Turn Cadence)
 
-            ### Release Series Context (`v3.95` – `v3.97`)
-            *Functionally grouped release series introducing multi-round (`0–100E`) energy tracking for Pokémon with two `<50E` charged moves, joint dual-bar sensor fusion, and 2nd-vs-3rd charge ring disambiguation.*
+            ### Release Series Context (`v3.95` – `v3.98`)
+            *Functionally grouped release series introducing multi-round (`0–100E`) energy tracking for Pokémon with `<50E` charged moves, single-bar slower-move authority, and 2nd-vs-3rd charge ring disambiguation.*
 
             ### Key Feature in `${{ steps.version.outputs.tag }}`
-            - **Unmatched `<50E` Joint Dual-Bar Sensor Fusion Across All `0–100E` Rounds (`resolveSub50AndMultiRoundEnergy`)**:
-              - Fuses both `<50E` charge meters across Rounds 1, 2, and 3 (e.g., Ninetales `45E Energy Ball` + `35E Weather Ball`) so whenever one bar's meniscus crosses the central move-type icon (`40..58%`, `73..81%`, `140..169%`) or fails to detect a softer 2nd-fill step, the companion bar outside the icon zone seamlessly drives player energy (`54E -> 63E -> 72E -> 81E -> 90E -> 99E`) with a cross-bar saturation floor (`fastSaturatedFloor`).
-            - **Matched `<50E` Dual-Bar Consensus & Initial Turn-0 Step Clamp (`resolveSub50AndMultiRoundEnergy`)**:
-              - Enforces dual-bar consensus for equal-cost `<50E` moves (e.g., Fearow `40E Drill Run + 40E Drill Peck`), rejecting single-bar `>= 100%` white-ring outliers when the companion bar is `< 92%` and clamping initial `0E` jumps so a single noisy frame never spikes a fresh Pokémon to `40E`.
-            - **White-Ring Upper-Arc & Colored Top-Cap Gating, 2-Layer Reference Band Overcharge Verification & Lower-Flank Continuity (`detectSingleChargeButtonFillPct`)**:
-              - Requires upper-half white ring arcs (`upperWhiteRingArcs >= 2`) and genuine colored top-cap liquid (`isTopCapFilled`) before classifying `>= 100%` ready state; verifies 2nd-fill (`105%..195%`) meniscuses against unobstructed Top (`78..86%`) and Bottom (`12..20%`) Reference Bands (`hasTwoLayerCapSeparation`); and verifies lower-quarter liquid continuity (`isLowerQuarterFilled`) in Round 1 (`1%..97%`).
-            - **Post-Opponent-Charged-Move Player Energy Floor Lock**:
-              - Preserves player banked overcharge energy across opponent charged attacks and shield prompts (`max(curE, rawMeasuredEnergy)`) so player energy never drops after shielding or taking an opponent charged move.
+            - **Single-Bar Authority on the Slower (Higher-Cost) Charge Move (`resolveSub50AndMultiRoundEnergy`)**:
+              - Undoes dual-bar fusion and keys player energy strictly off the single slower, higher-cost charge move bar (e.g., `45E Energy Ball` on Ninetales), eliminating cross-bar wrap-around clamping that previously held Ninetales at `76E`.
+            - **Unrestricted Top-Cap Chord Geometry Above `169%` (`170%..196%` / `77E..88E` on `45E` Moves)**:
+              - Scales the horizontal chord sample width above the center move-type icon (`minSafeDx = 4px` outside `inIconBand`) up to `91%` circle radius so upper-cap meniscuses (`170%..196%`) are scanned cleanly instead of cutting off at `169%` (`76E`).
+            - **Three-Tier 3rd-Fill Detection Strategy (`76E -> 90E -> 100E`)**:
+              - **Top-Cap Darkening Memory (`firstFillTopCapLuma` & `secondFillBotCapLuma`)**: Calibrates the bright 1st-fill top-cap luminance (`78..86%` height) and darker 2nd-fill bottom-cap luminance (`12..20%` height) per Pokémon slot/button so a saturated `200%` 2nd-fill circle (`90E` on `45E`) is immediately distinguished from a `100%` 1st-fill circle (`45E`).
+              - **Meniscus Wrap-Around Latch**: Latches `[3rd Fill]` when a 3rd-fill meniscus wraps back to the lower/mid circle (`101%..(peak - 18)%`) after reaching an upper-circle 2nd-fill peak (`>= 165%`).
+              - **Fast-Move Turn Cadence Progression**: Steps energy forward by `+userFastEnergy` every `userMoveDurationMs` during active fast-move combat whenever the meniscus enters the narrow upper cap (`>= 165%`) or saturates at `>= 2 * slowCost` up to `100E`.
 
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)
