@@ -7725,6 +7725,7 @@ class OverlayService : LifecycleService() {
     private var lastChargedAttackLoggedMs: Long = 0L
     private var lastChargedAttackLoggedActor: String = ""
     private var lastUserChargedMoveBannerResolvedMs: Long = 0L
+    private var pendingUserChargeConfirmedByOcr: Boolean = false
 
     // v3.68: Turn-Phased OCR Capture, Charge-Bar 2nd Source of Truth & Monotonic Fast-Move Energy Engine
     private var sampledOppHasPendingDmg: Boolean = false
@@ -8701,9 +8702,9 @@ class OverlayService : LifecycleService() {
                 if (!isShieldDecisionOverlayVisible) return@post
                 val density = resources.displayMetrics.density
                 val targetWidth = (screenWidth * 0.88f).toInt()
-                // v4.01: Position bottom at 0.285 * screenHeight with compact vertical padding so the top of the card
-                // stays below 0.54h (never overlapping srcMidBanner at 0.24h..0.54h where "<Opponent> used <Move>!" appears).
-                val bottomOffsetY = (screenHeight * 0.285f).toInt()
+                // v4.05: Position bottom at 0.340 * screenHeight (y = 0.660h from top) so the card sits cleanly above
+                // Pokémon GO's "Attack incoming! Use a Protect Shield?" text (0.65h..0.77h) without occluding the prompt text.
+                val bottomOffsetY = (screenHeight * 0.340f).toInt()
 
                 if (shieldDecisionOverlayView == null) {
                     val container = LinearLayout(this).apply {
@@ -9711,33 +9712,10 @@ class OverlayService : LifecycleService() {
         }
         detectChargedMoveButtonFillLevels(screen, w, h)
 
-        // v4.04: Cutscene-Gated Protect Shield Hexagon + "NOT NOW" Pixel Detection & CMP Second-Throw Support
-        // Never evaluates while top Pokéballs or bottom charge circles are visible, or during the player's active 2.3s minigame swipe phase!
-        // Once the player's "<Pokemon> used <Move>!" banner resolves (or 2.3s after throw start), re-enables immediately so an opponent
-        // throwing 2nd on a CMP tie is detected without needing combat circles to return in between!
-        val hasUserBannerResolvedSinceThrow = lastUserChargedMoveBannerResolvedMs > 0L &&
-            lastUserChargedMoveBannerResolvedMs >= pendingChargedAttackStartMs
-        val isUserMinigameSwipePhaseActive = pendingChargedAttackActor == "user" &&
-            !hasUserBannerResolvedSinceThrow &&
-            (currentFrameTimestampMs - pendingChargedAttackStartMs) < 2300L
-        val isCutsceneHudHiddenForShieldPrompt = isBattleActive &&
-            !isWaitingForOpponent &&
-            hasBattleStarted &&
-            playerShieldsRemaining > 0 &&
-            sampledPlayerBalls <= 0 &&
-            sampledOppBalls <= 0 &&
-            sampledLeftChargeBtnFillPct == -1 &&
-            sampledRightChargeBtnFillPct == -1 &&
-            !isUserMinigameSwipePhaseActive
-        if (isCutsceneHudHiddenForShieldPrompt && detectAttackIncomingShieldHexagonPixels(screen, w, h)) {
-            shieldHexagonConfirmFrames = (shieldHexagonConfirmFrames + 1).coerceAtMost(20)
-        } else {
-            shieldHexagonConfirmFrames = 0
-        }
-        sampledShieldHexagonVisible = shieldHexagonConfirmFrames >= 2
-        if (sampledShieldHexagonVisible) {
-            shieldHexagonSeenDuringPrompt = true
-        }
+        // v4.05: Visual shield hexagon pixel matching is disabled — opponent charged attacks trigger strictly off
+        // "Attack incoming!" / "Use a Protect Shield?" OCR text!
+        sampledShieldHexagonVisible = false
+        shieldHexagonConfirmFrames = 0
         if (isShieldDecisionOverlayVisible) {
             val overlayElapsedMs = if (shieldDecisionOverlayShownAtMs > 0L) {
                 currentFrameTimestampMs - shieldDecisionOverlayShownAtMs
@@ -9747,7 +9725,7 @@ class OverlayService : LifecycleService() {
             val hasCombatCirclesReturnedNow = (sampledLeftChargeBtnFillPct in 0..300 || sampledRightChargeBtnFillPct in 0..300) &&
                 (sampledPlayerBalls in 1..3 || sampledOppBalls in 1..3) &&
                 overlayElapsedMs >= 1000L
-            if (overlayElapsedMs >= 5000L || hasCombatCirclesReturnedNow || isUserMinigameSwipePhaseActive) {
+            if (overlayElapsedMs >= 5000L || hasCombatCirclesReturnedNow) {
                 hideShieldDecisionOverlay()
             }
         }
@@ -9806,7 +9784,7 @@ class OverlayService : LifecycleService() {
             }
         }
 
-        // Check whether to launch the asynchronous ML Kit OCR pass on this frame (accelerated to 300ms during Charged Moves or when bottom circles hide)
+        // Check whether to launch the asynchronous ML Kit OCR pass on this frame (accelerated to 250ms during Charged Moves or when bottom circles hide)
         val nowMs = System.currentTimeMillis()
         val areBottomCirclesHiddenInCombat = isBattleActive && !isWaitingForOpponent &&
             sampledLeftChargeBtnFillPct == -1 && sampledRightChargeBtnFillPct == -1
@@ -9814,132 +9792,30 @@ class OverlayService : LifecycleService() {
             isAttackIncomingPromptActive ||
             areBottomCirclesHiddenInCombat ||
             (lastChargedAttackLoggedMs > 0L && (nowMs - lastChargedAttackLoggedMs) <= 2200L)
-        val targetOcrIntervalMs = if (isChargedWindowForFastOcr) 300L else 750L
+        val targetOcrIntervalMs = if (isChargedWindowForFastOcr) 250L else 750L
         val shouldStartOcr = !isOcrInFlight && (lastOcrStartMs == 0L || (nowMs - lastOcrStartMs) >= targetOcrIntervalMs)
 
-        var compositeForOcr: Bitmap? = null
-        var ocrOppZoneH = 0
-        var ocrPlayerZoneH = 0
-        var ocrMovesBottomY = 0
-        // v4.04: Keep bottom prompt OCR (`srcMoves`, `0.70h..0.96h`) active throughout ANY cutscene where bottom charge circles
-        // are hidden (including when `pendingChargedAttackActor == "user"` so back-to-back CMP 2nd throws and "Attack incoming!"
-        // secondary triggers are always read by OCR!).
-        val isCutscenePromptWindowForOcr = isBattleActive &&
-            !isWaitingForOpponent &&
-            sampledLeftChargeBtnFillPct == -1 &&
-            sampledRightChargeBtnFillPct == -1 &&
-            ((sampledPlayerBalls <= 0 && sampledOppBalls <= 0) || playerShieldsRemaining == 0 || isPostFaintSwitchPromptActive)
+        // v4.05: Keep bottom prompt OCR (`srcMoves`, expanded to `0.53h..0.96h` to eliminate the 0.52h-0.70h blind spot!)
+        // active whenever bottom charge circles are hidden in combat — decoupled from top Pokéball false positives!
+        val isCutscenePromptWindowForOcr = areBottomCirclesHiddenInCombat || isPostFaintSwitchPromptActive
         val includeBottomMovesInOcr = !isBattleActive || isWaitingForOpponent || isCutscenePromptWindowForOcr
         if (!includeBottomMovesInOcr && cachedOcrPlayerMoveLines.isNotEmpty()) {
             cachedOcrPlayerMoveLines = emptyList()
         }
-        val gap = 24
 
-        if (shouldStartOcr) {
-            val srcOpp = Rect(
-                (w * 0.42f).toInt().coerceIn(0, w - 1),
-                (h * 0.025f).toInt().coerceIn(0, h - 1),
-                (w * 0.98f).toInt().coerceIn(1, w),
-                (h * 0.148f).toInt().coerceIn(1, h)
-            )
-            val srcPlayer = Rect(
-                (w * 0.01f).toInt().coerceIn(0, w - 1),
-                (h * 0.025f).toInt().coerceIn(0, h - 1),
-                (w * 0.47f).toInt().coerceIn(1, w),
-                (h * 0.148f).toInt().coerceIn(1, h)
-            )
-            val srcMoves = Rect(
-                (w * 0.10f).toInt().coerceIn(0, w - 1),
-                (h * (if (isCutscenePromptWindowForOcr) 0.70f else 0.68f)).toInt().coerceIn(0, h - 1),
-                (w * 0.90f).toInt().coerceIn(1, w),
-                (h * 0.96f).toInt().coerceIn(1, h)
-            )
-            // v4.02: Widened cross-device "<Pokemon> used <Move>!" banner crop (0.08w..0.92w, 0.15h..0.52h)
-            // Captures both high-aspect-ratio banners at 18%-27% height and standard/compact phone banners at 28%-52% height!
-            val srcMidBanner = Rect(
-                (w * 0.08f).toInt().coerceIn(0, w - 1),
-                (h * 0.15f).toInt().coerceIn(0, h - 1),
-                (w * 0.92f).toInt().coerceIn(1, w),
-                (h * 0.52f).toInt().coerceIn(1, h)
-            )
-
-            val bwOppBitmap = createHighContrastWhiteTextBitmap(screen, srcOpp)
-            val bwPlayerBitmap = createHighContrastWhiteTextBitmap(screen, srcPlayer)
-            val bwMovesBitmap = if (includeBottomMovesInOcr) createHighContrastWhiteTextBitmap(screen, srcMoves) else null
-            val bwMidBannerBitmap = createHighContrastWhiteTextBitmap(screen, srcMidBanner)
-
-            val scale = 1.8f
-            val dstOppW = (srcOpp.width() * scale).toInt().coerceAtLeast(1)
-            val dstOppH = (srcOpp.height() * scale).toInt().coerceAtLeast(1)
-            val dstPlayerW = (srcPlayer.width() * scale).toInt().coerceAtLeast(1)
-            val dstPlayerH = (srcPlayer.height() * scale).toInt().coerceAtLeast(1)
-            val movesW = if (includeBottomMovesInOcr) srcMoves.width().coerceAtLeast(1) else 0
-            val movesH = if (includeBottomMovesInOcr) srcMoves.height().coerceAtLeast(1) else 0
-            val ocrMovesZoneH = if (includeBottomMovesInOcr) (movesH + gap + movesH) else 0
-            val midScale = 1.35f
-            val dstMidW = (srcMidBanner.width() * midScale).toInt().coerceAtLeast(1)
-            val dstMidH = (srcMidBanner.height() * midScale).toInt().coerceAtLeast(1)
-            val ocrMidZoneH = dstMidH + gap + dstMidH
-
-            val compW = max(max(max(dstOppW, dstPlayerW), movesW), dstMidW).coerceAtLeast(100)
-            ocrOppZoneH = dstOppH + gap + dstOppH
-            ocrPlayerZoneH = dstPlayerH + gap + dstPlayerH
-            ocrMovesBottomY = if (includeBottomMovesInOcr) {
-                ocrOppZoneH + gap + ocrPlayerZoneH + gap + ocrMovesZoneH
-            } else {
-                ocrOppZoneH + gap + ocrPlayerZoneH
-            }
-            val compH = ocrMovesBottomY + gap + ocrMidZoneH
-
-            compositeForOcr = try {
-                Bitmap.createBitmap(compW, compH, Bitmap.Config.ARGB_8888)
+        // v4.05: Offload all OCR cropping, high-contrast white-text binarization, and composite Canvas drawing
+        // off the 10Hz pixel scan thread onto Dispatchers.Default so the pixel loop stays well under 100ms!
+        val screenForOcr: Bitmap? = if (shouldStartOcr) {
+            try {
+                screen.copy(Bitmap.Config.ARGB_8888, false)
             } catch (_: Exception) {
                 null
             }
-
-            if (compositeForOcr != null) {
-                val canvas = Canvas(compositeForOcr)
-                canvas.drawColor(Color.BLACK)
-                val filterPaint = Paint(Paint.FILTER_BITMAP_FLAG)
-
-                val dstOppRaw = Rect(0, 0, dstOppW, dstOppH)
-                val dstOppBw = Rect(0, dstOppH + gap, dstOppW, ocrOppZoneH)
-                val dstPlayerRaw = Rect(0, ocrOppZoneH + gap, dstPlayerW, ocrOppZoneH + gap + dstPlayerH)
-                val dstPlayerBw = Rect(0, ocrOppZoneH + gap + dstPlayerH + gap, dstPlayerW, ocrOppZoneH + gap + ocrPlayerZoneH)
-                val dstMidBannerRaw = Rect(0, ocrMovesBottomY + gap, dstMidW, ocrMovesBottomY + gap + dstMidH)
-                val dstMidBannerBw = Rect(0, ocrMovesBottomY + gap + dstMidH + gap, dstMidW, compH)
-
-                canvas.drawBitmap(screen, srcOpp, dstOppRaw, filterPaint)
-                if (bwOppBitmap != null) {
-                    canvas.drawBitmap(bwOppBitmap, null, dstOppBw, filterPaint)
-                }
-                canvas.drawBitmap(screen, srcPlayer, dstPlayerRaw, filterPaint)
-                if (bwPlayerBitmap != null) {
-                    canvas.drawBitmap(bwPlayerBitmap, null, dstPlayerBw, filterPaint)
-                }
-                if (includeBottomMovesInOcr && movesW > 0 && movesH > 0) {
-                    val movesTopY = ocrOppZoneH + gap + ocrPlayerZoneH + gap
-                    val dstMovesRaw = Rect(0, movesTopY, movesW, movesTopY + movesH)
-                    canvas.drawBitmap(screen, srcMoves, dstMovesRaw, filterPaint)
-                    if (bwMovesBitmap != null) {
-                        val dstMovesBw = Rect(0, movesTopY + movesH + gap, movesW, ocrMovesBottomY)
-                        canvas.drawBitmap(bwMovesBitmap, null, dstMovesBw, filterPaint)
-                    }
-                }
-                canvas.drawBitmap(screen, srcMidBanner, dstMidBannerRaw, filterPaint)
-                if (bwMidBannerBitmap != null) {
-                    canvas.drawBitmap(bwMidBannerBitmap, null, dstMidBannerBw, filterPaint)
-                }
-            }
-            bwOppBitmap?.recycle()
-            bwPlayerBitmap?.recycle()
-            bwMovesBitmap?.recycle()
-            bwMidBannerBitmap?.recycle()
-        }
+        } else null
 
         screen.recycle()
 
-        // Immediately advance the 200ms Pixel HUD & Sliver Latch-and-Lock + PID Energy State Machine
+        // Immediately advance the 100ms Pixel HUD & Sliver Latch-and-Lock + Energy State Machine
         // using the latest cached OCR lines so 0.5s GBL turns are never delayed by ML Kit OCR!
         if (!isBattleMenuScreen(cachedOcrOppLines, cachedOcrPlayerTopLines, cachedOcrPlayerMoveLines)) {
             updateSteadyFrameBallAndShieldState()
@@ -9951,20 +9827,130 @@ class OverlayService : LifecycleService() {
             )
         }
 
-        // Launch asynchronous ~750ms ML Kit OCR pass in background without blocking the 200ms pixel loop
-        if (compositeForOcr != null) {
+        // Launch asynchronous ML Kit OCR pass in background without blocking the 10Hz pixel loop
+        if (screenForOcr != null) {
             isOcrInFlight = true
-            val ocrLaunchMs = System.currentTimeMillis()
-            lastOcrStartMs = ocrLaunchMs
+            lastOcrStartMs = System.currentTimeMillis()
             val capturedEpoch = frameEpoch
-            val yDivider1 = ocrOppZoneH + gap / 2
-            val yDivider2 = ocrOppZoneH + gap + ocrPlayerZoneH + gap / 2
-            val yDivider3 = if (includeBottomMovesInOcr) ocrMovesBottomY + gap / 2 else yDivider2
+            val isFastCutsceneOcrMode = isCutscenePromptWindowForOcr && !isPostFaintSwitchPromptActive
 
             lifecycleScope.launch(Dispatchers.Default) {
+                var compositeForOcr: Bitmap? = null
                 try {
+                    val gap = 16
+                    val srcOpp = Rect(
+                        (w * 0.42f).toInt().coerceIn(0, w - 1),
+                        (h * 0.025f).toInt().coerceIn(0, h - 1),
+                        (w * 0.98f).toInt().coerceIn(1, w),
+                        (h * 0.148f).toInt().coerceIn(1, h)
+                    )
+                    val srcPlayer = Rect(
+                        (w * 0.01f).toInt().coerceIn(0, w - 1),
+                        (h * 0.025f).toInt().coerceIn(0, h - 1),
+                        (w * 0.47f).toInt().coerceIn(1, w),
+                        (h * 0.148f).toInt().coerceIn(1, h)
+                    )
+                    // v4.05: Expanded top of srcMoves from 0.70h to 0.53h during cutscenes so "Attack incoming!"
+                    // and "Use a Protect Shield?" (0.58h..0.78h) are 100% captured with zero blind spot!
+                    val srcMoves = Rect(
+                        (w * 0.08f).toInt().coerceIn(0, w - 1),
+                        (h * (if (isCutscenePromptWindowForOcr) 0.53f else 0.68f)).toInt().coerceIn(0, h - 1),
+                        (w * 0.92f).toInt().coerceIn(1, w),
+                        (h * 0.96f).toInt().coerceIn(1, h)
+                    )
+                    // v4.05: Contiguous mid-banner crop (0.08w..0.92w, 0.15h..0.53h) meeting srcMoves at 0.53h
+                    val srcMidBanner = Rect(
+                        (w * 0.08f).toInt().coerceIn(0, w - 1),
+                        (h * 0.15f).toInt().coerceIn(0, h - 1),
+                        (w * 0.92f).toInt().coerceIn(1, w),
+                        (h * 0.53f).toInt().coerceIn(1, h)
+                    )
+
+                    val bwOppBitmap = createHighContrastWhiteTextBitmap(screenForOcr, srcOpp)
+                    val bwPlayerBitmap = createHighContrastWhiteTextBitmap(screenForOcr, srcPlayer)
+                    val bwMovesBitmap = if (includeBottomMovesInOcr) createHighContrastWhiteTextBitmap(screenForOcr, srcMoves) else null
+                    val bwMidBannerBitmap = createHighContrastWhiteTextBitmap(screenForOcr, srcMidBanner)
+
+                    // v4.05: Compact scaling (~1.3 MP total instead of 5.5 MP) so ML Kit inference finishes in <75ms!
+                    val topScale = if (isFastCutsceneOcrMode) 1.0f else 1.35f
+                    val movesScale = if (isFastCutsceneOcrMode) 0.85f else 0.90f
+                    val midScale = 0.85f
+
+                    val dstOppW = (srcOpp.width() * topScale).toInt().coerceAtLeast(1)
+                    val dstOppH = (srcOpp.height() * topScale).toInt().coerceAtLeast(1)
+                    val dstPlayerW = (srcPlayer.width() * topScale).toInt().coerceAtLeast(1)
+                    val dstPlayerH = (srcPlayer.height() * topScale).toInt().coerceAtLeast(1)
+                    val movesW = if (includeBottomMovesInOcr) (srcMoves.width() * movesScale).toInt().coerceAtLeast(1) else 0
+                    val movesH = if (includeBottomMovesInOcr) (srcMoves.height() * movesScale).toInt().coerceAtLeast(1) else 0
+                    val ocrMovesZoneH = if (includeBottomMovesInOcr) (movesH + gap + movesH) else 0
+                    val dstMidW = (srcMidBanner.width() * midScale).toInt().coerceAtLeast(1)
+                    val dstMidH = (srcMidBanner.height() * midScale).toInt().coerceAtLeast(1)
+                    val ocrMidZoneH = dstMidH + gap + dstMidH
+
+                    val compW = max(max(max(dstOppW, dstPlayerW), movesW), dstMidW).coerceAtLeast(100)
+                    val ocrOppZoneH = dstOppH + gap + dstOppH
+                    val ocrPlayerZoneH = dstPlayerH + gap + dstPlayerH
+                    val ocrMovesBottomY = if (includeBottomMovesInOcr) {
+                        ocrOppZoneH + gap + ocrPlayerZoneH + gap + ocrMovesZoneH
+                    } else {
+                        ocrOppZoneH + gap + ocrPlayerZoneH
+                    }
+                    val compH = ocrMovesBottomY + gap + ocrMidZoneH
+
+                    compositeForOcr = try {
+                        Bitmap.createBitmap(compW, compH, Bitmap.Config.ARGB_8888)
+                    } catch (_: Exception) {
+                        null
+                    }
+
+                    if (compositeForOcr != null) {
+                        val canvas = Canvas(compositeForOcr)
+                        canvas.drawColor(Color.BLACK)
+                        val filterPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+
+                        val dstOppRaw = Rect(0, 0, dstOppW, dstOppH)
+                        val dstOppBw = Rect(0, dstOppH + gap, dstOppW, ocrOppZoneH)
+                        val dstPlayerRaw = Rect(0, ocrOppZoneH + gap, dstPlayerW, ocrOppZoneH + gap + dstPlayerH)
+                        val dstPlayerBw = Rect(0, ocrOppZoneH + gap + dstPlayerH + gap, dstPlayerW, ocrOppZoneH + gap + ocrPlayerZoneH)
+                        val dstMidBannerRaw = Rect(0, ocrMovesBottomY + gap, dstMidW, ocrMovesBottomY + gap + dstMidH)
+                        val dstMidBannerBw = Rect(0, ocrMovesBottomY + gap + dstMidH + gap, dstMidW, compH)
+
+                        canvas.drawBitmap(screenForOcr, srcOpp, dstOppRaw, filterPaint)
+                        if (bwOppBitmap != null) {
+                            canvas.drawBitmap(bwOppBitmap, null, dstOppBw, filterPaint)
+                        }
+                        canvas.drawBitmap(screenForOcr, srcPlayer, dstPlayerRaw, filterPaint)
+                        if (bwPlayerBitmap != null) {
+                            canvas.drawBitmap(bwPlayerBitmap, null, dstPlayerBw, filterPaint)
+                        }
+                        if (includeBottomMovesInOcr && movesW > 0 && movesH > 0) {
+                            val movesTopY = ocrOppZoneH + gap + ocrPlayerZoneH + gap
+                            val dstMovesRaw = Rect(0, movesTopY, movesW, movesTopY + movesH)
+                            canvas.drawBitmap(screenForOcr, srcMoves, dstMovesRaw, filterPaint)
+                            if (bwMovesBitmap != null) {
+                                val dstMovesBw = Rect(0, movesTopY + movesH + gap, movesW, ocrMovesBottomY)
+                                canvas.drawBitmap(bwMovesBitmap, null, dstMovesBw, filterPaint)
+                            }
+                        }
+                        canvas.drawBitmap(screenForOcr, srcMidBanner, dstMidBannerRaw, filterPaint)
+                        if (bwMidBannerBitmap != null) {
+                            canvas.drawBitmap(bwMidBannerBitmap, null, dstMidBannerBw, filterPaint)
+                        }
+                    }
+                    bwOppBitmap?.recycle()
+                    bwPlayerBitmap?.recycle()
+                    bwMovesBitmap?.recycle()
+                    bwMidBannerBitmap?.recycle()
+                    screenForOcr.recycle()
+
+                    val ocrBmp = compositeForOcr ?: return@launch
+                    val ocrLaunchMs = System.currentTimeMillis()
+                    val yDivider1 = ocrOppZoneH + gap / 2
+                    val yDivider2 = ocrOppZoneH + gap + ocrPlayerZoneH + gap / 2
+                    val yDivider3 = if (includeBottomMovesInOcr) ocrMovesBottomY + gap / 2 else yDivider2
+
                     val visionText = suspendCancellableCoroutine<Text?> { cont ->
-                        val input = InputImage.fromBitmap(compositeForOcr, 0)
+                        val input = InputImage.fromBitmap(ocrBmp, 0)
                         textRecognizer.process(input)
                             .addOnSuccessListener { result ->
                                 if (cont.isActive) cont.resume(result)
@@ -9973,7 +9959,7 @@ class OverlayService : LifecycleService() {
                                 if (cont.isActive) cont.resume(null)
                             }
                     }
-                    compositeForOcr.recycle()
+                    ocrBmp.recycle()
 
                     val ocrDoneMs = System.currentTimeMillis()
                     val ocrElapsedMs = (ocrDoneMs - ocrLaunchMs).coerceAtLeast(1L)
@@ -10002,27 +9988,34 @@ class OverlayService : LifecycleService() {
                             }
                         }
 
-                        cachedOcrOppLines = oppLines
-                        cachedOcrPlayerTopLines = playerTopLines
-                        cachedOcrPlayerMoveLines = playerMoveLines
-                        cachedOcrMidBannerLines = midBannerLines
+                        withContext(Dispatchers.Main) {
+                            if (capturedEpoch == battleResetEpoch) {
+                                cachedOcrOppLines = oppLines
+                                cachedOcrPlayerTopLines = playerTopLines
+                                cachedOcrPlayerMoveLines = playerMoveLines
+                                cachedOcrMidBannerLines = midBannerLines
 
-                        if (!isBattleMenuScreen(oppLines, playerTopLines, playerMoveLines)) {
-                            handleOpponentLines(oppLines)
-                            handlePlayerSwitchLines(playerTopLines, playerMoveLines)
-                            handleMidBannerUsedMoveLines(midBannerLines)
-                            // v4.04: Immediately evaluate "Attack incoming!" secondary OCR trigger upon OCR completion!
-                            updateLiveHpAndChargedAttackState(
-                                oppLines,
-                                playerTopLines,
-                                playerMoveLines,
-                                midBannerLines
-                            )
+                                if (!isBattleMenuScreen(oppLines, playerTopLines, playerMoveLines)) {
+                                    handleOpponentLines(oppLines)
+                                    handlePlayerSwitchLines(playerTopLines, playerMoveLines)
+                                    handleMidBannerUsedMoveLines(midBannerLines)
+                                    // v4.05: Immediately evaluate "Attack incoming!" OCR trigger on the Main thread upon OCR completion!
+                                    updateLiveHpAndChargedAttackState(
+                                        oppLines,
+                                        playerTopLines,
+                                        playerMoveLines,
+                                        midBannerLines
+                                    )
+                                }
+                            }
                         }
                     }
                 } catch (_: Exception) {
                     try {
-                        if (!compositeForOcr.isRecycled) compositeForOcr.recycle()
+                        if (!screenForOcr.isRecycled) screenForOcr.recycle()
+                    } catch (_: Exception) {}
+                    try {
+                        if (compositeForOcr != null && !compositeForOcr.isRecycled) compositeForOcr.recycle()
                     } catch (_: Exception) {}
                 } finally {
                     isOcrInFlight = false
@@ -12401,6 +12394,7 @@ class OverlayService : LifecycleService() {
                     }
                 } else if (actorRole == "user") {
                     lastUserChargedMoveBannerResolvedMs = nowMs
+                    pendingUserChargeConfirmedByOcr = true
                     val mStats = resolveChargedMoveStatsStatic(moveName, userMeta.types.firstOrNull() ?: "normal")
                     val trueCost = (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[moveName] ?: 50).coerceIn(35, 100)
                     if (pendingChargedAttackActor == "user") {
@@ -12430,19 +12424,23 @@ class OverlayService : LifecycleService() {
     }
 
     /**
-     * v4.04: Secondary OCR matcher for the opponent "Attack incoming! Use a Protect Shield?" / "NOT NOW" prompt.
-     * Excludes our own overlay status text and supports fuzzy OCR matching for common ML Kit typos
-     * (e.g., "attack incomming", "incomming!", "protect shield", "use a protect", "not now").
+     * v4.05: Primary OCR matcher for the opponent "Attack incoming! Use a Protect Shield?" / "NOT NOW" prompt.
+     * Excludes our own overlay status text (`isOverlayHudSelfText(it.lowercase())`) and supports both multi-word
+     * and cross-line fuzzy OCR matching for common ML Kit typos (e.g., "attack incomming", "incomming!",
+     * "protect shield", "use a protect", "not now").
      */
     private fun matchesAttackIncomingOcrText(lines: List<Text.Line>): Boolean {
         if (lines.isEmpty()) return false
-        val filteredLines = lines.map { it.text.trim() }.filter { it.isNotEmpty() && !isOverlayHudSelfText(it) }
+        val filteredLines = lines.map { it.text.trim() }.filter { it.isNotEmpty() && !isOverlayHudSelfText(it.lowercase()) }
         if (filteredLines.isEmpty()) return false
         val combined = filteredLines.joinToString(" ") { it.lowercase() }
         if (combined.contains("attack incoming") ||
             combined.contains("attack incomming") ||
             combined.contains("incoming!") ||
             combined.contains("incomming!") ||
+            combined.contains(" incoming") ||
+            combined.contains(" incomming") ||
+            combined.contains("attack inc") ||
             combined.contains("protect shield") ||
             combined.contains("use a protect") ||
             combined.contains("not now") ||
@@ -12453,26 +12451,42 @@ class OverlayService : LifecycleService() {
         ) {
             return true
         }
-        for (rawLine in filteredLines) {
-            val tokens = rawLine.lowercase()
-                .replace(Regex("[^a-z0-9\\s]"), " ")
-                .split(Regex("\\s+"))
-                .filter { it.length >= 3 }
-            if (tokens.isEmpty()) continue
-            val hasAttackOrShieldContext = tokens.any {
-                it.startsWith("att") || it.startsWith("shie") || it.startsWith("prot") || it == "use"
+        val allTokens = combined
+            .replace(Regex("[^a-z0-9\\s]"), " ")
+            .split(Regex("\\s+"))
+            .filter { it.length >= 3 }
+        if (allTokens.isEmpty()) return false
+
+        // Direct fuzzy match on "incoming" / "incomming" (no Pokémon or move in GBL is within edit distance 2 of "incoming")
+        for (tok in allTokens) {
+            if (tok.length in 7..10 && (
+                    levenshteinDistance(tok, "incoming") <= 2 ||
+                    levenshteinDistance(tok, "incomming") <= 2
+                )
+            ) {
+                return true
             }
-            if (hasAttackOrShieldContext) {
-                for (tok in tokens) {
-                    if (tok.length in 6..11 && (
-                            levenshteinDistance(tok, "incoming") <= 2 ||
-                            levenshteinDistance(tok, "incomming") <= 2 ||
-                            levenshteinDistance(tok, "protect") <= 1 ||
-                            levenshteinDistance(tok, "shield") <= 1
-                        )
-                    ) {
-                        return true
-                    }
+        }
+
+        val hasAttackOrShieldContext = allTokens.any {
+            it.startsWith("att") ||
+                it.startsWith("shie") ||
+                it.startsWith("prot") ||
+                it == "use" ||
+                (it.length in 5..7 && levenshteinDistance(it, "attack") <= 2)
+        }
+        if (hasAttackOrShieldContext) {
+            for (tok in allTokens) {
+                if (tok.startsWith("incom") ||
+                    (tok.length in 5..11 && (
+                        levenshteinDistance(tok, "incoming") <= 2 ||
+                        levenshteinDistance(tok, "incomming") <= 2 ||
+                        levenshteinDistance(tok, "protect") <= 1 ||
+                        levenshteinDistance(tok, "shield") <= 1 ||
+                        levenshteinDistance(tok, "shields") <= 1
+                    ))
+                ) {
+                    return true
                 }
             }
         }
@@ -12619,11 +12633,10 @@ class OverlayService : LifecycleService() {
         val midBannerLower = midBannerLines.joinToString(" ") { it.text.lowercase() }
         val combinedBannerLower = "$bottomLower $midBannerLower $oppTopLower $playerTopLower"
 
-        // v4.03/v4.04: Opponent Charged Attack prompt text is gated on the combat HUD being hidden
-        // (`sampledLeftChargeBtnFillPct == -1 && sampledRightChargeBtnFillPct == -1` and top Pokéballs hidden when player has shields)
+        // v4.05: Opponent Charged Attack prompt text is gated solely on the bottom Charge Move Circles being hidden
+        // (`sampledLeftChargeBtnFillPct == -1 && sampledRightChargeBtnFillPct == -1`), decoupled from top Pokéball false positives!
         val isHudHiddenForOpponentPrompt = sampledLeftChargeBtnFillPct == -1 &&
-            sampledRightChargeBtnFillPct == -1 &&
-            ((sampledPlayerBalls <= 0 && sampledOppBalls <= 0) || playerShieldsRemaining == 0)
+            sampledRightChargeBtnFillPct == -1
 
         // Player Charged Attack minigame banner text ("Get ready!", "GREAT!", "EXCELLENT!", "NICE!", "Charge your attack!", "Swipe!")
         val rawHasUserChargedBannerText = combinedBannerLower.contains("get ready") ||
@@ -12633,7 +12646,7 @@ class OverlayService : LifecycleService() {
             combinedBannerLower.contains("charge your") ||
             combinedBannerLower.contains("swipe")
 
-        // v4.04: Secondary OCR trigger for Opponent Charged Attack prompt text ("Attack incoming!", "attack incomming", "Use a Protect Shield?", "NOT NOW", etc.)
+        // v4.05: Primary OCR trigger for Opponent Charged Attack prompt text ("Attack incoming!", "attack incomming", "Use a Protect Shield?", "NOT NOW", etc.)
         // Evaluated on `playerMoveLines + midBannerLines` (excluding top HUD where our own toast renders).
         val hasAttackIncomingText = isHudHiddenForOpponentPrompt &&
             !rawHasUserChargedBannerText &&
@@ -12645,6 +12658,7 @@ class OverlayService : LifecycleService() {
         if (hasUserChargedBannerText) {
             // Player minigame banner ("Get ready!" / "NICE!" / "GREAT!" / "EXCELLENT!") is 100% exclusive to player charged moves!
             // If a tentative opponent prompt was falsely set before the minigame text appeared, roll it back immediately!
+            pendingUserChargeConfirmedByOcr = true
             if (pendingChargedAttackActor == "opp") {
                 if (pendingChargedAttackOppSlotIdx in 0..2 && pendingChargedAttackPreOppEnergy > 0) {
                     oppSlotEnergy[pendingChargedAttackOppSlotIdx] = pendingChargedAttackPreOppEnergy.coerceIn(0, 100)
@@ -12774,7 +12788,6 @@ class OverlayService : LifecycleService() {
             (nowMs - pendingChargedAttackStartMs) < 2300L
         val isShieldCallWindowEarly = hasAttackIncomingText ||
             isAttackIncomingPromptActive ||
-            sampledShieldHexagonVisible ||
             (playerShieldsRemaining == 0 && missingBottomCirclesWithOppHpFrames >= 6 && !isUserMinigameSwipePhaseActive)
         val isPostChargeReturnWindow = pendingChargedAttackActor.isNotEmpty() &&
             !isShieldCallWindowEarly &&
@@ -13633,106 +13646,128 @@ class OverlayService : LifecycleService() {
             lastSteadyMoveButtonsSeenMs = nowMs
         }
 
-        // 2. Detect Opponent Charged Attack (v4.04: Dual-trigger via Protect Shield hexagon pixels OR "Attack incoming!" secondary OCR,
-        //    plus seamless CMP 2nd-throw support when the player threw 1st on CMP and the opponent immediately throws 2nd without returning to combat circles!)
+        // 2. Detect Opponent Charged Attack (v4.05: Triggered strictly off "Attack incoming!" / "Use a Protect Shield?" OCR text,
+        //    with automatic rollback of unconfirmed HUD-only player wind-up states AND seamless CMP 2nd-throw support!)
         val isOpponentChargedScreen = isHudHiddenForOpponentPrompt &&
-            !hasUserChargedBannerText &&
-            !isUserMinigameSwipePhaseActive && (
-                sampledShieldHexagonVisible ||
+            !hasUserChargedBannerText && (
                 hasAttackIncomingText ||
-                (playerShieldsRemaining == 0 && missingBottomCirclesWithOppHpFrames >= 6 && pendingChargedAttackActor != "user")
+                (playerShieldsRemaining == 0 && missingBottomCirclesWithOppHpFrames >= 6 && !isUserMinigameSwipePhaseActive && pendingChargedAttackActor != "user")
             )
         if (isOpponentChargedScreen) {
-            // v4.04 CMP Tie Transition (Player threw 1st on CMP -> Opponent throws 2nd on CMP without returning to combat HUD):
-            // Finalize the pending player charged move immediately so the opponent's 2nd CMP throw can initialize & show the Shield Decision Overlay!
             if (pendingChargedAttackActor == "user") {
-                val cmpDefenderOppIdx = pendingChargedAttackOppSlotIdx.takeIf { it in 0..2 } ?: activeOppIdx.coerceIn(0, 2)
-                val cmpShieldDropped = oppShieldsRemaining < pendingChargedAttackPreOppShields
-                val cmpPostOppHp = if (oppFaintedSlots[cmpDefenderOppIdx]) 0 else oppSlotHpPct[cmpDefenderOppIdx].coerceIn(0, 100)
-                val cmpHpBefore = pendingChargedAttackPreOppHp.coerceIn(1, 100)
-                val cmpHpDelta = max(0, cmpHpBefore - cmpPostOppHp)
-                val cmpShielded = cmpShieldDropped || (cmpHpDelta <= 3 && pendingChargedAttackPreOppShields > 0 && !oppFaintedSlots[cmpDefenderOppIdx])
-                val cmpBannerMove = if (lastDetectedBannerMoveActor == "user" &&
-                    (nowMs - lastDetectedBannerMoveTimeMs) <= 7500L &&
-                    lastDetectedBannerMoveName.isNotBlank()
-                ) {
-                    lastDetectedBannerMoveName
-                } else {
-                    lastUserChargeResolvedMoveName.takeIf { it.isNotBlank() }
-                }
-                val cmpPreCircleMove = if (hasSecondUserMove && userMove1Energy != userMove2Energy) {
-                    when {
-                        preChargeRightFillPct >= 95 && preChargeLeftFillPct < 92 -> userMove2NameEarly
-                        preChargeLeftFillPct >= 95 && preChargeRightFillPct < 92 -> userMove1NameEarly
-                        else -> null
-                    }
-                } else userMove1NameEarly
-                val cmpResolvedUserMove = cmpBannerMove ?: cmpPreCircleMove ?: userMove1NameEarly
-                val cmpUserCost = when {
-                    cmpResolvedUserMove.equals(userMove2NameEarly, ignoreCase = true) -> userMove2Energy
-                    cmpResolvedUserMove.equals(userMove1NameEarly, ignoreCase = true) -> userMove1Energy
-                    else -> userMoveEnergyMap[cmpResolvedUserMove] ?: cheapestUserEnergy
-                }
-                val cmpEffectivePreEnergy = max(preChargeUserEnergy, cmpUserCost).coerceIn(cheapestUserEnergy, 100)
-                val cmpResidualEnergy = (cmpEffectivePreEnergy - cmpUserCost).coerceIn(0, 100)
-                playerSlotEnergy[activeUserIdx] = cmpResidualEnergy
-                playerSlotEnergyAnchor[activeUserIdx] = cmpResidualEnergy
-                lastStableNormalCombatEnergy = cmpResidualEnergy
-                prevStableNormalCombatEnergy = cmpResidualEnergy
-                lastUserChargePreEnergySnapshot = cmpEffectivePreEnergy
-                lastUserChargeDeductedEnergySnapshot = cmpUserCost
-                lastUserChargeResolvedMoveName = cmpResolvedUserMove
-                awaitingPostUserChargeCircleSync = true
-                resetSlotEnergyTracking(
-                    slotIdx = activeUserIdx,
-                    initialEnergy = cmpResidualEnergy,
-                    cost1 = userMove1Energy,
-                    cost2 = userMove2Energy,
-                    clearThirdFillLatches = cmpResidualEnergy < 2 * cheapestUserEnergy
-                )
-                if (lastDetectedBannerMoveActor == "user") {
-                    lastDetectedBannerMoveActor = ""
-                    lastDetectedBannerMoveName = ""
-                }
-                val cmpDefenderOppRawName = detectedOpponents.getOrNull(cmpDefenderOppIdx)
-                    ?: pendingChargedAttackOppRawName.ifBlank { activeOpponentName }
-                val cmpFormattedDefenderOppName = formatOpponentNameWithShadow(cmpDefenderOppRawName)
-                val cmpEventT = getElapsedBattleSeconds()
-                val cmpPlayerRemSec = if (playerSwapEndTimeMs > nowMs) ceil((playerSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
-                val cmpOppRemSec = if (oppSwapEndTimeMs > nowMs) ceil((oppSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
-                battleTimelineEvents.add(
-                    BattleTimelineEvent(
-                        type = "CHARGED_ATTACK",
-                        actor = "user",
-                        t = cmpEventT,
-                        activePokemon = pendingChargedAttackAttackerName,
-                        pokemonShielded = if (cmpShielded) cmpFormattedDefenderOppName else null,
-                        shielded = cmpShielded,
-                        hpBeforePct = cmpHpBefore,
-                        hpAfterPct = if (cmpShielded) max(1, cmpHpBefore - 1) else cmpPostOppHp,
-                        hpDeltaPct = if (cmpShielded) 1 else cmpHpDelta,
-                        inferredMoveName = cmpResolvedUserMove,
-                        userSlotHpPct = playerSlotHpPct.toList(),
-                        oppSlotHpPct = oppSlotHpPct.toList(),
-                        userShieldsRemaining = playerShieldsRemaining,
-                        oppShieldsRemaining = oppShieldsRemaining,
-                        recommendedAction = lastRecommendedAction.ifEmpty { null },
-                        recommendedGoal = lastRecommendedGoal.ifEmpty { null },
-                        decisionPhase = "CHARGED_MOVE",
-                        playerSwapRemainingSec = cmpPlayerRemSec,
-                        oppSwapRemainingSec = cmpOppRemSec,
-                        userEnergy = playerSlotEnergy[activeUserIdx],
-                        oppEnergy = oppSlotEnergy[cmpDefenderOppIdx],
-                        turnIndex = battleTurnIndex,
-                        scanTurnOffsetMs = scanTurnOffsetMs
+                if (!pendingUserChargeConfirmedByOcr && !hasUserBannerResolvedSinceThrow) {
+                    // Case 1: `pendingChargedAttackActor == "user"` was only latched by a HUD-missing camera zoom wind-up
+                    // before "Attack incoming!" appeared (no player minigame or player move banner OCR was ever seen).
+                    // Roll back the tentative player energy deduction and switch cleanly to the opponent charged attack!
+                    val rollbackUserIdx = pendingChargedAttackUserSlotIdx.takeIf { it in 0..2 } ?: activeUserIdx.coerceIn(0, 2)
+                    val restoredUserE = preChargeUserEnergy.coerceIn(0, 100)
+                    playerSlotEnergy[rollbackUserIdx] = restoredUserE
+                    playerSlotEnergyAnchor[rollbackUserIdx] = restoredUserE
+                    awaitingPostUserChargeCircleSync = false
+                    resetSlotEnergyTracking(
+                        slotIdx = rollbackUserIdx,
+                        initialEnergy = restoredUserE,
+                        cost1 = userMove1Energy,
+                        cost2 = userMove2Energy,
+                        clearThirdFillLatches = restoredUserE < 2 * cheapestUserEnergy
                     )
-                )
-                lastChargedAttackLoggedMs = nowMs
-                lastChargedAttackLoggedActor = "user"
-                pendingChargedAttackActor = ""
-                pendingChargedAttackDeductedEnergy = 0
-                shieldDecisionOverlayShownAtMs = 0L
-                hpChanged = true
+                    pendingChargedAttackActor = ""
+                    pendingChargedAttackDeductedEnergy = 0
+                    pendingUserChargeConfirmedByOcr = false
+                    hpChanged = true
+                } else {
+                    // Case 2: Genuine CMP Tie Transition (Player threw 1st on CMP confirmed by minigame/banner OCR ->
+                    // Opponent immediately throws 2nd on CMP without returning to combat circles):
+                    // Finalize the pending player charged move immediately so the opponent's 2nd CMP throw can initialize & show the Shield Decision Overlay!
+                    val cmpDefenderOppIdx = pendingChargedAttackOppSlotIdx.takeIf { it in 0..2 } ?: activeOppIdx.coerceIn(0, 2)
+                    val cmpShieldDropped = oppShieldsRemaining < pendingChargedAttackPreOppShields
+                    val cmpPostOppHp = if (oppFaintedSlots[cmpDefenderOppIdx]) 0 else oppSlotHpPct[cmpDefenderOppIdx].coerceIn(0, 100)
+                    val cmpHpBefore = pendingChargedAttackPreOppHp.coerceIn(1, 100)
+                    val cmpHpDelta = max(0, cmpHpBefore - cmpPostOppHp)
+                    val cmpShielded = cmpShieldDropped || (cmpHpDelta <= 3 && pendingChargedAttackPreOppShields > 0 && !oppFaintedSlots[cmpDefenderOppIdx])
+                    val cmpBannerMove = if (lastDetectedBannerMoveActor == "user" &&
+                        (nowMs - lastDetectedBannerMoveTimeMs) <= 7500L &&
+                        lastDetectedBannerMoveName.isNotBlank()
+                    ) {
+                        lastDetectedBannerMoveName
+                    } else {
+                        lastUserChargeResolvedMoveName.takeIf { it.isNotBlank() }
+                    }
+                    val cmpPreCircleMove = if (hasSecondUserMove && userMove1Energy != userMove2Energy) {
+                        when {
+                            preChargeRightFillPct >= 95 && preChargeLeftFillPct < 92 -> userMove2NameEarly
+                            preChargeLeftFillPct >= 95 && preChargeRightFillPct < 92 -> userMove1NameEarly
+                            else -> null
+                        }
+                    } else userMove1NameEarly
+                    val cmpResolvedUserMove = cmpBannerMove ?: cmpPreCircleMove ?: userMove1NameEarly
+                    val cmpUserCost = when {
+                        cmpResolvedUserMove.equals(userMove2NameEarly, ignoreCase = true) -> userMove2Energy
+                        cmpResolvedUserMove.equals(userMove1NameEarly, ignoreCase = true) -> userMove1Energy
+                        else -> userMoveEnergyMap[cmpResolvedUserMove] ?: cheapestUserEnergy
+                    }
+                    val cmpEffectivePreEnergy = max(preChargeUserEnergy, cmpUserCost).coerceIn(cheapestUserEnergy, 100)
+                    val cmpResidualEnergy = (cmpEffectivePreEnergy - cmpUserCost).coerceIn(0, 100)
+                    playerSlotEnergy[activeUserIdx] = cmpResidualEnergy
+                    playerSlotEnergyAnchor[activeUserIdx] = cmpResidualEnergy
+                    lastStableNormalCombatEnergy = cmpResidualEnergy
+                    prevStableNormalCombatEnergy = cmpResidualEnergy
+                    lastUserChargePreEnergySnapshot = cmpEffectivePreEnergy
+                    lastUserChargeDeductedEnergySnapshot = cmpUserCost
+                    lastUserChargeResolvedMoveName = cmpResolvedUserMove
+                    awaitingPostUserChargeCircleSync = true
+                    resetSlotEnergyTracking(
+                        slotIdx = activeUserIdx,
+                        initialEnergy = cmpResidualEnergy,
+                        cost1 = userMove1Energy,
+                        cost2 = userMove2Energy,
+                        clearThirdFillLatches = cmpResidualEnergy < 2 * cheapestUserEnergy
+                    )
+                    if (lastDetectedBannerMoveActor == "user") {
+                        lastDetectedBannerMoveActor = ""
+                        lastDetectedBannerMoveName = ""
+                    }
+                    val cmpDefenderOppRawName = detectedOpponents.getOrNull(cmpDefenderOppIdx)
+                        ?: pendingChargedAttackOppRawName.ifBlank { activeOpponentName }
+                    val cmpFormattedDefenderOppName = formatOpponentNameWithShadow(cmpDefenderOppRawName)
+                    val cmpEventT = getElapsedBattleSeconds()
+                    val cmpPlayerRemSec = if (playerSwapEndTimeMs > nowMs) ceil((playerSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
+                    val cmpOppRemSec = if (oppSwapEndTimeMs > nowMs) ceil((oppSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
+                    battleTimelineEvents.add(
+                        BattleTimelineEvent(
+                            type = "CHARGED_ATTACK",
+                            actor = "user",
+                            t = cmpEventT,
+                            activePokemon = pendingChargedAttackAttackerName,
+                            pokemonShielded = if (cmpShielded) cmpFormattedDefenderOppName else null,
+                            shielded = cmpShielded,
+                            hpBeforePct = cmpHpBefore,
+                            hpAfterPct = if (cmpShielded) max(1, cmpHpBefore - 1) else cmpPostOppHp,
+                            hpDeltaPct = if (cmpShielded) 1 else cmpHpDelta,
+                            inferredMoveName = cmpResolvedUserMove,
+                            userSlotHpPct = playerSlotHpPct.toList(),
+                            oppSlotHpPct = oppSlotHpPct.toList(),
+                            userShieldsRemaining = playerShieldsRemaining,
+                            oppShieldsRemaining = oppShieldsRemaining,
+                            recommendedAction = lastRecommendedAction.ifEmpty { null },
+                            recommendedGoal = lastRecommendedGoal.ifEmpty { null },
+                            decisionPhase = "CHARGED_MOVE",
+                            playerSwapRemainingSec = cmpPlayerRemSec,
+                            oppSwapRemainingSec = cmpOppRemSec,
+                            userEnergy = playerSlotEnergy[activeUserIdx],
+                            oppEnergy = oppSlotEnergy[cmpDefenderOppIdx],
+                            turnIndex = battleTurnIndex,
+                            scanTurnOffsetMs = scanTurnOffsetMs
+                        )
+                    )
+                    lastChargedAttackLoggedMs = nowMs
+                    lastChargedAttackLoggedActor = "user"
+                    pendingChargedAttackActor = ""
+                    pendingChargedAttackDeductedEnergy = 0
+                    pendingUserChargeConfirmedByOcr = false
+                    shieldDecisionOverlayShownAtMs = 0L
+                    hpChanged = true
+                }
             }
             val wasPromptActive = isAttackIncomingPromptActive
             isAttackIncomingPromptActive = true
@@ -13855,13 +13890,16 @@ class OverlayService : LifecycleService() {
             }
         }
 
-        // 3. Detect Player Charged Attack Minigame ("Get ready!" / "GREAT!" / "EXCELLENT!" / "NICE!" or both floating HP bars & Charge Move buttons hidden for >= 600ms)
+        // 3. Detect Player Charged Attack Minigame ("Get ready!" / "GREAT!" / "EXCELLENT!" / "NICE!" or both floating HP bars & Charge Move buttons hidden for >= 1400ms)
         //    Gated by NO shield prompt before the attack (`hadShieldPromptBeforeCurrentCharge = false`, `lastChargedPromptActor = "user"`).
         //    Rolls back any spurious energy registered during the throw zoom-in animation, and waits for Section 4 to show the toast with the ACTUAL move used!
         val isPlayerChargedScreen = hasUserChargedBannerText ||
-            (missingBothHpBarsFrames >= 6 && pendingChargedAttackActor != "opp" && !isAttackIncomingPromptActive &&
+            (missingBothHpBarsFrames >= 14 && pendingChargedAttackActor != "opp" && !isAttackIncomingPromptActive &&
                 (sampledOppBalls in 1..3 || sampledPlayerBalls in 1..3 || (lastSteadyMoveButtonsSeenMs > 0L && (nowMs - lastSteadyMoveButtonsSeenMs) <= 6000L)))
         if (isPlayerChargedScreen && !isPostFaintSwitchPromptActive) {
+            if (hasUserChargedBannerText) {
+                pendingUserChargeConfirmedByOcr = true
+            }
             isAttackIncomingPromptActive = false
             sampledShieldHexagonVisible = false
             shieldHexagonConfirmFrames = 0
@@ -13875,6 +13913,7 @@ class OverlayService : LifecycleService() {
             predictedOppSlotHpPct[activeOppIdx] = oppSlotHpPct[activeOppIdx]
             if (pendingChargedAttackActor != "user" && (nowMs - lastChargedAttackLoggedMs) > 3200L) {
                 hasBattleStarted = true
+                pendingUserChargeConfirmedByOcr = hasUserChargedBannerText
 
                 preChargeLeftFillPct = if (lastStableLeftChargeFillPct > 0) lastStableLeftChargeFillPct else lastScannedLeftChargeFillPct[activeUserIdx].coerceAtLeast(0)
                 preChargeRightFillPct = if (lastStableRightChargeFillPct > 0) lastStableRightChargeFillPct else lastScannedRightChargeFillPct[activeUserIdx].coerceAtLeast(0)
@@ -14246,6 +14285,7 @@ class OverlayService : LifecycleService() {
                 lastChargedAttackLoggedMs = nowMs
                 lastChargedAttackLoggedActor = "opp"
                 pendingChargedAttackActor = ""
+                pendingUserChargeConfirmedByOcr = false
                 pendingChargedAttackDeductedEnergy = 0
                 pendingChargedAttackPreOppEnergy = 0
                 pendingChargedAttackOppSlotIdx = -1
@@ -14555,6 +14595,7 @@ class OverlayService : LifecycleService() {
                 lastChargedAttackLoggedMs = nowMs
                 lastChargedAttackLoggedActor = "user"
                 pendingChargedAttackActor = ""
+                pendingUserChargeConfirmedByOcr = false
                 pendingChargedAttackDeductedEnergy = 0
                 pendingChargedAttackOppSlotIdx = -1
                 pendingChargedAttackUserSlotIdx = -1
@@ -16595,6 +16636,7 @@ class OverlayService : LifecycleService() {
         lastChargedAttackLoggedMs = 0L
         lastChargedAttackLoggedActor = ""
         lastUserChargedMoveBannerResolvedMs = 0L
+        pendingUserChargeConfirmedByOcr = false
         lastRecommendedAction = ""
         lastRecommendedGoal = ""
         lastRecommendedPhase = "LEAD"
@@ -16650,6 +16692,7 @@ class OverlayService : LifecycleService() {
         pendingChargedAttackActor = ""
         pendingChargedAttackDeductedEnergy = 0
         pendingChargedAttackPreOppEnergy = 0
+        pendingUserChargeConfirmedByOcr = false
         hideShieldDecisionOverlay()
         lastRecommendedAction = ""
         lastRecommendedGoal = ""
