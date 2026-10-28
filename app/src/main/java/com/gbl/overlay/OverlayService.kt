@@ -9816,7 +9816,6 @@ class OverlayService : LifecycleService() {
             return
         }
 
-        val activeUserIdx = (currentPreset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) } ?: 0).coerceIn(0, 2)
         val cy = (h * calibratedCyFrac).toInt()
         val leftCx = (w * calibratedLeftCxFrac).toInt()
         val rightCx = (w * calibratedRightCxFrac).toInt()
