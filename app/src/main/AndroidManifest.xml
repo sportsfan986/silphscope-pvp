@@ -20,7 +20,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.GBLOverlay"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="false">
 
         <activity
             android:name=".MainActivity"
@@ -106,22 +106,11 @@
         <service
             android:name=".OverlayService"
             android:enabled="true"
-            android:exported="true"
+            android:exported="false"
             android:foregroundServiceType="mediaProjection|specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Real-time PvP battle overlay HUD and Tasker automation control" />
-            <intent-filter>
-                <action android:name="com.gbl.overlay.ACTION_START_OVERLAY" />
-                <action android:name="com.gbl.overlay.ACTION_STOP_OVERLAY" />
-                <action android:name="com.gbl.overlay.ACTION_TOGGLE_OVERLAY" />
-                <action android:name="com.gbl.overlay.ACTION_MINIMIZE_OVERLAY" />
-                <action android:name="com.gbl.overlay.ACTION_RESTORE_OVERLAY" />
-                <action android:name="com.gbl.overlay.ACTION_START_BATTLE" />
-                <action android:name="com.gbl.overlay.START" />
-                <action android:name="com.gbl.overlay.STOP" />
-                <action android:name="com.gbl.overlay.TOGGLE" />
-            </intent-filter>
         </service>
 
     </application>
