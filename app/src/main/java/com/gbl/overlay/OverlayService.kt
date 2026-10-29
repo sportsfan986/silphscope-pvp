@@ -9716,12 +9716,9 @@ class OverlayService : LifecycleService() {
             sampledOppPendingDmgPct = 0
             sampledPlayerPendingDmgPct = 0
         }
-        detectChargedMoveButtonFillLevels(screen, w, h)
-
         // v4.06: 100ms (10 Hz) Top-Center 5-Second Countdown Circle & Top-Right Opponent Nameplate Box Detector:
-        // Drives both the Shield Decision Overlay visibility (no timeout — stays visible as long as the opponent
-        // countdown circle is present, including unshielded 0-shield prompts) and the opponent charged attack state,
-        // while deterministically excluding the post-faint "Switch in a new Pokémon?" countdown and player swipe minigame.
+        // Run BEFORE detectChargedMoveButtonFillLevels so an active 5s countdown circle immediately suppresses
+        // false 0% charge circle matches on the bottom "NOT NOW" text (`(0.50w, 0.8932h)`).
         sampledShieldHexagonVisible = false
         shieldHexagonConfirmFrames = 0
         sampledTopRightNameplateVisible = detectTopRightOpponentNameplate(screen, w, h)
@@ -9729,9 +9726,7 @@ class OverlayService : LifecycleService() {
         if (sampledTopCountdownCircleVisible) {
             topCountdownCircleConfirmFrames = (topCountdownCircleConfirmFrames + 1).coerceAtMost(30)
             topCountdownCircleMissingFrames = 0
-            if (topCountdownCircleConfirmFrames >= 2) {
-                isTopCountdownCircleActive = true
-            }
+            isTopCountdownCircleActive = true
         } else {
             topCountdownCircleMissingFrames = (topCountdownCircleMissingFrames + 1).coerceAtMost(30)
             if (topCountdownCircleMissingFrames >= 3) {
@@ -9739,6 +9734,7 @@ class OverlayService : LifecycleService() {
                 isTopCountdownCircleActive = false
             }
         }
+        detectChargedMoveButtonFillLevels(screen, w, h)
 
         // v3.94: Unified All-HUD-Gone & Cutscene Lockout + Multi-Frame Pokéball Debounce
         val areBottomCirclesVisible = sampledLeftChargeBtnFillPct in 0..300 || sampledRightChargeBtnFillPct in 0..300
@@ -10420,7 +10416,10 @@ class OverlayService : LifecycleService() {
     }
 
     private fun detectChargedMoveButtonFillLevels(screen: Bitmap, w: Int, h: Int) {
-        if (w < 200 || h < 400 || isWhiteScreenFlash(screen, w, h)) {
+        // v4.06: Whenever the top 5-second countdown circle is on screen (opponent shield prompt, player minigame,
+        // or post-faint switch prompt), Pokémon GO hides the bottom combat charge circles completely.
+        // Force -1 immediately so the white "NOT NOW" text at (0.50w, 0.8932h) can NEVER false-trigger a 0% charge circle!
+        if (w < 200 || h < 400 || sampledTopCountdownCircleVisible || isTopCountdownCircleActive || isWhiteScreenFlash(screen, w, h)) {
             sampledLeftChargeBtnFillPct = -1
             sampledRightChargeBtnFillPct = -1
             isCountdownDimmedState = false
@@ -10465,8 +10464,11 @@ class OverlayService : LifecycleService() {
             emptyBaseSat = prescanEmptySatRight,
             btnSlotKey = activeUserIdx * 2 + 1
         )
-        if (leftFill == -1 && rightFill == -1) {
-            // Fallback for single-charged-move Pokémon where the button is centered at x ≈ 0.50w
+        val userSlotCfg = currentPreset?.pokemon?.getOrNull(activeUserIdx)
+        val hasSecondMoveConfigured = !userSlotCfg?.chargedMove2.isNullOrBlank() &&
+            !userSlotCfg?.chargedMove2.equals(userSlotCfg?.chargedMove1, ignoreCase = true)
+        if (!hasSecondMoveConfigured && leftFill == -1 && rightFill == -1) {
+            // Fallback ONLY for single-charged-move Pokémon where the button is centered at x ≈ 0.50w
             leftFill = detectSingleChargeButtonFillPct(
                 screen = screen,
                 cx = (w * calibratedSingleCxFrac).toInt(),
@@ -10739,13 +10741,14 @@ class OverlayService : LifecycleService() {
     }
 
     /**
-     * v4.06: 100ms (10 Hz) Radial Pixel Detector for Pokémon GO's Top-Center 5-Second Countdown Circle
-     * (`cx = 0.500 * w`, `cy = 0.0825 * h`, `R = 0.0833 * w` -> `cx = 540, cy = 193, R = 90px` on `1080x2342`).
+     * v4.06: Multi-Device 100ms (10 Hz) Radial Pixel Detector for Pokémon GO's Top-Center 5-Second Countdown Circle
+     * (`cx = 0.500 * w`, `cyFrac ∈ [0.070..0.088] * h`, `R = 0.0833 * w` -> `cx = 540, cy = 192, R = 90px` on `1080x2342`
+     * and `cx = 480, cy = 170, R = 80px` on `960x2142`).
      * Verifies the 4-part concentric signature across 16 radial spokes:
-     * 1. Dark translucent interior disk (`rMult ∈ [0.34, 0.44, 0.54]`, `luma ∈ [8.0, 58.0], sat <= 48.0`)
-     * 2. Circular countdown progress track/arc (`rMult ∈ [0.63, 0.68, 0.73, 0.78]`, `sat <= 38.0`,
+     * 1. Dark translucent interior disk (`rMult ∈ [0.44, 0.52, 0.60]`, `luma ∈ [8.0, 58.0], sat <= 54.0`)
+     * 2. Circular countdown progress track/arc (`rMult ∈ [0.72, 0.77, 0.81, 0.85]`, `sat <= 46.0`,
      *    `ringPeakL >= 34.0`, `ringPeakL >= innerL + 12.0`, `ringPeakL >= outerRimL + 10.0`)
-     * 3. Dark outer border rim (`rMult ∈ [0.86, 0.92, 0.98]`, `luma ∈ [8.0, 58.0], sat <= 48.0`)
+     * 3. Dark outer border rim (`rMult ∈ [0.93, 0.98, 1.03]`, `luma ∈ [8.0, 92.0], sat <= 56.0`)
      * 4. Bright white countdown digit (`5, 4, 3, 2, 1`) in the center (`r <= 0.26R`, `luma >= 115.0, sat <= 38.0`)
      *    surrounded by the dark interior disk.
      */
@@ -10753,118 +10756,130 @@ class OverlayService : LifecycleService() {
         if (screen.isRecycled || w < 100 || h < 100) return false
         return try {
             val cx = w * 0.500
-            val cy = h * 0.0825
             val radius = w * 0.0833
+            val candidateCyFracs = doubleArrayOf(0.070, 0.073, 0.076, 0.078, 0.080, 0.082, 0.085, 0.088)
 
-            var validSpokes = 0
-            var upperSpokes = 0
-            var brightArcSpokes = 0
-            var innerLumaSum = 0.0
-            var innerCount = 0
+            for (cyFrac in candidateCyFracs) {
+                val cy = h * cyFrac
+                var validSpokes = 0
+                var upperSpokes = 0
+                var brightArcSpokes = 0
+                var innerLumaSum = 0.0
+                var innerCount = 0
 
-            for (i in 0 until 16) {
-                val theta = (i * 22.5) * Math.PI / 180.0
-                val ux = kotlin.math.cos(theta)
-                val uy = kotlin.math.sin(theta)
+                for (i in 0 until 16) {
+                    val theta = (i * 22.5) * Math.PI / 180.0
+                    val ux = kotlin.math.cos(theta)
+                    val uy = kotlin.math.sin(theta)
 
-                var innerL = 0.0
-                var innerS = 0.0
-                for (rMult in doubleArrayOf(0.42, 0.50, 0.57)) {
-                    val px = (cx + ux * radius * rMult).roundToInt().coerceIn(0, w - 1)
-                    val py = (cy + uy * radius * rMult).roundToInt().coerceIn(0, h - 1)
-                    val c = screen.getPixel(px, py)
-                    val r = Color.red(c)
-                    val g = Color.green(c)
-                    val b = Color.blue(c)
-                    innerL += (0.299 * r + 0.587 * g + 0.114 * b) / 3.0
-                    innerS += (max(r, max(g, b)) - min(r, min(g, b))) / 3.0
-                }
-                innerLumaSum += innerL
-                innerCount++
+                    var innerL = 0.0
+                    var innerS = 0.0
+                    for (rMult in doubleArrayOf(0.44, 0.52, 0.60)) {
+                        val px = (cx + ux * radius * rMult).roundToInt().coerceIn(0, w - 1)
+                        val py = (cy + uy * radius * rMult).roundToInt().coerceIn(0, h - 1)
+                        val c = screen.getPixel(px, py)
+                        val r = Color.red(c)
+                        val g = Color.green(c)
+                        val b = Color.blue(c)
+                        innerL += (0.299 * r + 0.587 * g + 0.114 * b) / 3.0
+                        innerS += (max(r, max(g, b)) - min(r, min(g, b))) / 3.0
+                    }
+                    innerLumaSum += innerL
+                    innerCount++
 
-                var ringPeakL = 0.0
-                var ringPeakS = 999.0
-                for (rMult in doubleArrayOf(0.64, 0.70, 0.76, 0.81)) {
-                    val px = (cx + ux * radius * rMult).roundToInt().coerceIn(0, w - 1)
-                    val py = (cy + uy * radius * rMult).roundToInt().coerceIn(0, h - 1)
-                    val c = screen.getPixel(px, py)
-                    val r = Color.red(c)
-                    val g = Color.green(c)
-                    val b = Color.blue(c)
-                    val l = 0.299 * r + 0.587 * g + 0.114 * b
-                    val s = (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
-                    if (s <= 42.0 && l > ringPeakL) {
-                        ringPeakL = l
-                        ringPeakS = s
+                    var ringPeakL = 0.0
+                    var ringPeakS = 999.0
+                    for (rMult in doubleArrayOf(0.72, 0.77, 0.81, 0.85)) {
+                        val px = (cx + ux * radius * rMult).roundToInt().coerceIn(0, w - 1)
+                        val py = (cy + uy * radius * rMult).roundToInt().coerceIn(0, h - 1)
+                        val c = screen.getPixel(px, py)
+                        val r = Color.red(c)
+                        val g = Color.green(c)
+                        val b = Color.blue(c)
+                        val l = 0.299 * r + 0.587 * g + 0.114 * b
+                        val s = (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
+                        if (s <= 46.0 && l > ringPeakL) {
+                            ringPeakL = l
+                            ringPeakS = s
+                        }
+                    }
+
+                    var outerRimL = 0.0
+                    var outerRimS = 0.0
+                    for (rMult in doubleArrayOf(0.93, 0.98, 1.03)) {
+                        val px = (cx + ux * radius * rMult).roundToInt().coerceIn(0, w - 1)
+                        val py = (cy + uy * radius * rMult).roundToInt().coerceIn(0, h - 1)
+                        val c = screen.getPixel(px, py)
+                        val r = Color.red(c)
+                        val g = Color.green(c)
+                        val b = Color.blue(c)
+                        outerRimL += (0.299 * r + 0.587 * g + 0.114 * b) / 3.0
+                        outerRimS += (max(r, max(g, b)) - min(r, min(g, b))) / 3.0
+                    }
+
+                    val isInnerDark = innerL in 8.0..58.0 && innerS <= 54.0
+                    val isOuterRimDark = outerRimL in 8.0..92.0 && outerRimS <= 56.0
+                    val hasRingRidge = ringPeakL >= 34.0 &&
+                        ringPeakS <= 46.0 &&
+                        ringPeakL >= innerL + 12.0 &&
+                        ringPeakL >= outerRimL + 10.0
+
+                    if (isInnerDark && isOuterRimDark && hasRingRidge) {
+                        validSpokes++
+                        if (uy < -0.15) upperSpokes++
+                        if (ringPeakL >= 78.0) brightArcSpokes++
                     }
                 }
 
-                var outerRimL = 0.0
-                var outerRimS = 0.0
-                for (rMult in doubleArrayOf(0.88, 0.94, 1.00)) {
-                    val px = (cx + ux * radius * rMult).roundToInt().coerceIn(0, w - 1)
-                    val py = (cy + uy * radius * rMult).roundToInt().coerceIn(0, h - 1)
-                    val c = screen.getPixel(px, py)
-                    val r = Color.red(c)
-                    val g = Color.green(c)
-                    val b = Color.blue(c)
-                    outerRimL += (0.299 * r + 0.587 * g + 0.114 * b) / 3.0
-                    outerRimS += (max(r, max(g, b)) - min(r, min(g, b))) / 3.0
-                }
+                // Full 16-spoke match (Single-App capture mode) OR upper-semicircle match if HUD ever overlaps lower half
+                val passesSpokeGeometry = (validSpokes >= 11 && upperSpokes >= 5) ||
+                    (upperSpokes >= 6 && validSpokes >= 7)
+                if (!passesSpokeGeometry || brightArcSpokes < 1) continue
 
-                val isInnerDark = innerL in 8.0..58.0 && innerS <= 52.0
-                val isOuterRimDark = outerRimL in 8.0..92.0 && outerRimS <= 52.0
-                val hasRingRidge = ringPeakL >= 34.0 &&
-                    ringPeakS <= 42.0 &&
-                    ringPeakL >= innerL + 12.0 &&
-                    ringPeakL >= outerRimL + 10.0
-
-                if (isInnerDark && isOuterRimDark && hasRingRidge) {
-                    validSpokes++
-                    if (uy < -0.15) upperSpokes++
-                    if (ringPeakL >= 78.0) brightArcSpokes++
-                }
-            }
-
-            val avgInnerL = if (innerCount > 0) innerLumaSum / innerCount else 999.0
-            val digitRx = (radius * 0.25).roundToInt().coerceAtLeast(6)
-            val digitRy = (radius * 0.26).roundToInt().coerceAtLeast(6)
-            val stepD = max(2, (w / 360))
-            var centerBrightGlyphHits = 0
-            var centerDarkBgHits = 0
-            var centerTotal = 0
-            var dy = -digitRy
-            while (dy <= digitRy) {
-                val py = (cy + dy).roundToInt().coerceIn(0, h - 1)
-                var dx = -digitRx
-                while (dx <= digitRx) {
-                    val px = (cx + dx).roundToInt().coerceIn(0, w - 1)
-                    val c = screen.getPixel(px, py)
-                    val r = Color.red(c)
-                    val g = Color.green(c)
-                    val b = Color.blue(c)
-                    val l = 0.299 * r + 0.587 * g + 0.114 * b
-                    val s = max(r, max(g, b)) - min(r, min(g, b))
-                    centerTotal++
-                    if (l >= 115.0 && s <= 38 && l >= avgInnerL + 58.0) {
-                        centerBrightGlyphHits++
-                    } else if (l in 8.0..58.0 && s <= 48) {
-                        centerDarkBgHits++
+                val avgInnerL = if (innerCount > 0) innerLumaSum / innerCount else 999.0
+                val digitRx = (radius * 0.25).roundToInt().coerceAtLeast(6)
+                val digitRy = (radius * 0.26).roundToInt().coerceAtLeast(6)
+                val stepD = max(2, (w / 360))
+                var centerBrightGlyphHits = 0
+                var centerDarkBgHits = 0
+                var centerTotal = 0
+                var dy = -digitRy
+                while (dy <= digitRy) {
+                    val py = (cy + dy).roundToInt().coerceIn(0, h - 1)
+                    var dx = -digitRx
+                    while (dx <= digitRx) {
+                        val px = (cx + dx).roundToInt().coerceIn(0, w - 1)
+                        val c = screen.getPixel(px, py)
+                        val r = Color.red(c)
+                        val g = Color.green(c)
+                        val b = Color.blue(c)
+                        val l = 0.299 * r + 0.587 * g + 0.114 * b
+                        val s = max(r, max(g, b)) - min(r, min(g, b))
+                        centerTotal++
+                        if (l >= 115.0 && s <= 38 && l >= avgInnerL + 58.0) {
+                            centerBrightGlyphHits++
+                        } else if (l in 8.0..58.0 && s <= 52) {
+                            centerDarkBgHits++
+                        }
+                        dx += stepD
                     }
-                    dx += stepD
+                    dy += stepD
                 }
-                dy += stepD
+
+                val hasCentralDigit = centerBrightGlyphHits >= 3 &&
+                    centerTotal > 0 &&
+                    centerDarkBgHits >= (centerTotal * 25) / 100
+                val holdsActiveRingTransition = isTopCountdownCircleActive &&
+                    validSpokes >= 12 &&
+                    upperSpokes >= 5 &&
+                    brightArcSpokes >= 1 &&
+                    centerDarkBgHits >= (centerTotal * 35) / 100
+
+                if (hasCentralDigit || holdsActiveRingTransition) {
+                    return true
+                }
             }
-
-            val hasCentralDigit = centerBrightGlyphHits >= 3 &&
-                centerTotal > 0 &&
-                centerDarkBgHits >= (centerTotal * 3) / 10
-
-            // Full 16-spoke match (Single-App capture mode) OR upper-semicircle match if HUD ever overlaps lower half
-            val passesSpokeGeometry = (validSpokes >= 11 && upperSpokes >= 5) ||
-                (upperSpokes >= 6 && validSpokes >= 7)
-
-            passesSpokeGeometry && brightArcSpokes >= 1 && hasCentralDigit
+            false
         } catch (_: Exception) {
             false
         }
@@ -11422,7 +11437,8 @@ class OverlayService : LifecycleService() {
                 return (((yBot - bestY) * 100.0) / span).roundToInt().coerceIn(1, 97)
             }
 
-            // 3. Explicit 0% Empty Baseline Check
+            // 3. Explicit 0% Empty Baseline Check (v4.06: Requires dark-grey circular perimeter border verification
+            //    so rectangular white text like "NOT NOW" at (0.50w, 0.8932h) or overlay labels never return 0%!)
             var emptyLumaSum = 0.0
             var emptySatSum = 0.0
             var emptySamples = 0
@@ -11447,7 +11463,38 @@ class OverlayService : LifecycleService() {
                     maxCenterIconLuma >= 150.0 &&
                     whiteRingArcs < 5
                 ) {
-                    return 0
+                    val rBorderIn = w * 0.0735
+                    val rBorderOut = w * 0.0850
+                    val borderDirs = arrayOf(
+                        Pair(0.0, -1.0),
+                        Pair(-0.707, -0.707),
+                        Pair(0.707, -0.707),
+                        Pair(-1.0, 0.0),
+                        Pair(1.0, 0.0),
+                        Pair(-0.866, -0.50),
+                        Pair(0.866, -0.50)
+                    )
+                    var darkGreyBorderArcs = 0
+                    for ((ux, uy) in borderDirs) {
+                        val xIn = (actualCx + ux * rBorderIn).roundToInt().coerceIn(0, w - 1)
+                        val yIn = (actualCy + uy * rBorderIn).roundToInt().coerceIn(0, h - 1)
+                        val xOut = (actualCx + ux * rBorderOut).roundToInt().coerceIn(0, w - 1)
+                        val yOut = (actualCy + uy * rBorderOut).roundToInt().coerceIn(0, h - 1)
+                        val cIn = screen.getPixel(xIn, yIn)
+                        val cOut = screen.getPixel(xOut, yOut)
+                        val rIn = Color.red(cIn); val gIn = Color.green(cIn); val bIn = Color.blue(cIn)
+                        val rOut = Color.red(cOut); val gOut = Color.green(cOut); val bOut = Color.blue(cOut)
+                        val lIn = 0.299 * rIn + 0.587 * gIn + 0.114 * bIn
+                        val sIn = (max(rIn, max(gIn, bIn)) - min(rIn, min(gIn, bIn))).toDouble()
+                        val lOut = 0.299 * rOut + 0.587 * gOut + 0.114 * bOut
+                        val rimContrast = kotlin.math.abs(lOut - lIn)
+                        if (lIn in 28.0..92.0 && sIn <= 32.0 && lOut < 185.0 && rimContrast >= 5.0) {
+                            darkGreyBorderArcs++
+                        }
+                    }
+                    if (darkGreyBorderArcs >= 5) {
+                        return 0
+                    }
                 }
             }
             -1
@@ -12923,16 +12970,20 @@ class OverlayService : LifecycleService() {
             sampledRightChargeBtnFillPct == -1
 
         // Player Charged Attack minigame banner text ("Get ready!", "GREAT!", "EXCELLENT!", "NICE!", "Charge your attack!", "Swipe!")
-        val rawHasUserChargedBannerText = combinedBannerLower.contains("get ready") ||
-            combinedBannerLower.contains("great") ||
-            combinedBannerLower.contains("excellent") ||
-            combinedBannerLower.contains("nice") ||
-            combinedBannerLower.contains("charge your") ||
-            combinedBannerLower.contains("swipe")
+        // Note: During the player's swipe minigame, BOTH floating HP bars are hidden (`sampledPlayerHpPct == -1 && sampledOppHpPct == -1`).
+        // Gating on `sampledPlayerHpPct == -1` prevents stale OCR lines from ever canceling an opponent charged move countdown!
+        val rawHasUserChargedBannerText = sampledPlayerHpPct == -1 && (
+            combinedBannerLower.contains("get ready") ||
+                combinedBannerLower.contains("great") ||
+                combinedBannerLower.contains("excellent") ||
+                combinedBannerLower.contains("nice") ||
+                combinedBannerLower.contains("charge your") ||
+                combinedBannerLower.contains("swipe")
+            )
 
         // v4.05: Primary OCR trigger for Opponent Charged Attack prompt text ("Attack incoming!", "attack incomming", "Use a Protect Shield?", "NOT NOW", etc.)
         // Evaluated on `playerMoveLines + midBannerLines` (excluding top HUD where our own toast renders).
-        val hasAttackIncomingText = isHudHiddenForOpponentPrompt &&
+        val hasAttackIncomingText = (isHudHiddenForOpponentPrompt || isTopCountdownCircleActive) &&
             !rawHasUserChargedBannerText &&
             matchesAttackIncomingOcrText(playerMoveLines + midBannerLines)
 
@@ -13078,13 +13129,13 @@ class OverlayService : LifecycleService() {
             !sampledTopRightNameplateVisible &&
             sampledOppBalls <= 0 &&
             sampledPlayerBalls <= 0 &&
-            isHudHiddenForOpponentPrompt &&
             !hasUserChargedBannerText &&
             !isUserMinigameSwipePhaseActive &&
-            ((sampledPlayerHpPct in 1..100 && sampledOppHpPct in 1..100) ||
-                sampledPlayerHpPct in 1..100 ||
+            (sampledPlayerHpPct in 1..100 ||
+                sampledOppHpPct in 1..100 ||
                 hasAttackIncomingText ||
-                isAttackIncomingPromptActive)
+                isAttackIncomingPromptActive ||
+                pendingChargedAttackActor == "opp")
         val isShieldCallWindowEarly = isOpponentCountdownWindowEarly ||
             hasAttackIncomingText ||
             isAttackIncomingPromptActive ||
@@ -13971,13 +14022,13 @@ class OverlayService : LifecycleService() {
             !sampledTopRightNameplateVisible &&
             sampledOppBalls <= 0 &&
             sampledPlayerBalls <= 0 &&
-            isHudHiddenForOpponentPrompt &&
             !hasUserChargedBannerText &&
             !isUserMinigameSwipePhaseActive &&
-            ((sampledPlayerHpPct in 1..100 && sampledOppHpPct in 1..100) ||
-                sampledPlayerHpPct in 1..100 ||
+            (sampledPlayerHpPct in 1..100 ||
+                sampledOppHpPct in 1..100 ||
                 hasAttackIncomingText ||
-                isAttackIncomingPromptActive)
+                isAttackIncomingPromptActive ||
+                pendingChargedAttackActor == "opp")
         val isOpponentChargedScreen = isOpponentCountdownCircleActive ||
             (isHudHiddenForOpponentPrompt &&
                 !isPostFaintSwitchPromptActive &&
@@ -14633,7 +14684,7 @@ class OverlayService : LifecycleService() {
                 pendingChargedAttackOppRawName = ""
                 pendingChargedAttackWasOppCatch = false
                 hadShieldPromptBeforeCurrentCharge = false
-                if (hasReturnedCombatCircles || (nowMs - shieldDecisionOverlayShownAtMs) >= 5000L) {
+                if (!isTopCountdownCircleActive && (hasReturnedCombatCircles || (nowMs - shieldDecisionOverlayShownAtMs) >= 5000L)) {
                     hideShieldDecisionOverlay()
                 }
                 hpChanged = true
