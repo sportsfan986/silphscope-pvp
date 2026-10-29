@@ -127,6 +127,8 @@ class OverlayService : LifecycleService() {
         const val EXTRA_ENABLE_HP_TRACKING = "extra_enable_hp_tracking"
         const val EXTRA_ENABLE_ENERGY_TRACKING = "extra_enable_energy_tracking"
         const val EXTRA_FAST_DETECT_TURN_OFFSET = "extra_fast_detect_turn_offset"
+        const val EXTRA_CHARGE_CIRCLE_PRIORITY_MODE = "extra_charge_circle_priority_mode"
+        const val EXTRA_ENABLE_ALT_FAST_MOVE_DETECT = "extra_enable_alt_fast_move_detect"
 
         const val PREFS_KEY_ENABLE_4_CHARGED_MOVES = "enable_4_charged_moves"
         const val PREFS_KEY_DISABLE_BATTLE_TOASTS = "disable_battle_toasts"
@@ -135,6 +137,10 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_ENABLE_HP_TRACKING = "enable_hp_tracking"
         const val PREFS_KEY_ENABLE_ENERGY_TRACKING = "enable_energy_tracking"
         const val PREFS_KEY_FAST_DETECT_TURN_OFFSET = "fast_detect_turn_offset"
+        const val PREFS_KEY_CHARGE_CIRCLE_PRIORITY_MODE = "charge_circle_priority_mode"
+        const val DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE = "smart_hybrid"
+        const val PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT = "enable_alt_fast_move_detect"
+        const val DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT = true
         const val PREFS_KEY_INSTALLED_VERSION_CODE = "gbl_last_installed_version_code"
         const val PREFS_KEY_OVERLAY_TRANSPARENCY_PCT = "overlay_transparency_pct"
         const val PREFS_KEY_APP_THEME_ID = "gbl_app_theme_id"
@@ -143,6 +149,44 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_BATTLE_LOGS = "gbl_battle_logs_v1"
         const val PREFS_KEY_AI_TRAINING_LOGS = "gbl_ai_training_logs_v1"
         const val PREFS_KEY_AI_LOGS_SPLIT_DONE = "gbl_ai_logs_split_v350_done"
+
+        /**
+         * v4.08: Scanner-Calibrated 18-Type Charged Move Contrast Ranking (1 = Highest Contrast, 18 = Lowest Contrast).
+         * Engineered directly from `measureSingleChargeCircleFillPct`:
+         * - `luma = 0.299R + 0.587G + 0.114B` vs dark unfilled background (`luma 35-55`)
+         * - `sat = max(R,G,B) - min(R,G,B)` vs `avgTopSat >= 42` 100%-ready cap gate
+         * - Spotlight & white-icon immunity `!(lumaDn >= 152 && satDn <= 40)`
+         * - 2nd/3rd fill white perimeter ring separation (`sat <= 45`, `luma >= 198`)
+         *
+         * Tier S (1-5): Optimal Chroma & Mid-High Luma (Fire, Grass, Fairy, Psychic, Electric)
+         * Tier A (6-10): Strong Chroma & Reliable Step (Water, Bug, Fighting, Poison, Ground)
+         * Tier B (11-14): Moderate — Pastel or Low-Luma Indigo (Ice, Dragon, Flying, Rock)
+         * Tier C (15-18): Low-Contrast Hazard — Achromatic Silver/Grey or Very Dark (Ghost, Steel, Normal, Dark)
+         */
+        val MOVE_TYPE_SCANNER_CONTRAST_RANK: Map<String, Int> = mapOf(
+            // Tier S (Ranks 1-5)
+            "fire" to 1,
+            "grass" to 2,
+            "fairy" to 3,
+            "psychic" to 4,
+            "electric" to 5,
+            // Tier A (Ranks 6-10)
+            "water" to 6,
+            "bug" to 7,
+            "fighting" to 8,
+            "poison" to 9,
+            "ground" to 10,
+            // Tier B (Ranks 11-14)
+            "ice" to 11,
+            "dragon" to 12,
+            "flying" to 13,
+            "rock" to 14,
+            // Tier C (Ranks 15-18)
+            "ghost" to 15,
+            "steel" to 16,
+            "normal" to 17,
+            "dark" to 18
+        )
         const val AI_LOG_RETENTION_MS = 7L * 24L * 60L * 60L * 1000L
         const val PREFS_KEY_DELETED_LOG_IDS = "gbl_deleted_log_ids_v1"
         const val PREFS_KEY_DELETED_TEAM_IDS = "gbl_deleted_team_ids_v1"
@@ -7786,7 +7830,9 @@ class OverlayService : LifecycleService() {
     private var needsPostSwapOrMoveTurnReindex: Boolean = false
     private var enableHpTracking: Boolean = false
     private var enableEnergyTracking: Boolean = false
-    // v3.85: Charge Move Meter Only Mode (highest-energy meter priority, decoupled from HP), Idle Back-Credit/Fallback, Banner Move OCR & Non-Standard Fast Move Detector
+    private var chargeCirclePriorityMode: String = DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE
+    private var enableAltFastMoveDetect: Boolean = DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT
+    // v3.85: Charge Move Meter Only Mode (configurable priority mode, decoupled from HP), Idle Back-Credit/Fallback, Banner Move OCR & Non-Standard Fast Move Detector
     private var fastDetectTurnOffset: Int = 0
     private var isPlayerInIdleFallback: Boolean = false
     private var lastIdleFallbackOppCreditMs: Long = 0L
@@ -7958,6 +8004,67 @@ class OverlayService : LifecycleService() {
             bestStep.coerceIn(lo, hi)
         } else {
             clampedRaw
+        }
+    }
+
+    private fun getMoveScannerContrastRank(moveName: String, fallbackSpeciesType: String = "normal"): Int {
+        if (moveName.isBlank()) return 17
+        val mStats = resolveChargedMoveStatsStatic(moveName, fallbackSpeciesType)
+        val moveTypeLower = mStats.type.trim().lowercase()
+        return MOVE_TYPE_SCANNER_CONTRAST_RANK[moveTypeLower] ?: 17
+    }
+
+    /**
+     * v4.08: Selects whether the Right Charged Move Circle (Move 2) should be tracked as the primary energy meter
+     * over the Left Charged Move Circle (Move 1) based on `chargeCirclePriorityMode`:
+     * - `"highest_energy"`: Picks the move with higher energy cost (ties broken by better scanner contrast rank).
+     * - `"highest_contrast"`: Picks the move with better 1-18 scanner contrast rank (ties broken by higher energy cost).
+     * - `"smart_hybrid"` (Default): Tracks the higher-energy move when both moves are in Tier S or Tier A (Ranks 1-10),
+     *   and automatically promotes the higher-contrast move whenever the higher-energy move falls in Tier B or Tier C
+     *   (Ranks 11-18, e.g. Xerneas's Moonblast Fairy #3 50E over Giga Impact Normal #17 80E).
+     */
+    private fun shouldSelectRightCircleAsPrimary(
+        move1Name: String,
+        move1Cost: Int,
+        move2Name: String,
+        move2Cost: Int,
+        hasSecondMove: Boolean,
+        fallbackSpeciesType: String = "normal"
+    ): Boolean {
+        if (!hasSecondMove || move2Cost <= 0 || move2Name.isBlank()) return false
+        val rank1 = getMoveScannerContrastRank(move1Name, fallbackSpeciesType)
+        val rank2 = getMoveScannerContrastRank(move2Name, fallbackSpeciesType)
+        return when (chargeCirclePriorityMode) {
+            "highest_contrast" -> {
+                if (rank1 != rank2) {
+                    rank2 < rank1
+                } else {
+                    move2Cost > move1Cost
+                }
+            }
+            "highest_energy" -> {
+                if (move1Cost != move2Cost) {
+                    move2Cost > move1Cost
+                } else {
+                    rank2 < rank1
+                }
+            }
+            else -> { // "smart_hybrid" (Default)
+                val slowerIsRight = if (move1Cost != move2Cost) {
+                    move2Cost > move1Cost
+                } else {
+                    rank2 < rank1
+                }
+                val slowerRank = if (slowerIsRight) rank2 else rank1
+                val fasterRank = if (slowerIsRight) rank1 else rank2
+                // If the higher-energy move is in Tier B or Tier C (rank >= 11) and the other move has strictly better contrast,
+                // promote the higher-contrast circle to primary!
+                if (slowerRank >= 11 && fasterRank < slowerRank) {
+                    !slowerIsRight
+                } else {
+                    slowerIsRight
+                }
+            }
         }
     }
 
@@ -8266,6 +8373,9 @@ class OverlayService : LifecycleService() {
         showShieldDecisionOverlay = prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true)
         enableHpTracking = prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
         enableEnergyTracking = prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
+        chargeCirclePriorityMode = prefs.getString(PREFS_KEY_CHARGE_CIRCLE_PRIORITY_MODE, DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE)
+            ?: DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE
+        enableAltFastMoveDetect = prefs.getBoolean(PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT, DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT)
         overlayScalePct = prefs.getInt("overlay_scale_pct", 78).coerceIn(50, 100)
         overlayTransparencyPct = prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 72).coerceIn(0, 100)
         val rawSavedThemeId = prefs.getString(PREFS_KEY_APP_THEME_ID, "dialga_shiny_midnight") ?: "dialga_shiny_midnight"
@@ -8784,39 +8894,96 @@ class OverlayService : LifecycleService() {
                     }
                     container.addView(divider)
 
-                    // 2a: Funded Candidate Moves (individual rows, bold primary text: will it KO or remaining HP%)
-                    for (m in fundedMoves) {
-                        val impactLabel = if (m.isKo) {
-                            "💥 KO! (0% HP left  •  -${m.dmgPct}% dmg)"
-                        } else {
-                            "✅ ${m.remHpPct}% HP left (-${m.dmgPct}% dmg)"
+                    // v4.08: Helper to build 4-Tier Remaining HP Pill Badges:
+                    // - > 50% (51-100%): Green check + green pill badge ("✓ 56% HP left")
+                    // - 20%-50%: Yellow pill badge ("35% HP left")
+                    // - 10%-19%: Orange pill badge ("15% HP left")
+                    // - < 10% (0-9% / KO!): Red pill badge ("💥 KO! • 0% HP left" or "8% HP left")
+                    // Note: All text colors are non-pure-white (#ECFDF5, #FEF9C3, #FFEDD5, #FFE4E6) so OCR white-glyph filters ignore them.
+                    fun createRemainingHpBadge(remHpPct: Int, isKo: Boolean, isFunded: Boolean): TextView {
+                        val clampedRem = if (isKo) 0 else remHpPct.coerceIn(0, 100)
+                        val (badgeBgHex, badgeStrokeHex, badgeTextHex) = when {
+                            isKo || clampedRem < 10 -> Triple("#7F1D1D", "#F87171", "#FFE4E6") // Red (<10% or KO)
+                            clampedRem < 20 -> Triple("#7C2D12", "#FB923C", "#FFEDD5")         // Orange (10-19%)
+                            clampedRem <= 50 -> Triple("#713F12", "#FACC15", "#FEF9C3")        // Yellow (20-50%)
+                            else -> Triple("#065F46", "#34D399", "#ECFDF5")                    // Green (>50%)
                         }
-                        val rowTv = TextView(this).apply {
-                            text = "⚡ ${m.moveName} (${m.energyCost}e)  →  $impactLabel"
-                            setTextColor(if (m.isKo) Color.parseColor("#FECDD3") else Color.parseColor("#BAE6FD"))
-                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
-                            typeface = Typeface.create("sans-serif", Typeface.BOLD)
-                            setPadding(0, (1f * density).toInt(), 0, (1f * density).toInt())
+                        val badgeLabel = when {
+                            isKo -> if (isFunded) "💥 KO! • 0% HP left" else "💥 would KO • 0% HP left"
+                            clampedRem > 50 -> "✓ ${clampedRem}% HP left"
+                            else -> "${clampedRem}% HP left"
                         }
-                        container.addView(rowTv)
+                        return TextView(this).apply {
+                            text = badgeLabel
+                            setTextColor(Color.parseColor(badgeTextHex))
+                            setTextSize(TypedValue.COMPLEX_UNIT_SP, if (isFunded) 10.8f else 9.8f)
+                            typeface = Typeface.create("sans-serif-condensed", if (isFunded) Typeface.BOLD else Typeface.BOLD_ITALIC)
+                            setPadding(
+                                (6.5f * density).toInt(),
+                                (1.5f * density).toInt(),
+                                (6.5f * density).toInt(),
+                                (1.5f * density).toInt()
+                            )
+                            background = GradientDrawable().apply {
+                                shape = GradientDrawable.RECTANGLE
+                                cornerRadius = 999f
+                                setColor(Color.parseColor(badgeBgHex))
+                                setStroke(max(1, (1.2f * density).toInt()), Color.parseColor(badgeStrokeHex))
+                            }
+                        }
                     }
 
-                    // 2b: Remaining Unfunded Candidate Moves (italics & muted font: move name, banked/req energy e.g. 30e/40e)
+                    // 2a: Funded Candidate Moves (individual rows with 4-tier color-coded remaining HP pill badge)
+                    for (m in fundedMoves) {
+                        val rowLayout = LinearLayout(this).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            gravity = Gravity.CENTER_VERTICAL
+                            setPadding(0, (1.5f * density).toInt(), 0, (1.5f * density).toInt())
+                        }
+                        val prefixTv = TextView(this).apply {
+                            text = "⚡ ${m.moveName} (${m.energyCost}e)  →  "
+                            setTextColor(if (m.isKo) Color.parseColor("#FECDD3") else Color.parseColor("#BAE6FD"))
+                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.2f)
+                            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+                        }
+                        val badgeTv = createRemainingHpBadge(m.remHpPct, m.isKo, isFunded = true)
+                        val suffixTv = TextView(this).apply {
+                            text = "  (-${m.dmgPct}% dmg)"
+                            setTextColor(if (m.isKo) Color.parseColor("#FECDD3") else Color.parseColor("#BAE6FD"))
+                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.6f)
+                            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+                        }
+                        rowLayout.addView(prefixTv)
+                        rowLayout.addView(badgeTv)
+                        rowLayout.addView(suffixTv)
+                        container.addView(rowLayout)
+                    }
+
+                    // 2b: Remaining Unfunded Candidate Moves (italics & muted font + 4-tier remaining HP pill badge)
                     for (m in unfundedMoves) {
-                        val impactSuffix = if (m.isKo) {
-                            "would KO (-${m.dmgPct}%)"
-                        } else {
-                            "${m.remHpPct}% HP left (-${m.dmgPct}%)"
+                        val rowLayout = LinearLayout(this).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            gravity = Gravity.CENTER_VERTICAL
+                            alpha = 0.86f
+                            setPadding(0, (1.5f * density).toInt(), 0, (1.5f * density).toInt())
                         }
-                        val rowTv = TextView(this).apply {
-                            text = "• ${m.moveName} (${effectiveBankedE}e/${m.energyCost}e)  —  $impactSuffix"
+                        val prefixTv = TextView(this).apply {
+                            text = "• ${m.moveName} (${effectiveBankedE}e/${m.energyCost}e)  —  "
                             setTextColor(if (m.isKo) Color.parseColor("#FDE68A") else Color.parseColor("#94A3B8"))
-                            alpha = 0.85f
-                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
+                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.3f)
                             typeface = Typeface.create("sans-serif", Typeface.ITALIC)
-                            setPadding(0, (1f * density).toInt(), 0, (1f * density).toInt())
                         }
-                        container.addView(rowTv)
+                        val badgeTv = createRemainingHpBadge(m.remHpPct, m.isKo, isFunded = false)
+                        val suffixTv = TextView(this).apply {
+                            text = "  (-${m.dmgPct}%)"
+                            setTextColor(if (m.isKo) Color.parseColor("#FDE68A") else Color.parseColor("#94A3B8"))
+                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.0f)
+                            typeface = Typeface.create("sans-serif", Typeface.ITALIC)
+                        }
+                        rowLayout.addView(prefixTv)
+                        rowLayout.addView(badgeTv)
+                        rowLayout.addView(suffixTv)
+                        container.addView(rowLayout)
                     }
 
                     container.visibility = View.VISIBLE
@@ -9265,6 +9432,16 @@ class OverlayService : LifecycleService() {
                     prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2)
                 }
                 overlayView?.evaluateJavascript("if (window.setFastDetectTurnOffset) setFastDetectTurnOffset($fastDetectTurnOffset);", null)
+                chargeCirclePriorityMode = if (intent?.hasExtra(EXTRA_CHARGE_CIRCLE_PRIORITY_MODE) == true) {
+                    intent.getStringExtra(EXTRA_CHARGE_CIRCLE_PRIORITY_MODE) ?: DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE
+                } else {
+                    prefs.getString(PREFS_KEY_CHARGE_CIRCLE_PRIORITY_MODE, DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE) ?: DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE
+                }
+                enableAltFastMoveDetect = if (intent?.hasExtra(EXTRA_ENABLE_ALT_FAST_MOVE_DETECT) == true) {
+                    intent.getBooleanExtra(EXTRA_ENABLE_ALT_FAST_MOVE_DETECT, DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT)
+                } else {
+                    prefs.getBoolean(PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT, DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT)
+                }
                 syncTierThresholdsFromPrefs(prefs)
 
                 val requestedTeamName = intent?.getStringExtra(EXTRA_TEAM_NAME)
@@ -9368,6 +9545,16 @@ class OverlayService : LifecycleService() {
                     fastDetectTurnOffset = prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, fastDetectTurnOffset).coerceIn(0, 2)
                 }
                 overlayView?.evaluateJavascript("if (window.setFastDetectTurnOffset) setFastDetectTurnOffset($fastDetectTurnOffset);", null)
+                if (intent?.hasExtra(EXTRA_CHARGE_CIRCLE_PRIORITY_MODE) == true) {
+                    chargeCirclePriorityMode = intent.getStringExtra(EXTRA_CHARGE_CIRCLE_PRIORITY_MODE) ?: DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE
+                } else {
+                    chargeCirclePriorityMode = prefs.getString(PREFS_KEY_CHARGE_CIRCLE_PRIORITY_MODE, chargeCirclePriorityMode) ?: chargeCirclePriorityMode
+                }
+                if (intent?.hasExtra(EXTRA_ENABLE_ALT_FAST_MOVE_DETECT) == true) {
+                    enableAltFastMoveDetect = intent.getBooleanExtra(EXTRA_ENABLE_ALT_FAST_MOVE_DETECT, DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT)
+                } else {
+                    enableAltFastMoveDetect = prefs.getBoolean(PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT, enableAltFastMoveDetect)
+                }
                 syncTierThresholdsFromPrefs(prefs)
                 val updatedScalePct = intent?.getIntExtra(
                     EXTRA_OVERLAY_SCALE_PCT,
@@ -11609,7 +11796,9 @@ class OverlayService : LifecycleService() {
         userFastEnergy: Int,
         userMoveDurationMs: Long,
         nowMs: Long,
-        canAdvanceMonotonically: Boolean
+        canAdvanceMonotonically: Boolean,
+        primaryContrastRank: Int = 9,
+        secondaryContrastRank: Int = 9
     ): Int {
         val slowCost = slowestMoveCost.coerceIn(35, 100)
         val fastCost = fasterMoveCost.coerceIn(35, 100)
@@ -11623,9 +11812,7 @@ class OverlayService : LifecycleService() {
             100
         }
 
-        // v4.06: Compute dual-circle cross-check energy from the faster (lower-cost, high-saturation) charge move circle
-        // (e.g. Xerneas's Moonblast 50E vibrant pink circle when white Geomancy floor spotlights transiently wash out
-        // Giga Impact's 80E low-saturation Normal-type circle).
+        // v4.06 / v4.08: Compute dual-circle cross-check energy from the secondary charge move circle (`fastCost`)
         val fasterResolvedE: Int = if (hasSecondUserMove && debouncedFasterPct in 0..300) {
             when (debouncedFasterPct) {
                 in 0..99 -> {
@@ -11667,12 +11854,11 @@ class OverlayService : LifecycleService() {
             }
         } else -1
 
-        // v4.07: Dual-Circle Physical Consistency Cross-Check:
-        // Both charge move circles represent the exact same banked energy `E`.
-        // Whenever the faster circle (`fastCost`, e.g. Moonblast 50E) is visibly below 95% (`debouncedFasterPct in 1..94`),
-        // `E` is strictly `< fastCost` (`< 50E`), so the slower circle (`slowCost`, e.g. Giga Impact 80E) physically cannot
-        // exceed `expectedSlowPct = (debouncedFasterPct * fastCost) / slowCost` by more than 14% (and can NEVER be `>= 100%`).
-        if (hasSecondUserMove && fastCost < slowCost && fasterResolvedE >= 0 && debouncedFasterPct in 1..94) {
+        // v4.07 / v4.08: Dual-Circle Physical Consistency Cross-Check:
+        // Only allow the secondary circle (`fastCost`) to override the primary circle (`slowCost`) when the secondary circle
+        // has equal or better scanner contrast (`secondaryContrastRank <= primaryContrastRank`).
+        val secondaryCanOverridePrimary = secondaryContrastRank <= primaryContrastRank
+        if (hasSecondUserMove && secondaryCanOverridePrimary && fastCost < slowCost && fasterResolvedE >= 0 && debouncedFasterPct in 1..94) {
             val expectedSlowPct = ((debouncedFasterPct * fastCost).toDouble() / slowCost.toDouble()).roundToInt()
             if (debouncedSlowestPct !in 0..300 || debouncedSlowestPct >= 100 || debouncedSlowestPct > expectedSlowPct + 14) {
                 val clampedFast = min(fasterResolvedE, maxAllowedSingleJumpE).coerceIn(0, fastCost - 1)
@@ -11704,12 +11890,13 @@ class OverlayService : LifecycleService() {
                 minBound = 0,
                 maxBound = slowCost - 1
             )
-            val resolvedE = if (fasterResolvedE > r1SnappedE && (r1SnappedE + userFastEnergy) <= fasterResolvedE) {
+            val resolvedE = if (secondaryCanOverridePrimary && fasterResolvedE > r1SnappedE && (r1SnappedE + userFastEnergy) <= fasterResolvedE) {
                 fasterResolvedE
             } else {
                 r1SnappedE
             }
-            return min(resolvedE, maxAllowedSingleJumpE).coerceIn(0, max(slowCost - 1, fasterResolvedE.coerceAtMost(100)))
+            val maxR1Bound = if (secondaryCanOverridePrimary) max(slowCost - 1, fasterResolvedE.coerceAtMost(100)) else (slowCost - 1)
+            return min(resolvedE, maxAllowedSingleJumpE).coerceIn(0, maxR1Bound)
         }
 
         if (debouncedSlowestPct in 100..199) {
@@ -11726,7 +11913,7 @@ class OverlayService : LifecycleService() {
                 minBound = slowCost,
                 maxBound = r2Max
             )
-            val resolvedR2 = if (fasterResolvedE > r2SnappedE && (r2SnappedE + userFastEnergy) <= fasterResolvedE) {
+            val resolvedR2 = if (secondaryCanOverridePrimary && fasterResolvedE > r2SnappedE && (r2SnappedE + userFastEnergy) <= fasterResolvedE) {
                 fasterResolvedE
             } else {
                 r2SnappedE
@@ -11820,7 +12007,10 @@ class OverlayService : LifecycleService() {
         cost2: Int,
         hasSecondMove: Boolean,
         leftInThirdFill: Boolean = false,
-        rightInThirdFill: Boolean = false
+        rightInThirdFill: Boolean = false,
+        move1Name: String = "",
+        move2Name: String = "",
+        fallbackSpeciesType: String = "normal"
     ): Int {
         val validLeft = leftFillPct in 0..300
         val validRight = hasSecondMove && rightFillPct in 0..300 && cost2 > 0
@@ -11828,10 +12018,17 @@ class OverlayService : LifecycleService() {
 
         val c1 = cost1.coerceIn(35, 100)
         val c2 = if (validRight) cost2.coerceIn(35, 100) else c1
-        val rightIsSlowerMove = validRight && c2 > c1
+        val rightIsPrimaryMove = validRight && shouldSelectRightCircleAsPrimary(
+            move1Name = move1Name,
+            move1Cost = c1,
+            move2Name = move2Name,
+            move2Cost = c2,
+            hasSecondMove = validRight,
+            fallbackSpeciesType = fallbackSpeciesType
+        )
 
-        val chosenPct = if (rightIsSlowerMove) rightFillPct else if (validLeft) leftFillPct else rightFillPct
-        val chosenCost = if (rightIsSlowerMove) c2 else if (validLeft) c1 else c2
+        val chosenPct = if (rightIsPrimaryMove) rightFillPct else if (validLeft) leftFillPct else rightFillPct
+        val chosenCost = if (rightIsPrimaryMove) c2 else if (validLeft) c1 else c2
 
         return when {
             chosenPct <= 0 -> 0
@@ -12944,10 +13141,21 @@ class OverlayService : LifecycleService() {
             }
             if (enableEnergyTracking && (sampledLeftChargeBtnFillPct in 0..300 || sampledRightChargeBtnFillPct in 0..300)) {
                 val userMoveDurationEarlyMs = (userFastTurnsForStats * 500L).coerceAtLeast(500L)
-                val slowestIsRightEarly = hasSecondUserMove && userMove2Energy > userMove1Energy
+                val userSpeciesPrimaryTypeEarly = userMetaForStats.types.firstOrNull() ?: "normal"
+                val slowestIsRightEarly = shouldSelectRightCircleAsPrimary(
+                    move1Name = userMove1NameEarly,
+                    move1Cost = userMove1Energy,
+                    move2Name = userMove2NameEarly,
+                    move2Cost = userMove2Energy,
+                    hasSecondMove = hasSecondUserMove,
+                    fallbackSpeciesType = userSpeciesPrimaryTypeEarly
+                )
                 val slowestMoveNameEarly = if (slowestIsRightEarly) userMove2NameEarly else userMove1NameEarly
+                val fasterMoveNameEarly = if (slowestIsRightEarly) userMove1NameEarly else userMove2NameEarly
                 val slowestMoveCostEarly = if (slowestIsRightEarly) userMove2Energy else userMove1Energy
                 val fasterMoveCostEarly = if (slowestIsRightEarly) userMove1Energy else userMove2Energy
+                val primaryRankEarly = getMoveScannerContrastRank(slowestMoveNameEarly, userSpeciesPrimaryTypeEarly)
+                val secondaryRankEarly = getMoveScannerContrastRank(fasterMoveNameEarly, userSpeciesPrimaryTypeEarly)
                 val slowestFillEarly = if (slowestIsRightEarly) sampledRightChargeBtnFillPct else sampledLeftChargeBtnFillPct
                 val fasterFillEarly = if (slowestIsRightEarly) sampledLeftChargeBtnFillPct else sampledRightChargeBtnFillPct
                 if (slowestFillEarly in 1..300) {
@@ -12987,7 +13195,9 @@ class OverlayService : LifecycleService() {
                             userFastEnergy = userFastEnergyForStats,
                             userMoveDurationMs = userMoveDurationEarlyMs,
                             nowMs = nowMs,
-                            canAdvanceMonotonically = true
+                            canAdvanceMonotonically = true,
+                            primaryContrastRank = primaryRankEarly,
+                            secondaryContrastRank = secondaryRankEarly
                         )
                         if (measuredEarly >= userFastEnergyForStats) {
                             hasBattleStarted = true
@@ -13520,10 +13730,21 @@ class OverlayService : LifecycleService() {
             !oppFaintedSlots[activeOppIdx] &&
             (sampledLeftChargeBtnFillPct in 0..300 || sampledRightChargeBtnFillPct in 0..300)
         ) {
-            val slowestIsRight = hasSecondUserMove && userMove2Energy > userMove1Energy
+            val userSpeciesPrimaryType = userMetaForStats.types.firstOrNull() ?: "normal"
+            val slowestIsRight = shouldSelectRightCircleAsPrimary(
+                move1Name = userMove1NameEarly,
+                move1Cost = userMove1Energy,
+                move2Name = userMove2NameEarly,
+                move2Cost = userMove2Energy,
+                hasSecondMove = hasSecondUserMove,
+                fallbackSpeciesType = userSpeciesPrimaryType
+            )
             val slowestMoveName = if (slowestIsRight) userMove2NameEarly else userMove1NameEarly
+            val fasterMoveName = if (slowestIsRight) userMove1NameEarly else userMove2NameEarly
             val slowestMoveCost = if (slowestIsRight) userMove2Energy else userMove1Energy
             val fasterMoveCost = if (slowestIsRight) userMove1Energy else userMove2Energy
+            val primaryContrastRank = getMoveScannerContrastRank(slowestMoveName, userSpeciesPrimaryType)
+            val secondaryContrastRank = getMoveScannerContrastRank(fasterMoveName, userSpeciesPrimaryType)
             val slowestFillPct = if (slowestIsRight) sampledRightChargeBtnFillPct else sampledLeftChargeBtnFillPct
             val fasterFillPct = if (slowestIsRight) sampledLeftChargeBtnFillPct else sampledRightChargeBtnFillPct
             val slowestOnline = slowestFillPct in 0..300
@@ -13698,7 +13919,9 @@ class OverlayService : LifecycleService() {
                             userFastEnergy = userFastEnergyForStats,
                             userMoveDurationMs = userMoveDurationMs,
                             nowMs = nowMs,
-                            canAdvanceMonotonically = canAccumulateFastEnergy
+                            canAdvanceMonotonically = canAccumulateFastEnergy,
+                            primaryContrastRank = primaryContrastRank,
+                            secondaryContrastRank = secondaryContrastRank
                         )
                         // v3.97 Requirement #5: Player energy NEVER drops during normal fast-move combat or after opponent charged moves!
                         val measuredEnergy = if (hasBattleStarted && curE > 0) max(curE, rawMeasuredEnergy) else rawMeasuredEnergy
@@ -13789,7 +14012,14 @@ class OverlayService : LifecycleService() {
                     playerLastFastCreditedAtMs[activeUserIdx] = nowMs
                     playerAutoIncrementAnchorMs[activeUserIdx] = nowMs
                     userFastMovesCreditedThisFrame = max(userFastMovesCreditedThisFrame, 1)
-                    val slowestIsRightForToast = hasSecondUserMove && userMove2Energy > userMove1Energy
+                    val slowestIsRightForToast = shouldSelectRightCircleAsPrimary(
+                        move1Name = userMove1NameEarly,
+                        move1Cost = userMove1Energy,
+                        move2Name = userMove2NameEarly,
+                        move2Cost = userMove2Energy,
+                        hasSecondMove = hasSecondUserMove,
+                        fallbackSpeciesType = userMetaForStats.types.firstOrNull() ?: "normal"
+                    )
                     val slowestMoveNameForToast = if (slowestIsRightForToast) userMove2NameEarly else userMove1NameEarly
                     val slowestMoveCostForToast = if (slowestIsRightForToast) userMove2Energy else userMove1Energy
                     val slowestFillForToast = if (slowestIsRightForToast) sampledRightChargeBtnFillPct else sampledLeftChargeBtnFillPct
@@ -13869,8 +14099,9 @@ class OverlayService : LifecycleService() {
             }
         }
 
-        // 1E. v3.80: Non-Standard Opponent Fast Move Detector (>= 10% Damage Threshold + 0/1/2 Turn Offset Setting)
-        if (hasBattleStarted &&
+        // 1E. v3.80 / v4.08: Non-Standard Opponent Fast Move Detector (>= 10% Damage Threshold + 0/1/2 Turn Offset Setting + Enable/Disable Toggle)
+        if (enableAltFastMoveDetect &&
+            hasBattleStarted &&
             activeOppIdx in 0..2 &&
             !oppFastMoveConfirmed[activeOppIdx] &&
             !oppFaintedSlots[activeOppIdx] &&
@@ -14886,7 +15117,10 @@ class OverlayService : LifecycleService() {
                     cost2 = userMove2Energy,
                     hasSecondMove = hasSecondUserMove,
                     leftInThirdFill = (effectivePreEnergy - cheapestUserEnergy) >= 2 * userMove1Energy,
-                    rightInThirdFill = (effectivePreEnergy - cheapestUserEnergy) >= 2 * userMove2Energy
+                    rightInThirdFill = (effectivePreEnergy - cheapestUserEnergy) >= 2 * userMove2Energy,
+                    move1Name = userMove1NameEarly,
+                    move2Name = userMove2NameEarly,
+                    fallbackSpeciesType = userMetaForStats.types.firstOrNull() ?: "normal"
                 )
                 val postCircleEnergySnapped = if (postCircleEnergyRaw >= 0) {
                     (((postCircleEnergyRaw.toDouble() / userFastEnergyForStats.toDouble()).roundToInt()) * userFastEnergyForStats).coerceIn(0, 100)

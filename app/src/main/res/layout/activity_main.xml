@@ -60,7 +60,7 @@
                 android:id="@+id/tv_app_main_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Real-Time PvP Floating Overlay • v4.07"
+                android:text="Real-Time PvP Floating Overlay • v4.08"
                 android:textSize="11sp"
                 android:textColor="#94a3b8"
                 android:layout_marginTop="1dp" />
@@ -1436,6 +1436,96 @@
                         android:backgroundTint="#059669"
                         android:textColor="#ffffff" />
                 </LinearLayout>
+            </LinearLayout>
+
+            <!-- v4.08: Charged Move Circle Priority Mode (Smart Hybrid / Highest Contrast / Highest Energy) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:background="#0f172a"
+                android:padding="10dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:paddingEnd="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🎨 Charged Move Circle Priority (18-Type Contrast)"
+                        android:textColor="#e2e8f0"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_charge_circle_priority_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: Smart Hybrid (Tracks higher-E move in Tiers S/A #1–10; promotes higher-contrast move when higher-E is Tier B/C #11–18 like Normal/Steel/Ghost)"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_cycle_charge_circle_priority"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="Smart Hybrid"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#0284c7"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
+            <!-- v4.08: Opponent Alternate Fast Move Detection Toggle (Default: Enabled) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:background="#0f172a"
+                android:padding="10dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:paddingEnd="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🔍 Opponent Alternate Fast Move Detection"
+                        android:textColor="#e2e8f0"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_alt_fast_move_detect_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: Enabled (Auto-switches opponent fast move when floating HP bar damage diverges from standard fast move)"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_toggle_alt_fast_move_detect"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="Alt Detect On"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#0284c7"
+                    android:textColor="#ffffff" />
             </LinearLayout>
 
             <!-- v3.80: Non-Standard Fast Move Detection Turn Offset (0 / +1 / +2 Turns) -->

@@ -854,6 +854,11 @@
             white-space: nowrap;
             font-family: monospace;
         }
+        .move-sub-line.energy-ready {
+            color: #fde047;
+            font-weight: 800;
+            text-shadow: 0 0 4px rgba(250, 204, 21, 0.45);
+        }
 
         /* Center Track: Universal Segmented Range Bars */
         .move-col-center {
@@ -3139,11 +3144,14 @@
                             );
                             const confirmedBadgeCls = isConfirmedMove ? " move-confirmed-badge" : "";
                             const confirmedTitleSuffix = isConfirmedMove ? " (Confirmed Used in Battle)" : "";
+                            const moveCostVal = row.energy || 50;
+                            const isOppMoveFunded = energyTrackingEnabled && !isWaitingState && (activeOppEnergyVal >= moveCostVal);
+                            const oppEnergyReadyCls = isOppMoveFunded ? " energy-ready" : "";
                             return `
                                 <div class="move-timing-row">
                                     <div class="move-col-left">
                                         <div class="move-title-line threat-${threatClass}${confirmedBadgeCls}" title="${row.name || ''}${confirmedTitleSuffix}">${shortMove}</div>
-                                        <div class="move-sub-line">${row.energy || 50}e/${displayReadyCount}f</div>
+                                        <div class="move-sub-line${oppEnergyReadyCls}">${moveCostVal}e/${displayReadyCount}f</div>
                                     </div>
                                     <div class="move-col-center">${centerHtml}</div>
                                     <div class="move-col-right-grid">${rightGridHtml}</div>
@@ -3255,11 +3263,14 @@
                                 return `<div class="dmg-cell ${tierCls} ${isAct && !isFainted ? 'active-col' : ''} ${faintCls} ${koCls}" title="${od.code || ''}: ${od.dmgPct}% dmg vs ${targetHp}% HP">${text}</div>`;
                             }).join("");
 
+                            const myMoveCostVal = row.energy || 50;
+                            const isMyMoveFunded = energyTrackingEnabled && (activeUserEnergyVal >= myMoveCostVal);
+                            const myEnergyReadyCls = isMyMoveFunded ? " energy-ready" : "";
                             return `
                                 <div class="move-timing-row">
                                     <div class="move-col-left">
                                         <div class="move-title-line threat-${threatClass}" title="${row.name || ''}">${shortMove}</div>
-                                        <div class="move-sub-line">${row.energy || 50}e/${myTaps}f</div>
+                                        <div class="move-sub-line${myEnergyReadyCls}">${myMoveCostVal}e/${myTaps}f</div>
                                     </div>
                                     <div class="move-col-center">${centerHtml}</div>
                                     <div class="move-col-right-grid">${rightGridHtml}</div>
