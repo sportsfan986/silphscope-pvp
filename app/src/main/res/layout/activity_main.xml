@@ -60,7 +60,7 @@
                 android:id="@+id/tv_app_main_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Real-Time PvP Floating Overlay • v4.12"
+                android:text="Real-Time PvP Floating Overlay • v4.13"
                 android:textSize="11sp"
                 android:textColor="#94a3b8"
                 android:layout_marginTop="1dp" />
@@ -1332,7 +1332,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="⚡ 3-Ring Energy Meter, Proactive Lead &amp; Increment Snap (v4.12)"
+                    android:text="⚡ 3-Ring Energy Meter, Proactive Lead &amp; 100E Opp Clock (v4.13)"
                     android:textColor="#38bdf8"
                     android:textSize="12sp"
                     android:textStyle="bold" />
@@ -1342,7 +1342,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="• Active: 2 Matching Samples (Default • Fastest Response, ±2% Fill Tolerance)
-• Proactive Fast-Move Energy Lead: 300ms (Default • Applies energy ~300ms early &amp; rolls back if delayed &gt;500ms)
+• Proactive Fast-Move Energy Lead: 300ms (Default • ~300ms early + charges opp at 100E with charge-scene gates)
 • Live Energy &amp; Circle % Battle Toasts: Enabled"
                     android:textColor="#94a3b8"
                     android:textSize="10sp"
@@ -1393,12 +1393,12 @@
                         android:textColor="#94a3b8" />
                 </LinearLayout>
 
-                <!-- v4.12: Proactive Fast-Move Energy Lead Time Selector (0 / 200 / 300 / 400ms) -->
+                <!-- v4.12 / v4.13: Proactive Fast-Move Energy Lead Time Selector (0 / 200 / 300 / 400ms) -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="⏱️ Proactive Fast-Move Energy Lead Time (Player &amp; Opponent)"
+                    android:text="⏱️ Proactive Fast-Move Energy Lead Time (Player &amp; Opponent + 100E Clock)"
                     android:textColor="#e2e8f0"
                     android:textSize="11sp"
                     android:textStyle="bold" />
@@ -1407,7 +1407,7 @@
                     android:id="@+id/text_proactive_energy_lead_desc"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Default: 300ms — Advances energy ~300ms early for end-of-turn swap/catch/throw decisions; auto-corrects if circle lags &gt;500ms (1 turn)"
+                    android:text="Default: 300ms — Advances player &amp; opponent energy ~300ms early (keeps charging opp at 100E with charge-scene gates); auto-rolls back if &gt;500ms lag"
                     android:textColor="#94a3b8"
                     android:textSize="9.5sp"
                     android:layout_marginTop="1dp" />

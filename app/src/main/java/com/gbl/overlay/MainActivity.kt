@@ -549,9 +549,9 @@ class MainActivity : AppCompatActivity() {
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "4.08"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "4.13"
         } catch (_: Exception) {
-            "4.08"
+            "4.13"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -3702,10 +3702,10 @@ class MainActivity : AppCompatActivity() {
 
         if (::textProactiveEnergyLeadDesc.isInitialized) {
             textProactiveEnergyLeadDesc.text = when (leadMs) {
-                0 -> "Off (0ms) — Waits strictly for debounced Charge Move Circle confirmation before updating energy"
-                200 -> "Active: 200ms — Advances energy 200ms early; auto-rolls back if circle lags >500ms (1 turn)"
-                400 -> "Active: 400ms — Advances energy 400ms early for maximum decision time; auto-rolls back if circle lags >500ms"
-                else -> "Default: 300ms — Advances energy ~300ms early for end-of-turn swap/catch/throw decisions; auto-corrects if circle lags >500ms (1 turn)"
+                0 -> "Off (0ms) — Waits for debounced circle confirmation; continues charging opponent at 100% player energy with charge-scene gates"
+                200 -> "Active: 200ms — Advances player & opponent energy 200ms early (including opp clock at 100E); auto-rolls back on charge-scene cut or >500ms lag"
+                400 -> "Active: 400ms — Advances player & opponent energy 400ms early (including opp clock at 100E); auto-rolls back on charge-scene cut or >500ms lag"
+                else -> "Default: 300ms — Advances player & opponent energy ~300ms early (keeps charging opp at 100E with charge-scene gates); auto-rolls back if >500ms lag"
             }
         }
 
@@ -3730,9 +3730,9 @@ class MainActivity : AppCompatActivity() {
                 else -> "4 Matching Samples (Strict Filtering, ±2% Fill Tolerance)"
             }
             val leadSummary = when (leadMs) {
-                0 -> "Off (0ms — Waits for debounced circle)"
-                300 -> "300ms (Default • Applies energy ~300ms early & rolls back if delayed >500ms)"
-                else -> "${leadMs}ms (Applies energy ~${leadMs}ms early & rolls back if delayed >500ms)"
+                0 -> "Off (0ms — Waits for debounced circle + 100E opp clock)"
+                300 -> "300ms (Default • ~300ms early + charges opp at 100E with charge-scene gates)"
+                else -> "${leadMs}ms (~${leadMs}ms early + charges opp at 100E with charge-scene gates)"
             }
             val toastStatus = if (toastsOn) "Enabled" else "Muted"
             tvEnergyDebounceSummary.text =

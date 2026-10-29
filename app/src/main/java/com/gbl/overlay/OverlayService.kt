@@ -14299,9 +14299,9 @@ class OverlayService : LifecycleService() {
             }
         }
 
-        // v4.01 / v4.09: 100E Ceiling Step Latch After 1 Fast-Move Duration (`userMoveDurationMs`)
-        // Requires the highest-cost move circle to also be >= 100% (white ring active) so a Pokemon with an 80E second move
-        // (e.g. Xerneas Giga Impact 80E) can never latch 100E while Giga Impact still has a dark-grey (<100%) border!
+        // v4.01 / v4.09 / v4.13: 100E Ceiling Step Latch After 1 Fast-Move Duration (`userMoveDurationMs`)
+        // Requires the highest-cost move circle to also be >= 98% (white ring active) so a Pokemon with an 80E second move
+        // (e.g. Xerneas Giga Impact 80E) can never latch 100E while Giga Impact still has a dark-grey (<98%) border!
         if (hasBattleStarted &&
             canAccumulateFastEnergy &&
             !playerFaintedSlots[activeUserIdx] &&
@@ -14318,7 +14318,7 @@ class OverlayService : LifecycleService() {
             } else {
                 sampledLeftChargeBtnFillPct
             }
-            val canLatchCeiling100 = maxCostCirclePct >= 100
+            val canLatchCeiling100 = maxCostCirclePct >= 98
             if (curSlotE in 1..99 && (curSlotE + userFastEnergyForStats) > 100 && canLatchCeiling100 && !playerSlotCeilingLatched100[activeUserIdx]) {
                 if (nearCeilingStepStartMs[activeUserIdx] <= 0L) {
                     nearCeilingStepStartMs[activeUserIdx] = nowMs
@@ -14373,16 +14373,68 @@ class OverlayService : LifecycleService() {
             nearCeilingStepStartMs[activeUserIdx] = 0L
         }
 
-        // 1C.5. v4.12: Proactive ~300ms Early Fast-Move Energy & Turn Step (Player + Opponent) with >500ms 1-Turn Lag Rollback
-        //       - Once at least 1 confirmed fast move has occurred in the current phase (`confirmedPhasePlayerTurns > 0`),
-        //         proactively advances player energy and turn count `activeProactiveEnergyLeadMs` (~300ms default) before
-        //         the next expected debounced circle confirmation (`elapsed >= userMoveDurationMs - leadMs`).
-        //       - If the real debounced circle update lags by more than one 500ms turn (`nowMs > expectedConfirmMs + 500L`)
-        //         or combat is interrupted, automatically rolls back both player and opponent energy/turns to the last
-        //         confirmed baseline.
+        // 1C.5. v4.12 / v4.13: Proactive ~300ms Early Fast-Move Energy & Turn Step (Player + Opponent, Including at 100E Player Ceiling)
+        //       - Once at least 1 confirmed fast move has occurred in the current phase (`confirmedPhasePlayerTurns > 0`)
+        //         or the player is at 100E with full Charge Move Circles visible on screen, proactively advances player turns
+        //         (and player energy if <100E) `activeProactiveEnergyLeadMs` (~300ms default) before the next expected
+        //         fast-move completion (`elapsed >= userMoveDurationMs - leadMs`).
+        //       - When player energy is at 100%, continues cycling the predictive turn clock and 500ms sub-turn interpolation
+        //         so the opponent energy meter (`oppSlotEnergy`) keeps charging smoothly in real time, gated by all charge-scene
+        //         animation cut and combat gates (`canAccumulateFastEnergy` + visible >=95% Charge Move Circles).
+        //       - If a charge scene animation cut occurs (`!canAccumulateFastEnergy` or circles disappear) or a <100E circle
+        //         confirmation lags by more than one 500ms turn (`nowMs > expectedConfirmMs + 500L`), immediately rolls back
+        //         both player and opponent energy/turns to the last confirmed baseline.
+        val maxCostCirclePctFor100 = if (hasSecondUserMove && userMove2Energy >= userMove1Energy) {
+            sampledRightChargeBtnFillPct
+        } else {
+            sampledLeftChargeBtnFillPct
+        }
+        val areCirclesVisibleAt100 = maxCostCirclePctFor100 >= 95 &&
+            (sampledLeftChargeBtnFillPct >= 95 || !hasSecondUserMove || sampledRightChargeBtnFillPct >= 95)
+
+        // At 100E, Charge Move Circles cannot increase past 100% (so Section 1C has diffE == 0).
+        // Confirm a pending 100E proactive turn step once `nowMs >= proactiveStepExpectedConfirmMs` while combat & circles remain active.
+        if (hasBattleStarted &&
+            canAccumulateFastEnergy &&
+            !playerFaintedSlots[activeUserIdx] &&
+            !oppFaintedSlots[activeOppIdx] &&
+            activeUserIdx in 0..2 &&
+            activeOppIdx in 0..2 &&
+            !awaitingPostUserChargeCircleSync &&
+            proactiveStepPending &&
+            proactiveStepSlotIdx == activeUserIdx &&
+            proactiveStepPreEnergy >= 100 &&
+            areCirclesVisibleAt100 &&
+            nowMs >= proactiveStepExpectedConfirmMs &&
+            nowMs <= (proactiveStepExpectedConfirmMs + 500L)
+        ) {
+            val addedTurns = proactiveStepAddedTurns.coerceAtLeast(userFastTurnsForStats)
+            clearPendingProactiveStep()
+            proactiveRolledBackAnchorMs = 0L
+            playerSlotCeilingLatched100[activeUserIdx] = true
+            playerSlotEnergy[activeUserIdx] = 100
+            playerSlotEnergyAnchor[activeUserIdx] = 100
+            confirmedPhasePlayerTurns += addedTurns
+            phasePlayerTurns = max(phasePlayerTurns, confirmedPhasePlayerTurns)
+            if (battleTurnIndex < confirmedPhasePlayerTurns) {
+                battleTurnIndex = confirmedPhasePlayerTurns
+            }
+            lastConfirmedPlayerFastMoveMs = if (nowMs - proactiveStepExpectedConfirmMs <= 450L) {
+                proactiveStepExpectedConfirmMs
+            } else {
+                nowMs
+            }
+            playerLastFastCreditedAtMs[activeUserIdx] = nowMs
+            playerAutoIncrementAnchorMs[activeUserIdx] = nowMs
+            userFastMovesCreditedThisFrame = max(userFastMovesCreditedThisFrame, 1)
+            hpChanged = true
+        }
+
         if (proactiveStepPending) {
+            val isAt100Proactive = proactiveStepPreEnergy >= 100
             val shouldRollbackProactive = !hasBattleStarted ||
                 !canAccumulateFastEnergy ||
+                (isAt100Proactive && !areCirclesVisibleAt100) ||
                 activeUserIdx != proactiveStepSlotIdx ||
                 playerFaintedSlots[activeUserIdx] ||
                 oppFaintedSlots[activeOppIdx] ||
@@ -14393,6 +14445,17 @@ class OverlayService : LifecycleService() {
                 rollbackPendingProactiveStep(markAnchorRolledBack = markAnchor)
                 hpChanged = true
             }
+        } else if (phasePlayerTurns > confirmedPhasePlayerTurns &&
+            (!hasBattleStarted ||
+                !canAccumulateFastEnergy ||
+                (playerSlotEnergy.getOrElse(activeUserIdx) { 0 } >= 100 && !areCirclesVisibleAt100) ||
+                playerFaintedSlots.getOrElse(activeUserIdx) { false } ||
+                oppFaintedSlots.getOrElse(activeOppIdx) { false } ||
+                awaitingPostUserChargeCircleSync)
+        ) {
+            // Immediately roll back any unconfirmed sub-turn interpolated opponent energy when a charge-scene animation cut starts
+            rollbackPendingProactiveStep(markAnchorRolledBack = false)
+            hpChanged = true
         }
 
         if (hasBattleStarted &&
@@ -14410,11 +14473,28 @@ class OverlayService : LifecycleService() {
                 confirmedMovePhaseOppTurns = phaseOppTurns.coerceAtLeast(0)
             }
 
+            // Self-heal phase cadence anchor when player is at 100E (e.g. re-entering at 100E or resuming after a charged move scene)
+            if (!proactiveStepPending &&
+                playerSlotEnergy[activeUserIdx] >= 100 &&
+                areCirclesVisibleAt100 &&
+                !awaitingPostUserChargeCircleSync
+            ) {
+                playerSlotCeilingLatched100[activeUserIdx] = true
+                if (lastConfirmedPlayerFastMoveMs <= 0L ||
+                    (nowMs - lastConfirmedPlayerFastMoveMs) > (userMoveDurationMs + 500L)
+                ) {
+                    lastConfirmedPlayerFastMoveMs = if (confirmedPhasePlayerTurns == 0) nowMs + 200L else nowMs
+                    proactiveRolledBackAnchorMs = 0L
+                }
+            }
+
             val leadMs = activeProactiveEnergyLeadMs.coerceIn(0, 400).toLong()
-            if (leadMs > 0L &&
-                !proactiveStepPending &&
-                confirmedPhasePlayerTurns > 0 &&
+            val curConfirmedE = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
+            val isAt100ReadyForClock = curConfirmedE >= 100 && areCirclesVisibleAt100
+            if (!proactiveStepPending &&
+                (confirmedPhasePlayerTurns > 0 || isAt100ReadyForClock) &&
                 lastConfirmedPlayerFastMoveMs > 0L &&
+                nowMs >= lastConfirmedPlayerFastMoveMs &&
                 lastConfirmedPlayerFastMoveMs != proactiveRolledBackAnchorMs &&
                 userFastMovesCreditedThisFrame == 0 &&
                 !awaitingPostUserChargeCircleSync
@@ -14422,18 +14502,69 @@ class OverlayService : LifecycleService() {
                 val elapsedSinceLastConfirmedMoveMs = (nowMs - lastConfirmedPlayerFastMoveMs).coerceAtLeast(0L)
                 val proactiveTriggerElapsedMs = (userMoveDurationMs - leadMs).coerceAtLeast(100L)
                 val expectedConfirmMs = lastConfirmedPlayerFastMoveMs + userMoveDurationMs
-                val curConfirmedE = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
-                if (elapsedSinceLastConfirmedMoveMs >= proactiveTriggerElapsedMs &&
-                    nowMs <= (expectedConfirmMs + 500L) &&
-                    curConfirmedE < 100
-                ) {
-                    val nextProactiveE = (curConfirmedE + userFastEnergyForStats).coerceIn(0, 100)
-                    val addedE = (nextProactiveE - curConfirmedE).coerceAtLeast(0)
-                    if (addedE > 0) {
+                if (curConfirmedE < 100) {
+                    if (leadMs > 0L &&
+                        elapsedSinceLastConfirmedMoveMs >= proactiveTriggerElapsedMs &&
+                        nowMs <= (expectedConfirmMs + 500L)
+                    ) {
+                        val nextProactiveE = (curConfirmedE + userFastEnergyForStats).coerceIn(0, 100)
+                        val addedE = (nextProactiveE - curConfirmedE).coerceAtLeast(0)
+                        if (addedE > 0) {
+                            proactiveStepPending = true
+                            proactiveStepSlotIdx = activeUserIdx
+                            proactiveStepPreEnergy = curConfirmedE
+                            proactiveStepAddedEnergy = addedE
+                            proactiveStepAddedTurns = userFastTurnsForStats
+                            proactiveStepExpectedConfirmMs = expectedConfirmMs
+                            proactiveStepPreOppSlotIdx = activeOppIdx
+                            proactiveStepPreOppEnergy = oppSlotEnergy[activeOppIdx].coerceIn(0, 100)
+                            proactiveStepPreOppTurnsOnField = oppSlotTurnsOnField[activeOppIdx].coerceAtLeast(0)
+                            proactiveStepPrePhaseOppTurns = phaseOppTurns.coerceAtLeast(0)
+
+                            playerSlotEnergy[activeUserIdx] = nextProactiveE
+                            playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + userFastTurnsForStats).coerceAtLeast(0)
+                            phasePlayerTurns = confirmedPhasePlayerTurns + userFastTurnsForStats
+                            playerSlotCurrentMoveTurns[activeUserIdx] = 0
+                            if (battleTurnIndex < phasePlayerTurns) {
+                                battleTurnIndex = phasePlayerTurns
+                            }
+
+                            val slowestIsRightForToast = shouldSelectRightCircleAsPrimary(
+                                move1Name = userMove1NameEarly,
+                                move1Cost = userMove1Energy,
+                                move2Name = userMove2NameEarly,
+                                move2Cost = userMove2Energy,
+                                hasSecondMove = hasSecondUserMove,
+                                fallbackSpeciesType = userMetaForStats.types.firstOrNull() ?: "normal"
+                            )
+                            val slowestMoveNameForToast = if (slowestIsRightForToast) userMove2NameEarly else userMove1NameEarly
+                            val slowestMoveCostForToast = if (slowestIsRightForToast) userMove2Energy else userMove1Energy
+                            val slowestFillForToast = if (slowestIsRightForToast) sampledRightChargeBtnFillPct else sampledLeftChargeBtnFillPct
+                            emitEnergyUpdateToastIfEnabled(
+                                slotIdx = activeUserIdx,
+                                moveName = slowestMoveNameForToast,
+                                moveCost = slowestMoveCostForToast,
+                                circleFillPct = slowestFillForToast,
+                                newEnergy = nextProactiveE,
+                                primaryAtkIndex = if (slowestIsRightForToast) 2 else 1,
+                                leftFillPct = sampledLeftChargeBtnFillPct,
+                                leftEnergy = computeSingleCircleSnappedEnergy(activeUserIdx, sampledLeftChargeBtnFillPct, userMove1Energy, userFastEnergyForStats),
+                                rightFillPct = sampledRightChargeBtnFillPct,
+                                rightEnergy = if (hasSecondUserMove) computeSingleCircleSnappedEnergy(activeUserIdx, sampledRightChargeBtnFillPct, userMove2Energy, userFastEnergyForStats) else -1,
+                                hasSecondMove = hasSecondUserMove
+                            )
+                            hpChanged = true
+                        }
+                    }
+                } else if (isAt100ReadyForClock) {
+                    if (leadMs > 0L &&
+                        elapsedSinceLastConfirmedMoveMs >= proactiveTriggerElapsedMs &&
+                        nowMs < expectedConfirmMs
+                    ) {
                         proactiveStepPending = true
                         proactiveStepSlotIdx = activeUserIdx
-                        proactiveStepPreEnergy = curConfirmedE
-                        proactiveStepAddedEnergy = addedE
+                        proactiveStepPreEnergy = 100
+                        proactiveStepAddedEnergy = 0
                         proactiveStepAddedTurns = userFastTurnsForStats
                         proactiveStepExpectedConfirmMs = expectedConfirmMs
                         proactiveStepPreOppSlotIdx = activeOppIdx
@@ -14441,38 +14572,33 @@ class OverlayService : LifecycleService() {
                         proactiveStepPreOppTurnsOnField = oppSlotTurnsOnField[activeOppIdx].coerceAtLeast(0)
                         proactiveStepPrePhaseOppTurns = phaseOppTurns.coerceAtLeast(0)
 
-                        playerSlotEnergy[activeUserIdx] = nextProactiveE
+                        playerSlotEnergy[activeUserIdx] = 100
                         playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + userFastTurnsForStats).coerceAtLeast(0)
                         phasePlayerTurns = confirmedPhasePlayerTurns + userFastTurnsForStats
                         playerSlotCurrentMoveTurns[activeUserIdx] = 0
                         if (battleTurnIndex < phasePlayerTurns) {
                             battleTurnIndex = phasePlayerTurns
                         }
-
-                        val slowestIsRightForToast = shouldSelectRightCircleAsPrimary(
-                            move1Name = userMove1NameEarly,
-                            move1Cost = userMove1Energy,
-                            move2Name = userMove2NameEarly,
-                            move2Cost = userMove2Energy,
-                            hasSecondMove = hasSecondUserMove,
-                            fallbackSpeciesType = userMetaForStats.types.firstOrNull() ?: "normal"
-                        )
-                        val slowestMoveNameForToast = if (slowestIsRightForToast) userMove2NameEarly else userMove1NameEarly
-                        val slowestMoveCostForToast = if (slowestIsRightForToast) userMove2Energy else userMove1Energy
-                        val slowestFillForToast = if (slowestIsRightForToast) sampledRightChargeBtnFillPct else sampledLeftChargeBtnFillPct
-                        emitEnergyUpdateToastIfEnabled(
-                            slotIdx = activeUserIdx,
-                            moveName = slowestMoveNameForToast,
-                            moveCost = slowestMoveCostForToast,
-                            circleFillPct = slowestFillForToast,
-                            newEnergy = nextProactiveE,
-                            primaryAtkIndex = if (slowestIsRightForToast) 2 else 1,
-                            leftFillPct = sampledLeftChargeBtnFillPct,
-                            leftEnergy = computeSingleCircleSnappedEnergy(activeUserIdx, sampledLeftChargeBtnFillPct, userMove1Energy, userFastEnergyForStats),
-                            rightFillPct = sampledRightChargeBtnFillPct,
-                            rightEnergy = if (hasSecondUserMove) computeSingleCircleSnappedEnergy(activeUserIdx, sampledRightChargeBtnFillPct, userMove2Energy, userFastEnergyForStats) else -1,
-                            hasSecondMove = hasSecondUserMove
-                        )
+                        hpChanged = true
+                    } else if (nowMs >= expectedConfirmMs && nowMs <= (expectedConfirmMs + 500L)) {
+                        playerSlotCeilingLatched100[activeUserIdx] = true
+                        playerSlotEnergy[activeUserIdx] = 100
+                        playerSlotEnergyAnchor[activeUserIdx] = 100
+                        confirmedPhasePlayerTurns += userFastTurnsForStats
+                        phasePlayerTurns = max(phasePlayerTurns, confirmedPhasePlayerTurns)
+                        playerSlotTurnsOnField[activeUserIdx] = (playerSlotTurnsOnField[activeUserIdx] + userFastTurnsForStats).coerceAtLeast(0)
+                        playerSlotCurrentMoveTurns[activeUserIdx] = 0
+                        if (battleTurnIndex < confirmedPhasePlayerTurns) {
+                            battleTurnIndex = confirmedPhasePlayerTurns
+                        }
+                        lastConfirmedPlayerFastMoveMs = if (nowMs - expectedConfirmMs <= 450L) {
+                            expectedConfirmMs
+                        } else {
+                            nowMs
+                        }
+                        playerLastFastCreditedAtMs[activeUserIdx] = nowMs
+                        playerAutoIncrementAnchorMs[activeUserIdx] = nowMs
+                        userFastMovesCreditedThisFrame = max(userFastMovesCreditedThisFrame, 1)
                         hpChanged = true
                     }
                 }
@@ -14505,28 +14631,38 @@ class OverlayService : LifecycleService() {
             }
         }
 
-        // 1D. v3.88 / v4.12: Opponent Fast Move Energy Indexed Directly to Player Turns (with Proactive Lead-Time Shift & >500ms Rollback)
+        // 1D. v3.88 / v4.12 / v4.13: Opponent Fast Move Energy Indexed Directly to Player Turns (with Proactive Lead-Time Shift & 100E Player Ceiling Clock)
         //     - When player uses a multi-turn fast move (`userFastTurnsForStats > 1`), approximates single-turn timing
         //       in 500ms intervals (`0 .. userFastTurnsForStats - 1`) between each confirmed player fast move, shifted early
-        //       by `activeProactiveEnergyLeadMs` once the phase cadence is anchored.
-        //     - If the expected player fast move confirmation lags by more than one 500ms turn (`elapsed > userMoveDurationMs + 500L`),
-        //       rolls back any unconfirmed interpolated sub-turns and opponent fast move credits from that unconfirmed cycle.
+        //       by `activeProactiveEnergyLeadMs` once the phase cadence is anchored (including while player energy is at 100%).
+        //     - If the expected player fast move confirmation lags by more than one 500ms turn (`elapsed > userMoveDurationMs + 500L`)
+        //       or a charge-scene animation cut occurs, rolls back any unconfirmed interpolated sub-turns and opponent fast move credits.
         //     - Charges opponent energy meter based on their fast move turn count (`oppFastTurnsForStats`).
         if (hasBattleStarted &&
             canAccumulateFastEnergy &&
             !playerFaintedSlots[activeUserIdx] &&
             !oppFaintedSlots[activeOppIdx]
         ) {
-            if (!proactiveStepPending && userFastTurnsForStats > 1 && lastConfirmedPlayerFastMoveMs > 0L && userFastMovesCreditedThisFrame == 0) {
+            val isAt100ReadyForSubTurns = playerSlotEnergy[activeUserIdx] >= 100 && areCirclesVisibleAt100
+            if (!proactiveStepPending &&
+                userFastTurnsForStats > 1 &&
+                lastConfirmedPlayerFastMoveMs > 0L &&
+                nowMs >= lastConfirmedPlayerFastMoveMs &&
+                userFastMovesCreditedThisFrame == 0
+            ) {
                 val elapsedSinceLastConfirmedMoveMs = (nowMs - lastConfirmedPlayerFastMoveMs).coerceAtLeast(0L)
-                if (confirmedPhasePlayerTurns > 0 && elapsedSinceLastConfirmedMoveMs > (userMoveDurationMs + 500L)) {
+                if ((confirmedPhasePlayerTurns > 0 || isAt100ReadyForSubTurns) &&
+                    elapsedSinceLastConfirmedMoveMs > (userMoveDurationMs + 500L)
+                ) {
                     if (phasePlayerTurns > confirmedPhasePlayerTurns) {
                         rollbackPendingProactiveStep(markAnchorRolledBack = true)
                         hpChanged = true
                     }
                     playerSlotCurrentMoveTurns[activeUserIdx] = 0
-                } else if (lastConfirmedPlayerFastMoveMs != proactiveRolledBackAnchorMs) {
-                    val leadOffsetMs = if (confirmedPhasePlayerTurns > 0) activeProactiveEnergyLeadMs.coerceIn(0, 400).toLong() else 0L
+                } else if (lastConfirmedPlayerFastMoveMs != proactiveRolledBackAnchorMs &&
+                    (confirmedPhasePlayerTurns > 0 || isAt100ReadyForSubTurns)
+                ) {
+                    val leadOffsetMs = activeProactiveEnergyLeadMs.coerceIn(0, 400).toLong()
                     val interpolatedSubTurns = ((elapsedSinceLastConfirmedMoveMs + leadOffsetMs) / 500L).toInt().coerceIn(0, userFastTurnsForStats - 1)
                     val interpolatedTotalTurns = confirmedPhasePlayerTurns + interpolatedSubTurns
                     if (interpolatedTotalTurns > phasePlayerTurns) {
