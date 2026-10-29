@@ -7885,6 +7885,11 @@ class OverlayService : LifecycleService() {
     private var shieldHexagonSeenDuringPrompt: Boolean = false
     private var sampledShieldHexagonVisible: Boolean = false
     private var shieldHexagonConfirmFrames: Int = 0
+    private var sampledTopCountdownCircleVisible: Boolean = false
+    private var topCountdownCircleConfirmFrames: Int = 0
+    private var topCountdownCircleMissingFrames: Int = 0
+    private var isTopCountdownCircleActive: Boolean = false
+    private var sampledTopRightNameplateVisible: Boolean = false
     private var lastOppChargeHpInferredMoveName: String = ""
 
     private var pllValidatedThisShieldDelay = false
@@ -8693,9 +8698,10 @@ class OverlayService : LifecycleService() {
         if (isFirstShow) {
             isShieldDecisionOverlayVisible = true
             shieldDecisionOverlayShownAtMs = nowMs
-            mainToastHandler.removeCallbacks(hideShieldDecisionOverlayRunnable)
-            mainToastHandler.postDelayed(hideShieldDecisionOverlayRunnable, 5000L)
         }
+        // v4.06: No 5.0s timer timeout — Shield Decision Overlay stays visible for as long as the top-center
+        // 5-second countdown circle is present on screen and hides immediately when the circle disappears!
+        mainToastHandler.removeCallbacks(hideShieldDecisionOverlayRunnable)
 
         mainToastHandler.post {
             try {
@@ -9699,7 +9705,7 @@ class OverlayService : LifecycleService() {
         sampledOppBalls = detectActivePokeballCount(screen, oppPokeballRect)
         sampledPlayerShields = detectActiveShieldCount(screen, playerShieldRect)
         sampledOppShields = detectActiveShieldCount(screen, oppShieldRect)
-        if (enableHpTracking || enableEnergyTracking) {
+        if (enableHpTracking || enableEnergyTracking || showShieldDecisionOverlay) {
             sampledOppHpPct = detectFloatingHpBarPct(screen, oppHpCorridorRect, w, isOpponent = true)
             sampledPlayerHpPct = detectFloatingHpBarPct(screen, playerHpCorridorRect, w, isOpponent = false)
         } else {
@@ -9712,21 +9718,25 @@ class OverlayService : LifecycleService() {
         }
         detectChargedMoveButtonFillLevels(screen, w, h)
 
-        // v4.05: Visual shield hexagon pixel matching is disabled — opponent charged attacks trigger strictly off
-        // "Attack incoming!" / "Use a Protect Shield?" OCR text!
+        // v4.06: 100ms (10 Hz) Top-Center 5-Second Countdown Circle & Top-Right Opponent Nameplate Box Detector:
+        // Drives both the Shield Decision Overlay visibility (no timeout — stays visible as long as the opponent
+        // countdown circle is present, including unshielded 0-shield prompts) and the opponent charged attack state,
+        // while deterministically excluding the post-faint "Switch in a new Pokémon?" countdown and player swipe minigame.
         sampledShieldHexagonVisible = false
         shieldHexagonConfirmFrames = 0
-        if (isShieldDecisionOverlayVisible) {
-            val overlayElapsedMs = if (shieldDecisionOverlayShownAtMs > 0L) {
-                currentFrameTimestampMs - shieldDecisionOverlayShownAtMs
-            } else {
-                0L
+        sampledTopRightNameplateVisible = detectTopRightOpponentNameplate(screen, w, h)
+        sampledTopCountdownCircleVisible = detectTopCountdownCircle(screen, w, h)
+        if (sampledTopCountdownCircleVisible) {
+            topCountdownCircleConfirmFrames = (topCountdownCircleConfirmFrames + 1).coerceAtMost(30)
+            topCountdownCircleMissingFrames = 0
+            if (topCountdownCircleConfirmFrames >= 2) {
+                isTopCountdownCircleActive = true
             }
-            val hasCombatCirclesReturnedNow = (sampledLeftChargeBtnFillPct in 0..300 || sampledRightChargeBtnFillPct in 0..300) &&
-                (sampledPlayerBalls in 1..3 || sampledOppBalls in 1..3) &&
-                overlayElapsedMs >= 1000L
-            if (overlayElapsedMs >= 5000L || hasCombatCirclesReturnedNow) {
-                hideShieldDecisionOverlay()
+        } else {
+            topCountdownCircleMissingFrames = (topCountdownCircleMissingFrames + 1).coerceAtMost(30)
+            if (topCountdownCircleMissingFrames >= 3) {
+                topCountdownCircleConfirmFrames = 0
+                isTopCountdownCircleActive = false
             }
         }
 
@@ -10693,6 +10703,173 @@ class OverlayService : LifecycleService() {
         } catch (_: Exception) {}
     }
 
+    /**
+     * v4.06: Detects the bright white top-right opponent nameplate box (`x ∈ [0.835w, 0.960w], y ∈ [0.058h, 0.092h]`).
+     * In Pokémon GO PvP:
+     * - During an opponent charged move 5-second countdown (both shielded and unshielded 0-shield), the top-right white
+     *   opponent nameplate box and Pokéballs are completely HIDDEN (`false`).
+     * - During the post-faint "Switch in a new Pokémon?" countdown, the top-right white opponent nameplate box and
+     *   Pokéballs remain VISIBLE (`true`).
+     */
+    private fun detectTopRightOpponentNameplate(screen: Bitmap, w: Int, h: Int): Boolean {
+        if (screen.isRecycled || w < 100 || h < 100) return false
+        return try {
+            val xFracs = floatArrayOf(0.840f, 0.870f, 0.900f, 0.930f, 0.955f)
+            val yFracs = floatArrayOf(0.060f, 0.070f, 0.080f, 0.090f)
+            var whitePlateHits = 0
+            for (yf in yFracs) {
+                val py = (h * yf).roundToInt().coerceIn(0, h - 1)
+                for (xf in xFracs) {
+                    val px = (w * xf).roundToInt().coerceIn(0, w - 1)
+                    val c = screen.getPixel(px, py)
+                    val r = Color.red(c)
+                    val g = Color.green(c)
+                    val b = Color.blue(c)
+                    val luma = 0.299 * r + 0.587 * g + 0.114 * b
+                    val sat = max(r, max(g, b)) - min(r, min(g, b))
+                    if (luma >= 198.0 && sat <= 32) {
+                        whitePlateHits++
+                    }
+                }
+            }
+            whitePlateHits >= 8
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * v4.06: 100ms (10 Hz) Radial Pixel Detector for Pokémon GO's Top-Center 5-Second Countdown Circle
+     * (`cx = 0.500 * w`, `cy = 0.0825 * h`, `R = 0.0833 * w` -> `cx = 540, cy = 193, R = 90px` on `1080x2342`).
+     * Verifies the 4-part concentric signature across 16 radial spokes:
+     * 1. Dark translucent interior disk (`rMult ∈ [0.34, 0.44, 0.54]`, `luma ∈ [8.0, 58.0], sat <= 48.0`)
+     * 2. Circular countdown progress track/arc (`rMult ∈ [0.63, 0.68, 0.73, 0.78]`, `sat <= 38.0`,
+     *    `ringPeakL >= 34.0`, `ringPeakL >= innerL + 12.0`, `ringPeakL >= outerRimL + 10.0`)
+     * 3. Dark outer border rim (`rMult ∈ [0.86, 0.92, 0.98]`, `luma ∈ [8.0, 58.0], sat <= 48.0`)
+     * 4. Bright white countdown digit (`5, 4, 3, 2, 1`) in the center (`r <= 0.26R`, `luma >= 115.0, sat <= 38.0`)
+     *    surrounded by the dark interior disk.
+     */
+    private fun detectTopCountdownCircle(screen: Bitmap, w: Int, h: Int): Boolean {
+        if (screen.isRecycled || w < 100 || h < 100) return false
+        return try {
+            val cx = w * 0.500
+            val cy = h * 0.0825
+            val radius = w * 0.0833
+
+            var validSpokes = 0
+            var upperSpokes = 0
+            var brightArcSpokes = 0
+            var innerLumaSum = 0.0
+            var innerCount = 0
+
+            for (i in 0 until 16) {
+                val theta = (i * 22.5) * Math.PI / 180.0
+                val ux = kotlin.math.cos(theta)
+                val uy = kotlin.math.sin(theta)
+
+                var innerL = 0.0
+                var innerS = 0.0
+                for (rMult in doubleArrayOf(0.34, 0.44, 0.54)) {
+                    val px = (cx + ux * radius * rMult).roundToInt().coerceIn(0, w - 1)
+                    val py = (cy + uy * radius * rMult).roundToInt().coerceIn(0, h - 1)
+                    val c = screen.getPixel(px, py)
+                    val r = Color.red(c)
+                    val g = Color.green(c)
+                    val b = Color.blue(c)
+                    innerL += (0.299 * r + 0.587 * g + 0.114 * b) / 3.0
+                    innerS += (max(r, max(g, b)) - min(r, min(g, b))) / 3.0
+                }
+                innerLumaSum += innerL
+                innerCount++
+
+                var ringPeakL = 0.0
+                var ringPeakS = 999.0
+                for (rMult in doubleArrayOf(0.63, 0.68, 0.73, 0.78)) {
+                    val px = (cx + ux * radius * rMult).roundToInt().coerceIn(0, w - 1)
+                    val py = (cy + uy * radius * rMult).roundToInt().coerceIn(0, h - 1)
+                    val c = screen.getPixel(px, py)
+                    val r = Color.red(c)
+                    val g = Color.green(c)
+                    val b = Color.blue(c)
+                    val l = 0.299 * r + 0.587 * g + 0.114 * b
+                    val s = (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
+                    if (s <= 38.0 && l > ringPeakL) {
+                        ringPeakL = l
+                        ringPeakS = s
+                    }
+                }
+
+                var outerRimL = 0.0
+                var outerRimS = 0.0
+                for (rMult in doubleArrayOf(0.86, 0.92, 0.98)) {
+                    val px = (cx + ux * radius * rMult).roundToInt().coerceIn(0, w - 1)
+                    val py = (cy + uy * radius * rMult).roundToInt().coerceIn(0, h - 1)
+                    val c = screen.getPixel(px, py)
+                    val r = Color.red(c)
+                    val g = Color.green(c)
+                    val b = Color.blue(c)
+                    outerRimL += (0.299 * r + 0.587 * g + 0.114 * b) / 3.0
+                    outerRimS += (max(r, max(g, b)) - min(r, min(g, b))) / 3.0
+                }
+
+                val isInnerDark = innerL in 8.0..58.0 && innerS <= 48.0
+                val isOuterRimDark = outerRimL in 8.0..58.0 && outerRimS <= 48.0
+                val hasRingRidge = ringPeakL >= 34.0 &&
+                    ringPeakS <= 38.0 &&
+                    ringPeakL >= innerL + 12.0 &&
+                    ringPeakL >= outerRimL + 10.0
+
+                if (isInnerDark && isOuterRimDark && hasRingRidge) {
+                    validSpokes++
+                    if (uy < -0.15) upperSpokes++
+                    if (ringPeakL >= 78.0) brightArcSpokes++
+                }
+            }
+
+            val avgInnerL = if (innerCount > 0) innerLumaSum / innerCount else 999.0
+            val digitRx = (radius * 0.25).roundToInt().coerceAtLeast(6)
+            val digitRy = (radius * 0.26).roundToInt().coerceAtLeast(6)
+            val stepD = max(2, (w / 360))
+            var centerBrightGlyphHits = 0
+            var centerDarkBgHits = 0
+            var centerTotal = 0
+            var dy = -digitRy
+            while (dy <= digitRy) {
+                val py = (cy + dy).roundToInt().coerceIn(0, h - 1)
+                var dx = -digitRx
+                while (dx <= digitRx) {
+                    val px = (cx + dx).roundToInt().coerceIn(0, w - 1)
+                    val c = screen.getPixel(px, py)
+                    val r = Color.red(c)
+                    val g = Color.green(c)
+                    val b = Color.blue(c)
+                    val l = 0.299 * r + 0.587 * g + 0.114 * b
+                    val s = max(r, max(g, b)) - min(r, min(g, b))
+                    centerTotal++
+                    if (l >= 115.0 && s <= 38 && l >= avgInnerL + 58.0) {
+                        centerBrightGlyphHits++
+                    } else if (l in 8.0..58.0 && s <= 48) {
+                        centerDarkBgHits++
+                    }
+                    dx += stepD
+                }
+                dy += stepD
+            }
+
+            val hasCentralDigit = centerBrightGlyphHits >= 3 &&
+                centerTotal > 0 &&
+                centerDarkBgHits >= (centerTotal * 3) / 10
+
+            // Full 16-spoke match (Single-App capture mode) OR upper-semicircle match if HUD ever overlaps lower half
+            val passesSpokeGeometry = (validSpokes >= 11 && upperSpokes >= 5) ||
+                (upperSpokes >= 6 && validSpokes >= 7)
+
+            passesSpokeGeometry && brightArcSpokes >= 1 && hasCentralDigit
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     private fun detectSingleChargeButtonFillPct(
         screen: Bitmap,
         cx: Int,
@@ -10864,16 +11041,7 @@ class OverlayService : LifecycleService() {
                     }
                 }
             }
-            if (exteriorWhiteArcs >= 5) {
-                return -1
-            }
-
-            // Enlarged Ready-Circle Interior Radius (`>= 100%` buttons expand to `readyHalfSpanPx ≈ 0.0835 * w = 90px` on 1080p)
-            val readyHalfSpanPx = (w * 0.0835f).roundToInt().coerceIn((w * 0.078f).toInt(), (w * 0.089f).toInt())
-
-            // Measure top interior cap to verify it is genuinely filled with colored liquid
-            // Never allow `whiteRingArcs >= 5` to bypass the top-cap colored liquid requirement!
-            // If the top interior cap is dark unfilled grey, the circle is strictly < 100% (Round 1).
+            // Measure top interior cap to verify it is genuinely filled with liquid
             val topCheckYStart = (yTop + stepY * 2).coerceIn(4, h - 8)
             val topCheckYEnd = (yTop + stepY * 5).coerceIn(topCheckYStart + 1, h - 6)
             var topLumaSum = 0.0
@@ -10896,20 +11064,37 @@ class OverlayService : LifecycleService() {
             }
             val avgTopLuma = if (topCount > 0) topLumaSum / topCount else 0.0
             val avgTopSat = if (topCount > 0) topSatSum / topCount else 0.0
+
+            // v4.06: Only treat exteriorWhiteArcs as a full-screen white flash when >= 7 of 8 exterior points are pure white
+            // AND the interior top cap is also washed out in pure white (prevents Xerneas Geomancy floor spotlights outside the
+            // circle perimeter from falsely aborting Giga Impact with -1!).
+            if (exteriorWhiteArcs >= 7 && avgTopLuma >= 205.0 && avgTopSat <= 28.0) {
+                return -1
+            }
+
+            // Enlarged Ready-Circle Interior Radius (`>= 100%` buttons expand to `readyHalfSpanPx ≈ 0.0835 * w = 90px` on 1080p)
+            val readyHalfSpanPx = (w * 0.0835f).roundToInt().coerceIn((w * 0.078f).toInt(), (w * 0.089f).toInt())
+
+            val lowerContinuityEarlyY = (yBot - (span * 0.24).toInt()).coerceIn(yTop + 4, yBot - 4)
+            var lowerFlankEarlyLuma = 0.0
+            var lowerFlankEarlySat = 0.0
+            for (dx in intArrayOf(-flankDx1, flankDx1)) {
+                val cLow = screen.getPixel((actualCx + dx).coerceIn(0, w - 1), lowerContinuityEarlyY)
+                val rl = Color.red(cLow); val gl = Color.green(cLow); val bl = Color.blue(cLow)
+                lowerFlankEarlyLuma += (0.299 * rl + 0.587 * gl + 0.114 * bl) * 0.5
+                lowerFlankEarlySat += (max(rl, max(gl, bl)) - min(rl, min(gl, bl))) * 0.5
+            }
+            val isLowerQuarterEarlyFilled = lowerFlankEarlyLuma > (emptyBaseLuma + 12.0).coerceAtLeast(62.0) ||
+                lowerFlankEarlySat > (emptyBaseSat + 10.0).coerceAtLeast(22.0)
+
             val hasAuthoritativeWhiteRing = whiteRingArcs >= 5 && upperWhiteRingArcs >= 2
             val hasSecondOuterCircle = hasAuthoritativeWhiteRing && outerSecondRingArcs >= 5 && upperOrSideOuterRingArcs >= 3
+            // v4.06: Support both saturated colored liquid caps AND Normal-type (e.g. Giga Impact / Body Slam) bright silver-grey
+            // liquid caps (`avgTopLuma >= max(118.0, emptyBaseLuma + 42.0)` with lower quarter also filled).
             val isTopCapFilled = avgTopLuma > (emptyBaseLuma + 16.0).coerceAtLeast(68.0) &&
-                avgTopSat > (emptyBaseSat + 10.0).coerceAtLeast(24.0)
+                (avgTopSat > (emptyBaseSat + 10.0).coerceAtLeast(24.0) ||
+                    (avgTopLuma in max(118.0, emptyBaseLuma + 42.0)..198.0 && isLowerQuarterEarlyFilled))
 
-            // Authoritative 100%+ Ready Ring (White Circle Border Active + Colored Top Cap Verified):
-            // v3.99:
-            // - Uses enlarged ready-circle geometry (`readyHalfSpanPx = 0.0835 * w = 90px` on 1080p) so high 2nd/3rd-fill
-            //   meniscus lines (e.g., 82% / 182% at `dy = -57px` on Ninetales' Energy Ball & Weather Ball) are measured at
-            //   their exact vertical percentage without clipping against the un-enlarged 81px radius.
-            // - Uses `vDelta ≈ 0.0038 * h` (`9px` on 1080x2342) to cleanly straddle the 8-10px white horizontal meniscus glow
-            //   without falsely rejecting the meniscus as `hasWhiteIconBleed`.
-            // - Returns `100..199%` when only the main circle border is white (2nd fill) and `200..300%` when the second
-            //   outer concentric circle is present outside the main circle (3rd fill).
             if (hasAuthoritativeWhiteRing && isTopCapFilled) {
                 val rOverInterior = readyHalfSpanPx * 0.94
                 val yTopOverScan = (actualCy - (readyHalfSpanPx * 0.90)).roundToInt().coerceIn(8, h - 16)
@@ -11037,8 +11222,8 @@ class OverlayService : LifecycleService() {
 
                                 val bothAreColoredLiquid = lumaUp in 68.0..215.0 &&
                                     lumaDn in 60.0..205.0 &&
-                                    satUp >= 16.0 &&
-                                    satDn >= 20.0
+                                    ((satUp >= 16.0 && satDn >= 20.0) ||
+                                        (lumaUp >= 115.0 && lumaDn >= 95.0 && isLowerQuarterEarlyFilled))
                                 val isSymmetric = kotlin.math.abs(lUpL - lUpR) <= 24.0 && kotlin.math.abs(lDnL - lDnR) <= 24.0
                                 val lumaDrop = lumaUp - lumaDn
                                 val satGain = satDn - satUp
@@ -11168,29 +11353,64 @@ class OverlayService : LifecycleService() {
                 rUp /= denom; gUp /= denom; bUp /= denom
                 rDn /= denom; gDn /= denom; bDn /= denom
 
-                val lumaUp = 0.299 * rUp + 0.587 * gUp + 0.114 * bUp
-                val lumaDn = 0.299 * rDn + 0.587 * gDn + 0.114 * bDn
+                val lUp = if (leftCnt > 0) leftFlankUpLuma / leftCnt else 0.0
+                val rUpFlank = if (rightCnt > 0) rightFlankUpLuma / rightCnt else 0.0
+                val lDn = if (leftCnt > 0) leftFlankDnLuma / leftCnt else 0.0
+                val rDnFlank = if (rightCnt > 0) rightFlankDnLuma / rightCnt else 0.0
+
+                // v4.06: Unilateral White Floor Spotlight Rejection & Normal-Type Silver-Grey Liquid Support:
+                // During Xerneas's Geomancy fast move, bright white floor spotlights can pass behind one flank (e.g. left flank
+                // at luma > 188) while the opposite flank remains completely uncontaminated. If one flank is spotlight-washed
+                // (`luma >= 188`) and the other is clean (`luma <= 182`), evaluate the clean flank directly!
+                val leftSpotlightWashed = leftCnt > 0 && rightCnt > 0 &&
+                    (lUp >= 188.0 || lDn >= 195.0) &&
+                    rUpFlank <= maxAllowedUnfilledLuma + 10.0 &&
+                    rDnFlank in 52.0..186.0
+                val rightSpotlightWashed = leftCnt > 0 && rightCnt > 0 &&
+                    (rUpFlank >= 188.0 || rDnFlank >= 195.0) &&
+                    lUp <= maxAllowedUnfilledLuma + 10.0 &&
+                    lDn in 52.0..186.0
+
+                val lumaUp = when {
+                    leftSpotlightWashed -> rUpFlank
+                    rightSpotlightWashed -> lUp
+                    else -> 0.299 * rUp + 0.587 * gUp + 0.114 * bUp
+                }
+                val lumaDn = when {
+                    leftSpotlightWashed -> rDnFlank
+                    rightSpotlightWashed -> lDn
+                    else -> 0.299 * rDn + 0.587 * gDn + 0.114 * bDn
+                }
                 val satUp = max(rUp, max(gUp, bUp)) - min(rUp, min(gUp, bUp))
                 val satDn = max(rDn, max(gDn, bDn)) - min(rDn, min(gDn, bDn))
-                val grad = kotlin.math.abs(rDn - rUp) + kotlin.math.abs(gDn - gUp) + kotlin.math.abs(bDn - bUp)
-                val isHorizontallySymmetric = if (leftCnt > 0 && rightCnt > 0) {
-                    val lUp = leftFlankUpLuma / leftCnt
-                    val rUpFlank = rightFlankUpLuma / rightCnt
-                    val lDn = leftFlankDnLuma / leftCnt
-                    val rDnFlank = rightFlankDnLuma / rightCnt
-                    kotlin.math.abs(lUp - rUpFlank) <= 40.0 && kotlin.math.abs(lDn - rDnFlank) <= 40.0
+                val rawGrad = kotlin.math.abs(rDn - rUp) + kotlin.math.abs(gDn - gUp) + kotlin.math.abs(bDn - bUp)
+                val grad = when {
+                    leftSpotlightWashed || rightSpotlightWashed -> max(rawGrad, kotlin.math.abs(lumaDn - lumaUp) * 3.0)
+                    else -> rawGrad
+                }
+                val isHorizontallySymmetric = if (leftCnt > 0 && rightCnt > 0 && !leftSpotlightWashed && !rightSpotlightWashed) {
+                    kotlin.math.abs(lUp - rUpFlank) <= 44.0 && kotlin.math.abs(lDn - rDnFlank) <= 44.0
                 } else true
 
                 val candFillPct = (((yBot - y) * 100.0) / span).roundToInt()
                 val passesContinuity = candFillPct <= 42 || isLowerQuarterFilled
-                val isNotWhiteIconTip = !(lumaDn >= 165.0 && satDn <= 32.0)
-                val isUnfilledAbove = lumaUp in 16.0..maxAllowedUnfilledLuma &&
+                // v4.06: Since xOffsets inside r1IconHalfH already sample at outer/inner flanks outside the center icon,
+                // only reject near-pure white pixels (`lumaDn >= 202.0 && satDn <= 22.0`) so Normal-type silver-grey liquid
+                // fill (e.g. Xerneas's Giga Impact at `lumaDn = 168..176, satDn = 2..12`) is never rejected as a white icon tip!
+                val isNotWhiteIconTip = !(lumaDn >= 202.0 && satDn <= 22.0)
+                val isUnfilledAbove = lumaUp in 16.0..(maxAllowedUnfilledLuma + 6.0) &&
                     satUp < maxAllowedUnfilledSat &&
-                    avgTopLuma <= maxAllowedUnfilledLuma + 8.0
+                    (avgTopLuma <= maxAllowedUnfilledLuma + 14.0 || lumaUp <= maxAllowedUnfilledLuma)
                 val isBottomCrescent = y >= yBot - (span * 0.18).toInt()
                 val minGrad = if (isBottomCrescent) 18.0 else 24.0
-                val isFilledBelow = isNotWhiteIconTip &&
-                    ((lumaDn > lumaUp + 3.5 && satDn >= 16.0) || (satDn > satUp + 6.0 && satDn >= 20.0) || (grad >= 32.0 && lumaDn >= 34.0 && satDn >= 18.0))
+                val isColoredLiquidBelow = (lumaDn > lumaUp + 3.5 && satDn >= 16.0) ||
+                    (satDn > satUp + 6.0 && satDn >= 20.0) ||
+                    (grad >= 32.0 && lumaDn >= 34.0 && satDn >= 18.0)
+                val isNormalSilverLiquidBelow = lumaDn >= max(106.0, emptyBaseLuma + 32.0) &&
+                    lumaDn > lumaUp + 12.0 &&
+                    grad >= 26.0 &&
+                    (isLowerQuarterFilled || isBottomCrescent)
+                val isFilledBelow = isNotWhiteIconTip && (isColoredLiquidBelow || isNormalSilverLiquidBelow)
                 if (passesContinuity && isHorizontallySymmetric && isUnfilledAbove && isFilledBelow && grad >= minGrad && grad > bestScore) {
                     bestScore = grad
                     bestY = y
@@ -11298,6 +11518,7 @@ class OverlayService : LifecycleService() {
         canAdvanceMonotonically: Boolean
     ): Int {
         val slowCost = slowestMoveCost.coerceIn(35, 100)
+        val fastCost = fasterMoveCost.coerceIn(35, 100)
         val clampedCurE = curE.coerceIn(0, 100)
         val maxFastStep = max(14, userFastEnergy * 2)
         val maxAllowedSingleJumpE = if (clampedCurE > 0) {
@@ -11306,6 +11527,59 @@ class OverlayService : LifecycleService() {
             max(22, userFastEnergy * 3 + 4).coerceAtMost(100)
         } else {
             100
+        }
+
+        // v4.06: Compute dual-circle cross-check energy from the faster (lower-cost, high-saturation) charge move circle
+        // (e.g. Xerneas's Moonblast 50E vibrant pink circle when white Geomancy floor spotlights transiently wash out
+        // Giga Impact's 80E low-saturation Normal-type circle).
+        val fasterResolvedE: Int = if (hasSecondUserMove && debouncedFasterPct in 0..300) {
+            when (debouncedFasterPct) {
+                in 0..99 -> {
+                    val f1Raw = (((debouncedFasterPct * fastCost) / 100.0).roundToInt()).coerceIn(0, fastCost - 1)
+                    snapPlayerEnergyToValidStep(
+                        slotIdx = slotIdx,
+                        rawEnergy = f1Raw,
+                        fastMoveEnergy = userFastEnergy,
+                        minBound = 0,
+                        maxBound = fastCost - 1
+                    )
+                }
+                in 100..199 -> {
+                    if (debouncedFasterPct > peakFastestSecondFillPct[slotIdx]) {
+                        peakFastestSecondFillPct[slotIdx] = debouncedFasterPct
+                    }
+                    val f2Max = min(100, 2 * fastCost)
+                    val f2Raw = (fastCost + (((debouncedFasterPct - 100) * fastCost) / 100.0).roundToInt()).coerceIn(fastCost, f2Max)
+                    snapPlayerEnergyToValidStep(
+                        slotIdx = slotIdx,
+                        rawEnergy = f2Raw,
+                        fastMoveEnergy = userFastEnergy,
+                        minBound = fastCost,
+                        maxBound = f2Max
+                    )
+                }
+                else -> {
+                    val f3Floor = min(100, 2 * fastCost)
+                    fasterMeterInThirdFill[slotIdx] = fastCost < 50
+                    val f3Raw = (2 * fastCost + (((debouncedFasterPct - 200) * fastCost) / 100.0).roundToInt()).coerceIn(f3Floor, 100)
+                    snapPlayerEnergyToValidStep(
+                        slotIdx = slotIdx,
+                        rawEnergy = f3Raw,
+                        fastMoveEnergy = userFastEnergy,
+                        minBound = f3Floor,
+                        maxBound = 100
+                    )
+                }
+            }
+        } else -1
+
+        if (debouncedSlowestPct !in 0..300) {
+            if (fasterResolvedE >= 0) {
+                val clampedFast = min(fasterResolvedE, maxAllowedSingleJumpE).coerceIn(0, 100)
+                if (clampedFast >= 100) playerSlotEnergyAnchor[slotIdx] = 100
+                return clampedFast
+            }
+            return clampedCurE
         }
 
         if (debouncedSlowestPct in 0..99) {
@@ -11323,7 +11597,12 @@ class OverlayService : LifecycleService() {
                 minBound = 0,
                 maxBound = slowCost - 1
             )
-            return min(r1SnappedE, maxAllowedSingleJumpE).coerceIn(0, slowCost - 1)
+            val resolvedE = if (fasterResolvedE > r1SnappedE && (r1SnappedE + userFastEnergy) <= fasterResolvedE) {
+                fasterResolvedE
+            } else {
+                r1SnappedE
+            }
+            return min(resolvedE, maxAllowedSingleJumpE).coerceIn(0, max(slowCost - 1, fasterResolvedE.coerceAtMost(100)))
         }
 
         if (debouncedSlowestPct in 100..199) {
@@ -11340,7 +11619,12 @@ class OverlayService : LifecycleService() {
                 minBound = slowCost,
                 maxBound = r2Max
             )
-            val clampedR2 = min(r2SnappedE, maxAllowedSingleJumpE).coerceIn(slowCost, r2Max)
+            val resolvedR2 = if (fasterResolvedE > r2SnappedE && (r2SnappedE + userFastEnergy) <= fasterResolvedE) {
+                fasterResolvedE
+            } else {
+                r2SnappedE
+            }
+            val clampedR2 = min(resolvedR2, maxAllowedSingleJumpE).coerceIn(slowCost, 100)
             if (clampedR2 >= 100) playerSlotEnergyAnchor[slotIdx] = 100
             return clampedR2
         }
@@ -12677,6 +12961,9 @@ class OverlayService : LifecycleService() {
             lastChargedPromptActor = "user"
             lastChargedPromptTimeMs = nowMs
         } else if (hasAttackIncomingText) {
+            if (sampledTopCountdownCircleVisible) {
+                isTopCountdownCircleActive = true
+            }
             hadShieldPromptBeforeCurrentCharge = true
             lastChargedPromptActor = "opp"
             lastChargedPromptTimeMs = nowMs
@@ -12786,7 +13073,17 @@ class OverlayService : LifecycleService() {
         val isUserMinigameSwipePhaseActive = pendingChargedAttackActor == "user" &&
             !hasUserBannerResolvedSinceThrow &&
             (nowMs - pendingChargedAttackStartMs) < 2300L
-        val isShieldCallWindowEarly = hasAttackIncomingText ||
+        val isOpponentCountdownWindowEarly = isTopCountdownCircleActive &&
+            !isPostFaintSwitchPromptActive &&
+            !sampledTopRightNameplateVisible &&
+            sampledOppBalls <= 0 &&
+            sampledOppHpPct == -1 &&
+            isHudHiddenForOpponentPrompt &&
+            !hasUserChargedBannerText &&
+            !isUserMinigameSwipePhaseActive &&
+            (sampledPlayerHpPct in 1..100 || hasAttackIncomingText || isAttackIncomingPromptActive)
+        val isShieldCallWindowEarly = isOpponentCountdownWindowEarly ||
+            hasAttackIncomingText ||
             isAttackIncomingPromptActive ||
             (playerShieldsRemaining == 0 && missingBottomCirclesWithOppHpFrames >= 6 && !isUserMinigameSwipePhaseActive)
         val isPostChargeReturnWindow = pendingChargedAttackActor.isNotEmpty() &&
@@ -13114,9 +13411,12 @@ class OverlayService : LifecycleService() {
             val slowestFillPct = if (slowestIsRight) sampledRightChargeBtnFillPct else sampledLeftChargeBtnFillPct
             val fasterFillPct = if (slowestIsRight) sampledLeftChargeBtnFillPct else sampledRightChargeBtnFillPct
             val slowestOnline = slowestFillPct in 0..300
+            val fasterOnline = hasSecondUserMove && fasterFillPct in 0..300
 
-            // Debounce both Slowest and Fastest Charge Move Circles (±2% circle fill tolerance):
-            if (slowestOnline) {
+            // v4.06: Debounce both Slowest and Fastest Charge Move Circles (±2% circle fill tolerance)
+            // and allow the faster circle (e.g. Xerneas's vibrant pink Moonblast 50E) to advance energy even if
+            // white Geomancy floor spotlights transiently wash out the slower circle (Giga Impact 80E)!
+            if (slowestOnline || fasterOnline) {
                 if (sampledLeftChargeBtnFillPct in 0..300) {
                     lastScannedLeftChargeFillPct[activeUserIdx] = sampledLeftChargeBtnFillPct
                     if (sampledLeftChargeBtnFillPct >= 195) leftMeterFilledTwiceLatched[activeUserIdx] = true
@@ -13127,15 +13427,19 @@ class OverlayService : LifecycleService() {
                 }
 
                 val tol = activeDebounceTolerancePct.coerceIn(0, 3)
-                if (candidateSlowestFillPct[activeUserIdx] >= 0 && kotlin.math.abs(slowestFillPct - candidateSlowestFillPct[activeUserIdx]) <= tol) {
-                    slowestFillDebounceCount[activeUserIdx]++
-                    candidateSlowestFillPct[activeUserIdx] = ((candidateSlowestFillPct[activeUserIdx] + slowestFillPct) / 2.0).roundToInt()
+                if (slowestOnline) {
+                    if (candidateSlowestFillPct[activeUserIdx] >= 0 && kotlin.math.abs(slowestFillPct - candidateSlowestFillPct[activeUserIdx]) <= tol) {
+                        slowestFillDebounceCount[activeUserIdx]++
+                        candidateSlowestFillPct[activeUserIdx] = ((candidateSlowestFillPct[activeUserIdx] + slowestFillPct) / 2.0).roundToInt()
+                    } else {
+                        candidateSlowestFillPct[activeUserIdx] = slowestFillPct
+                        slowestFillDebounceCount[activeUserIdx] = 1
+                    }
                 } else {
-                    candidateSlowestFillPct[activeUserIdx] = slowestFillPct
-                    slowestFillDebounceCount[activeUserIdx] = 1
+                    slowestFillDebounceCount[activeUserIdx] = 0
                 }
 
-                if (fasterFillPct in 0..300) {
+                if (fasterOnline) {
                     if (candidateFastestFillPct[activeUserIdx] >= 0 && kotlin.math.abs(fasterFillPct - candidateFastestFillPct[activeUserIdx]) <= tol) {
                         fastestFillDebounceCount[activeUserIdx]++
                         candidateFastestFillPct[activeUserIdx] = ((candidateFastestFillPct[activeUserIdx] + fasterFillPct) / 2.0).roundToInt()
@@ -13148,10 +13452,17 @@ class OverlayService : LifecycleService() {
                 }
 
                 val requiredDebounce = activeEnergyDebounceSamples.coerceIn(2, 4)
-                if (slowestFillDebounceCount[activeUserIdx] >= requiredDebounce) {
-                    val debouncedFillPct = candidateSlowestFillPct[activeUserIdx].coerceIn(0, 300)
-                    confirmedSlowestFillPct[activeUserIdx] = debouncedFillPct
-                    val debouncedFasterPct = if (fastestFillDebounceCount[activeUserIdx] >= requiredDebounce) {
+                val slowestDebouncedReady = slowestOnline && slowestFillDebounceCount[activeUserIdx] >= requiredDebounce
+                val fasterDebouncedReady = fasterOnline && fastestFillDebounceCount[activeUserIdx] >= requiredDebounce
+                if (slowestDebouncedReady || fasterDebouncedReady) {
+                    val debouncedFillPct = if (slowestDebouncedReady) {
+                        candidateSlowestFillPct[activeUserIdx].coerceIn(0, 300).also {
+                            confirmedSlowestFillPct[activeUserIdx] = it
+                        }
+                    } else {
+                        -1
+                    }
+                    val debouncedFasterPct = if (fasterDebouncedReady) {
                         candidateFastestFillPct[activeUserIdx].coerceIn(0, 300).also {
                             confirmedFastestFillPct[activeUserIdx] = it
                         }
@@ -13162,10 +13473,10 @@ class OverlayService : LifecycleService() {
                     }
 
                     if (slowestIsRight) {
-                        lastStableRightChargeFillPct = debouncedFillPct
+                        if (debouncedFillPct in 0..300) lastStableRightChargeFillPct = debouncedFillPct
                         if (debouncedFasterPct in 0..300) lastStableLeftChargeFillPct = debouncedFasterPct
                     } else {
-                        lastStableLeftChargeFillPct = debouncedFillPct
+                        if (debouncedFillPct in 0..300) lastStableLeftChargeFillPct = debouncedFillPct
                         if (debouncedFasterPct in 0..300) lastStableRightChargeFillPct = debouncedFasterPct
                     }
 
@@ -13646,13 +13957,25 @@ class OverlayService : LifecycleService() {
             lastSteadyMoveButtonsSeenMs = nowMs
         }
 
-        // 2. Detect Opponent Charged Attack (v4.05: Triggered strictly off "Attack incoming!" / "Use a Protect Shield?" OCR text,
-        //    with automatic rollback of unconfirmed HUD-only player wind-up states AND seamless CMP 2nd-throw support!)
-        val isOpponentChargedScreen = isHudHiddenForOpponentPrompt &&
-            !hasUserChargedBannerText && (
-                hasAttackIncomingText ||
-                (playerShieldsRemaining == 0 && missingBottomCirclesWithOppHpFrames >= 6 && !isUserMinigameSwipePhaseActive && pendingChargedAttackActor != "user")
-            )
+        // 2. Detect Opponent Charged Attack (v4.06: Driven by the top-center 5-second countdown circle detector AND/OR
+        //    "Attack incoming!" OCR text, with deterministic exclusion of the post-faint "Switch in a new Pokémon?" countdown
+        //    and player swipe minigame, automatic rollback of unconfirmed HUD-only player wind-up states, and no 5s timeout!)
+        val isOpponentCountdownCircleActive = isTopCountdownCircleActive &&
+            !isPostFaintSwitchPromptActive &&
+            !sampledTopRightNameplateVisible &&
+            sampledOppBalls <= 0 &&
+            sampledOppHpPct == -1 &&
+            isHudHiddenForOpponentPrompt &&
+            !hasUserChargedBannerText &&
+            !isUserMinigameSwipePhaseActive &&
+            (sampledPlayerHpPct in 1..100 || hasAttackIncomingText || isAttackIncomingPromptActive)
+        val isOpponentChargedScreen = isOpponentCountdownCircleActive ||
+            (isHudHiddenForOpponentPrompt &&
+                !isPostFaintSwitchPromptActive &&
+                !sampledTopRightNameplateVisible &&
+                sampledOppHpPct == -1 &&
+                !hasUserChargedBannerText &&
+                hasAttackIncomingText)
         if (isOpponentChargedScreen) {
             if (pendingChargedAttackActor == "user") {
                 if (!pendingUserChargeConfirmedByOcr && !hasUserBannerResolvedSinceThrow) {
@@ -13854,9 +14177,9 @@ class OverlayService : LifecycleService() {
                 }
                 showBattleToast(toastMsg)
             }
-            // v4.02: Show/Update Shield Decision Overlay purely from pixel detection & keep alive for 5.0s (or until combat circles return)
-            val shieldOverlayElapsedMs = if (shieldDecisionOverlayShownAtMs > 0L) (nowMs - shieldDecisionOverlayShownAtMs) else 0L
-            if (!isZeroShieldPrompt && showShieldDecisionOverlay && shieldOverlayElapsedMs < 5000L) {
+            // v4.06: Show/Update Shield Decision Overlay for the entire duration of the opponent's 5-second countdown circle
+            // (including unshielded 0-shield countdowns so the user always gets move/damage information) with NO timeout!
+            if (showShieldDecisionOverlay) {
                 val oppIdxForOverlay = if (pendingChargedAttackOppSlotIdx in 0..2) pendingChargedAttackOppSlotIdx else activeOppIdx.coerceIn(0, 2)
                 val preThrowE = if (pendingChargedAttackPreOppEnergy > 0) {
                     pendingChargedAttackPreOppEnergy
@@ -13868,7 +14191,7 @@ class OverlayService : LifecycleService() {
                     userSlotIdx = activeUserIdx.coerceIn(0, 2),
                     preThrowOppEnergy = preThrowE
                 )
-            } else if (isShieldDecisionOverlayVisible && (isZeroShieldPrompt || !showShieldDecisionOverlay || shieldOverlayElapsedMs >= 5000L)) {
+            } else if (isShieldDecisionOverlayVisible) {
                 hideShieldDecisionOverlay()
             }
             if (!wasPromptActive || hpChanged) {
@@ -13876,14 +14199,13 @@ class OverlayService : LifecycleService() {
             }
             return
         } else {
-            val shieldOverlayElapsedMs = if (shieldDecisionOverlayShownAtMs > 0L) (nowMs - shieldDecisionOverlayShownAtMs) else 0L
-            val hasReturnedCombatCirclesForOverlay = (sampledLeftChargeBtnFillPct in 0..300 || sampledRightChargeBtnFillPct in 0..300) &&
-                (sampledPlayerBalls in 1..3 || sampledOppBalls in 1..3) &&
-                shieldOverlayElapsedMs >= 1000L
-            if (isShieldDecisionOverlayVisible && (shieldOverlayElapsedMs >= 5000L || hasReturnedCombatCirclesForOverlay)) {
+            // v4.06: Immediately hide Shield Decision Overlay as soon as the opponent's 5-second countdown circle disappears
+            if (isShieldDecisionOverlayVisible && !isTopCountdownCircleActive) {
                 hideShieldDecisionOverlay()
             }
-            if (isAttackIncomingPromptActive && (isNormalFastCombatFrame || postOppChargedMissingPlayerHpFrames >= 6 || (nowMs - attackIncomingDetectedAtMs) > 4500L)) {
+            if (isAttackIncomingPromptActive && !isTopCountdownCircleActive &&
+                (isNormalFastCombatFrame || postOppChargedMissingPlayerHpFrames >= 6 || (nowMs - attackIncomingDetectedAtMs) > 1200L)
+            ) {
                 isAttackIncomingPromptActive = false
                 pllValidatedThisShieldDelay = false
                 hpChanged = true
@@ -14020,9 +14342,14 @@ class OverlayService : LifecycleService() {
         //    v3.92: <name> used <move> Gated Attribution + Pre-Charge Attacker Slot Lock + Bidirectional Catch Handling!
         val hasReturnedCombatCircles = (sampledLeftChargeBtnFillPct in 0..300 || sampledRightChargeBtnFillPct in 0..300) &&
             (sampledPlayerBalls in 1..3 || sampledOppBalls in 1..3)
-        // v4.01/v4.02: When `pendingChargedAttackActor == "opp"`, wait for `playerSlotHpConfirmFrames[activeUserIdx] >= reqHpDebounce`
-        // AND `!sampledPlayerHasPendingDmg` whenever `sampledPlayerHpPct in 1..100` so Section 4 never reconciles mid-drain while the HP bar is still dropping!
+        // v4.01/v4.06: When `pendingChargedAttackActor == "opp"`, NEVER reconcile while the 5-second top countdown circle
+        // is still active (`!isTopCountdownCircleActive && !isOpponentCountdownCircleActive`) AND wait until combat circles
+        // or the opponent's HP bar return (or >= 1.2s after the countdown ends) so the player's pre-hit HP bar during the
+        // 5-second countdown never triggers a premature 0%-delta reconciliation before the charged attack lands!
         val isDefenderHpReadyAfterCharge = (pendingChargedAttackActor == "opp" &&
+            !isTopCountdownCircleActive &&
+            !isOpponentCountdownCircleActive &&
+            (hasReturnedCombatCircles || sampledOppHpPct in 1..100 || (nowMs - attackIncomingDetectedAtMs) >= 1200L) &&
             ((sampledPlayerHpPct in 1..100 && playerSlotHpConfirmFrames[activeUserIdx] >= reqHpDebounce && (!sampledPlayerHasPendingDmg || (nowMs - pendingChargedAttackStartMs) >= 3400L)) ||
                 (hasReturnedCombatCircles && (sampledPlayerHpPct == -1 || (nowMs - pendingChargedAttackStartMs) >= 3400L) && (nowMs - pendingChargedAttackStartMs) >= 2400L))) ||
             (pendingChargedAttackActor == "user" &&
@@ -14032,6 +14359,7 @@ class OverlayService : LifecycleService() {
             (nowMs - pendingChargedAttackStartMs) >= 1800L &&
             !hasUserChargedBannerText &&
             !hasAttackIncomingText &&
+            !isTopCountdownCircleActive &&
             (isDefenderHpReadyAfterCharge || isPostChargedKoReady)
         ) {
             // Enforce Shield-Prompt Gate on actor: opponent charged attack ONLY if there was a shield prompt before the attack
@@ -16624,6 +16952,11 @@ class OverlayService : LifecycleService() {
         playerFinalMissingHpFrames = 0
         sampledShieldHexagonVisible = false
         shieldHexagonConfirmFrames = 0
+        sampledTopCountdownCircleVisible = false
+        topCountdownCircleConfirmFrames = 0
+        topCountdownCircleMissingFrames = 0
+        isTopCountdownCircleActive = false
+        sampledTopRightNameplateVisible = false
         lastOppChargeHpInferredMoveName = ""
         isAttackIncomingPromptActive = false
         attackIncomingDetectedAtMs = 0L
@@ -16688,6 +17021,11 @@ class OverlayService : LifecycleService() {
         phasePlayerTurns = 0
         phaseOppTurns = 0
         isAttackIncomingPromptActive = false
+        sampledTopCountdownCircleVisible = false
+        topCountdownCircleConfirmFrames = 0
+        topCountdownCircleMissingFrames = 0
+        isTopCountdownCircleActive = false
+        sampledTopRightNameplateVisible = false
         isPostFaintSwitchPromptActive = false
         pendingChargedAttackActor = ""
         pendingChargedAttackDeductedEnergy = 0
