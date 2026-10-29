@@ -10769,7 +10769,7 @@ class OverlayService : LifecycleService() {
 
                 var innerL = 0.0
                 var innerS = 0.0
-                for (rMult in doubleArrayOf(0.34, 0.44, 0.54)) {
+                for (rMult in doubleArrayOf(0.42, 0.50, 0.57)) {
                     val px = (cx + ux * radius * rMult).roundToInt().coerceIn(0, w - 1)
                     val py = (cy + uy * radius * rMult).roundToInt().coerceIn(0, h - 1)
                     val c = screen.getPixel(px, py)
@@ -10784,7 +10784,7 @@ class OverlayService : LifecycleService() {
 
                 var ringPeakL = 0.0
                 var ringPeakS = 999.0
-                for (rMult in doubleArrayOf(0.63, 0.68, 0.73, 0.78)) {
+                for (rMult in doubleArrayOf(0.64, 0.70, 0.76, 0.81)) {
                     val px = (cx + ux * radius * rMult).roundToInt().coerceIn(0, w - 1)
                     val py = (cy + uy * radius * rMult).roundToInt().coerceIn(0, h - 1)
                     val c = screen.getPixel(px, py)
@@ -10793,7 +10793,7 @@ class OverlayService : LifecycleService() {
                     val b = Color.blue(c)
                     val l = 0.299 * r + 0.587 * g + 0.114 * b
                     val s = (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
-                    if (s <= 38.0 && l > ringPeakL) {
+                    if (s <= 42.0 && l > ringPeakL) {
                         ringPeakL = l
                         ringPeakS = s
                     }
@@ -10801,7 +10801,7 @@ class OverlayService : LifecycleService() {
 
                 var outerRimL = 0.0
                 var outerRimS = 0.0
-                for (rMult in doubleArrayOf(0.86, 0.92, 0.98)) {
+                for (rMult in doubleArrayOf(0.88, 0.94, 1.00)) {
                     val px = (cx + ux * radius * rMult).roundToInt().coerceIn(0, w - 1)
                     val py = (cy + uy * radius * rMult).roundToInt().coerceIn(0, h - 1)
                     val c = screen.getPixel(px, py)
@@ -10812,10 +10812,10 @@ class OverlayService : LifecycleService() {
                     outerRimS += (max(r, max(g, b)) - min(r, min(g, b))) / 3.0
                 }
 
-                val isInnerDark = innerL in 8.0..58.0 && innerS <= 48.0
-                val isOuterRimDark = outerRimL in 8.0..58.0 && outerRimS <= 48.0
+                val isInnerDark = innerL in 8.0..58.0 && innerS <= 52.0
+                val isOuterRimDark = outerRimL in 8.0..92.0 && outerRimS <= 52.0
                 val hasRingRidge = ringPeakL >= 34.0 &&
-                    ringPeakS <= 38.0 &&
+                    ringPeakS <= 42.0 &&
                     ringPeakL >= innerL + 12.0 &&
                     ringPeakL >= outerRimL + 10.0
 
@@ -13077,11 +13077,14 @@ class OverlayService : LifecycleService() {
             !isPostFaintSwitchPromptActive &&
             !sampledTopRightNameplateVisible &&
             sampledOppBalls <= 0 &&
-            sampledOppHpPct == -1 &&
+            sampledPlayerBalls <= 0 &&
             isHudHiddenForOpponentPrompt &&
             !hasUserChargedBannerText &&
             !isUserMinigameSwipePhaseActive &&
-            (sampledPlayerHpPct in 1..100 || hasAttackIncomingText || isAttackIncomingPromptActive)
+            ((sampledPlayerHpPct in 1..100 && sampledOppHpPct in 1..100) ||
+                sampledPlayerHpPct in 1..100 ||
+                hasAttackIncomingText ||
+                isAttackIncomingPromptActive)
         val isShieldCallWindowEarly = isOpponentCountdownWindowEarly ||
             hasAttackIncomingText ||
             isAttackIncomingPromptActive ||
@@ -13960,20 +13963,25 @@ class OverlayService : LifecycleService() {
         // 2. Detect Opponent Charged Attack (v4.06: Driven by the top-center 5-second countdown circle detector AND/OR
         //    "Attack incoming!" OCR text, with deterministic exclusion of the post-faint "Switch in a new Pokémon?" countdown
         //    and player swipe minigame, automatic rollback of unconfirmed HUD-only player wind-up states, and no 5s timeout!)
+        //    Note: During an opponent charged attack countdown, BOTH floating health gauges (`sampledPlayerHpPct in 1..100`
+        //    and `sampledOppHpPct in 1..100`) remain visible on screen while the top-left/top-right nameplates & Pokéballs
+        //    and bottom charge circles are hidden.
         val isOpponentCountdownCircleActive = isTopCountdownCircleActive &&
             !isPostFaintSwitchPromptActive &&
             !sampledTopRightNameplateVisible &&
             sampledOppBalls <= 0 &&
-            sampledOppHpPct == -1 &&
+            sampledPlayerBalls <= 0 &&
             isHudHiddenForOpponentPrompt &&
             !hasUserChargedBannerText &&
             !isUserMinigameSwipePhaseActive &&
-            (sampledPlayerHpPct in 1..100 || hasAttackIncomingText || isAttackIncomingPromptActive)
+            ((sampledPlayerHpPct in 1..100 && sampledOppHpPct in 1..100) ||
+                sampledPlayerHpPct in 1..100 ||
+                hasAttackIncomingText ||
+                isAttackIncomingPromptActive)
         val isOpponentChargedScreen = isOpponentCountdownCircleActive ||
             (isHudHiddenForOpponentPrompt &&
                 !isPostFaintSwitchPromptActive &&
                 !sampledTopRightNameplateVisible &&
-                sampledOppHpPct == -1 &&
                 !hasUserChargedBannerText &&
                 hasAttackIncomingText)
         if (isOpponentChargedScreen) {
@@ -14344,12 +14352,16 @@ class OverlayService : LifecycleService() {
             (sampledPlayerBalls in 1..3 || sampledOppBalls in 1..3)
         // v4.01/v4.06: When `pendingChargedAttackActor == "opp"`, NEVER reconcile while the 5-second top countdown circle
         // is still active (`!isTopCountdownCircleActive && !isOpponentCountdownCircleActive`) AND wait until combat circles
-        // or the opponent's HP bar return (or >= 1.2s after the countdown ends) so the player's pre-hit HP bar during the
-        // 5-second countdown never triggers a premature 0%-delta reconciliation before the charged attack lands!
+        // or the top Pokéball racks return (or >= 1.2s after the countdown ends) so the floating HP bars present during the
+        // 5-second countdown never trigger a premature 0%-delta reconciliation before the charged attack lands!
+        val hasReturnedTopHudOrCircles = hasReturnedCombatCircles ||
+            sampledPlayerBalls in 1..3 ||
+            sampledOppBalls in 1..3 ||
+            sampledTopRightNameplateVisible
         val isDefenderHpReadyAfterCharge = (pendingChargedAttackActor == "opp" &&
             !isTopCountdownCircleActive &&
             !isOpponentCountdownCircleActive &&
-            (hasReturnedCombatCircles || sampledOppHpPct in 1..100 || (nowMs - attackIncomingDetectedAtMs) >= 1200L) &&
+            (hasReturnedTopHudOrCircles || (nowMs - attackIncomingDetectedAtMs) >= 1200L) &&
             ((sampledPlayerHpPct in 1..100 && playerSlotHpConfirmFrames[activeUserIdx] >= reqHpDebounce && (!sampledPlayerHasPendingDmg || (nowMs - pendingChargedAttackStartMs) >= 3400L)) ||
                 (hasReturnedCombatCircles && (sampledPlayerHpPct == -1 || (nowMs - pendingChargedAttackStartMs) >= 3400L) && (nowMs - pendingChargedAttackStartMs) >= 2400L))) ||
             (pendingChargedAttackActor == "user" &&
