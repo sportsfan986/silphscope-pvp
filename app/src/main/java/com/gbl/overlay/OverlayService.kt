@@ -7889,6 +7889,8 @@ class OverlayService : LifecycleService() {
     private var topCountdownCircleConfirmFrames: Int = 0
     private var topCountdownCircleMissingFrames: Int = 0
     private var isTopCountdownCircleActive: Boolean = false
+    private var shieldOverlayShowConfirmFrames: Int = 0
+    private var lastShieldOverlayConfirmFrameMs: Long = 0L
     private var sampledTopRightNameplateVisible: Boolean = false
     private var lastOppChargeHpInferredMoveName: String = ""
 
@@ -9726,7 +9728,10 @@ class OverlayService : LifecycleService() {
         if (sampledTopCountdownCircleVisible) {
             topCountdownCircleConfirmFrames = (topCountdownCircleConfirmFrames + 1).coerceAtMost(30)
             topCountdownCircleMissingFrames = 0
-            isTopCountdownCircleActive = true
+            // v4.07: 2-frame confirmation debounce before activating the top countdown state to eliminate 1-frame startup flicker
+            if (topCountdownCircleConfirmFrames >= 2) {
+                isTopCountdownCircleActive = true
+            }
         } else {
             topCountdownCircleMissingFrames = (topCountdownCircleMissingFrames + 1).coerceAtMost(30)
             if (topCountdownCircleMissingFrames >= 3) {
@@ -11090,6 +11095,35 @@ class OverlayService : LifecycleService() {
             // Enlarged Ready-Circle Interior Radius (`>= 100%` buttons expand to `readyHalfSpanPx ≈ 0.0835 * w = 90px` on 1080p)
             val readyHalfSpanPx = (w * 0.0835f).roundToInt().coerceIn((w * 0.078f).toInt(), (w * 0.089f).toInt())
 
+            // v4.07: Interior Flank Spotlight-Wash Rejection & Normal-Type Opaque Silver-Grey Band Count:
+            // During Xerneas's Geomancy animation, blinding pure-white floor spotlights (`luma = 215..255, sat = 0..12`)
+            // expand directly underneath the semi-transparent Giga Impact / Moonblast circles.
+            // Sample left and right flanks (`±flankDx1`) across 7 vertical bands (`20%..80%`):
+            // - If >= 3 of the 14 flank points have spotlight-wash luma (`luma >= 204.0 && sat <= 26.0`), discard (`-1`)
+            //   immediately so spotlight bleed never creates a false 91..100% meniscus or white-ring trigger!
+            // - Count `cleanSilverBands` (`luma in 158.0..188.0 && sat <= 18.0`) to verify genuine 100% READY opaque
+            //   Normal-type silver-grey buttons (`Giga Impact` at `>=100%` has `luma = 169..178, sat = 2..14` uniformly).
+            var spotlightWashedBands = 0
+            var cleanSilverBands = 0
+            for (pctCheck in intArrayOf(20, 30, 40, 50, 60, 70, 80)) {
+                val pyCheck = (yBot - (pctCheck * span) / 100.0).roundToInt().coerceIn(yTop + 4, yBot - 4)
+                for (dxCheck in intArrayOf(-flankDx1, flankDx1)) {
+                    val pxCheck = (actualCx + dxCheck).coerceIn(0, w - 1)
+                    val cCheck = screen.getPixel(pxCheck, pyCheck)
+                    val rC = Color.red(cCheck); val gC = Color.green(cCheck); val bC = Color.blue(cCheck)
+                    val lC = 0.299 * rC + 0.587 * gC + 0.114 * bC
+                    val sC = (max(rC, max(gC, bC)) - min(rC, min(gC, bC))).toDouble()
+                    if (lC >= 204.0 && sC <= 26.0) {
+                        spotlightWashedBands++
+                    } else if (lC in 158.0..188.0 && sC <= 18.0) {
+                        cleanSilverBands++
+                    }
+                }
+            }
+            if (spotlightWashedBands >= 3) {
+                return -1
+            }
+
             val lowerContinuityEarlyY = (yBot - (span * 0.24).toInt()).coerceIn(yTop + 4, yBot - 4)
             var lowerFlankEarlyLuma = 0.0
             var lowerFlankEarlySat = 0.0
@@ -11099,16 +11133,24 @@ class OverlayService : LifecycleService() {
                 lowerFlankEarlyLuma += (0.299 * rl + 0.587 * gl + 0.114 * bl) * 0.5
                 lowerFlankEarlySat += (max(rl, max(gl, bl)) - min(rl, min(gl, bl))) * 0.5
             }
-            val isLowerQuarterEarlyFilled = lowerFlankEarlyLuma > (emptyBaseLuma + 12.0).coerceAtLeast(62.0) ||
+            val isLowerQuarterEarlyFilled = (lowerFlankEarlyLuma in (emptyBaseLuma + 12.0).coerceAtLeast(62.0)..192.0 &&
+                !(lowerFlankEarlyLuma >= 188.0 && lowerFlankEarlySat <= 28.0)) ||
                 lowerFlankEarlySat > (emptyBaseSat + 10.0).coerceAtLeast(22.0)
 
-            val hasAuthoritativeWhiteRing = whiteRingArcs >= 5 && upperWhiteRingArcs >= 2
+            val hasAuthoritativeWhiteRing = whiteRingArcs >= 6 && upperWhiteRingArcs >= 2
             val hasSecondOuterCircle = hasAuthoritativeWhiteRing && outerSecondRingArcs >= 5 && upperOrSideOuterRingArcs >= 3
-            // v4.06: Support both saturated colored liquid caps AND Normal-type (e.g. Giga Impact / Body Slam) bright silver-grey
-            // liquid caps (`avgTopLuma >= max(118.0, emptyBaseLuma + 42.0)` with lower quarter also filled).
-            val isTopCapFilled = avgTopLuma > (emptyBaseLuma + 16.0).coerceAtLeast(68.0) &&
-                (avgTopSat > (emptyBaseSat + 10.0).coerceAtLeast(24.0) ||
-                    (avgTopLuma in max(118.0, emptyBaseLuma + 42.0)..198.0 && isLowerQuarterEarlyFilled))
+            // v4.07: Require either a saturated colored top cap (`avgTopSat >= 42.0`) OR a uniform opaque Normal-type
+            // silver-grey interior (`whiteRingArcs >= 7`, `upperWhiteRingArcs >= 3`, `avgTopLuma in 155..185`, `cleanSilverBands >= 10`)
+            // so a white floor spotlight washing over an empty Moonblast or partial Giga Impact can never trigger 100%!
+            val isColoredTopCapFilled = avgTopLuma > (emptyBaseLuma + 16.0).coerceAtLeast(68.0) &&
+                avgTopSat >= max(42.0, emptyBaseSat + 16.0)
+            val isNormalSilverTopCapFilled = whiteRingArcs >= 7 &&
+                upperWhiteRingArcs >= 3 &&
+                avgTopLuma in 155.0..185.0 &&
+                avgTopSat <= 20.0 &&
+                cleanSilverBands >= 10 &&
+                isLowerQuarterEarlyFilled
+            val isTopCapFilled = isColoredTopCapFilled || isNormalSilverTopCapFilled
 
             if (hasAuthoritativeWhiteRing && isTopCapFilled) {
                 val rOverInterior = readyHalfSpanPx * 0.94
@@ -11310,7 +11352,8 @@ class OverlayService : LifecycleService() {
                 lowerFlankLuma += (0.299 * rl + 0.587 * gl + 0.114 * bl) * 0.5
                 lowerFlankSat += (max(rl, max(gl, bl)) - min(rl, min(gl, bl))) * 0.5
             }
-            val isLowerQuarterFilled = lowerFlankLuma > (emptyBaseLuma + 12.0).coerceAtLeast(62.0) ||
+            val isLowerQuarterFilled = (lowerFlankLuma in (emptyBaseLuma + 12.0).coerceAtLeast(62.0)..192.0 &&
+                !(lowerFlankLuma >= 188.0 && lowerFlankSat <= 28.0)) ||
                 lowerFlankSat > (emptyBaseSat + 10.0).coerceAtLeast(22.0)
 
             var bestY = -1
@@ -11409,19 +11452,23 @@ class OverlayService : LifecycleService() {
 
                 val candFillPct = (((yBot - y) * 100.0) / span).roundToInt()
                 val passesContinuity = candFillPct <= 42 || isLowerQuarterFilled
-                // v4.06: Since xOffsets inside r1IconHalfH already sample at outer/inner flanks outside the center icon,
-                // only reject near-pure white pixels (`lumaDn >= 202.0 && satDn <= 22.0`) so Normal-type silver-grey liquid
-                // fill (e.g. Xerneas's Giga Impact at `lumaDn = 168..176, satDn = 2..12`) is never rejected as a white icon tip!
-                val isNotWhiteIconTip = !(lumaDn >= 202.0 && satDn <= 22.0)
+                // v4.07: Reject spotlight-washed low-saturation bright regions (`lumaDn >= 152.0 && satDn <= 40.0`)
+                // during the `<100%` primary meniscus scan so white Geomancy floor spotlights (`luma = 160..255, sat = 0..25`)
+                // can never register as a high meniscus step inside `<100%` Giga Impact (whose true `<100%` grey liquid has
+                // `lumaDn in 106..150`).
+                val isNotWhiteIconTip = !(lumaDn >= 198.0 && satDn <= 28.0)
+                val isNotSpotlightBleedBelow = !(lumaDn >= 152.0 && satDn <= 40.0)
                 val isUnfilledAbove = lumaUp in 16.0..(maxAllowedUnfilledLuma + 6.0) &&
                     satUp < maxAllowedUnfilledSat &&
                     (avgTopLuma <= maxAllowedUnfilledLuma + 14.0 || lumaUp <= maxAllowedUnfilledLuma)
                 val isBottomCrescent = y >= yBot - (span * 0.18).toInt()
                 val minGrad = if (isBottomCrescent) 18.0 else 24.0
-                val isColoredLiquidBelow = (lumaDn > lumaUp + 3.5 && satDn >= 16.0) ||
-                    (satDn > satUp + 6.0 && satDn >= 20.0) ||
-                    (grad >= 32.0 && lumaDn >= 34.0 && satDn >= 18.0)
-                val isNormalSilverLiquidBelow = lumaDn >= max(106.0, emptyBaseLuma + 32.0) &&
+                val isColoredLiquidBelow = ((lumaDn > lumaUp + 3.5 && satDn >= 18.0) ||
+                    (satDn > satUp + 6.0 && satDn >= 22.0) ||
+                    (grad >= 32.0 && lumaDn >= 34.0 && satDn >= 20.0)) &&
+                    isNotSpotlightBleedBelow
+                val isNormalSilverLiquidBelow = lumaDn in max(106.0, emptyBaseLuma + 32.0)..150.0 &&
+                    satDn <= 32.0 &&
                     lumaDn > lumaUp + 12.0 &&
                     grad >= 26.0 &&
                     (isLowerQuarterFilled || isBottomCrescent)
@@ -11619,6 +11666,19 @@ class OverlayService : LifecycleService() {
                 }
             }
         } else -1
+
+        // v4.07: Dual-Circle Physical Consistency Cross-Check:
+        // Both charge move circles represent the exact same banked energy `E`.
+        // Whenever the faster circle (`fastCost`, e.g. Moonblast 50E) is visibly below 95% (`debouncedFasterPct in 1..94`),
+        // `E` is strictly `< fastCost` (`< 50E`), so the slower circle (`slowCost`, e.g. Giga Impact 80E) physically cannot
+        // exceed `expectedSlowPct = (debouncedFasterPct * fastCost) / slowCost` by more than 14% (and can NEVER be `>= 100%`).
+        if (hasSecondUserMove && fastCost < slowCost && fasterResolvedE >= 0 && debouncedFasterPct in 1..94) {
+            val expectedSlowPct = ((debouncedFasterPct * fastCost).toDouble() / slowCost.toDouble()).roundToInt()
+            if (debouncedSlowestPct !in 0..300 || debouncedSlowestPct >= 100 || debouncedSlowestPct > expectedSlowPct + 14) {
+                val clampedFast = min(fasterResolvedE, maxAllowedSingleJumpE).coerceIn(0, fastCost - 1)
+                return clampedFast
+            }
+        }
 
         if (debouncedSlowestPct !in 0..300) {
             if (fasterResolvedE >= 0) {
@@ -13005,6 +13065,8 @@ class OverlayService : LifecycleService() {
             isAttackIncomingPromptActive = false
             sampledShieldHexagonVisible = false
             shieldHexagonConfirmFrames = 0
+            shieldOverlayShowConfirmFrames = 0
+            lastShieldOverlayConfirmFrameMs = 0L
             if (isShieldDecisionOverlayVisible) {
                 hideShieldDecisionOverlay()
             }
@@ -13012,7 +13074,7 @@ class OverlayService : LifecycleService() {
             lastChargedPromptActor = "user"
             lastChargedPromptTimeMs = nowMs
         } else if (hasAttackIncomingText) {
-            if (sampledTopCountdownCircleVisible) {
+            if (sampledTopCountdownCircleVisible && topCountdownCircleConfirmFrames >= 2) {
                 isTopCountdownCircleActive = true
             }
             hadShieldPromptBeforeCurrentCharge = true
@@ -14236,9 +14298,15 @@ class OverlayService : LifecycleService() {
                 }
                 showBattleToast(toastMsg)
             }
-            // v4.06: Show/Update Shield Decision Overlay for the entire duration of the opponent's 5-second countdown circle
-            // (including unshielded 0-shield countdowns so the user always gets move/damage information) with NO timeout!
-            if (showShieldDecisionOverlay) {
+            // v4.07: 2-Frame Show Debounce on Shield Decision Overlay:
+            // Increment `shieldOverlayShowConfirmFrames` at most once per unique 100ms frame (`currentFrameTimestampMs`)
+            // and require `shieldOverlayShowConfirmFrames >= 2` before displaying the Shield Decision Overlay so any
+            // 1-frame startup flicker is completely eliminated, then hold it steadily for the rest of the 5s countdown!
+            if (currentFrameTimestampMs != lastShieldOverlayConfirmFrameMs) {
+                lastShieldOverlayConfirmFrameMs = currentFrameTimestampMs
+                shieldOverlayShowConfirmFrames = (shieldOverlayShowConfirmFrames + 1).coerceAtMost(30)
+            }
+            if (showShieldDecisionOverlay && (isShieldDecisionOverlayVisible || shieldOverlayShowConfirmFrames >= 2)) {
                 val oppIdxForOverlay = if (pendingChargedAttackOppSlotIdx in 0..2) pendingChargedAttackOppSlotIdx else activeOppIdx.coerceIn(0, 2)
                 val preThrowE = if (pendingChargedAttackPreOppEnergy > 0) {
                     pendingChargedAttackPreOppEnergy
@@ -14250,7 +14318,7 @@ class OverlayService : LifecycleService() {
                     userSlotIdx = activeUserIdx.coerceIn(0, 2),
                     preThrowOppEnergy = preThrowE
                 )
-            } else if (isShieldDecisionOverlayVisible) {
+            } else if (!showShieldDecisionOverlay && isShieldDecisionOverlayVisible) {
                 hideShieldDecisionOverlay()
             }
             if (!wasPromptActive || hpChanged) {
@@ -14258,9 +14326,13 @@ class OverlayService : LifecycleService() {
             }
             return
         } else {
-            // v4.06: Immediately hide Shield Decision Overlay as soon as the opponent's 5-second countdown circle disappears
-            if (isShieldDecisionOverlayVisible && !isTopCountdownCircleActive) {
-                hideShieldDecisionOverlay()
+            // v4.07: Reset show debounce and hide Shield Decision Overlay once the opponent's 5-second countdown circle disappears
+            if (!isTopCountdownCircleActive) {
+                shieldOverlayShowConfirmFrames = 0
+                lastShieldOverlayConfirmFrameMs = 0L
+                if (isShieldDecisionOverlayVisible) {
+                    hideShieldDecisionOverlay()
+                }
             }
             if (isAttackIncomingPromptActive && !isTopCountdownCircleActive &&
                 (isNormalFastCombatFrame || postOppChargedMissingPlayerHpFrames >= 6 || (nowMs - attackIncomingDetectedAtMs) > 1200L)
@@ -17019,6 +17091,8 @@ class OverlayService : LifecycleService() {
         topCountdownCircleConfirmFrames = 0
         topCountdownCircleMissingFrames = 0
         isTopCountdownCircleActive = false
+        shieldOverlayShowConfirmFrames = 0
+        lastShieldOverlayConfirmFrameMs = 0L
         sampledTopRightNameplateVisible = false
         lastOppChargeHpInferredMoveName = ""
         isAttackIncomingPromptActive = false
