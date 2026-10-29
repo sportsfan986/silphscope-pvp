@@ -10023,16 +10023,22 @@ class OverlayService : LifecycleService() {
         val nowMs = System.currentTimeMillis()
         val areBottomCirclesHiddenInCombat = isBattleActive && !isWaitingForOpponent &&
             sampledLeftChargeBtnFillPct == -1 && sampledRightChargeBtnFillPct == -1
-        val isChargedWindowForFastOcr = pendingChargedAttackActor.isNotEmpty() ||
+        val hasActiveOrRecentShieldCountdown = sampledTopCountdownCircleVisible ||
+            isTopCountdownCircleActive ||
             isAttackIncomingPromptActive ||
+            (lastAttackIncomingOcrDetectedMs > 0L && (nowMs - lastAttackIncomingOcrDetectedMs) <= 4800L)
+        val isChargedWindowForFastOcr = pendingChargedAttackActor.isNotEmpty() ||
+            hasActiveOrRecentShieldCountdown ||
             areBottomCirclesHiddenInCombat ||
             (lastChargedAttackLoggedMs > 0L && (nowMs - lastChargedAttackLoggedMs) <= 2200L)
         val targetOcrIntervalMs = if (isChargedWindowForFastOcr) 250L else 750L
         val shouldStartOcr = !isOcrInFlight && (lastOcrStartMs == 0L || (nowMs - lastOcrStartMs) >= targetOcrIntervalMs)
 
-        // v4.05: Keep bottom prompt OCR (`srcMoves`, expanded to `0.53h..0.96h` to eliminate the 0.52h-0.70h blind spot!)
-        // active whenever bottom charge circles are hidden in combat — decoupled from top Pokéball false positives!
-        val isCutscenePromptWindowForOcr = areBottomCirclesHiddenInCombat || isPostFaintSwitchPromptActive
+        // v4.05 / v4.11: Keep bottom prompt OCR (`srcMoves`, expanded to `0.53h..0.96h` to eliminate the 0.52h-0.70h blind spot!)
+        // active whenever bottom charge circles are hidden in combat OR the top countdown circle / shield prompt is active!
+        val isCutscenePromptWindowForOcr = areBottomCirclesHiddenInCombat ||
+            hasActiveOrRecentShieldCountdown ||
+            isPostFaintSwitchPromptActive
         val includeBottomMovesInOcr = !isBattleActive || isWaitingForOpponent || isCutscenePromptWindowForOcr
         if (!includeBottomMovesInOcr && cachedOcrPlayerMoveLines.isNotEmpty()) {
             cachedOcrPlayerMoveLines = emptyList()
@@ -10651,9 +10657,8 @@ class OverlayService : LifecycleService() {
         // and wipe out cachedOcrPlayerMoveLines during the 5s shield countdown!
         val nowCheckMs = System.currentTimeMillis()
         val isOpponentPromptSuppressingBottomCircles = (isAttackIncomingPromptActive ||
-            (lastAttackIncomingOcrDetectedMs > 0L && (nowCheckMs - lastAttackIncomingOcrDetectedMs) <= 1800L)) &&
-            sampledPlayerBalls <= 0 &&
-            sampledOppBalls <= 0
+            (lastAttackIncomingOcrDetectedMs > 0L && (nowCheckMs - lastAttackIncomingOcrDetectedMs) <= 2800L)) &&
+            !sampledTopRightNameplateVisible
         if (w < 200 || h < 400 || sampledTopCountdownCircleVisible || isTopCountdownCircleActive || isOpponentPromptSuppressingBottomCircles || isWhiteScreenFlash(screen, w, h)) {
             sampledLeftChargeBtnFillPct = -1
             sampledRightChargeBtnFillPct = -1
@@ -10999,10 +11004,11 @@ class OverlayService : LifecycleService() {
     }
 
     /**
-     * v4.06 / v4.09: Multi-Device 100ms (10 Hz) Radial Pixel Detector for Pokémon GO's Top-Center 5-Second Countdown Circle
+     * v4.06 / v4.11: Multi-Device 100ms (10 Hz) Radial Pixel Detector for Pokémon GO's Top-Center 5-Second Countdown Circle
      * (`cx = 0.500 * w`, `cyFrac ∈ [0.070..0.088] * h`, `R = 0.0833 * w` -> `cx = 540, cy = 192, R = 90px` on `1080x2342`
      * and `cx = 480, cy = 170, R = 80px` on `960x2142`).
-     * Supports partial background occlusion behind the translucent inner disk (e.g. Xerneas's glowing antlers crossing
+     * Supports both nighttime stadiums (`innerL in 8..58`) and daytime blue-sky/cloud stadiums (`innerL in 58..128`),
+     * as well as partial background occlusion behind the translucent inner disk (e.g. Xerneas's glowing antlers crossing
      * 3-5 radial spokes) whenever the bright white countdown digit (`5, 4, 3, 2, 1`) and outer ring ridge are present.
      */
     private fun detectTopCountdownCircle(screen: Bitmap, w: Int, h: Int): Boolean {
@@ -11018,6 +11024,7 @@ class OverlayService : LifecycleService() {
                 var antlerOccludedSpokes = 0
                 var upperSpokes = 0
                 var brightArcSpokes = 0
+                var pureWhiteArcSpokes = 0
                 var innerLumaSum = 0.0
                 var innerCount = 0
 
@@ -11052,7 +11059,7 @@ class OverlayService : LifecycleService() {
                         val b = Color.blue(c)
                         val l = 0.299 * r + 0.587 * g + 0.114 * b
                         val s = (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
-                        if (s <= 52.0 && l > ringPeakL) {
+                        if (s <= 56.0 && l > ringPeakL) {
                             ringPeakL = l
                             ringPeakS = s
                         }
@@ -11071,37 +11078,48 @@ class OverlayService : LifecycleService() {
                         outerRimS += (max(r, max(g, b)) - min(r, min(g, b))) / 3.0
                     }
 
-                    val isInnerDark = innerL in 8.0..58.0 && innerS <= 54.0
-                    val isOuterRimDark = outerRimL in 8.0..96.0 && outerRimS <= 64.0
-                    val hasRingRidge = ringPeakL >= 34.0 &&
-                        ringPeakS <= 46.0 &&
-                        ringPeakL >= innerL + 12.0 &&
-                        ringPeakL >= outerRimL + 10.0
+                    // v4.11: Support both nighttime stadiums (`innerL in 8..58`) and daytime blue-sky/cloud stadiums (`innerL in 58..128`)
+                    val isNightSpoke = innerL in 8.0..58.0 && innerS <= 54.0 &&
+                        outerRimL in 8.0..96.0 && outerRimS <= 64.0 &&
+                        ringPeakL >= 34.0 && ringPeakS <= 46.0 &&
+                        ringPeakL >= innerL + 12.0 && ringPeakL >= outerRimL + 10.0
 
-                    if (isInnerDark && isOuterRimDark && hasRingRidge) {
+                    val isDaytimeOrTranslucentSpoke = innerL in 8.0..128.0 && innerS <= 110.0 &&
+                        outerRimL in 8.0..165.0 && outerRimS <= 112.0 &&
+                        ringPeakL >= 34.0 && ringPeakS <= 52.0 && (
+                            (ringPeakL >= 205.0 && ringPeakS <= 22.0 && ringPeakL >= innerL + 45.0 && ringPeakL >= outerRimL + 35.0) ||
+                                (ringPeakL >= 125.0 && ringPeakS <= 34.0 && innerL <= 115.0 && ringPeakL >= innerL + 18.0 && ringPeakL >= outerRimL + 6.0)
+                            )
+
+                    if (isNightSpoke || isDaytimeOrTranslucentSpoke) {
                         validSpokes++
                         if (uy < -0.15) upperSpokes++
                         if (ringPeakL >= 78.0) brightArcSpokes++
-                    } else if (innerL in 8.0..108.0 &&
-                        innerS <= 115.0 &&
-                        isOuterRimDark &&
+                        if (ringPeakL >= 205.0 && ringPeakS <= 22.0) pureWhiteArcSpokes++
+                    } else if (innerL in 8.0..168.0 &&
+                        innerS <= 118.0 &&
+                        outerRimL in 8.0..168.0 &&
                         ringPeakL >= 42.0 &&
                         ringPeakS <= 52.0 &&
-                        ringPeakL >= innerL + 9.0 &&
-                        ringPeakL >= outerRimL + 8.0
+                        ((ringPeakL >= innerL + 9.0 && ringPeakL >= outerRimL + 8.0) ||
+                            (ringPeakL >= 125.0 && ringPeakS <= 36.0))
                     ) {
                         antlerOccludedSpokes++
                         if (ringPeakL >= 78.0) brightArcSpokes++
+                        if (ringPeakL >= 205.0 && ringPeakS <= 22.0) pureWhiteArcSpokes++
                     }
                 }
 
-                // Full 16-spoke match, upper-semicircle match, OR antler-occluded match (8+ dark spokes & 12+ total valid/occluded spokes)
+                // Full 16-spoke match, upper-semicircle match, OR antler/cloud-occluded match (8+ valid spokes & 12+ total valid/occluded spokes)
                 val passesSpokeGeometry = (validSpokes >= 11 && upperSpokes >= 5) ||
                     (upperSpokes >= 6 && validSpokes >= 7) ||
                     (validSpokes >= 8 && (validSpokes + antlerOccludedSpokes) >= 12 && brightArcSpokes >= 2)
                 if (!passesSpokeGeometry || brightArcSpokes < 1) continue
 
                 val avgInnerL = if (innerCount > 0) innerLumaSum / innerCount else 999.0
+                // On daytime skies (`avgInnerL > 62.0`), require at least 2 pure-white remaining countdown arc spokes (`ringPeakL >= 205.0`)
+                if (avgInnerL > 62.0 && pureWhiteArcSpokes < 2) continue
+
                 val digitRx = (radius * 0.25).roundToInt().coerceAtLeast(6)
                 val digitRy = (radius * 0.26).roundToInt().coerceAtLeast(6)
                 val stepD = max(2, (w / 360))
@@ -11121,9 +11139,10 @@ class OverlayService : LifecycleService() {
                         val l = 0.299 * r + 0.587 * g + 0.114 * b
                         val s = max(r, max(g, b)) - min(r, min(g, b))
                         centerTotal++
-                        if (l >= 115.0 && s <= 38 && l >= min(avgInnerL, 52.0) + 55.0) {
+                        val glyphMinL = if (avgInnerL > 62.0) 175.0 else 115.0
+                        if (l >= glyphMinL && s <= 38 && l >= min(avgInnerL, 115.0) + 52.0) {
                             centerBrightGlyphHits++
-                        } else if (l in 8.0..62.0 && s <= 56) {
+                        } else if (l in 8.0..125.0 && s <= 110) {
                             centerDarkBgHits++
                         }
                         dx += stepD
@@ -11197,9 +11216,17 @@ class OverlayService : LifecycleService() {
             if (maxCenterIconLuma < 48.0) {
                 return -1
             }
-            // v3.87: If the 3-2-1 countdown dimming curtain is active (maxCenterIconLuma < 125.0),
-            // never allow false 1..99% meniscus triggers; return 0 if dark-grey empty circle, else -1.
+            // v3.87 / v4.11: If the 3-2-1 start-of-battle countdown dimming curtain is active (maxCenterIconLuma < 125.0),
+            // ONLY allow a 0% dark-grey circle match while waiting for battle start (`isWaitingForOpponent || !hasBattleStarted`).
+            // During active combat (`!isWaitingForOpponent && hasBattleStarted`), a genuine visible Charge Move Button ALWAYS
+            // has a bright white center type icon (`maxCenterIconLuma >= 125.0`). Returning 0 when `maxCenterIconLuma < 125.0`
+            // during active combat caused the dark translucent "Attack incoming! Use a Protect Shield?" card over Metagross's
+            // stadium line (`maxCenterIconLuma = 119.8`) or Xerneas's hind legs (`maxCenterIconLuma = 65.4..67.6`) to falsely
+            // report `0%` visible circles instead of `-1` (hidden), blocking both bottom OCR and the Shield Decision Overlay!
             if (maxCenterIconLuma < 125.0) {
+                if (!isWaitingForOpponent && hasBattleStarted) {
+                    return -1
+                }
                 val cL = screen.getPixel((actualCx - flankDx1).coerceIn(0, w - 1), actualCy.coerceIn(0, h - 1))
                 val cR = screen.getPixel((actualCx + flankDx1).coerceIn(0, w - 1), actualCy.coerceIn(0, h - 1))
                 val lL = 0.299 * Color.red(cL) + 0.587 * Color.green(cL) + 0.114 * Color.blue(cL)
@@ -13373,10 +13400,11 @@ class OverlayService : LifecycleService() {
         val midBannerLower = midBannerLines.joinToString(" ") { it.text.lowercase() }
         val combinedBannerLower = "$bottomLower $midBannerLower $oppTopLower $playerTopLower"
 
-        // v4.05: Opponent Charged Attack prompt text is gated solely on the bottom Charge Move Circles being hidden
-        // (`sampledLeftChargeBtnFillPct == -1 && sampledRightChargeBtnFillPct == -1`), decoupled from top Pokéball false positives!
-        val isHudHiddenForOpponentPrompt = sampledLeftChargeBtnFillPct == -1 &&
-            sampledRightChargeBtnFillPct == -1
+        // v4.05 / v4.11: Opponent Charged Attack prompt text is gated on the bottom Charge Move Circles being hidden
+        // OR the top 5-second countdown circle being active (`!sampledTopRightNameplateVisible`), decoupled from top Pokéball false positives!
+        val isHudHiddenForOpponentPrompt = (sampledLeftChargeBtnFillPct == -1 &&
+            sampledRightChargeBtnFillPct == -1) ||
+            ((isTopCountdownCircleActive || sampledTopCountdownCircleVisible) && !sampledTopRightNameplateVisible)
 
         // Player Charged Attack minigame banner text ("Get ready!", "GREAT!", "EXCELLENT!", "NICE!", "Charge your attack!", "Swipe!")
         // Note: During the player's swipe minigame, BOTH floating HP bars are hidden (`sampledPlayerHpPct == -1 && sampledOppHpPct == -1`).
