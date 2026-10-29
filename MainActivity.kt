@@ -167,6 +167,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textBattleToastsDesc: TextView
     private lateinit var btnToggleTacticalRec: Button
     private lateinit var textTacticalRecDesc: TextView
+    private lateinit var btnToggleShieldDecisionOverlay: Button
+    private lateinit var textShieldDecisionOverlayDesc: TextView
     private lateinit var btnToggleHpTracking: Button
     private lateinit var textHpTrackingDesc: TextView
     private lateinit var tvHpDebounceSummary: TextView
@@ -183,8 +185,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnDebounce2Samples: Button
     private lateinit var btnDebounce3Samples: Button
     private lateinit var btnDebounce4Samples: Button
+    private lateinit var btnProactiveLead0: Button
+    private lateinit var btnProactiveLead200: Button
+    private lateinit var btnProactiveLead300: Button
+    private lateinit var btnProactiveLead400: Button
+    private lateinit var textProactiveEnergyLeadDesc: TextView
     private lateinit var btnToggleEnergyUpdateToasts: Button
     private lateinit var textEnergyUpdateToastsDesc: TextView
+    private lateinit var btnCycleChargeCirclePriority: Button
+    private lateinit var textChargeCirclePriorityDesc: TextView
+    private lateinit var btnToggleAltFastMoveDetect: Button
+    private lateinit var textAltFastMoveDetectDesc: TextView
     private lateinit var btnCycleFastDetectOffset: Button
     private lateinit var textFastDetectOffsetDesc: TextView
     private lateinit var seekbarOverlayScale: SeekBar
@@ -450,6 +461,7 @@ class MainActivity : AppCompatActivity() {
     private val PREFS_KEY_ENABLE_4_CHARGED_MOVES = OverlayService.PREFS_KEY_ENABLE_4_CHARGED_MOVES
     private val PREFS_KEY_DISABLE_BATTLE_TOASTS = OverlayService.PREFS_KEY_DISABLE_BATTLE_TOASTS
     private val PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS = OverlayService.PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS
+    private val PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY = OverlayService.PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY
     private val PREFS_KEY_ENABLE_HP_TRACKING = OverlayService.PREFS_KEY_ENABLE_HP_TRACKING
     private val PREFS_KEY_ENABLE_ENERGY_TRACKING = OverlayService.PREFS_KEY_ENABLE_ENERGY_TRACKING
     private val PREFS_KEY_FAST_DETECT_TURN_OFFSET = OverlayService.PREFS_KEY_FAST_DETECT_TURN_OFFSET
@@ -537,9 +549,9 @@ class MainActivity : AppCompatActivity() {
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "3.89"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "4.08"
         } catch (_: Exception) {
-            "3.89"
+            "4.08"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -1156,8 +1168,11 @@ class MainActivity : AppCompatActivity() {
         if (::btnToggleOppChargedMoves.isInitialized) updateOppChargedMovesUi()
         if (::btnToggleBattleToasts.isInitialized) updateBattleToastsUi()
         if (::btnToggleTacticalRec.isInitialized) updateTacticalRecUi()
+        if (::btnToggleShieldDecisionOverlay.isInitialized) updateShieldDecisionOverlayUi()
         if (::btnToggleHpTracking.isInitialized) updateHpTrackingUi()
         if (::btnToggleEnergyTracking.isInitialized) updateEnergyTrackingUi()
+        if (::btnCycleChargeCirclePriority.isInitialized) updateChargeCirclePriorityUi()
+        if (::btnToggleAltFastMoveDetect.isInitialized) updateAltFastMoveDetectUi()
         if (::btnCycleFastDetectOffset.isInitialized) updateFastDetectOffsetUi()
         if (::presetsContainer.isInitialized && presetsContainer.childCount > 0) {
             refreshPresetsUi()
@@ -1198,6 +1213,8 @@ class MainActivity : AppCompatActivity() {
         textBattleToastsDesc = findViewById(R.id.text_battle_toasts_desc)
         btnToggleTacticalRec = findViewById(R.id.btn_toggle_tactical_rec)
         textTacticalRecDesc = findViewById(R.id.text_tactical_rec_desc)
+        btnToggleShieldDecisionOverlay = findViewById(R.id.btn_toggle_shield_decision_overlay)
+        textShieldDecisionOverlayDesc = findViewById(R.id.text_shield_decision_overlay_desc)
         btnToggleHpTracking = findViewById(R.id.btn_toggle_hp_tracking)
         textHpTrackingDesc = findViewById(R.id.text_hp_tracking_desc)
         tvHpDebounceSummary = findViewById(R.id.tv_hp_debounce_summary)
@@ -1214,8 +1231,17 @@ class MainActivity : AppCompatActivity() {
         btnDebounce2Samples = findViewById(R.id.btn_debounce_2_samples)
         btnDebounce3Samples = findViewById(R.id.btn_debounce_3_samples)
         btnDebounce4Samples = findViewById(R.id.btn_debounce_4_samples)
+        btnProactiveLead0 = findViewById(R.id.btn_proactive_lead_0)
+        btnProactiveLead200 = findViewById(R.id.btn_proactive_lead_200)
+        btnProactiveLead300 = findViewById(R.id.btn_proactive_lead_300)
+        btnProactiveLead400 = findViewById(R.id.btn_proactive_lead_400)
+        textProactiveEnergyLeadDesc = findViewById(R.id.text_proactive_energy_lead_desc)
         btnToggleEnergyUpdateToasts = findViewById(R.id.btn_toggle_energy_update_toasts)
         textEnergyUpdateToastsDesc = findViewById(R.id.text_energy_update_toasts_desc)
+        btnCycleChargeCirclePriority = findViewById(R.id.btn_cycle_charge_circle_priority)
+        textChargeCirclePriorityDesc = findViewById(R.id.text_charge_circle_priority_desc)
+        btnToggleAltFastMoveDetect = findViewById(R.id.btn_toggle_alt_fast_move_detect)
+        textAltFastMoveDetectDesc = findViewById(R.id.text_alt_fast_move_detect_desc)
         btnCycleFastDetectOffset = findViewById(R.id.btn_cycle_fast_detect_offset)
         textFastDetectOffsetDesc = findViewById(R.id.text_fast_detect_offset_desc)
         seekbarOverlayScale = findViewById(R.id.seekbar_overlay_scale)
@@ -1341,8 +1367,11 @@ class MainActivity : AppCompatActivity() {
         updateOppChargedMovesUi()
         updateBattleToastsUi()
         updateTacticalRecUi()
+        updateShieldDecisionOverlayUi()
         updateHpTrackingUi()
         updateEnergyTrackingUi()
+        updateChargeCirclePriorityUi()
+        updateAltFastMoveDetectUi()
         updateFastDetectOffsetUi()
 
         editSyncGithubToken.setText(prefs.getString(PREFS_KEY_SYNC_GITHUB_TOKEN, "") ?: "")
@@ -1398,6 +1427,18 @@ class MainActivity : AppCompatActivity() {
         }
         btnDebounce4Samples.setOnClickListener {
             saveEnergyDebounceSamples(4, showToast = true)
+        }
+        btnProactiveLead0.setOnClickListener {
+            saveProactiveEnergyLeadMs(0, showToast = true)
+        }
+        btnProactiveLead200.setOnClickListener {
+            saveProactiveEnergyLeadMs(200, showToast = true)
+        }
+        btnProactiveLead300.setOnClickListener {
+            saveProactiveEnergyLeadMs(300, showToast = true)
+        }
+        btnProactiveLead400.setOnClickListener {
+            saveProactiveEnergyLeadMs(400, showToast = true)
         }
         btnToggleEnergyUpdateToasts.setOnClickListener {
             val currentEnabled = prefs.getBoolean(OverlayService.PREFS_KEY_ENERGY_UPDATE_TOASTS, OverlayService.DEFAULT_ENERGY_UPDATE_TOASTS)
@@ -1659,6 +1700,21 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        btnToggleShieldDecisionOverlay.setOnClickListener {
+            val currentShow = prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true)
+            val nextShow = !currentShow
+            prefs.edit().putBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, nextShow).apply()
+            updateShieldDecisionOverlayUi()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_SHOW_SHIELD_DECISION_OVERLAY, nextShow)
+                }
+                startService(updateIntent)
+            }
+        }
+
         btnToggleHpTracking.setOnClickListener {
             val currentEnableHp = prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
             val nextEnableHp = !currentEnableHp
@@ -1684,6 +1740,48 @@ class MainActivity : AppCompatActivity() {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
                     action = OverlayService.ACTION_UPDATE_SETTINGS
                     putExtra(OverlayService.EXTRA_ENABLE_ENERGY_TRACKING, nextEnableEnergy)
+                }
+                startService(updateIntent)
+            }
+        }
+
+        btnCycleChargeCirclePriority.setOnClickListener {
+            val currentMode = prefs.getString(
+                OverlayService.PREFS_KEY_CHARGE_CIRCLE_PRIORITY_MODE,
+                OverlayService.DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE
+            ) ?: OverlayService.DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE
+            val nextMode = when (currentMode) {
+                "smart_hybrid" -> "highest_contrast"
+                "highest_contrast" -> "highest_energy"
+                else -> "smart_hybrid"
+            }
+            prefs.edit().putString(OverlayService.PREFS_KEY_CHARGE_CIRCLE_PRIORITY_MODE, nextMode).apply()
+            OverlayService.syncTierThresholdsFromPrefs(prefs)
+            updateChargeCirclePriorityUi()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_CHARGE_CIRCLE_PRIORITY_MODE, nextMode)
+                }
+                startService(updateIntent)
+            }
+        }
+
+        btnToggleAltFastMoveDetect.setOnClickListener {
+            val currentEnable = prefs.getBoolean(
+                OverlayService.PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT,
+                OverlayService.DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT
+            )
+            val nextEnable = !currentEnable
+            prefs.edit().putBoolean(OverlayService.PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT, nextEnable).apply()
+            OverlayService.syncTierThresholdsFromPrefs(prefs)
+            updateAltFastMoveDetectUi()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_ENABLE_ALT_FAST_MOVE_DETECT, nextEnable)
                 }
                 startService(updateIntent)
             }
@@ -3567,6 +3665,7 @@ class MainActivity : AppCompatActivity() {
         if (!::btnDebounce2Samples.isInitialized) return
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         val samples = OverlayService.activeEnergyDebounceSamples.coerceIn(2, 4)
+        val leadMs = OverlayService.activeProactiveEnergyLeadMs
         val toastsOn = OverlayService.activeEnergyUpdateToasts
         val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
         val activeTint = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
@@ -3581,6 +3680,33 @@ class MainActivity : AppCompatActivity() {
             val isSelected = (samples == count)
             btn.backgroundTintList = if (isSelected) activeTint else inactiveTint
             btn.setTextColor(if (isSelected) 0xFFFFFFFF.toInt() else theme.secondaryTextColor)
+        }
+
+        if (::btnProactiveLead0.isInitialized &&
+            ::btnProactiveLead200.isInitialized &&
+            ::btnProactiveLead300.isInitialized &&
+            ::btnProactiveLead400.isInitialized
+        ) {
+            val leadPairs = listOf(
+                0 to btnProactiveLead0,
+                200 to btnProactiveLead200,
+                300 to btnProactiveLead300,
+                400 to btnProactiveLead400
+            )
+            for ((ms, btn) in leadPairs) {
+                val isSelected = (leadMs == ms)
+                btn.backgroundTintList = if (isSelected) activeTint else inactiveTint
+                btn.setTextColor(if (isSelected) 0xFFFFFFFF.toInt() else theme.secondaryTextColor)
+            }
+        }
+
+        if (::textProactiveEnergyLeadDesc.isInitialized) {
+            textProactiveEnergyLeadDesc.text = when (leadMs) {
+                0 -> "Off (0ms) — Waits strictly for debounced Charge Move Circle confirmation before updating energy"
+                200 -> "Active: 200ms — Advances energy 200ms early; auto-rolls back if circle lags >500ms (1 turn)"
+                400 -> "Active: 400ms — Advances energy 400ms early for maximum decision time; auto-rolls back if circle lags >500ms"
+                else -> "Default: 300ms — Advances energy ~300ms early for end-of-turn swap/catch/throw decisions; auto-corrects if circle lags >500ms (1 turn)"
+            }
         }
 
         if (::btnToggleEnergyUpdateToasts.isInitialized && ::textEnergyUpdateToastsDesc.isInitialized) {
@@ -3603,11 +3729,37 @@ class MainActivity : AppCompatActivity() {
                 3 -> "3 Matching Samples (Balanced Noise Rejection, ±2% Fill Tolerance)"
                 else -> "4 Matching Samples (Strict Filtering, ±2% Fill Tolerance)"
             }
+            val leadSummary = when (leadMs) {
+                0 -> "Off (0ms — Waits for debounced circle)"
+                300 -> "300ms (Default • Applies energy ~300ms early & rolls back if delayed >500ms)"
+                else -> "${leadMs}ms (Applies energy ~${leadMs}ms early & rolls back if delayed >500ms)"
+            }
             val toastStatus = if (toastsOn) "Enabled" else "Muted"
             tvEnergyDebounceSummary.text =
                 "• Active: $modeDesc\n" +
-                "• Snaps on ≥1E diff to slowest Charge Move (100%–200% White Border + Meniscus)\n" +
+                "• Proactive Fast-Move Energy Lead: $leadSummary\n" +
                 "• Live Energy & Circle % Battle Toasts: $toastStatus"
+        }
+    }
+
+    private fun saveProactiveEnergyLeadMs(leadMs: Int, showToast: Boolean) {
+        val valid = if (leadMs in listOf(0, 200, 300, 400)) leadMs else OverlayService.DEFAULT_PROACTIVE_ENERGY_LEAD_MS
+        prefs.edit().putInt(OverlayService.PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS, valid).apply()
+        OverlayService.syncTierThresholdsFromPrefs(prefs)
+        loadAndRenderEnergyDebounceUi()
+        if (isOverlayRunning) {
+            val updateIntent = Intent(this, OverlayService::class.java).apply {
+                action = OverlayService.ACTION_UPDATE_SETTINGS
+            }
+            startService(updateIntent)
+        }
+        if (showToast) {
+            val label = if (valid == 0) "Off (0ms)" else "${valid}ms early (with >500ms 1-turn rollback)"
+            Toast.makeText(
+                this,
+                "Saved Proactive Fast-Move Energy Lead Time: $label",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
@@ -5243,6 +5395,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateShieldDecisionOverlayUi() {
+        if (!::btnToggleShieldDecisionOverlay.isInitialized) return
+        val showShieldHud = prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true)
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        if (showShieldHud) {
+            btnToggleShieldDecisionOverlay.text = "Shield HUD On"
+            btnToggleShieldDecisionOverlay.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            btnToggleShieldDecisionOverlay.setTextColor(0xFFFFFFFF.toInt())
+            textShieldDecisionOverlayDesc.text = "Default: Red/Orange/Yellow/Green KO & HP summary above Attack incoming! (Auto-hides <= 5s)"
+        } else {
+            btnToggleShieldDecisionOverlay.text = "Shield HUD Off"
+            btnToggleShieldDecisionOverlay.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+            btnToggleShieldDecisionOverlay.setTextColor(theme.primaryTextColor)
+            textShieldDecisionOverlayDesc.text = "Active: Attack Incoming! Shield Decision Overlay disabled"
+        }
+    }
+
     private fun updateHpTrackingUi() {
         if (!::btnToggleHpTracking.isInitialized) return
         val enabled = prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
@@ -5274,6 +5443,55 @@ class MainActivity : AppCompatActivity() {
             btnToggleEnergyTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
             btnToggleEnergyTracking.setTextColor(theme.primaryTextColor)
             textEnergyTrackingDesc.text = "Default: Disabled (Opt-in for Slowest Charge Move Meter Debounce & Snap)"
+        }
+    }
+
+    private fun updateChargeCirclePriorityUi() {
+        if (!::btnCycleChargeCirclePriority.isInitialized) return
+        val mode = prefs.getString(
+            OverlayService.PREFS_KEY_CHARGE_CIRCLE_PRIORITY_MODE,
+            OverlayService.DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE
+        ) ?: OverlayService.DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        when (mode) {
+            "highest_contrast" -> {
+                btnCycleChargeCirclePriority.text = "Highest Contrast"
+                btnCycleChargeCirclePriority.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
+                btnCycleChargeCirclePriority.setTextColor(0xFFFFFFFF.toInt())
+                textChargeCirclePriorityDesc.text = "Active: Highest Contrast (Always prioritizes move with better 1–18 scanner contrast rank; e.g. Fairy #3 over Normal #17)"
+            }
+            "highest_energy" -> {
+                btnCycleChargeCirclePriority.text = "Highest Energy"
+                btnCycleChargeCirclePriority.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+                btnCycleChargeCirclePriority.setTextColor(theme.primaryTextColor)
+                textChargeCirclePriorityDesc.text = "Active: Highest Energy (Always prioritizes higher-energy move regardless of type color contrast)"
+            }
+            else -> {
+                btnCycleChargeCirclePriority.text = "Smart Hybrid"
+                btnCycleChargeCirclePriority.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+                btnCycleChargeCirclePriority.setTextColor(0xFFFFFFFF.toInt())
+                textChargeCirclePriorityDesc.text = "Default: Smart Hybrid (Tracks higher-E move in Tiers S/A #1–10; promotes higher-contrast move when higher-E is Tier B/C #11–18 like Normal/Steel/Ghost)"
+            }
+        }
+    }
+
+    private fun updateAltFastMoveDetectUi() {
+        if (!::btnToggleAltFastMoveDetect.isInitialized) return
+        val enabled = prefs.getBoolean(
+            OverlayService.PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT,
+            OverlayService.DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT
+        )
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        if (enabled) {
+            btnToggleAltFastMoveDetect.text = "Alt Detect On"
+            btnToggleAltFastMoveDetect.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            btnToggleAltFastMoveDetect.setTextColor(0xFFFFFFFF.toInt())
+            textAltFastMoveDetectDesc.text = "Default: Enabled (Auto-switches opponent fast move when floating HP bar damage diverges from standard fast move)"
+        } else {
+            btnToggleAltFastMoveDetect.text = "Alt Detect Off"
+            btnToggleAltFastMoveDetect.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+            btnToggleAltFastMoveDetect.setTextColor(theme.primaryTextColor)
+            textAltFastMoveDetectDesc.text = "Active: Disabled (Opponent fast move stays locked to standard/manual selection)"
         }
     }
 
@@ -5425,8 +5643,17 @@ class MainActivity : AppCompatActivity() {
             putExtra(OverlayService.EXTRA_ENABLE_4_CHARGED_MOVES, prefs.getBoolean(PREFS_KEY_ENABLE_4_CHARGED_MOVES, false))
             putExtra(OverlayService.EXTRA_DISABLE_BATTLE_TOASTS, prefs.getBoolean(PREFS_KEY_DISABLE_BATTLE_TOASTS, false))
             putExtra(OverlayService.EXTRA_SHOW_TACTICAL_RECOMMENDATIONS, prefs.getBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, true))
+            putExtra(OverlayService.EXTRA_SHOW_SHIELD_DECISION_OVERLAY, prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true))
             putExtra(OverlayService.EXTRA_ENABLE_HP_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false))
             putExtra(OverlayService.EXTRA_ENABLE_ENERGY_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false))
+            putExtra(
+                OverlayService.EXTRA_CHARGE_CIRCLE_PRIORITY_MODE,
+                prefs.getString(OverlayService.PREFS_KEY_CHARGE_CIRCLE_PRIORITY_MODE, OverlayService.DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE)
+            )
+            putExtra(
+                OverlayService.EXTRA_ENABLE_ALT_FAST_MOVE_DETECT,
+                prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT, OverlayService.DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT)
+            )
             putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2))
             putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt(PREFS_KEY_OVERLAY_SCALE_PCT, DEFAULT_OVERLAY_SCALE_PCT))
             putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, DEFAULT_OVERLAY_TRANSPARENCY_PCT))
@@ -7498,6 +7725,15 @@ class TaskerOverlayActivity : Activity() {
             putExtra(OverlayService.EXTRA_OPP_COUNT_MODE, prefs.getString("opp_count_mode", "my_fasts") ?: "my_fasts")
             putExtra(OverlayService.EXTRA_ENABLE_4_CHARGED_MOVES, prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_4_CHARGED_MOVES, false))
             putExtra(OverlayService.EXTRA_DISABLE_BATTLE_TOASTS, prefs.getBoolean(OverlayService.PREFS_KEY_DISABLE_BATTLE_TOASTS, false))
+            putExtra(OverlayService.EXTRA_SHOW_SHIELD_DECISION_OVERLAY, prefs.getBoolean(OverlayService.PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true))
+            putExtra(
+                OverlayService.EXTRA_CHARGE_CIRCLE_PRIORITY_MODE,
+                prefs.getString(OverlayService.PREFS_KEY_CHARGE_CIRCLE_PRIORITY_MODE, OverlayService.DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE)
+            )
+            putExtra(
+                OverlayService.EXTRA_ENABLE_ALT_FAST_MOVE_DETECT,
+                prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT, OverlayService.DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT)
+            )
             putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, prefs.getInt(OverlayService.PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2))
             putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt("overlay_scale_pct", 78))
             putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(OverlayService.PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 72))
@@ -7601,6 +7837,15 @@ class TaskerBroadcastReceiver : BroadcastReceiver() {
                         putExtra(OverlayService.EXTRA_OPP_COUNT_MODE, prefs.getString("opp_count_mode", "my_fasts") ?: "my_fasts")
                         putExtra(OverlayService.EXTRA_ENABLE_4_CHARGED_MOVES, prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_4_CHARGED_MOVES, false))
                         putExtra(OverlayService.EXTRA_DISABLE_BATTLE_TOASTS, prefs.getBoolean(OverlayService.PREFS_KEY_DISABLE_BATTLE_TOASTS, false))
+                        putExtra(OverlayService.EXTRA_SHOW_SHIELD_DECISION_OVERLAY, prefs.getBoolean(OverlayService.PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true))
+                        putExtra(
+                            OverlayService.EXTRA_CHARGE_CIRCLE_PRIORITY_MODE,
+                            prefs.getString(OverlayService.PREFS_KEY_CHARGE_CIRCLE_PRIORITY_MODE, OverlayService.DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE)
+                        )
+                        putExtra(
+                            OverlayService.EXTRA_ENABLE_ALT_FAST_MOVE_DETECT,
+                            prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT, OverlayService.DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT)
+                        )
                         putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, prefs.getInt(OverlayService.PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2))
                         putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt("overlay_scale_pct", 78))
                         putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(OverlayService.PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 72))

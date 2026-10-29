@@ -60,7 +60,7 @@
                 android:id="@+id/tv_app_main_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Real-Time PvP Floating Overlay • v4.11"
+                android:text="Real-Time PvP Floating Overlay • v4.12"
                 android:textSize="11sp"
                 android:textColor="#94a3b8"
                 android:layout_marginTop="1dp" />
@@ -1332,7 +1332,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="⚡ 3-Ring Energy Meter &amp; Fast-Move Increment Snap (v4.00)"
+                    android:text="⚡ 3-Ring Energy Meter, Proactive Lead &amp; Increment Snap (v4.12)"
                     android:textColor="#38bdf8"
                     android:textSize="12sp"
                     android:textStyle="bold" />
@@ -1342,7 +1342,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="• Active: 2 Matching Samples (Default • Fastest Response, ±2% Fill Tolerance)
-• Snaps pixel fill (0–300% 3-Ring) to nearest Fast-Move step &amp; Post-Throw Discharge Anchor
+• Proactive Fast-Move Energy Lead: 300ms (Default • Applies energy ~300ms early &amp; rolls back if delayed &gt;500ms)
 • Live Energy &amp; Circle % Battle Toasts: Enabled"
                     android:textColor="#94a3b8"
                     android:textSize="10sp"
@@ -1387,6 +1387,83 @@
                         android:layout_weight="1"
                         android:text="4 Samples"
                         android:textSize="10.5sp"
+                        android:textStyle="bold"
+                        android:singleLine="true"
+                        android:backgroundTint="#334155"
+                        android:textColor="#94a3b8" />
+                </LinearLayout>
+
+                <!-- v4.12: Proactive Fast-Move Energy Lead Time Selector (0 / 200 / 300 / 400ms) -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="⏱️ Proactive Fast-Move Energy Lead Time (Player &amp; Opponent)"
+                    android:textColor="#e2e8f0"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/text_proactive_energy_lead_desc"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Default: 300ms — Advances energy ~300ms early for end-of-turn swap/catch/throw decisions; auto-corrects if circle lags &gt;500ms (1 turn)"
+                    android:textColor="#94a3b8"
+                    android:textSize="9.5sp"
+                    android:layout_marginTop="1dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="5dp">
+
+                    <Button
+                        android:id="@+id/btn_proactive_lead_0"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:text="Off (0ms)"
+                        android:textSize="9.5sp"
+                        android:textStyle="bold"
+                        android:singleLine="true"
+                        android:backgroundTint="#334155"
+                        android:textColor="#94a3b8"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_proactive_lead_200"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:text="200ms"
+                        android:textSize="9.5sp"
+                        android:textStyle="bold"
+                        android:singleLine="true"
+                        android:backgroundTint="#334155"
+                        android:textColor="#94a3b8"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_proactive_lead_300"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:text="300ms (Def)"
+                        android:textSize="9.5sp"
+                        android:textStyle="bold"
+                        android:singleLine="true"
+                        android:backgroundTint="#0284c7"
+                        android:textColor="#ffffff"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_proactive_lead_400"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:text="400ms"
+                        android:textSize="9.5sp"
                         android:textStyle="bold"
                         android:singleLine="true"
                         android:backgroundTint="#334155"

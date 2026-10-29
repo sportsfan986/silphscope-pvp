@@ -723,6 +723,22 @@ export default function App() {
     } catch {}
   };
 
+  // v4.12 Settings: Proactive Fast-Move Energy Lead Time (0ms Off, 200ms, 300ms Default, 400ms) with >500ms 1-Turn Lag Rollback
+  const [proactiveEnergyLeadMs, setProactiveEnergyLeadMs] = useState<0 | 200 | 300 | 400>(() => {
+    try {
+      const saved = Number(localStorage.getItem('gbl_proactive_energy_lead_ms'));
+      if (saved === 0 || saved === 200 || saved === 300 || saved === 400) return saved;
+    } catch {}
+    return 300;
+  });
+
+  const updateProactiveEnergyLeadMs = (leadMs: 0 | 200 | 300 | 400) => {
+    setProactiveEnergyLeadMs(leadMs);
+    try {
+      localStorage.setItem('gbl_proactive_energy_lead_ms', String(leadMs));
+    } catch {}
+  };
+
   const [energyUpdateToasts, setEnergyUpdateToasts] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('gbl_energy_update_toasts');
@@ -4068,7 +4084,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v4.11 • Android Native Overlay
+                  v4.12 • Android Native Overlay
                 </span>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
@@ -8856,21 +8872,22 @@ export default function App() {
               </div>
             </div>
 
-            {/* v3.86 Energy Meter Debounce & Slowest Move Snap Card */}
+            {/* v4.12 Energy Meter Debounce, Proactive ~300ms Lead & Slowest Move Snap Card */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <h3 className="text-sm font-bold text-sky-400 flex items-center gap-2">
-                    <span>⚡ Energy Meter Debounce &amp; Slowest Move Snap (v3.87)</span>
+                    <span>⚡ Energy Meter Debounce &amp; Proactive Lead (v4.12)</span>
                   </h3>
                   <p className="text-xs text-slate-400 mt-1">
-                    Replaces the Kalman filter with a low-latency <strong>N-sample circle fill debounce</strong> (<code>±2%</code> tolerance) on your slowest charge move (<code>max(cost1, cost2)</code>), snapping on <code>≥1E</code> differences while allowing turn ticks above the <code>200%</code> circle cap up to <code>100E</code>.
+                    Combines a low-latency <strong>circle fill debounce</strong> (<code>±2%</code> tolerance) on your slowest charge move (<code>max(cost1, cost2)</code>) with <strong>Proactive Fast-Move Energy Lead</strong> (applies Player &amp; Opponent fast-move energy <code>{proactiveEnergyLeadMs}ms</code> early and auto-corrects if the actual debounced circle lags by more than one <code>500ms</code> turn).
                   </p>
                 </div>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300 space-y-1">
                 <div>• <strong className="text-sky-400">Active Debounce</strong> = {energyDebounceSamples} Matching Samples <span className="text-slate-500">(Default: 2 • ±2% Circle Fill Tolerance)</span></div>
+                <div>• <strong className="text-cyan-300">Proactive Energy Lead</strong> = {proactiveEnergyLeadMs === 0 ? 'Off (0ms)' : `${proactiveEnergyLeadMs}ms Early`} <span className="text-slate-500">(Auto-rollback if circle confirmation lags &gt; 1 turn / 500ms)</span></div>
                 <div>• <strong className="text-emerald-300">Dual-Fill Detection</strong> = 0%–100% Base Fill + 100%–200% White Border &amp; Advancing White Meniscus Line</div>
                 <div>• <strong className="text-amber-300">Post-Charge Lock</strong> = Deducts provisional move cost from banked energy, verifies via post-throw circle snap</div>
                 <div>• <strong className="text-violet-300">Live Energy Update Toasts</strong> = {energyUpdateToasts ? 'Enabled (⚡ [Move] ([Cost]E) • Circle [X]% → [Y]E)' : 'Muted'}</div>
@@ -8891,6 +8908,37 @@ export default function App() {
                     {cnt === 2 ? '2 Samples (Default)' : cnt === 3 ? '3 Samples (Balanced)' : '4 Samples (Strict)'}
                   </button>
                 ))}
+              </div>
+
+              {/* v4.12 Proactive Fast-Move Energy Lead Selector */}
+              <div className="space-y-2 pt-2 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-sky-300">
+                    ⚡ Proactive Fast-Move Energy Lead Time (v4.12)
+                  </label>
+                  <span className="text-[10px] font-mono text-sky-400">
+                    {proactiveEnergyLeadMs === 0 ? 'Off (0ms)' : `${proactiveEnergyLeadMs}ms Early • >500ms Lag Rollback`}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Applies Player &amp; Opponent fast-move energy and turn counts early before the 200ms debounce finishes so energy transitions right on the turn boundary for end-of-turn swap/catch/throw decisions. Rolls back automatically if actual circle confirmation lags by more than one 500ms turn.
+                </p>
+                <div className="grid grid-cols-4 gap-2">
+                  {([0, 200, 300, 400] as const).map((leadVal) => (
+                    <button
+                      key={leadVal}
+                      type="button"
+                      onClick={() => updateProactiveEnergyLeadMs(leadVal)}
+                      className={`px-2.5 py-2 rounded-xl text-xs font-bold border transition whitespace-nowrap ${
+                        proactiveEnergyLeadMs === leadVal
+                          ? 'bg-sky-600 border-sky-400 text-white shadow-lg shadow-sky-900/30'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                      }`}
+                    >
+                      {leadVal === 0 ? 'Off (0ms)' : leadVal === 300 ? '300ms (Def)' : `${leadVal}ms`}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-800">
@@ -12832,7 +12880,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v3.63 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, and ML Kit Text Recognition.
+        SilphScope PvP v4.12 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, and ML Kit Text Recognition.
       </footer>
     </div>
   );

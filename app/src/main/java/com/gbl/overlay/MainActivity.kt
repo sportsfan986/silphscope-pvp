@@ -185,6 +185,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnDebounce2Samples: Button
     private lateinit var btnDebounce3Samples: Button
     private lateinit var btnDebounce4Samples: Button
+    private lateinit var btnProactiveLead0: Button
+    private lateinit var btnProactiveLead200: Button
+    private lateinit var btnProactiveLead300: Button
+    private lateinit var btnProactiveLead400: Button
+    private lateinit var textProactiveEnergyLeadDesc: TextView
     private lateinit var btnToggleEnergyUpdateToasts: Button
     private lateinit var textEnergyUpdateToastsDesc: TextView
     private lateinit var btnCycleChargeCirclePriority: Button
@@ -1226,6 +1231,11 @@ class MainActivity : AppCompatActivity() {
         btnDebounce2Samples = findViewById(R.id.btn_debounce_2_samples)
         btnDebounce3Samples = findViewById(R.id.btn_debounce_3_samples)
         btnDebounce4Samples = findViewById(R.id.btn_debounce_4_samples)
+        btnProactiveLead0 = findViewById(R.id.btn_proactive_lead_0)
+        btnProactiveLead200 = findViewById(R.id.btn_proactive_lead_200)
+        btnProactiveLead300 = findViewById(R.id.btn_proactive_lead_300)
+        btnProactiveLead400 = findViewById(R.id.btn_proactive_lead_400)
+        textProactiveEnergyLeadDesc = findViewById(R.id.text_proactive_energy_lead_desc)
         btnToggleEnergyUpdateToasts = findViewById(R.id.btn_toggle_energy_update_toasts)
         textEnergyUpdateToastsDesc = findViewById(R.id.text_energy_update_toasts_desc)
         btnCycleChargeCirclePriority = findViewById(R.id.btn_cycle_charge_circle_priority)
@@ -1417,6 +1427,18 @@ class MainActivity : AppCompatActivity() {
         }
         btnDebounce4Samples.setOnClickListener {
             saveEnergyDebounceSamples(4, showToast = true)
+        }
+        btnProactiveLead0.setOnClickListener {
+            saveProactiveEnergyLeadMs(0, showToast = true)
+        }
+        btnProactiveLead200.setOnClickListener {
+            saveProactiveEnergyLeadMs(200, showToast = true)
+        }
+        btnProactiveLead300.setOnClickListener {
+            saveProactiveEnergyLeadMs(300, showToast = true)
+        }
+        btnProactiveLead400.setOnClickListener {
+            saveProactiveEnergyLeadMs(400, showToast = true)
         }
         btnToggleEnergyUpdateToasts.setOnClickListener {
             val currentEnabled = prefs.getBoolean(OverlayService.PREFS_KEY_ENERGY_UPDATE_TOASTS, OverlayService.DEFAULT_ENERGY_UPDATE_TOASTS)
@@ -3643,6 +3665,7 @@ class MainActivity : AppCompatActivity() {
         if (!::btnDebounce2Samples.isInitialized) return
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         val samples = OverlayService.activeEnergyDebounceSamples.coerceIn(2, 4)
+        val leadMs = OverlayService.activeProactiveEnergyLeadMs
         val toastsOn = OverlayService.activeEnergyUpdateToasts
         val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
         val activeTint = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
@@ -3657,6 +3680,33 @@ class MainActivity : AppCompatActivity() {
             val isSelected = (samples == count)
             btn.backgroundTintList = if (isSelected) activeTint else inactiveTint
             btn.setTextColor(if (isSelected) 0xFFFFFFFF.toInt() else theme.secondaryTextColor)
+        }
+
+        if (::btnProactiveLead0.isInitialized &&
+            ::btnProactiveLead200.isInitialized &&
+            ::btnProactiveLead300.isInitialized &&
+            ::btnProactiveLead400.isInitialized
+        ) {
+            val leadPairs = listOf(
+                0 to btnProactiveLead0,
+                200 to btnProactiveLead200,
+                300 to btnProactiveLead300,
+                400 to btnProactiveLead400
+            )
+            for ((ms, btn) in leadPairs) {
+                val isSelected = (leadMs == ms)
+                btn.backgroundTintList = if (isSelected) activeTint else inactiveTint
+                btn.setTextColor(if (isSelected) 0xFFFFFFFF.toInt() else theme.secondaryTextColor)
+            }
+        }
+
+        if (::textProactiveEnergyLeadDesc.isInitialized) {
+            textProactiveEnergyLeadDesc.text = when (leadMs) {
+                0 -> "Off (0ms) — Waits strictly for debounced Charge Move Circle confirmation before updating energy"
+                200 -> "Active: 200ms — Advances energy 200ms early; auto-rolls back if circle lags >500ms (1 turn)"
+                400 -> "Active: 400ms — Advances energy 400ms early for maximum decision time; auto-rolls back if circle lags >500ms"
+                else -> "Default: 300ms — Advances energy ~300ms early for end-of-turn swap/catch/throw decisions; auto-corrects if circle lags >500ms (1 turn)"
+            }
         }
 
         if (::btnToggleEnergyUpdateToasts.isInitialized && ::textEnergyUpdateToastsDesc.isInitialized) {
@@ -3679,11 +3729,37 @@ class MainActivity : AppCompatActivity() {
                 3 -> "3 Matching Samples (Balanced Noise Rejection, ±2% Fill Tolerance)"
                 else -> "4 Matching Samples (Strict Filtering, ±2% Fill Tolerance)"
             }
+            val leadSummary = when (leadMs) {
+                0 -> "Off (0ms — Waits for debounced circle)"
+                300 -> "300ms (Default • Applies energy ~300ms early & rolls back if delayed >500ms)"
+                else -> "${leadMs}ms (Applies energy ~${leadMs}ms early & rolls back if delayed >500ms)"
+            }
             val toastStatus = if (toastsOn) "Enabled" else "Muted"
             tvEnergyDebounceSummary.text =
                 "• Active: $modeDesc\n" +
-                "• Snaps on ≥1E diff to slowest Charge Move (100%–200% White Border + Meniscus)\n" +
+                "• Proactive Fast-Move Energy Lead: $leadSummary\n" +
                 "• Live Energy & Circle % Battle Toasts: $toastStatus"
+        }
+    }
+
+    private fun saveProactiveEnergyLeadMs(leadMs: Int, showToast: Boolean) {
+        val valid = if (leadMs in listOf(0, 200, 300, 400)) leadMs else OverlayService.DEFAULT_PROACTIVE_ENERGY_LEAD_MS
+        prefs.edit().putInt(OverlayService.PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS, valid).apply()
+        OverlayService.syncTierThresholdsFromPrefs(prefs)
+        loadAndRenderEnergyDebounceUi()
+        if (isOverlayRunning) {
+            val updateIntent = Intent(this, OverlayService::class.java).apply {
+                action = OverlayService.ACTION_UPDATE_SETTINGS
+            }
+            startService(updateIntent)
+        }
+        if (showToast) {
+            val label = if (valid == 0) "Off (0ms)" else "${valid}ms early (with >500ms 1-turn rollback)"
+            Toast.makeText(
+                this,
+                "Saved Proactive Fast-Move Energy Lead Time: $label",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
