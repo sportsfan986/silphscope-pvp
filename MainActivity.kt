@@ -6668,13 +6668,13 @@ class MainActivity : AppCompatActivity() {
 
         val slotViews = ArrayList<SlotEditorViews>(6)
 
-        fun buildCurrentTeamMembers(): List<OverlayService.Companion.TeamMember> {
+        fun buildCurrentTeamMembers(): List<OverlayService.TeamMember> {
             val lg = currentLeagueProvider()
             return slotViews.mapIndexed { idx, sv ->
                 val rawName = sv.nameEdit.text?.toString()?.trim().orEmpty().ifEmpty { existingRoster.pokemon.getOrElse(idx) { "Azumarill" } }
                 val resolved = OverlayService.resolveRecommendedMovesForSpecies(rawName, lg)
                 val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, lg) else null
-                OverlayService.Companion.TeamMember(
+                OverlayService.TeamMember(
                     name = rawName,
                     cp = scaled?.defaultCp ?: 1500,
                     fastMove = sv.fastEdit.text?.toString()?.trim().orEmpty().ifEmpty { scaled?.defaultFastMove ?: "Bubble" },

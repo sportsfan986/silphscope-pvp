@@ -21047,9 +21047,9 @@ class OverlayService : LifecycleService() {
             val wUsage = activeShow6UsageWeightPct.coerceIn(0, 100) / 100.0
             knownShow6UnrevealedPool.associateWith { uOpp ->
                 val coreSum = revealedOppAll.sumOf { rev ->
-                    findShow6CommonCoreEntryStatic(activeLeagueName, rev, uOpp)?.usagePct ?: 0.0
+                    findShow6CommonCoreEntryStatic(activeLeague, rev, uOpp)?.usagePct ?: 0.0
                 }
-                val indivUsage = getShow6UsagePctStatic(activeLeagueName, uOpp)
+                val indivUsage = getShow6UsagePctStatic(activeLeague, uOpp)
                 1.0 + wUsage * (coreSum * 0.055 + indivUsage * 0.015)
             }
         } else {
@@ -21061,7 +21061,7 @@ class OverlayService : LifecycleService() {
             var bestPct = 0.0
             for (uOpp in knownShow6UnrevealedPool) {
                 for (rev in revealedOppAll) {
-                    val c = findShow6CommonCoreEntryStatic(activeLeagueName, rev, uOpp)
+                    val c = findShow6CommonCoreEntryStatic(activeLeague, rev, uOpp)
                     if (c != null && c.usagePct > bestPct) {
                         bestPct = c.usagePct
                         bestPartner = uOpp
