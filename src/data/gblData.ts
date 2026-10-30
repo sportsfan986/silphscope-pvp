@@ -6924,8 +6924,8 @@ export const DEFAULT_BF_CORES_SHEET_URL =
 
 export const BF_USAGE_URL_STORAGE_KEY = "silphscope_bf_usage_sheet_url_v1";
 export const BF_CORES_URL_STORAGE_KEY = "silphscope_bf_cores_sheet_url_v1";
-export const BF_USAGE_DATA_STORAGE_KEY = "silphscope_bf_usage_data_v1";
-export const BF_CORES_DATA_STORAGE_KEY = "silphscope_bf_cores_data_v1";
+export const BF_USAGE_DATA_STORAGE_KEY = "silphscope_bf_usage_data_v2";
+export const BF_CORES_DATA_STORAGE_KEY = "silphscope_bf_cores_data_v2";
 export const SHOW6_USAGE_WEIGHT_STORAGE_KEY = "silphscope_show6_usage_weight_pct_v1";
 
 export function getSavedBfUsageSheetUrl(): string {
@@ -7019,139 +7019,367 @@ export function toGoogleSheetCsvUrl(rawUrl: string, fallbackGid: string = "0"): 
 
 const DEFAULT_BATTLE_FRONTIER_USAGE: Record<string, BattleFrontierUsageEntry[]> = {
   "GREAT LEAGUE": [
-    { rank: 1, name: "Florges", baseName: "Florges", usagePct: 47.43, shadowSharePct: 0.0 },
-    { rank: 2, name: "Shadow Sableye", baseName: "Sableye", usagePct: 37.30, shadowSharePct: 96.12 },
-    { rank: 3, name: "Melmetal", baseName: "Melmetal", usagePct: 37.14, shadowSharePct: 0.0 },
-    { rank: 4, name: "Shadow Quagsire", baseName: "Quagsire", usagePct: 36.50, shadowSharePct: 73.13 },
-    { rank: 5, name: "Corsola (Galarian)", baseName: "Corsola (Galarian)", usagePct: 31.51, shadowSharePct: 0.0 },
-    { rank: 6, name: "Corviknight", baseName: "Corviknight", usagePct: 30.55, shadowSharePct: 0.0 },
-    { rank: 7, name: "Clodsire", baseName: "Clodsire", usagePct: 29.58, shadowSharePct: 0.0 },
-    { rank: 8, name: "Dunsparce", baseName: "Dunsparce", usagePct: 28.46, shadowSharePct: 0.0 },
-    { rank: 9, name: "Altaria", baseName: "Altaria", usagePct: 27.01, shadowSharePct: 0.0 },
-    { rank: 10, name: "Stunfisk", baseName: "Stunfisk", usagePct: 25.08, shadowSharePct: 0.0 },
-    { rank: 11, name: "Shadow Ninetales", baseName: "Ninetales", usagePct: 23.95, shadowSharePct: 68.46 },
-    { rank: 12, name: "Cramorant", baseName: "Cramorant", usagePct: 22.67, shadowSharePct: 0.0 },
-    { rank: 13, name: "Charjabug", baseName: "Charjabug", usagePct: 18.81, shadowSharePct: 33.33 },
-    { rank: 14, name: "Araquanid", baseName: "Araquanid", usagePct: 17.36, shadowSharePct: 0.0 },
-    { rank: 15, name: "Vigoroth", baseName: "Vigoroth", usagePct: 15.59, shadowSharePct: 0.0 },
-    { rank: 16, name: "Tinkaton", baseName: "Tinkaton", usagePct: 14.31, shadowSharePct: 0.0 },
-    { rank: 17, name: "Electrode (Hisuian)", baseName: "Electrode (Hisuian)", usagePct: 11.90, shadowSharePct: 0.0 },
-    { rank: 18, name: "Thievul", baseName: "Thievul", usagePct: 11.74, shadowSharePct: 0.0 },
-    { rank: 19, name: "Shadow Ninetales (Alolan)", baseName: "Ninetales (Alolan)", usagePct: 11.25, shadowSharePct: 50.0 },
-    { rank: 20, name: "Shadow Hydreigon", baseName: "Hydreigon", usagePct: 9.65, shadowSharePct: 56.67 },
-    { rank: 21, name: "Empoleon", baseName: "Empoleon", usagePct: 8.84, shadowSharePct: 47.27 },
-    { rank: 22, name: "Jumpluff", baseName: "Jumpluff", usagePct: 8.68, shadowSharePct: 38.89 },
-    { rank: 23, name: "Shadow Ursaluna", baseName: "Ursaluna", usagePct: 5.47, shadowSharePct: 50.0 },
-    { rank: 24, name: "Fearow", baseName: "Fearow", usagePct: 5.31, shadowSharePct: 0.0 },
-    { rank: 25, name: "Jellicent", baseName: "Jellicent", usagePct: 5.14, shadowSharePct: 0.0 }
+    { rank: 1, name: "Florges", baseName: "Florges", usagePct: 47.43, shadowSharePct: 0 },
+    { rank: 2, name: "Shadow Sableye", baseName: "Sableye", usagePct: 37.3, shadowSharePct: 96.12 },
+    { rank: 3, name: "Melmetal", baseName: "Melmetal", usagePct: 37.14, shadowSharePct: 0 },
+    { rank: 4, name: "Shadow Quagsire", baseName: "Quagsire", usagePct: 36.5, shadowSharePct: 73.13 },
+    { rank: 5, name: "Corsola (Galarian)", baseName: "Corsola (Galarian)", usagePct: 31.51, shadowSharePct: 0 },
+    { rank: 6, name: "Corviknight", baseName: "Corviknight", usagePct: 30.55, shadowSharePct: 0 },
+    { rank: 7, name: "Clodsire", baseName: "Clodsire", usagePct: 29.58, shadowSharePct: 0 },
+    { rank: 8, name: "Dunsparce", baseName: "Dunsparce", usagePct: 28.46, shadowSharePct: 0 },
+    { rank: 9, name: "Altaria", baseName: "Altaria", usagePct: 27.01, shadowSharePct: 1.19 },
+    { rank: 10, name: "Stunfisk", baseName: "Stunfisk", usagePct: 25.08, shadowSharePct: 0 },
+    { rank: 11, name: "Shadow Ninetales", baseName: "Ninetales", usagePct: 23.95, shadowSharePct: 84.56 },
+    { rank: 12, name: "Cramorant", baseName: "Cramorant", usagePct: 22.67, shadowSharePct: 0 },
+    { rank: 13, name: "Charjabug", baseName: "Charjabug", usagePct: 18.81, shadowSharePct: 0.85 },
+    { rank: 14, name: "Araquanid", baseName: "Araquanid", usagePct: 17.36, shadowSharePct: 0.93 },
+    { rank: 15, name: "Vigoroth", baseName: "Vigoroth", usagePct: 15.59, shadowSharePct: 4.12 },
+    { rank: 16, name: "Tinkaton", baseName: "Tinkaton", usagePct: 14.31, shadowSharePct: 0 },
+    { rank: 17, name: "Electrode (Hisuian)", baseName: "Electrode (Hisuian)", usagePct: 11.9, shadowSharePct: 0 },
+    { rank: 18, name: "Thievul", baseName: "Thievul", usagePct: 11.74, shadowSharePct: 0 },
+    { rank: 19, name: "Shadow Ninetales (Alolan)", baseName: "Ninetales (Alolan)", usagePct: 11.25, shadowSharePct: 88.57 },
+    { rank: 20, name: "Shadow Hydreigon", baseName: "Hydreigon", usagePct: 9.65, shadowSharePct: 100 },
+    { rank: 21, name: "Empoleon", baseName: "Empoleon", usagePct: 8.84, shadowSharePct: 10.91 },
+    { rank: 22, name: "Jumpluff", baseName: "Jumpluff", usagePct: 8.68, shadowSharePct: 12.96 },
+    { rank: 23, name: "Shadow Ursaluna", baseName: "Ursaluna", usagePct: 5.47, shadowSharePct: 94.12 },
+    { rank: 24, name: "Fearow", baseName: "Fearow", usagePct: 5.31, shadowSharePct: 0 },
+    { rank: 25, name: "Jellicent", baseName: "Jellicent", usagePct: 5.14, shadowSharePct: 0 },
+    { rank: 26, name: "Shadow Forretress", baseName: "Forretress", usagePct: 3.86, shadowSharePct: 66.67 },
+    { rank: 27, name: "Azumarill", baseName: "Azumarill", usagePct: 3.7, shadowSharePct: 0 },
+    { rank: 28, name: "Shadow Kingdra", baseName: "Kingdra", usagePct: 3.7, shadowSharePct: 82.61 },
+    { rank: 29, name: "Lanturn", baseName: "Lanturn", usagePct: 3.7, shadowSharePct: 0 },
+    { rank: 30, name: "Cradily", baseName: "Cradily", usagePct: 3.54, shadowSharePct: 0 },
+    { rank: 31, name: "Rillaboom", baseName: "Rillaboom", usagePct: 3.05, shadowSharePct: 0 },
+    { rank: 32, name: "Shadow Annihilape", baseName: "Annihilape", usagePct: 2.73, shadowSharePct: 58.82 },
+    { rank: 33, name: "Feraligatr", baseName: "Feraligatr", usagePct: 2.73, shadowSharePct: 35.29 },
+    { rank: 34, name: "Marowak", baseName: "Marowak", usagePct: 2.73, shadowSharePct: 47.06 },
+    { rank: 35, name: "Shadow Hippowdon", baseName: "Hippowdon", usagePct: 2.41, shadowSharePct: 80 },
+    { rank: 36, name: "Politoed", baseName: "Politoed", usagePct: 2.09, shadowSharePct: 7.69 },
+    { rank: 37, name: "Guzzlord", baseName: "Guzzlord", usagePct: 1.77, shadowSharePct: 0 },
+    { rank: 38, name: "Morpeko", baseName: "Morpeko", usagePct: 1.61, shadowSharePct: 0 },
+    { rank: 39, name: "Shadow Pangoro", baseName: "Pangoro", usagePct: 1.61, shadowSharePct: 50 },
+    { rank: 40, name: "Shadow Greninja", baseName: "Greninja", usagePct: 1.45, shadowSharePct: 100 },
+    { rank: 41, name: "Medicham", baseName: "Medicham", usagePct: 1.45, shadowSharePct: 0 },
+    { rank: 42, name: "Diggersby", baseName: "Diggersby", usagePct: 1.29, shadowSharePct: 0 },
+    { rank: 43, name: "Dondozo", baseName: "Dondozo", usagePct: 1.29, shadowSharePct: 0 },
+    { rank: 44, name: "Furret", baseName: "Furret", usagePct: 1.29, shadowSharePct: 0 },
+    { rank: 45, name: "Shadow Houndoom", baseName: "Houndoom", usagePct: 1.29, shadowSharePct: 100 },
+    { rank: 46, name: "Malamar", baseName: "Malamar", usagePct: 1.29, shadowSharePct: 0 },
+    { rank: 47, name: "Talonflame", baseName: "Talonflame", usagePct: 1.29, shadowSharePct: 25 },
+    { rank: 48, name: "Dusclops", baseName: "Dusclops", usagePct: 1.13, shadowSharePct: 14.29 },
+    { rank: 49, name: "Togetic", baseName: "Togetic", usagePct: 1.13, shadowSharePct: 0 },
+    { rank: 50, name: "Shadow Drapion", baseName: "Drapion", usagePct: 0.96, shadowSharePct: 100 },
+    { rank: 51, name: "Shadow Snorlax", baseName: "Snorlax", usagePct: 0.96, shadowSharePct: 66.67 },
+    { rank: 52, name: "Umbreon", baseName: "Umbreon", usagePct: 0.96, shadowSharePct: 0 },
+    { rank: 53, name: "Deoxys (Defense)", baseName: "Deoxys (Defense)", usagePct: 0.8, shadowSharePct: 0 },
+    { rank: 54, name: "Sandslash (Alolan)", baseName: "Sandslash (Alolan)", usagePct: 0.8, shadowSharePct: 40 },
+    { rank: 55, name: "Toxapex", baseName: "Toxapex", usagePct: 0.8, shadowSharePct: 0 },
+    { rank: 56, name: "Blastoise", baseName: "Blastoise", usagePct: 0.64, shadowSharePct: 0 },
+    { rank: 57, name: "Shadow Dusknoir", baseName: "Dusknoir", usagePct: 0.64, shadowSharePct: 75 },
+    { rank: 58, name: "Shadow Golisopod", baseName: "Golisopod", usagePct: 0.64, shadowSharePct: 75 },
+    { rank: 59, name: "Mantine", baseName: "Mantine", usagePct: 0.64, shadowSharePct: 0 },
+    { rank: 60, name: "Shadow Marowak (Alolan)", baseName: "Marowak (Alolan)", usagePct: 0.64, shadowSharePct: 75 },
+    { rank: 61, name: "Shadow Persian", baseName: "Persian", usagePct: 0.64, shadowSharePct: 75 },
+    { rank: 62, name: "Piloswine", baseName: "Piloswine", usagePct: 0.64, shadowSharePct: 0 },
+    { rank: 63, name: "Shadow Sealeo", baseName: "Sealeo", usagePct: 0.64, shadowSharePct: 50 },
+    { rank: 64, name: "Shadow Blaziken", baseName: "Blaziken", usagePct: 0.48, shadowSharePct: 100 },
+    { rank: 65, name: "Clefable", baseName: "Clefable", usagePct: 0.48, shadowSharePct: 0 },
+    { rank: 66, name: "Shadow Dragonite", baseName: "Dragonite", usagePct: 0.48, shadowSharePct: 66.67 },
+    { rank: 67, name: "Gastrodon", baseName: "Gastrodon", usagePct: 0.48, shadowSharePct: 0 },
+    { rank: 68, name: "Goodra", baseName: "Goodra", usagePct: 0.48, shadowSharePct: 0 },
+    { rank: 69, name: "Gourgeist", baseName: "Gourgeist", usagePct: 0.48, shadowSharePct: 0 },
+    { rank: 70, name: "Lickilicky", baseName: "Lickilicky", usagePct: 0.48, shadowSharePct: 0 },
+    { rank: 71, name: "Lickitung", baseName: "Lickitung", usagePct: 0.48, shadowSharePct: 0 },
+    { rank: 72, name: "Spidops", baseName: "Spidops", usagePct: 0.48, shadowSharePct: 0 },
+    { rank: 73, name: "Swampert", baseName: "Swampert", usagePct: 0.48, shadowSharePct: 33.33 },
+    { rank: 74, name: "Shadow Teddiursa", baseName: "Teddiursa", usagePct: 0.48, shadowSharePct: 100 },
+    { rank: 75, name: "Shadow Weezing (Galarian)", baseName: "Weezing (Galarian)", usagePct: 0.48, shadowSharePct: 100 },
+    { rank: 76, name: "Zweilous", baseName: "Zweilous", usagePct: 0.48, shadowSharePct: 33.33 },
+    { rank: 77, name: "Aegislash (Shield)", baseName: "Aegislash (Shield)", usagePct: 0.32, shadowSharePct: 0 },
+    { rank: 78, name: "Carbink", baseName: "Carbink", usagePct: 0.32, shadowSharePct: 0 },
+    { rank: 79, name: "Dewgong", baseName: "Dewgong", usagePct: 0.32, shadowSharePct: 0 },
+    { rank: 80, name: "Froslass", baseName: "Froslass", usagePct: 0.32, shadowSharePct: 0 },
+    { rank: 81, name: "Shadow Golurk", baseName: "Golurk", usagePct: 0.32, shadowSharePct: 100 },
+    { rank: 82, name: "Regidrago", baseName: "Regidrago", usagePct: 0.32, shadowSharePct: 0 },
+    { rank: 83, name: "Shadow Samurott", baseName: "Samurott", usagePct: 0.32, shadowSharePct: 100 },
+    { rank: 84, name: "Seaking", baseName: "Seaking", usagePct: 0.32, shadowSharePct: 0 },
+    { rank: 85, name: "Stunfisk (Galarian)", baseName: "Stunfisk (Galarian)", usagePct: 0.32, shadowSharePct: 0 },
+    { rank: 86, name: "Tentacruel", baseName: "Tentacruel", usagePct: 0.32, shadowSharePct: 0 },
+    { rank: 87, name: "Toedscruel", baseName: "Toedscruel", usagePct: 0.32, shadowSharePct: 0 },
+    { rank: 88, name: "Shadow Toucannon", baseName: "Toucannon", usagePct: 0.32, shadowSharePct: 100 },
+    { rank: 89, name: "Turtonator", baseName: "Turtonator", usagePct: 0.32, shadowSharePct: 0 },
+    { rank: 90, name: "Shadow Victreebel", baseName: "Victreebel", usagePct: 0.32, shadowSharePct: 100 },
+    { rank: 91, name: "Articuno", baseName: "Articuno", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 92, name: "Articuno (Galarian)", baseName: "Articuno (Galarian)", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 93, name: "Bastiodon", baseName: "Bastiodon", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 94, name: "Bulbasaur", baseName: "Bulbasaur", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 95, name: "Shadow Camerupt", baseName: "Camerupt", usagePct: 0.16, shadowSharePct: 100 },
+    { rank: 96, name: "Cetitan", baseName: "Cetitan", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 97, name: "Charmander", baseName: "Charmander", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 98, name: "Chesnaught", baseName: "Chesnaught", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 99, name: "Cresselia", baseName: "Cresselia", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 100, name: "Dragonair", baseName: "Dragonair", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 101, name: "Shadow Drilbur", baseName: "Drilbur", usagePct: 0.16, shadowSharePct: 100 },
+    { rank: 102, name: "Farfetch'd (Galarian)", baseName: "Farfetch'd (Galarian)", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 103, name: "Hakamo-o", baseName: "Hakamo-o", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 104, name: "Shadow Hariyama", baseName: "Hariyama", usagePct: 0.16, shadowSharePct: 100 },
+    { rank: 105, name: "Kommo-o", baseName: "Kommo-o", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 106, name: "Lapras", baseName: "Lapras", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 107, name: "Lopunny", baseName: "Lopunny", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 108, name: "Mandibuzz", baseName: "Mandibuzz", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 109, name: "Shadow Mightyena", baseName: "Mightyena", usagePct: 0.16, shadowSharePct: 100 },
+    { rank: 110, name: "Oinkologne (Female)", baseName: "Oinkologne (Female)", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 111, name: "Oranguru", baseName: "Oranguru", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 112, name: "Pachirisu", baseName: "Pachirisu", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 113, name: "Primarina", baseName: "Primarina", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 114, name: "Primeape", baseName: "Primeape", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 115, name: "Seismitoad", baseName: "Seismitoad", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 116, name: "Shadow Shelgon", baseName: "Shelgon", usagePct: 0.16, shadowSharePct: 100 },
+    { rank: 117, name: "Swalot", baseName: "Swalot", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 118, name: "Throh", baseName: "Throh", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 119, name: "Togekiss", baseName: "Togekiss", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 120, name: "Torkoal", baseName: "Torkoal", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 121, name: "Shadow Typhlosion", baseName: "Typhlosion", usagePct: 0.16, shadowSharePct: 100 },
+    { rank: 122, name: "Voltorb (Hisuian)", baseName: "Voltorb (Hisuian)", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 123, name: "Shadow Walrein", baseName: "Walrein", usagePct: 0.16, shadowSharePct: 100 },
+    { rank: 124, name: "Wigglytuff", baseName: "Wigglytuff", usagePct: 0.16, shadowSharePct: 0 }
   ],
   "Battle Frontier (Cauldron)": [
-    { rank: 1, name: "Greedent", baseName: "Greedent", usagePct: 52.58, shadowSharePct: 0.0 },
-    { rank: 2, name: "Muk (Alolan)", baseName: "Muk (Alolan)", usagePct: 52.26, shadowSharePct: 26.23 },
-    { rank: 3, name: "Ursaluna", baseName: "Ursaluna", usagePct: 50.32, shadowSharePct: 48.08 },
-    { rank: 4, name: "Weezing (Galarian)", baseName: "Weezing (Galarian)", usagePct: 45.00, shadowSharePct: 37.63 },
-    { rank: 5, name: "Jellicent", baseName: "Jellicent", usagePct: 40.32, shadowSharePct: 0.0 },
-    { rank: 6, name: "Talonflame", baseName: "Talonflame", usagePct: 34.52, shadowSharePct: 0.0 },
-    { rank: 7, name: "Clefable", baseName: "Clefable", usagePct: 31.77, shadowSharePct: 0.0 },
-    { rank: 8, name: "Greninja", baseName: "Greninja", usagePct: 31.77, shadowSharePct: 0.0 },
-    { rank: 9, name: "Giratina (Altered)", baseName: "Giratina (Altered)", usagePct: 24.52, shadowSharePct: 19.74 },
-    { rank: 10, name: "Moltres (Galarian)", baseName: "Moltres (Galarian)", usagePct: 21.29, shadowSharePct: 0.0 },
-    { rank: 11, name: "Samurott", baseName: "Samurott", usagePct: 21.29, shadowSharePct: 0.0 },
-    { rank: 12, name: "Seaking", baseName: "Seaking", usagePct: 20.32, shadowSharePct: 0.0 },
-    { rank: 13, name: "Shadow Drapion", baseName: "Drapion", usagePct: 19.19, shadowSharePct: 91.6 },
-    { rank: 14, name: "Crobat", baseName: "Crobat", usagePct: 18.06, shadowSharePct: 45.54 },
-    { rank: 15, name: "Dragalge", baseName: "Dragalge", usagePct: 17.74, shadowSharePct: 0.0 },
-    { rank: 16, name: "Shadow Dusknoir", baseName: "Dusknoir", usagePct: 12.74, shadowSharePct: 93.67 },
-    { rank: 17, name: "Togekiss", baseName: "Togekiss", usagePct: 9.68, shadowSharePct: 0.0 },
-    { rank: 18, name: "Florges", baseName: "Florges", usagePct: 7.26, shadowSharePct: 0.0 },
-    { rank: 19, name: "Rapidash", baseName: "Rapidash", usagePct: 6.94, shadowSharePct: 0.0 },
-    { rank: 20, name: "Shadow Scizor", baseName: "Scizor", usagePct: 5.81, shadowSharePct: 86.11 },
-    { rank: 21, name: "Aromatisse", baseName: "Aromatisse", usagePct: 5.00, shadowSharePct: 0.0 },
-    { rank: 22, name: "Doublade", baseName: "Doublade", usagePct: 5.00, shadowSharePct: 0.0 },
-    { rank: 23, name: "Genesect", baseName: "Genesect", usagePct: 5.00, shadowSharePct: 0.0 },
-    { rank: 24, name: "Shadow Nidoking", baseName: "Nidoking", usagePct: 4.68, shadowSharePct: 93.1 },
-    { rank: 25, name: "Audino (Mega)", baseName: "Audino (Mega)", usagePct: 4.52, shadowSharePct: 0.0 },
-    { rank: 26, name: "Malamar (Mega)", baseName: "Malamar (Mega)", usagePct: 3.71, shadowSharePct: 0.0 }
+    { rank: 1, name: "Greedent", baseName: "Greedent", usagePct: 52.58, shadowSharePct: 0 },
+    { rank: 2, name: "Muk (Alolan)", baseName: "Muk (Alolan)", usagePct: 52.26, shadowSharePct: 34.26 },
+    { rank: 3, name: "Ursaluna", baseName: "Ursaluna", usagePct: 50.32, shadowSharePct: 34.29 },
+    { rank: 4, name: "Weezing (Galarian)", baseName: "Weezing (Galarian)", usagePct: 45, shadowSharePct: 10.75 },
+    { rank: 5, name: "Jellicent", baseName: "Jellicent", usagePct: 40.32, shadowSharePct: 0 },
+    { rank: 6, name: "Talonflame", baseName: "Talonflame", usagePct: 34.52, shadowSharePct: 0.47 },
+    { rank: 7, name: "Clefable", baseName: "Clefable", usagePct: 31.77, shadowSharePct: 0 },
+    { rank: 8, name: "Greninja", baseName: "Greninja", usagePct: 31.77, shadowSharePct: 12.69 },
+    { rank: 9, name: "Giratina (Altered)", baseName: "Giratina (Altered)", usagePct: 24.52, shadowSharePct: 5.92 },
+    { rank: 10, name: "Moltres (Galarian)", baseName: "Moltres (Galarian)", usagePct: 21.29, shadowSharePct: 0 },
+    { rank: 11, name: "Samurott", baseName: "Samurott", usagePct: 21.29, shadowSharePct: 25.76 },
+    { rank: 12, name: "Seaking", baseName: "Seaking", usagePct: 20.32, shadowSharePct: 0 },
+    { rank: 13, name: "Shadow Drapion", baseName: "Drapion", usagePct: 19.19, shadowSharePct: 84.03 },
+    { rank: 14, name: "Crobat", baseName: "Crobat", usagePct: 18.06, shadowSharePct: 49.11 },
+    { rank: 15, name: "Dragalge", baseName: "Dragalge", usagePct: 17.74, shadowSharePct: 0 },
+    { rank: 16, name: "Shadow Dusknoir", baseName: "Dusknoir", usagePct: 12.74, shadowSharePct: 87.34 },
+    { rank: 17, name: "Togekiss", baseName: "Togekiss", usagePct: 9.68, shadowSharePct: 0 },
+    { rank: 18, name: "Florges", baseName: "Florges", usagePct: 7.26, shadowSharePct: 0 },
+    { rank: 19, name: "Rapidash", baseName: "Rapidash", usagePct: 6.94, shadowSharePct: 6.98 },
+    { rank: 20, name: "Shadow Scizor", baseName: "Scizor", usagePct: 5.81, shadowSharePct: 97.22 },
+    { rank: 21, name: "Aromatisse", baseName: "Aromatisse", usagePct: 5, shadowSharePct: 0 },
+    { rank: 22, name: "Doublade", baseName: "Doublade", usagePct: 5, shadowSharePct: 0 },
+    { rank: 23, name: "Genesect", baseName: "Genesect", usagePct: 5, shadowSharePct: 0 },
+    { rank: 24, name: "Shadow Nidoking", baseName: "Nidoking", usagePct: 4.68, shadowSharePct: 72.41 },
+    { rank: 25, name: "Audino (Mega)", baseName: "Audino (Mega)", usagePct: 4.52, shadowSharePct: 0 },
+    { rank: 26, name: "Primarina", baseName: "Primarina", usagePct: 4.19, shadowSharePct: 0 },
+    { rank: 27, name: "Sandslash", baseName: "Sandslash", usagePct: 4.19, shadowSharePct: 7.69 },
+    { rank: 28, name: "Golisopod", baseName: "Golisopod", usagePct: 4.03, shadowSharePct: 4 },
+    { rank: 29, name: "Ninetales", baseName: "Ninetales", usagePct: 4.03, shadowSharePct: 40 },
+    { rank: 30, name: "Malamar (Mega)", baseName: "Malamar (Mega)", usagePct: 3.71, shadowSharePct: 0 },
+    { rank: 31, name: "Shadow Ninetales (Alolan)", baseName: "Ninetales (Alolan)", usagePct: 2.9, shadowSharePct: 61.11 },
+    { rank: 32, name: "Turtonator", baseName: "Turtonator", usagePct: 2.58, shadowSharePct: 0 },
+    { rank: 33, name: "Clodsire", baseName: "Clodsire", usagePct: 2.26, shadowSharePct: 0 },
+    { rank: 34, name: "Overqwil", baseName: "Overqwil", usagePct: 2.1, shadowSharePct: 0 },
+    { rank: 35, name: "Malamar", baseName: "Malamar", usagePct: 1.94, shadowSharePct: 33.33 },
+    { rank: 36, name: "Runerigus", baseName: "Runerigus", usagePct: 1.94, shadowSharePct: 0 },
+    { rank: 37, name: "Galvantula", baseName: "Galvantula", usagePct: 1.77, shadowSharePct: 18.18 },
+    { rank: 38, name: "Pangoro", baseName: "Pangoro", usagePct: 1.77, shadowSharePct: 27.27 },
+    { rank: 39, name: "Annihilape", baseName: "Annihilape", usagePct: 1.45, shadowSharePct: 33.33 },
+    { rank: 40, name: "Tapu Fini", baseName: "Tapu Fini", usagePct: 1.45, shadowSharePct: 0 },
+    { rank: 41, name: "Toxtricity", baseName: "Toxtricity", usagePct: 1.45, shadowSharePct: 0 },
+    { rank: 42, name: "Grafaiai", baseName: "Grafaiai", usagePct: 1.13, shadowSharePct: 0 },
+    { rank: 43, name: "Drifblim", baseName: "Drifblim", usagePct: 0.97, shadowSharePct: 16.67 },
+    { rank: 44, name: "Shadow Typhlosion", baseName: "Typhlosion", usagePct: 0.97, shadowSharePct: 50 },
+    { rank: 45, name: "Shadow Golurk", baseName: "Golurk", usagePct: 0.65, shadowSharePct: 75 },
+    { rank: 46, name: "Charizard", baseName: "Charizard", usagePct: 0.48, shadowSharePct: 0 },
+    { rank: 47, name: "Shadow Hydreigon", baseName: "Hydreigon", usagePct: 0.48, shadowSharePct: 100 },
+    { rank: 48, name: "Mandibuzz", baseName: "Mandibuzz", usagePct: 0.48, shadowSharePct: 0 },
+    { rank: 49, name: "Muk", baseName: "Muk", usagePct: 0.48, shadowSharePct: 0 },
+    { rank: 50, name: "Samurott (Hisuian)", baseName: "Samurott (Hisuian)", usagePct: 0.48, shadowSharePct: 0 },
+    { rank: 51, name: "Skeledirge", baseName: "Skeledirge", usagePct: 0.48, shadowSharePct: 0 },
+    { rank: 52, name: "Toxicroak", baseName: "Toxicroak", usagePct: 0.48, shadowSharePct: 0 },
+    { rank: 53, name: "Umbreon", baseName: "Umbreon", usagePct: 0.48, shadowSharePct: 0 },
+    { rank: 54, name: "Beedrill (Mega)", baseName: "Beedrill (Mega)", usagePct: 0.32, shadowSharePct: 0 },
+    { rank: 55, name: "Bombirdier", baseName: "Bombirdier", usagePct: 0.32, shadowSharePct: 0 },
+    { rank: 56, name: "Shadow Victreebel", baseName: "Victreebel", usagePct: 0.32, shadowSharePct: 100 },
+    { rank: 57, name: "Shadow Blaziken", baseName: "Blaziken", usagePct: 0.16, shadowSharePct: 100 },
+    { rank: 58, name: "Camerupt", baseName: "Camerupt", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 59, name: "Charizard (Mega X)", baseName: "Charizard (Mega X)", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 60, name: "Cofagrigus", baseName: "Cofagrigus", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 61, name: "Diancie", baseName: "Diancie", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 62, name: "Gourgeist", baseName: "Gourgeist", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 63, name: "Krookodile", baseName: "Krookodile", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 64, name: "Morpeko", baseName: "Morpeko", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 65, name: "Shadow Qwilfish", baseName: "Qwilfish", usagePct: 0.16, shadowSharePct: 100 },
+    { rank: 66, name: "Scizor (Mega)", baseName: "Scizor (Mega)", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 67, name: "Shadow Tyranitar", baseName: "Tyranitar", usagePct: 0.16, shadowSharePct: 100 },
+    { rank: 68, name: "Shadow Venusaur", baseName: "Venusaur", usagePct: 0.16, shadowSharePct: 100 },
+    { rank: 69, name: "Victreebel (Mega)", baseName: "Victreebel (Mega)", usagePct: 0.16, shadowSharePct: 0 }
   ],
   "Battle Frontier (Master)": [
-    { rank: 1, name: "Zamazenta (Crowned)", baseName: "Zamazenta (Crowned)", usagePct: 29.28, shadowSharePct: 0.0 },
-    { rank: 2, name: "Ursaluna", baseName: "Ursaluna", usagePct: 24.84, shadowSharePct: 2.65 },
-    { rank: 3, name: "Dialga (Origin)", baseName: "Dialga (Origin)", usagePct: 24.01, shadowSharePct: 0.0 },
-    { rank: 4, name: "Zacian (Crowned)", baseName: "Zacian (Crowned)", usagePct: 23.85, shadowSharePct: 0.0 },
-    { rank: 5, name: "Reshiram", baseName: "Reshiram", usagePct: 23.68, shadowSharePct: 0.0 },
-    { rank: 6, name: "Metagross", baseName: "Metagross", usagePct: 22.37, shadowSharePct: 2.21 },
-    { rank: 7, name: "Groudon", baseName: "Groudon", usagePct: 20.56, shadowSharePct: 8.8 },
-    { rank: 8, name: "Lugia", baseName: "Lugia", usagePct: 20.07, shadowSharePct: 6.56 },
-    { rank: 9, name: "Lunala", baseName: "Lunala", usagePct: 19.74, shadowSharePct: 0.0 },
-    { rank: 10, name: "Florges", baseName: "Florges", usagePct: 19.41, shadowSharePct: 0.0 },
-    { rank: 11, name: "Necrozma (Dawn Wings)", baseName: "Necrozma (Dawn Wings)", usagePct: 19.08, shadowSharePct: 0.0 },
-    { rank: 12, name: "Zygarde", baseName: "Zygarde", usagePct: 18.59, shadowSharePct: 0.0 },
-    { rank: 13, name: "Keldeo (Resolute)", baseName: "Keldeo (Resolute)", usagePct: 18.26, shadowSharePct: 0.0 },
-    { rank: 14, name: "Eternatus", baseName: "Eternatus", usagePct: 16.78, shadowSharePct: 0.0 },
-    { rank: 15, name: "Palkia", baseName: "Palkia", usagePct: 16.45, shadowSharePct: 37.0 },
-    { rank: 16, name: "Xerneas", baseName: "Xerneas", usagePct: 15.62, shadowSharePct: 0.0 },
-    { rank: 17, name: "Kyurem (White)", baseName: "Kyurem (White)", usagePct: 14.47, shadowSharePct: 0.0 },
-    { rank: 18, name: "Palkia (Origin)", baseName: "Palkia (Origin)", usagePct: 13.98, shadowSharePct: 0.0 },
-    { rank: 19, name: "Zekrom", baseName: "Zekrom", usagePct: 13.98, shadowSharePct: 0.0 },
-    { rank: 20, name: "Blastoise (Mega)", baseName: "Blastoise (Mega)", usagePct: 12.83, shadowSharePct: 0.0 },
-    { rank: 21, name: "Kyurem (Black)", baseName: "Kyurem (Black)", usagePct: 12.50, shadowSharePct: 0.0 },
-    { rank: 22, name: "Kyogre", baseName: "Kyogre", usagePct: 12.17, shadowSharePct: 4.05 },
-    { rank: 23, name: "Necrozma (Dusk Mane)", baseName: "Necrozma (Dusk Mane)", usagePct: 11.35, shadowSharePct: 0.0 },
-    { rank: 24, name: "Melmetal", baseName: "Melmetal", usagePct: 11.18, shadowSharePct: 0.0 },
-    { rank: 25, name: "Meloetta (Aria)", baseName: "Meloetta (Aria)", usagePct: 10.86, shadowSharePct: 0.0 },
-    { rank: 26, name: "Yveltal", baseName: "Yveltal", usagePct: 9.87, shadowSharePct: 0.0 },
-    { rank: 27, name: "Landorus (Therian)", baseName: "Landorus (Therian)", usagePct: 9.70, shadowSharePct: 0.0 },
-    { rank: 28, name: "Aggron (Mega)", baseName: "Aggron (Mega)", usagePct: 9.54, shadowSharePct: 0.0 },
-    { rank: 29, name: "Scizor (Mega)", baseName: "Scizor (Mega)", usagePct: 9.21, shadowSharePct: 0.0 },
-    { rank: 30, name: "Marshadow", baseName: "Marshadow", usagePct: 8.88, shadowSharePct: 0.0 },
-    { rank: 31, name: "Ho-Oh", baseName: "Ho-Oh", usagePct: 8.72, shadowSharePct: 9.43 },
-    { rank: 32, name: "Gyarados", baseName: "Gyarados", usagePct: 7.89, shadowSharePct: 2.08 },
-    { rank: 33, name: "Swampert (Mega)", baseName: "Swampert (Mega)", usagePct: 7.89, shadowSharePct: 0.0 },
-    { rank: 34, name: "Latios (Mega)", baseName: "Latios (Mega)", usagePct: 7.73, shadowSharePct: 0.0 },
-    { rank: 35, name: "Gardevoir (Mega)", baseName: "Gardevoir (Mega)", usagePct: 7.07, shadowSharePct: 0.0 },
-    { rank: 36, name: "Charizard (Mega X)", baseName: "Charizard (Mega X)", usagePct: 6.74, shadowSharePct: 0.0 },
-    { rank: 37, name: "Gengar (Mega)", baseName: "Gengar (Mega)", usagePct: 5.92, shadowSharePct: 0.0 },
-    { rank: 38, name: "Rhyperior", baseName: "Rhyperior", usagePct: 5.26, shadowSharePct: 3.12 },
-    { rank: 39, name: "Giratina (Altered)", baseName: "Giratina (Altered)", usagePct: 4.93, shadowSharePct: 0.0 },
-    { rank: 40, name: "Gallade (Mega)", baseName: "Gallade (Mega)", usagePct: 4.77, shadowSharePct: 0.0 },
-    { rank: 41, name: "Garchomp", baseName: "Garchomp", usagePct: 3.95, shadowSharePct: 16.67 },
-    { rank: 42, name: "Latias (Mega)", baseName: "Latias (Mega)", usagePct: 3.95, shadowSharePct: 0.0 }
+    { rank: 1, name: "Zamazenta (Crowned)", baseName: "Zamazenta (Crowned)", usagePct: 29.28, shadowSharePct: 0 },
+    { rank: 2, name: "Ursaluna", baseName: "Ursaluna", usagePct: 24.84, shadowSharePct: 15.89 },
+    { rank: 3, name: "Dialga (Origin)", baseName: "Dialga (Origin)", usagePct: 24.01, shadowSharePct: 0 },
+    { rank: 4, name: "Zacian (Crowned)", baseName: "Zacian (Crowned)", usagePct: 23.85, shadowSharePct: 0 },
+    { rank: 5, name: "Reshiram", baseName: "Reshiram", usagePct: 23.68, shadowSharePct: 0.69 },
+    { rank: 6, name: "Metagross", baseName: "Metagross", usagePct: 22.37, shadowSharePct: 1.47 },
+    { rank: 7, name: "Groudon", baseName: "Groudon", usagePct: 20.56, shadowSharePct: 1.6 },
+    { rank: 8, name: "Lugia", baseName: "Lugia", usagePct: 20.07, shadowSharePct: 2.46 },
+    { rank: 9, name: "Lunala", baseName: "Lunala", usagePct: 19.74, shadowSharePct: 0 },
+    { rank: 10, name: "Florges", baseName: "Florges", usagePct: 19.41, shadowSharePct: 0 },
+    { rank: 11, name: "Necrozma (Dawn Wings)", baseName: "Necrozma (Dawn Wings)", usagePct: 19.08, shadowSharePct: 0 },
+    { rank: 12, name: "Zygarde", baseName: "Zygarde", usagePct: 18.59, shadowSharePct: 0 },
+    { rank: 13, name: "Keldeo (Resolute)", baseName: "Keldeo (Resolute)", usagePct: 18.26, shadowSharePct: 0 },
+    { rank: 14, name: "Eternatus", baseName: "Eternatus", usagePct: 16.78, shadowSharePct: 0 },
+    { rank: 15, name: "Palkia", baseName: "Palkia", usagePct: 16.45, shadowSharePct: 15 },
+    { rank: 16, name: "Xerneas", baseName: "Xerneas", usagePct: 15.62, shadowSharePct: 0 },
+    { rank: 17, name: "Kyurem (White)", baseName: "Kyurem (White)", usagePct: 14.47, shadowSharePct: 0 },
+    { rank: 18, name: "Palkia (Origin)", baseName: "Palkia (Origin)", usagePct: 13.98, shadowSharePct: 0 },
+    { rank: 19, name: "Zekrom", baseName: "Zekrom", usagePct: 13.98, shadowSharePct: 2.35 },
+    { rank: 20, name: "Blastoise (Mega)", baseName: "Blastoise (Mega)", usagePct: 12.83, shadowSharePct: 0 },
+    { rank: 21, name: "Kyurem (Black)", baseName: "Kyurem (Black)", usagePct: 12.5, shadowSharePct: 0 },
+    { rank: 22, name: "Kyogre", baseName: "Kyogre", usagePct: 12.17, shadowSharePct: 0 },
+    { rank: 23, name: "Necrozma (Dusk Mane)", baseName: "Necrozma (Dusk Mane)", usagePct: 11.35, shadowSharePct: 0 },
+    { rank: 24, name: "Melmetal", baseName: "Melmetal", usagePct: 11.18, shadowSharePct: 0 },
+    { rank: 25, name: "Meloetta (Aria)", baseName: "Meloetta (Aria)", usagePct: 10.86, shadowSharePct: 0 },
+    { rank: 26, name: "Yveltal", baseName: "Yveltal", usagePct: 9.87, shadowSharePct: 0 },
+    { rank: 27, name: "Landorus (Therian)", baseName: "Landorus (Therian)", usagePct: 9.7, shadowSharePct: 0 },
+    { rank: 28, name: "Aggron (Mega)", baseName: "Aggron (Mega)", usagePct: 9.54, shadowSharePct: 0 },
+    { rank: 29, name: "Scizor (Mega)", baseName: "Scizor (Mega)", usagePct: 9.21, shadowSharePct: 0 },
+    { rank: 30, name: "Marshadow", baseName: "Marshadow", usagePct: 8.88, shadowSharePct: 0 },
+    { rank: 31, name: "Ho-Oh", baseName: "Ho-Oh", usagePct: 8.72, shadowSharePct: 3.77 },
+    { rank: 32, name: "Gyarados", baseName: "Gyarados", usagePct: 7.89, shadowSharePct: 33.33 },
+    { rank: 33, name: "Swampert (Mega)", baseName: "Swampert (Mega)", usagePct: 7.89, shadowSharePct: 0 },
+    { rank: 34, name: "Latios (Mega)", baseName: "Latios (Mega)", usagePct: 7.73, shadowSharePct: 0 },
+    { rank: 35, name: "Gardevoir (Mega)", baseName: "Gardevoir (Mega)", usagePct: 7.07, shadowSharePct: 0 },
+    { rank: 36, name: "Charizard (Mega X)", baseName: "Charizard (Mega X)", usagePct: 6.74, shadowSharePct: 0 },
+    { rank: 37, name: "Gengar (Mega)", baseName: "Gengar (Mega)", usagePct: 5.92, shadowSharePct: 0 },
+    { rank: 38, name: "Rhyperior", baseName: "Rhyperior", usagePct: 5.26, shadowSharePct: 46.88 },
+    { rank: 39, name: "Giratina (Altered)", baseName: "Giratina (Altered)", usagePct: 4.93, shadowSharePct: 6.67 },
+    { rank: 40, name: "Gallade (Mega)", baseName: "Gallade (Mega)", usagePct: 4.77, shadowSharePct: 0 },
+    { rank: 41, name: "Garchomp", baseName: "Garchomp", usagePct: 3.95, shadowSharePct: 41.67 },
+    { rank: 42, name: "Latias (Mega)", baseName: "Latias (Mega)", usagePct: 3.95, shadowSharePct: 0 },
+    { rank: 43, name: "Aerodactyl (Mega)", baseName: "Aerodactyl (Mega)", usagePct: 3.29, shadowSharePct: 0 },
+    { rank: 44, name: "Mewtwo", baseName: "Mewtwo", usagePct: 2.8, shadowSharePct: 23.53 },
+    { rank: 45, name: "Blaziken (Mega)", baseName: "Blaziken (Mega)", usagePct: 2.47, shadowSharePct: 0 },
+    { rank: 46, name: "Houndoom (Mega)", baseName: "Houndoom (Mega)", usagePct: 2.14, shadowSharePct: 0 },
+    { rank: 47, name: "Togekiss", baseName: "Togekiss", usagePct: 1.97, shadowSharePct: 0 },
+    { rank: 48, name: "Urshifu (Single Strike)", baseName: "Urshifu (Single Strike)", usagePct: 1.48, shadowSharePct: 0 },
+    { rank: 49, name: "Primarina", baseName: "Primarina", usagePct: 1.32, shadowSharePct: 0 },
+    { rank: 50, name: "Tapu Lele", baseName: "Tapu Lele", usagePct: 1.32, shadowSharePct: 0 },
+    { rank: 51, name: "Lucario (Mega)", baseName: "Lucario (Mega)", usagePct: 1.15, shadowSharePct: 0 },
+    { rank: 52, name: "Staraptor (Mega)", baseName: "Staraptor (Mega)", usagePct: 1.15, shadowSharePct: 0 },
+    { rank: 53, name: "Kingambit", baseName: "Kingambit", usagePct: 0.99, shadowSharePct: 0 },
+    { rank: 54, name: "Mamoswine", baseName: "Mamoswine", usagePct: 0.99, shadowSharePct: 16.67 },
+    { rank: 55, name: "Zacian (Hero)", baseName: "Zacian (Hero)", usagePct: 0.99, shadowSharePct: 0 },
+    { rank: 56, name: "Gholdengo", baseName: "Gholdengo", usagePct: 0.66, shadowSharePct: 0 },
+    { rank: 57, name: "Hydreigon", baseName: "Hydreigon", usagePct: 0.66, shadowSharePct: 25 },
+    { rank: 58, name: "Solgaleo", baseName: "Solgaleo", usagePct: 0.66, shadowSharePct: 0 },
+    { rank: 59, name: "Shadow Tyranitar", baseName: "Tyranitar", usagePct: 0.66, shadowSharePct: 50 },
+    { rank: 60, name: "Alakazam (Mega)", baseName: "Alakazam (Mega)", usagePct: 0.49, shadowSharePct: 0 },
+    { rank: 61, name: "Keldeo (Ordinary)", baseName: "Keldeo (Ordinary)", usagePct: 0.49, shadowSharePct: 0 },
+    { rank: 62, name: "Snorlax", baseName: "Snorlax", usagePct: 0.49, shadowSharePct: 33.33 },
+    { rank: 63, name: "Abomasnow (Mega)", baseName: "Abomasnow (Mega)", usagePct: 0.33, shadowSharePct: 0 },
+    { rank: 64, name: "Ampharos (Mega)", baseName: "Ampharos (Mega)", usagePct: 0.33, shadowSharePct: 0 },
+    { rank: 65, name: "Annihilape", baseName: "Annihilape", usagePct: 0.33, shadowSharePct: 0 },
+    { rank: 66, name: "Chandelure", baseName: "Chandelure", usagePct: 0.33, shadowSharePct: 0 },
+    { rank: 67, name: "Dragonite", baseName: "Dragonite", usagePct: 0.33, shadowSharePct: 0 },
+    { rank: 68, name: "Enamorus (Therian)", baseName: "Enamorus (Therian)", usagePct: 0.33, shadowSharePct: 0 },
+    { rank: 69, name: "Giratina (Origin)", baseName: "Giratina (Origin)", usagePct: 0.33, shadowSharePct: 0 },
+    { rank: 70, name: "Raichu (Mega Y)", baseName: "Raichu (Mega Y)", usagePct: 0.33, shadowSharePct: 0 },
+    { rank: 71, name: "Slowbro (Mega)", baseName: "Slowbro (Mega)", usagePct: 0.33, shadowSharePct: 0 },
+    { rank: 72, name: "Starmie (Mega)", baseName: "Starmie (Mega)", usagePct: 0.33, shadowSharePct: 0 },
+    { rank: 73, name: "Tapu Bulu", baseName: "Tapu Bulu", usagePct: 0.33, shadowSharePct: 0 },
+    { rank: 74, name: "Baxcalibur", baseName: "Baxcalibur", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 75, name: "Shadow Darkrai", baseName: "Darkrai", usagePct: 0.16, shadowSharePct: 100 },
+    { rank: 76, name: "Shadow Dialga", baseName: "Dialga", usagePct: 0.16, shadowSharePct: 100 },
+    { rank: 77, name: "Gardevoir", baseName: "Gardevoir", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 78, name: "Genesect", baseName: "Genesect", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 79, name: "Grimmsnarl", baseName: "Grimmsnarl", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 80, name: "Kangaskhan (Mega)", baseName: "Kangaskhan (Mega)", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 81, name: "Kartana", baseName: "Kartana", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 82, name: "Kyurem", baseName: "Kyurem", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 83, name: "Moltres (Galarian)", baseName: "Moltres (Galarian)", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 84, name: "Rillaboom", baseName: "Rillaboom", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 85, name: "Steelix (Mega)", baseName: "Steelix (Mega)", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 86, name: "Zamazenta (Hero)", baseName: "Zamazenta (Hero)", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 87, name: "Zarude", baseName: "Zarude", usagePct: 0.16, shadowSharePct: 0 }
   ],
   "Battle Frontier (Spectral)": [
-    { rank: 1, name: "Golisopod", baseName: "Golisopod", usagePct: 80.60, shadowSharePct: 0.0 },
-    { rank: 2, name: "Weezing (Galarian)", baseName: "Weezing (Galarian)", usagePct: 77.70, shadowSharePct: 36.1 },
-    { rank: 3, name: "Cofagrigus", baseName: "Cofagrigus", usagePct: 49.11, shadowSharePct: 0.0 },
-    { rank: 4, name: "Arctibax", baseName: "Arctibax", usagePct: 46.22, shadowSharePct: 0.0 },
-    { rank: 5, name: "Charjabug", baseName: "Charjabug", usagePct: 44.61, shadowSharePct: 47.47 },
-    { rank: 6, name: "Glalie", baseName: "Glalie", usagePct: 40.82, shadowSharePct: 32.15 },
-    { rank: 7, name: "Hypno", baseName: "Hypno", usagePct: 35.99, shadowSharePct: 21.03 },
-    { rank: 8, name: "Tentacruel", baseName: "Tentacruel", usagePct: 29.79, shadowSharePct: 19.73 },
-    { rank: 9, name: "Skeledirge", baseName: "Skeledirge", usagePct: 19.81, shadowSharePct: 0.0 },
-    { rank: 10, name: "Dewgong", baseName: "Dewgong", usagePct: 18.04, shadowSharePct: 0.0 },
-    { rank: 11, name: "Grumpig", baseName: "Grumpig", usagePct: 16.26, shadowSharePct: 16.83 },
-    { rank: 12, name: "Ninetales (Alolan)", baseName: "Ninetales (Alolan)", usagePct: 15.86, shadowSharePct: 12.18 },
-    { rank: 13, name: "Starmie", baseName: "Starmie", usagePct: 14.17, shadowSharePct: 0.0 },
-    { rank: 14, name: "Runerigus", baseName: "Runerigus", usagePct: 13.04, shadowSharePct: 0.0 },
-    { rank: 15, name: "Piloswine", baseName: "Piloswine", usagePct: 11.59, shadowSharePct: 24.31 },
-    { rank: 16, name: "Slowbro", baseName: "Slowbro", usagePct: 11.51, shadowSharePct: 9.79 },
-    { rank: 17, name: "Qwilfish", baseName: "Qwilfish", usagePct: 9.02, shadowSharePct: 26.79 },
-    { rank: 18, name: "Slowking (Galarian)", baseName: "Slowking (Galarian)", usagePct: 7.89, shadowSharePct: 0.0 },
-    { rank: 19, name: "Arbok", baseName: "Arbok", usagePct: 7.81, shadowSharePct: 20.62 },
-    { rank: 20, name: "Ledian", baseName: "Ledian", usagePct: 7.00, shadowSharePct: 0.0 },
-    { rank: 21, name: "Amoonguss", baseName: "Amoonguss", usagePct: 5.31, shadowSharePct: 9.09 },
-    { rank: 22, name: "Swalot", baseName: "Swalot", usagePct: 5.31, shadowSharePct: 0.0 },
-    { rank: 23, name: "Dragalge", baseName: "Dragalge", usagePct: 5.23, shadowSharePct: 0.0 },
-    { rank: 24, name: "Centiskorch", baseName: "Centiskorch", usagePct: 3.62, shadowSharePct: 0.0 },
-    { rank: 25, name: "Baxcalibur", baseName: "Baxcalibur", usagePct: 3.14, shadowSharePct: 0.0 }
+    { rank: 1, name: "Golisopod", baseName: "Golisopod", usagePct: 80.6, shadowSharePct: 0 },
+    { rank: 2, name: "Weezing (Galarian)", baseName: "Weezing (Galarian)", usagePct: 77.7, shadowSharePct: 0 },
+    { rank: 3, name: "Cofagrigus", baseName: "Cofagrigus", usagePct: 49.11, shadowSharePct: 0 },
+    { rank: 4, name: "Arctibax", baseName: "Arctibax", usagePct: 46.22, shadowSharePct: 0 },
+    { rank: 5, name: "Charjabug", baseName: "Charjabug", usagePct: 44.61, shadowSharePct: 0 },
+    { rank: 6, name: "Glalie", baseName: "Glalie", usagePct: 40.82, shadowSharePct: 0 },
+    { rank: 7, name: "Hypno", baseName: "Hypno", usagePct: 35.99, shadowSharePct: 0 },
+    { rank: 8, name: "Tentacruel", baseName: "Tentacruel", usagePct: 29.79, shadowSharePct: 0 },
+    { rank: 9, name: "Skeledirge", baseName: "Skeledirge", usagePct: 19.81, shadowSharePct: 0 },
+    { rank: 10, name: "Dewgong", baseName: "Dewgong", usagePct: 18.04, shadowSharePct: 0 },
+    { rank: 11, name: "Grumpig", baseName: "Grumpig", usagePct: 16.26, shadowSharePct: 0 },
+    { rank: 12, name: "Ninetales (Alolan)", baseName: "Ninetales (Alolan)", usagePct: 15.86, shadowSharePct: 0 },
+    { rank: 13, name: "Starmie", baseName: "Starmie", usagePct: 14.17, shadowSharePct: 0 },
+    { rank: 14, name: "Runerigus", baseName: "Runerigus", usagePct: 13.04, shadowSharePct: 0 },
+    { rank: 15, name: "Piloswine", baseName: "Piloswine", usagePct: 11.59, shadowSharePct: 0 },
+    { rank: 16, name: "Slowbro", baseName: "Slowbro", usagePct: 11.51, shadowSharePct: 0 },
+    { rank: 17, name: "Qwilfish", baseName: "Qwilfish", usagePct: 9.02, shadowSharePct: 0 },
+    { rank: 18, name: "Slowking (Galarian)", baseName: "Slowking (Galarian)", usagePct: 7.89, shadowSharePct: 0 },
+    { rank: 19, name: "Arbok", baseName: "Arbok", usagePct: 7.81, shadowSharePct: 0 },
+    { rank: 20, name: "Ledian", baseName: "Ledian", usagePct: 7, shadowSharePct: 0 },
+    { rank: 21, name: "Amoonguss", baseName: "Amoonguss", usagePct: 5.31, shadowSharePct: 0 },
+    { rank: 22, name: "Swalot", baseName: "Swalot", usagePct: 5.31, shadowSharePct: 0 },
+    { rank: 23, name: "Dragalge", baseName: "Dragalge", usagePct: 5.23, shadowSharePct: 0 },
+    { rank: 24, name: "Centiskorch", baseName: "Centiskorch", usagePct: 3.62, shadowSharePct: 0 },
+    { rank: 25, name: "Baxcalibur", baseName: "Baxcalibur", usagePct: 3.14, shadowSharePct: 0 },
+    { rank: 26, name: "Weezing", baseName: "Weezing", usagePct: 2.74, shadowSharePct: 0 },
+    { rank: 27, name: "Avalugg", baseName: "Avalugg", usagePct: 2.01, shadowSharePct: 0 },
+    { rank: 28, name: "Bruxish", baseName: "Bruxish", usagePct: 1.69, shadowSharePct: 0 },
+    { rank: 29, name: "Raichu (Alolan)", baseName: "Raichu (Alolan)", usagePct: 1.29, shadowSharePct: 0 },
+    { rank: 30, name: "Froslass", baseName: "Froslass", usagePct: 1.21, shadowSharePct: 0 },
+    { rank: 31, name: "Wormadam (Sandy)", baseName: "Wormadam (Sandy)", usagePct: 1.21, shadowSharePct: 0 },
+    { rank: 32, name: "Claydol", baseName: "Claydol", usagePct: 0.89, shadowSharePct: 0 },
+    { rank: 33, name: "Medicham", baseName: "Medicham", usagePct: 0.81, shadowSharePct: 0 },
+    { rank: 34, name: "Golbat", baseName: "Golbat", usagePct: 0.72, shadowSharePct: 0 },
+    { rank: 35, name: "Nidoqueen", baseName: "Nidoqueen", usagePct: 0.64, shadowSharePct: 0 },
+    { rank: 36, name: "Vanillish", baseName: "Vanillish", usagePct: 0.64, shadowSharePct: 0 },
+    { rank: 37, name: "Ariados", baseName: "Ariados", usagePct: 0.56, shadowSharePct: 0 },
+    { rank: 38, name: "Slowbro (Galarian)", baseName: "Slowbro (Galarian)", usagePct: 0.56, shadowSharePct: 0 },
+    { rank: 39, name: "Abomasnow", baseName: "Abomasnow", usagePct: 0.48, shadowSharePct: 0 },
+    { rank: 40, name: "Drifblim", baseName: "Drifblim", usagePct: 0.48, shadowSharePct: 0 },
+    { rank: 41, name: "Muk", baseName: "Muk", usagePct: 0.4, shadowSharePct: 0 },
+    { rank: 42, name: "Cetitan", baseName: "Cetitan", usagePct: 0.32, shadowSharePct: 0 },
+    { rank: 43, name: "Gourgeist", baseName: "Gourgeist", usagePct: 0.32, shadowSharePct: 0 },
+    { rank: 44, name: "Delphox", baseName: "Delphox", usagePct: 0.24, shadowSharePct: 0 },
+    { rank: 45, name: "Mamoswine", baseName: "Mamoswine", usagePct: 0.24, shadowSharePct: 0 },
+    { rank: 46, name: "Nidorina", baseName: "Nidorina", usagePct: 0.24, shadowSharePct: 0 },
+    { rank: 47, name: "Salazzle", baseName: "Salazzle", usagePct: 0.24, shadowSharePct: 0 },
+    { rank: 48, name: "Toxicroak", baseName: "Toxicroak", usagePct: 0.24, shadowSharePct: 0 },
+    { rank: 49, name: "Venomoth", baseName: "Venomoth", usagePct: 0.24, shadowSharePct: 0 },
+    { rank: 50, name: "Castform (Snowy)", baseName: "Castform (Snowy)", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 51, name: "Grimer", baseName: "Grimer", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 52, name: "Heracross", baseName: "Heracross", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 53, name: "Lampent", baseName: "Lampent", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 54, name: "Smoochum", baseName: "Smoochum", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 55, name: "Swoobat", baseName: "Swoobat", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 56, name: "Trevenant", baseName: "Trevenant", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 57, name: "Venusaur", baseName: "Venusaur", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 58, name: "Victreebel", baseName: "Victreebel", usagePct: 0.16, shadowSharePct: 0 },
+    { rank: 59, name: "Ceruledge", baseName: "Ceruledge", usagePct: 0.08, shadowSharePct: 0 },
+    { rank: 60, name: "Chimecho", baseName: "Chimecho", usagePct: 0.08, shadowSharePct: 0 },
+    { rank: 61, name: "Frigibax", baseName: "Frigibax", usagePct: 0.08, shadowSharePct: 0 },
+    { rank: 62, name: "Galvantula", baseName: "Galvantula", usagePct: 0.08, shadowSharePct: 0 },
+    { rank: 63, name: "Houndstone", baseName: "Houndstone", usagePct: 0.08, shadowSharePct: 0 },
+    { rank: 64, name: "Mismagius", baseName: "Mismagius", usagePct: 0.08, shadowSharePct: 0 },
+    { rank: 65, name: "Wobbuffet", baseName: "Wobbuffet", usagePct: 0.08, shadowSharePct: 0 },
+    { rank: 66, name: "Xatu", baseName: "Xatu", usagePct: 0.08, shadowSharePct: 0 }
   ]
 };
 
 const DEFAULT_BATTLE_FRONTIER_CORES: Record<string, BattleFrontierCoreEntry[]> = {
   "GREAT LEAGUE": [
     { rank: 1, monA: "Florges", monB: "Melmetal", usagePct: 21.32 },
-    { rank: 2, monA: "Melmetal", monB: "Quagsire", usagePct: 19.90 },
+    { rank: 2, monA: "Melmetal", monB: "Quagsire", usagePct: 19.9 },
     { rank: 3, monA: "Sableye", monB: "Florges", usagePct: 18.73 },
-    { rank: 4, monA: "Florges", monB: "Quagsire", usagePct: 18.60 },
+    { rank: 4, monA: "Florges", monB: "Quagsire", usagePct: 18.6 },
     { rank: 5, monA: "Melmetal", monB: "Altaria", usagePct: 16.93 },
     { rank: 6, monA: "Florges", monB: "Altaria", usagePct: 16.28 },
     { rank: 7, monA: "Florges", monB: "Corviknight", usagePct: 16.02 },
@@ -7162,15 +7390,20 @@ const DEFAULT_BATTLE_FRONTIER_CORES: Record<string, BattleFrontierCoreEntry[]> =
     { rank: 12, monA: "Clodsire", monB: "Florges", usagePct: 13.18 },
     { rank: 13, monA: "Florges", monB: "Dunsparce", usagePct: 13.18 },
     { rank: 14, monA: "Sableye", monB: "Corviknight", usagePct: 12.53 },
-    { rank: 15, monA: "Sableye", monB: "Clodsire", usagePct: 12.40 },
-    { rank: 16, monA: "Stunfisk", monB: "Florges", usagePct: 12.27 },
-    { rank: 17, monA: "Corsola (Galarian)", monB: "Dunsparce", usagePct: 11.76 },
-    { rank: 18, monA: "Melmetal", monB: "Clodsire", usagePct: 11.63 },
-    { rank: 19, monA: "Sableye", monB: "Quagsire", usagePct: 11.63 },
-    { rank: 20, monA: "Florges", monB: "Ninetales", usagePct: 11.50 }
+    { rank: 15, monA: "Sableye", monB: "Clodsire", usagePct: 12.4 },
+    { rank: 16, monA: "Melmetal", monB: "Ninetales", usagePct: 12.02 },
+    { rank: 17, monA: "Dunsparce", monB: "Quagsire", usagePct: 11.37 },
+    { rank: 18, monA: "Corviknight", monB: "Quagsire", usagePct: 11.24 },
+    { rank: 19, monA: "Corviknight", monB: "Dunsparce", usagePct: 10.59 },
+    { rank: 20, monA: "Sableye", monB: "Melmetal", usagePct: 10.59 },
+    { rank: 21, monA: "Florges", monB: "Ninetales", usagePct: 10.47 },
+    { rank: 22, monA: "Sableye", monB: "Stunfisk", usagePct: 10.47 },
+    { rank: 23, monA: "Dunsparce", monB: "Altaria", usagePct: 10.34 },
+    { rank: 24, monA: "Sableye", monB: "Cramorant", usagePct: 10.34 },
+    { rank: 25, monA: "Sableye", monB: "Dunsparce", usagePct: 10.34 }
   ],
   "Battle Frontier (Cauldron)": [
-    { rank: 1, monA: "Muk (Alolan)", monB: "Greedent", usagePct: 27.20 },
+    { rank: 1, monA: "Muk (Alolan)", monB: "Greedent", usagePct: 27.2 },
     { rank: 2, monA: "Muk (Alolan)", monB: "Ursaluna", usagePct: 25.91 },
     { rank: 3, monA: "Weezing (Galarian)", monB: "Greedent", usagePct: 23.45 },
     { rank: 4, monA: "Jellicent", monB: "Muk (Alolan)", usagePct: 22.02 },
@@ -7184,12 +7417,17 @@ const DEFAULT_BATTLE_FRONTIER_CORES: Record<string, BattleFrontierCoreEntry[]> =
     { rank: 12, monA: "Greedent", monB: "Greninja", usagePct: 18.13 },
     { rank: 13, monA: "Jellicent", monB: "Ursaluna", usagePct: 18.01 },
     { rank: 14, monA: "Greedent", monB: "Clefable", usagePct: 17.36 },
-    { rank: 15, monA: "Weezing (Galarian)", monB: "Greninja", usagePct: 15.80 },
-    { rank: 16, monA: "Muk (Alolan)", monB: "Greninja", usagePct: 15.41 },
-    { rank: 17, monA: "Ursaluna", monB: "Talonflame", usagePct: 15.03 },
-    { rank: 18, monA: "Clefable", monB: "Ursaluna", usagePct: 14.51 },
-    { rank: 19, monA: "Jellicent", monB: "Talonflame", usagePct: 14.38 },
-    { rank: 20, monA: "Muk (Alolan)", monB: "Clefable", usagePct: 14.25 }
+    { rank: 15, monA: "Weezing (Galarian)", monB: "Greninja", usagePct: 15.8 },
+    { rank: 16, monA: "Muk (Alolan)", monB: "Greninja", usagePct: 15.28 },
+    { rank: 17, monA: "Muk (Alolan)", monB: "Clefable", usagePct: 15.16 },
+    { rank: 18, monA: "Talonflame", monB: "Ursaluna", usagePct: 15.03 },
+    { rank: 19, monA: "Weezing (Galarian)", monB: "Talonflame", usagePct: 14.9 },
+    { rank: 20, monA: "Muk (Alolan)", monB: "Giratina (Altered)", usagePct: 14.77 },
+    { rank: 21, monA: "Clefable", monB: "Ursaluna", usagePct: 14.64 },
+    { rank: 22, monA: "Jellicent", monB: "Talonflame", usagePct: 12.69 },
+    { rank: 23, monA: "Muk (Alolan)", monB: "Samurott", usagePct: 12.69 },
+    { rank: 24, monA: "Clefable", monB: "Greninja", usagePct: 12.56 },
+    { rank: 25, monA: "Ursaluna", monB: "Greninja", usagePct: 12.56 }
   ],
   "Battle Frontier (Master)": [
     { rank: 1, monA: "Keldeo (Resolute)", monB: "Dialga (Origin)", usagePct: 10.95 },
@@ -7203,37 +7441,47 @@ const DEFAULT_BATTLE_FRONTIER_CORES: Record<string, BattleFrontierCoreEntry[]> =
     { rank: 9, monA: "Metagross", monB: "Zamazenta (Crowned)", usagePct: 6.86 },
     { rank: 10, monA: "Keldeo (Resolute)", monB: "Zekrom", usagePct: 6.33 },
     { rank: 11, monA: "Landorus (Therian)", monB: "Melmetal", usagePct: 6.33 },
-    { rank: 12, monA: "Landorus (Therian)", monB: "Florges", usagePct: 6.20 },
-    { rank: 13, monA: "Zygarde", monB: "Zamazenta (Crowned)", usagePct: 6.20 },
+    { rank: 12, monA: "Landorus (Therian)", monB: "Florges", usagePct: 6.2 },
+    { rank: 13, monA: "Zygarde", monB: "Zamazenta (Crowned)", usagePct: 6.2 },
     { rank: 14, monA: "Lunala", monB: "Reshiram", usagePct: 6.07 },
     { rank: 15, monA: "Zamazenta (Crowned)", monB: "Palkia", usagePct: 6.07 },
-    { rank: 16, monA: "Dialga (Origin)", monB: "Blastoise (Mega)", usagePct: 5.80 },
-    { rank: 17, monA: "Groudon", monB: "Lunala", usagePct: 5.80 },
-    { rank: 18, monA: "Lugia", monB: "Zacian (Crowned)", usagePct: 5.80 },
-    { rank: 19, monA: "Necrozma (Dawn Wings)", monB: "Ursaluna", usagePct: 5.80 },
-    { rank: 20, monA: "Ursaluna", monB: "Reshiram", usagePct: 5.80 }
+    { rank: 16, monA: "Ursaluna", monB: "Kyurem (White)", usagePct: 5.94 },
+    { rank: 17, monA: "Ursaluna", monB: "Reshiram", usagePct: 5.94 },
+    { rank: 18, monA: "Dialga (Origin)", monB: "Blastoise (Mega)", usagePct: 5.8 },
+    { rank: 19, monA: "Keldeo (Resolute)", monB: "Florges", usagePct: 5.8 },
+    { rank: 20, monA: "Keldeo (Resolute)", monB: "Meloetta (Aria)", usagePct: 5.67 },
+    { rank: 21, monA: "Dialga (Origin)", monB: "Melmetal", usagePct: 5.54 },
+    { rank: 22, monA: "Lunala", monB: "Zacian (Crowned)", usagePct: 5.54 },
+    { rank: 23, monA: "Reshiram", monB: "Zacian (Crowned)", usagePct: 5.54 },
+    { rank: 24, monA: "Dialga (Origin)", monB: "Groudon", usagePct: 5.41 },
+    { rank: 25, monA: "Melmetal", monB: "Florges", usagePct: 5.41 }
   ],
   "Battle Frontier (Spectral)": [
     { rank: 1, monA: "Weezing (Galarian)", monB: "Golisopod", usagePct: 63.45 },
-    { rank: 2, monA: "Weezing (Galarian)", monB: "Cofagrigus", usagePct: 41.20 },
-    { rank: 3, monA: "Cofagrigus", monB: "Golisopod", usagePct: 37.90 },
+    { rank: 2, monA: "Weezing (Galarian)", monB: "Cofagrigus", usagePct: 41.2 },
+    { rank: 3, monA: "Cofagrigus", monB: "Golisopod", usagePct: 37.9 },
     { rank: 4, monA: "Weezing (Galarian)", monB: "Arctibax", usagePct: 35.96 },
-    { rank: 5, monA: "Weezing (Galarian)", monB: "Charjabug", usagePct: 35.90 },
+    { rank: 5, monA: "Weezing (Galarian)", monB: "Charjabug", usagePct: 35.9 },
     { rank: 6, monA: "Golisopod", monB: "Glalie", usagePct: 35.45 },
     { rank: 7, monA: "Golisopod", monB: "Arctibax", usagePct: 35.38 },
     { rank: 8, monA: "Golisopod", monB: "Charjabug", usagePct: 32.47 },
-    { rank: 9, monA: "Weezing (Galarian)", monB: "Glalie", usagePct: 30.60 },
-    { rank: 10, monA: "Golisopod", monB: "Hypno", usagePct: 29.50 },
-    { rank: 11, monA: "Weezing (Galarian)", monB: "Hypno", usagePct: 29.50 },
+    { rank: 9, monA: "Weezing (Galarian)", monB: "Glalie", usagePct: 30.6 },
+    { rank: 10, monA: "Golisopod", monB: "Hypno", usagePct: 29.5 },
+    { rank: 11, monA: "Weezing (Galarian)", monB: "Hypno", usagePct: 29.5 },
     { rank: 12, monA: "Golisopod", monB: "Tentacruel", usagePct: 25.23 },
     { rank: 13, monA: "Weezing (Galarian)", monB: "Tentacruel", usagePct: 22.64 },
     { rank: 14, monA: "Cofagrigus", monB: "Arctibax", usagePct: 21.73 },
     { rank: 15, monA: "Cofagrigus", monB: "Glalie", usagePct: 21.15 },
-    { rank: 16, monA: "Arctibax", monB: "Glalie", usagePct: 21.02 },
-    { rank: 17, monA: "Charjabug", monB: "Arctibax", usagePct: 20.63 },
-    { rank: 18, monA: "Charjabug", monB: "Cofagrigus", usagePct: 20.12 },
-    { rank: 19, monA: "Hypno", monB: "Cofagrigus", usagePct: 18.89 },
-    { rank: 20, monA: "Charjabug", monB: "Glalie", usagePct: 17.66 }
+    { rank: 16, monA: "Cofagrigus", monB: "Charjabug", usagePct: 19.15 },
+    { rank: 17, monA: "Cofagrigus", monB: "Hypno", usagePct: 16.56 },
+    { rank: 18, monA: "Charjabug", monB: "Glalie", usagePct: 16.24 },
+    { rank: 19, monA: "Arctibax", monB: "Charjabug", usagePct: 15.98 },
+    { rank: 20, monA: "Arctibax", monB: "Glalie", usagePct: 15.72 },
+    { rank: 21, monA: "Golisopod", monB: "Skeledirge", usagePct: 15.52 },
+    { rank: 22, monA: "Arctibax", monB: "Hypno", usagePct: 15.33 },
+    { rank: 23, monA: "Cofagrigus", monB: "Tentacruel", usagePct: 14.81 },
+    { rank: 24, monA: "Hypno", monB: "Glalie", usagePct: 14.17 },
+    { rank: 25, monA: "Golisopod", monB: "Grumpig", usagePct: 13.97 }
   ]
 };
 
@@ -7290,6 +7538,30 @@ function splitCsvRow(line: string): string[] {
   return result;
 }
 
+function mapBfHeaderCellToLeague(cell: string): string | null {
+  const lower = (cell || "").trim().toLowerCase();
+  if (!lower) return null;
+  if (lower.includes("great league")) return "GREAT LEAGUE";
+  if (lower.includes("spectral")) return "Battle Frontier (Spectral)";
+  if (lower.includes("cauldron")) return "Battle Frontier (Cauldron)";
+  if (lower.includes("master league") || lower === "battle frontier (master)") return "Battle Frontier (Master)";
+  return null;
+}
+
+export function getBattleFrontierCountsSummary(prefix: string = "Active Battle Frontier Data"): string {
+  const glM = (BATTLE_FRONTIER_USAGE_MAP["GREAT LEAGUE"] || []).length;
+  const glC = (BATTLE_FRONTIER_CORES_MAP["GREAT LEAGUE"] || []).length;
+  const spM = (BATTLE_FRONTIER_USAGE_MAP["Battle Frontier (Spectral)"] || []).length;
+  const spC = (BATTLE_FRONTIER_CORES_MAP["Battle Frontier (Spectral)"] || []).length;
+  const caM = (BATTLE_FRONTIER_USAGE_MAP["Battle Frontier (Cauldron)"] || []).length;
+  const caC = (BATTLE_FRONTIER_CORES_MAP["Battle Frontier (Cauldron)"] || []).length;
+  const mlM = (BATTLE_FRONTIER_USAGE_MAP["Battle Frontier (Master)"] || []).length;
+  const mlC = (BATTLE_FRONTIER_CORES_MAP["Battle Frontier (Master)"] || []).length;
+  const totalM = glM + spM + caM + mlM;
+  const totalC = glC + spC + caC + mlC;
+  return `${prefix} — GL: ${glM} Mons / ${glC} Cores • Spectral: ${spM} Mons / ${spC} Cores • Cauldron: ${caM} Mons / ${caC} Cores • Master: ${mlM} Mons / ${mlC} Cores (Total: ${totalM} Mons • ${totalC} Cores)`;
+}
+
 export function parseBattleFrontierUsageCsv(csvText: string): Record<string, BattleFrontierUsageEntry[]> {
   const out: Record<string, BattleFrontierUsageEntry[]> = {
     "GREAT LEAGUE": [],
@@ -7297,19 +7569,38 @@ export function parseBattleFrontierUsageCsv(csvText: string): Record<string, Bat
     "Battle Frontier (Master)": [],
     "Battle Frontier (Spectral)": []
   };
-  const lines = (csvText || "").split(/\r?\n/);
-  const colDefs: Array<{ league: string; nameCol: number; usageCol: number; shadowCol: number }> = [
-    { league: "GREAT LEAGUE", nameCol: 2, usageCol: 3, shadowCol: 4 },
-    { league: "Battle Frontier (Cauldron)", nameCol: 6, usageCol: 7, shadowCol: 8 },
-    { league: "Battle Frontier (Master)", nameCol: 10, usageCol: 11, shadowCol: 12 },
-    { league: "Battle Frontier (Spectral)", nameCol: 14, usageCol: 15, shadowCol: 16 }
-  ];
+  const rows = (csvText || "").split(/\r?\n/).map(splitCsvRow);
+  let colDefs: Array<{ league: string; nameCol: number; usageCol: number; shadowCol: number }> = [];
+  let dataStartRow = 5;
 
-  for (const rawLine of lines) {
-    if (!rawLine || !rawLine.trim()) continue;
-    const cols = splitCsvRow(rawLine);
-    const rankNum = parseInt(cols[1] || "", 10);
-    if (Number.isNaN(rankNum) || rankNum < 1 || rankNum > 100) continue;
+  for (let r = 0; r < Math.min(8, rows.length); r++) {
+    const row = rows[r];
+    const detected: Array<{ league: string; nameCol: number; usageCol: number; shadowCol: number }> = [];
+    for (let c = 0; c < row.length; c++) {
+      const lg = mapBfHeaderCellToLeague(row[c]);
+      if (lg) {
+        detected.push({ league: lg, nameCol: c, usageCol: c + 1, shadowCol: c + 3 });
+      }
+    }
+    if (detected.length >= 2) {
+      colDefs = detected;
+      dataStartRow = r + 2;
+      break;
+    }
+  }
+
+  if (colDefs.length === 0) {
+    colDefs = [
+      { league: "GREAT LEAGUE", nameCol: 0, usageCol: 1, shadowCol: 3 },
+      { league: "Battle Frontier (Cauldron)", nameCol: 8, usageCol: 9, shadowCol: 11 },
+      { league: "Battle Frontier (Master)", nameCol: 16, usageCol: 17, shadowCol: 19 },
+      { league: "Battle Frontier (Spectral)", nameCol: 32, usageCol: 33, shadowCol: 35 }
+    ];
+  }
+
+  for (let r = dataStartRow; r < rows.length; r++) {
+    const cols = rows[r];
+    if (!cols || cols.length === 0) continue;
 
     for (const def of colDefs) {
       const rawName = (cols[def.nameCol] || "").trim();
@@ -7344,19 +7635,38 @@ export function parseBattleFrontierCoresCsv(csvText: string): Record<string, Bat
     "Battle Frontier (Master)": [],
     "Battle Frontier (Spectral)": []
   };
-  const lines = (csvText || "").split(/\r?\n/);
-  const colDefs: Array<{ league: string; monACol: number; monBCol: number; usageCol: number }> = [
-    { league: "GREAT LEAGUE", monACol: 2, monBCol: 3, usageCol: 4 },
-    { league: "Battle Frontier (Cauldron)", monACol: 6, monBCol: 7, usageCol: 8 },
-    { league: "Battle Frontier (Master)", monACol: 10, monBCol: 11, usageCol: 12 },
-    { league: "Battle Frontier (Spectral)", monACol: 14, monBCol: 15, usageCol: 16 }
-  ];
+  const rows = (csvText || "").split(/\r?\n/).map(splitCsvRow);
+  let colDefs: Array<{ league: string; monACol: number; monBCol: number; usageCol: number }> = [];
+  let dataStartRow = 5;
 
-  for (const rawLine of lines) {
-    if (!rawLine || !rawLine.trim()) continue;
-    const cols = splitCsvRow(rawLine);
-    const rankNum = parseInt(cols[1] || "", 10);
-    if (Number.isNaN(rankNum) || rankNum < 1 || rankNum > 100) continue;
+  for (let r = 0; r < Math.min(8, rows.length); r++) {
+    const row = rows[r];
+    const detected: Array<{ league: string; monACol: number; monBCol: number; usageCol: number }> = [];
+    for (let c = 0; c < row.length; c++) {
+      const lg = mapBfHeaderCellToLeague(row[c]);
+      if (lg) {
+        detected.push({ league: lg, monACol: c, monBCol: c + 1, usageCol: c + 2 });
+      }
+    }
+    if (detected.length >= 2) {
+      colDefs = detected;
+      dataStartRow = r + 2;
+      break;
+    }
+  }
+
+  if (colDefs.length === 0) {
+    colDefs = [
+      { league: "GREAT LEAGUE", monACol: 0, monBCol: 1, usageCol: 2 },
+      { league: "Battle Frontier (Cauldron)", monACol: 4, monBCol: 5, usageCol: 6 },
+      { league: "Battle Frontier (Master)", monACol: 8, monBCol: 9, usageCol: 10 },
+      { league: "Battle Frontier (Spectral)", monACol: 16, monBCol: 17, usageCol: 18 }
+    ];
+  }
+
+  for (let r = dataStartRow; r < rows.length; r++) {
+    const cols = rows[r];
+    if (!cols || cols.length === 0) continue;
 
     for (const def of colDefs) {
       const rawA = (cols[def.monACol] || "").trim();
@@ -7387,6 +7697,7 @@ export async function syncBattleFrontierUsageAndCores(
   coreCounts: Record<string, number>;
   totalUsageEntries: number;
   totalCoreEntries: number;
+  summary: string;
 }> {
   const uUrl = setSavedBfUsageSheetUrl(customUsageUrl || getSavedBfUsageSheetUrl());
   const cUrl = setSavedBfCoresSheetUrl(customCoresUrl || getSavedBfCoresSheetUrl());
@@ -7443,11 +7754,14 @@ export async function syncBattleFrontierUsageAndCores(
     totalCoreEntries += cLen;
   }
 
+  const summary = getBattleFrontierCountsSummary("✅ Synced Battle Frontier Sheets");
+
   return {
     usageCounts,
     coreCounts,
     totalUsageEntries,
-    totalCoreEntries
+    totalCoreEntries,
+    summary
   };
 }
 

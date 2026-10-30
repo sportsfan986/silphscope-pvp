@@ -6996,6 +6996,7 @@ class MainActivity : AppCompatActivity() {
 
         editBfUsageUrl?.setText(prefs.getString(OverlayService.PREFS_KEY_BF_USAGE_SHEET_URL, OverlayService.DEFAULT_BF_USAGE_SHEET_URL))
         editBfCoresUrl?.setText(prefs.getString(OverlayService.PREFS_KEY_BF_CORES_SHEET_URL, OverlayService.DEFAULT_BF_CORES_SHEET_URL))
+        tvBfSheetsStatus?.text = OverlayService.getBattleFrontierLeagueCountsSummaryStatic("Active Season 3 Cycle 1")
         val savedWeightPct = prefs.getInt(OverlayService.PREFS_KEY_SHOW6_USAGE_WEIGHT_PCT, OverlayService.DEFAULT_SHOW6_USAGE_WEIGHT_PCT).coerceIn(0, 100)
         OverlayService.activeShow6UsageWeightPct = savedWeightPct
         seekShow6UsageWeight?.progress = savedWeightPct

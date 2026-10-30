@@ -3162,7 +3162,7 @@
                     android:id="@+id/tv_bf_sheets_status"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Battle Frontier Data: Season 3 Cycle 1 Usage &amp; Cores Active"
+                    android:text="Active Season 3 Cycle 1 — GL: 124 Mons / 25 Cores • Spectral: 66 Mons / 25 Cores • Cauldron: 69 Mons / 25 Cores • Master: 87 Mons / 25 Cores (Total: 346 Mons • 100 Cores)"
                     android:textColor="#34d399"
                     android:textSize="10sp"
                     android:layout_marginTop="4dp"

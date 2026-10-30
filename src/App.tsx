@@ -129,6 +129,7 @@ import {
   getShow6UsageAndCoreWeightPct,
   setShow6UsageAndCoreWeightPct,
   syncBattleFrontierUsageAndCores,
+  getBattleFrontierCountsSummary,
   BATTLE_FRONTIER_USAGE_MAP,
   BATTLE_FRONTIER_CORES_MAP,
   recommendShow6RosterSlotUpgrades,
@@ -1885,11 +1886,11 @@ export default function App() {
   const [bfSheetSyncStatus, setBfSheetSyncStatus] = useState<string>(() => {
     try {
       return (
-        localStorage.getItem('gbl_bf_sheets_last_sync_status_v1') ||
-        'Pre-loaded Season 3 Cycle 1 Usage (4 Leagues) & Most-Used Cores'
+        localStorage.getItem('gbl_bf_sheets_last_sync_status_v2') ||
+        getBattleFrontierCountsSummary('Pre-loaded Season 3 Cycle 1')
       );
     } catch {
-      return 'Pre-loaded Season 3 Cycle 1 Usage (4 Leagues) & Most-Used Cores';
+      return getBattleFrontierCountsSummary('Pre-loaded Season 3 Cycle 1');
     }
   });
 
@@ -1908,7 +1909,7 @@ export default function App() {
       const res = await syncBattleFrontierUsageAndCores(bfUsageSheetUrl, bfCoresSheetUrl);
       setBfSheetSyncStatus(res.summary);
       try {
-        localStorage.setItem('gbl_bf_sheets_last_sync_status_v1', res.summary);
+        localStorage.setItem('gbl_bf_sheets_last_sync_status_v2', res.summary);
       } catch {}
       handleRunShow6Pick3Optimizer(show6Pick3League, show6My6, show6Opponent6);
       setStartBattleToast(`🏛️ ${res.summary}`);
@@ -11723,19 +11724,59 @@ export default function App() {
                 CARD 4B: BATTLE FRONTIER META USAGE & MOST-USED CORES GOOGLE SHEETS + WEIGHTING SLIDER
                =================================================================== */}
             <div className="bg-slate-900 border border-amber-500/40 rounded-2xl p-5 shadow-xl space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
-                <div>
-                  <span className="text-sm font-extrabold text-amber-300 block">
-                    🏛️ Battle Frontier Show 6 Meta Usage (Week - All) &amp; Most-Used Cores Sync
-                  </span>
-                  <span className="text-xs text-slate-400 font-mono">
-                    Status: <strong className="text-emerald-400">{bfSheetSyncStatus}</strong>
-                  </span>
-                </div>
-                <span className="px-2.5 py-1 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-200 text-[10px] font-bold font-mono shrink-0">
-                  GL: {(BATTLE_FRONTIER_USAGE_MAP['GREAT LEAGUE'] || []).length} • Spec: {(BATTLE_FRONTIER_USAGE_MAP['Battle Frontier (Spectral)'] || []).length} • Caul: {(BATTLE_FRONTIER_USAGE_MAP['Battle Frontier (Cauldron)'] || []).length} • ML: {(BATTLE_FRONTIER_USAGE_MAP['Battle Frontier (Master)'] || []).length}
-                </span>
-              </div>
+              {(() => {
+                const glMons = (BATTLE_FRONTIER_USAGE_MAP['GREAT LEAGUE'] || []).length;
+                const glCores = (BATTLE_FRONTIER_CORES_MAP['GREAT LEAGUE'] || []).length;
+                const specMons = (BATTLE_FRONTIER_USAGE_MAP['Battle Frontier (Spectral)'] || []).length;
+                const specCores = (BATTLE_FRONTIER_CORES_MAP['Battle Frontier (Spectral)'] || []).length;
+                const caulMons = (BATTLE_FRONTIER_USAGE_MAP['Battle Frontier (Cauldron)'] || []).length;
+                const caulCores = (BATTLE_FRONTIER_CORES_MAP['Battle Frontier (Cauldron)'] || []).length;
+                const mlMons = (BATTLE_FRONTIER_USAGE_MAP['Battle Frontier (Master)'] || []).length;
+                const mlCores = (BATTLE_FRONTIER_CORES_MAP['Battle Frontier (Master)'] || []).length;
+                const totalMons = glMons + specMons + caulMons + mlMons;
+                const totalCores = glCores + specCores + caulCores + mlCores;
+                return (
+                  <>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                      <div>
+                        <span className="text-sm font-extrabold text-amber-300 block">
+                          🏛️ Battle Frontier Show 6 Meta Usage (Week - All) &amp; Most-Used Cores Sync
+                        </span>
+                        <span className="text-xs text-slate-400 font-mono">
+                          Status: <strong className="text-emerald-400">{bfSheetSyncStatus}</strong>
+                        </span>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-200 text-[10px] font-bold font-mono shrink-0">
+                        Total: {totalMons} Mons • {totalCores} Cores (4 Leagues)
+                      </span>
+                    </div>
+
+                    {/* Per-League & Total Count Breakdown Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center font-mono text-xs">
+                      <div className="p-2 rounded-xl bg-slate-950 border border-slate-800">
+                        <span className="text-sky-400 block text-[10px] font-bold">Great League</span>
+                        <strong className="text-white text-xs">{glMons} Mons • {glCores} Cores</strong>
+                      </div>
+                      <div className="p-2 rounded-xl bg-slate-950 border border-slate-800">
+                        <span className="text-purple-400 block text-[10px] font-bold">Spectral Cup</span>
+                        <strong className="text-white text-xs">{specMons} Mons • {specCores} Cores</strong>
+                      </div>
+                      <div className="p-2 rounded-xl bg-slate-950 border border-slate-800">
+                        <span className="text-amber-400 block text-[10px] font-bold">Cauldron Cup</span>
+                        <strong className="text-white text-xs">{caulMons} Mons • {caulCores} Cores</strong>
+                      </div>
+                      <div className="p-2 rounded-xl bg-slate-950 border border-slate-800">
+                        <span className="text-rose-400 block text-[10px] font-bold">Master League</span>
+                        <strong className="text-white text-xs">{mlMons} Mons • {mlCores} Cores</strong>
+                      </div>
+                      <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 col-span-2 sm:col-span-1">
+                        <span className="text-amber-300 block text-[10px] font-bold">All 4 Leagues</span>
+                        <strong className="text-emerald-300 text-xs">{totalMons} Mons • {totalCores} Cores</strong>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
 
               <div className="space-y-3 text-xs">
                 <div>
@@ -11777,8 +11818,8 @@ export default function App() {
                         : '📥 Save Links & Import Battle Frontier Usage + Cores'}
                     </span>
                   </button>
-                  <span className="text-[11px] text-slate-400">
-                    Loaded Cores — GL: {(BATTLE_FRONTIER_CORES_MAP['GREAT LEAGUE'] || []).length} • Spectral: {(BATTLE_FRONTIER_CORES_MAP['Battle Frontier (Spectral)'] || []).length} • Cauldron: {(BATTLE_FRONTIER_CORES_MAP['Battle Frontier (Cauldron)'] || []).length} • Master: {(BATTLE_FRONTIER_CORES_MAP['Battle Frontier (Master)'] || []).length}
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    {getBattleFrontierCountsSummary('Loaded')}
                   </span>
                 </div>
               </div>

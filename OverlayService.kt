@@ -292,8 +292,8 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_SHOW6_DELETED_ROSTERS_TRASH = "gbl_show6_deleted_rosters_trash_v1"
         const val PREFS_KEY_BF_USAGE_SHEET_URL = "gbl_bf_usage_sheet_url_v1"
         const val PREFS_KEY_BF_CORES_SHEET_URL = "gbl_bf_cores_sheet_url_v1"
-        const val PREFS_KEY_BF_USAGE_JSON = "gbl_bf_usage_json_v1"
-        const val PREFS_KEY_BF_CORES_JSON = "gbl_bf_cores_json_v1"
+        const val PREFS_KEY_BF_USAGE_JSON = "gbl_bf_usage_json_v2"
+        const val PREFS_KEY_BF_CORES_JSON = "gbl_bf_cores_json_v2"
         const val PREFS_KEY_BF_LAST_SYNC_MS = "gbl_bf_last_sync_ms_v1"
         const val PREFS_KEY_SHOW6_USAGE_WEIGHT_PCT = "gbl_show6_usage_weight_pct_v1"
         const val DEFAULT_SHOW6_USAGE_WEIGHT_PCT = 65
@@ -7740,120 +7740,264 @@ class OverlayService : LifecycleService() {
 
         val BATTLE_FRONTIER_USAGE_MAP: MutableMap<String, MutableMap<String, Double>> = java.util.concurrent.ConcurrentHashMap<String, MutableMap<String, Double>>().apply {
             put("GREAT LEAGUE", java.util.concurrent.ConcurrentHashMap<String, Double>().apply {
-                put("Azumarill", 46.6); put("Corsola (Galarian)", 31.3); put("Cradily", 30.8); put("Corviknight", 30.7)
-                put("Feraligatr", 28.4); put("Dedenne", 26.7); put("Bastiodon", 26.3); put("Gastrodon", 25.1)
-                put("Scizor", 24.1); put("Marowak", 21.8); put("Furfrou", 19.7); put("blastoise", 19.3)
-                put("Blastoise", 19.3); put("Morpeko", 18.8); put("Diggersby", 16.5); put("Sableye", 15.6)
-                put("Altaria", 14.3); put("Moltres (Galarian)", 13.7); put("Skeledirge", 13.5); put("Primeape", 12.1)
-                put("Claydol", 11.7); put("Annihilape", 11.6); put("Jellicent", 10.7); put("Wigglytuff", 10.6)
-                put("Talonflame", 9.6); put("Clodsire", 9.1); put("Tinkaton", 8.9); put("Stunfisk", 8.7)
-                put("Nidoqueen", 8.5); put("Forretress", 8.1); put("Guzzlord", 7.8); put("Zweilous", 7.6)
-                put("Jumpluff", 7.4); put("Gourgeist", 7.0); put("Lapras", 6.9); put("Dusknoir", 6.5)
-                put("Lickilicky", 6.3); put("Togekiss", 5.8); put("Empoleon", 5.6); put("Giratina (Altered)", 5.6)
-                put("Pidgeot", 5.3); put("Cobalion", 5.2); put("Mandibuzz", 4.9); put("Dewgong", 4.7)
-                put("Dunsparce", 4.7); put("Samurott", 4.6)
+                put("Florges", 47.43); put("Sableye", 37.3); put("Melmetal", 37.14); put("Quagsire", 36.5)
+                put("Corsola (Galarian)", 31.51); put("Corviknight", 30.55); put("Clodsire", 29.58); put("Dunsparce", 28.46)
+                put("Altaria", 27.01); put("Stunfisk", 25.08); put("Ninetales", 23.95); put("Cramorant", 22.67)
+                put("Charjabug", 18.81); put("Araquanid", 17.36); put("Vigoroth", 15.59); put("Tinkaton", 14.31)
+                put("Electrode (Hisuian)", 11.9); put("Thievul", 11.74); put("Ninetales (Alolan)", 11.25); put("Hydreigon", 9.65)
+                put("Empoleon", 8.84); put("Jumpluff", 8.68); put("Ursaluna", 5.47); put("Fearow", 5.31)
+                put("Jellicent", 5.14); put("Forretress", 3.86); put("Azumarill", 3.7); put("Kingdra", 3.7)
+                put("Lanturn", 3.7); put("Cradily", 3.54); put("Rillaboom", 3.05); put("Annihilape", 2.73)
+                put("Feraligatr", 2.73); put("Marowak", 2.73); put("Hippowdon", 2.41); put("Politoed", 2.09)
+                put("Guzzlord", 1.77); put("Morpeko", 1.61); put("Pangoro", 1.61); put("Greninja", 1.45)
+                put("Medicham", 1.45); put("Diggersby", 1.29); put("Dondozo", 1.29); put("Furret", 1.29)
+                put("Houndoom", 1.29); put("Malamar", 1.29); put("Talonflame", 1.29); put("Dusclops", 1.13)
+                put("Togetic", 1.13); put("Drapion", 0.96); put("Snorlax", 0.96); put("Umbreon", 0.96)
+                put("Deoxys (Defense)", 0.8); put("Sandslash (Alolan)", 0.8); put("Toxapex", 0.8); put("Blastoise", 0.64)
+                put("Dusknoir", 0.64); put("Golisopod", 0.64); put("Mantine", 0.64); put("Marowak (Alolan)", 0.64)
+                put("Persian", 0.64); put("Piloswine", 0.64); put("Sealeo", 0.64); put("Blaziken", 0.48)
+                put("Clefable", 0.48); put("Dragonite", 0.48); put("Gastrodon", 0.48); put("Goodra", 0.48)
+                put("Gourgeist", 0.48); put("Lickilicky", 0.48); put("Lickitung", 0.48); put("Spidops", 0.48)
+                put("Swampert", 0.48); put("Teddiursa", 0.48); put("Weezing (Galarian)", 0.48); put("Zweilous", 0.48)
+                put("Aegislash (Shield)", 0.32); put("Carbink", 0.32); put("Dewgong", 0.32); put("Froslass", 0.32)
+                put("Golurk", 0.32); put("Regidrago", 0.32); put("Samurott", 0.32); put("Seaking", 0.32)
+                put("Stunfisk (Galarian)", 0.32); put("Tentacruel", 0.32); put("Toedscruel", 0.32); put("Toucannon", 0.32)
+                put("Turtonator", 0.32); put("Victreebel", 0.32); put("Articuno", 0.16); put("Articuno (Galarian)", 0.16)
+                put("Bastiodon", 0.16); put("Bulbasaur", 0.16); put("Camerupt", 0.16); put("Cetitan", 0.16)
+                put("Charmander", 0.16); put("Chesnaught", 0.16); put("Cresselia", 0.16); put("Dragonair", 0.16)
+                put("Drilbur", 0.16); put("Farfetch'd (Galarian)", 0.16); put("Hakamo-o", 0.16); put("Hariyama", 0.16)
+                put("Kommo-o", 0.16); put("Lapras", 0.16); put("Lopunny", 0.16); put("Mandibuzz", 0.16)
+                put("Mightyena", 0.16); put("Oinkologne (Female)", 0.16); put("Oranguru", 0.16); put("Pachirisu", 0.16)
+                put("Primarina", 0.16); put("Primeape", 0.16); put("Seismitoad", 0.16); put("Shelgon", 0.16)
+                put("Swalot", 0.16); put("Throh", 0.16); put("Togekiss", 0.16); put("Torkoal", 0.16)
+                put("Typhlosion", 0.16); put("Voltorb (Hisuian)", 0.16); put("Walrein", 0.16); put("Wigglytuff", 0.16)
             })
             put("BATTLE FRONTIER (SPECTRAL)", java.util.concurrent.ConcurrentHashMap<String, Double>().apply {
-                put("Murkrow", 74.8); put("Drifblim", 44.3); put("Turtonator", 44.3); put("Ninetales (Alolan)", 39.2)
-                put("Golisopod", 36.1); put("Swalot", 35.1); put("Rotom (Wash)", 34.0); put("Gourgeist", 32.0)
-                put("Jellicent", 30.9); put("Regidrago", 27.8); put("Grimer", 23.7); put("Lanturn", 23.7)
-                put("Abomasnow", 15.5); put("Whimsicott", 15.5); put("Zoroark (Hisuian)", 14.4); put("Skuntank", 11.3)
-                put("Charjabug", 8.2); put("Dachsbun", 8.2); put("Hakamo-o", 8.2); put("Magcargo", 8.2)
-                put("Typhlosion", 8.2); put("Dragalge", 7.2); put("Aurorus", 6.2); put("Tinkaton", 6.2)
-                put("Skeledirge", 5.2); put("Dusknoir", 4.1); put("Dusclops", 3.1); put("Muk (Alolan)", 3.1)
-                put("Piloswine", 3.1); put("Trevenant", 3.1)
+                put("Golisopod", 80.6); put("Weezing (Galarian)", 77.7); put("Cofagrigus", 49.11); put("Arctibax", 46.22)
+                put("Charjabug", 44.61); put("Glalie", 40.82); put("Hypno", 35.99); put("Tentacruel", 29.79)
+                put("Skeledirge", 19.81); put("Dewgong", 18.04); put("Grumpig", 16.26); put("Ninetales (Alolan)", 15.86)
+                put("Starmie", 14.17); put("Runerigus", 13.04); put("Piloswine", 11.59); put("Slowbro", 11.51)
+                put("Qwilfish", 9.02); put("Slowking (Galarian)", 7.89); put("Arbok", 7.81); put("Ledian", 7)
+                put("Amoonguss", 5.31); put("Swalot", 5.31); put("Dragalge", 5.23); put("Centiskorch", 3.62)
+                put("Baxcalibur", 3.14); put("Weezing", 2.74); put("Avalugg", 2.01); put("Bruxish", 1.69)
+                put("Raichu (Alolan)", 1.29); put("Froslass", 1.21); put("Wormadam (Sandy)", 1.21); put("Claydol", 0.89)
+                put("Medicham", 0.81); put("Golbat", 0.72); put("Nidoqueen", 0.64); put("Vanillish", 0.64)
+                put("Ariados", 0.56); put("Slowbro (Galarian)", 0.56); put("Abomasnow", 0.48); put("Drifblim", 0.48)
+                put("Muk", 0.4); put("Cetitan", 0.32); put("Gourgeist", 0.32); put("Delphox", 0.24)
+                put("Mamoswine", 0.24); put("Nidorina", 0.24); put("Salazzle", 0.24); put("Toxicroak", 0.24)
+                put("Venomoth", 0.24); put("Castform (Snowy)", 0.16); put("Grimer", 0.16); put("Heracross", 0.16)
+                put("Lampent", 0.16); put("Smoochum", 0.16); put("Swoobat", 0.16); put("Trevenant", 0.16)
+                put("Venusaur", 0.16); put("Victreebel", 0.16); put("Ceruledge", 0.08); put("Chimecho", 0.08)
+                put("Frigibax", 0.08); put("Galvantula", 0.08); put("Houndstone", 0.08); put("Mismagius", 0.08)
+                put("Wobbuffet", 0.08); put("Xatu", 0.08)
             })
             put("BATTLE FRONTIER (CAULDRON)", java.util.concurrent.ConcurrentHashMap<String, Double>().apply {
-                put("Skeledirge", 62.5); put("Malamar", 59.3); put("Torterra", 56.8); put("Walrein", 46.8)
-                put("Poliwrath", 43.2); put("Dragalge", 41.8); put("Pangoro", 38.6); put("Nidoqueen", 38.2)
-                put("Salazzle", 37.9); put("Flygon", 32.5); put("Wigglytuff", 28.2); put("Tentacruel", 19.6)
-                put("Crustle", 19.3); put("Enamorus (Incarnate)", 11.8); put("Obstagoon", 8.9); put("Talonflame", 8.6)
-                put("Florges", 6.1); put("Venusaur", 5.7); put("Kommo-o", 5.4); put("Gyarados", 3.2)
-                put("Lucario", 2.9); put("Swampert", 2.9); put("incineroar", 2.9); put("Incineroar", 2.9)
+                put("Greedent", 52.58); put("Muk (Alolan)", 52.26); put("Ursaluna", 50.32); put("Weezing (Galarian)", 45)
+                put("Jellicent", 40.32); put("Talonflame", 34.52); put("Clefable", 31.77); put("Greninja", 31.77)
+                put("Giratina (Altered)", 24.52); put("Moltres (Galarian)", 21.29); put("Samurott", 21.29); put("Seaking", 20.32)
+                put("Drapion", 19.19); put("Crobat", 18.06); put("Dragalge", 17.74); put("Dusknoir", 12.74)
+                put("Togekiss", 9.68); put("Florges", 7.26); put("Rapidash", 6.94); put("Scizor", 5.81)
+                put("Aromatisse", 5); put("Doublade", 5); put("Genesect", 5); put("Nidoking", 4.68)
+                put("Audino (Mega)", 4.52); put("Primarina", 4.19); put("Sandslash", 4.19); put("Golisopod", 4.03)
+                put("Ninetales", 4.03); put("Malamar (Mega)", 3.71); put("Ninetales (Alolan)", 2.9); put("Turtonator", 2.58)
+                put("Clodsire", 2.26); put("Overqwil", 2.1); put("Malamar", 1.94); put("Runerigus", 1.94)
+                put("Galvantula", 1.77); put("Pangoro", 1.77); put("Annihilape", 1.45); put("Tapu Fini", 1.45)
+                put("Toxtricity", 1.45); put("Grafaiai", 1.13); put("Drifblim", 0.97); put("Typhlosion", 0.97)
+                put("Golurk", 0.65); put("Charizard", 0.48); put("Hydreigon", 0.48); put("Mandibuzz", 0.48)
+                put("Muk", 0.48); put("Samurott (Hisuian)", 0.48); put("Skeledirge", 0.48); put("Toxicroak", 0.48)
+                put("Umbreon", 0.48); put("Beedrill (Mega)", 0.32); put("Bombirdier", 0.32); put("Victreebel", 0.32)
+                put("Blaziken", 0.16); put("Camerupt", 0.16); put("Charizard (Mega X)", 0.16); put("Cofagrigus", 0.16)
+                put("Diancie", 0.16); put("Gourgeist", 0.16); put("Krookodile", 0.16); put("Morpeko", 0.16)
+                put("Qwilfish", 0.16); put("Scizor (Mega)", 0.16); put("Tyranitar", 0.16); put("Venusaur", 0.16)
+                put("Victreebel (Mega)", 0.16)
             })
             put("BATTLE FRONTIER (MASTER)", java.util.concurrent.ConcurrentHashMap<String, Double>().apply {
-                put("Zacian (Crowned Sword)", 82.9); put("Palkia (Origin)", 62.6); put("Metagross", 53.6)
-                put("Groudon", 50.0); put("Kyurem (Black)", 45.0); put("Gyarados (Mega)", 32.9); put("Gyarados", 32.9)
-                put("Moltres (Galarian)", 31.1); put("Rhyperior", 29.3); put("Kyurem (White)", 28.4); put("Florges", 27.0)
-                put("Reshiram", 22.1); put("Lunala", 21.6); put("Zekrom", 18.0); put("Lugia", 14.9)
-                put("Ho-Oh", 14.4); put("Scizor (Mega)", 14.4); put("Scizor", 14.4); put("Dialga (Origin)", 13.5)
-                put("Keldeo", 7.2); put("Solgaleo", 5.4); put("Garchomp (Mega)", 3.2); put("Urshifu (Single Strike)", 2.7)
+                put("Zamazenta (Crowned)", 29.28); put("Ursaluna", 24.84); put("Dialga (Origin)", 24.01); put("Zacian (Crowned)", 23.85)
+                put("Reshiram", 23.68); put("Metagross", 22.37); put("Groudon", 20.56); put("Lugia", 20.07)
+                put("Lunala", 19.74); put("Florges", 19.41); put("Necrozma (Dawn Wings)", 19.08); put("Zygarde", 18.59)
+                put("Keldeo (Resolute)", 18.26); put("Eternatus", 16.78); put("Palkia", 16.45); put("Xerneas", 15.62)
+                put("Kyurem (White)", 14.47); put("Palkia (Origin)", 13.98); put("Zekrom", 13.98); put("Blastoise (Mega)", 12.83)
+                put("Kyurem (Black)", 12.5); put("Kyogre", 12.17); put("Necrozma (Dusk Mane)", 11.35); put("Melmetal", 11.18)
+                put("Meloetta (Aria)", 10.86); put("Yveltal", 9.87); put("Landorus (Therian)", 9.7); put("Aggron (Mega)", 9.54)
+                put("Scizor (Mega)", 9.21); put("Marshadow", 8.88); put("Ho-Oh", 8.72); put("Gyarados", 7.89)
+                put("Swampert (Mega)", 7.89); put("Latios (Mega)", 7.73); put("Gardevoir (Mega)", 7.07); put("Charizard (Mega X)", 6.74)
+                put("Gengar (Mega)", 5.92); put("Rhyperior", 5.26); put("Giratina (Altered)", 4.93); put("Gallade (Mega)", 4.77)
+                put("Garchomp", 3.95); put("Latias (Mega)", 3.95); put("Aerodactyl (Mega)", 3.29); put("Mewtwo", 2.8)
+                put("Blaziken (Mega)", 2.47); put("Houndoom (Mega)", 2.14); put("Togekiss", 1.97); put("Urshifu (Single Strike)", 1.48)
+                put("Primarina", 1.32); put("Tapu Lele", 1.32); put("Lucario (Mega)", 1.15); put("Staraptor (Mega)", 1.15)
+                put("Kingambit", 0.99); put("Mamoswine", 0.99); put("Zacian (Hero)", 0.99); put("Gholdengo", 0.66)
+                put("Hydreigon", 0.66); put("Solgaleo", 0.66); put("Tyranitar", 0.66); put("Alakazam (Mega)", 0.49)
+                put("Keldeo (Ordinary)", 0.49); put("Snorlax", 0.49); put("Abomasnow (Mega)", 0.33); put("Ampharos (Mega)", 0.33)
+                put("Annihilape", 0.33); put("Chandelure", 0.33); put("Dragonite", 0.33); put("Enamorus (Therian)", 0.33)
+                put("Giratina (Origin)", 0.33); put("Raichu (Mega Y)", 0.33); put("Slowbro (Mega)", 0.33); put("Starmie (Mega)", 0.33)
+                put("Tapu Bulu", 0.33); put("Baxcalibur", 0.16); put("Darkrai", 0.16); put("Dialga", 0.16)
+                put("Gardevoir", 0.16); put("Genesect", 0.16); put("Grimmsnarl", 0.16); put("Kangaskhan (Mega)", 0.16)
+                put("Kartana", 0.16); put("Kyurem", 0.16); put("Moltres (Galarian)", 0.16); put("Rillaboom", 0.16)
+                put("Steelix (Mega)", 0.16); put("Zamazenta (Hero)", 0.16); put("Zarude", 0.16)
             })
         }
 
         val BATTLE_FRONTIER_CORES_MAP: MutableMap<String, MutableList<BattleFrontierCoreEntry>> = java.util.concurrent.ConcurrentHashMap<String, MutableList<BattleFrontierCoreEntry>>().apply {
             put("GREAT LEAGUE", java.util.concurrent.CopyOnWriteArrayList(listOf(
-                BattleFrontierCoreEntry("Azumarill", "Corsola (Galarian)", 16.8),
-                BattleFrontierCoreEntry("Azumarill", "Cradily", 15.4),
-                BattleFrontierCoreEntry("Azumarill", "Corviknight", 14.9),
-                BattleFrontierCoreEntry("Bastiodon", "Cradily", 13.2),
-                BattleFrontierCoreEntry("Corsola (Galarian)", "Gastrodon", 12.6),
-                BattleFrontierCoreEntry("Feraligatr", "Corviknight", 12.1),
-                BattleFrontierCoreEntry("Azumarill", "Gastrodon", 11.8),
-                BattleFrontierCoreEntry("Dedenne", "Gastrodon", 11.4),
-                BattleFrontierCoreEntry("Scizor", "Gastrodon", 10.9),
-                BattleFrontierCoreEntry("Marowak", "Azumarill", 10.5),
-                BattleFrontierCoreEntry("Corviknight", "Gastrodon", 10.2),
-                BattleFrontierCoreEntry("Bastiodon", "Annihilape", 9.4),
-                BattleFrontierCoreEntry("Feraligatr", "Cradily", 9.1),
-                BattleFrontierCoreEntry("Morpeko", "Azumarill", 8.8),
-                BattleFrontierCoreEntry("Sableye", "Bastiodon", 8.5),
-                BattleFrontierCoreEntry("Corsola (Galarian)", "Diggersby", 8.2)
+                BattleFrontierCoreEntry("Florges", "Melmetal", 21.32),
+                BattleFrontierCoreEntry("Melmetal", "Quagsire", 19.9),
+                BattleFrontierCoreEntry("Sableye", "Florges", 18.73),
+                BattleFrontierCoreEntry("Florges", "Quagsire", 18.6),
+                BattleFrontierCoreEntry("Melmetal", "Altaria", 16.93),
+                BattleFrontierCoreEntry("Florges", "Altaria", 16.28),
+                BattleFrontierCoreEntry("Florges", "Corviknight", 16.02),
+                BattleFrontierCoreEntry("Melmetal", "Corsola (Galarian)", 14.99),
+                BattleFrontierCoreEntry("Florges", "Corsola (Galarian)", 14.73),
+                BattleFrontierCoreEntry("Quagsire", "Corsola (Galarian)", 14.08),
+                BattleFrontierCoreEntry("Quagsire", "Altaria", 13.57),
+                BattleFrontierCoreEntry("Clodsire", "Florges", 13.18),
+                BattleFrontierCoreEntry("Florges", "Dunsparce", 13.18),
+                BattleFrontierCoreEntry("Sableye", "Corviknight", 12.53),
+                BattleFrontierCoreEntry("Sableye", "Clodsire", 12.4),
+                BattleFrontierCoreEntry("Melmetal", "Ninetales", 12.02),
+                BattleFrontierCoreEntry("Dunsparce", "Quagsire", 11.37),
+                BattleFrontierCoreEntry("Corviknight", "Quagsire", 11.24),
+                BattleFrontierCoreEntry("Corviknight", "Dunsparce", 10.59),
+                BattleFrontierCoreEntry("Sableye", "Melmetal", 10.59),
+                BattleFrontierCoreEntry("Florges", "Ninetales", 10.47),
+                BattleFrontierCoreEntry("Sableye", "Stunfisk", 10.47),
+                BattleFrontierCoreEntry("Dunsparce", "Altaria", 10.34),
+                BattleFrontierCoreEntry("Sableye", "Cramorant", 10.34),
+                BattleFrontierCoreEntry("Sableye", "Dunsparce", 10.34)
             )))
             put("BATTLE FRONTIER (SPECTRAL)", java.util.concurrent.CopyOnWriteArrayList(listOf(
-                BattleFrontierCoreEntry("Murkrow", "Turtonator", 35.1),
-                BattleFrontierCoreEntry("Murkrow", "Drifblim", 33.0),
-                BattleFrontierCoreEntry("Murkrow", "Ninetales (Alolan)", 29.9),
-                BattleFrontierCoreEntry("Murkrow", "Golisopod", 27.8),
-                BattleFrontierCoreEntry("Murkrow", "Swalot", 26.8),
-                BattleFrontierCoreEntry("Murkrow", "Rotom (Wash)", 25.8),
-                BattleFrontierCoreEntry("Drifblim", "Turtonator", 22.7),
-                BattleFrontierCoreEntry("Ninetales (Alolan)", "Turtonator", 21.6),
-                BattleFrontierCoreEntry("Golisopod", "Turtonator", 19.6),
-                BattleFrontierCoreEntry("Jellicent", "Murkrow", 19.6),
-                BattleFrontierCoreEntry("Gourgeist", "Murkrow", 18.6),
-                BattleFrontierCoreEntry("Rotom (Wash)", "Turtonator", 17.5),
-                BattleFrontierCoreEntry("Swalot", "Drifblim", 16.5),
-                BattleFrontierCoreEntry("Regidrago", "Murkrow", 16.5),
-                BattleFrontierCoreEntry("Ninetales (Alolan)", "Jellicent", 15.5),
-                BattleFrontierCoreEntry("Lanturn", "Murkrow", 14.4)
+                BattleFrontierCoreEntry("Weezing (Galarian)", "Golisopod", 63.45),
+                BattleFrontierCoreEntry("Weezing (Galarian)", "Cofagrigus", 41.2),
+                BattleFrontierCoreEntry("Cofagrigus", "Golisopod", 37.9),
+                BattleFrontierCoreEntry("Weezing (Galarian)", "Arctibax", 35.96),
+                BattleFrontierCoreEntry("Weezing (Galarian)", "Charjabug", 35.9),
+                BattleFrontierCoreEntry("Golisopod", "Glalie", 35.45),
+                BattleFrontierCoreEntry("Golisopod", "Arctibax", 35.38),
+                BattleFrontierCoreEntry("Golisopod", "Charjabug", 32.47),
+                BattleFrontierCoreEntry("Weezing (Galarian)", "Glalie", 30.6),
+                BattleFrontierCoreEntry("Golisopod", "Hypno", 29.5),
+                BattleFrontierCoreEntry("Weezing (Galarian)", "Hypno", 29.5),
+                BattleFrontierCoreEntry("Golisopod", "Tentacruel", 25.23),
+                BattleFrontierCoreEntry("Weezing (Galarian)", "Tentacruel", 22.64),
+                BattleFrontierCoreEntry("Cofagrigus", "Arctibax", 21.73),
+                BattleFrontierCoreEntry("Cofagrigus", "Glalie", 21.15),
+                BattleFrontierCoreEntry("Cofagrigus", "Charjabug", 19.15),
+                BattleFrontierCoreEntry("Cofagrigus", "Hypno", 16.56),
+                BattleFrontierCoreEntry("Charjabug", "Glalie", 16.24),
+                BattleFrontierCoreEntry("Arctibax", "Charjabug", 15.98),
+                BattleFrontierCoreEntry("Arctibax", "Glalie", 15.72),
+                BattleFrontierCoreEntry("Golisopod", "Skeledirge", 15.52),
+                BattleFrontierCoreEntry("Arctibax", "Hypno", 15.33),
+                BattleFrontierCoreEntry("Cofagrigus", "Tentacruel", 14.81),
+                BattleFrontierCoreEntry("Hypno", "Glalie", 14.17),
+                BattleFrontierCoreEntry("Golisopod", "Grumpig", 13.97)
             )))
             put("BATTLE FRONTIER (CAULDRON)", java.util.concurrent.CopyOnWriteArrayList(listOf(
-                BattleFrontierCoreEntry("Skeledirge", "Malamar", 38.9),
-                BattleFrontierCoreEntry("Skeledirge", "Torterra", 36.4),
-                BattleFrontierCoreEntry("Malamar", "Torterra", 34.6),
-                BattleFrontierCoreEntry("Skeledirge", "Walrein", 29.6),
-                BattleFrontierCoreEntry("Skeledirge", "Poliwrath", 27.9),
-                BattleFrontierCoreEntry("Malamar", "Walrein", 27.1),
-                BattleFrontierCoreEntry("Torterra", "Walrein", 25.7),
-                BattleFrontierCoreEntry("Dragalge", "Skeledirge", 25.0),
-                BattleFrontierCoreEntry("Nidoqueen", "Malamar", 23.9),
-                BattleFrontierCoreEntry("Pangoro", "Skeledirge", 23.2),
-                BattleFrontierCoreEntry("Salazzle", "Torterra", 22.5),
-                BattleFrontierCoreEntry("Poliwrath", "Torterra", 21.8),
-                BattleFrontierCoreEntry("Dragalge", "Malamar", 21.1),
-                BattleFrontierCoreEntry("Flygon", "Skeledirge", 19.6),
-                BattleFrontierCoreEntry("Wigglytuff", "Skeledirge", 18.2),
-                BattleFrontierCoreEntry("Nidoqueen", "Walrein", 17.5)
+                BattleFrontierCoreEntry("Muk (Alolan)", "Greedent", 27.2),
+                BattleFrontierCoreEntry("Muk (Alolan)", "Ursaluna", 25.91),
+                BattleFrontierCoreEntry("Weezing (Galarian)", "Greedent", 23.45),
+                BattleFrontierCoreEntry("Jellicent", "Muk (Alolan)", 22.02),
+                BattleFrontierCoreEntry("Greedent", "Ursaluna", 20.47),
+                BattleFrontierCoreEntry("Weezing (Galarian)", "Muk (Alolan)", 20.47),
+                BattleFrontierCoreEntry("Weezing (Galarian)", "Ursaluna", 20.08),
+                BattleFrontierCoreEntry("Greedent", "Talonflame", 19.82),
+                BattleFrontierCoreEntry("Weezing (Galarian)", "Jellicent", 19.43),
+                BattleFrontierCoreEntry("Jellicent", "Greedent", 18.91),
+                BattleFrontierCoreEntry("Muk (Alolan)", "Talonflame", 18.78),
+                BattleFrontierCoreEntry("Greedent", "Greninja", 18.13),
+                BattleFrontierCoreEntry("Jellicent", "Ursaluna", 18.01),
+                BattleFrontierCoreEntry("Greedent", "Clefable", 17.36),
+                BattleFrontierCoreEntry("Weezing (Galarian)", "Greninja", 15.8),
+                BattleFrontierCoreEntry("Muk (Alolan)", "Greninja", 15.28),
+                BattleFrontierCoreEntry("Muk (Alolan)", "Clefable", 15.16),
+                BattleFrontierCoreEntry("Talonflame", "Ursaluna", 15.03),
+                BattleFrontierCoreEntry("Weezing (Galarian)", "Talonflame", 14.9),
+                BattleFrontierCoreEntry("Muk (Alolan)", "Giratina (Altered)", 14.77),
+                BattleFrontierCoreEntry("Clefable", "Ursaluna", 14.64),
+                BattleFrontierCoreEntry("Jellicent", "Talonflame", 12.69),
+                BattleFrontierCoreEntry("Muk (Alolan)", "Samurott", 12.69),
+                BattleFrontierCoreEntry("Clefable", "Greninja", 12.56),
+                BattleFrontierCoreEntry("Ursaluna", "Greninja", 12.56)
             )))
             put("BATTLE FRONTIER (MASTER)", java.util.concurrent.CopyOnWriteArrayList(listOf(
-                BattleFrontierCoreEntry("Zacian (Crowned Sword)", "Palkia (Origin)", 54.5),
-                BattleFrontierCoreEntry("Zacian (Crowned Sword)", "Metagross", 44.6),
-                BattleFrontierCoreEntry("Zacian (Crowned Sword)", "Groudon", 41.9),
-                BattleFrontierCoreEntry("Zacian (Crowned Sword)", "Kyurem (Black)", 37.8),
-                BattleFrontierCoreEntry("Palkia (Origin)", "Metagross", 33.8),
-                BattleFrontierCoreEntry("Palkia (Origin)", "Groudon", 32.0),
-                BattleFrontierCoreEntry("Palkia (Origin)", "Kyurem (Black)", 28.8),
-                BattleFrontierCoreEntry("Zacian (Crowned Sword)", "Gyarados (Mega)", 27.5),
-                BattleFrontierCoreEntry("Metagross", "Groudon", 26.6),
-                BattleFrontierCoreEntry("Zacian (Crowned Sword)", "Moltres (Galarian)", 25.7),
-                BattleFrontierCoreEntry("Zacian (Crowned Sword)", "Rhyperior", 24.3),
-                BattleFrontierCoreEntry("Zacian (Crowned Sword)", "Kyurem (White)", 23.9),
-                BattleFrontierCoreEntry("Zacian (Crowned Sword)", "Florges", 22.5),
-                BattleFrontierCoreEntry("Palkia (Origin)", "Rhyperior", 19.8),
-                BattleFrontierCoreEntry("Groudon", "Kyurem (Black)", 19.4),
-                BattleFrontierCoreEntry("Metagross", "Gyarados (Mega)", 18.0)
+                BattleFrontierCoreEntry("Keldeo (Resolute)", "Dialga (Origin)", 10.95),
+                BattleFrontierCoreEntry("Florges", "Dialga (Origin)", 9.89),
+                BattleFrontierCoreEntry("Dialga (Origin)", "Landorus (Therian)", 8.84),
+                BattleFrontierCoreEntry("Lugia", "Ursaluna", 8.31),
+                BattleFrontierCoreEntry("Palkia (Origin)", "Xerneas", 7.52),
+                BattleFrontierCoreEntry("Necrozma (Dawn Wings)", "Zamazenta (Crowned)", 7.26),
+                BattleFrontierCoreEntry("Dialga (Origin)", "Zekrom", 6.99),
+                BattleFrontierCoreEntry("Keldeo (Resolute)", "Landorus (Therian)", 6.86),
+                BattleFrontierCoreEntry("Metagross", "Zamazenta (Crowned)", 6.86),
+                BattleFrontierCoreEntry("Keldeo (Resolute)", "Zekrom", 6.33),
+                BattleFrontierCoreEntry("Landorus (Therian)", "Melmetal", 6.33),
+                BattleFrontierCoreEntry("Landorus (Therian)", "Florges", 6.2),
+                BattleFrontierCoreEntry("Zygarde", "Zamazenta (Crowned)", 6.2),
+                BattleFrontierCoreEntry("Lunala", "Reshiram", 6.07),
+                BattleFrontierCoreEntry("Zamazenta (Crowned)", "Palkia", 6.07),
+                BattleFrontierCoreEntry("Ursaluna", "Kyurem (White)", 5.94),
+                BattleFrontierCoreEntry("Ursaluna", "Reshiram", 5.94),
+                BattleFrontierCoreEntry("Dialga (Origin)", "Blastoise (Mega)", 5.8),
+                BattleFrontierCoreEntry("Keldeo (Resolute)", "Florges", 5.8),
+                BattleFrontierCoreEntry("Keldeo (Resolute)", "Meloetta (Aria)", 5.67),
+                BattleFrontierCoreEntry("Dialga (Origin)", "Melmetal", 5.54),
+                BattleFrontierCoreEntry("Lunala", "Zacian (Crowned)", 5.54),
+                BattleFrontierCoreEntry("Reshiram", "Zacian (Crowned)", 5.54),
+                BattleFrontierCoreEntry("Dialga (Origin)", "Groudon", 5.41),
+                BattleFrontierCoreEntry("Melmetal", "Florges", 5.41)
             )))
+        }
+
+        fun getBattleFrontierLeagueCountsSummaryStatic(prefix: String = "Battle Frontier Data"): String {
+            val glM = BATTLE_FRONTIER_USAGE_MAP["GREAT LEAGUE"]?.size ?: 0
+            val glC = BATTLE_FRONTIER_CORES_MAP["GREAT LEAGUE"]?.size ?: 0
+            val spM = BATTLE_FRONTIER_USAGE_MAP["BATTLE FRONTIER (SPECTRAL)"]?.size ?: 0
+            val spC = BATTLE_FRONTIER_CORES_MAP["BATTLE FRONTIER (SPECTRAL)"]?.size ?: 0
+            val caM = BATTLE_FRONTIER_USAGE_MAP["BATTLE FRONTIER (CAULDRON)"]?.size ?: 0
+            val caC = BATTLE_FRONTIER_CORES_MAP["BATTLE FRONTIER (CAULDRON)"]?.size ?: 0
+            val mlM = BATTLE_FRONTIER_USAGE_MAP["BATTLE FRONTIER (MASTER)"]?.size ?: 0
+            val mlC = BATTLE_FRONTIER_CORES_MAP["BATTLE FRONTIER (MASTER)"]?.size ?: 0
+            val totalM = glM + spM + caM + mlM
+            val totalC = glC + spC + caC + mlC
+            return "$prefix — GL: ${glM} Mons / ${glC} Cores • Spectral: ${spM} Mons / ${spC} Cores • Cauldron: ${caM} Mons / ${caC} Cores • Master: ${mlM} Mons / ${mlC} Cores (Total: ${totalM} Mons • ${totalC} Cores)"
+        }
+
+        private fun splitCsvRowStatic(line: String): List<String> {
+            val result = ArrayList<String>()
+            val current = StringBuilder()
+            var inQuotes = false
+            for (ch in line) {
+                if (ch == '"') {
+                    inQuotes = !inQuotes
+                } else if (ch == ',' && !inQuotes) {
+                    result.add(current.toString().trim())
+                    current.setLength(0)
+                } else {
+                    current.append(ch)
+                }
+            }
+            result.add(current.toString().trim())
+            return result
+        }
+
+        private fun mapBfHeaderCellToLeagueKeyStatic(cell: String): String? {
+            val lower = cell.trim().lowercase()
+            if (lower.isEmpty()) return null
+            if (lower.contains("great league")) return "GREAT LEAGUE"
+            if (lower.contains("spectral")) return "BATTLE FRONTIER (SPECTRAL)"
+            if (lower.contains("cauldron")) return "BATTLE FRONTIER (CAULDRON)"
+            if (lower.contains("master league") || lower == "battle frontier (master)") return "BATTLE FRONTIER (MASTER)"
+            return null
+        }
+
+        private fun normalizeBfSpeciesAliasStatic(rawName: String): String {
+            val clean = rawName.trim().replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "").trim()
+            return when (clean.lowercase()) {
+                "zamazenta (crowned shield)" -> "Zamazenta (Crowned)"
+                "zacian (crowned sword)" -> "Zacian (Crowned)"
+                "zygarde (complete forme)", "zygarde (complete)" -> "Zygarde"
+                else -> clean
+            }
         }
 
         fun loadCachedBattleFrontierUsageAndCores(prefs: android.content.SharedPreferences) {
@@ -7906,10 +8050,14 @@ class OverlayService : LifecycleService() {
                 .putString(PREFS_KEY_BF_CORES_SHEET_URL, cleanCoresUrl)
                 .apply()
 
-            var usageUpdatedCount = 0
-            var coresUpdatedCount = 0
+            val targetLeagues = listOf(
+                "GREAT LEAGUE",
+                "BATTLE FRONTIER (SPECTRAL)",
+                "BATTLE FRONTIER (CAULDRON)",
+                "BATTLE FRONTIER (MASTER)"
+            )
 
-            // 1. Fetch Usage CSV
+            // 1. Fetch & Parse Usage CSV (8-column horizontal blocks per league, skipping LAIC 2027)
             try {
                 val csvUrl = toGoogleSheetCsvExportUrlStatic(cleanUsageUrl, "466174368")
                 val conn = (java.net.URL(csvUrl).openConnection() as java.net.HttpURLConnection).apply {
@@ -7919,26 +8067,52 @@ class OverlayService : LifecycleService() {
                 }
                 if (conn.responseCode in 200..299) {
                     val text = conn.inputStream.bufferedReader().use { it.readText() }
-                    val lines = text.lines().map { it.split(",") }
-                    val leagues = listOf("GREAT LEAGUE", "BATTLE FRONTIER (SPECTRAL)", "BATTLE FRONTIER (CAULDRON)", "BATTLE FRONTIER (MASTER)")
-                    for (r in 3 until lines.size) {
-                        val row = lines[r]
-                        for (b in 0 until 4) {
-                            val baseCol = b * 5
-                            val name = row.getOrNull(baseCol + 1)?.trim()?.trim('"') ?: ""
-                            val pctStr = row.getOrNull(baseCol + 3)?.trim()?.trim('"')?.replace("%", "") ?: ""
-                            val pct = pctStr.toDoubleOrNull()
-                            if (name.isNotEmpty() && !name.equals("Pokemon", ignoreCase = true) && pct != null && pct > 0.0) {
-                                val map = BATTLE_FRONTIER_USAGE_MAP.getOrPut(leagues[b]) { java.util.concurrent.ConcurrentHashMap() }
-                                map[name] = pct
-                                usageUpdatedCount++
+                    val rows = text.lines().map { splitCsvRowStatic(it) }
+                    val colBlocks = ArrayList<Pair<String, Int>>()
+                    var dataStartRow = 5
+                    for (r in 0 until minOf(8, rows.size)) {
+                        val row = rows[r]
+                        val detected = ArrayList<Pair<String, Int>>()
+                        for (c in row.indices) {
+                            val lg = mapBfHeaderCellToLeagueKeyStatic(row[c])
+                            if (lg != null) {
+                                detected.add(lg to c)
                             }
+                        }
+                        if (detected.size >= 2) {
+                            colBlocks.addAll(detected)
+                            dataStartRow = r + 2
+                            break
+                        }
+                    }
+                    if (colBlocks.isEmpty()) {
+                        colBlocks.add("GREAT LEAGUE" to 0)
+                        colBlocks.add("BATTLE FRONTIER (CAULDRON)" to 8)
+                        colBlocks.add("BATTLE FRONTIER (MASTER)" to 16)
+                        colBlocks.add("BATTLE FRONTIER (SPECTRAL)" to 32)
+                    }
+                    val parsedUsage = targetLeagues.associateWith { LinkedHashMap<String, Double>() }
+                    for (r in dataStartRow until rows.size) {
+                        val row = rows[r]
+                        for ((lgKey, baseCol) in colBlocks) {
+                            val rawName = row.getOrNull(baseCol)?.trim()?.trim('"') ?: ""
+                            val pctStr = row.getOrNull(baseCol + 1)?.trim()?.trim('"')?.replace("%", "") ?: ""
+                            val pct = pctStr.toDoubleOrNull()
+                            if (rawName.isNotEmpty() && !rawName.equals("Pokemon", ignoreCase = true) && pct != null && pct > 0.0) {
+                                val normSpecies = normalizeBfSpeciesAliasStatic(rawName)
+                                parsedUsage[lgKey]?.put(normSpecies, pct)
+                            }
+                        }
+                    }
+                    parsedUsage.forEach { (lgKey, map) ->
+                        if (map.isNotEmpty()) {
+                            BATTLE_FRONTIER_USAGE_MAP[lgKey] = java.util.concurrent.ConcurrentHashMap(map)
                         }
                     }
                 }
             } catch (_: Exception) {}
 
-            // 2. Fetch Cores CSV
+            // 2. Fetch & Parse Cores CSV (4-column horizontal blocks per league, skipping LAIC 2027)
             try {
                 val csvUrl = toGoogleSheetCsvExportUrlStatic(cleanCoresUrl, "94099054")
                 val conn = (java.net.URL(csvUrl).openConnection() as java.net.HttpURLConnection).apply {
@@ -7948,56 +8122,65 @@ class OverlayService : LifecycleService() {
                 }
                 if (conn.responseCode in 200..299) {
                     val text = conn.inputStream.bufferedReader().use { it.readText() }
-                    val lines = text.lines().map { it.split(",") }
-                    val leagues = listOf("GREAT LEAGUE", "BATTLE FRONTIER (SPECTRAL)", "BATTLE FRONTIER (CAULDRON)", "BATTLE FRONTIER (MASTER)")
-                    val parsedLists = leagues.associateWith { ArrayList<BattleFrontierCoreEntry>() }
-                    for (r in 2 until lines.size) {
-                        val row = lines[r]
-                        for (b in 0 until 4) {
-                            for (offset in listOf(b * 5, b * 6)) {
-                                val cellA = row.getOrNull(offset + 1)?.trim()?.trim('"') ?: ""
-                                val cellB = row.getOrNull(offset + 2)?.trim()?.trim('"') ?: ""
-                                val cellC = row.getOrNull(offset + 3)?.trim()?.trim('"') ?: ""
-                                if ((cellA.contains("+") || cellA.contains("/")) && cellB.contains("%")) {
-                                    val parts = cellA.split(Regex("[+/]")).map { it.trim() }.filter { it.isNotEmpty() }
-                                    val pct = cellB.replace("%", "").trim().toDoubleOrNull()
-                                    if (parts.size >= 2 && pct != null && pct > 0.0) {
-                                        val list = parsedLists[leagues[b]]!!
-                                        if (list.none { it.monA.equals(parts[0], true) && it.monB.equals(parts[1], true) }) {
-                                            list.add(BattleFrontierCoreEntry(parts[0], parts[1], pct))
-                                            coresUpdatedCount++
-                                        }
-                                    }
-                                } else if (cellA.isNotEmpty() && cellB.isNotEmpty() && !cellA.equals("Pokemon", true) && !cellA.equals("Rank", true)) {
-                                    val pct = cellC.replace("%", "").trim().toDoubleOrNull()
-                                    if (pct != null && pct > 0.0) {
-                                        val list = parsedLists[leagues[b]]!!
-                                        if (list.none { it.monA.equals(cellA, true) && it.monB.equals(cellB, true) }) {
-                                            list.add(BattleFrontierCoreEntry(cellA, cellB, pct))
-                                            coresUpdatedCount++
-                                        }
+                    val rows = text.lines().map { splitCsvRowStatic(it) }
+                    val colBlocks = ArrayList<Pair<String, Int>>()
+                    var dataStartRow = 5
+                    for (r in 0 until minOf(8, rows.size)) {
+                        val row = rows[r]
+                        val detected = ArrayList<Pair<String, Int>>()
+                        for (c in row.indices) {
+                            val lg = mapBfHeaderCellToLeagueKeyStatic(row[c])
+                            if (lg != null) {
+                                detected.add(lg to c)
+                            }
+                        }
+                        if (detected.size >= 2) {
+                            colBlocks.addAll(detected)
+                            dataStartRow = r + 2
+                            break
+                        }
+                    }
+                    if (colBlocks.isEmpty()) {
+                        colBlocks.add("GREAT LEAGUE" to 0)
+                        colBlocks.add("BATTLE FRONTIER (CAULDRON)" to 4)
+                        colBlocks.add("BATTLE FRONTIER (MASTER)" to 8)
+                        colBlocks.add("BATTLE FRONTIER (SPECTRAL)" to 16)
+                    }
+                    val parsedLists = targetLeagues.associateWith { ArrayList<BattleFrontierCoreEntry>() }
+                    for (r in dataStartRow until rows.size) {
+                        val row = rows[r]
+                        for ((lgKey, baseCol) in colBlocks) {
+                            val rawA = row.getOrNull(baseCol)?.trim()?.trim('"') ?: ""
+                            val rawB = row.getOrNull(baseCol + 1)?.trim()?.trim('"') ?: ""
+                            val pctStr = row.getOrNull(baseCol + 2)?.trim()?.trim('"')?.replace("%", "") ?: ""
+                            if (rawA.isNotEmpty() && rawB.isNotEmpty() && !rawA.equals("Pokemon", ignoreCase = true)) {
+                                val pct = pctStr.toDoubleOrNull()
+                                if (pct != null && pct > 0.0) {
+                                    val monA = normalizeBfSpeciesAliasStatic(rawA)
+                                    val monB = normalizeBfSpeciesAliasStatic(rawB)
+                                    val list = parsedLists[lgKey]!!
+                                    if (list.none { it.monA.equals(monA, true) && it.monB.equals(monB, true) }) {
+                                        list.add(BattleFrontierCoreEntry(monA, monB, pct))
                                     }
                                 }
                             }
                         }
                     }
-                    parsedLists.forEach { (lg, list) ->
+                    parsedLists.forEach { (lgKey, list) ->
                         if (list.isNotEmpty()) {
-                            BATTLE_FRONTIER_CORES_MAP[lg] = java.util.concurrent.CopyOnWriteArrayList(list)
+                            BATTLE_FRONTIER_CORES_MAP[lgKey] = java.util.concurrent.CopyOnWriteArrayList(list)
                         }
                     }
                 }
             } catch (_: Exception) {}
 
-            val totalUsage = BATTLE_FRONTIER_USAGE_MAP.values.sumOf { it.size }
-            val totalCores = BATTLE_FRONTIER_CORES_MAP.values.sumOf { it.size }
             prefs.edit()
                 .putString(PREFS_KEY_BF_USAGE_JSON, Gson().toJson(BATTLE_FRONTIER_USAGE_MAP))
                 .putString(PREFS_KEY_BF_CORES_JSON, Gson().toJson(BATTLE_FRONTIER_CORES_MAP))
                 .putLong(PREFS_KEY_BF_LAST_SYNC_MS, System.currentTimeMillis())
                 .apply()
 
-            return "✅ Synced Battle Frontier Sheets ($totalUsage Pokémon usage entries • $totalCores top cores across 4 leagues)"
+            return getBattleFrontierLeagueCountsSummaryStatic("✅ Synced Battle Frontier Sheets")
         }
 
         fun getShow6UsagePctStatic(league: String, speciesName: String): Double {
