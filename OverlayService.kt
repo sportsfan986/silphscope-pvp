@@ -7777,7 +7777,7 @@ class OverlayService : LifecycleService() {
                 put("Charjabug", 44.61); put("Glalie", 40.82); put("Hypno", 35.99); put("Tentacruel", 29.79)
                 put("Skeledirge", 19.81); put("Dewgong", 18.04); put("Grumpig", 16.26); put("Ninetales (Alolan)", 15.86)
                 put("Starmie", 14.17); put("Runerigus", 13.04); put("Piloswine", 11.59); put("Slowbro", 11.51)
-                put("Qwilfish", 9.02); put("Slowking (Galarian)", 7.89); put("Arbok", 7.81); put("Ledian", 7)
+                put("Qwilfish", 9.02); put("Slowking (Galarian)", 7.89); put("Arbok", 7.81); put("Ledian", 7.0)
                 put("Amoonguss", 5.31); put("Swalot", 5.31); put("Dragalge", 5.23); put("Centiskorch", 3.62)
                 put("Baxcalibur", 3.14); put("Weezing", 2.74); put("Avalugg", 2.01); put("Bruxish", 1.69)
                 put("Raichu (Alolan)", 1.29); put("Froslass", 1.21); put("Wormadam (Sandy)", 1.21); put("Claydol", 0.89)
@@ -7792,12 +7792,12 @@ class OverlayService : LifecycleService() {
                 put("Wobbuffet", 0.08); put("Xatu", 0.08)
             })
             put("BATTLE FRONTIER (CAULDRON)", java.util.concurrent.ConcurrentHashMap<String, Double>().apply {
-                put("Greedent", 52.58); put("Muk (Alolan)", 52.26); put("Ursaluna", 50.32); put("Weezing (Galarian)", 45)
+                put("Greedent", 52.58); put("Muk (Alolan)", 52.26); put("Ursaluna", 50.32); put("Weezing (Galarian)", 45.0)
                 put("Jellicent", 40.32); put("Talonflame", 34.52); put("Clefable", 31.77); put("Greninja", 31.77)
                 put("Giratina (Altered)", 24.52); put("Moltres (Galarian)", 21.29); put("Samurott", 21.29); put("Seaking", 20.32)
                 put("Drapion", 19.19); put("Crobat", 18.06); put("Dragalge", 17.74); put("Dusknoir", 12.74)
                 put("Togekiss", 9.68); put("Florges", 7.26); put("Rapidash", 6.94); put("Scizor", 5.81)
-                put("Aromatisse", 5); put("Doublade", 5); put("Genesect", 5); put("Nidoking", 4.68)
+                put("Aromatisse", 5.0); put("Doublade", 5.0); put("Genesect", 5.0); put("Nidoking", 4.68)
                 put("Audino (Mega)", 4.52); put("Primarina", 4.19); put("Sandslash", 4.19); put("Golisopod", 4.03)
                 put("Ninetales", 4.03); put("Malamar (Mega)", 3.71); put("Ninetales (Alolan)", 2.9); put("Turtonator", 2.58)
                 put("Clodsire", 2.26); put("Overqwil", 2.1); put("Malamar", 1.94); put("Runerigus", 1.94)
@@ -8063,7 +8063,7 @@ class OverlayService : LifecycleService() {
                 val conn = (java.net.URL(csvUrl).openConnection() as java.net.HttpURLConnection).apply {
                     connectTimeout = 8000
                     readTimeout = 8000
-                    setRequestProperty("User-Agent", "SilphScopePvP/5.01")
+                    setRequestProperty("User-Agent", "SilphScopePvP/5.02")
                 }
                 if (conn.responseCode in 200..299) {
                     val text = conn.inputStream.bufferedReader().use { it.readText() }
@@ -8118,7 +8118,7 @@ class OverlayService : LifecycleService() {
                 val conn = (java.net.URL(csvUrl).openConnection() as java.net.HttpURLConnection).apply {
                     connectTimeout = 8000
                     readTimeout = 8000
-                    setRequestProperty("User-Agent", "SilphScopePvP/5.01")
+                    setRequestProperty("User-Agent", "SilphScopePvP/5.02")
                 }
                 if (conn.responseCode in 200..299) {
                     val text = conn.inputStream.bufferedReader().use { it.readText() }
@@ -21202,7 +21202,7 @@ class OverlayService : LifecycleService() {
             if (oBase.equals(oppMeta.baseSpecies, ignoreCase = true) || (idx in 0..2 && oppFaintedSlots[idx])) null else oName
         }
 
-        // v5.01 Show 6 Live AI Constraint + Common Core Unrevealed Backline Boost:
+        // v5.02 Show 6 Live AI Constraint + Common Core Unrevealed Backline Boost:
         // When in Show 6 mode, limit unseen backline predictions strictly to unrevealed Pokémon from Opponent's known 6,
         // and boost the likelihood of any unrevealed Pokémon that forms a Most-Used Battle Frontier Core with a revealed opponent Pokémon.
         val isShow6ModeActive = ::prefs.isInitialized && prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
