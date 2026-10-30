@@ -11045,9 +11045,10 @@ export type AppCombatMode = "gbl" | "show6";
 export interface Show6RosterOf6Preset {
   id: string;
   name: string;
-  league: string;
+  league: LeagueType;
   isSelected?: boolean;
   pokemon: TeamMember[]; // 6 Pokémon slots
+  notes?: string;
   updatedAt?: number;
 }
 
@@ -11055,6 +11056,7 @@ export interface Show6OpponentViableLineup {
   id: string;
   rank: number;
   archetype: "ABB" | "ABC" | "DUO";
+  names: [string, string, string];
   lead: string;
   swap: string;
   closer: string;
@@ -11077,34 +11079,45 @@ export interface Show6VsOpponentLineupBreakdown {
 
 export interface Show6RecommendedLineup {
   id: string;
-  archetype: "ABB" | "ABC" | "DUO";
+  archetype: TeamArchetype;
   rankInArchetype: number; // 1, 2, or 3
   overallRank: number;
-  league: string;
+  league: LeagueType;
   pokemon: [TeamMember, TeamMember, TeamMember]; // [Lead, Safe Swap, Closer] with simulated best movesets
+  members: [TeamMember, TeamMember, TeamMember];
   viabilityWeightedBr: number;
+  expectedWeightedBr: number;
   rawAverageBr: number;
   leadWinPct: number;
   safeSwapScore: number;
   closerScore: number;
   worstCaseTop5Br: number;
+  worstCaseBr: number;
   compositeShow6Score: number;
   sharedWeaknesses: string[];
   altMovesetNotes: string[];
   synergySummary: string;
+  strongestAgainst: string[];
+  dangerLineups: string[];
   vsTopOpponentTeams: Show6VsOpponentLineupBreakdown[];
 }
 
 export interface Show6Pick3MatchupResult {
-  league: string;
+  league: LeagueType;
   leagueAbbr: string;
   myOptimized6: TeamMember[];
+  my6SimulatedBestMoves: TeamMember[];
   opp6Names: string[];
   top3AbbTeams: Show6RecommendedLineup[];
   top3AbcTeams: Show6RecommendedLineup[];
   top3DuoTeams: Show6RecommendedLineup[];
+  topAbbLineups: Show6RecommendedLineup[];
+  topAbcLineups: Show6RecommendedLineup[];
+  topDuoLineups: Show6RecommendedLineup[];
   topOpponentViableTeams: Show6OpponentViableLineup[];
+  topOpponentViableLineups: Show6OpponentViableLineup[];
   totalOrderedPairsEvaluated: number; // 120 x 120 = 14,400
+  totalMatchupsSimulated: number;
   movesetsSimulated: number;
   elapsedMs: number;
 }
@@ -11118,11 +11131,14 @@ export interface BlindShow6RosterSlotEval {
   swapBr: number;
   closerBr: number;
   overallBr: number;
+  blendedBr: number;
+  metaBr: number;
+  historicalBr: number;
   topWins: string[];
 }
 
 export interface BlindShow6RosterResult {
-  league: string;
+  league: LeagueType;
   leagueAbbr: string;
   filterMode: "OPEN" | "WHITELIST" | "BANLIST";
   filterCount: number;
@@ -11131,8 +11147,11 @@ export interface BlindShow6RosterResult {
   metaWeightPct: number;
   roster6: TeamMember[];
   slotEvals: BlindShow6RosterSlotEval[];
+  roster: BlindShow6RosterSlotEval[];
   fieldCoveragePct: number;
   avgRosterBr: number;
+  overallBlendedScore: number;
+  eligiblePoolCount: number;
   beatenThreatsCount: number;
   totalThreatsAudited: number;
   embeddedPick3Preview: Show6Pick3MatchupResult;
@@ -11143,6 +11162,7 @@ export interface BlindShow6RosterResult {
 
 export interface Show6LiveBacklinePredictionItem {
   names: string[]; // 2 names if 1 revealed; 1 name if 2 revealed; 3 names if 0 revealed
+  backlineNames: string[];
   fullLineup: [string, string, string];
   archetype: "ABB" | "ABC" | "DUO";
   probabilityPct: number;
@@ -11151,11 +11171,15 @@ export interface Show6LiveBacklinePredictionItem {
 }
 
 export interface Show6LiveBacklinePredictionResult {
+  knownOpponent6: string[];
   revealedOpponents: string[];
   unrevealedPool: string[];
   predictions: Show6LiveBacklinePredictionItem[];
+  mostLikelyPairs: Show6LiveBacklinePredictionItem[];
   criticalPreserveCallout: string;
+  tacticalSummary: string;
 }
+
 
 /**
  * Parses comma- or newline-separated Pokémon names (from Text Paste Mode or Chip Picker)
@@ -11331,12 +11355,12 @@ function classifyOrderedTrioStructure(
  */
 export function evaluateShow6Pick3Matchup(
   league: string = "GREAT LEAGUE",
-  my6Raw: Array<TeamMember | string>,
-  opp6Raw: Array<TeamMember | string>
+  my6Raw: Array<TeamMember | string> = [],
+  opp6Raw: Array<TeamMember | string> = []
 ): Show6Pick3MatchupResult {
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
   const upper = (league || "GREAT LEAGUE").toUpperCase();
-  const normLeague = upper.includes("MEGA")
+  const normLeague: LeagueType = upper.includes("MEGA")
     ? "MEGA MASTER LEAGUE"
     : upper.includes("GREAT")
     ? "GREAT LEAGUE"
@@ -11345,6 +11369,8 @@ export function evaluateShow6Pick3Matchup(
     : "MASTER LEAGUE";
 
   const defaultTop = getLeagueTopMetaSpeciesNames(normLeague, 12);
+  const safeMy6 = Array.isArray(my6Raw) ? my6Raw : [];
+  const safeOpp6 = Array.isArray(opp6Raw) ? opp6Raw : [];
 
   // Resolve 6 user Pokémon and 6 opponent Pokémon species names
   const buildBaseUserMember = (input: TeamMember | string | undefined, idx: number): TeamMember => {
@@ -11374,9 +11400,9 @@ export function evaluateShow6Pick3Matchup(
     };
   };
 
-  const myBase6: TeamMember[] = [0, 1, 2, 3, 4, 5].map((i) => buildBaseUserMember(my6Raw[i], i));
+  const myBase6: TeamMember[] = [0, 1, 2, 3, 4, 5].map((i) => buildBaseUserMember(safeMy6[i], i));
   const opp6Names: string[] = [0, 1, 2, 3, 4, 5].map((i) => {
-    const input = opp6Raw[i];
+    const input = safeOpp6[i];
     const rawName = typeof input === "string" ? input : input?.name || "";
     const fallbackName = defaultTop[i + 6] || defaultTop[i] || "Clodsire";
     const canon = canonicalizeMetaPokemonName(rawName) || fallbackName;
@@ -11621,6 +11647,7 @@ export function evaluateShow6Pick3Matchup(
       id: `opp-viable-${ol.permIdx}`,
       rank: topOpponentViableTeams.length + 1,
       archetype: ol.archetype,
+      names: [ol.lead, ol.swap, ol.closer],
       lead: ol.lead,
       swap: ol.swap,
       closer: ol.closer,
@@ -11794,27 +11821,43 @@ export function evaluateShow6Pick3Matchup(
         ? `Duo-Core Pick-3: ${p0.name} (Core 1) + ${p2.name} (Core 2) cover each other's weaknesses with ${p1.name} (${ev.safeSwapScore} Swap BR) as Safe Switch. Wins ${winsVsTop}/${ev.vsTopOpponentTeams.length} vs Opponent's top viable teams (${ev.viabilityWeightedBr} Weighted BR).`
         : `ABC Balanced Pick-3: ${p0.name} Lead + ${p1.name} Safe Swap + ${p2.name} Closer. Wins ${winsVsTop}/${ev.vsTopOpponentTeams.length} vs Opponent's top viable teams (${ev.viabilityWeightedBr} Weighted BR • Floor ${ev.worstCaseTop5Br} BR).`;
 
+    const orderedMembers: [TeamMember, TeamMember, TeamMember] = [
+      { ...p0, id: "s6-slot-1" },
+      { ...p1, id: "s6-slot-2" },
+      { ...p2, id: "s6-slot-3" }
+    ];
+
+    const sortedVsOppDesc = [...ev.vsTopOpponentTeams].sort((a, b) => b.matchupBr - a.matchupBr);
+    const strongestAgainst = sortedVsOppDesc
+      .slice(0, 2)
+      .map((x) => `${x.oppLead.split(" ")[0]}/${x.oppSwap.split(" ")[0]}/${x.oppCloser.split(" ")[0]} (${x.matchupBr})`);
+    const dangerLineups = [...ev.vsTopOpponentTeams]
+      .sort((a, b) => a.matchupBr - b.matchupBr)
+      .slice(0, 2)
+      .map((x) => `${x.oppLead.split(" ")[0]}/${x.oppSwap.split(" ")[0]}/${x.oppCloser.split(" ")[0]} (${x.matchupBr})`);
+
     return {
       id: `show6-rec-${archetype.toLowerCase()}-${rankInArchetype}-${ev.permIdx}`,
       archetype,
       rankInArchetype,
       overallRank: overallRankByPerm.get(ev.permIdx) || 1,
       league: normLeague,
-      pokemon: [
-        { ...p0, id: "s6-slot-1" },
-        { ...p1, id: "s6-slot-2" },
-        { ...p2, id: "s6-slot-3" }
-      ],
+      pokemon: orderedMembers,
+      members: orderedMembers,
       viabilityWeightedBr: ev.viabilityWeightedBr,
+      expectedWeightedBr: ev.viabilityWeightedBr,
       rawAverageBr: ev.rawAverageBr,
       leadWinPct: ev.leadWinPct,
       safeSwapScore: ev.safeSwapScore,
       closerScore: ev.closerScore,
       worstCaseTop5Br: ev.worstCaseTop5Br,
+      worstCaseBr: ev.worstCaseTop5Br,
       compositeShow6Score,
       sharedWeaknesses: ev.sharedWeaknesses,
       altMovesetNotes: altNotes,
       synergySummary,
+      strongestAgainst,
+      dangerLineups,
       vsTopOpponentTeams: ev.vsTopOpponentTeams
     };
   };
@@ -11855,12 +11898,18 @@ export function evaluateShow6Pick3Matchup(
     league: normLeague,
     leagueAbbr: getLeagueAbbreviation(normLeague),
     myOptimized6,
+    my6SimulatedBestMoves: myOptimized6,
     opp6Names,
     top3AbbTeams,
     top3AbcTeams,
     top3DuoTeams,
+    topAbbLineups: top3AbbTeams,
+    topAbcLineups: top3AbcTeams,
+    topDuoLineups: top3DuoTeams,
     topOpponentViableTeams,
+    topOpponentViableLineups: topOpponentViableTeams,
     totalOrderedPairsEvaluated: 14400,
+    totalMatchupsSimulated: 14400,
     movesetsSimulated,
     elapsedMs: Math.max(1, Math.round(t1 - t0))
   };
@@ -11875,14 +11924,19 @@ export function evaluateShow6Pick3Matchup(
 export function generateBlindShow6Roster(params: {
   league: string;
   lockedPokemonNames?: string[];
+  lockedCoreNames?: string[];
   filterMode?: "OPEN" | "WHITELIST" | "BANLIST";
+  metaFilterMode?: "OPEN" | "WHITELIST" | "BANLIST";
   filterPokemonInput?: string | string[];
+  whitelistNames?: string | string[];
+  banlistNames?: string | string[];
   historicalPokemonInput?: string | string[];
+  historicalExpectedNames?: string | string[];
   historicalWeightPct?: number; // 0..100
 }): BlindShow6RosterResult {
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
   const upper = (params.league || "GREAT LEAGUE").toUpperCase();
-  const normLeague = upper.includes("MEGA")
+  const normLeague: LeagueType = upper.includes("MEGA")
     ? "MEGA MASTER LEAGUE"
     : upper.includes("GREAT")
     ? "GREAT LEAGUE"
@@ -11890,17 +11944,25 @@ export function generateBlindShow6Roster(params: {
     ? "ULTRA LEAGUE"
     : "MASTER LEAGUE";
 
-  const filterMode = params.filterMode || "OPEN";
-  const parsedFilterList = parsePokemonListInput(params.filterPokemonInput || [], normLeague);
+  const filterMode = params.metaFilterMode || params.filterMode || "OPEN";
+  const rawFilterInput =
+    params.filterPokemonInput ??
+    (filterMode === "WHITELIST"
+      ? params.whitelistNames
+      : filterMode === "BANLIST"
+      ? params.banlistNames
+      : []);
+  const parsedFilterList = parsePokemonListInput(rawFilterInput || [], normLeague);
   const filterLowerSet = new Set(parsedFilterList.map((n) => n.toLowerCase()));
   const filterBaseSet = new Set(
     parsedFilterList.map((n) => getTypesAndWeaknessesForSpecies(n, normLeague).baseSpecies)
   );
 
   // Parse Historical Expected Pokémon (allowing duplicates in raw input to weight frequency!)
-  const rawHistTokens = Array.isArray(params.historicalPokemonInput)
-    ? params.historicalPokemonInput
-    : (params.historicalPokemonInput || "")
+  const rawHistSource = params.historicalExpectedNames ?? params.historicalPokemonInput ?? [];
+  const rawHistTokens = Array.isArray(rawHistSource)
+    ? rawHistSource
+    : (rawHistSource || "")
         .split(/[\n,;]+/)
         .map((s) => s.trim())
         .filter(Boolean);
@@ -12084,7 +12146,8 @@ export function generateBlindShow6Roster(params: {
   const selected6: Array<{ eval: BlindCandEval; isLocked: boolean }> = [];
   const usedBaseSpecies = new Set<string>();
 
-  for (const rawLock of (params.lockedPokemonNames || []).slice(0, 6)) {
+  const rawLocksList = params.lockedCoreNames ?? params.lockedPokemonNames ?? [];
+  for (const rawLock of rawLocksList.slice(0, 6)) {
     const parsed = parsePokemonListInput([rawLock], normLeague);
     if (!parsed[0]) continue;
     const lockName = parsed[0];
@@ -12233,17 +12296,38 @@ export function generateBlindShow6Roster(params: {
     "CORE BREAKER / ANCHOR"
   ];
 
-  const slotEvals: BlindShow6RosterSlotEval[] = selected6.map((s, idx) => ({
-    slotIndex: idx,
-    member: optimizedRoster6[idx] || s.eval.member,
-    isLocked: s.isLocked,
-    roleBadge: roleBadges[idx] || `SLOT ${idx + 1}`,
-    leadBr: s.eval.leadBr,
-    swapBr: s.eval.swapBr,
-    closerBr: s.eval.closerBr,
-    overallBr: s.eval.overallBr,
-    topWins: s.eval.topWins
-  }));
+  const slotEvals: BlindShow6RosterSlotEval[] = selected6.map((s, idx) => {
+    let metaSumBr = 0;
+    let metaW = 0;
+    let histSumBr = 0;
+    let histW = 0;
+    for (const [tName, mWeight] of metaWeightMap.entries()) {
+      const brVal = s.eval.byThreat.get(tName) ?? s.eval.overallBr;
+      metaSumBr += mWeight * brVal;
+      metaW += mWeight;
+    }
+    for (const [tName, hWeight] of histWeightMap.entries()) {
+      const brVal = s.eval.byThreat.get(tName) ?? s.eval.overallBr;
+      histSumBr += hWeight * brVal;
+      histW += hWeight;
+    }
+    const metaBr = metaW > 0 ? Math.round(metaSumBr / metaW) : s.eval.overallBr;
+    const historicalBr = histW > 0 ? Math.round(histSumBr / histW) : s.eval.overallBr;
+    return {
+      slotIndex: idx,
+      member: optimizedRoster6[idx] || s.eval.member,
+      isLocked: s.isLocked,
+      roleBadge: roleBadges[idx] || `SLOT ${idx + 1}`,
+      leadBr: s.eval.leadBr,
+      swapBr: s.eval.swapBr,
+      closerBr: s.eval.closerBr,
+      overallBr: s.eval.overallBr,
+      blendedBr: s.eval.overallBr,
+      metaBr,
+      historicalBr,
+      topWins: s.eval.topWins
+    };
+  });
 
   const avgRosterBr = Math.round(
     slotEvals.reduce((acc, s) => acc + s.overallBr, 0) / Math.max(1, slotEvals.length)
@@ -12276,8 +12360,11 @@ export function generateBlindShow6Roster(params: {
     metaWeightPct: effectiveMetaPct,
     roster6: optimizedRoster6,
     slotEvals,
+    roster: slotEvals,
     fieldCoveragePct,
     avgRosterBr,
+    overallBlendedScore: avgRosterBr,
+    eligiblePoolCount: eligiblePool.length,
     beatenThreatsCount,
     totalThreatsAudited,
     embeddedPick3Preview,
@@ -12325,11 +12412,15 @@ export function predictShow6UnrevealedBackline(
   const unrevealedPool = cleanOpp6.filter((p) => !revSet.has(p.toLowerCase()));
 
   if (cleanOpp6.length === 0) {
+    const emptyMsg = "Enter Opponent's 6 in Show 6 Teams to constrain AI backline predictions.";
     return {
+      knownOpponent6: [],
       revealedOpponents: cleanRevealed,
       unrevealedPool: [],
       predictions: [],
-      criticalPreserveCallout: "Enter Opponent's 6 in Show 6 Teams to constrain AI backline predictions."
+      mostLikelyPairs: [],
+      criticalPreserveCallout: emptyMsg,
+      tacticalSummary: emptyMsg
     };
   }
 
@@ -12445,6 +12536,7 @@ export function predictShow6UnrevealedBackline(
 
   const predictions: Show6LiveBacklinePredictionItem[] = topSlice.map((p) => ({
     names: p.names,
+    backlineNames: p.names.length > 0 ? p.names : p.fullLineup,
     fullLineup: p.fullLineup,
     archetype: p.archetype,
     probabilityPct: Math.round((p.rawWeight / weightSum) * 100),
@@ -12469,19 +12561,30 @@ export function predictShow6UnrevealedBackline(
   }
 
   return {
+    knownOpponent6: cleanOpp6,
     revealedOpponents: cleanRevealed,
     unrevealedPool,
     predictions,
-    criticalPreserveCallout
+    mostLikelyPairs: predictions,
+    criticalPreserveCallout,
+    tacticalSummary: criticalPreserveCallout
   };
 }
 
-export function getDefaultShow6RosterNames(league: string, isOpponent: boolean = false): string[] {
+export type DefaultShow6RosterResult = string[] & { my6: string[]; opp6: string[] };
+
+export function getDefaultShow6RosterNames(
+  league: string = "GREAT LEAGUE",
+  isOpponent: boolean = false
+): DefaultShow6RosterResult {
   const top12 = getLeagueTopMetaSpeciesNames(league, 12);
-  if (!isOpponent) {
-    return top12.slice(0, 6);
+  const my6 = top12.slice(0, 6);
+  const opp6 = [top12[1], top12[3], top12[4], top12[6], top12[7], top12[9]].filter(Boolean);
+  while (opp6.length < 6) {
+    opp6.push(my6[opp6.length] || "Azumarill");
   }
-  return [top12[1], top12[3], top12[4], top12[6], top12[7], top12[9]].filter(Boolean);
+  const primaryList = isOpponent ? [...opp6] : [...my6];
+  return Object.assign(primaryList, { my6, opp6 });
 }
 
 export const INITIAL_SHOW6_ROSTERS_OF_6: Show6RosterOf6Preset[] = [
