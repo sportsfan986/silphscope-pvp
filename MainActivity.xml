@@ -35,10 +35,11 @@
         android:layout_marginBottom="10dp">
 
         <ImageView
+            android:id="@+id/iv_app_mode_logo"
             android:layout_width="38dp"
             android:layout_height="38dp"
             android:src="@drawable/ic_gbl_logo"
-            android:contentDescription="SilphScope PvP Icon"
+            android:contentDescription="SilphScope PvP Mode Icon"
             android:layout_marginEnd="10dp" />
 
         <LinearLayout
@@ -47,20 +48,41 @@
             android:layout_weight="1"
             android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/tv_app_main_title"
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="SilphScope PvP"
-                android:textSize="19sp"
-                android:textStyle="bold"
-                android:textColor="#f8fafc" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/tv_app_main_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="SilphScope PvP"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:textColor="#f8fafc" />
+
+                <Button
+                    android:id="@+id/btn_header_mode_badge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="28dp"
+                    android:minWidth="0dp"
+                    android:paddingHorizontal="7dp"
+                    android:paddingVertical="0dp"
+                    android:text="🛡️ GBL MODE"
+                    android:textSize="9.5sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#0284c7"
+                    android:textColor="#ffffff"
+                    android:layout_marginStart="6dp" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/tv_app_main_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Real-Time PvP Floating Overlay • v3.15"
+                android:text="Real-Time PvP Floating Overlay • v5.00"
                 android:textSize="11sp"
                 android:textColor="#94a3b8"
                 android:layout_marginTop="1dp" />
@@ -99,7 +121,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="8dp"
-                android:text="Status: Idle"
+                android:text="Status: GBL Idle"
                 android:textColor="#38bdf8"
                 android:textSize="13sp"
                 android:textStyle="bold" />
@@ -238,6 +260,7 @@
             android:layout_marginBottom="8dp">
 
             <TextView
+                android:id="@+id/tv_teams_page_title"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -249,17 +272,30 @@
                 android:textColor="#e2e8f0" />
 
             <Button
+                android:id="@+id/btn_toggle_anti_meta_builder"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:minWidth="0dp"
+                android:paddingHorizontal="9dp"
+                android:singleLine="true"
+                android:text="🧪 Anti-Meta"
+                android:textSize="11sp"
+                android:backgroundTint="#7c3aed"
+                android:textColor="#ffffff"
+                android:layout_marginEnd="5dp" />
+
+            <Button
                 android:id="@+id/btn_trash_presets"
                 android:layout_width="wrap_content"
                 android:layout_height="36dp"
                 android:minWidth="0dp"
-                android:paddingHorizontal="10dp"
+                android:paddingHorizontal="9dp"
                 android:singleLine="true"
                 android:text="🗑️ Trash"
                 android:textSize="11sp"
                 android:backgroundTint="#334155"
                 android:textColor="#cbd5e1"
-                android:layout_marginEnd="6dp" />
+                android:layout_marginEnd="5dp" />
 
             <Button
                 android:id="@+id/btn_add_preset"
@@ -280,10 +316,943 @@
             android:layout_weight="1">
 
             <LinearLayout
-                android:id="@+id/layout_presets_list"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical" />
+                android:orientation="vertical">
+
+                <!-- ===========================================================
+                     v5.00 SHOW 6 MODE HUB: TEAMS OF 6 + DUAL SHOW 6 TEAM BUILDERS
+                     (Visible when App Combat Mode == "show6")
+                     =========================================================== -->
+                <LinearLayout
+                    android:id="@+id/card_show6_mode_hub"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#1e293b"
+                    android:padding="12dp"
+                    android:layout_marginBottom="10dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="🏛️ Show 6 Battle Frontier Hub (Teams of 6 &amp; Dual Team Builders)"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:textColor="#fbbf24" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Manage saved Teams of 6, run the 6v6 Pick-3 Optimizer (unknown opponent movesets 75%/25% weighted, best movesets simulated for your team, 3 ABB / 3 ABC / 3 Duo-Core options), or build an optimal Blind Show 6 Roster with per-league persisted Whitelist/Banlist."
+                        android:textSize="10.5sp"
+                        android:textColor="#cbd5e1"
+                        android:layout_marginTop="2dp"
+                        android:layout_marginBottom="8dp" />
+
+                    <!-- Saved Show 6 Teams of 6 Section -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="#0f172a"
+                        android:padding="10dp"
+                        android:layout_marginBottom="8dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="📦 Saved Show 6 Rosters (Teams of 6)"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:textColor="#fbbf24" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="6dp">
+
+                            <EditText
+                                android:id="@+id/edit_show6_new_roster_name"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="8dp"
+                                android:singleLine="true"
+                                android:hint="Roster Name (e.g. GL Show 6 Core)"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11.5sp" />
+
+                            <Button
+                                android:id="@+id/btn_save_show6_roster6"
+                                android:layout_width="wrap_content"
+                                android:layout_height="36dp"
+                                android:text="💾 Save My 6"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:backgroundTint="#d97706"
+                                android:textColor="#0f172a"
+                                android:layout_marginStart="6dp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/layout_show6_rosters6_list"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical" />
+                    </LinearLayout>
+
+                    <!-- Dual Show 6 Builder Sub-Tab Switcher -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="8dp">
+
+                        <Button
+                            android:id="@+id/btn_show6_tab_pick3"
+                            android:layout_width="0dp"
+                            android:layout_height="38dp"
+                            android:layout_weight="1"
+                            android:text="🎯 1. 6v6 Pick-3"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:backgroundTint="#d97706"
+                            android:textColor="#0f172a"
+                            android:layout_marginEnd="4dp" />
+
+                        <Button
+                            android:id="@+id/btn_show6_tab_blind6"
+                            android:layout_width="0dp"
+                            android:layout_height="38dp"
+                            android:layout_weight="1"
+                            android:text="🌐 2. Blind Show 6"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:backgroundTint="#334155"
+                            android:textColor="#cbd5e1" />
+                    </LinearLayout>
+
+                    <!-- =======================================================
+                         BUILDER 1: 6v6 PICK-3 MATCHUP OPTIMIZER
+                         ======================================================= -->
+                    <LinearLayout
+                        android:id="@+id/layout_show6_builder_pick3"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="#0f172a"
+                        android:padding="10dp"
+                        android:visibility="visible">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="🎯 Mode 1: 6v6 Matchup Pick-3 Simulator (3 ABB, 3 ABC &amp; 3 Duo-Core Options)"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:textColor="#fbbf24" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Opponent movesets are unknown (weighted 75% standard / 25% alt). Simulates best movesets for your 6 and weights high-viability opponent trios highest."
+                            android:textSize="10sp"
+                            android:textColor="#94a3b8"
+                            android:layout_marginTop="2dp"
+                            android:layout_marginBottom="6dp" />
+
+                        <Spinner
+                            android:id="@+id/spinner_show6_pick3_league"
+                            android:layout_width="match_parent"
+                            android:layout_height="38dp"
+                            android:background="#1e293b"
+                            android:paddingHorizontal="8dp"
+                            android:layout_marginBottom="6dp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🛡️ Your 6 Pokémon (Best Movesets Simulated):"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:textColor="#34d399" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginTop="3dp">
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_my_1"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="My #1"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp"
+                                android:layout_marginEnd="4dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_my_2"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="My #2"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp"
+                                android:layout_marginEnd="4dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_my_3"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="My #3"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="6dp">
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_my_4"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="My #4"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp"
+                                android:layout_marginEnd="4dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_my_5"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="My #5"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp"
+                                android:layout_marginEnd="4dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_my_6"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="My #6"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="⚔️ Opponent's 6 Pokémon (Constrains Live Overlay AI Backline):"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:textColor="#fbbf24" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginTop="3dp">
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_opp_1"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="Opp #1"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp"
+                                android:layout_marginEnd="4dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_opp_2"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="Opp #2"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp"
+                                android:layout_marginEnd="4dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_opp_3"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="Opp #3"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="8dp">
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_opp_4"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="Opp #4"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp"
+                                android:layout_marginEnd="4dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_opp_5"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="Opp #5"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp"
+                                android:layout_marginEnd="4dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_opp_6"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="Opp #6"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <Button
+                            android:id="@+id/btn_run_show6_pick3"
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:text="⚡ Simulate 6v6 Pick-3 (3 ABB • 3 ABC • 3 Duo-Core)"
+                            android:textSize="11.5sp"
+                            android:textStyle="bold"
+                            android:backgroundTint="#d97706"
+                            android:textColor="#0f172a" />
+
+                        <LinearLayout
+                            android:id="@+id/layout_show6_pick3_results"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:layout_marginTop="8dp" />
+                    </LinearLayout>
+
+                    <!-- =======================================================
+                         BUILDER 2: BLIND SHOW 6 META ROSTER BUILDER
+                         ======================================================= -->
+                    <LinearLayout
+                        android:id="@+id/layout_show6_builder_blind6"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="#0f172a"
+                        android:padding="10dp"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="🌐 Mode 2: Blind Show 6 Meta Roster Optimizer"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:textColor="#38bdf8" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Build a synergistic 6-Pokémon roster against the PvPoke Meta + Historical Expected Pokémon. Whitelists &amp; Banlists are persisted per league with 1-click Clear."
+                            android:textSize="10sp"
+                            android:textColor="#94a3b8"
+                            android:layout_marginTop="2dp"
+                            android:layout_marginBottom="6dp" />
+
+                        <Spinner
+                            android:id="@+id/spinner_show6_blind_league"
+                            android:layout_width="match_parent"
+                            android:layout_height="38dp"
+                            android:background="#1e293b"
+                            android:paddingHorizontal="8dp"
+                            android:layout_marginBottom="6dp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="🔒 Lockable Core Slots (0–5 Optional):"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:textColor="#cbd5e1" />
+                            <Button
+                                android:id="@+id/btn_clear_show6_locks"
+                                android:layout_width="wrap_content"
+                                android:layout_height="28dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="8dp"
+                                android:text="Clear Locks"
+                                android:textSize="9.5sp"
+                                android:backgroundTint="#334155"
+                                android:textColor="#cbd5e1" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginTop="3dp"
+                            android:layout_marginBottom="6dp">
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_lock_1"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="5dp"
+                                android:singleLine="true"
+                                android:hint="Lock 1"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="10.5sp"
+                                android:layout_marginEnd="3dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_lock_2"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="5dp"
+                                android:singleLine="true"
+                                android:hint="Lock 2"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="10.5sp"
+                                android:layout_marginEnd="3dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_lock_3"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="5dp"
+                                android:singleLine="true"
+                                android:hint="Lock 3"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="10.5sp"
+                                android:layout_marginEnd="3dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_lock_4"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="5dp"
+                                android:singleLine="true"
+                                android:hint="Lock 4"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="10.5sp"
+                                android:layout_marginEnd="3dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_lock_5"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="5dp"
+                                android:singleLine="true"
+                                android:hint="Lock 5"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="10.5sp" />
+                        </LinearLayout>
+
+                        <!-- Input Method Selector (Option 2 Text Paste vs Option 3 Chip Picker) -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="6dp">
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="List Input Method:"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:textColor="#c084fc" />
+                            <Button
+                                android:id="@+id/btn_show6_input_text"
+                                android:layout_width="wrap_content"
+                                android:layout_height="30dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="8dp"
+                                android:text="📝 Text Paste"
+                                android:textSize="10sp"
+                                android:backgroundTint="#334155"
+                                android:textColor="#cbd5e1"
+                                android:layout_marginEnd="4dp" />
+                            <Button
+                                android:id="@+id/btn_show6_input_chips"
+                                android:layout_width="wrap_content"
+                                android:layout_height="30dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="8dp"
+                                android:text="🏷️ Chip Picker"
+                                android:textSize="10sp"
+                                android:backgroundTint="#7c3aed"
+                                android:textColor="#ffffff" />
+                        </LinearLayout>
+
+                        <!-- Cup Filter Mode (Open / Whitelist / Banlist — Persisted Per League) -->
+                        <TextView
+                            android:id="@+id/tv_show6_league_persisted_status"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="🛡️ Limited Meta Filter (Persisted for GREAT LEAGUE: 0 Whitelisted • 0 Banned)"
+                            android:textSize="10.5sp"
+                            android:textStyle="bold"
+                            android:textColor="#c084fc"
+                            android:layout_marginBottom="4dp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginBottom="6dp">
+                            <Button
+                                android:id="@+id/btn_show6_filter_open"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:text="Open Meta"
+                                android:textSize="10sp"
+                                android:backgroundTint="#7c3aed"
+                                android:textColor="#ffffff"
+                                android:layout_marginEnd="4dp" />
+                            <Button
+                                android:id="@+id/btn_show6_filter_whitelist"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:text="Whitelist (0)"
+                                android:textSize="10sp"
+                                android:backgroundTint="#334155"
+                                android:textColor="#cbd5e1"
+                                android:layout_marginEnd="4dp" />
+                            <Button
+                                android:id="@+id/btn_show6_filter_banlist"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:text="Banlist (0)"
+                                android:textSize="10sp"
+                                android:backgroundTint="#334155"
+                                android:textColor="#cbd5e1" />
+                        </LinearLayout>
+
+                        <!-- Clear Persisted Whitelist / Banlist Buttons -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="end"
+                            android:layout_marginBottom="6dp">
+                            <Button
+                                android:id="@+id/btn_clear_show6_active_list"
+                                android:layout_width="wrap_content"
+                                android:layout_height="30dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="8dp"
+                                android:text="🗑️ Clear Active List (League)"
+                                android:textSize="9.5sp"
+                                android:backgroundTint="#7f1d1d"
+                                android:textColor="#fecaca"
+                                android:layout_marginEnd="4dp" />
+                            <Button
+                                android:id="@+id/btn_clear_show6_both_lists"
+                                android:layout_width="wrap_content"
+                                android:layout_height="30dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="8dp"
+                                android:text="🧹 Clear Both Lists (League)"
+                                android:textSize="9.5sp"
+                                android:backgroundTint="#334155"
+                                android:textColor="#fca5a5" />
+                        </LinearLayout>
+
+                        <EditText
+                            android:id="@+id/edit_show6_filter_text"
+                            android:layout_width="match_parent"
+                            android:layout_height="64dp"
+                            android:background="#1e293b"
+                            android:padding="8dp"
+                            android:gravity="top|start"
+                            android:hint="Paste comma/newline Pokémon for Whitelist or Banlist (auto-saved per league)..."
+                            android:textColor="#f8fafc"
+                            android:textColorHint="#64748b"
+                            android:textSize="11sp"
+                            android:visibility="gone"
+                            android:layout_marginBottom="6dp" />
+
+                        <LinearLayout
+                            android:id="@+id/layout_show6_filter_chip_box"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:layout_marginBottom="6dp">
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal">
+                                <AutoCompleteTextView
+                                    android:id="@+id/edit_show6_filter_chip_input"
+                                    android:layout_width="0dp"
+                                    android:layout_height="36dp"
+                                    android:layout_weight="1"
+                                    android:background="#1e293b"
+                                    android:paddingHorizontal="8dp"
+                                    android:singleLine="true"
+                                    android:hint="Type Pokémon to add to Whitelist/Banlist..."
+                                    android:textColor="#f8fafc"
+                                    android:textColorHint="#64748b"
+                                    android:textSize="11sp" />
+                                <Button
+                                    android:id="@+id/btn_add_show6_filter_chip"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="36dp"
+                                    android:text="+ Add"
+                                    android:textSize="10.5sp"
+                                    android:backgroundTint="#7c3aed"
+                                    android:textColor="#ffffff"
+                                    android:layout_marginStart="4dp" />
+                            </LinearLayout>
+                            <LinearLayout
+                                android:id="@+id/layout_show6_filter_chips"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:layout_marginTop="4dp" />
+                        </LinearLayout>
+
+                        <!-- Historical Match Weight Slider & Input -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="4dp">
+                            <TextView
+                                android:id="@+id/tv_show6_hist_weight_label"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="📜 Meta 65% vs. Historical 35%"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:textColor="#34d399" />
+                            <Button
+                                android:id="@+id/btn_pull_show6_hist_logs"
+                                android:layout_width="wrap_content"
+                                android:layout_height="30dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="8dp"
+                                android:text="📥 Pull from Logs"
+                                android:textSize="9.5sp"
+                                android:backgroundTint="#059669"
+                                android:textColor="#ffffff" />
+                        </LinearLayout>
+
+                        <SeekBar
+                            android:id="@+id/seek_show6_hist_weight"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:max="100"
+                            android:progress="35"
+                            android:layout_marginVertical="4dp" />
+
+                        <EditText
+                            android:id="@+id/edit_show6_hist_text"
+                            android:layout_width="match_parent"
+                            android:layout_height="56dp"
+                            android:background="#1e293b"
+                            android:padding="8dp"
+                            android:gravity="top|start"
+                            android:hint="Expected historical opponent Pokémon (comma/newline separated)..."
+                            android:text="Azumarill, Clodsire, Mandibuzz, Feraligatr, Annihilape, Wigglytuff"
+                            android:textColor="#f8fafc"
+                            android:textColorHint="#64748b"
+                            android:textSize="11sp"
+                            android:layout_marginBottom="8dp" />
+
+                        <Button
+                            android:id="@+id/btn_run_show6_blind"
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:text="✨ Build Optimal Blind Show 6 Roster"
+                            android:textSize="11.5sp"
+                            android:textStyle="bold"
+                            android:backgroundTint="#0284c7"
+                            android:textColor="#ffffff" />
+
+                        <LinearLayout
+                            android:id="@+id/layout_show6_blind_results"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:layout_marginTop="8dp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- ===========================================================
+                     ANTI-META TEAM BUILDER PANEL (2a, 2b, 2c)
+                     =========================================================== -->
+                <LinearLayout
+                    android:id="@+id/card_anti_meta_builder"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#1e293b"
+                    android:padding="12dp"
+                    android:layout_marginBottom="10dp"
+                    android:visibility="visible">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="🧪 Anti-Meta Team Builder (ABB &amp; ABC)"
+                                android:textSize="13.5sp"
+                                android:textStyle="bold"
+                                android:textColor="#38bdf8" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Pick a League and 0, 1, or 2 Featured Pokémon → Generates Best 5 ABB &amp; Best 5 ABC Teams. Tap any option to create &amp; open Edit Team."
+                                android:textSize="11sp"
+                                android:textColor="#94a3b8"
+                                android:layout_marginTop="2dp" />
+                        </LinearLayout>
+
+                        <Button
+                            android:id="@+id/btn_collapse_anti_meta_panel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="32dp"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="8dp"
+                            android:singleLine="true"
+                            android:text="Hide ▲"
+                            android:textSize="10.5sp"
+                            android:backgroundTint="#334155"
+                            android:textColor="#cbd5e1"
+                            android:layout_marginStart="6dp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/layout_anti_meta_body"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:layout_marginTop="8dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="1. Select League:"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:textColor="#cbd5e1" />
+
+                        <Spinner
+                            android:id="@+id/spinner_antimeta_league"
+                            android:layout_width="match_parent"
+                            android:layout_height="38dp"
+                            android:background="#0f172a"
+                            android:paddingHorizontal="8dp"
+                            android:layout_marginTop="3dp"
+                            android:layout_marginBottom="8dp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="2. Featured Pokémon (Optional — Enter 0, 1, or 2):"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:textColor="#cbd5e1" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="4dp">
+
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_antimeta_feat1"
+                                android:layout_width="0dp"
+                                android:layout_height="38dp"
+                                android:layout_weight="1"
+                                android:background="#0f172a"
+                                android:paddingHorizontal="10dp"
+                                android:singleLine="true"
+                                android:hint="Featured #1 (optional, e.g. Feraligatr)"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="12sp" />
+
+                            <Button
+                                android:id="@+id/btn_clear_antimeta_feat1"
+                                android:layout_width="36dp"
+                                android:layout_height="36dp"
+                                android:minWidth="0dp"
+                                android:padding="0dp"
+                                android:text="✕"
+                                android:textSize="11sp"
+                                android:backgroundTint="#334155"
+                                android:textColor="#fca5a5"
+                                android:layout_marginStart="6dp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="6dp"
+                            android:layout_marginBottom="8dp">
+
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_antimeta_feat2"
+                                android:layout_width="0dp"
+                                android:layout_height="38dp"
+                                android:layout_weight="1"
+                                android:background="#0f172a"
+                                android:paddingHorizontal="10dp"
+                                android:singleLine="true"
+                                android:hint="Featured #2 (optional, e.g. Clodsire)"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="12sp" />
+
+                            <Button
+                                android:id="@+id/btn_clear_antimeta_feat2"
+                                android:layout_width="36dp"
+                                android:layout_height="36dp"
+                                android:minWidth="0dp"
+                                android:padding="0dp"
+                                android:text="✕"
+                                android:textSize="11sp"
+                                android:backgroundTint="#334155"
+                                android:textColor="#fca5a5"
+                                android:layout_marginStart="6dp" />
+                        </LinearLayout>
+
+                        <Button
+                            android:id="@+id/btn_generate_antimeta_teams"
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:text="⚡ Generate Best 5 ABB &amp; 5 ABC Anti-Meta Teams"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:backgroundTint="#0284c7"
+                            android:textColor="#ffffff" />
+
+                        <TextView
+                            android:id="@+id/text_antimeta_status"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Default Created Name: GL Anti-Meta • Tap Generate to view 5 ABB &amp; 5 ABC options."
+                            android:textSize="11sp"
+                            android:textColor="#fbbf24"
+                            android:layout_marginTop="6dp" />
+
+                        <LinearLayout
+                            android:id="@+id/layout_antimeta_results"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:layout_marginTop="8dp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/layout_presets_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </LinearLayout>
         </ScrollView>
     </LinearLayout>
 
@@ -313,6 +1282,67 @@
                 android:textSize="15sp"
                 android:textStyle="bold"
                 android:layout_marginBottom="8dp" />
+
+            <!-- ===================================================================
+                 0. APP COMBAT MODE TOGGLE (v5.00: STANDARD GBL vs SHOW 6 MODE)
+                 =================================================================== -->
+            <LinearLayout
+                android:id="@+id/card_settings_combat_mode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#0f172a"
+                android:padding="10dp"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🏛️ 0. App Combat Mode (Standard GBL vs. Show 6 Battle Frontier • v5.00)"
+                    android:textColor="#fbbf24"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tv_settings_combat_mode_desc"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Switch between Standard GBL (Blind 3 PvP) and Show 6 (Battle Frontier / Pick-3). Show 6 Mode stores independent Battle Logs, Teams of 6 &amp; Teams of 3, Dual Show 6 Team Builders, per-league persisted Whitelist/Banlist, and constrains live AI backline predictions to the known Opponent 6."
+                    android:textColor="#94a3b8"
+                    android:textSize="10sp"
+                    android:lineSpacingExtra="1.5dp"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="8dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btn_mode_standard_gbl"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:text="🛡️ Standard GBL (Blind 3)"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#0284c7"
+                        android:textColor="#ffffff"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_mode_show6_frontier"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:text="🏛️ Show 6 (Battle Frontier)"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#cbd5e1" />
+                </LinearLayout>
+            </LinearLayout>
 
             <!-- ===================================================================
                  1. APP & OVERLAY THEME + SIZE & TRANSPARENCY GROUP (TOP OF SETTINGS)
@@ -781,6 +1811,666 @@
                     android:layout_width="wrap_content"
                     android:layout_height="36dp"
                     android:text="Toasts On"
+                    android:textSize="11sp"
+                    android:backgroundTint="#0284c7"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
+            <!-- Lead & Swap Tactical Recommendations GUI Setting -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:paddingTop="8dp"
+                android:background="#0f172a"
+                android:paddingHorizontal="10dp"
+                android:paddingBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🧠 Lead &amp; Swap Tactical Recommendation Row"
+                        android:textColor="#34d399"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_tactical_rec_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: Enabled — 1-line Action, Shield Plan &amp; Goal row in Overlay"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_toggle_tactical_rec"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="Recs On"
+                    android:textSize="11sp"
+                    android:backgroundTint="#059669"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
+            <!-- v4.00: Attack Incoming! Shield Decision Overlay Setting (Default ON) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:paddingTop="8dp"
+                android:background="#0f172a"
+                android:paddingHorizontal="10dp"
+                android:paddingBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🛡️ Attack Incoming! Shield Decision Overlay"
+                        android:textColor="#34d399"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_shield_decision_overlay_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: Enabled — Red/Orange/Yellow/Green KO &amp; HP summary above Attack incoming!"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_toggle_shield_decision_overlay"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="Shield HUD On"
+                    android:textSize="11sp"
+                    android:backgroundTint="#059669"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
+            <!-- Live HP Tracking Setting (v3.60: Default OFF, Opt-In) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:paddingTop="8dp"
+                android:background="#0f172a"
+                android:paddingHorizontal="10dp"
+                android:paddingBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="❤️ Live HP Bar Tracking (Opt-In)"
+                        android:textColor="#e2e8f0"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_hp_tracking_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: Disabled (Opt-in via Settings to scan floating HP bars)"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_toggle_hp_tracking"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="HP Off"
+                    android:textSize="11sp"
+                    android:backgroundTint="#334155"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
+            <!-- v3.89: HP Bar Meter Debounce & Upward Self-Correction Card -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="8dp"
+                android:padding="10dp"
+                android:background="#0f172a">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="❤️ HP Bar Meter Debounce &amp; Upward Self-Correction (v3.89)"
+                    android:textColor="#34d399"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="Requires N consecutive matching HP bar samples (±2% tolerance) before updating, locks out noisy charged-move animation frames, and immediately self-corrects upward on clean stable HP bars (including during Shield Call prompts)."
+                    android:textColor="#94a3b8"
+                    android:textSize="10sp" />
+
+                <TextView
+                    android:id="@+id/tv_hp_debounce_summary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:padding="8dp"
+                    android:background="#090d16"
+                    android:text="• Active: 2 Matching Samples (Default • Fastest Response, ±2% HP Tolerance)\n• Upward Self-Correction: Enabled (Recovers from low glitch readings)\n• Shield Call Prompts: Always corrects with clean stable HP meters"
+                    android:textColor="#a7f3d0"
+                    android:textSize="10sp"
+                    android:fontFamily="monospace" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Matching HP Samples Required"
+                    android:textColor="#cbd5e1"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="4dp">
+
+                    <Button
+                        android:id="@+id/btn_hp_debounce_2_samples"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="2 Samples (Def)"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#10b981"
+                        android:textColor="#ffffff"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_hp_debounce_3_samples"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="3 Samples"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#e2e8f0"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_hp_debounce_4_samples"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="4 Samples"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#e2e8f0" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Debounce Error Tolerance (±%):"
+                    android:textColor="#cbd5e1"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="4dp">
+
+                    <Button
+                        android:id="@+id/btn_debounce_tol_0"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="±0%"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#e2e8f0"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_debounce_tol_1"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="±1% (Def)"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#10b981"
+                        android:textColor="#ffffff"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_debounce_tol_2"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="±2%"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#e2e8f0"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_debounce_tol_3"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="±3%"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#e2e8f0" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Live Energy Tracking Setting (v3.60: Default OFF, Opt-In) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:paddingTop="8dp"
+                android:background="#0f172a"
+                android:paddingHorizontal="10dp"
+                android:paddingBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="⚡ Live Energy &amp; Fast-Move Counting (Opt-In)"
+                        android:textColor="#e2e8f0"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_energy_tracking_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: Disabled (Opt-in for slowest charge move circle debounce &amp; snap)"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_toggle_energy_tracking"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="Energy Off"
+                    android:textSize="11sp"
+                    android:backgroundTint="#334155"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
+            <!-- v3.87: Energy Meter Debounce & Slowest Move Snap Card -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="8dp"
+                android:background="#0f172a"
+                android:padding="10dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="⚡ 3-Ring Energy Meter, Proactive Lead &amp; 100E Opp Clock (v4.13)"
+                    android:textColor="#38bdf8"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tv_energy_debounce_summary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="• Active: 2 Matching Samples (Default • Fastest Response, ±2% Fill Tolerance)
+• Proactive Fast-Move Energy Lead: 300ms (Default • ~300ms early + charges opp at 100E with charge-scene gates)
+• Live Energy &amp; Circle % Battle Toasts: Enabled"
+                    android:textColor="#94a3b8"
+                    android:textSize="10sp"
+                    android:layout_marginTop="3dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="8dp">
+
+                    <Button
+                        android:id="@+id/btn_debounce_2_samples"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="2 Samples (Def)"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold"
+                        android:singleLine="true"
+                        android:backgroundTint="#0284c7"
+                        android:textColor="#ffffff"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_debounce_3_samples"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="3 Samples"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold"
+                        android:singleLine="true"
+                        android:backgroundTint="#334155"
+                        android:textColor="#94a3b8"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_debounce_4_samples"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="4 Samples"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold"
+                        android:singleLine="true"
+                        android:backgroundTint="#334155"
+                        android:textColor="#94a3b8" />
+                </LinearLayout>
+
+                <!-- v4.12 / v4.13: Proactive Fast-Move Energy Lead Time Selector (0 / 200 / 300 / 400ms) -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="⏱️ Proactive Fast-Move Energy Lead Time (Player &amp; Opponent + 100E Clock)"
+                    android:textColor="#e2e8f0"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/text_proactive_energy_lead_desc"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Default: 300ms — Advances player &amp; opponent energy ~300ms early (keeps charging opp at 100E with charge-scene gates); auto-rolls back if &gt;500ms lag"
+                    android:textColor="#94a3b8"
+                    android:textSize="9.5sp"
+                    android:layout_marginTop="1dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="5dp">
+
+                    <Button
+                        android:id="@+id/btn_proactive_lead_0"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:text="Off (0ms)"
+                        android:textSize="9.5sp"
+                        android:textStyle="bold"
+                        android:singleLine="true"
+                        android:backgroundTint="#334155"
+                        android:textColor="#94a3b8"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_proactive_lead_200"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:text="200ms"
+                        android:textSize="9.5sp"
+                        android:textStyle="bold"
+                        android:singleLine="true"
+                        android:backgroundTint="#334155"
+                        android:textColor="#94a3b8"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_proactive_lead_300"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:text="300ms (Def)"
+                        android:textSize="9.5sp"
+                        android:textStyle="bold"
+                        android:singleLine="true"
+                        android:backgroundTint="#0284c7"
+                        android:textColor="#ffffff"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_proactive_lead_400"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:text="400ms"
+                        android:textSize="9.5sp"
+                        android:textStyle="bold"
+                        android:singleLine="true"
+                        android:backgroundTint="#334155"
+                        android:textColor="#94a3b8" />
+                </LinearLayout>
+
+                <!-- Live Energy & Circle % Update Toast Toggle -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="8dp"
+                    android:paddingTop="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:layout_marginEnd="8dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="⚡ Live Energy &amp; Circle % Battle Toasts"
+                            android:textColor="#e2e8f0"
+                            android:textSize="11.5sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/text_energy_update_toasts_desc"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Default: On — Shows tracked move, circle % &amp; energy on every change"
+                            android:textColor="#94a3b8"
+                            android:textSize="10sp" />
+                    </LinearLayout>
+
+                    <Button
+                        android:id="@+id/btn_toggle_energy_update_toasts"
+                        android:layout_width="wrap_content"
+                        android:layout_height="34dp"
+                        android:text="Toasts On"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#059669"
+                        android:textColor="#ffffff" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- v4.08: Charged Move Circle Priority Mode (Smart Hybrid / Highest Contrast / Highest Energy) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:background="#0f172a"
+                android:padding="10dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:paddingEnd="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🎨 Charged Move Circle Priority (18-Type Contrast)"
+                        android:textColor="#e2e8f0"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_charge_circle_priority_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: Smart Hybrid (Tracks higher-E move in Tiers S/A #1–10; promotes higher-contrast move when higher-E is Tier B/C #11–18 like Normal/Steel/Ghost)"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_cycle_charge_circle_priority"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="Smart Hybrid"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#0284c7"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
+            <!-- v4.08: Opponent Alternate Fast Move Detection Toggle (Default: Enabled) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:background="#0f172a"
+                android:padding="10dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:paddingEnd="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🔍 Opponent Alternate Fast Move Detection"
+                        android:textColor="#e2e8f0"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_alt_fast_move_detect_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: Enabled (Auto-switches opponent fast move when floating HP bar damage diverges from standard fast move)"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_toggle_alt_fast_move_detect"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="Alt Detect On"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#0284c7"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
+            <!-- v3.80: Non-Standard Fast Move Detection Turn Offset (0 / +1 / +2 Turns) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:background="#0f172a"
+                android:padding="10dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🔍 Non-Standard Fast Move Sample Offset"
+                        android:textColor="#e2e8f0"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_fast_detect_offset_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: +0 Turns (Samples at exact 3/6/9... turn multiple where Std &gt;= 10% HP)"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_cycle_fast_detect_offset"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="+0 Turns"
                     android:textSize="11sp"
                     android:backgroundTint="#0284c7"
                     android:textColor="#ffffff" />

@@ -35,10 +35,11 @@
         android:layout_marginBottom="10dp">
 
         <ImageView
+            android:id="@+id/iv_app_mode_logo"
             android:layout_width="38dp"
             android:layout_height="38dp"
             android:src="@drawable/ic_gbl_logo"
-            android:contentDescription="SilphScope PvP Icon"
+            android:contentDescription="SilphScope PvP Mode Icon"
             android:layout_marginEnd="10dp" />
 
         <LinearLayout
@@ -47,20 +48,41 @@
             android:layout_weight="1"
             android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/tv_app_main_title"
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="SilphScope PvP"
-                android:textSize="19sp"
-                android:textStyle="bold"
-                android:textColor="#f8fafc" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/tv_app_main_title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="SilphScope PvP"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:textColor="#f8fafc" />
+
+                <Button
+                    android:id="@+id/btn_header_mode_badge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="28dp"
+                    android:minWidth="0dp"
+                    android:paddingHorizontal="7dp"
+                    android:paddingVertical="0dp"
+                    android:text="🛡️ GBL MODE"
+                    android:textSize="9.5sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#0284c7"
+                    android:textColor="#ffffff"
+                    android:layout_marginStart="6dp" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/tv_app_main_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Real-Time PvP Floating Overlay • v4.13"
+                android:text="Real-Time PvP Floating Overlay • v5.00"
                 android:textSize="11sp"
                 android:textColor="#94a3b8"
                 android:layout_marginTop="1dp" />
@@ -99,7 +121,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="8dp"
-                android:text="Status: Idle"
+                android:text="Status: GBL Idle"
                 android:textColor="#38bdf8"
                 android:textSize="13sp"
                 android:textStyle="bold" />
@@ -238,6 +260,7 @@
             android:layout_marginBottom="8dp">
 
             <TextView
+                android:id="@+id/tv_teams_page_title"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -296,6 +319,750 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
+
+                <!-- ===========================================================
+                     v5.00 SHOW 6 MODE HUB: TEAMS OF 6 + DUAL SHOW 6 TEAM BUILDERS
+                     (Visible when App Combat Mode == "show6")
+                     =========================================================== -->
+                <LinearLayout
+                    android:id="@+id/card_show6_mode_hub"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#1e293b"
+                    android:padding="12dp"
+                    android:layout_marginBottom="10dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="🏛️ Show 6 Battle Frontier Hub (Teams of 6 &amp; Dual Team Builders)"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:textColor="#fbbf24" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Manage saved Teams of 6, run the 6v6 Pick-3 Optimizer (unknown opponent movesets 75%/25% weighted, best movesets simulated for your team, 3 ABB / 3 ABC / 3 Duo-Core options), or build an optimal Blind Show 6 Roster with per-league persisted Whitelist/Banlist."
+                        android:textSize="10.5sp"
+                        android:textColor="#cbd5e1"
+                        android:layout_marginTop="2dp"
+                        android:layout_marginBottom="8dp" />
+
+                    <!-- Saved Show 6 Teams of 6 Section -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="#0f172a"
+                        android:padding="10dp"
+                        android:layout_marginBottom="8dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="📦 Saved Show 6 Rosters (Teams of 6)"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:textColor="#fbbf24" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="6dp">
+
+                            <EditText
+                                android:id="@+id/edit_show6_new_roster_name"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="8dp"
+                                android:singleLine="true"
+                                android:hint="Roster Name (e.g. GL Show 6 Core)"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11.5sp" />
+
+                            <Button
+                                android:id="@+id/btn_save_show6_roster6"
+                                android:layout_width="wrap_content"
+                                android:layout_height="36dp"
+                                android:text="💾 Save My 6"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:backgroundTint="#d97706"
+                                android:textColor="#0f172a"
+                                android:layout_marginStart="6dp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/layout_show6_rosters6_list"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical" />
+                    </LinearLayout>
+
+                    <!-- Dual Show 6 Builder Sub-Tab Switcher -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="8dp">
+
+                        <Button
+                            android:id="@+id/btn_show6_tab_pick3"
+                            android:layout_width="0dp"
+                            android:layout_height="38dp"
+                            android:layout_weight="1"
+                            android:text="🎯 1. 6v6 Pick-3"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:backgroundTint="#d97706"
+                            android:textColor="#0f172a"
+                            android:layout_marginEnd="4dp" />
+
+                        <Button
+                            android:id="@+id/btn_show6_tab_blind6"
+                            android:layout_width="0dp"
+                            android:layout_height="38dp"
+                            android:layout_weight="1"
+                            android:text="🌐 2. Blind Show 6"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:backgroundTint="#334155"
+                            android:textColor="#cbd5e1" />
+                    </LinearLayout>
+
+                    <!-- =======================================================
+                         BUILDER 1: 6v6 PICK-3 MATCHUP OPTIMIZER
+                         ======================================================= -->
+                    <LinearLayout
+                        android:id="@+id/layout_show6_builder_pick3"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="#0f172a"
+                        android:padding="10dp"
+                        android:visibility="visible">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="🎯 Mode 1: 6v6 Matchup Pick-3 Simulator (3 ABB, 3 ABC &amp; 3 Duo-Core Options)"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:textColor="#fbbf24" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Opponent movesets are unknown (weighted 75% standard / 25% alt). Simulates best movesets for your 6 and weights high-viability opponent trios highest."
+                            android:textSize="10sp"
+                            android:textColor="#94a3b8"
+                            android:layout_marginTop="2dp"
+                            android:layout_marginBottom="6dp" />
+
+                        <Spinner
+                            android:id="@+id/spinner_show6_pick3_league"
+                            android:layout_width="match_parent"
+                            android:layout_height="38dp"
+                            android:background="#1e293b"
+                            android:paddingHorizontal="8dp"
+                            android:layout_marginBottom="6dp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🛡️ Your 6 Pokémon (Best Movesets Simulated):"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:textColor="#34d399" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginTop="3dp">
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_my_1"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="My #1"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp"
+                                android:layout_marginEnd="4dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_my_2"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="My #2"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp"
+                                android:layout_marginEnd="4dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_my_3"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="My #3"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="6dp">
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_my_4"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="My #4"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp"
+                                android:layout_marginEnd="4dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_my_5"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="My #5"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp"
+                                android:layout_marginEnd="4dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_my_6"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="My #6"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="⚔️ Opponent's 6 Pokémon (Constrains Live Overlay AI Backline):"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:textColor="#fbbf24" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginTop="3dp">
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_opp_1"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="Opp #1"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp"
+                                android:layout_marginEnd="4dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_opp_2"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="Opp #2"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp"
+                                android:layout_marginEnd="4dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_opp_3"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="Opp #3"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="8dp">
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_opp_4"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="Opp #4"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp"
+                                android:layout_marginEnd="4dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_opp_5"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="Opp #5"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp"
+                                android:layout_marginEnd="4dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_opp_6"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="6dp"
+                                android:singleLine="true"
+                                android:hint="Opp #6"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <Button
+                            android:id="@+id/btn_run_show6_pick3"
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:text="⚡ Simulate 6v6 Pick-3 (3 ABB • 3 ABC • 3 Duo-Core)"
+                            android:textSize="11.5sp"
+                            android:textStyle="bold"
+                            android:backgroundTint="#d97706"
+                            android:textColor="#0f172a" />
+
+                        <LinearLayout
+                            android:id="@+id/layout_show6_pick3_results"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:layout_marginTop="8dp" />
+                    </LinearLayout>
+
+                    <!-- =======================================================
+                         BUILDER 2: BLIND SHOW 6 META ROSTER BUILDER
+                         ======================================================= -->
+                    <LinearLayout
+                        android:id="@+id/layout_show6_builder_blind6"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="#0f172a"
+                        android:padding="10dp"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="🌐 Mode 2: Blind Show 6 Meta Roster Optimizer"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:textColor="#38bdf8" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Build a synergistic 6-Pokémon roster against the PvPoke Meta + Historical Expected Pokémon. Whitelists &amp; Banlists are persisted per league with 1-click Clear."
+                            android:textSize="10sp"
+                            android:textColor="#94a3b8"
+                            android:layout_marginTop="2dp"
+                            android:layout_marginBottom="6dp" />
+
+                        <Spinner
+                            android:id="@+id/spinner_show6_blind_league"
+                            android:layout_width="match_parent"
+                            android:layout_height="38dp"
+                            android:background="#1e293b"
+                            android:paddingHorizontal="8dp"
+                            android:layout_marginBottom="6dp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="🔒 Lockable Core Slots (0–5 Optional):"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:textColor="#cbd5e1" />
+                            <Button
+                                android:id="@+id/btn_clear_show6_locks"
+                                android:layout_width="wrap_content"
+                                android:layout_height="28dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="8dp"
+                                android:text="Clear Locks"
+                                android:textSize="9.5sp"
+                                android:backgroundTint="#334155"
+                                android:textColor="#cbd5e1" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginTop="3dp"
+                            android:layout_marginBottom="6dp">
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_lock_1"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="5dp"
+                                android:singleLine="true"
+                                android:hint="Lock 1"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="10.5sp"
+                                android:layout_marginEnd="3dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_lock_2"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="5dp"
+                                android:singleLine="true"
+                                android:hint="Lock 2"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="10.5sp"
+                                android:layout_marginEnd="3dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_lock_3"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="5dp"
+                                android:singleLine="true"
+                                android:hint="Lock 3"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="10.5sp"
+                                android:layout_marginEnd="3dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_lock_4"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="5dp"
+                                android:singleLine="true"
+                                android:hint="Lock 4"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="10.5sp"
+                                android:layout_marginEnd="3dp" />
+                            <AutoCompleteTextView
+                                android:id="@+id/edit_show6_lock_5"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:background="#1e293b"
+                                android:paddingHorizontal="5dp"
+                                android:singleLine="true"
+                                android:hint="Lock 5"
+                                android:textColor="#f8fafc"
+                                android:textColorHint="#64748b"
+                                android:textSize="10.5sp" />
+                        </LinearLayout>
+
+                        <!-- Input Method Selector (Option 2 Text Paste vs Option 3 Chip Picker) -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="6dp">
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="List Input Method:"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:textColor="#c084fc" />
+                            <Button
+                                android:id="@+id/btn_show6_input_text"
+                                android:layout_width="wrap_content"
+                                android:layout_height="30dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="8dp"
+                                android:text="📝 Text Paste"
+                                android:textSize="10sp"
+                                android:backgroundTint="#334155"
+                                android:textColor="#cbd5e1"
+                                android:layout_marginEnd="4dp" />
+                            <Button
+                                android:id="@+id/btn_show6_input_chips"
+                                android:layout_width="wrap_content"
+                                android:layout_height="30dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="8dp"
+                                android:text="🏷️ Chip Picker"
+                                android:textSize="10sp"
+                                android:backgroundTint="#7c3aed"
+                                android:textColor="#ffffff" />
+                        </LinearLayout>
+
+                        <!-- Cup Filter Mode (Open / Whitelist / Banlist — Persisted Per League) -->
+                        <TextView
+                            android:id="@+id/tv_show6_league_persisted_status"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="🛡️ Limited Meta Filter (Persisted for GREAT LEAGUE: 0 Whitelisted • 0 Banned)"
+                            android:textSize="10.5sp"
+                            android:textStyle="bold"
+                            android:textColor="#c084fc"
+                            android:layout_marginBottom="4dp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginBottom="6dp">
+                            <Button
+                                android:id="@+id/btn_show6_filter_open"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:text="Open Meta"
+                                android:textSize="10sp"
+                                android:backgroundTint="#7c3aed"
+                                android:textColor="#ffffff"
+                                android:layout_marginEnd="4dp" />
+                            <Button
+                                android:id="@+id/btn_show6_filter_whitelist"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:text="Whitelist (0)"
+                                android:textSize="10sp"
+                                android:backgroundTint="#334155"
+                                android:textColor="#cbd5e1"
+                                android:layout_marginEnd="4dp" />
+                            <Button
+                                android:id="@+id/btn_show6_filter_banlist"
+                                android:layout_width="0dp"
+                                android:layout_height="34dp"
+                                android:layout_weight="1"
+                                android:text="Banlist (0)"
+                                android:textSize="10sp"
+                                android:backgroundTint="#334155"
+                                android:textColor="#cbd5e1" />
+                        </LinearLayout>
+
+                        <!-- Clear Persisted Whitelist / Banlist Buttons -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="end"
+                            android:layout_marginBottom="6dp">
+                            <Button
+                                android:id="@+id/btn_clear_show6_active_list"
+                                android:layout_width="wrap_content"
+                                android:layout_height="30dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="8dp"
+                                android:text="🗑️ Clear Active List (League)"
+                                android:textSize="9.5sp"
+                                android:backgroundTint="#7f1d1d"
+                                android:textColor="#fecaca"
+                                android:layout_marginEnd="4dp" />
+                            <Button
+                                android:id="@+id/btn_clear_show6_both_lists"
+                                android:layout_width="wrap_content"
+                                android:layout_height="30dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="8dp"
+                                android:text="🧹 Clear Both Lists (League)"
+                                android:textSize="9.5sp"
+                                android:backgroundTint="#334155"
+                                android:textColor="#fca5a5" />
+                        </LinearLayout>
+
+                        <EditText
+                            android:id="@+id/edit_show6_filter_text"
+                            android:layout_width="match_parent"
+                            android:layout_height="64dp"
+                            android:background="#1e293b"
+                            android:padding="8dp"
+                            android:gravity="top|start"
+                            android:hint="Paste comma/newline Pokémon for Whitelist or Banlist (auto-saved per league)..."
+                            android:textColor="#f8fafc"
+                            android:textColorHint="#64748b"
+                            android:textSize="11sp"
+                            android:visibility="gone"
+                            android:layout_marginBottom="6dp" />
+
+                        <LinearLayout
+                            android:id="@+id/layout_show6_filter_chip_box"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:layout_marginBottom="6dp">
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal">
+                                <AutoCompleteTextView
+                                    android:id="@+id/edit_show6_filter_chip_input"
+                                    android:layout_width="0dp"
+                                    android:layout_height="36dp"
+                                    android:layout_weight="1"
+                                    android:background="#1e293b"
+                                    android:paddingHorizontal="8dp"
+                                    android:singleLine="true"
+                                    android:hint="Type Pokémon to add to Whitelist/Banlist..."
+                                    android:textColor="#f8fafc"
+                                    android:textColorHint="#64748b"
+                                    android:textSize="11sp" />
+                                <Button
+                                    android:id="@+id/btn_add_show6_filter_chip"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="36dp"
+                                    android:text="+ Add"
+                                    android:textSize="10.5sp"
+                                    android:backgroundTint="#7c3aed"
+                                    android:textColor="#ffffff"
+                                    android:layout_marginStart="4dp" />
+                            </LinearLayout>
+                            <LinearLayout
+                                android:id="@+id/layout_show6_filter_chips"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:layout_marginTop="4dp" />
+                        </LinearLayout>
+
+                        <!-- Historical Match Weight Slider & Input -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="4dp">
+                            <TextView
+                                android:id="@+id/tv_show6_hist_weight_label"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="📜 Meta 65% vs. Historical 35%"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:textColor="#34d399" />
+                            <Button
+                                android:id="@+id/btn_pull_show6_hist_logs"
+                                android:layout_width="wrap_content"
+                                android:layout_height="30dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="8dp"
+                                android:text="📥 Pull from Logs"
+                                android:textSize="9.5sp"
+                                android:backgroundTint="#059669"
+                                android:textColor="#ffffff" />
+                        </LinearLayout>
+
+                        <SeekBar
+                            android:id="@+id/seek_show6_hist_weight"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:max="100"
+                            android:progress="35"
+                            android:layout_marginVertical="4dp" />
+
+                        <EditText
+                            android:id="@+id/edit_show6_hist_text"
+                            android:layout_width="match_parent"
+                            android:layout_height="56dp"
+                            android:background="#1e293b"
+                            android:padding="8dp"
+                            android:gravity="top|start"
+                            android:hint="Expected historical opponent Pokémon (comma/newline separated)..."
+                            android:text="Azumarill, Clodsire, Mandibuzz, Feraligatr, Annihilape, Wigglytuff"
+                            android:textColor="#f8fafc"
+                            android:textColorHint="#64748b"
+                            android:textSize="11sp"
+                            android:layout_marginBottom="8dp" />
+
+                        <Button
+                            android:id="@+id/btn_run_show6_blind"
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:text="✨ Build Optimal Blind Show 6 Roster"
+                            android:textSize="11.5sp"
+                            android:textStyle="bold"
+                            android:backgroundTint="#0284c7"
+                            android:textColor="#ffffff" />
+
+                        <LinearLayout
+                            android:id="@+id/layout_show6_blind_results"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:layout_marginTop="8dp" />
+                    </LinearLayout>
+                </LinearLayout>
 
                 <!-- ===========================================================
                      ANTI-META TEAM BUILDER PANEL (2a, 2b, 2c)
@@ -515,6 +1282,67 @@
                 android:textSize="15sp"
                 android:textStyle="bold"
                 android:layout_marginBottom="8dp" />
+
+            <!-- ===================================================================
+                 0. APP COMBAT MODE TOGGLE (v5.00: STANDARD GBL vs SHOW 6 MODE)
+                 =================================================================== -->
+            <LinearLayout
+                android:id="@+id/card_settings_combat_mode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#0f172a"
+                android:padding="10dp"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🏛️ 0. App Combat Mode (Standard GBL vs. Show 6 Battle Frontier • v5.00)"
+                    android:textColor="#fbbf24"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tv_settings_combat_mode_desc"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Switch between Standard GBL (Blind 3 PvP) and Show 6 (Battle Frontier / Pick-3). Show 6 Mode stores independent Battle Logs, Teams of 6 &amp; Teams of 3, Dual Show 6 Team Builders, per-league persisted Whitelist/Banlist, and constrains live AI backline predictions to the known Opponent 6."
+                    android:textColor="#94a3b8"
+                    android:textSize="10sp"
+                    android:lineSpacingExtra="1.5dp"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="8dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btn_mode_standard_gbl"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:text="🛡️ Standard GBL (Blind 3)"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#0284c7"
+                        android:textColor="#ffffff"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_mode_show6_frontier"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:text="🏛️ Show 6 (Battle Frontier)"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#cbd5e1" />
+                </LinearLayout>
+            </LinearLayout>
 
             <!-- ===================================================================
                  1. APP & OVERLAY THEME + SIZE & TRANSPARENCY GROUP (TOP OF SETTINGS)

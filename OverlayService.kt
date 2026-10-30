@@ -274,6 +274,14 @@ class OverlayService : LifecycleService() {
         private const val NOTIFICATION_ID = 2001
 
         const val PREFS_KEY_PERSISTENT_TEAMS = "gbl_user_teams_persistent"
+        const val PREFS_KEY_APP_COMBAT_MODE = "gbl_app_combat_mode_v1"
+        const val PREFS_KEY_SHOW6_BATTLE_LOGS = "gbl_show6_battle_logs_v1"
+        const val PREFS_KEY_SHOW6_PRESETS_OF_3 = "gbl_show6_presets_of_3_v1"
+        const val PREFS_KEY_SHOW6_SELECTED_PRESET_ID = "gbl_show6_selected_preset_id_v1"
+        const val PREFS_KEY_SHOW6_ROSTERS_OF_6 = "gbl_show6_rosters_of_6_v1"
+        const val PREFS_KEY_SHOW6_OPPONENT_6 = "gbl_show6_opponent_6_v1"
+        const val PREFS_KEY_SHOW6_WHITELIST_BY_LEAGUE = "gbl_show6_whitelist_by_league_v1"
+        const val PREFS_KEY_SHOW6_BANLIST_BY_LEAGUE = "gbl_show6_banlist_by_league_v1"
         val LEGACY_PRESET_KEYS = listOf(
             "gbl_team_presets_v6",
             "gbl_team_presets_v5",
@@ -7565,6 +7573,517 @@ class OverlayService : LifecycleService() {
                 top50MetaList = roleMeta.top50MetaList,
                 metaSummaryLabel = "Top-100 Flattened Role-Weighted Synthetic Meta (${roleMeta.wMetaPct}% PvPoke Role Meta / ${roleMeta.wHistPct}% Season Logs • Auditing Top $targetAuditTotal Threats)",
                 elapsedMs = elapsed
+            )
+        }
+
+        data class Show6Pick3LineupOption(
+            val id: String,
+            val archetype: String, // "ABB", "ABC", "DUO"
+            val rank: Int,
+            val league: String,
+            val pokemon: List<TeamMember>,
+            val weightedExpectedBr: Int,
+            val worstCaseMinimaxBr: Int,
+            val compositeScore: Double,
+            val leadAggBr: Int,
+            val safeSwapBr: Int,
+            val closerBr: Int,
+            val machineAggBr: Int,
+            val sharedWeaknesses: List<String>,
+            val topOppLineupsBeatenCount: Int,
+            val totalOppLineupsEvaluated: Int,
+            val worstCounterLineupLabel: String,
+            val synergySummary: String
+        )
+
+        data class Show6OpponentViableLineup(
+            val rank: Int,
+            val pokemonNames: List<String>,
+            val archetype: String,
+            val viabilityScore: Int,
+            val normalizedWeightPct: Double
+        )
+
+        data class Show6Pick3OptimizerResult(
+            val league: String,
+            val myOptimized6: List<TeamMember>,
+            val opp6Names: List<String>,
+            val top3AbbTeams: List<Show6Pick3LineupOption>,
+            val top3AbcTeams: List<Show6Pick3LineupOption>,
+            val top3DuoTeams: List<Show6Pick3LineupOption>,
+            val topViableOpponentLineups: List<Show6OpponentViableLineup>,
+            val totalMatchupsSimulated: Int,
+            val elapsedMs: Long
+        )
+
+        data class BlindShow6RosterResult(
+            val league: String,
+            val roster: List<TeamMember>,
+            val lockedSlotsIncluded: List<String>,
+            val metaCoveragePct: Int,
+            val coreBreakerCount: Int,
+            val coreBreakers: List<String>,
+            val topAbbLineup: List<TeamMember>,
+            val topAbcLineup: List<TeamMember>,
+            val topDuoLineup: List<TeamMember>,
+            val filterSummary: String,
+            val elapsedMs: Long
+        )
+
+        /**
+         * Show 6 Mode 1: 6v6 Matchup Pick-3 Optimizer
+         * - Opponent movesets are unknown -> uses standard 75%/25% weighted moveset distribution in calculateMatchupRatingStatic.
+         * - Simulates best movesets for Your 6 Pokémon against Opponent's 6.
+         * - Weighs Opponent 3-Pokémon lineups of highest viability highest when evaluating all 120 x 120 = 14,400 ordered 3v3 lineups.
+         * - Returns 3 options for each team type: Top 3 ABB, Top 3 ABC, Top 3 Duo-Core.
+         */
+        fun evaluateShow6Pick3MatchupStatic(
+            league: String,
+            my6NamesOrSlots: List<TeamMember>,
+            opp6RawNames: List<String>
+        ): Show6Pick3OptimizerResult {
+            val t0 = System.currentTimeMillis()
+            val normLeague = when {
+                league.contains("MEGA", ignoreCase = true) -> "MEGA MASTER LEAGUE"
+                league.contains("GREAT", ignoreCase = true) -> "GREAT LEAGUE"
+                league.contains("ULTRA", ignoreCase = true) -> "ULTRA LEAGUE"
+                else -> "MASTER LEAGUE"
+            }
+            val isGreat = normLeague == "GREAT LEAGUE"
+            val isUltra = normLeague == "ULTRA LEAGUE"
+            val fallbackPool = getTop100MetaCandidatesForLeagueStatic(normLeague, 24)
+
+            val rawMy6 = ArrayList<TeamMember>(6)
+            for (i in 0 until 6) {
+                val input = my6NamesOrSlots.getOrNull(i)
+                val name = input?.name?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: fallbackPool.getOrNull(i)?.name ?: "Clodsire"
+                val resolved = resolveRecommendedMovesForSpecies(name, normLeague)
+                val scaled = if (resolved != null) computeEffectiveCombatStats(resolved, normLeague) else null
+                val defIvs = when {
+                    isGreat -> scaled?.defaultIvsGl ?: "4/15/14"
+                    isUltra -> scaled?.defaultIvsUl ?: "4/15/14"
+                    else -> "15/15/15"
+                }
+                rawMy6.add(
+                    TeamMember(
+                        name = scaled?.name ?: name,
+                        cp = input?.cp?.takeIf { it > 0 } ?: scaled?.defaultCp ?: 1500,
+                        fastMove = input?.fastMove?.takeIf { it.isNotBlank() } ?: scaled?.defaultFastMove ?: "Mud Shot",
+                        chargedMove1 = input?.chargedMove1?.takeIf { it.isNotBlank() } ?: scaled?.chargedMove1 ?: "Earthquake",
+                        chargedMove2 = input?.chargedMove2?.takeIf { it.isNotBlank() } ?: scaled?.chargedMove2 ?: "Stone Edge",
+                        ivs = input?.ivs ?: defIvs
+                    )
+                )
+            }
+
+            val opp6Names = ArrayList<String>(6)
+            for (i in 0 until 6) {
+                val rawName = opp6RawNames.getOrNull(i)?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: fallbackPool.getOrNull(i + 6)?.name ?: "Feraligatr"
+                val resolved = resolveRecommendedMovesForSpecies(rawName, normLeague)
+                val displayName = if (rawName.startsWith("Shadow ", ignoreCase = true) && resolved != null && !resolved.name.startsWith("Shadow ", ignoreCase = true)) {
+                    "Shadow ${resolved.name}"
+                } else {
+                    resolved?.name ?: rawName
+                }
+                opp6Names.add(displayName)
+            }
+
+            // Stage 1: Simulate best movesets for Your 6 Pokémon against the Opponent's 6
+            val myOptimized6 = rawMy6.map { slot ->
+                val (rawFast, rawCharged) = getAvailableMovePoolForSpeciesStatic(slot.name, normLeague)
+                val fastPool = rawFast.filter { it.isNotBlank() && !it.equals("Struggle", ignoreCase = true) }.distinctBy { it.lowercase() }.take(3).ifEmpty { listOf(slot.fastMove) }
+                val chargedPool = rawCharged.filter { it.isNotBlank() && !it.equals("Struggle", ignoreCase = true) && !it.equals("Frustration", ignoreCase = true) }.distinctBy { it.lowercase() }.take(4).ifEmpty { listOf(slot.chargedMove1, slot.chargedMove2).distinct() }
+                val pairs = ArrayList<Pair<String, String>>()
+                if (chargedPool.size <= 1) {
+                    val m = chargedPool.firstOrNull() ?: slot.chargedMove1
+                    pairs.add(m to m)
+                } else {
+                    for (a in 0 until chargedPool.size) {
+                        for (b in (a + 1) until chargedPool.size) {
+                            pairs.add(chargedPool[a] to chargedPool[b])
+                        }
+                    }
+                }
+                var bestMember = slot
+                var bestAvgBr = -1.0
+                for (fMove in fastPool) {
+                    for ((c1, c2) in pairs) {
+                        var sumBr = 0.0
+                        for (oppName in opp6Names) {
+                            val b11 = calculateMatchupRatingStatic(slot.name, oppName, 1, 1, normLeague, fMove, c1, c2, slot.cp, slot.ivs)
+                            val b00 = calculateMatchupRatingStatic(slot.name, oppName, 0, 0, normLeague, fMove, c1, c2, slot.cp, slot.ivs)
+                            sumBr += 0.65 * b11 + 0.35 * b00
+                        }
+                        val avg = sumBr / 6.0
+                        if (avg > bestAvgBr) {
+                            bestAvgBr = avg
+                            bestMember = slot.copy(fastMove = fMove, chargedMove1 = c1, chargedMove2 = c2)
+                        }
+                    }
+                }
+                bestMember
+            }
+
+            // Stage 2: Precompute 6x6 role-specific matchup matrices (Opponent movesets weighted 75%/25% inside calculateMatchupRatingStatic)
+            val leadBrMatrix = Array(6) { DoubleArray(6) }
+            val swapBrMatrix = Array(6) { DoubleArray(6) }
+            val closerBrMatrix = Array(6) { DoubleArray(6) }
+            for (u in 0 until 6) {
+                val uSlot = myOptimized6[u]
+                for (o in 0 until 6) {
+                    val oName = opp6Names[o]
+                    val b00 = calculateMatchupRatingStatic(uSlot.name, oName, 0, 0, normLeague, uSlot.fastMove, uSlot.chargedMove1, uSlot.chargedMove2, uSlot.cp, uSlot.ivs).toDouble()
+                    val b11 = calculateMatchupRatingStatic(uSlot.name, oName, 1, 1, normLeague, uSlot.fastMove, uSlot.chargedMove1, uSlot.chargedMove2, uSlot.cp, uSlot.ivs).toDouble()
+                    val b22 = calculateMatchupRatingStatic(uSlot.name, oName, 2, 2, normLeague, uSlot.fastMove, uSlot.chargedMove1, uSlot.chargedMove2, uSlot.cp, uSlot.ivs).toDouble()
+                    val b10 = calculateMatchupRatingStatic(uSlot.name, oName, 1, 0, normLeague, uSlot.fastMove, uSlot.chargedMove1, uSlot.chargedMove2, uSlot.cp, uSlot.ivs).toDouble()
+                    val b01 = calculateMatchupRatingStatic(uSlot.name, oName, 0, 1, normLeague, uSlot.fastMove, uSlot.chargedMove1, uSlot.chargedMove2, uSlot.cp, uSlot.ivs).toDouble()
+                    leadBrMatrix[u][o] = 0.50 * b11 + 0.35 * b22 + 0.15 * b00
+                    swapBrMatrix[u][o] = 0.45 * b11 + 0.25 * b10 + 0.20 * b01 + 0.10 * b00
+                    closerBrMatrix[u][o] = 0.55 * b00 + 0.25 * b10 + 0.20 * b11
+                }
+            }
+
+            fun getTypesAndProfile(name: String): Triple<List<String>, Set<String>, Set<String>> {
+                val meta = resolveRecommendedMovesForSpecies(name, normLeague)
+                val types = meta?.types?.map { it.lowercase() }?.ifEmpty { listOf("normal") } ?: listOf("normal")
+                val weaks = ALL_18_TYPES.filter { getTypeEffectivenessStatic(it, types) > 1.05 }.toSet()
+                val resists = ALL_18_TYPES.filter { getTypeEffectivenessStatic(it, types) < 0.95 }.toSet()
+                return Triple(types, weaks, resists)
+            }
+
+            val myProfiles = myOptimized6.map { getTypesAndProfile(it.name) }
+            val oppProfiles = opp6Names.map { getTypesAndProfile(it) }
+
+            fun classifyOrderedTrio(
+                i0: Int,
+                i1: Int,
+                i2: Int,
+                profiles: List<Triple<List<String>, Set<String>, Set<String>>>
+            ): Pair<String, List<String>> {
+                val w0 = profiles[i0].second
+                val r0 = profiles[i0].third
+                val w1 = profiles[i1].second
+                val r1 = profiles[i1].third
+                val w2 = profiles[i2].second
+                val r2 = profiles[i2].third
+
+                val backShared = w1.intersect(w2)
+                val coveredByLead = backShared.filter { it in r0 && it !in w0 }
+                if (coveredByLead.isNotEmpty() && (backShared.size >= 2 || coveredByLead.any { it in CRITICAL_META_TYPES })) {
+                    return "ABB" to coveredByLead.map { it.replaceFirstChar { c -> c.uppercase() } }
+                }
+
+                val c0Covers2 = w2.filter { it in r0 }
+                val c2Covers0 = w0.filter { it in r2 }
+                if (w0.intersect(w2).isEmpty() && c0Covers2.isNotEmpty() && c2Covers0.isNotEmpty() && (c0Covers2.size + c2Covers0.size) >= 2) {
+                    val mut = (c0Covers2 + c2Covers0).distinct().map { it.replaceFirstChar { c -> c.uppercase() } }
+                    return "DUO" to mut
+                }
+                return "ABC" to emptyList()
+            }
+
+            val allOrdered120 = ArrayList<Triple<Int, Int, Int>>(120)
+            for (a in 0 until 6) {
+                for (b in 0 until 6) {
+                    if (b == a) continue
+                    for (c in 0 until 6) {
+                        if (c == a || c == b) continue
+                        allOrdered120.add(Triple(a, b, c))
+                    }
+                }
+            }
+
+            // Stage 3: Score all 120 Opponent 3-Pokémon lineups by structural viability & pressure against Your 6
+            data class OppTrioEval(
+                val indices: Triple<Int, Int, Int>,
+                val names: List<String>,
+                val archetype: String,
+                val viabilityBr: Int,
+                val rawExpWeight: Double
+            )
+
+            val oppTrios = allOrdered120.map { (o0, o1, o2) ->
+                val (arch, _) = classifyOrderedTrio(o0, o1, o2, oppProfiles)
+                var leadVsMy6 = 0.0
+                var swapVsMy6 = 0.0
+                var closerVsMy6 = 0.0
+                for (u in 0 until 6) {
+                    leadVsMy6 += (1000.0 - leadBrMatrix[u][o0])
+                    swapVsMy6 += (1000.0 - swapBrMatrix[u][o1])
+                    closerVsMy6 += (1000.0 - closerBrMatrix[u][o2])
+                }
+                leadVsMy6 /= 6.0
+                swapVsMy6 /= 6.0
+                closerVsMy6 /= 6.0
+                val structBonus = when (arch) {
+                    "ABB" -> 18.0
+                    "DUO" -> 14.0
+                    else -> 8.0
+                }
+                val viab = (0.40 * leadVsMy6 + 0.32 * swapVsMy6 + 0.28 * closerVsMy6 + structBonus).roundToInt().coerceIn(250, 820)
+                val expW = kotlin.math.exp((viab - 500.0) / 38.0)
+                OppTrioEval(Triple(o0, o1, o2), listOf(opp6Names[o0], opp6Names[o1], opp6Names[o2]), arch, viab, expW)
+            }
+            val totalOppExpW = oppTrios.sumOf { it.rawExpWeight }.takeIf { it > 0.0 } ?: 1.0
+
+            val sortedOppTrios = oppTrios.sortedByDescending { it.viabilityBr }
+            val topViableOppLineups = sortedOppTrios.take(8).mapIndexed { idx, ot ->
+                Show6OpponentViableLineup(
+                    rank = idx + 1,
+                    pokemonNames = ot.names,
+                    archetype = ot.archetype,
+                    viabilityScore = ot.viabilityBr,
+                    normalizedWeightPct = ((ot.rawExpWeight / totalOppExpW) * 1000.0).roundToInt() / 10.0
+                )
+            }
+
+            // Stage 4: Evaluate all 120 Player 3-Pokémon lineups against all 120 viability-weighted Opponent lineups
+            val abbList = ArrayList<Show6Pick3LineupOption>()
+            val abcList = ArrayList<Show6Pick3LineupOption>()
+            val duoList = ArrayList<Show6Pick3LineupOption>()
+
+            for ((u0, u1, u2) in allOrdered120) {
+                val (arch, sharedWeaks) = classifyOrderedTrio(u0, u1, u2, myProfiles)
+                var weightedBrSum = 0.0
+                var worstBr = 999.0
+                var worstOppLabel = ""
+                var beatenCount = 0
+
+                for (ot in oppTrios) {
+                    val (o0, o1, o2) = ot.indices
+                    val normW = ot.rawExpWeight / totalOppExpW
+                    val lBr = leadBrMatrix[u0][o0]
+                    val alignA = (swapBrMatrix[u1][o1] + closerBrMatrix[u2][o2]) * 0.5
+                    val alignB = (swapBrMatrix[u1][o2] + closerBrMatrix[u2][o1]) * 0.5
+                    val backBr = 0.68 * max(alignA, alignB) + 0.32 * min(alignA, alignB)
+                    val teamBr = 0.42 * lBr + 0.58 * backBr
+
+                    weightedBrSum += normW * teamBr
+                    if (teamBr >= 505.0) beatenCount++
+                    if (teamBr < worstBr) {
+                        worstBr = teamBr
+                        worstOppLabel = "${ot.names[0]} / ${ot.names[1]} / ${ot.names[2]} (${teamBr.roundToInt()} BR)"
+                    }
+                }
+
+                val lAgg = (0 until 6).map { leadBrMatrix[u0][it] }.average().roundToInt().coerceIn(200, 850)
+                val sAgg = (0 until 6).map { swapBrMatrix[u1][it] }.average().roundToInt().coerceIn(200, 850)
+                val cAgg = (0 until 6).map { closerBrMatrix[u2][it] }.average().roundToInt().coerceIn(200, 850)
+                val wExpBr = weightedBrSum.roundToInt().coerceIn(200, 850)
+                val wMinBr = worstBr.roundToInt().coerceIn(150, 850)
+                val compScore = ((0.72 * weightedBrSum + 0.28 * worstBr) * 10.0).roundToInt() / 10.0
+
+                val members = listOf(myOptimized6[u0], myOptimized6[u1], myOptimized6[u2])
+                val summary = when (arch) {
+                    "ABB" -> "ABB Pick-3: ${members[0].name} (Lead A) covers ${sharedWeaks.joinToString("/").ifEmpty { "Backline" }} for ${members[1].name} (B1) & ${members[2].name} (B2) • Beats $beatenCount/120 Opp Trios • Worst vs: $worstOppLabel"
+                    "DUO" -> "Duo-Core Pick-3: ${members[0].name} (Core 1) & ${members[2].name} (Core 2) cover ${sharedWeaks.joinToString("/").ifEmpty { "Core" }} w/ ${members[1].name} Pivot • Beats $beatenCount/120 Opp Trios • Worst vs: $worstOppLabel"
+                    else -> "ABC Balanced Pick-3: ${members[0].name} Lead + ${members[1].name} Safe Swap + ${members[2].name} Closer • Beats $beatenCount/120 Opp Trios • Worst vs: $worstOppLabel"
+                }
+
+                val option = Show6Pick3LineupOption(
+                    id = "show6-${arch.lowercase()}-$u0-$u1-$u2",
+                    archetype = arch,
+                    rank = 0,
+                    league = normLeague,
+                    pokemon = members,
+                    weightedExpectedBr = wExpBr,
+                    worstCaseMinimaxBr = wMinBr,
+                    compositeScore = compScore,
+                    leadAggBr = lAgg,
+                    safeSwapBr = sAgg,
+                    closerBr = cAgg,
+                    machineAggBr = wExpBr,
+                    sharedWeaknesses = sharedWeaks,
+                    topOppLineupsBeatenCount = beatenCount,
+                    totalOppLineupsEvaluated = 120,
+                    worstCounterLineupLabel = worstOppLabel,
+                    synergySummary = summary
+                )
+
+                when (arch) {
+                    "ABB" -> abbList.add(option)
+                    "DUO" -> duoList.add(option)
+                    else -> abcList.add(option)
+                }
+            }
+
+            // Ensure each of the 3 archetypes has at least 3 options even if the 6-mon pool is heavily skewed
+            val allSorted = (abbList + abcList + duoList).sortedByDescending { it.compositeScore }
+            fun fillTop3(primary: List<Show6Pick3LineupOption>, targetArch: String): List<Show6Pick3LineupOption> {
+                val sorted = primary.sortedByDescending { it.compositeScore }.toMutableList()
+                if (sorted.size < 3) {
+                    for (cand in allSorted) {
+                        if (sorted.size >= 3) break
+                        if (sorted.none { it.pokemon.map { m -> m.name } == cand.pokemon.map { m -> m.name } }) {
+                            sorted.add(cand.copy(archetype = targetArch))
+                        }
+                    }
+                }
+                return sorted.take(3).mapIndexed { idx, item -> item.copy(rank = idx + 1) }
+            }
+
+            return Show6Pick3OptimizerResult(
+                league = normLeague,
+                myOptimized6 = myOptimized6,
+                opp6Names = opp6Names,
+                top3AbbTeams = fillTop3(abbList, "ABB"),
+                top3AbcTeams = fillTop3(abcList, "ABC"),
+                top3DuoTeams = fillTop3(duoList, "DUO"),
+                topViableOpponentLineups = topViableOppLineups,
+                totalMatchupsSimulated = 14400,
+                elapsedMs = max(1L, System.currentTimeMillis() - t0)
+            )
+        }
+
+        /**
+         * Show 6 Mode 2: Blind Show 6 Meta Roster Builder
+         * - Builds an optimal 6-Pokémon tournament roster before knowing Opponent's 6.
+         * - Supports 0–5 locked core Pokémon, Banlist or Whitelist filter, Expected Historical Pokémon list,
+         *   and Historical vs. PvPoke Meta Weight Slider (0%–100%).
+         */
+        fun generateBlindShow6RosterStatic(
+            league: String,
+            lockedCoreNames: List<String> = emptyList(),
+            filterMode: String = "NONE", // "NONE" | "BANLIST" | "WHITELIST"
+            filterPokemonList: List<String> = emptyList(),
+            expectedHistoricalPokemon: List<String> = emptyList(),
+            historicalWeightPct: Int = 35
+        ): BlindShow6RosterResult {
+            val t0 = System.currentTimeMillis()
+            val normLeague = when {
+                league.contains("MEGA", ignoreCase = true) -> "MEGA MASTER LEAGUE"
+                league.contains("GREAT", ignoreCase = true) -> "GREAT LEAGUE"
+                league.contains("ULTRA", ignoreCase = true) -> "ULTRA LEAGUE"
+                else -> "MASTER LEAGUE"
+            }
+            val baseCandidates = getTop100MetaCandidatesForLeagueStatic(normLeague, 120)
+            val filterBaseSet = filterPokemonList.map { FormResolver.extractBaseSpecies(it).lowercase() }.filter { it.isNotEmpty() }.toSet()
+            val filterExactSet = filterPokemonList.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
+
+            val eligiblePool = baseCandidates.filter { cand ->
+                val baseSp = FormResolver.extractBaseSpecies(cand.name).lowercase()
+                val nameLower = cand.name.lowercase()
+                when (filterMode.uppercase()) {
+                    "BANLIST" -> baseSp !in filterBaseSet && nameLower !in filterExactSet
+                    "WHITELIST" -> if (filterBaseSet.isEmpty()) true else (baseSp in filterBaseSet || nameLower in filterExactSet)
+                    else -> true
+                }
+            }.ifEmpty { baseCandidates.take(30) }
+
+            // Build blended target threat distribution (PvPoke Meta + Expected Historical Pokémon)
+            val wHist = (historicalWeightPct.coerceIn(0, 100) / 100.0)
+            val wMeta = 1.0 - wHist
+            val metaTargets = eligiblePool.take(36).map { it.name }
+            val histClean = expectedHistoricalPokemon.map { it.trim() }.filter { it.isNotEmpty() }
+            val targetWeights = LinkedHashMap<String, Double>()
+
+            metaTargets.forEachIndexed { idx, name ->
+                val w = kotlin.math.exp(-0.045 * idx.toDouble())
+                targetWeights[name] = (targetWeights[name] ?: 0.0) + wMeta * w
+            }
+            if (histClean.isNotEmpty() && wHist > 0.0) {
+                val perEntry = wHist / histClean.size.toDouble()
+                for (rawH in histClean) {
+                    val resolved = resolveRecommendedMovesForSpecies(rawH, normLeague)?.name ?: rawH
+                    targetWeights[resolved] = (targetWeights[resolved] ?: 0.0) + perEntry * 12.0
+                }
+            }
+            val topThreats = targetWeights.entries.sortedByDescending { it.value }.take(30).map { it.key }.ifEmpty { metaTargets.take(25) }
+
+            val roster = ArrayList<TeamMember>(6)
+            val usedBaseSpecies = HashSet<String>()
+            val lockedIncluded = ArrayList<String>()
+
+            for (rawLock in lockedCoreNames.take(5)) {
+                val clean = rawLock.trim()
+                if (clean.isEmpty()) continue
+                val match = eligiblePool.find { it.name.equals(clean, ignoreCase = true) }
+                    ?: baseCandidates.find { it.name.equals(clean, ignoreCase = true) }
+                    ?: eligiblePool.find { FormResolver.extractBaseSpecies(it.name).equals(FormResolver.extractBaseSpecies(clean), ignoreCase = true) }
+                if (match != null) {
+                    val bSp = FormResolver.extractBaseSpecies(match.name).lowercase()
+                    if (usedBaseSpecies.add(bSp)) {
+                        roster.add(match)
+                        lockedIncluded.add(match.name)
+                    }
+                }
+            }
+
+            // Greedily add complementary Pokémon up to 6 that maximize threat coverage & minimize shared unresisted weaknesses
+            val candidateSubPool = eligiblePool.take(45)
+            val brCache = HashMap<String, Int>()
+            fun getBr1s(c: TeamMember, opp: String): Int {
+                val k = "${c.name.lowercase()}|${opp.lowercase()}"
+                return brCache.getOrPut(k) {
+                    calculateMatchupRatingStatic(c.name, opp, 1, 1, normLeague, c.fastMove, c.chargedMove1, c.chargedMove2, c.cp, c.ivs)
+                }
+            }
+
+            while (roster.size < 6) {
+                var bestCand: TeamMember? = null
+                var bestScore = Double.NEGATIVE_INFINITY
+
+                for (cand in candidateSubPool) {
+                    val bSp = FormResolver.extractBaseSpecies(cand.name).lowercase()
+                    if (bSp in usedBaseSpecies) continue
+                    var covGain = 0.0
+                    for (t in topThreats) {
+                        val existingBest = if (roster.isEmpty()) 420 else roster.maxOf { getBr1s(it, t) }
+                        val candBr = getBr1s(cand, t)
+                        val w = targetWeights[t] ?: 0.1
+                        if (existingBest < 515 && candBr >= 525) {
+                            covGain += w * (candBr - existingBest) * 2.2
+                        } else {
+                            covGain += w * max(0, candBr - 480) * 0.45
+                        }
+                    }
+                    // Type diversity bonus
+                    val candTypes = resolveRecommendedMovesForSpecies(cand.name, normLeague)?.types?.map { it.lowercase() }.orEmpty()
+                    val existingTypes = roster.flatMap { resolveRecommendedMovesForSpecies(it.name, normLeague)?.types?.map { t -> t.lowercase() }.orEmpty() }.toSet()
+                    val newTypeBonus = candTypes.count { it !in existingTypes } * 18.0
+                    val total = covGain + newTypeBonus
+                    if (total > bestScore) {
+                        bestScore = total
+                        bestCand = cand
+                    }
+                }
+                val chosen = bestCand ?: eligiblePool.firstOrNull { FormResolver.extractBaseSpecies(it.name).lowercase() !in usedBaseSpecies } ?: break
+                usedBaseSpecies.add(FormResolver.extractBaseSpecies(chosen.name).lowercase())
+                roster.add(chosen)
+            }
+
+            // Audit 6-Pokémon roster against topThreats
+            var coveredCount = 0
+            val coreBreakers = ArrayList<String>()
+            for (t in topThreats) {
+                val brs = roster.map { getBr1s(it, t) }
+                val wins = brs.count { it >= 515 }
+                if (wins >= 2) coveredCount++
+                if (brs.all { it < 490 }) coreBreakers.add(t)
+            }
+            val covPct = ((coveredCount * 100.0) / max(1, topThreats.size).toDouble()).roundToInt().coerceIn(10, 100)
+
+            val selfPick3 = evaluateShow6Pick3MatchupStatic(normLeague, roster, topThreats.take(6))
+            val filterLabel = when (filterMode.uppercase()) {
+                "BANLIST" -> "Banlist (${filterPokemonList.size} banned)"
+                "WHITELIST" -> "Whitelist (${filterPokemonList.size} allowed)"
+                else -> "Open Meta (No Ban/Whitelist)"
+            }
+
+            return BlindShow6RosterResult(
+                league = normLeague,
+                roster = selfPick3.myOptimized6,
+                lockedSlotsIncluded = lockedIncluded,
+                metaCoveragePct = covPct,
+                coreBreakerCount = coreBreakers.size,
+                coreBreakers = coreBreakers.take(6),
+                topAbbLineup = selfPick3.top3AbbTeams.firstOrNull()?.pokemon ?: roster.take(3),
+                topAbcLineup = selfPick3.top3AbcTeams.firstOrNull()?.pokemon ?: roster.take(3),
+                topDuoLineup = selfPick3.top3DuoTeams.firstOrNull()?.pokemon ?: roster.take(3),
+                filterSummary = "$filterLabel • ${100 - historicalWeightPct}% PvPoke Meta / ${historicalWeightPct}% Historical (${expectedHistoricalPokemon.size} entries)",
+                elapsedMs = max(1L, System.currentTimeMillis() - t0)
             )
         }
     }
@@ -18183,9 +18702,12 @@ class OverlayService : LifecycleService() {
             switchAdvantage = switchAdvantage
         )
 
+        val isShow6CombatMode = prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
+        val targetBattleLogsPrefKey = if (isShow6CombatMode) PREFS_KEY_SHOW6_BATTLE_LOGS else PREFS_KEY_BATTLE_LOGS
+
         val logsType = object : TypeToken<List<SyncBattleLogRecord>>() {}.type
         val existingLogs: MutableList<SyncBattleLogRecord> = try {
-            gson.fromJson<List<SyncBattleLogRecord>>(prefs.getString(PREFS_KEY_BATTLE_LOGS, "[]"), logsType)?.toMutableList()
+            gson.fromJson<List<SyncBattleLogRecord>>(prefs.getString(targetBattleLogsPrefKey, "[]"), logsType)?.toMutableList()
                 ?: mutableListOf()
         } catch (_: Exception) {
             mutableListOf()
@@ -18217,7 +18739,7 @@ class OverlayService : LifecycleService() {
             )
         }
         prefs.edit()
-            .putString(PREFS_KEY_BATTLE_LOGS, gson.toJson(existingLogs))
+            .putString(targetBattleLogsPrefKey, gson.toJson(existingLogs))
             .putString(PREFS_KEY_AI_TRAINING_LOGS, gson.toJson(existingAiLogs))
             .apply()
 
@@ -19910,7 +20432,27 @@ class OverlayService : LifecycleService() {
             if (oBase.equals(oppMeta.baseSpecies, ignoreCase = true) || (idx in 0..2 && oppFaintedSlots[idx])) null else oName
         }
 
-        // Score alive bench candidates across Active Opp (45%), Swap Clocks (25%), Known Bench (20%), Unseen Meta (10%) + v3.41 persistent HP penalty
+        // v5.00 Show 6 Live AI Constraint: When in Show 6 mode, limit unseen backline predictions strictly to unrevealed Pokémon from Opponent's known 6
+        val isShow6ModeActive = ::prefs.isInitialized && prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
+        val knownShow6UnrevealedPool: List<String> = if (isShow6ModeActive && ::prefs.isInitialized) {
+            val rawJson = prefs.getString(PREFS_KEY_SHOW6_OPPONENT_6, "[]") ?: "[]"
+            val parsed6: List<String> = try {
+                gson.fromJson(rawJson, object : TypeToken<List<String>>() {}.type) ?: emptyList()
+            } catch (_: Exception) {
+                emptyList()
+            }
+            val seenBaseSet = (detectedOpponents + listOf(activeOpponentName))
+                .map { FormResolver.extractBaseSpecies(it).lowercase() }
+                .filter { it.isNotEmpty() }
+                .toSet()
+            parsed6.map { it.trim() }.filter { cand ->
+                cand.isNotEmpty() && FormResolver.extractBaseSpecies(cand).lowercase() !in seenBaseSet
+            }
+        } else {
+            emptyList()
+        }
+
+        // Score alive bench candidates across Active Opp (45%), Swap Clocks (25%), Known Bench (20%), Unseen Meta / Known Show 6 Unrevealed (10%) + v3.41 persistent HP penalty
         val candidateScoreMap = mutableMapOf<String, Int>()
         val candidateWorstRespMap = mutableMapOf<Int, Int>()
         for (bIdx in aliveBenchIndices) {
@@ -19921,6 +20463,8 @@ class OverlayService : LifecycleService() {
             val oneBr = slotBr(bIdx, 1, 1)
             val worstResp = if (revealedBenchOpponents.isNotEmpty()) {
                 revealedBenchOpponents.minOf { bOpp -> slotBrAgainst(bIdx, bOpp, playerShieldsRemaining, oppShieldsRemaining) }
+            } else if (knownShow6UnrevealedPool.isNotEmpty()) {
+                knownShow6UnrevealedPool.minOf { uOpp -> slotBrAgainst(bIdx, uOpp, playerShieldsRemaining, oppShieldsRemaining) }
             } else {
                 min(actBr, oneBr)
             }
@@ -19933,10 +20477,16 @@ class OverlayService : LifecycleService() {
             }
             val knownBenchFactor = if (revealedBenchOpponents.isNotEmpty()) {
                 revealedBenchOpponents.map { bOpp -> slotBrAgainst(bIdx, bOpp, playerShieldsRemaining, oppShieldsRemaining) }.average()
+            } else if (knownShow6UnrevealedPool.isNotEmpty()) {
+                knownShow6UnrevealedPool.map { uOpp -> slotBrAgainst(bIdx, uOpp, playerShieldsRemaining, oppShieldsRemaining) }.average()
             } else {
                 oneBr.toDouble()
             }
-            val unseenMetaFactor = ((actBr + oneBr) / 2.0)
+            val unseenMetaFactor = if (knownShow6UnrevealedPool.isNotEmpty()) {
+                knownShow6UnrevealedPool.map { uOpp -> slotBrAgainst(bIdx, uOpp, 1, 1) }.average()
+            } else {
+                ((actBr + oneBr) / 2.0)
+            }
             val lowHpPenalty = when {
                 bHp < 25 && activeOppHp > 22 -> -110
                 bHp < 40 && activeOppHp > 35 -> -45
@@ -20426,6 +20976,15 @@ class OverlayService : LifecycleService() {
 
     private fun loadPresets(): List<TeamPreset> {
         if (!::prefs.isInitialized) return emptyList()
+        val isShow6 = prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
+        if (isShow6) {
+            val show6Json = prefs.getString(PREFS_KEY_SHOW6_PRESETS_OF_3, null)
+            if (!show6Json.isNullOrBlank()) {
+                val type = object : TypeToken<List<TeamPreset>>() {}.type
+                val parsed: List<TeamPreset>? = try { gson.fromJson(show6Json, type) } catch (_: Exception) { null }
+                if (!parsed.isNullOrEmpty()) return parsed
+            }
+        }
         val persistentJson = prefs.getString(PREFS_KEY_PERSISTENT_TEAMS, null)
         if (!persistentJson.isNullOrBlank()) {
             val type = object : TypeToken<List<TeamPreset>>() {}.type
@@ -20511,7 +21070,9 @@ class OverlayService : LifecycleService() {
             if (chosen != null) {
                 currentPreset = chosen
                 activeUserPokemonName = chosen.pokemon.firstOrNull()?.name
-                prefs.edit().putString("gbl_selected_preset_id", presetId).apply()
+                val isShow6 = prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
+                val selKey = if (isShow6) PREFS_KEY_SHOW6_SELECTED_PRESET_ID else "gbl_selected_preset_id"
+                prefs.edit().putString(selKey, presetId).apply()
                 lifecycleScope.launch(Dispatchers.Default) {
                     try {
                         precomputeActiveTeamTop200MatrixStatic(chosen)

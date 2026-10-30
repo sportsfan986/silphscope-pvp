@@ -1,0 +1,39 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <!-- Battle Frontier Golden Star Crest -->
+    <path
+        android:fillColor="#451A03"
+        android:strokeColor="#F59E0B"
+        android:strokeWidth="2.5"
+        android:pathData="M32,4 L41,20 L59,23 L46,36 L49,54 L32,45 L15,54 L18,36 L5,23 L23,20 Z" />
+    <path
+        android:fillColor="#0F172A"
+        android:strokeColor="#FCD34D"
+        android:strokeWidth="2"
+        android:pathData="M32,14 L48,32 L32,50 L16,32 Z" />
+    <!-- 6 Frontier Orbs representing Show 6 Roster -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M32,16.5 A3.5,3.5 0 1,1 31.99,16.5 Z" />
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M41,24.5 A3,3 0 1,1 40.99,24.5 Z" />
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M41,34.5 A3,3 0 1,1 40.99,34.5 Z" />
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M32,41.5 A3.5,3.5 0 1,1 31.99,41.5 Z" />
+    <path
+        android:fillColor="#A855F7"
+        android:pathData="M23,34.5 A3,3 0 1,1 22.99,34.5 Z" />
+    <path
+        android:fillColor="#EC4899"
+        android:pathData="M23,24.5 A3,3 0 1,1 22.99,24.5 Z" />
+    <path
+        android:fillColor="#FDE68A"
+        android:pathData="M32,27.5 A4.5,4.5 0 1,1 31.99,27.5 Z" />
+</vector>

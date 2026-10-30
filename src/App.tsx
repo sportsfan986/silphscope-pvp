@@ -101,7 +101,19 @@ import {
   computeTacticalLeadAndSwapRecommendation,
   TacticalRecommendationResult,
   scaleBrByHpRatio,
-  inferUnshieldedChargedMoveName
+  inferUnshieldedChargedMoveName,
+  AppCombatMode,
+  Show6RosterOf6Preset,
+  Show6Pick3MatchupResult,
+  BlindShow6RosterResult,
+  Show6LiveBacklinePredictionResult,
+  parsePokemonListInput,
+  evaluateShow6Pick3Matchup,
+  generateBlindShow6Roster,
+  predictShow6UnrevealedBackline,
+  getDefaultShow6RosterNames,
+  INITIAL_SHOW6_ROSTERS_OF_6,
+  INITIAL_SHOW6_PRESETS_OF_3
 } from './data/gblData';
 import {
   BattleQualityMetadata,
@@ -113,6 +125,68 @@ import {
   resolveLogEntryQuality
 } from './data/battleQuality';
 import { ANDROID_FILES, downloadAndroidProjectZip, AndroidProjectFile } from './data/androidFiles';
+
+function renderGblModeLogo(sizePx: number = 22) {
+  const s = `${sizePx}px`;
+  return (
+    <svg
+      viewBox="0 0 64 64"
+      style={{ width: s, height: s, display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}
+      aria-label="GBL Blind 3 Shield Emblem"
+    >
+      <defs>
+        <linearGradient id="gblShieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#38BDF8" />
+          <stop offset="55%" stopColor="#2563EB" />
+          <stop offset="100%" stopColor="#1E1B4B" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M32 4 L56 14 V31 C56 46 45 56 32 60 C19 56 8 46 8 31 V14 Z"
+        fill="url(#gblShieldGrad)"
+        stroke="#FACC15"
+        strokeWidth="3"
+      />
+      <path d="M12 29 H52" stroke="#F8FAFC" strokeWidth="2.5" />
+      <circle cx="32" cy="29" r="7" fill="#0F172A" stroke="#FACC15" strokeWidth="2.5" />
+      <circle cx="32" cy="29" r="3" fill="#38BDF8" />
+      <path d="M22 16 L32 22 L42 16" fill="none" stroke="#FACC15" strokeWidth="2.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function renderBattleFrontierLogo(sizePx: number = 22) {
+  const s = `${sizePx}px`;
+  return (
+    <svg
+      viewBox="0 0 64 64"
+      style={{ width: s, height: s, display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}
+      aria-label="Battle Frontier Show 6 Emblem"
+    >
+      <defs>
+        <linearGradient id="bfGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#FDE047" />
+          <stop offset="50%" stopColor="#F59E0B" />
+          <stop offset="100%" stopColor="#B45309" />
+        </linearGradient>
+      </defs>
+      <polygon
+        points="32,3 41,19 59,19 45,31 51,49 32,39 13,49 19,31 5,19 23,19"
+        fill="url(#bfGoldGrad)"
+        stroke="#FEF08A"
+        strokeWidth="2.2"
+      />
+      <polygon
+        points="32,13 44,32 32,51 20,32"
+        fill="#EF4444"
+        stroke="#FEF08A"
+        strokeWidth="2"
+      />
+      <circle cx="32" cy="32" r="5.5" fill="#0F172A" stroke="#38BDF8" strokeWidth="2" />
+      <circle cx="32" cy="32" r="2.2" fill="#FDE047" />
+    </svg>
+  );
+}
 
 function renderTierDots(tierStr: string) {
   const raw = tierStr || 'W,N,L';
@@ -874,7 +948,30 @@ export default function App() {
     }
   });
 
-  const [battleLogs, setBattleLogs] = useState<WebBattleLogEntry[]>(() => {
+  // v5.00 App Combat Mode: Standard GBL (Blind 3 PvP) vs Show 6 (Battle Frontier / Pick-3)
+  const [appCombatMode, setAppCombatModeState] = useState<AppCombatMode>(() => {
+    try {
+      return localStorage.getItem('gbl_app_combat_mode') === 'show6' ? 'show6' : 'gbl';
+    } catch {
+      return 'gbl';
+    }
+  });
+
+  const handleSetAppCombatMode = (mode: AppCombatMode) => {
+    setAppCombatModeState(mode);
+    try {
+      localStorage.setItem('gbl_app_combat_mode', mode);
+    } catch {}
+    setStartBattleToast(
+      mode === 'show6'
+        ? '🏛️ Switched to Show 6 Mode (Battle Frontier • Independent Teams & Battle Logs)'
+        : '🛡️ Switched to Standard GBL Mode (Blind 3 PvP • Independent Teams & Battle Logs)'
+    );
+    setTimeout(() => setStartBattleToast(null), 2200);
+  };
+
+  // Independent Battle Logs: Standard GBL ('gbl_battle_logs_v1') vs Show 6 ('gbl_show6_battle_logs_v1')
+  const [gblBattleLogs, setGblBattleLogs] = useState<WebBattleLogEntry[]>(() => {
     try {
       const raw = localStorage.getItem('gbl_battle_logs_v1');
       if (raw) {
@@ -884,6 +981,23 @@ export default function App() {
     } catch {}
     return [];
   });
+
+  const [show6BattleLogs, setShow6BattleLogs] = useState<WebBattleLogEntry[]>(() => {
+    try {
+      const raw = localStorage.getItem('gbl_show6_battle_logs_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+
+  const battleLogs = appCombatMode === 'show6' ? show6BattleLogs : gblBattleLogs;
+  const setBattleLogs: React.Dispatch<React.SetStateAction<WebBattleLogEntry[]>> =
+    appCombatMode === 'show6' ? setShow6BattleLogs : setGblBattleLogs;
+  const activeBattleLogStorageKey =
+    appCombatMode === 'show6' ? 'gbl_show6_battle_logs_v1' : 'gbl_battle_logs_v1';
 
   const [aiTrainingLogs, setAiTrainingLogs] = useState<WebAiTrainingLogRecord[]>(() => {
     try {
@@ -1044,7 +1158,7 @@ export default function App() {
       .sort((a, b) => b.timestampMs - a.timestampMs);
     setBattleLogs(compact);
     try {
-      localStorage.setItem('gbl_battle_logs_v1', JSON.stringify(compact));
+      localStorage.setItem(activeBattleLogStorageKey, JSON.stringify(compact));
     } catch {}
   };
 
@@ -1190,7 +1304,7 @@ export default function App() {
         ...filteredPrev
       ].sort((a, b) => b.timestampMs - a.timestampMs);
       try {
-        localStorage.setItem('gbl_battle_logs_v1', JSON.stringify(updated));
+        localStorage.setItem(activeBattleLogStorageKey, JSON.stringify(updated));
       } catch {}
       return updated;
     });
@@ -1280,8 +1394,8 @@ export default function App() {
     setIsDragging(false);
   };
 
-  // Team Presets State (persisted in version-independent 'gbl_user_teams_persistent' with automatic migration from legacy keys)
-  const [presets, setPresets] = useState<TeamPreset[]>(() => {
+  // Standard GBL Team Presets State (persisted in 'gbl_user_teams_persistent')
+  const [gblPresets, setGblPresets] = useState<TeamPreset[]>(() => {
     try {
       const persistent = localStorage.getItem('gbl_user_teams_persistent');
       if (persistent) {
@@ -1312,26 +1426,401 @@ export default function App() {
     return INITIAL_PRESETS;
   });
 
-  const [selectedPresetId, setSelectedPresetId] = useState<string>(() => {
+  const [gblSelectedPresetId, setGblSelectedPresetId] = useState<string>(() => {
     return localStorage.getItem('gbl_selected_preset_id') || 'preset-ml-1';
   });
 
-  // Save presets whenever updated to version-independent key
-  useEffect(() => {
+  // Show 6 Mode Independent Storage: Teams of 3 for Overlay ('gbl_show6_presets_of_3_v1') & Teams of 6 ('gbl_show6_rosters_of_6_v1')
+  const [show6Presets3, setShow6Presets3] = useState<TeamPreset[]>(() => {
     try {
-      localStorage.setItem('gbl_user_teams_persistent', JSON.stringify(presets));
+      const saved = localStorage.getItem('gbl_show6_presets_of_3_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
     } catch {}
-  }, [presets]);
+    return INITIAL_SHOW6_PRESETS_OF_3;
+  });
+
+  const [show6SelectedPreset3Id, setShow6SelectedPreset3Id] = useState<string>(() => {
+    return localStorage.getItem('gbl_show6_selected_preset3_id') || 'show6-trio-gl-1';
+  });
+
+  const [show6Rosters6, setShow6Rosters6] = useState<Show6RosterOf6Preset[]>(() => {
+    try {
+      const saved = localStorage.getItem('gbl_show6_rosters_of_6_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_SHOW6_ROSTERS_OF_6;
+  });
+
+  const [selectedShow6Roster6Id, setSelectedShow6Roster6Id] = useState<string>(() => {
+    return localStorage.getItem('gbl_selected_show6_roster6_id') || 'show6-roster-gl-1';
+  });
 
   useEffect(() => {
     try {
-      localStorage.setItem('gbl_selected_preset_id', selectedPresetId);
+      localStorage.setItem('gbl_user_teams_persistent', JSON.stringify(gblPresets));
     } catch {}
-  }, [selectedPresetId]);
+  }, [gblPresets]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('gbl_selected_preset_id', gblSelectedPresetId);
+    } catch {}
+  }, [gblSelectedPresetId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('gbl_show6_presets_of_3_v1', JSON.stringify(show6Presets3));
+    } catch {}
+  }, [show6Presets3]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('gbl_show6_selected_preset3_id', show6SelectedPreset3Id);
+    } catch {}
+  }, [show6SelectedPreset3Id]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('gbl_show6_rosters_of_6_v1', JSON.stringify(show6Rosters6));
+    } catch {}
+  }, [show6Rosters6]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('gbl_selected_show6_roster6_id', selectedShow6Roster6Id);
+    } catch {}
+  }, [selectedShow6Roster6Id]);
+
+  // Mode-Aware Active Teams of 3 (Automatically switches between Standard GBL Teams and Show 6 Overlay Teams of 3)
+  const presets = appCombatMode === 'show6' ? show6Presets3 : gblPresets;
+  const setPresets: React.Dispatch<React.SetStateAction<TeamPreset[]>> =
+    appCombatMode === 'show6' ? setShow6Presets3 : setGblPresets;
+  const selectedPresetId = appCombatMode === 'show6' ? show6SelectedPreset3Id : gblSelectedPresetId;
+  const setSelectedPresetId: React.Dispatch<React.SetStateAction<string>> =
+    appCombatMode === 'show6' ? setShow6SelectedPreset3Id : setGblSelectedPresetId;
 
   const activePreset = useMemo(() => {
-    return presets.find(p => p.id === selectedPresetId) || presets[0] || INITIAL_PRESETS[0];
+    return presets.find((p) => p.id === selectedPresetId) || presets[0] || INITIAL_PRESETS[0];
   }, [presets, selectedPresetId]);
+
+  // ============================================================================
+  // SHOW 6 DUAL TEAM BUILDERS STATE (Mode 1: 6v6 Pick-3 & Mode 2: Blind Show-6)
+  // ============================================================================
+  const [show6ActiveBuilderTab, setShow6ActiveBuilderTab] = useState<'pick3' | 'blind6'>('pick3');
+  const [show6Pick3League, setShow6Pick3League] = useState<LeagueType>('GREAT LEAGUE');
+  const [show6My6, setShow6My6] = useState<string[]>(() => {
+    const def = getDefaultShow6RosterNames('GREAT LEAGUE');
+    return def.my6;
+  });
+  const [show6Opponent6, setShow6Opponent6] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('gbl_show6_opponent_6_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === 6) return parsed;
+      }
+    } catch {}
+    return getDefaultShow6RosterNames('GREAT LEAGUE').opp6;
+  });
+  const [show6NewRosterName, setShow6NewRosterName] = useState<string>('');
+  const [show6SlotAutocomplete, setShow6SlotAutocomplete] = useState<{
+    group: 'my6' | 'opp6' | 'lock6';
+    idx: number;
+  } | null>(null);
+  const [show6Pick3Result, setShow6Pick3Result] = useState<Show6Pick3MatchupResult | null>(() =>
+    evaluateShow6Pick3Matchup(
+      'GREAT LEAGUE',
+      getDefaultShow6RosterNames('GREAT LEAGUE').my6,
+      getDefaultShow6RosterNames('GREAT LEAGUE').opp6
+    )
+  );
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('gbl_show6_opponent_6_v1', JSON.stringify(show6Opponent6));
+    } catch {}
+  }, [show6Opponent6]);
+
+  // Mode 2: Blind Show 6 Meta Roster Builder State (Per-League Persisted Whitelist & Banlist + Clear Option)
+  const [blindShow6League, setBlindShow6League] = useState<LeagueType>('GREAT LEAGUE');
+  const [blindShow6LockedSlots, setBlindShow6LockedSlots] = useState<string[]>(['', '', '', '', '']);
+  const [blindShow6FilterMode, setBlindShow6FilterMode] = useState<'OPEN' | 'WHITELIST' | 'BANLIST'>('OPEN');
+  // User's Clarifying Answer #3: Method to choose Option 2 (Comma/Newline Text Paste) or Option 3 (Autocomplete Chip Picker)
+  const [blindShow6InputMethod, setBlindShow6InputMethod] = useState<'text' | 'chips'>('chips');
+
+  const [show6WhitelistByLeague, setShow6WhitelistByLeague] = useState<Record<LeagueType, string[]>>(() => {
+    const emptyMap: Record<LeagueType, string[]> = {
+      'GREAT LEAGUE': [],
+      'ULTRA LEAGUE': [],
+      'MASTER LEAGUE': [],
+      'MEGA MASTER LEAGUE': []
+    };
+    try {
+      const raw = localStorage.getItem('gbl_show6_whitelist_by_league_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          return { ...emptyMap, ...parsed };
+        }
+      }
+    } catch {}
+    return emptyMap;
+  });
+
+  const [show6BanlistByLeague, setShow6BanlistByLeague] = useState<Record<LeagueType, string[]>>(() => {
+    const emptyMap: Record<LeagueType, string[]> = {
+      'GREAT LEAGUE': [],
+      'ULTRA LEAGUE': [],
+      'MASTER LEAGUE': [],
+      'MEGA MASTER LEAGUE': []
+    };
+    try {
+      const raw = localStorage.getItem('gbl_show6_banlist_by_league_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          return { ...emptyMap, ...parsed };
+        }
+      }
+    } catch {}
+    return emptyMap;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('gbl_show6_whitelist_by_league_v1', JSON.stringify(show6WhitelistByLeague));
+    } catch {}
+  }, [show6WhitelistByLeague]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('gbl_show6_banlist_by_league_v1', JSON.stringify(show6BanlistByLeague));
+    } catch {}
+  }, [show6BanlistByLeague]);
+
+  // Derived active league Whitelist / Banlist chips & text + per-league update and clear helpers
+  const activeLeagueWhitelistChips = show6WhitelistByLeague[blindShow6League] || [];
+  const activeLeagueBanlistChips = show6BanlistByLeague[blindShow6League] || [];
+  const blindShow6FilterChips =
+    blindShow6FilterMode === 'WHITELIST'
+      ? activeLeagueWhitelistChips
+      : blindShow6FilterMode === 'BANLIST'
+      ? activeLeagueBanlistChips
+      : [];
+
+  const [blindShow6FilterTextDraft, setBlindShow6FilterTextDraft] = useState<string>(() =>
+    (show6WhitelistByLeague['GREAT LEAGUE'] || []).join(', ')
+  );
+
+  // Sync text draft whenever league or filter mode changes
+  useEffect(() => {
+    const list =
+      blindShow6FilterMode === 'WHITELIST'
+        ? show6WhitelistByLeague[blindShow6League] || []
+        : blindShow6FilterMode === 'BANLIST'
+        ? show6BanlistByLeague[blindShow6League] || []
+        : [];
+    setBlindShow6FilterTextDraft(list.join(', '));
+  }, [blindShow6League, blindShow6FilterMode]);
+
+  const updateActiveLeagueFilterList = (nextChips: string[], nextRawText?: string) => {
+    const deduped = Array.from(new Set(nextChips.map((c) => c.trim()).filter(Boolean)));
+    if (blindShow6FilterMode === 'WHITELIST') {
+      setShow6WhitelistByLeague((prev) => ({
+        ...prev,
+        [blindShow6League]: deduped
+      }));
+    } else if (blindShow6FilterMode === 'BANLIST') {
+      setShow6BanlistByLeague((prev) => ({
+        ...prev,
+        [blindShow6League]: deduped
+      }));
+    }
+    setBlindShow6FilterTextDraft(nextRawText !== undefined ? nextRawText : deduped.join(', '));
+  };
+
+  const handleClearLeagueFilterList = (target: 'WHITELIST' | 'BANLIST' | 'BOTH') => {
+    if (target === 'WHITELIST' || target === 'BOTH') {
+      setShow6WhitelistByLeague((prev) => ({
+        ...prev,
+        [blindShow6League]: []
+      }));
+    }
+    if (target === 'BANLIST' || target === 'BOTH') {
+      setShow6BanlistByLeague((prev) => ({
+        ...prev,
+        [blindShow6League]: []
+      }));
+    }
+    setBlindShow6FilterTextDraft('');
+    setStartBattleToast(
+      target === 'BOTH'
+        ? `🧹 Cleared persisted Whitelist & Banlist for ${blindShow6League}!`
+        : `🧹 Cleared persisted ${target === 'WHITELIST' ? 'Whitelist' : 'Banlist'} for ${blindShow6League}!`
+    );
+    setTimeout(() => setStartBattleToast(null), 2200);
+  };
+
+  const [blindShow6FilterChipQuery, setBlindShow6FilterChipQuery] = useState<string>('');
+  const [blindShow6HistoricalText, setBlindShow6HistoricalText] = useState<string>(
+    'Azumarill, Clodsire, Mandibuzz, Feraligatr, Annihilape, Wigglytuff'
+  );
+  const [blindShow6HistoricalChips, setBlindShow6HistoricalChips] = useState<string[]>([
+    'Azumarill',
+    'Clodsire',
+    'Mandibuzz',
+    'Feraligatr',
+    'Annihilape',
+    'Wigglytuff'
+  ]);
+  const [blindShow6HistoricalChipQuery, setBlindShow6HistoricalChipQuery] = useState<string>('');
+  const [blindShow6HistoricalWeightPct, setBlindShow6HistoricalWeightPct] = useState<number>(35);
+  const [blindShow6Result, setBlindShow6Result] = useState<BlindShow6RosterResult | null>(() =>
+    generateBlindShow6Roster({
+      league: 'GREAT LEAGUE',
+      lockedCoreNames: [],
+      metaFilterMode: 'OPEN',
+      whitelistNames: [],
+      banlistNames: [],
+      historicalExpectedNames: ['Azumarill', 'Clodsire', 'Mandibuzz', 'Feraligatr', 'Annihilape', 'Wigglytuff'],
+      historicalWeightPct: 35
+    })
+  );
+
+  const handleRunShow6Pick3Optimizer = (
+    overrideLeague?: LeagueType,
+    overrideMy6?: string[],
+    overrideOpp6?: string[]
+  ) => {
+    const lg = overrideLeague || show6Pick3League;
+    const m6 = overrideMy6 || show6My6;
+    const o6 = overrideOpp6 || show6Opponent6;
+    const res = evaluateShow6Pick3Matchup(lg, m6, o6);
+    setShow6Pick3Result(res);
+  };
+
+  const handleSaveMy6AsRosterPreset = (customName?: string, membersOverride?: TeamMember[], leagueOverride?: LeagueType) => {
+    const lg = leagueOverride || show6Pick3League;
+    const members: TeamMember[] =
+      membersOverride ||
+      (show6Pick3Result?.my6SimulatedBestMoves.length === 6
+        ? show6Pick3Result.my6SimulatedBestMoves
+        : show6My6.map((name, idx) => {
+            const rec = getRecommendedMovesForPokemon(name, lg);
+            return {
+              id: `s6-${idx + 1}`,
+              name: rec?.name || name,
+              cp: rec?.cp || 1500,
+              fastMove: rec?.fastMove || 'Tackle',
+              chargedMove1: rec?.chargedMove1 || 'Body Slam',
+              chargedMove2: rec?.chargedMove2 || 'Surf'
+            };
+          }));
+    const newId = `show6-roster-${Date.now()}`;
+    const rosterTitle =
+      (customName ?? show6NewRosterName).trim() ||
+      `Show 6 ${lg.split(' ')[0]} (${members.slice(0, 3).map((m) => m.name.split(' ')[0]).join('/')})`;
+    const created: Show6RosterOf6Preset = {
+      id: newId,
+      name: rosterTitle,
+      league: lg,
+      pokemon: members,
+      notes: 'Saved Show 6 Tournament Roster (Simulated Best Movesets)',
+      updatedAt: Date.now()
+    };
+    setShow6Rosters6((prev) => [created, ...prev]);
+    setSelectedShow6Roster6Id(newId);
+    setShow6NewRosterName('');
+    setStartBattleToast(`🏛️ Saved Show 6 Team of 6: "${rosterTitle}"`);
+    setTimeout(() => setStartBattleToast(null), 2200);
+  };
+
+  const handleEquipShow6LineupToOverlay = (
+    members: TeamMember[],
+    archetype: TeamArchetype,
+    league: LeagueType,
+    labelSuffix: string
+  ) => {
+    const newId = `show6-trio-${Date.now()}`;
+    const monNames = members.map((m) => m.name.split(' ')[0]).join('/');
+    const basePreset: TeamPreset = {
+      id: newId,
+      name: `Show 6 ${archetype}: ${monNames} (${labelSuffix})`,
+      league,
+      pokemon: members.map((m, idx) => ({ ...m, id: `p${idx + 1}` })),
+      archetype,
+      isArchetypeManual: true
+    };
+    const evaluated = evaluateTeamPresetMetrics(
+      basePreset,
+      show6BattleLogs,
+      activeSeasonBounds.startMs,
+      activeSeasonBounds.endMs,
+      false
+    );
+    setShow6Presets3((prev) => [evaluated, ...prev]);
+    setShow6SelectedPreset3Id(newId);
+    if (appCombatMode !== 'show6') {
+      setAppCombatModeState('show6');
+      try {
+        localStorage.setItem('gbl_app_combat_mode', 'show6');
+      } catch {}
+    }
+    setStartBattleToast(`⚡ Equipped "${evaluated.name}" to Show 6 Overlay (Team of 3)!`);
+    setTimeout(() => setStartBattleToast(null), 2400);
+  };
+
+  const handleRunBlindShow6Optimizer = () => {
+    const whitelistForLeague =
+      blindShow6FilterMode === 'WHITELIST' && blindShow6InputMethod === 'text'
+        ? parsePokemonListInput(blindShow6FilterTextDraft, blindShow6League)
+        : show6WhitelistByLeague[blindShow6League] || [];
+    const banlistForLeague =
+      blindShow6FilterMode === 'BANLIST' && blindShow6InputMethod === 'text'
+        ? parsePokemonListInput(blindShow6FilterTextDraft, blindShow6League)
+        : show6BanlistByLeague[blindShow6League] || [];
+    const histList =
+      blindShow6InputMethod === 'text'
+        ? parsePokemonListInput(blindShow6HistoricalText, blindShow6League)
+        : blindShow6HistoricalChips;
+    const res = generateBlindShow6Roster({
+      league: blindShow6League,
+      lockedCoreNames: blindShow6LockedSlots.filter((s) => s.trim().length > 0),
+      metaFilterMode: blindShow6FilterMode,
+      whitelistNames: blindShow6FilterMode === 'WHITELIST' ? whitelistForLeague : [],
+      banlistNames: blindShow6FilterMode === 'BANLIST' ? banlistForLeague : [],
+      historicalExpectedNames: histList,
+      historicalWeightPct: blindShow6HistoricalWeightPct
+    });
+    setBlindShow6Result(res);
+  };
+
+  const handleImportHistoricalFromShow6Logs = () => {
+    const sourceLogs = show6BattleLogs.length > 0 ? show6BattleLogs : gblBattleLogs;
+    const seen = Array.from(
+      new Set(
+        sourceLogs
+          .filter((b) => !b.league || b.league === blindShow6League)
+          .flatMap((b) => b.opponents || [])
+          .filter(Boolean)
+      )
+    );
+    if (seen.length === 0) {
+      setStartBattleToast('ℹ️ No logged opponents found for this league yet — using default historical list.');
+      setTimeout(() => setStartBattleToast(null), 2200);
+      return;
+    }
+    setBlindShow6HistoricalChips(seen);
+    setBlindShow6HistoricalText(seen.join(', '));
+    setStartBattleToast(`📥 Imported ${seen.length} historical opponent species from Battle Logs!`);
+    setTimeout(() => setStartBattleToast(null), 2200);
+  };
 
   const activeSeasonBounds = useMemo(() => {
     const now = Date.now();
@@ -1366,14 +1855,14 @@ export default function App() {
         activeSeasonBounds.endMs
       )
     );
-  }, [battleLogs.length, activeSeasonBounds.startMs, activeSeasonBounds.endMs]);
+  }, [appCombatMode, battleLogs.length, activeSeasonBounds.startMs, activeSeasonBounds.endMs]);
 
   const [reparseBattlesStatus, setReparseBattlesStatus] = useState<string>(
     'Re-evaluates all logged battles with latest 2.56x dual-type & Shadow 1.2x damage + Win Quality (WAE) metrics'
   );
 
   const handleReparseAllCompletedBattles = (silent: boolean = false) => {
-    const reparsedActive = reparseAllCompletedBattleLogs(battleLogs, presets, 'gbl_battle_logs_v1');
+    const reparsedActive = reparseAllCompletedBattleLogs(battleLogs, presets, activeBattleLogStorageKey);
     setBattleLogs(reparsedActive);
     const reparsedTrash = reparseAllCompletedBattleLogs(deletedBattlesTrash, presets, 'gbl_deleted_battles_trash_v1');
     setDeletedBattlesTrash(reparsedTrash);
@@ -1384,7 +1873,7 @@ export default function App() {
     );
     if (!silent) {
       try {
-        localStorage.setItem('gbl_damage_reparse_version', '293');
+        localStorage.setItem('gbl_damage_reparse_version', '500');
       } catch {}
     }
   };
@@ -2526,7 +3015,7 @@ export default function App() {
     };
   }, [activeOpponent, activePreset, activeUserSlotIndex, activeOpponentLeague, isOpponentShadow]);
 
-  // Lead, Swap, Post-Faint, Persistent-HP & Shield Callout Tactical Recommendation (v3.44)
+  // Lead, Swap, Post-Faint, Persistent-HP & Shield Callout Tactical Recommendation (v5.00 Show 6 Known-Opponent-6 Aware)
   const activeTacticalRec: TacticalRecommendationResult | null = useMemo(() => {
     if (isWaitingOpponent || scannedOpponents.length === 0 || !activePreset?.pokemon?.length) {
       return null;
@@ -2557,7 +3046,8 @@ export default function App() {
       thirdOppMoveName: activeOppChargedMoveBounds.thirdMoveName,
       fourthOppMoveDmgPct: activeOppChargedMoveBounds.fourthDmgPct,
       fourthOppMoveName: activeOppChargedMoveBounds.fourthMoveName,
-      league: activePreset.league
+      league: activePreset.league,
+      knownOpponent6: appCombatMode === 'show6' ? show6Opponent6 : undefined
     });
     return rec && rec.visible ? rec : null;
   }, [
@@ -2580,8 +3070,20 @@ export default function App() {
     playerSwapRemainingSec,
     oppSwapRemainingSec,
     lastOppSwitchWasFaint,
-    isPostFaintPromptActive
+    isPostFaintPromptActive,
+    appCombatMode,
+    show6Opponent6
   ]);
+
+  const show6LiveBacklinePrediction: Show6LiveBacklinePredictionResult | null = useMemo(() => {
+    if (appCombatMode !== 'show6') return null;
+    return predictShow6UnrevealedBackline(
+      activePreset?.league || 'GREAT LEAGUE',
+      show6Opponent6,
+      isWaitingOpponent ? [] : scannedOpponents,
+      activePreset?.pokemon || []
+    );
+  }, [appCombatMode, activePreset, show6Opponent6, isWaitingOpponent, scannedOpponents]);
 
   // Resolve an Opponent Charged Attack (either Shielded 1S or Unshielded Tank with conservative move inference)
   const handleResolveOppChargedAttack = (useShield: boolean, simulatedMoveIdx: number = 0) => {
@@ -3836,7 +4338,7 @@ export default function App() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'SilphScope_PvP_v3.46_Android_Project.zip';
+      a.download = 'SilphScope_PvP_v5.00_Android_Project.zip';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -3847,6 +4349,8 @@ export default function App() {
       setIsDownloadingZip(false);
     }
   };
+
+  const modeBannerWord = appCombatMode === 'show6' ? 'Show 6' : 'GBL';
 
   return (
     <div
@@ -4072,7 +4576,7 @@ export default function App() {
               style={{ borderColor: activeTheme.accentHex }}
             />
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="font-bold text-base md:text-lg tracking-tight" style={{ color: activeTheme.textPrimaryHex }}>
                   SilphScope PvP
                 </h1>
@@ -4084,11 +4588,31 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v4.13 • Android Native Overlay
+                  v5.00 • Android Native Overlay
                 </span>
+                {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
+                <button
+                  type="button"
+                  onClick={() => handleSetAppCombatMode(appCombatMode === 'show6' ? 'gbl' : 'show6')}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-[10.5px] font-extrabold uppercase tracking-wider border transition shadow-sm ${
+                    appCombatMode === 'show6'
+                      ? 'bg-amber-500/20 border-amber-400 text-amber-200 hover:bg-amber-500/30'
+                      : 'bg-sky-500/20 border-sky-400 text-sky-200 hover:bg-sky-500/30'
+                  }`}
+                  title="Active Combat Mode (Click to toggle between Standard GBL Blind 3 Mode and Show 6 Battle Frontier Mode, or configure in Settings)"
+                >
+                  {appCombatMode === 'show6' ? renderBattleFrontierLogo(16) : renderGblModeLogo(16)}
+                  <span>
+                    {appCombatMode === 'show6'
+                      ? 'SHOW 6 MODE • BATTLE FRONTIER (PICK 3)'
+                      : 'GBL MODE • BLIND 3 PVP'}
+                  </span>
+                </button>
               </div>
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
-                Charge Move Meter Turn Detection, On-Screen Move Recognition &amp; Non-Standard Fast Move Detector for Pokémon GO PvP
+                {appCombatMode === 'show6'
+                  ? 'Show 6 Tournament & Battle Frontier Pick-3 Mode • Known Opponent 6 AI Backline Predictor, 6v6 Pick-3 & Blind Show 6 Meta Builders'
+                  : 'Standard GBL Blind 3 PvP Mode • Charge Move Meter Turn Detection, On-Screen Move Recognition & Anti-Meta Team Builder'}
               </p>
             </div>
           </div>
@@ -4116,9 +4640,9 @@ export default function App() {
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
-                <span>⚔️ Teams</span>
+                <span>{appCombatMode === 'show6' ? '🏛️ Show 6 Teams' : '⚔️ Teams'}</span>
                 <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-slate-800 text-[10px] text-sky-400 border border-slate-700">
-                  {presets.length}
+                  {appCombatMode === 'show6' ? `${show6Rosters6.length}×6 · ${presets.length}×3` : presets.length}
                 </span>
               </button>
               <button
@@ -4130,7 +4654,10 @@ export default function App() {
                 }`}
               >
                 <Target className="w-3.5 h-3.5" />
-                <span>📜 Battle Log</span>
+                <span>{appCombatMode === 'show6' ? '📜 Show 6 Log' : '📜 Battle Log'}</span>
+                <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-slate-800 text-[10px] text-amber-300 border border-slate-700">
+                  {battleLogs.length}
+                </span>
               </button>
               <button
                 onClick={() => setActiveTab('settings')}
@@ -4182,19 +4709,27 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6">
-        {/* Persistent Overlay Launch, Status & Help Button Bar (Mirrors Android Top Region) */}
+        {/* Persistent Overlay Launch, Mode Banner Logo, Status & Help Button Bar (Mirrors Android Top Region) */}
         <div className="mb-5 p-3.5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5 text-xs sm:text-sm font-bold text-sky-400">
-            <span>
-              {isOverlayVisible
-                ? isBattleActive
-                  ? 'Status: Battle Active'
-                  : 'Status: Overlay Active'
-                : 'Status: Idle'}
+            <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-800">
+              {appCombatMode === 'show6' ? renderBattleFrontierLogo(20) : renderGblModeLogo(20)}
+              <span className={appCombatMode === 'show6' ? 'text-amber-300 font-extrabold' : 'text-sky-300 font-extrabold'}>
+                {isOverlayVisible
+                  ? isBattleActive
+                    ? `Status: ${modeBannerWord} Battle Active`
+                    : `Status: ${modeBannerWord} Overlay Active`
+                  : `Status: ${modeBannerWord} Idle`}
+              </span>
             </span>
             <span className="px-2 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[10px] font-mono">
               ⚡ Precomputed 9x9 Matrix: Top {precomputed9x9State.metaDepth} {precomputed9x9State.league} Meta ({precomputed9x9State.totalCellsComputed} cells • {precomputed9x9State.elapsedMs}ms)
             </span>
+            {appCombatMode === 'show6' && (
+              <span className="px-2 py-0.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[10px] font-mono">
+                🏛️ Show 6 AI Constrained to Known Opponent 6 ({show6Opponent6.slice(0, 3).map((n) => n.split(' ')[0]).join('/')}...)
+              </span>
+            )}
             <span
               className={`px-2 py-0.5 rounded-lg text-[10px] font-mono border ${
                 activeRealtime9x9Lookup.source === 'PRECOMPUTED_TOP200'
@@ -6358,12 +6893,104 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Show 6 Live Overlay AI: Known Opponent 6 Backline Predictor & Swap Picker (Strictly Constrained to Known Opponent 6) */}
+              {appCombatMode === 'show6' && show6LiveBacklinePrediction && (
+                <div className="bg-slate-900 border border-amber-500/50 rounded-2xl p-5 shadow-xl space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      {renderBattleFrontierLogo(20)}
+                      <div>
+                        <h3 className="font-extrabold text-sm text-amber-300">
+                          Show 6 AI • Known Opponent 6 Backline Predictor
+                        </h3>
+                        <p className="text-[10.5px] text-slate-400">
+                          AI predictions &amp; tactical swap/shield callouts are strictly constrained to the unrevealed Pokémon in Opponent&apos;s Known 6.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('presets')}
+                      className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 text-[10.5px] font-bold shrink-0"
+                    >
+                      Edit Opp 6 →
+                    </button>
+                  </div>
+
+                  {/* Known Opponent 6 Quick Swap-In Strip */}
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                      Opponent&apos;s Known 6 Roster (Tap to Swap In / Reveal in Battle)
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                      {show6LiveBacklinePrediction.knownOpponent6.map((monName, idx) => {
+                        const isRevealed =
+                          !isWaitingOpponent &&
+                          scannedOpponents.some((s) => s.toLowerCase() === monName.toLowerCase());
+                        const isActiveNow =
+                          !isWaitingOpponent && activeOpponentName.toLowerCase() === monName.toLowerCase();
+                        return (
+                          <button
+                            key={`${monName}-${idx}`}
+                            type="button"
+                            onClick={() => handleSwapActiveOpponent(monName)}
+                            className={`px-2.5 py-1.5 rounded-xl border text-left text-xs font-bold transition flex items-center justify-between gap-1 ${
+                              isActiveNow
+                                ? 'bg-sky-500/25 border-sky-400 text-sky-200 shadow-sm'
+                                : isRevealed
+                                ? 'bg-emerald-500/20 border-emerald-400/60 text-emerald-200'
+                                : 'bg-slate-950/80 border-slate-800 text-slate-300 hover:border-amber-400/60 hover:text-amber-200'
+                            }`}
+                          >
+                            <span className="truncate">
+                              #{idx + 1} {monName}
+                            </span>
+                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-900 shrink-0">
+                              {isActiveNow ? 'ACTIVE' : isRevealed ? 'SEEN' : 'UNSEEN'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* AI Unrevealed Backline Pair Predictions */}
+                  <div className="p-3 rounded-xl bg-slate-950/90 border border-amber-500/30 space-y-2">
+                    <div className="text-[11px] font-bold text-amber-200">
+                      {show6LiveBacklinePrediction.tacticalSummary}
+                    </div>
+                    {show6LiveBacklinePrediction.mostLikelyPairs.length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        {show6LiveBacklinePrediction.mostLikelyPairs.slice(0, 3).map((pair, pIdx) => (
+                          <div
+                            key={`${pair.backlineNames.join('-')}-${pIdx}`}
+                            className="p-2 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between gap-2 text-[11px]"
+                          >
+                            <div>
+                              <span className="font-extrabold text-white">
+                                #{pIdx + 1} Predicted Backline: {pair.backlineNames.join(' + ')}
+                              </span>
+                              <span className="block text-[10px] text-slate-400">{pair.rationale}</span>
+                            </div>
+                            <span className="px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-400/50 text-amber-300 font-mono font-extrabold text-xs shrink-0">
+                              {pair.probabilityPct}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Active Team Preset Summary Card */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <Layers className="w-4 h-4 text-emerald-400" />
-                    <h3 className="font-bold text-sm text-white">Active Team Preset</h3>
+                    <h3 className="font-bold text-sm text-white">
+                      {appCombatMode === 'show6' ? 'Active Show 6 Overlay Trio (Team of 3)' : 'Active Team Preset'}
+                    </h3>
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                     {activePreset.league}
@@ -6434,15 +7061,952 @@ export default function App() {
         )}
 
         {/* =========================================================================
-            TAB 2: CUSTOM GBL TEAM PRESETS MANAGER (User Requirement)
+            TAB 2: CUSTOM GBL TEAM PRESETS & SHOW 6 TEAMS / DUAL BUILDERS HUB
            ========================================================================= */}
         {activeTab === 'presets' && (
           <div className="space-y-6">
+            {/* =====================================================================
+                SHOW 6 MODE HUB: SAVED TEAMS OF 6 + DUAL SHOW 6 TEAM BUILDERS
+               ===================================================================== */}
+            {appCombatMode === 'show6' && (
+              <div className="space-y-6">
+                {/* Section A: Saved Show 6 Rosters (Teams of 6) */}
+                <div className="bg-slate-900 border border-amber-500/40 rounded-2xl p-6 shadow-2xl space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                    <div className="flex items-center gap-3">
+                      {renderBattleFrontierLogo(28)}
+                      <div>
+                        <h2 className="text-lg font-extrabold text-white flex items-center gap-2">
+                          <span>Show 6 Tournament Rosters (Saved Teams of 6)</span>
+                          <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-300 text-[10px] font-bold">
+                            {show6Rosters6.length} Saved Rosters of 6
+                          </span>
+                        </h2>
+                        <p className="text-xs text-slate-400">
+                          Stores your 6-Pokémon Show 6 rosters independently of Standard GBL mode. Load any saved Team of 6 into the 6v6 Pick-3 Optimizer with 1 click!
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={show6NewRosterName}
+                        onChange={(e) => setShow6NewRosterName(e.target.value)}
+                        placeholder="Optional Roster Name..."
+                        className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleSaveMy6AsRosterPreset()}
+                        className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs shadow-lg transition shrink-0"
+                      >
+                        💾 Save Current My 6
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {show6Rosters6.map((roster) => {
+                      const isSel = roster.id === selectedShow6Roster6Id;
+                      return (
+                        <div
+                          key={roster.id}
+                          className={`p-4 rounded-xl border transition flex flex-col justify-between gap-3 ${
+                            isSel
+                              ? 'bg-amber-500/10 border-amber-400/70 shadow-lg'
+                              : 'bg-slate-950/80 border-slate-800 hover:border-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <span className="font-extrabold text-sm text-white block">{roster.name}</span>
+                              <span className="text-[10px] font-mono text-amber-300">{roster.league}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedShow6Roster6Id(roster.id);
+                                  const names = roster.pokemon.map((p) => p.name);
+                                  setShow6Pick3League(roster.league);
+                                  setShow6My6(names);
+                                  handleRunShow6Pick3Optimizer(roster.league, names, show6Opponent6);
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-sky-500/25 hover:bg-sky-500/40 border border-sky-400/60 text-sky-200 text-[11px] font-bold transition"
+                              >
+                                ⚡ Load into 6v6 Optimizer
+                              </button>
+                              {show6Rosters6.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setShow6Rosters6((prev) => prev.filter((r) => r.id !== roster.id))
+                                  }
+                                  className="px-2 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/35 border border-rose-400/40 text-rose-200 text-[11px] font-bold"
+                                  title="Delete Roster of 6"
+                                >
+                                  🗑️
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                            {roster.pokemon.slice(0, 6).map((m, idx) => (
+                              <div
+                                key={`${roster.id}-${idx}`}
+                                className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px]"
+                              >
+                                <span className="font-bold text-white block truncate">
+                                  #{idx + 1} {m.name}
+                                </span>
+                                <span className="text-[9.5px] text-slate-400 font-mono block truncate">
+                                  {m.fastMove} • {m.chargedMove1}/{m.chargedMove2}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Section B: Dual Show 6 Team Builders Card */}
+                <div className="bg-slate-900 border border-amber-500/40 rounded-2xl p-6 shadow-2xl space-y-5">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {renderBattleFrontierLogo(22)}
+                        <h3 className="text-lg font-extrabold text-white">
+                          Show 6 Dual Team Builders (6v6 Pick-3 Optimizer &amp; Blind Show-6 Meta Roster Builder)
+                        </h3>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Switch between <strong>Builder 1 (6v6 Matchup Pick-3 Optimizer)</strong> when you know your opponent&apos;s 6 Pokémon and <strong>Builder 2 (Blind Show 6 Meta Roster Builder)</strong> to construct your optimal 6-Pokémon tournament roster before knowing opponents.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800 text-xs font-extrabold shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setShow6ActiveBuilderTab('pick3')}
+                        className={`px-3.5 py-2 rounded-lg transition ${
+                          show6ActiveBuilderTab === 'pick3'
+                            ? 'bg-amber-500 text-slate-950 shadow'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        ⚔️ Builder 1: 6v6 Pick-3 Optimizer
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShow6ActiveBuilderTab('blind6')}
+                        className={`px-3.5 py-2 rounded-lg transition ${
+                          show6ActiveBuilderTab === 'blind6'
+                            ? 'bg-sky-500 text-slate-950 shadow'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        🌐 Builder 2: Blind Show 6 Meta Builder
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* ===============================================================
+                      BUILDER 1: 6v6 MATCHUP PICK-3 OPTIMIZER (Mode 1)
+                     =============================================================== */}
+                  {show6ActiveBuilderTab === 'pick3' && (
+                    <div className="space-y-5">
+                      <div className="p-3.5 rounded-xl bg-slate-950/90 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="text-xs text-slate-300 space-y-0.5">
+                          <div className="font-bold text-amber-300">
+                            🎯 Mode 1 Rules: Unknown Opponent Movesets + Simulated Best Movesets for Your 6 + Viability Weighting
+                          </div>
+                          <p className="text-[11px] text-slate-400">
+                            Opponent movesets are treated as unknown using the exact Team Builder weighting (75% PvPoke default + 25% alternate moveset combinations). Simulates the highest-BR movesets for your 6 Pokémon, weights all 120 opponent 3-Pokémon teams by viability, and recommends the <strong>Top 3 ABB</strong>, <strong>Top 3 ABC</strong>, and <strong>Top 3 Duo-Core</strong> teams for you!
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <select
+                            value={show6Pick3League}
+                            onChange={(e) => {
+                              const nextLg = e.target.value as LeagueType;
+                              setShow6Pick3League(nextLg);
+                              handleRunShow6Pick3Optimizer(nextLg, show6My6, show6Opponent6);
+                            }}
+                            className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white"
+                          >
+                            <option value="GREAT LEAGUE">GREAT LEAGUE (1500)</option>
+                            <option value="ULTRA LEAGUE">ULTRA LEAGUE (2500)</option>
+                            <option value="MASTER LEAGUE">MASTER LEAGUE (10000)</option>
+                            <option value="MEGA MASTER LEAGUE">MEGA MASTER LEAGUE</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => handleRunShow6Pick3Optimizer()}
+                            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs shadow-lg transition"
+                          >
+                            ⚡ Simulate 14,400 Lineups
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* 6v6 Roster Entry Grid: Your 6 vs Opponent's 6 */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {/* Your 6 Pokémon */}
+                        <div className="p-4 rounded-xl bg-slate-950/80 border border-sky-500/40 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-extrabold uppercase tracking-wider text-sky-400">
+                              🛡️ Your 6 Pokémon (Best Movesets Auto-Simulated)
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const def = getDefaultShow6RosterNames(show6Pick3League);
+                                setShow6My6(def.my6);
+                                handleRunShow6Pick3Optimizer(show6Pick3League, def.my6, show6Opponent6);
+                              }}
+                              className="text-[10px] font-bold text-sky-300 hover:underline"
+                            >
+                              Load League Template
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {show6My6.map((val, idx) => {
+                              const isFocused =
+                                show6SlotAutocomplete?.group === 'my6' && show6SlotAutocomplete.idx === idx;
+                              const sugs = isFocused
+                                ? getPokemonAutocompleteSuggestions(val, show6Pick3League, 8)
+                                : [];
+                              const simMember = show6Pick3Result?.my6SimulatedBestMoves[idx];
+                              return (
+                                <div key={`my6-${idx}`} className="relative space-y-1">
+                                  <label className="block text-[10px] font-bold text-slate-400">
+                                    My Slot #{idx + 1}
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={val}
+                                    onFocus={() => setShow6SlotAutocomplete({ group: 'my6', idx })}
+                                    onChange={(e) => {
+                                      const next = [...show6My6];
+                                      next[idx] = e.target.value;
+                                      setShow6My6(next);
+                                      setShow6SlotAutocomplete({ group: 'my6', idx });
+                                    }}
+                                    onBlur={() =>
+                                      setTimeout(() => {
+                                        setShow6SlotAutocomplete((prev) =>
+                                          prev?.group === 'my6' && prev.idx === idx ? null : prev
+                                        );
+                                      }, 160)
+                                    }
+                                    className="w-full bg-slate-900 border border-slate-700 focus:border-sky-400 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white"
+                                    placeholder={`My Pokémon #${idx + 1}`}
+                                  />
+                                  {simMember && (
+                                    <div className="text-[9.5px] font-mono text-emerald-300 truncate">
+                                      ✨ {simMember.fastMove} + {simMember.chargedMove1}/{simMember.chargedMove2}
+                                    </div>
+                                  )}
+                                  {isFocused && sugs.length > 0 && (
+                                    <div className="absolute left-0 right-0 top-full mt-1 z-50 max-h-44 overflow-y-auto rounded-xl bg-slate-900 border border-sky-400 shadow-2xl divide-y divide-slate-800">
+                                      {sugs.map((opt) => (
+                                        <button
+                                          key={opt.name}
+                                          type="button"
+                                          onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            const next = [...show6My6];
+                                            next[idx] = opt.name;
+                                            setShow6My6(next);
+                                            setShow6SlotAutocomplete(null);
+                                            handleRunShow6Pick3Optimizer(show6Pick3League, next, show6Opponent6);
+                                          }}
+                                          className="w-full px-2.5 py-1.5 text-left text-xs font-bold text-white hover:bg-sky-500/25 flex items-center justify-between"
+                                        >
+                                          <span className="truncate">{opt.name}</span>
+                                          <span className="text-[9px] font-mono text-sky-300">CP {opt.cp}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Opponent's 6 Pokémon */}
+                        <div className="p-4 rounded-xl bg-slate-950/80 border border-amber-500/40 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-extrabold uppercase tracking-wider text-amber-400">
+                              ⚔️ Opponent&apos;s 6 Pokémon (Unknown Movesets • Weighted 75%/25%)
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const def = getDefaultShow6RosterNames(show6Pick3League);
+                                setShow6Opponent6(def.opp6);
+                                handleRunShow6Pick3Optimizer(show6Pick3League, show6My6, def.opp6);
+                              }}
+                              className="text-[10px] font-bold text-amber-300 hover:underline"
+                            >
+                              Reset Sample Opp 6
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {show6Opponent6.map((val, idx) => {
+                              const isFocused =
+                                show6SlotAutocomplete?.group === 'opp6' && show6SlotAutocomplete.idx === idx;
+                              const sugs = isFocused
+                                ? getPokemonAutocompleteSuggestions(val, show6Pick3League, 8)
+                                : [];
+                              return (
+                                <div key={`opp6-${idx}`} className="relative space-y-1">
+                                  <label className="block text-[10px] font-bold text-slate-400">
+                                    Opp Slot #{idx + 1}
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={val}
+                                    onFocus={() => setShow6SlotAutocomplete({ group: 'opp6', idx })}
+                                    onChange={(e) => {
+                                      const next = [...show6Opponent6];
+                                      next[idx] = e.target.value;
+                                      setShow6Opponent6(next);
+                                      setShow6SlotAutocomplete({ group: 'opp6', idx });
+                                    }}
+                                    onBlur={() =>
+                                      setTimeout(() => {
+                                        setShow6SlotAutocomplete((prev) =>
+                                          prev?.group === 'opp6' && prev.idx === idx ? null : prev
+                                        );
+                                      }, 160)
+                                    }
+                                    className="w-full bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white"
+                                    placeholder={`Opp Pokémon #${idx + 1}`}
+                                  />
+                                  <div className="text-[9.5px] font-mono text-amber-300/90 truncate">
+                                    🎲 Unknown Moves (75%/25% Wtd)
+                                  </div>
+                                  {isFocused && sugs.length > 0 && (
+                                    <div className="absolute left-0 right-0 top-full mt-1 z-50 max-h-44 overflow-y-auto rounded-xl bg-slate-900 border border-amber-400 shadow-2xl divide-y divide-slate-800">
+                                      {sugs.map((opt) => (
+                                        <button
+                                          key={opt.name}
+                                          type="button"
+                                          onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            const next = [...show6Opponent6];
+                                            next[idx] = opt.name;
+                                            setShow6Opponent6(next);
+                                            setShow6SlotAutocomplete(null);
+                                            handleRunShow6Pick3Optimizer(show6Pick3League, show6My6, next);
+                                          }}
+                                          className="w-full px-2.5 py-1.5 text-left text-xs font-bold text-white hover:bg-amber-500/25 flex items-center justify-between"
+                                        >
+                                          <span className="truncate">{opt.name}</span>
+                                          <span className="text-[9px] font-mono text-amber-300">CP {opt.cp}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Pick-3 Simulation Results: Opponent Viability Top Lineups + 3 ABB, 3 ABC, 3 Duo-Core Options */}
+                      {show6Pick3Result && (
+                        <div className="space-y-5">
+                          {/* Top Viable Opponent 3-Pokemon Lineups Strip */}
+                          <div className="p-4 rounded-xl bg-slate-950/90 border border-slate-800 space-y-2.5">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-xs font-extrabold text-amber-300">
+                                📊 Highest-Viability Opponent 3-Pokémon Lineups (Weighted Highest in Evaluating Your Teams)
+                              </span>
+                              <span className="text-[10.5px] font-mono text-slate-400">
+                                {show6Pick3Result.totalMatchupsSimulated.toLocaleString()} ordered 3v3 matchups simulated in {show6Pick3Result.elapsedMs}ms
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                              {show6Pick3Result.topOpponentViableLineups.slice(0, 6).map((oppLineup, idx) => (
+                                <div
+                                  key={`opp-viable-${idx}`}
+                                  className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between gap-2 text-xs"
+                                >
+                                  <div className="min-w-0">
+                                    <span className="font-bold text-white block truncate">
+                                      #{idx + 1} {oppLineup.names.join(' / ')}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 font-mono">
+                                      Archetype: {oppLineup.archetype} • Score {oppLineup.viabilityScore}
+                                    </span>
+                                  </div>
+                                  <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-400/40 text-amber-300 font-mono font-extrabold text-[11px] shrink-0">
+                                    {oppLineup.viabilityWeightPct.toFixed(1)}% Wt
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* 3 Options per Team Type: Top 3 ABB, Top 3 ABC, Top 3 Duo-Core */}
+                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            {(
+                              [
+                                {
+                                  title: 'Top 3 ABB Lineups',
+                                  subtitle: 'Lead A covers shared B1/B2 backline weakness',
+                                  badgeColor: 'text-amber-300 border-amber-500/40 bg-amber-500/10',
+                                  items: show6Pick3Result.topAbbLineups
+                                },
+                                {
+                                  title: 'Top 3 ABC Lineups',
+                                  subtitle: 'Balanced triangular coverage core',
+                                  badgeColor: 'text-sky-300 border-sky-500/40 bg-sky-500/10',
+                                  items: show6Pick3Result.topAbcLineups
+                                },
+                                {
+                                  title: 'Top 3 Duo-Core Lineups',
+                                  subtitle: 'Reciprocal Core + Pivot Safe Swap',
+                                  badgeColor: 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10',
+                                  items: show6Pick3Result.topDuoLineups
+                                }
+                              ] as const
+                            ).map((group) => (
+                              <div
+                                key={group.title}
+                                className="p-4 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-3"
+                              >
+                                <div className="border-b border-slate-800 pb-2">
+                                  <h4 className="font-extrabold text-sm text-white">{group.title}</h4>
+                                  <p className="text-[10.5px] text-slate-400">{group.subtitle}</p>
+                                </div>
+
+                                <div className="space-y-3">
+                                  {group.items.map((lineup, idx) => (
+                                    <div
+                                      key={lineup.id}
+                                      className="p-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-sky-500/50 transition space-y-2"
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${group.badgeColor}`}>
+                                          Option #{idx + 1} • {lineup.archetype}
+                                        </span>
+                                        <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 font-extrabold">
+                                            Exp BR {lineup.expectedWeightedBr}
+                                          </span>
+                                          <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">
+                                            Min {lineup.worstCaseBr}
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      <div className="space-y-1">
+                                        {lineup.members.map((m, mIdx) => (
+                                          <div
+                                            key={`${lineup.id}-m-${mIdx}`}
+                                            className="px-2 py-1 rounded bg-slate-950/80 border border-slate-800/80 flex items-center justify-between gap-2 text-[11px]"
+                                          >
+                                            <span className="font-extrabold text-white truncate">
+                                              {mIdx === 0 ? '1. Lead:' : mIdx === 1 ? '2. Swap:' : '3. Closer:'} {m.name}
+                                            </span>
+                                            <span className="text-[9.5px] font-mono text-sky-300 truncate shrink-0">
+                                              {m.fastMove} + {m.chargedMove1}/{m.chargedMove2}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+
+                                      <div className="text-[10px] text-slate-400 space-y-0.5">
+                                        <div className="text-emerald-300 truncate">
+                                          ✅ Beats: {lineup.strongestAgainst.slice(0, 2).join(' • ')}
+                                        </div>
+                                        <div className="text-rose-300 truncate">
+                                          ⚠️ Watch: {lineup.dangerLineups.slice(0, 1).join(' • ')}
+                                        </div>
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleEquipShow6LineupToOverlay(
+                                            lineup.members,
+                                            lineup.archetype,
+                                            show6Pick3League,
+                                            `Exp BR ${lineup.expectedWeightedBr}`
+                                          )
+                                        }
+                                        className="w-full py-1.5 px-3 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-extrabold text-xs transition shadow"
+                                      >
+                                        ⚡ Save &amp; Equip to Show 6 Overlay (Team of 3)
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ===============================================================
+                      BUILDER 2: BLIND SHOW 6 META ROSTER BUILDER (Mode 2)
+                     =============================================================== */}
+                  {show6ActiveBuilderTab === 'blind6' && (
+                    <div className="space-y-5">
+                      <div className="p-3.5 rounded-xl bg-slate-950/90 border border-sky-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="text-xs text-slate-300 space-y-0.5">
+                          <div className="font-bold text-sky-300">
+                            🌐 Mode 2: Blind Show 6 Tournament Roster Optimizer (PvPoke Meta + Limited Cup Ban/Whitelist + Historical Opponents)
+                          </div>
+                          <p className="text-[11px] text-slate-400">
+                            Constructs an optimal 6-Pokémon roster with mutually covering ABB, ABC, and Duo-Core trios before knowing your opponent&apos;s 6. Lock 0–5 core Pokémon, import a Whitelist or Banlist, and weight Expected Historical Pokémon vs. the PvPoke Meta.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <select
+                            value={blindShow6League}
+                            onChange={(e) => setBlindShow6League(e.target.value as LeagueType)}
+                            className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white"
+                          >
+                            <option value="GREAT LEAGUE">GREAT LEAGUE (1500)</option>
+                            <option value="ULTRA LEAGUE">ULTRA LEAGUE (2500)</option>
+                            <option value="MASTER LEAGUE">MASTER LEAGUE (10000)</option>
+                            <option value="MEGA MASTER LEAGUE">MEGA MASTER LEAGUE</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={handleRunBlindShow6Optimizer}
+                            className="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-extrabold text-xs shadow-lg transition"
+                          >
+                            ✨ Build Optimal Blind Show 6
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Lockable Core Slots (0 to 5 Pokémon) */}
+                      <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold text-white">
+                            🔒 Lockable Core Slots (Optional: Lock 0 to 5 Pokémon to Build Around)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setBlindShow6LockedSlots(['', '', '', '', ''])}
+                            className="text-[10px] font-bold text-slate-400 hover:text-white"
+                          >
+                            Clear Locks
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                          {blindShow6LockedSlots.map((val, idx) => {
+                            const isFocused =
+                              show6SlotAutocomplete?.group === 'lock6' && show6SlotAutocomplete.idx === idx;
+                            const sugs = isFocused
+                              ? getPokemonAutocompleteSuggestions(val, blindShow6League, 8)
+                              : [];
+                            return (
+                              <div key={`lock6-${idx}`} className="relative">
+                                <input
+                                  type="text"
+                                  value={val}
+                                  onFocus={() => setShow6SlotAutocomplete({ group: 'lock6', idx })}
+                                  onChange={(e) => {
+                                    const next = [...blindShow6LockedSlots];
+                                    next[idx] = e.target.value;
+                                    setBlindShow6LockedSlots(next);
+                                    setShow6SlotAutocomplete({ group: 'lock6', idx });
+                                  }}
+                                  onBlur={() =>
+                                    setTimeout(() => {
+                                      setShow6SlotAutocomplete((prev) =>
+                                        prev?.group === 'lock6' && prev.idx === idx ? null : prev
+                                      );
+                                    }, 160)
+                                  }
+                                  placeholder={`Lock Slot #${idx + 1} (Opt)`}
+                                  className="w-full bg-slate-900 border border-slate-700 focus:border-sky-400 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                                />
+                                {isFocused && sugs.length > 0 && (
+                                  <div className="absolute left-0 right-0 top-full mt-1 z-50 max-h-44 overflow-y-auto rounded-xl bg-slate-900 border border-sky-400 shadow-2xl divide-y divide-slate-800">
+                                    {sugs.map((opt) => (
+                                      <button
+                                        key={opt.name}
+                                        type="button"
+                                        onMouseDown={(e) => {
+                                          e.preventDefault();
+                                          const next = [...blindShow6LockedSlots];
+                                          next[idx] = opt.name;
+                                          setBlindShow6LockedSlots(next);
+                                          setShow6SlotAutocomplete(null);
+                                        }}
+                                        className="w-full px-2.5 py-1.5 text-left text-xs font-bold text-white hover:bg-sky-500/25 flex items-center justify-between"
+                                      >
+                                        <span className="truncate">{opt.name}</span>
+                                        <span className="text-[9px] font-mono text-sky-300">CP {opt.cp}</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Input Method Selector (Option 2 Text Paste vs Option 3 Interactive Chip Picker) + Cup Filter + Historical Weight */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {/* Left: Cup Rules (Open / Whitelist / Banlist — Persisted Per League + Clear Option) */}
+                        <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <span className="text-xs font-extrabold text-purple-300 block">
+                                🛡️ Limited Meta Filter (Persisted Per League: {blindShow6League.split(' ')[0]})
+                              </span>
+                              <span className="text-[10px] text-slate-400">
+                                Saved for {blindShow6League}: <strong>{activeLeagueWhitelistChips.length} Whitelisted</strong> • <strong>{activeLeagueBanlistChips.length} Banned</strong>
+                              </span>
+                            </div>
+                            {/* User's Clarifying Answer #3: Method Selector between Text Paste and Chip Picker */}
+                            <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 text-[10px] font-bold">
+                              <button
+                                type="button"
+                                onClick={() => setBlindShow6InputMethod('text')}
+                                className={`px-2 py-1 rounded ${
+                                  blindShow6InputMethod === 'text'
+                                    ? 'bg-purple-500 text-white'
+                                    : 'text-slate-400 hover:text-white'
+                                }`}
+                              >
+                                📝 Text Paste
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setBlindShow6InputMethod('chips')}
+                                className={`px-2 py-1 rounded ${
+                                  blindShow6InputMethod === 'chips'
+                                    ? 'bg-purple-500 text-white'
+                                    : 'text-slate-400 hover:text-white'
+                                }`}
+                              >
+                                🏷️ Chip Picker
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-1.5 text-xs font-bold">
+                            {(['OPEN', 'WHITELIST', 'BANLIST'] as const).map((m) => (
+                              <button
+                                key={m}
+                                type="button"
+                                onClick={() => setBlindShow6FilterMode(m)}
+                                className={`py-1.5 rounded-lg border transition ${
+                                  blindShow6FilterMode === m
+                                    ? 'bg-purple-500/25 border-purple-400 text-purple-200'
+                                    : 'bg-slate-900 border-slate-800 text-slate-400'
+                                }`}
+                              >
+                                {m === 'OPEN'
+                                  ? 'Open Meta'
+                                  : m === 'WHITELIST'
+                                  ? `Whitelist (${activeLeagueWhitelistChips.length})`
+                                  : `Banlist (${activeLeagueBanlistChips.length})`}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Per-League Clear Whitelist / Banlist Buttons */}
+                          <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t border-slate-800/80">
+                            <span className="text-[10px] font-mono text-slate-400">
+                              Auto-saved for {blindShow6League}
+                            </span>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {blindShow6FilterMode !== 'OPEN' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleClearLeagueFilterList(blindShow6FilterMode)}
+                                  className="px-2 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 text-[10px] font-bold transition"
+                                >
+                                  🗑️ Clear {blindShow6FilterMode === 'WHITELIST' ? 'Whitelist' : 'Banlist'} ({blindShow6League.split(' ')[0]})
+                                </button>
+                              )}
+                              {(activeLeagueWhitelistChips.length > 0 || activeLeagueBanlistChips.length > 0) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleClearLeagueFilterList('BOTH')}
+                                  className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-rose-950/60 border border-slate-700 hover:border-rose-500/40 text-slate-300 hover:text-rose-200 text-[10px] font-bold transition"
+                                >
+                                  🧹 Clear Both ({blindShow6League.split(' ')[0]})
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {blindShow6FilterMode !== 'OPEN' && (
+                            <div className="space-y-2">
+                              {blindShow6InputMethod === 'text' ? (
+                                <textarea
+                                  rows={3}
+                                  value={blindShow6FilterTextDraft}
+                                  onChange={(e) => {
+                                    const rawVal = e.target.value;
+                                    const parsed = parsePokemonListInput(rawVal, blindShow6League);
+                                    updateActiveLeagueFilterList(parsed, rawVal);
+                                  }}
+                                  placeholder={`Paste comma or newline-separated Pokémon for ${blindShow6League} ${blindShow6FilterMode.toLowerCase()} (auto-persisted per league)...`}
+                                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-mono"
+                                />
+                              ) : (
+                                <div className="space-y-2">
+                                  <div className="flex gap-1.5">
+                                    <input
+                                      type="text"
+                                      value={blindShow6FilterChipQuery}
+                                      onChange={(e) => setBlindShow6FilterChipQuery(e.target.value)}
+                                      placeholder={`Type Pokémon to add to ${blindShow6League} ${blindShow6FilterMode.toLowerCase()}...`}
+                                      className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                                    />
+                                  </div>
+                                  {blindShow6FilterChipQuery.trim().length > 0 && (
+                                    <div className="flex flex-wrap gap-1">
+                                      {getPokemonAutocompleteSuggestions(
+                                        blindShow6FilterChipQuery,
+                                        blindShow6League,
+                                        6
+                                      ).map((opt) => (
+                                        <button
+                                          key={opt.name}
+                                          type="button"
+                                          onClick={() => {
+                                            if (!blindShow6FilterChips.includes(opt.name)) {
+                                              const next = [...blindShow6FilterChips, opt.name];
+                                              updateActiveLeagueFilterList(next);
+                                            }
+                                            setBlindShow6FilterChipQuery('');
+                                          }}
+                                          className="px-2 py-1 rounded-md bg-purple-500/20 hover:bg-purple-500/35 border border-purple-400/50 text-purple-200 text-[11px] font-bold"
+                                        >
+                                          + {opt.name}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                  <div className="flex flex-wrap gap-1.5 pt-1">
+                                    {blindShow6FilterChips.map((chip) => (
+                                      <span
+                                        key={chip}
+                                        className="px-2 py-0.5 rounded-full bg-slate-900 border border-purple-400/50 text-purple-200 text-[11px] font-bold inline-flex items-center gap-1"
+                                      >
+                                        <span>{chip}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const next = blindShow6FilterChips.filter((c) => c !== chip);
+                                            updateActiveLeagueFilterList(next);
+                                          }}
+                                          className="text-slate-400 hover:text-white"
+                                        >
+                                          ✕
+                                        </button>
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Right: Expected Historical Pokémon & Weight Slider */}
+                        <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-xs font-extrabold text-emerald-300">
+                              📜 Expected Historical Pokémon &amp; Weight Slider
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleImportHistoricalFromShow6Logs}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/50 text-emerald-200 text-[10.5px] font-bold"
+                            >
+                              📥 Pull from Battle Logs
+                            </button>
+                          </div>
+
+                          {/* Historical vs Meta Weight Slider */}
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-[11px] font-mono">
+                              <span className="text-sky-300">
+                                PvPoke Meta Weight: <strong>{100 - blindShow6HistoricalWeightPct}%</strong>
+                              </span>
+                              <span className="text-emerald-300">
+                                Historical Match Weight: <strong>{blindShow6HistoricalWeightPct}%</strong>
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              step={5}
+                              value={blindShow6HistoricalWeightPct}
+                              onChange={(e) => setBlindShow6HistoricalWeightPct(Number(e.target.value))}
+                              className="w-full accent-emerald-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                            />
+                          </div>
+
+                          {blindShow6InputMethod === 'text' ? (
+                            <textarea
+                              rows={3}
+                              value={blindShow6HistoricalText}
+                              onChange={(e) => {
+                                setBlindShow6HistoricalText(e.target.value);
+                                setBlindShow6HistoricalChips(
+                                  parsePokemonListInput(e.target.value, blindShow6League)
+                                );
+                              }}
+                              placeholder="Paste expected opponent Pokémon from historical matches (comma or newline separated)..."
+                              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-mono"
+                            />
+                          ) : (
+                            <div className="space-y-2">
+                              <input
+                                type="text"
+                                value={blindShow6HistoricalChipQuery}
+                                onChange={(e) => setBlindShow6HistoricalChipQuery(e.target.value)}
+                                placeholder="Type Pokémon to add to Expected Historical Opponents..."
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                              />
+                              {blindShow6HistoricalChipQuery.trim().length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {getPokemonAutocompleteSuggestions(
+                                    blindShow6HistoricalChipQuery,
+                                    blindShow6League,
+                                    6
+                                  ).map((opt) => (
+                                    <button
+                                      key={opt.name}
+                                      type="button"
+                                      onClick={() => {
+                                        const next = [...blindShow6HistoricalChips, opt.name];
+                                        setBlindShow6HistoricalChips(next);
+                                        setBlindShow6HistoricalText(next.join(', '));
+                                        setBlindShow6HistoricalChipQuery('');
+                                      }}
+                                      className="px-2 py-1 rounded-md bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/50 text-emerald-200 text-[11px] font-bold"
+                                    >
+                                      + {opt.name}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                                {blindShow6HistoricalChips.map((chip, cIdx) => (
+                                  <span
+                                    key={`${chip}-${cIdx}`}
+                                    className="px-2 py-0.5 rounded-full bg-slate-900 border border-emerald-400/50 text-emerald-200 text-[11px] font-bold inline-flex items-center gap-1"
+                                  >
+                                    <span>{chip}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const next = blindShow6HistoricalChips.filter((_, i) => i !== cIdx);
+                                        setBlindShow6HistoricalChips(next);
+                                        setBlindShow6HistoricalText(next.join(', '));
+                                      }}
+                                      className="text-slate-400 hover:text-white"
+                                    >
+                                      ✕
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Blind Show 6 Generated Roster Result */}
+                      {blindShow6Result && (
+                        <div className="p-4 rounded-2xl bg-slate-950/90 border border-sky-500/40 space-y-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                            <div>
+                              <h4 className="font-extrabold text-sm text-white">
+                                🏆 Recommended Blind Show 6 Tournament Roster ({blindShow6Result.league})
+                              </h4>
+                              <p className="text-[11px] text-slate-400">
+                                Overall Blended Score: <strong className="text-emerald-300">{blindShow6Result.overallBlendedScore} BR</strong> • {blindShow6Result.eligiblePoolCount} eligible meta species evaluated in {blindShow6Result.elapsedMs}ms
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const members = blindShow6Result.roster.map((r) => r.member);
+                                handleSaveMy6AsRosterPreset(
+                                  `Blind Show 6 ${blindShow6Result.league.split(' ')[0]}`,
+                                  members,
+                                  blindShow6Result.league
+                                );
+                                setShow6Pick3League(blindShow6Result.league);
+                                setShow6My6(members.map((m) => m.name));
+                              }}
+                              className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs shadow transition shrink-0"
+                            >
+                              💾 Save to Show 6 Teams of 6 &amp; Load into 6v6 Optimizer
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                            {blindShow6Result.roster.map((slot, idx) => (
+                              <div
+                                key={`blind-slot-${idx}-${slot.member.name}`}
+                                className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1.5"
+                              >
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="font-extrabold text-xs text-white truncate">
+                                    #{idx + 1} {slot.member.name}
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded bg-sky-500/20 border border-sky-400/40 text-sky-300 font-mono text-[10px] font-bold">
+                                    Blended {slot.blendedBr}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] font-semibold text-amber-300">
+                                  {slot.roleBadge}
+                                </div>
+                                <div className="text-[10px] font-mono text-slate-300 truncate">
+                                  {slot.member.fastMove} + {slot.member.chargedMove1}/{slot.member.chargedMove2}
+                                </div>
+                                <div className="text-[9.5px] font-mono text-slate-400 flex items-center justify-between pt-1 border-t border-slate-800">
+                                  <span>Meta BR: {slot.metaBr}</span>
+                                  <span>Hist BR: {slot.historicalBr}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
               <div>
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <Layers className="w-5 h-5 text-sky-400" />
-                  <span>Custom GBL Team Presets</span>
+                  <span>
+                    {appCombatMode === 'show6'
+                      ? 'Show 6 Overlay Trios (Saved Teams of 3 for Floating HUD)'
+                      : 'Custom GBL Team Presets'}
+                  </span>
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
                   Drag cards by the grip handle (or use ↑/↓) to rearrange team order. Type any Pokémon base name in the Team Builder to autocomplete Base, Shadow, and Alternate Forms with PvPoke rankings moves!
@@ -8433,6 +9997,93 @@ export default function App() {
             </div>
 
             {/* ===================================================================
+                CARD 0 (v5.00): APP COMBAT MODE TOGGLE (STANDARD GBL vs SHOW 6)
+               =================================================================== */}
+            <div
+              className={`border rounded-2xl p-5 shadow-xl space-y-4 ${
+                appCombatMode === 'show6'
+                  ? 'bg-gradient-to-br from-amber-950/60 via-slate-900 to-slate-950 border-amber-500/50'
+                  : 'bg-slate-900 border-slate-800'
+              }`}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                <div>
+                  <span className="text-sm font-extrabold text-amber-300 flex items-center gap-2">
+                    <span>{appCombatMode === 'show6' ? '🏛️' : '🛡️'} App Combat Mode (Standard GBL vs. Show 6 Battle Frontier)</span>
+                    <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 text-[10px] font-mono">
+                      v5.00
+                    </span>
+                  </span>
+                  <span className="text-xs text-slate-400 block mt-0.5">
+                    Switch between <strong>Standard GBL (Blind 3 PvP)</strong> and <strong>Show 6 (Battle Frontier / Pick-3)</strong>. Show 6 Mode features its own independent Battle Logs, Teams of 6 &amp; Teams of 3 storage, Dual Show 6 Team Builders, and Known-Opponent-6 AI backline constraints.
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {appCombatMode === 'show6'
+                    ? renderBattleFrontierLogo('w-8 h-8 shrink-0')
+                    : renderGblModeLogo('w-8 h-8 shrink-0')}
+                  <span
+                    className={`px-2.5 py-1 rounded-xl text-xs font-extrabold border font-mono ${
+                      appCombatMode === 'show6'
+                        ? 'bg-amber-500/20 border-amber-400/60 text-amber-200'
+                        : 'bg-sky-500/20 border-sky-400/60 text-sky-200'
+                    }`}
+                  >
+                    {appCombatMode === 'show6' ? 'SHOW 6 ACTIVE' : 'STANDARD GBL ACTIVE'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleSetAppCombatMode('gbl')}
+                  className={`p-3.5 rounded-xl border text-left transition flex items-start gap-3 ${
+                    appCombatMode === 'gbl'
+                      ? 'bg-sky-950/70 border-sky-400 text-white shadow-lg shadow-sky-900/20'
+                      : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                  }`}
+                >
+                  {renderGblModeLogo('w-8 h-8 shrink-0 mt-0.5')}
+                  <div>
+                    <div className="text-xs font-extrabold text-sky-300 flex items-center gap-1.5">
+                      <span>🛡️ Standard GBL Mode (Blind 3 PvP)</span>
+                      {appCombatMode === 'gbl' && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/30 text-sky-200 font-mono">ACTIVE</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Standard GO Battle League blind 3v3 teams, Top-50 meta backline predictor, and standard GBL battle logs.
+                    </p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSetAppCombatMode('show6')}
+                  className={`p-3.5 rounded-xl border text-left transition flex items-start gap-3 ${
+                    appCombatMode === 'show6'
+                      ? 'bg-amber-950/70 border-amber-400 text-white shadow-lg shadow-amber-900/20'
+                      : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                  }`}
+                >
+                  {renderBattleFrontierLogo('w-8 h-8 shrink-0 mt-0.5')}
+                  <div>
+                    <div className="text-xs font-extrabold text-amber-300 flex items-center gap-1.5">
+                      <span>🏛️ Show 6 Mode (Battle Frontier / Pick-3)</span>
+                      {appCombatMode === 'show6' && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/30 text-amber-200 font-mono">ACTIVE</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Stores Teams of 6 &amp; Teams of 3, 6v6 Pick-3 Optimizer (3 ABB / 3 ABC / 3 Duo-Core), Blind Show 6 Roster Builder, independent Show 6 logs, and Known-Opponent-6 AI predictions.
+                    </p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* ===================================================================
                 CARD 1 (TOP): APP & OVERLAY THEME, SIZE & TRANSPARENCY
                =================================================================== */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-5">
@@ -9897,12 +11548,29 @@ export default function App() {
               {/* 4-Page Quick Switcher Banner (Teams • Battle Logs • Settings • Help) */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
                 <div>
-                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-white flex items-center gap-2 flex-wrap">
                     <Target className="w-5 h-5 text-sky-400" />
-                    <span>📜 GBL Battle Logs, Season Export &amp; Interactive Replay</span>
+                    <span>
+                      {appCombatMode === 'show6'
+                        ? '🏛️ Show 6 Battle Logs, Season Export & Interactive Replay'
+                        : '📜 GBL Battle Logs, Season Export & Interactive Replay'}
+                    </span>
+                    <span
+                      className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                        appCombatMode === 'show6'
+                          ? 'bg-amber-500/20 border-amber-400/50 text-amber-200'
+                          : 'bg-sky-500/20 border-sky-400/50 text-sky-200'
+                      }`}
+                    >
+                      {appCombatMode === 'show6'
+                        ? `Independent Show 6 Vault (${show6BattleLogs.length} Battles)`
+                        : `Standard GBL Vault (${gblBattleLogs.length} Battles)`}
+                    </span>
                   </h2>
                   <p className="text-xs text-slate-400">
-                    Click any battle card (or <strong>🔍 Replay</strong>) to inspect the interactive 3v3 overlay matrix and analyze swap/shield decisions!
+                    {appCombatMode === 'show6'
+                      ? 'Independent Show 6 Mode battle history! Click any battle card (or 🔍 Replay) to inspect the 3v3 matrix.'
+                      : 'Standard GBL Mode battle history! Click any battle card (or 🔍 Replay) to inspect the interactive 3v3 overlay matrix.'}
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-bold shrink-0">

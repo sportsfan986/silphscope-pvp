@@ -12,6 +12,8 @@ import bgEmblemInstinctXmlContent from '../../app/src/main/res/drawable/bg_emble
 import bgEmblemMysticXmlContent from '../../app/src/main/res/drawable/bg_emblem_mystic.xml?raw';
 import bgEmblemValorXmlContent from '../../app/src/main/res/drawable/bg_emblem_valor.xml?raw';
 import bgEmblemSylveonXmlContent from '../../app/src/main/res/drawable/bg_emblem_sylveon.xml?raw';
+import icBattleFrontierLogoXmlContent from '../../app/src/main/res/drawable/ic_battle_frontier_logo.xml?raw';
+import icGblLogoXmlContent from '../../app/src/main/res/drawable/ic_gbl_logo.xml?raw';
 
 export interface AndroidProjectFile {
   path: string;
@@ -40,21 +42,21 @@ export const ANDROID_FILES: AndroidProjectFile[] = [
     path: "app/build.gradle.kts",
     name: "app/build.gradle.kts",
     category: "gradle",
-    description: "App module Gradle dependencies including ML Kit Text Recognition, OkHttp, and Gson.",
+    description: "App module Gradle dependencies (v5.00) including ML Kit Text Recognition, OkHttp, and Gson.",
     content: appGradleContent
   },
   {
     path: "app/src/main/java/com/gbl/overlay/MainActivity.kt",
     name: "MainActivity.kt",
     category: "kotlin",
-    description: "Manages permissions, local team & move presets, 10-theme customization engine, PvPoke sync, and overlay launch.",
+    description: "Manages permissions, Standard GBL vs. Show 6 Mode toggle, Teams of 6 & Teams of 3, Dual Show 6 Team Builders, per-league persisted Whitelist/Banlist, and overlay launch.",
     content: mainActivityContent
   },
   {
     path: "app/src/main/java/com/gbl/overlay/OverlayService.kt",
     name: "OverlayService.kt",
     category: "kotlin",
-    description: "Foreground service with always-on 1+ Hz single-pass stitched OCR, 1-per-species opponent deduplication, Shadow/Form toggles, and 3v3 shield/damage matrix.",
+    description: "Foreground service with Show 6 Pick-3 & Blind Show 6 engines, known Opponent 6 backline AI constraint, independent Show 6 battle logs, and 3v3 shield/damage matrix.",
     content: overlayServiceContent
   },
   {
@@ -68,7 +70,7 @@ export const ANDROID_FILES: AndroidProjectFile[] = [
     path: "app/src/main/res/layout/activity_main.xml",
     name: "activity_main.xml",
     category: "layout",
-    description: "Main activity UI layout with theme frame, emblem watermark, reorganized Settings page, and team presets list.",
+    description: "Main activity UI layout with GBL/Battle Frontier mode logos, Show 6 Mode Hub (6v6 Pick-3 & Blind Show 6 Builders), Settings Combat Mode toggle, and team presets list.",
     content: activityMainXmlContent
   },
   {
@@ -127,6 +129,8 @@ export async function downloadAndroidProjectZip(): Promise<Blob> {
           drawable.file("bg_emblem_mystic.xml", bgEmblemMysticXmlContent);
           drawable.file("bg_emblem_valor.xml", bgEmblemValorXmlContent);
           drawable.file("bg_emblem_sylveon.xml", bgEmblemSylveonXmlContent);
+          drawable.file("ic_battle_frontier_logo.xml", icBattleFrontierLogoXmlContent);
+          drawable.file("ic_gbl_logo.xml", icGblLogoXmlContent);
         }
       }
     }

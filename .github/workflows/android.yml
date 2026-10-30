@@ -129,20 +129,22 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
           body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Cutscene-Gated Shield Call Overlay, Player Charged Move Suppression & Mirror-Safe Move Attribution)
-
-            ### Release Series Context (`v4.00` – `v4.03`)
-            *Introduces fast-move turn increment snapping with post-throw discharge anchoring, the 4-tier color-coded (Red / Orange / Yellow / Green) "Attack incoming!" Shield Decision Overlay with pure 5s timer / combat-return lifecycle, strict cutscene HUD gating and player-minigame suppression so the Shield Call Overlay never triggers on player charged moves or pink/purple Pokémon sprites, focused cross-device "<Pokemon> used <Move>!" OCR (`0.15h..0.52h`), pre-attack HP ratchet lock against mid-drain HP overwrites, and 100E ceiling step latching after 1 fast-move duration.*
+            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Show 6 Battle Frontier Mode, 6v6 Pick-3 & Blind Show 6 Optimizers, Per-League Persisted Whitelist/Banlist)
 
             ### Key Features in `${{ steps.version.outputs.tag }}`
-            - **Strict Cutscene HUD Gate & 3-Part Protect-Shield Prompt Verification (`detectAttackIncomingShieldHexagonPixels`)**:
-              - Prevents `sampledShieldHexagonVisible`, `hasAttackIncomingText`, and `isOpponentChargedScreen` from evaluating or triggering while top Pokéballs (`sampledPlayerBalls in 1..3 || sampledOppBalls in 1..3`) or bottom charge circles (`sampledLeftChargeBtnFillPct in 0..300 || sampledRightChargeBtnFillPct in 0..300`) are visible on screen.
-              - Tightens `detectAttackIncomingShieldHexagonPixels` to require left-right violet hexagon symmetry in the center (`0.43w..0.57w, 0.79h..0.88h`), zero pink/purple sprite bleed in the outer left/right wings (`0.20w..0.34w` & `0.66w..0.80w`), and the crisp white `"NOT NOW"` button signature directly below (`0.41w..0.59w, 0.905h..0.955h`) across 2 consecutive frames, eliminating false triggers on pink/violet Pokémon sprites (like Tinkaton) and charge minigame bubbles.
-            - **Eliminated False Shield Call Overlay Triggers on Player Charged Moves & Mirror-Safe Attribution**:
-              - Removes generic `missingTopBallsWithHpBarsFrames` from triggering `isOpponentChargedScreen` when `playerShieldsRemaining > 0`, adds cutscene-only bottom prompt OCR (`0.71h..0.96h` only while normal combat HUD is hidden and `pendingChargedAttackActor.isEmpty()`), and immediately rolls back any tentative opponent prompt and hides the Shield Decision Overlay if player minigame indicators (`"Get ready!"`, `"Swipe!"`, `"NICE!"`, `"GREAT!"`, `"EXCELLENT!"`) appear.
-              - Ensures `"<Pokemon> used <Move>!"` never guesses *who* threw the charged move in mirror matchups (`isMirrorMatch`), relying strictly on the pre-move cutscene state for actor attribution.
-            - **Carried Forward from `v4.00`–`v4.02`**:
-              - 5.0s timer / combat-return Shield Decision Overlay, widened cross-device used-move banner OCR (`0.15h..0.52h`), pre-attack HP ratchet lock, fast-move energy increment snapping, `100E` ceiling step latch, and `v3.93` opponent used-move badges.
+            - **Dedicated Show 6 Mode (`GBL` vs. `Show 6`) Toggled in Settings & Main Banner**:
+              - Switch between **Standard GBL (Blind 3 PvP)** and **Show 6 (Battle Frontier / Pick-3)** in Settings or via the header mode badge.
+              - Displays the **GBL Shield Logo** in Standard GBL mode and the **Battle Frontier Emblem Logo** in Show 6 mode, with explicit mode status text (`Status: GBL Idle` / `Status: GBL Overlay Active` vs. `Status: Show 6 Idle` / `Status: Show 6 Overlay Active`).
+            - **Independent Show 6 Teams & Battle Logs**:
+              - Show 6 Mode maintains independent **Teams of 6 (Show 6 Rosters)**, **Teams of 3 (Overlay Trios)**, and **Show 6 Battle Logs** (`gbl_show6_battle_logs_v1`).
+            - **Mode 1 — 6v6 Matchup Pick-3 Simulator**:
+              - Evaluates all $120 \times 120 = 14,400$ ordered 3v3 matchups between your 6 and the opponent's 6, weighting opponent trios by viability.
+              - Uses unknown opponent moveset weighting (**75% standard PvPoke / 25% alternate movesets**), simulates the **best movesets for your team**, and recommends the **Top 3 ABB**, **Top 3 ABC**, and **Top 3 Duo-Core** lineups with 1-click Equip to Overlay.
+            - **Mode 2 — Blind Show 6 Meta Roster Optimizer (with Per-League Persisted Whitelist & Banlist)**:
+              - Builds a synergistic 6-Pokémon tournament roster (`0–5` lockable core slots) against a customizable blend of the PvPoke Meta and Expected Historical Pokémon (`0%–100%` slider + 1-click Pull from Battle Logs).
+              - Supports Text Paste or Interactive Chip Picker input and **persists Whitelists & Banlists per league** (`GREAT LEAGUE`, `ULTRA LEAGUE`, `MASTER LEAGUE`, `MEGA MASTER LEAGUE`) with 1-click Clear buttons.
+            - **Show 6 Live Overlay AI — Known Opponent 6 Constraint**:
+              - Strictly constrains live HUD AI backline predictions and tactical shield/swap advice to the unrevealed Pokémon remaining in the known Opponent 6.
 
             ### Live Web Simulator & Download
             - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)
