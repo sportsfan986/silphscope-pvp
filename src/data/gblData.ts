@@ -39,8 +39,44 @@ export interface TeamMember {
   ivs?: string;
 }
 
-export type LeagueType = "MEGA MASTER LEAGUE" | "MASTER LEAGUE" | "ULTRA LEAGUE" | "GREAT LEAGUE";
+export type LeagueType =
+  | "MEGA MASTER LEAGUE"
+  | "MASTER LEAGUE"
+  | "ULTRA LEAGUE"
+  | "GREAT LEAGUE"
+  | "Battle Frontier (Spectral)"
+  | "Battle Frontier (Cauldron)"
+  | "Battle Frontier (Master)";
 export type TeamArchetype = "ABB" | "ABC" | "DUO";
+
+export const GBL_LEAGUES: LeagueType[] = [
+  "GREAT LEAGUE",
+  "ULTRA LEAGUE",
+  "MASTER LEAGUE",
+  "MEGA MASTER LEAGUE"
+];
+
+export const SHOW6_LEAGUES: LeagueType[] = [
+  "Battle Frontier (Spectral)",
+  "Battle Frontier (Cauldron)",
+  "Battle Frontier (Master)"
+];
+
+export function isBattleFrontierLeague(league: string | undefined): boolean {
+  const u = (league || "").toUpperCase();
+  return u.includes("BATTLE FRONTIER") || u.includes("SPECTRAL") || u.includes("CAULDRON");
+}
+
+export function normalizeLeagueName(league: string | undefined): LeagueType {
+  const u = (league || "GREAT LEAGUE").toUpperCase();
+  if (u.includes("SPECTRAL")) return "Battle Frontier (Spectral)";
+  if (u.includes("CAULDRON")) return "Battle Frontier (Cauldron)";
+  if (u.includes("BATTLE FRONTIER") && u.includes("MASTER")) return "Battle Frontier (Master)";
+  if (u.includes("MEGA")) return "MEGA MASTER LEAGUE";
+  if (u.includes("GREAT")) return "GREAT LEAGUE";
+  if (u.includes("ULTRA")) return "ULTRA LEAGUE";
+  return "MASTER LEAGUE";
+}
 
 export interface MoveUsage {
   moveId: string;
@@ -65,7 +101,10 @@ export const PVPOKE_ENDPOINTS = {
   RANKINGS_GL: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-1500.json",
   RANKINGS_UL: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-2500.json",
   RANKINGS_ML: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-10000.json",
-  RANKINGS_MEGA_ML: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-10000.json"
+  RANKINGS_MEGA_ML: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-10000.json",
+  RANKINGS_BF_SPECTRAL: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/spectral/overall/rankings-1500.json",
+  RANKINGS_BF_CAULDRON: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/cauldron/overall/rankings-2500.json",
+  RANKINGS_BF_MASTER: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/battlefrontiermaster/overall/rankings-10000.json"
 } as const;
 
 export interface TeamPreset {
@@ -1623,7 +1662,30 @@ export const POKEMON_DATABASE: Record<string, PokemonStats> = {
       { name: "Hurricane", code: "Hur", type: "flying", power: 110, energyCost: 60 }
     ],
     color: "#16a34a"
-  }
+  },
+  "Piloswine": {"speciesId":"piloswine","name":"Piloswine","baseSpecies":"piloswine","types":["ice","ground"],"baseStats":{"atk":181,"def":138,"hp":225},"isRawBaseStats":true,"defaultIvsGl":"4/13/13","defaultIvsUl":"5/15/14","defaultFastMove":{"name":"Powder Snow","type":"ice","turns":2,"power":6,"energyGain":8},"chargedMoves":[{"name":"Icicle Spear","code":"IS","type":"ice","power":60,"energyCost":40},{"name":"Stone Edge","code":"SE","type":"rock","power":100,"energyCost":55},{"name":"High Horsepower","code":"HH","type":"ground","power":100,"energyCost":60}],"color":"#38bdf8"},
+  "Ledian": {"speciesId":"ledian","name":"Ledian","baseSpecies":"ledian","types":["bug","flying"],"baseStats":{"atk":107,"def":179,"hp":146},"isRawBaseStats":true,"defaultIvsGl":"15/15/15","defaultIvsUl":"15/15/15","defaultFastMove":{"name":"Rollout","type":"rock","turns":3,"power":12,"energyGain":14},"chargedMoves":[{"name":"Acrobatics","code":"AC","type":"flying","power":110,"energyCost":55},{"name":"Dynamic Punch","code":"DP","type":"fighting","power":90,"energyCost":45},{"name":"Aerial Ace","code":"AA","type":"flying","power":60,"energyCost":45}],"color":"#84cc16"},
+  "Arctibax": {"speciesId":"arctibax","name":"Arctibax","baseSpecies":"arctibax","types":["dragon","ice"],"baseStats":{"atk":173,"def":128,"hp":207},"isRawBaseStats":true,"defaultIvsGl":"4/15/15","defaultIvsUl":"5/15/15","defaultFastMove":{"name":"Dragon Breath","type":"dragon","turns":1,"power":3,"energyGain":4},"chargedMoves":[{"name":"Dragon Claw","code":"DC","type":"dragon","power":80,"energyCost":50},{"name":"Icy Wind","code":"IW","type":"ice","power":60,"energyCost":45},{"name":"Avalanche","code":"AV","type":"ice","power":90,"energyCost":45}],"color":"#6366f1"},
+  "Swalot": {"speciesId":"swalot","name":"Swalot","baseSpecies":"swalot","types":["poison"],"baseStats":{"atk":140,"def":159,"hp":225},"isRawBaseStats":true,"defaultIvsGl":"3/15/14","defaultIvsUl":"15/15/15","defaultFastMove":{"name":"Mud Shot","type":"ground","turns":2,"power":4,"energyGain":8},"chargedMoves":[{"name":"Sludge","code":"SL","type":"poison","power":70,"energyCost":40},{"name":"Ice Beam","code":"IB","type":"ice","power":95,"energyCost":55},{"name":"Acid Spray","code":"AS","type":"poison","power":20,"energyCost":45}],"color":"#a855f7"},
+  "Golisopod": {"speciesId":"golisopod","name":"Golisopod","baseSpecies":"golisopod","types":["bug","water"],"baseStats":{"atk":218,"def":226,"hp":181},"isRawBaseStats":true,"defaultIvsGl":"4/14/14","defaultIvsUl":"4/15/15","defaultFastMove":{"name":"Fury Cutter","type":"bug","turns":1,"power":3,"energyGain":4},"chargedMoves":[{"name":"Aqua Jet","code":"AJ","type":"water","power":70,"energyCost":40},{"name":"X-Scissor","code":"X-","type":"bug","power":65,"energyCost":40},{"name":"Liquidation","code":"LI","type":"water","power":70,"energyCost":45}],"color":"#84cc16"},
+  "Arbok": {"speciesId":"arbok","name":"Arbok","baseSpecies":"arbok","types":["poison"],"baseStats":{"atk":167,"def":153,"hp":155},"isRawBaseStats":true,"defaultIvsGl":"4/15/14","defaultIvsUl":"15/15/15","defaultFastMove":{"name":"Acid","type":"poison","turns":2,"power":6,"energyGain":8},"chargedMoves":[{"name":"Brutal Swing","code":"BS","type":"dark","power":55,"energyCost":35},{"name":"Wrap","code":"WR","type":"normal","power":60,"energyCost":45},{"name":"Acid Spray","code":"AS","type":"poison","power":20,"energyCost":45}],"color":"#a855f7"},
+  "Glalie": {"speciesId":"glalie","name":"Glalie","baseSpecies":"glalie","types":["ice"],"baseStats":{"atk":162,"def":162,"hp":190},"isRawBaseStats":true,"defaultIvsGl":"3/15/13","defaultIvsUl":"15/15/15","defaultFastMove":{"name":"Rollout","type":"rock","turns":3,"power":12,"energyGain":14},"chargedMoves":[{"name":"Shadow Ball","code":"SB","type":"ghost","power":90,"energyCost":50},{"name":"Avalanche","code":"AV","type":"ice","power":90,"energyCost":45},{"name":"Gyro Ball","code":"GB","type":"steel","power":80,"energyCost":60}],"color":"#38bdf8"},
+  "Runerigus": {"speciesId":"runerigus","name":"Runerigus","baseSpecies":"runerigus","types":["ground","ghost"],"baseStats":{"atk":163,"def":237,"hp":151},"isRawBaseStats":true,"defaultIvsGl":"6/15/14","defaultIvsUl":"10/14/15","defaultFastMove":{"name":"Shadow Claw","type":"ghost","turns":2,"power":6,"energyGain":8},"chargedMoves":[{"name":"Brutal Swing","code":"BS","type":"dark","power":55,"energyCost":35},{"name":"Rock Tomb","code":"RT","type":"rock","power":75,"energyCost":50},{"name":"Shadow Ball","code":"SB","type":"ghost","power":90,"energyCost":50}],"color":"#d97706"},
+  "Qwilfish": {"speciesId":"qwilfish","name":"Qwilfish","baseSpecies":"qwilfish","types":["water","poison"],"baseStats":{"atk":184,"def":138,"hp":163},"isRawBaseStats":true,"defaultIvsGl":"3/15/14","defaultIvsUl":"15/15/15","defaultFastMove":{"name":"Poison Sting","type":"poison","turns":2,"power":4,"energyGain":9},"chargedMoves":[{"name":"Aqua Tail","code":"AT","type":"water","power":55,"energyCost":35},{"name":"Shadow Ball","code":"SB","type":"ghost","power":90,"energyCost":50},{"name":"Ice Beam","code":"IB","type":"ice","power":95,"energyCost":55}],"color":"#3b82f6"},
+  "Cofagrigus": {"speciesId":"cofagrigus","name":"Cofagrigus","baseSpecies":"cofagrigus","types":["ghost"],"baseStats":{"atk":163,"def":237,"hp":151},"isRawBaseStats":true,"defaultIvsGl":"6/15/14","defaultIvsUl":"10/14/15","defaultFastMove":{"name":"Shadow Claw","type":"ghost","turns":2,"power":6,"energyGain":8},"chargedMoves":[{"name":"Shadow Ball","code":"SB","type":"ghost","power":90,"energyCost":50},{"name":"Dark Pulse","code":"DP","type":"dark","power":80,"energyCost":45},{"name":"Psychic","code":"PS","type":"psychic","power":75,"energyCost":55}],"color":"#8b5cf6"},
+  "Beedrill": {"speciesId":"beedrill","name":"Beedrill","baseSpecies":"beedrill","types":["bug","poison"],"baseStats":{"atk":169,"def":130,"hp":163},"isRawBaseStats":true,"defaultIvsGl":"4/15/15","defaultIvsUl":"15/15/15","defaultFastMove":{"name":"Poison Sting","type":"poison","turns":2,"power":4,"energyGain":9},"chargedMoves":[{"name":"Drill Run","code":"DR","type":"ground","power":70,"energyCost":40},{"name":"X-Scissor","code":"X-","type":"bug","power":65,"energyCost":40},{"name":"Aerial Ace","code":"AA","type":"flying","power":60,"energyCost":45}],"color":"#84cc16"},
+  "Qwilfish (Hisuian)": {"speciesId":"qwilfish_hisuian","name":"Qwilfish (Hisuian)","baseSpecies":"qwilfish","types":["dark","poison"],"baseStats":{"atk":184,"def":151,"hp":163},"isRawBaseStats":true,"defaultIvsGl":"6/15/15","defaultIvsUl":"15/15/15","defaultFastMove":{"name":"Poison Sting","type":"poison","turns":2,"power":4,"energyGain":9},"chargedMoves":[{"name":"Aqua Tail","code":"AT","type":"water","power":55,"energyCost":35},{"name":"Shadow Ball","code":"SB","type":"ghost","power":90,"energyCost":50},{"name":"Dark Pulse","code":"DP","type":"dark","power":80,"energyCost":45}],"color":"#64748b"},
+  "Overqwil": {"speciesId":"overqwil","name":"Overqwil","baseSpecies":"overqwil","types":["dark","poison"],"baseStats":{"atk":222,"def":171,"hp":198},"isRawBaseStats":true,"defaultIvsGl":"4/14/14","defaultIvsUl":"4/15/15","defaultFastMove":{"name":"Poison Sting","type":"poison","turns":2,"power":4,"energyGain":9},"chargedMoves":[{"name":"Aqua Tail","code":"AT","type":"water","power":55,"energyCost":35},{"name":"Shadow Ball","code":"SB","type":"ghost","power":90,"energyCost":50},{"name":"Dark Pulse","code":"DP","type":"dark","power":80,"energyCost":45}],"color":"#64748b"},
+  "Golbat": {"speciesId":"golbat","name":"Golbat","baseSpecies":"golbat","types":["poison","flying"],"baseStats":{"atk":161,"def":150,"hp":181},"isRawBaseStats":true,"defaultIvsGl":"4/15/15","defaultIvsUl":"15/15/15","defaultFastMove":{"name":"Wing Attack","type":"flying","turns":2,"power":5,"energyGain":7},"chargedMoves":[{"name":"Poison Fang","code":"PF","type":"poison","power":50,"energyCost":40},{"name":"Shadow Ball","code":"SB","type":"ghost","power":90,"energyCost":50},{"name":"Air Cutter","code":"AC","type":"flying","power":45,"energyCost":35}],"color":"#a855f7"},
+  "Dragalge": {"speciesId":"dragalge","name":"Dragalge","baseSpecies":"dragalge","types":["poison","dragon"],"baseStats":{"atk":177,"def":207,"hp":163},"isRawBaseStats":true,"defaultIvsGl":"4/14/15","defaultIvsUl":"9/15/15","defaultFastMove":{"name":"Acid","type":"poison","turns":2,"power":6,"energyGain":8},"chargedMoves":[{"name":"Aqua Tail","code":"AT","type":"water","power":55,"energyCost":35},{"name":"Outrage","code":"OU","type":"dragon","power":110,"energyCost":60},{"name":"Gunk Shot","code":"GS","type":"poison","power":130,"energyCost":75}],"color":"#a855f7"},
+  "Audino (Mega)": {"speciesId":"audino_mega","name":"Audino (Mega)","baseSpecies":"audino","types":["normal","fairy"],"baseStats":{"atk":147,"def":239,"hp":230},"isRawBaseStats":true,"defaultIvsGl":"5/14/15","defaultIvsUl":"12/15/15","defaultFastMove":{"name":"Charge Beam","type":"electric","turns":3,"power":5,"energyGain":11},"chargedMoves":[{"name":"Body Slam","code":"BS","type":"normal","power":50,"energyCost":35},{"name":"Disarming Voice","code":"DV","type":"fairy","power":70,"energyCost":45},{"name":"Hyper Beam","code":"HB","type":"normal","power":150,"energyCost":80}],"color":"#9ca3af"},
+  "Seaking": {"speciesId":"seaking","name":"Seaking","baseSpecies":"seaking","types":["water"],"baseStats":{"atk":175,"def":147,"hp":190},"isRawBaseStats":true,"defaultIvsGl":"4/14/15","defaultIvsUl":"15/15/15","defaultFastMove":{"name":"Peck","type":"flying","turns":2,"power":6,"energyGain":7},"chargedMoves":[{"name":"Drill Run","code":"DR","type":"ground","power":70,"energyCost":40},{"name":"Icy Wind","code":"IW","type":"ice","power":60,"energyCost":45},{"name":"Megahorn","code":"ME","type":"bug","power":110,"energyCost":55}],"color":"#3b82f6"},
+  "Crobat": {"speciesId":"crobat","name":"Crobat","baseSpecies":"crobat","types":["poison","flying"],"baseStats":{"atk":194,"def":178,"hp":198},"isRawBaseStats":true,"defaultIvsGl":"4/15/15","defaultIvsUl":"4/14/14","defaultFastMove":{"name":"Gust","type":"flying","turns":4,"power":16,"energyGain":12},"chargedMoves":[{"name":"Poison Fang","code":"PF","type":"poison","power":50,"energyCost":40},{"name":"Shadow Ball","code":"SB","type":"ghost","power":90,"energyCost":50},{"name":"Cross Poison","code":"CP","type":"poison","power":50,"energyCost":35}],"color":"#a855f7"},
+  "Grafaiai": {"speciesId":"grafaiai","name":"Grafaiai","baseSpecies":"grafaiai","types":["poison","normal"],"baseStats":{"atk":199,"def":135,"hp":160},"isRawBaseStats":true,"defaultIvsGl":"4/14/14","defaultIvsUl":"15/15/15","defaultFastMove":{"name":"Scratch","type":"normal","turns":1,"power":4,"energyGain":2},"chargedMoves":[{"name":"Poison Fang","code":"PF","type":"poison","power":50,"energyCost":40},{"name":"Foul Play","code":"FP","type":"dark","power":65,"energyCost":40},{"name":"Sludge Bomb","code":"SB","type":"poison","power":80,"energyCost":50}],"color":"#a855f7"},
+  "Samurott": {"speciesId":"samurott","name":"Samurott","baseSpecies":"samurott","types":["water"],"baseStats":{"atk":212,"def":157,"hp":216},"isRawBaseStats":true,"defaultIvsGl":"4/15/15","defaultIvsUl":"5/15/15","defaultFastMove":{"name":"Fury Cutter","type":"bug","turns":1,"power":3,"energyGain":4},"chargedMoves":[{"name":"Hydro Cannon","code":"HC","type":"water","power":80,"energyCost":40},{"name":"Megahorn","code":"ME","type":"bug","power":110,"energyCost":55},{"name":"Razor Shell","code":"RS","type":"water","power":55,"energyCost":35}],"color":"#3b82f6"},
+  "Goodra": {"speciesId":"goodra","name":"Goodra","baseSpecies":"goodra","types":["dragon"],"baseStats":{"atk":220,"def":242,"hp":207},"isRawBaseStats":true,"defaultIvsGl":"4/14/12","defaultIvsUl":"4/14/13","defaultFastMove":{"name":"Dragon Breath","type":"dragon","turns":1,"power":3,"energyGain":4},"chargedMoves":[{"name":"Aqua Tail","code":"AT","type":"water","power":55,"energyCost":35},{"name":"Draco Meteor","code":"DM","type":"dragon","power":150,"energyCost":65},{"name":"Thunder Punch","code":"TP","type":"electric","power":60,"energyCost":40}],"color":"#6366f1"},
+  "Garchomp": {"speciesId":"garchomp","name":"Garchomp","baseSpecies":"garchomp","types":["dragon","ground"],"baseStats":{"atk":261,"def":193,"hp":239},"isRawBaseStats":true,"defaultIvsGl":"4/15/14","defaultIvsUl":"5/15/15","defaultFastMove":{"name":"Dragon Tail","type":"dragon","turns":3,"power":13,"energyGain":9},"chargedMoves":[{"name":"Twister","code":"TW","type":"dragon","power":65,"energyCost":40},{"name":"Earth Power","code":"EP","type":"ground","power":90,"energyCost":50},{"name":"Outrage","code":"OU","type":"dragon","power":110,"energyCost":60}],"color":"#6366f1"},
+  "Latios": {"speciesId":"latios","name":"Latios","baseSpecies":"latios","types":["dragon","psychic"],"baseStats":{"atk":268,"def":212,"hp":190},"isRawBaseStats":true,"defaultIvsGl":"4/12/14","defaultIvsUl":"5/14/12","defaultFastMove":{"name":"Dragon Breath","type":"dragon","turns":1,"power":3,"energyGain":4},"chargedMoves":[{"name":"Aura Sphere","code":"AS","type":"fighting","power":100,"energyCost":55},{"name":"Luster Purge","code":"LP","type":"psychic","power":120,"energyCost":60},{"name":"Dragon Claw","code":"DC","type":"dragon","power":80,"energyCost":50}],"color":"#6366f1"}
 };
 
 export interface TopOpponentInfo {
@@ -1687,6 +1749,57 @@ export const PVPOKE_TOP_OPPONENTS: Record<string, TopOpponentInfo[]> = {
     { rank: 8, name: "Annihilape", types: ["fighting", "ghost"], fastMove: "Counter", fastTurns: 2, chargedMoves: ["Rage Fist", "Ice Punch"], score: 90.4 },
     { rank: 9, name: "Sandslash (Alolan)", types: ["ice", "steel"], fastMove: "Powder Snow", fastTurns: 2, chargedMoves: ["Ice Punch", "Drill Run"], score: 89.9 },
     { rank: 10, name: "Primeape", types: ["fighting"], fastMove: "Karate Chop", fastTurns: 2, chargedMoves: ["Rage Fist", "Close Combat"], score: 89.3 }
+  ],
+  "Battle Frontier (Spectral)": [
+    { rank: 1, name: "Ninetales (Alolan)", types: ["ice", "fairy"], fastMove: "Powder Snow", fastTurns: 2, chargedMoves: ["Weather Ball (Ice)", "Psyshock"], score: 96.9 },
+    { rank: 2, name: "Weezing (Galarian)", types: ["poison", "fairy"], fastMove: "Fairy Wind", fastTurns: 2, chargedMoves: ["Sludge", "Brutal Swing"], score: 95.8 },
+    { rank: 3, name: "Dewgong", types: ["water", "ice"], fastMove: "Ice Shard", fastTurns: 3, chargedMoves: ["Icy Wind", "Drill Run"], score: 95.4 },
+    { rank: 4, name: "Piloswine", types: ["ice", "ground"], fastMove: "Powder Snow", fastTurns: 2, chargedMoves: ["Icicle Spear", "Stone Edge"], score: 95.1 },
+    { rank: 5, name: "Ledian", types: ["bug", "flying"], fastMove: "Rollout", fastTurns: 3, chargedMoves: ["Acrobatics", "Dynamic Punch"], score: 94.0 },
+    { rank: 6, name: "Arctibax", types: ["dragon", "ice"], fastMove: "Dragon Breath", fastTurns: 1, chargedMoves: ["Dragon Claw", "Icy Wind"], score: 93.7 },
+    { rank: 7, name: "Swalot", types: ["poison"], fastMove: "Mud Shot", fastTurns: 2, chargedMoves: ["Sludge", "Ice Beam"], score: 93.5 },
+    { rank: 8, name: "Golisopod", types: ["bug", "water"], fastMove: "Fury Cutter", fastTurns: 1, chargedMoves: ["Aqua Jet", "X-Scissor"], score: 93.3 },
+    { rank: 9, name: "Arbok", types: ["poison"], fastMove: "Acid", fastTurns: 2, chargedMoves: ["Brutal Swing", "Wrap"], score: 93.0 },
+    { rank: 10, name: "Glalie", types: ["ice"], fastMove: "Rollout", fastTurns: 3, chargedMoves: ["Shadow Ball", "Avalanche"], score: 92.9 },
+    { rank: 11, name: "Runerigus", types: ["ground", "ghost"], fastMove: "Shadow Claw", fastTurns: 2, chargedMoves: ["Brutal Swing", "Rock Tomb"], score: 92.6 },
+    { rank: 12, name: "Tentacruel", types: ["water", "poison"], fastMove: "Acid", fastTurns: 2, chargedMoves: ["Scald", "Payback"], score: 92.2 },
+    { rank: 13, name: "Qwilfish", types: ["water", "poison"], fastMove: "Poison Sting", fastTurns: 2, chargedMoves: ["Aqua Tail", "Shadow Ball"], score: 92.0 },
+    { rank: 14, name: "Cofagrigus", types: ["ghost"], fastMove: "Shadow Claw", fastTurns: 2, chargedMoves: ["Shadow Ball", "Dark Pulse"], score: 91.9 },
+    { rank: 15, name: "Skeledirge", types: ["fire", "ghost"], fastMove: "Hex", fastTurns: 3, chargedMoves: ["Shadow Ball", "Torch Song"], score: 90.8 }
+  ],
+  "Battle Frontier (Cauldron)": [
+    { rank: 1, name: "Muk (Alolan)", types: ["poison", "dark"], fastMove: "Poison Jab", fastTurns: 2, chargedMoves: ["Brutal Swing", "Ice Punch"], score: 96.7 },
+    { rank: 2, name: "Talonflame", types: ["fire", "flying"], fastMove: "Incinerate", fastTurns: 5, chargedMoves: ["Fly", "Brave Bird"], score: 96.3 },
+    { rank: 3, name: "Moltres (Galarian)", types: ["dark", "flying"], fastMove: "Sucker Punch", fastTurns: 2, chargedMoves: ["Fly", "Brave Bird"], score: 95.6 },
+    { rank: 4, name: "Shadow Muk (Alolan)", types: ["poison", "dark"], fastMove: "Poison Jab", fastTurns: 2, chargedMoves: ["Brutal Swing", "Ice Punch"], score: 95.3 },
+    { rank: 5, name: "Greedent", types: ["normal"], fastMove: "Mud Shot", fastTurns: 2, chargedMoves: ["Body Slam", "Trailblaze"], score: 94.8 },
+    { rank: 6, name: "Dragalge", types: ["poison", "dragon"], fastMove: "Acid", fastTurns: 2, chargedMoves: ["Aqua Tail", "Outrage"], score: 94.5 },
+    { rank: 7, name: "Weezing (Galarian)", types: ["poison", "fairy"], fastMove: "Fairy Wind", fastTurns: 2, chargedMoves: ["Overheat", "Sludge"], score: 94.0 },
+    { rank: 8, name: "Audino (Mega)", types: ["normal", "fairy"], fastMove: "Charge Beam", fastTurns: 3, chargedMoves: ["Body Slam", "Disarming Voice"], score: 93.5 },
+    { rank: 9, name: "Seaking", types: ["water"], fastMove: "Peck", fastTurns: 2, chargedMoves: ["Drill Run", "Icy Wind"], score: 93.5 },
+    { rank: 10, name: "Shadow Drapion", types: ["poison", "dark"], fastMove: "Poison Sting", fastTurns: 2, chargedMoves: ["Aqua Tail", "Crunch"], score: 93.4 },
+    { rank: 11, name: "Shadow Weezing (Galarian)", types: ["poison", "fairy"], fastMove: "Fairy Wind", fastTurns: 2, chargedMoves: ["Overheat", "Sludge"], score: 93.4 },
+    { rank: 12, name: "Drapion", types: ["poison", "dark"], fastMove: "Poison Sting", fastTurns: 2, chargedMoves: ["Crunch", "Aqua Tail"], score: 93.3 },
+    { rank: 13, name: "Shadow Crobat", types: ["poison", "flying"], fastMove: "Gust", fastTurns: 4, chargedMoves: ["Poison Fang", "Shadow Ball"], score: 93.2 },
+    { rank: 14, name: "Grafaiai", types: ["poison", "normal"], fastMove: "Scratch", fastTurns: 1, chargedMoves: ["Poison Fang", "Foul Play"], score: 93.0 },
+    { rank: 15, name: "Samurott", types: ["water"], fastMove: "Fury Cutter", fastTurns: 1, chargedMoves: ["Hydro Cannon", "Megahorn"], score: 92.9 }
+  ],
+  "Battle Frontier (Master)": [
+    { rank: 1, name: "Giratina (Altered)", types: ["ghost", "dragon"], fastMove: "Dragon Breath", fastTurns: 1, chargedMoves: ["Dragon Claw", "Shadow Force"], score: 98.7 },
+    { rank: 2, name: "Zekrom", types: ["dragon", "electric"], fastMove: "Dragon Breath", fastTurns: 1, chargedMoves: ["Outrage", "Fusion Bolt"], score: 97.4 },
+    { rank: 3, name: "Shadow Giratina (Altered)", types: ["ghost", "dragon"], fastMove: "Dragon Breath", fastTurns: 1, chargedMoves: ["Shadow Force", "Dragon Claw"], score: 97.1 },
+    { rank: 4, name: "Dialga (Origin)", types: ["steel", "dragon"], fastMove: "Dragon Breath", fastTurns: 1, chargedMoves: ["Roar of Time", "Iron Head"], score: 96.5 },
+    { rank: 5, name: "Goodra", types: ["dragon"], fastMove: "Dragon Breath", fastTurns: 1, chargedMoves: ["Aqua Tail", "Draco Meteor"], score: 96.3 },
+    { rank: 6, name: "Garchomp", types: ["dragon", "ground"], fastMove: "Dragon Tail", fastTurns: 3, chargedMoves: ["Twister", "Earth Power"], score: 95.9 },
+    { rank: 7, name: "Melmetal", types: ["steel"], fastMove: "Thunder Shock", fastTurns: 2, chargedMoves: ["Double Iron Bash", "Dynamic Punch"], score: 95.5 },
+    { rank: 8, name: "Shadow Zekrom", types: ["dragon", "electric"], fastMove: "Dragon Breath", fastTurns: 1, chargedMoves: ["Outrage", "Fusion Bolt"], score: 95.3 },
+    { rank: 9, name: "Shadow Garchomp", types: ["dragon", "ground"], fastMove: "Dragon Tail", fastTurns: 3, chargedMoves: ["Twister", "Earth Power"], score: 95.0 },
+    { rank: 10, name: "Meloetta (Aria)", types: ["normal", "psychic"], fastMove: "Confusion", fastTurns: 4, chargedMoves: ["Psyshock", "Dazzling Gleam"], score: 94.6 },
+    { rank: 11, name: "Kyurem (Black)", types: ["dragon", "ice"], fastMove: "Dragon Tail", fastTurns: 3, chargedMoves: ["Freeze Shock", "Fusion Bolt"], score: 94.5 },
+    { rank: 12, name: "Solgaleo", types: ["psychic", "steel"], fastMove: "Fire Spin", fastTurns: 3, chargedMoves: ["Psychic Fangs", "Iron Head"], score: 94.4 },
+    { rank: 13, name: "Latios", types: ["dragon", "psychic"], fastMove: "Dragon Breath", fastTurns: 1, chargedMoves: ["Aura Sphere", "Luster Purge"], score: 94.2 },
+    { rank: 14, name: "Shadow Latios", types: ["dragon", "psychic"], fastMove: "Dragon Breath", fastTurns: 1, chargedMoves: ["Aura Sphere", "Luster Purge"], score: 93.9 },
+    { rank: 15, name: "Dialga", types: ["steel", "dragon"], fastMove: "Dragon Breath", fastTurns: 1, chargedMoves: ["Iron Head", "Draco Meteor"], score: 93.8 }
   ]
 };
 
@@ -2393,7 +2506,7 @@ export function formatSpeciesIdToDisplayName(speciesId: string): string {
 }
 
 export function getLiveRankingsForLeague(league: LeagueType, limit: number = 20): TopOpponentInfo[] {
-  const normLeague = (league || "GREAT LEAGUE").toUpperCase() as LeagueType;
+  const normLeague = normalizeLeagueName(league);
   const list = LIVE_RANKINGS_LIST[normLeague] || [];
 
   if (list && list.length > 0) {
@@ -3051,14 +3164,14 @@ export function parseIvTriplet(
     }
   }
   const upper = league.toUpperCase();
-  if (upper.includes("GREAT")) {
+  if (upper.includes("GREAT") || upper.includes("SPECTRAL")) {
     if (pokemon?.defaultIvsGl) {
       const glParts = pokemon.defaultIvsGl.split("/").map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n));
       if (glParts.length >= 3) return [glParts[0], glParts[1], glParts[2]];
     }
     return [1, 15, 15];
   }
-  if (upper.includes("ULTRA")) {
+  if (upper.includes("ULTRA") || upper.includes("CAULDRON")) {
     if (pokemon?.defaultIvsUl) {
       const ulParts = pokemon.defaultIvsUl.split("/").map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n));
       if (ulParts.length >= 3) return [ulParts[0], ulParts[1], ulParts[2]];
@@ -3079,8 +3192,8 @@ export function computeEffectiveStatsForLeague(
   isShadow?: boolean
 ): PokemonStats & { resolvedCp: number } {
   const upper = league.toUpperCase();
-  const isGreat = upper.includes("GREAT");
-  const isUltra = upper.includes("ULTRA");
+  const isGreat = upper.includes("GREAT") || upper.includes("SPECTRAL");
+  const isUltra = upper.includes("ULTRA") || upper.includes("CAULDRON");
   const leagueCap = isGreat ? 1500 : isUltra ? 2500 : 6000;
   const actualIvs = parseIvTriplet(customIvs, league, pokemon);
   const withLeagueMoves = applyRankingMovesToPokemonStats(pokemon, league, isShadow);
@@ -3216,6 +3329,57 @@ export const LIVE_RANKINGS_LIST: Record<LeagueType, PokemonRankingEntry[]> = {
     { speciesId: "kyogre_primal", score: 95.2, moves: { fastMoves: [{ moveId: "WATERFALL", uses: 2300 }], chargedMoves: [{ moveId: "ORIGIN_PULSE", uses: 2300 }, { moveId: "SURF", uses: 2100 }] }, moveset: ["WATERFALL", "ORIGIN_PULSE", "SURF"] },
     { speciesId: "gyarados_mega", score: 93.7, moves: { fastMoves: [{ moveId: "DRAGON_BREATH", uses: 2200 }], chargedMoves: [{ moveId: "AQUA_TAIL", uses: 2200 }, { moveId: "CRUNCH", uses: 1900 }] }, moveset: ["DRAGON_BREATH", "AQUA_TAIL", "CRUNCH"] },
     { speciesId: "garchomp_mega", score: 92.5, moves: { fastMoves: [{ moveId: "MUD_SHOT", uses: 2200 }], chargedMoves: [{ moveId: "EARTH_POWER", uses: 2100 }, { moveId: "OUTRAGE", uses: 1900 }] }, moveset: ["MUD_SHOT", "EARTH_POWER", "OUTRAGE"] }
+  ],
+  "Battle Frontier (Spectral)": [
+    { speciesId: "ninetales_alolan", score: 96.9, moves: { fastMoves: [{ moveId: "POWDER_SNOW", uses: 3249 }], chargedMoves: [{ moveId: "WEATHER_BALL_ICE", uses: 3150 }, { moveId: "PSYSHOCK", uses: 2950 }] }, moveset: ["POWDER_SNOW", "WEATHER_BALL_ICE", "PSYSHOCK"] },
+    { speciesId: "weezing_galarian", score: 95.8, moves: { fastMoves: [{ moveId: "FAIRY_WIND", uses: 3200 }], chargedMoves: [{ moveId: "SLUDGE", uses: 2900 }, { moveId: "BRUTAL_SWING", uses: 2800 }] }, moveset: ["FAIRY_WIND", "SLUDGE", "BRUTAL_SWING"] },
+    { speciesId: "dewgong", score: 95.4, moves: { fastMoves: [{ moveId: "ICE_SHARD", uses: 3150 }], chargedMoves: [{ moveId: "ICY_WIND", uses: 3100 }, { moveId: "DRILL_RUN", uses: 2900 }] }, moveset: ["ICE_SHARD", "ICY_WIND", "DRILL_RUN"] },
+    { speciesId: "piloswine", score: 95.1, moves: { fastMoves: [{ moveId: "POWDER_SNOW", uses: 3100 }], chargedMoves: [{ moveId: "ICICLE_SPEAR", uses: 3000 }, { moveId: "STONE_EDGE", uses: 2700 }] }, moveset: ["POWDER_SNOW", "ICICLE_SPEAR", "STONE_EDGE"] },
+    { speciesId: "ledian", score: 94.0, moves: { fastMoves: [{ moveId: "ROLLOUT", uses: 3000 }], chargedMoves: [{ moveId: "ACROBATICS", uses: 2850 }, { moveId: "DYNAMIC_PUNCH", uses: 2700 }] }, moveset: ["ROLLOUT", "ACROBATICS", "DYNAMIC_PUNCH"] },
+    { speciesId: "arctibax", score: 93.7, moves: { fastMoves: [{ moveId: "DRAGON_BREATH", uses: 2950 }], chargedMoves: [{ moveId: "DRAGON_CLAW", uses: 2800 }, { moveId: "ICY_WIND", uses: 2700 }] }, moveset: ["DRAGON_BREATH", "DRAGON_CLAW", "ICY_WIND"] },
+    { speciesId: "swalot", score: 93.5, moves: { fastMoves: [{ moveId: "MUD_SHOT", uses: 2900 }], chargedMoves: [{ moveId: "SLUDGE", uses: 2750 }, { moveId: "ICE_BEAM", uses: 2600 }] }, moveset: ["MUD_SHOT", "SLUDGE", "ICE_BEAM"] },
+    { speciesId: "golisopod", score: 93.3, moves: { fastMoves: [{ moveId: "FURY_CUTTER", uses: 2850 }], chargedMoves: [{ moveId: "AQUA_JET", uses: 2700 }, { moveId: "X_SCISSOR", uses: 2550 }] }, moveset: ["FURY_CUTTER", "AQUA_JET", "X_SCISSOR"] },
+    { speciesId: "arbok", score: 93.0, moves: { fastMoves: [{ moveId: "ACID", uses: 2800 }], chargedMoves: [{ moveId: "BRUTAL_SWING", uses: 2650 }, { moveId: "WRAP", uses: 2500 }] }, moveset: ["ACID", "BRUTAL_SWING", "WRAP"] },
+    { speciesId: "glalie", score: 92.9, moves: { fastMoves: [{ moveId: "ROLLOUT", uses: 2750 }], chargedMoves: [{ moveId: "SHADOW_BALL", uses: 2600 }, { moveId: "AVALANCHE", uses: 2550 }] }, moveset: ["ROLLOUT", "SHADOW_BALL", "AVALANCHE"] },
+    { speciesId: "runerigus", score: 92.6, moves: { fastMoves: [{ moveId: "SHADOW_CLAW", uses: 2700 }], chargedMoves: [{ moveId: "BRUTAL_SWING", uses: 2550 }, { moveId: "ROCK_TOMB", uses: 2500 }] }, moveset: ["SHADOW_CLAW", "BRUTAL_SWING", "ROCK_TOMB"] },
+    { speciesId: "tentacruel", score: 92.2, moves: { fastMoves: [{ moveId: "ACID", uses: 2650 }], chargedMoves: [{ moveId: "SCALD", uses: 2500 }, { moveId: "PAYBACK", uses: 2400 }] }, moveset: ["ACID", "SCALD", "PAYBACK"] },
+    { speciesId: "qwilfish", score: 92.0, moves: { fastMoves: [{ moveId: "POISON_STING", uses: 2600 }], chargedMoves: [{ moveId: "AQUA_TAIL", uses: 2500 }, { moveId: "SHADOW_BALL", uses: 2400 }] }, moveset: ["POISON_STING", "AQUA_TAIL", "SHADOW_BALL"] },
+    { speciesId: "cofagrigus", score: 91.9, moves: { fastMoves: [{ moveId: "SHADOW_CLAW", uses: 2550 }], chargedMoves: [{ moveId: "SHADOW_BALL", uses: 2450 }, { moveId: "DARK_PULSE", uses: 2350 }] }, moveset: ["SHADOW_CLAW", "SHADOW_BALL", "DARK_PULSE"] },
+    { speciesId: "skeledirge", score: 90.8, moves: { fastMoves: [{ moveId: "HEX", uses: 2500 }], chargedMoves: [{ moveId: "SHADOW_BALL", uses: 2400 }, { moveId: "TORCH_SONG", uses: 2350 }] }, moveset: ["HEX", "SHADOW_BALL", "TORCH_SONG"] }
+  ],
+  "Battle Frontier (Cauldron)": [
+    { speciesId: "muk_alolan", score: 96.7, moves: { fastMoves: [{ moveId: "POISON_JAB", uses: 3250 }], chargedMoves: [{ moveId: "BRUTAL_SWING", uses: 3100 }, { moveId: "ICE_PUNCH", uses: 2950 }] }, moveset: ["POISON_JAB", "BRUTAL_SWING", "ICE_PUNCH"] },
+    { speciesId: "talonflame", score: 96.3, moves: { fastMoves: [{ moveId: "INCINERATE", uses: 3200 }], chargedMoves: [{ moveId: "FLY", uses: 3050 }, { moveId: "BRAVE_BIRD", uses: 2900 }] }, moveset: ["INCINERATE", "FLY", "BRAVE_BIRD"] },
+    { speciesId: "moltres_galarian", score: 95.6, moves: { fastMoves: [{ moveId: "SUCKER_PUNCH", uses: 3150 }], chargedMoves: [{ moveId: "FLY", uses: 3000 }, { moveId: "BRAVE_BIRD", uses: 2850 }] }, moveset: ["SUCKER_PUNCH", "FLY", "BRAVE_BIRD"] },
+    { speciesId: "muk_alolan_shadow", score: 95.3, moves: { fastMoves: [{ moveId: "POISON_JAB", uses: 3100 }], chargedMoves: [{ moveId: "BRUTAL_SWING", uses: 2950 }, { moveId: "ICE_PUNCH", uses: 2800 }] }, moveset: ["POISON_JAB", "BRUTAL_SWING", "ICE_PUNCH"] },
+    { speciesId: "greedent", score: 94.8, moves: { fastMoves: [{ moveId: "MUD_SHOT", uses: 3050 }], chargedMoves: [{ moveId: "BODY_SLAM", uses: 2900 }, { moveId: "TRAILBLAZE", uses: 2750 }] }, moveset: ["MUD_SHOT", "BODY_SLAM", "TRAILBLAZE"] },
+    { speciesId: "dragalge", score: 94.5, moves: { fastMoves: [{ moveId: "ACID", uses: 3000 }], chargedMoves: [{ moveId: "AQUA_TAIL", uses: 2850 }, { moveId: "OUTRAGE", uses: 2700 }] }, moveset: ["ACID", "AQUA_TAIL", "OUTRAGE"] },
+    { speciesId: "weezing_galarian", score: 94.0, moves: { fastMoves: [{ moveId: "FAIRY_WIND", uses: 2950 }], chargedMoves: [{ moveId: "OVERHEAT", uses: 2800 }, { moveId: "SLUDGE", uses: 2650 }] }, moveset: ["FAIRY_WIND", "OVERHEAT", "SLUDGE"] },
+    { speciesId: "audino_mega", score: 93.5, moves: { fastMoves: [{ moveId: "CHARGE_BEAM", uses: 2900 }], chargedMoves: [{ moveId: "BODY_SLAM", uses: 2750 }, { moveId: "DISARMING_VOICE", uses: 2600 }] }, moveset: ["CHARGE_BEAM", "BODY_SLAM", "DISARMING_VOICE"] },
+    { speciesId: "seaking", score: 93.5, moves: { fastMoves: [{ moveId: "PECK", uses: 2850 }], chargedMoves: [{ moveId: "DRILL_RUN", uses: 2700 }, { moveId: "ICY_WIND", uses: 2550 }] }, moveset: ["PECK", "DRILL_RUN", "ICY_WIND"] },
+    { speciesId: "drapion_shadow", score: 93.4, moves: { fastMoves: [{ moveId: "POISON_STING", uses: 2800 }], chargedMoves: [{ moveId: "AQUA_TAIL", uses: 2650 }, { moveId: "CRUNCH", uses: 2500 }] }, moveset: ["POISON_STING", "AQUA_TAIL", "CRUNCH"] },
+    { speciesId: "weezing_galarian_shadow", score: 93.4, moves: { fastMoves: [{ moveId: "FAIRY_WIND", uses: 2750 }], chargedMoves: [{ moveId: "OVERHEAT", uses: 2600 }, { moveId: "SLUDGE", uses: 2450 }] }, moveset: ["FAIRY_WIND", "OVERHEAT", "SLUDGE"] },
+    { speciesId: "drapion", score: 93.3, moves: { fastMoves: [{ moveId: "POISON_STING", uses: 2700 }], chargedMoves: [{ moveId: "CRUNCH", uses: 2550 }, { moveId: "AQUA_TAIL", uses: 2400 }] }, moveset: ["POISON_STING", "CRUNCH", "AQUA_TAIL"] },
+    { speciesId: "crobat_shadow", score: 93.2, moves: { fastMoves: [{ moveId: "GUST", uses: 2650 }], chargedMoves: [{ moveId: "POISON_FANG", uses: 2500 }, { moveId: "SHADOW_BALL", uses: 2350 }] }, moveset: ["GUST", "POISON_FANG", "SHADOW_BALL"] },
+    { speciesId: "grafaiai", score: 93.0, moves: { fastMoves: [{ moveId: "SCRATCH", uses: 2600 }], chargedMoves: [{ moveId: "POISON_FANG", uses: 2450 }, { moveId: "FOUL_PLAY", uses: 2300 }] }, moveset: ["SCRATCH", "POISON_FANG", "FOUL_PLAY"] },
+    { speciesId: "samurott", score: 92.9, moves: { fastMoves: [{ moveId: "FURY_CUTTER", uses: 2550 }], chargedMoves: [{ moveId: "HYDRO_CANNON", uses: 2400 }, { moveId: "MEGAHORN", uses: 2250 }] }, moveset: ["FURY_CUTTER", "HYDRO_CANNON", "MEGAHORN"] }
+  ],
+  "Battle Frontier (Master)": [
+    { speciesId: "giratina_altered", score: 98.7, moves: { fastMoves: [{ moveId: "DRAGON_BREATH", uses: 3300 }], chargedMoves: [{ moveId: "DRAGON_CLAW", uses: 3150 }, { moveId: "SHADOW_FORCE", uses: 3000 }] }, moveset: ["DRAGON_BREATH", "DRAGON_CLAW", "SHADOW_FORCE"] },
+    { speciesId: "zekrom", score: 97.4, moves: { fastMoves: [{ moveId: "DRAGON_BREATH", uses: 3250 }], chargedMoves: [{ moveId: "OUTRAGE", uses: 3100 }, { moveId: "FUSION_BOLT", uses: 2950 }] }, moveset: ["DRAGON_BREATH", "OUTRAGE", "FUSION_BOLT"] },
+    { speciesId: "giratina_altered_shadow", score: 97.1, moves: { fastMoves: [{ moveId: "DRAGON_BREATH", uses: 3200 }], chargedMoves: [{ moveId: "SHADOW_FORCE", uses: 3050 }, { moveId: "DRAGON_CLAW", uses: 2900 }] }, moveset: ["DRAGON_BREATH", "SHADOW_FORCE", "DRAGON_CLAW"] },
+    { speciesId: "dialga_origin", score: 96.5, moves: { fastMoves: [{ moveId: "DRAGON_BREATH", uses: 3150 }], chargedMoves: [{ moveId: "ROAR_OF_TIME", uses: 3000 }, { moveId: "IRON_HEAD", uses: 2850 }] }, moveset: ["DRAGON_BREATH", "ROAR_OF_TIME", "IRON_HEAD"] },
+    { speciesId: "goodra", score: 96.3, moves: { fastMoves: [{ moveId: "DRAGON_BREATH", uses: 3100 }], chargedMoves: [{ moveId: "AQUA_TAIL", uses: 2950 }, { moveId: "DRACO_METEOR", uses: 2800 }] }, moveset: ["DRAGON_BREATH", "AQUA_TAIL", "DRACO_METEOR"] },
+    { speciesId: "garchomp", score: 95.9, moves: { fastMoves: [{ moveId: "DRAGON_TAIL", uses: 3050 }], chargedMoves: [{ moveId: "TWISTER", uses: 2900 }, { moveId: "EARTH_POWER", uses: 2750 }] }, moveset: ["DRAGON_TAIL", "TWISTER", "EARTH_POWER"] },
+    { speciesId: "melmetal", score: 95.5, moves: { fastMoves: [{ moveId: "THUNDER_SHOCK", uses: 3000 }], chargedMoves: [{ moveId: "DOUBLE_IRON_BASH", uses: 2850 }, { moveId: "DYNAMIC_PUNCH", uses: 2700 }] }, moveset: ["THUNDER_SHOCK", "DOUBLE_IRON_BASH", "DYNAMIC_PUNCH"] },
+    { speciesId: "zekrom_shadow", score: 95.3, moves: { fastMoves: [{ moveId: "DRAGON_BREATH", uses: 2950 }], chargedMoves: [{ moveId: "OUTRAGE", uses: 2800 }, { moveId: "FUSION_BOLT", uses: 2650 }] }, moveset: ["DRAGON_BREATH", "OUTRAGE", "FUSION_BOLT"] },
+    { speciesId: "garchomp_shadow", score: 95.0, moves: { fastMoves: [{ moveId: "DRAGON_TAIL", uses: 2900 }], chargedMoves: [{ moveId: "TWISTER", uses: 2750 }, { moveId: "EARTH_POWER", uses: 2600 }] }, moveset: ["DRAGON_TAIL", "TWISTER", "EARTH_POWER"] },
+    { speciesId: "meloetta_aria", score: 94.6, moves: { fastMoves: [{ moveId: "CONFUSION", uses: 2850 }], chargedMoves: [{ moveId: "PSYSHOCK", uses: 2700 }, { moveId: "DAZZLING_GLEAM", uses: 2550 }] }, moveset: ["CONFUSION", "PSYSHOCK", "DAZZLING_GLEAM"] },
+    { speciesId: "kyurem_black", score: 94.5, moves: { fastMoves: [{ moveId: "DRAGON_TAIL", uses: 2800 }], chargedMoves: [{ moveId: "FREEZE_SHOCK", uses: 2650 }, { moveId: "FUSION_BOLT", uses: 2500 }] }, moveset: ["DRAGON_TAIL", "FREEZE_SHOCK", "FUSION_BOLT"] },
+    { speciesId: "solgaleo", score: 94.4, moves: { fastMoves: [{ moveId: "FIRE_SPIN", uses: 2750 }], chargedMoves: [{ moveId: "PSYCHIC_FANGS", uses: 2600 }, { moveId: "IRON_HEAD", uses: 2450 }] }, moveset: ["FIRE_SPIN", "PSYCHIC_FANGS", "IRON_HEAD"] },
+    { speciesId: "latios", score: 94.2, moves: { fastMoves: [{ moveId: "DRAGON_BREATH", uses: 2700 }], chargedMoves: [{ moveId: "AURA_SPHERE", uses: 2550 }, { moveId: "LUSTER_PURGE", uses: 2400 }] }, moveset: ["DRAGON_BREATH", "AURA_SPHERE", "LUSTER_PURGE"] },
+    { speciesId: "latios_shadow", score: 93.9, moves: { fastMoves: [{ moveId: "DRAGON_BREATH", uses: 2650 }], chargedMoves: [{ moveId: "AURA_SPHERE", uses: 2500 }, { moveId: "LUSTER_PURGE", uses: 2350 }] }, moveset: ["DRAGON_BREATH", "AURA_SPHERE", "LUSTER_PURGE"] },
+    { speciesId: "dialga", score: 93.8, moves: { fastMoves: [{ moveId: "DRAGON_BREATH", uses: 2600 }], chargedMoves: [{ moveId: "IRON_HEAD", uses: 2450 }, { moveId: "DRACO_METEOR", uses: 2300 }] }, moveset: ["DRAGON_BREATH", "IRON_HEAD", "DRACO_METEOR"] }
   ]
 };
 
@@ -3223,14 +3387,28 @@ const LIVE_RANKINGS_MAP: Record<string, Map<string, PokemonRankingEntry>> = {
   "GREAT LEAGUE": new Map(),
   "ULTRA LEAGUE": new Map(),
   "MASTER LEAGUE": new Map(),
-  "MEGA MASTER LEAGUE": new Map()
+  "MEGA MASTER LEAGUE": new Map(),
+  "Battle Frontier (Spectral)": new Map(),
+  "Battle Frontier (Cauldron)": new Map(),
+  "Battle Frontier (Master)": new Map()
 };
 
 // Seed LIVE_RANKINGS_MAP immediately from initial rankings
-(["GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE", "MEGA MASTER LEAGUE"] as const).forEach((lg) => {
+(
+  [
+    "GREAT LEAGUE",
+    "ULTRA LEAGUE",
+    "MASTER LEAGUE",
+    "MEGA MASTER LEAGUE",
+    "Battle Frontier (Spectral)",
+    "Battle Frontier (Cauldron)",
+    "Battle Frontier (Master)"
+  ] as const
+).forEach((lg) => {
   LIVE_RANKINGS_LIST[lg].forEach((entry) => {
     LIVE_RANKINGS_MAP[lg].set(entry.speciesId.toLowerCase(), entry);
   });
+  LIVE_RANKINGS_MAP[lg.toUpperCase()] = LIVE_RANKINGS_MAP[lg];
 });
 
 const MOVE_ID_TO_NAME: Record<string, string> = {};
@@ -3894,18 +4072,12 @@ export function applyRankingMovesToPokemonStats(
   league: string = "MASTER LEAGUE",
   isShadowOverride?: boolean
 ): PokemonStats {
-  const upper = league.toUpperCase();
-  const normLeague = upper.includes("MEGA")
-    ? "MEGA MASTER LEAGUE"
-    : upper.includes("GREAT")
-    ? "GREAT LEAGUE"
-    : upper.includes("ULTRA")
-    ? "ULTRA LEAGUE"
-    : "MASTER LEAGUE";
+  const normLeague = normalizeLeagueName(league);
 
   const isSkeledirge =
-    pokemon.baseSpecies?.toLowerCase() === "skeledirge" ||
-    pokemon.speciesId.toLowerCase().startsWith("skeledirge");
+    !isBattleFrontierLeague(normLeague) &&
+    (pokemon.baseSpecies?.toLowerCase() === "skeledirge" ||
+      pokemon.speciesId.toLowerCase().startsWith("skeledirge"));
 
   const map = LIVE_RANKINGS_MAP[normLeague];
   const baseKey = pokemon.speciesId.toLowerCase().replace(/_shadow$/i, "");
@@ -4059,12 +4231,15 @@ export async function syncPvPokeDataAndRankings(): Promise<{
   syncedCount: number;
   rankingsCount: Record<string, number>;
 }> {
-  const [gmRes, glRes, ulRes, mlRes, megaRes] = await Promise.all([
+  const [gmRes, glRes, ulRes, mlRes, megaRes, bfSpecRes, bfCaulRes, bfMasterRes] = await Promise.all([
     fetch(PVPOKE_ENDPOINTS.GAMEMASTER).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     fetch(PVPOKE_ENDPOINTS.RANKINGS_GL).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     fetch(PVPOKE_ENDPOINTS.RANKINGS_UL).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     fetch(PVPOKE_ENDPOINTS.RANKINGS_ML).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-    fetch(PVPOKE_ENDPOINTS.RANKINGS_MEGA_ML).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+    fetch(PVPOKE_ENDPOINTS.RANKINGS_MEGA_ML).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    fetch(PVPOKE_ENDPOINTS.RANKINGS_BF_SPECTRAL).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    fetch(PVPOKE_ENDPOINTS.RANKINGS_BF_CAULDRON).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    fetch(PVPOKE_ENDPOINTS.RANKINGS_BF_MASTER).then((r) => (r.ok ? r.json() : null)).catch(() => null)
   ]);
 
   const gmMoveDetails: Record<
@@ -4212,36 +4387,56 @@ export async function syncPvPokeDataAndRankings(): Promise<{
   const ulEntries = parseRankingsJsonArray(ulRes);
   const mlEntries = parseRankingsJsonArray(mlRes);
   const megaEntries = parseRankingsJsonArray(megaRes);
+  const bfSpecEntries = parseRankingsJsonArray(bfSpecRes);
+  const bfCaulEntries = parseRankingsJsonArray(bfCaulRes);
+  const bfMasterEntries = parseRankingsJsonArray(bfMasterRes);
 
   const storeLeagueRankings = (leagueKey: string, list: PokemonRankingEntry[]) => {
+    if (list.length === 0) return;
+    if (!LIVE_RANKINGS_MAP[leagueKey]) {
+      LIVE_RANKINGS_MAP[leagueKey] = new Map();
+    }
     const map = LIVE_RANKINGS_MAP[leagueKey];
-    if (!map) return;
     map.clear();
     list.forEach((entry) => {
       map.set(entry.speciesId.toLowerCase(), entry);
     });
+    const upperKey = leagueKey.toUpperCase();
+    if (upperKey !== leagueKey) {
+      LIVE_RANKINGS_MAP[upperKey] = map;
+    }
   };
 
   storeLeagueRankings("GREAT LEAGUE", glEntries);
   storeLeagueRankings("ULTRA LEAGUE", ulEntries);
   storeLeagueRankings("MASTER LEAGUE", mlEntries);
   storeLeagueRankings("MEGA MASTER LEAGUE", megaEntries);
+  storeLeagueRankings("Battle Frontier (Spectral)", bfSpecEntries);
+  storeLeagueRankings("Battle Frontier (Cauldron)", bfCaulEntries);
+  storeLeagueRankings("Battle Frontier (Master)", bfMasterEntries);
 
-  if (glEntries.length > 0) {
-    LIVE_RANKINGS_LIST["GREAT LEAGUE"] = glEntries;
-  }
-  if (ulEntries.length > 0) {
-    LIVE_RANKINGS_LIST["ULTRA LEAGUE"] = ulEntries;
-  }
-  if (mlEntries.length > 0) {
-    LIVE_RANKINGS_LIST["MASTER LEAGUE"] = mlEntries;
-  }
-  if (megaEntries.length > 0) {
-    LIVE_RANKINGS_LIST["MEGA MASTER LEAGUE"] = megaEntries;
-  }
+  if (glEntries.length > 0) LIVE_RANKINGS_LIST["GREAT LEAGUE"] = glEntries;
+  if (ulEntries.length > 0) LIVE_RANKINGS_LIST["ULTRA LEAGUE"] = ulEntries;
+  if (mlEntries.length > 0) LIVE_RANKINGS_LIST["MASTER LEAGUE"] = mlEntries;
+  if (megaEntries.length > 0) LIVE_RANKINGS_LIST["MEGA MASTER LEAGUE"] = megaEntries;
+  if (bfSpecEntries.length > 0) LIVE_RANKINGS_LIST["Battle Frontier (Spectral)"] = bfSpecEntries;
+  if (bfCaulEntries.length > 0) LIVE_RANKINGS_LIST["Battle Frontier (Cauldron)"] = bfCaulEntries;
+  if (bfMasterEntries.length > 0) LIVE_RANKINGS_LIST["Battle Frontier (Master)"] = bfMasterEntries;
 
-  (["GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE", "MEGA MASTER LEAGUE"] as const).forEach((lg) => {
-    PVPOKE_TOP_OPPONENTS[lg] = getLiveRankingsForLeague(lg, 20);
+  (
+    [
+      "GREAT LEAGUE",
+      "ULTRA LEAGUE",
+      "MASTER LEAGUE",
+      "MEGA MASTER LEAGUE",
+      "Battle Frontier (Spectral)",
+      "Battle Frontier (Cauldron)",
+      "Battle Frontier (Master)"
+    ] as const
+  ).forEach((lg) => {
+    const top20 = getLiveRankingsForLeague(lg, 20);
+    PVPOKE_TOP_OPPONENTS[lg] = top20;
+    PVPOKE_TOP_OPPONENTS[lg.toUpperCase()] = top20;
   });
 
   // Dynamically ingest species from gamemaster.json so all base, alternate, mega, and shadow forms are available in Team Builder
@@ -4461,7 +4656,10 @@ export async function syncPvPokeDataAndRankings(): Promise<{
       "GREAT LEAGUE": glEntries.length,
       "ULTRA LEAGUE": ulEntries.length,
       "MASTER LEAGUE": mlEntries.length,
-      "MEGA MASTER LEAGUE": megaEntries.length
+      "MEGA MASTER LEAGUE": megaEntries.length,
+      "Battle Frontier (Spectral)": bfSpecEntries.length,
+      "Battle Frontier (Cauldron)": bfCaulEntries.length,
+      "Battle Frontier (Master)": bfMasterEntries.length
     }
   };
 }
@@ -4791,7 +4989,13 @@ export function getRecommendedMovesForPokemon(
     );
     if (builtinAlt) {
       const ivTuple = parseIvTriplet(customIvs, league);
-      const defaultCp = league.includes("GREAT") ? 1496 : league.includes("ULTRA") ? 2492 : 3450;
+      const upperLg = league.toUpperCase();
+      const defaultCp =
+        upperLg.includes("GREAT") || upperLg.includes("SPECTRAL")
+          ? 1496
+          : upperLg.includes("ULTRA") || upperLg.includes("CAULDRON")
+          ? 2492
+          : 3450;
       return {
         name: trimmed.toLowerCase().startsWith("shadow ") ? `Shadow ${builtinAlt.name}` : builtinAlt.name,
         cp: defaultCp,
@@ -4813,10 +5017,11 @@ export function getRecommendedMovesForPokemon(
 
   if (!partial) return null;
 
-  const scaled = computeEffectiveStatsForLeague(partial, league, undefined, customIvs);
-  const ivTuple = parseIvTriplet(customIvs, league);
+  const normLeague = normalizeLeagueName(league);
+  const scaled = computeEffectiveStatsForLeague(partial, normLeague, undefined, customIvs);
+  const ivTuple = parseIvTriplet(customIvs, normLeague);
 
-  const leagueMap = LIVE_RANKINGS_MAP[league.toUpperCase()];
+  const leagueMap = LIVE_RANKINGS_MAP[normLeague] || LIVE_RANKINGS_MAP[league.toUpperCase()];
   const isShadowInput = trimmed.toLowerCase().startsWith("shadow ");
   const rankingEntry = isShadowInput
     ? leagueMap?.get(`${partial.speciesId.toLowerCase()}_shadow`) ||
@@ -4825,8 +5030,9 @@ export function getRecommendedMovesForPokemon(
       leagueMap?.get(`${partial.speciesId.toLowerCase()}_shadow`);
 
   const isSkeledirge =
-    partial.baseSpecies?.toLowerCase() === "skeledirge" ||
-    partial.speciesId.toLowerCase().startsWith("skeledirge");
+    !isBattleFrontierLeague(normLeague) &&
+    (partial.baseSpecies?.toLowerCase() === "skeledirge" ||
+      partial.speciesId.toLowerCase().startsWith("skeledirge"));
 
   const topFastId = rankingEntry?.moveset?.[0] || rankingEntry?.moves.fastMoves[0]?.moveId;
   const orderedChargedNames: string[] = [];
@@ -4883,7 +5089,92 @@ export function getRecommendedMovesForPokemon(
 export function getLeagueTop3Template(
   league: LeagueType
 ): TeamMember[] {
-  if (league === "MEGA MASTER LEAGUE") {
+  const normLeague = normalizeLeagueName(league);
+  if (normLeague === "Battle Frontier (Spectral)") {
+    return [
+      {
+        id: "bfs1",
+        name: "Ninetales (Alolan)",
+        cp: 1495,
+        fastMove: "Powder Snow",
+        chargedMove1: "Weather Ball (Ice)",
+        chargedMove2: "Psyshock"
+      },
+      {
+        id: "bfs2",
+        name: "Weezing (Galarian)",
+        cp: 1498,
+        fastMove: "Fairy Wind",
+        chargedMove1: "Sludge",
+        chargedMove2: "Brutal Swing"
+      },
+      {
+        id: "bfs3",
+        name: "Dewgong",
+        cp: 1496,
+        fastMove: "Ice Shard",
+        chargedMove1: "Icy Wind",
+        chargedMove2: "Drill Run"
+      }
+    ];
+  }
+  if (normLeague === "Battle Frontier (Cauldron)") {
+    return [
+      {
+        id: "bfc1",
+        name: "Muk (Alolan)",
+        cp: 2497,
+        fastMove: "Poison Jab",
+        chargedMove1: "Brutal Swing",
+        chargedMove2: "Ice Punch"
+      },
+      {
+        id: "bfc2",
+        name: "Talonflame",
+        cp: 2493,
+        fastMove: "Incinerate",
+        chargedMove1: "Fly",
+        chargedMove2: "Brave Bird"
+      },
+      {
+        id: "bfc3",
+        name: "Moltres (Galarian)",
+        cp: 2496,
+        fastMove: "Sucker Punch",
+        chargedMove1: "Fly",
+        chargedMove2: "Brave Bird"
+      }
+    ];
+  }
+  if (normLeague === "Battle Frontier (Master)") {
+    return [
+      {
+        id: "bfm1",
+        name: "Giratina (Altered)",
+        cp: 3820,
+        fastMove: "Dragon Breath",
+        chargedMove1: "Dragon Claw",
+        chargedMove2: "Shadow Force"
+      },
+      {
+        id: "bfm2",
+        name: "Zekrom",
+        cp: 4565,
+        fastMove: "Dragon Breath",
+        chargedMove1: "Outrage",
+        chargedMove2: "Fusion Bolt"
+      },
+      {
+        id: "bfm3",
+        name: "Dialga (Origin)",
+        cp: 4624,
+        fastMove: "Dragon Breath",
+        chargedMove1: "Roar of Time",
+        chargedMove2: "Iron Head"
+      }
+    ];
+  }
+  if (normLeague === "MEGA MASTER LEAGUE") {
     return [
       {
         id: "m1",
@@ -4911,7 +5202,7 @@ export function getLeagueTop3Template(
       }
     ];
   }
-  if (league === "GREAT LEAGUE") {
+  if (normLeague === "GREAT LEAGUE") {
     return [
       {
         id: "g1",
@@ -4939,7 +5230,7 @@ export function getLeagueTop3Template(
       }
     ];
   }
-  if (league === "ULTRA LEAGUE") {
+  if (normLeague === "ULTRA LEAGUE") {
     return [
       {
         id: "u1",
@@ -5968,14 +6259,7 @@ export function getAvailableMovePoolForPokemon(
   fastMoves: FastMove[];
   chargedMoves: ChargedMove[];
 } {
-  const upper = (league || "GREAT LEAGUE").toUpperCase();
-  const normLeague = upper.includes("MEGA")
-    ? "MEGA MASTER LEAGUE"
-    : upper.includes("GREAT")
-    ? "GREAT LEAGUE"
-    : upper.includes("ULTRA")
-    ? "ULTRA LEAGUE"
-    : "MASTER LEAGUE";
+  const normLeague = normalizeLeagueName(league);
 
   let stats: PokemonStats;
   let isShadow = false;
@@ -6518,14 +6802,7 @@ export interface BlendedSeasonMetaDistribution {
 }
 
 export function getLeagueTopMetaSpeciesNames(league: string, maxCount: number = 100): string[] {
-  const upper = (league || "GREAT LEAGUE").toUpperCase();
-  const normLeague = upper.includes("MEGA")
-    ? "MEGA MASTER LEAGUE"
-    : upper.includes("GREAT")
-    ? "GREAT LEAGUE"
-    : upper.includes("ULTRA")
-    ? "ULTRA LEAGUE"
-    : "MASTER LEAGUE";
+  const normLeague = normalizeLeagueName(league);
 
   const names: string[] = [];
   const seen = new Set<string>();
@@ -6567,7 +6844,45 @@ export function getLeagueTopMetaSpeciesNames(league: string, maxCount: number = 
 
   // Fallback / supplement curated meta pool per league up to maxCount (100 for battle rankings)
   const curatedSeeds =
-    normLeague === "GREAT LEAGUE"
+    normLeague === "Battle Frontier (Spectral)"
+      ? [
+          "Ninetales (Alolan)", "Weezing (Galarian)", "Dewgong", "Piloswine", "Ledian",
+          "Arctibax", "Swalot", "Golisopod", "Arbok", "Glalie",
+          "Runerigus", "Tentacruel", "Qwilfish", "Cofagrigus", "Skeledirge",
+          "Beedrill", "Qwilfish (Hisuian)", "Shadow Piloswine", "Shadow Tentacruel", "Overqwil",
+          "Shadow Ninetales (Alolan)", "Nidoqueen", "Shadow Golbat", "Golbat", "Shadow Nidoqueen",
+          "Froslass", "Drifblim", "Shadow Drifblim", "Sandslash (Alolan)", "Shadow Sandslash (Alolan)",
+          "Muk (Alolan)", "Shadow Muk (Alolan)", "Drapion", "Shadow Drapion", "Toxapex",
+          "Clodsire", "Ariados", "Forretress", "Wormadam (Trash)", "Escavalier",
+          "Charjabug", "Galvantula", "Marowak (Alolan)", "Sableye", "Jellicent",
+          "Trevenant", "Mimikyu", "Aegislash", "Lapras", "Walrein"
+        ]
+      : normLeague === "Battle Frontier (Cauldron)"
+      ? [
+          "Muk (Alolan)", "Talonflame", "Moltres (Galarian)", "Shadow Muk (Alolan)", "Greedent",
+          "Dragalge", "Weezing (Galarian)", "Audino (Mega)", "Seaking", "Shadow Drapion",
+          "Shadow Weezing (Galarian)", "Drapion", "Shadow Crobat", "Grafaiai", "Samurott",
+          "Feraligatr", "Shadow Feraligatr", "Tentacruel", "Skeledirge", "Lickilicky",
+          "Pidgeot", "Mandibuzz", "Umbreon", "Guzzlord", "Obstagoon",
+          "Scrafty", "Malamar", "Drifblim", "Jellicent", "Trevenant",
+          "Nidoqueen", "Clodsire", "Toxicroak", "Venusaur", "Swampert",
+          "Empoleon", "Greninja", "Primarina", "Blastoise", "Gyarados",
+          "Charizard", "Typhlosion", "Ho-Oh", "Corviknight", "Skarmory",
+          "Forretress", "Escavalier", "Scizor", "Snorlax", "Dubwool"
+        ]
+      : normLeague === "Battle Frontier (Master)"
+      ? [
+          "Giratina (Altered)", "Zekrom", "Shadow Giratina (Altered)", "Dialga (Origin)", "Goodra",
+          "Garchomp", "Melmetal", "Shadow Zekrom", "Shadow Garchomp", "Meloetta (Aria)",
+          "Kyurem (Black)", "Solgaleo", "Latios", "Shadow Latios", "Dialga",
+          "Palkia (Origin)", "Palkia", "Reshiram", "Kyurem (White)", "Giratina (Origin)",
+          "Dragonite", "Shadow Dragonite", "Baxcalibur", "Kommo-o", "Hydreigon",
+          "Zygarde", "Rayquaza", "Lugia", "Ho-Oh", "Mewtwo",
+          "Necrozma (Dusk Mane)", "Necrozma (Dawn Wings)", "Zacian (Crowned)", "Xerneas", "Yveltal",
+          "Landorus (Therian)", "Groudon", "Kyogre", "Rhyperior", "Metagross",
+          "Excadrill", "Gholdengo", "Florges", "Primarina", "Togekiss"
+        ]
+      : normLeague === "GREAT LEAGUE"
       ? [
           "Clodsire", "Feraligatr", "Mandibuzz", "Azumarill", "Annihilape",
           "Gastrodon", "Shadow Feraligatr", "Jumpluff", "Dunsparce", "Drapion",
@@ -6658,7 +6973,7 @@ export function getLeagueTopMetaSpeciesNames(league: string, maxCount: number = 
     addUniqueName(dbMatch ? dbMatch.name : s);
   }
 
-  if (names.length < maxCount) {
+  if (names.length < maxCount && !isBattleFrontierLeague(normLeague)) {
     for (const mon of Object.values(POKEMON_DATABASE)) {
       if (names.length >= maxCount) break;
       if (normLeague !== "MEGA MASTER LEAGUE" && /^Mega\s+|^Primal\s+/i.test(mon.name)) continue;
@@ -6705,14 +7020,7 @@ export function computeBlendedSeasonMeta(
   seasonBattleLogs?: Array<{ timestampMs: number; league: string; opponents: string[] }>,
   currentSeason?: { startMs: number; endMs: number }
 ): BlendedSeasonMetaDistribution {
-  const upperLeague = (league || "GREAT LEAGUE").toUpperCase();
-  const normLeague = upperLeague.includes("MEGA")
-    ? "MEGA MASTER LEAGUE"
-    : upperLeague.includes("GREAT")
-    ? "GREAT LEAGUE"
-    : upperLeague.includes("ULTRA")
-    ? "ULTRA LEAGUE"
-    : "MASTER LEAGUE";
+  const normLeague = normalizeLeagueName(league);
 
   // Meta depth of 100 for evaluating team and role battle rankings
   const metaSpecies = getLeagueTopMetaSpeciesNames(normLeague, 100);
@@ -6734,7 +7042,7 @@ export function computeBlendedSeasonMeta(
   const matchingLogs = (seasonBattleLogs || [])
     .filter((entry) => {
       if (!entry || !Array.isArray(entry.opponents) || entry.opponents.length === 0) return false;
-      const entryLeague = (entry.league || "").toUpperCase();
+      const entryLeague = normalizeLeagueName(entry.league || "");
       if (entryLeague !== normLeague) return false;
       if (currentSeason && currentSeason.startMs > 0 && currentSeason.endMs > currentSeason.startMs) {
         if (entry.timestampMs < currentSeason.startMs || entry.timestampMs > currentSeason.endMs) {
@@ -7569,23 +7877,23 @@ function isShadowEligibleForTop100(name: string, baseSpecies: string): boolean {
  * including eligible Shadow variants, for simulating role upgrades.
  */
 export function getTop100MetaCandidatesForLeague(league: string, maxCount: number = 200): TeamMember[] {
-  const upper = (league || "GREAT LEAGUE").toUpperCase();
-  const normLeague = upper.includes("MEGA")
-    ? "MEGA MASTER LEAGUE"
-    : upper.includes("GREAT")
-    ? "GREAT LEAGUE"
-    : upper.includes("ULTRA")
-    ? "ULTRA LEAGUE"
-    : "MASTER LEAGUE";
+  const normLeague = normalizeLeagueName(league);
+  const isBf = isBattleFrontierLeague(normLeague);
 
   const results: TeamMember[] = [];
   const seenNames = new Set<string>();
 
-  const tryAddCandidate = (rawName: string) => {
+  const tryAddCandidate = (rawName: string, allowRankedMega: boolean = false) => {
     if (results.length >= maxCount) return;
     const trimmed = (rawName || "").trim();
     if (!trimmed) return;
-    if (normLeague !== "MEGA MASTER LEAGUE" && /^Mega\s+|^Primal\s+/i.test(trimmed)) return;
+    if (
+      normLeague !== "MEGA MASTER LEAGUE" &&
+      !allowRankedMega &&
+      (/^Mega\s+|^Primal\s+/i.test(trimmed) || /\(Mega/i.test(trimmed))
+    ) {
+      return;
+    }
     const rec = getRecommendedMovesForPokemon(trimmed, normLeague);
     if (!rec) return;
     const key = rec.name.toLowerCase();
@@ -7602,7 +7910,7 @@ export function getTop100MetaCandidatesForLeague(league: string, maxCount: numbe
     });
   };
 
-  // 1. Live PvPoke Top-200 Rankings for the league (includes both normal and Shadow entries)
+  // 1. Live PvPoke Rankings for the league (includes both normal, Shadow, and cup-legal Mega entries)
   const liveMap = LIVE_RANKINGS_MAP[normLeague];
   if (liveMap && liveMap.size > 0) {
     const sorted = Array.from(liveMap.values()).sort((a, b) => b.score - a.score);
@@ -7619,24 +7927,26 @@ export function getTop100MetaCandidatesForLeague(league: string, maxCount: numbe
           isShad && !matchedMon.name.toLowerCase().startsWith("shadow ")
             ? `Shadow ${matchedMon.name}`
             : matchedMon.name;
-        tryAddCandidate(displayName);
+        tryAddCandidate(displayName, true);
       }
     }
   }
 
-  // 2. Fallback curated league meta + POKEMON_DATABASE species + eligible Shadow variants up to maxCount (200)
+  // 2. Fallback curated league meta + eligible Shadow variants up to maxCount
   if (results.length < maxCount) {
     for (const name of getLeagueTopMetaSpeciesNames(normLeague, maxCount)) {
-      tryAddCandidate(name);
-      const dbEntry = POKEMON_DATABASE[name];
-      const baseSp = extractBaseSpeciesKey(name, dbEntry?.speciesId, dbEntry?.baseSpecies);
-      if (isShadowEligibleForTop100(name, baseSp)) {
-        tryAddCandidate(`Shadow ${name}`);
+      tryAddCandidate(name, isBf);
+      if (!isBf) {
+        const dbEntry = POKEMON_DATABASE[name];
+        const baseSp = extractBaseSpeciesKey(name, dbEntry?.speciesId, dbEntry?.baseSpecies);
+        if (isShadowEligibleForTop100(name, baseSp)) {
+          tryAddCandidate(`Shadow ${name}`);
+        }
       }
     }
   }
 
-  if (results.length < maxCount) {
+  if (results.length < maxCount && !isBf) {
     for (const mon of Object.values(POKEMON_DATABASE)) {
       if (results.length >= maxCount) break;
       const cap = normLeague === "GREAT LEAGUE" ? 1500 : normLeague === "ULTRA LEAGUE" ? 2500 : 10000;
@@ -7650,8 +7960,8 @@ export function getTop100MetaCandidatesForLeague(league: string, maxCount: numbe
     }
   }
 
-  // Second pass if maxCount > 200 (e.g. for 200- rank range queries) so all leagues have 300+ ranked candidates
-  if (results.length < maxCount) {
+  // Second pass if maxCount > 200 (only for Open GBL leagues)
+  if (results.length < maxCount && !isBf) {
     for (const mon of Object.values(POKEMON_DATABASE)) {
       if (results.length >= maxCount) break;
       tryAddCandidate(mon.name);
@@ -8373,7 +8683,10 @@ export const TOP_5_LEAGUE_SPECIES: Record<LeagueType, string[]> = {
   "GREAT LEAGUE": ["Melmetal", "Clodsire", "Feraligatr", "Mandibuzz", "Azumarill", "Gastrodon"],
   "ULTRA LEAGUE": ["Feraligatr", "Cobalion", "Cresselia", "Registeel", "Annihilape"],
   "MASTER LEAGUE": ["Palkia (Origin)", "Zacian (Crowned)", "Dialga (Origin)", "Necrozma (Dusk Mane)", "Landorus (Therian)"],
-  "MEGA MASTER LEAGUE": ["Mega Rayquaza", "Primal Groudon", "Primal Kyogre", "Mega Mewtwo Y", "Mega Gyarados"]
+  "MEGA MASTER LEAGUE": ["Mega Rayquaza", "Primal Groudon", "Primal Kyogre", "Mega Mewtwo Y", "Mega Gyarados"],
+  "Battle Frontier (Spectral)": ["Ninetales (Alolan)", "Weezing (Galarian)", "Dewgong", "Piloswine", "Ledian"],
+  "Battle Frontier (Cauldron)": ["Muk (Alolan)", "Talonflame", "Moltres (Galarian)", "Greedent", "Dragalge"],
+  "Battle Frontier (Master)": ["Giratina (Altered)", "Zekrom", "Dialga (Origin)", "Goodra", "Garchomp"]
 };
 
 // =========================================================================
@@ -8860,6 +9173,9 @@ export interface AntiMetaTeamBuilderResult {
 
 export function getLeagueAbbreviation(league: string): string {
   const upper = (league || "GREAT LEAGUE").toUpperCase();
+  if (upper.includes("SPECTRAL")) return "BF-Spec";
+  if (upper.includes("CAULDRON")) return "BF-Caul";
+  if (upper.includes("BATTLE FRONTIER") && upper.includes("MASTER")) return "BF-ML";
   if (upper.includes("MEGA")) return "MML";
   if (upper.includes("GREAT")) return "GL";
   if (upper.includes("ULTRA")) return "UL";
@@ -8990,7 +9306,7 @@ function computeRoleWeightedTop100Meta(
   const matchingLogs = (seasonBattleLogs || [])
     .filter((entry) => {
       if (!entry || !Array.isArray(entry.opponents) || entry.opponents.length === 0) return false;
-      const entryLeague = (entry.league || "").toUpperCase();
+      const entryLeague = normalizeLeagueName(entry.league || "");
       if (entryLeague !== normLeague) return false;
       if (currentSeason && currentSeason.startMs > 0 && currentSeason.endMs > currentSeason.startMs) {
         if (entry.timestampMs < currentSeason.startMs || entry.timestampMs > currentSeason.endMs) {
@@ -9113,14 +9429,7 @@ export function generateAntiMetaTeamOptions(
   currentSeason?: { startMs: number; endMs: number }
 ): AntiMetaTeamBuilderResult {
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
-  const upper = (league || "GREAT LEAGUE").toUpperCase();
-  const normLeague = upper.includes("MEGA")
-    ? "MEGA MASTER LEAGUE"
-    : upper.includes("GREAT")
-    ? "GREAT LEAGUE"
-    : upper.includes("ULTRA")
-    ? "ULTRA LEAGUE"
-    : "MASTER LEAGUE";
+  const normLeague = normalizeLeagueName(league);
 
   const roleMeta = computeRoleWeightedTop100Meta(normLeague, seasonBattleLogs, currentSeason);
   const fullRankedPool = getTop100MetaCandidatesForLeague(normLeague, 360);
@@ -11354,19 +11663,12 @@ function classifyOrderedTrioStructure(
  * - Returns the Top 3 ABB, Top 3 ABC, and Top 3 Duo-Core 3-Pokémon lineups for Your Team.
  */
 export function evaluateShow6Pick3Matchup(
-  league: string = "GREAT LEAGUE",
+  league: string = "Battle Frontier (Spectral)",
   my6Raw: Array<TeamMember | string> = [],
   opp6Raw: Array<TeamMember | string> = []
 ): Show6Pick3MatchupResult {
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
-  const upper = (league || "GREAT LEAGUE").toUpperCase();
-  const normLeague: LeagueType = upper.includes("MEGA")
-    ? "MEGA MASTER LEAGUE"
-    : upper.includes("GREAT")
-    ? "GREAT LEAGUE"
-    : upper.includes("ULTRA")
-    ? "ULTRA LEAGUE"
-    : "MASTER LEAGUE";
+  const normLeague: LeagueType = normalizeLeagueName(league || "Battle Frontier (Spectral)");
 
   const defaultTop = getLeagueTopMetaSpeciesNames(normLeague, 12);
   const safeMy6 = Array.isArray(my6Raw) ? my6Raw : [];
@@ -11935,14 +12237,7 @@ export function generateBlindShow6Roster(params: {
   historicalWeightPct?: number; // 0..100
 }): BlindShow6RosterResult {
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
-  const upper = (params.league || "GREAT LEAGUE").toUpperCase();
-  const normLeague: LeagueType = upper.includes("MEGA")
-    ? "MEGA MASTER LEAGUE"
-    : upper.includes("GREAT")
-    ? "GREAT LEAGUE"
-    : upper.includes("ULTRA")
-    ? "ULTRA LEAGUE"
-    : "MASTER LEAGUE";
+  const normLeague: LeagueType = normalizeLeagueName(params.league || "Battle Frontier (Spectral)");
 
   const filterMode = params.metaFilterMode || params.filterMode || "OPEN";
   const rawFilterInput =
@@ -12385,14 +12680,7 @@ export function predictShow6UnrevealedBackline(
   revealedOpponents: string[],
   userTeam: TeamMember[] = []
 ): Show6LiveBacklinePredictionResult {
-  const upper = (league || "GREAT LEAGUE").toUpperCase();
-  const normLeague = upper.includes("MEGA")
-    ? "MEGA MASTER LEAGUE"
-    : upper.includes("GREAT")
-    ? "GREAT LEAGUE"
-    : upper.includes("ULTRA")
-    ? "ULTRA LEAGUE"
-    : "MASTER LEAGUE";
+  const normLeague = normalizeLeagueName(league || "Battle Frontier (Spectral)");
 
   const cleanOpp6 = (knownOpponent6 || [])
     .map((n) => canonicalizeMetaPokemonName(n))
@@ -12574,14 +12862,15 @@ export function predictShow6UnrevealedBackline(
 export type DefaultShow6RosterResult = string[] & { my6: string[]; opp6: string[] };
 
 export function getDefaultShow6RosterNames(
-  league: string = "GREAT LEAGUE",
+  league: string = "Battle Frontier (Spectral)",
   isOpponent: boolean = false
 ): DefaultShow6RosterResult {
-  const top12 = getLeagueTopMetaSpeciesNames(league, 12);
+  const normLeague = normalizeLeagueName(league || "Battle Frontier (Spectral)");
+  const top12 = getLeagueTopMetaSpeciesNames(normLeague, 12);
   const my6 = top12.slice(0, 6);
   const opp6 = [top12[1], top12[3], top12[4], top12[6], top12[7], top12[9]].filter(Boolean);
   while (opp6.length < 6) {
-    opp6.push(my6[opp6.length] || "Azumarill");
+    opp6.push(my6[opp6.length] || "Ninetales (Alolan)");
   }
   const primaryList = isOpponent ? [...opp6] : [...my6];
   return Object.assign(primaryList, { my6, opp6 });
@@ -12589,14 +12878,14 @@ export function getDefaultShow6RosterNames(
 
 export const INITIAL_SHOW6_ROSTERS_OF_6: Show6RosterOf6Preset[] = [
   {
-    id: "show6-roster6-gl-1",
-    name: "GL Frontier 6: Clodsire / Gatr / Mandi / Azu / Ape / Dunsparce",
-    league: "GREAT LEAGUE",
+    id: "show6-roster6-spectral-1",
+    name: "Spectral Frontier 6: A-Ninetales / G-Weezing / Dewgong / Piloswine / Ledian / Arctibax",
+    league: "Battle Frontier (Spectral)",
     isSelected: true,
-    pokemon: getDefaultShow6RosterNames("GREAT LEAGUE", false).map((name, i) => {
-      const rec = getRecommendedMovesForPokemon(name, "GREAT LEAGUE");
+    pokemon: getDefaultShow6RosterNames("Battle Frontier (Spectral)", false).map((name, i) => {
+      const rec = getRecommendedMovesForPokemon(name, "Battle Frontier (Spectral)");
       return {
-        id: `s6-gl-m-${i + 1}`,
+        id: `s6-spec-m-${i + 1}`,
         name: rec?.name || name,
         cp: rec?.cp || 1500,
         fastMove: rec?.fastMove || "Fast",
@@ -12607,14 +12896,14 @@ export const INITIAL_SHOW6_ROSTERS_OF_6: Show6RosterOf6Preset[] = [
     })
   },
   {
-    id: "show6-roster6-ul-1",
-    name: "UL Frontier 6: Zygarde / Gatr / Tina-A / Cress / Regi / Talon",
-    league: "ULTRA LEAGUE",
+    id: "show6-roster6-cauldron-1",
+    name: "Cauldron Frontier 6: A-Muk / Talonflame / G-Moltres / Greedent / Dragalge / G-Weezing",
+    league: "Battle Frontier (Cauldron)",
     isSelected: false,
-    pokemon: getDefaultShow6RosterNames("ULTRA LEAGUE", false).map((name, i) => {
-      const rec = getRecommendedMovesForPokemon(name, "ULTRA LEAGUE");
+    pokemon: getDefaultShow6RosterNames("Battle Frontier (Cauldron)", false).map((name, i) => {
+      const rec = getRecommendedMovesForPokemon(name, "Battle Frontier (Cauldron)");
       return {
-        id: `s6-ul-m-${i + 1}`,
+        id: `s6-caul-m-${i + 1}`,
         name: rec?.name || name,
         cp: rec?.cp || 2500,
         fastMove: rec?.fastMove || "Fast",
@@ -12625,14 +12914,14 @@ export const INITIAL_SHOW6_ROSTERS_OF_6: Show6RosterOf6Preset[] = [
     })
   },
   {
-    id: "show6-roster6-ml-1",
-    name: "ML Frontier 6: Palkia-O / Zacian-C / Dialga-O / Dusk Mane / Ho-Oh / Lando-T",
-    league: "MASTER LEAGUE",
+    id: "show6-roster6-bfmaster-1",
+    name: "BF Master 6: Giratina-A / Zekrom / Dialga-O / Goodra / Garchomp / Melmetal",
+    league: "Battle Frontier (Master)",
     isSelected: false,
-    pokemon: getDefaultShow6RosterNames("MASTER LEAGUE", false).map((name, i) => {
-      const rec = getRecommendedMovesForPokemon(name, "MASTER LEAGUE");
+    pokemon: getDefaultShow6RosterNames("Battle Frontier (Master)", false).map((name, i) => {
+      const rec = getRecommendedMovesForPokemon(name, "Battle Frontier (Master)");
       return {
-        id: `s6-ml-m-${i + 1}`,
+        id: `s6-bfm-m-${i + 1}`,
         name: rec?.name || name,
         cp: rec?.cp || 4500,
         fastMove: rec?.fastMove || "Fast",
@@ -12646,25 +12935,25 @@ export const INITIAL_SHOW6_ROSTERS_OF_6: Show6RosterOf6Preset[] = [
 
 export const INITIAL_SHOW6_PRESETS_OF_3: TeamPreset[] = recalculateAllPresetsMetrics([
   {
-    id: "show6-preset3-gl-1",
-    name: "[Show 6 GL] Clodsire / Feraligatr / Mandibuzz",
-    league: "GREAT LEAGUE",
+    id: "show6-preset3-spectral-1",
+    name: "[BF Spectral] Ninetales (Alolan) / Weezing (Galarian) / Dewgong",
+    league: "Battle Frontier (Spectral)",
     isSelected: true,
-    pokemon: getLeagueTop3Template("GREAT LEAGUE")
+    pokemon: getLeagueTop3Template("Battle Frontier (Spectral)")
   },
   {
-    id: "show6-preset3-ul-1",
-    name: "[Show 6 UL] Zygarde / Feraligatr / Giratina (Altered)",
-    league: "ULTRA LEAGUE",
+    id: "show6-preset3-cauldron-1",
+    name: "[BF Cauldron] Muk (Alolan) / Talonflame / Moltres (Galarian)",
+    league: "Battle Frontier (Cauldron)",
     isSelected: false,
-    pokemon: getLeagueTop3Template("ULTRA LEAGUE")
+    pokemon: getLeagueTop3Template("Battle Frontier (Cauldron)")
   },
   {
-    id: "show6-preset3-ml-1",
-    name: "[Show 6 ML] Palkia (Origin) / Zacian (Crowned) / Dialga (Origin)",
-    league: "MASTER LEAGUE",
+    id: "show6-preset3-bfmaster-1",
+    name: "[BF Master] Giratina (Altered) / Zekrom / Dialga (Origin)",
+    league: "Battle Frontier (Master)",
     isSelected: false,
-    pokemon: getLeagueTop3Template("MASTER LEAGUE")
+    pokemon: getLeagueTop3Template("Battle Frontier (Master)")
   }
 ]);
 

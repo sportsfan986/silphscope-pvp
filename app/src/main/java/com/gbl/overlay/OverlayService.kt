@@ -2508,13 +2508,23 @@ class OverlayService : LifecycleService() {
          * (including Shadow vs non-Shadow ranking comparison) for the currently active league,
          * and provides cycling across valid forms.
          */
+        fun normalizeLeagueKeyStatic(league: String): String = when {
+            league.contains("SPECTRAL", ignoreCase = true) -> "BATTLE FRONTIER (SPECTRAL)"
+            league.contains("CAULDRON", ignoreCase = true) -> "BATTLE FRONTIER (CAULDRON)"
+            league.contains("FRONTIER", ignoreCase = true) -> "BATTLE FRONTIER (MASTER)"
+            league.contains("MEGA", ignoreCase = true) -> "MEGA MASTER LEAGUE"
+            league.contains("GREAT", ignoreCase = true) -> "GREAT LEAGUE"
+            league.contains("ULTRA", ignoreCase = true) -> "ULTRA LEAGUE"
+            else -> "MASTER LEAGUE"
+        }
+
+        fun isBattleFrontierLeagueStatic(league: String): Boolean {
+            val k = normalizeLeagueKeyStatic(league)
+            return k.startsWith("BATTLE FRONTIER")
+        }
+
         object FormResolver {
-            private fun normalizeLeagueKey(activeLeague: String): String = when {
-                activeLeague.contains("MEGA", ignoreCase = true) -> "MEGA MASTER LEAGUE"
-                activeLeague.contains("GREAT", ignoreCase = true) -> "GREAT LEAGUE"
-                activeLeague.contains("ULTRA", ignoreCase = true) -> "ULTRA LEAGUE"
-                else -> "MASTER LEAGUE"
-            }
+            private fun normalizeLeagueKey(activeLeague: String): String = normalizeLeagueKeyStatic(activeLeague)
 
             fun isShadowEligibleVariant(variant: PokemonMeta): Boolean {
                 val idLower = variant.speciesId.lowercase().removeSuffix("_shadow")
@@ -2536,11 +2546,10 @@ class OverlayService : LifecycleService() {
                 val baseId = variant.speciesId.lowercase().removeSuffix("_shadow")
                 val isMegaVariant = baseId.contains("_mega") || baseId.contains("_primal") ||
                     variant.name.startsWith("Mega ", ignoreCase = true) || variant.name.startsWith("Primal ", ignoreCase = true)
-                if (isMegaVariant && normLeague != "MEGA MASTER LEAGUE") {
+                val map = LIVE_RANKINGS_MAP[normLeague]
+                if (isMegaVariant && normLeague != "MEGA MASTER LEAGUE" && map?.containsKey(baseId) != true) {
                     return 9999 to false
                 }
-
-                val map = LIVE_RANKINGS_MAP[normLeague]
                 val normalEntry = map?.get(baseId)
                 val shadowEntry = if (isShadowEligibleVariant(variant)) map?.get("${baseId}_shadow") else null
 
@@ -2578,8 +2587,8 @@ class OverlayService : LifecycleService() {
                 }
 
                 val staticRank = when (normLeague) {
-                    "GREAT LEAGUE" -> variant.glRank
-                    "ULTRA LEAGUE" -> variant.ulRank
+                    "GREAT LEAGUE", "BATTLE FRONTIER (SPECTRAL)" -> variant.glRank
+                    "ULTRA LEAGUE", "BATTLE FRONTIER (CAULDRON)" -> variant.ulRank
                     else -> variant.mlRank
                 }
                 val staticDefaultShadow = when {
@@ -2768,7 +2777,10 @@ class OverlayService : LifecycleService() {
             "GREAT LEAGUE",
             "ULTRA LEAGUE",
             "MASTER LEAGUE",
-            "MEGA MASTER LEAGUE"
+            "MEGA MASTER LEAGUE",
+            "BATTLE FRONTIER (SPECTRAL)",
+            "BATTLE FRONTIER (CAULDRON)",
+            "BATTLE FRONTIER (MASTER)"
         )
 
         fun areAllFourLeaguesLoaded(): Boolean {
@@ -2905,12 +2917,7 @@ class OverlayService : LifecycleService() {
         }
 
         fun applyRankingMovesForLeague(meta: PokemonMeta, league: String, isShadow: Boolean = false): PokemonMeta {
-            val normLeague = when {
-                league.contains("MEGA", ignoreCase = true) -> "MEGA MASTER LEAGUE"
-                league.contains("GREAT", ignoreCase = true) -> "GREAT LEAGUE"
-                league.contains("ULTRA", ignoreCase = true) -> "ULTRA LEAGUE"
-                else -> "MASTER LEAGUE"
-            }
+            val normLeague = normalizeLeagueKeyStatic(league)
             val isSkeledirge = meta.baseSpecies.equals("skeledirge", ignoreCase = true) ||
                 meta.speciesId.startsWith("skeledirge", ignoreCase = true)
 
@@ -3260,11 +3267,11 @@ class OverlayService : LifecycleService() {
                 }
             }
             return when {
-                league.contains("GREAT", ignoreCase = true) -> {
+                league.contains("GREAT", ignoreCase = true) || league.contains("SPECTRAL", ignoreCase = true) -> {
                     val glParts = meta.defaultIvsGl.split("/").mapNotNull { it.toIntOrNull() }
                     if (glParts.size >= 3) Triple(glParts[0], glParts[1], glParts[2]) else Triple(1, 15, 15)
                 }
-                league.contains("ULTRA", ignoreCase = true) -> {
+                league.contains("ULTRA", ignoreCase = true) || league.contains("CAULDRON", ignoreCase = true) -> {
                     val ulParts = meta.defaultIvsUl.split("/").mapNotNull { it.toIntOrNull() }
                     if (ulParts.size >= 3) Triple(ulParts[0], ulParts[1], ulParts[2]) else Triple(1, 15, 15)
                 }
@@ -3282,8 +3289,8 @@ class OverlayService : LifecycleService() {
             customCp: Int? = null,
             customIvs: String? = null
         ): PokemonMeta {
-            val isGreat = league.contains("GREAT", ignoreCase = true)
-            val isUltra = league.contains("ULTRA", ignoreCase = true)
+            val isGreat = league.contains("GREAT", ignoreCase = true) || league.contains("SPECTRAL", ignoreCase = true)
+            val isUltra = league.contains("ULTRA", ignoreCase = true) || league.contains("CAULDRON", ignoreCase = true)
             val leagueCap = when {
                 isGreat -> 1500
                 isUltra -> 2500
@@ -3790,12 +3797,7 @@ class OverlayService : LifecycleService() {
                 ?: POKEMON_META_DATABASE.first()
             val cleanSpeciesId = meta.speciesId.lowercase().removeSuffix("_shadow")
             val baseKey = meta.baseSpecies.lowercase()
-            val normLeague = when {
-                league.contains("MEGA", ignoreCase = true) -> "MEGA MASTER LEAGUE"
-                league.contains("GREAT", ignoreCase = true) -> "GREAT LEAGUE"
-                league.contains("ULTRA", ignoreCase = true) -> "ULTRA LEAGUE"
-                else -> "MASTER LEAGUE"
-            }
+            val normLeague = normalizeLeagueKeyStatic(league)
             val rankEntry = LIVE_RANKINGS_MAP[normLeague]?.let { map ->
                 map[meta.speciesId.lowercase()] ?: map[cleanSpeciesId] ?: map["${cleanSpeciesId}_shadow"]
             }
@@ -4236,14 +4238,17 @@ class OverlayService : LifecycleService() {
         }
 
         fun getTopMetaPoolForLeagueStatic(league: String): List<String> {
-            val isGreat = league.contains("GREAT", ignoreCase = true)
-            val isUltra = league.contains("ULTRA", ignoreCase = true)
-            val normKey = when {
-                isGreat -> "GREAT"
-                isUltra -> "ULTRA"
-                else -> "MASTER"
+            val normLeague = normalizeLeagueKeyStatic(league)
+            TOP_META_POOL_CACHE[normLeague]?.let { return it }
+            val candidates = getTop100MetaCandidatesForLeagueStatic(normLeague, 100).map { it.name }
+            if (candidates.isNotEmpty()) {
+                if (DYNAMIC_POKEMON_DATABASE.isNotEmpty()) {
+                    TOP_META_POOL_CACHE[normLeague] = candidates
+                }
+                return candidates
             }
-            TOP_META_POOL_CACHE[normKey]?.let { return it }
+            val isGreat = normLeague == "GREAT LEAGUE" || normLeague == "BATTLE FRONTIER (SPECTRAL)"
+            val isUltra = normLeague == "ULTRA LEAGUE" || normLeague == "BATTLE FRONTIER (CAULDRON)"
             val sorted = getAllPokemonMeta()
                 .filter { !it.speciesId.endsWith("_shadow", ignoreCase = true) && !it.name.startsWith("Shadow ", ignoreCase = true) }
                 .sortedBy {
@@ -4257,7 +4262,7 @@ class OverlayService : LifecycleService() {
                 .map { it.name }
             val result = if (sorted.isNotEmpty()) sorted else listOf("Azumarill", "Clodsire", "Annihilape", "Feraligatr", "Mandibuzz", "Gastrodon")
             if (DYNAMIC_POKEMON_DATABASE.isNotEmpty()) {
-                TOP_META_POOL_CACHE[normKey] = result
+                TOP_META_POOL_CACHE[normLeague] = result
             }
             return result
         }
@@ -4266,20 +4271,10 @@ class OverlayService : LifecycleService() {
         @Volatile var lastPrecomputedTeamSignature: String = ""
 
         fun getTop200MetaPoolForLeagueStatic(league: String): List<String> {
-            val isGreat = league.contains("GREAT", ignoreCase = true)
-            val isUltra = league.contains("ULTRA", ignoreCase = true)
-            val sorted = getAllPokemonMeta()
-                .sortedBy {
-                    when {
-                        isGreat -> it.glRank
-                        isUltra -> it.ulRank
-                        else -> it.mlRank
-                    }
-                }
-                .take(200)
-                .map { it.name }
-                .distinct()
-            return if (sorted.isNotEmpty()) sorted else getTopMetaPoolForLeagueStatic(league)
+            val normLeague = normalizeLeagueKeyStatic(league)
+            val candidates = getTop100MetaCandidatesForLeagueStatic(normLeague, 200).map { it.name }.distinct()
+            if (candidates.isNotEmpty()) return candidates
+            return getTopMetaPoolForLeagueStatic(league)
         }
 
         private fun buildUserSlotCacheKey(
@@ -4292,12 +4287,7 @@ class OverlayService : LifecycleService() {
             ivs: String?,
             oppName: String
         ): String {
-            val normLeague = when {
-                league.contains("MEGA", ignoreCase = true) -> "MEGA"
-                league.contains("GREAT", ignoreCase = true) -> "GL"
-                league.contains("ULTRA", ignoreCase = true) -> "UL"
-                else -> "ML"
-            }
+            val normLeague = getLeagueAbbreviationStatic(league)
             val uSig = "${userName.lowercase().trim()}|${fastMove.orEmpty().lowercase().trim()}|${charged1.orEmpty().lowercase().trim()}|${charged2.orEmpty().lowercase().trim()}|${cp ?: 0}|${ivs.orEmpty().trim()}"
             val oSig = oppName.lowercase().trim()
             return "$normLeague||$uSig||$oSig"
@@ -5131,24 +5121,9 @@ class OverlayService : LifecycleService() {
             league: String,
             seasonLogs: List<Pair<Long, List<String>>>
         ): BlendedSeasonMetaDistribution {
-            val isGreat = league.contains("GREAT", ignoreCase = true)
-            val isUltra = league.contains("ULTRA", ignoreCase = true)
-            val normKey = when {
-                isGreat -> "GREAT"
-                isUltra -> "ULTRA"
-                else -> "MASTER"
-            }
+            val normKey = normalizeLeagueKeyStatic(league)
             val rankedPool = TOP_30_RANKED_POOL_CACHE[normKey] ?: run {
-                val computed = getAllPokemonMeta()
-                    .filter { !it.speciesId.endsWith("_shadow", ignoreCase = true) && !it.name.startsWith("Shadow ", ignoreCase = true) }
-                    .sortedBy {
-                        when {
-                            isGreat -> it.glRank
-                            isUltra -> it.ulRank
-                            else -> it.mlRank
-                        }
-                    }
-                    .take(100)
+                val computed = getTop100MetaCandidatesForLeagueStatic(normKey, 100)
                     .map { it.name }
                     .ifEmpty { getTopMetaPoolForLeagueStatic(league) }
                 if (DYNAMIC_POKEMON_DATABASE.isNotEmpty()) {
@@ -5652,20 +5627,17 @@ class OverlayService : LifecycleService() {
         )
 
         fun getTop100MetaCandidatesForLeagueStatic(league: String, maxLimit: Int = 200): List<TeamMember> {
-            val normLeague = when {
-                league.contains("MEGA", ignoreCase = true) -> "MEGA MASTER LEAGUE"
-                league.contains("GREAT", ignoreCase = true) -> "GREAT LEAGUE"
-                league.contains("ULTRA", ignoreCase = true) -> "ULTRA LEAGUE"
-                else -> "MASTER LEAGUE"
-            }
-            val allowMega = normLeague == "MEGA MASTER LEAGUE"
-            val isGreat = normLeague == "GREAT LEAGUE"
-            val isUltra = normLeague == "ULTRA LEAGUE"
+            val normLeague = normalizeLeagueKeyStatic(league)
+            val isBfCup = isBattleFrontierLeagueStatic(normLeague)
+            val allowMega = normLeague == "MEGA MASTER LEAGUE" || normLeague == "BATTLE FRONTIER (CAULDRON)"
+            val isGreat = normLeague == "GREAT LEAGUE" || normLeague == "BATTLE FRONTIER (SPECTRAL)"
+            val isUltra = normLeague == "ULTRA LEAGUE" || normLeague == "BATTLE FRONTIER (CAULDRON)"
 
             val allMeta = getAllPokemonMeta()
             val bySpeciesId = allMeta.associateBy { it.speciesId.lowercase() }
             val result = ArrayList<TeamMember>(maxLimit)
             val seenNames = HashSet<String>()
+            val rankingsMap = LIVE_RANKINGS_MAP[normLeague]
 
             fun isMegaOrPrimal(name: String, speciesId: String): Boolean {
                 val n = name.lowercase()
@@ -5678,7 +5650,9 @@ class OverlayService : LifecycleService() {
                 val cleanKey = candidateName.trim().lowercase()
                 if (cleanKey.isEmpty() || !seenNames.add(cleanKey)) return
                 val resolved = resolveRecommendedMovesForSpecies(candidateName, normLeague) ?: return
-                if (!allowMega && isMegaOrPrimal(resolved.name, resolved.speciesId)) {
+                val baseId = resolved.speciesId.lowercase().removeSuffix("_shadow")
+                val inCupRankings = rankingsMap?.containsKey(baseId) == true || rankingsMap?.containsKey("${baseId}_shadow") == true
+                if (!allowMega && !inCupRankings && isMegaOrPrimal(resolved.name, resolved.speciesId)) {
                     seenNames.remove(cleanKey)
                     return
                 }
@@ -5705,7 +5679,6 @@ class OverlayService : LifecycleService() {
                 )
             }
 
-            val rankingsMap = LIVE_RANKINGS_MAP[normLeague]
             if (rankingsMap != null && rankingsMap.isNotEmpty()) {
                 val sortedEntries = rankingsMap.values.sortedBy { it.rank }
                 for (entry in sortedEntries) {
@@ -5724,6 +5697,37 @@ class OverlayService : LifecycleService() {
                         addCandidateFromName(displayName)
                     }
                 }
+                if (isBfCup && result.size >= 15) {
+                    return result.take(maxLimit)
+                }
+            }
+
+            if (isBfCup && result.isEmpty()) {
+                val bfSeed = when (normLeague) {
+                    "BATTLE FRONTIER (SPECTRAL)" -> listOf(
+                        "Ninetales (Alolan)", "Weezing (Galarian)", "Dewgong", "Piloswine", "Shadow Piloswine",
+                        "Ledian", "Jellicent", "Arctibax", "Talonflame", "Shadow Scizor", "Scizor",
+                        "Shadowcharizard", "Swalot", "Golisopod", "Shadow Gligar", "Gligar", "Drifblim",
+                        "Shadow Drifblim", "Sandslash (Alolan)", "Shadow Sandslash (Alolan)"
+                    )
+                    "BATTLE FRONTIER (CAULDRON)" -> listOf(
+                        "Weezing (Galarian)", "Guzzlord", "Drapion", "Shadow Drapion", "Tentacruel",
+                        "Skuntank", "Shadow Skuntank", "Dragalge", "Overqwil", "Nidoqueen", "Shadow Nidoqueen",
+                        "Qwilfish (Hisuian)", "Venusaur", "Shadow Venusaur", "Muk (Alolan)", "Toxicroak",
+                        "Swalot", "Salazzle", "Golbat", "Crobat"
+                    )
+                    else -> listOf(
+                        "Rhyperior", "Shadow Rhyperior", "Florges", "Zacian", "Kyurem", "Gyarados",
+                        "Shadow Gyarados", "Dragonite", "Shadow Dragonite", "Landorus (Therian)", "Garchomp",
+                        "Shadow Garchomp", "Primarina", "Mamoswine", "Shadow Mamoswine", "Metagross",
+                        "Togekiss", "Excadrill", "Ursaluna", "Goodra"
+                    )
+                }
+                for (name in bfSeed) {
+                    if (result.size >= maxLimit) break
+                    addCandidateFromName(name)
+                }
+                return result.take(maxLimit)
             }
 
             if (result.size < maxLimit) {
@@ -6417,6 +6421,9 @@ class OverlayService : LifecycleService() {
 
         fun getLeagueAbbreviationStatic(league: String): String {
             return when {
+                league.contains("SPECTRAL", ignoreCase = true) -> "BF-Spec"
+                league.contains("CAULDRON", ignoreCase = true) -> "BF-Caul"
+                league.contains("FRONTIER", ignoreCase = true) -> "BF-ML"
                 league.contains("MEGA", ignoreCase = true) -> "MML"
                 league.contains("GREAT", ignoreCase = true) -> "GL"
                 league.contains("ULTRA", ignoreCase = true) -> "UL"
@@ -6658,15 +6665,10 @@ class OverlayService : LifecycleService() {
             seasonLogs: List<Pair<Long, List<String>>> = emptyList()
         ): AntiMetaTeamBuilderResult {
             val t0 = System.currentTimeMillis()
-            val normLeague = when {
-                league.contains("MEGA", ignoreCase = true) -> "MEGA MASTER LEAGUE"
-                league.contains("GREAT", ignoreCase = true) -> "GREAT LEAGUE"
-                league.contains("ULTRA", ignoreCase = true) -> "ULTRA LEAGUE"
-                else -> "MASTER LEAGUE"
-            }
-            val allowMega = normLeague == "MEGA MASTER LEAGUE"
-            val isGreat = normLeague == "GREAT LEAGUE"
-            val isUltra = normLeague == "ULTRA LEAGUE"
+            val normLeague = normalizeLeagueKeyStatic(league)
+            val allowMega = normLeague == "MEGA MASTER LEAGUE" || normLeague == "BATTLE FRONTIER (CAULDRON)"
+            val isGreat = normLeague == "GREAT LEAGUE" || normLeague == "BATTLE FRONTIER (SPECTRAL)"
+            val isUltra = normLeague == "ULTRA LEAGUE" || normLeague == "BATTLE FRONTIER (CAULDRON)"
 
             val roleMeta = computeRoleWeightedTop100MetaStatic(normLeague, seasonLogs)
             val extendedRankedPool = getTop100MetaCandidatesForLeagueStatic(normLeague, 360)
@@ -7696,14 +7698,9 @@ class OverlayService : LifecycleService() {
             opp6RawNames: List<String>
         ): Show6Pick3OptimizerResult {
             val t0 = System.currentTimeMillis()
-            val normLeague = when {
-                league.contains("MEGA", ignoreCase = true) -> "MEGA MASTER LEAGUE"
-                league.contains("GREAT", ignoreCase = true) -> "GREAT LEAGUE"
-                league.contains("ULTRA", ignoreCase = true) -> "ULTRA LEAGUE"
-                else -> "MASTER LEAGUE"
-            }
-            val isGreat = normLeague == "GREAT LEAGUE"
-            val isUltra = normLeague == "ULTRA LEAGUE"
+            val normLeague = normalizeLeagueKeyStatic(league)
+            val isGreat = normLeague == "GREAT LEAGUE" || normLeague == "BATTLE FRONTIER (SPECTRAL)"
+            val isUltra = normLeague == "ULTRA LEAGUE" || normLeague == "BATTLE FRONTIER (CAULDRON)"
             val fallbackPool = getTop100MetaCandidatesForLeagueStatic(normLeague, 24)
 
             val rawMy6 = ArrayList<TeamMember>(6)
@@ -8007,12 +8004,7 @@ class OverlayService : LifecycleService() {
             val filterPokemonList = filterPokemonNames
             val expectedHistoricalPokemon = expectedHistoricalNames
             val t0 = System.currentTimeMillis()
-            val normLeague = when {
-                league.contains("MEGA", ignoreCase = true) -> "MEGA MASTER LEAGUE"
-                league.contains("GREAT", ignoreCase = true) -> "GREAT LEAGUE"
-                league.contains("ULTRA", ignoreCase = true) -> "ULTRA LEAGUE"
-                else -> "MASTER LEAGUE"
-            }
+            val normLeague = normalizeLeagueKeyStatic(league)
             val baseCandidates = getTop100MetaCandidatesForLeagueStatic(normLeague, 120)
             val filterBaseSet = filterPokemonList.map { FormResolver.extractBaseSpecies(it).lowercase() }.filter { it.isNotEmpty() }.toSet()
             val filterExactSet = filterPokemonList.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
@@ -9704,7 +9696,10 @@ class OverlayService : LifecycleService() {
                 Pair("GREAT LEAGUE", "pvpoke_rankings_gl.json"),
                 Pair("ULTRA LEAGUE", "pvpoke_rankings_ul.json"),
                 Pair("MASTER LEAGUE", "pvpoke_rankings_ml.json"),
-                Pair("MEGA MASTER LEAGUE", "pvpoke_rankings_mega_ml.json")
+                Pair("MEGA MASTER LEAGUE", "pvpoke_rankings_mega_ml.json"),
+                Pair("BATTLE FRONTIER (SPECTRAL)", "pvpoke_rankings_bf_spectral.json"),
+                Pair("BATTLE FRONTIER (CAULDRON)", "pvpoke_rankings_bf_cauldron.json"),
+                Pair("BATTLE FRONTIER (MASTER)", "pvpoke_rankings_bf_master.json")
             )
             for ((leagueKey, fileName) in rankingTargets) {
                 if (LIVE_RANKINGS_MAP[leagueKey].isNullOrEmpty()) {
@@ -9732,7 +9727,10 @@ class OverlayService : LifecycleService() {
                     Triple("GREAT LEAGUE", "pvpoke_rankings_gl.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-1500.json"),
                     Triple("ULTRA LEAGUE", "pvpoke_rankings_ul.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-2500.json"),
                     Triple("MASTER LEAGUE", "pvpoke_rankings_ml.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-10000.json"),
-                    Triple("MEGA MASTER LEAGUE", "pvpoke_rankings_mega_ml.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-10000.json")
+                    Triple("MEGA MASTER LEAGUE", "pvpoke_rankings_mega_ml.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-10000.json"),
+                    Triple("BATTLE FRONTIER (SPECTRAL)", "pvpoke_rankings_bf_spectral.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/spectral/overall/rankings-1500.json"),
+                    Triple("BATTLE FRONTIER (CAULDRON)", "pvpoke_rankings_bf_cauldron.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/cauldron/overall/rankings-2500.json"),
+                    Triple("BATTLE FRONTIER (MASTER)", "pvpoke_rankings_bf_master.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/battlefrontiermaster/overall/rankings-10000.json")
                 )
 
                 var didDownloadAny = false

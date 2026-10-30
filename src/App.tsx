@@ -38,6 +38,10 @@ import {
   TeamMember,
   TeamArchetype,
   LeagueType,
+  GBL_LEAGUES,
+  SHOW6_LEAGUES,
+  isBattleFrontierLeague,
+  normalizeLeagueName,
   calculateTurnAlignment,
   resolveFastMove,
   resolveChargedMove,
@@ -962,9 +966,24 @@ export default function App() {
     try {
       localStorage.setItem('gbl_app_combat_mode', mode);
     } catch {}
+    if (mode === 'show6') {
+      if (!isBattleFrontierLeague(antiMetaLeague)) {
+        setAntiMetaLeague('Battle Frontier (Spectral)');
+      }
+      if (selectedOpponentLeague !== 'AUTO' && !isBattleFrontierLeague(selectedOpponentLeague)) {
+        setSelectedOpponentLeague('AUTO');
+      }
+    } else {
+      if (isBattleFrontierLeague(antiMetaLeague)) {
+        setAntiMetaLeague('GREAT LEAGUE');
+      }
+      if (selectedOpponentLeague !== 'AUTO' && isBattleFrontierLeague(selectedOpponentLeague)) {
+        setSelectedOpponentLeague('AUTO');
+      }
+    }
     setStartBattleToast(
       mode === 'show6'
-        ? '🏛️ Switched to Show 6 Mode (Battle Frontier • Independent Teams & Battle Logs)'
+        ? '🏛️ Switched to Show 6 Mode (Battle Frontier Spectral / Cauldron / Master • Independent Teams & Battle Logs)'
         : '🛡️ Switched to Standard GBL Mode (Blind 3 PvP • Independent Teams & Battle Logs)'
     );
     setTimeout(() => setStartBattleToast(null), 2200);
@@ -1436,14 +1455,27 @@ export default function App() {
       const saved = localStorage.getItem('gbl_show6_presets_of_3_v1');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const hasLegacyOpenGbl = parsed.some((p: any) => !isBattleFrontierLeague(p?.league));
+          if (!hasLegacyOpenGbl) return parsed;
+          return parsed.map((p: any) => {
+            if (isBattleFrontierLeague(p?.league)) return p;
+            const norm = String(p?.league || '').toUpperCase();
+            const mappedLg: LeagueType = norm.includes('ULTRA')
+              ? 'Battle Frontier (Cauldron)'
+              : norm.includes('MASTER')
+              ? 'Battle Frontier (Master)'
+              : 'Battle Frontier (Spectral)';
+            return { ...p, league: mappedLg };
+          });
+        }
       }
     } catch {}
     return INITIAL_SHOW6_PRESETS_OF_3;
   });
 
   const [show6SelectedPreset3Id, setShow6SelectedPreset3Id] = useState<string>(() => {
-    return localStorage.getItem('gbl_show6_selected_preset3_id') || 'show6-trio-gl-1';
+    return localStorage.getItem('gbl_show6_selected_preset3_id') || 'show6-preset3-spectral-1';
   });
 
   const [show6Rosters6, setShow6Rosters6] = useState<Show6RosterOf6Preset[]>(() => {
@@ -1451,14 +1483,33 @@ export default function App() {
       const saved = localStorage.getItem('gbl_show6_rosters_of_6_v1');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const isUnmodifiedLegacyDefaults =
+            parsed.length <= 3 &&
+            parsed.every((r: any) =>
+              ['show6-roster-gl-1', 'show6-roster-ul-1', 'show6-roster-ml-1', 'show6-roster6-gl-1', 'show6-roster6-ul-1', 'show6-roster6-ml-1'].includes(String(r?.id))
+            );
+          if (isUnmodifiedLegacyDefaults) {
+            return INITIAL_SHOW6_ROSTERS_OF_6;
+          }
+          return parsed.map((r: any) => {
+            if (isBattleFrontierLeague(r?.league)) return r;
+            const norm = String(r?.league || '').toUpperCase();
+            const mappedLg: LeagueType = norm.includes('ULTRA')
+              ? 'Battle Frontier (Cauldron)'
+              : norm.includes('MASTER')
+              ? 'Battle Frontier (Master)'
+              : 'Battle Frontier (Spectral)';
+            return { ...r, league: mappedLg };
+          });
+        }
       }
     } catch {}
     return INITIAL_SHOW6_ROSTERS_OF_6;
   });
 
   const [selectedShow6Roster6Id, setSelectedShow6Roster6Id] = useState<string>(() => {
-    return localStorage.getItem('gbl_selected_show6_roster6_id') || 'show6-roster-gl-1';
+    return localStorage.getItem('gbl_selected_show6_roster6_id') || 'show6-roster6-spectral-1';
   });
 
   useEffect(() => {
@@ -1513,9 +1564,9 @@ export default function App() {
   // SHOW 6 DUAL TEAM BUILDERS STATE (Mode 1: 6v6 Pick-3 & Mode 2: Blind Show-6)
   // ============================================================================
   const [show6ActiveBuilderTab, setShow6ActiveBuilderTab] = useState<'pick3' | 'blind6'>('pick3');
-  const [show6Pick3League, setShow6Pick3League] = useState<LeagueType>('GREAT LEAGUE');
+  const [show6Pick3League, setShow6Pick3League] = useState<LeagueType>('Battle Frontier (Spectral)');
   const [show6My6, setShow6My6] = useState<string[]>(() => {
-    const def = getDefaultShow6RosterNames('GREAT LEAGUE');
+    const def = getDefaultShow6RosterNames('Battle Frontier (Spectral)');
     return def.my6;
   });
   const [show6Opponent6, setShow6Opponent6] = useState<string[]>(() => {
@@ -1523,10 +1574,16 @@ export default function App() {
       const saved = localStorage.getItem('gbl_show6_opponent_6_v1');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length === 6) return parsed;
+        if (Array.isArray(parsed) && parsed.length === 6) {
+          const isOldGlDefault =
+            parsed[0] === 'Clodsire' ||
+            parsed[0] === 'Azumarill' ||
+            parsed.includes('Annihilape');
+          if (!isOldGlDefault) return parsed;
+        }
       }
     } catch {}
-    return getDefaultShow6RosterNames('GREAT LEAGUE').opp6;
+    return getDefaultShow6RosterNames('Battle Frontier (Spectral)').opp6;
   });
   const [show6NewRosterName, setShow6NewRosterName] = useState<string>('');
   const [show6SlotAutocomplete, setShow6SlotAutocomplete] = useState<{
@@ -1535,9 +1592,9 @@ export default function App() {
   } | null>(null);
   const [show6Pick3Result, setShow6Pick3Result] = useState<Show6Pick3MatchupResult | null>(() =>
     evaluateShow6Pick3Matchup(
-      'GREAT LEAGUE',
-      getDefaultShow6RosterNames('GREAT LEAGUE').my6,
-      getDefaultShow6RosterNames('GREAT LEAGUE').opp6
+      'Battle Frontier (Spectral)',
+      getDefaultShow6RosterNames('Battle Frontier (Spectral)').my6,
+      getDefaultShow6RosterNames('Battle Frontier (Spectral)').opp6
     )
   );
 
@@ -1548,7 +1605,7 @@ export default function App() {
   }, [show6Opponent6]);
 
   // Mode 2: Blind Show 6 Meta Roster Builder State (Per-League Persisted Whitelist & Banlist + Clear Option)
-  const [blindShow6League, setBlindShow6League] = useState<LeagueType>('GREAT LEAGUE');
+  const [blindShow6League, setBlindShow6League] = useState<LeagueType>('Battle Frontier (Spectral)');
   const [blindShow6LockedSlots, setBlindShow6LockedSlots] = useState<string[]>(['', '', '', '', '']);
   const [blindShow6FilterMode, setBlindShow6FilterMode] = useState<'OPEN' | 'WHITELIST' | 'BANLIST'>('OPEN');
   // User's Clarifying Answer #3: Method to choose Option 2 (Comma/Newline Text Paste) or Option 3 (Autocomplete Chip Picker)
@@ -1559,7 +1616,10 @@ export default function App() {
       'GREAT LEAGUE': [],
       'ULTRA LEAGUE': [],
       'MASTER LEAGUE': [],
-      'MEGA MASTER LEAGUE': []
+      'MEGA MASTER LEAGUE': [],
+      'Battle Frontier (Spectral)': [],
+      'Battle Frontier (Cauldron)': [],
+      'Battle Frontier (Master)': []
     };
     try {
       const raw = localStorage.getItem('gbl_show6_whitelist_by_league_v1');
@@ -1578,7 +1638,10 @@ export default function App() {
       'GREAT LEAGUE': [],
       'ULTRA LEAGUE': [],
       'MASTER LEAGUE': [],
-      'MEGA MASTER LEAGUE': []
+      'MEGA MASTER LEAGUE': [],
+      'Battle Frontier (Spectral)': [],
+      'Battle Frontier (Cauldron)': [],
+      'Battle Frontier (Master)': []
     };
     try {
       const raw = localStorage.getItem('gbl_show6_banlist_by_league_v1');
@@ -1615,7 +1678,7 @@ export default function App() {
       : [];
 
   const [blindShow6FilterTextDraft, setBlindShow6FilterTextDraft] = useState<string>(() =>
-    (show6WhitelistByLeague['GREAT LEAGUE'] || []).join(', ')
+    (show6WhitelistByLeague['Battle Frontier (Spectral)'] || []).join(', ')
   );
 
   // Sync text draft whenever league or filter mode changes
@@ -1669,26 +1732,26 @@ export default function App() {
 
   const [blindShow6FilterChipQuery, setBlindShow6FilterChipQuery] = useState<string>('');
   const [blindShow6HistoricalText, setBlindShow6HistoricalText] = useState<string>(
-    'Azumarill, Clodsire, Mandibuzz, Feraligatr, Annihilape, Wigglytuff'
+    'Ninetales (Alolan), Weezing (Galarian), Dewgong, Piloswine, Ledian, Arctibax'
   );
   const [blindShow6HistoricalChips, setBlindShow6HistoricalChips] = useState<string[]>([
-    'Azumarill',
-    'Clodsire',
-    'Mandibuzz',
-    'Feraligatr',
-    'Annihilape',
-    'Wigglytuff'
+    'Ninetales (Alolan)',
+    'Weezing (Galarian)',
+    'Dewgong',
+    'Piloswine',
+    'Ledian',
+    'Arctibax'
   ]);
   const [blindShow6HistoricalChipQuery, setBlindShow6HistoricalChipQuery] = useState<string>('');
   const [blindShow6HistoricalWeightPct, setBlindShow6HistoricalWeightPct] = useState<number>(35);
   const [blindShow6Result, setBlindShow6Result] = useState<BlindShow6RosterResult | null>(() =>
     generateBlindShow6Roster({
-      league: 'GREAT LEAGUE',
+      league: 'Battle Frontier (Spectral)',
       lockedCoreNames: [],
       metaFilterMode: 'OPEN',
       whitelistNames: [],
       banlistNames: [],
-      historicalExpectedNames: ['Azumarill', 'Clodsire', 'Mandibuzz', 'Feraligatr', 'Annihilape', 'Wigglytuff'],
+      historicalExpectedNames: ['Ninetales (Alolan)', 'Weezing (Galarian)', 'Dewgong', 'Piloswine', 'Ledian', 'Arctibax'],
       historicalWeightPct: 35
     })
   );
@@ -3873,7 +3936,14 @@ export default function App() {
   const [isSimulatingMovesets, setIsSimulatingMovesets] = useState<boolean>(false);
 
   const openCreatePresetModal = () => {
-    const defaultLeague = activePreset?.league || 'GREAT LEAGUE';
+    const defaultLeague: LeagueType =
+      appCombatMode === 'show6'
+        ? isBattleFrontierLeague(activePreset?.league)
+          ? activePreset.league
+          : 'Battle Frontier (Spectral)'
+        : activePreset?.league && !isBattleFrontierLeague(activePreset.league)
+        ? activePreset.league
+        : 'GREAT LEAGUE';
     setEditingPresetId(null);
     setNewPresetName('');
     setNewPresetLeague(defaultLeague);
@@ -6793,9 +6863,12 @@ export default function App() {
                           : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      Auto ({activePreset.league.split(' ')[0]})
+                      Auto ({activePreset.league.includes('Spectral') ? 'Spectral' : activePreset.league.includes('Cauldron') ? 'Cauldron' : activePreset.league.includes('Battle Frontier') ? 'BF Master' : activePreset.league.split(' ')[0]})
                     </button>
-                    {(['MEGA MASTER LEAGUE', 'MASTER LEAGUE', 'ULTRA LEAGUE', 'GREAT LEAGUE'] as const).map((lg) => (
+                    {(appCombatMode === 'show6'
+                      ? SHOW6_LEAGUES
+                      : (['MEGA MASTER LEAGUE', 'MASTER LEAGUE', 'ULTRA LEAGUE', 'GREAT LEAGUE'] as const)
+                    ).map((lg) => (
                       <button
                         key={lg}
                         onClick={() => setSelectedOpponentLeague(lg)}
@@ -6805,7 +6878,15 @@ export default function App() {
                             : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
                         }`}
                       >
-                        {lg === 'MEGA MASTER LEAGUE' ? 'MEGA ML' : lg.split(' ')[0]}
+                        {lg === 'Battle Frontier (Spectral)'
+                          ? 'BF Spectral'
+                          : lg === 'Battle Frontier (Cauldron)'
+                          ? 'BF Cauldron'
+                          : lg === 'Battle Frontier (Master)'
+                          ? 'BF Master'
+                          : lg === 'MEGA MASTER LEAGUE'
+                          ? 'MEGA ML'
+                          : lg.split(' ')[0]}
                       </button>
                     ))}
                   </div>
@@ -7233,14 +7314,16 @@ export default function App() {
                             onChange={(e) => {
                               const nextLg = e.target.value as LeagueType;
                               setShow6Pick3League(nextLg);
-                              handleRunShow6Pick3Optimizer(nextLg, show6My6, show6Opponent6);
+                              const def = getDefaultShow6RosterNames(nextLg);
+                              setShow6My6(def.my6);
+                              setShow6Opponent6(def.opp6);
+                              handleRunShow6Pick3Optimizer(nextLg, def.my6, def.opp6);
                             }}
                             className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white"
                           >
-                            <option value="GREAT LEAGUE">GREAT LEAGUE (1500)</option>
-                            <option value="ULTRA LEAGUE">ULTRA LEAGUE (2500)</option>
-                            <option value="MASTER LEAGUE">MASTER LEAGUE (10000)</option>
-                            <option value="MEGA MASTER LEAGUE">MEGA MASTER LEAGUE</option>
+                            <option value="Battle Frontier (Spectral)">Battle Frontier (Spectral) (1500 CP)</option>
+                            <option value="Battle Frontier (Cauldron)">Battle Frontier (Cauldron) (2500 CP)</option>
+                            <option value="Battle Frontier (Master)">Battle Frontier (Master) (Uncapped CP)</option>
                           </select>
                           <button
                             type="button"
@@ -7575,13 +7658,18 @@ export default function App() {
                         <div className="flex items-center gap-2 shrink-0">
                           <select
                             value={blindShow6League}
-                            onChange={(e) => setBlindShow6League(e.target.value as LeagueType)}
+                            onChange={(e) => {
+                              const nextLg = e.target.value as LeagueType;
+                              setBlindShow6League(nextLg);
+                              const sampleHist = getDefaultShow6RosterNames(nextLg).opp6;
+                              setBlindShow6HistoricalChips(sampleHist);
+                              setBlindShow6HistoricalText(sampleHist.join(', '));
+                            }}
                             className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white"
                           >
-                            <option value="GREAT LEAGUE">GREAT LEAGUE (1500)</option>
-                            <option value="ULTRA LEAGUE">ULTRA LEAGUE (2500)</option>
-                            <option value="MASTER LEAGUE">MASTER LEAGUE (10000)</option>
-                            <option value="MEGA MASTER LEAGUE">MEGA MASTER LEAGUE</option>
+                            <option value="Battle Frontier (Spectral)">Battle Frontier (Spectral) (1500 CP)</option>
+                            <option value="Battle Frontier (Cauldron)">Battle Frontier (Cauldron) (2500 CP)</option>
+                            <option value="Battle Frontier (Master)">Battle Frontier (Master) (Uncapped CP)</option>
                           </select>
                           <button
                             type="button"
@@ -8155,13 +8243,18 @@ export default function App() {
                         1. Target League
                       </label>
                       <div className="grid grid-cols-2 gap-1.5">
-                        {(
-                          [
-                            { id: 'GREAT LEAGUE', label: 'Great (GL)' },
-                            { id: 'ULTRA LEAGUE', label: 'Ultra (UL)' },
-                            { id: 'MASTER LEAGUE', label: 'Master (ML)' },
-                            { id: 'MEGA MASTER LEAGUE', label: 'Mega ML (MML)' }
-                          ] as Array<{ id: LeagueType; label: string }>
+                        {(appCombatMode === 'show6'
+                          ? ([
+                              { id: 'Battle Frontier (Spectral)', label: 'Spectral (1500)' },
+                              { id: 'Battle Frontier (Cauldron)', label: 'Cauldron (2500)' },
+                              { id: 'Battle Frontier (Master)', label: 'BF Master' }
+                            ] as Array<{ id: LeagueType; label: string }>)
+                          : ([
+                              { id: 'GREAT LEAGUE', label: 'Great (GL)' },
+                              { id: 'ULTRA LEAGUE', label: 'Ultra (UL)' },
+                              { id: 'MASTER LEAGUE', label: 'Master (ML)' },
+                              { id: 'MEGA MASTER LEAGUE', label: 'Mega ML (MML)' }
+                            ] as Array<{ id: LeagueType; label: string }>)
                         ).map((lg) => (
                           <button
                             key={lg.id}
@@ -8958,10 +9051,20 @@ export default function App() {
                           }}
                           className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400"
                         >
-                          <option value="GREAT LEAGUE">GREAT LEAGUE (Max 1500 CP)</option>
-                          <option value="ULTRA LEAGUE">ULTRA LEAGUE (Max 2500 CP)</option>
-                          <option value="MASTER LEAGUE">MASTER LEAGUE (No CP Limit)</option>
-                          <option value="MEGA MASTER LEAGUE">MEGA MASTER LEAGUE (Megas &amp; Primals)</option>
+                          {appCombatMode === 'show6' ? (
+                            <>
+                              <option value="Battle Frontier (Spectral)">Battle Frontier (Spectral) (Max 1500 CP)</option>
+                              <option value="Battle Frontier (Cauldron)">Battle Frontier (Cauldron) (Max 2500 CP)</option>
+                              <option value="Battle Frontier (Master)">Battle Frontier (Master) (No CP Limit)</option>
+                            </>
+                          ) : (
+                            <>
+                              <option value="GREAT LEAGUE">GREAT LEAGUE (Max 1500 CP)</option>
+                              <option value="ULTRA LEAGUE">ULTRA LEAGUE (Max 2500 CP)</option>
+                              <option value="MASTER LEAGUE">MASTER LEAGUE (No CP Limit)</option>
+                              <option value="MEGA MASTER LEAGUE">MEGA MASTER LEAGUE (Megas &amp; Primals)</option>
+                            </>
+                          )}
                         </select>
                       </div>
                     </div>
@@ -11606,10 +11709,20 @@ export default function App() {
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-semibold"
                     >
                       <option value="ALL LEAGUES">ALL LEAGUES</option>
-                      <option value="GREAT LEAGUE">GREAT LEAGUE</option>
-                      <option value="ULTRA LEAGUE">ULTRA LEAGUE</option>
-                      <option value="MASTER LEAGUE">MASTER LEAGUE</option>
-                      <option value="MEGA MASTER LEAGUE">MEGA MASTER LEAGUE</option>
+                      {appCombatMode === 'show6' ? (
+                        <>
+                          <option value="Battle Frontier (Spectral)">Battle Frontier (Spectral)</option>
+                          <option value="Battle Frontier (Cauldron)">Battle Frontier (Cauldron)</option>
+                          <option value="Battle Frontier (Master)">Battle Frontier (Master)</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="GREAT LEAGUE">GREAT LEAGUE</option>
+                          <option value="ULTRA LEAGUE">ULTRA LEAGUE</option>
+                          <option value="MASTER LEAGUE">MASTER LEAGUE</option>
+                          <option value="MEGA MASTER LEAGUE">MEGA MASTER LEAGUE</option>
+                        </>
+                      )}
                     </select>
                   </div>
 

@@ -495,7 +495,10 @@ class MainActivity : AppCompatActivity() {
         Triple("GREAT LEAGUE", "pvpoke_rankings_gl.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-1500.json"),
         Triple("ULTRA LEAGUE", "pvpoke_rankings_ul.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-2500.json"),
         Triple("MASTER LEAGUE", "pvpoke_rankings_ml.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-10000.json"),
-        Triple("MEGA MASTER LEAGUE", "pvpoke_rankings_mega_ml.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-10000.json")
+        Triple("MEGA MASTER LEAGUE", "pvpoke_rankings_mega_ml.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-10000.json"),
+        Triple("BATTLE FRONTIER (SPECTRAL)", "pvpoke_rankings_bf_spectral.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/spectral/overall/rankings-1500.json"),
+        Triple("BATTLE FRONTIER (CAULDRON)", "pvpoke_rankings_bf_cauldron.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/cauldron/overall/rankings-2500.json"),
+        Triple("BATTLE FRONTIER (MASTER)", "pvpoke_rankings_bf_master.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/battlefrontiermaster/overall/rankings-10000.json")
     )
 
     // Android 13+ Notification permission launcher
@@ -3130,20 +3133,38 @@ class MainActivity : AppCompatActivity() {
         if (!::spinnerLogFilterLeague.isInitialized) return
         isUpdatingLogFilterSpinners = true
 
-        val leagueLabels = listOf(
-            "All Leagues",
-            "GREAT LEAGUE",
-            "ULTRA LEAGUE",
-            "MASTER LEAGUE",
-            "MEGA MASTER LEAGUE"
-        )
-        val leagueKeys = listOf(
-            "ALL",
-            "GREAT LEAGUE",
-            "ULTRA LEAGUE",
-            "MASTER LEAGUE",
-            "MEGA MASTER LEAGUE"
-        )
+        val leagueLabels = if (isShow6CombatMode()) {
+            listOf(
+                "All Leagues",
+                "Battle Frontier (Spectral)",
+                "Battle Frontier (Cauldron)",
+                "Battle Frontier (Master)"
+            )
+        } else {
+            listOf(
+                "All Leagues",
+                "GREAT LEAGUE",
+                "ULTRA LEAGUE",
+                "MASTER LEAGUE",
+                "MEGA MASTER LEAGUE"
+            )
+        }
+        val leagueKeys = if (isShow6CombatMode()) {
+            listOf(
+                "ALL",
+                "Battle Frontier (Spectral)",
+                "Battle Frontier (Cauldron)",
+                "Battle Frontier (Master)"
+            )
+        } else {
+            listOf(
+                "ALL",
+                "GREAT LEAGUE",
+                "ULTRA LEAGUE",
+                "MASTER LEAGUE",
+                "MEGA MASTER LEAGUE"
+            )
+        }
         spinnerLogFilterLeague.adapter = createThemedSpinnerAdapter(leagueLabels)
         val lgIdx = leagueKeys.indexOf(selectedLogLeagueFilter).takeIf { it >= 0 } ?: 0
         spinnerLogFilterLeague.setSelection(lgIdx, false)
@@ -5787,6 +5808,21 @@ class MainActivity : AppCompatActivity() {
 
     private fun getLeagueTop3Defaults(league: String): List<PokemonSlot> {
         return when {
+            league.contains("SPECTRAL", ignoreCase = true) -> listOf(
+                PokemonSlot("Ninetales (Alolan)", 1495, "Powder Snow", "Weather Ball (Ice)", "Dazzling Gleam"),
+                PokemonSlot("Weezing (Galarian)", 1495, "Fairy Wind", "Brutal Swing", "Sludge"),
+                PokemonSlot("Dewgong", 1497, "Ice Shard", "Icy Wind", "Drill Run")
+            )
+            league.contains("CAULDRON", ignoreCase = true) -> listOf(
+                PokemonSlot("Weezing (Galarian)", 2483, "Fairy Wind", "Brutal Swing", "Play Rough"),
+                PokemonSlot("Guzzlord", 2497, "Dragon Tail", "Brutal Swing", "Sludge Bomb"),
+                PokemonSlot("Drapion", 2491, "Poison Sting", "Crunch", "Aqua Tail")
+            )
+            league.contains("FRONTIER", ignoreCase = true) -> listOf(
+                PokemonSlot("Rhyperior", 4221, "Mud-Slap", "Breaking Swipe", "Rock Wrecker"),
+                PokemonSlot("Florges", 3657, "Fairy Wind", "Chilling Water", "Moonblast"),
+                PokemonSlot("Zacian", 4241, "Quick Attack", "Close Combat", "Play Rough")
+            )
             league.contains("MEGA", ignoreCase = true) -> listOf(
                 PokemonSlot("Mega Rayquaza", 5728, "Dragon Tail", "Breaking Swipe", "Dragon Ascent"),
                 PokemonSlot("Primal Groudon", 5910, "Mud Shot", "Precipice Blades", "Fire Punch"),
@@ -5813,31 +5849,68 @@ class MainActivity : AppCompatActivity() {
     private fun ensureDefaultPresets() {
         val existing = loadPresets()
         if (existing.isEmpty()) {
-            val defaults = listOf(
-                TeamPreset(
-                    id = "preset-ml-1",
-                    name = "Master: Palkia-O / Zacian-C / Dialga-O",
-                    league = "MASTER LEAGUE",
-                    pokemon = getLeagueTop3Defaults("MASTER LEAGUE"),
-                    isSelected = true
-                ),
-                TeamPreset(
-                    id = "preset-ul-1",
-                    name = "Ultra: Zygarde / Feraligatr / Giratina-A",
-                    league = "ULTRA LEAGUE",
-                    pokemon = getLeagueTop3Defaults("ULTRA LEAGUE")
-                ),
-                TeamPreset(
-                    id = "preset-gl-1",
-                    name = "Great: Clodsire / Feraligatr / Mandibuzz",
-                    league = "GREAT LEAGUE",
-                    pokemon = getLeagueTop3Defaults("GREAT LEAGUE")
+            val defaults = if (isShow6CombatMode()) {
+                listOf(
+                    TeamPreset(
+                        id = "show6-preset3-spectral-1",
+                        name = "BF Spectral Trio: Ninetales-A / Weezing-G / Dewgong",
+                        league = "Battle Frontier (Spectral)",
+                        pokemon = getLeagueTop3Defaults("Battle Frontier (Spectral)"),
+                        isSelected = true
+                    ),
+                    TeamPreset(
+                        id = "show6-preset3-cauldron-1",
+                        name = "BF Cauldron Trio: Weezing-G / Guzzlord / Drapion",
+                        league = "Battle Frontier (Cauldron)",
+                        pokemon = getLeagueTop3Defaults("Battle Frontier (Cauldron)")
+                    ),
+                    TeamPreset(
+                        id = "show6-preset3-master-1",
+                        name = "BF Master Trio: Rhyperior / Florges / Zacian",
+                        league = "Battle Frontier (Master)",
+                        pokemon = getLeagueTop3Defaults("Battle Frontier (Master)")
+                    )
                 )
-            )
-            savePresets(defaults)
-            if (!prefs.contains(PREFS_KEY_SELECTED_PRESET)) {
-                prefs.edit().putString(PREFS_KEY_SELECTED_PRESET, "preset-ml-1").apply()
+            } else {
+                listOf(
+                    TeamPreset(
+                        id = "preset-ml-1",
+                        name = "Master: Palkia-O / Zacian-C / Dialga-O",
+                        league = "MASTER LEAGUE",
+                        pokemon = getLeagueTop3Defaults("MASTER LEAGUE"),
+                        isSelected = true
+                    ),
+                    TeamPreset(
+                        id = "preset-ul-1",
+                        name = "Ultra: Zygarde / Feraligatr / Giratina-A",
+                        league = "ULTRA LEAGUE",
+                        pokemon = getLeagueTop3Defaults("ULTRA LEAGUE")
+                    ),
+                    TeamPreset(
+                        id = "preset-gl-1",
+                        name = "Great: Clodsire / Feraligatr / Mandibuzz",
+                        league = "GREAT LEAGUE",
+                        pokemon = getLeagueTop3Defaults("GREAT LEAGUE")
+                    )
+                )
             }
+            savePresets(defaults)
+            if (!prefs.contains(activePresetsSelectedKey())) {
+                prefs.edit().putString(activePresetsSelectedKey(), defaults.first().id).apply()
+            }
+        } else if (isShow6CombatMode() && existing.any { !OverlayService.isBattleFrontierLeagueStatic(it.league) }) {
+            val migrated = existing.map { p ->
+                if (OverlayService.isBattleFrontierLeagueStatic(p.league)) p
+                else {
+                    val mappedLg = when {
+                        p.league.contains("ULTRA", ignoreCase = true) -> "Battle Frontier (Cauldron)"
+                        p.league.contains("MASTER", ignoreCase = true) -> "Battle Frontier (Master)"
+                        else -> "Battle Frontier (Spectral)"
+                    }
+                    p.copy(league = mappedLg)
+                }
+            }
+            savePresets(migrated)
         }
     }
 
@@ -5876,6 +5949,9 @@ class MainActivity : AppCompatActivity() {
 
             val maxCp = preset.pokemon.maxOfOrNull { it.cp } ?: 0
             val resolvedLeague = when {
+                preset.league.contains("SPECTRAL", ignoreCase = true) -> "Battle Frontier (Spectral)"
+                preset.league.contains("CAULDRON", ignoreCase = true) -> "Battle Frontier (Cauldron)"
+                preset.league.contains("FRONTIER", ignoreCase = true) -> "Battle Frontier (Master)"
                 preset.league.contains("MEGA", ignoreCase = true) -> "MEGA MASTER LEAGUE"
                 preset.league.contains("GREAT", ignoreCase = true) || (maxCp in 1..1500) -> "GREAT LEAGUE"
                 preset.league.contains("ULTRA", ignoreCase = true) || (maxCp in 1501..2500) -> "ULTRA LEAGUE"
@@ -6146,11 +6222,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupAntiMetaTeamBuilderUi() {
         if (!::spinnerAntiMetaLeague.isInitialized) return
-        val leagues = listOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE", "MEGA MASTER LEAGUE")
+        val leagues = if (isShow6CombatMode()) {
+            listOf("Battle Frontier (Spectral)", "Battle Frontier (Cauldron)", "Battle Frontier (Master)")
+        } else {
+            listOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE", "MEGA MASTER LEAGUE")
+        }
         spinnerAntiMetaLeague.adapter = createThemedSpinnerAdapter(leagues)
 
         val antiMetaLeagueProvider = {
-            spinnerAntiMetaLeague.selectedItem?.toString() ?: "GREAT LEAGUE"
+            spinnerAntiMetaLeague.selectedItem?.toString() ?: leagues.first()
         }
 
         fun updateAntiMetaStatusDefaultName() {
@@ -6249,6 +6329,7 @@ class MainActivity : AppCompatActivity() {
         ensureDefaultPresets()
         updateSettingsCombatModeButtonsUi()
         syncOverlayRunningUiState()
+        setupAntiMetaTeamBuilderUi()
         refreshPresetsUi()
         setupBattleLogFilters()
         renderBattleLogPage()
@@ -6279,34 +6360,51 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadShow6RostersOf6(): List<OverlayService.Companion.Show6RosterPreset> {
+        val defaults = listOf(
+            OverlayService.Companion.Show6RosterPreset(
+                id = "show6-spectral-default",
+                name = "BF Spectral Core (1500 CP)",
+                league = "Battle Frontier (Spectral)",
+                pokemon = listOf("Ninetales (Alolan)", "Weezing (Galarian)", "Dewgong", "Piloswine", "Ledian", "Arctibax")
+            ),
+            OverlayService.Companion.Show6RosterPreset(
+                id = "show6-cauldron-default",
+                name = "BF Cauldron Core (2500 CP)",
+                league = "Battle Frontier (Cauldron)",
+                pokemon = listOf("Weezing (Galarian)", "Guzzlord", "Drapion", "Tentacruel", "Skuntank", "Dragalge")
+            ),
+            OverlayService.Companion.Show6RosterPreset(
+                id = "show6-bfmaster-default",
+                name = "BF Master Core (Uncapped CP)",
+                league = "Battle Frontier (Master)",
+                pokemon = listOf("Rhyperior", "Florges", "Zacian", "Kyurem", "Gyarados", "Dragonite")
+            )
+        )
         val raw = prefs.getString(OverlayService.PREFS_KEY_SHOW6_ROSTERS_OF_6, null)
         if (!raw.isNullOrBlank()) {
             try {
                 val type = object : TypeToken<List<OverlayService.Companion.Show6RosterPreset>>() {}.type
                 val parsed: List<OverlayService.Companion.Show6RosterPreset>? = gson.fromJson(raw, type)
-                if (!parsed.isNullOrEmpty()) return parsed
+                if (!parsed.isNullOrEmpty()) {
+                    val isLegacyDefaults = parsed.all { it.id in setOf("show6-gl-default", "show6-ul-default", "show6-ml-default") }
+                    if (isLegacyDefaults) {
+                        prefs.edit().putString(OverlayService.PREFS_KEY_SHOW6_ROSTERS_OF_6, gson.toJson(defaults)).apply()
+                        return defaults
+                    }
+                    return parsed.map { r ->
+                        if (OverlayService.isBattleFrontierLeagueStatic(r.league)) r
+                        else {
+                            val mappedLg = when {
+                                r.league.contains("ULTRA", ignoreCase = true) -> "Battle Frontier (Cauldron)"
+                                r.league.contains("MASTER", ignoreCase = true) -> "Battle Frontier (Master)"
+                                else -> "Battle Frontier (Spectral)"
+                            }
+                            r.copy(league = mappedLg)
+                        }
+                    }
+                }
             } catch (_: Exception) {}
         }
-        val defaults = listOf(
-            OverlayService.Companion.Show6RosterPreset(
-                id = "show6-gl-default",
-                name = "GL Show 6 Core",
-                league = "GREAT LEAGUE",
-                pokemon = listOf("Azumarill", "Clodsire", "Mandibuzz", "Feraligatr", "Annihilape", "Wigglytuff")
-            ),
-            OverlayService.Companion.Show6RosterPreset(
-                id = "show6-ul-default",
-                name = "UL Show 6 Core",
-                league = "ULTRA LEAGUE",
-                pokemon = listOf("Zygarde", "Feraligatr", "Giratina (Altered)", "Cresselia", "Talonflame", "Clefable")
-            ),
-            OverlayService.Companion.Show6RosterPreset(
-                id = "show6-ml-default",
-                name = "ML Show 6 Core",
-                league = "MASTER LEAGUE",
-                pokemon = listOf("Palkia (Origin)", "Zacian (Crowned)", "Dialga (Origin)", "Landorus (Therian)", "Ho-Oh", "Necrozma (Dusk Mane)")
-            )
-        )
         prefs.edit().putString(OverlayService.PREFS_KEY_SHOW6_ROSTERS_OF_6, gson.toJson(defaults)).apply()
         return defaults
     }
@@ -6318,6 +6416,9 @@ class MainActivity : AppCompatActivity() {
     private fun loadShow6LeagueMap(prefKey: String): MutableMap<String, List<String>> {
         val raw = prefs.getString(prefKey, null)
         val map = mutableMapOf(
+            "Battle Frontier (Spectral)" to emptyList<String>(),
+            "Battle Frontier (Cauldron)" to emptyList<String>(),
+            "Battle Frontier (Master)" to emptyList<String>(),
             "GREAT LEAGUE" to emptyList<String>(),
             "ULTRA LEAGUE" to emptyList<String>(),
             "MASTER LEAGUE" to emptyList<String>(),
@@ -6361,7 +6462,7 @@ class MainActivity : AppCompatActivity() {
         }
         updateSettingsCombatModeButtonsUi()
 
-        val leagues = listOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE", "MEGA MASTER LEAGUE")
+        val leagues = listOf("Battle Frontier (Spectral)", "Battle Frontier (Cauldron)", "Battle Frontier (Master)")
         val spinnerPick3League = findViewById<Spinner>(R.id.spinner_show6_pick3_league) ?: return
         val spinnerBlindLeague = findViewById<Spinner>(R.id.spinner_show6_blind_league) ?: return
         spinnerPick3League.adapter = createThemedSpinnerAdapter(leagues)
@@ -6391,8 +6492,8 @@ class MainActivity : AppCompatActivity() {
             findViewById<AutoCompleteTextView>(R.id.edit_show6_lock_5)
         )
 
-        val pick3LeagueProvider = { spinnerPick3League.selectedItem?.toString() ?: "GREAT LEAGUE" }
-        val blindLeagueProvider = { spinnerBlindLeague.selectedItem?.toString() ?: "GREAT LEAGUE" }
+        val pick3LeagueProvider = { spinnerPick3League.selectedItem?.toString() ?: "Battle Frontier (Spectral)" }
+        val blindLeagueProvider = { spinnerBlindLeague.selectedItem?.toString() ?: "Battle Frontier (Spectral)" }
 
         myInputs.filterNotNull().forEach { input ->
             input.setAdapter(PokemonAutocompleteAdapter(pick3LeagueProvider))
@@ -6419,16 +6520,16 @@ class MainActivity : AppCompatActivity() {
             input.threshold = 1
         }
 
-        // Seed default My 6 & Opponent 6
-        val defaultMy6 = listOf("Azumarill", "Clodsire", "Mandibuzz", "Feraligatr", "Annihilape", "Wigglytuff")
+        // Seed default My 6 & Opponent 6 for Battle Frontier (Spectral)
+        val defaultMy6 = listOf("Ninetales (Alolan)", "Weezing (Galarian)", "Dewgong", "Piloswine", "Ledian", "Arctibax")
         val savedOpp6Raw = prefs.getString(OverlayService.PREFS_KEY_SHOW6_OPPONENT_6, null)
         val defaultOpp6 = if (!savedOpp6Raw.isNullOrBlank()) {
             try {
                 val type = object : TypeToken<List<String>>() {}.type
-                gson.fromJson<List<String>>(savedOpp6Raw, type)?.takeIf { it.size >= 3 }
+                gson.fromJson<List<String>>(savedOpp6Raw, type)?.takeIf { it.size >= 3 && !it.contains("Gastrodon") }
             } catch (_: Exception) { null }
         } else null
-        val initialOpp6 = defaultOpp6 ?: listOf("Gastrodon", "Talonflame", "Drapion (Shadow)", "jumpluff", "Dunsparce", "Corsola (Galarian)")
+        val initialOpp6 = defaultOpp6 ?: listOf("Jellicent", "Talonflame", "Shadow Scizor", "Swalot", "Golisopod", "Shadow Gligar")
 
         myInputs.forEachIndexed { idx, edit ->
             if (edit != null && edit.text.isNullOrBlank()) {
@@ -7393,11 +7494,15 @@ class MainActivity : AppCompatActivity() {
         val editP3C1 = dialogView.findViewById<EditText>(R.id.edit_p3_c1)
         val editP3C2 = dialogView.findViewById<EditText>(R.id.edit_p3_c2)
 
-        val leagues = listOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE", "MEGA MASTER LEAGUE")
+        val leagues = if (isShow6CombatMode()) {
+            listOf("Battle Frontier (Spectral)", "Battle Frontier (Cauldron)", "Battle Frontier (Master)")
+        } else {
+            listOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE", "MEGA MASTER LEAGUE")
+        }
         spinnerLeague.adapter = createThemedSpinnerAdapter(leagues)
 
         val currentLeagueProvider = {
-            spinnerLeague.selectedItem?.toString() ?: "GREAT LEAGUE"
+            spinnerLeague.selectedItem?.toString() ?: leagues.first()
         }
 
         // Apply active theme & optional background watermark logo to the Team Edit dialog FIRST
