@@ -479,10 +479,14 @@ class MainActivity : AppCompatActivity() {
     private val DEFAULT_OVERLAY_TRANSPARENCY_PCT = 72
     private val PREFS_KEY_BATTLE_LOGS: String
         get() = if (isShow6CombatMode()) OverlayService.PREFS_KEY_SHOW6_BATTLE_LOGS else OverlayService.PREFS_KEY_BATTLE_LOGS
-    private val PREFS_KEY_DELETED_LOG_IDS = OverlayService.PREFS_KEY_DELETED_LOG_IDS
-    private val PREFS_KEY_DELETED_TEAM_IDS = OverlayService.PREFS_KEY_DELETED_TEAM_IDS
-    private val PREFS_KEY_DELETED_BATTLES_TRASH = OverlayService.PREFS_KEY_DELETED_LOGS_TRASH
-    private val PREFS_KEY_DELETED_TEAMS_TRASH = OverlayService.PREFS_KEY_DELETED_TEAMS_TRASH
+    private val PREFS_KEY_DELETED_LOG_IDS: String
+        get() = if (isShow6CombatMode()) OverlayService.PREFS_KEY_SHOW6_DELETED_LOG_IDS else OverlayService.PREFS_KEY_DELETED_LOG_IDS
+    private val PREFS_KEY_DELETED_TEAM_IDS: String
+        get() = if (isShow6CombatMode()) OverlayService.PREFS_KEY_SHOW6_DELETED_TEAM_IDS else OverlayService.PREFS_KEY_DELETED_TEAM_IDS
+    private val PREFS_KEY_DELETED_BATTLES_TRASH: String
+        get() = if (isShow6CombatMode()) OverlayService.PREFS_KEY_SHOW6_DELETED_BATTLES_TRASH else OverlayService.PREFS_KEY_DELETED_LOGS_TRASH
+    private val PREFS_KEY_DELETED_TEAMS_TRASH: String
+        get() = if (isShow6CombatMode()) OverlayService.PREFS_KEY_SHOW6_DELETED_TEAMS_TRASH else OverlayService.PREFS_KEY_DELETED_TEAMS_TRASH
     private val PREFS_KEY_GBL_SEASONS_JSON = OverlayService.PREFS_KEY_GBL_SEASONS_JSON
     private val PREFS_KEY_SYNC_GITHUB_TOKEN = OverlayService.PREFS_KEY_SYNC_GITHUB_TOKEN
     private val PREFS_KEY_SYNC_GITHUB_USERNAME = OverlayService.PREFS_KEY_SYNC_GITHUB_USERNAME
@@ -549,19 +553,19 @@ class MainActivity : AppCompatActivity() {
             prefs.edit()
                 .putBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
                 .putBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
-                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 500)
+                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 501)
                 .apply()
-        } else if (prevInstalledVerCode < 500) {
-            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 500).apply()
+        } else if (prevInstalledVerCode < 501) {
+            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 501).apply()
         }
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? MediaProjectionManager
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "5.00"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "5.01"
         } catch (_: Exception) {
-            "5.00"
+            "5.01"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -2854,9 +2858,50 @@ class MainActivity : AppCompatActivity() {
         updateTrashButtonsUi()
     }
 
+    data class DeletedShow6RosterTrashItem(
+        val roster: OverlayService.Companion.Show6RosterPreset,
+        val isOpponent: Boolean = false,
+        val deletedAtMs: Long = System.currentTimeMillis()
+    )
+
+    private fun loadDeletedShow6RostersTrash(): List<DeletedShow6RosterTrashItem> {
+        val raw = prefs.getString(OverlayService.PREFS_KEY_SHOW6_DELETED_ROSTERS_TRASH, null) ?: return emptyList()
+        return try {
+            val type = object : TypeToken<List<DeletedShow6RosterTrashItem>>() {}.type
+            (gson.fromJson<List<DeletedShow6RosterTrashItem>>(raw, type) ?: emptyList()).distinctBy { "${it.isOpponent}_${it.roster.id}" }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun saveDeletedShow6RostersTrash(items: List<DeletedShow6RosterTrashItem>) {
+        val trimmed = items.distinctBy { "${it.isOpponent}_${it.roster.id}" }.take(50)
+        prefs.edit().putString(OverlayService.PREFS_KEY_SHOW6_DELETED_ROSTERS_TRASH, gson.toJson(trimmed)).apply()
+        updateTrashButtonsUi()
+    }
+
+    private fun restoreShow6RosterFromTrash(item: DeletedShow6RosterTrashItem) {
+        val remaining = loadDeletedShow6RostersTrash().filterNot { it.isOpponent == item.isOpponent && it.roster.id == item.roster.id }
+        saveDeletedShow6RostersTrash(remaining)
+        if (item.isOpponent) {
+            val current = loadShow6OpponentRostersOf6().toMutableList()
+            current.removeAll { it.id == item.roster.id }
+            current.add(0, item.roster)
+            saveShow6OpponentRostersOf6(current)
+        } else {
+            val current = loadShow6RostersOf6().toMutableList()
+            current.removeAll { it.id == item.roster.id }
+            current.add(0, item.roster)
+            saveShow6RostersOf6(current)
+        }
+        setupShow6ModeHubUi()
+        updateTrashButtonsUi()
+    }
+
     private fun updateTrashButtonsUi() {
         if (::btnTrashTeams.isInitialized) {
-            val count = loadDeletedTeamsTrash().size
+            val extraShow6Rosters = if (isShow6CombatMode()) loadDeletedShow6RostersTrash().size else 0
+            val count = loadDeletedTeamsTrash().size + extraShow6Rosters
             btnTrashTeams.text = if (count > 0) "🗑️ Trash ($count)" else "🗑️ Trash"
         }
         if (::btnTrashBattleLog.isInitialized) {
@@ -2929,10 +2974,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun showTeamsTrashBinDialog() {
         val trashList = loadDeletedTeamsTrash()
-        if (trashList.isEmpty()) {
+        val rosterTrashList = if (isShow6CombatMode()) loadDeletedShow6RostersTrash() else emptyList()
+        val modeLabel = if (isShow6CombatMode()) "Show 6" else "GBL"
+        if (trashList.isEmpty() && rosterTrashList.isEmpty()) {
             AlertDialog.Builder(this)
-                .setTitle("🗑️ Deleted Teams Trash Bin")
-                .setMessage("No deleted teams in Trash. Any team you delete will appear here so you can restore it anytime.")
+                .setTitle("🗑️ Deleted $modeLabel Teams Trash Bin")
+                .setMessage("No deleted $modeLabel teams in Trash. Show 6 Mode and Standard GBL Mode maintain separate Trash bins.")
                 .setPositiveButton("OK", null)
                 .show()
             return
@@ -2949,6 +2996,67 @@ class MainActivity : AppCompatActivity() {
         scroll.addView(container)
 
         var dialogRef: AlertDialog? = null
+
+        for (rItem in rosterTrashList) {
+            val r = rItem.roster
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setBackgroundColor(0xFF1E293B.toInt())
+                val pad = (10 * density).toInt()
+                setPadding(pad, pad, pad, pad)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = (8 * density).toInt()
+                }
+            }
+            val tag = if (rItem.isOpponent) "⚔️ Opp Pick-6" else "🛡️ My Pick-6"
+            val titleTv = TextView(this).apply {
+                text = "[$tag] ${r.name} (${r.league})"
+                setTextColor(if (rItem.isOpponent) 0xFFFDA4AF.toInt() else 0xFF6EE7B7.toInt())
+                textSize = 13f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            }
+            val monsTv = TextView(this).apply {
+                text = r.pokemon.joinToString(" • ")
+                setTextColor(0xFF94A3B8.toInt())
+                textSize = 11.5f
+                setPadding(0, (3 * density).toInt(), 0, (6 * density).toInt())
+            }
+            val btnRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.END
+            }
+            val restoreBtn = Button(this).apply {
+                text = "♻️ Restore Pick-6"
+                textSize = 11f
+                setTextColor(0xFFFFFFFF.toInt())
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF059669.toInt())
+                setOnClickListener {
+                    restoreShow6RosterFromTrash(rItem)
+                    Toast.makeText(this@MainActivity, "Restored '${r.name}'!", Toast.LENGTH_SHORT).show()
+                    dialogRef?.dismiss()
+                }
+            }
+            val deleteForeverBtn = Button(this).apply {
+                text = "✕ Delete Forever"
+                textSize = 11f
+                setTextColor(0xFFFCA5A5.toInt())
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF450A0A.toInt())
+                setOnClickListener {
+                    saveDeletedShow6RostersTrash(loadDeletedShow6RostersTrash().filterNot { it.isOpponent == rItem.isOpponent && it.roster.id == r.id })
+                    dialogRef?.dismiss()
+                    showTeamsTrashBinDialog()
+                }
+            }
+            btnRow.addView(restoreBtn)
+            btnRow.addView(deleteForeverBtn)
+            card.addView(titleTv)
+            card.addView(monsTv)
+            card.addView(btnRow)
+            container.addView(card)
+        }
 
         for (team in trashList) {
             val card = LinearLayout(this).apply {
@@ -3011,16 +3119,19 @@ class MainActivity : AppCompatActivity() {
 
         applyCurrentAppThemeToSubtree(scroll)
 
+        val totalTrashCount = trashList.size + rosterTrashList.size
         dialogRef = AlertDialog.Builder(this)
-            .setTitle("🗑️ Deleted Teams (${trashList.size})")
+            .setTitle("🗑️ Deleted $modeLabel Teams ($totalTrashCount)")
             .setView(scroll)
             .setPositiveButton("♻️ Restore All") { _, _ ->
+                rosterTrashList.forEach { restoreShow6RosterFromTrash(it) }
                 trashList.forEach { restoreTeamPresetFromTrash(it) }
-                Toast.makeText(this, "Restored ${trashList.size} team(s)!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Restored $totalTrashCount $modeLabel team(s)!", Toast.LENGTH_SHORT).show()
             }
             .setNeutralButton("🗑️ Empty Trash") { _, _ ->
                 saveDeletedTeamsTrash(emptyList())
-                Toast.makeText(this, "Team trash emptied", Toast.LENGTH_SHORT).show()
+                if (isShow6CombatMode()) saveDeletedShow6RostersTrash(emptyList())
+                Toast.makeText(this, "$modeLabel team trash emptied", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Close", null)
             .create()
@@ -3136,6 +3247,7 @@ class MainActivity : AppCompatActivity() {
         val leagueLabels = if (isShow6CombatMode()) {
             listOf(
                 "All Leagues",
+                "GREAT LEAGUE",
                 "Battle Frontier (Spectral)",
                 "Battle Frontier (Cauldron)",
                 "Battle Frontier (Master)"
@@ -3152,6 +3264,7 @@ class MainActivity : AppCompatActivity() {
         val leagueKeys = if (isShow6CombatMode()) {
             listOf(
                 "ALL",
+                "GREAT LEAGUE",
                 "Battle Frontier (Spectral)",
                 "Battle Frontier (Cauldron)",
                 "Battle Frontier (Master)"
@@ -5852,11 +5965,21 @@ class MainActivity : AppCompatActivity() {
             val defaults = if (isShow6CombatMode()) {
                 listOf(
                     TeamPreset(
+                        id = "show6-preset3-gl-1",
+                        name = "BF Great League Trio: Azumarill / Corsola-G / Cradily",
+                        league = "GREAT LEAGUE",
+                        pokemon = listOf(
+                            PokemonSlot("Azumarill", 1499, "Bubble", "Ice Beam", "Play Rough"),
+                            PokemonSlot("Corsola (Galarian)", 1496, "Astonish", "Night Shade", "Power Gem"),
+                            PokemonSlot("Cradily", 1498, "Bullet Seed", "Rock Slide", "Grass Knot")
+                        ),
+                        isSelected = true
+                    ),
+                    TeamPreset(
                         id = "show6-preset3-spectral-1",
                         name = "BF Spectral Trio: Ninetales-A / Weezing-G / Dewgong",
                         league = "Battle Frontier (Spectral)",
-                        pokemon = getLeagueTop3Defaults("Battle Frontier (Spectral)"),
-                        isSelected = true
+                        pokemon = getLeagueTop3Defaults("Battle Frontier (Spectral)")
                     ),
                     TeamPreset(
                         id = "show6-preset3-cauldron-1",
@@ -5898,14 +6021,14 @@ class MainActivity : AppCompatActivity() {
             if (!prefs.contains(PREFS_KEY_SELECTED_PRESET)) {
                 prefs.edit().putString(PREFS_KEY_SELECTED_PRESET, defaults.first().id).apply()
             }
-        } else if (isShow6CombatMode() && existing.any { !OverlayService.isBattleFrontierLeagueStatic(it.league) }) {
+        } else if (isShow6CombatMode() && existing.any { !OverlayService.isShow6EligibleLeagueStatic(it.league) }) {
             val migrated = existing.map { p ->
-                if (OverlayService.isBattleFrontierLeagueStatic(p.league)) p
+                if (OverlayService.isShow6EligibleLeagueStatic(p.league)) p
                 else {
                     val mappedLg = when {
                         p.league.contains("ULTRA", ignoreCase = true) -> "Battle Frontier (Cauldron)"
                         p.league.contains("MASTER", ignoreCase = true) -> "Battle Frontier (Master)"
-                        else -> "Battle Frontier (Spectral)"
+                        else -> "GREAT LEAGUE"
                     }
                     p.copy(league = mappedLg)
                 }
@@ -6223,7 +6346,7 @@ class MainActivity : AppCompatActivity() {
     private fun setupAntiMetaTeamBuilderUi() {
         if (!::spinnerAntiMetaLeague.isInitialized) return
         val leagues = if (isShow6CombatMode()) {
-            listOf("Battle Frontier (Spectral)", "Battle Frontier (Cauldron)", "Battle Frontier (Master)")
+            listOf("GREAT LEAGUE", "Battle Frontier (Spectral)", "Battle Frontier (Cauldron)", "Battle Frontier (Master)")
         } else {
             listOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE", "MEGA MASTER LEAGUE")
         }
@@ -6362,22 +6485,28 @@ class MainActivity : AppCompatActivity() {
     private fun loadShow6RostersOf6(): List<OverlayService.Companion.Show6RosterPreset> {
         val defaults = listOf(
             OverlayService.Companion.Show6RosterPreset(
+                id = "show6-gl-bf-default",
+                name = "BF Open GL Core (1500 CP)",
+                league = "GREAT LEAGUE",
+                pokemon = listOf("Azumarill", "Corsola (Galarian)", "Cradily", "Corviknight", "Feraligatr", "Gastrodon")
+            ),
+            OverlayService.Companion.Show6RosterPreset(
                 id = "show6-spectral-default",
                 name = "BF Spectral Core (1500 CP)",
                 league = "Battle Frontier (Spectral)",
-                pokemon = listOf("Ninetales (Alolan)", "Weezing (Galarian)", "Dewgong", "Piloswine", "Ledian", "Arctibax")
+                pokemon = listOf("Murkrow", "Drifblim", "Turtonator", "Ninetales (Alolan)", "Golisopod", "Rotom (Wash)")
             ),
             OverlayService.Companion.Show6RosterPreset(
                 id = "show6-cauldron-default",
                 name = "BF Cauldron Core (2500 CP)",
                 league = "Battle Frontier (Cauldron)",
-                pokemon = listOf("Weezing (Galarian)", "Guzzlord", "Drapion", "Tentacruel", "Skuntank", "Dragalge")
+                pokemon = listOf("Skeledirge", "Malamar", "Torterra", "Walrein", "Poliwrath", "Dragalge")
             ),
             OverlayService.Companion.Show6RosterPreset(
                 id = "show6-bfmaster-default",
                 name = "BF Master Core (Uncapped CP)",
                 league = "Battle Frontier (Master)",
-                pokemon = listOf("Rhyperior", "Florges", "Zacian", "Kyurem", "Gyarados", "Dragonite")
+                pokemon = listOf("Zacian (Crowned Sword)", "Palkia (Origin)", "Metagross", "Groudon", "Kyurem (Black)", "Gyarados (Mega)")
             )
         )
         val raw = prefs.getString(OverlayService.PREFS_KEY_SHOW6_ROSTERS_OF_6, null)
@@ -6386,18 +6515,13 @@ class MainActivity : AppCompatActivity() {
                 val type = object : TypeToken<List<OverlayService.Companion.Show6RosterPreset>>() {}.type
                 val parsed: List<OverlayService.Companion.Show6RosterPreset>? = gson.fromJson(raw, type)
                 if (!parsed.isNullOrEmpty()) {
-                    val isLegacyDefaults = parsed.all { it.id in setOf("show6-gl-default", "show6-ul-default", "show6-ml-default") }
-                    if (isLegacyDefaults) {
-                        prefs.edit().putString(OverlayService.PREFS_KEY_SHOW6_ROSTERS_OF_6, gson.toJson(defaults)).apply()
-                        return defaults
-                    }
                     return parsed.map { r ->
-                        if (OverlayService.isBattleFrontierLeagueStatic(r.league)) r
+                        if (OverlayService.isShow6EligibleLeagueStatic(r.league)) r
                         else {
                             val mappedLg = when {
                                 r.league.contains("ULTRA", ignoreCase = true) -> "Battle Frontier (Cauldron)"
                                 r.league.contains("MASTER", ignoreCase = true) -> "Battle Frontier (Master)"
-                                else -> "Battle Frontier (Spectral)"
+                                else -> "GREAT LEAGUE"
                             }
                             r.copy(league = mappedLg)
                         }
@@ -6413,13 +6537,56 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putString(OverlayService.PREFS_KEY_SHOW6_ROSTERS_OF_6, gson.toJson(rosters)).apply()
     }
 
+    private fun loadShow6OpponentRostersOf6(): List<OverlayService.Companion.Show6RosterPreset> {
+        val defaults = listOf(
+            OverlayService.Companion.Show6RosterPreset(
+                id = "show6-opp-gl-default",
+                name = "Opp Open GL Meta 6",
+                league = "GREAT LEAGUE",
+                pokemon = listOf("Bastiodon", "Cradily", "Azumarill", "Dedenne", "Gastrodon", "Scizor")
+            ),
+            OverlayService.Companion.Show6RosterPreset(
+                id = "show6-opp-spectral-default",
+                name = "Opp Spectral Meta 6",
+                league = "Battle Frontier (Spectral)",
+                pokemon = listOf("Murkrow", "Swalot", "Jellicent", "Gourgeist", "Regidrago", "Lanturn")
+            ),
+            OverlayService.Companion.Show6RosterPreset(
+                id = "show6-opp-cauldron-default",
+                name = "Opp Cauldron Meta 6",
+                league = "Battle Frontier (Cauldron)",
+                pokemon = listOf("Skeledirge", "Torterra", "Nidoqueen", "Malamar", "Pangoro", "Salazzle")
+            ),
+            OverlayService.Companion.Show6RosterPreset(
+                id = "show6-opp-master-default",
+                name = "Opp BF Master Meta 6",
+                league = "Battle Frontier (Master)",
+                pokemon = listOf("Zacian (Crowned Sword)", "Palkia (Origin)", "Rhyperior", "Florges", "Moltres (Galarian)", "Scizor (Mega)")
+            )
+        )
+        val raw = prefs.getString(OverlayService.PREFS_KEY_SHOW6_OPPONENT_ROSTERS_OF_6, null)
+        if (!raw.isNullOrBlank()) {
+            try {
+                val type = object : TypeToken<List<OverlayService.Companion.Show6RosterPreset>>() {}.type
+                val parsed: List<OverlayService.Companion.Show6RosterPreset>? = gson.fromJson(raw, type)
+                if (!parsed.isNullOrEmpty()) return parsed
+            } catch (_: Exception) {}
+        }
+        prefs.edit().putString(OverlayService.PREFS_KEY_SHOW6_OPPONENT_ROSTERS_OF_6, gson.toJson(defaults)).apply()
+        return defaults
+    }
+
+    private fun saveShow6OpponentRostersOf6(rosters: List<OverlayService.Companion.Show6RosterPreset>) {
+        prefs.edit().putString(OverlayService.PREFS_KEY_SHOW6_OPPONENT_ROSTERS_OF_6, gson.toJson(rosters)).apply()
+    }
+
     private fun loadShow6LeagueMap(prefKey: String): MutableMap<String, List<String>> {
         val raw = prefs.getString(prefKey, null)
         val map = mutableMapOf(
+            "GREAT LEAGUE" to emptyList<String>(),
             "Battle Frontier (Spectral)" to emptyList<String>(),
             "Battle Frontier (Cauldron)" to emptyList<String>(),
             "Battle Frontier (Master)" to emptyList<String>(),
-            "GREAT LEAGUE" to emptyList<String>(),
             "ULTRA LEAGUE" to emptyList<String>(),
             "MASTER LEAGUE" to emptyList<String>(),
             "MEGA MASTER LEAGUE" to emptyList<String>()
@@ -6442,6 +6609,363 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putString(prefKey, gson.toJson(map)).apply()
     }
 
+    /**
+     * Pick-6 Team Editor Dialog (Supports both My 6 and Opponent 6 rosters)
+     * Includes League Spinner, 6 Pokémon Autocomplete slots + Moveset fields, 1-Mega limit validation,
+     * per-slot "✨ Alt Pokémon" (Top 5 Upgrades) and per-slot "🎯 Alt Moves" (Top 4 Movesets).
+     */
+    private fun showEditShow6RosterDialog(
+        existingRoster: OverlayService.Companion.Show6RosterPreset,
+        isOpponent: Boolean,
+        onSaved: (OverlayService.Companion.Show6RosterPreset) -> Unit
+    ) {
+        val density = resources.displayMetrics.density
+        val pad = (12 * density).toInt()
+        val scroll = ScrollView(this)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(0xFF0F172A.toInt())
+            setPadding(pad, pad, pad, pad)
+        }
+        scroll.addView(container)
+
+        val leagues = OverlayService.SHOW6_ELIGIBLE_LEAGUES
+        val nameInput = EditText(this).apply {
+            setText(existingRoster.name)
+            hint = if (isOpponent) "Opponent Roster Name" else "My Show 6 Roster Name"
+            setTextColor(0xFFF8FAFC.toInt())
+            setHintTextColor(0xFF64748B.toInt())
+            setBackgroundColor(0xFF1E293B.toInt())
+            textSize = 12f
+            setPadding(pad, (8 * density).toInt(), pad, (8 * density).toInt())
+        }
+        container.addView(nameInput)
+
+        val leagueSpinner = Spinner(this).apply {
+            adapter = createThemedSpinnerAdapter(leagues)
+            val idx = leagues.indexOfFirst { it.equals(existingRoster.league, ignoreCase = true) }.takeIf { it >= 0 } ?: 0
+            setSelection(idx)
+            setBackgroundColor(0xFF1E293B.toInt())
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                (38 * density).toInt()
+            ).apply {
+                topMargin = (6 * density).toInt()
+                bottomMargin = (8 * density).toInt()
+            }
+        }
+        container.addView(leagueSpinner)
+
+        val currentLeagueProvider = { leagueSpinner.selectedItem?.toString() ?: existingRoster.league }
+
+        data class SlotEditorViews(
+            val nameEdit: AutoCompleteTextView,
+            val fastEdit: EditText,
+            val c1Edit: EditText,
+            val c2Edit: EditText,
+            val suggestBox: LinearLayout
+        )
+
+        val slotViews = ArrayList<SlotEditorViews>(6)
+
+        fun buildCurrentTeamMembers(): List<OverlayService.Companion.TeamMember> {
+            val lg = currentLeagueProvider()
+            return slotViews.mapIndexed { idx, sv ->
+                val rawName = sv.nameEdit.text?.toString()?.trim().orEmpty().ifEmpty { existingRoster.pokemon.getOrElse(idx) { "Azumarill" } }
+                val resolved = OverlayService.resolveRecommendedMovesForSpecies(rawName, lg)
+                val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, lg) else null
+                OverlayService.Companion.TeamMember(
+                    name = rawName,
+                    cp = scaled?.defaultCp ?: 1500,
+                    fastMove = sv.fastEdit.text?.toString()?.trim().orEmpty().ifEmpty { scaled?.defaultFastMove ?: "Bubble" },
+                    chargedMove1 = sv.c1Edit.text?.toString()?.trim().orEmpty().ifEmpty { scaled?.chargedMove1 ?: "Ice Beam" },
+                    chargedMove2 = sv.c2Edit.text?.toString()?.trim().orEmpty().ifEmpty { scaled?.chargedMove2 ?: "Play Rough" },
+                    ivs = scaled?.defaultIvsGl
+                )
+            }
+        }
+
+        for (i in 0 until 6) {
+            val initName = existingRoster.pokemon.getOrElse(i) { "" }
+            val resolved = OverlayService.resolveRecommendedMovesForSpecies(initName, existingRoster.league)
+            val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, existingRoster.league) else null
+
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setBackgroundColor(0xFF1E293B.toInt())
+                val cPad = (8 * density).toInt()
+                setPadding(cPad, cPad, cPad, cPad)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = (8 * density).toInt()
+                }
+            }
+
+            val hdrRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+            val slotLbl = TextView(this).apply {
+                text = "Slot #${i + 1}"
+                setTextColor(if (isOpponent) 0xFFFDA4AF.toInt() else 0xFF34D399.toInt())
+                textSize = 11f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            val btnSuggestMon = Button(this).apply {
+                text = "✨ Suggest Alt Mon"
+                textSize = 9f
+                minWidth = 0
+                minimumWidth = 0
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF0284C7.toInt())
+                setTextColor(0xFFFFFFFF.toInt())
+            }
+            val btnSuggestMoves = Button(this).apply {
+                text = "🎯 Suggest Moves"
+                textSize = 9f
+                minWidth = 0
+                minimumWidth = 0
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFD97706.toInt())
+                setTextColor(0xFF0F172A.toInt())
+            }
+            hdrRow.addView(slotLbl)
+            hdrRow.addView(btnSuggestMon)
+            hdrRow.addView(btnSuggestMoves)
+            card.addView(hdrRow)
+
+            val nameEdit = AutoCompleteTextView(this).apply {
+                setText(initName, false)
+                hint = "Pokémon #${i + 1}"
+                setTextColor(0xFFF8FAFC.toInt())
+                setHintTextColor(0xFF64748B.toInt())
+                setBackgroundColor(0xFF0F172A.toInt())
+                textSize = 11.5f
+                setSingleLine(true)
+                val iPad = (6 * density).toInt()
+                setPadding(iPad, iPad, iPad, iPad)
+                setAdapter(PokemonAutocompleteAdapter(currentLeagueProvider))
+                threshold = 1
+            }
+            card.addView(nameEdit)
+
+            val movesRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = (4 * density).toInt()
+                }
+            }
+            val fastEdit = EditText(this).apply {
+                setText(scaled?.defaultFastMove ?: "")
+                hint = "Fast Move"
+                setTextColor(0xFFCBD5E1.toInt())
+                setHintTextColor(0xFF64748B.toInt())
+                setBackgroundColor(0xFF0F172A.toInt())
+                textSize = 10f
+                setSingleLine(true)
+                val iPad = (5 * density).toInt()
+                setPadding(iPad, iPad, iPad, iPad)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginEnd = (4 * density).toInt()
+                }
+            }
+            val c1Edit = EditText(this).apply {
+                setText(scaled?.chargedMove1 ?: "")
+                hint = "Charged 1"
+                setTextColor(0xFFCBD5E1.toInt())
+                setHintTextColor(0xFF64748B.toInt())
+                setBackgroundColor(0xFF0F172A.toInt())
+                textSize = 10f
+                setSingleLine(true)
+                val iPad = (5 * density).toInt()
+                setPadding(iPad, iPad, iPad, iPad)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginEnd = (4 * density).toInt()
+                }
+            }
+            val c2Edit = EditText(this).apply {
+                setText(scaled?.chargedMove2 ?: "")
+                hint = "Charged 2"
+                setTextColor(0xFFCBD5E1.toInt())
+                setHintTextColor(0xFF64748B.toInt())
+                setBackgroundColor(0xFF0F172A.toInt())
+                textSize = 10f
+                setSingleLine(true)
+                val iPad = (5 * density).toInt()
+                setPadding(iPad, iPad, iPad, iPad)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            movesRow.addView(fastEdit)
+            movesRow.addView(c1Edit)
+            movesRow.addView(c2Edit)
+            card.addView(movesRow)
+
+            nameEdit.setOnItemClickListener { parent, _, position, _ ->
+                val chosen = parent.getItemAtPosition(position) as? OverlayService.Companion.PokemonAutocompleteSuggestion ?: return@setOnItemClickListener
+                nameEdit.setText(chosen.name, false)
+                fastEdit.setText(chosen.fastMove)
+                c1Edit.setText(chosen.chargedMove1)
+                c2Edit.setText(chosen.chargedMove2)
+            }
+
+            val suggestBox = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                visibility = android.view.View.GONE
+                setPadding(0, (6 * density).toInt(), 0, 0)
+            }
+            card.addView(suggestBox)
+
+            val sv = SlotEditorViews(nameEdit, fastEdit, c1Edit, c2Edit, suggestBox)
+            slotViews.add(sv)
+
+            btnSuggestMon.setOnClickListener {
+                suggestBox.visibility = android.view.View.VISIBLE
+                suggestBox.removeAllViews()
+                val loadingTv = TextView(this).apply {
+                    text = "⏳ Computing Top 5 Alternate Pokémon Upgrades for Slot #${i + 1}..."
+                    setTextColor(0xFF38BDF8.toInt())
+                    textSize = 10f
+                }
+                suggestBox.addView(loadingTv)
+                val curMembers = buildCurrentTeamMembers()
+                val lg = currentLeagueProvider()
+                lifecycleScope.launch(Dispatchers.Default) {
+                    val upgrades = OverlayService.recommendShow6RosterSlotUpgradesStatic(lg, curMembers, i)
+                    withContext(Dispatchers.Main) {
+                        suggestBox.removeAllViews()
+                        for (u in upgrades) {
+                            val row = LinearLayout(this@MainActivity).apply {
+                                orientation = LinearLayout.HORIZONTAL
+                                gravity = android.view.Gravity.CENTER_VERTICAL
+                                setBackgroundColor(0xFF0F172A.toInt())
+                                val rPad = (5 * density).toInt()
+                                setPadding(rPad, rPad, rPad, rPad)
+                                layoutParams = LinearLayout.LayoutParams(
+                                    LinearLayout.LayoutParams.MATCH_PARENT,
+                                    LinearLayout.LayoutParams.WRAP_CONTENT
+                                ).apply {
+                                    bottomMargin = (3 * density).toInt()
+                                }
+                            }
+                            val sign = if (u.weightedScoreGain >= 0) "+" else ""
+                            val infoTv = TextView(this@MainActivity).apply {
+                                text = "✨ ${u.candidate.name} (${sign}${u.weightedScoreGain} Score)\n${u.reason}"
+                                setTextColor(0xFFE2E8F0.toInt())
+                                textSize = 9.5f
+                                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                            }
+                            val useBtn = Button(this@MainActivity).apply {
+                                text = "Swap In"
+                                textSize = 9f
+                                minWidth = 0
+                                minimumWidth = 0
+                                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF059669.toInt())
+                                setTextColor(0xFFFFFFFF.toInt())
+                                setOnClickListener {
+                                    nameEdit.setText(u.candidate.name, false)
+                                    fastEdit.setText(u.candidate.fastMove)
+                                    c1Edit.setText(u.candidate.chargedMove1)
+                                    c2Edit.setText(u.candidate.chargedMove2)
+                                    suggestBox.visibility = android.view.View.GONE
+                                }
+                            }
+                            row.addView(infoTv)
+                            row.addView(useBtn)
+                            suggestBox.addView(row)
+                        }
+                    }
+                }
+            }
+
+            btnSuggestMoves.setOnClickListener {
+                suggestBox.visibility = android.view.View.VISIBLE
+                suggestBox.removeAllViews()
+                val curMembers = buildCurrentTeamMembers()
+                val lg = currentLeagueProvider()
+                val member = curMembers[i]
+                lifecycleScope.launch(Dispatchers.Default) {
+                    val moveRecs = OverlayService.recommendShow6RosterSlotMovesetsStatic(lg, member)
+                    withContext(Dispatchers.Main) {
+                        suggestBox.removeAllViews()
+                        for (m in moveRecs) {
+                            val row = LinearLayout(this@MainActivity).apply {
+                                orientation = LinearLayout.HORIZONTAL
+                                gravity = android.view.Gravity.CENTER_VERTICAL
+                                setBackgroundColor(0xFF0F172A.toInt())
+                                val rPad = (5 * density).toInt()
+                                setPadding(rPad, rPad, rPad, rPad)
+                                layoutParams = LinearLayout.LayoutParams(
+                                    LinearLayout.LayoutParams.MATCH_PARENT,
+                                    LinearLayout.LayoutParams.WRAP_CONTENT
+                                ).apply {
+                                    bottomMargin = (3 * density).toInt()
+                                }
+                            }
+                            val deltaStr = if (m.deltaBr >= 0) "+${m.deltaBr}" else "${m.deltaBr}"
+                            val infoTv = TextView(this@MainActivity).apply {
+                                text = "🎯 ${m.fastMove} + ${m.chargedMove1} / ${m.chargedMove2} (Meta BR ${m.avgBrVsMeta} • $deltaStr BR)"
+                                setTextColor(if (m.isCurrent) 0xFF34D399.toInt() else 0xFFE2E8F0.toInt())
+                                textSize = 9.5f
+                                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                            }
+                            val applyBtn = Button(this@MainActivity).apply {
+                                text = if (m.isCurrent) "Active" else "Apply"
+                                textSize = 9f
+                                minWidth = 0
+                                minimumWidth = 0
+                                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFD97706.toInt())
+                                setTextColor(0xFF0F172A.toInt())
+                                setOnClickListener {
+                                    fastEdit.setText(m.fastMove)
+                                    c1Edit.setText(m.chargedMove1)
+                                    c2Edit.setText(m.chargedMove2)
+                                    suggestBox.visibility = android.view.View.GONE
+                                }
+                            }
+                            row.addView(infoTv)
+                            row.addView(applyBtn)
+                            suggestBox.addView(row)
+                        }
+                    }
+                }
+            }
+
+            container.addView(card)
+        }
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(if (isOpponent) "⚔️ Edit Opponent Show 6 Roster" else "🛡️ Edit My Show 6 Roster")
+            .setView(scroll)
+            .setPositiveButton("💾 Save Pick-6", null)
+            .setNegativeButton("Cancel", null)
+            .create()
+
+        dialog.show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val mons = slotViews.map { it.nameEdit.text?.toString()?.trim().orEmpty() }.filter { it.isNotEmpty() }
+            if (mons.size < 6) {
+                Toast.makeText(this, "Please fill all 6 Pokémon slots.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (OverlayService.hasMultipleMegasStatic(mons)) {
+                Toast.makeText(this, "⚠️ Max 1 Mega/Primal Pokémon allowed per Show 6 team!", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            val lg = currentLeagueProvider()
+            val updated = existingRoster.copy(
+                name = nameInput.text?.toString()?.trim().orEmpty().ifEmpty { existingRoster.name },
+                league = lg,
+                pokemon = mons.take(6)
+            )
+            onSaved(updated)
+            dialog.dismiss()
+        }
+    }
+
     private fun setupShow6ModeHubUi() {
         findViewById<Button>(R.id.btn_header_mode_badge)?.setOnClickListener {
             val nextMode = if (isShow6CombatMode()) "gbl" else "show6"
@@ -6458,11 +6982,55 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<Button>(R.id.btn_mode_show6_frontier)?.setOnClickListener {
             setAppCombatMode("show6")
-            Toast.makeText(this, "🏛️ Show 6 Mode active (Independent Teams & Logs)", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "🏛️ Show 6 Mode active (Independent Teams, Trash & Logs)", Toast.LENGTH_SHORT).show()
         }
         updateSettingsCombatModeButtonsUi()
 
-        val leagues = listOf("Battle Frontier (Spectral)", "Battle Frontier (Cauldron)", "Battle Frontier (Master)")
+        // Wire Settings Battle Frontier Usage & Core Google Sheet Sync + Weighting Slider (65% Usage & Cores / 35% PvPoke)
+        val editBfUsageUrl = findViewById<EditText>(R.id.edit_bf_usage_sheet_url)
+        val editBfCoresUrl = findViewById<EditText>(R.id.edit_bf_cores_sheet_url)
+        val btnSyncBfSheets = findViewById<Button>(R.id.btn_sync_bf_sheets)
+        val tvBfSheetsStatus = findViewById<TextView>(R.id.tv_bf_sheets_status)
+        val tvShow6UsageWeightLabel = findViewById<TextView>(R.id.tv_show6_usage_weight_label)
+        val seekShow6UsageWeight = findViewById<SeekBar>(R.id.seek_show6_usage_weight)
+
+        editBfUsageUrl?.setText(prefs.getString(OverlayService.PREFS_KEY_BF_USAGE_SHEET_URL, OverlayService.DEFAULT_BF_USAGE_SHEET_URL))
+        editBfCoresUrl?.setText(prefs.getString(OverlayService.PREFS_KEY_BF_CORES_SHEET_URL, OverlayService.DEFAULT_BF_CORES_SHEET_URL))
+        val savedWeightPct = prefs.getInt(OverlayService.PREFS_KEY_SHOW6_USAGE_WEIGHT_PCT, OverlayService.DEFAULT_SHOW6_USAGE_WEIGHT_PCT).coerceIn(0, 100)
+        OverlayService.activeShow6UsageWeightPct = savedWeightPct
+        seekShow6UsageWeight?.progress = savedWeightPct
+        tvShow6UsageWeightLabel?.text = "${savedWeightPct}% Usage & Cores / ${100 - savedWeightPct}% PvPoke"
+
+        seekShow6UsageWeight?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val p = progress.coerceIn(0, 100)
+                OverlayService.activeShow6UsageWeightPct = p
+                tvShow6UsageWeightLabel?.text = "${p}% Usage & Cores / ${100 - p}% PvPoke"
+                if (fromUser) {
+                    prefs.edit().putInt(OverlayService.PREFS_KEY_SHOW6_USAGE_WEIGHT_PCT, p).apply()
+                }
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        btnSyncBfSheets?.setOnClickListener {
+            val uUrl = editBfUsageUrl?.text?.toString()?.trim().orEmpty().ifEmpty { OverlayService.DEFAULT_BF_USAGE_SHEET_URL }
+            val cUrl = editBfCoresUrl?.text?.toString()?.trim().orEmpty().ifEmpty { OverlayService.DEFAULT_BF_CORES_SHEET_URL }
+            btnSyncBfSheets.isEnabled = false
+            btnSyncBfSheets.text = "⏳ Importing Battle Frontier Usage & Cores..."
+            lifecycleScope.launch(Dispatchers.IO) {
+                val msg = OverlayService.syncBattleFrontierSheetsBlocking(prefs, uUrl, cUrl)
+                withContext(Dispatchers.Main) {
+                    btnSyncBfSheets.isEnabled = true
+                    btnSyncBfSheets.text = "📥 Save Links & Import Battle Frontier Usage + Cores"
+                    tvBfSheetsStatus?.text = msg
+                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+
+        val leagues = OverlayService.SHOW6_ELIGIBLE_LEAGUES
         val spinnerPick3League = findViewById<Spinner>(R.id.spinner_show6_pick3_league) ?: return
         val spinnerBlindLeague = findViewById<Spinner>(R.id.spinner_show6_blind_league) ?: return
         spinnerPick3League.adapter = createThemedSpinnerAdapter(leagues)
@@ -6492,8 +7060,8 @@ class MainActivity : AppCompatActivity() {
             findViewById<AutoCompleteTextView>(R.id.edit_show6_lock_5)
         )
 
-        val pick3LeagueProvider = { spinnerPick3League.selectedItem?.toString() ?: "Battle Frontier (Spectral)" }
-        val blindLeagueProvider = { spinnerBlindLeague.selectedItem?.toString() ?: "Battle Frontier (Spectral)" }
+        val pick3LeagueProvider = { spinnerPick3League.selectedItem?.toString() ?: "GREAT LEAGUE" }
+        val blindLeagueProvider = { spinnerBlindLeague.selectedItem?.toString() ?: "GREAT LEAGUE" }
 
         myInputs.filterNotNull().forEach { input ->
             input.setAdapter(PokemonAutocompleteAdapter(pick3LeagueProvider))
@@ -6520,16 +7088,16 @@ class MainActivity : AppCompatActivity() {
             input.threshold = 1
         }
 
-        // Seed default My 6 & Opponent 6 for Battle Frontier (Spectral)
-        val defaultMy6 = listOf("Ninetales (Alolan)", "Weezing (Galarian)", "Dewgong", "Piloswine", "Ledian", "Arctibax")
+        // Seed default My 6 & Opponent 6
+        val defaultMy6 = listOf("Azumarill", "Corsola (Galarian)", "Cradily", "Corviknight", "Feraligatr", "Gastrodon")
         val savedOpp6Raw = prefs.getString(OverlayService.PREFS_KEY_SHOW6_OPPONENT_6, null)
         val defaultOpp6 = if (!savedOpp6Raw.isNullOrBlank()) {
             try {
                 val type = object : TypeToken<List<String>>() {}.type
-                gson.fromJson<List<String>>(savedOpp6Raw, type)?.takeIf { it.size >= 3 && !it.contains("Gastrodon") }
+                gson.fromJson<List<String>>(savedOpp6Raw, type)?.takeIf { it.size >= 3 }
             } catch (_: Exception) { null }
         } else null
-        val initialOpp6 = defaultOpp6 ?: listOf("Jellicent", "Talonflame", "Shadow Scizor", "Swalot", "Golisopod", "Shadow Gligar")
+        val initialOpp6 = defaultOpp6 ?: listOf("Bastiodon", "Cradily", "Azumarill", "Dedenne", "Gastrodon", "Scizor")
 
         myInputs.forEachIndexed { idx, edit ->
             if (edit != null && edit.text.isNullOrBlank()) {
@@ -6546,6 +7114,10 @@ class MainActivity : AppCompatActivity() {
         val rosters6Container = findViewById<LinearLayout>(R.id.layout_show6_rosters6_list)
         val editNewRosterName = findViewById<EditText>(R.id.edit_show6_new_roster_name)
         val btnSaveRoster6 = findViewById<Button>(R.id.btn_save_show6_roster6)
+
+        val oppRosters6Container = findViewById<LinearLayout>(R.id.layout_show6_opp_rosters6_list)
+        val editNewOppRosterName = findViewById<EditText>(R.id.edit_show6_new_opp_roster_name)
+        val btnSaveOppRoster6 = findViewById<Button>(R.id.btn_save_show6_opp_roster6)
 
         fun renderShow6RostersOf6List() {
             rosters6Container?.removeAllViews()
@@ -6566,7 +7138,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 val tv = TextView(this).apply {
-                    text = "${r.name} (${r.league.split(" ").first()})\n${r.pokemon.joinToString(" • ")}"
+                    text = "${r.name} (${r.league})\n${r.pokemon.joinToString(" • ")}"
                     textSize = 10.5f
                     setTextColor(0xFFF8FAFC.toInt())
                     layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -6587,6 +7159,22 @@ class MainActivity : AppCompatActivity() {
                         Toast.makeText(this@MainActivity, "Loaded '${r.name}' into Your 6!", Toast.LENGTH_SHORT).show()
                     }
                 }
+                val editBtn = Button(this).apply {
+                    text = "✏️"
+                    textSize = 9.5f
+                    minWidth = 0
+                    minimumWidth = 0
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF0284C7.toInt())
+                    setTextColor(0xFFFFFFFF.toInt())
+                    setOnClickListener {
+                        showEditShow6RosterDialog(r, isOpponent = false) { updated ->
+                            val next = loadShow6RostersOf6().map { if (it.id == r.id) updated else it }
+                            saveShow6RostersOf6(next)
+                            renderShow6RostersOf6List()
+                            Toast.makeText(this@MainActivity, "Updated '${updated.name}'!", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
                 val delBtn = Button(this).apply {
                     text = "✕"
                     textSize = 9.5f
@@ -6595,24 +7183,161 @@ class MainActivity : AppCompatActivity() {
                     backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF7F1D1D.toInt())
                     setTextColor(0xFFFECACA.toInt())
                     setOnClickListener {
-                        val updated = loadShow6RostersOf6().filter { it.id != r.id }
+                        val allMy6 = loadShow6RostersOf6()
+                        if (allMy6.size <= 1) {
+                            Toast.makeText(this@MainActivity, "Must keep at least 1 stored team in the app", Toast.LENGTH_SHORT).show()
+                            return@setOnClickListener
+                        }
+                        val trash = loadDeletedShow6RostersTrash().toMutableList()
+                        trash.add(0, DeletedShow6RosterTrashItem(r, isOpponent = false))
+                        saveDeletedShow6RostersTrash(trash)
+                        val updated = allMy6.filter { it.id != r.id }
                         saveShow6RostersOf6(updated)
                         renderShow6RostersOf6List()
+                        showUndoBanner("🗑️ My Pick-6 '${r.name}' moved to Show 6 Trash") {
+                            restoreShow6RosterFromTrash(DeletedShow6RosterTrashItem(r, isOpponent = false))
+                        }
                     }
                 }
                 row.addView(tv)
                 row.addView(loadBtn)
+                row.addView(editBtn)
                 row.addView(delBtn)
                 rosters6Container?.addView(row)
             }
         }
+
+        fun renderShow6OpponentRostersOf6List() {
+            oppRosters6Container?.removeAllViews()
+            val rosters = loadShow6OpponentRostersOf6()
+            val density = resources.displayMetrics.density
+            for (r in rosters) {
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    setBackgroundColor(0xFF1E293B.toInt())
+                    val pad = (6 * density).toInt()
+                    setPadding(pad, pad, pad, pad)
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        bottomMargin = (4 * density).toInt()
+                    }
+                }
+                val tv = TextView(this).apply {
+                    text = "⚔️ ${r.name} (${r.league})\n${r.pokemon.joinToString(" • ")}"
+                    textSize = 10.5f
+                    setTextColor(0xFFFECDD3.toInt())
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                }
+                val loadBtn = Button(this).apply {
+                    text = "Load Opp"
+                    textSize = 9.5f
+                    minWidth = 0
+                    minimumWidth = 0
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFE11D48.toInt())
+                    setTextColor(0xFFFFFFFF.toInt())
+                    setOnClickListener {
+                        val lgIdx = leagues.indexOfFirst { it.equals(r.league, ignoreCase = true) }.takeIf { it >= 0 } ?: 0
+                        spinnerPick3League.setSelection(lgIdx)
+                        oppInputs.forEachIndexed { i, edit ->
+                            edit?.setText(r.pokemon.getOrElse(i) { "" }, false)
+                        }
+                        persistCurrentOpponent6ToPrefs()
+                        Toast.makeText(this@MainActivity, "Loaded '${r.name}' into Opponent's 6!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                val editBtn = Button(this).apply {
+                    text = "✏️"
+                    textSize = 9.5f
+                    minWidth = 0
+                    minimumWidth = 0
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF0284C7.toInt())
+                    setTextColor(0xFFFFFFFF.toInt())
+                    setOnClickListener {
+                        showEditShow6RosterDialog(r, isOpponent = true) { updated ->
+                            val next = loadShow6OpponentRostersOf6().map { if (it.id == r.id) updated else it }
+                            saveShow6OpponentRostersOf6(next)
+                            renderShow6OpponentRostersOf6List()
+                            Toast.makeText(this@MainActivity, "Updated Opponent 6 '${updated.name}'!", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+                val delBtn = Button(this).apply {
+                    text = "✕"
+                    textSize = 9.5f
+                    minWidth = 0
+                    minimumWidth = 0
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF7F1D1D.toInt())
+                    setTextColor(0xFFFECACA.toInt())
+                    setOnClickListener {
+                        val trash = loadDeletedShow6RostersTrash().toMutableList()
+                        trash.add(0, DeletedShow6RosterTrashItem(r, isOpponent = true))
+                        saveDeletedShow6RostersTrash(trash)
+                        val updated = loadShow6OpponentRostersOf6().filter { it.id != r.id }
+                        saveShow6OpponentRostersOf6(updated)
+                        renderShow6OpponentRostersOf6List()
+                        showUndoBanner("🗑️ Opponent Pick-6 '${r.name}' moved to Show 6 Trash") {
+                            restoreShow6RosterFromTrash(DeletedShow6RosterTrashItem(r, isOpponent = true))
+                        }
+                    }
+                }
+                row.addView(tv)
+                row.addView(loadBtn)
+                row.addView(editBtn)
+                row.addView(delBtn)
+                oppRosters6Container?.addView(row)
+            }
+        }
+
         renderShow6RostersOf6List()
+        renderShow6OpponentRostersOf6List()
+
+        findViewById<Button>(R.id.btn_edit_active_my6)?.setOnClickListener {
+            val lg = pick3LeagueProvider()
+            val curMons = myInputs.mapNotNull { it?.text?.toString()?.trim() }.filter { it.isNotEmpty() }
+            val tempRoster = OverlayService.Companion.Show6RosterPreset(
+                id = "active-my6",
+                name = editNewRosterName?.text?.toString()?.trim().orEmpty().ifEmpty { "Active My 6 ($lg)" },
+                league = lg,
+                pokemon = if (curMons.size >= 6) curMons.take(6) else defaultMy6
+            )
+            showEditShow6RosterDialog(tempRoster, isOpponent = false) { updated ->
+                val lgIdx = leagues.indexOfFirst { it.equals(updated.league, ignoreCase = true) }.takeIf { it >= 0 } ?: 0
+                spinnerPick3League.setSelection(lgIdx)
+                myInputs.forEachIndexed { idx, edit -> edit?.setText(updated.pokemon.getOrElse(idx) { "" }, false) }
+                Toast.makeText(this, "Applied edited My 6!", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        findViewById<Button>(R.id.btn_edit_active_opp6)?.setOnClickListener {
+            val lg = pick3LeagueProvider()
+            val curMons = oppInputs.mapNotNull { it?.text?.toString()?.trim() }.filter { it.isNotEmpty() }
+            val tempRoster = OverlayService.Companion.Show6RosterPreset(
+                id = "active-opp6",
+                name = editNewOppRosterName?.text?.toString()?.trim().orEmpty().ifEmpty { "Active Opponent 6 ($lg)" },
+                league = lg,
+                pokemon = if (curMons.size >= 6) curMons.take(6) else initialOpp6
+            )
+            showEditShow6RosterDialog(tempRoster, isOpponent = true) { updated ->
+                val lgIdx = leagues.indexOfFirst { it.equals(updated.league, ignoreCase = true) }.takeIf { it >= 0 } ?: 0
+                spinnerPick3League.setSelection(lgIdx)
+                oppInputs.forEachIndexed { idx, edit -> edit?.setText(updated.pokemon.getOrElse(idx) { "" }, false) }
+                persistCurrentOpponent6ToPrefs()
+                Toast.makeText(this, "Applied edited Opponent 6!", Toast.LENGTH_SHORT).show()
+            }
+        }
 
         btnSaveRoster6?.setOnClickListener {
             val lg = pick3LeagueProvider()
             val mons = myInputs.mapNotNull { it?.text?.toString()?.trim() }.filter { it.isNotEmpty() }
             if (mons.size < 6) {
                 Toast.makeText(this, "Enter all 6 Pokémon in 'Your 6' before saving a Team of 6", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (OverlayService.hasMultipleMegasStatic(mons)) {
+                Toast.makeText(this, "⚠️ Max 1 Mega/Primal Pokémon allowed per Show 6 team!", Toast.LENGTH_LONG).show()
                 return@setOnClickListener
             }
             val rName = editNewRosterName?.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
@@ -6629,7 +7354,35 @@ class MainActivity : AppCompatActivity() {
             saveShow6RostersOf6(current)
             editNewRosterName?.setText("")
             renderShow6RostersOf6List()
-            Toast.makeText(this, "Saved Team of 6: $rName", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Saved My Team of 6: $rName", Toast.LENGTH_SHORT).show()
+        }
+
+        btnSaveOppRoster6?.setOnClickListener {
+            val lg = pick3LeagueProvider()
+            val mons = oppInputs.mapNotNull { it?.text?.toString()?.trim() }.filter { it.isNotEmpty() }
+            if (mons.size < 6) {
+                Toast.makeText(this, "Enter all 6 Pokémon in 'Opponent's 6' before saving an Opponent Team of 6", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (OverlayService.hasMultipleMegasStatic(mons)) {
+                Toast.makeText(this, "⚠️ Max 1 Mega/Primal Pokémon allowed per Show 6 team!", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            val rName = editNewOppRosterName?.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+                ?: "Opp ${lg.split(" ").first()} 6 (${mons.take(2).joinToString("/")})"
+            val current = loadShow6OpponentRostersOf6().toMutableList()
+            current.add(
+                0,
+                OverlayService.Companion.Show6RosterPreset(
+                    name = rName,
+                    league = lg,
+                    pokemon = mons.take(6)
+                )
+            )
+            saveShow6OpponentRostersOf6(current)
+            editNewOppRosterName?.setText("")
+            renderShow6OpponentRostersOf6List()
+            Toast.makeText(this, "Saved Opponent Team of 6: $rName", Toast.LENGTH_SHORT).show()
         }
 
         // Sub-tab switcher between Builder 1 (6v6 Pick-3) and Builder 2 (Blind Show 6)
@@ -6698,6 +7451,10 @@ class MainActivity : AppCompatActivity() {
             val opp6 = oppInputs.mapNotNull { it?.text?.toString()?.trim() }.filter { it.isNotEmpty() }
             if (my6.size < 3 || opp6.size < 3) {
                 Toast.makeText(this, "Enter at least 3 Pokémon for Your Roster and Opponent's Roster", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (OverlayService.hasMultipleMegasStatic(my6) || OverlayService.hasMultipleMegasStatic(opp6)) {
+                Toast.makeText(this, "⚠️ Max 1 Mega/Primal Pokémon allowed per Show 6 team!", Toast.LENGTH_LONG).show()
                 return@setOnClickListener
             }
             persistCurrentOpponent6ToPrefs()
@@ -7495,7 +8252,7 @@ class MainActivity : AppCompatActivity() {
         val editP3C2 = dialogView.findViewById<EditText>(R.id.edit_p3_c2)
 
         val leagues = if (isShow6CombatMode()) {
-            listOf("Battle Frontier (Spectral)", "Battle Frontier (Cauldron)", "Battle Frontier (Master)")
+            listOf("GREAT LEAGUE", "Battle Frontier (Spectral)", "Battle Frontier (Cauldron)", "Battle Frontier (Master)")
         } else {
             listOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE", "MEGA MASTER LEAGUE")
         }
@@ -8299,6 +9056,11 @@ class MainActivity : AppCompatActivity() {
                 val p1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, league, top3Defaults[0])
                 val p2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, league, top3Defaults[1])
                 val p3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, league, top3Defaults[2])
+
+                if (OverlayService.hasMultipleMegasStatic(listOf(p1.name, p2.name, p3.name))) {
+                    Toast.makeText(this, "⚠️ Max 1 Mega/Primal Pokémon allowed per team!", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
 
                 val rawPreset = TeamPreset(
                     id = existingPreset?.id ?: UUID.randomUUID().toString(),

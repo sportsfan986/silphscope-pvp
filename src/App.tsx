@@ -117,7 +117,24 @@ import {
   predictShow6UnrevealedBackline,
   getDefaultShow6RosterNames,
   INITIAL_SHOW6_ROSTERS_OF_6,
-  INITIAL_SHOW6_PRESETS_OF_3
+  INITIAL_SHOW6_OPPONENT_ROSTERS_OF_6,
+  INITIAL_SHOW6_PRESETS_OF_3,
+  isShow6EligibleLeague,
+  isMegaOrPrimalSpecies,
+  hasMultipleMegas,
+  getSavedBfUsageSheetUrl,
+  setSavedBfUsageSheetUrl,
+  getSavedBfCoresSheetUrl,
+  setSavedBfCoresSheetUrl,
+  getShow6UsageAndCoreWeightPct,
+  setShow6UsageAndCoreWeightPct,
+  syncBattleFrontierUsageAndCores,
+  BATTLE_FRONTIER_USAGE_MAP,
+  BATTLE_FRONTIER_CORES_MAP,
+  recommendShow6RosterSlotUpgrades,
+  recommendShow6RosterSlotMovesets,
+  Show6SlotUpgradeSuggestion,
+  Show6MovesetSuggestion
 } from './data/gblData';
 import {
   BattleQualityMetadata,
@@ -967,10 +984,10 @@ export default function App() {
       localStorage.setItem('gbl_app_combat_mode', mode);
     } catch {}
     if (mode === 'show6') {
-      if (!isBattleFrontierLeague(antiMetaLeague)) {
+      if (!isShow6EligibleLeague(antiMetaLeague)) {
         setAntiMetaLeague('Battle Frontier (Spectral)');
       }
-      if (selectedOpponentLeague !== 'AUTO' && !isBattleFrontierLeague(selectedOpponentLeague)) {
+      if (selectedOpponentLeague !== 'AUTO' && !isShow6EligibleLeague(selectedOpponentLeague)) {
         setSelectedOpponentLeague('AUTO');
       }
     } else {
@@ -983,8 +1000,8 @@ export default function App() {
     }
     setStartBattleToast(
       mode === 'show6'
-        ? '🏛️ Switched to Show 6 Mode (Battle Frontier Spectral / Cauldron / Master • Independent Teams & Battle Logs)'
-        : '🛡️ Switched to Standard GBL Mode (Blind 3 PvP • Independent Teams & Battle Logs)'
+        ? '🏛️ Switched to Show 6 Mode (Great / Spectral / Cauldron / Master • Independent Teams, Trash & Battle Logs)'
+        : '🛡️ Switched to Standard GBL Mode (Blind 3 PvP • Independent Teams, Trash & Battle Logs)'
     );
     setTimeout(() => setStartBattleToast(null), 2200);
   };
@@ -1054,7 +1071,7 @@ export default function App() {
     return [];
   });
 
-  const [deletedBattlesTrash, setDeletedBattlesTrash] = useState<WebBattleLogEntry[]>(() => {
+  const [gblDeletedBattlesTrash, setGblDeletedBattlesTrash] = useState<WebBattleLogEntry[]>(() => {
     try {
       const raw = localStorage.getItem('gbl_deleted_battles_trash_v1');
       if (raw) {
@@ -1065,9 +1082,48 @@ export default function App() {
     return [];
   });
 
-  const [deletedTeamsTrash, setDeletedTeamsTrash] = useState<TeamPreset[]>(() => {
+  const [show6DeletedBattlesTrash, setShow6DeletedBattlesTrash] = useState<WebBattleLogEntry[]>(() => {
+    try {
+      const raw = localStorage.getItem('gbl_show6_deleted_battles_trash_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+
+  const deletedBattlesTrash = appCombatMode === 'show6' ? show6DeletedBattlesTrash : gblDeletedBattlesTrash;
+
+  const [gblDeletedTeamsTrash, setGblDeletedTeamsTrash] = useState<TeamPreset[]>(() => {
     try {
       const raw = localStorage.getItem('gbl_deleted_teams_trash_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+
+  const [show6DeletedTeamsTrash, setShow6DeletedTeamsTrash] = useState<TeamPreset[]>(() => {
+    try {
+      const raw = localStorage.getItem('gbl_show6_deleted_teams_trash_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+
+  const deletedTeamsTrash = appCombatMode === 'show6' ? show6DeletedTeamsTrash : gblDeletedTeamsTrash;
+
+  const [show6DeletedRostersTrash, setShow6DeletedRostersTrash] = useState<
+    Array<{ target: 'MY' | 'OPP'; roster: Show6RosterOf6Preset }>
+  >(() => {
+    try {
+      const raw = localStorage.getItem('gbl_show6_deleted_rosters_trash_v1');
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) return parsed;
@@ -1119,17 +1175,41 @@ export default function App() {
 
   const saveDeletedBattlesTrashToStorage = (list: WebBattleLogEntry[]) => {
     const unique = Array.from(new Map(list.map((item) => [item.id, item])).values()).slice(0, 200);
-    setDeletedBattlesTrash(unique);
-    try {
-      localStorage.setItem('gbl_deleted_battles_trash_v1', JSON.stringify(unique));
-    } catch {}
+    if (appCombatMode === 'show6') {
+      setShow6DeletedBattlesTrash(unique);
+      try {
+        localStorage.setItem('gbl_show6_deleted_battles_trash_v1', JSON.stringify(unique));
+      } catch {}
+    } else {
+      setGblDeletedBattlesTrash(unique);
+      try {
+        localStorage.setItem('gbl_deleted_battles_trash_v1', JSON.stringify(unique));
+      } catch {}
+    }
   };
 
   const saveDeletedTeamsTrashToStorage = (list: TeamPreset[]) => {
     const unique = Array.from(new Map(list.map((item) => [item.id, item])).values()).slice(0, 50);
-    setDeletedTeamsTrash(unique);
+    if (appCombatMode === 'show6') {
+      setShow6DeletedTeamsTrash(unique);
+      try {
+        localStorage.setItem('gbl_show6_deleted_teams_trash_v1', JSON.stringify(unique));
+      } catch {}
+    } else {
+      setGblDeletedTeamsTrash(unique);
+      try {
+        localStorage.setItem('gbl_deleted_teams_trash_v1', JSON.stringify(unique));
+      } catch {}
+    }
+  };
+
+  const saveShow6DeletedRostersTrashToStorage = (
+    list: Array<{ target: 'MY' | 'OPP'; roster: Show6RosterOf6Preset }>
+  ) => {
+    const unique = Array.from(new Map(list.map((item) => [item.roster.id, item])).values()).slice(0, 50);
+    setShow6DeletedRostersTrash(unique);
     try {
-      localStorage.setItem('gbl_deleted_teams_trash_v1', JSON.stringify(unique));
+      localStorage.setItem('gbl_show6_deleted_rosters_trash_v1', JSON.stringify(unique));
     } catch {}
   };
 
@@ -1449,23 +1529,21 @@ export default function App() {
     return localStorage.getItem('gbl_selected_preset_id') || 'preset-ml-1';
   });
 
-  // Show 6 Mode Independent Storage: Teams of 3 for Overlay ('gbl_show6_presets_of_3_v1') & Teams of 6 ('gbl_show6_rosters_of_6_v1')
+  // Show 6 Mode Independent Storage: Teams of 3 for Overlay ('gbl_show6_presets_of_3_v1'), My Teams of 6 ('gbl_show6_rosters_of_6_v1'), & Opponent Teams of 6 ('gbl_show6_opp_rosters_of_6_v1')
   const [show6Presets3, setShow6Presets3] = useState<TeamPreset[]>(() => {
     try {
       const saved = localStorage.getItem('gbl_show6_presets_of_3_v1');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const hasLegacyOpenGbl = parsed.some((p: any) => !isBattleFrontierLeague(p?.league));
-          if (!hasLegacyOpenGbl) return parsed;
           return parsed.map((p: any) => {
-            if (isBattleFrontierLeague(p?.league)) return p;
+            if (isShow6EligibleLeague(p?.league)) return p;
             const norm = String(p?.league || '').toUpperCase();
             const mappedLg: LeagueType = norm.includes('ULTRA')
               ? 'Battle Frontier (Cauldron)'
               : norm.includes('MASTER')
               ? 'Battle Frontier (Master)'
-              : 'Battle Frontier (Spectral)';
+              : 'GREAT LEAGUE';
             return { ...p, league: mappedLg };
           });
         }
@@ -1484,22 +1562,14 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const isUnmodifiedLegacyDefaults =
-            parsed.length <= 3 &&
-            parsed.every((r: any) =>
-              ['show6-roster-gl-1', 'show6-roster-ul-1', 'show6-roster-ml-1', 'show6-roster6-gl-1', 'show6-roster6-ul-1', 'show6-roster6-ml-1'].includes(String(r?.id))
-            );
-          if (isUnmodifiedLegacyDefaults) {
-            return INITIAL_SHOW6_ROSTERS_OF_6;
-          }
           return parsed.map((r: any) => {
-            if (isBattleFrontierLeague(r?.league)) return r;
+            if (isShow6EligibleLeague(r?.league)) return r;
             const norm = String(r?.league || '').toUpperCase();
             const mappedLg: LeagueType = norm.includes('ULTRA')
               ? 'Battle Frontier (Cauldron)'
               : norm.includes('MASTER')
               ? 'Battle Frontier (Master)'
-              : 'Battle Frontier (Spectral)';
+              : 'GREAT LEAGUE';
             return { ...r, league: mappedLg };
           });
         }
@@ -1511,6 +1581,45 @@ export default function App() {
   const [selectedShow6Roster6Id, setSelectedShow6Roster6Id] = useState<string>(() => {
     return localStorage.getItem('gbl_selected_show6_roster6_id') || 'show6-roster6-spectral-1';
   });
+
+  const [show6OpponentRosters6, setShow6OpponentRosters6] = useState<Show6RosterOf6Preset[]>(() => {
+    try {
+      const saved = localStorage.getItem('gbl_show6_opp_rosters_of_6_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((r: any) => {
+            if (isShow6EligibleLeague(r?.league)) return r;
+            const norm = String(r?.league || '').toUpperCase();
+            const mappedLg: LeagueType = norm.includes('ULTRA')
+              ? 'Battle Frontier (Cauldron)'
+              : norm.includes('MASTER')
+              ? 'Battle Frontier (Master)'
+              : 'GREAT LEAGUE';
+            return { ...r, league: mappedLg };
+          });
+        }
+      }
+    } catch {}
+    return INITIAL_SHOW6_OPPONENT_ROSTERS_OF_6;
+  });
+
+  const [selectedShow6OppRoster6Id, setSelectedShow6OppRoster6Id] = useState<string>(() => {
+    return localStorage.getItem('gbl_selected_show6_opp_roster6_id') || 'show6-opp-roster6-spectral-1';
+  });
+  const [show6NewOppRosterName, setShow6NewOppRosterName] = useState<string>('');
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('gbl_show6_opp_rosters_of_6_v1', JSON.stringify(show6OpponentRosters6));
+    } catch {}
+  }, [show6OpponentRosters6]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('gbl_selected_show6_opp_roster6_id', selectedShow6OppRoster6Id);
+    } catch {}
+  }, [selectedShow6OppRoster6Id]);
 
   useEffect(() => {
     try {
@@ -1768,6 +1877,158 @@ export default function App() {
     setShow6Pick3Result(res);
   };
 
+  // Battle Frontier Meta Usage & Most-Used Cores Sync + Weighting State
+  const [bfUsageSheetUrl, setBfUsageSheetUrl] = useState<string>(() => getSavedBfUsageSheetUrl());
+  const [bfCoresSheetUrl, setBfCoresSheetUrl] = useState<string>(() => getSavedBfCoresSheetUrl());
+  const [show6UsageWeightPct, setShow6UsageWeightPctState] = useState<number>(() => getShow6UsageAndCoreWeightPct());
+  const [isSyncingBfSheets, setIsSyncingBfSheets] = useState<boolean>(false);
+  const [bfSheetSyncStatus, setBfSheetSyncStatus] = useState<string>(() => {
+    try {
+      return (
+        localStorage.getItem('gbl_bf_sheets_last_sync_status_v1') ||
+        'Pre-loaded Season 3 Cycle 1 Usage (4 Leagues) & Most-Used Cores'
+      );
+    } catch {
+      return 'Pre-loaded Season 3 Cycle 1 Usage (4 Leagues) & Most-Used Cores';
+    }
+  });
+
+  const handleChangeShow6UsageWeightPct = (val: number) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(val)));
+    setShow6UsageWeightPctState(clamped);
+    setShow6UsageAndCoreWeightPct(clamped);
+    handleRunShow6Pick3Optimizer(show6Pick3League, show6My6, show6Opponent6);
+  };
+
+  const handleSyncBattleFrontierSheets = async () => {
+    setIsSyncingBfSheets(true);
+    try {
+      setSavedBfUsageSheetUrl(bfUsageSheetUrl);
+      setSavedBfCoresSheetUrl(bfCoresSheetUrl);
+      const res = await syncBattleFrontierUsageAndCores(bfUsageSheetUrl, bfCoresSheetUrl);
+      setBfSheetSyncStatus(res.summary);
+      try {
+        localStorage.setItem('gbl_bf_sheets_last_sync_status_v1', res.summary);
+      } catch {}
+      handleRunShow6Pick3Optimizer(show6Pick3League, show6My6, show6Opponent6);
+      setStartBattleToast(`🏛️ ${res.summary}`);
+      setTimeout(() => setStartBattleToast(null), 2800);
+    } catch (err) {
+      setStartBattleToast('⚠️ Could not reach Google Sheets CSV export — using cached Battle Frontier Usage & Cores');
+      setTimeout(() => setStartBattleToast(null), 2800);
+    } finally {
+      setIsSyncingBfSheets(false);
+    }
+  };
+
+  // Pick-6 Team Editor Modal State (Supports editing both My 6 and Opponent 6 stored rosters)
+  const [editingShow6RosterModal, setEditingShow6RosterModal] = useState<{
+    target: 'MY' | 'OPP';
+    isNewFromBuilder?: boolean;
+    roster: Show6RosterOf6Preset;
+  } | null>(null);
+  const [activeShow6EditorSlotIdx, setActiveShow6EditorSlotIdx] = useState<number>(0);
+  const [show6EditorSlotUpgrades, setShow6EditorSlotUpgrades] = useState<Show6SlotUpgradeSuggestion[]>([]);
+  const [show6EditorSlotMovesets, setShow6EditorSlotMovesets] = useState<Show6MovesetSuggestion[]>([]);
+  const [show6EditorSlotAutocompleteIdx, setShow6EditorSlotAutocompleteIdx] = useState<number | null>(null);
+
+  const refreshShow6EditorSuggestions = (roster: Show6RosterOf6Preset, slotIdx: number) => {
+    const upgrades = recommendShow6RosterSlotUpgrades(roster.pokemon, slotIdx, roster.league);
+    const movesets = recommendShow6RosterSlotMovesets(roster.pokemon, slotIdx, roster.league);
+    setShow6EditorSlotUpgrades(upgrades);
+    setShow6EditorSlotMovesets(movesets);
+  };
+
+  const openShow6RosterEditor = (roster: Show6RosterOf6Preset, target: 'MY' | 'OPP', isNewFromBuilder = false) => {
+    const cloned: Show6RosterOf6Preset = {
+      ...roster,
+      pokemon: roster.pokemon.map((p, idx) => ({ ...p, id: p.id || `s6-${idx + 1}` }))
+    };
+    setEditingShow6RosterModal({ target, isNewFromBuilder, roster: cloned });
+    setActiveShow6EditorSlotIdx(0);
+    refreshShow6EditorSuggestions(cloned, 0);
+  };
+
+  const openActiveBuilderRosterEditor = (target: 'MY' | 'OPP') => {
+    const lg = show6Pick3League;
+    const sourceNames = target === 'MY' ? show6My6 : show6Opponent6;
+    const members: TeamMember[] = sourceNames.map((name, idx) => {
+      if (target === 'MY' && show6Pick3Result?.my6SimulatedBestMoves[idx]?.name === name) {
+        return { ...show6Pick3Result.my6SimulatedBestMoves[idx], id: `s6-${idx + 1}` };
+      }
+      const rec = getRecommendedMovesForPokemon(name, lg);
+      return {
+        id: `s6-${idx + 1}`,
+        name: rec?.name || name,
+        cp: rec?.cp || (lg === 'Battle Frontier (Cauldron)' ? 2500 : lg === 'Battle Frontier (Master)' ? 4000 : 1500),
+        fastMove: rec?.fastMove || 'Tackle',
+        chargedMove1: rec?.chargedMove1 || 'Body Slam',
+        chargedMove2: rec?.chargedMove2 || 'Surf'
+      };
+    });
+    const tempRoster: Show6RosterOf6Preset = {
+      id: target === 'MY' ? selectedShow6Roster6Id || `show6-roster-${Date.now()}` : selectedShow6OppRoster6Id || `show6-opp-roster-${Date.now()}`,
+      name:
+        target === 'MY'
+          ? `My ${lg} Show 6 (${members.slice(0, 3).map((m) => m.name.split(' ')[0]).join('/')})`
+          : `Opp ${lg} Show 6 (${members.slice(0, 3).map((m) => m.name.split(' ')[0]).join('/')})`,
+      league: lg,
+      pokemon: members,
+      notes: target === 'MY' ? 'Edited My Show 6 Roster' : 'Edited Opponent Show 6 Roster',
+      updatedAt: Date.now()
+    };
+    openShow6RosterEditor(tempRoster, target, true);
+  };
+
+  const handleSaveEditedShow6Roster = () => {
+    if (!editingShow6RosterModal) return;
+    const { target, roster } = editingShow6RosterModal;
+    if (hasMultipleMegas(roster.pokemon)) {
+      setStartBattleToast('⚠️ Max 1 Mega/Primal Pokémon allowed per Show 6 team!');
+      setTimeout(() => setStartBattleToast(null), 2600);
+      return;
+    }
+    const updatedRoster: Show6RosterOf6Preset = {
+      ...roster,
+      name: roster.name.trim() || `${target === 'MY' ? 'My' : 'Opp'} Show 6 (${roster.league})`,
+      updatedAt: Date.now()
+    };
+    if (target === 'MY') {
+      setShow6Rosters6((prev) => {
+        const idx = prev.findIndex((r) => r.id === updatedRoster.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = updatedRoster;
+          return next;
+        }
+        return [updatedRoster, ...prev];
+      });
+      setSelectedShow6Roster6Id(updatedRoster.id);
+      const nextNames = updatedRoster.pokemon.map((m) => m.name);
+      setShow6Pick3League(updatedRoster.league);
+      setShow6My6(nextNames);
+      handleRunShow6Pick3Optimizer(updatedRoster.league, nextNames, show6Opponent6);
+    } else {
+      setShow6OpponentRosters6((prev) => {
+        const idx = prev.findIndex((r) => r.id === updatedRoster.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = updatedRoster;
+          return next;
+        }
+        return [updatedRoster, ...prev];
+      });
+      setSelectedShow6OppRoster6Id(updatedRoster.id);
+      const nextNames = updatedRoster.pokemon.map((m) => m.name);
+      setShow6Pick3League(updatedRoster.league);
+      setShow6Opponent6(nextNames);
+      handleRunShow6Pick3Optimizer(updatedRoster.league, show6My6, nextNames);
+    }
+    setEditingShow6RosterModal(null);
+    setStartBattleToast(`✅ Saved ${target === 'MY' ? 'My' : 'Opponent'} Pick-6 Team: "${updatedRoster.name}"`);
+    setTimeout(() => setStartBattleToast(null), 2400);
+  };
+
   const handleSaveMy6AsRosterPreset = (customName?: string, membersOverride?: TeamMember[], leagueOverride?: LeagueType) => {
     const lg = leagueOverride || show6Pick3League;
     const members: TeamMember[] =
@@ -1785,6 +2046,11 @@ export default function App() {
               chargedMove2: rec?.chargedMove2 || 'Surf'
             };
           }));
+    if (hasMultipleMegas(members)) {
+      setStartBattleToast('⚠️ Max 1 Mega/Primal Pokémon allowed per Show 6 team!');
+      setTimeout(() => setStartBattleToast(null), 2600);
+      return;
+    }
     const newId = `show6-roster-${Date.now()}`;
     const rosterTitle =
       (customName ?? show6NewRosterName).trim() ||
@@ -1800,8 +2066,87 @@ export default function App() {
     setShow6Rosters6((prev) => [created, ...prev]);
     setSelectedShow6Roster6Id(newId);
     setShow6NewRosterName('');
-    setStartBattleToast(`🏛️ Saved Show 6 Team of 6: "${rosterTitle}"`);
+    setStartBattleToast(`🏛️ Saved My Show 6 Team: "${rosterTitle}"`);
     setTimeout(() => setStartBattleToast(null), 2200);
+  };
+
+  const handleSaveOpp6AsRosterPreset = (customName?: string, membersOverride?: TeamMember[], leagueOverride?: LeagueType) => {
+    const lg = leagueOverride || show6Pick3League;
+    const members: TeamMember[] =
+      membersOverride ||
+      show6Opponent6.map((name, idx) => {
+        const rec = getRecommendedMovesForPokemon(name, lg);
+        return {
+          id: `opp6-${idx + 1}`,
+          name: rec?.name || name,
+          cp: rec?.cp || 1500,
+          fastMove: rec?.fastMove || 'Tackle',
+          chargedMove1: rec?.chargedMove1 || 'Body Slam',
+          chargedMove2: rec?.chargedMove2 || 'Surf'
+        };
+      });
+    if (hasMultipleMegas(members)) {
+      setStartBattleToast('⚠️ Max 1 Mega/Primal Pokémon allowed per Opponent Show 6 team!');
+      setTimeout(() => setStartBattleToast(null), 2600);
+      return;
+    }
+    const newId = `show6-opp-roster-${Date.now()}`;
+    const rosterTitle =
+      (customName ?? show6NewOppRosterName).trim() ||
+      `Opp ${lg.split(' ')[0]} (${members.slice(0, 3).map((m) => m.name.split(' ')[0]).join('/')})`;
+    const created: Show6RosterOf6Preset = {
+      id: newId,
+      name: rosterTitle,
+      league: lg,
+      pokemon: members,
+      notes: 'Saved Opponent Show 6 Roster (Constrains Live Overlay AI)',
+      updatedAt: Date.now()
+    };
+    setShow6OpponentRosters6((prev) => [created, ...prev]);
+    setSelectedShow6OppRoster6Id(newId);
+    setShow6NewOppRosterName('');
+    setStartBattleToast(`⚔️ Saved Opponent Show 6 Team: "${rosterTitle}"`);
+    setTimeout(() => setStartBattleToast(null), 2200);
+  };
+
+  const handleDeleteShow6Roster6 = (roster: Show6RosterOf6Preset, target: 'MY' | 'OPP') => {
+    if (target === 'MY' && show6Rosters6.length <= 1) {
+      setStartBattleToast('⚠️ Keep at least 1 stored Show 6 roster in the app.');
+      setTimeout(() => setStartBattleToast(null), 2200);
+      return;
+    }
+    if (target === 'OPP' && show6OpponentRosters6.length <= 1) {
+      setStartBattleToast('⚠️ Keep at least 1 stored Opponent Show 6 roster in the app.');
+      setTimeout(() => setStartBattleToast(null), 2200);
+      return;
+    }
+    saveShow6DeletedRostersTrashToStorage([
+      { target, roster },
+      ...show6DeletedRostersTrash.filter((item) => item.roster.id !== roster.id)
+    ]);
+    if (target === 'MY') {
+      const next = show6Rosters6.filter((r) => r.id !== roster.id);
+      setShow6Rosters6(next);
+      if (selectedShow6Roster6Id === roster.id && next[0]) {
+        setSelectedShow6Roster6Id(next[0].id);
+      }
+    } else {
+      const next = show6OpponentRosters6.filter((r) => r.id !== roster.id);
+      setShow6OpponentRosters6(next);
+      if (selectedShow6OppRoster6Id === roster.id && next[0]) {
+        setSelectedShow6OppRoster6Id(next[0].id);
+      }
+    }
+    triggerUndoBanner(`🗑️ ${target === 'MY' ? 'My' : 'Opponent'} Show 6 '${roster.name}' moved to Show 6 Trash`, () => {
+      if (target === 'MY') {
+        setShow6Rosters6((prev) => [roster, ...prev.filter((r) => r.id !== roster.id)]);
+      } else {
+        setShow6OpponentRosters6((prev) => [roster, ...prev.filter((r) => r.id !== roster.id)]);
+      }
+      saveShow6DeletedRostersTrashToStorage(
+        show6DeletedRostersTrash.filter((item) => item.roster.id !== roster.id)
+      );
+    });
   };
 
   const handleEquipShow6LineupToOverlay = (
@@ -4285,6 +4630,15 @@ export default function App() {
     const targetId = editingPresetId || `preset-${Date.now()}`;
     const members = buildModalMembersArray();
 
+    if (
+      (appCombatMode === 'show6' || newPresetLeague === 'MEGA MASTER LEAGUE' || newPresetLeague === 'Battle Frontier (Master)') &&
+      hasMultipleMegas(members)
+    ) {
+      setStartBattleToast('⚠️ Each team can only contain at most 1 Mega/Primal Pokémon!');
+      setTimeout(() => setStartBattleToast(null), 2600);
+      return;
+    }
+
     const basePreset: TeamPreset = {
       id: targetId,
       name: newPresetName.trim() || `${newPresetLeague} Custom`,
@@ -4408,7 +4762,7 @@ export default function App() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'SilphScope_PvP_v5.00_Android_Project.zip';
+      a.download = 'SilphScope_PvP_v5.01_Android_Project.zip';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -4658,7 +5012,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v5.00 • Android Native Overlay
+                  v5.01 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -7151,29 +7505,38 @@ export default function App() {
                ===================================================================== */}
             {appCombatMode === 'show6' && (
               <div className="space-y-6">
-                {/* Section A: Saved Show 6 Rosters (Teams of 6) */}
-                <div className="bg-slate-900 border border-amber-500/40 rounded-2xl p-6 shadow-2xl space-y-4">
+                {/* Section A: Saved My Show 6 Rosters & Saved Opponent Show 6 Rosters (Teams of 6) */}
+                <div className="bg-slate-900 border border-amber-500/40 rounded-2xl p-6 shadow-2xl space-y-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
                     <div className="flex items-center gap-3">
                       {renderBattleFrontierLogo(28)}
                       <div>
-                        <h2 className="text-lg font-extrabold text-white flex items-center gap-2">
-                          <span>Show 6 Tournament Rosters (Saved Teams of 6)</span>
+                        <h2 className="text-lg font-extrabold text-white flex items-center gap-2 flex-wrap">
+                          <span>Saved My Show 6 Rosters (Teams of 6)</span>
                           <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-300 text-[10px] font-bold">
-                            {show6Rosters6.length} Saved Rosters of 6
+                            {show6Rosters6.length} My Rosters
                           </span>
                         </h2>
                         <p className="text-xs text-slate-400">
-                          Stores your 6-Pokémon Show 6 rosters independently of Standard GBL mode. Load any saved Team of 6 into the 6v6 Pick-3 Optimizer with 1 click!
+                          Load any saved Team of 6 into the 6v6 Pick-3 Optimizer, or click <strong>✎ Edit / Suggest</strong> to optimize individual slots with alternate Pokémon &amp; moveset recommendations!
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setShowTeamsTrashModal(true)}
+                        className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition"
+                        title="Open Show 6 Trash Bin (Separate from Standard GBL Trash)"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Show 6 Trash ({deletedTeamsTrash.length + show6DeletedRostersTrash.length})</span>
+                      </button>
                       <input
                         type="text"
                         value={show6NewRosterName}
                         onChange={(e) => setShow6NewRosterName(e.target.value)}
-                        placeholder="Optional Roster Name..."
+                        placeholder="My Roster Name (e.g. GL Show 6 Core)"
                         className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
                       />
                       <button
@@ -7181,7 +7544,7 @@ export default function App() {
                         onClick={() => handleSaveMy6AsRosterPreset()}
                         className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs shadow-lg transition shrink-0"
                       >
-                        💾 Save Current My 6
+                        💾 Save My 6
                       </button>
                     </div>
                   </div>
@@ -7203,7 +7566,7 @@ export default function App() {
                               <span className="font-extrabold text-sm text-white block">{roster.name}</span>
                               <span className="text-[10px] font-mono text-amber-300">{roster.league}</span>
                             </div>
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <button
                                 type="button"
                                 onClick={() => {
@@ -7215,16 +7578,22 @@ export default function App() {
                                 }}
                                 className="px-2.5 py-1 rounded-lg bg-sky-500/25 hover:bg-sky-500/40 border border-sky-400/60 text-sky-200 text-[11px] font-bold transition"
                               >
-                                ⚡ Load into 6v6 Optimizer
+                                ⚡ Load 6
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openShow6RosterEditor(roster, 'MY')}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/50 text-emerald-200 text-[11px] font-bold transition"
+                                title="Edit Pick-6 Team & Suggest Alternate Pokémon or Moves"
+                              >
+                                ✎ Edit / Suggest
                               </button>
                               {show6Rosters6.length > 1 && (
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    setShow6Rosters6((prev) => prev.filter((r) => r.id !== roster.id))
-                                  }
+                                  onClick={() => handleDeleteShow6Roster6(roster, 'MY')}
                                   className="px-2 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/35 border border-rose-400/40 text-rose-200 text-[11px] font-bold"
-                                  title="Delete Roster of 6"
+                                  title="Delete My Roster of 6"
                                 >
                                   🗑️
                                 </button>
@@ -7250,6 +7619,111 @@ export default function App() {
                         </div>
                       );
                     })}
+                  </div>
+
+                  {/* Saved Opponent Show 6 Rosters (Teams of 6) */}
+                  <div className="pt-4 border-t border-slate-800 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+                          <span>⚔️ Saved Opponent Show 6 Rosters (Teams of 6)</span>
+                          <span className="px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-400/50 text-rose-300 text-[10px] font-bold">
+                            {show6OpponentRosters6.length} Opponent Rosters
+                          </span>
+                        </h3>
+                        <p className="text-xs text-slate-400">
+                          Store tournament opponents&apos; Pick-6 teams to quickly load into the 6v6 Pick-3 Simulator and constrain Live Overlay AI backline predictions!
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <input
+                          type="text"
+                          value={show6NewOppRosterName}
+                          onChange={(e) => setShow6NewOppRosterName(e.target.value)}
+                          placeholder="Opponent Name / Scouting Tag..."
+                          className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSaveOpp6AsRosterPreset()}
+                          className="px-3.5 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-slate-950 font-extrabold text-xs shadow-lg transition shrink-0"
+                        >
+                          💾 Save Opp 6
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {show6OpponentRosters6.map((oppRoster) => {
+                        const isSelOpp = oppRoster.id === selectedShow6OppRoster6Id;
+                        return (
+                          <div
+                            key={oppRoster.id}
+                            className={`p-4 rounded-xl border transition flex flex-col justify-between gap-3 ${
+                              isSelOpp
+                                ? 'bg-rose-500/10 border-rose-400/70 shadow-lg'
+                                : 'bg-slate-950/80 border-slate-800 hover:border-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div>
+                                <span className="font-extrabold text-sm text-white block">{oppRoster.name}</span>
+                                <span className="text-[10px] font-mono text-rose-300">{oppRoster.league}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedShow6OppRoster6Id(oppRoster.id);
+                                    const names = oppRoster.pokemon.map((p) => p.name);
+                                    setShow6Pick3League(oppRoster.league);
+                                    setShow6Opponent6(names);
+                                    handleRunShow6Pick3Optimizer(oppRoster.league, show6My6, names);
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-amber-500/25 hover:bg-amber-500/40 border border-amber-400/60 text-amber-200 text-[11px] font-bold transition"
+                                >
+                                  ⚡ Load Opp 6
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openShow6RosterEditor(oppRoster, 'OPP')}
+                                  className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/50 text-emerald-200 text-[11px] font-bold transition"
+                                  title="Edit Opponent Pick-6 Team & Suggest Alternate Pokémon or Moves"
+                                >
+                                  ✎ Edit / Suggest
+                                </button>
+                                {show6OpponentRosters6.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteShow6Roster6(oppRoster, 'OPP')}
+                                    className="px-2 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/35 border border-rose-400/40 text-rose-200 text-[11px] font-bold"
+                                    title="Delete Opponent Roster of 6"
+                                  >
+                                    🗑️
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                              {oppRoster.pokemon.slice(0, 6).map((m, idx) => (
+                                <div
+                                  key={`${oppRoster.id}-${idx}`}
+                                  className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px]"
+                                >
+                                  <span className="font-bold text-white block truncate">
+                                    #{idx + 1} {m.name}
+                                  </span>
+                                  <span className="text-[9.5px] text-slate-400 font-mono block truncate">
+                                    {m.fastMove} • {m.chargedMove1}/{m.chargedMove2}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 
@@ -7321,6 +7795,7 @@ export default function App() {
                             }}
                             className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white"
                           >
+                            <option value="GREAT LEAGUE">GREAT LEAGUE (1500 CP)</option>
                             <option value="Battle Frontier (Spectral)">Battle Frontier (Spectral) (1500 CP)</option>
                             <option value="Battle Frontier (Cauldron)">Battle Frontier (Cauldron) (2500 CP)</option>
                             <option value="Battle Frontier (Master)">Battle Frontier (Master) (Uncapped CP)</option>
@@ -7339,21 +7814,30 @@ export default function App() {
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         {/* Your 6 Pokémon */}
                         <div className="p-4 rounded-xl bg-slate-950/80 border border-sky-500/40 space-y-3">
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
                             <span className="text-xs font-extrabold uppercase tracking-wider text-sky-400">
                               🛡️ Your 6 Pokémon (Best Movesets Auto-Simulated)
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const def = getDefaultShow6RosterNames(show6Pick3League);
-                                setShow6My6(def.my6);
-                                handleRunShow6Pick3Optimizer(show6Pick3League, def.my6, show6Opponent6);
-                              }}
-                              className="text-[10px] font-bold text-sky-300 hover:underline"
-                            >
-                              Load League Template
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openActiveBuilderRosterEditor('MY')}
+                                className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/50 text-[10px] font-bold text-emerald-300 hover:bg-emerald-500/30"
+                              >
+                                ✎ Edit &amp; Suggest Upgrades/Moves
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const def = getDefaultShow6RosterNames(show6Pick3League);
+                                  setShow6My6(def.my6);
+                                  handleRunShow6Pick3Optimizer(show6Pick3League, def.my6, show6Opponent6);
+                                }}
+                                className="text-[10px] font-bold text-sky-300 hover:underline"
+                              >
+                                Load League Template
+                              </button>
+                            </div>
                           </div>
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                             {show6My6.map((val, idx) => {
@@ -7423,21 +7907,37 @@ export default function App() {
 
                         {/* Opponent's 6 Pokémon */}
                         <div className="p-4 rounded-xl bg-slate-950/80 border border-amber-500/40 space-y-3">
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
                             <span className="text-xs font-extrabold uppercase tracking-wider text-amber-400">
-                              ⚔️ Opponent&apos;s 6 Pokémon (Unknown Movesets • Weighted 75%/25%)
+                              ⚔️ Opponent&apos;s 6 Pokémon (Constrains Live Overlay AI)
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const def = getDefaultShow6RosterNames(show6Pick3League);
-                                setShow6Opponent6(def.opp6);
-                                handleRunShow6Pick3Optimizer(show6Pick3League, show6My6, def.opp6);
-                              }}
-                              className="text-[10px] font-bold text-amber-300 hover:underline"
-                            >
-                              Reset Sample Opp 6
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleSaveOpp6AsRosterPreset()}
+                                className="px-2 py-0.5 rounded bg-rose-500/20 border border-rose-400/50 text-[10px] font-bold text-rose-300 hover:bg-rose-500/30"
+                              >
+                                💾 Save Opp 6
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openActiveBuilderRosterEditor('OPP')}
+                                className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/50 text-[10px] font-bold text-emerald-300 hover:bg-emerald-500/30"
+                              >
+                                ✎ Edit Opp 6
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const def = getDefaultShow6RosterNames(show6Pick3League);
+                                  setShow6Opponent6(def.opp6);
+                                  handleRunShow6Pick3Optimizer(show6Pick3League, show6My6, def.opp6);
+                                }}
+                                className="text-[10px] font-bold text-amber-300 hover:underline"
+                              >
+                                Reset Sample Opp 6
+                              </button>
+                            </div>
                           </div>
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                             {show6Opponent6.map((val, idx) => {
@@ -7667,6 +8167,7 @@ export default function App() {
                             }}
                             className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white"
                           >
+                            <option value="GREAT LEAGUE">GREAT LEAGUE (1500 CP)</option>
                             <option value="Battle Frontier (Spectral)">Battle Frontier (Spectral) (1500 CP)</option>
                             <option value="Battle Frontier (Cauldron)">Battle Frontier (Cauldron) (2500 CP)</option>
                             <option value="Battle Frontier (Master)">Battle Frontier (Master) (Uncapped CP)</option>
@@ -8131,7 +8632,13 @@ export default function App() {
                   title="Restore accidentally deleted team presets"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>Trash ({deletedTeamsTrash.length})</span>
+                  <span>
+                    Trash (
+                    {appCombatMode === 'show6'
+                      ? deletedTeamsTrash.length + show6DeletedRostersTrash.length
+                      : deletedTeamsTrash.length}
+                    )
+                  </span>
                 </button>
                 <button
                   onClick={handleManualPvPokeSync}
@@ -8245,6 +8752,7 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-1.5">
                         {(appCombatMode === 'show6'
                           ? ([
+                              { id: 'GREAT LEAGUE', label: 'Great (1500)' },
                               { id: 'Battle Frontier (Spectral)', label: 'Spectral (1500)' },
                               { id: 'Battle Frontier (Cauldron)', label: 'Cauldron (2500)' },
                               { id: 'Battle Frontier (Master)', label: 'BF Master' }
@@ -9053,6 +9561,7 @@ export default function App() {
                         >
                           {appCombatMode === 'show6' ? (
                             <>
+                              <option value="GREAT LEAGUE">GREAT LEAGUE (Max 1500 CP)</option>
                               <option value="Battle Frontier (Spectral)">Battle Frontier (Spectral) (Max 1500 CP)</option>
                               <option value="Battle Frontier (Cauldron)">Battle Frontier (Cauldron) (Max 2500 CP)</option>
                               <option value="Battle Frontier (Master)">Battle Frontier (Master) (No CP Limit)</option>
@@ -10114,7 +10623,7 @@ export default function App() {
                   <span className="text-sm font-extrabold text-amber-300 flex items-center gap-2">
                     <span>{appCombatMode === 'show6' ? '🏛️' : '🛡️'} App Combat Mode (Standard GBL vs. Show 6 Battle Frontier)</span>
                     <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 text-[10px] font-mono">
-                      v5.00
+                      v5.01
                     </span>
                   </span>
                   <span className="text-xs text-slate-400 block mt-0.5">
@@ -11206,6 +11715,103 @@ export default function App() {
                 <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
                   <span className="text-emerald-400 block text-[10px]">Mega ML</span>
                   <strong className="text-white text-sm">{dbTelemetry.megaCount}</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* ===================================================================
+                CARD 4B: BATTLE FRONTIER META USAGE & MOST-USED CORES GOOGLE SHEETS + WEIGHTING SLIDER
+               =================================================================== */}
+            <div className="bg-slate-900 border border-amber-500/40 rounded-2xl p-5 shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                <div>
+                  <span className="text-sm font-extrabold text-amber-300 block">
+                    🏛️ Battle Frontier Show 6 Meta Usage (Week - All) &amp; Most-Used Cores Sync
+                  </span>
+                  <span className="text-xs text-slate-400 font-mono">
+                    Status: <strong className="text-emerald-400">{bfSheetSyncStatus}</strong>
+                  </span>
+                </div>
+                <span className="px-2.5 py-1 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-200 text-[10px] font-bold font-mono shrink-0">
+                  GL: {(BATTLE_FRONTIER_USAGE_MAP['GREAT LEAGUE'] || []).length} • Spec: {(BATTLE_FRONTIER_USAGE_MAP['Battle Frontier (Spectral)'] || []).length} • Caul: {(BATTLE_FRONTIER_USAGE_MAP['Battle Frontier (Cauldron)'] || []).length} • ML: {(BATTLE_FRONTIER_USAGE_MAP['Battle Frontier (Master)'] || []).length}
+                </span>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">
+                    1. Battle Frontier Meta Usage Sheet Link (Week - All / Cumulative Tab):
+                  </label>
+                  <input
+                    type="text"
+                    value={bfUsageSheetUrl}
+                    onChange={(e) => setBfUsageSheetUrl(e.target.value)}
+                    placeholder="https://docs.google.com/spreadsheets/d/.../edit?gid=466174368"
+                    className="w-full bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">
+                    2. Battle Frontier Most-Used Cores Sheet Link:
+                  </label>
+                  <input
+                    type="text"
+                    value={bfCoresSheetUrl}
+                    onChange={(e) => setBfCoresSheetUrl(e.target.value)}
+                    placeholder="https://docs.google.com/spreadsheets/d/.../edit?gid=94099054"
+                    className="w-full bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleSyncBattleFrontierSheets}
+                    disabled={isSyncingBfSheets}
+                    className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center gap-2 shadow-lg transition"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncingBfSheets ? 'animate-spin' : ''}`} />
+                    <span>
+                      {isSyncingBfSheets
+                        ? 'Importing Battle Frontier Sheets...'
+                        : '📥 Save Links & Import Battle Frontier Usage + Cores'}
+                    </span>
+                  </button>
+                  <span className="text-[11px] text-slate-400">
+                    Loaded Cores — GL: {(BATTLE_FRONTIER_CORES_MAP['GREAT LEAGUE'] || []).length} • Spectral: {(BATTLE_FRONTIER_CORES_MAP['Battle Frontier (Spectral)'] || []).length} • Cauldron: {(BATTLE_FRONTIER_CORES_MAP['Battle Frontier (Cauldron)'] || []).length} • Master: {(BATTLE_FRONTIER_CORES_MAP['Battle Frontier (Master)'] || []).length}
+                  </span>
+                </div>
+              </div>
+
+              {/* Show 6 Meta Fusion Weighting Slider (Default 65% Usage & Cores / 35% PvPoke Rankings) */}
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-white">
+                    ⚖️ Show 6 Meta &amp; Core Weighting vs. Straight PvPoke Rankings
+                  </span>
+                  <span className="font-mono font-extrabold text-amber-300">
+                    {show6UsageWeightPct}% Imported Usage &amp; Cores / {100 - show6UsageWeightPct}% PvPoke Rankings
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={show6UsageWeightPct}
+                  onChange={(e) => handleChangeShow6UsageWeightPct(Number(e.target.value))}
+                  className="w-full accent-amber-500 cursor-pointer"
+                />
+                <div className="flex justify-between items-center text-[10px] text-slate-400">
+                  <span>0% (100% Straight PvPoke)</span>
+                  <button
+                    type="button"
+                    onClick={() => handleChangeShow6UsageWeightPct(65)}
+                    className="text-amber-300 hover:underline font-bold"
+                  >
+                    Reset Default (65% Usage &amp; Cores / 35% PvPoke)
+                  </button>
+                  <span>100% (Pure BF Usage &amp; Cores)</span>
                 </div>
               </div>
             </div>
@@ -14067,13 +14673,383 @@ export default function App() {
           </div>
         )}
 
-        {/* Deleted Teams Trash Bin Modal */}
+        {/* Pick-6 Team Editor Modal (Edit My 6 or Opponent 6 Roster + Suggest Alternate Pokémon & Alternate Moves) */}
+        {editingShow6RosterModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+            <div className="bg-slate-900 border border-amber-500/50 rounded-2xl max-w-4xl w-full p-5 shadow-2xl space-y-4 my-auto max-h-[92vh] overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div>
+                  <h3 className="font-extrabold text-base text-white flex items-center gap-2">
+                    <span>
+                      {editingShow6RosterModal.target === 'MY'
+                        ? '🛡️ Edit My Pick-6 Tournament Roster'
+                        : '⚔️ Edit Opponent Pick-6 Tournament Roster'}
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-400/50 text-amber-300 text-[10px] font-mono">
+                      Max 1 Mega • Weighted Meta + Core Simulator
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Click any of the 6 slots below to inspect &amp; apply <strong>Top Alternate Pokémon Upgrades</strong> and <strong>Top Alternate Movesets</strong> against the fused Battle Frontier Usage + Core + PvPoke meta!
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingShow6RosterModal(null)}
+                  className="text-slate-400 hover:text-white font-bold text-lg px-2"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Roster Name</label>
+                  <input
+                    type="text"
+                    value={editingShow6RosterModal.roster.name}
+                    onChange={(e) =>
+                      setEditingShow6RosterModal((prev) =>
+                        prev ? { ...prev, roster: { ...prev.roster, name: e.target.value } } : null
+                      )
+                    }
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Show 6 League Format</label>
+                  <select
+                    value={editingShow6RosterModal.roster.league}
+                    onChange={(e) => {
+                      const nextLg = e.target.value as LeagueType;
+                      const updatedRoster: Show6RosterOf6Preset = {
+                        ...editingShow6RosterModal.roster,
+                        league: nextLg
+                      };
+                      setEditingShow6RosterModal({
+                        ...editingShow6RosterModal,
+                        roster: updatedRoster
+                      });
+                      refreshShow6EditorSuggestions(updatedRoster, activeShow6EditorSlotIdx);
+                    }}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-bold"
+                  >
+                    <option value="GREAT LEAGUE">GREAT LEAGUE (1500 CP)</option>
+                    <option value="Battle Frontier (Spectral)">Battle Frontier (Spectral) (1500 CP)</option>
+                    <option value="Battle Frontier (Cauldron)">Battle Frontier (Cauldron) (2500 CP)</option>
+                    <option value="Battle Frontier (Master)">Battle Frontier (Master) (Uncapped CP)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* 6 Pokémon Slots Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {editingShow6RosterModal.roster.pokemon.slice(0, 6).map((member, sIdx) => {
+                  const isSelectedSlot = activeShow6EditorSlotIdx === sIdx;
+                  const isAutoFocused = show6EditorSlotAutocompleteIdx === sIdx;
+                  const autoSugs = isAutoFocused
+                    ? getPokemonAutocompleteSuggestions(member.name, editingShow6RosterModal.roster.league, 8)
+                    : [];
+                  const spEntry = POKEMON_DATABASE[member.name];
+                  const fastPool = spEntry?.fastMoves || [member.fastMove];
+                  const chargedPool = spEntry?.chargedMoves || [member.chargedMove1, member.chargedMove2];
+
+                  const updateSlotMember = (patch: Partial<TeamMember>, recalculate = false) => {
+                    const nextPokemon = [...editingShow6RosterModal.roster.pokemon];
+                    nextPokemon[sIdx] = { ...nextPokemon[sIdx], ...patch };
+                    const nextRoster = { ...editingShow6RosterModal.roster, pokemon: nextPokemon };
+                    setEditingShow6RosterModal({ ...editingShow6RosterModal, roster: nextRoster });
+                    if (recalculate) {
+                      refreshShow6EditorSuggestions(nextRoster, sIdx);
+                    }
+                  };
+
+                  return (
+                    <div
+                      key={`edit-s6-${sIdx}`}
+                      onClick={() => {
+                        if (activeShow6EditorSlotIdx !== sIdx) {
+                          setActiveShow6EditorSlotIdx(sIdx);
+                          refreshShow6EditorSuggestions(editingShow6RosterModal.roster, sIdx);
+                        }
+                      }}
+                      className={`p-3 rounded-xl border transition cursor-pointer space-y-2 relative ${
+                        isSelectedSlot
+                          ? 'bg-amber-500/10 border-amber-400 shadow-lg'
+                          : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-extrabold text-amber-300">
+                          Slot #{sIdx + 1} {isMegaOrPrimalSpecies(member.name) ? '🧬 MEGA' : ''}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400">
+                          {isSelectedSlot ? '✨ Active Optimizer Slot' : 'Click to Suggest'}
+                        </span>
+                      </div>
+
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={member.name}
+                          onFocus={() => {
+                            setActiveShow6EditorSlotIdx(sIdx);
+                            setShow6EditorSlotAutocompleteIdx(sIdx);
+                          }}
+                          onChange={(e) => {
+                            updateSlotMember({ name: e.target.value });
+                            setShow6EditorSlotAutocompleteIdx(sIdx);
+                          }}
+                          onBlur={() =>
+                            setTimeout(() => {
+                              setShow6EditorSlotAutocompleteIdx((prev) => (prev === sIdx ? null : prev));
+                            }, 160)
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white"
+                          placeholder={`Pokémon #${sIdx + 1}`}
+                        />
+                        {isAutoFocused && autoSugs.length > 0 && (
+                          <div className="absolute left-0 right-0 top-full mt-1 z-50 max-h-44 overflow-y-auto rounded-xl bg-slate-900 border border-amber-400 shadow-2xl divide-y divide-slate-800">
+                            {autoSugs.map((opt) => (
+                              <button
+                                key={opt.name}
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  const rec = getRecommendedMovesForPokemon(
+                                    opt.name,
+                                    editingShow6RosterModal.roster.league
+                                  );
+                                  updateSlotMember(
+                                    {
+                                      name: opt.name,
+                                      cp: rec?.cp || opt.cp,
+                                      fastMove: rec?.fastMove || member.fastMove,
+                                      chargedMove1: rec?.chargedMove1 || member.chargedMove1,
+                                      chargedMove2: rec?.chargedMove2 || member.chargedMove2
+                                    },
+                                    true
+                                  );
+                                  setShow6EditorSlotAutocompleteIdx(null);
+                                }}
+                                className="w-full px-2.5 py-1.5 text-left text-xs font-bold text-white hover:bg-amber-500/25 flex items-center justify-between"
+                              >
+                                <span className="truncate">{opt.name}</span>
+                                <span className="text-[9px] font-mono text-amber-300">CP {opt.cp}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-1.5 text-[11px]">
+                        <select
+                          value={member.fastMove}
+                          onChange={(e) => updateSlotMember({ fastMove: e.target.value }, true)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-slate-200 font-mono"
+                        >
+                          {Array.from(new Set([member.fastMove, ...fastPool])).map((fm) => (
+                            <option key={fm} value={fm}>
+                              Fast: {fm}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="grid grid-cols-2 gap-1">
+                          <select
+                            value={member.chargedMove1}
+                            onChange={(e) => updateSlotMember({ chargedMove1: e.target.value }, true)}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-200 font-mono text-[10px]"
+                          >
+                            {Array.from(new Set([member.chargedMove1, ...chargedPool])).map((cm) => (
+                              <option key={cm} value={cm}>
+                                C1: {cm}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={member.chargedMove2}
+                            onChange={(e) => updateSlotMember({ chargedMove2: e.target.value }, true)}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-1.5 py-1 text-slate-200 font-mono text-[10px]"
+                          >
+                            {Array.from(new Set([member.chargedMove2, ...chargedPool])).map((cm) => (
+                              <option key={cm} value={cm}>
+                                C2: {cm}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Per-Slot Recommendations Panel (Alternate Pokémon Upgrades & Alternate Movesets) */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-2 border-t border-slate-800">
+                {/* Suggest Alternate Pokémon for Active Slot */}
+                <div className="p-3.5 rounded-xl bg-slate-950 border border-emerald-500/40 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-emerald-300">
+                      🔄 Suggest Alternate Pokémon for Slot #{activeShow6EditorSlotIdx + 1} (
+                      {editingShow6RosterModal.roster.pokemon[activeShow6EditorSlotIdx]?.name})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        refreshShow6EditorSuggestions(editingShow6RosterModal.roster, activeShow6EditorSlotIdx)
+                      }
+                      className="text-[10px] font-bold text-emerald-400 hover:underline"
+                    >
+                      Recalculate
+                    </button>
+                  </div>
+                  {show6EditorSlotUpgrades.length === 0 ? (
+                    <p className="text-[11px] text-slate-400">
+                      Click any slot card above to compute top Battle Frontier meta &amp; core Pokémon replacements.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {show6EditorSlotUpgrades.map((sug) => (
+                        <div
+                          key={sug.replacement.name}
+                          className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between gap-2 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-bold text-white flex items-center gap-1.5 flex-wrap">
+                              <span>{sug.replacement.name}</span>
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[10px]">
+                                BR {sug.newBr} ({sug.deltaBr >= 0 ? `+${sug.deltaBr}` : sug.deltaBr})
+                              </span>
+                              {sug.usagePct > 0 && (
+                                <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px]">
+                                  Usage {sug.usagePct.toFixed(1)}%
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono truncate">
+                              {sug.replacement.fastMove} + {sug.replacement.chargedMove1}/{sug.replacement.chargedMove2}
+                            </div>
+                            <div className="text-[10px] text-sky-300">{sug.synergyReason}</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextPokemon = [...editingShow6RosterModal.roster.pokemon];
+                              nextPokemon[activeShow6EditorSlotIdx] = {
+                                ...sug.replacement,
+                                id: `s6-${activeShow6EditorSlotIdx + 1}`
+                              };
+                              const nextRoster = { ...editingShow6RosterModal.roster, pokemon: nextPokemon };
+                              setEditingShow6RosterModal({ ...editingShow6RosterModal, roster: nextRoster });
+                              refreshShow6EditorSuggestions(nextRoster, activeShow6EditorSlotIdx);
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shrink-0"
+                          >
+                            Swap In
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Suggest Alternate Movesets for Active Slot */}
+                <div className="p-3.5 rounded-xl bg-slate-950 border border-sky-500/40 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-sky-300">
+                      ⚡ Suggest Alternate Moves for Slot #{activeShow6EditorSlotIdx + 1} (
+                      {editingShow6RosterModal.roster.pokemon[activeShow6EditorSlotIdx]?.name})
+                    </span>
+                  </div>
+                  {show6EditorSlotMovesets.length === 0 ? (
+                    <p className="text-[11px] text-slate-400">
+                      No alternate legal movesets found for this species.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {show6EditorSlotMovesets.map((ms, mIdx) => (
+                        <div
+                          key={`${ms.fastMove}-${ms.chargedMove1}-${ms.chargedMove2}-${mIdx}`}
+                          className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between gap-2 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-bold text-white font-mono truncate">
+                              {ms.fastMove} + {ms.chargedMove1} / {ms.chargedMove2}
+                            </div>
+                            <div className="text-[10px] text-slate-400 flex items-center gap-2">
+                              <span className="text-sky-300 font-mono">
+                                Projected BR {ms.projectedBr} ({ms.deltaBr >= 0 ? `+${ms.deltaBr}` : ms.deltaBr})
+                              </span>
+                              <span>• {ms.reason}</span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextPokemon = [...editingShow6RosterModal.roster.pokemon];
+                              nextPokemon[activeShow6EditorSlotIdx] = {
+                                ...nextPokemon[activeShow6EditorSlotIdx],
+                                fastMove: ms.fastMove,
+                                chargedMove1: ms.chargedMove1,
+                                chargedMove2: ms.chargedMove2
+                              };
+                              const nextRoster = { ...editingShow6RosterModal.roster, pokemon: nextPokemon };
+                              setEditingShow6RosterModal({ ...editingShow6RosterModal, roster: nextRoster });
+                              refreshShow6EditorSuggestions(nextRoster, activeShow6EditorSlotIdx);
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-[11px] shrink-0"
+                          >
+                            Apply Moves
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-slate-800">
+                <span className="text-[11px] text-slate-400">
+                  {hasMultipleMegas(editingShow6RosterModal.roster.pokemon) ? (
+                    <strong className="text-rose-400">
+                      ⚠️ Invalid: Team contains more than 1 Mega/Primal Pokémon!
+                    </strong>
+                  ) : (
+                    '✅ Valid Show 6 Roster (≤ 1 Mega/Primal)'
+                  )}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingShow6RosterModal(null)}
+                    className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveEditedShow6Roster}
+                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold shadow-lg"
+                  >
+                    💾 Save &amp; Load Pick-6 Roster
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Deleted Teams Trash Bin Modal (Separate for Show 6 Mode vs Standard GBL Mode) */}
         {showTeamsTrashModal && (
           <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-5 shadow-2xl space-y-3">
               <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                 <h3 className="font-bold text-sm text-white">
-                  🗑️ Deleted Teams Trash Bin ({deletedTeamsTrash.length})
+                  🗑️ {appCombatMode === 'show6' ? 'Show 6 Mode' : 'Standard GBL'} Deleted Teams Trash Bin (
+                  {appCombatMode === 'show6'
+                    ? deletedTeamsTrash.length + show6DeletedRostersTrash.length
+                    : deletedTeamsTrash.length}
+                  )
                 </h3>
                 <button
                   onClick={() => setShowTeamsTrashModal(false)}
@@ -14082,12 +15058,68 @@ export default function App() {
                   ✕
                 </button>
               </div>
-              {deletedTeamsTrash.length === 0 ? (
+              {deletedTeamsTrash.length === 0 &&
+              (appCombatMode !== 'show6' || show6DeletedRostersTrash.length === 0) ? (
                 <p className="text-xs text-slate-400 py-4 text-center">
-                  No deleted teams in Trash. Any team you delete can be restored from here anytime.
+                  No deleted teams in {appCombatMode === 'show6' ? 'Show 6' : 'GBL'} Trash. Any team you delete in this mode can be restored from here anytime.
                 </p>
               ) : (
                 <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                  {appCombatMode === 'show6' &&
+                    show6DeletedRostersTrash.map((item) => (
+                      <div
+                        key={item.roster.id}
+                        className="p-3 rounded-xl bg-slate-950 border border-amber-500/40 flex items-center justify-between gap-2 text-xs"
+                      >
+                        <div>
+                          <div className="font-bold text-white">
+                            <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-mono mr-1.5">
+                              {item.target === 'MY' ? 'MY 6' : 'OPP 6'}
+                            </span>
+                            {item.roster.name}{' '}
+                            <span className="text-[10px] text-amber-400 font-mono">({item.roster.league})</span>
+                          </div>
+                          <div className="text-[11px] text-slate-400">
+                            {item.roster.pokemon.map((p) => p.name).join(' • ')}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (item.target === 'MY') {
+                                setShow6Rosters6((prev) => [
+                                  item.roster,
+                                  ...prev.filter((r) => r.id !== item.roster.id)
+                                ]);
+                              } else {
+                                setShow6OpponentRosters6((prev) => [
+                                  item.roster,
+                                  ...prev.filter((r) => r.id !== item.roster.id)
+                                ]);
+                              }
+                              saveShow6DeletedRostersTrashToStorage(
+                                show6DeletedRostersTrash.filter((x) => x.roster.id !== item.roster.id)
+                              );
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px]"
+                          >
+                            ♻️ Restore
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              saveShow6DeletedRostersTrashToStorage(
+                                show6DeletedRostersTrash.filter((x) => x.roster.id !== item.roster.id)
+                              )
+                            }
+                            className="px-2 py-1 rounded-lg bg-rose-950 hover:bg-rose-900 text-rose-300 font-bold text-[11px]"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   {deletedTeamsTrash.map((t) => (
                     <div
                       key={t.id}
@@ -14125,21 +15157,44 @@ export default function App() {
                 </div>
               )}
               <div className="flex justify-between items-center pt-2 border-t border-slate-800">
-                {deletedTeamsTrash.length > 0 ? (
+                {deletedTeamsTrash.length > 0 ||
+                (appCombatMode === 'show6' && show6DeletedRostersTrash.length > 0) ? (
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => {
-                        restoreTeamPresetsFromTrash(deletedTeamsTrash);
+                        if (deletedTeamsTrash.length > 0) {
+                          restoreTeamPresetsFromTrash(deletedTeamsTrash);
+                        }
+                        if (appCombatMode === 'show6' && show6DeletedRostersTrash.length > 0) {
+                          const myToRestore = show6DeletedRostersTrash
+                            .filter((x) => x.target === 'MY')
+                            .map((x) => x.roster);
+                          const oppToRestore = show6DeletedRostersTrash
+                            .filter((x) => x.target === 'OPP')
+                            .map((x) => x.roster);
+                          if (myToRestore.length > 0) {
+                            setShow6Rosters6((prev) => [...myToRestore, ...prev]);
+                          }
+                          if (oppToRestore.length > 0) {
+                            setShow6OpponentRosters6((prev) => [...oppToRestore, ...prev]);
+                          }
+                          saveShow6DeletedRostersTrashToStorage([]);
+                        }
                         setShowTeamsTrashModal(false);
                       }}
                       className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold"
                     >
-                      ♻️ Restore All ({deletedTeamsTrash.length})
+                      ♻️ Restore All
                     </button>
                     <button
                       type="button"
-                      onClick={() => saveDeletedTeamsTrashToStorage([])}
+                      onClick={() => {
+                        saveDeletedTeamsTrashToStorage([]);
+                        if (appCombatMode === 'show6') {
+                          saveShow6DeletedRostersTrashToStorage([]);
+                        }
+                      }}
                       className="px-3 py-1.5 rounded-xl bg-rose-950 hover:bg-rose-900 text-rose-300 text-xs font-bold"
                     >
                       🗑️ Empty Trash

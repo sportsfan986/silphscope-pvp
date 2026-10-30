@@ -1,4 +1,16 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v4.03`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v5.01`)
+
+---
+
+## v5.00 – v5.01 (2026-10-30) — Show 6 Mode (Battle Frontier), Pick-6 Team Editor with AI Pokémon & Moveset Suggestions, Saved Opponent Pick-6 Rosters, Separate Mode Trash, 1-Mega Limit & Battle Frontier Usage + Core Weighting
+*Major milestone release series introducing Show 6 Mode (Pick-6 Bring-3) for Battle Frontier formats (`GREAT LEAGUE`, `Battle Frontier (Spectral)`, `Battle Frontier (Cauldron)`, `Battle Frontier (Master)`), Pick-6 Team Editor with per-slot Alternate Pokémon & Alternate Moveset suggestions, Saved Opponent Pick-6 Rosters, separate Trash bins for Show 6 vs. GBL modes, 1-Mega limit enforcement, Google Sheets import for Battle Frontier Meta Usage (`Week - All`) & Most-Used Cores with 65%/35% Usage+Core vs. PvPoke weighting slider, and Live Overlay Common Core unrevealed backline prediction boost.*
+
+- **v5.01 — Key Feature: Pick-6 Team Editor (My 6 & Opponent 6) with AI Slot & Moveset Suggestions, Saved Opponent Rosters, Separate Trash, 4 Battle Frontier Leagues, 1-Mega Limit & Imported Usage/Core Fusion**:
+  - **Pick-6 Team Editor Modal (`showEditShow6RosterDialog` / Web Pick-6 Editor)**: Edit any stored **My 6** or **Opponent 6** roster with per-slot **Suggest Alternate Pokémon (Top 5 Upgrades)** and **Suggest Alternate Moves (Top 3–4 Movesets)**.
+  - **Saved Opponent Pick-6 Rosters**: Store, load, edit, and delete multiple Opponent Pick-6 rosters alongside My Pick-6 rosters.
+  - **Separate Trash for Show 6 vs. GBL Modes**: Independent Deleted Teams Trash (including Pick-6 rosters and Pick-3 presets) and Deleted Battles Trash per mode, requiring only 1 stored team minimum across the app.
+  - **4 Battle Frontier Show 6 Leagues & 1-Mega Rule**: Supports `GREAT LEAGUE`, `Battle Frontier (Spectral)`, `Battle Frontier (Cauldron)`, and `Battle Frontier (Master)`, and enforces at most **1 Mega/Primal Pokémon** per team of 6 or 3 across Show 6 and Blind 3 PvP Mega Master League.
+  - **Battle Frontier Meta Usage (`Week - All`) & Most-Used Cores Sync + 65%/35% Weighting**: Pre-seeded Season 3 Cycle 1 Usage % and Most-Used Cores with editable Google Sheet URLs in Settings, one-tap **"Save Links & Import Battle Frontier Usage + Cores"**, a customizable **Usage & Cores vs. PvPoke Rankings** slider (default **65% Usage & Cores / 35% PvPoke**), and a **Live Overlay AI Common Core Boost** (`🔥 Core Watch`) for unrevealed opponent backline Pokémon.
 
 ---
 

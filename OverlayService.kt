@@ -265,6 +265,8 @@ class OverlayService : LifecycleService() {
             activeProactiveEnergyLeadMs = prefs.getInt(PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS, DEFAULT_PROACTIVE_ENERGY_LEAD_MS).let {
                 if (it in listOf(0, 200, 300, 400)) it else DEFAULT_PROACTIVE_ENERGY_LEAD_MS
             }
+            activeShow6UsageWeightPct = prefs.getInt(PREFS_KEY_SHOW6_USAGE_WEIGHT_PCT, DEFAULT_SHOW6_USAGE_WEIGHT_PCT).coerceIn(0, 100)
+            loadCachedBattleFrontierUsageAndCores(prefs)
         }
         const val PREFS_KEY_SYNC_GIST_ID = "gbl_sync_gist_id"
         const val PREFS_KEY_SYNC_LAST_AT = "gbl_sync_last_at"
@@ -279,9 +281,26 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_SHOW6_PRESETS_OF_3 = "gbl_show6_presets_of_3_v1"
         const val PREFS_KEY_SHOW6_SELECTED_PRESET_ID = "gbl_show6_selected_preset_id_v1"
         const val PREFS_KEY_SHOW6_ROSTERS_OF_6 = "gbl_show6_rosters_of_6_v1"
+        const val PREFS_KEY_SHOW6_OPPONENT_ROSTERS_OF_6 = "gbl_show6_opp_rosters_of_6_v1"
         const val PREFS_KEY_SHOW6_OPPONENT_6 = "gbl_show6_opponent_6_v1"
         const val PREFS_KEY_SHOW6_WHITELIST_BY_LEAGUE = "gbl_show6_whitelist_by_league_v1"
         const val PREFS_KEY_SHOW6_BANLIST_BY_LEAGUE = "gbl_show6_banlist_by_league_v1"
+        const val PREFS_KEY_SHOW6_DELETED_LOG_IDS = "gbl_show6_deleted_log_ids_v1"
+        const val PREFS_KEY_SHOW6_DELETED_TEAM_IDS = "gbl_show6_deleted_team_ids_v1"
+        const val PREFS_KEY_SHOW6_DELETED_BATTLES_TRASH = "gbl_show6_deleted_battles_trash_v1"
+        const val PREFS_KEY_SHOW6_DELETED_TEAMS_TRASH = "gbl_show6_deleted_teams_trash_v1"
+        const val PREFS_KEY_SHOW6_DELETED_ROSTERS_TRASH = "gbl_show6_deleted_rosters_trash_v1"
+        const val PREFS_KEY_BF_USAGE_SHEET_URL = "gbl_bf_usage_sheet_url_v1"
+        const val PREFS_KEY_BF_CORES_SHEET_URL = "gbl_bf_cores_sheet_url_v1"
+        const val PREFS_KEY_BF_USAGE_JSON = "gbl_bf_usage_json_v1"
+        const val PREFS_KEY_BF_CORES_JSON = "gbl_bf_cores_json_v1"
+        const val PREFS_KEY_BF_LAST_SYNC_MS = "gbl_bf_last_sync_ms_v1"
+        const val PREFS_KEY_SHOW6_USAGE_WEIGHT_PCT = "gbl_show6_usage_weight_pct_v1"
+        const val DEFAULT_SHOW6_USAGE_WEIGHT_PCT = 65
+        const val DEFAULT_BF_USAGE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1PD_1CVCMvD1WuubJCHHrS2HKSoECZgscZuiKF07XidM/edit?gid=466174368#gid=466174368"
+        const val DEFAULT_BF_CORES_SHEET_URL = "https://docs.google.com/spreadsheets/d/14P0XFd8uTgdMMieYB_4n2-2cRY057qeh9J5yG85JHtg/edit?gid=94099054#gid=94099054"
+        @Volatile
+        var activeShow6UsageWeightPct: Int = DEFAULT_SHOW6_USAGE_WEIGHT_PCT
         val LEGACY_PRESET_KEYS = listOf(
             "gbl_team_presets_v6",
             "gbl_team_presets_v5",
@@ -7666,6 +7685,365 @@ class OverlayService : LifecycleService() {
             val coveragePct: Int get() = metaCoveragePct
         }
 
+        data class BattleFrontierCoreEntry(
+            val monA: String,
+            val monB: String,
+            val usagePct: Double
+        )
+
+        data class Show6RosterSlotUpgradeRec(
+            val candidate: TeamMember,
+            val weightedScoreGain: Double,
+            val newRosterBr: Int,
+            val usagePct: Double,
+            val coreBonusLabel: String,
+            val reason: String
+        )
+
+        data class Show6RosterSlotMovesetRec(
+            val fastMove: String,
+            val chargedMove1: String,
+            val chargedMove2: String,
+            val avgBrVsMeta: Int,
+            val deltaBr: Int,
+            val isCurrent: Boolean
+        )
+
+        val SHOW6_ELIGIBLE_LEAGUES = listOf(
+            "GREAT LEAGUE",
+            "Battle Frontier (Spectral)",
+            "Battle Frontier (Cauldron)",
+            "Battle Frontier (Master)"
+        )
+
+        fun isShow6EligibleLeagueStatic(league: String): Boolean {
+            val norm = normalizeLeagueKeyStatic(league)
+            return norm == "GREAT LEAGUE" || isBattleFrontierLeagueStatic(norm)
+        }
+
+        fun isMegaOrPrimalSpeciesStatic(name: String): Boolean {
+            val lower = name.trim().lowercase()
+            return lower.contains("(mega") ||
+                lower.startsWith("mega ") ||
+                lower.contains(" mega") ||
+                lower.contains("(primal") ||
+                lower.startsWith("primal ")
+        }
+
+        fun countMegaOrPrimalInListStatic(names: List<String>): Int {
+            return names.count { isMegaOrPrimalSpeciesStatic(it) }
+        }
+
+        fun hasMultipleMegasStatic(names: List<String>): Boolean {
+            return countMegaOrPrimalInListStatic(names) > 1
+        }
+
+        val BATTLE_FRONTIER_USAGE_MAP: MutableMap<String, MutableMap<String, Double>> = java.util.concurrent.ConcurrentHashMap<String, MutableMap<String, Double>>().apply {
+            put("GREAT LEAGUE", java.util.concurrent.ConcurrentHashMap<String, Double>().apply {
+                put("Azumarill", 46.6); put("Corsola (Galarian)", 31.3); put("Cradily", 30.8); put("Corviknight", 30.7)
+                put("Feraligatr", 28.4); put("Dedenne", 26.7); put("Bastiodon", 26.3); put("Gastrodon", 25.1)
+                put("Scizor", 24.1); put("Marowak", 21.8); put("Furfrou", 19.7); put("blastoise", 19.3)
+                put("Blastoise", 19.3); put("Morpeko", 18.8); put("Diggersby", 16.5); put("Sableye", 15.6)
+                put("Altaria", 14.3); put("Moltres (Galarian)", 13.7); put("Skeledirge", 13.5); put("Primeape", 12.1)
+                put("Claydol", 11.7); put("Annihilape", 11.6); put("Jellicent", 10.7); put("Wigglytuff", 10.6)
+                put("Talonflame", 9.6); put("Clodsire", 9.1); put("Tinkaton", 8.9); put("Stunfisk", 8.7)
+                put("Nidoqueen", 8.5); put("Forretress", 8.1); put("Guzzlord", 7.8); put("Zweilous", 7.6)
+                put("Jumpluff", 7.4); put("Gourgeist", 7.0); put("Lapras", 6.9); put("Dusknoir", 6.5)
+                put("Lickilicky", 6.3); put("Togekiss", 5.8); put("Empoleon", 5.6); put("Giratina (Altered)", 5.6)
+                put("Pidgeot", 5.3); put("Cobalion", 5.2); put("Mandibuzz", 4.9); put("Dewgong", 4.7)
+                put("Dunsparce", 4.7); put("Samurott", 4.6)
+            })
+            put("BATTLE FRONTIER (SPECTRAL)", java.util.concurrent.ConcurrentHashMap<String, Double>().apply {
+                put("Murkrow", 74.8); put("Drifblim", 44.3); put("Turtonator", 44.3); put("Ninetales (Alolan)", 39.2)
+                put("Golisopod", 36.1); put("Swalot", 35.1); put("Rotom (Wash)", 34.0); put("Gourgeist", 32.0)
+                put("Jellicent", 30.9); put("Regidrago", 27.8); put("Grimer", 23.7); put("Lanturn", 23.7)
+                put("Abomasnow", 15.5); put("Whimsicott", 15.5); put("Zoroark (Hisuian)", 14.4); put("Skuntank", 11.3)
+                put("Charjabug", 8.2); put("Dachsbun", 8.2); put("Hakamo-o", 8.2); put("Magcargo", 8.2)
+                put("Typhlosion", 8.2); put("Dragalge", 7.2); put("Aurorus", 6.2); put("Tinkaton", 6.2)
+                put("Skeledirge", 5.2); put("Dusknoir", 4.1); put("Dusclops", 3.1); put("Muk (Alolan)", 3.1)
+                put("Piloswine", 3.1); put("Trevenant", 3.1)
+            })
+            put("BATTLE FRONTIER (CAULDRON)", java.util.concurrent.ConcurrentHashMap<String, Double>().apply {
+                put("Skeledirge", 62.5); put("Malamar", 59.3); put("Torterra", 56.8); put("Walrein", 46.8)
+                put("Poliwrath", 43.2); put("Dragalge", 41.8); put("Pangoro", 38.6); put("Nidoqueen", 38.2)
+                put("Salazzle", 37.9); put("Flygon", 32.5); put("Wigglytuff", 28.2); put("Tentacruel", 19.6)
+                put("Crustle", 19.3); put("Enamorus (Incarnate)", 11.8); put("Obstagoon", 8.9); put("Talonflame", 8.6)
+                put("Florges", 6.1); put("Venusaur", 5.7); put("Kommo-o", 5.4); put("Gyarados", 3.2)
+                put("Lucario", 2.9); put("Swampert", 2.9); put("incineroar", 2.9); put("Incineroar", 2.9)
+            })
+            put("BATTLE FRONTIER (MASTER)", java.util.concurrent.ConcurrentHashMap<String, Double>().apply {
+                put("Zacian (Crowned Sword)", 82.9); put("Palkia (Origin)", 62.6); put("Metagross", 53.6)
+                put("Groudon", 50.0); put("Kyurem (Black)", 45.0); put("Gyarados (Mega)", 32.9); put("Gyarados", 32.9)
+                put("Moltres (Galarian)", 31.1); put("Rhyperior", 29.3); put("Kyurem (White)", 28.4); put("Florges", 27.0)
+                put("Reshiram", 22.1); put("Lunala", 21.6); put("Zekrom", 18.0); put("Lugia", 14.9)
+                put("Ho-Oh", 14.4); put("Scizor (Mega)", 14.4); put("Scizor", 14.4); put("Dialga (Origin)", 13.5)
+                put("Keldeo", 7.2); put("Solgaleo", 5.4); put("Garchomp (Mega)", 3.2); put("Urshifu (Single Strike)", 2.7)
+            })
+        }
+
+        val BATTLE_FRONTIER_CORES_MAP: MutableMap<String, MutableList<BattleFrontierCoreEntry>> = java.util.concurrent.ConcurrentHashMap<String, MutableList<BattleFrontierCoreEntry>>().apply {
+            put("GREAT LEAGUE", java.util.concurrent.CopyOnWriteArrayList(listOf(
+                BattleFrontierCoreEntry("Azumarill", "Corsola (Galarian)", 16.8),
+                BattleFrontierCoreEntry("Azumarill", "Cradily", 15.4),
+                BattleFrontierCoreEntry("Azumarill", "Corviknight", 14.9),
+                BattleFrontierCoreEntry("Bastiodon", "Cradily", 13.2),
+                BattleFrontierCoreEntry("Corsola (Galarian)", "Gastrodon", 12.6),
+                BattleFrontierCoreEntry("Feraligatr", "Corviknight", 12.1),
+                BattleFrontierCoreEntry("Azumarill", "Gastrodon", 11.8),
+                BattleFrontierCoreEntry("Dedenne", "Gastrodon", 11.4),
+                BattleFrontierCoreEntry("Scizor", "Gastrodon", 10.9),
+                BattleFrontierCoreEntry("Marowak", "Azumarill", 10.5),
+                BattleFrontierCoreEntry("Corviknight", "Gastrodon", 10.2),
+                BattleFrontierCoreEntry("Bastiodon", "Annihilape", 9.4),
+                BattleFrontierCoreEntry("Feraligatr", "Cradily", 9.1),
+                BattleFrontierCoreEntry("Morpeko", "Azumarill", 8.8),
+                BattleFrontierCoreEntry("Sableye", "Bastiodon", 8.5),
+                BattleFrontierCoreEntry("Corsola (Galarian)", "Diggersby", 8.2)
+            )))
+            put("BATTLE FRONTIER (SPECTRAL)", java.util.concurrent.CopyOnWriteArrayList(listOf(
+                BattleFrontierCoreEntry("Murkrow", "Turtonator", 35.1),
+                BattleFrontierCoreEntry("Murkrow", "Drifblim", 33.0),
+                BattleFrontierCoreEntry("Murkrow", "Ninetales (Alolan)", 29.9),
+                BattleFrontierCoreEntry("Murkrow", "Golisopod", 27.8),
+                BattleFrontierCoreEntry("Murkrow", "Swalot", 26.8),
+                BattleFrontierCoreEntry("Murkrow", "Rotom (Wash)", 25.8),
+                BattleFrontierCoreEntry("Drifblim", "Turtonator", 22.7),
+                BattleFrontierCoreEntry("Ninetales (Alolan)", "Turtonator", 21.6),
+                BattleFrontierCoreEntry("Golisopod", "Turtonator", 19.6),
+                BattleFrontierCoreEntry("Jellicent", "Murkrow", 19.6),
+                BattleFrontierCoreEntry("Gourgeist", "Murkrow", 18.6),
+                BattleFrontierCoreEntry("Rotom (Wash)", "Turtonator", 17.5),
+                BattleFrontierCoreEntry("Swalot", "Drifblim", 16.5),
+                BattleFrontierCoreEntry("Regidrago", "Murkrow", 16.5),
+                BattleFrontierCoreEntry("Ninetales (Alolan)", "Jellicent", 15.5),
+                BattleFrontierCoreEntry("Lanturn", "Murkrow", 14.4)
+            )))
+            put("BATTLE FRONTIER (CAULDRON)", java.util.concurrent.CopyOnWriteArrayList(listOf(
+                BattleFrontierCoreEntry("Skeledirge", "Malamar", 38.9),
+                BattleFrontierCoreEntry("Skeledirge", "Torterra", 36.4),
+                BattleFrontierCoreEntry("Malamar", "Torterra", 34.6),
+                BattleFrontierCoreEntry("Skeledirge", "Walrein", 29.6),
+                BattleFrontierCoreEntry("Skeledirge", "Poliwrath", 27.9),
+                BattleFrontierCoreEntry("Malamar", "Walrein", 27.1),
+                BattleFrontierCoreEntry("Torterra", "Walrein", 25.7),
+                BattleFrontierCoreEntry("Dragalge", "Skeledirge", 25.0),
+                BattleFrontierCoreEntry("Nidoqueen", "Malamar", 23.9),
+                BattleFrontierCoreEntry("Pangoro", "Skeledirge", 23.2),
+                BattleFrontierCoreEntry("Salazzle", "Torterra", 22.5),
+                BattleFrontierCoreEntry("Poliwrath", "Torterra", 21.8),
+                BattleFrontierCoreEntry("Dragalge", "Malamar", 21.1),
+                BattleFrontierCoreEntry("Flygon", "Skeledirge", 19.6),
+                BattleFrontierCoreEntry("Wigglytuff", "Skeledirge", 18.2),
+                BattleFrontierCoreEntry("Nidoqueen", "Walrein", 17.5)
+            )))
+            put("BATTLE FRONTIER (MASTER)", java.util.concurrent.CopyOnWriteArrayList(listOf(
+                BattleFrontierCoreEntry("Zacian (Crowned Sword)", "Palkia (Origin)", 54.5),
+                BattleFrontierCoreEntry("Zacian (Crowned Sword)", "Metagross", 44.6),
+                BattleFrontierCoreEntry("Zacian (Crowned Sword)", "Groudon", 41.9),
+                BattleFrontierCoreEntry("Zacian (Crowned Sword)", "Kyurem (Black)", 37.8),
+                BattleFrontierCoreEntry("Palkia (Origin)", "Metagross", 33.8),
+                BattleFrontierCoreEntry("Palkia (Origin)", "Groudon", 32.0),
+                BattleFrontierCoreEntry("Palkia (Origin)", "Kyurem (Black)", 28.8),
+                BattleFrontierCoreEntry("Zacian (Crowned Sword)", "Gyarados (Mega)", 27.5),
+                BattleFrontierCoreEntry("Metagross", "Groudon", 26.6),
+                BattleFrontierCoreEntry("Zacian (Crowned Sword)", "Moltres (Galarian)", 25.7),
+                BattleFrontierCoreEntry("Zacian (Crowned Sword)", "Rhyperior", 24.3),
+                BattleFrontierCoreEntry("Zacian (Crowned Sword)", "Kyurem (White)", 23.9),
+                BattleFrontierCoreEntry("Zacian (Crowned Sword)", "Florges", 22.5),
+                BattleFrontierCoreEntry("Palkia (Origin)", "Rhyperior", 19.8),
+                BattleFrontierCoreEntry("Groudon", "Kyurem (Black)", 19.4),
+                BattleFrontierCoreEntry("Metagross", "Gyarados (Mega)", 18.0)
+            )))
+        }
+
+        fun loadCachedBattleFrontierUsageAndCores(prefs: android.content.SharedPreferences) {
+            try {
+                val usageJson = prefs.getString(PREFS_KEY_BF_USAGE_JSON, null)
+                if (!usageJson.isNullOrBlank()) {
+                    val parsed: Map<String, Map<String, Double>>? = Gson().fromJson(
+                        usageJson,
+                        object : TypeToken<Map<String, Map<String, Double>>>() {}.type
+                    )
+                    parsed?.forEach { (league, map) ->
+                        if (map.isNotEmpty()) {
+                            BATTLE_FRONTIER_USAGE_MAP[league] = java.util.concurrent.ConcurrentHashMap(map)
+                        }
+                    }
+                }
+                val coresJson = prefs.getString(PREFS_KEY_BF_CORES_JSON, null)
+                if (!coresJson.isNullOrBlank()) {
+                    val parsedCores: Map<String, List<BattleFrontierCoreEntry>>? = Gson().fromJson(
+                        coresJson,
+                        object : TypeToken<Map<String, List<BattleFrontierCoreEntry>>>() {}.type
+                    )
+                    parsedCores?.forEach { (league, list) ->
+                        if (list.isNotEmpty()) {
+                            BATTLE_FRONTIER_CORES_MAP[league] = java.util.concurrent.CopyOnWriteArrayList(list)
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        fun toGoogleSheetCsvExportUrlStatic(rawUrl: String, fallbackGid: String): String {
+            val trimmed = rawUrl.trim()
+            if (trimmed.contains("/export?format=csv")) return trimmed
+            val idMatch = Regex("/spreadsheets/d/([a-zA-Z0-9-_]+)").find(trimmed) ?: return trimmed
+            val gidMatch = Regex("[?#&]gid=([0-9]+)").find(trimmed)
+            val gid = gidMatch?.groupValues?.getOrNull(1) ?: fallbackGid
+            return "https://docs.google.com/spreadsheets/d/${idMatch.groupValues[1]}/export?format=csv&gid=$gid"
+        }
+
+        fun syncBattleFrontierSheetsBlocking(
+            prefs: android.content.SharedPreferences,
+            usageUrlInput: String,
+            coresUrlInput: String
+        ): String {
+            val cleanUsageUrl = usageUrlInput.trim().ifEmpty { DEFAULT_BF_USAGE_SHEET_URL }
+            val cleanCoresUrl = coresUrlInput.trim().ifEmpty { DEFAULT_BF_CORES_SHEET_URL }
+            prefs.edit()
+                .putString(PREFS_KEY_BF_USAGE_SHEET_URL, cleanUsageUrl)
+                .putString(PREFS_KEY_BF_CORES_SHEET_URL, cleanCoresUrl)
+                .apply()
+
+            var usageUpdatedCount = 0
+            var coresUpdatedCount = 0
+
+            // 1. Fetch Usage CSV
+            try {
+                val csvUrl = toGoogleSheetCsvExportUrlStatic(cleanUsageUrl, "466174368")
+                val conn = (java.net.URL(csvUrl).openConnection() as java.net.HttpURLConnection).apply {
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                    setRequestProperty("User-Agent", "SilphScopePvP/5.01")
+                }
+                if (conn.responseCode in 200..299) {
+                    val text = conn.inputStream.bufferedReader().use { it.readText() }
+                    val lines = text.lines().map { it.split(",") }
+                    val leagues = listOf("GREAT LEAGUE", "BATTLE FRONTIER (SPECTRAL)", "BATTLE FRONTIER (CAULDRON)", "BATTLE FRONTIER (MASTER)")
+                    for (r in 3 until lines.size) {
+                        val row = lines[r]
+                        for (b in 0 until 4) {
+                            val baseCol = b * 5
+                            val name = row.getOrNull(baseCol + 1)?.trim()?.trim('"') ?: ""
+                            val pctStr = row.getOrNull(baseCol + 3)?.trim()?.trim('"')?.replace("%", "") ?: ""
+                            val pct = pctStr.toDoubleOrNull()
+                            if (name.isNotEmpty() && !name.equals("Pokemon", ignoreCase = true) && pct != null && pct > 0.0) {
+                                val map = BATTLE_FRONTIER_USAGE_MAP.getOrPut(leagues[b]) { java.util.concurrent.ConcurrentHashMap() }
+                                map[name] = pct
+                                usageUpdatedCount++
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+
+            // 2. Fetch Cores CSV
+            try {
+                val csvUrl = toGoogleSheetCsvExportUrlStatic(cleanCoresUrl, "94099054")
+                val conn = (java.net.URL(csvUrl).openConnection() as java.net.HttpURLConnection).apply {
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                    setRequestProperty("User-Agent", "SilphScopePvP/5.01")
+                }
+                if (conn.responseCode in 200..299) {
+                    val text = conn.inputStream.bufferedReader().use { it.readText() }
+                    val lines = text.lines().map { it.split(",") }
+                    val leagues = listOf("GREAT LEAGUE", "BATTLE FRONTIER (SPECTRAL)", "BATTLE FRONTIER (CAULDRON)", "BATTLE FRONTIER (MASTER)")
+                    val parsedLists = leagues.associateWith { ArrayList<BattleFrontierCoreEntry>() }
+                    for (r in 2 until lines.size) {
+                        val row = lines[r]
+                        for (b in 0 until 4) {
+                            for (offset in listOf(b * 5, b * 6)) {
+                                val cellA = row.getOrNull(offset + 1)?.trim()?.trim('"') ?: ""
+                                val cellB = row.getOrNull(offset + 2)?.trim()?.trim('"') ?: ""
+                                val cellC = row.getOrNull(offset + 3)?.trim()?.trim('"') ?: ""
+                                if ((cellA.contains("+") || cellA.contains("/")) && cellB.contains("%")) {
+                                    val parts = cellA.split(Regex("[+/]")).map { it.trim() }.filter { it.isNotEmpty() }
+                                    val pct = cellB.replace("%", "").trim().toDoubleOrNull()
+                                    if (parts.size >= 2 && pct != null && pct > 0.0) {
+                                        val list = parsedLists[leagues[b]]!!
+                                        if (list.none { it.monA.equals(parts[0], true) && it.monB.equals(parts[1], true) }) {
+                                            list.add(BattleFrontierCoreEntry(parts[0], parts[1], pct))
+                                            coresUpdatedCount++
+                                        }
+                                    }
+                                } else if (cellA.isNotEmpty() && cellB.isNotEmpty() && !cellA.equals("Pokemon", true) && !cellA.equals("Rank", true)) {
+                                    val pct = cellC.replace("%", "").trim().toDoubleOrNull()
+                                    if (pct != null && pct > 0.0) {
+                                        val list = parsedLists[leagues[b]]!!
+                                        if (list.none { it.monA.equals(cellA, true) && it.monB.equals(cellB, true) }) {
+                                            list.add(BattleFrontierCoreEntry(cellA, cellB, pct))
+                                            coresUpdatedCount++
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    parsedLists.forEach { (lg, list) ->
+                        if (list.isNotEmpty()) {
+                            BATTLE_FRONTIER_CORES_MAP[lg] = java.util.concurrent.CopyOnWriteArrayList(list)
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+
+            val totalUsage = BATTLE_FRONTIER_USAGE_MAP.values.sumOf { it.size }
+            val totalCores = BATTLE_FRONTIER_CORES_MAP.values.sumOf { it.size }
+            prefs.edit()
+                .putString(PREFS_KEY_BF_USAGE_JSON, Gson().toJson(BATTLE_FRONTIER_USAGE_MAP))
+                .putString(PREFS_KEY_BF_CORES_JSON, Gson().toJson(BATTLE_FRONTIER_CORES_MAP))
+                .putLong(PREFS_KEY_BF_LAST_SYNC_MS, System.currentTimeMillis())
+                .apply()
+
+            return "✅ Synced Battle Frontier Sheets ($totalUsage Pokémon usage entries • $totalCores top cores across 4 leagues)"
+        }
+
+        fun getShow6UsagePctStatic(league: String, speciesName: String): Double {
+            val normLeague = normalizeLeagueKeyStatic(league)
+            val usageMap = BATTLE_FRONTIER_USAGE_MAP[normLeague] ?: BATTLE_FRONTIER_USAGE_MAP["GREAT LEAGUE"] ?: return 0.0
+            val clean = speciesName.replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "").trim()
+            usageMap[clean]?.let { return it }
+            val lower = clean.lowercase()
+            usageMap.entries.firstOrNull { it.key.lowercase() == lower }?.let { return it.value }
+            val base = FormResolver.extractBaseSpecies(clean).lowercase()
+            usageMap.entries.firstOrNull { FormResolver.extractBaseSpecies(it.key).lowercase() == base }?.let { return it.value * 0.85 }
+            return 0.0
+        }
+
+        fun findShow6CommonCoreEntryStatic(league: String, mon1: String, mon2: String): BattleFrontierCoreEntry? {
+            val normLeague = normalizeLeagueKeyStatic(league)
+            val cores = BATTLE_FRONTIER_CORES_MAP[normLeague] ?: BATTLE_FRONTIER_CORES_MAP["GREAT LEAGUE"] ?: return null
+            val b1 = FormResolver.extractBaseSpecies(mon1).lowercase()
+            val b2 = FormResolver.extractBaseSpecies(mon2).lowercase()
+            if (b1.isEmpty() || b2.isEmpty() || b1 == b2) return null
+            return cores.firstOrNull { c ->
+                val ca = FormResolver.extractBaseSpecies(c.monA).lowercase()
+                val cb = FormResolver.extractBaseSpecies(c.monB).lowercase()
+                (ca == b1 && cb == b2) || (ca == b2 && cb == b1)
+            }
+        }
+
+        fun calculateShow6TrioCoreBonusPctStatic(league: String, trioNames: List<String>): Pair<Double, String> {
+            var totalCorePct = 0.0
+            var topLabel = ""
+            var bestPairPct = 0.0
+            for (i in trioNames.indices) {
+                for (j in (i + 1) until trioNames.size) {
+                    val match = findShow6CommonCoreEntryStatic(league, trioNames[i], trioNames[j])
+                    if (match != null) {
+                        totalCorePct += match.usagePct
+                        if (match.usagePct > bestPairPct) {
+                            bestPairPct = match.usagePct
+                            topLabel = "${match.monA} + ${match.monB} (${match.usagePct}%)"
+                        }
+                    }
+                }
+            }
+            return totalCorePct to topLabel
+        }
+
         @JvmName("evaluateShow6Pick3MatchupFromNamesStatic")
         fun evaluateShow6Pick3MatchupStatic(
             league: String,
@@ -7845,7 +8223,10 @@ class OverlayService : LifecycleService() {
                 }
             }
 
-            // Stage 3: Score all 120 Opponent 3-Pokémon lineups by structural viability & pressure against Your 6
+            val wUsageAndCores = (activeShow6UsageWeightPct.coerceIn(0, 100) / 100.0)
+            val maxLeagueUsage = (BATTLE_FRONTIER_USAGE_MAP[normLeague]?.values?.maxOrNull() ?: 50.0).coerceAtLeast(10.0)
+
+            // Stage 3: Score all 120 Opponent 3-Pokémon lineups by structural viability, Battle Frontier Usage %, Common Core multiplier & 1-Mega limit
             data class OppTrioEval(
                 val indices: Triple<Int, Int, Int>,
                 val names: List<String>,
@@ -7854,7 +8235,9 @@ class OverlayService : LifecycleService() {
                 val rawExpWeight: Double
             )
 
-            val oppTrios = allOrdered120.map { (o0, o1, o2) ->
+            val oppTrios = allOrdered120.mapNotNull { (o0, o1, o2) ->
+                val trioNames = listOf(opp6Names[o0], opp6Names[o1], opp6Names[o2])
+                if (hasMultipleMegasStatic(trioNames)) return@mapNotNull null
                 val (arch, _) = classifyOrderedTrio(o0, o1, o2, oppProfiles)
                 var leadVsMy6 = 0.0
                 var swapVsMy6 = 0.0
@@ -7872,9 +8255,13 @@ class OverlayService : LifecycleService() {
                     "DUO" -> 14.0
                     else -> 8.0
                 }
-                val viab = (0.40 * leadVsMy6 + 0.32 * swapVsMy6 + 0.28 * closerVsMy6 + structBonus).roundToInt().coerceIn(250, 820)
-                val expW = kotlin.math.exp((viab - 500.0) / 38.0)
-                OppTrioEval(Triple(o0, o1, o2), listOf(opp6Names[o0], opp6Names[o1], opp6Names[o2]), arch, viab, expW)
+                val avgUsagePct = trioNames.map { getShow6UsagePctStatic(normLeague, it) }.average()
+                val (coreSumPct, _) = calculateShow6TrioCoreBonusPctStatic(normLeague, trioNames)
+                val usageAndCoreBonusBr = wUsageAndCores * ((avgUsagePct / maxLeagueUsage) * 32.0 + min(42.0, coreSumPct * 0.85))
+                val viab = (0.40 * leadVsMy6 + 0.32 * swapVsMy6 + 0.28 * closerVsMy6 + structBonus + usageAndCoreBonusBr).roundToInt().coerceIn(250, 860)
+                val coreMultiplier = 1.0 + wUsageAndCores * min(0.75, coreSumPct / 40.0)
+                val expW = kotlin.math.exp((viab - 500.0) / 38.0) * coreMultiplier
+                OppTrioEval(Triple(o0, o1, o2), trioNames, arch, viab, expW)
             }
             val totalOppExpW = oppTrios.sumOf { it.rawExpWeight }.takeIf { it > 0.0 } ?: 1.0
 
@@ -7895,6 +8282,8 @@ class OverlayService : LifecycleService() {
             val duoList = ArrayList<Show6Pick3LineupRec>()
 
             for ((u0, u1, u2) in allOrdered120) {
+                val members = listOf(myOptimized6[u0], myOptimized6[u1], myOptimized6[u2])
+                if (hasMultipleMegasStatic(members.map { it.name })) continue
                 val (arch, sharedWeaks) = classifyOrderedTrio(u0, u1, u2, myProfiles)
                 var weightedBrSum = 0.0
                 var worstBr = 999.0
@@ -7921,15 +8310,17 @@ class OverlayService : LifecycleService() {
                 val lAgg = (0 until 6).map { leadBrMatrix[u0][it] }.average().roundToInt().coerceIn(200, 850)
                 val sAgg = (0 until 6).map { swapBrMatrix[u1][it] }.average().roundToInt().coerceIn(200, 850)
                 val cAgg = (0 until 6).map { closerBrMatrix[u2][it] }.average().roundToInt().coerceIn(200, 850)
-                val wExpBr = weightedBrSum.roundToInt().coerceIn(200, 850)
+                val (myCoreSumPct, myTopCoreLabel) = calculateShow6TrioCoreBonusPctStatic(normLeague, members.map { it.name })
+                val myCoreBonusBr = wUsageAndCores * min(18.0, myCoreSumPct * 0.35)
+                val wExpBr = (weightedBrSum + myCoreBonusBr).roundToInt().coerceIn(200, 850)
                 val wMinBr = worstBr.roundToInt().coerceIn(150, 850)
-                val compScore = ((0.72 * weightedBrSum + 0.28 * worstBr) * 10.0).roundToInt() / 10.0
+                val compScore = ((0.72 * (weightedBrSum + myCoreBonusBr) + 0.28 * worstBr) * 10.0).roundToInt() / 10.0
+                val coreSuffix = if (myTopCoreLabel.isNotEmpty()) " • 🔥 Core: $myTopCoreLabel" else ""
 
-                val members = listOf(myOptimized6[u0], myOptimized6[u1], myOptimized6[u2])
                 val summary = when (arch) {
-                    "ABB" -> "ABB Pick-3: ${members[0].name} (Lead A) covers ${sharedWeaks.joinToString("/").ifEmpty { "Backline" }} for ${members[1].name} (B1) & ${members[2].name} (B2) • Beats $beatenCount/120 Opp Trios • Worst vs: $worstOppLabel"
-                    "DUO" -> "Duo-Core Pick-3: ${members[0].name} (Core 1) & ${members[2].name} (Core 2) cover ${sharedWeaks.joinToString("/").ifEmpty { "Core" }} w/ ${members[1].name} Pivot • Beats $beatenCount/120 Opp Trios • Worst vs: $worstOppLabel"
-                    else -> "ABC Balanced Pick-3: ${members[0].name} Lead + ${members[1].name} Safe Swap + ${members[2].name} Closer • Beats $beatenCount/120 Opp Trios • Worst vs: $worstOppLabel"
+                    "ABB" -> "ABB Pick-3: ${members[0].name} (Lead A) covers ${sharedWeaks.joinToString("/").ifEmpty { "Backline" }} for ${members[1].name} (B1) & ${members[2].name} (B2)$coreSuffix • Beats $beatenCount/${oppTrios.size} Opp Trios • Worst vs: $worstOppLabel"
+                    "DUO" -> "Duo-Core Pick-3: ${members[0].name} (Core 1) & ${members[2].name} (Core 2) cover ${sharedWeaks.joinToString("/").ifEmpty { "Core" }} w/ ${members[1].name} Pivot$coreSuffix • Beats $beatenCount/${oppTrios.size} Opp Trios • Worst vs: $worstOppLabel"
+                    else -> "ABC Balanced Pick-3: ${members[0].name} Lead + ${members[1].name} Safe Swap + ${members[2].name} Closer$coreSuffix • Beats $beatenCount/${oppTrios.size} Opp Trios • Worst vs: $worstOppLabel"
                 }
 
                 val option = Show6Pick3LineupRec(
@@ -7947,7 +8338,7 @@ class OverlayService : LifecycleService() {
                     machineAggBr = wExpBr,
                     sharedWeaknesses = sharedWeaks,
                     topOppLineupsBeatenCount = beatenCount,
-                    totalOppLineupsEvaluated = 120,
+                    totalOppLineupsEvaluated = max(1, oppTrios.size),
                     worstCounterLineupLabel = worstOppLabel,
                     synergySummary = summary
                 )
@@ -8019,16 +8410,21 @@ class OverlayService : LifecycleService() {
                 }
             }.ifEmpty { baseCandidates.take(30) }
 
-            // Build blended target threat distribution (PvPoke Meta + Expected Historical Pokémon)
+            // Build blended target threat distribution (Fused Battle Frontier Usage + Cores + PvPoke Meta + Expected Historical Pokémon)
             val wHist = (historicalWeightPct.coerceIn(0, 100) / 100.0)
             val wMeta = 1.0 - wHist
-            val metaTargets = eligiblePool.take(36).map { it.name }
+            val wUsage = (activeShow6UsageWeightPct.coerceIn(0, 100) / 100.0)
+            val maxLeagueUsage = (BATTLE_FRONTIER_USAGE_MAP[normLeague]?.values?.maxOrNull() ?: 50.0).coerceAtLeast(10.0)
+            val metaTargets = eligiblePool.take(40).map { it.name }
             val histClean = expectedHistoricalPokemon.map { it.trim() }.filter { it.isNotEmpty() }
             val targetWeights = LinkedHashMap<String, Double>()
 
             metaTargets.forEachIndexed { idx, name ->
-                val w = kotlin.math.exp(-0.045 * idx.toDouble())
-                targetWeights[name] = (targetWeights[name] ?: 0.0) + wMeta * w
+                val pvpokeRankW = kotlin.math.exp(-0.045 * idx.toDouble())
+                val usagePct = getShow6UsagePctStatic(normLeague, name)
+                val usageNormW = if (usagePct > 0.0) (usagePct / maxLeagueUsage).coerceIn(0.08, 1.35) else 0.12
+                val fusedW = (1.0 - wUsage) * pvpokeRankW + wUsage * usageNormW
+                targetWeights[name] = (targetWeights[name] ?: 0.0) + wMeta * fusedW
             }
             if (histClean.isNotEmpty() && wHist > 0.0) {
                 val perEntry = wHist / histClean.size.toDouble()
@@ -8051,15 +8447,16 @@ class OverlayService : LifecycleService() {
                     ?: eligiblePool.find { FormResolver.extractBaseSpecies(it.name).equals(FormResolver.extractBaseSpecies(clean), ignoreCase = true) }
                 if (match != null) {
                     val bSp = FormResolver.extractBaseSpecies(match.name).lowercase()
-                    if (usedBaseSpecies.add(bSp)) {
+                    val wouldExceedMega = isMegaOrPrimalSpeciesStatic(match.name) && roster.any { isMegaOrPrimalSpeciesStatic(it.name) }
+                    if (!wouldExceedMega && usedBaseSpecies.add(bSp)) {
                         roster.add(match)
                         lockedIncluded.add(match.name)
                     }
                 }
             }
 
-            // Greedily add complementary Pokémon up to 6 that maximize threat coverage & minimize shared unresisted weaknesses
-            val candidateSubPool = eligiblePool.take(45)
+            // Greedily add complementary Pokémon up to 6 that maximize threat coverage, Common Core synergy & enforce Max 1 Mega
+            val candidateSubPool = eligiblePool.take(48)
             val brCache = HashMap<String, Int>()
             fun getBr1s(c: TeamMember, opp: String): Int {
                 val k = "${c.name.lowercase()}|${opp.lowercase()}"
@@ -8071,10 +8468,12 @@ class OverlayService : LifecycleService() {
             while (roster.size < 6) {
                 var bestCand: TeamMember? = null
                 var bestScore = Double.NEGATIVE_INFINITY
+                val alreadyHasMega = roster.any { isMegaOrPrimalSpeciesStatic(it.name) }
 
                 for (cand in candidateSubPool) {
                     val bSp = FormResolver.extractBaseSpecies(cand.name).lowercase()
                     if (bSp in usedBaseSpecies) continue
+                    if (alreadyHasMega && isMegaOrPrimalSpeciesStatic(cand.name)) continue
                     var covGain = 0.0
                     for (t in topThreats) {
                         val existingBest = if (roster.isEmpty()) 420 else roster.maxOf { getBr1s(it, t) }
@@ -8086,17 +8485,25 @@ class OverlayService : LifecycleService() {
                             covGain += w * max(0, candBr - 480) * 0.45
                         }
                     }
+                    // Common Core synergy bonus with existing roster members + Usage % bonus
+                    val coreBonus = roster.sumOf { existing ->
+                        findShow6CommonCoreEntryStatic(normLeague, existing.name, cand.name)?.usagePct ?: 0.0
+                    } * wUsage * 1.4
+                    val usageBonus = getShow6UsagePctStatic(normLeague, cand.name) * wUsage * 0.65
                     // Type diversity bonus
                     val candTypes = resolveRecommendedMovesForSpecies(cand.name, normLeague)?.types?.map { it.lowercase() }.orEmpty()
                     val existingTypes = roster.flatMap { resolveRecommendedMovesForSpecies(it.name, normLeague)?.types?.map { t -> t.lowercase() }.orEmpty() }.toSet()
                     val newTypeBonus = candTypes.count { it !in existingTypes } * 18.0
-                    val total = covGain + newTypeBonus
+                    val total = covGain + newTypeBonus + coreBonus + usageBonus
                     if (total > bestScore) {
                         bestScore = total
                         bestCand = cand
                     }
                 }
-                val chosen = bestCand ?: eligiblePool.firstOrNull { FormResolver.extractBaseSpecies(it.name).lowercase() !in usedBaseSpecies } ?: break
+                val chosen = bestCand ?: eligiblePool.firstOrNull {
+                    FormResolver.extractBaseSpecies(it.name).lowercase() !in usedBaseSpecies &&
+                        !(alreadyHasMega && isMegaOrPrimalSpeciesStatic(it.name))
+                } ?: break
                 usedBaseSpecies.add(FormResolver.extractBaseSpecies(chosen.name).lowercase())
                 roster.add(chosen)
             }
@@ -8144,9 +8551,121 @@ class OverlayService : LifecycleService() {
                 topAbbLineup = selfPick3.top3AbbTeams.firstOrNull()?.pokemon ?: roster.take(3),
                 topAbcLineup = selfPick3.top3AbcTeams.firstOrNull()?.pokemon ?: roster.take(3),
                 topDuoLineup = selfPick3.top3DuoTeams.firstOrNull()?.pokemon ?: roster.take(3),
-                filterSummary = "$filterLabel • ${100 - historicalWeightPct}% PvPoke Meta / ${historicalWeightPct}% Historical (${expectedHistoricalPokemon.size} entries)",
+                filterSummary = "$filterLabel • ${activeShow6UsageWeightPct}% BF Usage & Cores / ${100 - activeShow6UsageWeightPct}% PvPoke",
                 elapsedMs = max(1L, System.currentTimeMillis() - t0)
             )
+        }
+
+        /**
+         * Pick-6 Team Editor: Suggest Top 5 Alternate Pokémon Upgrades for a specific slot (0..5)
+         */
+        fun recommendShow6RosterSlotUpgradesStatic(
+            league: String,
+            currentRoster6: List<TeamMember>,
+            slotIndex: Int
+        ): List<Show6RosterSlotUpgradeRec> {
+            val normLeague = normalizeLeagueKeyStatic(league)
+            val candidates = getTop100MetaCandidatesForLeagueStatic(normLeague, 55)
+            val other5 = currentRoster6.filterIndexed { idx, _ -> idx != slotIndex }
+            val otherBaseSet = other5.map { FormResolver.extractBaseSpecies(it.name).lowercase() }.toSet()
+            val otherHasMega = other5.any { isMegaOrPrimalSpeciesStatic(it.name) }
+            val currentSlot = currentRoster6.getOrNull(slotIndex)
+            val metaThreats = candidates.take(20).map { it.name }
+            val wUsage = activeShow6UsageWeightPct.coerceIn(0, 100) / 100.0
+
+            fun evalMemberScore(member: TeamMember): Triple<Double, Int, String> {
+                var weightedBr = 0.0
+                var weightSum = 0.0
+                metaThreats.forEachIndexed { idx, tName ->
+                    val uPct = getShow6UsagePctStatic(normLeague, tName)
+                    val w = (1.0 - wUsage) * kotlin.math.exp(-0.05 * idx) + wUsage * ((uPct / 45.0).coerceIn(0.15, 1.3))
+                    val br = calculateMatchupRatingStatic(member.name, tName, 1, 1, normLeague, member.fastMove, member.chargedMove1, member.chargedMove2, member.cp, member.ivs)
+                    val teammateBest = other5.maxOfOrNull { tm ->
+                        calculateMatchupRatingStatic(tm.name, tName, 1, 1, normLeague, tm.fastMove, tm.chargedMove1, tm.chargedMove2, tm.cp, tm.ivs)
+                    } ?: 450
+                    val synergyLift = if (teammateBest < 495 && br >= 525) (br - teammateBest) * 0.45 else 0.0
+                    weightedBr += w * (br + synergyLift)
+                    weightSum += w
+                }
+                val baseBr = (weightedBr / max(0.01, weightSum)).roundToInt().coerceIn(320, 780)
+                var bestCoreLabel = ""
+                var coreSum = 0.0
+                for (tm in other5) {
+                    val c = findShow6CommonCoreEntryStatic(normLeague, member.name, tm.name)
+                    if (c != null) {
+                        coreSum += c.usagePct
+                        if (bestCoreLabel.isEmpty()) bestCoreLabel = "${c.monA} + ${c.monB} (${c.usagePct}%)"
+                    }
+                }
+                val uPct = getShow6UsagePctStatic(normLeague, member.name)
+                val totalComposite = baseBr + wUsage * (uPct * 0.45 + min(30.0, coreSum * 0.65))
+                return Triple(totalComposite, baseBr, bestCoreLabel)
+            }
+
+            val baselineScore = if (currentSlot != null && currentSlot.name.isNotBlank()) evalMemberScore(currentSlot).first else 480.0
+            val recs = ArrayList<Show6RosterSlotUpgradeRec>()
+            for (cand in candidates.take(40)) {
+                val bSp = FormResolver.extractBaseSpecies(cand.name).lowercase()
+                if (bSp in otherBaseSet) continue
+                if (currentSlot != null && bSp == FormResolver.extractBaseSpecies(currentSlot.name).lowercase()) continue
+                if (otherHasMega && isMegaOrPrimalSpeciesStatic(cand.name)) continue
+                val (comp, br, coreLbl) = evalMemberScore(cand)
+                val gain = ((comp - baselineScore) * 10.0).roundToInt() / 10.0
+                val uPct = getShow6UsagePctStatic(normLeague, cand.name)
+                val reason = buildString {
+                    append("${cand.fastMove} + ${cand.chargedMove1}/${cand.chargedMove2} • Meta BR $br")
+                    if (uPct > 0.0) append(" • Usage ${uPct}%")
+                    if (coreLbl.isNotEmpty()) append(" • 🔥 Core: $coreLbl")
+                }
+                recs.add(Show6RosterSlotUpgradeRec(cand, gain, br, uPct, coreLbl, reason))
+            }
+            return recs.sortedByDescending { it.weightedScoreGain }.take(5)
+        }
+
+        /**
+         * Pick-6 Team Editor: Suggest Top 4 Alternate Movesets for a specific Pokémon in the league
+         */
+        fun recommendShow6RosterSlotMovesetsStatic(
+            league: String,
+            member: TeamMember
+        ): List<Show6RosterSlotMovesetRec> {
+            val normLeague = normalizeLeagueKeyStatic(league)
+            val metaThreats = getTop100MetaCandidatesForLeagueStatic(normLeague, 16).map { it.name }
+            val (rawFast, rawCharged) = getAvailableMovePoolForSpeciesStatic(member.name, normLeague)
+            val fastPool = (listOf(member.fastMove) + rawFast).filter { it.isNotBlank() && !it.equals("Struggle", true) }.distinctBy { it.lowercase() }.take(4)
+            val chargedPool = (listOf(member.chargedMove1, member.chargedMove2) + rawCharged).filter { it.isNotBlank() && !it.equals("Struggle", true) && !it.equals("Frustration", true) }.distinctBy { it.lowercase() }.take(5)
+            val pairs = ArrayList<Pair<String, String>>()
+            if (chargedPool.size <= 1) {
+                val c = chargedPool.firstOrNull() ?: member.chargedMove1.ifBlank { "Body Slam" }
+                pairs.add(c to c)
+            } else {
+                for (i in 0 until chargedPool.size) {
+                    for (j in (i + 1) until chargedPool.size) {
+                        pairs.add(chargedPool[i] to chargedPool[j])
+                    }
+                }
+            }
+            fun evalMovesetBr(f: String, c1: String, c2: String): Int {
+                if (metaThreats.isEmpty()) return 500
+                val avg = metaThreats.map { opp ->
+                    val b11 = calculateMatchupRatingStatic(member.name, opp, 1, 1, normLeague, f, c1, c2, member.cp, member.ivs)
+                    val b00 = calculateMatchupRatingStatic(member.name, opp, 0, 0, normLeague, f, c1, c2, member.cp, member.ivs)
+                    0.68 * b11 + 0.32 * b00
+                }.average()
+                return avg.roundToInt().coerceIn(250, 820)
+            }
+            val curBr = evalMovesetBr(member.fastMove, member.chargedMove1, member.chargedMove2)
+            val results = ArrayList<Show6RosterSlotMovesetRec>()
+            for (f in fastPool) {
+                for ((c1, c2) in pairs) {
+                    val br = evalMovesetBr(f, c1, c2)
+                    val isCur = f.equals(member.fastMove, true) &&
+                        ((c1.equals(member.chargedMove1, true) && c2.equals(member.chargedMove2, true)) ||
+                            (c1.equals(member.chargedMove2, true) && c2.equals(member.chargedMove1, true)))
+                    results.add(Show6RosterSlotMovesetRec(f, c1, c2, br, br - curBr, isCur))
+                }
+            }
+            return results.sortedByDescending { it.avgBrVsMeta }.take(4)
         }
     }
 
@@ -20500,8 +21019,11 @@ class OverlayService : LifecycleService() {
             if (oBase.equals(oppMeta.baseSpecies, ignoreCase = true) || (idx in 0..2 && oppFaintedSlots[idx])) null else oName
         }
 
-        // v5.00 Show 6 Live AI Constraint: When in Show 6 mode, limit unseen backline predictions strictly to unrevealed Pokémon from Opponent's known 6
+        // v5.01 Show 6 Live AI Constraint + Common Core Unrevealed Backline Boost:
+        // When in Show 6 mode, limit unseen backline predictions strictly to unrevealed Pokémon from Opponent's known 6,
+        // and boost the likelihood of any unrevealed Pokémon that forms a Most-Used Battle Frontier Core with a revealed opponent Pokémon.
         val isShow6ModeActive = ::prefs.isInitialized && prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
+        val revealedOppAll = (detectedOpponents + listOf(activeOpponentName)).filter { it.isNotBlank() }.distinct()
         val knownShow6UnrevealedPool: List<String> = if (isShow6ModeActive && ::prefs.isInitialized) {
             val rawJson = prefs.getString(PREFS_KEY_SHOW6_OPPONENT_6, "[]") ?: "[]"
             val parsed6: List<String> = try {
@@ -20509,7 +21031,7 @@ class OverlayService : LifecycleService() {
             } catch (_: Exception) {
                 emptyList()
             }
-            val seenBaseSet = (detectedOpponents + listOf(activeOpponentName))
+            val seenBaseSet = revealedOppAll
                 .map { FormResolver.extractBaseSpecies(it).lowercase() }
                 .filter { it.isNotEmpty() }
                 .toSet()
@@ -20519,6 +21041,38 @@ class OverlayService : LifecycleService() {
         } else {
             emptyList()
         }
+
+        // Compute Common Core weights for each unrevealed Show 6 opponent Pokémon based on revealed opponent Pokémon
+        val show6UnrevealedWeights: Map<String, Double> = if (knownShow6UnrevealedPool.isNotEmpty()) {
+            val wUsage = activeShow6UsageWeightPct.coerceIn(0, 100) / 100.0
+            knownShow6UnrevealedPool.associateWith { uOpp ->
+                val coreSum = revealedOppAll.sumOf { rev ->
+                    findShow6CommonCoreEntryStatic(activeLeagueName, rev, uOpp)?.usagePct ?: 0.0
+                }
+                val indivUsage = getShow6UsagePctStatic(activeLeagueName, uOpp)
+                1.0 + wUsage * (coreSum * 0.055 + indivUsage * 0.015)
+            }
+        } else {
+            emptyMap()
+        }
+        val topShow6UnrevealedCoreNote: String? = if (knownShow6UnrevealedPool.isNotEmpty()) {
+            var bestPartner = ""
+            var bestLead = ""
+            var bestPct = 0.0
+            for (uOpp in knownShow6UnrevealedPool) {
+                for (rev in revealedOppAll) {
+                    val c = findShow6CommonCoreEntryStatic(activeLeagueName, rev, uOpp)
+                    if (c != null && c.usagePct > bestPct) {
+                        bestPct = c.usagePct
+                        bestPartner = uOpp
+                        bestLead = rev
+                    }
+                }
+            }
+            if (bestPartner.isNotEmpty() && bestPct > 0.0) {
+                "🔥 Core Watch: ${abbrPokemon3(bestPartner)} w/ ${abbrPokemon3(bestLead)} (${bestPct.roundToInt()}%)"
+            } else null
+        } else null
 
         // Score alive bench candidates across Active Opp (45%), Swap Clocks (25%), Known Bench (20%), Unseen Meta / Known Show 6 Unrevealed (10%) + v3.41 persistent HP penalty
         val candidateScoreMap = mutableMapOf<String, Int>()
@@ -20543,15 +21097,20 @@ class OverlayService : LifecycleService() {
             } else {
                 actBr * 0.55 + worstResp * 0.45
             }
+            val weightSum = show6UnrevealedWeights.values.sum().takeIf { it > 0.0 } ?: 1.0
             val knownBenchFactor = if (revealedBenchOpponents.isNotEmpty()) {
                 revealedBenchOpponents.map { bOpp -> slotBrAgainst(bIdx, bOpp, playerShieldsRemaining, oppShieldsRemaining) }.average()
             } else if (knownShow6UnrevealedPool.isNotEmpty()) {
-                knownShow6UnrevealedPool.map { uOpp -> slotBrAgainst(bIdx, uOpp, playerShieldsRemaining, oppShieldsRemaining) }.average()
+                knownShow6UnrevealedPool.sumOf { uOpp ->
+                    slotBrAgainst(bIdx, uOpp, playerShieldsRemaining, oppShieldsRemaining) * (show6UnrevealedWeights[uOpp] ?: 1.0)
+                } / weightSum
             } else {
                 oneBr.toDouble()
             }
             val unseenMetaFactor = if (knownShow6UnrevealedPool.isNotEmpty()) {
-                knownShow6UnrevealedPool.map { uOpp -> slotBrAgainst(bIdx, uOpp, 1, 1) }.average()
+                knownShow6UnrevealedPool.sumOf { uOpp ->
+                    slotBrAgainst(bIdx, uOpp, 1, 1) * (show6UnrevealedWeights[uOpp] ?: 1.0)
+                } / weightSum
             } else {
                 ((actBr + oneBr) / 2.0)
             }
@@ -20801,6 +21360,9 @@ class OverlayService : LifecycleService() {
 
         if (hasAltMoveKoRisk && !oppNukeKosActive && recPhase != "SHIELD_CALL" && recPhase != "POST_FAINT_SWAP" && !recGoal.contains("⚠️")) {
             recGoal = "$recGoal • $altKoGoalWarning"
+        }
+        if (topShow6UnrevealedCoreNote != null && revealedBenchOpponents.size < 2 && !recGoal.contains("Core Watch")) {
+            recGoal = "$recGoal • $topShow6UnrevealedCoreNote"
         }
 
         val recUrgencyColor = when (recTone) {
