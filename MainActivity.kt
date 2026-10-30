@@ -5895,8 +5895,8 @@ class MainActivity : AppCompatActivity() {
                 )
             }
             savePresets(defaults)
-            if (!prefs.contains(activePresetsSelectedKey())) {
-                prefs.edit().putString(activePresetsSelectedKey(), defaults.first().id).apply()
+            if (!prefs.contains(PREFS_KEY_SELECTED_PRESET)) {
+                prefs.edit().putString(PREFS_KEY_SELECTED_PRESET, defaults.first().id).apply()
             }
         } else if (isShow6CombatMode() && existing.any { !OverlayService.isBattleFrontierLeagueStatic(it.league) }) {
             val migrated = existing.map { p ->
