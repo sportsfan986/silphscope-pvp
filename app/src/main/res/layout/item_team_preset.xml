@@ -100,6 +100,65 @@
             android:textColor="#cbd5e1"
             android:textSize="11.5sp"
             android:layout_marginTop="3dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="6dp">
+
+            <Button
+                android:id="@+id/btn_clone_preset"
+                android:layout_width="wrap_content"
+                android:layout_height="26dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="0dp"
+                android:text="📋 Clone"
+                android:textSize="9.5sp"
+                android:textStyle="bold"
+                android:backgroundTint="#334155"
+                android:textColor="#38bdf8"
+                android:layout_marginEnd="5dp" />
+
+            <Button
+                android:id="@+id/btn_copy_preset_mode"
+                android:layout_width="wrap_content"
+                android:layout_height="26dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="0dp"
+                android:text="🏛️ → Show 6"
+                android:textSize="9.5sp"
+                android:textStyle="bold"
+                android:backgroundTint="#334155"
+                android:textColor="#fbbf24"
+                android:layout_marginEnd="5dp" />
+
+            <Button
+                android:id="@+id/btn_swap_preset_opp6"
+                android:layout_width="wrap_content"
+                android:layout_height="26dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="0dp"
+                android:text="⇄ To Opp 6"
+                android:textSize="9.5sp"
+                android:textStyle="bold"
+                android:backgroundTint="#334155"
+                android:textColor="#fda4af"
+                android:visibility="gone" />
+        </LinearLayout>
     </LinearLayout>
 
     <LinearLayout

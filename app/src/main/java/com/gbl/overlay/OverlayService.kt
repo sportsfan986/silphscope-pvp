@@ -7650,11 +7650,17 @@ class OverlayService : LifecycleService() {
             val top3AbcTeams: List<Show6Pick3LineupRec>,
             val top3DuoTeams: List<Show6Pick3LineupRec>,
             val topViableOpponentLineups: List<Show6OpponentViableLineup>,
+            val oppTop3AbbTeams: List<Show6OpponentViableLineup> = emptyList(),
+            val oppTop3AbcTeams: List<Show6OpponentViableLineup> = emptyList(),
+            val oppTop3DuoTeams: List<Show6OpponentViableLineup> = emptyList(),
             val totalMatchupsSimulated: Int,
             val elapsedMs: Long
         ) {
             val my6OptimallyMoved: List<TeamMember> get() = myOptimized6
             val topOpponentTrios: List<Show6OpponentViableLineup> get() = topViableOpponentLineups
+            val oppTop3Abb: List<Show6OpponentViableLineup> get() = oppTop3AbbTeams
+            val oppTop3Abc: List<Show6OpponentViableLineup> get() = oppTop3AbcTeams
+            val oppTop3Duo: List<Show6OpponentViableLineup> get() = oppTop3DuoTeams
             val top3Abb: List<Show6Pick3LineupRec> get() = top3AbbTeams
             val top3Abc: List<Show6Pick3LineupRec> get() = top3AbcTeams
             val top3Duo: List<Show6Pick3LineupRec> get() = top3DuoTeams
@@ -8063,7 +8069,7 @@ class OverlayService : LifecycleService() {
                 val conn = (java.net.URL(csvUrl).openConnection() as java.net.HttpURLConnection).apply {
                     connectTimeout = 8000
                     readTimeout = 8000
-                    setRequestProperty("User-Agent", "SilphScopePvP/5.02")
+                    setRequestProperty("User-Agent", "SilphScopePvP/5.03")
                 }
                 if (conn.responseCode in 200..299) {
                     val text = conn.inputStream.bufferedReader().use { it.readText() }
@@ -8118,7 +8124,7 @@ class OverlayService : LifecycleService() {
                 val conn = (java.net.URL(csvUrl).openConnection() as java.net.HttpURLConnection).apply {
                     connectTimeout = 8000
                     readTimeout = 8000
-                    setRequestProperty("User-Agent", "SilphScopePvP/5.02")
+                    setRequestProperty("User-Agent", "SilphScopePvP/5.03")
                 }
                 if (conn.responseCode in 200..299) {
                     val text = conn.inputStream.bufferedReader().use { it.readText() }
@@ -8225,6 +8231,49 @@ class OverlayService : LifecycleService() {
                 }
             }
             return totalCorePct to topLabel
+        }
+
+        fun getMostLikelyMetaOpponent6Static(league: String): List<String> {
+            val normLeague = normalizeLeagueKeyStatic(league)
+            val picked = ArrayList<String>(6)
+            val usedBase = HashSet<String>()
+            var hasMega = false
+
+            fun tryAddMon(rawName: String): Boolean {
+                if (picked.size >= 6) return false
+                val clean = rawName.trim()
+                if (clean.isEmpty()) return false
+                val resolved = resolveRecommendedMovesForSpecies(clean, normLeague)?.name ?: clean
+                val base = FormResolver.extractBaseSpecies(resolved).lowercase()
+                if (base.isEmpty() || base in usedBase) return false
+                val isMega = isMegaOrPrimalSpeciesStatic(resolved)
+                if (isMega && hasMega) return false
+                usedBase.add(base)
+                if (isMega) hasMega = true
+                picked.add(resolved)
+                return true
+            }
+
+            val cores = BATTLE_FRONTIER_CORES_MAP[normLeague]?.sortedByDescending { it.usagePct }.orEmpty()
+            for (c in cores) {
+                if (picked.size >= 4) break
+                tryAddMon(c.monA)
+                tryAddMon(c.monB)
+            }
+
+            val usageEntries = BATTLE_FRONTIER_USAGE_MAP[normLeague]?.entries?.sortedByDescending { it.value }.orEmpty()
+            for (e in usageEntries) {
+                if (picked.size >= 6) break
+                tryAddMon(e.key)
+            }
+
+            if (picked.size < 6) {
+                for (cand in getTop100MetaCandidatesForLeagueStatic(normLeague, 30)) {
+                    if (picked.size >= 6) break
+                    tryAddMon(cand.name)
+                }
+            }
+            return picked.take(6)
         }
 
         @JvmName("evaluateShow6Pick3MatchupFromNamesStatic")
@@ -8459,6 +8508,32 @@ class OverlayService : LifecycleService() {
                 )
             }
 
+            fun pickTop3OppArchetype(targetArch: String): List<Show6OpponentViableLineup> {
+                val chosen = ArrayList<Show6OpponentViableLineup>(3)
+                val seenSigs = HashSet<String>()
+                val primary = sortedOppTrios.filter { it.archetype.equals(targetArch, ignoreCase = true) }
+                for (ot in (primary + sortedOppTrios)) {
+                    if (chosen.size >= 3) break
+                    val sig = ot.names.map { it.lowercase() }.sorted().joinToString("|")
+                    if (seenSigs.add(sig)) {
+                        chosen.add(
+                            Show6OpponentViableLineup(
+                                rank = chosen.size + 1,
+                                pokemonNames = ot.names,
+                                archetype = targetArch,
+                                viabilityScore = ot.viabilityBr,
+                                normalizedWeightPct = ((ot.rawExpWeight / totalOppExpW) * 1000.0).roundToInt() / 10.0
+                            )
+                        )
+                    }
+                }
+                return chosen
+            }
+
+            val oppTop3Abb = pickTop3OppArchetype("ABB")
+            val oppTop3Abc = pickTop3OppArchetype("ABC")
+            val oppTop3Duo = pickTop3OppArchetype("DUO")
+
             // Stage 4: Evaluate all 120 Player 3-Pokémon lineups against all 120 viability-weighted Opponent lineups
             val abbList = ArrayList<Show6Pick3LineupRec>()
             val abcList = ArrayList<Show6Pick3LineupRec>()
@@ -8556,6 +8631,9 @@ class OverlayService : LifecycleService() {
                 top3AbcTeams = fillTop3(abcList, "ABC"),
                 top3DuoTeams = fillTop3(duoList, "DUO"),
                 topViableOpponentLineups = topViableOppLineups,
+                oppTop3AbbTeams = oppTop3Abb,
+                oppTop3AbcTeams = oppTop3Abc,
+                oppTop3DuoTeams = oppTop3Duo,
                 totalMatchupsSimulated = 14400,
                 elapsedMs = max(1L, System.currentTimeMillis() - t0)
             )

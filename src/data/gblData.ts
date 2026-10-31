@@ -12551,10 +12551,23 @@ export interface Show6Pick3MatchupResult {
   topDuoLineups: Show6RecommendedLineup[];
   topOpponentViableTeams: Show6OpponentViableLineup[];
   topOpponentViableLineups: Show6OpponentViableLineup[];
+  oppTop3AbbTeams: Show6OpponentViableLineup[];
+  oppTop3AbcTeams: Show6OpponentViableLineup[];
+  oppTop3DuoTeams: Show6OpponentViableLineup[];
   totalOrderedPairsEvaluated: number; // 120 x 120 = 14,400
   totalMatchupsSimulated: number;
   movesetsSimulated: number;
   elapsedMs: number;
+}
+
+export interface MostLikelyFormatOpponent6Info {
+  league: LeagueType;
+  shortLabel: string;
+  pokemonNames: string[];
+  members: TeamMember[];
+  featuredCores: string[];
+  avgUsagePct: number;
+  summaryLabel: string;
 }
 
 export interface BlindShow6RosterSlotEval {
@@ -13016,10 +13029,16 @@ export function evaluateShow6Pick3Matchup(
   interface InternalOppLineup {
     permIdx: number;
     indices: [number, number, number];
+    trioKey: string;
     lead: string;
     swap: string;
     closer: string;
     archetype: "ABB" | "ABC" | "DUO";
+    abbScore: number;
+    abcScore: number;
+    duoScore: number;
+    oppMegaCount: number;
+    coreNote: string;
     sharedWeaknesses: string[];
     viabilityScore: number;
     rawWeight: number;
@@ -13079,10 +13098,16 @@ export function evaluateShow6Pick3Matchup(
     return {
       permIdx,
       indices: [j0, j1, j2],
+      trioKey: [j0, j1, j2].slice().sort().join("-"),
       lead: opp6Names[j0],
       swap: opp6Names[j1],
       closer: opp6Names[j2],
       archetype: struct.primaryArchetype,
+      abbScore: struct.abbScore,
+      abcScore: struct.abcScore,
+      duoScore: struct.duoScore,
+      oppMegaCount,
+      coreNote,
       sharedWeaknesses: struct.sharedWeaknesses,
       viabilityScore,
       rawWeight,
@@ -13119,6 +13144,60 @@ export function evaluateShow6Pick3Matchup(
     });
     if (topOpponentViableTeams.length >= 8) break;
   }
+
+  // Pick Top 3 Opponent Lineups per Archetype (ABB, ABC, DUO)
+  const pickOppTop3ForArchetype = (
+    targetArch: "ABB" | "ABC" | "DUO",
+    archScoreGetter: (o: InternalOppLineup) => number
+  ): Show6OpponentViableLineup[] => {
+    const validMegaPool = oppLineups120.filter((o) => o.oppMegaCount <= 1);
+    const basePool = validMegaPool.length >= 3 ? validMegaPool : oppLineups120;
+    const compositeScore = (o: InternalOppLineup) => o.viabilityScore * 0.65 + archScoreGetter(o) * 0.35;
+    const primaryPool = basePool.filter((o) => o.archetype === targetArch);
+    const sortedPrimary = [...primaryPool].sort((a, b) => compositeScore(b) - compositeScore(a));
+    const sortedAll = [...basePool].sort((a, b) => compositeScore(b) - compositeScore(a));
+
+    const picked: InternalOppLineup[] = [];
+    const usedPerm = new Set<number>();
+    const usedTrioKeys = new Set<string>();
+
+    for (const cand of [...sortedPrimary, ...sortedAll]) {
+      if (picked.length >= 3) break;
+      if (usedPerm.has(cand.permIdx)) continue;
+      if (usedTrioKeys.has(cand.trioKey) && picked.length < 2) continue;
+      usedPerm.add(cand.permIdx);
+      usedTrioKeys.add(cand.trioKey);
+      picked.push(cand);
+    }
+
+    return picked.slice(0, 3).map((ol, idx) => {
+      const archRationale =
+        (targetArch === "ABB"
+          ? `ABB Lineup: ${ol.lead} covers ${ol.swap} & ${ol.closer} (${
+              ol.sharedWeaknesses.slice(0, 2).map((w) => w.toUpperCase()).join("/") || "Shared"
+            } bait)`
+          : targetArch === "DUO"
+          ? `Duo-Core: ${ol.lead} + ${ol.closer} reciprocal core w/ ${ol.swap} Safe Swap`
+          : `ABC Balanced: ${ol.lead} Lead, ${ol.swap} Swap, ${ol.closer} Closer`) + ol.coreNote;
+      return {
+        id: `opp-${targetArch.toLowerCase()}-${idx + 1}-${ol.permIdx}`,
+        rank: idx + 1,
+        archetype: targetArch,
+        names: [ol.lead, ol.swap, ol.closer],
+        lead: ol.lead,
+        swap: ol.swap,
+        closer: ol.closer,
+        viabilityScore: ol.viabilityScore,
+        viabilityWeightPct: Number((ol.normWeight * 100).toFixed(1)),
+        sharedWeaknesses: ol.sharedWeaknesses,
+        rationale: archRationale
+      };
+    });
+  };
+
+  const oppTop3AbbTeams = pickOppTop3ForArchetype("ABB", (o) => o.abbScore);
+  const oppTop3AbcTeams = pickOppTop3ForArchetype("ABC", (o) => o.abcScore);
+  const oppTop3DuoTeams = pickOppTop3ForArchetype("DUO", (o) => o.duoScore);
 
   const top5OppPermIndices = sortedOppByViability.slice(0, 5).map((o) => o.permIdx);
 
@@ -13400,6 +13479,9 @@ export function evaluateShow6Pick3Matchup(
     topDuoLineups: top3DuoTeams,
     topOpponentViableTeams,
     topOpponentViableLineups: topOpponentViableTeams,
+    oppTop3AbbTeams,
+    oppTop3AbcTeams,
+    oppTop3DuoTeams,
     totalOrderedPairsEvaluated: 14400,
     totalMatchupsSimulated: 14400,
     movesetsSimulated,
@@ -14433,6 +14515,180 @@ export function getDefaultShow6RosterNames(
   const opp6 = pick6SingleMega([1, 3, 4, 6, 7, 9, 2, 5, 8, 10]);
   const primaryList = isOpponent ? [...opp6] : [...my6];
   return Object.assign(primaryList, { my6, opp6 });
+}
+
+/**
+ * Rescales an array of TeamMember (3 or 6 slots) when changing league format,
+ * updating CP and default IVs while keeping valid custom moves or recommended moves.
+ */
+export function rescaleTeamMembersForLeague(
+  members: TeamMember[],
+  targetLeague: string
+): TeamMember[] {
+  const normLeague = normalizeLeagueName(targetLeague || "GREAT LEAGUE");
+  const defaultCp =
+    normLeague === "ULTRA LEAGUE" || normLeague === "Battle Frontier (Cauldron)"
+      ? 2500
+      : normLeague === "MASTER LEAGUE" ||
+        normLeague === "MEGA MASTER LEAGUE" ||
+        normLeague === "Battle Frontier (Master)"
+      ? 4200
+      : 1500;
+
+  return (members || []).map((m, idx) => {
+    const rec = getRecommendedMovesForPokemon(m.name, normLeague);
+    if (!rec) {
+      return {
+        ...m,
+        id: m.id || `p${idx + 1}`,
+        cp: defaultCp
+      };
+    }
+    return {
+      ...m,
+      id: m.id || `p${idx + 1}`,
+      name: rec.name || m.name,
+      cp: rec.cp || defaultCp,
+      fastMove: m.fastMove?.trim() || rec.fastMove,
+      chargedMove1: m.chargedMove1?.trim() || rec.chargedMove1,
+      chargedMove2: m.chargedMove2?.trim() || rec.chargedMove2,
+      ivs: rec.defaultIvs || m.ivs
+    };
+  });
+}
+
+/**
+ * Computes the Most Likely 6-Pokémon Meta Opponent Roster for a given Show 6 format
+ * by combining the highest-usage Battle Frontier Common Cores with the highest-weighted
+ * tournament usage + PvPoke meta species (strictly enforcing Species Clause & ≤1 Mega).
+ */
+export function getMostLikelyMetaOpponent6ForFormat(
+  league: string = "Battle Frontier (Spectral)"
+): MostLikelyFormatOpponent6Info {
+  const normLeague = normalizeLeagueName(league || "Battle Frontier (Spectral)");
+  const shortLabel =
+    normLeague === "Battle Frontier (Spectral)"
+      ? "BF Spectral (1500)"
+      : normLeague === "Battle Frontier (Cauldron)"
+      ? "BF Cauldron (2500)"
+      : normLeague === "Battle Frontier (Master)"
+      ? "BF Master (Uncapped)"
+      : "Open GL (1500)";
+
+  const cores = getShow6CoresForLeague(normLeague);
+  const weightedMeta = getShow6WeightedMetaList(normLeague, getShow6UsageAndCoreWeightPct(), 45);
+  const usageMap = new Map<string, number>();
+  for (const wm of weightedMeta) {
+    usageMap.set(wm.name.replace(/^Shadow\s+/i, "").trim().toLowerCase(), wm.usagePct);
+    usageMap.set(wm.name.toLowerCase(), wm.usagePct);
+  }
+
+  const pickedNames: string[] = [];
+  const usedBaseSpecies = new Set<string>();
+  let hasMega = false;
+
+  const tryAddSpecies = (rawName: string): boolean => {
+    if (pickedNames.length >= 6) return false;
+    const canon = canonicalizeMetaPokemonName(rawName);
+    if (!canon) return false;
+    const rec = getRecommendedMovesForPokemon(canon, normLeague);
+    const resolvedName = rec?.name || canon;
+    const baseKey = getTypesAndWeaknessesForSpecies(resolvedName, normLeague).baseSpecies;
+    if (usedBaseSpecies.has(baseKey)) return false;
+    const isMega = isMegaOrPrimalSpecies(resolvedName);
+    if (isMega && hasMega) return false;
+    usedBaseSpecies.add(baseKey);
+    if (isMega) hasMega = true;
+    pickedNames.push(resolvedName);
+    return true;
+  };
+
+  // Step 1: Seed from top 2 non-overlapping Most-Used Cores in this format
+  const featuredCores: string[] = [];
+  for (const core of cores) {
+    if (pickedNames.length >= 4) break;
+    const cA = canonicalizeMetaPokemonName(core.monA);
+    const cB = canonicalizeMetaPokemonName(core.monB);
+    const baseA = getTypesAndWeaknessesForSpecies(cA, normLeague).baseSpecies;
+    const baseB = getTypesAndWeaknessesForSpecies(cB, normLeague).baseSpecies;
+    if (baseA === baseB) continue;
+    const aAlready = usedBaseSpecies.has(baseA);
+    const bAlready = usedBaseSpecies.has(baseB);
+    if (!aAlready && !bAlready && pickedNames.length <= 4) {
+      const addedA = tryAddSpecies(cA);
+      const addedB = tryAddSpecies(cB);
+      if (addedA && addedB) {
+        featuredCores.push(`${core.monA} + ${core.monB} (${core.usagePct.toFixed(1)}%)`);
+      }
+    }
+  }
+
+  // Step 2: Fill remaining slots up to 6 from highest-weighted meta species (prioritizing core partners)
+  for (const wm of weightedMeta) {
+    if (pickedNames.length >= 6) break;
+    tryAddSpecies(wm.name);
+  }
+
+  // Fallback if still < 6
+  if (pickedNames.length < 6) {
+    const fallback = getDefaultShow6RosterNames(normLeague, true);
+    for (const fb of fallback) {
+      if (pickedNames.length >= 6) break;
+      tryAddSpecies(fb);
+    }
+  }
+
+  // Check all cores present in the final 6
+  for (let i = 0; i < pickedNames.length; i++) {
+    for (let j = i + 1; j < pickedNames.length; j++) {
+      const c = findShow6CommonCoreEntry(normLeague, pickedNames[i], pickedNames[j]);
+      if (c) {
+        const label = `${c.monA} + ${c.monB} (${c.usagePct.toFixed(1)}%)`;
+        if (!featuredCores.includes(label) && featuredCores.length < 3) {
+          featuredCores.push(label);
+        }
+      }
+    }
+  }
+
+  const members: TeamMember[] = pickedNames.slice(0, 6).map((name, idx) => {
+    const rec = getRecommendedMovesForPokemon(name, normLeague);
+    return {
+      id: `meta-opp6-${idx + 1}`,
+      name: rec?.name || name,
+      cp: rec?.cp || (normLeague === "Battle Frontier (Cauldron)" ? 2500 : normLeague === "Battle Frontier (Master)" ? 4200 : 1500),
+      fastMove: rec?.fastMove || "Tackle",
+      chargedMove1: rec?.chargedMove1 || "Body Slam",
+      chargedMove2: rec?.chargedMove2 || "Surf",
+      ivs: rec?.defaultIvs
+    };
+  });
+
+  const usageSum = pickedNames.reduce((acc, n) => {
+    const u = usageMap.get(n.toLowerCase()) ?? usageMap.get(n.replace(/^Shadow\s+/i, "").trim().toLowerCase()) ?? 12;
+    return acc + u;
+  }, 0);
+  const avgUsagePct = Number((usageSum / Math.max(1, pickedNames.length)).toFixed(1));
+
+  return {
+    league: normLeague,
+    shortLabel,
+    pokemonNames: pickedNames.slice(0, 6),
+    members,
+    featuredCores,
+    avgUsagePct,
+    summaryLabel: `${shortLabel}: ${pickedNames.slice(0, 6).join(" / ")}`
+  };
+}
+
+export function getAllFormatsMostLikelyMetaOpponent6(): MostLikelyFormatOpponent6Info[] {
+  const formats: LeagueType[] = [
+    "GREAT LEAGUE",
+    "Battle Frontier (Spectral)",
+    "Battle Frontier (Cauldron)",
+    "Battle Frontier (Master)"
+  ];
+  return formats.map((lg) => getMostLikelyMetaOpponent6ForFormat(lg));
 }
 
 export const INITIAL_SHOW6_ROSTERS_OF_6: Show6RosterOf6Preset[] = [

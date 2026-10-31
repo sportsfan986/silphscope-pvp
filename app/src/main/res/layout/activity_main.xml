@@ -82,7 +82,7 @@
                 android:id="@+id/tv_app_main_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Real-Time PvP Floating Overlay • v5.02"
+                android:text="Real-Time PvP Floating Overlay • v5.03"
                 android:textSize="11sp"
                 android:textColor="#94a3b8"
                 android:layout_marginTop="1dp" />
@@ -658,6 +658,19 @@
                                 android:textColor="#fbbf24" />
 
                             <Button
+                                android:id="@+id/btn_flip_active_my6_opp6"
+                                android:layout_width="wrap_content"
+                                android:layout_height="30dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="7dp"
+                                android:text="⇄ Flip My/Opp"
+                                android:textSize="9sp"
+                                android:textStyle="bold"
+                                android:backgroundTint="#334155"
+                                android:textColor="#fcd34d"
+                                android:layout_marginEnd="4dp" />
+
+                            <Button
                                 android:id="@+id/btn_edit_active_opp6"
                                 android:layout_width="wrap_content"
                                 android:layout_height="30dp"
@@ -667,6 +680,17 @@
                                 android:backgroundTint="#be123c"
                                 android:textColor="#ffffff" />
                         </LinearLayout>
+
+                        <Button
+                            android:id="@+id/btn_load_most_likely_opp6"
+                            android:layout_width="match_parent"
+                            android:layout_height="32dp"
+                            android:text="🔥 Load Most Likely Meta Opponent Team (6) of Format"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:backgroundTint="#881337"
+                            android:textColor="#fecdd3"
+                            android:layout_marginTop="3dp" />
 
                         <LinearLayout
                             android:layout_width="match_parent"

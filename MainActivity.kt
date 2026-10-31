@@ -563,9 +563,9 @@ class MainActivity : AppCompatActivity() {
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "5.02"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "5.03"
         } catch (_: Exception) {
-            "5.02"
+            "5.03"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -6061,6 +6061,9 @@ class MainActivity : AppCompatActivity() {
             val btnMoveDown = itemView.findViewById<TextView>(R.id.btn_move_preset_down)
             val btnEdit = itemView.findViewById<ImageButton>(R.id.btn_edit_preset)
             val btnDelete = itemView.findViewById<ImageButton>(R.id.btn_delete_preset)
+            val btnClone = itemView.findViewById<Button>(R.id.btn_clone_preset)
+            val btnCopyMode = itemView.findViewById<Button>(R.id.btn_copy_preset_mode)
+            val btnSwapOpp6 = itemView.findViewById<Button>(R.id.btn_swap_preset_opp6)
 
             val isCurrent = preset.id == selectedId
             radioSelected.isChecked = isCurrent
@@ -6212,6 +6215,177 @@ class MainActivity : AppCompatActivity() {
 
             btnEdit.setOnClickListener {
                 showPresetEditorDialog(preset)
+            }
+
+            val show6ModeNow = isShow6CombatMode()
+            btnCopyMode?.text = if (show6ModeNow) "🛡️ → GBL 3" else "🏛️ → Show 6"
+            btnSwapOpp6?.visibility = if (show6ModeNow) android.view.View.VISIBLE else android.view.View.GONE
+
+            btnClone?.setOnClickListener {
+                val cloned = preset.copy(
+                    id = UUID.randomUUID().toString(),
+                    name = "${preset.name} (Copy)",
+                    isSelected = true
+                )
+                val updated = presets.map { it.copy(isSelected = false) }.toMutableList()
+                updated.add(0, cloned)
+                savePresets(updated)
+                setSelectedPreset(cloned.id)
+                Toast.makeText(this, "📋 Cloned '${preset.name}' — choose League or edits below", Toast.LENGTH_SHORT).show()
+                showPresetEditorDialog(cloned)
+            }
+
+            btnCopyMode?.setOnClickListener {
+                if (show6ModeNow) {
+                    val targetLg = when {
+                        preset.league.contains("CAULDRON", ignoreCase = true) || preset.league.contains("ULTRA", ignoreCase = true) -> "ULTRA LEAGUE"
+                        preset.league.contains("MASTER", ignoreCase = true) -> "MASTER LEAGUE"
+                        else -> "GREAT LEAGUE"
+                    }
+                    val rescaledSlots = preset.pokemon.map { slot ->
+                        val resolved = OverlayService.resolveRecommendedMovesForSpecies(slot.name, targetLg)
+                        val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, targetLg) else null
+                        slot.copy(
+                            cp = scaled?.defaultCp ?: slot.cp,
+                            ivs = scaled?.defaultIvsGl ?: slot.ivs
+                        )
+                    }
+                    val copied = preset.copy(
+                        id = UUID.randomUUID().toString(),
+                        name = "${preset.name} (from Show 6)",
+                        league = targetLg,
+                        pokemon = rescaledSlots,
+                        isSelected = true
+                    )
+                    val type = object : TypeToken<List<TeamPreset>>() {}.type
+                    val rawGbl = prefs.getString(OverlayService.PREFS_KEY_PERSISTENT_TEAMS, null)
+                    val gblList = (try { gson.fromJson<List<TeamPreset>>(rawGbl, type) } catch (_: Exception) { null }).orEmpty().toMutableList()
+                    gblList.add(0, copied)
+                    prefs.edit()
+                        .putString(OverlayService.PREFS_KEY_PERSISTENT_TEAMS, gson.toJson(gblList))
+                        .putString("gbl_selected_preset_id", copied.id)
+                        .apply()
+                    Toast.makeText(this, "🛡️ Copied '${preset.name}' to Standard GBL Blind 3 ($targetLg)!", Toast.LENGTH_LONG).show()
+                } else {
+                    val targetShow6Lg = when {
+                        preset.league.contains("ULTRA", ignoreCase = true) -> "Battle Frontier (Cauldron)"
+                        preset.league.contains("MASTER", ignoreCase = true) -> "Battle Frontier (Master)"
+                        else -> "GREAT LEAGUE"
+                    }
+                    val options = arrayOf(
+                        "🏛️ Copy as Show 6 Overlay Trio (Team of 3)",
+                        "⚡ Auto-Fill Show 6 Roster of 6 (Lock 3 + Add 3 Meta Partners)"
+                    )
+                    AlertDialog.Builder(this)
+                        .setTitle("Copy '${preset.name}' to Show 6 Mode")
+                        .setItems(options) { _, which ->
+                            if (which == 0) {
+                                val rescaledSlots = preset.pokemon.map { slot ->
+                                    val resolved = OverlayService.resolveRecommendedMovesForSpecies(slot.name, targetShow6Lg)
+                                    val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, targetShow6Lg) else null
+                                    slot.copy(
+                                        cp = scaled?.defaultCp ?: slot.cp,
+                                        ivs = scaled?.defaultIvsGl ?: slot.ivs
+                                    )
+                                }
+                                val copied = preset.copy(
+                                    id = UUID.randomUUID().toString(),
+                                    name = "${preset.name} (from GBL)",
+                                    league = targetShow6Lg,
+                                    pokemon = rescaledSlots,
+                                    isSelected = true
+                                )
+                                val type = object : TypeToken<List<TeamPreset>>() {}.type
+                                val rawS6 = prefs.getString(OverlayService.PREFS_KEY_SHOW6_PRESETS_OF_3, null)
+                                val s6List = (try { gson.fromJson<List<TeamPreset>>(rawS6, type) } catch (_: Exception) { null }).orEmpty().toMutableList()
+                                s6List.add(0, copied)
+                                prefs.edit()
+                                    .putString(OverlayService.PREFS_KEY_SHOW6_PRESETS_OF_3, gson.toJson(s6List))
+                                    .putString(OverlayService.PREFS_KEY_SHOW6_SELECTED_PRESET_ID, copied.id)
+                                    .apply()
+                                Toast.makeText(this, "🏛️ Copied '${preset.name}' to Show 6 Trios ($targetShow6Lg)!", Toast.LENGTH_LONG).show()
+                            } else {
+                                val locked3 = preset.pokemon.map { it.name }.filter { it.isNotBlank() }
+                                Toast.makeText(this, "⏳ Auto-filling 3 synergistic partners for $targetShow6Lg...", Toast.LENGTH_SHORT).show()
+                                lifecycleScope.launch(Dispatchers.Default) {
+                                    val gen = OverlayService.generateBlindShow6RosterStatic(
+                                        league = targetShow6Lg,
+                                        lockedPokemon = locked3,
+                                        whitelist = emptySet(),
+                                        banlist = emptySet()
+                                    )
+                                    val full6 = gen.recommended6.map { it.member.name }.ifEmpty {
+                                        (locked3 + OverlayService.getMostLikelyMetaOpponent6Static(targetShow6Lg)).distinct().take(6)
+                                    }
+                                    val newRoster = OverlayService.Companion.Show6RosterPreset(
+                                        id = "show6-autofill-${System.currentTimeMillis()}",
+                                        name = "${preset.name} + Auto-Fill 6",
+                                        league = targetShow6Lg,
+                                        pokemon = full6
+                                    )
+                                    withContext(Dispatchers.Main) {
+                                        val curMy6 = loadShow6RostersOf6().toMutableList()
+                                        curMy6.add(0, newRoster)
+                                        saveShow6RostersOf6(curMy6)
+                                        setAppCombatMode("show6")
+                                        setupShow6ModeHubUi()
+                                        Toast.makeText(
+                                            this@MainActivity,
+                                            "🏛️ Auto-filled Show 6 Roster: ${full6.joinToString(" • ")}",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                        showEditShow6RosterDialog(newRoster, isOpponent = false) { updated, finalIsOpp ->
+                                            if (finalIsOpp) {
+                                                saveShow6RostersOf6(loadShow6RostersOf6().filter { it.id != newRoster.id })
+                                                val oppList = loadShow6OpponentRostersOf6().toMutableList()
+                                                oppList.add(0, updated)
+                                                saveShow6OpponentRostersOf6(oppList)
+                                            } else {
+                                                saveShow6RostersOf6(loadShow6RostersOf6().map { if (it.id == newRoster.id) updated else it })
+                                            }
+                                            setupShow6ModeHubUi()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                }
+            }
+
+            btnSwapOpp6?.setOnClickListener {
+                val targetShow6Lg = if (OverlayService.isShow6EligibleLeagueStatic(preset.league)) preset.league else "GREAT LEAGUE"
+                val locked3 = preset.pokemon.map { it.name }.filter { it.isNotBlank() }
+                lifecycleScope.launch(Dispatchers.Default) {
+                    val gen = OverlayService.generateBlindShow6RosterStatic(
+                        league = targetShow6Lg,
+                        lockedPokemon = locked3,
+                        whitelist = emptySet(),
+                        banlist = emptySet()
+                    )
+                    val full6 = gen.recommended6.map { it.member.name }.ifEmpty {
+                        (locked3 + OverlayService.getMostLikelyMetaOpponent6Static(targetShow6Lg)).distinct().take(6)
+                    }
+                    val oppRoster = OverlayService.Companion.Show6RosterPreset(
+                        id = "show6-opp-trio-${System.currentTimeMillis()}",
+                        name = "Opp: ${preset.name} (6)",
+                        league = targetShow6Lg,
+                        pokemon = full6
+                    )
+                    withContext(Dispatchers.Main) {
+                        val curOpp = loadShow6OpponentRostersOf6().toMutableList()
+                        curOpp.add(0, oppRoster)
+                        saveShow6OpponentRostersOf6(curOpp)
+                        prefs.edit().putString(OverlayService.PREFS_KEY_SHOW6_OPPONENT_ROSTER, gson.toJson(full6)).apply()
+                        setupShow6ModeHubUi()
+                        Toast.makeText(
+                            this@MainActivity,
+                            "⚔️ Swapped '${preset.name}' into Opponent 6 (${full6.joinToString(" / ")})!",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
             }
 
             btnDelete.setOnClickListener {
@@ -6617,8 +6791,9 @@ class MainActivity : AppCompatActivity() {
     private fun showEditShow6RosterDialog(
         existingRoster: OverlayService.Companion.Show6RosterPreset,
         isOpponent: Boolean,
-        onSaved: (OverlayService.Companion.Show6RosterPreset) -> Unit
+        onSaved: (OverlayService.Companion.Show6RosterPreset, Boolean) -> Unit
     ) {
+        var currentIsOpponent = isOpponent
         val density = resources.displayMetrics.density
         val pad = (12 * density).toInt()
         val scroll = ScrollView(this)
@@ -6632,7 +6807,7 @@ class MainActivity : AppCompatActivity() {
         val leagues = OverlayService.SHOW6_ELIGIBLE_LEAGUES
         val nameInput = EditText(this).apply {
             setText(existingRoster.name)
-            hint = if (isOpponent) "Opponent Roster Name" else "My Show 6 Roster Name"
+            hint = if (currentIsOpponent) "Opponent Roster Name" else "My Show 6 Roster Name"
             setTextColor(0xFFF8FAFC.toInt())
             setHintTextColor(0xFF64748B.toInt())
             setBackgroundColor(0xFF1E293B.toInt())
@@ -6640,6 +6815,31 @@ class MainActivity : AppCompatActivity() {
             setPadding(pad, (8 * density).toInt(), pad, (8 * density).toInt())
         }
         container.addView(nameInput)
+
+        val roleToggleBtn = Button(this).apply {
+            text = if (currentIsOpponent) "⚔️ Role: Opponent 6 Roster (Tap to Swap to My 6 ⇄)" else "🛡️ Role: My Show 6 Roster (Tap to Swap to Opponent 6 ⇄)"
+            textSize = 10.5f
+            isAllCaps = false
+            backgroundTintList = android.content.res.ColorStateList.valueOf(
+                if (currentIsOpponent) 0xFFBE123C.toInt() else 0xFFD97706.toInt()
+            )
+            setTextColor(if (currentIsOpponent) 0xFFFFFFFF.toInt() else 0xFF0F172A.toInt())
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = (6 * density).toInt()
+            }
+            setOnClickListener {
+                currentIsOpponent = !currentIsOpponent
+                text = if (currentIsOpponent) "⚔️ Role: Opponent 6 Roster (Tap to Swap to My 6 ⇄)" else "🛡️ Role: My Show 6 Roster (Tap to Swap to Opponent 6 ⇄)"
+                backgroundTintList = android.content.res.ColorStateList.valueOf(
+                    if (currentIsOpponent) 0xFFBE123C.toInt() else 0xFFD97706.toInt()
+                )
+                setTextColor(if (currentIsOpponent) 0xFFFFFFFF.toInt() else 0xFF0F172A.toInt())
+            }
+        }
+        container.addView(roleToggleBtn)
 
         val leagueSpinner = Spinner(this).apply {
             adapter = createThemedSpinnerAdapter(leagues)
@@ -6961,7 +7161,7 @@ class MainActivity : AppCompatActivity() {
                 league = lg,
                 pokemon = mons.take(6)
             )
-            onSaved(updated)
+            onSaved(updated, currentIsOpponent)
             dialog.dismiss()
         }
     }
@@ -7120,6 +7320,43 @@ class MainActivity : AppCompatActivity() {
         val editNewOppRosterName = findViewById<EditText>(R.id.edit_show6_new_opp_roster_name)
         val btnSaveOppRoster6 = findViewById<Button>(R.id.btn_save_show6_opp_roster6)
 
+        fun copyShow6RosterTop3ToGblBlind3(r: OverlayService.Companion.Show6RosterPreset) {
+            val targetGblLg = when {
+                r.league.contains("CAULDRON", ignoreCase = true) || r.league.contains("ULTRA", ignoreCase = true) -> "ULTRA LEAGUE"
+                r.league.contains("MASTER", ignoreCase = true) -> "MASTER LEAGUE"
+                else -> "GREAT LEAGUE"
+            }
+            val top3Names = r.pokemon.take(3)
+            val slots = top3Names.map { monName ->
+                val resolved = OverlayService.resolveRecommendedMovesForSpecies(monName, targetGblLg)
+                val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, targetGblLg) else null
+                PokemonSlot(
+                    name = monName,
+                    cp = scaled?.defaultCp ?: 1500,
+                    fastMove = scaled?.defaultFastMove ?: "Tackle",
+                    chargedMove1 = scaled?.chargedMove1 ?: "Struggle",
+                    chargedMove2 = scaled?.chargedMove2 ?: "Return",
+                    ivs = scaled?.defaultIvsGl
+                )
+            }
+            val newGblPreset = TeamPreset(
+                id = UUID.randomUUID().toString(),
+                name = "${r.name} (Top 3 → GBL)",
+                league = targetGblLg,
+                pokemon = slots,
+                isSelected = true
+            )
+            val type = object : TypeToken<List<TeamPreset>>() {}.type
+            val rawGbl = prefs.getString(OverlayService.PREFS_KEY_PERSISTENT_TEAMS, null)
+            val gblList = (try { gson.fromJson<List<TeamPreset>>(rawGbl, type) } catch (_: Exception) { null }).orEmpty().toMutableList()
+            gblList.add(0, newGblPreset)
+            prefs.edit()
+                .putString(OverlayService.PREFS_KEY_PERSISTENT_TEAMS, gson.toJson(gblList))
+                .putString("gbl_selected_preset_id", newGblPreset.id)
+                .apply()
+            Toast.makeText(this, "🛡️ Copied Top 3 (${top3Names.joinToString("/")}) to GBL Blind 3 ($targetGblLg)!", Toast.LENGTH_LONG).show()
+        }
+
         fun renderShow6RostersOf6List() {
             rosters6Container?.removeAllViews()
             val rosters = loadShow6RostersOf6()
@@ -7140,13 +7377,13 @@ class MainActivity : AppCompatActivity() {
                 }
                 val tv = TextView(this).apply {
                     text = "${r.name} (${r.league})\n${r.pokemon.joinToString(" • ")}"
-                    textSize = 10.5f
+                    textSize = 10f
                     setTextColor(0xFFF8FAFC.toInt())
                     layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 }
                 val loadBtn = Button(this).apply {
-                    text = "Load 6"
-                    textSize = 9.5f
+                    text = "Load"
+                    textSize = 9f
                     minWidth = 0
                     minimumWidth = 0
                     backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFD97706.toInt())
@@ -7160,25 +7397,97 @@ class MainActivity : AppCompatActivity() {
                         Toast.makeText(this@MainActivity, "Loaded '${r.name}' into Your 6!", Toast.LENGTH_SHORT).show()
                     }
                 }
+                val cloneBtn = Button(this).apply {
+                    text = "📋"
+                    textSize = 9f
+                    minWidth = 0
+                    minimumWidth = 0
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF334155.toInt())
+                    setTextColor(0xFFFBBF24.toInt())
+                    setOnClickListener {
+                        val cloned = r.copy(
+                            id = "show6-clone-${System.currentTimeMillis()}",
+                            name = "${r.name} (Copy)"
+                        )
+                        val cur = loadShow6RostersOf6().toMutableList()
+                        cur.add(0, cloned)
+                        saveShow6RostersOf6(cur)
+                        renderShow6RostersOf6List()
+                        showEditShow6RosterDialog(cloned, isOpponent = false) { updated, finalIsOpp ->
+                            if (finalIsOpp) {
+                                saveShow6RostersOf6(loadShow6RostersOf6().filter { it.id != cloned.id })
+                                val oppList = loadShow6OpponentRostersOf6().toMutableList()
+                                oppList.add(0, updated)
+                                saveShow6OpponentRostersOf6(oppList)
+                            } else {
+                                saveShow6RostersOf6(loadShow6RostersOf6().map { if (it.id == cloned.id) updated else it })
+                            }
+                            renderShow6RostersOf6List()
+                            renderShow6OpponentRostersOf6List()
+                            Toast.makeText(this@MainActivity, "Saved cloned roster '${updated.name}'!", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+                val swapBtn = Button(this).apply {
+                    text = "⇄Opp"
+                    textSize = 8.5f
+                    minWidth = 0
+                    minimumWidth = 0
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF881337.toInt())
+                    setTextColor(0xFFFECDD3.toInt())
+                    setOnClickListener {
+                        val swapped = r.copy(id = "show6-swap-${System.currentTimeMillis()}")
+                        val remMy = loadShow6RostersOf6().filter { it.id != r.id }
+                        if (remMy.isNotEmpty()) saveShow6RostersOf6(remMy)
+                        val curOpp = loadShow6OpponentRostersOf6().toMutableList()
+                        curOpp.add(0, swapped)
+                        saveShow6OpponentRostersOf6(curOpp)
+                        oppInputs.forEachIndexed { idx, edit -> edit?.setText(swapped.pokemon.getOrElse(idx) { "" }, false) }
+                        persistCurrentOpponent6ToPrefs()
+                        renderShow6RostersOf6List()
+                        renderShow6OpponentRostersOf6List()
+                        Toast.makeText(this@MainActivity, "⇄ Swapped '${r.name}' to Opponent 6!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                val toGblBtn = Button(this).apply {
+                    text = "→GBL"
+                    textSize = 8.5f
+                    minWidth = 0
+                    minimumWidth = 0
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF0369A1.toInt())
+                    setTextColor(0xFFE0F2FE.toInt())
+                    setOnClickListener {
+                        copyShow6RosterTop3ToGblBlind3(r)
+                    }
+                }
                 val editBtn = Button(this).apply {
                     text = "✏️"
-                    textSize = 9.5f
+                    textSize = 9f
                     minWidth = 0
                     minimumWidth = 0
                     backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF0284C7.toInt())
                     setTextColor(0xFFFFFFFF.toInt())
                     setOnClickListener {
-                        showEditShow6RosterDialog(r, isOpponent = false) { updated ->
-                            val next = loadShow6RostersOf6().map { if (it.id == r.id) updated else it }
-                            saveShow6RostersOf6(next)
+                        showEditShow6RosterDialog(r, isOpponent = false) { updated, finalIsOpp ->
+                            if (finalIsOpp) {
+                                val remMy = loadShow6RostersOf6().filter { it.id != r.id }
+                                if (remMy.isNotEmpty()) saveShow6RostersOf6(remMy)
+                                val oppList = loadShow6OpponentRostersOf6().toMutableList()
+                                oppList.add(0, updated)
+                                saveShow6OpponentRostersOf6(oppList)
+                            } else {
+                                val next = loadShow6RostersOf6().map { if (it.id == r.id) updated else it }
+                                saveShow6RostersOf6(next)
+                            }
                             renderShow6RostersOf6List()
+                            renderShow6OpponentRostersOf6List()
                             Toast.makeText(this@MainActivity, "Updated '${updated.name}'!", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
                 val delBtn = Button(this).apply {
                     text = "✕"
-                    textSize = 9.5f
+                    textSize = 9f
                     minWidth = 0
                     minimumWidth = 0
                     backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF7F1D1D.toInt())
@@ -7202,6 +7511,9 @@ class MainActivity : AppCompatActivity() {
                 }
                 row.addView(tv)
                 row.addView(loadBtn)
+                row.addView(cloneBtn)
+                row.addView(swapBtn)
+                row.addView(toGblBtn)
                 row.addView(editBtn)
                 row.addView(delBtn)
                 rosters6Container?.addView(row)
@@ -7228,13 +7540,13 @@ class MainActivity : AppCompatActivity() {
                 }
                 val tv = TextView(this).apply {
                     text = "⚔️ ${r.name} (${r.league})\n${r.pokemon.joinToString(" • ")}"
-                    textSize = 10.5f
+                    textSize = 10f
                     setTextColor(0xFFFECDD3.toInt())
                     layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 }
                 val loadBtn = Button(this).apply {
-                    text = "Load Opp"
-                    textSize = 9.5f
+                    text = "Load"
+                    textSize = 9f
                     minWidth = 0
                     minimumWidth = 0
                     backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFE11D48.toInt())
@@ -7249,25 +7561,94 @@ class MainActivity : AppCompatActivity() {
                         Toast.makeText(this@MainActivity, "Loaded '${r.name}' into Opponent's 6!", Toast.LENGTH_SHORT).show()
                     }
                 }
+                val cloneBtn = Button(this).apply {
+                    text = "📋"
+                    textSize = 9f
+                    minWidth = 0
+                    minimumWidth = 0
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF334155.toInt())
+                    setTextColor(0xFFFDA4AF.toInt())
+                    setOnClickListener {
+                        val cloned = r.copy(
+                            id = "show6-opp-clone-${System.currentTimeMillis()}",
+                            name = "${r.name} (Copy)"
+                        )
+                        val cur = loadShow6OpponentRostersOf6().toMutableList()
+                        cur.add(0, cloned)
+                        saveShow6OpponentRostersOf6(cur)
+                        renderShow6OpponentRostersOf6List()
+                        showEditShow6RosterDialog(cloned, isOpponent = true) { updated, finalIsOpp ->
+                            if (!finalIsOpp) {
+                                saveShow6OpponentRostersOf6(loadShow6OpponentRostersOf6().filter { it.id != cloned.id })
+                                val myList = loadShow6RostersOf6().toMutableList()
+                                myList.add(0, updated)
+                                saveShow6RostersOf6(myList)
+                            } else {
+                                saveShow6OpponentRostersOf6(loadShow6OpponentRostersOf6().map { if (it.id == cloned.id) updated else it })
+                            }
+                            renderShow6RostersOf6List()
+                            renderShow6OpponentRostersOf6List()
+                            Toast.makeText(this@MainActivity, "Saved cloned roster '${updated.name}'!", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+                val swapBtn = Button(this).apply {
+                    text = "⇄My"
+                    textSize = 8.5f
+                    minWidth = 0
+                    minimumWidth = 0
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF065F46.toInt())
+                    setTextColor(0xFFA7F3D0.toInt())
+                    setOnClickListener {
+                        val swapped = r.copy(id = "show6-swap-my-${System.currentTimeMillis()}")
+                        saveShow6OpponentRostersOf6(loadShow6OpponentRostersOf6().filter { it.id != r.id })
+                        val curMy = loadShow6RostersOf6().toMutableList()
+                        curMy.add(0, swapped)
+                        saveShow6RostersOf6(curMy)
+                        myInputs.forEachIndexed { idx, edit -> edit?.setText(swapped.pokemon.getOrElse(idx) { "" }, false) }
+                        renderShow6RostersOf6List()
+                        renderShow6OpponentRostersOf6List()
+                        Toast.makeText(this@MainActivity, "⇄ Swapped '${r.name}' to My Show 6!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                val toGblBtn = Button(this).apply {
+                    text = "→GBL"
+                    textSize = 8.5f
+                    minWidth = 0
+                    minimumWidth = 0
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF0369A1.toInt())
+                    setTextColor(0xFFE0F2FE.toInt())
+                    setOnClickListener {
+                        copyShow6RosterTop3ToGblBlind3(r)
+                    }
+                }
                 val editBtn = Button(this).apply {
                     text = "✏️"
-                    textSize = 9.5f
+                    textSize = 9f
                     minWidth = 0
                     minimumWidth = 0
                     backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF0284C7.toInt())
                     setTextColor(0xFFFFFFFF.toInt())
                     setOnClickListener {
-                        showEditShow6RosterDialog(r, isOpponent = true) { updated ->
-                            val next = loadShow6OpponentRostersOf6().map { if (it.id == r.id) updated else it }
-                            saveShow6OpponentRostersOf6(next)
+                        showEditShow6RosterDialog(r, isOpponent = true) { updated, finalIsOpp ->
+                            if (!finalIsOpp) {
+                                saveShow6OpponentRostersOf6(loadShow6OpponentRostersOf6().filter { it.id != r.id })
+                                val myList = loadShow6RostersOf6().toMutableList()
+                                myList.add(0, updated)
+                                saveShow6RostersOf6(myList)
+                            } else {
+                                val next = loadShow6OpponentRostersOf6().map { if (it.id == r.id) updated else it }
+                                saveShow6OpponentRostersOf6(next)
+                            }
+                            renderShow6RostersOf6List()
                             renderShow6OpponentRostersOf6List()
-                            Toast.makeText(this@MainActivity, "Updated Opponent 6 '${updated.name}'!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@MainActivity, "Updated '${updated.name}'!", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
                 val delBtn = Button(this).apply {
                     text = "✕"
-                    textSize = 9.5f
+                    textSize = 9f
                     minWidth = 0
                     minimumWidth = 0
                     backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF7F1D1D.toInt())
@@ -7286,6 +7667,9 @@ class MainActivity : AppCompatActivity() {
                 }
                 row.addView(tv)
                 row.addView(loadBtn)
+                row.addView(cloneBtn)
+                row.addView(swapBtn)
+                row.addView(toGblBtn)
                 row.addView(editBtn)
                 row.addView(delBtn)
                 oppRosters6Container?.addView(row)
@@ -7304,11 +7688,17 @@ class MainActivity : AppCompatActivity() {
                 league = lg,
                 pokemon = if (curMons.size >= 6) curMons.take(6) else defaultMy6
             )
-            showEditShow6RosterDialog(tempRoster, isOpponent = false) { updated ->
+            showEditShow6RosterDialog(tempRoster, isOpponent = false) { updated, finalIsOpp ->
                 val lgIdx = leagues.indexOfFirst { it.equals(updated.league, ignoreCase = true) }.takeIf { it >= 0 } ?: 0
                 spinnerPick3League.setSelection(lgIdx)
-                myInputs.forEachIndexed { idx, edit -> edit?.setText(updated.pokemon.getOrElse(idx) { "" }, false) }
-                Toast.makeText(this, "Applied edited My 6!", Toast.LENGTH_SHORT).show()
+                if (finalIsOpp) {
+                    oppInputs.forEachIndexed { idx, edit -> edit?.setText(updated.pokemon.getOrElse(idx) { "" }, false) }
+                    persistCurrentOpponent6ToPrefs()
+                    Toast.makeText(this, "Applied edited roster into Opponent's 6!", Toast.LENGTH_SHORT).show()
+                } else {
+                    myInputs.forEachIndexed { idx, edit -> edit?.setText(updated.pokemon.getOrElse(idx) { "" }, false) }
+                    Toast.makeText(this, "Applied edited My 6!", Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
@@ -7321,13 +7711,71 @@ class MainActivity : AppCompatActivity() {
                 league = lg,
                 pokemon = if (curMons.size >= 6) curMons.take(6) else initialOpp6
             )
-            showEditShow6RosterDialog(tempRoster, isOpponent = true) { updated ->
+            showEditShow6RosterDialog(tempRoster, isOpponent = true) { updated, finalIsOpp ->
                 val lgIdx = leagues.indexOfFirst { it.equals(updated.league, ignoreCase = true) }.takeIf { it >= 0 } ?: 0
                 spinnerPick3League.setSelection(lgIdx)
-                oppInputs.forEachIndexed { idx, edit -> edit?.setText(updated.pokemon.getOrElse(idx) { "" }, false) }
-                persistCurrentOpponent6ToPrefs()
-                Toast.makeText(this, "Applied edited Opponent 6!", Toast.LENGTH_SHORT).show()
+                if (!finalIsOpp) {
+                    myInputs.forEachIndexed { idx, edit -> edit?.setText(updated.pokemon.getOrElse(idx) { "" }, false) }
+                    Toast.makeText(this, "Applied edited roster into Your 6!", Toast.LENGTH_SHORT).show()
+                } else {
+                    oppInputs.forEachIndexed { idx, edit -> edit?.setText(updated.pokemon.getOrElse(idx) { "" }, false) }
+                    persistCurrentOpponent6ToPrefs()
+                    Toast.makeText(this, "Applied edited Opponent 6!", Toast.LENGTH_SHORT).show()
+                }
             }
+        }
+
+        findViewById<Button>(R.id.btn_flip_active_my6_opp6)?.setOnClickListener {
+            val curMy = myInputs.map { it?.text?.toString()?.trim().orEmpty() }
+            val curOpp = oppInputs.map { it?.text?.toString()?.trim().orEmpty() }
+            myInputs.forEachIndexed { idx, edit -> edit?.setText(curOpp.getOrElse(idx) { "" }, false) }
+            oppInputs.forEachIndexed { idx, edit -> edit?.setText(curMy.getOrElse(idx) { "" }, false) }
+            persistCurrentOpponent6ToPrefs()
+            Toast.makeText(this, "⇄ Flipped Your 6 and Opponent's 6!", Toast.LENGTH_SHORT).show()
+        }
+
+        findViewById<Button>(R.id.btn_load_most_likely_opp6)?.setOnClickListener {
+            val formatLabels = leagues.map { lg ->
+                val mon6 = OverlayService.getMostLikelyMetaOpponent6Static(lg)
+                "🔥 $lg:\n   ${mon6.joinToString(" • ")}"
+            }.toTypedArray()
+            AlertDialog.Builder(this)
+                .setTitle("🔥 Load Most Likely Meta Opponent 6 by Format")
+                .setItems(formatLabels) { _, which ->
+                    val chosenLg = leagues.getOrElse(which) { pick3LeagueProvider() }
+                    val mon6 = OverlayService.getMostLikelyMetaOpponent6Static(chosenLg)
+                    val lgIdx = leagues.indexOfFirst { it.equals(chosenLg, ignoreCase = true) }.takeIf { it >= 0 } ?: 0
+                    spinnerPick3League.setSelection(lgIdx)
+                    oppInputs.forEachIndexed { idx, edit -> edit?.setText(mon6.getOrElse(idx) { "" }, false) }
+                    persistCurrentOpponent6ToPrefs()
+                    Toast.makeText(
+                        this,
+                        "🔥 Loaded Most Likely Meta Opponent 6 for $chosenLg!",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                .setNeutralButton("Save All 4 Formats to Opp 6") { _, _ ->
+                    val curOpp = loadShow6OpponentRostersOf6().toMutableList()
+                    for (lg in leagues.reversed()) {
+                        val mon6 = OverlayService.getMostLikelyMetaOpponent6Static(lg)
+                        val name = "Most Likely Opp 6 ($lg)"
+                        curOpp.removeAll { it.name.equals(name, ignoreCase = true) }
+                        curOpp.add(
+                            0,
+                            OverlayService.Companion.Show6RosterPreset(
+                                id = "show6-likely-opp6-${lg.lowercase().replace("[^a-z0-9]".toRegex(), "-")}",
+                                name = name,
+                                league = lg,
+                                pokemon = mon6
+                            )
+                        )
+                    }
+                    saveShow6OpponentRostersOf6(curOpp)
+                    renderShow6OpponentRostersOf6List()
+                    Toast.makeText(this, "💾 Saved Most Likely Meta Opponent 6 for all 4 formats!", Toast.LENGTH_LONG).show()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
         }
 
         btnSaveRoster6?.setOnClickListener {
@@ -7539,9 +7987,111 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
 
-                    addRecGroup("🛡️ Top 3 ABB Lineups (Bait Backline):", 0xFFFBBF24.toInt(), res.top3Abb)
-                    addRecGroup("⚖️ Top 3 ABC Lineups (Balanced Triad):", 0xFF38BDF8.toInt(), res.top3Abc)
-                    addRecGroup("☯️ Top 3 Duo-Core + Pivot Lineups:", 0xFF34D399.toInt(), res.top3Duo)
+                    addRecGroup("🛡️ Your Top 3 ABB Lineups (Bait Backline):", 0xFFFBBF24.toInt(), res.top3Abb)
+                    addRecGroup("⚖️ Your Top 3 ABC Lineups (Balanced Triad):", 0xFF38BDF8.toInt(), res.top3Abc)
+                    addRecGroup("☯️ Your Top 3 Duo-Core + Pivot Lineups:", 0xFF34D399.toInt(), res.top3Duo)
+
+                    val oppHdr = TextView(this@MainActivity).apply {
+                        text = "⚔️ MOST LIKELY OPPONENT PICK-3 TEAMS BY ARCHETYPE"
+                        textSize = 12f
+                        setTypeface(typeface, android.graphics.Typeface.BOLD)
+                        setTextColor(0xFFFDA4AF.toInt())
+                        setPadding(0, (12 * density).toInt(), 0, (4 * density).toInt())
+                    }
+                    layoutPick3Results?.addView(oppHdr)
+
+                    fun addOppArchetypeGroup(groupTitle: String, titleColor: Int, trios: List<OverlayService.Companion.Show6OpponentTrioWeight>) {
+                        if (trios.isEmpty()) return
+                        val hdr = TextView(this@MainActivity).apply {
+                            text = groupTitle
+                            textSize = 11f
+                            setTypeface(typeface, android.graphics.Typeface.BOLD)
+                            setTextColor(titleColor)
+                            setPadding(0, (6 * density).toInt(), 0, (3 * density).toInt())
+                        }
+                        layoutPick3Results?.addView(hdr)
+                        trios.take(3).forEachIndexed { idx, oppTrio ->
+                            val card = LinearLayout(this@MainActivity).apply {
+                                orientation = LinearLayout.VERTICAL
+                                setBackgroundColor(0xFF271524.toInt())
+                                val pad = (8 * density).toInt()
+                                setPadding(pad, pad, pad, pad)
+                                layoutParams = LinearLayout.LayoutParams(
+                                    LinearLayout.LayoutParams.MATCH_PARENT,
+                                    LinearLayout.LayoutParams.WRAP_CONTENT
+                                ).apply {
+                                    bottomMargin = (5 * density).toInt()
+                                }
+                            }
+                            val topRow = LinearLayout(this@MainActivity).apply {
+                                orientation = LinearLayout.HORIZONTAL
+                                gravity = android.view.Gravity.CENTER_VERTICAL
+                            }
+                            val pct = (oppTrio.weight * 100.0).toInt().coerceAtLeast(1)
+                            val titleTv = TextView(this@MainActivity).apply {
+                                text = "⚔️ Opp #${idx + 1} ${oppTrio.archetype} • Viability BR ${oppTrio.viabilityScore} • Weight ~${pct}%"
+                                textSize = 10.5f
+                                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                                setTextColor(0xFFFECDD3.toInt())
+                                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                            }
+                            val cloneOppTrioBtn = Button(this@MainActivity).apply {
+                                text = "📋 Clone Trio"
+                                textSize = 9f
+                                minWidth = 0
+                                minimumWidth = 0
+                                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFBE123C.toInt())
+                                setTextColor(0xFFFFFFFF.toInt())
+                                setOnClickListener {
+                                    val lead = oppTrio.trio.getOrNull(0) ?: return@setOnClickListener
+                                    val swap = oppTrio.trio.getOrNull(1) ?: return@setOnClickListener
+                                    val closer = oppTrio.trio.getOrNull(2) ?: return@setOnClickListener
+                                    val newPreset = TeamPreset(
+                                        id = UUID.randomUUID().toString(),
+                                        name = "Opp ${oppTrio.archetype}: ${lead.name}/${swap.name}/${closer.name}",
+                                        league = lg,
+                                        pokemon = listOf(
+                                            PokemonSlot(lead.name, lead.cp, lead.fastMove, lead.chargedMove1, lead.chargedMove2, lead.ivs),
+                                            PokemonSlot(swap.name, swap.cp, swap.fastMove, swap.chargedMove1, swap.chargedMove2, swap.ivs),
+                                            PokemonSlot(closer.name, closer.cp, closer.fastMove, closer.chargedMove1, closer.chargedMove2, closer.ivs)
+                                        ),
+                                        isSelected = true,
+                                        archetype = oppTrio.archetype,
+                                        machineAggBr = oppTrio.viabilityScore
+                                    )
+                                    val existing = loadPresets().toMutableList()
+                                    existing.add(0, newPreset)
+                                    savePresets(existing)
+                                    setSelectedPreset(newPreset.id)
+                                    Toast.makeText(
+                                        this@MainActivity,
+                                        "📋 Cloned Opponent Trio (${lead.name}/${swap.name}/${closer.name}) to Your Show 6 Trios!",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                            topRow.addView(titleTv)
+                            topRow.addView(cloneOppTrioBtn)
+                            card.addView(topRow)
+
+                            val lead = oppTrio.trio.getOrNull(0)
+                            val swap = oppTrio.trio.getOrNull(1)
+                            val closer = oppTrio.trio.getOrNull(2)
+                            val slotsTv = TextView(this@MainActivity).apply {
+                                text = "• Lead: ${lead?.name ?: "-"} (${lead?.fastMove ?: ""} + ${lead?.chargedMove1 ?: ""}/${lead?.chargedMove2 ?: ""})\n" +
+                                    "• Swap: ${swap?.name ?: "-"} (${swap?.fastMove ?: ""} + ${swap?.chargedMove1 ?: ""}/${swap?.chargedMove2 ?: ""})\n" +
+                                    "• Closer: ${closer?.name ?: "-"} (${closer?.fastMove ?: ""} + ${closer?.chargedMove1 ?: ""}/${closer?.chargedMove2 ?: ""})"
+                                textSize = 9.5f
+                                setTextColor(0xFFFDA4AF.toInt())
+                            }
+                            card.addView(slotsTv)
+                            layoutPick3Results?.addView(card)
+                        }
+                    }
+
+                    addOppArchetypeGroup("⚔️ Opponent Top 3 ABB Lineups:", 0xFFFBBF24.toInt(), res.oppTop3AbbTeams)
+                    addOppArchetypeGroup("⚔️ Opponent Top 3 ABC Lineups:", 0xFF38BDF8.toInt(), res.oppTop3AbcTeams)
+                    addOppArchetypeGroup("⚔️ Opponent Top 3 Duo-Core Lineups:", 0xFF34D399.toInt(), res.oppTop3DuoTeams)
                 }
             }
         }
@@ -8692,10 +9242,29 @@ class MainActivity : AppCompatActivity() {
             updateLeagueTemplateHints("GREAT LEAGUE")
         }
 
+        var lastSelectedEditorLeague = existingPreset?.league ?: "GREAT LEAGUE"
         spinnerLeague.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
                 val lg = leagues.getOrElse(position) { "GREAT LEAGUE" }
                 updateLeagueTemplateHints(lg)
+                if (!lg.equals(lastSelectedEditorLeague, ignoreCase = true)) {
+                    lastSelectedEditorLeague = lg
+                    listOf(
+                        Triple(editP1Name, editP1Cp, editP1Ivs),
+                        Triple(editP2Name, editP2Cp, editP2Ivs),
+                        Triple(editP3Name, editP3Cp, editP3Ivs)
+                    ).forEach { (nameEd, cpEd, ivEd) ->
+                        val monName = nameEd.text?.toString()?.trim().orEmpty()
+                        if (monName.isNotEmpty()) {
+                            val resolved = OverlayService.resolveRecommendedMovesForSpecies(monName, lg)
+                            val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, lg) else null
+                            if (scaled != null) {
+                                cpEd.setText(scaled.defaultCp.toString())
+                                ivEd.setText(scaled.defaultIvsGl ?: "")
+                            }
+                        }
+                    }
+                }
                 refreshDialogTeamEvaluation(autoReorder = false)
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}

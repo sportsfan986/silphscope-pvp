@@ -135,7 +135,11 @@ import {
   recommendShow6RosterSlotUpgrades,
   recommendShow6RosterSlotMovesets,
   Show6SlotUpgradeSuggestion,
-  Show6MovesetSuggestion
+  Show6MovesetSuggestion,
+  MostLikelyFormatOpponent6Info,
+  getMostLikelyMetaOpponent6ForFormat,
+  getAllFormatsMostLikelyMetaOpponent6,
+  rescaleTeamMembersForLeague
 } from './data/gblData';
 import {
   BattleQualityMetadata,
@@ -1922,9 +1926,10 @@ export default function App() {
     }
   };
 
-  // Pick-6 Team Editor Modal State (Supports editing both My 6 and Opponent 6 stored rosters)
+  // Pick-6 Team Editor Modal State (Supports editing both My 6 and Opponent 6 stored rosters + Role Swap)
   const [editingShow6RosterModal, setEditingShow6RosterModal] = useState<{
     target: 'MY' | 'OPP';
+    originalTarget: 'MY' | 'OPP';
     isNewFromBuilder?: boolean;
     roster: Show6RosterOf6Preset;
   } | null>(null);
@@ -1932,6 +1937,13 @@ export default function App() {
   const [show6EditorSlotUpgrades, setShow6EditorSlotUpgrades] = useState<Show6SlotUpgradeSuggestion[]>([]);
   const [show6EditorSlotMovesets, setShow6EditorSlotMovesets] = useState<Show6MovesetSuggestion[]>([]);
   const [show6EditorSlotAutocompleteIdx, setShow6EditorSlotAutocompleteIdx] = useState<number | null>(null);
+  const [show6OppLineupViewMode, setShow6OppLineupViewMode] = useState<'archetypes' | 'top6'>('archetypes');
+  const [showMostLikelyOpp6FormatsBar, setShowMostLikelyOpp6FormatsBar] = useState<boolean>(true);
+
+  const mostLikelyOpponent6ByFormat = useMemo(
+    () => getAllFormatsMostLikelyMetaOpponent6(),
+    [show6UsageWeightPct, bfSheetSyncStatus, pvPokeSyncStatus]
+  );
 
   const refreshShow6EditorSuggestions = (roster: Show6RosterOf6Preset, slotIdx: number) => {
     const upgrades = recommendShow6RosterSlotUpgrades(roster.pokemon, slotIdx, roster.league);
@@ -1945,7 +1957,7 @@ export default function App() {
       ...roster,
       pokemon: roster.pokemon.map((p, idx) => ({ ...p, id: p.id || `s6-${idx + 1}` }))
     };
-    setEditingShow6RosterModal({ target, isNewFromBuilder, roster: cloned });
+    setEditingShow6RosterModal({ target, originalTarget: target, isNewFromBuilder, roster: cloned });
     setActiveShow6EditorSlotIdx(0);
     refreshShow6EditorSuggestions(cloned, 0);
   };
@@ -1983,7 +1995,7 @@ export default function App() {
 
   const handleSaveEditedShow6Roster = () => {
     if (!editingShow6RosterModal) return;
-    const { target, roster } = editingShow6RosterModal;
+    const { target, originalTarget, isNewFromBuilder, roster } = editingShow6RosterModal;
     if (hasMultipleMegas(roster.pokemon)) {
       setStartBattleToast('⚠️ Max 1 Mega/Primal Pokémon allowed per Show 6 team!');
       setTimeout(() => setStartBattleToast(null), 2600);
@@ -1994,6 +2006,14 @@ export default function App() {
       name: roster.name.trim() || `${target === 'MY' ? 'My' : 'Opp'} Show 6 (${roster.league})`,
       updatedAt: Date.now()
     };
+    // If side was switched inside the editor (e.g. MY -> OPP or OPP -> MY), remove from original list if >1
+    if (!isNewFromBuilder && originalTarget && originalTarget !== target) {
+      if (originalTarget === 'MY' && show6Rosters6.length > 1) {
+        setShow6Rosters6((prev) => prev.filter((r) => r.id !== updatedRoster.id));
+      } else if (originalTarget === 'OPP' && show6OpponentRosters6.length > 1) {
+        setShow6OpponentRosters6((prev) => prev.filter((r) => r.id !== updatedRoster.id));
+      }
+    }
     if (target === 'MY') {
       setShow6Rosters6((prev) => {
         const idx = prev.findIndex((r) => r.id === updatedRoster.id);
@@ -2028,6 +2048,123 @@ export default function App() {
     setEditingShow6RosterModal(null);
     setStartBattleToast(`✅ Saved ${target === 'MY' ? 'My' : 'Opponent'} Pick-6 Team: "${updatedRoster.name}"`);
     setTimeout(() => setStartBattleToast(null), 2400);
+  };
+
+  // Clone any Show 6 Roster of 6 (My or Opponent) and immediately open the Pick-6 Editor Modal
+  const handleCloneShow6Roster6 = (roster: Show6RosterOf6Preset, sourceSide: 'MY' | 'OPP') => {
+    const newId = `show6-clone-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const clonedRoster: Show6RosterOf6Preset = {
+      ...roster,
+      id: newId,
+      name: `${roster.name} (Copy)`,
+      pokemon: roster.pokemon.map((p, idx) => ({ ...p, id: `s6-c-${idx + 1}` })),
+      updatedAt: Date.now()
+    };
+    if (sourceSide === 'MY') {
+      setShow6Rosters6((prev) => [clonedRoster, ...prev]);
+      setSelectedShow6Roster6Id(newId);
+    } else {
+      setShow6OpponentRosters6((prev) => [clonedRoster, ...prev]);
+      setSelectedShow6OppRoster6Id(newId);
+    }
+    openShow6RosterEditor(clonedRoster, sourceSide, false);
+    setStartBattleToast(`📋 Cloned "${roster.name}" — Edit League or Swap My/Opponent side below!`);
+    setTimeout(() => setStartBattleToast(null), 2600);
+  };
+
+  // Direct inline Swap My <-> Opponent on any Show 6 Roster of 6 card
+  const handleSwapShow6RosterSide = (roster: Show6RosterOf6Preset, fromSide: 'MY' | 'OPP') => {
+    const targetSide: 'MY' | 'OPP' = fromSide === 'MY' ? 'OPP' : 'MY';
+    const newId = `show6-swap-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const swappedName =
+      fromSide === 'MY'
+        ? roster.name.replace(/^My\s+/i, 'Opp ').includes('Opp')
+          ? roster.name.replace(/^My\s+/i, 'Opp ')
+          : `[Opp] ${roster.name}`
+        : roster.name.replace(/^\[?Opp\]?\s*/i, 'My ');
+    const swappedRoster: Show6RosterOf6Preset = {
+      ...roster,
+      id: newId,
+      name: swappedName,
+      pokemon: roster.pokemon.map((p, idx) => ({ ...p, id: `s6-sw-${idx + 1}` })),
+      updatedAt: Date.now()
+    };
+    const names = swappedRoster.pokemon.map((p) => p.name);
+    if (targetSide === 'OPP') {
+      setShow6OpponentRosters6((prev) => [swappedRoster, ...prev]);
+      setSelectedShow6OppRoster6Id(newId);
+      setShow6Pick3League(swappedRoster.league);
+      setShow6Opponent6(names);
+      handleRunShow6Pick3Optimizer(swappedRoster.league, show6My6, names);
+    } else {
+      setShow6Rosters6((prev) => [swappedRoster, ...prev]);
+      setSelectedShow6Roster6Id(newId);
+      setShow6Pick3League(swappedRoster.league);
+      setShow6My6(names);
+      handleRunShow6Pick3Optimizer(swappedRoster.league, names, show6Opponent6);
+    }
+    setStartBattleToast(
+      `⇄ Swapped "${roster.name}" to ${targetSide === 'MY' ? 'My Show 6 Teams' : 'Opponent Show 6 Teams'} & loaded into 6v6 Simulator!`
+    );
+    setTimeout(() => setStartBattleToast(null), 2600);
+  };
+
+  // Flip active My 6 and Opponent 6 inside the 6v6 Pick-3 Simulator
+  const handleFlipActiveMy6AndOpp6 = () => {
+    const prevMy = [...show6My6];
+    const prevOpp = [...show6Opponent6];
+    setShow6My6(prevOpp);
+    setShow6Opponent6(prevMy);
+    handleRunShow6Pick3Optimizer(show6Pick3League, prevOpp, prevMy);
+    setStartBattleToast('⇄ Flipped Active My 6 ⇄ Opponent 6 in Pick-3 Simulator!');
+    setTimeout(() => setStartBattleToast(null), 2200);
+  };
+
+  // Copy a Show 6 Roster of 6's Top 3 Core to Standard GBL (Blind 3) Mode
+  const handleCopyShow6RosterToGblBlind3 = (roster: Show6RosterOf6Preset) => {
+    const sim = evaluateShow6Pick3Matchup(
+      roster.league,
+      roster.pokemon,
+      getMostLikelyMetaOpponent6ForFormat(roster.league).pokemonNames
+    );
+    const bestTrio =
+      sim.topAbcLineups[0]?.members ||
+      sim.topAbbLineups[0]?.members ||
+      sim.topDuoLineups[0]?.members ||
+      roster.pokemon.slice(0, 3);
+    const hasMega = bestTrio.some((m) => isMegaOrPrimalSpecies(m.name));
+    const targetGblLeague: LeagueType =
+      roster.league === 'Battle Frontier (Cauldron)'
+        ? 'ULTRA LEAGUE'
+        : roster.league === 'Battle Frontier (Master)'
+        ? hasMega
+          ? 'MEGA MASTER LEAGUE'
+          : 'MASTER LEAGUE'
+        : 'GREAT LEAGUE';
+    const rescaled = rescaleTeamMembersForLeague(bestTrio, targetGblLeague);
+    const newId = `gbl-from-s6-${Date.now()}`;
+    const basePreset: TeamPreset = {
+      id: newId,
+      name: `[From Show 6] ${rescaled.map((m) => m.name.split(' ')[0]).join(' / ')}`,
+      league: targetGblLeague,
+      pokemon: rescaled.map((m, idx) => ({ ...m, id: `p${idx + 1}` }))
+    };
+    const evaluated = evaluateTeamPresetMetrics(
+      basePreset,
+      gblBattleLogs,
+      activeSeasonBounds.startMs,
+      activeSeasonBounds.endMs,
+      true
+    );
+    setGblPresets((prev) => [evaluated, ...prev]);
+    setGblSelectedPresetId(newId);
+    setAppCombatModeState('gbl');
+    try {
+      localStorage.setItem('gbl_app_combat_mode', 'gbl');
+    } catch {}
+    openEditPresetModal(evaluated);
+    setStartBattleToast(`🛡️ Copied Top 3 Core to Standard GBL (${targetGblLeague}) & opened Team Editor!`);
+    setTimeout(() => setStartBattleToast(null), 2800);
   };
 
   const handleSaveMy6AsRosterPreset = (customName?: string, membersOverride?: TeamMember[], leagueOverride?: LeagueType) => {
@@ -4672,6 +4809,186 @@ export default function App() {
     setModalAutoDetectSummary(null);
   };
 
+  // Clone any 3-Pokémon Team Preset (Standard GBL or Show 6 Overlay Trio) & immediately open Edit Team Modal
+  const handleClonePreset3 = (preset: TeamPreset) => {
+    const newId = `preset-clone-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const clonedBase: TeamPreset = {
+      ...preset,
+      id: newId,
+      name: `${preset.name} (Copy)`,
+      pokemon: preset.pokemon.map((p, idx) => ({ ...p, id: `p${idx + 1}` }))
+    };
+    const evaluated = evaluateTeamPresetMetrics(
+      clonedBase,
+      battleLogs,
+      activeSeasonBounds.startMs,
+      activeSeasonBounds.endMs,
+      false
+    );
+    setPresets((prev) => [evaluated, ...prev]);
+    setSelectedPresetId(newId);
+    openEditPresetModal(evaluated);
+    setStartBattleToast(`📋 Cloned "${preset.name}" — Edit League, Moves, or Pokémon in the modal!`);
+    setTimeout(() => setStartBattleToast(null), 2600);
+  };
+
+  // Bidirectional Copy between Standard GBL (Blind 3) and Show 6 (Trio of 3 OR Auto-Filled Roster of 6)
+  const handleCopyPreset3CrossMode = (
+    preset: TeamPreset,
+    targetMode: 'show6_trio' | 'show6_autofill6' | 'gbl_blind3'
+  ) => {
+    if (targetMode === 'show6_trio') {
+      const targetShow6League: LeagueType =
+        preset.league === 'ULTRA LEAGUE'
+          ? 'Battle Frontier (Cauldron)'
+          : preset.league === 'MASTER LEAGUE' || preset.league === 'MEGA MASTER LEAGUE'
+          ? 'Battle Frontier (Master)'
+          : isBattleFrontierLeague(preset.league)
+          ? preset.league
+          : 'GREAT LEAGUE';
+      const rescaled = rescaleTeamMembersForLeague(preset.pokemon, targetShow6League);
+      const newId = `show6-from-gbl3-${Date.now()}`;
+      const basePreset: TeamPreset = {
+        id: newId,
+        name: `[From GBL] ${preset.name}`,
+        league: targetShow6League,
+        pokemon: rescaled.map((m, idx) => ({ ...m, id: `p${idx + 1}` })),
+        archetype: preset.archetype,
+        isArchetypeManual: preset.isArchetypeManual
+      };
+      const evaluated = evaluateTeamPresetMetrics(
+        basePreset,
+        show6BattleLogs,
+        activeSeasonBounds.startMs,
+        activeSeasonBounds.endMs,
+        false
+      );
+      setShow6Presets3((prev) => [evaluated, ...prev]);
+      setShow6SelectedPreset3Id(newId);
+      setAppCombatModeState('show6');
+      try {
+        localStorage.setItem('gbl_app_combat_mode', 'show6');
+      } catch {}
+      openEditPresetModal(evaluated);
+      setStartBattleToast(`🏛️ Copied "${preset.name}" to Show 6 Overlay Trios (${targetShow6League})!`);
+      setTimeout(() => setStartBattleToast(null), 2600);
+      return;
+    }
+
+    if (targetMode === 'show6_autofill6') {
+      const targetShow6League: LeagueType =
+        preset.league === 'ULTRA LEAGUE'
+          ? 'Battle Frontier (Cauldron)'
+          : preset.league === 'MASTER LEAGUE' || preset.league === 'MEGA MASTER LEAGUE'
+          ? 'Battle Frontier (Master)'
+          : isBattleFrontierLeague(preset.league)
+          ? preset.league
+          : 'Battle Frontier (Spectral)';
+      const locked3Names = preset.pokemon.map((p) => p.name);
+      const blindRes = generateBlindShow6Roster({
+        league: targetShow6League,
+        lockedCoreNames: locked3Names,
+        metaFilterMode: 'OPEN',
+        historicalExpectedNames: getMostLikelyMetaOpponent6ForFormat(targetShow6League).pokemonNames,
+        historicalWeightPct: 35
+      });
+      // Preserve custom moves from the original 3 Pokémon if present
+      const origByClean = new Map<string, TeamMember>();
+      for (const m of rescaleTeamMembersForLeague(preset.pokemon, targetShow6League)) {
+        origByClean.set(m.name.toLowerCase(), m);
+      }
+      const final6Members: TeamMember[] = blindRes.roster6.map((m, idx) => {
+        const matchOrig = origByClean.get(m.name.toLowerCase());
+        return matchOrig ? { ...matchOrig, id: `s6-af-${idx + 1}` } : { ...m, id: `s6-af-${idx + 1}` };
+      });
+      const newRosterId = `show6-autofill6-${Date.now()}`;
+      const createdRoster: Show6RosterOf6Preset = {
+        id: newRosterId,
+        name: `[Auto-6 from GBL] ${locked3Names.map((n) => n.split(' ')[0]).join('/')} + 3`,
+        league: targetShow6League,
+        pokemon: final6Members,
+        notes: `Built from Blind 3 preset "${preset.name}" + 3 synergistic meta/core partners`,
+        updatedAt: Date.now()
+      };
+      setShow6Rosters6((prev) => [createdRoster, ...prev]);
+      setSelectedShow6Roster6Id(newRosterId);
+      const nextNames = final6Members.map((m) => m.name);
+      setShow6Pick3League(targetShow6League);
+      setShow6My6(nextNames);
+      handleRunShow6Pick3Optimizer(targetShow6League, nextNames, show6Opponent6);
+      setAppCombatModeState('show6');
+      try {
+        localStorage.setItem('gbl_app_combat_mode', 'show6');
+      } catch {}
+      openShow6RosterEditor(createdRoster, 'MY', false);
+      setStartBattleToast(
+        `🏛️ Locked ${locked3Names.join('/')} & Auto-Filled 3 Partners for Show 6 (${targetShow6League})!`
+      );
+      setTimeout(() => setStartBattleToast(null), 2800);
+      return;
+    }
+
+    // targetMode === 'gbl_blind3': Copy Show 6 Trio of 3 -> Standard GBL Blind 3
+    const hasMega = preset.pokemon.some((m) => isMegaOrPrimalSpecies(m.name));
+    const targetGblLeague: LeagueType =
+      preset.league === 'Battle Frontier (Cauldron)' || preset.league === 'ULTRA LEAGUE'
+        ? 'ULTRA LEAGUE'
+        : preset.league === 'Battle Frontier (Master)' ||
+          preset.league === 'MASTER LEAGUE' ||
+          preset.league === 'MEGA MASTER LEAGUE'
+        ? hasMega
+          ? 'MEGA MASTER LEAGUE'
+          : 'MASTER LEAGUE'
+        : 'GREAT LEAGUE';
+    const rescaled = rescaleTeamMembersForLeague(preset.pokemon, targetGblLeague);
+    const newId = `gbl-from-s6trio-${Date.now()}`;
+    const basePreset: TeamPreset = {
+      id: newId,
+      name: `[From Show 6] ${preset.name.replace(/^Show 6\s+/i, '')}`,
+      league: targetGblLeague,
+      pokemon: rescaled.map((m, idx) => ({ ...m, id: `p${idx + 1}` })),
+      archetype: preset.archetype,
+      isArchetypeManual: preset.isArchetypeManual
+    };
+    const evaluated = evaluateTeamPresetMetrics(
+      basePreset,
+      gblBattleLogs,
+      activeSeasonBounds.startMs,
+      activeSeasonBounds.endMs,
+      false
+    );
+    setGblPresets((prev) => [evaluated, ...prev]);
+    setGblSelectedPresetId(newId);
+    setAppCombatModeState('gbl');
+    try {
+      localStorage.setItem('gbl_app_combat_mode', 'gbl');
+    } catch {}
+    openEditPresetModal(evaluated);
+    setStartBattleToast(`🛡️ Copied "${preset.name}" to Standard GBL (${targetGblLeague}) & opened Editor!`);
+    setTimeout(() => setStartBattleToast(null), 2600);
+  };
+
+  // Swap a Show 6 Trio (3-mon card) into Opponent's 6 in the 6v6 Pick-3 Simulator
+  const handleSwapShow6TrioToOpp6 = (preset: TeamPreset) => {
+    const targetLeague: LeagueType = isShow6EligibleLeague(preset.league)
+      ? preset.league
+      : 'Battle Frontier (Spectral)';
+    const trioNames = preset.pokemon.map((p) => p.name);
+    const formatMetaOpp = getMostLikelyMetaOpponent6ForFormat(targetLeague).pokemonNames;
+    const combinedOpp6: string[] = [...trioNames];
+    for (const cand of [...show6Opponent6, ...formatMetaOpp]) {
+      if (combinedOpp6.length >= 6) break;
+      if (!combinedOpp6.some((n) => n.toLowerCase() === cand.toLowerCase())) {
+        combinedOpp6.push(cand);
+      }
+    }
+    setShow6Pick3League(targetLeague);
+    setShow6Opponent6(combinedOpp6.slice(0, 6));
+    handleRunShow6Pick3Optimizer(targetLeague, show6My6, combinedOpp6.slice(0, 6));
+    setStartBattleToast(`⇄ Loaded Trio (${trioNames.join('/')}) into Opponent's 6 in Pick-3 Simulator!`);
+    setTimeout(() => setStartBattleToast(null), 2400);
+  };
+
   // Anti-Meta Team Builder: Generate Best 5 ABB + Best 5 ABC Teams & Select Option to Create + Open Edit Modal
   const handleGenerateAntiMetaTeams = (
     overrideLeague?: LeagueType,
@@ -5013,7 +5330,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v5.02 • Android Native Overlay
+                  v5.03 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -7583,6 +7900,30 @@ export default function App() {
                               </button>
                               <button
                                 type="button"
+                                onClick={() => handleCloneShow6Roster6(roster, 'MY')}
+                                className="px-2.5 py-1 rounded-lg bg-purple-500/20 hover:bg-purple-500/35 border border-purple-400/50 text-purple-200 text-[11px] font-bold transition"
+                                title="Clone this Show 6 Team & open Editor to change League or Swap My/Opponent side"
+                              >
+                                📋 Clone
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSwapShow6RosterSide(roster, 'MY')}
+                                className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 border border-amber-400/50 text-amber-200 text-[11px] font-bold transition"
+                                title="Swap / Copy this My Show 6 Team to Opponent Show 6 Teams & load into Simulator"
+                              >
+                                ⇄ Swap My/Opp
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyShow6RosterToGblBlind3(roster)}
+                                className="px-2 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/35 border border-indigo-400/50 text-indigo-200 text-[10.5px] font-bold transition"
+                                title="Copy Top 3 Core of this Show 6 Roster to Standard GBL (Blind 3) Mode"
+                              >
+                                🛡️ → GBL 3
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => openShow6RosterEditor(roster, 'MY')}
                                 className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/50 text-emerald-200 text-[11px] font-bold transition"
                                 title="Edit Pick-6 Team & Suggest Alternate Pokémon or Moves"
@@ -7687,6 +8028,30 @@ export default function App() {
                                 </button>
                                 <button
                                   type="button"
+                                  onClick={() => handleCloneShow6Roster6(oppRoster, 'OPP')}
+                                  className="px-2.5 py-1 rounded-lg bg-purple-500/20 hover:bg-purple-500/35 border border-purple-400/50 text-purple-200 text-[11px] font-bold transition"
+                                  title="Clone this Opponent Show 6 Team & open Editor to change League or Swap My/Opponent side"
+                                >
+                                  📋 Clone
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSwapShow6RosterSide(oppRoster, 'OPP')}
+                                  className="px-2.5 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/35 border border-sky-400/50 text-sky-200 text-[11px] font-bold transition"
+                                  title="Swap / Copy this Opponent Show 6 Team to My Show 6 Teams & load into Simulator"
+                                >
+                                  ⇄ Swap My/Opp
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyShow6RosterToGblBlind3(oppRoster)}
+                                  className="px-2 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/35 border border-indigo-400/50 text-indigo-200 text-[10.5px] font-bold transition"
+                                  title="Copy Top 3 Core of this Opponent Roster to Standard GBL (Blind 3) Mode"
+                                >
+                                  🛡️ → GBL 3
+                                </button>
+                                <button
+                                  type="button"
                                   onClick={() => openShow6RosterEditor(oppRoster, 'OPP')}
                                   className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/50 text-emerald-200 text-[11px] font-bold transition"
                                   title="Edit Opponent Pick-6 Team & Suggest Alternate Pokémon or Moves"
@@ -7780,10 +8145,10 @@ export default function App() {
                             🎯 Mode 1 Rules: Unknown Opponent Movesets + Simulated Best Movesets for Your 6 + Viability Weighting
                           </div>
                           <p className="text-[11px] text-slate-400">
-                            Opponent movesets are treated as unknown using the exact Team Builder weighting (75% PvPoke default + 25% alternate moveset combinations). Simulates the highest-BR movesets for your 6 Pokémon, weights all 120 opponent 3-Pokémon teams by viability, and recommends the <strong>Top 3 ABB</strong>, <strong>Top 3 ABC</strong>, and <strong>Top 3 Duo-Core</strong> teams for you!
+                            Opponent movesets are treated as unknown using the exact Team Builder weighting (75% PvPoke default + 25% alternate moveset combinations). Simulates the highest-BR movesets for your 6 Pokémon, weights all 120 opponent 3-Pokémon teams by viability, and recommends the <strong>Top 3 ABB</strong>, <strong>Top 3 ABC</strong>, and <strong>Top 3 Duo-Core</strong> teams for both You and Your Opponent!
                           </p>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-2 shrink-0 flex-wrap">
                           <select
                             value={show6Pick3League}
                             onChange={(e) => {
@@ -7803,12 +8168,117 @@ export default function App() {
                           </select>
                           <button
                             type="button"
+                            onClick={handleFlipActiveMy6AndOpp6}
+                            className="px-3 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/35 border border-purple-400/50 text-purple-200 font-extrabold text-xs transition"
+                            title="Swap Active My 6 and Opponent 6 in the 6v6 Simulator"
+                          >
+                            ⇄ Flip My 6 / Opp 6
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleRunShow6Pick3Optimizer()}
                             className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs shadow-lg transition"
                           >
                             ⚡ Simulate 14,400 Lineups
                           </button>
                         </div>
+                      </div>
+
+                      {/* Most Likely Meta Opponent 6 of Each Format Quick-Loader Panel */}
+                      <div className="p-4 rounded-xl bg-slate-950/90 border border-rose-500/35 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <span className="text-xs font-extrabold text-rose-300 flex items-center gap-1.5">
+                              <span>🔥 Most Likely Meta Opponent Team (6) of Each Format</span>
+                              <span className="px-2 py-0.5 rounded bg-rose-500/20 border border-rose-400/40 text-rose-200 text-[10px] font-mono">
+                                Top Cores + Weighted Meta Usage
+                              </span>
+                            </span>
+                            <p className="text-[11px] text-slate-400">
+                              Synthesized from each format&apos;s #1/#2 Battle Frontier Common Cores + highest-usage tournament Pokémon (≤1 Mega, Species Clause enforced). Click any format below to load its Most Likely Opponent 6 into the simulator!
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setShowMostLikelyOpp6FormatsBar((prev) => !prev)}
+                            className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[11px] font-bold text-slate-300"
+                          >
+                            {showMostLikelyOpp6FormatsBar ? 'Hide Format Cards ▲' : 'Show Format Cards ▼'}
+                          </button>
+                        </div>
+
+                        {showMostLikelyOpp6FormatsBar && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                            {mostLikelyOpponent6ByFormat.map((fmt) => {
+                              const isActiveFmt = fmt.league === show6Pick3League;
+                              return (
+                                <div
+                                  key={fmt.league}
+                                  className={`p-3 rounded-xl border transition flex flex-col justify-between gap-2 ${
+                                    isActiveFmt
+                                      ? 'bg-rose-500/10 border-rose-400/70 shadow-md'
+                                      : 'bg-slate-900/90 border-slate-800 hover:border-slate-700'
+                                  }`}
+                                >
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className="text-xs font-extrabold text-white">{fmt.shortLabel}</span>
+                                      <span className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-400/40 text-amber-300 font-mono text-[9.5px] font-bold">
+                                        Avg {fmt.avgUsagePct}% Usage
+                                      </span>
+                                    </div>
+                                    {fmt.featuredCores.length > 0 && (
+                                      <div className="text-[10px] font-mono text-rose-300 truncate">
+                                        🔥 {fmt.featuredCores[0]}
+                                      </div>
+                                    )}
+                                    <div className="flex flex-wrap gap-1 pt-1">
+                                      {fmt.pokemonNames.map((mon, mIdx) => (
+                                        <span
+                                          key={`${fmt.league}-${mIdx}-${mon}`}
+                                          className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-[10px] font-bold text-slate-200"
+                                        >
+                                          #{mIdx + 1} {mon}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 pt-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setShow6Pick3League(fmt.league);
+                                        setShow6Opponent6(fmt.pokemonNames);
+                                        handleRunShow6Pick3Optimizer(fmt.league, show6My6, fmt.pokemonNames);
+                                        setStartBattleToast(
+                                          `🔥 Loaded Most Likely ${fmt.shortLabel} Opponent 6 (${fmt.pokemonNames.slice(0, 3).join('/')}...)!`
+                                        );
+                                        setTimeout(() => setStartBattleToast(null), 2400);
+                                      }}
+                                      className="flex-1 py-1.5 px-2 rounded-lg bg-rose-500 hover:bg-rose-400 text-slate-950 font-extrabold text-[10.5px] transition shadow"
+                                    >
+                                      ⚡ Load as Opp 6
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleSaveOpp6AsRosterPreset(
+                                          `Meta Opp 6: ${fmt.shortLabel}`,
+                                          fmt.members,
+                                          fmt.league
+                                        )
+                                      }
+                                      className="py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-rose-200 font-bold text-[10.5px] transition"
+                                      title="Save this Format's Most Likely Opponent 6 to Saved Opponent Rosters"
+                                    >
+                                      💾 Save
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
 
                       {/* 6v6 Roster Entry Grid: Your 6 vs Opponent's 6 */}
@@ -7912,7 +8382,21 @@ export default function App() {
                             <span className="text-xs font-extrabold uppercase tracking-wider text-amber-400">
                               ⚔️ Opponent&apos;s 6 Pokémon (Constrains Live Overlay AI)
                             </span>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const metaOpp = getMostLikelyMetaOpponent6ForFormat(show6Pick3League);
+                                  setShow6Opponent6(metaOpp.pokemonNames);
+                                  handleRunShow6Pick3Optimizer(show6Pick3League, show6My6, metaOpp.pokemonNames);
+                                  setStartBattleToast(`🔥 Loaded Most Likely ${metaOpp.shortLabel} Opponent 6!`);
+                                  setTimeout(() => setStartBattleToast(null), 2200);
+                                }}
+                                className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-400/50 text-[10px] font-bold text-amber-300 hover:bg-amber-500/30"
+                                title="Load the Most Likely Meta Opponent 6 for the selected league format"
+                              >
+                                🔥 Most Likely Meta Opp 6
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => handleSaveOpp6AsRosterPreset()}
@@ -7926,17 +8410,6 @@ export default function App() {
                                 className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/50 text-[10px] font-bold text-emerald-300 hover:bg-emerald-500/30"
                               >
                                 ✎ Edit Opp 6
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const def = getDefaultShow6RosterNames(show6Pick3League);
-                                  setShow6Opponent6(def.opp6);
-                                  handleRunShow6Pick3Optimizer(show6Pick3League, show6My6, def.opp6);
-                                }}
-                                className="text-[10px] font-bold text-amber-300 hover:underline"
-                              >
-                                Reset Sample Opp 6
                               </button>
                             </div>
                           </div>
@@ -8004,59 +8477,182 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Pick-3 Simulation Results: Opponent Viability Top Lineups + 3 ABB, 3 ABC, 3 Duo-Core Options */}
+                      {/* Pick-3 Simulation Results: Opponent Most Likely Teams (by Archetype or Top 6) + Your 3 ABB, 3 ABC, 3 Duo-Core Options */}
                       {show6Pick3Result && (
                         <div className="space-y-5">
-                          {/* Top Viable Opponent 3-Pokemon Lineups Strip */}
-                          <div className="p-4 rounded-xl bg-slate-950/90 border border-slate-800 space-y-2.5">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className="text-xs font-extrabold text-amber-300">
-                                📊 Highest-Viability Opponent 3-Pokémon Lineups (Weighted Highest in Evaluating Your Teams)
-                              </span>
-                              <span className="text-[10.5px] font-mono text-slate-400">
-                                {show6Pick3Result.totalMatchupsSimulated.toLocaleString()} ordered 3v3 matchups simulated in {show6Pick3Result.elapsedMs}ms
-                              </span>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                              {show6Pick3Result.topOpponentViableLineups.slice(0, 6).map((oppLineup, idx) => (
-                                <div
-                                  key={`opp-viable-${idx}`}
-                                  className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between gap-2 text-xs"
+                          {/* Most Likely Opponent 3-Pokemon Lineups Panel (Supports Both Archetype Breakdown ABB/ABC/Duo AND Overall Top 6) */}
+                          <div className="p-4 rounded-xl bg-slate-950/90 border border-amber-500/35 space-y-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                              <div>
+                                <span className="text-xs font-extrabold text-amber-300 block">
+                                  📊 Most Likely Opponent Pick-3 Teams from Opponent&apos;s 6 (Weighted by Viability, Meta Usage &amp; Common Cores)
+                                </span>
+                                <span className="text-[10.5px] font-mono text-slate-400">
+                                  {show6Pick3Result.totalMatchupsSimulated.toLocaleString()} ordered 3v3 matchups simulated in {show6Pick3Result.elapsedMs}ms
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800 text-[10.5px] font-bold">
+                                <button
+                                  type="button"
+                                  onClick={() => setShow6OppLineupViewMode('archetypes')}
+                                  className={`px-2.5 py-1 rounded-md transition ${
+                                    show6OppLineupViewMode === 'archetypes'
+                                      ? 'bg-amber-500 text-slate-950 font-extrabold'
+                                      : 'text-slate-400 hover:text-white'
+                                  }`}
                                 >
-                                  <div className="min-w-0">
-                                    <span className="font-bold text-white block truncate">
-                                      #{idx + 1} {oppLineup.names.join(' / ')}
-                                    </span>
-                                    <span className="text-[10px] text-slate-400 font-mono">
-                                      Archetype: {oppLineup.archetype} • Score {oppLineup.viabilityScore}
-                                    </span>
-                                  </div>
-                                  <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-400/40 text-amber-300 font-mono font-extrabold text-[11px] shrink-0">
-                                    {oppLineup.viabilityWeightPct.toFixed(1)}% Wt
-                                  </span>
-                                </div>
-                              ))}
+                                  🎯 By Format Archetype (3 ABB / 3 ABC / 3 Duo)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setShow6OppLineupViewMode('top6')}
+                                  className={`px-2.5 py-1 rounded-md transition ${
+                                    show6OppLineupViewMode === 'top6'
+                                      ? 'bg-amber-500 text-slate-950 font-extrabold'
+                                      : 'text-slate-400 hover:text-white'
+                                  }`}
+                                >
+                                  🏆 Top 6 Overall Viable Trios
+                                </button>
+                              </div>
                             </div>
+
+                            {show6OppLineupViewMode === 'archetypes' ? (
+                              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                                {(
+                                  [
+                                    {
+                                      title: 'Opponent Top 3 ABB Trios',
+                                      subtitle: 'Opp Lead A covers shared B1/B2 backline',
+                                      badgeCls: 'text-amber-300 border-amber-500/40 bg-amber-500/10',
+                                      items: show6Pick3Result.oppTop3AbbTeams || []
+                                    },
+                                    {
+                                      title: 'Opponent Top 3 ABC Trios',
+                                      subtitle: 'Opp Balanced Lead / Swap / Closer',
+                                      badgeCls: 'text-sky-300 border-sky-500/40 bg-sky-500/10',
+                                      items: show6Pick3Result.oppTop3AbcTeams || []
+                                    },
+                                    {
+                                      title: 'Opponent Top 3 Duo-Core Trios',
+                                      subtitle: 'Opp Reciprocal Core + Safe Swap Pivot',
+                                      badgeCls: 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10',
+                                      items: show6Pick3Result.oppTop3DuoTeams || []
+                                    }
+                                  ] as const
+                                ).map((oppGroup) => (
+                                  <div
+                                    key={oppGroup.title}
+                                    className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2"
+                                  >
+                                    <div className="border-b border-slate-800 pb-1.5">
+                                      <h5 className="font-extrabold text-xs text-white">{oppGroup.title}</h5>
+                                      <p className="text-[10px] text-slate-400">{oppGroup.subtitle}</p>
+                                    </div>
+                                    <div className="space-y-2">
+                                      {oppGroup.items.map((oppLineup, idx) => (
+                                        <div
+                                          key={oppLineup.id}
+                                          className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/90 space-y-1.5 text-xs"
+                                        >
+                                          <div className="flex items-center justify-between gap-1.5">
+                                            <span className={`px-1.5 py-0.5 rounded text-[9.5px] font-extrabold border ${oppGroup.badgeCls}`}>
+                                              Opp #{idx + 1} {oppLineup.archetype}
+                                            </span>
+                                            <div className="flex items-center gap-1 font-mono text-[10px]">
+                                              <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300">
+                                                Score {oppLineup.viabilityScore}
+                                              </span>
+                                              <span className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-400/40 text-amber-300 font-extrabold">
+                                                {oppLineup.viabilityWeightPct.toFixed(1)}% Wt
+                                              </span>
+                                            </div>
+                                          </div>
+                                          <div className="font-bold text-white text-[11.5px]">
+                                            1. {oppLineup.lead} <span className="text-slate-500">/</span> 2. {oppLineup.swap}{' '}
+                                            <span className="text-slate-500">/</span> 3. {oppLineup.closer}
+                                          </div>
+                                          <div className="text-[10px] text-slate-400 leading-snug">
+                                            {oppLineup.rationale}
+                                          </div>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const members: TeamMember[] = oppLineup.names.map((n, mIdx) => {
+                                                const rec = getRecommendedMovesForPokemon(n, show6Pick3League);
+                                                return {
+                                                  id: `p${mIdx + 1}`,
+                                                  name: rec?.name || n,
+                                                  cp: rec?.cp || 1500,
+                                                  fastMove: rec?.fastMove || 'Tackle',
+                                                  chargedMove1: rec?.chargedMove1 || 'Body Slam',
+                                                  chargedMove2: rec?.chargedMove2 || 'Surf',
+                                                  ivs: rec?.defaultIvs
+                                                };
+                                              });
+                                              handleEquipShow6LineupToOverlay(
+                                                members,
+                                                oppLineup.archetype,
+                                                show6Pick3League,
+                                                `Opp ${oppLineup.archetype} Score ${oppLineup.viabilityScore}`
+                                              );
+                                            }}
+                                            className="w-full py-1 px-2 rounded bg-slate-800 hover:bg-sky-500/25 border border-slate-700 hover:border-sky-400/50 text-sky-300 font-bold text-[10px] transition"
+                                            title="Clone & Equip this Opponent Trio as Your Show 6 Overlay Trio"
+                                          >
+                                            📋 Clone Trio to My Show 6 Overlay (3)
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                {show6Pick3Result.topOpponentViableLineups.slice(0, 6).map((oppLineup, idx) => (
+                                  <div
+                                    key={`opp-viable-${idx}`}
+                                    className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex flex-col justify-between gap-2 text-xs"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <span className="font-bold text-white block truncate">
+                                          #{idx + 1} {oppLineup.names.join(' / ')}
+                                        </span>
+                                        <span className="text-[10px] text-slate-400 font-mono">
+                                          Archetype: {oppLineup.archetype} • Score {oppLineup.viabilityScore}
+                                        </span>
+                                      </div>
+                                      <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-400/40 text-amber-300 font-mono font-extrabold text-[11px] shrink-0">
+                                        {oppLineup.viabilityWeightPct.toFixed(1)}% Wt
+                                      </span>
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 truncate">{oppLineup.rationale}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
 
-                          {/* 3 Options per Team Type: Top 3 ABB, Top 3 ABC, Top 3 Duo-Core */}
+                          {/* 3 Options per Team Type for YOU: Top 3 ABB, Top 3 ABC, Top 3 Duo-Core */}
                           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                             {(
                               [
                                 {
-                                  title: 'Top 3 ABB Lineups',
+                                  title: 'Your Top 3 ABB Lineups',
                                   subtitle: 'Lead A covers shared B1/B2 backline weakness',
                                   badgeColor: 'text-amber-300 border-amber-500/40 bg-amber-500/10',
                                   items: show6Pick3Result.topAbbLineups
                                 },
                                 {
-                                  title: 'Top 3 ABC Lineups',
+                                  title: 'Your Top 3 ABC Lineups',
                                   subtitle: 'Balanced triangular coverage core',
                                   badgeColor: 'text-sky-300 border-sky-500/40 bg-sky-500/10',
                                   items: show6Pick3Result.topAbcLineups
                                 },
                                 {
-                                  title: 'Top 3 Duo-Core Lineups',
+                                  title: 'Your Top 3 Duo-Core Lineups',
                                   subtitle: 'Reciprocal Core + Pivot Safe Swap',
                                   badgeColor: 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10',
                                   items: show6Pick3Result.topDuoLineups
@@ -9385,6 +9981,53 @@ export default function App() {
                             </button>
                           )}
                           <button
+                            type="button"
+                            onClick={() => handleClonePreset3(preset)}
+                            className="text-[11px] text-purple-200 hover:text-white font-bold px-2 py-0.5 rounded bg-purple-500/20 hover:bg-purple-500/40 border border-purple-400/50 transition"
+                            title="Clone this Team & immediately open Team Editor to change League or Pokémon"
+                          >
+                            📋 Clone
+                          </button>
+                          {appCombatMode === 'show6' ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleSwapShow6TrioToOpp6(preset)}
+                                className="text-[10.5px] text-amber-200 hover:text-white font-bold px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/40 border border-amber-400/50 transition"
+                                title="Swap / Load this Trio into Opponent's 6 in the Show 6 Pick-3 Simulator"
+                              >
+                                ⇄ Swap My/Opp
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyPreset3CrossMode(preset, 'gbl_blind3')}
+                                className="text-[10.5px] text-sky-200 hover:text-white font-bold px-2 py-0.5 rounded bg-sky-500/20 hover:bg-sky-500/40 border border-sky-400/50 transition"
+                                title="Copy this Show 6 Trio to Standard GBL (Blind 3) Mode"
+                              >
+                                🛡️ → GBL 3
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyPreset3CrossMode(preset, 'show6_trio')}
+                                className="text-[10.5px] text-amber-200 hover:text-white font-bold px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/40 border border-amber-400/50 transition"
+                                title="Copy this Blind 3 Team directly to Show 6 Overlay Trios (Team of 3)"
+                              >
+                                🏛️ → Show 6 (3)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyPreset3CrossMode(preset, 'show6_autofill6')}
+                                className="text-[10.5px] text-emerald-200 hover:text-white font-bold px-2 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-400/50 transition"
+                                title="Lock these 3 Pokémon & Auto-Fill 3 Synergistic Partners into a Show 6 Roster of 6"
+                              >
+                                🏛️ → Auto-Fill 6
+                              </button>
+                            </>
+                          )}
+                          <button
                             onClick={() => openEditPresetModal(preset)}
                             className="text-xs text-white font-bold px-2.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 transition"
                             title="Edit Team, Moves, IVs & CP"
@@ -9556,6 +10199,14 @@ export default function App() {
                             setNewPresetLeague(nextL);
                             if (!editingPresetId) {
                               applyLeagueTop3TemplateToForm(nextL);
+                            } else {
+                              // Rescale existing 3 Pokémon CPs and IVs for the newly selected league
+                              const currentMembers = buildModalMembersArray();
+                              const rescaled = rescaleTeamMembersForLeague(currentMembers, nextL);
+                              applyOrderedMembersToModalForm(rescaled);
+                              setModalAutoDetectSummary(
+                                `🔄 Rescaled CPs & default IVs for ${nextL}`
+                              );
                             }
                           }}
                           className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400"
@@ -10624,7 +11275,7 @@ export default function App() {
                   <span className="text-sm font-extrabold text-amber-300 flex items-center gap-2">
                     <span>{appCombatMode === 'show6' ? '🏛️' : '🛡️'} App Combat Mode (Standard GBL vs. Show 6 Battle Frontier)</span>
                     <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 text-[10px] font-mono">
-                      v5.02
+                      v5.03
                     </span>
                   </span>
                   <span className="text-xs text-slate-400 block mt-0.5">
@@ -14743,7 +15394,7 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">Roster Name</label>
                   <input
@@ -14758,14 +15409,21 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Show 6 League Format</label>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Show 6 League Format (Auto-Rescales CP)
+                  </label>
                   <select
                     value={editingShow6RosterModal.roster.league}
                     onChange={(e) => {
                       const nextLg = e.target.value as LeagueType;
+                      const rescaledPokemon = rescaleTeamMembersForLeague(
+                        editingShow6RosterModal.roster.pokemon,
+                        nextLg
+                      );
                       const updatedRoster: Show6RosterOf6Preset = {
                         ...editingShow6RosterModal.roster,
-                        league: nextLg
+                        league: nextLg,
+                        pokemon: rescaledPokemon
                       };
                       setEditingShow6RosterModal({
                         ...editingShow6RosterModal,
@@ -14780,6 +15438,43 @@ export default function App() {
                     <option value="Battle Frontier (Cauldron)">Battle Frontier (Cauldron) (2500 CP)</option>
                     <option value="Battle Frontier (Master)">Battle Frontier (Master) (Uncapped CP)</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Team Role (Swap My ⇄ Opponent)
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-700">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditingShow6RosterModal((prev) =>
+                          prev ? { ...prev, target: 'MY' } : null
+                        )
+                      }
+                      className={`py-1.5 px-2 rounded-lg text-[11px] font-extrabold transition ${
+                        editingShow6RosterModal.target === 'MY'
+                          ? 'bg-sky-500 text-slate-950 shadow'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      🛡️ My Show 6
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditingShow6RosterModal((prev) =>
+                          prev ? { ...prev, target: 'OPP' } : null
+                        )
+                      }
+                      className={`py-1.5 px-2 rounded-lg text-[11px] font-extrabold transition ${
+                        editingShow6RosterModal.target === 'OPP'
+                          ? 'bg-rose-500 text-slate-950 shadow'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      ⚔️ Opponent 6
+                    </button>
+                  </div>
                 </div>
               </div>
 
