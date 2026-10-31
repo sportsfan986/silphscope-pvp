@@ -6310,11 +6310,13 @@ class MainActivity : AppCompatActivity() {
                                 lifecycleScope.launch(Dispatchers.Default) {
                                     val gen = OverlayService.generateBlindShow6RosterStatic(
                                         league = targetShow6Lg,
-                                        lockedPokemon = locked3,
-                                        whitelist = emptySet(),
-                                        banlist = emptySet()
+                                        lockedCoreNames = locked3,
+                                        filterMode = "open",
+                                        filterPokemonNames = emptyList(),
+                                        expectedHistoricalNames = emptyList(),
+                                        historicalWeightPct = 0
                                     )
-                                    val full6 = gen.recommended6.map { it.member.name }.ifEmpty {
+                                    val full6 = gen.roster6.map { it.pokemon.name }.ifEmpty {
                                         (locked3 + OverlayService.getMostLikelyMetaOpponent6Static(targetShow6Lg)).distinct().take(6)
                                     }
                                     val newRoster = OverlayService.Companion.Show6RosterPreset(
@@ -6360,11 +6362,13 @@ class MainActivity : AppCompatActivity() {
                 lifecycleScope.launch(Dispatchers.Default) {
                     val gen = OverlayService.generateBlindShow6RosterStatic(
                         league = targetShow6Lg,
-                        lockedPokemon = locked3,
-                        whitelist = emptySet(),
-                        banlist = emptySet()
+                        lockedCoreNames = locked3,
+                        filterMode = "open",
+                        filterPokemonNames = emptyList(),
+                        expectedHistoricalNames = emptyList(),
+                        historicalWeightPct = 0
                     )
-                    val full6 = gen.recommended6.map { it.member.name }.ifEmpty {
+                    val full6 = gen.roster6.map { it.pokemon.name }.ifEmpty {
                         (locked3 + OverlayService.getMostLikelyMetaOpponent6Static(targetShow6Lg)).distinct().take(6)
                     }
                     val oppRoster = OverlayService.Companion.Show6RosterPreset(
@@ -6377,7 +6381,7 @@ class MainActivity : AppCompatActivity() {
                         val curOpp = loadShow6OpponentRostersOf6().toMutableList()
                         curOpp.add(0, oppRoster)
                         saveShow6OpponentRostersOf6(curOpp)
-                        prefs.edit().putString(OverlayService.PREFS_KEY_SHOW6_OPPONENT_ROSTER, gson.toJson(full6)).apply()
+                        prefs.edit().putString(OverlayService.PREFS_KEY_SHOW6_OPPONENT_6, gson.toJson(full6)).apply()
                         setupShow6ModeHubUi()
                         Toast.makeText(
                             this@MainActivity,
@@ -7357,6 +7361,8 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "🛡️ Copied Top 3 (${top3Names.joinToString("/")}) to GBL Blind 3 ($targetGblLg)!", Toast.LENGTH_LONG).show()
         }
 
+        var refreshBothShow6RosterLists: () -> Unit = {}
+
         fun renderShow6RostersOf6List() {
             rosters6Container?.removeAllViews()
             val rosters = loadShow6RostersOf6()
@@ -7422,8 +7428,7 @@ class MainActivity : AppCompatActivity() {
                             } else {
                                 saveShow6RostersOf6(loadShow6RostersOf6().map { if (it.id == cloned.id) updated else it })
                             }
-                            renderShow6RostersOf6List()
-                            renderShow6OpponentRostersOf6List()
+                            refreshBothShow6RosterLists()
                             Toast.makeText(this@MainActivity, "Saved cloned roster '${updated.name}'!", Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -7444,8 +7449,7 @@ class MainActivity : AppCompatActivity() {
                         saveShow6OpponentRostersOf6(curOpp)
                         oppInputs.forEachIndexed { idx, edit -> edit?.setText(swapped.pokemon.getOrElse(idx) { "" }, false) }
                         persistCurrentOpponent6ToPrefs()
-                        renderShow6RostersOf6List()
-                        renderShow6OpponentRostersOf6List()
+                        refreshBothShow6RosterLists()
                         Toast.makeText(this@MainActivity, "⇄ Swapped '${r.name}' to Opponent 6!", Toast.LENGTH_SHORT).show()
                     }
                 }
@@ -7479,8 +7483,7 @@ class MainActivity : AppCompatActivity() {
                                 val next = loadShow6RostersOf6().map { if (it.id == r.id) updated else it }
                                 saveShow6RostersOf6(next)
                             }
-                            renderShow6RostersOf6List()
-                            renderShow6OpponentRostersOf6List()
+                            refreshBothShow6RosterLists()
                             Toast.makeText(this@MainActivity, "Updated '${updated.name}'!", Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -7676,8 +7679,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        renderShow6RostersOf6List()
-        renderShow6OpponentRostersOf6List()
+        refreshBothShow6RosterLists = {
+            renderShow6RostersOf6List()
+            renderShow6OpponentRostersOf6List()
+        }
+        refreshBothShow6RosterLists()
 
         findViewById<Button>(R.id.btn_edit_active_my6)?.setOnClickListener {
             val lg = pick3LeagueProvider()
@@ -8000,7 +8006,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     layoutPick3Results?.addView(oppHdr)
 
-                    fun addOppArchetypeGroup(groupTitle: String, titleColor: Int, trios: List<OverlayService.Companion.Show6OpponentTrioWeight>) {
+                    fun addOppArchetypeGroup(groupTitle: String, titleColor: Int, trios: List<OverlayService.Companion.Show6OpponentViableLineup>) {
                         if (trios.isEmpty()) return
                         val hdr = TextView(this@MainActivity).apply {
                             text = groupTitle
@@ -8027,13 +8033,25 @@ class MainActivity : AppCompatActivity() {
                                 orientation = LinearLayout.HORIZONTAL
                                 gravity = android.view.Gravity.CENTER_VERTICAL
                             }
-                            val pct = (oppTrio.weight * 100.0).toInt().coerceAtLeast(1)
+                            val pct = oppTrio.normalizedWeightPct.toInt().coerceAtLeast(1)
                             val titleTv = TextView(this@MainActivity).apply {
                                 text = "⚔️ Opp #${idx + 1} ${oppTrio.archetype} • Viability BR ${oppTrio.viabilityScore} • Weight ~${pct}%"
                                 textSize = 10.5f
                                 setTypeface(typeface, android.graphics.Typeface.BOLD)
                                 setTextColor(0xFFFECDD3.toInt())
                                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                            }
+                            val resolvedTrioSlots = oppTrio.pokemonNames.take(3).map { monName ->
+                                val resolved = OverlayService.resolveRecommendedMovesForSpecies(monName, lg)
+                                val scaled = if (resolved != null) OverlayService.computeEffectiveCombatStats(resolved, lg) else null
+                                PokemonSlot(
+                                    name = monName,
+                                    cp = scaled?.defaultCp ?: 1500,
+                                    fastMove = scaled?.defaultFastMove ?: "Tackle",
+                                    chargedMove1 = scaled?.chargedMove1 ?: "Struggle",
+                                    chargedMove2 = scaled?.chargedMove2 ?: "Return",
+                                    ivs = scaled?.defaultIvsGl
+                                )
                             }
                             val cloneOppTrioBtn = Button(this@MainActivity).apply {
                                 text = "📋 Clone Trio"
@@ -8043,18 +8061,12 @@ class MainActivity : AppCompatActivity() {
                                 backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFBE123C.toInt())
                                 setTextColor(0xFFFFFFFF.toInt())
                                 setOnClickListener {
-                                    val lead = oppTrio.trio.getOrNull(0) ?: return@setOnClickListener
-                                    val swap = oppTrio.trio.getOrNull(1) ?: return@setOnClickListener
-                                    val closer = oppTrio.trio.getOrNull(2) ?: return@setOnClickListener
+                                    if (resolvedTrioSlots.size < 3) return@setOnClickListener
                                     val newPreset = TeamPreset(
                                         id = UUID.randomUUID().toString(),
-                                        name = "Opp ${oppTrio.archetype}: ${lead.name}/${swap.name}/${closer.name}",
+                                        name = "Opp ${oppTrio.archetype}: ${resolvedTrioSlots.joinToString("/") { it.name }}",
                                         league = lg,
-                                        pokemon = listOf(
-                                            PokemonSlot(lead.name, lead.cp, lead.fastMove, lead.chargedMove1, lead.chargedMove2, lead.ivs),
-                                            PokemonSlot(swap.name, swap.cp, swap.fastMove, swap.chargedMove1, swap.chargedMove2, swap.ivs),
-                                            PokemonSlot(closer.name, closer.cp, closer.fastMove, closer.chargedMove1, closer.chargedMove2, closer.ivs)
-                                        ),
+                                        pokemon = resolvedTrioSlots,
                                         isSelected = true,
                                         archetype = oppTrio.archetype,
                                         machineAggBr = oppTrio.viabilityScore
@@ -8065,7 +8077,7 @@ class MainActivity : AppCompatActivity() {
                                     setSelectedPreset(newPreset.id)
                                     Toast.makeText(
                                         this@MainActivity,
-                                        "📋 Cloned Opponent Trio (${lead.name}/${swap.name}/${closer.name}) to Your Show 6 Trios!",
+                                        "📋 Cloned Opponent Trio (${resolvedTrioSlots.joinToString("/") { it.name }}) to Your Show 6 Trios!",
                                         Toast.LENGTH_LONG
                                     ).show()
                                 }
@@ -8074,9 +8086,9 @@ class MainActivity : AppCompatActivity() {
                             topRow.addView(cloneOppTrioBtn)
                             card.addView(topRow)
 
-                            val lead = oppTrio.trio.getOrNull(0)
-                            val swap = oppTrio.trio.getOrNull(1)
-                            val closer = oppTrio.trio.getOrNull(2)
+                            val lead = resolvedTrioSlots.getOrNull(0)
+                            val swap = resolvedTrioSlots.getOrNull(1)
+                            val closer = resolvedTrioSlots.getOrNull(2)
                             val slotsTv = TextView(this@MainActivity).apply {
                                 text = "• Lead: ${lead?.name ?: "-"} (${lead?.fastMove ?: ""} + ${lead?.chargedMove1 ?: ""}/${lead?.chargedMove2 ?: ""})\n" +
                                     "• Swap: ${swap?.name ?: "-"} (${swap?.fastMove ?: ""} + ${swap?.chargedMove1 ?: ""}/${swap?.chargedMove2 ?: ""})\n" +
@@ -9250,9 +9262,9 @@ class MainActivity : AppCompatActivity() {
                 if (!lg.equals(lastSelectedEditorLeague, ignoreCase = true)) {
                     lastSelectedEditorLeague = lg
                     listOf(
-                        Triple(editP1Name, editP1Cp, editP1Ivs),
-                        Triple(editP2Name, editP2Cp, editP2Ivs),
-                        Triple(editP3Name, editP3Cp, editP3Ivs)
+                        Triple(editP1, editP1Cp, editP1Ivs),
+                        Triple(editP2, editP2Cp, editP2Ivs),
+                        Triple(editP3, editP3Cp, editP3Ivs)
                     ).forEach { (nameEd, cpEd, ivEd) ->
                         val monName = nameEd.text?.toString()?.trim().orEmpty()
                         if (monName.isNotEmpty()) {
