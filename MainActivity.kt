@@ -5932,10 +5932,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun getLeagueTop3Defaults(league: String): List<PokemonSlot> {
-        val dynPool = if (::prefs.isInitialized) {
-            OverlayService.getTop100MetaCandidatesForLeagueStatic(league, prefs)
-        } else emptyList()
-        if (dynPool.size >= 3 && OverlayService.getLimitedMetaCatalogStatic(if (::prefs.isInitialized) prefs else null).any { it.title.equals(league, ignoreCase = true) }) {
+        val dynPool = OverlayService.getTop100MetaCandidatesForLeagueStatic(league, 30)
+        if (dynPool.size >= 3 && OverlayService.getLimitedMetaCatalogStatic(if (::prefs.isInitialized) prefs else null).any { it.leagueKey.equals(league, ignoreCase = true) || it.title.equals(league, ignoreCase = true) }) {
             val picked = mutableListOf<PokemonSlot>()
             var megaUsed = false
             for (c in dynPool) {
@@ -7420,9 +7418,9 @@ class MainActivity : AppCompatActivity() {
 
         fun updateLimitedMetasSummaryLabels() {
             val catalog = OverlayService.getLimitedMetaCatalogStatic(prefs)
-            val curCount = catalog.count { it.lifecycle == "CURRENT" }
-            val upCount = catalog.count { it.lifecycle == "UPCOMING" }
-            val recCount = catalog.count { it.lifecycle == "RECENT" }
+            val curCount = catalog.count { it.lifecycleStatus == "CURRENT" }
+            val upCount = catalog.count { it.lifecycleStatus == "UPCOMING" }
+            val recCount = catalog.count { it.lifecycleStatus == "RECENT" }
             tvPvPokeMetasStatus?.text =
                 "Catalog: ${catalog.size} ranked PvPoke cups (🟢 $curCount Current • 🔜 $upCount Upcoming • 🕒 $recCount Recent • Obsolete hidden)"
             val gblPinned = OverlayService.getPinnedGblLimitedMetasStatic(prefs)
@@ -7440,9 +7438,7 @@ class MainActivity : AppCompatActivity() {
             btnSyncPvPokeMetas.isEnabled = false
             btnSyncPvPokeMetas.text = "⏳ Syncing PvPoke GitHub Formats & Rankings..."
             lifecycleScope.launch(Dispatchers.IO) {
-                val (_, msg) = OverlayService.fetchPvPokeLimitedMetasBlocking(prefs)
-                val pinnedAll = (OverlayService.getPinnedGblLimitedMetasStatic(prefs) + OverlayService.getPinnedShow6LimitedMetasStatic(prefs)).distinct()
-                OverlayService.syncPinnedLimitedMetaRankingsBlocking(prefs, pinnedAll)
+                val msg = OverlayService.fetchPvPokeLimitedMetasBlocking(prefs, filesDir)
                 withContext(Dispatchers.Main) {
                     btnSyncPvPokeMetas.isEnabled = true
                     btnSyncPvPokeMetas.text = "🔄 Sync Ranked Limited Metas from PvPoke GitHub"
@@ -7462,15 +7458,15 @@ class MainActivity : AppCompatActivity() {
                 OverlayService.getPinnedGblLimitedMetasStatic(prefs).toMutableSet()
             }
             val labels = catalog.map { m ->
-                val badge = when (m.lifecycle) {
+                val badge = when (m.lifecycleStatus) {
                     "CURRENT" -> "🟢 [CURRENT]"
                     "UPCOMING" -> "🔜 [UPCOMING]"
                     else -> "🕒 [RECENT]"
                 }
-                "$badge ${m.title} • ${m.cpCap} CP (${m.cup})"
+                "$badge ${m.leagueKey} • ${m.cp} CP (${m.cup})"
             }.toTypedArray()
             val checked = BooleanArray(catalog.size) { idx ->
-                currentlyPinned.any { it.equals(catalog[idx].title, ignoreCase = true) }
+                currentlyPinned.any { it.equals(catalog[idx].leagueKey, ignoreCase = true) }
             }
             AlertDialog.Builder(this)
                 .setTitle(
@@ -7478,13 +7474,13 @@ class MainActivity : AppCompatActivity() {
                     else "🛡️ Select GBL (Blind 3) Limited Metas"
                 )
                 .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
-                    val title = catalog[which].title
-                    if (isChecked) currentlyPinned.add(title)
-                    else currentlyPinned.removeAll { it.equals(title, ignoreCase = true) }
+                    val lgKey = catalog[which].leagueKey
+                    if (isChecked) currentlyPinned.add(lgKey)
+                    else currentlyPinned.removeAll { it.equals(lgKey, ignoreCase = true) }
                 }
                 .setPositiveButton("💾 Save & Sync Rankings") { _, _ ->
-                    val orderedSelected = catalog.map { it.title }.filter { t ->
-                        currentlyPinned.any { it.equals(t, ignoreCase = true) }
+                    val orderedSelected = catalog.map { it.leagueKey }.filter { k ->
+                        currentlyPinned.any { it.equals(k, ignoreCase = true) }
                     }
                     if (isShow6ModeSelector) {
                         OverlayService.setPinnedShow6LimitedMetasStatic(prefs, orderedSelected)
@@ -7496,7 +7492,7 @@ class MainActivity : AppCompatActivity() {
                     setupShow6ModeHubUi()
                     refreshPresetsUi()
                     lifecycleScope.launch(Dispatchers.IO) {
-                        val synced = OverlayService.syncPinnedLimitedMetaRankingsBlocking(prefs, orderedSelected)
+                        val synced = OverlayService.syncPinnedLimitedMetaRankingsBlocking(prefs, filesDir)
                         withContext(Dispatchers.Main) {
                             Toast.makeText(
                                 this@MainActivity,

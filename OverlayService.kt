@@ -10080,7 +10080,8 @@ class OverlayService : LifecycleService() {
         val safeSwapBr: Int = 500,
         val closerSwapBr: Int = 500,
         val closerBr: Int = 500,
-        val sharedWeaknesses: List<String> = emptyList()
+        val sharedWeaknesses: List<String> = emptyList(),
+        val combatMode: String = "gbl"
     )
 
     override fun onCreate() {
