@@ -504,11 +504,14 @@ class MainActivity : AppCompatActivity() {
         Triple("GREAT LEAGUE", "pvpoke_rankings_gl.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-1500.json"),
         Triple("ULTRA LEAGUE", "pvpoke_rankings_ul.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-2500.json"),
         Triple("MASTER LEAGUE", "pvpoke_rankings_ml.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-10000.json"),
-        Triple("MEGA MASTER LEAGUE", "pvpoke_rankings_mega_ml.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-10000.json"),
+        Triple("MEGA MASTER LEAGUE (10000)", "pvpoke_rankings_mega_ml.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-10000.json"),
         Triple("BATTLE FRONTIER (SPECTRAL)", "pvpoke_rankings_bf_spectral.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/spectral/overall/rankings-1500.json"),
         Triple("BATTLE FRONTIER (CAULDRON)", "pvpoke_rankings_bf_cauldron.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/cauldron/overall/rankings-2500.json"),
         Triple("BATTLE FRONTIER (MASTER)", "pvpoke_rankings_bf_master.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/battlefrontiermaster/overall/rankings-10000.json")
     )
+
+    private var isBattleLogMultiSelectMode: Boolean = false
+    private val selectedBattleLogIds = LinkedHashSet<String>()
 
     // Android 13+ Notification permission launcher
     private val notificationPermissionLauncher = registerForActivityResult(
@@ -564,6 +567,7 @@ class MainActivity : AppCompatActivity() {
             prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 510).apply()
         }
         OverlayService.syncTierThresholdsFromPrefs(prefs)
+        runV511LeagueRemapAndCleanup()
         projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? MediaProjectionManager
 
         initViews()
@@ -2552,13 +2556,127 @@ class MainActivity : AppCompatActivity() {
         return current to prev
     }
 
+    /**
+     * Remaps legacy `"MEGA MASTER LEAGUE"` -> `"Mega Master League (10000)"`, ensures `"Mega Master League (10000)"`
+     * is selected in GBL pinned metas, removes hardcoded Show 6 Great League defaults, and normalizes Battle Frontier
+     * forced cups to ALL CAPS across teams, rosters, and battle logs.
+     */
+    private fun runV511LeagueRemapAndCleanup() {
+        try {
+            val firstTime = !prefs.getBoolean(OverlayService.PREFS_KEY_V511_LEAGUE_REMAP_DONE, false)
+            if (firstTime) {
+                val gblPinned = OverlayService.getPinnedGblLimitedMetasStatic(prefs).toMutableList()
+                if (gblPinned.none { it.equals("Mega Master League (10000)", ignoreCase = true) }) {
+                    gblPinned.add(0, "Mega Master League (10000)")
+                    OverlayService.setPinnedGblLimitedMetasStatic(prefs, gblPinned)
+                }
+                prefs.edit().putBoolean(OverlayService.PREFS_KEY_V511_LEAGUE_REMAP_DONE, true).apply()
+            }
+
+            val presetType = object : TypeToken<List<TeamPreset>>() {}.type
+            val logType = object : TypeToken<List<BattleLogEntry>>() {}.type
+            val rosterType = object : TypeToken<List<OverlayService.Companion.Show6RosterPreset>>() {}.type
+
+            // 1. Remap GBL Teams
+            prefs.getString(OverlayService.PREFS_KEY_PERSISTENT_TEAMS, null)?.takeIf { it.isNotBlank() }?.let { raw ->
+                val list: List<TeamPreset>? = try { gson.fromJson(raw, presetType) } catch (_: Exception) { null }
+                if (!list.isNullOrEmpty()) {
+                    var changed = false
+                    val updated = list.map { p ->
+                        val newLg = OverlayService.remapLegacyLeagueForModeStatic(p.league, isShow6 = false)
+                        if (newLg != p.league) {
+                            changed = true
+                            p.copy(league = newLg)
+                        } else p
+                    }
+                    if (changed) {
+                        prefs.edit().putString(OverlayService.PREFS_KEY_PERSISTENT_TEAMS, gson.toJson(updated)).apply()
+                    }
+                }
+            }
+
+            // 2. Remap Show 6 Trios & remove hardcoded Show 6 Great League default (`show6-preset3-gl-1`)
+            prefs.getString(OverlayService.PREFS_KEY_SHOW6_PRESETS_OF_3, null)?.takeIf { it.isNotBlank() }?.let { raw ->
+                val list: List<TeamPreset>? = try { gson.fromJson(raw, presetType) } catch (_: Exception) { null }
+                if (!list.isNullOrEmpty()) {
+                    var changed = false
+                    val updated = list.filter { p ->
+                        val removeHardcodedGl = p.id == "show6-preset3-gl-1"
+                        if (removeHardcodedGl) changed = true
+                        !removeHardcodedGl
+                    }.map { p ->
+                        val newLg = OverlayService.remapLegacyLeagueForModeStatic(p.league, isShow6 = true)
+                        if (newLg != p.league) {
+                            changed = true
+                            p.copy(league = newLg)
+                        } else p
+                    }
+                    if (changed) {
+                        prefs.edit().putString(OverlayService.PREFS_KEY_SHOW6_PRESETS_OF_3, gson.toJson(updated)).apply()
+                    }
+                }
+            }
+
+            // 3. Remap Show 6 Rosters of 6 & remove hardcoded Show 6 Great League defaults (`show6-gl-bf-default`, `show6-opp-gl-default`)
+            for (rKey in listOf(OverlayService.PREFS_KEY_SHOW6_ROSTERS_OF_6, OverlayService.PREFS_KEY_SHOW6_OPPONENT_ROSTERS_OF_6)) {
+                prefs.getString(rKey, null)?.takeIf { it.isNotBlank() }?.let { raw ->
+                    val list: List<OverlayService.Companion.Show6RosterPreset>? = try { gson.fromJson(raw, rosterType) } catch (_: Exception) { null }
+                    if (!list.isNullOrEmpty()) {
+                        var changed = false
+                        val updated = list.filter { r ->
+                            val removeHardcodedGl = r.id == "show6-gl-bf-default" || r.id == "show6-opp-gl-default"
+                            if (removeHardcodedGl) changed = true
+                            !removeHardcodedGl
+                        }.map { r ->
+                            val newLg = OverlayService.remapLegacyLeagueForModeStatic(r.league, isShow6 = true)
+                            if (newLg != r.league) {
+                                changed = true
+                                r.copy(league = newLg)
+                            } else r
+                        }
+                        if (changed) {
+                            prefs.edit().putString(rKey, gson.toJson(updated)).apply()
+                        }
+                    }
+                }
+            }
+
+            // 4. Remap GBL & Show 6 Battle Logs
+            for ((lKey, isS6) in listOf(OverlayService.PREFS_KEY_BATTLE_LOGS to false, OverlayService.PREFS_KEY_SHOW6_BATTLE_LOGS to true)) {
+                prefs.getString(lKey, null)?.takeIf { it.isNotBlank() }?.let { raw ->
+                    val list: List<BattleLogEntry>? = try { gson.fromJson(raw, logType) } catch (_: Exception) { null }
+                    if (!list.isNullOrEmpty()) {
+                        var changed = false
+                        val updated = list.map { b ->
+                            val newLg = OverlayService.remapLegacyLeagueForModeStatic(b.league, isShow6 = isS6)
+                            if (newLg != b.league) {
+                                changed = true
+                                b.copy(league = newLg)
+                            } else b
+                        }
+                        if (changed) {
+                            prefs.edit().putString(lKey, gson.toJson(updated)).apply()
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
     private fun loadBattleLogs(): List<BattleLogEntry> {
         val raw = prefs.getString(PREFS_KEY_BATTLE_LOGS, null) ?: return emptyList()
+        val isShow6 = isShow6CombatMode()
         return try {
             val type = object : TypeToken<List<BattleLogEntry>>() {}.type
             val parsed: List<BattleLogEntry> = gson.fromJson<List<BattleLogEntry>>(raw, type) ?: emptyList()
             val deleted = loadDeletedLogIds().toSet()
-            parsed.filter { it.id !in deleted }.sortedByDescending { it.timestampMs }
+            parsed
+                .filter { it.id !in deleted }
+                .map { b ->
+                    val remappedLg = OverlayService.remapLegacyLeagueForModeStatic(b.league, isShow6)
+                    if (remappedLg != b.league) b.copy(league = remappedLg) else b
+                }
+                .sortedByDescending { it.timestampMs }
         } catch (_: Exception) {
             emptyList()
         }
@@ -2566,10 +2684,95 @@ class MainActivity : AppCompatActivity() {
 
     private fun saveBattleLogs(logs: List<BattleLogEntry>) {
         // Ensure Main Battle Logs remain compact (timelineEvents stored exclusively in 7-day AI Training Logs)
-        val compact = logs.map {
-            if (it.timelineEvents.isEmpty()) it else it.copy(timelineEvents = emptyList())
+        val isShow6 = isShow6CombatMode()
+        val compact = logs.map { b ->
+            val remappedLg = OverlayService.remapLegacyLeagueForModeStatic(b.league, isShow6)
+            val base = if (remappedLg != b.league) b.copy(league = remappedLg) else b
+            if (base.timelineEvents.isEmpty()) base else base.copy(timelineEvents = emptyList())
         }.sortedByDescending { it.timestampMs }
         prefs.edit().putString(PREFS_KEY_BATTLE_LOGS, gson.toJson(compact)).apply()
+    }
+
+    private fun showReassignSelectedBattlesLeagueDialog(targetIds: Set<String>) {
+        if (targetIds.isEmpty()) {
+            Toast.makeText(this, "Select at least 1 battle card first.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val isShow6 = isShow6CombatMode()
+        val enabledLeagues = if (isShow6) {
+            OverlayService.getEnabledShow6LeaguesStatic(prefs)
+        } else {
+            OverlayService.getEnabledGblLeaguesStatic(prefs)
+        }
+        val catalogLeagues = OverlayService.getLimitedMetaCatalogStatic(prefs).map { it.leagueKey }
+        val allChoices = (enabledLeagues + catalogLeagues).distinct()
+        if (allChoices.isEmpty()) return
+
+        var chosenIndex = 0
+        val labels = allChoices.map { lg ->
+            val inEnabled = enabledLeagues.any { it.equals(lg, ignoreCase = true) }
+            if (inEnabled) "🟢 $lg" else "📌 $lg (Will also pin cup)"
+        }.toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle("🏷️ Move ${targetIds.size} Battle(s) to League / Cup")
+            .setSingleChoiceItems(labels, 0) { _, which ->
+                chosenIndex = which
+            }
+            .setPositiveButton("💾 Reassign League") { _, _ ->
+                val targetLeague = allChoices.getOrElse(chosenIndex) { allChoices.first() }
+                // If user picked an unpinned limited meta, automatically pin it so the moved battles appear in active filters
+                if (enabledLeagues.none { it.equals(targetLeague, ignoreCase = true) }) {
+                    if (isShow6) {
+                        OverlayService.setPinnedShow6LimitedMetasStatic(
+                            prefs,
+                            OverlayService.getPinnedShow6LimitedMetasStatic(prefs) + targetLeague
+                        )
+                    } else {
+                        OverlayService.setPinnedGblLimitedMetasStatic(
+                            prefs,
+                            OverlayService.getPinnedGblLimitedMetasStatic(prefs) + targetLeague
+                        )
+                    }
+                }
+                val nowMs = System.currentTimeMillis()
+                val allLogs = loadBattleLogs()
+                var movedCount = 0
+                val updatedLogs = allLogs.map { entry ->
+                    if (entry.id in targetIds) {
+                        movedCount++
+                        entry.copy(league = targetLeague, updatedAt = nowMs)
+                    } else {
+                        entry
+                    }
+                }
+                saveBattleLogs(updatedLogs)
+
+                // Also keep any pending AI telemetry records in sync with the corrected league
+                try {
+                    val pendingAi = OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson)
+                    if (pendingAi.any { it.battleId in targetIds }) {
+                        val updatedAi = pendingAi.map { rec ->
+                            if (rec.battleId in targetIds) rec.copy(league = targetLeague) else rec
+                        }
+                        OverlayService.savePendingAiTelemetryLogsStatic(prefs, gson, updatedAi)
+                    }
+                } catch (_: Exception) {}
+
+                selectedBattleLogIds.clear()
+                isBattleLogMultiSelectMode = false
+                setupBattleLogFilters()
+                renderBattleLogPage()
+                refreshPresetsUi()
+                triggerTwoDeviceCloudSync(silent = true)
+                Toast.makeText(
+                    this,
+                    "✅ Reassigned $movedCount battle(s) to $targetLeague!",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     /**
@@ -4797,6 +5000,120 @@ class MainActivity : AppCompatActivity() {
         val aiLogsById = loadAiTrainingLogs().associateBy { it.battleId }
         val nowRenderMs = System.currentTimeMillis()
 
+        // Multi-Select Battle Log Reassignment Toolbar (allows moving mislogged battles to another cup/league)
+        selectedBattleLogIds.retainAll(filtered.map { it.id }.toSet())
+        val multiSelectBar = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                cornerRadius = 8f * density
+                setColor(if (isBattleLogMultiSelectMode) 0xFF0F172A.toInt() else 0xFF1E293B.toInt())
+                setStroke(
+                    (1.5f * density).toInt().coerceAtLeast(1),
+                    if (isBattleLogMultiSelectMode) 0xFF38BDF8.toInt() else 0xFF334155.toInt()
+                )
+            }
+            val pad = (8 * density).toInt()
+            setPadding(pad, pad, pad, pad)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = (8 * density).toInt()
+            }
+        }
+
+        if (!isBattleLogMultiSelectMode) {
+            val toggleBtn = Button(this).apply {
+                text = "☑️ Multi-Select Battles to Reassign League / Cup"
+                isAllCaps = false
+                textSize = 11.5f
+                setTextColor(0xFFFFFFFF.toInt())
+                backgroundTintList = android.content.res.ColorStateList.valueOf(activeTheme.secondaryButtonColor)
+                setOnClickListener {
+                    isBattleLogMultiSelectMode = true
+                    selectedBattleLogIds.clear()
+                    renderBattleLogPage()
+                }
+            }
+            multiSelectBar.addView(toggleBtn)
+        } else {
+            val statusTv = TextView(this).apply {
+                text = "☑️ Multi-Select Mode: ${selectedBattleLogIds.size} of ${filtered.size} battle(s) selected — tap cards below to toggle"
+                setTextColor(0xFF38BDF8.toInt())
+                textSize = 11.5f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setPadding(0, 0, 0, (6 * density).toInt())
+            }
+            val btnRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+            val btnSelectAll = Button(this).apply {
+                text = "All (${filtered.size})"
+                isAllCaps = false
+                textSize = 10.5f
+                setTextColor(0xFFFFFFFF.toInt())
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF334155.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginEnd = (4 * density).toInt()
+                }
+                setOnClickListener {
+                    selectedBattleLogIds.addAll(filtered.map { it.id })
+                    renderBattleLogPage()
+                }
+            }
+            val btnClear = Button(this).apply {
+                text = "Clear"
+                isAllCaps = false
+                textSize = 10.5f
+                setTextColor(0xFFFFFFFF.toInt())
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF334155.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.8f).apply {
+                    marginEnd = (4 * density).toInt()
+                }
+                setOnClickListener {
+                    selectedBattleLogIds.clear()
+                    renderBattleLogPage()
+                }
+            }
+            val btnMoveLeague = Button(this).apply {
+                text = "🏷️ Move (${selectedBattleLogIds.size})"
+                isAllCaps = false
+                textSize = 10.5f
+                setTextColor(0xFFFFFFFF.toInt())
+                backgroundTintList = android.content.res.ColorStateList.valueOf(
+                    if (selectedBattleLogIds.isNotEmpty()) activeTheme.buttonAccentColor else 0xFF475569.toInt()
+                )
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.3f).apply {
+                    marginEnd = (4 * density).toInt()
+                }
+                setOnClickListener {
+                    showReassignSelectedBattlesLeagueDialog(selectedBattleLogIds.toSet())
+                }
+            }
+            val btnDone = Button(this).apply {
+                text = "✖ Done"
+                isAllCaps = false
+                textSize = 10.5f
+                setTextColor(0xFFFFFFFF.toInt())
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF475569.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.8f)
+                setOnClickListener {
+                    isBattleLogMultiSelectMode = false
+                    selectedBattleLogIds.clear()
+                    renderBattleLogPage()
+                }
+            }
+            btnRow.addView(btnSelectAll)
+            btnRow.addView(btnClear)
+            btnRow.addView(btnMoveLeague)
+            btnRow.addView(btnDone)
+            multiSelectBar.addView(statusTv)
+            multiSelectBar.addView(btnRow)
+        }
+        battleLogContainer.addView(multiSelectBar)
+
         for ((dayStr, dayEntries) in groupedByDay) {
             val dWins = dayEntries.count { it.result.equals("WIN", ignoreCase = true) }
             val dLosses = dayEntries.count { it.result.equals("LOSS", ignoreCase = true) }
@@ -4838,6 +5155,7 @@ class MainActivity : AppCompatActivity() {
 
             for (entry in dayEntries) {
                 val isWin = entry.result.equals("WIN", ignoreCase = true)
+                val isSelectedForBatch = isBattleLogMultiSelectMode && entry.id in selectedBattleLogIds
                 val leadUp = entry.leadMatchup.uppercase()
                 val leadBadgeText = when (leadUp) {
                     "FAVORABLE" -> "Lead: Favorable"
@@ -4858,7 +5176,14 @@ class MainActivity : AppCompatActivity() {
 
                 val card = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
-                    if (isRepeatDailyLead) {
+                    if (isSelectedForBatch) {
+                        background = android.graphics.drawable.GradientDrawable().apply {
+                            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                            cornerRadius = 8f * density
+                            setColor(0xFF0F172A.toInt())
+                            setStroke((2f * density).toInt().coerceAtLeast(2), 0xFF38BDF8.toInt())
+                        }
+                    } else if (isRepeatDailyLead) {
                         val surfaceAlpha = if (hasWatermark) 0xBF else 0xF5
                         background = android.graphics.drawable.GradientDrawable().apply {
                             shape = android.graphics.drawable.GradientDrawable.RECTANGLE
@@ -4878,7 +5203,29 @@ class MainActivity : AppCompatActivity() {
                         bottomMargin = (8 * density).toInt()
                     }
                     setOnClickListener {
-                        showInteractiveBattleReplayDialog(entry)
+                        if (isBattleLogMultiSelectMode) {
+                            if (entry.id in selectedBattleLogIds) {
+                                selectedBattleLogIds.remove(entry.id)
+                            } else {
+                                selectedBattleLogIds.add(entry.id)
+                            }
+                            renderBattleLogPage()
+                        } else {
+                            showInteractiveBattleReplayDialog(entry)
+                        }
+                    }
+                    setOnLongClickListener {
+                        if (!isBattleLogMultiSelectMode) {
+                            isBattleLogMultiSelectMode = true
+                            selectedBattleLogIds.clear()
+                        }
+                        if (entry.id in selectedBattleLogIds) {
+                            selectedBattleLogIds.remove(entry.id)
+                        } else {
+                            selectedBattleLogIds.add(entry.id)
+                        }
+                        renderBattleLogPage()
+                        true
                     }
                 }
 
@@ -4887,8 +5234,12 @@ class MainActivity : AppCompatActivity() {
                     gravity = android.view.Gravity.CENTER_VERTICAL
                 }
 
+                val checkPrefix = if (isBattleLogMultiSelectMode) {
+                    if (isSelectedForBatch) "☑️ " else "⬜ "
+                } else ""
+
                 val resultTv = TextView(this).apply {
-                    text = if (isWin) "🏆 WIN" else "💀 LOSS"
+                    text = "$checkPrefix${if (isWin) "🏆 WIN" else "💀 LOSS"}"
                     setTextColor(if (isWin) 0xFF4ADE80.toInt() else 0xFFF87171.toInt())
                     textSize = 12f
                     setTypeface(typeface, android.graphics.Typeface.BOLD)
@@ -6006,7 +6357,10 @@ class MainActivity : AppCompatActivity() {
                 val filtered = parsed.filter { p ->
                     val mode = p.combatMode.ifBlank { expectedMode }
                     if (isShow6) mode.equals("show6", ignoreCase = true) else !mode.equals("show6", ignoreCase = true)
-                }.map { it.copy(combatMode = expectedMode) }
+                }.map { p ->
+                    val remappedLg = OverlayService.remapLegacyLeagueForModeStatic(p.league, isShow6)
+                    p.copy(league = remappedLg, combatMode = expectedMode)
+                }
                 if (filtered.isNotEmpty()) return filtered
             }
         }
@@ -6017,7 +6371,10 @@ class MainActivity : AppCompatActivity() {
                 if (!legacyJson.isNullOrBlank()) {
                     val parsed: List<TeamPreset>? = try { gson.fromJson(legacyJson, type) } catch (_: Exception) { null }
                     if (!parsed.isNullOrEmpty()) {
-                        val tagged = parsed.map { it.copy(combatMode = "gbl") }
+                        val tagged = parsed.map { p ->
+                            val remappedLg = OverlayService.remapLegacyLeagueForModeStatic(p.league, isShow6 = false)
+                            p.copy(league = remappedLg, combatMode = "gbl")
+                        }
                         prefs.edit().putString(PREFS_KEY_PRESETS, gson.toJson(tagged)).apply()
                         return tagged
                     }
@@ -6028,8 +6385,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun savePresets(presets: List<TeamPreset>) {
-        val expectedMode = if (isShow6CombatMode()) "show6" else "gbl"
-        val tagged = presets.map { it.copy(combatMode = expectedMode) }
+        val isShow6 = isShow6CombatMode()
+        val expectedMode = if (isShow6) "show6" else "gbl"
+        val tagged = presets.map { p ->
+            val remappedLg = OverlayService.remapLegacyLeagueForModeStatic(p.league, isShow6)
+            p.copy(league = remappedLg, combatMode = expectedMode)
+        }
         prefs.edit().putString(PREFS_KEY_PRESETS, gson.toJson(tagged)).apply()
     }
 
@@ -6121,36 +6482,25 @@ class MainActivity : AppCompatActivity() {
             val defaults = if (isShow6CombatMode()) {
                 listOf(
                     TeamPreset(
-                        id = "show6-preset3-gl-1",
-                        name = "BF Great League Trio: Azumarill / Corsola-G / Cradily",
-                        league = "GREAT LEAGUE",
-                        pokemon = listOf(
-                            PokemonSlot("Azumarill", 1499, "Bubble", "Ice Beam", "Play Rough"),
-                            PokemonSlot("Corsola (Galarian)", 1496, "Astonish", "Night Shade", "Power Gem"),
-                            PokemonSlot("Cradily", 1498, "Bullet Seed", "Rock Slide", "Grass Knot")
-                        ),
-                        isSelected = true,
-                        combatMode = "show6"
-                    ),
-                    TeamPreset(
                         id = "show6-preset3-spectral-1",
                         name = "BF Spectral Trio: Ninetales-A / Weezing-G / Dewgong",
-                        league = "Battle Frontier (Spectral)",
-                        pokemon = getLeagueTop3Defaults("Battle Frontier (Spectral)"),
+                        league = "BATTLE FRONTIER (SPECTRAL)",
+                        pokemon = getLeagueTop3Defaults("BATTLE FRONTIER (SPECTRAL)"),
+                        isSelected = true,
                         combatMode = "show6"
                     ),
                     TeamPreset(
                         id = "show6-preset3-cauldron-1",
                         name = "BF Cauldron Trio: Weezing-G / Guzzlord / Drapion",
-                        league = "Battle Frontier (Cauldron)",
-                        pokemon = getLeagueTop3Defaults("Battle Frontier (Cauldron)"),
+                        league = "BATTLE FRONTIER (CAULDRON)",
+                        pokemon = getLeagueTop3Defaults("BATTLE FRONTIER (CAULDRON)"),
                         combatMode = "show6"
                     ),
                     TeamPreset(
                         id = "show6-preset3-master-1",
                         name = "BF Master Trio: Rhyperior / Florges / Zacian",
-                        league = "Battle Frontier (Master)",
-                        pokemon = getLeagueTop3Defaults("Battle Frontier (Master)"),
+                        league = "BATTLE FRONTIER (MASTER)",
+                        pokemon = getLeagueTop3Defaults("BATTLE FRONTIER (MASTER)"),
                         combatMode = "show6"
                     )
                 )
@@ -6376,10 +6726,10 @@ class MainActivity : AppCompatActivity() {
                 }
             )
             textLeague.setTextColor(
-                when (resolvedLeague) {
-                    "GREAT LEAGUE" -> activeTheme.accentColor
-                    "ULTRA LEAGUE" -> 0xFFFBBF24.toInt()
-                    "MEGA MASTER LEAGUE" -> 0xFFE879F9.toInt()
+                when {
+                    resolvedLeague.equals("GREAT LEAGUE", ignoreCase = true) || resolvedLeague.equals("Great League (1500)", ignoreCase = true) -> activeTheme.accentColor
+                    resolvedLeague.equals("ULTRA LEAGUE", ignoreCase = true) || resolvedLeague.equals("Ultra League (2500)", ignoreCase = true) -> 0xFFFBBF24.toInt()
+                    resolvedLeague.contains("Mega", ignoreCase = true) -> 0xFFE879F9.toInt()
                     else -> 0xFFC084FC.toInt()
                 }
             )
@@ -6583,7 +6933,8 @@ class MainActivity : AppCompatActivity() {
             }
 
             btnSwapOpp6?.setOnClickListener {
-                val targetShow6Lg = if (OverlayService.isShow6EligibleLeagueStatic(preset.league)) preset.league else "GREAT LEAGUE"
+                val defaultBf = OverlayService.getForcedShow6LeaguesStatic(prefs).firstOrNull() ?: "BATTLE FRONTIER (SPECTRAL)"
+                val targetShow6Lg = if (OverlayService.isShow6EligibleLeagueStatic(preset.league, prefs)) preset.league else defaultBf
                 val locked3 = preset.pokemon.map { it.name }.filter { it.isNotBlank() }
                 lifecycleScope.launch(Dispatchers.Default) {
                     val gen = OverlayService.generateBlindShow6RosterStatic(
@@ -6889,27 +7240,21 @@ class MainActivity : AppCompatActivity() {
     private fun loadShow6RostersOf6(): List<OverlayService.Companion.Show6RosterPreset> {
         val defaults = listOf(
             OverlayService.Companion.Show6RosterPreset(
-                id = "show6-gl-bf-default",
-                name = "BF Open GL Core (1500 CP)",
-                league = "GREAT LEAGUE",
-                pokemon = listOf("Azumarill", "Corsola (Galarian)", "Cradily", "Corviknight", "Feraligatr", "Gastrodon")
-            ),
-            OverlayService.Companion.Show6RosterPreset(
                 id = "show6-spectral-default",
                 name = "BF Spectral Core (1500 CP)",
-                league = "Battle Frontier (Spectral)",
+                league = "BATTLE FRONTIER (SPECTRAL)",
                 pokemon = listOf("Murkrow", "Drifblim", "Turtonator", "Ninetales (Alolan)", "Golisopod", "Rotom (Wash)")
             ),
             OverlayService.Companion.Show6RosterPreset(
                 id = "show6-cauldron-default",
                 name = "BF Cauldron Core (2500 CP)",
-                league = "Battle Frontier (Cauldron)",
+                league = "BATTLE FRONTIER (CAULDRON)",
                 pokemon = listOf("Skeledirge", "Malamar", "Torterra", "Walrein", "Poliwrath", "Dragalge")
             ),
             OverlayService.Companion.Show6RosterPreset(
                 id = "show6-bfmaster-default",
                 name = "BF Master Core (Uncapped CP)",
-                league = "Battle Frontier (Master)",
+                league = "BATTLE FRONTIER (MASTER)",
                 pokemon = listOf("Zacian (Crowned Sword)", "Palkia (Origin)", "Metagross", "Groudon", "Kyurem (Black)", "Gyarados (Mega)")
             )
         )
@@ -6919,9 +7264,10 @@ class MainActivity : AppCompatActivity() {
                 val type = object : TypeToken<List<OverlayService.Companion.Show6RosterPreset>>() {}.type
                 val parsed: List<OverlayService.Companion.Show6RosterPreset>? = gson.fromJson(raw, type)
                 if (!parsed.isNullOrEmpty()) {
+                    val fallbackLg = OverlayService.getForcedShow6LeaguesStatic(prefs).firstOrNull() ?: "BATTLE FRONTIER (SPECTRAL)"
                     return parsed.map { r ->
-                        if (OverlayService.isShow6EligibleLeagueStatic(r.league, prefs) || r.league.isNotBlank()) r
-                        else r.copy(league = "GREAT LEAGUE")
+                        val remappedLg = OverlayService.remapLegacyLeagueForModeStatic(r.league, isShow6 = true)
+                        r.copy(league = remappedLg.ifBlank { fallbackLg })
                     }
                 }
             } catch (_: Exception) {}
@@ -6937,27 +7283,21 @@ class MainActivity : AppCompatActivity() {
     private fun loadShow6OpponentRostersOf6(): List<OverlayService.Companion.Show6RosterPreset> {
         val defaults = listOf(
             OverlayService.Companion.Show6RosterPreset(
-                id = "show6-opp-gl-default",
-                name = "Opp Open GL Meta 6",
-                league = "GREAT LEAGUE",
-                pokemon = listOf("Bastiodon", "Cradily", "Azumarill", "Dedenne", "Gastrodon", "Scizor")
-            ),
-            OverlayService.Companion.Show6RosterPreset(
                 id = "show6-opp-spectral-default",
                 name = "Opp Spectral Meta 6",
-                league = "Battle Frontier (Spectral)",
+                league = "BATTLE FRONTIER (SPECTRAL)",
                 pokemon = listOf("Murkrow", "Swalot", "Jellicent", "Gourgeist", "Regidrago", "Lanturn")
             ),
             OverlayService.Companion.Show6RosterPreset(
                 id = "show6-opp-cauldron-default",
                 name = "Opp Cauldron Meta 6",
-                league = "Battle Frontier (Cauldron)",
+                league = "BATTLE FRONTIER (CAULDRON)",
                 pokemon = listOf("Skeledirge", "Torterra", "Nidoqueen", "Malamar", "Pangoro", "Salazzle")
             ),
             OverlayService.Companion.Show6RosterPreset(
                 id = "show6-opp-master-default",
                 name = "Opp BF Master Meta 6",
-                league = "Battle Frontier (Master)",
+                league = "BATTLE FRONTIER (MASTER)",
                 pokemon = listOf("Zacian (Crowned Sword)", "Palkia (Origin)", "Rhyperior", "Florges", "Moltres (Galarian)", "Scizor (Mega)")
             )
         )
@@ -6966,7 +7306,11 @@ class MainActivity : AppCompatActivity() {
             try {
                 val type = object : TypeToken<List<OverlayService.Companion.Show6RosterPreset>>() {}.type
                 val parsed: List<OverlayService.Companion.Show6RosterPreset>? = gson.fromJson(raw, type)
-                if (!parsed.isNullOrEmpty()) return parsed
+                if (!parsed.isNullOrEmpty()) {
+                    return parsed.map { r ->
+                        r.copy(league = OverlayService.remapLegacyLeagueForModeStatic(r.league, isShow6 = true))
+                    }
+                }
             } catch (_: Exception) {}
         }
         prefs.edit().putString(OverlayService.PREFS_KEY_SHOW6_OPPONENT_ROSTERS_OF_6, gson.toJson(defaults)).apply()
@@ -6980,13 +7324,13 @@ class MainActivity : AppCompatActivity() {
     private fun loadShow6LeagueMap(prefKey: String): MutableMap<String, List<String>> {
         val raw = prefs.getString(prefKey, null)
         val map = mutableMapOf(
+            "BATTLE FRONTIER (SPECTRAL)" to emptyList<String>(),
+            "BATTLE FRONTIER (CAULDRON)" to emptyList<String>(),
+            "BATTLE FRONTIER (MASTER)" to emptyList<String>(),
             "GREAT LEAGUE" to emptyList<String>(),
-            "Battle Frontier (Spectral)" to emptyList<String>(),
-            "Battle Frontier (Cauldron)" to emptyList<String>(),
-            "Battle Frontier (Master)" to emptyList<String>(),
             "ULTRA LEAGUE" to emptyList<String>(),
             "MASTER LEAGUE" to emptyList<String>(),
-            "MEGA MASTER LEAGUE" to emptyList<String>()
+            "Mega Master League (10000)" to emptyList<String>()
         )
         if (!raw.isNullOrBlank()) {
             try {
@@ -6994,7 +7338,8 @@ class MainActivity : AppCompatActivity() {
                 val parsed: Map<String, List<String>>? = gson.fromJson(raw, type)
                 if (parsed != null) {
                     for ((k, v) in parsed) {
-                        map[k] = v.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+                        val remappedKey = OverlayService.remapLegacyLeagueForModeStatic(k, isShow6 = k.contains("Frontier", ignoreCase = true))
+                        map[remappedKey] = v.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
                     }
                 }
             } catch (_: Exception) {}
@@ -7574,13 +7919,15 @@ class MainActivity : AppCompatActivity() {
             val recCount = catalog.count { it.lifecycleStatus == "RECENT" }
             tvPvPokeMetasStatus?.text =
                 "Catalog: ${catalog.size} ranked PvPoke cups (🟢 $curCount Current • 🔜 $upCount Upcoming • 🕒 $recCount Recent • Obsolete hidden)"
+            val gblForced = OverlayService.getForcedGblLeaguesStatic()
             val gblPinned = OverlayService.getPinnedGblLimitedMetasStatic(prefs)
+            val s6Forced = OverlayService.getForcedShow6LeaguesStatic(prefs)
             val s6Pinned = OverlayService.getPinnedShow6LimitedMetasStatic(prefs)
-            btnOpenGblMetas?.text = "🛡️ GBL Metas (${gblPinned.size})"
-            btnOpenShow6Metas?.text = "🏛️ Frontier Metas (${s6Pinned.size})"
-            val gblStr = if (gblPinned.isEmpty()) "None" else gblPinned.joinToString(", ")
-            val s6Str = if (s6Pinned.isEmpty()) "None" else s6Pinned.joinToString(", ")
-            tvPinnedSummary?.text = "Pinned GBL: $gblStr\nPinned Battle Frontier (Show 6): $s6Str"
+            btnOpenGblMetas?.text = "🛡️ GBL Metas (${gblForced.size} Forced + ${gblPinned.size})"
+            btnOpenShow6Metas?.text = "🏛️ Frontier Metas (${s6Forced.size} Forced + ${s6Pinned.size})"
+            val gblStr = (gblForced + gblPinned).joinToString(", ")
+            val s6Str = (s6Forced + s6Pinned).joinToString(", ")
+            tvPinnedSummary?.text = "Active GBL (Blind 3): $gblStr\nActive Battle Frontier (Show 6): $s6Str"
         }
 
         updateLimitedMetasSummaryLabels()
@@ -7609,38 +7956,130 @@ class MainActivity : AppCompatActivity() {
             } else {
                 OverlayService.getPinnedGblLimitedMetasStatic(prefs).toMutableSet()
             }
-            val labels = catalog.map { m ->
-                val isExpired = OverlayService.isExpiredLimitedMetaStatic(m, nowMs)
-                val badge = when {
-                    m.lifecycleStatus == "CURRENT" -> "🟢 [CURRENT]"
-                    m.lifecycleStatus == "UPCOMING" -> "🔜 [UPCOMING]"
-                    isExpired -> "⚠️ [EXPIRED >4W]"
-                    else -> {
-                        val daysAgo = ((nowMs - m.lastSeenAt).coerceAtLeast(0L) / 86400_000L).toInt()
-                        "🕒 [RECENT • ${daysAgo}d ago]"
-                    }
+
+            data class SelectorRow(
+                val leagueKey: String,
+                val label: String,
+                val isForced: Boolean
+            )
+
+            val rows = mutableListOf<SelectorRow>()
+            if (isShow6ModeSelector) {
+                // 1. Forced top items: all catalog cups containing "Battle Frontier" (ALL CAPS)
+                val forcedBfFormats = catalog
+                    .filter { OverlayService.isBattleFrontierFormatTitleStatic(it.title, it.cup) || OverlayService.isBattleFrontierFormatTitleStatic(it.leagueKey, it.cup) }
+                    .sortedBy { it.leagueKey }
+                for (m in forcedBfFormats) {
+                    val megaTag = if (m.allowsMega) " • 🧬 Max 1 Mega" else ""
+                    rows.add(
+                        SelectorRow(
+                            leagueKey = m.leagueKey.uppercase(),
+                            label = "🔒 [FORCED DEFAULT] ${m.leagueKey.uppercase()} • ${m.cp} CP (${m.cup})$megaTag",
+                            isForced = true
+                        )
+                    )
                 }
-                val megaTag = if (m.allowsMega) " • 🧬 Max 1 Mega" else ""
-                val expiredHint = if (isExpired) " (Uncheck to delete)" else ""
-                "$badge ${m.leagueKey} • ${m.cp} CP (${m.cup})$megaTag$expiredHint"
-            }.toTypedArray()
-            val checked = BooleanArray(catalog.size) { idx ->
-                currentlyPinned.any { it.equals(catalog[idx].leagueKey, ignoreCase = true) }
+                // 2. Optional regular Great / Ultra / Master League downloads for Show 6 if desired
+                val optionalOpenFormats = catalog.filter { it.category == "standard_open" }
+                for (m in optionalOpenFormats) {
+                    rows.add(
+                        SelectorRow(
+                            leagueKey = m.leagueKey,
+                            label = "🟢 [OPTIONAL OPEN] ${m.leagueKey} • ${m.cp} CP (${m.cup})",
+                            isForced = false
+                        )
+                    )
+                }
+                // 3. Remaining user-selectable limited metas (Title Case with CP in parentheses)
+                val optionalLimited = catalog.filterNot {
+                    it.category == "standard_open" ||
+                        OverlayService.isBattleFrontierFormatTitleStatic(it.title, it.cup) ||
+                        OverlayService.isBattleFrontierFormatTitleStatic(it.leagueKey, it.cup)
+                }
+                for (m in optionalLimited) {
+                    val isExpired = OverlayService.isExpiredLimitedMetaStatic(m, nowMs)
+                    val badge = when {
+                        m.lifecycleStatus == "CURRENT" -> "🟢 [CURRENT]"
+                        m.lifecycleStatus == "UPCOMING" -> "🔜 [UPCOMING]"
+                        isExpired -> "⚠️ [EXPIRED >4W]"
+                        else -> {
+                            val daysAgo = ((nowMs - m.lastSeenAt).coerceAtLeast(0L) / 86400_000L).toInt()
+                            "🕒 [RECENT • ${daysAgo}d ago]"
+                        }
+                    }
+                    val megaTag = if (m.allowsMega) " • 🧬 Max 1 Mega" else ""
+                    val expiredHint = if (isExpired) " (Uncheck to delete)" else ""
+                    rows.add(
+                        SelectorRow(
+                            leagueKey = m.leagueKey,
+                            label = "$badge ${m.leagueKey} • ${m.cp} CP (${m.cup})$megaTag$expiredHint",
+                            isForced = false
+                        )
+                    )
+                }
+            } else {
+                // Blind 3 PvP Mode:
+                // 1. Forced top items: Standard GREAT LEAGUE, ULTRA LEAGUE, MASTER LEAGUE (ALL CAPS)
+                rows.add(SelectorRow("GREAT LEAGUE", "🔒 [FORCED DEFAULT] GREAT LEAGUE • 1500 CP (all)", true))
+                rows.add(SelectorRow("ULTRA LEAGUE", "🔒 [FORCED DEFAULT] ULTRA LEAGUE • 2500 CP (all)", true))
+                rows.add(SelectorRow("MASTER LEAGUE", "🔒 [FORCED DEFAULT] MASTER LEAGUE • 10000 CP (all)", true))
+
+                // 2. Optional user-selectable limited metas (including data-driven Mega Master League (10000) + Title Case cups)
+                val optionalGbl = catalog.filter { it.category != "standard_open" }
+                for (m in optionalGbl) {
+                    val isExpired = OverlayService.isExpiredLimitedMetaStatic(m, nowMs)
+                    val badge = when {
+                        m.lifecycleStatus == "CURRENT" -> "🟢 [CURRENT]"
+                        m.lifecycleStatus == "UPCOMING" -> "🔜 [UPCOMING]"
+                        isExpired -> "⚠️ [EXPIRED >4W]"
+                        else -> {
+                            val daysAgo = ((nowMs - m.lastSeenAt).coerceAtLeast(0L) / 86400_000L).toInt()
+                            "🕒 [RECENT • ${daysAgo}d ago]"
+                        }
+                    }
+                    val megaTag = if (m.allowsMega) " • 🧬 Max 1 Mega" else ""
+                    val expiredHint = if (isExpired) " (Uncheck to delete)" else ""
+                    rows.add(
+                        SelectorRow(
+                            leagueKey = m.leagueKey,
+                            label = "$badge ${m.leagueKey} • ${m.cp} CP (${m.cup})$megaTag$expiredHint",
+                            isForced = false
+                        )
+                    )
+                }
+            }
+
+            val labels = rows.map { it.label }.toTypedArray()
+            val checked = BooleanArray(rows.size) { idx ->
+                val r = rows[idx]
+                r.isForced || currentlyPinned.any { it.equals(r.leagueKey, ignoreCase = true) }
             }
             AlertDialog.Builder(this)
                 .setTitle(
                     if (isShow6ModeSelector) "🏛️ Select Battle Frontier (Show 6) Limited Metas"
                     else "🛡️ Select GBL (Blind 3) Limited Metas"
                 )
-                .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
-                    val lgKey = catalog[which].leagueKey
+                .setMultiChoiceItems(labels, checked) { dialogInterface, which, isChecked ->
+                    val r = rows[which]
+                    if (r.isForced) {
+                        checked[which] = true
+                        (dialogInterface as? AlertDialog)?.listView?.setItemChecked(which, true)
+                        Toast.makeText(
+                            this,
+                            "🔒 ${r.leagueKey} is a forced default league for ${if (isShow6ModeSelector) "Show 6" else "Blind 3 PvP"} mode.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        return@setMultiChoiceItems
+                    }
+                    val lgKey = r.leagueKey
                     if (isChecked) currentlyPinned.add(lgKey)
                     else currentlyPinned.removeAll { it.equals(lgKey, ignoreCase = true) }
                 }
                 .setPositiveButton("💾 Save & Sync Rankings") { _, _ ->
-                    val orderedSelected = catalog.map { it.leagueKey }.filter { k ->
-                        currentlyPinned.any { it.equals(k, ignoreCase = true) }
-                    }
+                    val orderedSelected = rows
+                        .filter { !it.isForced }
+                        .map { it.leagueKey }
+                        .filter { k -> currentlyPinned.any { it.equals(k, ignoreCase = true) } }
                     if (isShow6ModeSelector) {
                         OverlayService.setPinnedShow6LimitedMetasStatic(prefs, orderedSelected)
                     } else {
@@ -7656,7 +8095,7 @@ class MainActivity : AppCompatActivity() {
                         withContext(Dispatchers.Main) {
                             Toast.makeText(
                                 this@MainActivity,
-                                "✅ Saved ${orderedSelected.size} pinned metas ($synced rankings synced from PvPoke GitHub)!",
+                                "✅ Saved ${orderedSelected.size} optional metas + forced defaults ($synced rankings synced from PvPoke GitHub)!",
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
@@ -10379,6 +10818,7 @@ class MainActivity : AppCompatActivity() {
                 } catch (_: Exception) {}
                 runOneTimeAiLogSplitAndCleanup(silent = true)
                 migrateExistingBattleLogs()
+                OverlayService.syncPinnedLimitedMetaRankingsBlocking(prefs, filesDir)
                 recalculateAllPresetsWithSeasonMetaBlocking()
                 withContext(Dispatchers.Main) {
                     dbStatusText.text = formatDbAndLeagueStatusText()

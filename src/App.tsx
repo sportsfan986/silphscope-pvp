@@ -148,6 +148,9 @@ import {
   setPinnedShow6LimitedMetas,
   getEnabledGblLeagues,
   getEnabledShow6Leagues,
+  getForcedGblLeagues,
+  getForcedShow6Leagues,
+  isBattleFrontierCupTitle,
   getLimitedMetaSheetAliases,
   setLimitedMetaSheetAlias,
   getLeagueCpCap,
@@ -1531,7 +1534,14 @@ export default function App() {
     const sanitizeGblList = (arr: any[]): TeamPreset[] =>
       arr
         .filter((p) => p && p.combatMode !== 'show6' && !String(p.id || '').startsWith('show6-preset3-'))
-        .map((p) => ({ ...p, combatMode: 'gbl' as const }));
+        .map((p) => ({
+          ...p,
+          league:
+            String(p.league || '').trim().toUpperCase() === 'MEGA MASTER LEAGUE'
+              ? 'Mega Master League (10000)'
+              : normalizeLeagueName(p.league),
+          combatMode: 'gbl' as const
+        }));
     try {
       const persistent = localStorage.getItem('gbl_user_teams_persistent');
       if (persistent) {
@@ -1565,7 +1575,14 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
-    return INITIAL_PRESETS.map((p) => ({ ...p, combatMode: 'gbl' as const }));
+    return INITIAL_PRESETS.map((p) => ({
+      ...p,
+      league:
+        String(p.league || '').trim().toUpperCase() === 'MEGA MASTER LEAGUE'
+          ? 'Mega Master League (10000)'
+          : normalizeLeagueName(p.league),
+      combatMode: 'gbl' as const
+    }));
   });
 
   const [gblSelectedPresetId, setGblSelectedPresetId] = useState<string>(() => {
@@ -1575,7 +1592,7 @@ export default function App() {
   // Show 6 Mode Independent Storage: Teams of 3 for Overlay ('gbl_show6_presets_of_3_v1'), My Teams of 6 ('gbl_show6_rosters_of_6_v1'), & Opponent Teams of 6 ('gbl_show6_opp_rosters_of_6_v1')
   // Strictly isolated: Blind 3 PvP teams never appear here unless intentionally cloned over as a separate entry.
   const [show6Presets3, setShow6Presets3] = useState<TeamPreset[]>(() => {
-    const gblDefaultIds = new Set(['preset-ml-1', 'preset-gl-1', 'preset-ul-1', 'preset-mega-1']);
+    const gblDefaultIds = new Set(['preset-ml-1', 'preset-gl-1', 'preset-ul-1', 'preset-mega-1', 'show6-preset3-gl-1']);
     try {
       const saved = localStorage.getItem('gbl_show6_presets_of_3_v1');
       if (saved) {
@@ -1585,6 +1602,7 @@ export default function App() {
             .filter((p: any) => p && p.combatMode !== 'gbl' && !gblDefaultIds.has(String(p.id || '')))
             .map((p: any) => ({
               ...p,
+              league: normalizeLeagueName(p.league),
               combatMode: 'show6' as const
             }));
           if (filtered.length > 0) return filtered;
@@ -1595,7 +1613,8 @@ export default function App() {
   });
 
   const [show6SelectedPreset3Id, setShow6SelectedPreset3Id] = useState<string>(() => {
-    return localStorage.getItem('gbl_show6_selected_preset3_id') || 'show6-preset3-spectral-1';
+    const saved = localStorage.getItem('gbl_show6_selected_preset3_id') || 'show6-preset3-spectral-1';
+    return saved === 'show6-preset3-gl-1' ? 'show6-preset3-spectral-1' : saved;
   });
 
   const [show6Rosters6, setShow6Rosters6] = useState<Show6RosterOf6Preset[]>(() => {
@@ -1604,16 +1623,20 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((r: any) => {
-            if (isShow6EligibleLeague(r?.league)) return r;
-            const norm = String(r?.league || '').toUpperCase();
-            const mappedLg: LeagueType = norm.includes('ULTRA')
-              ? 'Battle Frontier (Cauldron)'
-              : norm.includes('MASTER')
-              ? 'Battle Frontier (Master)'
-              : 'GREAT LEAGUE';
-            return { ...r, league: mappedLg };
-          });
+          const cleaned = parsed
+            .filter((r: any) => r && r.id !== 'show6-roster6-gl-1')
+            .map((r: any) => {
+              const norm = normalizeLeagueName(r?.league);
+              if (isShow6EligibleLeague(norm)) return { ...r, league: norm };
+              const u = String(r?.league || '').toUpperCase();
+              const mappedLg: LeagueType = u.includes('ULTRA')
+                ? 'BATTLE FRONTIER (CAULDRON)'
+                : u.includes('MASTER')
+                ? 'BATTLE FRONTIER (MASTER)'
+                : 'BATTLE FRONTIER (SPECTRAL)';
+              return { ...r, league: mappedLg };
+            });
+          if (cleaned.length > 0) return cleaned;
         }
       }
     } catch {}
@@ -1621,7 +1644,8 @@ export default function App() {
   });
 
   const [selectedShow6Roster6Id, setSelectedShow6Roster6Id] = useState<string>(() => {
-    return localStorage.getItem('gbl_selected_show6_roster6_id') || 'show6-roster6-spectral-1';
+    const saved = localStorage.getItem('gbl_selected_show6_roster6_id') || 'show6-roster6-spectral-1';
+    return saved === 'show6-roster6-gl-1' ? 'show6-roster6-spectral-1' : saved;
   });
 
   const [show6OpponentRosters6, setShow6OpponentRosters6] = useState<Show6RosterOf6Preset[]>(() => {
@@ -1630,16 +1654,20 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((r: any) => {
-            if (isShow6EligibleLeague(r?.league)) return r;
-            const norm = String(r?.league || '').toUpperCase();
-            const mappedLg: LeagueType = norm.includes('ULTRA')
-              ? 'Battle Frontier (Cauldron)'
-              : norm.includes('MASTER')
-              ? 'Battle Frontier (Master)'
-              : 'GREAT LEAGUE';
-            return { ...r, league: mappedLg };
-          });
+          const cleaned = parsed
+            .filter((r: any) => r && r.id !== 'show6-opp-roster6-gl-1')
+            .map((r: any) => {
+              const norm = normalizeLeagueName(r?.league);
+              if (isShow6EligibleLeague(norm)) return { ...r, league: norm };
+              const u = String(r?.league || '').toUpperCase();
+              const mappedLg: LeagueType = u.includes('ULTRA')
+                ? 'BATTLE FRONTIER (CAULDRON)'
+                : u.includes('MASTER')
+                ? 'BATTLE FRONTIER (MASTER)'
+                : 'BATTLE FRONTIER (SPECTRAL)';
+              return { ...r, league: mappedLg };
+            });
+          if (cleaned.length > 0) return cleaned;
         }
       }
     } catch {}
@@ -1647,7 +1675,8 @@ export default function App() {
   });
 
   const [selectedShow6OppRoster6Id, setSelectedShow6OppRoster6Id] = useState<string>(() => {
-    return localStorage.getItem('gbl_selected_show6_opp_roster6_id') || 'show6-opp-roster6-spectral-1';
+    const saved = localStorage.getItem('gbl_selected_show6_opp_roster6_id') || 'show6-opp-roster6-spectral-1';
+    return saved === 'show6-opp-roster6-gl-1' ? 'show6-opp-roster6-spectral-1' : saved;
   });
   const [show6NewOppRosterName, setShow6NewOppRosterName] = useState<string>('');
 
@@ -1727,8 +1756,15 @@ export default function App() {
   );
   const [limitedMetaSearchQuery, setLimitedMetaSearchQuery] = useState<string>('');
   const [modalCloneTargetLeague, setModalCloneTargetLeague] = useState<LeagueType>('GREAT LEAGUE');
-  const [show6ModalCloneTargetLeague, setShow6ModalCloneTargetLeague] = useState<LeagueType>('Battle Frontier (Spectral)');
+  const [show6ModalCloneTargetLeague, setShow6ModalCloneTargetLeague] = useState<LeagueType>('BATTLE FRONTIER (SPECTRAL)');
 
+  // Multi-Select Battle Log Reassignment State
+  const [isBattleLogMultiSelectMode, setIsBattleLogMultiSelectMode] = useState<boolean>(false);
+  const [selectedBattleLogIds, setSelectedBattleLogIds] = useState<string[]>([]);
+  const [reassignTargetLeague, setReassignTargetLeague] = useState<LeagueType>('GREAT LEAGUE');
+
+  const forcedGblLeagues = useMemo(() => getForcedGblLeagues(), []);
+  const forcedShow6Leagues = useMemo(() => getForcedShow6Leagues(), [limitedMetaCatalog]);
   const enabledGblLeagues = useMemo(() => getEnabledGblLeagues(), [pinnedGblMetas, limitedMetaCatalog]);
   const enabledShow6Leagues = useMemo(() => getEnabledShow6Leagues(), [pinnedShow6Metas, limitedMetaCatalog]);
   const allEnabledLeaguesCombined = useMemo(
@@ -1736,11 +1772,47 @@ export default function App() {
     [enabledGblLeagues, enabledShow6Leagues]
   );
 
-  // Sync rankings for any pinned Limited Metas on startup
+  // Sync rankings for forced Show 6 Battle Frontier cups + any pinned Limited Metas on startup, and remap legacy Mega Master / Battle Frontier logs
   useEffect(() => {
-    const allPinned = Array.from(new Set([...pinnedGblMetas, ...pinnedShow6Metas]));
-    allPinned.forEach((metaId) => {
+    const allToSync = Array.from(new Set([...forcedShow6Leagues, ...pinnedGblMetas, ...pinnedShow6Metas]));
+    allToSync.forEach((metaId) => {
       syncLimitedMetaRankings(metaId).catch(() => {});
+    });
+
+    // Remap legacy "MEGA MASTER LEAGUE" and mixed-case Battle Frontier cups in stored battle logs
+    setGblBattleLogs((prev) => {
+      let changed = false;
+      const next = prev.map((b) => {
+        const norm = normalizeLeagueName(b.league);
+        if (norm !== b.league) {
+          changed = true;
+          return { ...b, league: norm };
+        }
+        return b;
+      });
+      if (changed) {
+        try {
+          localStorage.setItem('gbl_battle_logs_v1', JSON.stringify(next));
+        } catch {}
+      }
+      return changed ? next : prev;
+    });
+    setShow6BattleLogs((prev) => {
+      let changed = false;
+      const next = prev.map((b) => {
+        const norm = normalizeLeagueName(b.league);
+        if (norm !== b.league) {
+          changed = true;
+          return { ...b, league: norm };
+        }
+        return b;
+      });
+      if (changed) {
+        try {
+          localStorage.setItem('gbl_show6_battle_logs_v1', JSON.stringify(next));
+        } catch {}
+      }
+      return changed ? next : prev;
     });
   }, []);
 
@@ -11920,6 +11992,52 @@ export default function App() {
                 </div>
               </div>
 
+              {/* LOCKED FORCED DEFAULT LEAGUES AT TOP OF SELECT METAS */}
+              <div className="p-3.5 rounded-xl bg-slate-950/90 border border-sky-500/40 space-y-2.5">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="text-xs font-extrabold text-white flex items-center gap-1.5">
+                    🔒 Forced Default Leagues (Locked Active &amp; Auto-Downloaded at Top of Mode Lists)
+                  </span>
+                  <span className="text-[10.5px] font-mono text-slate-400">
+                    Forced cups use ALL CAPS • Optional selectable cups use PvPoke Title Case (CP)
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="p-2.5 rounded-lg bg-slate-900/90 border border-sky-500/30 space-y-1.5">
+                    <div className="text-[11px] font-extrabold text-sky-300">
+                      🌍 Blind 3 PvP (Standard GBL) — Forced Top Defaults:
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {forcedGblLeagues.map((lg) => (
+                        <span
+                          key={lg}
+                          className="px-2.5 py-1 rounded-md bg-sky-500/20 border border-sky-400/50 text-sky-200 text-[10.5px] font-black font-mono flex items-center gap-1"
+                        >
+                          <span>🔒</span>
+                          <span>{lg}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-slate-900/90 border border-amber-500/30 space-y-1.5">
+                    <div className="text-[11px] font-extrabold text-amber-300">
+                      🏛️ Show 6 Pick 3 (Battle Frontier) — Forced Top Defaults (All &quot;Battle Frontier&quot; Cups):
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {forcedShow6Leagues.map((lg) => (
+                        <span
+                          key={lg}
+                          className="px-2.5 py-1 rounded-md bg-amber-500/20 border border-amber-400/50 text-amber-200 text-[10.5px] font-black font-mono flex items-center gap-1"
+                        >
+                          <span>🔒</span>
+                          <span>{lg}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {(['CURRENT', 'UPCOMING', 'RECENT'] as const).map((statusGroup) => {
                 const q = limitedMetaSearchQuery.trim().toLowerCase();
                 const groupFormats = limitedMetaCatalog.filter(
@@ -11964,8 +12082,10 @@ export default function App() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
                       {groupFormats.map((fmt) => {
-                        const isPinnedGbl = pinnedGblMetas.includes(fmt.id);
-                        const isPinnedShow6 = pinnedShow6Metas.includes(fmt.id);
+                        const isForcedShow6BF = isBattleFrontierCupTitle(fmt.title || fmt.label, fmt.cup);
+                        const isStandardOpenCup = fmt.cup === 'all';
+                        const isPinnedGbl = isStandardOpenCup || pinnedGblMetas.includes(fmt.id);
+                        const isPinnedShow6 = isForcedShow6BF || pinnedShow6Metas.includes(fmt.id);
                         const sheetAlias = limitedMetaSheetAliases[fmt.id] || '';
                         const isExpired4w = isExpiredLimitedMeta(fmt);
                         const daysAgo = fmt.lastSeenAt
@@ -12004,25 +12124,49 @@ export default function App() {
                             <div className="grid grid-cols-2 gap-1.5 pt-1">
                               <button
                                 type="button"
-                                onClick={() => handleTogglePinnedGblMeta(fmt.id)}
+                                onClick={() => {
+                                  if (isStandardOpenCup) {
+                                    setStartBattleToast(`🔒 ${fmt.title.toUpperCase()} is a forced default in Blind 3 PvP.`);
+                                    return;
+                                  }
+                                  handleTogglePinnedGblMeta(fmt.id);
+                                }}
                                 className={`px-2 py-1.5 rounded-lg text-[10.5px] font-extrabold border transition flex items-center justify-center gap-1 ${
-                                  isPinnedGbl
+                                  isStandardOpenCup
+                                    ? 'bg-sky-900/50 text-sky-200 border-sky-400/60 cursor-default'
+                                    : isPinnedGbl
                                     ? 'bg-sky-500 text-slate-950 border-sky-300 shadow'
                                     : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-sky-500/50'
                                 }`}
                               >
-                                <span>{isPinnedGbl ? '✓ GBL Pinned' : '+ Pin to GBL'}</span>
+                                <span>
+                                  {isStandardOpenCup ? '🔒 GBL Forced' : isPinnedGbl ? '✓ GBL Pinned' : '+ Pin to GBL'}
+                                </span>
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleTogglePinnedShow6Meta(fmt.id)}
+                                onClick={() => {
+                                  if (isForcedShow6BF) {
+                                    setStartBattleToast(`🔒 ${fmt.id} is a forced Battle Frontier default in Show 6.`);
+                                    return;
+                                  }
+                                  handleTogglePinnedShow6Meta(fmt.id);
+                                }}
                                 className={`px-2 py-1.5 rounded-lg text-[10.5px] font-extrabold border transition flex items-center justify-center gap-1 ${
-                                  isPinnedShow6
+                                  isForcedShow6BF
+                                    ? 'bg-amber-900/50 text-amber-200 border-amber-400/60 cursor-default'
+                                    : isPinnedShow6
                                     ? 'bg-amber-500 text-slate-950 border-amber-300 shadow'
                                     : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-amber-500/50'
                                 }`}
                               >
-                                <span>{isPinnedShow6 ? '✓ Show 6 Pinned' : '+ Pin to Show 6'}</span>
+                                <span>
+                                  {isForcedShow6BF
+                                    ? '🔒 Show 6 Forced'
+                                    : isPinnedShow6
+                                    ? '✓ Show 6 Pinned'
+                                    : '+ Pin to Show 6'}
+                                </span>
                               </button>
                             </div>
 
@@ -13624,7 +13768,22 @@ export default function App() {
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextMode = !isBattleLogMultiSelectMode;
+                        setIsBattleLogMultiSelectMode(nextMode);
+                        if (!nextMode) setSelectedBattleLogIds([]);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl border text-xs font-extrabold transition flex items-center gap-1.5 ${
+                        isBattleLogMultiSelectMode
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-300 shadow-lg'
+                          : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-emerald-300'
+                      }`}
+                    >
+                      <span>{isBattleLogMultiSelectMode ? `☑️ Exit Multi-Select (${selectedBattleLogIds.length})` : '☑️ Multi-Select Battles'}</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
@@ -13654,6 +13813,83 @@ export default function App() {
                     )}
                   </div>
                 </div>
+
+                {/* MULTI-SELECT BATTLE LOG REASSIGNMENT BAR */}
+                {isBattleLogMultiSelectMode && (
+                  <div className="p-3.5 rounded-xl bg-emerald-950/35 border border-emerald-500/50 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-400/50 text-emerald-200 text-xs font-black font-mono">
+                        ☑️ {selectedBattleLogIds.length} Battle(s) Selected
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBattleLogIds(filteredLogs.map((b) => b.id))}
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-bold text-sky-300 transition"
+                      >
+                        Select All Filtered ({filteredLogs.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBattleLogIds([])}
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-bold text-slate-300 transition"
+                      >
+                        Clear Selection
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <label className="text-xs font-bold text-emerald-200">Reassign Selected To League/Cup:</label>
+                      <select
+                        value={reassignTargetLeague}
+                        onChange={(e) => setReassignTargetLeague(e.target.value as LeagueType)}
+                        className="bg-slate-950 border border-emerald-500/60 rounded-xl px-3 py-1.5 text-xs font-extrabold text-white"
+                      >
+                        {Array.from(
+                          new Set([
+                            ...allEnabledLeaguesCombined,
+                            ...limitedMetaCatalog.map((m) => m.label)
+                          ])
+                        ).map((lg) => (
+                          <option key={lg} value={lg}>
+                            {lg}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={selectedBattleLogIds.length === 0}
+                        onClick={() => {
+                          if (selectedBattleLogIds.length === 0) return;
+                          const selectedSet = new Set(selectedBattleLogIds);
+                          const targetLg = normalizeLeagueName(reassignTargetLeague);
+                          const updated = battleLogs.map((entry) => {
+                            if (!selectedSet.has(entry.id)) return entry;
+                            const nextEntry: WebBattleLogEntry = {
+                              ...entry,
+                              league: targetLg,
+                              updatedAt: Date.now()
+                            };
+                            const recomputedQuality = resolveLogEntryQuality(nextEntry, presets);
+                            if (recomputedQuality) {
+                              nextEntry.quality = recomputedQuality;
+                              nextEntry.bmfScore = recomputedQuality.pPre;
+                              nextEntry.execWae = recomputedQuality.execWae;
+                            }
+                            return nextEntry;
+                          });
+                          saveBattleLogsToStorage(updated);
+                          setStartBattleToast(
+                            `🏷️ Reassigned ${selectedBattleLogIds.length} battle(s) to ${targetLg}`
+                          );
+                          setSelectedBattleLogIds([]);
+                          setIsBattleLogMultiSelectMode(false);
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-slate-950 font-black text-xs transition shadow-lg"
+                      >
+                        🏷️ Apply League ({selectedBattleLogIds.length})
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Summary Metrics Row (5-Stat Responsive Grid: Record, Lead Matchups, Win Rate, Exec WAE, Matchup Luck) */}
@@ -13752,7 +13988,10 @@ export default function App() {
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-bold text-white">
-                    Logged Battles ({filteredLogs.length}) • Tap any battle to open Interactive Overlay Replay
+                    Logged Battles ({filteredLogs.length}) •{' '}
+                    {isBattleLogMultiSelectMode
+                      ? 'Tap battles to select & reassign to another league/cup'
+                      : 'Tap any battle to open Interactive Overlay Replay'}
                   </span>
                   <span className="text-[11px] font-mono text-slate-400">
                     Season: {currentSeason.name} (Start {currentSeason.rawStart.slice(0, 10)})
@@ -13906,23 +14145,51 @@ export default function App() {
                             const badgeStyle = getBadgeStyle(quality?.badgeLabel);
                             const contextualFlags: string[] = quality?.contextualFlags || entry.flags || [];
 
+                            const isSelectedForReassign = selectedBattleLogIds.includes(entry.id);
+
                             return (
                               <div
                                 key={entry.id}
                                 onClick={() => {
+                                  if (isBattleLogMultiSelectMode) {
+                                    setSelectedBattleLogIds((prev) =>
+                                      prev.includes(entry.id)
+                                        ? prev.filter((id) => id !== entry.id)
+                                        : [...prev, entry.id]
+                                    );
+                                    return;
+                                  }
                                   setReplayLogEntry(entry);
                                   setReplayUserIdx(0);
                                   setReplayOppIdx(0);
                                   setReplayOppShadow(false);
                                 }}
                                 className={`p-3.5 rounded-xl bg-slate-950 hover:bg-slate-900/90 border cursor-pointer transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
-                                  isRepeatedLeadToday
+                                  isBattleLogMultiSelectMode && isSelectedForReassign
+                                    ? 'border-emerald-400 bg-emerald-950/20 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                                    : isRepeatedLeadToday
                                     ? 'border-amber-400/70 shadow-[0_0_12px_rgba(251,191,36,0.12)]'
                                     : 'border-slate-800 hover:border-sky-500/50'
                                 }`}
                               >
                                 <div className="space-y-1.5">
                                   <div className="flex items-center gap-2 flex-wrap">
+                                    {isBattleLogMultiSelectMode && (
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelectedForReassign}
+                                        onChange={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedBattleLogIds((prev) =>
+                                            prev.includes(entry.id)
+                                              ? prev.filter((id) => id !== entry.id)
+                                              : [...prev, entry.id]
+                                          );
+                                        }}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="w-4 h-4 accent-emerald-500 rounded cursor-pointer"
+                                      />
+                                    )}
                                     <span
                                       className={`px-2 py-0.5 rounded font-extrabold text-[10px] border ${
                                         isWin

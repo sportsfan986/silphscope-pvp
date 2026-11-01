@@ -344,20 +344,63 @@ class OverlayService : LifecycleService() {
             val allowsMega: Boolean = false
         )
 
+        const val PREFS_KEY_V511_LEAGUE_REMAP_DONE = "gbl_v511_league_remap_done"
+
+        fun toPvPokeTitleCaseStatic(raw: String): String {
+            val trimmed = raw.trim()
+            if (trimmed.isEmpty()) return ""
+            val preserveUpper = setOf("LAIC", "P!P", "GBL", "CP", "GL", "UL", "ML", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X")
+            return trimmed.split(Regex("\\s+")).joinToString(" ") { word ->
+                val cleanAlpha = word.replace(Regex("[^A-Za-z0-9!]"), "")
+                when {
+                    cleanAlpha.uppercase() in preserveUpper -> word.uppercase()
+                    word.startsWith("(") && word.endsWith(")") -> {
+                        val inner = word.substring(1, word.length - 1)
+                        "(${toPvPokeTitleCaseStatic(inner)})"
+                    }
+                    else -> word.lowercase().replaceFirstChar { ch ->
+                        if (ch.isLowerCase()) ch.titlecase(java.util.Locale.US) else ch.toString()
+                    }
+                }
+            }
+        }
+
+        fun isBattleFrontierFormatTitleStatic(titleOrKey: String, cupSlug: String = ""): Boolean {
+            return titleOrKey.contains("Battle Frontier", ignoreCase = true) ||
+                cupSlug.contains("battlefrontier", ignoreCase = true) ||
+                cupSlug.equals("spectral", ignoreCase = true) ||
+                cupSlug.equals("cauldron", ignoreCase = true)
+        }
+
+        fun formatCatalogLeagueKeyStatic(rawTitle: String, cp: Int, cupSlug: String = ""): String {
+            val cleanNoCp = rawTitle.trim().replace(Regex("\\s*\\((500|1500|2500|10000)\\)\\s*$"), "").trim()
+            if (isBattleFrontierFormatTitleStatic(cleanNoCp, cupSlug)) {
+                return cleanNoCp.uppercase()
+            }
+            val titleCase = toPvPokeTitleCaseStatic(cleanNoCp)
+            return "$titleCase ($cp)"
+        }
+
         // Default catalog aligned with live compiled PvPoke src/data/gamemaster.json formats
         val DEFAULT_LIMITED_META_CATALOG: List<LimitedMetaFormat> = listOf(
+            // Forced Show 6 Battle Frontier Cups (ALL CAPS, dynamically matched via "Battle Frontier")
+            LimitedMetaFormat("cauldron_2500", "BATTLE FRONTIER (CAULDRON)", "cauldron", 2500, "BATTLE FRONTIER (CAULDRON)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/cauldron/overall/rankings-2500.json", "cauldron", 1793491200000L, true),
+            LimitedMetaFormat("battlefrontiermaster_10000", "BATTLE FRONTIER (MASTER)", "battlefrontiermaster", 10000, "BATTLE FRONTIER (MASTER)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/battlefrontiermaster/overall/rankings-10000.json", "master", 1793491200000L, true),
+            LimitedMetaFormat("spectral_1500", "BATTLE FRONTIER (SPECTRAL)", "spectral", 1500, "BATTLE FRONTIER (SPECTRAL)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/spectral/overall/rankings-1500.json", "spectral", 1793491200000L, false),
+            // Optional Standard Open Leagues (User-selectable in Show 6 mode; forced as GREAT/ULTRA/MASTER LEAGUE in Blind 3 mode)
+            LimitedMetaFormat("all_1500", "Great League", "all", 1500, "Great League (1500)", "standard_open", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-1500.json", "great", 1793491200000L, false),
+            LimitedMetaFormat("all_2500", "Ultra League", "all", 2500, "Ultra League (2500)", "standard_open", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-2500.json", "ultra", 1793491200000L, false),
+            LimitedMetaFormat("all_10000", "Master League", "all", 10000, "Master League (10000)", "standard_open", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-10000.json", "master", 1793491200000L, false),
             // CURRENT (Live in PvPoke gamemaster.json["formats"])
+            LimitedMetaFormat("mega_10000", "Mega Master League", "mega", 10000, "Mega Master League (10000)", "premier_mega", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-10000.json", "mega", 1793491200000L, true),
+            LimitedMetaFormat("mega_1500", "Mega Great League", "mega", 1500, "Mega Great League (1500)", "premier_mega", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-1500.json", "megagreat", 1793491200000L, true),
+            LimitedMetaFormat("mega_2500", "Mega Ultra League", "mega", 2500, "Mega Ultra League (2500)", "premier_mega", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-2500.json", "megaultra", 1793491200000L, true),
             LimitedMetaFormat("laic2027_1500", "LAIC 2027 Championship Series Cup", "laic2027", 1500, "LAIC 2027 Championship Series Cup (1500)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/laic2027/overall/rankings-1500.json", "laic2027", 1793491200000L, true),
             LimitedMetaFormat("halloweenmega_1500", "Mega Halloween Cup", "halloweenmega", 1500, "Mega Halloween Cup (1500)", "gbl", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/halloweenmega/overall/rankings-1500.json", "halloweenmega", 1793491200000L, true),
             LimitedMetaFormat("fantasy_1500", "Fantasy Cup", "fantasy", 1500, "Fantasy Cup (1500)", "gbl", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fantasy/overall/rankings-1500.json", "fantasy", 1793491200000L, false),
-            LimitedMetaFormat("mega_1500", "Mega Great League", "mega", 1500, "Mega Great League (1500)", "premier_mega", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-1500.json", "megagreat", 1793491200000L, true),
-            LimitedMetaFormat("mega_2500", "Mega Ultra League", "mega", 2500, "Mega Ultra League (2500)", "premier_mega", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-2500.json", "megaultra", 1793491200000L, true),
             LimitedMetaFormat("trail_1500", "Devon Trail Cup", "trail", 1500, "Devon Trail Cup (1500)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/trail/overall/rankings-1500.json", "trail", 1793491200000L, false),
             LimitedMetaFormat("fable_1500", "Devon Fable Cup", "fable", 1500, "Devon Fable Cup (1500)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fable/overall/rankings-1500.json", "fable", 1793491200000L, false),
             LimitedMetaFormat("gymbreakers_1500", "Gymbreakers Invitational Season 7", "gymbreakers", 1500, "Gymbreakers Invitational Season 7 (1500)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/gymbreakers/overall/rankings-1500.json", "gymbreakers", 1793491200000L, false),
-            LimitedMetaFormat("spectral_1500", "Battle Frontier (Spectral)", "spectral", 1500, "Battle Frontier (Spectral)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/spectral/overall/rankings-1500.json", "spectral", 1793491200000L, false),
-            LimitedMetaFormat("cauldron_2500", "Battle Frontier (Cauldron)", "cauldron", 2500, "Battle Frontier (Cauldron)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/cauldron/overall/rankings-2500.json", "cauldron", 1793491200000L, true),
-            LimitedMetaFormat("battlefrontiermaster_10000", "Battle Frontier (Master)", "battlefrontiermaster", 10000, "Battle Frontier (Master)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/battlefrontiermaster/overall/rankings-10000.json", "master", 1793491200000L, true),
             // RECENT (Within 4-week window by default)
             LimitedMetaFormat("colormega_1500", "Mega Color Cup", "colormega", 1500, "Mega Color Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/colormega/overall/rankings-1500.json", "colormega", System.currentTimeMillis() - 14L * 86400_000L, true),
             LimitedMetaFormat("halloween_1500", "Halloween Cup", "halloween", 1500, "Halloween Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/halloween/overall/rankings-1500.json", "halloween", System.currentTimeMillis() - 7L * 86400_000L, false),
@@ -383,7 +426,7 @@ class OverlayService : LifecycleService() {
             }
             return formats.sortedWith(Comparator { a, b ->
                 val cmp = order(a.lifecycleStatus).compareTo(order(b.lifecycleStatus))
-                if (cmp != 0) cmp else a.title.compareTo(b.title, ignoreCase = true)
+                if (cmp != 0) cmp else a.leagueKey.compareTo(b.leagueKey, ignoreCase = true)
             })
         }
 
@@ -397,7 +440,7 @@ class OverlayService : LifecycleService() {
 
             val byKey = LinkedHashMap<String, LimitedMetaFormat>()
             for (item in DEFAULT_LIMITED_META_CATALOG) {
-                byKey[item.leagueKey] = item
+                byKey[item.leagueKey.uppercase()] = item
             }
             val raw = prefs?.getString(PREFS_KEY_LIMITED_META_CATALOG_JSON, null)
             if (!raw.isNullOrBlank()) {
@@ -408,18 +451,30 @@ class OverlayService : LifecycleService() {
                         for (item in parsed) {
                             if (item.leagueKey.isNotBlank() && item.rankingsUrl.isNotBlank()) {
                                 val fixedSeen = if (item.lastSeenAt > 0L) item.lastSeenAt else nowMs
-                                val detectedMega = item.allowsMega || hasMegaInRankingsMapStatic(item.leagueKey)
-                                byKey[item.leagueKey] = item.copy(lastSeenAt = fixedSeen, allowsMega = detectedMega)
+                                val normalizedKey = formatCatalogLeagueKeyStatic(item.title.ifBlank { item.leagueKey }, item.cp, item.cup)
+                                val normalizedTitle = if (isBattleFrontierFormatTitleStatic(normalizedKey, item.cup)) {
+                                    normalizedKey.uppercase()
+                                } else {
+                                    toPvPokeTitleCaseStatic(item.title.ifBlank { item.leagueKey })
+                                }
+                                val detectedMega = item.allowsMega || hasMegaInRankingsMapStatic(normalizedKey)
+                                byKey[normalizedKey.uppercase()] = item.copy(
+                                    title = normalizedTitle,
+                                    leagueKey = normalizedKey,
+                                    lastSeenAt = fixedSeen,
+                                    allowsMega = detectedMega
+                                )
                             }
                         }
                     }
                 } catch (_: Exception) {}
             }
 
-            // Filter out RECENT formats older than 4 weeks UNLESS still checked/pinned
+            // Filter out RECENT formats older than 4 weeks UNLESS still checked/pinned or Battle Frontier forced
             val filtered = byKey.values.filter { item ->
                 val isPinned = item.leagueKey.lowercase() in pinnedKeysLower
-                !isExpiredLimitedMetaStatic(item, nowMs) || isPinned
+                val isBfForced = isBattleFrontierFormatTitleStatic(item.title, item.cup)
+                !isExpiredLimitedMetaStatic(item, nowMs) || isPinned || isBfForced
             }
             val sorted = sortLimitedMetasByLifecycleStatic(filtered)
             LAST_LOADED_META_CATALOG = sorted
@@ -437,7 +492,8 @@ class OverlayService : LifecycleService() {
                 val parsed: List<LimitedMetaFormat> = Gson().fromJson(raw, type) ?: return
                 val kept = parsed.filter { item ->
                     val isPinned = item.leagueKey.lowercase() in pinnedKeysLower
-                    !isExpiredLimitedMetaStatic(item, nowMs) || isPinned
+                    val isBfForced = isBattleFrontierFormatTitleStatic(item.title, item.cup)
+                    !isExpiredLimitedMetaStatic(item, nowMs) || isPinned || isBfForced
                 }
                 if (kept.size != parsed.size) {
                     prefs.edit().putString(PREFS_KEY_LIMITED_META_CATALOG_JSON, Gson().toJson(kept)).apply()
@@ -446,63 +502,142 @@ class OverlayService : LifecycleService() {
             } catch (_: Exception) {}
         }
 
+        fun getForcedGblLeaguesStatic(): List<String> = listOf(
+            "GREAT LEAGUE",
+            "ULTRA LEAGUE",
+            "MASTER LEAGUE"
+        )
+
+        fun getForcedShow6LeaguesStatic(prefs: SharedPreferences? = null): List<String> {
+            val catalog = getLimitedMetaCatalogStatic(prefs)
+            val bfFromCatalog = catalog
+                .filter { isBattleFrontierFormatTitleStatic(it.title, it.cup) || isBattleFrontierFormatTitleStatic(it.leagueKey, it.cup) }
+                .map { it.leagueKey.uppercase() }
+                .distinct()
+                .sorted()
+            return if (bfFromCatalog.isNotEmpty()) {
+                bfFromCatalog
+            } else {
+                listOf(
+                    "BATTLE FRONTIER (CAULDRON)",
+                    "BATTLE FRONTIER (MASTER)",
+                    "BATTLE FRONTIER (SPECTRAL)"
+                )
+            }
+        }
+
+        fun remapLegacyLeagueForModeStatic(rawLeague: String, isShow6: Boolean): String {
+            val trimmed = rawLeague.trim()
+            if (trimmed.isEmpty()) return if (isShow6) "BATTLE FRONTIER (SPECTRAL)" else "GREAT LEAGUE"
+            val upper = trimmed.uppercase()
+            if (upper == "MEGA MASTER LEAGUE" || upper == "MASTER LEAGUE (MEGA)" || upper == "MEGA MASTER LEAGUE (10000)" || upper == "MASTER LEAGUE (MEGA) (10000)") {
+                return "Mega Master League (10000)"
+            }
+            if (upper.startsWith("BATTLE FRONTIER")) {
+                return upper.replace(Regex("\\s*\\((500|1500|2500|10000)\\)\\s*$"), "").trim()
+            }
+            if (isShow6) {
+                return when (upper) {
+                    "GREAT LEAGUE", "GREAT LEAGUE (1500)" -> "Great League (1500)"
+                    "ULTRA LEAGUE", "ULTRA LEAGUE (2500)" -> "Ultra League (2500)"
+                    "MASTER LEAGUE", "MASTER LEAGUE (10000)" -> "Master League (10000)"
+                    else -> {
+                        val matched = LAST_LOADED_META_CATALOG.find {
+                            it.leagueKey.equals(trimmed, ignoreCase = true) || it.title.equals(trimmed, ignoreCase = true)
+                        }
+                        matched?.leagueKey ?: trimmed
+                    }
+                }
+            } else {
+                return when (upper) {
+                    "GREAT LEAGUE", "GREAT LEAGUE (1500)" -> "GREAT LEAGUE"
+                    "ULTRA LEAGUE", "ULTRA LEAGUE (2500)" -> "ULTRA LEAGUE"
+                    "MASTER LEAGUE", "MASTER LEAGUE (10000)" -> "MASTER LEAGUE"
+                    else -> {
+                        val matched = LAST_LOADED_META_CATALOG.find {
+                            it.leagueKey.equals(trimmed, ignoreCase = true) || it.title.equals(trimmed, ignoreCase = true)
+                        }
+                        matched?.leagueKey ?: trimmed
+                    }
+                }
+            }
+        }
+
         fun getPinnedGblLimitedMetasStatic(prefs: SharedPreferences): List<String> {
-            val raw = prefs.getString(PREFS_KEY_PINNED_GBL_METAS, null) ?: return emptyList()
+            val raw = prefs.getString(PREFS_KEY_PINNED_GBL_METAS, null) ?: return listOf("Mega Master League (10000)")
             return try {
                 val type = object : TypeToken<List<String>>() {}.type
-                Gson().fromJson<List<String>>(raw, type)?.filter { it.isNotBlank() }?.distinct().orEmpty()
-            } catch (_: Exception) { emptyList() }
+                val list = Gson().fromJson<List<String>>(raw, type)?.filter { it.isNotBlank() }.orEmpty()
+                list.map { remapLegacyLeagueForModeStatic(it, isShow6 = false) }
+                    .filterNot { k -> getForcedGblLeaguesStatic().any { it.equals(k, ignoreCase = true) } }
+                    .distinct()
+            } catch (_: Exception) { listOf("Mega Master League (10000)") }
         }
 
         fun setPinnedGblLimitedMetasStatic(prefs: SharedPreferences, keys: List<String>) {
-            prefs.edit().putString(PREFS_KEY_PINNED_GBL_METAS, Gson().toJson(keys.filter { it.isNotBlank() }.distinct())).apply()
+            val cleaned = keys
+                .filter { it.isNotBlank() }
+                .map { remapLegacyLeagueForModeStatic(it, isShow6 = false) }
+                .filterNot { k -> getForcedGblLeaguesStatic().any { it.equals(k, ignoreCase = true) } }
+                .distinct()
+            prefs.edit().putString(PREFS_KEY_PINNED_GBL_METAS, Gson().toJson(cleaned)).apply()
             pruneUncheckedExpiredMetasStatic(prefs)
         }
 
         fun getPinnedShow6LimitedMetasStatic(prefs: SharedPreferences): List<String> {
             val raw = prefs.getString(PREFS_KEY_PINNED_SHOW6_METAS, null) ?: return emptyList()
+            val forcedShow6 = getForcedShow6LeaguesStatic(null)
             return try {
                 val type = object : TypeToken<List<String>>() {}.type
-                Gson().fromJson<List<String>>(raw, type)?.filter { it.isNotBlank() }?.distinct().orEmpty()
+                val list = Gson().fromJson<List<String>>(raw, type)?.filter { it.isNotBlank() }.orEmpty()
+                list.map { remapLegacyLeagueForModeStatic(it, isShow6 = true) }
+                    .filterNot { k -> forcedShow6.any { it.equals(k, ignoreCase = true) } }
+                    .distinct()
             } catch (_: Exception) { emptyList() }
         }
 
         fun setPinnedShow6LimitedMetasStatic(prefs: SharedPreferences, keys: List<String>) {
-            prefs.edit().putString(PREFS_KEY_PINNED_SHOW6_METAS, Gson().toJson(keys.filter { it.isNotBlank() }.distinct())).apply()
+            val forcedShow6 = getForcedShow6LeaguesStatic(null)
+            val cleaned = keys
+                .filter { it.isNotBlank() }
+                .map { remapLegacyLeagueForModeStatic(it, isShow6 = true) }
+                .filterNot { k -> forcedShow6.any { it.equals(k, ignoreCase = true) } }
+                .distinct()
+            prefs.edit().putString(PREFS_KEY_PINNED_SHOW6_METAS, Gson().toJson(cleaned)).apply()
             pruneUncheckedExpiredMetasStatic(prefs)
         }
 
         fun getEnabledGblLeaguesStatic(prefs: SharedPreferences): List<String> {
-            val base = listOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE", "MEGA MASTER LEAGUE")
+            val base = getForcedGblLeaguesStatic()
             val pinned = getPinnedGblLimitedMetasStatic(prefs).filter { p -> base.none { it.equals(p, ignoreCase = true) } }
             return base + pinned
         }
 
         fun getEnabledShow6LeaguesStatic(prefs: SharedPreferences): List<String> {
-            val base = SHOW6_ELIGIBLE_LEAGUES
+            val base = getForcedShow6LeaguesStatic(prefs)
             val pinned = getPinnedShow6LimitedMetasStatic(prefs).filter { p -> base.none { it.equals(p, ignoreCase = true) } }
             return base + pinned
         }
 
         fun isOldCupForModeStatic(league: String, isShow6: Boolean, prefs: SharedPreferences): Boolean {
-            val trimmed = league.trim()
-            if (trimmed.isEmpty()) return false
-            val baseLeagues = if (isShow6) {
-                SHOW6_ELIGIBLE_LEAGUES
+            val remapped = remapLegacyLeagueForModeStatic(league, isShow6).trim()
+            if (remapped.isEmpty()) return false
+            val forcedLeagues = if (isShow6) {
+                getForcedShow6LeaguesStatic(prefs)
             } else {
-                listOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE", "MEGA MASTER LEAGUE")
+                getForcedGblLeaguesStatic()
             }
-            if (baseLeagues.any { it.equals(trimmed, ignoreCase = true) }) return false
+            if (forcedLeagues.any { it.equals(remapped, ignoreCase = true) }) return false
 
             val pinnedForMode = if (isShow6) {
                 getPinnedShow6LimitedMetasStatic(prefs)
             } else {
                 getPinnedGblLimitedMetasStatic(prefs)
             }
-            val isCurrentlyPinned = pinnedForMode.any { it.equals(trimmed, ignoreCase = true) }
+            val isCurrentlyPinned = pinnedForMode.any { it.equals(remapped, ignoreCase = true) }
             if (!isCurrentlyPinned) return true
 
-            val catalogEntry = getLimitedMetaCatalogStatic(prefs).find { it.leagueKey.equals(trimmed, ignoreCase = true) }
+            val catalogEntry = getLimitedMetaCatalogStatic(prefs).find { it.leagueKey.equals(remapped, ignoreCase = true) }
             if (catalogEntry != null && isExpiredLimitedMetaStatic(catalogEntry)) {
                 return true
             }
@@ -3432,6 +3567,12 @@ class OverlayService : LifecycleService() {
             val trimmed = league.trim()
             val upper = trimmed.uppercase()
             if (LIVE_RANKINGS_MAP.containsKey(upper)) return upper
+            if (upper == "GREAT LEAGUE" || upper == "GREAT LEAGUE (1500)") return "GREAT LEAGUE"
+            if (upper == "ULTRA LEAGUE" || upper == "ULTRA LEAGUE (2500)") return "ULTRA LEAGUE"
+            if (upper == "MASTER LEAGUE" || upper == "MASTER LEAGUE (10000)") return "MASTER LEAGUE"
+            if (upper == "MEGA MASTER LEAGUE" || upper == "MEGA MASTER LEAGUE (10000)" || upper == "MASTER LEAGUE (MEGA)" || upper == "MASTER LEAGUE (MEGA) (10000)") {
+                return "MEGA MASTER LEAGUE (10000)"
+            }
             val matchedCatalog = (LAST_LOADED_META_CATALOG + DEFAULT_LIMITED_META_CATALOG).find {
                 it.leagueKey.equals(trimmed, ignoreCase = true) ||
                     "${it.title} (${it.cp})".equals(trimmed, ignoreCase = true) ||
@@ -3448,7 +3589,7 @@ class OverlayService : LifecycleService() {
                 upper.contains("FRONTIER") -> "BATTLE FRONTIER (MASTER)"
                 upper.contains("MEGA GREAT") -> "MEGA GREAT LEAGUE (1500)"
                 upper.contains("MEGA ULTRA") -> "MEGA ULTRA LEAGUE (2500)"
-                upper.contains("MEGA") -> "MEGA MASTER LEAGUE"
+                upper.contains("MEGA") -> "MEGA MASTER LEAGUE (10000)"
                 upper.contains("GREAT") -> "GREAT LEAGUE"
                 upper.contains("ULTRA") -> "ULTRA LEAGUE"
                 else -> "MASTER LEAGUE"
@@ -3713,7 +3854,7 @@ class OverlayService : LifecycleService() {
             "GREAT LEAGUE",
             "ULTRA LEAGUE",
             "MASTER LEAGUE",
-            "MEGA MASTER LEAGUE",
+            "MEGA MASTER LEAGUE (10000)",
             "BATTLE FRONTIER (SPECTRAL)",
             "BATTLE FRONTIER (CAULDRON)",
             "BATTLE FRONTIER (MASTER)"
@@ -3721,7 +3862,7 @@ class OverlayService : LifecycleService() {
 
         fun areAllFourLeaguesLoaded(): Boolean {
             return REQUIRED_LEAGUE_KEYS.all { key ->
-                val map = LIVE_RANKINGS_MAP[key]
+                val map = LIVE_RANKINGS_MAP[key] ?: LIVE_RANKINGS_MAP[key.removeSuffix(" (10000)")]
                 map != null && map.isNotEmpty()
             }
         }
@@ -3844,7 +3985,26 @@ class OverlayService : LifecycleService() {
                         // Skip individual malformed entry without aborting league parsing
                     }
                 }
-                LIVE_RANKINGS_MAP[leagueKey.uppercase()] = leagueMap
+                val upperKey = leagueKey.uppercase()
+                LIVE_RANKINGS_MAP[upperKey] = leagueMap
+                when (upperKey) {
+                    "GREAT LEAGUE", "GREAT LEAGUE (1500)" -> {
+                        LIVE_RANKINGS_MAP["GREAT LEAGUE"] = leagueMap
+                        LIVE_RANKINGS_MAP["GREAT LEAGUE (1500)"] = leagueMap
+                    }
+                    "ULTRA LEAGUE", "ULTRA LEAGUE (2500)" -> {
+                        LIVE_RANKINGS_MAP["ULTRA LEAGUE"] = leagueMap
+                        LIVE_RANKINGS_MAP["ULTRA LEAGUE (2500)"] = leagueMap
+                    }
+                    "MASTER LEAGUE", "MASTER LEAGUE (10000)" -> {
+                        LIVE_RANKINGS_MAP["MASTER LEAGUE"] = leagueMap
+                        LIVE_RANKINGS_MAP["MASTER LEAGUE (10000)"] = leagueMap
+                    }
+                    "MEGA MASTER LEAGUE", "MEGA MASTER LEAGUE (10000)", "MASTER LEAGUE (MEGA) (10000)" -> {
+                        LIVE_RANKINGS_MAP["MEGA MASTER LEAGUE"] = leagueMap
+                        LIVE_RANKINGS_MAP["MEGA MASTER LEAGUE (10000)"] = leagueMap
+                    }
+                }
                 clearSimulationCachesStatic()
                 leagueMap.size
             } catch (_: Exception) {
@@ -8633,27 +8793,24 @@ class OverlayService : LifecycleService() {
             val isCurrent: Boolean
         )
 
-        val SHOW6_ELIGIBLE_LEAGUES = listOf(
-            "GREAT LEAGUE",
-            "Battle Frontier (Spectral)",
-            "Battle Frontier (Cauldron)",
-            "Battle Frontier (Master)"
-        )
-
         fun isShow6EligibleLeagueStatic(league: String, prefs: SharedPreferences? = null): Boolean {
             if (prefs != null && getEnabledShow6LeaguesStatic(prefs).any { it.equals(league, ignoreCase = true) }) {
                 return true
             }
             val norm = normalizeLeagueKeyStatic(league)
-            return norm == "GREAT LEAGUE" || isBattleFrontierLeagueStatic(norm)
+            return isBattleFrontierLeagueStatic(norm) || getForcedShow6LeaguesStatic(prefs).any { it.equals(league, ignoreCase = true) }
         }
 
         fun syncPinnedLimitedMetaRankingsBlocking(prefs: SharedPreferences, filesDir: java.io.File): Int {
             val catalog = getLimitedMetaCatalogStatic(prefs)
-            val pinnedKeys = (getPinnedGblLimitedMetasStatic(prefs) + getPinnedShow6LimitedMetasStatic(prefs)).distinct()
+            val allActiveKeys = (
+                getForcedShow6LeaguesStatic(prefs) +
+                    getPinnedGblLimitedMetasStatic(prefs) +
+                    getPinnedShow6LimitedMetasStatic(prefs)
+                ).distinct()
             var loadedCount = 0
-            for (key in pinnedKeys) {
-                val fmt = catalog.find { it.leagueKey.equals(key, ignoreCase = true) } ?: continue
+            for (key in allActiveKeys) {
+                val fmt = catalog.find { it.leagueKey.equals(key, ignoreCase = true) || it.title.equals(key, ignoreCase = true) } ?: continue
                 val normKey = fmt.leagueKey.uppercase()
                 val cacheFile = java.io.File(filesDir, "pvpoke_rankings_meta_${fmt.cup}_${fmt.cp}.json")
                 if (!LIVE_RANKINGS_MAP[normKey].isNullOrEmpty()) {
@@ -8671,7 +8828,7 @@ class OverlayService : LifecycleService() {
                     val conn = (java.net.URL(fmt.rankingsUrl).openConnection() as java.net.HttpURLConnection).apply {
                         connectTimeout = 7000
                         readTimeout = 7000
-                        setRequestProperty("User-Agent", "SilphScopePvP/5.04")
+                        setRequestProperty("User-Agent", "SilphScopePvP/5.10")
                     }
                     if (conn.responseCode in 200..299) {
                         val body = conn.inputStream.bufferedReader().use { it.readText() }
@@ -8709,7 +8866,7 @@ class OverlayService : LifecycleService() {
             val nowMs = System.currentTimeMillis()
             val sevenDaysMs = 7L * 24L * 60L * 60L * 1000L
             val skipBaseCups = setOf("all", "overall", "premierclassic", "classic", "custom")
-            val skipTitles = setOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE", "MEGA MASTER LEAGUE")
+            val skipTitles = setOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE")
             val pinnedKeysLower = (getPinnedGblLimitedMetasStatic(prefs) + getPinnedShow6LimitedMetasStatic(prefs))
                 .map { it.lowercase() }
                 .toSet()
@@ -8717,7 +8874,7 @@ class OverlayService : LifecycleService() {
             // Load previously persisted catalog so we preserve lastSeenAt when a format leaves gamemaster.json["formats"]
             val previousByKey = LinkedHashMap<String, LimitedMetaFormat>()
             for (item in DEFAULT_LIMITED_META_CATALOG) {
-                previousByKey[item.leagueKey] = item
+                previousByKey[item.leagueKey.uppercase()] = item
             }
             val rawSaved = prefs.getString(PREFS_KEY_LIMITED_META_CATALOG_JSON, null)
             if (!rawSaved.isNullOrBlank()) {
@@ -8726,7 +8883,8 @@ class OverlayService : LifecycleService() {
                     val parsed: List<LimitedMetaFormat>? = Gson().fromJson(rawSaved, type)
                     parsed?.forEach { item ->
                         if (item.leagueKey.isNotBlank()) {
-                            previousByKey[item.leagueKey] = item
+                            val normKey = formatCatalogLeagueKeyStatic(item.title.ifBlank { item.leagueKey }, item.cp, item.cup)
+                            previousByKey[normKey.uppercase()] = item.copy(leagueKey = normKey)
                         }
                     }
                 } catch (_: Exception) {}
@@ -8735,7 +8893,7 @@ class OverlayService : LifecycleService() {
             // Start with previous entries demoted from CURRENT to RECENT (preserving their lastSeenAt) until re-confirmed live
             val byKey = LinkedHashMap<String, LimitedMetaFormat>()
             for ((k, prev) in previousByKey) {
-                val demotedStatus = if (prev.lifecycleStatus == "CURRENT") "RECENT" else prev.lifecycleStatus
+                val demotedStatus = if (prev.lifecycleStatus == "CURRENT" && prev.category != "standard_open") "RECENT" else prev.lifecycleStatus
                 byKey[k] = prev.copy(lifecycleStatus = demotedStatus)
             }
 
@@ -8746,7 +8904,7 @@ class OverlayService : LifecycleService() {
                     val conn = (java.net.URL(rankingsUrl).openConnection() as java.net.HttpURLConnection).apply {
                         connectTimeout = 6500
                         readTimeout = 6500
-                        setRequestProperty("User-Agent", "SilphScopePvP/5.05")
+                        setRequestProperty("User-Agent", "SilphScopePvP/5.10")
                     }
                     if (conn.responseCode in 200..299) {
                         val body = conn.inputStream.bufferedReader().use { it.readText() }
@@ -8765,7 +8923,7 @@ class OverlayService : LifecycleService() {
                     val conn = (java.net.URL(apiUrl).openConnection() as java.net.HttpURLConnection).apply {
                         connectTimeout = 5000
                         readTimeout = 5000
-                        setRequestProperty("User-Agent", "SilphScopePvP/5.05")
+                        setRequestProperty("User-Agent", "SilphScopePvP/5.10")
                     }
                     if (conn.responseCode in 200..299) {
                         val arr = JsonParser.parseString(conn.inputStream.bufferedReader().use { it.readText() }).asJsonArray
@@ -8790,7 +8948,7 @@ class OverlayService : LifecycleService() {
                 val conn = (java.net.URL(gmUrl).openConnection() as java.net.HttpURLConnection).apply {
                     connectTimeout = 9000
                     readTimeout = 9000
-                    setRequestProperty("User-Agent", "SilphScopePvP/5.05")
+                    setRequestProperty("User-Agent", "SilphScopePvP/5.10")
                 }
                 if (conn.responseCode in 200..299) {
                     val text = conn.inputStream.bufferedReader().use { it.readText() }
@@ -8806,28 +8964,28 @@ class OverlayService : LifecycleService() {
                             if (hideRankings) continue
                             val showFormat = obj.get("showFormat")?.takeIf { it.isJsonPrimitive }?.asBoolean ?: true
                             val cup = obj.optString("cup")?.trim()?.lowercase().orEmpty()
-                            val title = obj.optString("title")?.trim().orEmpty()
+                            val rawTitle = obj.optString("title")?.trim().orEmpty()
                             val cp = obj.optInt("cp") ?: 1500
                             val meta = obj.optString("meta")?.trim()?.lowercase().orEmpty()
-                            if (cup.isEmpty() || title.isEmpty() || cup in skipBaseCups) continue
-                            if (title.uppercase() in skipTitles) continue
-                            if (cup == "mega" && cp == 10000) continue
+                            if (cup.isEmpty() || rawTitle.isEmpty() || cup in skipBaseCups) continue
+                            if (rawTitle.uppercase() in skipTitles) continue
 
                             liveFormatCups.add("${cup}_${cp}")
-                            val isBf = title.contains("Battle Frontier", ignoreCase = true) ||
+                            val isBf = isBattleFrontierFormatTitleStatic(rawTitle, cup) ||
                                 meta.contains("frontier") ||
                                 cup == "laic2027" ||
                                 cup == "trail" ||
                                 cup == "fable" ||
                                 cup == "gymbreakers"
-                            val leagueKey = if (title.contains("Battle Frontier", ignoreCase = true) || title.contains("($cp)")) {
-                                title
+                            val leagueKey = formatCatalogLeagueKeyStatic(rawTitle, cp, cup)
+                            val displayTitle = if (isBattleFrontierFormatTitleStatic(rawTitle, cup)) {
+                                leagueKey.uppercase()
                             } else {
-                                "$title ($cp)"
+                                toPvPokeTitleCaseStatic(rawTitle)
                             }
                             if (leagueKey.uppercase() in skipTitles) continue
                             val rankingsUrl = "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/$cup/overall/rankings-$cp.json"
-                            val prev = previousByKey[leagueKey]
+                            val prev = previousByKey[leagueKey.uppercase()]
                             val (ok, hasMegas) = verifyRankingsAndDetectMega(rankingsUrl, prev?.allowsMega ?: false)
                             if (!ok && prev == null) continue
                             val cat = when {
@@ -8836,9 +8994,9 @@ class OverlayService : LifecycleService() {
                                 else -> "gbl"
                             }
                             val status = if (!showFormat) "UPCOMING" else "CURRENT"
-                            byKey[leagueKey] = LimitedMetaFormat(
+                            byKey[leagueKey.uppercase()] = LimitedMetaFormat(
                                 id = "${cup}_${cp}",
-                                title = title,
+                                title = displayTitle,
                                 cup = cup,
                                 cp = cp,
                                 leagueKey = leagueKey,
@@ -8859,39 +9017,41 @@ class OverlayService : LifecycleService() {
                             if (!el.isJsonObject) continue
                             val cupObj = el.asJsonObject
                             val cup = cupObj.optString("name")?.trim()?.lowercase().orEmpty()
-                            val title = cupObj.optString("title")?.trim().orEmpty()
+                            val rawTitle = cupObj.optString("title")?.trim().orEmpty()
                             val cp = cupObj.optInt("league") ?: 1500
-                            if (cup.isEmpty() || title.isEmpty() || cup in skipBaseCups) continue
-                            if (title.uppercase() in skipTitles) continue
+                            if (cup.isEmpty() || rawTitle.isEmpty() || cup in skipBaseCups) continue
+                            if (rawTitle.uppercase() in skipTitles || rawTitle.equals("All Pokemon", ignoreCase = true)) continue
                             val cupCpId = "${cup}_${cp}"
                             if (cupCpId in liveFormatCups) continue
 
-                            val leagueKey = if (title.contains("Battle Frontier", ignoreCase = true) || title.contains("($cp)")) {
-                                title
+                            val leagueKey = formatCatalogLeagueKeyStatic(rawTitle, cp, cup)
+                            val displayTitle = if (isBattleFrontierFormatTitleStatic(rawTitle, cup)) {
+                                leagueKey.uppercase()
                             } else {
-                                "$title ($cp)"
+                                toPvPokeTitleCaseStatic(rawTitle)
                             }
                             if (leagueKey.uppercase() in skipTitles) continue
 
                             val rankingsUrl = "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/$cup/overall/rankings-$cp.json"
-                            val prev = previousByKey[leagueKey]
+                            val prev = previousByKey[leagueKey.uppercase()]
                             val commitMs = fetchCupLastCommitMs(cup) ?: prev?.lastSeenAt ?: (nowMs - 21L * 86400_000L)
                             val ageMs = nowMs - commitMs
                             val isPinned = leagueKey.lowercase() in pinnedKeysLower
+                            val isBfForced = isBattleFrontierFormatTitleStatic(rawTitle, cup)
                             // Skip unpinned cups older than 4 weeks
-                            if (ageMs > FOUR_WEEKS_MS && !isPinned) continue
+                            if (ageMs > FOUR_WEEKS_MS && !isPinned && !isBfForced) continue
 
                             val (ok, hasMegas) = verifyRankingsAndDetectMega(rankingsUrl, prev?.allowsMega ?: false)
                             if (!ok) continue
 
                             val status = if (ageMs <= sevenDaysMs && prev == null) "UPCOMING" else "RECENT"
-                            byKey[leagueKey] = LimitedMetaFormat(
+                            byKey[leagueKey.uppercase()] = LimitedMetaFormat(
                                 id = cupCpId,
-                                title = title,
+                                title = displayTitle,
                                 cup = cup,
                                 cp = cp,
                                 leagueKey = leagueKey,
-                                category = prev?.category ?: "gbl",
+                                category = if (isBfForced) "battle_frontier" else (prev?.category ?: "gbl"),
                                 lifecycleStatus = status,
                                 rankingsUrl = rankingsUrl,
                                 sheetTabAlias = prev?.sheetTabAlias ?: cup,
@@ -8909,7 +9069,7 @@ class OverlayService : LifecycleService() {
                 val bConn = (java.net.URL(branchesUrl).openConnection() as java.net.HttpURLConnection).apply {
                     connectTimeout = 5000
                     readTimeout = 5000
-                    setRequestProperty("User-Agent", "SilphScopePvP/5.05")
+                    setRequestProperty("User-Agent", "SilphScopePvP/5.10")
                 }
                 if (bConn.responseCode in 200..299) {
                     val bArr = JsonParser.parseString(bConn.inputStream.bufferedReader().use { it.readText() }).asJsonArray
@@ -8921,7 +9081,7 @@ class OverlayService : LifecycleService() {
                         val fConn = (java.net.URL(branchFormatsUrl).openConnection() as java.net.HttpURLConnection).apply {
                             connectTimeout = 4500
                             readTimeout = 4500
-                            setRequestProperty("User-Agent", "SilphScopePvP/5.05")
+                            setRequestProperty("User-Agent", "SilphScopePvP/5.10")
                         }
                         if (fConn.responseCode in 200..299) {
                             val fArr = JsonParser.parseString(fConn.inputStream.bufferedReader().use { it.readText() }).asJsonArray
@@ -8929,21 +9089,26 @@ class OverlayService : LifecycleService() {
                                 if (!fEl.isJsonObject) continue
                                 val fObj = fEl.asJsonObject
                                 val cup = fObj.optString("cup")?.trim()?.lowercase().orEmpty()
-                                val title = fObj.optString("title")?.trim().orEmpty()
+                                val rawTitle = fObj.optString("title")?.trim().orEmpty()
                                 val cp = fObj.optInt("cp") ?: 1500
-                                if (cup.isEmpty() || title.isEmpty() || cup in skipBaseCups) continue
-                                val leagueKey = if (title.contains("($cp)")) title else "$title ($cp)"
-                                if (byKey.containsKey(leagueKey)) continue
+                                if (cup.isEmpty() || rawTitle.isEmpty() || cup in skipBaseCups) continue
+                                val leagueKey = formatCatalogLeagueKeyStatic(rawTitle, cp, cup)
+                                val displayTitle = if (isBattleFrontierFormatTitleStatic(rawTitle, cup)) {
+                                    leagueKey.uppercase()
+                                } else {
+                                    toPvPokeTitleCaseStatic(rawTitle)
+                                }
+                                if (byKey.containsKey(leagueKey.uppercase())) continue
                                 val rUrl = "https://raw.githubusercontent.com/pvpoke/pvpoke/$bName/src/data/rankings/$cup/overall/rankings-$cp.json"
                                 val (ok, hasMegas) = verifyRankingsAndDetectMega(rUrl, false)
                                 if (ok) {
-                                    byKey[leagueKey] = LimitedMetaFormat(
+                                    byKey[leagueKey.uppercase()] = LimitedMetaFormat(
                                         id = "${cup}_${cp}",
-                                        title = title,
+                                        title = displayTitle,
                                         cup = cup,
                                         cp = cp,
                                         leagueKey = leagueKey,
-                                        category = "gbl",
+                                        category = if (isBattleFrontierFormatTitleStatic(rawTitle, cup)) "battle_frontier" else "gbl",
                                         lifecycleStatus = "UPCOMING",
                                         rankingsUrl = rUrl,
                                         sheetTabAlias = cup,
@@ -8957,10 +9122,11 @@ class OverlayService : LifecycleService() {
                 }
             } catch (_: Exception) {}
 
-            // 3. Enforce 4-week (28-day) expiration: keep expired RECENT metas ONLY if still checked/pinned
+            // 3. Enforce 4-week (28-day) expiration: keep expired RECENT metas ONLY if still checked/pinned or Battle Frontier forced
             val filtered = byKey.values.filter { item ->
                 val isPinned = item.leagueKey.lowercase() in pinnedKeysLower
-                !isExpiredLimitedMetaStatic(item, nowMs) || isPinned
+                val isBfForced = isBattleFrontierFormatTitleStatic(item.title, item.cup)
+                !isExpiredLimitedMetaStatic(item, nowMs) || isPinned || isBfForced
             }
 
             val sorted = sortLimitedMetasByLifecycleStatic(filtered)
