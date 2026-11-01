@@ -167,12 +167,18 @@ import {
 } from './data/battleQuality';
 import { ANDROID_FILES, downloadAndroidProjectZip, AndroidProjectFile } from './data/androidFiles';
 
-function renderGblModeLogo(sizePx: number = 22) {
-  const s = `${sizePx}px`;
+function renderGblModeLogo(sizeOrClass: number | string = 22) {
+  const isNum = typeof sizeOrClass === 'number';
+  const s = isNum ? `${sizeOrClass}px` : undefined;
   return (
     <svg
       viewBox="0 0 64 64"
-      style={{ width: s, height: s, display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}
+      className={!isNum ? sizeOrClass : undefined}
+      style={
+        isNum
+          ? { width: s, height: s, display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }
+          : { display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }
+      }
       aria-label="GBL Blind 3 Shield Emblem"
     >
       <defs>
@@ -196,12 +202,18 @@ function renderGblModeLogo(sizePx: number = 22) {
   );
 }
 
-function renderBattleFrontierLogo(sizePx: number = 22) {
-  const s = `${sizePx}px`;
+function renderBattleFrontierLogo(sizeOrClass: number | string = 22) {
+  const isNum = typeof sizeOrClass === 'number';
+  const s = isNum ? `${sizeOrClass}px` : undefined;
   return (
     <svg
       viewBox="0 0 64 64"
-      style={{ width: s, height: s, display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}
+      className={!isNum ? sizeOrClass : undefined}
+      style={
+        isNum
+          ? { width: s, height: s, display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }
+          : { display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }
+      }
       aria-label="Battle Frontier Show 6 Emblem"
     >
       <defs>
@@ -2578,7 +2590,7 @@ export default function App() {
     const reparsedActive = reparseAllCompletedBattleLogs(battleLogs, presets, activeBattleLogStorageKey);
     setBattleLogs(reparsedActive);
     const reparsedTrash = reparseAllCompletedBattleLogs(deletedBattlesTrash, presets, 'gbl_deleted_battles_trash_v1');
-    setDeletedBattlesTrash(reparsedTrash);
+    saveDeletedBattlesTrashToStorage(reparsedTrash);
     const agg = calculateAggregateWAE(reparsedActive, presets);
     const timeStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
     setReparseBattlesStatus(
@@ -2610,7 +2622,7 @@ export default function App() {
     }
     const migTrash = migrateExistingBattleLogs(deletedBattlesTrash, presets, 'gbl_deleted_battles_trash_v1');
     if (migTrash.didMigrate) {
-      setDeletedBattlesTrash(migTrash.logs);
+      saveDeletedBattlesTrashToStorage(migTrash.logs);
     }
     runOneTimeAiLogSplitAndCleanup(true);
   }, [presets]);
@@ -16072,9 +16084,15 @@ export default function App() {
                   const autoSugs = isAutoFocused
                     ? getPokemonAutocompleteSuggestions(member.name, editingShow6RosterModal.roster.league, 8)
                     : [];
-                  const spEntry = POKEMON_DATABASE[member.name];
-                  const fastPool = spEntry?.fastMoves || [member.fastMove];
-                  const chargedPool = spEntry?.chargedMoves || [member.chargedMove1, member.chargedMove2];
+                  const spEntry =
+                    POKEMON_DATABASE[member.name] ||
+                    POKEMON_DATABASE[member.name.replace(/^Shadow\s+/i, '').trim()];
+                  const fastPool: string[] = spEntry
+                    ? [spEntry.defaultFastMove.name]
+                    : [member.fastMove];
+                  const chargedPool: string[] = spEntry
+                    ? spEntry.chargedMoves.map((cm) => cm.name)
+                    : [member.chargedMove1, member.chargedMove2];
 
                   const updateSlotMember = (patch: Partial<TeamMember>, recalculate = false) => {
                     const nextPokemon = [...editingShow6RosterModal.roster.pokemon];

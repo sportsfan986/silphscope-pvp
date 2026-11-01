@@ -8366,6 +8366,11 @@ export async function syncBattleFrontierUsageAndCores(
   };
 }
 
+export function getShow6CoresForLeague(league: string): BattleFrontierCoreEntry[] {
+  const normLeague = normalizeLeagueName(league);
+  return BATTLE_FRONTIER_CORES_MAP[normLeague] || [];
+}
+
 /**
  * Checks if two Pokémon species names form a Most-Used Core in the given Show 6 league.
  * Matches both Shadow and non-Shadow variants of the core species.
@@ -8376,7 +8381,7 @@ export function findShow6CommonCoreEntry(
   mon2: string
 ): BattleFrontierCoreEntry | null {
   const normLeague = normalizeLeagueName(league);
-  const cores = BATTLE_FRONTIER_CORES_MAP[normLeague] || [];
+  const cores = getShow6CoresForLeague(normLeague);
   if (cores.length === 0) return null;
   const clean1 = (canonicalizeMetaPokemonName(mon1) || mon1).replace(/^Shadow\s+/i, "").trim().toLowerCase();
   const clean2 = (canonicalizeMetaPokemonName(mon2) || mon2).replace(/^Shadow\s+/i, "").trim().toLowerCase();
@@ -14813,22 +14818,29 @@ export function predictShow6UnrevealedBackline(
 export interface Show6SlotUpgradeSuggestion {
   slotIndex: number;
   candidate: TeamMember;
+  replacement: TeamMember;
   newSlotBr: number;
+  newBr: number;
   deltaSlotBr: number;
+  deltaBr: number;
+  usagePct: number;
   newRosterCoveragePct: number;
   deltaCoveragePct: number;
   corePartnersInRoster: string[];
   synergyNote: string;
+  synergyReason: string;
   summaryBadge: string;
 }
 
 export function recommendShow6RosterSlotUpgrades(
   roster6: TeamMember[],
-  league: string,
-  slotIndex: number,
+  leagueOrSlotIndex: string | number,
+  slotIndexOrLeague: number | string,
   maxSuggestions: number = 5
 ): Show6SlotUpgradeSuggestion[] {
-  const normLeague = normalizeLeagueName(league || "Battle Frontier (Spectral)");
+  const slotIndex = typeof leagueOrSlotIndex === "number" ? leagueOrSlotIndex : Number(slotIndexOrLeague) || 0;
+  const rawLeague = typeof leagueOrSlotIndex === "string" ? leagueOrSlotIndex : String(slotIndexOrLeague || "Battle Frontier (Spectral)");
+  const normLeague = normalizeLeagueName(rawLeague || "Battle Frontier (Spectral)");
   const safeRoster = (roster6 || []).slice(0, 6);
   if (safeRoster.length === 0 || slotIndex < 0 || slotIndex >= safeRoster.length) return [];
 
@@ -14842,6 +14854,11 @@ export function recommendShow6RosterSlotUpgrades(
   const usageWeightPct = getShow6UsageAndCoreWeightPct();
   const wUsage = usageWeightPct / 100;
   const fusedThreats = getShow6WeightedMetaList(normLeague, usageWeightPct, 28);
+  const usagePctMap = new Map<string, number>();
+  for (const ft of fusedThreats) {
+    usagePctMap.set(ft.name.toLowerCase(), ft.usagePct);
+    usagePctMap.set(ft.name.replace(/^Shadow\s+/i, "").trim().toLowerCase(), ft.usagePct);
+  }
 
   const scoreMemberAgainstThreats = (m: TeamMember) => {
     const byThreat = new Map<string, number>();
@@ -14903,6 +14920,10 @@ export function recommendShow6RosterSlotUpgrades(
     const deltaSlotBr = newSlotBr - currentEval.overallBr;
     const newRosterCoveragePct = computeRosterCoverage(candEval);
     const deltaCoveragePct = newRosterCoveragePct - baselineCoveragePct;
+    const candUsagePct =
+      usagePctMap.get(cand.name.toLowerCase()) ??
+      usagePctMap.get(cand.name.replace(/^Shadow\s+/i, "").trim().toLowerCase()) ??
+      0;
 
     const corePartners: string[] = [];
     let coreBonus = 0;
@@ -14924,18 +14945,25 @@ export function recommendShow6RosterSlotUpgrades(
         ? `Boosts 6-mon multi-counter field coverage by ${fmtDeltaCov}`
         : `Higher individual meta rating (${newSlotBr} BR)`;
 
+    const resolvedCandidate: TeamMember = {
+      ...cand,
+      id: currentMember.id || `s6-slot-${slotIndex + 1}`
+    };
+
     scored.push({
       slotIndex,
-      candidate: {
-        ...cand,
-        id: currentMember.id || `s6-slot-${slotIndex + 1}`
-      },
+      candidate: resolvedCandidate,
+      replacement: resolvedCandidate,
       newSlotBr,
+      newBr: newSlotBr,
       deltaSlotBr,
+      deltaBr: deltaSlotBr,
+      usagePct: candUsagePct,
       newRosterCoveragePct,
       deltaCoveragePct,
       corePartnersInRoster: corePartners,
       synergyNote,
+      synergyReason: synergyNote,
       summaryBadge: `BR ${newSlotBr} (${fmtDeltaBr}) • Cov ${newRosterCoveragePct}% (${fmtDeltaCov})`,
       sortScore,
       baseSpecies: candInfo.baseSpecies
@@ -14964,6 +14992,7 @@ export interface Show6MovesetSuggestion {
   chargedMove1: string;
   chargedMove2: string;
   blendedBr: number;
+  projectedBr: number;
   deltaBr: number;
   leadBr: number;
   swapBr: number;
@@ -14971,14 +15000,27 @@ export interface Show6MovesetSuggestion {
   isCurrent: boolean;
   isStandard: boolean;
   badgeText: string;
+  reason: string;
 }
 
 export function recommendShow6RosterSlotMovesets(
-  member: TeamMember,
-  league: string,
-  maxSuggestions: number = 4
+  memberOrRoster: TeamMember | TeamMember[],
+  leagueOrSlotIndex: string | number,
+  slotIndexOrLeague?: number | string,
+  maxSuggestionsArg: number = 4
 ): Show6MovesetSuggestion[] {
-  const normLeague = normalizeLeagueName(league || "Battle Frontier (Spectral)");
+  const member: TeamMember | undefined = Array.isArray(memberOrRoster)
+    ? memberOrRoster[typeof leagueOrSlotIndex === "number" ? leagueOrSlotIndex : 0]
+    : memberOrRoster;
+  const rawLeague =
+    typeof leagueOrSlotIndex === "string"
+      ? leagueOrSlotIndex
+      : typeof slotIndexOrLeague === "string"
+      ? slotIndexOrLeague
+      : "Battle Frontier (Spectral)";
+  const maxSuggestions =
+    typeof slotIndexOrLeague === "number" ? slotIndexOrLeague : maxSuggestionsArg;
+  const normLeague = normalizeLeagueName(rawLeague || "Battle Frontier (Spectral)");
   if (!member || !member.name) return [];
 
   const rec = getRecommendedMovesForPokemon(member.name, normLeague, member.ivs);
@@ -15063,18 +15105,21 @@ export function recommendShow6RosterSlotMovesets(
       const isStandard = key === stdKey;
       const deltaBr = m.blendedBr - curMetrics.blendedBr;
       const fmtDelta = deltaBr >= 0 ? `+${deltaBr}` : `${deltaBr}`;
+      const badgeText = `${m.blendedBr} BR (${fmtDelta}) • L:${m.leadBr}/S:${m.swapBr}/C:${m.closerBr}`;
       results.push({
         fastMove: fMove,
         chargedMove1: c1,
         chargedMove2: c2,
         blendedBr: m.blendedBr,
+        projectedBr: m.blendedBr,
         deltaBr,
         leadBr: m.leadBr,
         swapBr: m.swapBr,
         closerBr: m.closerBr,
         isCurrent,
         isStandard,
-        badgeText: `${m.blendedBr} BR (${fmtDelta}) • L:${m.leadBr}/S:${m.swapBr}/C:${m.closerBr}`
+        badgeText,
+        reason: `L:${m.leadBr} / S:${m.swapBr} / C:${m.closerBr}`
       });
     }
   }
