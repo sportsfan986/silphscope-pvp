@@ -1,1 +1,1 @@
-{"schemaVersion":"5.11","updatedAtMs":1762036800000,"totalBatches":0,"totalBattles":0,"totalAnomalies":0,"batches":[]}
+{"batches":[{"anomalyCount":33,"appVersion":"5.10","batchId":"batch_1793572969554_sportsfan986_2e0c6f1b","battleCount":7,"deviceHash":"2e0c6f1b","highSeverityCount":7,"path":"batches/2026-11-01/batch_1793572969554_sportsfan986_2e0c6f1b.jsonl","uploadedAtMs":1793572969554,"uploader":"sportsfan986"}],"schemaVersion":"5.10","totalAnomalies":33,"totalBatches":1,"totalBattles":7,"updatedAtMs":1793572969554}
