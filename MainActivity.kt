@@ -582,13 +582,9 @@ class MainActivity : AppCompatActivity() {
         fetchSeasonsFromScrapedDuck()
         syncOverlayRunningUiState()
         handleIncomingNavigationAndTaskerIntent(intent)
+        OverlayService.runV510AiTelemetryMigrationAndWipeStatic(prefs)
         maybeShowFirstRunAiTelemetryOptInPrompt()
-        OverlayService.maybeAutoUploadAiTelemetryAsync(
-            applicationContext,
-            gson,
-            reason = "DAILY_APP_LAUNCH",
-            requireMinBattles = false
-        ) { _, _ ->
+        OverlayService.triggerAutoUploadOnAppLaunchAsync(prefs, gson) { _, _ ->
             runOnUiThread {
                 if (!isFinishing && ::prefs.isInitialized) {
                     updateAiTelemetryStatusUi()
@@ -618,12 +614,7 @@ class MainActivity : AppCompatActivity() {
             // Automatically pull & reconcile deltas from the other device on every app open / resume
             triggerTwoDeviceCloudSync(silent = true)
             // v5.10: Once-daily AI & Anomaly telemetry upload check on app launch/resume
-            OverlayService.maybeAutoUploadAiTelemetryAsync(
-                applicationContext,
-                gson,
-                reason = "DAILY_APP_LAUNCH",
-                requireMinBattles = false
-            ) { _, _ ->
+            OverlayService.triggerAutoUploadOnAppLaunchAsync(prefs, gson) { _, _ ->
                 runOnUiThread {
                     if (!isFinishing && ::prefs.isInitialized) {
                         updateAiTelemetryStatusUi()
@@ -1473,14 +1464,14 @@ class MainActivity : AppCompatActivity() {
             val next = !current
             prefs.edit()
                 .putBoolean(OverlayService.PREFS_KEY_AUTO_UPLOAD_AI_LOGS, next)
-                .putBoolean(OverlayService.PREFS_KEY_AI_TELEMETRY_PROMPT_SHOWN, true)
+                .putBoolean(OverlayService.PREFS_KEY_AI_TELEMETRY_ONBOARDING_SHOWN, true)
                 .apply()
             updateAiTelemetryStatusUi()
             if (next) {
                 if (OverlayService.getEffectiveSyncToken(prefs).isEmpty()) {
                     Toast.makeText(
                         this,
-                        "🤖 Auto-Upload Enabled! Sign in with GitHub so logs can upload to branch '${OverlayService.AI_TELEMETRY_REPO_BRANCH}'.",
+                        "🤖 Auto-Upload Enabled! Sign in with GitHub so logs can upload to branch '${OverlayService.AI_TELEMETRY_BRANCH}'.",
                         Toast.LENGTH_LONG
                     ).show()
                     startGitHubOAuthDeviceFlow()
@@ -2030,10 +2021,9 @@ class MainActivity : AppCompatActivity() {
         val pendingLogs = OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson)
         val pendingBattles = pendingLogs.size
         val pendingAnomalies = pendingLogs.sumOf { it.anomalies.size }
-        val lastAt = prefs.getLong(OverlayService.PREFS_KEY_AI_TELEMETRY_LAST_UPLOAD_AT, 0L)
-        val totalUploaded = prefs.getInt(OverlayService.PREFS_KEY_AI_TELEMETRY_UPLOADED_COUNT, 0)
-        val lastBranch = prefs.getString(OverlayService.PREFS_KEY_AI_TELEMETRY_LAST_BRANCH, OverlayService.AI_TELEMETRY_REPO_BRANCH)
-            ?: OverlayService.AI_TELEMETRY_REPO_BRANCH
+        val lastAt = prefs.getLong(OverlayService.PREFS_KEY_LAST_AI_TELEMETRY_UPLOAD_MS, 0L)
+        val totalUploaded = prefs.getInt(OverlayService.PREFS_KEY_TOTAL_AI_TELEMETRY_UPLOADED_COUNT, 0)
+        val lastBranch = OverlayService.AI_TELEMETRY_BRANCH
         val timeFmt = java.text.SimpleDateFormat("MMM d, h:mm a", java.util.Locale.US)
         val lastStr = if (lastAt > 0L) timeFmt.format(java.util.Date(lastAt)) else "Never"
 
@@ -2070,13 +2060,14 @@ class MainActivity : AppCompatActivity() {
             }
             return
         }
-        textAiTelemetryStatus.text = "⏳ Uploading ${pendingLogs.size} battle logs to '${OverlayService.AI_TELEMETRY_REPO_BRANCH}' & purging local queue..."
+        val queuedCount = pendingLogs.size
+        textAiTelemetryStatus.text = "⏳ Uploading $queuedCount battle logs to '${OverlayService.AI_TELEMETRY_BRANCH}' & purging local queue..."
         lifecycleScope.launch(Dispatchers.IO) {
-            val (ok, msg, count) = OverlayService.uploadPendingAiTelemetryToGitHubBranchBlocking(
-                applicationContext,
-                prefs,
-                gson,
-                reason = "MANUAL_BUTTON"
+            val (ok, msg) = OverlayService.uploadPendingAiTelemetryBatchBlocking(
+                prefs = prefs,
+                gson = gson,
+                forceUpload = true,
+                minBattlesRequired = 1
             )
             withContext(Dispatchers.Main) {
                 updateAiTelemetryStatusUi()
@@ -2084,7 +2075,7 @@ class MainActivity : AppCompatActivity() {
                 if (ok) {
                     Toast.makeText(
                         this@MainActivity,
-                        "✅ Uploaded $count AI/anomaly battle logs & purged from phone storage!",
+                        "✅ Uploaded $queuedCount AI/anomaly battle logs & purged from phone storage!",
                         Toast.LENGTH_LONG
                     ).show()
                 } else if (!silentIfEmpty) {
@@ -2099,14 +2090,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun maybeShowFirstRunAiTelemetryOptInPrompt() {
-        val alreadyShown = prefs.getBoolean(OverlayService.PREFS_KEY_AI_TELEMETRY_PROMPT_SHOWN, false)
+        val alreadyShown = prefs.getBoolean(OverlayService.PREFS_KEY_AI_TELEMETRY_ONBOARDING_SHOWN, false)
         if (alreadyShown) return
-        prefs.edit().putBoolean(OverlayService.PREFS_KEY_AI_TELEMETRY_PROMPT_SHOWN, true).apply()
+        prefs.edit().putBoolean(OverlayService.PREFS_KEY_AI_TELEMETRY_ONBOARDING_SHOWN, true).apply()
 
         val hasToken = OverlayService.getEffectiveSyncToken(prefs).isNotEmpty()
         val msg = "Help improve SilphScope PvP's AI decision engine and automatic energy/move anomaly detection!\n\n" +
             "• Automatically detects corner cases (e.g., when an opponent throws a charged move with fewer detected fast moves than required, missed fast moves, or move OCR fallbacks).\n" +
-            "• Uploads compact JSONL batches to the isolated '${OverlayService.AI_TELEMETRY_REPO_BRANCH}' branch (never clutters main branch history).\n" +
+            "• Uploads compact JSONL batches to the isolated '${OverlayService.AI_TELEMETRY_BRANCH}' branch (never clutters main branch history).\n" +
             "• Runs automatically once per day on app launch and on overlay stop when ≥${OverlayService.AI_TELEMETRY_MIN_BATTLES_ON_STOP} battles are queued.\n" +
             "• Automatically purges uploaded AI logs from your phone right after upload to keep local storage tiny.\n\n" +
             if (hasToken) {
@@ -2121,7 +2112,7 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton(if (hasToken) "✅ Enable Auto-Upload" else "🔑 Login & Enable") { _, _ ->
                 prefs.edit()
                     .putBoolean(OverlayService.PREFS_KEY_AUTO_UPLOAD_AI_LOGS, true)
-                    .putBoolean(OverlayService.PREFS_KEY_AI_TELEMETRY_PROMPT_SHOWN, true)
+                    .putBoolean(OverlayService.PREFS_KEY_AI_TELEMETRY_ONBOARDING_SHOWN, true)
                     .apply()
                 updateAiTelemetryStatusUi()
                 if (OverlayService.getEffectiveSyncToken(prefs).isEmpty()) {
@@ -2595,25 +2586,22 @@ class MainActivity : AppCompatActivity() {
                     battleId = rec.battleId,
                     timestampMs = rec.timestampMs,
                     league = rec.league,
-                    combatMode = rec.combatMode,
-                    result = rec.result,
+                    userTeamName = rec.teamName,
+                    userPokemon = rec.userTeamSpecs.map { it.species },
+                    opponents = rec.oppTeamSpecs.map { it.species },
                     leadMatchup = rec.leadMatchup,
-                    finalUserHpPct = rec.finalUserHpPct,
-                    finalOppHpPct = rec.finalOppHpPct,
-                    userShieldsRemaining = rec.userShieldsRemaining,
-                    oppShieldsRemaining = rec.oppShieldsRemaining,
-                    firstSwapActor = rec.firstSwapActor,
-                    switchAdvantage = rec.switchAdvantage,
-                    userTeam = rec.userTeam,
-                    opponentTeam = rec.opponentTeam,
-                    quality = rec.quality,
+                    result = rec.result,
+                    battleDurationSec = rec.battleDurationSec,
+                    adherenceRatePct = rec.adherenceRatePct,
+                    recommendationsIssuedCount = rec.recommendationsIssuedCount,
+                    recommendationsFollowedCount = rec.recommendationsFollowedCount,
                     timelineEvents = rec.timelineEvents
                 )
             }
     }
 
     private fun saveAiTrainingLogs(logs: List<OverlayService.AiTrainingLogRecord>) {
-        // v5.10: AI logs are stored in PREFS_KEY_AI_TELEMETRY_PENDING and purged automatically upon upload to GitHub.
+        // v5.10: AI logs are stored in PREFS_KEY_PENDING_AI_TELEMETRY_V510 and purged automatically upon upload to GitHub.
         prefs.edit().remove(OverlayService.PREFS_KEY_AI_TRAINING_LOGS).apply()
     }
 
@@ -5993,12 +5981,7 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {}
         syncOverlayRunningUiState()
         // v5.10: Auto-upload pending AI & anomaly logs when overlay stops and >= 5 battles are queued
-        OverlayService.maybeAutoUploadAiTelemetryAsync(
-            applicationContext,
-            gson,
-            reason = "OVERLAY_STOP",
-            requireMinBattles = true
-        ) { _, _ ->
+        OverlayService.triggerAutoUploadOnOverlayStopAsync(prefs, gson) { _, _ ->
             runOnUiThread {
                 if (!isFinishing && ::prefs.isInitialized) {
                     updateAiTelemetryStatusUi()
