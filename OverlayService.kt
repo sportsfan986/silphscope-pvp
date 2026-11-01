@@ -314,6 +314,8 @@ class OverlayService : LifecycleService() {
             "gbl_team_presets"
         )
 
+        const val FOUR_WEEKS_MS: Long = 28L * 24L * 60L * 60L * 1000L
+
         data class LimitedMetaFormat(
             val id: String,
             val title: String,
@@ -323,37 +325,41 @@ class OverlayService : LifecycleService() {
             val category: String, // "gbl" | "battle_frontier" | "premier_mega"
             val lifecycleStatus: String = "RECENT", // "CURRENT" | "UPCOMING" | "RECENT"
             val rankingsUrl: String,
-            val sheetTabAlias: String? = null
+            val sheetTabAlias: String? = null,
+            val lastSeenAt: Long = System.currentTimeMillis(),
+            val allowsMega: Boolean = false
         )
 
+        // Default catalog aligned with live compiled PvPoke src/data/gamemaster.json formats
         val DEFAULT_LIMITED_META_CATALOG: List<LimitedMetaFormat> = listOf(
-            // CURRENT (Active in formats.json)
-            LimitedMetaFormat("scroll_1500", "Scroll Cup", "scroll", 1500, "Scroll Cup (1500)", "gbl", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/scroll/overall/rankings-1500.json"),
-            LimitedMetaFormat("Sunshine_1500", "Sunshine Cup", "sunshine", 1500, "Sunshine Cup (1500)", "gbl", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/sunshine/overall/rankings-1500.json"),
-            LimitedMetaFormat("little_500", "Little Cup", "little", 500, "Little Cup (500)", "gbl", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/little/overall/rankings-500.json"),
-            LimitedMetaFormat("premier_10000", "Master League Premier", "premier", 10000, "Master League Premier (10000)", "premier_mega", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/premier/overall/rankings-10000.json"),
-            LimitedMetaFormat("bf_spellcraft_1500", "Battle Frontier (Spellcraft)", "spellcraft", 1500, "Battle Frontier (Spellcraft)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/spellcraft/overall/rankings-1500.json", "spellcraft"),
-            LimitedMetaFormat("bf_lagoon_1500", "Battle Frontier (Lagoon)", "lagoon", 1500, "Battle Frontier (Lagoon)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/lagoon/overall/rankings-1500.json", "lagoon"),
-            LimitedMetaFormat("bf_2500", "Battle Frontier (UL)", "battlefrontierul", 2500, "Battle Frontier (UL)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/battlefrontierul/overall/rankings-2500.json", "ultra"),
-            // UPCOMING (Next Scheduled GBL Rotation Cups & Mega Formats)
-            LimitedMetaFormat("spring_1500", "Spring Cup", "spring", 1500, "Spring Cup (1500)", "gbl", "UPCOMING", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/spring/overall/rankings-1500.json"),
-            LimitedMetaFormat("fantasy_1500", "Fantasy Cup", "fantasy", 1500, "Fantasy Cup (1500)", "gbl", "UPCOMING", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fantasy/overall/rankings-1500.json"),
-            LimitedMetaFormat("jungle_1500", "Jungle Cup", "jungle", 1500, "Jungle Cup (1500)", "gbl", "UPCOMING", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/jungle/overall/rankings-1500.json"),
-            LimitedMetaFormat("summer_1500", "Summer Cup", "summer", 1500, "Summer Cup (1500)", "gbl", "UPCOMING", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/summer/overall/rankings-1500.json"),
-            LimitedMetaFormat("mega_1500", "Mega Great League", "mega", 1500, "Mega Great League (1500)", "premier_mega", "UPCOMING", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-1500.json"),
-            LimitedMetaFormat("mega_2500", "Mega Ultra League", "mega", 2500, "Mega Ultra League (2500)", "premier_mega", "UPCOMING", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-2500.json"),
-            // RECENT (Recent Season Rotation Cups)
-            LimitedMetaFormat("electric_1500", "Electric Cup", "electric", 1500, "Electric Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/electric/overall/rankings-1500.json"),
-            LimitedMetaFormat("psychic_1500", "Psychic Cup", "psychic", 1500, "Psychic Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/psychic/overall/rankings-1500.json"),
-            LimitedMetaFormat("willpower_1500", "Willpower Cup", "willpower", 1500, "Willpower Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/willpower/overall/rankings-1500.json"),
-            LimitedMetaFormat("love_1500", "Love Cup", "love", 1500, "Love Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/love/overall/rankings-1500.json"),
-            LimitedMetaFormat("retro_1500", "Retro Cup", "retro", 1500, "Retro Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/retro/overall/rankings-1500.json"),
-            LimitedMetaFormat("fossil_1500", "Fossil Cup", "fossil", 1500, "Fossil Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fossil/overall/rankings-1500.json"),
-            LimitedMetaFormat("halloween_1500", "Halloween Cup", "halloween", 1500, "Halloween Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/halloween/overall/rankings-1500.json"),
-            LimitedMetaFormat("holiday_1500", "Holiday Cup", "holiday", 1500, "Holiday Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/holiday/overall/rankings-1500.json"),
-            LimitedMetaFormat("kanto_1500", "Kanto Cup", "kanto", 1500, "Kanto Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/kanto/overall/rankings-1500.json"),
-            LimitedMetaFormat("hisui_1500", "Hisui Cup", "hisui", 1500, "Hisui Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/hisui/overall/rankings-1500.json")
+            // CURRENT (Live in PvPoke gamemaster.json["formats"])
+            LimitedMetaFormat("laic2027_1500", "LAIC 2027 Championship Series Cup", "laic2027", 1500, "LAIC 2027 Championship Series Cup (1500)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/laic2027/overall/rankings-1500.json", "laic2027", 1793491200000L, true),
+            LimitedMetaFormat("halloweenmega_1500", "Mega Halloween Cup", "halloweenmega", 1500, "Mega Halloween Cup (1500)", "gbl", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/halloweenmega/overall/rankings-1500.json", "halloweenmega", 1793491200000L, true),
+            LimitedMetaFormat("fantasy_1500", "Fantasy Cup", "fantasy", 1500, "Fantasy Cup (1500)", "gbl", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fantasy/overall/rankings-1500.json", "fantasy", 1793491200000L, false),
+            LimitedMetaFormat("mega_1500", "Mega Great League", "mega", 1500, "Mega Great League (1500)", "premier_mega", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-1500.json", "megagreat", 1793491200000L, true),
+            LimitedMetaFormat("mega_2500", "Mega Ultra League", "mega", 2500, "Mega Ultra League (2500)", "premier_mega", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-2500.json", "megaultra", 1793491200000L, true),
+            LimitedMetaFormat("trail_1500", "Devon Trail Cup", "trail", 1500, "Devon Trail Cup (1500)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/trail/overall/rankings-1500.json", "trail", 1793491200000L, false),
+            LimitedMetaFormat("fable_1500", "Devon Fable Cup", "fable", 1500, "Devon Fable Cup (1500)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fable/overall/rankings-1500.json", "fable", 1793491200000L, false),
+            LimitedMetaFormat("gymbreakers_1500", "Gymbreakers Invitational Season 7", "gymbreakers", 1500, "Gymbreakers Invitational Season 7 (1500)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/gymbreakers/overall/rankings-1500.json", "gymbreakers", 1793491200000L, false),
+            LimitedMetaFormat("spectral_1500", "Battle Frontier (Spectral)", "spectral", 1500, "Battle Frontier (Spectral)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/spectral/overall/rankings-1500.json", "spectral", 1793491200000L, false),
+            LimitedMetaFormat("cauldron_2500", "Battle Frontier (Cauldron)", "cauldron", 2500, "Battle Frontier (Cauldron)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/cauldron/overall/rankings-2500.json", "cauldron", 1793491200000L, true),
+            LimitedMetaFormat("battlefrontiermaster_10000", "Battle Frontier (Master)", "battlefrontiermaster", 10000, "Battle Frontier (Master)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/battlefrontiermaster/overall/rankings-10000.json", "master", 1793491200000L, true),
+            // RECENT (Within 4-week window by default)
+            LimitedMetaFormat("colormega_1500", "Mega Color Cup", "colormega", 1500, "Mega Color Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/colormega/overall/rankings-1500.json", "colormega", System.currentTimeMillis() - 14L * 86400_000L, true),
+            LimitedMetaFormat("halloween_1500", "Halloween Cup", "halloween", 1500, "Halloween Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/halloween/overall/rankings-1500.json", "halloween", System.currentTimeMillis() - 7L * 86400_000L, false),
+            LimitedMetaFormat("sunshine_1500", "Sunshine Cup", "sunshine", 1500, "Sunshine Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/sunshine/overall/rankings-1500.json", "sunshine", System.currentTimeMillis() - 18L * 86400_000L, false),
+            LimitedMetaFormat("little_500", "Little Cup", "little", 500, "Little Cup (500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/little/overall/rankings-500.json", "little", System.currentTimeMillis() - 12L * 86400_000L, false),
+            LimitedMetaFormat("premier_10000", "Master League Premier", "premier", 10000, "Master League Premier (10000)", "premier_mega", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/premier/overall/rankings-10000.json", "premier", System.currentTimeMillis() - 10L * 86400_000L, false)
         )
+
+        @Volatile
+        var LAST_LOADED_META_CATALOG: List<LimitedMetaFormat> = DEFAULT_LIMITED_META_CATALOG
+
+        fun isExpiredLimitedMetaStatic(item: LimitedMetaFormat, nowMs: Long = System.currentTimeMillis()): Boolean {
+            if (!item.lifecycleStatus.equals("RECENT", ignoreCase = true)) return false
+            val seen = if (item.lastSeenAt > 0L) item.lastSeenAt else nowMs
+            return (nowMs - seen) > FOUR_WEEKS_MS
+        }
 
         fun sortLimitedMetasByLifecycleStatic(formats: List<LimitedMetaFormat>): List<LimitedMetaFormat> {
             fun order(status: String): Int = when (status.uppercase()) {
@@ -368,24 +374,62 @@ class OverlayService : LifecycleService() {
         }
 
         fun getLimitedMetaCatalogStatic(prefs: SharedPreferences? = null): List<LimitedMetaFormat> {
+            val nowMs = System.currentTimeMillis()
+            val pinnedKeysLower = if (prefs != null) {
+                (getPinnedGblLimitedMetasStatic(prefs) + getPinnedShow6LimitedMetasStatic(prefs))
+                    .map { it.lowercase() }
+                    .toSet()
+            } else emptySet()
+
+            val byKey = LinkedHashMap<String, LimitedMetaFormat>()
+            for (item in DEFAULT_LIMITED_META_CATALOG) {
+                byKey[item.leagueKey] = item
+            }
             val raw = prefs?.getString(PREFS_KEY_LIMITED_META_CATALOG_JSON, null)
             if (!raw.isNullOrBlank()) {
                 try {
                     val type = object : TypeToken<List<LimitedMetaFormat>>() {}.type
                     val parsed: List<LimitedMetaFormat>? = Gson().fromJson(raw, type)
                     if (!parsed.isNullOrEmpty()) {
-                        val byKey = LinkedHashMap<String, LimitedMetaFormat>()
-                        for (item in DEFAULT_LIMITED_META_CATALOG) byKey[item.leagueKey] = item
                         for (item in parsed) {
                             if (item.leagueKey.isNotBlank() && item.rankingsUrl.isNotBlank()) {
-                                byKey[item.leagueKey] = item
+                                val fixedSeen = if (item.lastSeenAt > 0L) item.lastSeenAt else nowMs
+                                val detectedMega = item.allowsMega || hasMegaInRankingsMapStatic(item.leagueKey)
+                                byKey[item.leagueKey] = item.copy(lastSeenAt = fixedSeen, allowsMega = detectedMega)
                             }
                         }
-                        return sortLimitedMetasByLifecycleStatic(byKey.values.toList())
                     }
                 } catch (_: Exception) {}
             }
-            return sortLimitedMetasByLifecycleStatic(DEFAULT_LIMITED_META_CATALOG)
+
+            // Filter out RECENT formats older than 4 weeks UNLESS still checked/pinned
+            val filtered = byKey.values.filter { item ->
+                val isPinned = item.leagueKey.lowercase() in pinnedKeysLower
+                !isExpiredLimitedMetaStatic(item, nowMs) || isPinned
+            }
+            val sorted = sortLimitedMetasByLifecycleStatic(filtered)
+            LAST_LOADED_META_CATALOG = sorted
+            return sorted
+        }
+
+        fun pruneUncheckedExpiredMetasStatic(prefs: SharedPreferences) {
+            val nowMs = System.currentTimeMillis()
+            val pinnedKeysLower = (getPinnedGblLimitedMetasStatic(prefs) + getPinnedShow6LimitedMetasStatic(prefs))
+                .map { it.lowercase() }
+                .toSet()
+            val raw = prefs.getString(PREFS_KEY_LIMITED_META_CATALOG_JSON, null) ?: return
+            try {
+                val type = object : TypeToken<List<LimitedMetaFormat>>() {}.type
+                val parsed: List<LimitedMetaFormat> = Gson().fromJson(raw, type) ?: return
+                val kept = parsed.filter { item ->
+                    val isPinned = item.leagueKey.lowercase() in pinnedKeysLower
+                    !isExpiredLimitedMetaStatic(item, nowMs) || isPinned
+                }
+                if (kept.size != parsed.size) {
+                    prefs.edit().putString(PREFS_KEY_LIMITED_META_CATALOG_JSON, Gson().toJson(kept)).apply()
+                }
+                LAST_LOADED_META_CATALOG = getLimitedMetaCatalogStatic(prefs)
+            } catch (_: Exception) {}
         }
 
         fun getPinnedGblLimitedMetasStatic(prefs: SharedPreferences): List<String> {
@@ -398,6 +442,7 @@ class OverlayService : LifecycleService() {
 
         fun setPinnedGblLimitedMetasStatic(prefs: SharedPreferences, keys: List<String>) {
             prefs.edit().putString(PREFS_KEY_PINNED_GBL_METAS, Gson().toJson(keys.filter { it.isNotBlank() }.distinct())).apply()
+            pruneUncheckedExpiredMetasStatic(prefs)
         }
 
         fun getPinnedShow6LimitedMetasStatic(prefs: SharedPreferences): List<String> {
@@ -410,18 +455,44 @@ class OverlayService : LifecycleService() {
 
         fun setPinnedShow6LimitedMetasStatic(prefs: SharedPreferences, keys: List<String>) {
             prefs.edit().putString(PREFS_KEY_PINNED_SHOW6_METAS, Gson().toJson(keys.filter { it.isNotBlank() }.distinct())).apply()
+            pruneUncheckedExpiredMetasStatic(prefs)
         }
 
         fun getEnabledGblLeaguesStatic(prefs: SharedPreferences): List<String> {
             val base = listOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE", "MEGA MASTER LEAGUE")
-            val pinned = getPinnedGblLimitedMetasStatic(prefs).filter { it !in base }
+            val pinned = getPinnedGblLimitedMetasStatic(prefs).filter { p -> base.none { it.equals(p, ignoreCase = true) } }
             return base + pinned
         }
 
         fun getEnabledShow6LeaguesStatic(prefs: SharedPreferences): List<String> {
             val base = SHOW6_ELIGIBLE_LEAGUES
-            val pinned = getPinnedShow6LimitedMetasStatic(prefs).filter { it !in base }
+            val pinned = getPinnedShow6LimitedMetasStatic(prefs).filter { p -> base.none { it.equals(p, ignoreCase = true) } }
             return base + pinned
+        }
+
+        fun isOldCupForModeStatic(league: String, isShow6: Boolean, prefs: SharedPreferences): Boolean {
+            val trimmed = league.trim()
+            if (trimmed.isEmpty()) return false
+            val baseLeagues = if (isShow6) {
+                SHOW6_ELIGIBLE_LEAGUES
+            } else {
+                listOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE", "MEGA MASTER LEAGUE")
+            }
+            if (baseLeagues.any { it.equals(trimmed, ignoreCase = true) }) return false
+
+            val pinnedForMode = if (isShow6) {
+                getPinnedShow6LimitedMetasStatic(prefs)
+            } else {
+                getPinnedGblLimitedMetasStatic(prefs)
+            }
+            val isCurrentlyPinned = pinnedForMode.any { it.equals(trimmed, ignoreCase = true) }
+            if (!isCurrentlyPinned) return true
+
+            val catalogEntry = getLimitedMetaCatalogStatic(prefs).find { it.leagueKey.equals(trimmed, ignoreCase = true) }
+            if (catalogEntry != null && isExpiredLimitedMetaStatic(catalogEntry)) {
+                return true
+            }
+            return false
         }
 
         fun getLeagueCpCapStatic(league: String, prefs: SharedPreferences? = null): Int {
@@ -436,8 +507,18 @@ class OverlayService : LifecycleService() {
             return 10000
         }
 
-        fun isMegaAllowedInLeagueStatic(league: String): Boolean {
-            val u = league.uppercase()
+        fun hasMegaInRankingsMapStatic(league: String): Boolean {
+            val map = LIVE_RANKINGS_MAP[league.trim().uppercase()] ?: return false
+            return map.keys.any { isMegaOrPrimalSpeciesStatic(it) }
+        }
+
+        fun isMegaAllowedInLeagueStatic(league: String, prefs: SharedPreferences? = null): Boolean {
+            val trimmed = league.trim()
+            if (hasMegaInRankingsMapStatic(trimmed)) return true
+            val cat = (if (prefs != null) getLimitedMetaCatalogStatic(prefs) else LAST_LOADED_META_CATALOG)
+                .find { it.leagueKey.equals(trimmed, ignoreCase = true) || it.title.equals(trimmed, ignoreCase = true) }
+            if (cat != null) return cat.allowsMega
+            val u = trimmed.uppercase()
             return u.contains("MEGA") || u.contains("CAULDRON") || u == "BATTLE FRONTIER (MASTER)"
         }
 
@@ -2662,12 +2743,13 @@ class OverlayService : LifecycleService() {
             val trimmed = league.trim()
             val upper = trimmed.uppercase()
             if (LIVE_RANKINGS_MAP.containsKey(upper)) return upper
-            val matchedCatalog = DEFAULT_LIMITED_META_CATALOG.find {
+            val matchedCatalog = (LAST_LOADED_META_CATALOG + DEFAULT_LIMITED_META_CATALOG).find {
                 it.leagueKey.equals(trimmed, ignoreCase = true) ||
                     "${it.title} (${it.cp})".equals(trimmed, ignoreCase = true) ||
                     it.title.equals(trimmed, ignoreCase = true)
             }
             if (matchedCatalog != null) return matchedCatalog.leagueKey.uppercase()
+            if (Regex("\\((500|1500|2500|10000)\\)").containsMatchIn(upper)) return upper
             return when {
                 upper.contains("SPECTRAL") -> "BATTLE FRONTIER (SPECTRAL)"
                 upper.contains("CAULDRON") -> "BATTLE FRONTIER (CAULDRON)"
@@ -2686,7 +2768,7 @@ class OverlayService : LifecycleService() {
 
         fun isBattleFrontierLeagueStatic(league: String): Boolean {
             val k = normalizeLeagueKeyStatic(league)
-            return k.startsWith("BATTLE FRONTIER") || DEFAULT_LIMITED_META_CATALOG.any { it.leagueKey.equals(league, ignoreCase = true) }
+            return k.startsWith("BATTLE FRONTIER") || (LAST_LOADED_META_CATALOG + DEFAULT_LIMITED_META_CATALOG).any { it.leagueKey.equals(league, ignoreCase = true) }
         }
 
         object FormResolver {
@@ -2710,10 +2792,9 @@ class OverlayService : LifecycleService() {
             fun getEffectiveRankAndShadowForVariant(variant: PokemonMeta, activeLeague: String): Pair<Int, Boolean> {
                 val normLeague = normalizeLeagueKey(activeLeague)
                 val baseId = variant.speciesId.lowercase().removeSuffix("_shadow")
-                val isMegaVariant = baseId.contains("_mega") || baseId.contains("_primal") ||
-                    variant.name.startsWith("Mega ", ignoreCase = true) || variant.name.startsWith("Primal ", ignoreCase = true)
+                val isMegaVariant = isMegaOrPrimalSpeciesStatic(baseId) || isMegaOrPrimalSpeciesStatic(variant.name)
                 val map = LIVE_RANKINGS_MAP[normLeague]
-                if (isMegaVariant && normLeague != "MEGA MASTER LEAGUE" && map?.containsKey(baseId) != true) {
+                if (isMegaVariant && !isMegaAllowedInLeagueStatic(normLeague) && map?.containsKey(baseId) != true) {
                     return 9999 to false
                 }
                 val normalEntry = map?.get(baseId)
@@ -5811,9 +5892,7 @@ class OverlayService : LifecycleService() {
             val rankingsMap = LIVE_RANKINGS_MAP[normLeague]
 
             fun isMegaOrPrimal(name: String, speciesId: String): Boolean {
-                val n = name.lowercase()
-                val s = speciesId.lowercase()
-                return n.startsWith("mega ") || n.startsWith("primal ") || s.contains("_mega") || s.contains("_primal")
+                return isMegaOrPrimalSpeciesStatic(name) || isMegaOrPrimalSpeciesStatic(speciesId)
             }
 
             fun addCandidateFromName(candidateName: String) {
@@ -6065,11 +6144,10 @@ class OverlayService : LifecycleService() {
                 val safeSwapVal = (sMean - 0.5 * sSigma).roundToInt().coerceIn(150, 850)
 
                 val cTypes = getTypesFor(cand.name)
-                val nLower = cand.name.lowercase()
                 PrecomputedCandidate(
                     member = cand,
                     baseSpecies = FormResolver.extractBaseSpecies(cand.name),
-                    isMega = nLower.startsWith("mega ") || nLower.startsWith("primal "),
+                    isMega = isMegaOrPrimalSpeciesStatic(cand.name),
                     types = cTypes,
                     weaknesses = getWeaknesses(cTypes),
                     resistances = getResistances(cTypes),
@@ -6088,7 +6166,7 @@ class OverlayService : LifecycleService() {
                 val otherBase1 = FormResolver.extractBaseSpecies(currentSlots[otherIdx1].name)
                 val otherBase2 = FormResolver.extractBaseSpecies(currentSlots[otherIdx2].name)
                 val otherHasMega = listOf(currentSlots[otherIdx1].name, currentSlots[otherIdx2].name).any {
-                    it.startsWith("Mega ", ignoreCase = true) || it.startsWith("Primal ", ignoreCase = true)
+                    isMegaOrPrimalSpeciesStatic(it)
                 }
                 val currentSlotMember = currentSlots[slotIdx]
                 val isAbb = baselineEval.archetype == "ABB"
@@ -6837,9 +6915,10 @@ class OverlayService : LifecycleService() {
         ): AntiMetaTeamBuilderResult {
             val t0 = System.currentTimeMillis()
             val normLeague = normalizeLeagueKeyStatic(league)
-            val allowMega = normLeague == "MEGA MASTER LEAGUE" || normLeague == "BATTLE FRONTIER (CAULDRON)"
-            val isGreat = normLeague == "GREAT LEAGUE" || normLeague == "BATTLE FRONTIER (SPECTRAL)"
-            val isUltra = normLeague == "ULTRA LEAGUE" || normLeague == "BATTLE FRONTIER (CAULDRON)"
+            val allowMega = isMegaAllowedInLeagueStatic(normLeague)
+            val cpCap = getLeagueCpCapStatic(normLeague)
+            val isGreat = cpCap <= 1500
+            val isUltra = cpCap == 2500
 
             val roleMeta = computeRoleWeightedTop100MetaStatic(normLeague, seasonLogs)
             val extendedRankedPool = getTop100MetaCandidatesForLeagueStatic(normLeague, 360)
@@ -6853,9 +6932,7 @@ class OverlayService : LifecycleService() {
             val targetAuditTotal = top50MetaThreats.size.takeIf { it > 0 } ?: 50
 
             fun isMegaOrPrimal(name: String, speciesId: String = ""): Boolean {
-                val n = name.lowercase()
-                val s = speciesId.lowercase()
-                return n.startsWith("mega ") || n.startsWith("primal ") || s.contains("_mega") || s.contains("_primal")
+                return isMegaOrPrimalSpeciesStatic(name) || isMegaOrPrimalSpeciesStatic(speciesId)
             }
 
             fun buildMemberFromName(rawName: String): TeamMember? {
@@ -7920,65 +7997,291 @@ class OverlayService : LifecycleService() {
             return loadedCount
         }
 
-        fun fetchPvPokeLimitedMetasBlocking(prefs: SharedPreferences, filesDir: java.io.File): String {
-            val skipBaseCups = setOf("all", "premierclassic", "classic", "custom")
-            val skipTitles = setOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE", "MEGA MASTER LEAGUE", "BATTLE FRONTIER (SPECTRAL)", "BATTLE FRONTIER (CAULDRON)", "BATTLE FRONTIER (MASTER)")
-            val byKey = LinkedHashMap<String, LimitedMetaFormat>()
-            for (item in DEFAULT_LIMITED_META_CATALOG) {
-                byKey[item.leagueKey] = item
+        fun detectMegaOrPrimalInRankingsJsonStatic(jsonBody: String): Boolean {
+            return try {
+                val arr = JsonParser.parseString(jsonBody).asJsonArray
+                for (el in arr) {
+                    if (!el.isJsonObject) continue
+                    val obj = el.asJsonObject
+                    val spId = obj.optString("speciesId").orEmpty()
+                    val spName = obj.optString("speciesName").orEmpty()
+                    if (isMegaOrPrimalSpeciesStatic(spId) || isMegaOrPrimalSpeciesStatic(spName)) {
+                        return true
+                    }
+                }
+                false
+            } catch (_: Exception) {
+                val lower = jsonBody.lowercase()
+                lower.contains("_mega\"") || lower.contains("_primal\"") || lower.contains("(mega") || lower.contains("(primal")
             }
+        }
+
+        fun fetchPvPokeLimitedMetasBlocking(prefs: SharedPreferences, filesDir: java.io.File): String {
+            val nowMs = System.currentTimeMillis()
+            val sevenDaysMs = 7L * 24L * 60L * 60L * 1000L
+            val skipBaseCups = setOf("all", "overall", "premierclassic", "classic", "custom")
+            val skipTitles = setOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE", "MEGA MASTER LEAGUE")
+            val pinnedKeysLower = (getPinnedGblLimitedMetasStatic(prefs) + getPinnedShow6LimitedMetasStatic(prefs))
+                .map { it.lowercase() }
+                .toSet()
+
+            // Load previously persisted catalog so we preserve lastSeenAt when a format leaves gamemaster.json["formats"]
+            val previousByKey = LinkedHashMap<String, LimitedMetaFormat>()
+            for (item in DEFAULT_LIMITED_META_CATALOG) {
+                previousByKey[item.leagueKey] = item
+            }
+            val rawSaved = prefs.getString(PREFS_KEY_LIMITED_META_CATALOG_JSON, null)
+            if (!rawSaved.isNullOrBlank()) {
+                try {
+                    val type = object : TypeToken<List<LimitedMetaFormat>>() {}.type
+                    val parsed: List<LimitedMetaFormat>? = Gson().fromJson(rawSaved, type)
+                    parsed?.forEach { item ->
+                        if (item.leagueKey.isNotBlank()) {
+                            previousByKey[item.leagueKey] = item
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // Start with previous entries demoted from CURRENT to RECENT (preserving their lastSeenAt) until re-confirmed live
+            val byKey = LinkedHashMap<String, LimitedMetaFormat>()
+            for ((k, prev) in previousByKey) {
+                val demotedStatus = if (prev.lifecycleStatus == "CURRENT") "RECENT" else prev.lifecycleStatus
+                byKey[k] = prev.copy(lifecycleStatus = demotedStatus)
+            }
+
+            val liveFormatCups = HashSet<String>()
+
+            fun verifyRankingsAndDetectMega(rankingsUrl: String, fallbackAllowMega: Boolean): Pair<Boolean, Boolean> {
+                return try {
+                    val conn = (java.net.URL(rankingsUrl).openConnection() as java.net.HttpURLConnection).apply {
+                        connectTimeout = 6500
+                        readTimeout = 6500
+                        setRequestProperty("User-Agent", "SilphScopePvP/5.05")
+                    }
+                    if (conn.responseCode in 200..299) {
+                        val body = conn.inputStream.bufferedReader().use { it.readText() }
+                        if (body.length > 200) {
+                            true to detectMegaOrPrimalInRankingsJsonStatic(body)
+                        } else false to fallbackAllowMega
+                    } else false to fallbackAllowMega
+                } catch (_: Exception) {
+                    false to fallbackAllowMega
+                }
+            }
+
+            fun fetchCupLastCommitMs(cupSlug: String): Long? {
+                return try {
+                    val apiUrl = "https://api.github.com/repos/pvpoke/pvpoke/commits?path=src/data/rankings/$cupSlug&per_page=1"
+                    val conn = (java.net.URL(apiUrl).openConnection() as java.net.HttpURLConnection).apply {
+                        connectTimeout = 5000
+                        readTimeout = 5000
+                        setRequestProperty("User-Agent", "SilphScopePvP/5.05")
+                    }
+                    if (conn.responseCode in 200..299) {
+                        val arr = JsonParser.parseString(conn.inputStream.bufferedReader().use { it.readText() }).asJsonArray
+                        if (arr.size() > 0) {
+                            val isoDate = arr[0].asJsonObject
+                                .getAsJsonObject("commit")
+                                ?.getAsJsonObject("committer")
+                                ?.optString("date")
+                            if (!isoDate.isNullOrBlank()) {
+                                java.time.Instant.parse(isoDate).toEpochMilli()
+                            } else null
+                        } else null
+                    } else null
+                } catch (_: Exception) {
+                    null
+                }
+            }
+
             try {
-                val formatsUrl = "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/gamemaster/formats.json"
-                val conn = (java.net.URL(formatsUrl).openConnection() as java.net.HttpURLConnection).apply {
-                    connectTimeout = 8000
-                    readTimeout = 8000
-                    setRequestProperty("User-Agent", "SilphScopePvP/5.04")
+                // 1. Primary Source: Compiled PvPoke gamemaster.json (matches live pvpoke.com dropdown)
+                val gmUrl = "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/gamemaster.json"
+                val conn = (java.net.URL(gmUrl).openConnection() as java.net.HttpURLConnection).apply {
+                    connectTimeout = 9000
+                    readTimeout = 9000
+                    setRequestProperty("User-Agent", "SilphScopePvP/5.05")
                 }
                 if (conn.responseCode in 200..299) {
                     val text = conn.inputStream.bufferedReader().use { it.readText() }
-                    val arr = JsonParser.parseString(text).asJsonArray
-                    for (el in arr) {
-                        if (!el.isJsonObject) continue
-                        val obj = el.asJsonObject
-                        val hideRankings = obj.get("hideRankings")?.takeIf { it.isJsonPrimitive }?.asBoolean ?: false
-                        if (hideRankings) continue
-                        val cup = obj.optString("cup")?.trim()?.lowercase().orEmpty()
-                        val title = obj.optString("title")?.trim().orEmpty()
-                        val cp = obj.optInt("cp") ?: 1500
-                        val meta = obj.optString("meta")?.trim()?.lowercase().orEmpty()
-                        if (cup.isEmpty() || title.isEmpty() || cup in skipBaseCups) continue
-                        if (title.uppercase() in skipTitles) continue
-                        val isBf = title.contains("Battle Frontier", ignoreCase = true) || meta.contains("frontier")
-                        val leagueKey = if (isBf) title else if (title.contains("($cp)")) title else "$title ($cp)"
-                        if (leagueKey.uppercase() in skipTitles) continue
-                        val rankingsUrl = "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/$cup/overall/rankings-$cp.json"
-                        val cat = when {
-                            isBf -> "battle_frontier"
-                            cup == "premier" || cup == "mega" -> "premier_mega"
-                            else -> "gbl"
+                    val root = JsonParser.parseString(text).asJsonObject
+
+                    // 1A: Parse root["formats"]
+                    val formatsArr = root.getAsJsonArray("formats")
+                    if (formatsArr != null) {
+                        for (el in formatsArr) {
+                            if (!el.isJsonObject) continue
+                            val obj = el.asJsonObject
+                            val hideRankings = obj.get("hideRankings")?.takeIf { it.isJsonPrimitive }?.asBoolean ?: false
+                            if (hideRankings) continue
+                            val showFormat = obj.get("showFormat")?.takeIf { it.isJsonPrimitive }?.asBoolean ?: true
+                            val cup = obj.optString("cup")?.trim()?.lowercase().orEmpty()
+                            val title = obj.optString("title")?.trim().orEmpty()
+                            val cp = obj.optInt("cp") ?: 1500
+                            val meta = obj.optString("meta")?.trim()?.lowercase().orEmpty()
+                            if (cup.isEmpty() || title.isEmpty() || cup in skipBaseCups) continue
+                            if (title.uppercase() in skipTitles) continue
+                            if (cup == "mega" && cp == 10000) continue
+
+                            liveFormatCups.add("${cup}_${cp}")
+                            val isBf = title.contains("Battle Frontier", ignoreCase = true) ||
+                                meta.contains("frontier") ||
+                                cup == "laic2027" ||
+                                cup == "trail" ||
+                                cup == "fable" ||
+                                cup == "gymbreakers"
+                            val leagueKey = if (title.contains("Battle Frontier", ignoreCase = true) || title.contains("($cp)")) {
+                                title
+                            } else {
+                                "$title ($cp)"
+                            }
+                            if (leagueKey.uppercase() in skipTitles) continue
+                            val rankingsUrl = "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/$cup/overall/rankings-$cp.json"
+                            val prev = previousByKey[leagueKey]
+                            val (ok, hasMegas) = verifyRankingsAndDetectMega(rankingsUrl, prev?.allowsMega ?: false)
+                            if (!ok && prev == null) continue
+                            val cat = when {
+                                isBf -> "battle_frontier"
+                                cup == "premier" || cup == "mega" -> "premier_mega"
+                                else -> "gbl"
+                            }
+                            val status = if (!showFormat) "UPCOMING" else "CURRENT"
+                            byKey[leagueKey] = LimitedMetaFormat(
+                                id = "${cup}_${cp}",
+                                title = title,
+                                cup = cup,
+                                cp = cp,
+                                leagueKey = leagueKey,
+                                category = cat,
+                                lifecycleStatus = status,
+                                rankingsUrl = rankingsUrl,
+                                sheetTabAlias = prev?.sheetTabAlias ?: meta.ifEmpty { cup },
+                                lastSeenAt = nowMs,
+                                allowsMega = hasMegas
+                            )
                         }
-                        byKey[leagueKey] = LimitedMetaFormat(
-                            id = "${cup}_${cp}",
-                            title = title,
-                            cup = cup,
-                            cp = cp,
-                            leagueKey = leagueKey,
-                            category = cat,
-                            lifecycleStatus = "CURRENT",
-                            rankingsUrl = rankingsUrl,
-                            sheetTabAlias = byKey[leagueKey]?.sheetTabAlias ?: cup
-                        )
+                    }
+
+                    // 1B: Parse root["cups"] for additional UPCOMING (newly staged <= 7d) or RECENT (<= 28d) cups not in live formats
+                    val cupsArr = root.getAsJsonArray("cups")
+                    if (cupsArr != null) {
+                        for (el in cupsArr) {
+                            if (!el.isJsonObject) continue
+                            val cupObj = el.asJsonObject
+                            val cup = cupObj.optString("name")?.trim()?.lowercase().orEmpty()
+                            val title = cupObj.optString("title")?.trim().orEmpty()
+                            val cp = cupObj.optInt("league") ?: 1500
+                            if (cup.isEmpty() || title.isEmpty() || cup in skipBaseCups) continue
+                            if (title.uppercase() in skipTitles) continue
+                            val cupCpId = "${cup}_${cp}"
+                            if (cupCpId in liveFormatCups) continue
+
+                            val leagueKey = if (title.contains("Battle Frontier", ignoreCase = true) || title.contains("($cp)")) {
+                                title
+                            } else {
+                                "$title ($cp)"
+                            }
+                            if (leagueKey.uppercase() in skipTitles) continue
+
+                            val rankingsUrl = "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/$cup/overall/rankings-$cp.json"
+                            val prev = previousByKey[leagueKey]
+                            val commitMs = fetchCupLastCommitMs(cup) ?: prev?.lastSeenAt ?: (nowMs - 21L * 86400_000L)
+                            val ageMs = nowMs - commitMs
+                            val isPinned = leagueKey.lowercase() in pinnedKeysLower
+                            // Skip unpinned cups older than 4 weeks
+                            if (ageMs > FOUR_WEEKS_MS && !isPinned) continue
+
+                            val (ok, hasMegas) = verifyRankingsAndDetectMega(rankingsUrl, prev?.allowsMega ?: false)
+                            if (!ok) continue
+
+                            val status = if (ageMs <= sevenDaysMs && prev == null) "UPCOMING" else "RECENT"
+                            byKey[leagueKey] = LimitedMetaFormat(
+                                id = cupCpId,
+                                title = title,
+                                cup = cup,
+                                cp = cp,
+                                leagueKey = leagueKey,
+                                category = prev?.category ?: "gbl",
+                                lifecycleStatus = status,
+                                rankingsUrl = rankingsUrl,
+                                sheetTabAlias = prev?.sheetTabAlias ?: cup,
+                                lastSeenAt = commitMs,
+                                allowsMega = hasMegas
+                            )
+                        }
                     }
                 }
             } catch (_: Exception) {}
 
-            val sorted = sortLimitedMetasByLifecycleStatic(byKey.values.toList())
+            // 2. Check non-master branches on pvpoke/pvpoke updated within the last 14 days for staged UPCOMING metas
+            try {
+                val branchesUrl = "https://api.github.com/repos/pvpoke/pvpoke/branches?per_page=10"
+                val bConn = (java.net.URL(branchesUrl).openConnection() as java.net.HttpURLConnection).apply {
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    setRequestProperty("User-Agent", "SilphScopePvP/5.05")
+                }
+                if (bConn.responseCode in 200..299) {
+                    val bArr = JsonParser.parseString(bConn.inputStream.bufferedReader().use { it.readText() }).asJsonArray
+                    for (bEl in bArr) {
+                        val bObj = bEl.asJsonObject
+                        val bName = bObj.optString("name").orEmpty()
+                        if (bName.isEmpty() || bName == "master" || bName == "main") continue
+                        val branchFormatsUrl = "https://raw.githubusercontent.com/pvpoke/pvpoke/$bName/src/data/gamemaster/formats.json"
+                        val fConn = (java.net.URL(branchFormatsUrl).openConnection() as java.net.HttpURLConnection).apply {
+                            connectTimeout = 4500
+                            readTimeout = 4500
+                            setRequestProperty("User-Agent", "SilphScopePvP/5.05")
+                        }
+                        if (fConn.responseCode in 200..299) {
+                            val fArr = JsonParser.parseString(fConn.inputStream.bufferedReader().use { it.readText() }).asJsonArray
+                            for (fEl in fArr) {
+                                if (!fEl.isJsonObject) continue
+                                val fObj = fEl.asJsonObject
+                                val cup = fObj.optString("cup")?.trim()?.lowercase().orEmpty()
+                                val title = fObj.optString("title")?.trim().orEmpty()
+                                val cp = fObj.optInt("cp") ?: 1500
+                                if (cup.isEmpty() || title.isEmpty() || cup in skipBaseCups) continue
+                                val leagueKey = if (title.contains("($cp)")) title else "$title ($cp)"
+                                if (byKey.containsKey(leagueKey)) continue
+                                val rUrl = "https://raw.githubusercontent.com/pvpoke/pvpoke/$bName/src/data/rankings/$cup/overall/rankings-$cp.json"
+                                val (ok, hasMegas) = verifyRankingsAndDetectMega(rUrl, false)
+                                if (ok) {
+                                    byKey[leagueKey] = LimitedMetaFormat(
+                                        id = "${cup}_${cp}",
+                                        title = title,
+                                        cup = cup,
+                                        cp = cp,
+                                        leagueKey = leagueKey,
+                                        category = "gbl",
+                                        lifecycleStatus = "UPCOMING",
+                                        rankingsUrl = rUrl,
+                                        sheetTabAlias = cup,
+                                        lastSeenAt = nowMs,
+                                        allowsMega = hasMegas
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+
+            // 3. Enforce 4-week (28-day) expiration: keep expired RECENT metas ONLY if still checked/pinned
+            val filtered = byKey.values.filter { item ->
+                val isPinned = item.leagueKey.lowercase() in pinnedKeysLower
+                !isExpiredLimitedMetaStatic(item, nowMs) || isPinned
+            }
+
+            val sorted = sortLimitedMetasByLifecycleStatic(filtered)
+            LAST_LOADED_META_CATALOG = sorted
             prefs.edit().putString(PREFS_KEY_LIMITED_META_CATALOG_JSON, Gson().toJson(sorted)).apply()
             val synced = syncPinnedLimitedMetaRankingsBlocking(prefs, filesDir)
             val curCount = sorted.count { it.lifecycleStatus == "CURRENT" }
             val upCount = sorted.count { it.lifecycleStatus == "UPCOMING" }
             val recCount = sorted.count { it.lifecycleStatus == "RECENT" }
-            return "✅ PvPoke GitHub Synced: ${sorted.size} Verified Metas (🟢 $curCount Current • 🔜 $upCount Upcoming • 🕒 $recCount Recent • Obsolete Hidden • $synced Pinned Loaded)"
+            return "✅ PvPoke GitHub Synced: ${sorted.size} Verified Metas (🟢 $curCount Current • 🔜 $upCount Upcoming • 🕒 $recCount Recent ≤4w • $synced Pinned Loaded)"
         }
 
         fun isMegaOrPrimalSpeciesStatic(name: String): Boolean {
@@ -7986,8 +8289,11 @@ class OverlayService : LifecycleService() {
             return lower.contains("(mega") ||
                 lower.startsWith("mega ") ||
                 lower.contains(" mega") ||
+                lower.contains("_mega") ||
                 lower.contains("(primal") ||
-                lower.startsWith("primal ")
+                lower.startsWith("primal ") ||
+                lower.contains(" primal") ||
+                lower.contains("_primal")
         }
 
         fun countMegaOrPrimalInListStatic(names: List<String>): Int {

@@ -151,6 +151,8 @@ import {
   getLimitedMetaSheetAliases,
   setLimitedMetaSheetAlias,
   getLeagueCpCap,
+  isExpiredLimitedMeta,
+  isOldCupForMode,
   syncLimitedMetaRankings,
   fetchPvPokeLimitedMetasFromGitHub
 } from './data/gblData';
@@ -1735,9 +1737,11 @@ export default function App() {
     const next = exists ? pinnedGblMetas.filter((id) => id !== metaId) : [...pinnedGblMetas, metaId];
     setPinnedGblLimitedMetas(next);
     setPinnedGblMetasState(next);
+    setLimitedMetaCatalog(getLimitedMetaCatalog());
     if (!exists) {
       setStartBattleToast(`🔄 Fetching PvPoke rankings for ${metaId}...`);
       const count = await syncLimitedMetaRankings(metaId);
+      setLimitedMetaCatalog(getLimitedMetaCatalog());
       setStartBattleToast(
         count > 0
           ? `✅ Pinned "${metaId}" to Standard GBL (${count} ranked Pokémon synced from PvPoke GitHub)!`
@@ -1745,9 +1749,19 @@ export default function App() {
       );
       setTimeout(() => setStartBattleToast(null), 2600);
     } else {
-      if (activeTeamsLeagueFilter === metaId) setActiveTeamsLeagueFilter('ALL');
-      setStartBattleToast(`Removed "${metaId}" from Standard GBL selector.`);
-      setTimeout(() => setStartBattleToast(null), 2000);
+      const hasPresetForCup = presets.some((p) => p.league.toLowerCase() === metaId.toLowerCase());
+      if (activeTeamsLeagueFilter === metaId) {
+        setActiveTeamsLeagueFilter(hasPresetForCup ? 'OLD_CUPS' : 'ALL');
+      }
+      if (logFilterLeague.toLowerCase() === metaId.toLowerCase()) {
+        setLogFilterLeague('OLD_CUPS');
+      }
+      setStartBattleToast(
+        hasPresetForCup
+          ? `Removed "${metaId}" from GBL selector (existing teams moved to "Old Cups" filter).`
+          : `Removed "${metaId}" from Standard GBL selector.`
+      );
+      setTimeout(() => setStartBattleToast(null), 2400);
     }
   };
 
@@ -1756,9 +1770,11 @@ export default function App() {
     const next = exists ? pinnedShow6Metas.filter((id) => id !== metaId) : [...pinnedShow6Metas, metaId];
     setPinnedShow6LimitedMetas(next);
     setPinnedShow6MetasState(next);
+    setLimitedMetaCatalog(getLimitedMetaCatalog());
     if (!exists) {
       setStartBattleToast(`🔄 Fetching PvPoke rankings for ${metaId}...`);
       const count = await syncLimitedMetaRankings(metaId);
+      setLimitedMetaCatalog(getLimitedMetaCatalog());
       setStartBattleToast(
         count > 0
           ? `🏛️ Pinned "${metaId}" to Battle Frontier / Show 6 (${count} ranked Pokémon synced)!`
@@ -1766,9 +1782,19 @@ export default function App() {
       );
       setTimeout(() => setStartBattleToast(null), 2600);
     } else {
-      if (activeTeamsLeagueFilter === metaId) setActiveTeamsLeagueFilter('ALL');
-      setStartBattleToast(`Removed "${metaId}" from Battle Frontier / Show 6 selector.`);
-      setTimeout(() => setStartBattleToast(null), 2000);
+      const hasPresetForCup = presets.some((p) => p.league.toLowerCase() === metaId.toLowerCase());
+      if (activeTeamsLeagueFilter === metaId) {
+        setActiveTeamsLeagueFilter(hasPresetForCup ? 'OLD_CUPS' : 'ALL');
+      }
+      if (logFilterLeague.toLowerCase() === metaId.toLowerCase()) {
+        setLogFilterLeague('OLD_CUPS');
+      }
+      setStartBattleToast(
+        hasPresetForCup
+          ? `Removed "${metaId}" from Show 6 selector (existing teams moved to "Old Cups" filter).`
+          : `Removed "${metaId}" from Battle Frontier / Show 6 selector.`
+      );
+      setTimeout(() => setStartBattleToast(null), 2400);
     }
   };
 
@@ -9992,12 +10018,9 @@ export default function App() {
                 >
                   All Teams ({presets.length})
                 </button>
-                {Array.from(
-                  new Set([
-                    ...(appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues),
-                    ...presets.map((p) => p.league)
-                  ])
-                ).map((lg) => {
+                {(appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues)
+                  .filter((lg) => !isOldCupForMode(lg, appCombatMode))
+                  .map((lg) => {
                   const count = presets.filter((p) => p.league === lg).length;
                   const shortName =
                     lg === 'GREAT LEAGUE'
@@ -10039,6 +10062,33 @@ export default function App() {
                     </button>
                   );
                 })}
+                {(() => {
+                  const oldCupsCount = presets.filter((p) => isOldCupForMode(p.league, appCombatMode)).length;
+                  if (oldCupsCount === 0 && activeTeamsLeagueFilter !== 'OLD_CUPS') return null;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTeamsLeagueFilter('OLD_CUPS')}
+                      title="Teams from unsynced/unchecked cups or cups outside the 4-week active window"
+                      className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 ${
+                        activeTeamsLeagueFilter === 'OLD_CUPS'
+                          ? 'bg-amber-500 text-slate-950 border-amber-400 shadow'
+                          : 'bg-slate-950 border-amber-500/40 text-amber-300 hover:border-amber-400'
+                      }`}
+                    >
+                      <span>🗄️ Old Cups</span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                          activeTeamsLeagueFilter === 'OLD_CUPS'
+                            ? 'bg-slate-950/25 text-slate-950 font-black'
+                            : 'bg-amber-500/20 text-amber-300'
+                        }`}
+                      >
+                        {oldCupsCount}
+                      </span>
+                    </button>
+                  );
+                })()}
               </div>
               <button
                 type="button"
@@ -10053,7 +10103,13 @@ export default function App() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               {presets
                 .map((preset, presetIdx) => ({ preset, presetIdx }))
-                .filter(({ preset }) => activeTeamsLeagueFilter === 'ALL' || preset.league === activeTeamsLeagueFilter)
+                .filter(({ preset }) =>
+                  activeTeamsLeagueFilter === 'ALL'
+                    ? true
+                    : activeTeamsLeagueFilter === 'OLD_CUPS'
+                    ? isOldCupForMode(preset.league, appCombatMode)
+                    : preset.league === activeTeamsLeagueFilter
+                )
                 .map(({ preset, presetIdx }) => {
                 const isSelected = preset.id === selectedPresetId;
                 const isDragged = draggedPresetIndex === presetIdx;
@@ -11878,8 +11934,8 @@ export default function App() {
                         cls: 'text-sky-300 border-sky-500/40 bg-sky-500/10'
                       }
                     : {
-                        badge: '🕒 RECENT (THIS SEASON)',
-                        desc: 'Active non-archived PvPoke cups with verified rankings (Obsolete /archive/ cups hidden)',
+                        badge: '🕒 RECENT (≤ 4 WEEKS)',
+                        desc: 'Selectable for 4 weeks after last seen on PvPoke (expired >4w cups auto-delete when unchecked)',
                         cls: 'text-amber-300 border-amber-500/40 bg-amber-500/10'
                       };
 
@@ -11899,11 +11955,17 @@ export default function App() {
                         const isPinnedGbl = pinnedGblMetas.includes(fmt.id);
                         const isPinnedShow6 = pinnedShow6Metas.includes(fmt.id);
                         const sheetAlias = limitedMetaSheetAliases[fmt.id] || '';
+                        const isExpired4w = isExpiredLimitedMeta(fmt);
+                        const daysAgo = fmt.lastSeenAt
+                          ? Math.max(0, Math.floor((Date.now() - fmt.lastSeenAt) / (24 * 60 * 60 * 1000)))
+                          : 0;
                         return (
                           <div
                             key={fmt.id}
                             className={`p-3 rounded-xl border transition space-y-2 ${
-                              isPinnedGbl || isPinnedShow6
+                              isExpired4w
+                                ? 'bg-rose-950/25 border-rose-500/60 shadow-md'
+                                : isPinnedGbl || isPinnedShow6
                                 ? 'bg-slate-950 border-purple-400/60 shadow-md'
                                 : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
                             }`}
@@ -11916,8 +11978,14 @@ export default function App() {
                                 <div className="text-[10px] font-mono text-slate-400">
                                   cup: <span className="text-purple-300">{fmt.cupKey}</span> • Max CP:{' '}
                                   <span className="text-sky-300">{fmt.cp >= 10000 ? 'Uncapped' : fmt.cp}</span>
-                                  {fmt.allowMegas ? ' • 🧬 Max 1 Mega' : ''}
+                                  {fmt.allowMegas ? ' • 🧬 Max 1 Mega/Primal' : ''}
+                                  {fmt.lifecycle === 'RECENT' && !isExpired4w ? ` • 🕒 ${daysAgo}d ago` : ''}
                                 </div>
+                                {isExpired4w && (
+                                  <div className="text-[10px] font-extrabold text-rose-300 mt-0.5">
+                                    ⚠️ Expired (&gt;4w, {daysAgo}d ago) — kept while pinned; uncheck to delete
+                                  </div>
+                                )}
                               </div>
                             </div>
 
@@ -13004,7 +13072,12 @@ export default function App() {
             startOfYesterday.setDate(startOfYesterday.getDate() - 1);
             const sevenDaysAgo = nowMs - 7 * 24 * 60 * 60 * 1000;
             return entries.filter((e) => {
-              const leagueOk = logFilterLeague === 'ALL LEAGUES' || e.league.toUpperCase() === logFilterLeague.toUpperCase();
+              const leagueOk =
+                logFilterLeague === 'ALL LEAGUES'
+                  ? true
+                  : logFilterLeague === 'OLD_CUPS'
+                  ? isOldCupForMode(e.league, appCombatMode)
+                  : e.league.toUpperCase() === logFilterLeague.toUpperCase();
               const teamOk =
                 logFilterTeamId === 'ALL TEAMS' ||
                 e.presetId === logFilterTeamId ||
@@ -13456,20 +13529,18 @@ export default function App() {
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-semibold"
                     >
                       <option value="ALL LEAGUES">ALL LEAGUES</option>
-                      {appCombatMode === 'show6' ? (
-                        <>
-                          <option value="Battle Frontier (Spectral)">Battle Frontier (Spectral)</option>
-                          <option value="Battle Frontier (Cauldron)">Battle Frontier (Cauldron)</option>
-                          <option value="Battle Frontier (Master)">Battle Frontier (Master)</option>
-                        </>
-                      ) : (
-                        <>
-                          <option value="GREAT LEAGUE">GREAT LEAGUE</option>
-                          <option value="ULTRA LEAGUE">ULTRA LEAGUE</option>
-                          <option value="MASTER LEAGUE">MASTER LEAGUE</option>
-                          <option value="MEGA MASTER LEAGUE">MEGA MASTER LEAGUE</option>
-                        </>
-                      )}
+                      {(appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues)
+                        .filter((lg) => !isOldCupForMode(lg, appCombatMode))
+                        .map((lg) => (
+                          <option key={lg} value={lg}>
+                            {lg}
+                          </option>
+                        ))}
+                      {(() => {
+                        const oldCupLogsCount = battleLogs.filter((e) => isOldCupForMode(e.league, appCombatMode)).length;
+                        if (oldCupLogsCount === 0 && logFilterLeague !== 'OLD_CUPS') return null;
+                        return <option value="OLD_CUPS">🗄️ Old Cups ({oldCupLogsCount})</option>;
+                      })()}
                     </select>
                   </div>
 

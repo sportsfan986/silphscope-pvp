@@ -52,17 +52,22 @@ export type LeagueType = CoreLeagueType | (string & {});
 export type TeamArchetype = "ABB" | "ABC" | "DUO";
 export type LimitedMetaLifecycleStatus = "CURRENT" | "UPCOMING" | "RECENT";
 
+export const FOUR_WEEKS_MS = 28 * 24 * 60 * 60 * 1000;
+
 export interface LimitedMetaFormat {
   id: string;
   cup: string;
+  cupKey: string;
   cp: 500 | 1500 | 2500 | 10000;
   title: string;
   label: string;
   status: LimitedMetaLifecycleStatus;
+  lifecycle: LimitedMetaLifecycleStatus;
   rankingsUrl: string;
   isShow6Native?: boolean;
   allowMegas?: boolean;
   verifiedRankingsCount?: number;
+  lastSeenAt: number;
 }
 
 export const GBL_LEAGUES: LeagueType[] = [
@@ -79,243 +84,225 @@ export const SHOW6_LEAGUES: LeagueType[] = [
   "Battle Frontier (Master)"
 ];
 
+const NOW_INIT_MS = Date.now();
+
 export const DEFAULT_LIMITED_META_CATALOG: LimitedMetaFormat[] = [
-  // CURRENT (Active in formats.json & live rotation)
+  // CURRENT (Live in PvPoke gamemaster.json["formats"])
   {
-    id: "fantasy_1500",
+    id: "LAIC 2027 Championship Series Cup (1500)",
+    cup: "laic2027",
+    cupKey: "laic2027",
+    cp: 1500,
+    title: "LAIC 2027 Championship Series Cup",
+    label: "LAIC 2027 Championship Series Cup (1500)",
+    status: "CURRENT",
+    lifecycle: "CURRENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/laic2027/overall/rankings-1500.json",
+    isShow6Native: true,
+    allowMegas: true,
+    lastSeenAt: NOW_INIT_MS
+  },
+  {
+    id: "Mega Halloween Cup (1500)",
+    cup: "halloweenmega",
+    cupKey: "halloweenmega",
+    cp: 1500,
+    title: "Mega Halloween Cup",
+    label: "Mega Halloween Cup (1500)",
+    status: "CURRENT",
+    lifecycle: "CURRENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/halloweenmega/overall/rankings-1500.json",
+    allowMegas: true,
+    lastSeenAt: NOW_INIT_MS
+  },
+  {
+    id: "Fantasy Cup (1500)",
     cup: "fantasy",
+    cupKey: "fantasy",
     cp: 1500,
     title: "Fantasy Cup",
     label: "Fantasy Cup (1500)",
     status: "CURRENT",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fantasy/overall/rankings-1500.json"
+    lifecycle: "CURRENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fantasy/overall/rankings-1500.json",
+    allowMegas: false,
+    lastSeenAt: NOW_INIT_MS
   },
   {
-    id: "color_1500",
-    cup: "color",
+    id: "Mega Great League (1500)",
+    cup: "mega",
+    cupKey: "mega",
     cp: 1500,
-    title: "Color Cup",
-    label: "Color Cup (1500)",
+    title: "Mega Great League",
+    label: "Mega Great League (1500)",
     status: "CURRENT",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/color/overall/rankings-1500.json"
+    lifecycle: "CURRENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-1500.json",
+    allowMegas: true,
+    lastSeenAt: NOW_INIT_MS
   },
   {
-    id: "love_1500",
-    cup: "love",
-    cp: 1500,
-    title: "Love Cup",
-    label: "Love Cup (1500)",
-    status: "CURRENT",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/love/overall/rankings-1500.json"
-  },
-  {
-    id: "spring_1500",
-    cup: "spring",
-    cp: 1500,
-    title: "Spring Cup",
-    label: "Spring Cup (1500)",
-    status: "CURRENT",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/spring/overall/rankings-1500.json"
-  },
-  {
-    id: "championshipseries_1500",
-    cup: "championshipseries",
-    cp: 1500,
-    title: "Play! Pokémon Championship Series",
-    label: "Play! Pokémon Championship (1500)",
-    status: "CURRENT",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/championshipseries/overall/rankings-1500.json",
-    isShow6Native: true
-  },
-  {
-    id: "retro_1500",
-    cup: "retro",
-    cp: 1500,
-    title: "Retro Cup",
-    label: "Retro Cup (1500)",
-    status: "CURRENT",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/retro/overall/rankings-1500.json"
-  },
-  {
-    id: "premier_10000",
-    cup: "premier",
-    cp: 10000,
-    title: "Master League Premier",
-    label: "Master Premier (10000)",
-    status: "CURRENT",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/premier/overall/rankings-10000.json"
-  },
-  // UPCOMING (Next scheduled GBL & Battle Frontier rotations in formats.json)
-  {
-    id: "sunshine_1500",
-    cup: "sunshine",
-    cp: 1500,
-    title: "Sunshine Cup",
-    label: "Sunshine Cup (1500)",
-    status: "UPCOMING",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/sunshine/overall/rankings-1500.json"
-  },
-  {
-    id: "summer_1500",
-    cup: "summer",
-    cp: 1500,
-    title: "Summer Cup",
-    label: "Summer Cup (1500)",
-    status: "UPCOMING",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/summer/overall/rankings-1500.json"
-  },
-  {
-    id: "summer_2500",
-    cup: "summer",
+    id: "Mega Ultra League (2500)",
+    cup: "mega",
+    cupKey: "mega",
     cp: 2500,
-    title: "Summer Cup (Ultra)",
-    label: "Summer Cup (2500)",
-    status: "UPCOMING",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/summer/overall/rankings-2500.json"
+    title: "Mega Ultra League",
+    label: "Mega Ultra League (2500)",
+    status: "CURRENT",
+    lifecycle: "CURRENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-2500.json",
+    allowMegas: true,
+    lastSeenAt: NOW_INIT_MS
   },
   {
-    id: "willpower_1500",
-    cup: "willpower",
+    id: "Devon Trail Cup (1500)",
+    cup: "trail",
+    cupKey: "trail",
     cp: 1500,
-    title: "Willpower Cup",
-    label: "Willpower Cup (1500)",
-    status: "UPCOMING",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/willpower/overall/rankings-1500.json"
+    title: "Devon Trail Cup",
+    label: "Devon Trail Cup (1500)",
+    status: "CURRENT",
+    lifecycle: "CURRENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/trail/overall/rankings-1500.json",
+    isShow6Native: true,
+    allowMegas: false,
+    lastSeenAt: NOW_INIT_MS
   },
   {
-    id: "psychic_1500",
-    cup: "psychic",
+    id: "Devon Fable Cup (1500)",
+    cup: "fable",
+    cupKey: "fable",
     cp: 1500,
-    title: "Psychic Cup",
-    label: "Psychic Cup (1500)",
-    status: "UPCOMING",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/psychic/overall/rankings-1500.json"
+    title: "Devon Fable Cup",
+    label: "Devon Fable Cup (1500)",
+    status: "CURRENT",
+    lifecycle: "CURRENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fable/overall/rankings-1500.json",
+    isShow6Native: true,
+    allowMegas: false,
+    lastSeenAt: NOW_INIT_MS
   },
   {
-    id: "evolution_1500",
-    cup: "evolution",
+    id: "Gymbreakers Invitational Season 7 (1500)",
+    cup: "gymbreakers",
+    cupKey: "gymbreakers",
     cp: 1500,
-    title: "Evolution Cup",
-    label: "Evolution Cup (1500)",
-    status: "UPCOMING",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/evolution/overall/rankings-1500.json"
+    title: "Gymbreakers Invitational Season 7",
+    label: "Gymbreakers Invitational Season 7 (1500)",
+    status: "CURRENT",
+    lifecycle: "CURRENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/gymbreakers/overall/rankings-1500.json",
+    isShow6Native: true,
+    allowMegas: false,
+    lastSeenAt: NOW_INIT_MS
   },
+  // RECENT (Within 4-week window by default)
   {
-    id: "catch_1500",
-    cup: "catch",
+    id: "Mega Color Cup (1500)",
+    cup: "colormega",
+    cupKey: "colormega",
     cp: 1500,
-    title: "Catch Cup",
-    label: "Catch Cup (1500)",
-    status: "UPCOMING",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/catch/overall/rankings-1500.json"
+    title: "Mega Color Cup",
+    label: "Mega Color Cup (1500)",
+    status: "RECENT",
+    lifecycle: "RECENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/colormega/overall/rankings-1500.json",
+    allowMegas: true,
+    lastSeenAt: NOW_INIT_MS - 14 * 86400_000
   },
-  // RECENT (Active this season in src/data/gamemaster/cups/*.json with verified rankings, not archived)
   {
-    id: "halloween_1500",
+    id: "Halloween Cup (1500)",
     cup: "halloween",
+    cupKey: "halloween",
     cp: 1500,
     title: "Halloween Cup",
     label: "Halloween Cup (1500)",
     status: "RECENT",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/halloween/overall/rankings-1500.json"
+    lifecycle: "RECENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/halloween/overall/rankings-1500.json",
+    allowMegas: false,
+    lastSeenAt: NOW_INIT_MS - 7 * 86400_000
   },
   {
-    id: "halloween_2500",
-    cup: "halloween",
-    cp: 2500,
-    title: "Halloween Cup (Ultra)",
-    label: "Halloween Cup (2500)",
-    status: "RECENT",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/halloween/overall/rankings-2500.json"
-  },
-  {
-    id: "holiday_1500",
-    cup: "holiday",
+    id: "Sunshine Cup (1500)",
+    cup: "sunshine",
+    cupKey: "sunshine",
     cp: 1500,
-    title: "Holiday Cup",
-    label: "Holiday Cup (1500)",
+    title: "Sunshine Cup",
+    label: "Sunshine Cup (1500)",
     status: "RECENT",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/holiday/overall/rankings-1500.json"
+    lifecycle: "RECENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/sunshine/overall/rankings-1500.json",
+    allowMegas: false,
+    lastSeenAt: NOW_INIT_MS - 18 * 86400_000
   },
   {
-    id: "holiday_2500",
-    cup: "holiday",
-    cp: 2500,
-    title: "Holiday Cup (Ultra)",
-    label: "Holiday Cup (2500)",
-    status: "RECENT",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/holiday/overall/rankings-2500.json"
-  },
-  {
-    id: "jungle_1500",
-    cup: "jungle",
-    cp: 1500,
-    title: "Electric / Jungle Cup",
-    label: "Jungle Cup (1500)",
-    status: "RECENT",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/jungle/overall/rankings-1500.json"
-  },
-  {
-    id: "fossil_1500",
-    cup: "fossil",
-    cp: 1500,
-    title: "Fossil Cup",
-    label: "Fossil Cup (1500)",
-    status: "RECENT",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fossil/overall/rankings-1500.json"
-  },
-  {
-    id: "hisui_1500",
-    cup: "hisui",
-    cp: 1500,
-    title: "Hisui Cup",
-    label: "Hisui Cup (1500)",
-    status: "RECENT",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/hisui/overall/rankings-1500.json"
-  },
-  {
-    id: "sinnoh_1500",
-    cup: "sinnoh",
-    cp: 1500,
-    title: "Sinnoh Cup",
-    label: "Sinnoh Cup (1500)",
-    status: "RECENT",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/sinnoh/overall/rankings-1500.json"
-  },
-  {
-    id: "kanto_1500",
-    cup: "kanto",
-    cp: 1500,
-    title: "Kanto Cup",
-    label: "Kanto Cup (1500)",
-    status: "RECENT",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/kanto/overall/rankings-1500.json"
-  },
-  {
-    id: "element_500",
-    cup: "element",
-    cp: 500,
-    title: "Element Cup (Little)",
-    label: "Element Cup (500)",
-    status: "RECENT",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/element/overall/rankings-500.json"
-  },
-  {
-    id: "little_500",
+    id: "Little Cup (500)",
     cup: "little",
+    cupKey: "little",
     cp: 500,
     title: "Little Cup",
     label: "Little Cup (500)",
     status: "RECENT",
-    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/little/overall/rankings-500.json"
+    lifecycle: "RECENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/little/overall/rankings-500.json",
+    allowMegas: false,
+    lastSeenAt: NOW_INIT_MS - 12 * 86400_000
+  },
+  {
+    id: "Master League Premier (10000)",
+    cup: "premier",
+    cupKey: "premier",
+    cp: 10000,
+    title: "Master League Premier",
+    label: "Master League Premier (10000)",
+    status: "RECENT",
+    lifecycle: "RECENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/premier/overall/rankings-10000.json",
+    allowMegas: false,
+    lastSeenAt: NOW_INIT_MS - 10 * 86400_000
   }
 ];
 
-export const LIMITED_META_CATALOG_STORAGE_KEY = "silphscope_pvpoke_limited_meta_catalog_v1";
+export const LIMITED_META_CATALOG_STORAGE_KEY = "silphscope_pvpoke_limited_meta_catalog_v2";
 export const PINNED_GBL_LIMITED_METAS_STORAGE_KEY = "silphscope_pinned_gbl_limited_metas_v1";
 export const PINNED_SHOW6_LIMITED_METAS_STORAGE_KEY = "silphscope_pinned_show6_limited_metas_v1";
 export const LIMITED_META_RANKINGS_CACHE_KEY = "silphscope_limited_meta_rankings_cache_v1";
 export const LIMITED_META_SHEET_ALIASES_KEY = "silphscope_limited_meta_sheet_aliases_v1";
+
+function normalizeMetaFormatEntry(raw: Partial<LimitedMetaFormat>): LimitedMetaFormat {
+  const cp: 500 | 1500 | 2500 | 10000 =
+    raw.cp === 500 || raw.cp === 1500 || raw.cp === 2500 || raw.cp === 10000 ? raw.cp : 1500;
+  const cup = (raw.cup || raw.cupKey || "custom").trim().toLowerCase();
+  const title = (raw.title || cup).trim();
+  const label = (raw.label || raw.id || `${title} (${cp})`).trim();
+  const status: LimitedMetaLifecycleStatus =
+    raw.status || raw.lifecycle || "RECENT";
+  return {
+    id: label,
+    label,
+    cup,
+    cupKey: cup,
+    cp,
+    title,
+    status,
+    lifecycle: status,
+    rankingsUrl:
+      raw.rankingsUrl ||
+      `https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/${cup}/overall/rankings-${cp}.json`,
+    isShow6Native: raw.isShow6Native,
+    allowMegas: Boolean(raw.allowMegas),
+    verifiedRankingsCount: raw.verifiedRankingsCount,
+    lastSeenAt: typeof raw.lastSeenAt === "number" && raw.lastSeenAt > 0 ? raw.lastSeenAt : Date.now()
+  };
+}
+
+export function isExpiredLimitedMeta(item: LimitedMetaFormat, nowMs: number = Date.now()): boolean {
+  const st = item.status || item.lifecycle;
+  if (st !== "RECENT") return false;
+  const seen = item.lastSeenAt > 0 ? item.lastSeenAt : nowMs;
+  return nowMs - seen > FOUR_WEEKS_MS;
+}
 
 let DYNAMIC_LIMITED_META_CATALOG: LimitedMetaFormat[] = (() => {
   try {
@@ -324,14 +311,15 @@ let DYNAMIC_LIMITED_META_CATALOG: LimitedMetaFormat[] = (() => {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const byId = new Map<string, LimitedMetaFormat>();
-          for (const d of DEFAULT_LIMITED_META_CATALOG) byId.set(d.id, d);
+          const byLabel = new Map<string, LimitedMetaFormat>();
+          for (const d of DEFAULT_LIMITED_META_CATALOG) byLabel.set(d.label, d);
           for (const p of parsed) {
-            if (p && typeof p.id === "string" && typeof p.label === "string") {
-              byId.set(p.id, p as LimitedMetaFormat);
+            if (p && (typeof p.label === "string" || typeof p.id === "string")) {
+              const norm = normalizeMetaFormatEntry(p);
+              byLabel.set(norm.label, norm);
             }
           }
-          return Array.from(byId.values());
+          return Array.from(byLabel.values());
         }
       }
     }
@@ -340,20 +328,6 @@ let DYNAMIC_LIMITED_META_CATALOG: LimitedMetaFormat[] = (() => {
   }
   return [...DEFAULT_LIMITED_META_CATALOG];
 })();
-
-export function getLimitedMetaCatalog(): LimitedMetaFormat[] {
-  const statusOrder: Record<LimitedMetaLifecycleStatus, number> = {
-    CURRENT: 0,
-    UPCOMING: 1,
-    RECENT: 2
-  };
-  return [...DYNAMIC_LIMITED_META_CATALOG].sort((a, b) => {
-    const sa = statusOrder[a.status] ?? 2;
-    const sb = statusOrder[b.status] ?? 2;
-    if (sa !== sb) return sa - sb;
-    return a.label.localeCompare(b.label);
-  });
-}
 
 export function getPinnedGblLimitedMetas(): string[] {
   try {
@@ -370,18 +344,6 @@ export function getPinnedGblLimitedMetas(): string[] {
     // ignore
   }
   return [];
-}
-
-export function setPinnedGblLimitedMetas(labels: string[]): string[] {
-  const unique = Array.from(new Set((labels || []).map((s) => s.trim()).filter(Boolean)));
-  try {
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(PINNED_GBL_LIMITED_METAS_STORAGE_KEY, JSON.stringify(unique));
-    }
-  } catch {
-    // ignore
-  }
-  return unique;
 }
 
 export function getPinnedShow6LimitedMetas(): string[] {
@@ -401,6 +363,61 @@ export function getPinnedShow6LimitedMetas(): string[] {
   return [];
 }
 
+export function pruneUncheckedExpiredMetas(): LimitedMetaFormat[] {
+  const nowMs = Date.now();
+  const pinnedLower = new Set([
+    ...getPinnedGblLimitedMetas().map((s) => s.toLowerCase()),
+    ...getPinnedShow6LimitedMetas().map((s) => s.toLowerCase())
+  ]);
+  DYNAMIC_LIMITED_META_CATALOG = DYNAMIC_LIMITED_META_CATALOG.filter((item) => {
+    const isPinned = pinnedLower.has(item.label.toLowerCase()) || pinnedLower.has(item.id.toLowerCase());
+    return !isExpiredLimitedMeta(item, nowMs) || isPinned;
+  });
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(LIMITED_META_CATALOG_STORAGE_KEY, JSON.stringify(DYNAMIC_LIMITED_META_CATALOG));
+    }
+  } catch {
+    // ignore
+  }
+  return getLimitedMetaCatalog();
+}
+
+export function getLimitedMetaCatalog(): LimitedMetaFormat[] {
+  const nowMs = Date.now();
+  const pinnedLower = new Set([
+    ...getPinnedGblLimitedMetas().map((s) => s.toLowerCase()),
+    ...getPinnedShow6LimitedMetas().map((s) => s.toLowerCase())
+  ]);
+  const statusOrder: Record<LimitedMetaLifecycleStatus, number> = {
+    CURRENT: 0,
+    UPCOMING: 1,
+    RECENT: 2
+  };
+  return DYNAMIC_LIMITED_META_CATALOG.filter((item) => {
+    const isPinned = pinnedLower.has(item.label.toLowerCase()) || pinnedLower.has(item.id.toLowerCase());
+    return !isExpiredLimitedMeta(item, nowMs) || isPinned;
+  }).sort((a, b) => {
+    const sa = statusOrder[a.status] ?? 2;
+    const sb = statusOrder[b.status] ?? 2;
+    if (sa !== sb) return sa - sb;
+    return a.label.localeCompare(b.label);
+  });
+}
+
+export function setPinnedGblLimitedMetas(labels: string[]): string[] {
+  const unique = Array.from(new Set((labels || []).map((s) => s.trim()).filter(Boolean)));
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(PINNED_GBL_LIMITED_METAS_STORAGE_KEY, JSON.stringify(unique));
+    }
+  } catch {
+    // ignore
+  }
+  pruneUncheckedExpiredMetas();
+  return unique;
+}
+
 export function setPinnedShow6LimitedMetas(labels: string[]): string[] {
   const unique = Array.from(new Set((labels || []).map((s) => s.trim()).filter(Boolean)));
   try {
@@ -410,6 +427,7 @@ export function setPinnedShow6LimitedMetas(labels: string[]): string[] {
   } catch {
     // ignore
   }
+  pruneUncheckedExpiredMetas();
   return unique;
 }
 
@@ -429,6 +447,25 @@ export function getEnabledShow6Leagues(): LeagueType[] {
     if (!out.includes(p)) out.push(p);
   }
   return out;
+}
+
+export function isOldCupForMode(league: string | undefined, mode: "gbl" | "show6"): boolean {
+  const trimmed = (league || "").trim();
+  if (!trimmed) return false;
+  const baseLeagues = mode === "show6" ? SHOW6_LEAGUES : GBL_LEAGUES;
+  if (baseLeagues.some((b) => b.toLowerCase() === trimmed.toLowerCase())) return false;
+
+  const pinned = mode === "show6" ? getPinnedShow6LimitedMetas() : getPinnedGblLimitedMetas();
+  const isCurrentlyPinned = pinned.some((p) => p.toLowerCase() === trimmed.toLowerCase());
+  if (!isCurrentlyPinned) return true;
+
+  const catEntry = DYNAMIC_LIMITED_META_CATALOG.find(
+    (m) => m.label.toLowerCase() === trimmed.toLowerCase() || m.id.toLowerCase() === trimmed.toLowerCase()
+  );
+  if (catEntry && isExpiredLimitedMeta(catEntry)) {
+    return true;
+  }
+  return false;
 }
 
 export function getLimitedMetaSheetAliases(): Record<string, string> {
@@ -488,21 +525,53 @@ export function getLeagueCpCap(league: string | undefined): 500 | 1500 | 2500 | 
   return 1500;
 }
 
+export function isMegaOrPrimalSpecies(name: string | undefined): boolean {
+  const s = (name || "").trim().toLowerCase();
+  return (
+    s.startsWith("mega ") ||
+    s.startsWith("primal ") ||
+    s.includes(" mega") ||
+    s.includes(" primal") ||
+    s.includes("(mega") ||
+    s.includes("(primal") ||
+    s.includes("_mega") ||
+    s.includes("_primal")
+  );
+}
+
+export function countMegaOrPrimalInRoster(members: Array<{ name: string } | string>): number {
+  let count = 0;
+  for (const m of members || []) {
+    const n = typeof m === "string" ? m : m?.name || "";
+    if (isMegaOrPrimalSpecies(n)) count++;
+  }
+  return count;
+}
+
+export function hasMultipleMegas(members: Array<{ name: string } | string>): boolean {
+  return countMegaOrPrimalInRoster(members) > 1;
+}
+
 export function isMegaAllowedInLeague(league: string | undefined): boolean {
   const raw = (league || "").trim();
+  if (!raw) return false;
+  const liveMap = LIVE_RANKINGS_MAP[raw] || LIVE_RANKINGS_MAP[raw.toUpperCase()];
+  if (liveMap && liveMap.size > 0) {
+    for (const spId of liveMap.keys()) {
+      if (isMegaOrPrimalSpecies(spId)) return true;
+    }
+  }
+  const catMatch = DYNAMIC_LIMITED_META_CATALOG.find(
+    (m) => m.label.toLowerCase() === raw.toLowerCase() || m.id.toLowerCase() === raw.toLowerCase()
+  );
+  if (catMatch) return Boolean(catMatch.allowMegas);
   const u = raw.toUpperCase();
-  if (
+  return (
     u === "MEGA MASTER LEAGUE" ||
     u.includes("MEGA") ||
     u.includes("BATTLE FRONTIER (CAULDRON)") ||
     u.includes("BATTLE FRONTIER (MASTER)")
-  ) {
-    return true;
-  }
-  const catMatch = DYNAMIC_LIMITED_META_CATALOG.find(
-    (m) => m.label.toLowerCase() === raw.toLowerCase()
   );
-  return Boolean(catMatch?.allowMegas);
 }
 
 export function isBattleFrontierLeague(league: string | undefined): boolean {
@@ -518,24 +587,6 @@ export function isBattleFrontierLeague(league: string | undefined): boolean {
 export function isShow6EligibleLeague(league: string | undefined): boolean {
   const norm = normalizeLeagueName(league);
   return getEnabledShow6Leagues().includes(norm) || SHOW6_LEAGUES.includes(norm);
-}
-
-export function isMegaOrPrimalSpecies(name: string | undefined): boolean {
-  const s = (name || "").trim();
-  return /^Mega\s+|^Primal\s+|\((Mega|Primal)(\s+[XY])?\)/i.test(s);
-}
-
-export function countMegaOrPrimalInRoster(members: Array<{ name: string } | string>): number {
-  let count = 0;
-  for (const m of members || []) {
-    const n = typeof m === "string" ? m : m?.name || "";
-    if (isMegaOrPrimalSpecies(n)) count++;
-  }
-  return count;
-}
-
-export function hasMultipleMegas(members: Array<{ name: string } | string>): boolean {
-  return countMegaOrPrimalInRoster(members) > 1;
 }
 
 export function normalizeLeagueName(league: string | undefined): LeagueType {
@@ -15473,18 +15524,21 @@ export const INITIAL_SHOW6_PRESETS_OF_3: TeamPreset[] = recalculateAllPresetsMet
  * storing the parsed rankings into `LIVE_RANKINGS_MAP[meta.label]`, `LIVE_RANKINGS_LIST[meta.label]`, and `localStorage`.
  */
 export async function syncLimitedMetaRankings(
-  formatsToSync?: LimitedMetaFormat[]
-): Promise<{
-  syncedFormats: number;
-  entriesByFormat: Record<string, number>;
-}> {
+  formatsToSync?: LimitedMetaFormat[] | string
+): Promise<number> {
   const catalog = getLimitedMetaCatalog();
   const pinnedSet = new Set([
     ...getPinnedGblLimitedMetas().map((s) => s.toLowerCase()),
     ...getPinnedShow6LimitedMetas().map((s) => s.toLowerCase())
   ]);
-  const targets =
-    formatsToSync && formatsToSync.length > 0
+  const targets: LimitedMetaFormat[] =
+    typeof formatsToSync === "string"
+      ? catalog.filter(
+          (m) =>
+            m.label.toLowerCase() === formatsToSync.toLowerCase() ||
+            m.id.toLowerCase() === formatsToSync.toLowerCase()
+        )
+      : Array.isArray(formatsToSync) && formatsToSync.length > 0
       ? formatsToSync
       : catalog.filter((m) => pinnedSet.has(m.label.toLowerCase()));
 
@@ -15521,6 +15575,7 @@ export async function syncLimitedMetaRankings(
           cachedObj[fmt.label] = parsed.slice(0, 220);
           entriesByFormat[fmt.label] = parsed.length;
           fmt.verifiedRankingsCount = parsed.length;
+          fmt.allowMegas = parsed.some((e) => isMegaOrPrimalSpecies(e.speciesId));
         }
       } catch {
         // ignore network errors
@@ -15536,37 +15591,89 @@ export async function syncLimitedMetaRankings(
     // ignore quota errors
   }
 
-  return {
-    syncedFormats: Object.keys(entriesByFormat).length,
-    entriesByFormat
-  };
+  if (typeof formatsToSync === "string") {
+    return entriesByFormat[formatsToSync] || Object.values(entriesByFormat)[0] || 0;
+  }
+  return Object.keys(entriesByFormat).length;
 }
 
 /**
  * Discovers Current, Upcoming, and Recent Limited Metas directly from the PvPoke GitHub repository:
- * 1. Fetches `src/data/gamemaster/formats.json` (excluding `hideRankings: true` and base open leagues)
- * 2. Fetches `src/data/gamemaster/cups/*.json` directory listing (excluding `archive/` obsolete formats)
- * 3. Verifies `src/data/rankings/{cup}/overall/rankings-{cp}.json` exists and has ranked Pokémon
- * 4. Classifies each format into `CURRENT`, `UPCOMING`, or `RECENT` and persists to `LIMITED_META_CATALOG_STORAGE_KEY`.
+ * 1. Fetches compiled `src/data/gamemaster.json` (`formats` and `cups` arrays) to match the live pvpoke.com dropdown
+ * 2. Checks recently updated branches & commit dates for `UPCOMING` and `RECENT` metas
+ * 3. Verifies `src/data/rankings/{cup}/overall/rankings-{cp}.json` exists and dynamically detects `allowMegas` from ranked species
+ * 4. Enforces the 4-week (`lastSeenAt`) expiration rule (retaining expired RECENT formats only while pinned).
  */
 export async function fetchPvPokeLimitedMetasFromGitHub(): Promise<{
   catalog: LimitedMetaFormat[];
+  formats: LimitedMetaFormat[];
   currentCount: number;
   upcomingCount: number;
   recentCount: number;
   summary: string;
+  statusMessage: string;
 }> {
-  const excludedBaseCups = new Set(["all", "overall", "classic", "premierclassic"]);
-  const discoveredById = new Map<string, LimitedMetaFormat>();
+  const nowMs = Date.now();
+  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+  const excludedBaseCups = new Set(["all", "overall", "classic", "premierclassic", "custom"]);
+  const excludedBaseTitles = new Set([
+    "GREAT LEAGUE",
+    "ULTRA LEAGUE",
+    "MASTER LEAGUE",
+    "MEGA MASTER LEAGUE",
+    "BATTLE FRONTIER (SPECTRAL)",
+    "BATTLE FRONTIER (CAULDRON)",
+    "BATTLE FRONTIER (MASTER)"
+  ]);
+
+  const pinnedLower = new Set([
+    ...getPinnedGblLimitedMetas().map((s) => s.toLowerCase()),
+    ...getPinnedShow6LimitedMetas().map((s) => s.toLowerCase())
+  ]);
+
+  const previousByLabel = new Map<string, LimitedMetaFormat>();
   for (const d of DEFAULT_LIMITED_META_CATALOG) {
-    discoveredById.set(d.id, { ...d });
+    previousByLabel.set(d.label, { ...d });
+  }
+  for (const existing of DYNAMIC_LIMITED_META_CATALOG) {
+    previousByLabel.set(existing.label, { ...existing });
   }
 
+  // Demote previous CURRENT entries to RECENT (preserving lastSeenAt) until re-confirmed in live gamemaster.json["formats"]
+  const discoveredByLabel = new Map<string, LimitedMetaFormat>();
+  for (const [lbl, prev] of previousByLabel.entries()) {
+    const nextStatus: LimitedMetaLifecycleStatus = prev.status === "CURRENT" ? "RECENT" : prev.status;
+    discoveredByLabel.set(lbl, {
+      ...prev,
+      status: nextStatus,
+      lifecycle: nextStatus
+    });
+  }
+
+  const fetchCupLastCommitMs = async (cupSlug: string): Promise<number | null> => {
+    try {
+      const res = await fetch(
+        `https://api.github.com/repos/pvpoke/pvpoke/commits?path=src/data/rankings/${cupSlug}&per_page=1`
+      );
+      if (!res.ok) return null;
+      const arr = await res.json();
+      if (Array.isArray(arr) && arr.length > 0) {
+        const dateStr = arr[0]?.commit?.committer?.date;
+        if (typeof dateStr === "string") {
+          const parsedMs = Date.parse(dateStr);
+          if (!Number.isNaN(parsedMs)) return parsedMs;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  };
+
   try {
-    const [formatsRes, cupsDirRes] = await Promise.all([
-      fetch(PVPOKE_ENDPOINTS.FORMATS_JSON).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      fetch(PVPOKE_ENDPOINTS.CUPS_DIR_API).then((r) => (r.ok ? r.json() : null)).catch(() => null)
-    ]);
+    const gmRes = await fetch(PVPOKE_ENDPOINTS.GAMEMASTER)
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
 
     const candidateList: Array<{
       cup: string;
@@ -15574,127 +15681,138 @@ export async function fetchPvPokeLimitedMetasFromGitHub(): Promise<{
       title: string;
       status: LimitedMetaLifecycleStatus;
       isShow6Native?: boolean;
-      allowMegas?: boolean;
+      lastSeenAt: number;
+      rankingsUrl?: string;
     }> = [];
 
-    if (Array.isArray(formatsRes)) {
-      formatsRes.forEach((f: Record<string, unknown>, idx: number) => {
-        if (!f || f.hideRankings === true) return;
+    const liveCupCpSet = new Set<string>();
+
+    if (gmRes && typeof gmRes === "object") {
+      const formatsArr = Array.isArray((gmRes as Record<string, unknown>).formats)
+        ? ((gmRes as Record<string, unknown>).formats as Array<Record<string, unknown>>)
+        : [];
+      for (const f of formatsArr) {
+        if (!f || f.hideRankings === true) continue;
         const cup = typeof f.cup === "string" ? f.cup.trim().toLowerCase() : "";
         const cpRaw = Number(f.cp) || 1500;
         const cp: 500 | 1500 | 2500 | 10000 =
           cpRaw <= 500 ? 500 : cpRaw <= 1500 ? 1500 : cpRaw <= 2500 ? 2500 : 10000;
-        if (!cup || excludedBaseCups.has(cup)) return;
-        if (cup === "mega" && cp === 10000) return;
-        if (cup === "spectral" || cup === "cauldron" || cup === "battlefrontiermaster") return;
+        if (!cup || excludedBaseCups.has(cup)) continue;
+        if (cup === "mega" && cp === 10000) continue;
+        if (cup === "spectral" || cup === "cauldron" || cup === "battlefrontiermaster") continue;
 
         const title =
           typeof f.title === "string" && f.title.trim()
             ? f.title.trim()
             : `${cup.charAt(0).toUpperCase() + cup.slice(1)} Cup`;
-        const metaStr = typeof f.meta === "string" ? f.meta.toLowerCase() : "";
-        const status: LimitedMetaLifecycleStatus =
-          metaStr.includes("upcoming") || idx >= 6 ? "UPCOMING" : "CURRENT";
+        if (excludedBaseTitles.has(title.toUpperCase())) continue;
+
+        liveCupCpSet.add(`${cup}_${cp}`);
+        const status: LimitedMetaLifecycleStatus = f.showFormat === false ? "UPCOMING" : "CURRENT";
         candidateList.push({
           cup,
           cp,
           title,
           status,
-          isShow6Native: cup.includes("championship") || cup.includes("frontier") || Boolean(f.showCup),
-          allowMegas: title.toLowerCase().includes("mega") || cup.includes("mega")
+          isShow6Native:
+            title.toLowerCase().includes("championship") ||
+            title.toLowerCase().includes("devon") ||
+            title.toLowerCase().includes("gymbreakers") ||
+            cup.includes("frontier"),
+          lastSeenAt: nowMs
         });
-      });
-    }
+      }
 
-    if (Array.isArray(cupsDirRes)) {
-      for (const item of cupsDirRes) {
-        if (!item || typeof item !== "object") continue;
-        const fileObj = item as Record<string, unknown>;
-        if (fileObj.type !== "file") continue;
-        const fileName = typeof fileObj.name === "string" ? fileObj.name : "";
-        if (!fileName.endsWith(".json")) continue;
-        const cupSlug = fileName.replace(/\.json$/i, "").trim().toLowerCase();
-        if (!cupSlug || excludedBaseCups.has(cupSlug)) continue;
-        if (cupSlug === "mega" || cupSlug === "spectral" || cupSlug === "cauldron" || cupSlug === "battlefrontiermaster") {
-          continue;
-        }
-        if (candidateList.some((c) => c.cup === cupSlug)) continue;
+      const cupsArr = Array.isArray((gmRes as Record<string, unknown>).cups)
+        ? ((gmRes as Record<string, unknown>).cups as Array<Record<string, unknown>>)
+        : [];
+      for (const cObj of cupsArr) {
+        if (!cObj) continue;
+        const cup = typeof cObj.name === "string" ? cObj.name.trim().toLowerCase() : "";
+        const title = typeof cObj.title === "string" ? cObj.title.trim() : "";
+        const cpRaw = Number(cObj.league) || 1500;
+        const cp: 500 | 1500 | 2500 | 10000 =
+          cpRaw <= 500 ? 500 : cpRaw <= 1500 ? 1500 : cpRaw <= 2500 ? 2500 : 10000;
+        if (!cup || !title || excludedBaseCups.has(cup)) continue;
+        if (excludedBaseTitles.has(title.toUpperCase())) continue;
+        if (cup === "mega" || cup === "spectral" || cup === "cauldron" || cup === "battlefrontiermaster") continue;
+        if (liveCupCpSet.has(`${cup}_${cp}`)) continue;
 
-        const existingDefault = DEFAULT_LIMITED_META_CATALOG.find((d) => d.cup === cupSlug);
-        const prettyTitle =
-          existingDefault?.title ||
-          `${cupSlug
-            .replace(/([a-z])([A-Z])/g, "$1 $2")
-            .replace(/[-_]+/g, " ")
-            .replace(/\b\w/g, (ch) => ch.toUpperCase())} Cup`;
-        const inferredCp: 500 | 1500 | 2500 | 10000 =
-          existingDefault?.cp ||
-          (cupSlug.includes("little") || cupSlug.includes("element")
-            ? 500
-            : cupSlug.includes("premier") || cupSlug.includes("master")
-            ? 10000
-            : 1500);
+        const cleanTitle = title.replace(/\s*\(\d+\)\s*$/, "").trim();
+        const label = `${cleanTitle} (${cp})`;
+        const prev = previousByLabel.get(label);
+        const commitMs = (await fetchCupLastCommitMs(cup)) ?? prev?.lastSeenAt ?? nowMs - 21 * 86400_000;
+        const ageMs = nowMs - commitMs;
+        const isPinned = pinnedLower.has(label.toLowerCase());
+        if (ageMs > FOUR_WEEKS_MS && !isPinned) continue;
+
+        const status: LimitedMetaLifecycleStatus =
+          ageMs <= sevenDaysMs && !prev ? "UPCOMING" : "RECENT";
         candidateList.push({
-          cup: cupSlug,
-          cp: inferredCp,
-          title: prettyTitle,
-          status: existingDefault?.status || "RECENT",
-          isShow6Native: existingDefault?.isShow6Native,
-          allowMegas: prettyTitle.toLowerCase().includes("mega")
+          cup,
+          cp,
+          title: cleanTitle,
+          status,
+          isShow6Native: prev?.isShow6Native,
+          lastSeenAt: commitMs
         });
       }
     }
 
     await Promise.all(
-      candidateList.slice(0, 24).map(async (cand) => {
-        const id = `${cand.cup}_${cand.cp}`;
-        const rankingsUrl = `https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/${cand.cup}/overall/rankings-${cand.cp}.json`;
+      candidateList.slice(0, 28).map(async (cand) => {
+        const cleanTitle = cand.title.replace(/\s*\(\d+\)\s*$/, "").trim();
+        const label = `${cleanTitle} (${cand.cp})`;
+        const rankingsUrl =
+          cand.rankingsUrl ||
+          `https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/${cand.cup}/overall/rankings-${cand.cp}.json`;
         try {
           const res = await fetch(rankingsUrl);
           if (!res.ok) return;
           const arr = await res.json();
           if (!Array.isArray(arr) || arr.length === 0) return;
-          const cleanTitle = cand.title.replace(/\s*\(\d+\)\s*$/, "").trim();
-          const label = `${cleanTitle} (${cand.cp})`;
+
+          const parsed = parseRankingsJsonArray(arr);
+          const detectedMega = parsed.some((e) => isMegaOrPrimalSpecies(e.speciesId));
           const fmt: LimitedMetaFormat = {
-            id,
+            id: label,
+            label,
             cup: cand.cup,
+            cupKey: cand.cup,
             cp: cand.cp,
             title: cleanTitle,
-            label,
             status: cand.status,
+            lifecycle: cand.status,
             rankingsUrl,
             isShow6Native: cand.isShow6Native,
-            allowMegas: cand.allowMegas,
-            verifiedRankingsCount: arr.length
+            allowMegas: detectedMega,
+            verifiedRankingsCount: arr.length,
+            lastSeenAt: cand.lastSeenAt
           };
-          discoveredById.set(id, fmt);
+          discoveredByLabel.set(label, fmt);
 
-          const pinnedLower = new Set([
-            ...getPinnedGblLimitedMetas().map((s) => s.toLowerCase()),
-            ...getPinnedShow6LimitedMetas().map((s) => s.toLowerCase())
-          ]);
-          if (pinnedLower.has(label.toLowerCase())) {
-            const parsed = parseRankingsJsonArray(arr);
-            if (parsed.length > 0) {
-              if (!LIVE_RANKINGS_MAP[label]) LIVE_RANKINGS_MAP[label] = new Map();
-              const map = LIVE_RANKINGS_MAP[label];
-              map.clear();
-              parsed.forEach((e) => map.set(e.speciesId.toLowerCase(), e));
-              LIVE_RANKINGS_MAP[label.toUpperCase()] = map;
-              (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)[label] = parsed;
-            }
+          if (pinnedLower.has(label.toLowerCase()) && parsed.length > 0) {
+            if (!LIVE_RANKINGS_MAP[label]) LIVE_RANKINGS_MAP[label] = new Map();
+            const map = LIVE_RANKINGS_MAP[label];
+            map.clear();
+            parsed.forEach((e) => map.set(e.speciesId.toLowerCase(), e));
+            LIVE_RANKINGS_MAP[label.toUpperCase()] = map;
+            (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)[label] = parsed;
           }
         } catch {
-          // ignore unranked/obsolete cups that lack rankings-{cp}.json
+          // ignore unranked cups
         }
       })
     );
   } catch {
-    // fallback to DEFAULT_LIMITED_META_CATALOG
+    // fallback to cached / default catalog
   }
 
-  DYNAMIC_LIMITED_META_CATALOG = Array.from(discoveredById.values());
+  DYNAMIC_LIMITED_META_CATALOG = Array.from(discoveredByLabel.values()).filter((item) => {
+    const isPinned = pinnedLower.has(item.label.toLowerCase()) || pinnedLower.has(item.id.toLowerCase());
+    return !isExpiredLimitedMeta(item, nowMs) || isPinned;
+  });
+
   try {
     if (typeof localStorage !== "undefined") {
       localStorage.setItem(LIMITED_META_CATALOG_STORAGE_KEY, JSON.stringify(DYNAMIC_LIMITED_META_CATALOG));
@@ -15706,13 +15824,16 @@ export async function fetchPvPokeLimitedMetasFromGitHub(): Promise<{
   const sorted = getLimitedMetaCatalog();
   const currentCount = sorted.filter((m) => m.status === "CURRENT").length;
   const upcomingCount = sorted.filter((m) => m.status === "UPCOMING").length;
-  const recentCount = sorted.filter((m) => m.status === "UPCOMING" ? false : m.status === "RECENT").length;
+  const recentCount = sorted.filter((m) => m.status === "RECENT").length;
+  const summary = `✅ Synced ${sorted.length} Ranked PvPoke Metas (🟢 ${currentCount} Current • 🔜 ${upcomingCount} Upcoming • 🕒 ${recentCount} Recent ≤4w)`;
   return {
     catalog: sorted,
+    formats: sorted,
     currentCount,
     upcomingCount,
     recentCount,
-    summary: `✅ Synced ${sorted.length} Ranked PvPoke Limited Metas (${currentCount} Current • ${upcomingCount} Upcoming • ${recentCount} Recent; Obsolete Hidden)`
+    summary,
+    statusMessage: summary
   };
 }
 
