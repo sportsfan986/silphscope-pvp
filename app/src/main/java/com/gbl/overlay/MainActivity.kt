@@ -572,9 +572,9 @@ class MainActivity : AppCompatActivity() {
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "5.10"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "5.11"
         } catch (_: Exception) {
-            "5.10"
+            "5.11"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -2111,7 +2111,7 @@ class MainActivity : AppCompatActivity() {
             }
 
         AlertDialog.Builder(this)
-            .setTitle("🤖 Enable AI & Anomaly Log Auto-Upload? (v5.10)")
+            .setTitle("🤖 Enable AI & Anomaly Log Auto-Upload? (v5.11)")
             .setMessage(msg)
             .setPositiveButton(if (hasToken) "✅ Enable Auto-Upload" else "🔑 Login & Enable") { _, _ ->
                 prefs.edit()

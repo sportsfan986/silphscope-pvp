@@ -1669,39 +1669,70 @@ class OverlayService : LifecycleService() {
                     jsonlContent.toByteArray(Charsets.UTF_8),
                     android.util.Base64.NO_WRAP
                 )
-                val putBatchBody = gson.toJson(
-                    mapOf(
-                        "message" to "telemetry(v5.10): $batchId (${enrichedPending.size} battles, $totalAnomalies anomalies) by @$safeUser",
-                        "content" to encodedBatchB64,
-                        "branch" to AI_TELEMETRY_BRANCH
+
+                fun tryPutBatchToBranch(targetBranch: String, targetPath: String): Pair<Boolean, Int> {
+                    val bodyStr = gson.toJson(
+                        mapOf(
+                            "message" to "telemetry(v5.11): $batchId (${enrichedPending.size} battles, $totalAnomalies anomalies) by @$safeUser",
+                            "content" to encodedBatchB64,
+                            "branch" to targetBranch
+                        )
                     )
-                ).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-
-                val putBatchReq = Request.Builder()
-                    .url("$repoBaseUrl/contents/$batchPath")
-                    .put(putBatchBody)
-                    .header("Authorization", "Bearer $token")
-                    .header("Accept", "application/vnd.github+json")
-                    .build()
-
-                var uploadedViaDirectBranch = false
-                var directBranchErrorCode = 0
-                httpClient.newCall(putBatchReq).execute().use { resp ->
-                    if (resp.isSuccessful) {
-                        uploadedViaDirectBranch = true
-                    } else {
-                        directBranchErrorCode = resp.code
+                    val req = Request.Builder()
+                        .url("$repoBaseUrl/contents/$targetPath")
+                        .put(bodyStr.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
+                        .header("Authorization", "Bearer $token")
+                        .header("Accept", "application/vnd.github+json")
+                        .build()
+                    httpClient.newCall(req).execute().use { resp ->
+                        return resp.isSuccessful to resp.code
                     }
                 }
 
-                if (uploadedViaDirectBranch) {
-                    // Update `manifest.json` on `ai-telemetry-logs` so AI Studio can inspect 1 lightweight file to discover new batches
+                fun tryEnsureBranchExists(branchName: String): Boolean {
+                    for (sourceRef in listOf("heads/sync-vault", "heads/main")) {
+                        try {
+                            val getRefReq = Request.Builder()
+                                .url("$repoBaseUrl/git/ref/$sourceRef")
+                                .header("Authorization", "Bearer $token")
+                                .header("Accept", "application/vnd.github+json")
+                                .build()
+                            var baseSha = ""
+                            httpClient.newCall(getRefReq).execute().use { rResp ->
+                                if (rResp.isSuccessful) {
+                                    val obj = JsonParser.parseString(rResp.body?.string().orEmpty()).asJsonObject
+                                    baseSha = obj.getAsJsonObject("object")?.get("sha")?.asString.orEmpty()
+                                }
+                            }
+                            if (baseSha.isNotEmpty()) {
+                                val createRefBody = gson.toJson(
+                                    mapOf(
+                                        "ref" to "refs/heads/$branchName",
+                                        "sha" to baseSha
+                                    )
+                                ).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+                                val createRefReq = Request.Builder()
+                                    .url("$repoBaseUrl/git/refs")
+                                    .post(createRefBody)
+                                    .header("Authorization", "Bearer $token")
+                                    .header("Accept", "application/vnd.github+json")
+                                    .build()
+                                httpClient.newCall(createRefReq).execute().use { cResp ->
+                                    if (cResp.isSuccessful || cResp.code == 422) return true
+                                }
+                            }
+                        } catch (_: Exception) {}
+                    }
+                    return false
+                }
+
+                fun updateBranchManifest(targetBranch: String, manifestPath: String, storedBatchPath: String) {
                     try {
-                        val manifestUrl = "$repoBaseUrl/contents/manifest.json"
-                        var existingManifest = AiTelemetryManifest(schemaVersion = "5.10", updatedAtMs = nowMs)
+                        val manifestUrl = "$repoBaseUrl/contents/$manifestPath"
+                        var existingManifest = AiTelemetryManifest(schemaVersion = "5.11", updatedAtMs = nowMs)
                         var manifestSha = ""
                         val getManifestReq = Request.Builder()
-                            .url("$manifestUrl?ref=$AI_TELEMETRY_BRANCH")
+                            .url("$manifestUrl?ref=$targetBranch")
                             .header("Authorization", "Bearer $token")
                             .header("Accept", "application/vnd.github+json")
                             .build()
@@ -1723,18 +1754,18 @@ class OverlayService : LifecycleService() {
                         }
                         val newEntry = AiTelemetryManifestEntry(
                             batchId = batchId,
-                            path = batchPath,
+                            path = storedBatchPath,
                             uploadedAtMs = nowMs,
                             uploader = safeUser,
                             deviceHash = devHash,
-                            appVersion = "5.10",
+                            appVersion = "5.11",
                             battleCount = enrichedPending.size,
                             anomalyCount = totalAnomalies,
                             highSeverityCount = highSevCount
                         )
                         val updatedBatches = (existingManifest.batches.filter { it.batchId != batchId } + newEntry).takeLast(1500)
                         val updatedManifest = AiTelemetryManifest(
-                            schemaVersion = "5.10",
+                            schemaVersion = "5.11",
                             updatedAtMs = nowMs,
                             totalBatches = updatedBatches.size,
                             totalBattles = updatedBatches.sumOf { it.battleCount },
@@ -1746,9 +1777,9 @@ class OverlayService : LifecycleService() {
                             android.util.Base64.NO_WRAP
                         )
                         val putManifestMap = mutableMapOf<String, Any>(
-                            "message" to "telemetry(v5.10): update manifest.json for $batchId",
+                            "message" to "telemetry(v5.11): update $manifestPath for $batchId",
                             "content" to manifestB64,
-                            "branch" to AI_TELEMETRY_BRANCH
+                            "branch" to targetBranch
                         )
                         if (manifestSha.isNotEmpty()) {
                             putManifestMap["sha"] = manifestSha
@@ -1761,10 +1792,35 @@ class OverlayService : LifecycleService() {
                             .build()
                         httpClient.newCall(putManifestReq).execute().close()
                     } catch (_: Exception) {}
+                }
+
+                var uploadedDestinationLabel = "@$AI_TELEMETRY_BRANCH"
+                var (uploadedOk, directBranchErrorCode) = tryPutBatchToBranch(AI_TELEMETRY_BRANCH, batchPath)
+
+                // If `ai-telemetry-logs` branch did not exist yet (404/422), try auto-creating the branch and retrying
+                if (!uploadedOk && (directBranchErrorCode == 404 || directBranchErrorCode == 422)) {
+                    if (tryEnsureBranchExists(AI_TELEMETRY_BRANCH)) {
+                        val retryRes = tryPutBatchToBranch(AI_TELEMETRY_BRANCH, batchPath)
+                        uploadedOk = retryRes.first
+                        directBranchErrorCode = retryRes.second
+                    }
+                }
+
+                if (uploadedOk) {
+                    updateBranchManifest(AI_TELEMETRY_BRANCH, "manifest.json", batchPath)
                 } else {
-                    // Tier 2 Community User Fallback: Any authenticated GitHub user can submit an Issue to the public repository,
-                    // which `.github/workflows/ingest-community-telemetry.yml` automatically commits into `ai-telemetry-logs` and closes!
-                    var uploadedViaCommunityRelay = false
+                    // Tier 2: Fallback to `sync-vault` branch (`ai_telemetry/$batchPath`)
+                    val syncVaultPath = "ai_telemetry/$batchPath"
+                    val (syncVaultOk, _) = tryPutBatchToBranch("sync-vault", syncVaultPath)
+                    if (syncVaultOk) {
+                        uploadedOk = true
+                        uploadedDestinationLabel = "@sync-vault"
+                        updateBranchManifest("sync-vault", "ai_telemetry/manifest.json", syncVaultPath)
+                    }
+                }
+
+                if (!uploadedOk) {
+                    // Tier 3: Community Issue Relay (`POST /repos/sportsfan986/silphscope-pvp/issues`)
                     try {
                         val metaHeader = gson.toJson(
                             AiTelemetryManifestEntry(
@@ -1773,14 +1829,14 @@ class OverlayService : LifecycleService() {
                                 uploadedAtMs = nowMs,
                                 uploader = safeUser,
                                 deviceHash = devHash,
-                                appVersion = "5.10",
+                                appVersion = "5.11",
                                 battleCount = enrichedPending.size,
                                 anomalyCount = totalAnomalies,
                                 highSeverityCount = highSevCount
                             )
                         )
                         val issueBodyText = buildString {
-                            appendLine("### SilphScope PvP v5.10 Community AI Telemetry Batch")
+                            appendLine("### SilphScope PvP v5.11 Community AI Telemetry Batch")
                             appendLine("- **Batch ID**: `$batchId`")
                             appendLine("- **Target Path**: `$batchPath` (`$AI_TELEMETRY_BRANCH`)")
                             appendLine("- **Battles**: ${enrichedPending.size} (Anomalies detected: $totalAnomalies, High-Severity: $highSevCount)")
@@ -1803,21 +1859,125 @@ class OverlayService : LifecycleService() {
                             .build()
                         httpClient.newCall(issueReq).execute().use { iResp ->
                             if (iResp.isSuccessful) {
-                                uploadedViaCommunityRelay = true
+                                uploadedOk = true
+                                uploadedDestinationLabel = "Community Relay"
                             }
                         }
                     } catch (_: Exception) {}
+                }
 
-                    if (!uploadedViaCommunityRelay) {
-                        return false to "Telemetry upload failed (HTTP $directBranchErrorCode). Check GitHub login in Settings."
-                    }
+                if (!uploadedOk) {
+                    // Tier 4: GitHub Gist Telemetry Vault Fallback (works with 100% of legacy `gist`-only OAuth tokens!)
+                    try {
+                        val telemetryManifestFile = "silphscope_pvp_ai_telemetry_manifest.json"
+                        var telemetryGistId = ""
+                        var existingManifest = AiTelemetryManifest(schemaVersion = "5.11", updatedAtMs = nowMs)
+
+                        val listGistsReq = Request.Builder()
+                            .url("https://api.github.com/gists?per_page=100")
+                            .header("Authorization", "Bearer $token")
+                            .header("Accept", "application/vnd.github+json")
+                            .build()
+                        httpClient.newCall(listGistsReq).execute().use { gResp ->
+                            if (gResp.isSuccessful) {
+                                val arr = JsonParser.parseString(gResp.body?.string().orEmpty()).asJsonArray
+                                for (el in arr) {
+                                    val obj = el.asJsonObject
+                                    val filesObj = obj.getAsJsonObject("files")
+                                    if (filesObj != null && filesObj.has(telemetryManifestFile)) {
+                                        telemetryGistId = obj.get("id")?.asString.orEmpty()
+                                        break
+                                    }
+                                }
+                            }
+                        }
+
+                        if (telemetryGistId.isNotEmpty()) {
+                            val getGistReq = Request.Builder()
+                                .url("https://api.github.com/gists/$telemetryGistId")
+                                .header("Authorization", "Bearer $token")
+                                .header("Accept", "application/vnd.github+json")
+                                .build()
+                            httpClient.newCall(getGistReq).execute().use { gResp ->
+                                if (gResp.isSuccessful) {
+                                    val root = JsonParser.parseString(gResp.body?.string().orEmpty()).asJsonObject
+                                    val filesObj = root.getAsJsonObject("files")
+                                    val mContent = filesObj?.getAsJsonObject(telemetryManifestFile)?.get("content")?.asString
+                                    if (!mContent.isNullOrBlank()) {
+                                        existingManifest = try {
+                                            gson.fromJson(mContent, AiTelemetryManifest::class.java) ?: existingManifest
+                                        } catch (_: Exception) { existingManifest }
+                                    }
+                                } else if (gResp.code == 404) {
+                                    telemetryGistId = ""
+                                }
+                            }
+                        }
+
+                        val newEntry = AiTelemetryManifestEntry(
+                            batchId = batchId,
+                            path = "$batchId.jsonl",
+                            uploadedAtMs = nowMs,
+                            uploader = safeUser,
+                            deviceHash = devHash,
+                            appVersion = "5.11",
+                            battleCount = enrichedPending.size,
+                            anomalyCount = totalAnomalies,
+                            highSeverityCount = highSevCount
+                        )
+                        val updatedBatches = (existingManifest.batches.filter { it.batchId != batchId } + newEntry).takeLast(1500)
+                        val updatedManifest = AiTelemetryManifest(
+                            schemaVersion = "5.11",
+                            updatedAtMs = nowMs,
+                            totalBatches = updatedBatches.size,
+                            totalBattles = updatedBatches.sumOf { it.battleCount },
+                            totalAnomalies = updatedBatches.sumOf { it.anomalyCount },
+                            batches = updatedBatches
+                        )
+
+                        val gistBodyMap = mapOf(
+                            "description" to "SilphScope PvP v5.11 AI Training & Anomaly Telemetry Vault (@$safeUser)",
+                            "public" to true,
+                            "files" to mapOf(
+                                telemetryManifestFile to mapOf("content" to gson.toJson(updatedManifest)),
+                                "$batchId.jsonl" to mapOf("content" to jsonlContent)
+                            )
+                        )
+                        val gistReqBody = gson.toJson(gistBodyMap)
+                            .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+                        val gistWriteReq = if (telemetryGistId.isEmpty()) {
+                            Request.Builder()
+                                .url("https://api.github.com/gists")
+                                .post(gistReqBody)
+                                .header("Authorization", "Bearer $token")
+                                .header("Accept", "application/vnd.github+json")
+                                .build()
+                        } else {
+                            Request.Builder()
+                                .url("https://api.github.com/gists/$telemetryGistId")
+                                .patch(gistReqBody)
+                                .header("Authorization", "Bearer $token")
+                                .header("Accept", "application/vnd.github+json")
+                                .build()
+                        }
+                        httpClient.newCall(gistWriteReq).execute().use { gwResp ->
+                            if (gwResp.isSuccessful) {
+                                uploadedOk = true
+                                uploadedDestinationLabel = "Telemetry Vault (@$safeUser)"
+                            }
+                        }
+                    } catch (_: Exception) {}
+                }
+
+                if (!uploadedOk) {
+                    return false to "Telemetry upload failed (HTTP $directBranchErrorCode). Tap Connected in Settings -> Re-Authorize GitHub."
                 }
 
                 // Clear uploaded records from pending queue
                 val uploadedIds = enrichedPending.map { it.battleId }.toSet()
                 val remaining = loadPendingAiTelemetryLogsStatic(prefs, gson).filter { it.battleId !in uploadedIds }
                 val totalUploadedSoFar = prefs.getInt(PREFS_KEY_TOTAL_AI_TELEMETRY_UPLOADED_COUNT, 0) + enrichedPending.size
-                val statusMsg = "Uploaded ${enrichedPending.size} battle${if (enrichedPending.size == 1) "" else "s"} ($totalAnomalies anomal${if (totalAnomalies == 1) "y" else "ies"}) to GitHub @$AI_TELEMETRY_BRANCH"
+                val statusMsg = "Uploaded ${enrichedPending.size} battle${if (enrichedPending.size == 1) "" else "s"} ($totalAnomalies anomal${if (totalAnomalies == 1) "y" else "ies"}) to GitHub $uploadedDestinationLabel"
                 prefs.edit()
                     .putString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(remaining))
                     .putLong(PREFS_KEY_LAST_AI_TELEMETRY_UPLOAD_MS, nowMs)
