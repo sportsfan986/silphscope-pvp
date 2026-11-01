@@ -102,11 +102,13 @@
             android:layout_marginTop="3dp" />
 
         <LinearLayout
+            android:id="@+id/layout_outer_preset_clone_row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginTop="6dp">
+            android:layout_marginTop="6dp"
+            android:visibility="gone">
 
             <Button
                 android:id="@+id/btn_clone_preset"

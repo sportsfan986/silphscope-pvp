@@ -72,7 +72,124 @@
                     android:layout_marginTop="4dp"
                     android:background="#0f172a"
                     android:paddingHorizontal="6dp"
-                    android:layout_marginBottom="6dp" />
+                    android:layout_marginBottom="8dp" />
+
+                <!-- Relocated Clone & Cross-Mode Copy Panel Inside Edit Team Card -->
+                <LinearLayout
+                    android:id="@+id/layout_edit_modal_clone_panel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#0f172a"
+                    android:padding="8dp"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="📋 Clone or Copy Team (to Any League, Limited Meta, or Mode)"
+                        android:textColor="#34d399"
+                        android:textStyle="bold"
+                        android:textSize="11sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Creates a separate team entry (auto-rescaled CP &amp; legal moves) and switches editor to the new copy."
+                        android:textColor="#94a3b8"
+                        android:textSize="9.5sp"
+                        android:layout_marginTop="2dp"
+                        android:layout_marginBottom="6dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="6dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Target Format:"
+                            android:textColor="#cbd5e1"
+                            android:textStyle="bold"
+                            android:textSize="10.5sp"
+                            android:layout_marginEnd="6dp" />
+
+                        <Spinner
+                            android:id="@+id/spinner_modal_clone_target_league"
+                            android:layout_width="0dp"
+                            android:layout_height="36dp"
+                            android:layout_weight="1"
+                            android:background="#1e293b"
+                            android:paddingHorizontal="6dp" />
+                    </LinearLayout>
+
+                    <HorizontalScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:scrollbars="none">
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <Button
+                                android:id="@+id/btn_modal_clone_same_mode"
+                                android:layout_width="wrap_content"
+                                android:layout_height="32dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="10dp"
+                                android:text="📋 Clone Team"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:backgroundTint="#059669"
+                                android:textColor="#ffffff"
+                                android:layout_marginEnd="5dp" />
+
+                            <Button
+                                android:id="@+id/btn_modal_copy_cross_mode"
+                                android:layout_width="wrap_content"
+                                android:layout_height="32dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="10dp"
+                                android:text="🏛️ Copy to Show 6 Trio"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:backgroundTint="#0284c7"
+                                android:textColor="#ffffff"
+                                android:layout_marginEnd="5dp" />
+
+                            <Button
+                                android:id="@+id/btn_modal_copy_autofill6"
+                                android:layout_width="wrap_content"
+                                android:layout_height="32dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="10dp"
+                                android:text="🏛️ Auto-Fill Show 6 (6)"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:backgroundTint="#d97706"
+                                android:textColor="#0f172a"
+                                android:layout_marginEnd="5dp" />
+
+                            <Button
+                                android:id="@+id/btn_modal_swap_to_opp6"
+                                android:layout_width="wrap_content"
+                                android:layout_height="32dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="10dp"
+                                android:text="⇄ Load Trio into Opp 6"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:backgroundTint="#7c3aed"
+                                android:textColor="#ffffff"
+                                android:visibility="gone" />
+                        </LinearLayout>
+                    </HorizontalScrollView>
+                </LinearLayout>
 
                 <TextView
                     android:layout_width="match_parent"

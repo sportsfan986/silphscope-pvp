@@ -139,7 +139,20 @@ import {
   MostLikelyFormatOpponent6Info,
   getMostLikelyMetaOpponent6ForFormat,
   getAllFormatsMostLikelyMetaOpponent6,
-  rescaleTeamMembersForLeague
+  rescaleTeamMembersForLeague,
+  LimitedMetaFormat,
+  getLimitedMetaCatalog,
+  getPinnedGblLimitedMetas,
+  setPinnedGblLimitedMetas,
+  getPinnedShow6LimitedMetas,
+  setPinnedShow6LimitedMetas,
+  getEnabledGblLeagues,
+  getEnabledShow6Leagues,
+  getLimitedMetaSheetAliases,
+  setLimitedMetaSheetAlias,
+  getLeagueCpCap,
+  syncLimitedMetaRankings,
+  fetchPvPokeLimitedMetasFromGitHub
 } from './data/gblData';
 import {
   BattleQualityMetadata,
@@ -1003,6 +1016,7 @@ export default function App() {
         setSelectedOpponentLeague('AUTO');
       }
     }
+    setActiveTeamsLeagueFilter('ALL');
     setStartBattleToast(
       mode === 'show6'
         ? '🏛️ Switched to Show 6 Mode (Great / Spectral / Cauldron / Master • Independent Teams, Trash & Battle Logs)'
@@ -1498,13 +1512,20 @@ export default function App() {
     setIsDragging(false);
   };
 
-  // Standard GBL Team Presets State (persisted in 'gbl_user_teams_persistent')
+  // Standard GBL Team Presets State (persisted in 'gbl_user_teams_persistent' — strictly Blind 3 PvP teams)
   const [gblPresets, setGblPresets] = useState<TeamPreset[]>(() => {
+    const sanitizeGblList = (arr: any[]): TeamPreset[] =>
+      arr
+        .filter((p) => p && p.combatMode !== 'show6' && !String(p.id || '').startsWith('show6-preset3-'))
+        .map((p) => ({ ...p, combatMode: 'gbl' as const }));
     try {
       const persistent = localStorage.getItem('gbl_user_teams_persistent');
       if (persistent) {
         const parsed = JSON.parse(persistent);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const clean = sanitizeGblList(parsed);
+          if (clean.length > 0) return clean;
+        }
       }
       const legacyKeys = [
         'gbl_team_presets_v6',
@@ -1519,15 +1540,18 @@ export default function App() {
         if (legacy) {
           const parsed = JSON.parse(legacy);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            localStorage.setItem('gbl_user_teams_persistent', JSON.stringify(parsed));
-            return parsed;
+            const clean = sanitizeGblList(parsed);
+            if (clean.length > 0) {
+              localStorage.setItem('gbl_user_teams_persistent', JSON.stringify(clean));
+              return clean;
+            }
           }
         }
       }
     } catch (e) {
       console.error(e);
     }
-    return INITIAL_PRESETS;
+    return INITIAL_PRESETS.map((p) => ({ ...p, combatMode: 'gbl' as const }));
   });
 
   const [gblSelectedPresetId, setGblSelectedPresetId] = useState<string>(() => {
@@ -1535,26 +1559,25 @@ export default function App() {
   });
 
   // Show 6 Mode Independent Storage: Teams of 3 for Overlay ('gbl_show6_presets_of_3_v1'), My Teams of 6 ('gbl_show6_rosters_of_6_v1'), & Opponent Teams of 6 ('gbl_show6_opp_rosters_of_6_v1')
+  // Strictly isolated: Blind 3 PvP teams never appear here unless intentionally cloned over as a separate entry.
   const [show6Presets3, setShow6Presets3] = useState<TeamPreset[]>(() => {
+    const gblDefaultIds = new Set(['preset-ml-1', 'preset-gl-1', 'preset-ul-1', 'preset-mega-1']);
     try {
       const saved = localStorage.getItem('gbl_show6_presets_of_3_v1');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((p: any) => {
-            if (isShow6EligibleLeague(p?.league)) return p;
-            const norm = String(p?.league || '').toUpperCase();
-            const mappedLg: LeagueType = norm.includes('ULTRA')
-              ? 'Battle Frontier (Cauldron)'
-              : norm.includes('MASTER')
-              ? 'Battle Frontier (Master)'
-              : 'GREAT LEAGUE';
-            return { ...p, league: mappedLg };
-          });
+          const filtered = parsed
+            .filter((p: any) => p && p.combatMode !== 'gbl' && !gblDefaultIds.has(String(p.id || '')))
+            .map((p: any) => ({
+              ...p,
+              combatMode: 'show6' as const
+            }));
+          if (filtered.length > 0) return filtered;
         }
       }
     } catch {}
-    return INITIAL_SHOW6_PRESETS_OF_3;
+    return INITIAL_SHOW6_PRESETS_OF_3.map((p) => ({ ...p, combatMode: 'show6' as const }));
   });
 
   const [show6SelectedPreset3Id, setShow6SelectedPreset3Id] = useState<string>(() => {
@@ -1673,6 +1696,102 @@ export default function App() {
   const activePreset = useMemo(() => {
     return presets.find((p) => p.id === selectedPresetId) || presets[0] || INITIAL_PRESETS[0];
   }, [presets, selectedPresetId]);
+
+  // ============================================================================
+  // PVPOKE LIMITED METAS CATALOG, PINNED METAS PER MODE, & MY TEAMS FILTER TABS
+  // ============================================================================
+  const [activeTeamsLeagueFilter, setActiveTeamsLeagueFilter] = useState<'ALL' | LeagueType>('ALL');
+  const [limitedMetaCatalog, setLimitedMetaCatalog] = useState<LimitedMetaFormat[]>(() => getLimitedMetaCatalog());
+  const [pinnedGblMetas, setPinnedGblMetasState] = useState<string[]>(() => getPinnedGblLimitedMetas());
+  const [pinnedShow6Metas, setPinnedShow6MetasState] = useState<string[]>(() => getPinnedShow6LimitedMetas());
+  const [limitedMetaSheetAliases, setLimitedMetaSheetAliasesState] = useState<Record<string, string>>(() =>
+    getLimitedMetaSheetAliases()
+  );
+  const [isSyncingPvPokeMetas, setIsSyncingPvPokeMetas] = useState<boolean>(false);
+  const [pvPokeMetasSyncStatus, setPvPokeMetasSyncStatus] = useState<string>(
+    'PvPoke GitHub Formats Ready • Grouped into Current, Upcoming & Recent (Obsolete Archived Cups Hidden)'
+  );
+  const [limitedMetaSearchQuery, setLimitedMetaSearchQuery] = useState<string>('');
+  const [modalCloneTargetLeague, setModalCloneTargetLeague] = useState<LeagueType>('GREAT LEAGUE');
+  const [show6ModalCloneTargetLeague, setShow6ModalCloneTargetLeague] = useState<LeagueType>('Battle Frontier (Spectral)');
+
+  const enabledGblLeagues = useMemo(() => getEnabledGblLeagues(), [pinnedGblMetas, limitedMetaCatalog]);
+  const enabledShow6Leagues = useMemo(() => getEnabledShow6Leagues(), [pinnedShow6Metas, limitedMetaCatalog]);
+  const allEnabledLeaguesCombined = useMemo(
+    () => Array.from(new Set([...enabledGblLeagues, ...enabledShow6Leagues])),
+    [enabledGblLeagues, enabledShow6Leagues]
+  );
+
+  // Sync rankings for any pinned Limited Metas on startup
+  useEffect(() => {
+    const allPinned = Array.from(new Set([...pinnedGblMetas, ...pinnedShow6Metas]));
+    allPinned.forEach((metaId) => {
+      syncLimitedMetaRankings(metaId).catch(() => {});
+    });
+  }, []);
+
+  const handleTogglePinnedGblMeta = async (metaId: string) => {
+    const exists = pinnedGblMetas.includes(metaId);
+    const next = exists ? pinnedGblMetas.filter((id) => id !== metaId) : [...pinnedGblMetas, metaId];
+    setPinnedGblLimitedMetas(next);
+    setPinnedGblMetasState(next);
+    if (!exists) {
+      setStartBattleToast(`🔄 Fetching PvPoke rankings for ${metaId}...`);
+      const count = await syncLimitedMetaRankings(metaId);
+      setStartBattleToast(
+        count > 0
+          ? `✅ Pinned "${metaId}" to Standard GBL (${count} ranked Pokémon synced from PvPoke GitHub)!`
+          : `✅ Pinned "${metaId}" to Standard GBL!`
+      );
+      setTimeout(() => setStartBattleToast(null), 2600);
+    } else {
+      if (activeTeamsLeagueFilter === metaId) setActiveTeamsLeagueFilter('ALL');
+      setStartBattleToast(`Removed "${metaId}" from Standard GBL selector.`);
+      setTimeout(() => setStartBattleToast(null), 2000);
+    }
+  };
+
+  const handleTogglePinnedShow6Meta = async (metaId: string) => {
+    const exists = pinnedShow6Metas.includes(metaId);
+    const next = exists ? pinnedShow6Metas.filter((id) => id !== metaId) : [...pinnedShow6Metas, metaId];
+    setPinnedShow6LimitedMetas(next);
+    setPinnedShow6MetasState(next);
+    if (!exists) {
+      setStartBattleToast(`🔄 Fetching PvPoke rankings for ${metaId}...`);
+      const count = await syncLimitedMetaRankings(metaId);
+      setStartBattleToast(
+        count > 0
+          ? `🏛️ Pinned "${metaId}" to Battle Frontier / Show 6 (${count} ranked Pokémon synced)!`
+          : `🏛️ Pinned "${metaId}" to Battle Frontier / Show 6!`
+      );
+      setTimeout(() => setStartBattleToast(null), 2600);
+    } else {
+      if (activeTeamsLeagueFilter === metaId) setActiveTeamsLeagueFilter('ALL');
+      setStartBattleToast(`Removed "${metaId}" from Battle Frontier / Show 6 selector.`);
+      setTimeout(() => setStartBattleToast(null), 2000);
+    }
+  };
+
+  const handleUpdateLimitedMetaSheetAlias = (metaId: string, aliasKeyword: string) => {
+    setLimitedMetaSheetAlias(metaId, aliasKeyword);
+    setLimitedMetaSheetAliasesState(getLimitedMetaSheetAliases());
+  };
+
+  const handleSyncPvPokeLimitedMetasFromGitHub = async () => {
+    setIsSyncingPvPokeMetas(true);
+    setPvPokeMetasSyncStatus('Querying PvPoke GitHub formats.json, active cups/*.json & verifying rankings-{cp}.json...');
+    try {
+      const res = await fetchPvPokeLimitedMetasFromGitHub();
+      setLimitedMetaCatalog(res.formats);
+      setPvPokeMetasSyncStatus(res.statusMessage);
+      setStartBattleToast(`🌐 ${res.statusMessage}`);
+      setTimeout(() => setStartBattleToast(null), 2800);
+    } catch {
+      setPvPokeMetasSyncStatus('Using cached PvPoke Limited Meta catalog');
+    } finally {
+      setIsSyncingPvPokeMetas(false);
+    }
+  };
 
   // ============================================================================
   // SHOW 6 DUAL TEAM BUILDERS STATE (Mode 1: 6v6 Pick-3 & Mode 2: Blind Show-6)
@@ -2050,25 +2169,44 @@ export default function App() {
     setTimeout(() => setStartBattleToast(null), 2400);
   };
 
-  // Clone any Show 6 Roster of 6 (My or Opponent) and immediately open the Pick-6 Editor Modal
-  const handleCloneShow6Roster6 = (roster: Show6RosterOf6Preset, sourceSide: 'MY' | 'OPP') => {
+  // Clone any Show 6 Roster of 6 (My or Opponent) inside the Pick-6 Editor Modal with optional target league or side
+  const handleCloneShow6Roster6 = (
+    roster: Show6RosterOf6Preset,
+    sourceSide: 'MY' | 'OPP',
+    targetLeagueOverride?: LeagueType,
+    targetSideOverride?: 'MY' | 'OPP'
+  ) => {
+    const destLeague = targetLeagueOverride || roster.league;
+    const destSide = targetSideOverride || sourceSide;
     const newId = `show6-clone-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const rescaledMembers =
+      destLeague !== roster.league
+        ? rescaleTeamMembersForLeague(roster.pokemon, destLeague)
+        : roster.pokemon;
     const clonedRoster: Show6RosterOf6Preset = {
       ...roster,
       id: newId,
-      name: `${roster.name} (Copy)`,
-      pokemon: roster.pokemon.map((p, idx) => ({ ...p, id: `s6-c-${idx + 1}` })),
+      name:
+        destSide !== sourceSide
+          ? `[${destSide === 'MY' ? 'My' : 'Opp'} Copy] ${roster.name}`
+          : destLeague !== roster.league
+          ? `${roster.name} (${destLeague.split(' ')[0]})`
+          : `${roster.name} (Copy)`,
+      league: destLeague,
+      pokemon: rescaledMembers.map((p, idx) => ({ ...p, id: `s6-c-${idx + 1}` })),
       updatedAt: Date.now()
     };
-    if (sourceSide === 'MY') {
+    if (destSide === 'MY') {
       setShow6Rosters6((prev) => [clonedRoster, ...prev]);
       setSelectedShow6Roster6Id(newId);
     } else {
       setShow6OpponentRosters6((prev) => [clonedRoster, ...prev]);
       setSelectedShow6OppRoster6Id(newId);
     }
-    openShow6RosterEditor(clonedRoster, sourceSide, false);
-    setStartBattleToast(`📋 Cloned "${roster.name}" — Edit League or Swap My/Opponent side below!`);
+    openShow6RosterEditor(clonedRoster, destSide, false);
+    setStartBattleToast(
+      `📋 Cloned as new ${destSide === 'MY' ? 'My' : 'Opponent'} Show 6 entry in ${destLeague} — now editing the copy!`
+    );
     setTimeout(() => setStartBattleToast(null), 2600);
   };
 
@@ -2147,7 +2285,8 @@ export default function App() {
       id: newId,
       name: `[From Show 6] ${rescaled.map((m) => m.name.split(' ')[0]).join(' / ')}`,
       league: targetGblLeague,
-      pokemon: rescaled.map((m, idx) => ({ ...m, id: `p${idx + 1}` }))
+      pokemon: rescaled.map((m, idx) => ({ ...m, id: `p${idx + 1}` })),
+      combatMode: 'gbl'
     };
     const evaluated = evaluateTeamPresetMetrics(
       basePreset,
@@ -2158,6 +2297,7 @@ export default function App() {
     );
     setGblPresets((prev) => [evaluated, ...prev]);
     setGblSelectedPresetId(newId);
+    setEditingShow6RosterModal(null);
     setAppCombatModeState('gbl');
     try {
       localStorage.setItem('gbl_app_combat_mode', 'gbl');
@@ -2301,7 +2441,8 @@ export default function App() {
       league,
       pokemon: members.map((m, idx) => ({ ...m, id: `p${idx + 1}` })),
       archetype,
-      isArchetypeManual: true
+      isArchetypeManual: true,
+      combatMode: 'show6'
     };
     const evaluated = evaluateTeamPresetMetrics(
       basePreset,
@@ -4473,6 +4614,7 @@ export default function App() {
       setP3C1(s3.chargedMove1);
       setP3C2(s3.chargedMove2);
     }
+    setModalCloneTargetLeague(preset.league);
     setIsNewPresetOpen(true);
   };
 
@@ -4768,10 +4910,7 @@ export default function App() {
     const targetId = editingPresetId || `preset-${Date.now()}`;
     const members = buildModalMembersArray();
 
-    if (
-      (appCombatMode === 'show6' || newPresetLeague === 'MEGA MASTER LEAGUE' || newPresetLeague === 'Battle Frontier (Master)') &&
-      hasMultipleMegas(members)
-    ) {
+    if (hasMultipleMegas(members)) {
       setStartBattleToast('⚠️ Each team can only contain at most 1 Mega/Primal Pokémon!');
       setTimeout(() => setStartBattleToast(null), 2600);
       return;
@@ -4783,7 +4922,8 @@ export default function App() {
       league: newPresetLeague,
       pokemon: members,
       archetype: manualArchetypeOverride,
-      isArchetypeManual: !!manualArchetypeOverride
+      isArchetypeManual: !!manualArchetypeOverride,
+      combatMode: appCombatMode
     };
 
     const savedPreset = evaluateTeamPresetMetrics(
@@ -4809,14 +4949,26 @@ export default function App() {
     setModalAutoDetectSummary(null);
   };
 
-  // Clone any 3-Pokémon Team Preset (Standard GBL or Show 6 Overlay Trio) & immediately open Edit Team Modal
-  const handleClonePreset3 = (preset: TeamPreset) => {
+  // Clone any 3-Pokémon Team Preset inside the Edit Team Modal (supports changing Target League/Meta)
+  const handleClonePreset3 = (preset: TeamPreset, targetLeagueOverride?: LeagueType) => {
+    const destLeague = targetLeagueOverride || preset.league;
+    const rawMembers = isNewPresetOpen ? buildModalMembersArray() : preset.pokemon;
+    if (hasMultipleMegas(rawMembers)) {
+      setStartBattleToast('⚠️ Max 1 Mega/Primal Pokémon allowed per team of 3!');
+      setTimeout(() => setStartBattleToast(null), 2600);
+      return;
+    }
+    const rescaled =
+      destLeague !== preset.league ? rescaleTeamMembersForLeague(rawMembers, destLeague) : rawMembers;
     const newId = `preset-clone-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const baseName = (isNewPresetOpen ? newPresetName.trim() : preset.name) || preset.name;
     const clonedBase: TeamPreset = {
       ...preset,
       id: newId,
-      name: `${preset.name} (Copy)`,
-      pokemon: preset.pokemon.map((p, idx) => ({ ...p, id: `p${idx + 1}` }))
+      name: destLeague !== preset.league ? `${baseName} (${destLeague.split(' ')[0]})` : `${baseName} (Copy)`,
+      league: destLeague,
+      pokemon: rescaled.map((p, idx) => ({ ...p, id: `p${idx + 1}` })),
+      combatMode: appCombatMode
     };
     const evaluated = evaluateTeamPresetMetrics(
       clonedBase,
@@ -4828,33 +4980,47 @@ export default function App() {
     setPresets((prev) => [evaluated, ...prev]);
     setSelectedPresetId(newId);
     openEditPresetModal(evaluated);
-    setStartBattleToast(`📋 Cloned "${preset.name}" — Edit League, Moves, or Pokémon in the modal!`);
+    setStartBattleToast(`📋 Cloned as new team in ${destLeague} — now editing "${evaluated.name}"!`);
     setTimeout(() => setStartBattleToast(null), 2600);
   };
 
-  // Bidirectional Copy between Standard GBL (Blind 3) and Show 6 (Trio of 3 OR Auto-Filled Roster of 6)
+  // Bidirectional Copy between Standard GBL (Blind 3) and Show 6 (Trio of 3 OR Auto-Filled Roster of 6) inside Edit Team Modal
   const handleCopyPreset3CrossMode = (
     preset: TeamPreset,
-    targetMode: 'show6_trio' | 'show6_autofill6' | 'gbl_blind3'
+    targetMode: 'show6_trio' | 'show6_autofill6' | 'gbl_blind3',
+    targetLeagueOverride?: LeagueType
   ) => {
+    const rawMembers = isNewPresetOpen ? buildModalMembersArray() : preset.pokemon;
+    const sourceName = (isNewPresetOpen ? newPresetName.trim() : preset.name) || preset.name;
+    if (hasMultipleMegas(rawMembers)) {
+      setStartBattleToast('⚠️ Max 1 Mega/Primal Pokémon allowed per team!');
+      setTimeout(() => setStartBattleToast(null), 2600);
+      return;
+    }
+
     if (targetMode === 'show6_trio') {
-      const targetShow6League: LeagueType =
+      const defaultShow6Lg: LeagueType =
         preset.league === 'ULTRA LEAGUE'
           ? 'Battle Frontier (Cauldron)'
           : preset.league === 'MASTER LEAGUE' || preset.league === 'MEGA MASTER LEAGUE'
           ? 'Battle Frontier (Master)'
-          : isBattleFrontierLeague(preset.league)
+          : isShow6EligibleLeague(preset.league)
           ? preset.league
           : 'GREAT LEAGUE';
-      const rescaled = rescaleTeamMembersForLeague(preset.pokemon, targetShow6League);
-      const newId = `show6-from-gbl3-${Date.now()}`;
+      const targetShow6League: LeagueType =
+        targetLeagueOverride && isShow6EligibleLeague(targetLeagueOverride)
+          ? targetLeagueOverride
+          : defaultShow6Lg;
+      const rescaled = rescaleTeamMembersForLeague(rawMembers, targetShow6League);
+      const newId = `show6-from-gbl3-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const basePreset: TeamPreset = {
         id: newId,
-        name: `[From GBL] ${preset.name}`,
+        name: `[From GBL] ${sourceName}`,
         league: targetShow6League,
         pokemon: rescaled.map((m, idx) => ({ ...m, id: `p${idx + 1}` })),
         archetype: preset.archetype,
-        isArchetypeManual: preset.isArchetypeManual
+        isArchetypeManual: preset.isArchetypeManual,
+        combatMode: 'show6'
       };
       const evaluated = evaluateTeamPresetMetrics(
         basePreset,
@@ -4870,21 +5036,25 @@ export default function App() {
         localStorage.setItem('gbl_app_combat_mode', 'show6');
       } catch {}
       openEditPresetModal(evaluated);
-      setStartBattleToast(`🏛️ Copied "${preset.name}" to Show 6 Overlay Trios (${targetShow6League})!`);
+      setStartBattleToast(`🏛️ Cloned "${sourceName}" as a separate Show 6 Trio (${targetShow6League})!`);
       setTimeout(() => setStartBattleToast(null), 2600);
       return;
     }
 
     if (targetMode === 'show6_autofill6') {
-      const targetShow6League: LeagueType =
+      const defaultShow6Lg: LeagueType =
         preset.league === 'ULTRA LEAGUE'
           ? 'Battle Frontier (Cauldron)'
           : preset.league === 'MASTER LEAGUE' || preset.league === 'MEGA MASTER LEAGUE'
           ? 'Battle Frontier (Master)'
-          : isBattleFrontierLeague(preset.league)
+          : isShow6EligibleLeague(preset.league)
           ? preset.league
           : 'Battle Frontier (Spectral)';
-      const locked3Names = preset.pokemon.map((p) => p.name);
+      const targetShow6League: LeagueType =
+        targetLeagueOverride && isShow6EligibleLeague(targetLeagueOverride)
+          ? targetLeagueOverride
+          : defaultShow6Lg;
+      const locked3Names = rawMembers.map((p) => p.name);
       const blindRes = generateBlindShow6Roster({
         league: targetShow6League,
         lockedCoreNames: locked3Names,
@@ -4892,22 +5062,21 @@ export default function App() {
         historicalExpectedNames: getMostLikelyMetaOpponent6ForFormat(targetShow6League).pokemonNames,
         historicalWeightPct: 35
       });
-      // Preserve custom moves from the original 3 Pokémon if present
       const origByClean = new Map<string, TeamMember>();
-      for (const m of rescaleTeamMembersForLeague(preset.pokemon, targetShow6League)) {
+      for (const m of rescaleTeamMembersForLeague(rawMembers, targetShow6League)) {
         origByClean.set(m.name.toLowerCase(), m);
       }
       const final6Members: TeamMember[] = blindRes.roster6.map((m, idx) => {
         const matchOrig = origByClean.get(m.name.toLowerCase());
         return matchOrig ? { ...matchOrig, id: `s6-af-${idx + 1}` } : { ...m, id: `s6-af-${idx + 1}` };
       });
-      const newRosterId = `show6-autofill6-${Date.now()}`;
+      const newRosterId = `show6-autofill6-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const createdRoster: Show6RosterOf6Preset = {
         id: newRosterId,
         name: `[Auto-6 from GBL] ${locked3Names.map((n) => n.split(' ')[0]).join('/')} + 3`,
         league: targetShow6League,
         pokemon: final6Members,
-        notes: `Built from Blind 3 preset "${preset.name}" + 3 synergistic meta/core partners`,
+        notes: `Built from Blind 3 preset "${sourceName}" + 3 synergistic meta/core partners`,
         updatedAt: Date.now()
       };
       setShow6Rosters6((prev) => [createdRoster, ...prev]);
@@ -4916,6 +5085,7 @@ export default function App() {
       setShow6Pick3League(targetShow6League);
       setShow6My6(nextNames);
       handleRunShow6Pick3Optimizer(targetShow6League, nextNames, show6Opponent6);
+      setIsNewPresetOpen(false);
       setAppCombatModeState('show6');
       try {
         localStorage.setItem('gbl_app_combat_mode', 'show6');
@@ -4928,27 +5098,27 @@ export default function App() {
       return;
     }
 
-    // targetMode === 'gbl_blind3': Copy Show 6 Trio of 3 -> Standard GBL Blind 3
-    const hasMega = preset.pokemon.some((m) => isMegaOrPrimalSpecies(m.name));
-    const targetGblLeague: LeagueType =
-      preset.league === 'Battle Frontier (Cauldron)' || preset.league === 'ULTRA LEAGUE'
+    // targetMode === 'gbl_blind3': Copy Show 6 Trio of 3 -> Standard GBL Blind 3 as a separate entry
+    const hasMega = rawMembers.some((m) => isMegaOrPrimalSpecies(m.name));
+    const defaultGblLg: LeagueType =
+      preset.league === 'Battle Frontier (Cauldron)' || getLeagueCpCap(preset.league) === 2500
         ? 'ULTRA LEAGUE'
-        : preset.league === 'Battle Frontier (Master)' ||
-          preset.league === 'MASTER LEAGUE' ||
-          preset.league === 'MEGA MASTER LEAGUE'
+        : preset.league === 'Battle Frontier (Master)' || getLeagueCpCap(preset.league) === 10000
         ? hasMega
           ? 'MEGA MASTER LEAGUE'
           : 'MASTER LEAGUE'
         : 'GREAT LEAGUE';
-    const rescaled = rescaleTeamMembersForLeague(preset.pokemon, targetGblLeague);
-    const newId = `gbl-from-s6trio-${Date.now()}`;
+    const targetGblLeague: LeagueType = targetLeagueOverride || defaultGblLg;
+    const rescaled = rescaleTeamMembersForLeague(rawMembers, targetGblLeague);
+    const newId = `gbl-from-s6trio-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const basePreset: TeamPreset = {
       id: newId,
-      name: `[From Show 6] ${preset.name.replace(/^Show 6\s+/i, '')}`,
+      name: `[From Show 6] ${sourceName.replace(/^Show 6\s+/i, '')}`,
       league: targetGblLeague,
       pokemon: rescaled.map((m, idx) => ({ ...m, id: `p${idx + 1}` })),
       archetype: preset.archetype,
-      isArchetypeManual: preset.isArchetypeManual
+      isArchetypeManual: preset.isArchetypeManual,
+      combatMode: 'gbl'
     };
     const evaluated = evaluateTeamPresetMetrics(
       basePreset,
@@ -4964,7 +5134,7 @@ export default function App() {
       localStorage.setItem('gbl_app_combat_mode', 'gbl');
     } catch {}
     openEditPresetModal(evaluated);
-    setStartBattleToast(`🛡️ Copied "${preset.name}" to Standard GBL (${targetGblLeague}) & opened Editor!`);
+    setStartBattleToast(`🛡️ Cloned "${sourceName}" as a separate Standard GBL team (${targetGblLeague})!`);
     setTimeout(() => setStartBattleToast(null), 2600);
   };
 
@@ -5330,7 +5500,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v5.03 • Android Native Overlay
+                  v5.04 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -7537,10 +7707,7 @@ export default function App() {
                     >
                       Auto ({activePreset.league.includes('Spectral') ? 'Spectral' : activePreset.league.includes('Cauldron') ? 'Cauldron' : activePreset.league.includes('Battle Frontier') ? 'BF Master' : activePreset.league.split(' ')[0]})
                     </button>
-                    {(appCombatMode === 'show6'
-                      ? SHOW6_LEAGUES
-                      : (['MEGA MASTER LEAGUE', 'MASTER LEAGUE', 'ULTRA LEAGUE', 'GREAT LEAGUE'] as const)
-                    ).map((lg) => (
+                    {(appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues).map((lg) => (
                       <button
                         key={lg}
                         onClick={() => setSelectedOpponentLeague(lg)}
@@ -7558,7 +7725,7 @@ export default function App() {
                           ? 'BF Master'
                           : lg === 'MEGA MASTER LEAGUE'
                           ? 'MEGA ML'
-                          : lg.split(' ')[0]}
+                          : lg.replace(/\s*\(\d+\)\s*$/, '')}
                       </button>
                     ))}
                   </div>
@@ -7900,14 +8067,6 @@ export default function App() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleCloneShow6Roster6(roster, 'MY')}
-                                className="px-2.5 py-1 rounded-lg bg-purple-500/20 hover:bg-purple-500/35 border border-purple-400/50 text-purple-200 text-[11px] font-bold transition"
-                                title="Clone this Show 6 Team & open Editor to change League or Swap My/Opponent side"
-                              >
-                                📋 Clone
-                              </button>
-                              <button
-                                type="button"
                                 onClick={() => handleSwapShow6RosterSide(roster, 'MY')}
                                 className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 border border-amber-400/50 text-amber-200 text-[11px] font-bold transition"
                                 title="Swap / Copy this My Show 6 Team to Opponent Show 6 Teams & load into Simulator"
@@ -7916,19 +8075,14 @@ export default function App() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleCopyShow6RosterToGblBlind3(roster)}
-                                className="px-2 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/35 border border-indigo-400/50 text-indigo-200 text-[10.5px] font-bold transition"
-                                title="Copy Top 3 Core of this Show 6 Roster to Standard GBL (Blind 3) Mode"
-                              >
-                                🛡️ → GBL 3
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => openShow6RosterEditor(roster, 'MY')}
+                                onClick={() => {
+                                  setShow6ModalCloneTargetLeague(roster.league);
+                                  openShow6RosterEditor(roster, 'MY');
+                                }}
                                 className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/50 text-emerald-200 text-[11px] font-bold transition"
-                                title="Edit Pick-6 Team & Suggest Alternate Pokémon or Moves"
+                                title="Edit Pick-6 Team, Suggest Upgrades, or Clone / Cross-Mode Copy inside the Editor"
                               >
-                                ✎ Edit / Suggest
+                                ✎ Edit / Clone
                               </button>
                               {show6Rosters6.length > 1 && (
                                 <button
@@ -8028,14 +8182,6 @@ export default function App() {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => handleCloneShow6Roster6(oppRoster, 'OPP')}
-                                  className="px-2.5 py-1 rounded-lg bg-purple-500/20 hover:bg-purple-500/35 border border-purple-400/50 text-purple-200 text-[11px] font-bold transition"
-                                  title="Clone this Opponent Show 6 Team & open Editor to change League or Swap My/Opponent side"
-                                >
-                                  📋 Clone
-                                </button>
-                                <button
-                                  type="button"
                                   onClick={() => handleSwapShow6RosterSide(oppRoster, 'OPP')}
                                   className="px-2.5 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500/35 border border-sky-400/50 text-sky-200 text-[11px] font-bold transition"
                                   title="Swap / Copy this Opponent Show 6 Team to My Show 6 Teams & load into Simulator"
@@ -8044,19 +8190,14 @@ export default function App() {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => handleCopyShow6RosterToGblBlind3(oppRoster)}
-                                  className="px-2 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/35 border border-indigo-400/50 text-indigo-200 text-[10.5px] font-bold transition"
-                                  title="Copy Top 3 Core of this Opponent Roster to Standard GBL (Blind 3) Mode"
-                                >
-                                  🛡️ → GBL 3
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => openShow6RosterEditor(oppRoster, 'OPP')}
+                                  onClick={() => {
+                                    setShow6ModalCloneTargetLeague(oppRoster.league);
+                                    openShow6RosterEditor(oppRoster, 'OPP');
+                                  }}
                                   className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/50 text-emerald-200 text-[11px] font-bold transition"
-                                  title="Edit Opponent Pick-6 Team & Suggest Alternate Pokémon or Moves"
+                                  title="Edit Opponent Pick-6 Team, Suggest Upgrades, or Clone / Cross-Mode Copy inside the Editor"
                                 >
-                                  ✎ Edit / Suggest
+                                  ✎ Edit / Clone
                                 </button>
                                 {show6OpponentRosters6.length > 1 && (
                                   <button
@@ -8161,10 +8302,11 @@ export default function App() {
                             }}
                             className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white"
                           >
-                            <option value="GREAT LEAGUE">GREAT LEAGUE (1500 CP)</option>
-                            <option value="Battle Frontier (Spectral)">Battle Frontier (Spectral) (1500 CP)</option>
-                            <option value="Battle Frontier (Cauldron)">Battle Frontier (Cauldron) (2500 CP)</option>
-                            <option value="Battle Frontier (Master)">Battle Frontier (Master) (Uncapped CP)</option>
+                            {enabledShow6Leagues.map((lg) => (
+                              <option key={lg} value={lg}>
+                                {lg} ({getLeagueCpCap(lg) >= 10000 ? 'Uncapped CP' : `${getLeagueCpCap(lg)} CP`})
+                              </option>
+                            ))}
                           </select>
                           <button
                             type="button"
@@ -8764,10 +8906,11 @@ export default function App() {
                             }}
                             className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white"
                           >
-                            <option value="GREAT LEAGUE">GREAT LEAGUE (1500 CP)</option>
-                            <option value="Battle Frontier (Spectral)">Battle Frontier (Spectral) (1500 CP)</option>
-                            <option value="Battle Frontier (Cauldron)">Battle Frontier (Cauldron) (2500 CP)</option>
-                            <option value="Battle Frontier (Master)">Battle Frontier (Master) (Uncapped CP)</option>
+                            {enabledShow6Leagues.map((lg) => (
+                              <option key={lg} value={lg}>
+                                {lg} ({getLeagueCpCap(lg) >= 10000 ? 'Uncapped CP' : `${getLeagueCpCap(lg)} CP`})
+                              </option>
+                            ))}
                           </select>
                           <button
                             type="button"
@@ -9346,37 +9489,43 @@ export default function App() {
                       <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
                         1. Target League
                       </label>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {(appCombatMode === 'show6'
-                          ? ([
-                              { id: 'GREAT LEAGUE', label: 'Great (1500)' },
-                              { id: 'Battle Frontier (Spectral)', label: 'Spectral (1500)' },
-                              { id: 'Battle Frontier (Cauldron)', label: 'Cauldron (2500)' },
-                              { id: 'Battle Frontier (Master)', label: 'BF Master' }
-                            ] as Array<{ id: LeagueType; label: string }>)
-                          : ([
-                              { id: 'GREAT LEAGUE', label: 'Great (GL)' },
-                              { id: 'ULTRA LEAGUE', label: 'Ultra (UL)' },
-                              { id: 'MASTER LEAGUE', label: 'Master (ML)' },
-                              { id: 'MEGA MASTER LEAGUE', label: 'Mega ML (MML)' }
-                            ] as Array<{ id: LeagueType; label: string }>)
-                        ).map((lg) => (
-                          <button
-                            key={lg.id}
-                            type="button"
-                            onClick={() => {
-                              setAntiMetaLeague(lg.id);
-                              handleGenerateAntiMetaTeams(lg.id, antiMetaFeat1, antiMetaFeat2);
-                            }}
-                            className={`px-2.5 py-2 rounded-lg text-xs font-bold transition border ${
-                              antiMetaLeague === lg.id
-                                ? 'bg-sky-600 text-white border-sky-400 shadow'
-                                : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
-                            }`}
-                          >
-                            {lg.label}
-                          </button>
-                        ))}
+                      <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto pr-1">
+                        {(appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues).map((lgId) => {
+                          const shortLbl =
+                            lgId === 'GREAT LEAGUE'
+                              ? 'Great (1500)'
+                              : lgId === 'ULTRA LEAGUE'
+                              ? 'Ultra (2500)'
+                              : lgId === 'MASTER LEAGUE'
+                              ? 'Master (ML)'
+                              : lgId === 'MEGA MASTER LEAGUE'
+                              ? 'Mega ML'
+                              : lgId === 'Battle Frontier (Spectral)'
+                              ? 'Spectral (1500)'
+                              : lgId === 'Battle Frontier (Cauldron)'
+                              ? 'Cauldron (2500)'
+                              : lgId === 'Battle Frontier (Master)'
+                              ? 'BF Master'
+                              : lgId;
+                          return (
+                            <button
+                              key={lgId}
+                              type="button"
+                              onClick={() => {
+                                setAntiMetaLeague(lgId);
+                                handleGenerateAntiMetaTeams(lgId, antiMetaFeat1, antiMetaFeat2);
+                              }}
+                              className={`px-2.5 py-2 rounded-lg text-xs font-bold transition border truncate ${
+                                antiMetaLeague === lgId
+                                  ? 'bg-sky-600 text-white border-sky-400 shadow'
+                                  : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
+                              }`}
+                              title={lgId}
+                            >
+                              {shortLbl}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -9826,9 +9975,86 @@ export default function App() {
               );
             })()}
 
+            {/* League & Limited Meta Filter Tabs for My Teams (Dedicated Teams per Format) */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mr-1">
+                  {appCombatMode === 'show6' ? '🏛️ Show 6 Trios Filter:' : '🛡️ GBL Blind 3 Filter:'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveTeamsLeagueFilter('ALL')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-extrabold border transition ${
+                    activeTeamsLeagueFilter === 'ALL'
+                      ? 'bg-sky-500 text-slate-950 border-sky-400 shadow'
+                      : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                  }`}
+                >
+                  All Teams ({presets.length})
+                </button>
+                {Array.from(
+                  new Set([
+                    ...(appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues),
+                    ...presets.map((p) => p.league)
+                  ])
+                ).map((lg) => {
+                  const count = presets.filter((p) => p.league === lg).length;
+                  const shortName =
+                    lg === 'GREAT LEAGUE'
+                      ? 'Great'
+                      : lg === 'ULTRA LEAGUE'
+                      ? 'Ultra'
+                      : lg === 'MASTER LEAGUE'
+                      ? 'Master'
+                      : lg === 'MEGA MASTER LEAGUE'
+                      ? 'Mega ML'
+                      : lg === 'Battle Frontier (Spectral)'
+                      ? 'BF Spectral'
+                      : lg === 'Battle Frontier (Cauldron)'
+                      ? 'BF Cauldron'
+                      : lg === 'Battle Frontier (Master)'
+                      ? 'BF Master'
+                      : lg;
+                  return (
+                    <button
+                      key={lg}
+                      type="button"
+                      onClick={() => setActiveTeamsLeagueFilter(lg)}
+                      className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 ${
+                        activeTeamsLeagueFilter === lg
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow'
+                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                      }`}
+                    >
+                      <span>{shortName}</span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                          activeTeamsLeagueFilter === lg
+                            ? 'bg-slate-950/25 text-slate-950 font-black'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}
+                      >
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('settings')}
+                className="text-[11px] font-bold text-purple-300 hover:text-purple-200 underline shrink-0"
+              >
+                ⚙️ + Pin PvPoke Limited Metas in Settings
+              </button>
+            </div>
+
             {/* Presets Grid (Unified Anti-Meta Generator Look & Feel + Key Wins / Threats / Core Breakers Summary) */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              {presets.map((preset, presetIdx) => {
+              {presets
+                .map((preset, presetIdx) => ({ preset, presetIdx }))
+                .filter(({ preset }) => activeTeamsLeagueFilter === 'ALL' || preset.league === activeTeamsLeagueFilter)
+                .map(({ preset, presetIdx }) => {
                 const isSelected = preset.id === selectedPresetId;
                 const isDragged = draggedPresetIndex === presetIdx;
                 const isDragOver = dragOverPresetIndex === presetIdx && draggedPresetIndex !== presetIdx;
@@ -9981,58 +10207,11 @@ export default function App() {
                             </button>
                           )}
                           <button
-                            type="button"
-                            onClick={() => handleClonePreset3(preset)}
-                            className="text-[11px] text-purple-200 hover:text-white font-bold px-2 py-0.5 rounded bg-purple-500/20 hover:bg-purple-500/40 border border-purple-400/50 transition"
-                            title="Clone this Team & immediately open Team Editor to change League or Pokémon"
-                          >
-                            📋 Clone
-                          </button>
-                          {appCombatMode === 'show6' ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handleSwapShow6TrioToOpp6(preset)}
-                                className="text-[10.5px] text-amber-200 hover:text-white font-bold px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/40 border border-amber-400/50 transition"
-                                title="Swap / Load this Trio into Opponent's 6 in the Show 6 Pick-3 Simulator"
-                              >
-                                ⇄ Swap My/Opp
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleCopyPreset3CrossMode(preset, 'gbl_blind3')}
-                                className="text-[10.5px] text-sky-200 hover:text-white font-bold px-2 py-0.5 rounded bg-sky-500/20 hover:bg-sky-500/40 border border-sky-400/50 transition"
-                                title="Copy this Show 6 Trio to Standard GBL (Blind 3) Mode"
-                              >
-                                🛡️ → GBL 3
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handleCopyPreset3CrossMode(preset, 'show6_trio')}
-                                className="text-[10.5px] text-amber-200 hover:text-white font-bold px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/40 border border-amber-400/50 transition"
-                                title="Copy this Blind 3 Team directly to Show 6 Overlay Trios (Team of 3)"
-                              >
-                                🏛️ → Show 6 (3)
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleCopyPreset3CrossMode(preset, 'show6_autofill6')}
-                                className="text-[10.5px] text-emerald-200 hover:text-white font-bold px-2 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-400/50 transition"
-                                title="Lock these 3 Pokémon & Auto-Fill 3 Synergistic Partners into a Show 6 Roster of 6"
-                              >
-                                🏛️ → Auto-Fill 6
-                              </button>
-                            </>
-                          )}
-                          <button
                             onClick={() => openEditPresetModal(preset)}
                             className="text-xs text-white font-bold px-2.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 transition"
-                            title="Edit Team, Moves, IVs & CP"
+                            title="Edit Team, Moves, IVs, CP, or Clone / Cross-Mode Copy inside the Editor"
                           >
-                            ✎ Edit Team
+                            ✎ Edit / Clone
                           </button>
                           <button
                             onClick={() => handleDeletePreset(preset.id)}
@@ -10211,22 +10390,136 @@ export default function App() {
                           }}
                           className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-400"
                         >
-                          {appCombatMode === 'show6' ? (
-                            <>
-                              <option value="GREAT LEAGUE">GREAT LEAGUE (Max 1500 CP)</option>
-                              <option value="Battle Frontier (Spectral)">Battle Frontier (Spectral) (Max 1500 CP)</option>
-                              <option value="Battle Frontier (Cauldron)">Battle Frontier (Cauldron) (Max 2500 CP)</option>
-                              <option value="Battle Frontier (Master)">Battle Frontier (Master) (No CP Limit)</option>
-                            </>
-                          ) : (
-                            <>
-                              <option value="GREAT LEAGUE">GREAT LEAGUE (Max 1500 CP)</option>
-                              <option value="ULTRA LEAGUE">ULTRA LEAGUE (Max 2500 CP)</option>
-                              <option value="MASTER LEAGUE">MASTER LEAGUE (No CP Limit)</option>
-                              <option value="MEGA MASTER LEAGUE">MEGA MASTER LEAGUE (Megas &amp; Primals)</option>
-                            </>
-                          )}
+                          {(appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues).map((lg) => (
+                            <option key={lg} value={lg}>
+                              {lg} ({getLeagueCpCap(lg) >= 10000 ? 'No CP Limit' : `Max ${getLeagueCpCap(lg)} CP`})
+                            </option>
+                          ))}
                         </select>
+                      </div>
+                    </div>
+
+                    {/* Relocated Clone & Cross-Mode Copy Panel Inside Edit Team Card */}
+                    <div className="p-3.5 rounded-xl bg-slate-950/90 border border-emerald-500/35 space-y-2.5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                          <div className="text-xs font-extrabold text-emerald-300 flex items-center gap-1.5">
+                            <span>📋 Clone or Copy Team to Any League, Limited Meta, or Mode</span>
+                          </div>
+                          <p className="text-[10.5px] text-slate-400">
+                            Creates a brand-new independent team entry (with auto-rescaled CP &amp; legal moves) and switches the editor to the new copy.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Target Format:</span>
+                          <select
+                            value={modalCloneTargetLeague}
+                            onChange={(e) => setModalCloneTargetLeague(e.target.value as LeagueType)}
+                            className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white"
+                          >
+                            {allEnabledLeaguesCombined.map((lg) => (
+                              <option key={lg} value={lg}>
+                                {lg} ({getLeagueCpCap(lg) >= 10000 ? 'Uncapped' : `${getLeagueCpCap(lg)} CP`})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentObj: TeamPreset =
+                              presets.find((p) => p.id === editingPresetId) || {
+                                id: editingPresetId || `temp-${Date.now()}`,
+                                name: newPresetName.trim() || `${newPresetLeague} Team`,
+                                league: newPresetLeague,
+                                pokemon: buildModalMembersArray(),
+                                combatMode: appCombatMode
+                              };
+                            handleClonePreset3(currentObj, modalCloneTargetLeague);
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs transition shadow"
+                        >
+                          📋 Clone in {appCombatMode === 'show6' ? 'Show 6 (Trio)' : 'Standard GBL'} ({modalCloneTargetLeague.split(' ')[0]})
+                        </button>
+
+                        {appCombatMode === 'gbl' ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentObj: TeamPreset =
+                                  presets.find((p) => p.id === editingPresetId) || {
+                                    id: editingPresetId || `temp-${Date.now()}`,
+                                    name: newPresetName.trim() || `${newPresetLeague} Team`,
+                                    league: newPresetLeague,
+                                    pokemon: buildModalMembersArray(),
+                                    combatMode: 'gbl'
+                                  };
+                                handleCopyPreset3CrossMode(currentObj, 'show6_trio', modalCloneTargetLeague);
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/35 border border-sky-400/50 text-sky-200 font-bold text-xs transition"
+                            >
+                              🏛️ Copy to Show 6 Trio (Separate Entry)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentObj: TeamPreset =
+                                  presets.find((p) => p.id === editingPresetId) || {
+                                    id: editingPresetId || `temp-${Date.now()}`,
+                                    name: newPresetName.trim() || `${newPresetLeague} Team`,
+                                    league: newPresetLeague,
+                                    pokemon: buildModalMembersArray(),
+                                    combatMode: 'gbl'
+                                  };
+                                handleCopyPreset3CrossMode(currentObj, 'show6_autofill6', modalCloneTargetLeague);
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 border border-amber-400/50 text-amber-200 font-bold text-xs transition"
+                            >
+                              🏛️ Lock 3 &amp; Auto-Fill Show 6 Roster of 6
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentObj: TeamPreset =
+                                  presets.find((p) => p.id === editingPresetId) || {
+                                    id: editingPresetId || `temp-${Date.now()}`,
+                                    name: newPresetName.trim() || `${newPresetLeague} Trio`,
+                                    league: newPresetLeague,
+                                    pokemon: buildModalMembersArray(),
+                                    combatMode: 'show6'
+                                  };
+                                handleCopyPreset3CrossMode(currentObj, 'gbl_blind3', modalCloneTargetLeague);
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 border border-amber-400/50 text-amber-200 font-bold text-xs transition"
+                            >
+                              🛡️ Copy to Standard GBL Blind 3 (Separate Entry)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentObj: TeamPreset =
+                                  presets.find((p) => p.id === editingPresetId) || {
+                                    id: editingPresetId || `temp-${Date.now()}`,
+                                    name: newPresetName.trim() || `${newPresetLeague} Trio`,
+                                    league: newPresetLeague,
+                                    pokemon: buildModalMembersArray(),
+                                    combatMode: 'show6'
+                                  };
+                                handleSwapShow6TrioToOpp6(currentObj);
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/35 border border-purple-400/50 text-purple-200 font-bold text-xs transition"
+                            >
+                              ⇄ Swap / Load Trio into Opponent&apos;s 6
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -11275,7 +11568,7 @@ export default function App() {
                   <span className="text-sm font-extrabold text-amber-300 flex items-center gap-2">
                     <span>{appCombatMode === 'show6' ? '🏛️' : '🛡️'} App Combat Mode (Standard GBL vs. Show 6 Battle Frontier)</span>
                     <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 text-[10px] font-mono">
-                      v5.03
+                      v5.04
                     </span>
                   </span>
                   <span className="text-xs text-slate-400 block mt-0.5">
@@ -11518,6 +11811,162 @@ export default function App() {
                   <span className="absolute right-0">100% (Clear)</span>
                 </div>
               </div>
+            </div>
+
+            {/* ===================================================================
+                PVPOKE GITHUB LIMITED METAS IMPORTER & DUAL SELECTOR (GBL + SHOW 6)
+               =================================================================== */}
+            <div className="p-5 rounded-2xl bg-slate-900 border border-purple-500/40 shadow-xl space-y-4">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-extrabold text-white">
+                      🌐 PvPoke GitHub Limited Metas Selector (Dedicated GBL &amp; Battle Frontier Formats)
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 font-mono">
+                      GBL Pinned: {pinnedGblMetas.length} • Show 6 Pinned: {pinnedShow6Metas.length}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Pulls verified ranked formats directly from the official <code className="text-purple-300 font-mono">pvpoke/pvpoke</code> GitHub repository (<code className="text-sky-300 font-mono">formats.json</code> + active <code className="text-sky-300 font-mono">cups/*.json</code> + verified <code className="text-sky-300 font-mono">rankings-&#123;cp&#125;.json</code>). Automatically groups metas into <strong className="text-emerald-300">🟢 Current</strong>, <strong className="text-sky-300">🔜 Upcoming</strong>, and <strong className="text-amber-300">🕒 Recent (This Season)</strong> while hiding obsolete archived formats. Pin any number of Limited Metas independently for <strong className="text-sky-300">Standard GBL (Blind 3)</strong> and <strong className="text-amber-300">Battle Frontier (Show 6)</strong>!
+                  </p>
+                  <div className="text-[11px] font-mono text-emerald-400">{pvPokeMetasSyncStatus}</div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                  <input
+                    type="text"
+                    value={limitedMetaSearchQuery}
+                    onChange={(e) => setLimitedMetaSearchQuery(e.target.value)}
+                    placeholder="Search cup (e.g. Fantasy, Retro, Kanto)..."
+                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white w-56"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSyncPvPokeLimitedMetasFromGitHub}
+                    disabled={isSyncingPvPokeMetas}
+                    className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-extrabold text-xs transition shadow-lg flex items-center gap-1.5"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncingPvPokeMetas ? 'animate-spin' : ''}`} />
+                    <span>{isSyncingPvPokeMetas ? 'Syncing PvPoke GitHub...' : '🔄 Sync Metas from PvPoke GitHub'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {(['CURRENT', 'UPCOMING', 'RECENT'] as const).map((statusGroup) => {
+                const q = limitedMetaSearchQuery.trim().toLowerCase();
+                const groupFormats = limitedMetaCatalog.filter(
+                  (f) =>
+                    f.lifecycle === statusGroup &&
+                    (!q ||
+                      f.id.toLowerCase().includes(q) ||
+                      f.title.toLowerCase().includes(q) ||
+                      f.cupKey.toLowerCase().includes(q))
+                );
+                if (groupFormats.length === 0) return null;
+
+                const groupHeader =
+                  statusGroup === 'CURRENT'
+                    ? {
+                        badge: '🟢 CURRENT ROTATION',
+                        desc: 'Live in PvPoke formats.json with active rankings (hideRankings != true)',
+                        cls: 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10'
+                      }
+                    : statusGroup === 'UPCOMING'
+                    ? {
+                        badge: '🔜 UPCOMING / SCHEDULED',
+                        desc: 'Pre-staged in PvPoke active cups/ with verified rankings-{cp}.json',
+                        cls: 'text-sky-300 border-sky-500/40 bg-sky-500/10'
+                      }
+                    : {
+                        badge: '🕒 RECENT (THIS SEASON)',
+                        desc: 'Active non-archived PvPoke cups with verified rankings (Obsolete /archive/ cups hidden)',
+                        cls: 'text-amber-300 border-amber-500/40 bg-amber-500/10'
+                      };
+
+                return (
+                  <div key={statusGroup} className="space-y-2.5">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2.5 py-0.5 rounded-md text-[10.5px] font-black border ${groupHeader.cls}`}>
+                          {groupHeader.badge} ({groupFormats.length})
+                        </span>
+                        <span className="text-[11px] text-slate-400">{groupHeader.desc}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                      {groupFormats.map((fmt) => {
+                        const isPinnedGbl = pinnedGblMetas.includes(fmt.id);
+                        const isPinnedShow6 = pinnedShow6Metas.includes(fmt.id);
+                        const sheetAlias = limitedMetaSheetAliases[fmt.id] || '';
+                        return (
+                          <div
+                            key={fmt.id}
+                            className={`p-3 rounded-xl border transition space-y-2 ${
+                              isPinnedGbl || isPinnedShow6
+                                ? 'bg-slate-950 border-purple-400/60 shadow-md'
+                                : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="font-extrabold text-xs text-white truncate" title={fmt.id}>
+                                  {fmt.id}
+                                </div>
+                                <div className="text-[10px] font-mono text-slate-400">
+                                  cup: <span className="text-purple-300">{fmt.cupKey}</span> • Max CP:{' '}
+                                  <span className="text-sky-300">{fmt.cp >= 10000 ? 'Uncapped' : fmt.cp}</span>
+                                  {fmt.allowMegas ? ' • 🧬 Max 1 Mega' : ''}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-1.5 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePinnedGblMeta(fmt.id)}
+                                className={`px-2 py-1.5 rounded-lg text-[10.5px] font-extrabold border transition flex items-center justify-center gap-1 ${
+                                  isPinnedGbl
+                                    ? 'bg-sky-500 text-slate-950 border-sky-300 shadow'
+                                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-sky-500/50'
+                                }`}
+                              >
+                                <span>{isPinnedGbl ? '✓ GBL Pinned' : '+ Pin to GBL'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePinnedShow6Meta(fmt.id)}
+                                className={`px-2 py-1.5 rounded-lg text-[10.5px] font-extrabold border transition flex items-center justify-center gap-1 ${
+                                  isPinnedShow6
+                                    ? 'bg-amber-500 text-slate-950 border-amber-300 shadow'
+                                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-amber-500/50'
+                                }`}
+                              >
+                                <span>{isPinnedShow6 ? '✓ Show 6 Pinned' : '+ Pin to Show 6'}</span>
+                              </button>
+                            </div>
+
+                            {isPinnedShow6 && (
+                              <div className="pt-1.5 border-t border-slate-800/80 space-y-1">
+                                <label className="block text-[9.5px] font-bold text-amber-300">
+                                  Optional Battle Frontier Sheet Tab/Column Keyword (blank = 100% PvPoke Rankings):
+                                </label>
+                                <input
+                                  type="text"
+                                  value={sheetAlias}
+                                  onChange={(e) => handleUpdateLimitedMetaSheetAlias(fmt.id, e.target.value)}
+                                  placeholder="e.g. Retro, Fantasy, Great..."
+                                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[10.5px] text-white font-mono"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {/* ===================================================================
@@ -15433,10 +15882,11 @@ export default function App() {
                     }}
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-bold"
                   >
-                    <option value="GREAT LEAGUE">GREAT LEAGUE (1500 CP)</option>
-                    <option value="Battle Frontier (Spectral)">Battle Frontier (Spectral) (1500 CP)</option>
-                    <option value="Battle Frontier (Cauldron)">Battle Frontier (Cauldron) (2500 CP)</option>
-                    <option value="Battle Frontier (Master)">Battle Frontier (Master) (Uncapped CP)</option>
+                    {enabledShow6Leagues.map((lg) => (
+                      <option key={lg} value={lg}>
+                        {lg} ({getLeagueCpCap(lg) >= 10000 ? 'Uncapped CP' : `${getLeagueCpCap(lg)} CP`})
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -15475,6 +15925,71 @@ export default function App() {
                       ⚔️ Opponent 6
                     </button>
                   </div>
+                </div>
+              </div>
+
+              {/* Relocated Clone & Cross-Mode Copy Panel Inside Pick-6 Edit Team Modal */}
+              <div className="p-3.5 rounded-xl bg-slate-950/90 border border-sky-500/35 space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <div className="text-xs font-extrabold text-sky-300">
+                      📋 Clone Pick-6 Team or Copy Top-3 Core to Standard GBL (Blind 3)
+                    </div>
+                    <p className="text-[10.5px] text-slate-400">
+                      Clone this 6-Pokémon roster into any Show 6 League/Limited Meta (My 6 or Opponent 6) or copy its Top-3 Core to Standard GBL as a separate entry.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Target Format:</span>
+                    <select
+                      value={show6ModalCloneTargetLeague}
+                      onChange={(e) => setShow6ModalCloneTargetLeague(e.target.value as LeagueType)}
+                      className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-bold text-white"
+                    >
+                      {enabledShow6Leagues.map((lg) => (
+                        <option key={lg} value={lg}>
+                          {lg}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleCloneShow6Roster6(
+                        editingShow6RosterModal.roster,
+                        editingShow6RosterModal.target,
+                        show6ModalCloneTargetLeague,
+                        'MY'
+                      )
+                    }
+                    className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-extrabold text-xs transition shadow"
+                  >
+                    📋 Clone as My Show 6 ({show6ModalCloneTargetLeague.split(' ')[0]})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleCloneShow6Roster6(
+                        editingShow6RosterModal.roster,
+                        editingShow6RosterModal.target,
+                        show6ModalCloneTargetLeague,
+                        'OPP'
+                      )
+                    }
+                    className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs transition shadow"
+                  >
+                    ⚔️ Clone as Opponent Show 6 ({show6ModalCloneTargetLeague.split(' ')[0]})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyShow6RosterToGblBlind3(editingShow6RosterModal.roster)}
+                    className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 border border-amber-400/50 text-amber-200 font-bold text-xs transition"
+                  >
+                    🛡️ Copy Top-3 Core to Standard GBL (Blind 3)
+                  </button>
                 </div>
               </div>
 

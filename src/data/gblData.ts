@@ -39,7 +39,7 @@ export interface TeamMember {
   ivs?: string;
 }
 
-export type LeagueType =
+export type CoreLeagueType =
   | "MEGA MASTER LEAGUE"
   | "MASTER LEAGUE"
   | "ULTRA LEAGUE"
@@ -47,7 +47,23 @@ export type LeagueType =
   | "Battle Frontier (Spectral)"
   | "Battle Frontier (Cauldron)"
   | "Battle Frontier (Master)";
+
+export type LeagueType = CoreLeagueType | (string & {});
 export type TeamArchetype = "ABB" | "ABC" | "DUO";
+export type LimitedMetaLifecycleStatus = "CURRENT" | "UPCOMING" | "RECENT";
+
+export interface LimitedMetaFormat {
+  id: string;
+  cup: string;
+  cp: 500 | 1500 | 2500 | 10000;
+  title: string;
+  label: string;
+  status: LimitedMetaLifecycleStatus;
+  rankingsUrl: string;
+  isShow6Native?: boolean;
+  allowMegas?: boolean;
+  verifiedRankingsCount?: number;
+}
 
 export const GBL_LEAGUES: LeagueType[] = [
   "GREAT LEAGUE",
@@ -63,14 +79,445 @@ export const SHOW6_LEAGUES: LeagueType[] = [
   "Battle Frontier (Master)"
 ];
 
+export const DEFAULT_LIMITED_META_CATALOG: LimitedMetaFormat[] = [
+  // CURRENT (Active in formats.json & live rotation)
+  {
+    id: "fantasy_1500",
+    cup: "fantasy",
+    cp: 1500,
+    title: "Fantasy Cup",
+    label: "Fantasy Cup (1500)",
+    status: "CURRENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fantasy/overall/rankings-1500.json"
+  },
+  {
+    id: "color_1500",
+    cup: "color",
+    cp: 1500,
+    title: "Color Cup",
+    label: "Color Cup (1500)",
+    status: "CURRENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/color/overall/rankings-1500.json"
+  },
+  {
+    id: "love_1500",
+    cup: "love",
+    cp: 1500,
+    title: "Love Cup",
+    label: "Love Cup (1500)",
+    status: "CURRENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/love/overall/rankings-1500.json"
+  },
+  {
+    id: "spring_1500",
+    cup: "spring",
+    cp: 1500,
+    title: "Spring Cup",
+    label: "Spring Cup (1500)",
+    status: "CURRENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/spring/overall/rankings-1500.json"
+  },
+  {
+    id: "championshipseries_1500",
+    cup: "championshipseries",
+    cp: 1500,
+    title: "Play! Pokémon Championship Series",
+    label: "Play! Pokémon Championship (1500)",
+    status: "CURRENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/championshipseries/overall/rankings-1500.json",
+    isShow6Native: true
+  },
+  {
+    id: "retro_1500",
+    cup: "retro",
+    cp: 1500,
+    title: "Retro Cup",
+    label: "Retro Cup (1500)",
+    status: "CURRENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/retro/overall/rankings-1500.json"
+  },
+  {
+    id: "premier_10000",
+    cup: "premier",
+    cp: 10000,
+    title: "Master League Premier",
+    label: "Master Premier (10000)",
+    status: "CURRENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/premier/overall/rankings-10000.json"
+  },
+  // UPCOMING (Next scheduled GBL & Battle Frontier rotations in formats.json)
+  {
+    id: "sunshine_1500",
+    cup: "sunshine",
+    cp: 1500,
+    title: "Sunshine Cup",
+    label: "Sunshine Cup (1500)",
+    status: "UPCOMING",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/sunshine/overall/rankings-1500.json"
+  },
+  {
+    id: "summer_1500",
+    cup: "summer",
+    cp: 1500,
+    title: "Summer Cup",
+    label: "Summer Cup (1500)",
+    status: "UPCOMING",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/summer/overall/rankings-1500.json"
+  },
+  {
+    id: "summer_2500",
+    cup: "summer",
+    cp: 2500,
+    title: "Summer Cup (Ultra)",
+    label: "Summer Cup (2500)",
+    status: "UPCOMING",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/summer/overall/rankings-2500.json"
+  },
+  {
+    id: "willpower_1500",
+    cup: "willpower",
+    cp: 1500,
+    title: "Willpower Cup",
+    label: "Willpower Cup (1500)",
+    status: "UPCOMING",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/willpower/overall/rankings-1500.json"
+  },
+  {
+    id: "psychic_1500",
+    cup: "psychic",
+    cp: 1500,
+    title: "Psychic Cup",
+    label: "Psychic Cup (1500)",
+    status: "UPCOMING",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/psychic/overall/rankings-1500.json"
+  },
+  {
+    id: "evolution_1500",
+    cup: "evolution",
+    cp: 1500,
+    title: "Evolution Cup",
+    label: "Evolution Cup (1500)",
+    status: "UPCOMING",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/evolution/overall/rankings-1500.json"
+  },
+  {
+    id: "catch_1500",
+    cup: "catch",
+    cp: 1500,
+    title: "Catch Cup",
+    label: "Catch Cup (1500)",
+    status: "UPCOMING",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/catch/overall/rankings-1500.json"
+  },
+  // RECENT (Active this season in src/data/gamemaster/cups/*.json with verified rankings, not archived)
+  {
+    id: "halloween_1500",
+    cup: "halloween",
+    cp: 1500,
+    title: "Halloween Cup",
+    label: "Halloween Cup (1500)",
+    status: "RECENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/halloween/overall/rankings-1500.json"
+  },
+  {
+    id: "halloween_2500",
+    cup: "halloween",
+    cp: 2500,
+    title: "Halloween Cup (Ultra)",
+    label: "Halloween Cup (2500)",
+    status: "RECENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/halloween/overall/rankings-2500.json"
+  },
+  {
+    id: "holiday_1500",
+    cup: "holiday",
+    cp: 1500,
+    title: "Holiday Cup",
+    label: "Holiday Cup (1500)",
+    status: "RECENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/holiday/overall/rankings-1500.json"
+  },
+  {
+    id: "holiday_2500",
+    cup: "holiday",
+    cp: 2500,
+    title: "Holiday Cup (Ultra)",
+    label: "Holiday Cup (2500)",
+    status: "RECENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/holiday/overall/rankings-2500.json"
+  },
+  {
+    id: "jungle_1500",
+    cup: "jungle",
+    cp: 1500,
+    title: "Electric / Jungle Cup",
+    label: "Jungle Cup (1500)",
+    status: "RECENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/jungle/overall/rankings-1500.json"
+  },
+  {
+    id: "fossil_1500",
+    cup: "fossil",
+    cp: 1500,
+    title: "Fossil Cup",
+    label: "Fossil Cup (1500)",
+    status: "RECENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fossil/overall/rankings-1500.json"
+  },
+  {
+    id: "hisui_1500",
+    cup: "hisui",
+    cp: 1500,
+    title: "Hisui Cup",
+    label: "Hisui Cup (1500)",
+    status: "RECENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/hisui/overall/rankings-1500.json"
+  },
+  {
+    id: "sinnoh_1500",
+    cup: "sinnoh",
+    cp: 1500,
+    title: "Sinnoh Cup",
+    label: "Sinnoh Cup (1500)",
+    status: "RECENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/sinnoh/overall/rankings-1500.json"
+  },
+  {
+    id: "kanto_1500",
+    cup: "kanto",
+    cp: 1500,
+    title: "Kanto Cup",
+    label: "Kanto Cup (1500)",
+    status: "RECENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/kanto/overall/rankings-1500.json"
+  },
+  {
+    id: "element_500",
+    cup: "element",
+    cp: 500,
+    title: "Element Cup (Little)",
+    label: "Element Cup (500)",
+    status: "RECENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/element/overall/rankings-500.json"
+  },
+  {
+    id: "little_500",
+    cup: "little",
+    cp: 500,
+    title: "Little Cup",
+    label: "Little Cup (500)",
+    status: "RECENT",
+    rankingsUrl: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/little/overall/rankings-500.json"
+  }
+];
+
+export const LIMITED_META_CATALOG_STORAGE_KEY = "silphscope_pvpoke_limited_meta_catalog_v1";
+export const PINNED_GBL_LIMITED_METAS_STORAGE_KEY = "silphscope_pinned_gbl_limited_metas_v1";
+export const PINNED_SHOW6_LIMITED_METAS_STORAGE_KEY = "silphscope_pinned_show6_limited_metas_v1";
+export const LIMITED_META_RANKINGS_CACHE_KEY = "silphscope_limited_meta_rankings_cache_v1";
+export const LIMITED_META_SHEET_ALIASES_KEY = "silphscope_limited_meta_sheet_aliases_v1";
+
+let DYNAMIC_LIMITED_META_CATALOG: LimitedMetaFormat[] = (() => {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const raw = localStorage.getItem(LIMITED_META_CATALOG_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const byId = new Map<string, LimitedMetaFormat>();
+          for (const d of DEFAULT_LIMITED_META_CATALOG) byId.set(d.id, d);
+          for (const p of parsed) {
+            if (p && typeof p.id === "string" && typeof p.label === "string") {
+              byId.set(p.id, p as LimitedMetaFormat);
+            }
+          }
+          return Array.from(byId.values());
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return [...DEFAULT_LIMITED_META_CATALOG];
+})();
+
+export function getLimitedMetaCatalog(): LimitedMetaFormat[] {
+  const statusOrder: Record<LimitedMetaLifecycleStatus, number> = {
+    CURRENT: 0,
+    UPCOMING: 1,
+    RECENT: 2
+  };
+  return [...DYNAMIC_LIMITED_META_CATALOG].sort((a, b) => {
+    const sa = statusOrder[a.status] ?? 2;
+    const sb = statusOrder[b.status] ?? 2;
+    if (sa !== sb) return sa - sb;
+    return a.label.localeCompare(b.label);
+  });
+}
+
+export function getPinnedGblLimitedMetas(): string[] {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const raw = localStorage.getItem(PINNED_GBL_LIMITED_METAS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+export function setPinnedGblLimitedMetas(labels: string[]): string[] {
+  const unique = Array.from(new Set((labels || []).map((s) => s.trim()).filter(Boolean)));
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(PINNED_GBL_LIMITED_METAS_STORAGE_KEY, JSON.stringify(unique));
+    }
+  } catch {
+    // ignore
+  }
+  return unique;
+}
+
+export function getPinnedShow6LimitedMetas(): string[] {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const raw = localStorage.getItem(PINNED_SHOW6_LIMITED_METAS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+export function setPinnedShow6LimitedMetas(labels: string[]): string[] {
+  const unique = Array.from(new Set((labels || []).map((s) => s.trim()).filter(Boolean)));
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(PINNED_SHOW6_LIMITED_METAS_STORAGE_KEY, JSON.stringify(unique));
+    }
+  } catch {
+    // ignore
+  }
+  return unique;
+}
+
+export function getEnabledGblLeagues(): LeagueType[] {
+  const pinned = getPinnedGblLimitedMetas();
+  const out: LeagueType[] = [...GBL_LEAGUES];
+  for (const p of pinned) {
+    if (!out.includes(p)) out.push(p);
+  }
+  return out;
+}
+
+export function getEnabledShow6Leagues(): LeagueType[] {
+  const pinned = getPinnedShow6LimitedMetas();
+  const out: LeagueType[] = [...SHOW6_LEAGUES];
+  for (const p of pinned) {
+    if (!out.includes(p)) out.push(p);
+  }
+  return out;
+}
+
+export function getLimitedMetaSheetAliases(): Record<string, string> {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const raw = localStorage.getItem(LIMITED_META_SHEET_ALIASES_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") return parsed as Record<string, string>;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return {};
+}
+
+export function setLimitedMetaSheetAlias(metaLabel: string, aliasKeyword: string): Record<string, string> {
+  const current = getLimitedMetaSheetAliases();
+  const cleanKey = (metaLabel || "").trim();
+  const cleanVal = (aliasKeyword || "").trim();
+  if (cleanKey) {
+    if (cleanVal) {
+      current[cleanKey] = cleanVal;
+    } else {
+      delete current[cleanKey];
+    }
+  }
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(LIMITED_META_SHEET_ALIASES_KEY, JSON.stringify(current));
+    }
+  } catch {
+    // ignore
+  }
+  return current;
+}
+
+export function getLeagueCpCap(league: string | undefined): 500 | 1500 | 2500 | 10000 {
+  const raw = (league || "GREAT LEAGUE").trim();
+  const catMatch = DYNAMIC_LIMITED_META_CATALOG.find(
+    (m) => m.label.toLowerCase() === raw.toLowerCase() || m.id.toLowerCase() === raw.toLowerCase()
+  );
+  if (catMatch) return catMatch.cp;
+  const cpParen = raw.match(/\((\d{3,5})\)/);
+  if (cpParen) {
+    const n = parseInt(cpParen[1], 10);
+    if (n <= 500) return 500;
+    if (n <= 1500) return 1500;
+    if (n <= 2500) return 2500;
+    return 10000;
+  }
+  const u = raw.toUpperCase();
+  if (u.includes("500") || u.includes("LITTLE") || u.includes("ELEMENT")) return 500;
+  if (u.includes("2500") || u.includes("ULTRA") || u.includes("CAULDRON")) return 2500;
+  if (u.includes("10000") || u.includes("MASTER")) return 10000;
+  return 1500;
+}
+
+export function isMegaAllowedInLeague(league: string | undefined): boolean {
+  const raw = (league || "").trim();
+  const u = raw.toUpperCase();
+  if (
+    u === "MEGA MASTER LEAGUE" ||
+    u.includes("MEGA") ||
+    u.includes("BATTLE FRONTIER (CAULDRON)") ||
+    u.includes("BATTLE FRONTIER (MASTER)")
+  ) {
+    return true;
+  }
+  const catMatch = DYNAMIC_LIMITED_META_CATALOG.find(
+    (m) => m.label.toLowerCase() === raw.toLowerCase()
+  );
+  return Boolean(catMatch?.allowMegas);
+}
+
 export function isBattleFrontierLeague(league: string | undefined): boolean {
-  const u = (league || "").toUpperCase();
-  return u.includes("BATTLE FRONTIER") || u.includes("SPECTRAL") || u.includes("CAULDRON");
+  const raw = (league || "").trim();
+  const u = raw.toUpperCase();
+  if (u.includes("BATTLE FRONTIER") || u.includes("SPECTRAL") || u.includes("CAULDRON")) {
+    return true;
+  }
+  const pinnedShow6 = getPinnedShow6LimitedMetas();
+  return pinnedShow6.some((p) => p.toLowerCase() === raw.toLowerCase());
 }
 
 export function isShow6EligibleLeague(league: string | undefined): boolean {
   const norm = normalizeLeagueName(league);
-  return SHOW6_LEAGUES.includes(norm);
+  return getEnabledShow6Leagues().includes(norm) || SHOW6_LEAGUES.includes(norm);
 }
 
 export function isMegaOrPrimalSpecies(name: string | undefined): boolean {
@@ -92,10 +539,31 @@ export function hasMultipleMegas(members: Array<{ name: string } | string>): boo
 }
 
 export function normalizeLeagueName(league: string | undefined): LeagueType {
-  const u = (league || "GREAT LEAGUE").toUpperCase();
+  const raw = (league || "GREAT LEAGUE").trim();
+  if (!raw) return "GREAT LEAGUE";
+  const u = raw.toUpperCase();
+  if (u === "GREAT LEAGUE") return "GREAT LEAGUE";
+  if (u === "ULTRA LEAGUE") return "ULTRA LEAGUE";
+  if (u === "MASTER LEAGUE") return "MASTER LEAGUE";
+  if (u === "MEGA MASTER LEAGUE") return "MEGA MASTER LEAGUE";
   if (u.includes("SPECTRAL")) return "Battle Frontier (Spectral)";
   if (u.includes("CAULDRON")) return "Battle Frontier (Cauldron)";
   if (u.includes("BATTLE FRONTIER") && u.includes("MASTER")) return "Battle Frontier (Master)";
+
+  const catalogMatch = DYNAMIC_LIMITED_META_CATALOG.find(
+    (m) =>
+      m.label.toLowerCase() === raw.toLowerCase() ||
+      m.title.toLowerCase() === raw.toLowerCase() ||
+      m.id.toLowerCase() === raw.toLowerCase()
+  );
+  if (catalogMatch) return catalogMatch.label;
+
+  const allPinned = [...getPinnedGblLimitedMetas(), ...getPinnedShow6LimitedMetas()];
+  const pinnedMatch = allPinned.find((p) => p.toLowerCase() === raw.toLowerCase());
+  if (pinnedMatch) return pinnedMatch;
+
+  if (/\(\d{3,5}\)$/.test(raw)) return raw;
+
   if (u.includes("MEGA")) return "MEGA MASTER LEAGUE";
   if (u.includes("GREAT")) return "GREAT LEAGUE";
   if (u.includes("ULTRA")) return "ULTRA LEAGUE";
@@ -122,6 +590,8 @@ export interface PokemonRankingEntry {
 
 export const PVPOKE_ENDPOINTS = {
   GAMEMASTER: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/gamemaster.json",
+  FORMATS_JSON: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/gamemaster/formats.json",
+  CUPS_DIR_API: "https://api.github.com/repos/pvpoke/pvpoke/contents/src/data/gamemaster/cups",
   RANKINGS_GL: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-1500.json",
   RANKINGS_UL: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-2500.json",
   RANKINGS_ML: "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-10000.json",
@@ -135,6 +605,7 @@ export interface TeamPreset {
   id: string;
   name: string;
   league: LeagueType;
+  combatMode?: "gbl" | "show6";
   pokemon: TeamMember[];
   isSelected?: boolean;
   archetype?: TeamArchetype;
@@ -3248,15 +3719,15 @@ export function parseIvTriplet(
       ];
     }
   }
-  const upper = league.toUpperCase();
-  if (upper.includes("GREAT") || upper.includes("SPECTRAL")) {
+  const cap = getLeagueCpCap(league);
+  if (cap <= 1500) {
     if (pokemon?.defaultIvsGl) {
       const glParts = pokemon.defaultIvsGl.split("/").map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n));
       if (glParts.length >= 3) return [glParts[0], glParts[1], glParts[2]];
     }
     return [1, 15, 15];
   }
-  if (upper.includes("ULTRA") || upper.includes("CAULDRON")) {
+  if (cap === 2500) {
     if (pokemon?.defaultIvsUl) {
       const ulParts = pokemon.defaultIvsUl.split("/").map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n));
       if (ulParts.length >= 3) return [ulParts[0], ulParts[1], ulParts[2]];
@@ -3276,10 +3747,11 @@ export function computeEffectiveStatsForLeague(
   customIvs?: string,
   isShadow?: boolean
 ): PokemonStats & { resolvedCp: number } {
-  const upper = league.toUpperCase();
-  const isGreat = upper.includes("GREAT") || upper.includes("SPECTRAL");
-  const isUltra = upper.includes("ULTRA") || upper.includes("CAULDRON");
-  const leagueCap = isGreat ? 1500 : isUltra ? 2500 : 6000;
+  const cap = getLeagueCpCap(league);
+  const isLittle = cap === 500;
+  const isGreat = cap === 1500;
+  const isUltra = cap === 2500;
+  const leagueCap = isLittle ? 500 : isGreat ? 1500 : isUltra ? 2500 : 6000;
   const actualIvs = parseIvTriplet(customIvs, league, pokemon);
   const withLeagueMoves = applyRankingMovesToPokemonStats(pokemon, league, isShadow);
 
@@ -3332,7 +3804,9 @@ export function computeEffectiveStatsForLeague(
   const adjProd = Math.max(1, adjAtkAtRef * Math.sqrt(adjDefAtRef * adjHpAtRef));
   const ivCpRatio = adjProd / refProd;
 
-  const defaultLeagueCp = isGreat
+  const defaultLeagueCp = isLittle
+    ? Math.min(500, Math.max(100, Math.round(refStatCp * 0.33)))
+    : isGreat
     ? refStatCp <= 1500
       ? refStatCp
       : 1498
@@ -3349,7 +3823,7 @@ export function computeEffectiveStatsForLeague(
   const targetCp =
     customCp && customCp >= 100 && customCp <= leagueCap + 100
       ? customCp
-      : !isGreat && !isUltra
+      : !isLittle && !isGreat && !isUltra
       ? Math.max(100, Math.round(defaultLeagueCp * ivCpRatio))
       : defaultLeagueCp;
 
@@ -3468,15 +3942,42 @@ export const LIVE_RANKINGS_LIST: Record<LeagueType, PokemonRankingEntry[]> = {
   ]
 };
 
-const LIVE_RANKINGS_MAP: Record<string, Map<string, PokemonRankingEntry>> = {
-  "GREAT LEAGUE": new Map(),
-  "ULTRA LEAGUE": new Map(),
-  "MASTER LEAGUE": new Map(),
-  "MEGA MASTER LEAGUE": new Map(),
-  "Battle Frontier (Spectral)": new Map(),
-  "Battle Frontier (Cauldron)": new Map(),
-  "Battle Frontier (Master)": new Map()
-};
+const LIVE_RANKINGS_MAP: Record<string, Map<string, PokemonRankingEntry>> = (() => {
+  const base: Record<string, Map<string, PokemonRankingEntry>> = {
+    "GREAT LEAGUE": new Map(),
+    "ULTRA LEAGUE": new Map(),
+    "MASTER LEAGUE": new Map(),
+    "MEGA MASTER LEAGUE": new Map(),
+    "Battle Frontier (Spectral)": new Map(),
+    "Battle Frontier (Cauldron)": new Map(),
+    "Battle Frontier (Master)": new Map()
+  };
+  try {
+    if (typeof localStorage !== "undefined") {
+      const raw = localStorage.getItem(LIMITED_META_RANKINGS_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          for (const [lgKey, arr] of Object.entries(parsed)) {
+            if (Array.isArray(arr) && arr.length > 0) {
+              const map = new Map<string, PokemonRankingEntry>();
+              for (const item of arr as PokemonRankingEntry[]) {
+                if (item && typeof item.speciesId === "string") {
+                  map.set(item.speciesId.toLowerCase(), item);
+                }
+              }
+              base[lgKey] = map;
+              base[lgKey.toUpperCase()] = map;
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return base;
+})();
 
 // Seed LIVE_RANKINGS_MAP immediately from initial rankings
 (
@@ -5089,11 +5590,13 @@ export function getRecommendedMovesForPokemon(
     );
     if (builtinAlt) {
       const ivTuple = parseIvTriplet(customIvs, league);
-      const upperLg = league.toUpperCase();
+      const cap = getLeagueCpCap(league);
       const defaultCp =
-        upperLg.includes("GREAT") || upperLg.includes("SPECTRAL")
+        cap === 500
+          ? 498
+          : cap === 1500
           ? 1496
-          : upperLg.includes("ULTRA") || upperLg.includes("CAULDRON")
+          : cap === 2500
           ? 2492
           : 3450;
       return {
@@ -5286,19 +5789,19 @@ export function getLeagueTop3Template(
       },
       {
         id: "m2",
-        name: "Primal Groudon",
-        cp: 5910,
-        fastMove: "Mud Shot",
-        chargedMove1: "Precipice Blades",
-        chargedMove2: "Fire Punch"
+        name: "Palkia (Origin)",
+        cp: 4683,
+        fastMove: "Dragon Breath",
+        chargedMove1: "Spacial Rend",
+        chargedMove2: "Aqua Tail"
       },
       {
         id: "m3",
-        name: "Primal Kyogre",
-        cp: 5910,
-        fastMove: "Waterfall",
-        chargedMove1: "Origin Pulse",
-        chargedMove2: "Surf"
+        name: "Zacian (Crowned)",
+        cp: 4658,
+        fastMove: "Metal Claw",
+        chargedMove1: "Behemoth Blade",
+        chargedMove2: "Close Combat"
       }
     ];
   }
@@ -5357,6 +5860,38 @@ export function getLeagueTop3Template(
         chargedMove2: "Ancient Power"
       }
     ];
+  }
+  if (normLeague !== "MASTER LEAGUE") {
+    const topNames = getLeagueTopMetaSpeciesNames(normLeague, 15);
+    const dynamicTriad: TeamMember[] = [];
+    const seenBases = new Set<string>();
+    let hasMega = false;
+    const fallbackCp = getLeagueCpCap(normLeague) === 500 ? 498 : getLeagueCpCap(normLeague) === 2500 ? 2495 : getLeagueCpCap(normLeague) === 10000 ? 4200 : 1498;
+    for (const spName of topNames) {
+      if (dynamicTriad.length >= 3) break;
+      const rec = getRecommendedMovesForPokemon(spName, normLeague);
+      const resolvedName = rec?.name || spName;
+      if (isMegaOrPrimalSpecies(resolvedName)) {
+        if (hasMega) continue;
+      }
+      const dbEntry = POKEMON_DATABASE[resolvedName];
+      const baseKey = extractBaseSpeciesKey(resolvedName, dbEntry?.speciesId, dbEntry?.baseSpecies);
+      if (seenBases.has(baseKey)) continue;
+      seenBases.add(baseKey);
+      if (isMegaOrPrimalSpecies(resolvedName)) hasMega = true;
+      dynamicTriad.push({
+        id: `lm-${dynamicTriad.length + 1}`,
+        name: resolvedName,
+        cp: rec?.cp || fallbackCp,
+        fastMove: rec?.fastMove || "Quick Attack",
+        chargedMove1: rec?.chargedMove1 || "Body Slam",
+        chargedMove2: rec?.chargedMove2 || "Surf",
+        ivs: rec?.defaultIvs
+      });
+    }
+    if (dynamicTriad.length === 3) {
+      return dynamicTriad;
+    }
   }
   return [
     {
@@ -7545,6 +8080,19 @@ function mapBfHeaderCellToLeague(cell: string): string | null {
   if (lower.includes("spectral")) return "Battle Frontier (Spectral)";
   if (lower.includes("cauldron")) return "Battle Frontier (Cauldron)";
   if (lower.includes("master league") || lower === "battle frontier (master)") return "Battle Frontier (Master)";
+  const aliases = getLimitedMetaSheetAliases();
+  for (const [metaLabel, aliasKw] of Object.entries(aliases)) {
+    const kw = (aliasKw || "").trim().toLowerCase();
+    if (kw && lower.includes(kw)) {
+      return metaLabel;
+    }
+  }
+  for (const pinned of getPinnedShow6LimitedMetas()) {
+    const cleanTitle = pinned.replace(/\s*\(\d+\)\s*$/, "").trim().toLowerCase();
+    if (cleanTitle && lower.includes(cleanTitle)) {
+      return pinned;
+    }
+  }
   return null;
 }
 
@@ -7616,6 +8164,7 @@ export function parseBattleFrontierUsageCsv(csvText: string): Record<string, Bat
         shadowSharePct >= 50 && !cleanBase.toLowerCase().startsWith("shadow ")
           ? `Shadow ${cleanBase}`
           : baseCanon;
+      if (!out[def.league]) out[def.league] = [];
       out[def.league].push({
         rank: out[def.league].length + 1,
         name: displayName,
@@ -7678,6 +8227,7 @@ export function parseBattleFrontierCoresCsv(csvText: string): Record<string, Bat
       if (Number.isNaN(usagePct) || usagePct <= 0) continue;
       const monA = canonicalizeMetaPokemonName(rawA) || rawA;
       const monB = canonicalizeMetaPokemonName(rawB) || rawB;
+      if (!out[def.league]) out[def.league] = [];
       out[def.league].push({
         rank: out[def.league].length + 1,
         monA,
@@ -7745,7 +8295,7 @@ export async function syncBattleFrontierUsageAndCores(
   const coreCounts: Record<string, number> = {};
   let totalUsageEntries = 0;
   let totalCoreEntries = 0;
-  for (const lg of SHOW6_LEAGUES) {
+  for (const lg of getEnabledShow6Leagues()) {
     const uLen = BATTLE_FRONTIER_USAGE_MAP[lg]?.length || 0;
     const cLen = BATTLE_FRONTIER_CORES_MAP[lg]?.length || 0;
     usageCounts[lg] = uLen;
@@ -8084,7 +8634,7 @@ export function getLeagueTopMetaSpeciesNames(
   if (names.length < maxCount && !isBattleFrontierLeague(normLeague)) {
     for (const mon of Object.values(POKEMON_DATABASE)) {
       if (names.length >= maxCount) break;
-      if (normLeague !== "MEGA MASTER LEAGUE" && isMegaOrPrimalSpecies(mon.name)) continue;
+      if (!isMegaAllowedInLeague(normLeague) && isMegaOrPrimalSpecies(mon.name)) continue;
       addUniqueName(mon.name);
     }
   }
@@ -8917,13 +9467,13 @@ export function recalculateAllPresetsMetrics(
       : undefined;
   const metaCacheByLeague = new Map<string, BlendedSeasonMetaDistribution>();
   return (presets || []).map((preset) => {
-    const lg = (preset.league || "GREAT LEAGUE").toUpperCase();
+    const lg = normalizeLeagueName(preset.league || "GREAT LEAGUE");
     let blended = metaCacheByLeague.get(lg);
     if (!blended) {
       blended = computeBlendedSeasonMeta(lg, seasonBattleLogs, currentSeason);
       metaCacheByLeague.set(lg, blended);
     }
-    return evaluateTeamPresetMetrics(preset, seasonBattleLogs, currentSeason, blended);
+    return evaluateTeamPresetMetrics({ ...preset, league: lg }, seasonBattleLogs, currentSeason, blended);
   });
 }
 
@@ -8932,6 +9482,7 @@ export const INITIAL_PRESETS: TeamPreset[] = recalculateAllPresetsMetrics([
     id: "preset-ml-1",
     name: "Master: Palkia-O / Zacian-C / Dialga-O",
     league: "MASTER LEAGUE",
+    combatMode: "gbl",
     isSelected: true,
     pokemon: getLeagueTop3Template("MASTER LEAGUE")
   },
@@ -8939,12 +9490,14 @@ export const INITIAL_PRESETS: TeamPreset[] = recalculateAllPresetsMetrics([
     id: "preset-ul-1",
     name: "Ultra: Zygarde / Feraligatr / Giratina-A",
     league: "ULTRA LEAGUE",
+    combatMode: "gbl",
     pokemon: getLeagueTop3Template("ULTRA LEAGUE")
   },
   {
     id: "preset-gl-1",
     name: "Great: Clodsire / Feraligatr / Mandibuzz",
     league: "GREAT LEAGUE",
+    combatMode: "gbl",
     pokemon: getLeagueTop3Template("GREAT LEAGUE")
   }
 ]);
@@ -9012,9 +9565,9 @@ export function getTop100MetaCandidatesForLeague(league: string, maxCount: numbe
     const trimmed = (rawName || "").trim();
     if (!trimmed) return;
     if (
-      normLeague !== "MEGA MASTER LEAGUE" &&
+      !isMegaAllowedInLeague(normLeague) &&
       !allowRankedMega &&
-      (/^Mega\s+|^Primal\s+/i.test(trimmed) || /\(Mega/i.test(trimmed))
+      isMegaOrPrimalSpecies(trimmed)
     ) {
       return;
     }
@@ -10296,14 +10849,20 @@ export interface AntiMetaTeamBuilderResult {
 }
 
 export function getLeagueAbbreviation(league: string): string {
-  const upper = (league || "GREAT LEAGUE").toUpperCase();
+  const raw = (league || "GREAT LEAGUE").trim();
+  const upper = raw.toUpperCase();
   if (upper.includes("SPECTRAL")) return "BF-Spec";
   if (upper.includes("CAULDRON")) return "BF-Caul";
   if (upper.includes("BATTLE FRONTIER") && upper.includes("MASTER")) return "BF-ML";
-  if (upper.includes("MEGA")) return "MML";
-  if (upper.includes("GREAT")) return "GL";
-  if (upper.includes("ULTRA")) return "UL";
-  return "ML";
+  if (upper === "MEGA MASTER LEAGUE") return "MML";
+  if (upper === "GREAT LEAGUE") return "GL";
+  if (upper === "ULTRA LEAGUE") return "UL";
+  if (upper === "MASTER LEAGUE") return "ML";
+  const withoutCp = raw.replace(/\s*\(\d+\)\s*$/, "").replace(/\s*Cup$/i, "").trim();
+  if (withoutCp.length > 0 && withoutCp.length <= 10) {
+    return withoutCp;
+  }
+  return withoutCp.slice(0, 8) || "CUP";
 }
 
 export function formatAntiMetaDefaultTeamName(league: string, date: Date = new Date()): string {
@@ -14526,14 +15085,8 @@ export function rescaleTeamMembersForLeague(
   targetLeague: string
 ): TeamMember[] {
   const normLeague = normalizeLeagueName(targetLeague || "GREAT LEAGUE");
-  const defaultCp =
-    normLeague === "ULTRA LEAGUE" || normLeague === "Battle Frontier (Cauldron)"
-      ? 2500
-      : normLeague === "MASTER LEAGUE" ||
-        normLeague === "MEGA MASTER LEAGUE" ||
-        normLeague === "Battle Frontier (Master)"
-      ? 4200
-      : 1500;
+  const cap = getLeagueCpCap(normLeague);
+  const defaultCp = cap === 500 ? 500 : cap === 2500 ? 2500 : cap === 10000 ? 4200 : 1500;
 
   return (members || []).map((m, idx) => {
     const rec = getRecommendedMovesForPokemon(m.name, normLeague);
@@ -14573,7 +15126,9 @@ export function getMostLikelyMetaOpponent6ForFormat(
       ? "BF Cauldron (2500)"
       : normLeague === "Battle Frontier (Master)"
       ? "BF Master (Uncapped)"
-      : "Open GL (1500)";
+      : normLeague === "GREAT LEAGUE"
+      ? "Open GL (1500)"
+      : normLeague;
 
   const cores = getShow6CoresForLeague(normLeague);
   const weightedMeta = getShow6WeightedMetaList(normLeague, getShow6UsageAndCoreWeightPct(), 45);
@@ -14682,12 +15237,7 @@ export function getMostLikelyMetaOpponent6ForFormat(
 }
 
 export function getAllFormatsMostLikelyMetaOpponent6(): MostLikelyFormatOpponent6Info[] {
-  const formats: LeagueType[] = [
-    "GREAT LEAGUE",
-    "Battle Frontier (Spectral)",
-    "Battle Frontier (Cauldron)",
-    "Battle Frontier (Master)"
-  ];
+  const formats: LeagueType[] = getEnabledShow6Leagues();
   return formats.map((lg) => getMostLikelyMetaOpponent6ForFormat(lg));
 }
 
@@ -14888,6 +15438,7 @@ export const INITIAL_SHOW6_PRESETS_OF_3: TeamPreset[] = recalculateAllPresetsMet
     id: "show6-preset3-gl-1",
     name: "[BF Great] Florges / Melmetal / Shadow Quagsire",
     league: "GREAT LEAGUE",
+    combatMode: "show6",
     isSelected: false,
     pokemon: getLeagueTop3Template("GREAT LEAGUE")
   },
@@ -14895,6 +15446,7 @@ export const INITIAL_SHOW6_PRESETS_OF_3: TeamPreset[] = recalculateAllPresetsMet
     id: "show6-preset3-spectral-1",
     name: "[BF Spectral] Golisopod / Weezing (Galarian) / Cofagrigus",
     league: "Battle Frontier (Spectral)",
+    combatMode: "show6",
     isSelected: true,
     pokemon: getLeagueTop3Template("Battle Frontier (Spectral)")
   },
@@ -14902,6 +15454,7 @@ export const INITIAL_SHOW6_PRESETS_OF_3: TeamPreset[] = recalculateAllPresetsMet
     id: "show6-preset3-cauldron-1",
     name: "[BF Cauldron] Greedent / Muk (Alolan) / Ursaluna",
     league: "Battle Frontier (Cauldron)",
+    combatMode: "show6",
     isSelected: false,
     pokemon: getLeagueTop3Template("Battle Frontier (Cauldron)")
   },
@@ -14909,9 +15462,258 @@ export const INITIAL_SHOW6_PRESETS_OF_3: TeamPreset[] = recalculateAllPresetsMet
     id: "show6-preset3-bfmaster-1",
     name: "[BF Master] Zamazenta (Crowned) / Ursaluna / Dialga (Origin)",
     league: "Battle Frontier (Master)",
+    combatMode: "show6",
     isSelected: false,
     pokemon: getLeagueTop3Template("Battle Frontier (Master)")
   }
 ]);
+
+/**
+ * Fetches and syncs PvPoke Limited Meta rankings JSON (`rankings-{cp}.json`) for one or more LimitedMetaFormat entries,
+ * storing the parsed rankings into `LIVE_RANKINGS_MAP[meta.label]`, `LIVE_RANKINGS_LIST[meta.label]`, and `localStorage`.
+ */
+export async function syncLimitedMetaRankings(
+  formatsToSync?: LimitedMetaFormat[]
+): Promise<{
+  syncedFormats: number;
+  entriesByFormat: Record<string, number>;
+}> {
+  const catalog = getLimitedMetaCatalog();
+  const pinnedSet = new Set([
+    ...getPinnedGblLimitedMetas().map((s) => s.toLowerCase()),
+    ...getPinnedShow6LimitedMetas().map((s) => s.toLowerCase())
+  ]);
+  const targets =
+    formatsToSync && formatsToSync.length > 0
+      ? formatsToSync
+      : catalog.filter((m) => pinnedSet.has(m.label.toLowerCase()));
+
+  const entriesByFormat: Record<string, number> = {};
+  let cachedObj: Record<string, PokemonRankingEntry[]> = {};
+  try {
+    if (typeof localStorage !== "undefined") {
+      const raw = localStorage.getItem(LIMITED_META_RANKINGS_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") cachedObj = parsed;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  await Promise.all(
+    targets.map(async (fmt) => {
+      try {
+        const res = await fetch(fmt.rankingsUrl);
+        if (!res.ok) return;
+        const json = await res.json();
+        const parsed = parseRankingsJsonArray(json);
+        if (parsed.length > 0) {
+          if (!LIVE_RANKINGS_MAP[fmt.label]) {
+            LIVE_RANKINGS_MAP[fmt.label] = new Map();
+          }
+          const map = LIVE_RANKINGS_MAP[fmt.label];
+          map.clear();
+          parsed.forEach((entry) => map.set(entry.speciesId.toLowerCase(), entry));
+          LIVE_RANKINGS_MAP[fmt.label.toUpperCase()] = map;
+          (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)[fmt.label] = parsed;
+          cachedObj[fmt.label] = parsed.slice(0, 220);
+          entriesByFormat[fmt.label] = parsed.length;
+          fmt.verifiedRankingsCount = parsed.length;
+        }
+      } catch {
+        // ignore network errors
+      }
+    })
+  );
+
+  try {
+    if (typeof localStorage !== "undefined" && Object.keys(cachedObj).length > 0) {
+      localStorage.setItem(LIMITED_META_RANKINGS_CACHE_KEY, JSON.stringify(cachedObj));
+    }
+  } catch {
+    // ignore quota errors
+  }
+
+  return {
+    syncedFormats: Object.keys(entriesByFormat).length,
+    entriesByFormat
+  };
+}
+
+/**
+ * Discovers Current, Upcoming, and Recent Limited Metas directly from the PvPoke GitHub repository:
+ * 1. Fetches `src/data/gamemaster/formats.json` (excluding `hideRankings: true` and base open leagues)
+ * 2. Fetches `src/data/gamemaster/cups/*.json` directory listing (excluding `archive/` obsolete formats)
+ * 3. Verifies `src/data/rankings/{cup}/overall/rankings-{cp}.json` exists and has ranked Pokémon
+ * 4. Classifies each format into `CURRENT`, `UPCOMING`, or `RECENT` and persists to `LIMITED_META_CATALOG_STORAGE_KEY`.
+ */
+export async function fetchPvPokeLimitedMetasFromGitHub(): Promise<{
+  catalog: LimitedMetaFormat[];
+  currentCount: number;
+  upcomingCount: number;
+  recentCount: number;
+  summary: string;
+}> {
+  const excludedBaseCups = new Set(["all", "overall", "classic", "premierclassic"]);
+  const discoveredById = new Map<string, LimitedMetaFormat>();
+  for (const d of DEFAULT_LIMITED_META_CATALOG) {
+    discoveredById.set(d.id, { ...d });
+  }
+
+  try {
+    const [formatsRes, cupsDirRes] = await Promise.all([
+      fetch(PVPOKE_ENDPOINTS.FORMATS_JSON).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(PVPOKE_ENDPOINTS.CUPS_DIR_API).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+    ]);
+
+    const candidateList: Array<{
+      cup: string;
+      cp: 500 | 1500 | 2500 | 10000;
+      title: string;
+      status: LimitedMetaLifecycleStatus;
+      isShow6Native?: boolean;
+      allowMegas?: boolean;
+    }> = [];
+
+    if (Array.isArray(formatsRes)) {
+      formatsRes.forEach((f: Record<string, unknown>, idx: number) => {
+        if (!f || f.hideRankings === true) return;
+        const cup = typeof f.cup === "string" ? f.cup.trim().toLowerCase() : "";
+        const cpRaw = Number(f.cp) || 1500;
+        const cp: 500 | 1500 | 2500 | 10000 =
+          cpRaw <= 500 ? 500 : cpRaw <= 1500 ? 1500 : cpRaw <= 2500 ? 2500 : 10000;
+        if (!cup || excludedBaseCups.has(cup)) return;
+        if (cup === "mega" && cp === 10000) return;
+        if (cup === "spectral" || cup === "cauldron" || cup === "battlefrontiermaster") return;
+
+        const title =
+          typeof f.title === "string" && f.title.trim()
+            ? f.title.trim()
+            : `${cup.charAt(0).toUpperCase() + cup.slice(1)} Cup`;
+        const metaStr = typeof f.meta === "string" ? f.meta.toLowerCase() : "";
+        const status: LimitedMetaLifecycleStatus =
+          metaStr.includes("upcoming") || idx >= 6 ? "UPCOMING" : "CURRENT";
+        candidateList.push({
+          cup,
+          cp,
+          title,
+          status,
+          isShow6Native: cup.includes("championship") || cup.includes("frontier") || Boolean(f.showCup),
+          allowMegas: title.toLowerCase().includes("mega") || cup.includes("mega")
+        });
+      });
+    }
+
+    if (Array.isArray(cupsDirRes)) {
+      for (const item of cupsDirRes) {
+        if (!item || typeof item !== "object") continue;
+        const fileObj = item as Record<string, unknown>;
+        if (fileObj.type !== "file") continue;
+        const fileName = typeof fileObj.name === "string" ? fileObj.name : "";
+        if (!fileName.endsWith(".json")) continue;
+        const cupSlug = fileName.replace(/\.json$/i, "").trim().toLowerCase();
+        if (!cupSlug || excludedBaseCups.has(cupSlug)) continue;
+        if (cupSlug === "mega" || cupSlug === "spectral" || cupSlug === "cauldron" || cupSlug === "battlefrontiermaster") {
+          continue;
+        }
+        if (candidateList.some((c) => c.cup === cupSlug)) continue;
+
+        const existingDefault = DEFAULT_LIMITED_META_CATALOG.find((d) => d.cup === cupSlug);
+        const prettyTitle =
+          existingDefault?.title ||
+          `${cupSlug
+            .replace(/([a-z])([A-Z])/g, "$1 $2")
+            .replace(/[-_]+/g, " ")
+            .replace(/\b\w/g, (ch) => ch.toUpperCase())} Cup`;
+        const inferredCp: 500 | 1500 | 2500 | 10000 =
+          existingDefault?.cp ||
+          (cupSlug.includes("little") || cupSlug.includes("element")
+            ? 500
+            : cupSlug.includes("premier") || cupSlug.includes("master")
+            ? 10000
+            : 1500);
+        candidateList.push({
+          cup: cupSlug,
+          cp: inferredCp,
+          title: prettyTitle,
+          status: existingDefault?.status || "RECENT",
+          isShow6Native: existingDefault?.isShow6Native,
+          allowMegas: prettyTitle.toLowerCase().includes("mega")
+        });
+      }
+    }
+
+    await Promise.all(
+      candidateList.slice(0, 24).map(async (cand) => {
+        const id = `${cand.cup}_${cand.cp}`;
+        const rankingsUrl = `https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/${cand.cup}/overall/rankings-${cand.cp}.json`;
+        try {
+          const res = await fetch(rankingsUrl);
+          if (!res.ok) return;
+          const arr = await res.json();
+          if (!Array.isArray(arr) || arr.length === 0) return;
+          const cleanTitle = cand.title.replace(/\s*\(\d+\)\s*$/, "").trim();
+          const label = `${cleanTitle} (${cand.cp})`;
+          const fmt: LimitedMetaFormat = {
+            id,
+            cup: cand.cup,
+            cp: cand.cp,
+            title: cleanTitle,
+            label,
+            status: cand.status,
+            rankingsUrl,
+            isShow6Native: cand.isShow6Native,
+            allowMegas: cand.allowMegas,
+            verifiedRankingsCount: arr.length
+          };
+          discoveredById.set(id, fmt);
+
+          const pinnedLower = new Set([
+            ...getPinnedGblLimitedMetas().map((s) => s.toLowerCase()),
+            ...getPinnedShow6LimitedMetas().map((s) => s.toLowerCase())
+          ]);
+          if (pinnedLower.has(label.toLowerCase())) {
+            const parsed = parseRankingsJsonArray(arr);
+            if (parsed.length > 0) {
+              if (!LIVE_RANKINGS_MAP[label]) LIVE_RANKINGS_MAP[label] = new Map();
+              const map = LIVE_RANKINGS_MAP[label];
+              map.clear();
+              parsed.forEach((e) => map.set(e.speciesId.toLowerCase(), e));
+              LIVE_RANKINGS_MAP[label.toUpperCase()] = map;
+              (LIVE_RANKINGS_LIST as Record<string, PokemonRankingEntry[]>)[label] = parsed;
+            }
+          }
+        } catch {
+          // ignore unranked/obsolete cups that lack rankings-{cp}.json
+        }
+      })
+    );
+  } catch {
+    // fallback to DEFAULT_LIMITED_META_CATALOG
+  }
+
+  DYNAMIC_LIMITED_META_CATALOG = Array.from(discoveredById.values());
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(LIMITED_META_CATALOG_STORAGE_KEY, JSON.stringify(DYNAMIC_LIMITED_META_CATALOG));
+    }
+  } catch {
+    // ignore
+  }
+
+  const sorted = getLimitedMetaCatalog();
+  const currentCount = sorted.filter((m) => m.status === "CURRENT").length;
+  const upcomingCount = sorted.filter((m) => m.status === "UPCOMING").length;
+  const recentCount = sorted.filter((m) => m.status === "UPCOMING" ? false : m.status === "RECENT").length;
+  return {
+    catalog: sorted,
+    currentCount,
+    upcomingCount,
+    recentCount,
+    summary: `✅ Synced ${sorted.length} Ranked PvPoke Limited Metas (${currentCount} Current • ${upcomingCount} Upcoming • ${recentCount} Recent; Obsolete Hidden)`
+  };
+}
 
 

@@ -82,7 +82,7 @@
                 android:id="@+id/tv_app_main_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Real-Time PvP Floating Overlay • v5.03"
+                android:text="Real-Time PvP Floating Overlay • v5.04"
                 android:textSize="11sp"
                 android:textColor="#94a3b8"
                 android:layout_marginTop="1dp" />
@@ -1356,6 +1356,39 @@
                     </LinearLayout>
                 </LinearLayout>
 
+                <!-- League & Limited Meta Filter Tabs for My Teams -->
+                <LinearLayout
+                    android:id="@+id/layout_presets_league_filter_bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#1e293b"
+                    android:padding="8dp"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:id="@+id/tv_presets_league_filter_title"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🛡️ Filter My Teams by League / Limited Meta:"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold"
+                        android:textColor="#38bdf8"
+                        android:layout_marginBottom="4dp" />
+
+                    <HorizontalScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:scrollbars="none">
+
+                        <LinearLayout
+                            android:id="@+id/layout_presets_league_filter_chips"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal" />
+                    </HorizontalScrollView>
+                </LinearLayout>
+
                 <LinearLayout
                     android:id="@+id/layout_presets_list"
                     android:layout_width="match_parent"
@@ -1451,6 +1484,95 @@
                         android:backgroundTint="#334155"
                         android:textColor="#cbd5e1" />
                 </LinearLayout>
+            </LinearLayout>
+
+            <!-- ===================================================================
+                 0B. PVPOKE GITHUB LIMITED METAS IMPORTER & DUAL SELECTOR (v5.04)
+                 =================================================================== -->
+            <LinearLayout
+                android:id="@+id/card_settings_limited_metas"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#0f172a"
+                android:padding="10dp"
+                android:layout_marginBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🌐 PvPoke GitHub Limited Metas Selector (GBL &amp; Battle Frontier)"
+                        android:textColor="#c084fc"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <Button
+                        android:id="@+id/btn_sync_pvpoke_limited_metas"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:minWidth="0dp"
+                        android:paddingHorizontal="10dp"
+                        android:text="🔄 Sync PvPoke Metas"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#7c3aed"
+                        android:textColor="#ffffff" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tv_pvpoke_limited_metas_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Grouped into 🟢 Current, 🔜 Upcoming &amp; 🕒 Recent (Obsolete Archived Formats Hidden)"
+                    android:textColor="#34d399"
+                    android:textSize="10sp"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="6dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="6dp">
+
+                    <Button
+                        android:id="@+id/btn_open_gbl_limited_metas_dialog"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="🛡️ Select GBL Metas (0)"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#0284c7"
+                        android:textColor="#ffffff"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_open_show6_limited_metas_dialog"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="🏛️ Select Show 6 Metas (0)"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#d97706"
+                        android:textColor="#0f172a" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tv_pinned_limited_metas_summary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Pinned Metas: None (Standard Leagues active)"
+                    android:textColor="#cbd5e1"
+                    android:textSize="10sp" />
             </LinearLayout>
 
             <!-- ===================================================================
