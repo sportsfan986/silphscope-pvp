@@ -149,6 +149,20 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_BATTLE_LOGS = "gbl_battle_logs_v1"
         const val PREFS_KEY_AI_TRAINING_LOGS = "gbl_ai_training_logs_v1"
         const val PREFS_KEY_AI_LOGS_SPLIT_DONE = "gbl_ai_logs_split_v350_done"
+        // v5.10: AI Training & Anomaly Telemetry Auto-Upload Constants
+        const val PREFS_KEY_AI_TELEMETRY_V510_MIGRATED = "gbl_ai_telemetry_v510_migrated"
+        const val PREFS_KEY_AI_TELEMETRY_ONBOARDING_SHOWN = "gbl_ai_telemetry_v510_onboarding_shown"
+        const val PREFS_KEY_AUTO_UPLOAD_AI_LOGS = "gbl_auto_upload_ai_logs_v510"
+        const val PREFS_KEY_PENDING_AI_TELEMETRY_V510 = "gbl_pending_ai_telemetry_v510"
+        const val PREFS_KEY_LAST_AI_TELEMETRY_UPLOAD_MS = "gbl_last_ai_telemetry_upload_ms_v510"
+        const val PREFS_KEY_LAST_AI_TELEMETRY_UPLOAD_STATUS = "gbl_last_ai_telemetry_upload_status_v510"
+        const val PREFS_KEY_TOTAL_AI_TELEMETRY_UPLOADED_COUNT = "gbl_total_ai_telemetry_uploaded_count_v510"
+        const val PREFS_KEY_TOTAL_AI_ANOMALIES_DETECTED_COUNT = "gbl_total_ai_anomalies_detected_count_v510"
+        const val PREFS_KEY_DEVICE_TELEMETRY_HASH = "gbl_device_telemetry_hash_v510"
+        const val AI_TELEMETRY_BRANCH = "ai-telemetry-logs"
+        const val AI_TELEMETRY_MIN_BATTLES_ON_STOP = 5
+        const val AI_TELEMETRY_DAILY_INTERVAL_MS = 24L * 60L * 60L * 1000L
+        @Volatile var isAiTelemetryUploadInFlight: Boolean = false
 
         /**
          * v4.08: Scanner-Calibrated 18-Type Charged Move Contrast Ranking (1 = Highest Contrast, 18 = Lowest Contrast).
@@ -1074,6 +1088,681 @@ class OverlayService : LifecycleService() {
                 return true to "Synced ($userTag)! (${mergedPayload.battleLogs.size} battles, +$newLogsCount from other devices · ${mergedPayload.teamPresets.size} teams, +$newTeamsCount updated)"
             } catch (e: Exception) {
                 return false to "Sync failed: ${e.localizedMessage ?: "Network error"}"
+            }
+        }
+
+        // =========================================================================
+        // v5.10: AI TRAINING & ANOMALY TELEMETRY SCHEMA + GITHUB AUTO-UPLOAD ENGINE
+        // =========================================================================
+
+        data class BattleAnomalyRecord(
+            val type: String = "", // "ENERGY_DEFICIT_THROW" | "ENERGY_CAP_DRIFT" | "UNEXPECTED_HP_DELTA" | "SHIELD_DESYNC" | "FAST_MOVE_CADENCE_DRIFT" | "FALLBACK_SPECIES_OR_MOVE"
+            val severity: String = "WARN", // "HIGH" | "WARN" | "INFO"
+            val tSec: Double = 0.0,
+            val actor: String = "user", // "user" | "opp"
+            val species: String = "",
+            val fastMove: String? = null,
+            val moveName: String? = null,
+            val moveResolutionSource: String? = null,
+            val detectedEnergyBefore: Int? = null,
+            val requiredMoveEnergy: Int? = null,
+            val energyDeficit: Int? = null,
+            val residualEnergyAfter: Int? = null,
+            val leftCircleFillPct: Int? = null,
+            val rightCircleFillPct: Int? = null,
+            val hpBeforePct: Int? = null,
+            val hpAfterPct: Int? = null,
+            val actualHpDropPct: Int? = null,
+            val expectedDmgPct: Int? = null,
+            val shieldsBefore: Int? = null,
+            val shieldsAfter: Int? = null,
+            val detail: String = ""
+        )
+
+        data class AiTelemetrySlotSpec(
+            val slotIndex: Int = 0,
+            val species: String = "",
+            val cp: Int? = null,
+            val ivs: String? = null,
+            val fastMove: String = "",
+            val fastTurns: Int = 2,
+            val fastEnergy: Int = 6,
+            val chargedMove1: String = "",
+            val chargedMove1Energy: Int = 45,
+            val chargedMove2: String = "",
+            val chargedMove2Energy: Int = 55,
+            val finalHpPct: Int = 0,
+            val finalEnergy: Int = 0,
+            val fainted: Boolean = false
+        )
+
+        data class AiTelemetryOppSlotSpec(
+            val slotIndex: Int = 0,
+            val species: String = "",
+            val isShadow: Boolean = false,
+            val inferredFastMove: String = "",
+            val fastMoveConfirmed: Boolean = false,
+            val fastMoveStatus: String = "unconfirmed",
+            val fastTurns: Int = 2,
+            val fastEnergy: Int = 6,
+            val confirmedChargedMoves: List<String> = emptyList(),
+            val finalHpPct: Int = 0,
+            val finalEnergy: Int = 0,
+            val fainted: Boolean = false
+        )
+
+        data class AiTelemetryBattleRecordV510(
+            val schemaVersion: String = "5.10",
+            val battleId: String = "",
+            val timestampMs: Long = System.currentTimeMillis(),
+            val appVersion: String = "5.10",
+            val uploaderHandle: String = "anonymous",
+            val deviceHash: String = "",
+            val deviceModel: String = Build.MODEL ?: "Android",
+            val combatMode: String = "gbl",
+            val league: String = "GREAT LEAGUE",
+            val teamName: String = "",
+            val teamArchetype: String = "ABC",
+            val result: String = "WIN",
+            val leadMatchup: String = "NEUTRAL",
+            val battleDurationSec: Double? = null,
+            val bmfScore: Double? = null,
+            val execWae: Double? = null,
+            val adherenceRatePct: Int? = null,
+            val recommendationsIssuedCount: Int = 0,
+            val recommendationsFollowedCount: Int = 0,
+            val firstSwapActor: String = "NONE",
+            val switchAdvantage: String = "NEUTRAL",
+            val userShieldsRemaining: Int = 2,
+            val oppShieldsRemaining: Int = 2,
+            val userFaints: Int = 0,
+            val oppFaints: Int = 0,
+            val scannerSettings: Map<String, Any> = emptyMap(),
+            val userTeamSpecs: List<AiTelemetrySlotSpec> = emptyList(),
+            val oppTeamSpecs: List<AiTelemetryOppSlotSpec> = emptyList(),
+            val anomalies: List<BattleAnomalyRecord> = emptyList(),
+            val anomalyCount: Int = 0,
+            val hasHighSeverityAnomaly: Boolean = false,
+            val timelineEvents: List<BattleTimelineEvent> = emptyList()
+        )
+
+        data class AiTelemetryManifestEntry(
+            val batchId: String = "",
+            val path: String = "",
+            val uploadedAtMs: Long = 0L,
+            val uploader: String = "",
+            val deviceHash: String = "",
+            val appVersion: String = "5.10",
+            val battleCount: Int = 0,
+            val anomalyCount: Int = 0,
+            val highSeverityCount: Int = 0
+        )
+
+        data class AiTelemetryManifest(
+            val schemaVersion: String = "5.10",
+            val updatedAtMs: Long = 0L,
+            val totalBatches: Int = 0,
+            val totalBattles: Int = 0,
+            val totalAnomalies: Int = 0,
+            val batches: List<AiTelemetryManifestEntry> = emptyList()
+        )
+
+        fun getDeviceTelemetryHashStatic(prefs: SharedPreferences): String {
+            val existing = prefs.getString(PREFS_KEY_DEVICE_TELEMETRY_HASH, null)?.trim().orEmpty()
+            if (existing.length >= 6) return existing
+            val rawSeed = "${Build.MANUFACTURER}_${Build.MODEL}_${System.currentTimeMillis()}_${(1000..9999).random()}"
+            val hash = Integer.toHexString(rawSeed.hashCode()).lowercase().padStart(8, '0').take(8)
+            prefs.edit().putString(PREFS_KEY_DEVICE_TELEMETRY_HASH, hash).apply()
+            return hash
+        }
+
+        /**
+         * v5.10 One-Time Migration: Wipes legacy pre-5.10 AI training logs (`gbl_ai_training_logs_v1`)
+         * and strips any residual embedded timeline events from main battle logs so all future AI training
+         * & anomaly telemetry starts clean on the v5.10 schema.
+         */
+        fun runV510AiTelemetryMigrationAndWipeStatic(prefs: SharedPreferences) {
+            if (prefs.getBoolean(PREFS_KEY_AI_TELEMETRY_V510_MIGRATED, false)) return
+            val hasToken = getEffectiveSyncToken(prefs).isNotEmpty()
+            val editor = prefs.edit()
+                .remove(PREFS_KEY_AI_TRAINING_LOGS)
+                .putBoolean(PREFS_KEY_AI_TELEMETRY_V510_MIGRATED, true)
+            if (!prefs.contains(PREFS_KEY_AUTO_UPLOAD_AI_LOGS)) {
+                editor.putBoolean(PREFS_KEY_AUTO_UPLOAD_AI_LOGS, hasToken)
+            }
+            editor.apply()
+        }
+
+        fun loadPendingAiTelemetryLogsStatic(prefs: SharedPreferences, gson: Gson): List<AiTelemetryBattleRecordV510> {
+            val raw = prefs.getString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, null) ?: return emptyList()
+            return try {
+                val type = object : TypeToken<List<AiTelemetryBattleRecordV510>>() {}.type
+                val parsed: List<AiTelemetryBattleRecordV510> = gson.fromJson(raw, type) ?: emptyList()
+                parsed.distinctBy { it.battleId }.sortedBy { it.timestampMs }
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+
+        fun savePendingAiTelemetryLogsStatic(
+            prefs: SharedPreferences,
+            gson: Gson,
+            logs: List<AiTelemetryBattleRecordV510>
+        ) {
+            val capped = logs.distinctBy { it.battleId }.sortedBy { it.timestampMs }.takeLast(200)
+            prefs.edit().putString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(capped)).apply()
+        }
+
+        /**
+         * Inspects a completed battle's timeline events, slot specs, and move/energy/HP/shield states
+         * to automatically detect anomalies (e.g. charged move thrown with less energy tracked than move cost
+         * like the Xerneas fast-move energy issue, unexpected HP drops vs PvPoke damage, shield desyncs,
+         * circle-fill drift, or fallback species/moves).
+         */
+        fun detectBattleAnomaliesStatic(
+            league: String,
+            userTeamSpecs: List<AiTelemetrySlotSpec>,
+            oppTeamSpecs: List<AiTelemetryOppSlotSpec>,
+            timelineEvents: List<BattleTimelineEvent>
+        ): List<BattleAnomalyRecord> {
+            val anomalies = mutableListOf<BattleAnomalyRecord>()
+
+            // 1. Check species & move specs for fallback / missing GameMaster entries
+            for (u in userTeamSpecs) {
+                if (u.species.isBlank() || u.fastMove.equals("Fast Attack", ignoreCase = true) ||
+                    u.chargedMove1.equals("Charged Move 1", ignoreCase = true) ||
+                    u.chargedMove1.equals("Struggle", ignoreCase = true)
+                ) {
+                    anomalies.add(
+                        BattleAnomalyRecord(
+                            type = "FALLBACK_SPECIES_OR_MOVE",
+                            severity = "HIGH",
+                            tSec = 0.0,
+                            actor = "user",
+                            species = u.species,
+                            fastMove = u.fastMove,
+                            moveName = u.chargedMove1,
+                            detail = "User slot #${u.slotIndex + 1} (${u.species}) resolved to fallback move (${u.fastMove} / ${u.chargedMove1})"
+                        )
+                    )
+                }
+            }
+            for (o in oppTeamSpecs) {
+                if (o.species.equals("Waiting...", ignoreCase = true) ||
+                    o.inferredFastMove.equals("Fast Attack", ignoreCase = true)
+                ) {
+                    anomalies.add(
+                        BattleAnomalyRecord(
+                            type = "FALLBACK_SPECIES_OR_MOVE",
+                            severity = "HIGH",
+                            tSec = 0.0,
+                            actor = "opp",
+                            species = o.species,
+                            fastMove = o.inferredFastMove,
+                            detail = "Opponent slot #${o.slotIndex + 1} (${o.species}) resolved to fallback fast move (${o.inferredFastMove})"
+                        )
+                    )
+                }
+            }
+
+            var prevUserShields = 2
+            var prevOppShields = 2
+            var lastActiveUserSpecies = userTeamSpecs.firstOrNull()?.species.orEmpty()
+            var lastActiveOppSpecies = oppTeamSpecs.firstOrNull()?.species.orEmpty()
+            var prevActiveUserHp = 100
+            var prevActiveOppHp = 100
+
+            val sortedEvents = timelineEvents.sortedBy { it.t }
+            for (ev in sortedEvents) {
+                if (ev.type.equals("SWAP", ignoreCase = true) || ev.type.equals("FAINT", ignoreCase = true)) {
+                    if (ev.actor.equals("user", ignoreCase = true) && !ev.pokemonIn.isNullOrBlank()) {
+                        lastActiveUserSpecies = ev.pokemonIn
+                        prevActiveUserHp = 100
+                    } else if (ev.actor.equals("opp", ignoreCase = true) && !ev.pokemonIn.isNullOrBlank()) {
+                        lastActiveOppSpecies = ev.pokemonIn
+                        prevActiveOppHp = 100
+                    }
+                }
+
+                if (ev.type.equals("CHARGED_ATTACK", ignoreCase = true)) {
+                    val isUser = ev.actor.equals("user", ignoreCase = true)
+                    val attackerSpecies = ev.activePokemon?.takeIf { it.isNotBlank() }
+                        ?: (if (isUser) lastActiveUserSpecies else lastActiveOppSpecies)
+                    val moveName = ev.inferredMoveName.orEmpty()
+                    val userSpec = userTeamSpecs.find { it.species.equals(attackerSpecies, ignoreCase = true) }
+                    val oppSpec = oppTeamSpecs.find {
+                        it.species.equals(attackerSpecies, ignoreCase = true) ||
+                            it.species.equals(attackerSpecies.removePrefix("Shadow ").trim(), ignoreCase = true)
+                    }
+                    val fastMoveName = if (isUser) userSpec?.fastMove else oppSpec?.inferredFastMove
+                    val fastTurns = if (isUser) userSpec?.fastTurns else oppSpec?.fastTurns
+                    val fastEnergy = if (isUser) userSpec?.fastEnergy else oppSpec?.fastEnergy
+
+                    val reqEnergy = ev.requiredMoveEnergy ?: if (moveName.isNotBlank()) {
+                        val mStats = resolveChargedMoveStatsStatic(moveName, "normal")
+                        (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[moveName] ?: 45).coerceIn(35, 100)
+                    } else null
+                    val preEnergy = ev.preThrowEnergy
+                    val deficit = ev.energyDeficit ?: if (preEnergy != null && reqEnergy != null && preEnergy < reqEnergy) {
+                        reqEnergy - preEnergy
+                    } else 0
+
+                    // A. ENERGY_DEFICIT_THROW: Move thrown when tracked energy < required move energy (e.g. Xerneas Geomancy / fast move EPT mismatch)
+                    if (deficit > 0 && preEnergy != null && reqEnergy != null) {
+                        anomalies.add(
+                            BattleAnomalyRecord(
+                                type = "ENERGY_DEFICIT_THROW",
+                                severity = if (deficit >= 8) "HIGH" else "WARN",
+                                tSec = ev.t,
+                                actor = ev.actor,
+                                species = attackerSpecies,
+                                fastMove = fastMoveName,
+                                moveName = moveName,
+                                moveResolutionSource = ev.moveResolutionSource,
+                                detectedEnergyBefore = preEnergy,
+                                requiredMoveEnergy = reqEnergy,
+                                energyDeficit = deficit,
+                                residualEnergyAfter = if (isUser) ev.userEnergy else ev.oppEnergy,
+                                leftCircleFillPct = ev.leftCircleFillBeforePct,
+                                rightCircleFillPct = ev.rightCircleFillBeforePct,
+                                detail = "${ev.actor.uppercase()} $attackerSpecies threw $moveName (${reqEnergy}E) with only ${preEnergy}E tracked (deficit -${deficit}E; fast=${fastMoveName ?: "?"} ${fastTurns ?: "?"}t/${fastEnergy ?: "?"}e, src=${ev.moveResolutionSource ?: "?"})"
+                            )
+                        )
+                    }
+
+                    // B. ENERGY_CAP_DRIFT: User threw charged move confirmed by OCR/HP, but pre-throw circle fills were both < 85%
+                    if (isUser &&
+                        (ev.moveResolutionSource == "BANNER_OCR" || ev.moveResolutionSource == "HP_DELTA") &&
+                        ev.leftCircleFillBeforePct != null &&
+                        ev.rightCircleFillBeforePct != null &&
+                        ev.leftCircleFillBeforePct in 1..84 &&
+                        ev.rightCircleFillBeforePct in 0..84
+                    ) {
+                        anomalies.add(
+                            BattleAnomalyRecord(
+                                type = "ENERGY_CAP_DRIFT",
+                                severity = "WARN",
+                                tSec = ev.t,
+                                actor = "user",
+                                species = attackerSpecies,
+                                fastMove = fastMoveName,
+                                moveName = moveName,
+                                moveResolutionSource = ev.moveResolutionSource,
+                                detectedEnergyBefore = preEnergy,
+                                requiredMoveEnergy = reqEnergy,
+                                leftCircleFillPct = ev.leftCircleFillBeforePct,
+                                rightCircleFillPct = ev.rightCircleFillBeforePct,
+                                detail = "User $attackerSpecies threw $moveName (${ev.moveResolutionSource}) while pre-throw circle fills read L=${ev.leftCircleFillBeforePct}% / R=${ev.rightCircleFillBeforePct}% (<85% ready gate)"
+                            )
+                        )
+                    }
+
+                    // C. SHIELD_DESYNC & UNEXPECTED_HP_DELTA
+                    val hpBefore = ev.hpBeforePct
+                    val hpAfter = ev.hpAfterPct
+                    val actualDrop = ev.hpDeltaPct ?: if (hpBefore != null && hpAfter != null) max(0, hpBefore - hpAfter) else null
+                    val expectedDmg = ev.expectedMoveDmgPct
+                    val wasShielded = ev.shielded == true
+
+                    if (hpBefore != null && hpAfter != null && actualDrop != null) {
+                        if (!wasShielded && hpBefore >= 20 && (expectedDmg == null || expectedDmg >= 15) && actualDrop <= 2) {
+                            anomalies.add(
+                                BattleAnomalyRecord(
+                                    type = "SHIELD_DESYNC",
+                                    severity = "HIGH",
+                                    tSec = ev.t,
+                                    actor = ev.actor,
+                                    species = attackerSpecies,
+                                    moveName = moveName,
+                                    hpBeforePct = hpBefore,
+                                    hpAfterPct = hpAfter,
+                                    actualHpDropPct = actualDrop,
+                                    expectedDmgPct = expectedDmg,
+                                    shieldsBefore = if (isUser) prevOppShields else prevUserShields,
+                                    shieldsAfter = if (isUser) ev.oppShieldsRemaining else ev.userShieldsRemaining,
+                                    detail = "Unshielded $moveName from ${ev.actor.uppercase()} $attackerSpecies caused only ${actualDrop}% HP drop (${hpBefore}% -> ${hpAfter}%, expected ~${expectedDmg ?: "?"}%) without shield decrement"
+                                )
+                            )
+                        } else if (wasShielded && actualDrop >= 12 && hpAfter > 0) {
+                            anomalies.add(
+                                BattleAnomalyRecord(
+                                    type = "SHIELD_DESYNC",
+                                    severity = "WARN",
+                                    tSec = ev.t,
+                                    actor = ev.actor,
+                                    species = attackerSpecies,
+                                    moveName = moveName,
+                                    hpBeforePct = hpBefore,
+                                    hpAfterPct = hpAfter,
+                                    actualHpDropPct = actualDrop,
+                                    expectedDmgPct = expectedDmg,
+                                    shieldsBefore = if (isUser) prevOppShields else prevUserShields,
+                                    shieldsAfter = if (isUser) ev.oppShieldsRemaining else ev.userShieldsRemaining,
+                                    detail = "Charged move $moveName from ${ev.actor.uppercase()} $attackerSpecies was marked shielded, but defender HP dropped ${actualDrop}% (${hpBefore}% -> ${hpAfter}%)"
+                                )
+                            )
+                        } else if (!wasShielded && hpAfter > 0 && expectedDmg != null && kotlin.math.abs(actualDrop - expectedDmg) >= 20) {
+                            val diff = kotlin.math.abs(actualDrop - expectedDmg)
+                            anomalies.add(
+                                BattleAnomalyRecord(
+                                    type = "UNEXPECTED_HP_DELTA",
+                                    severity = if (diff >= 32) "HIGH" else "WARN",
+                                    tSec = ev.t,
+                                    actor = ev.actor,
+                                    species = attackerSpecies,
+                                    moveName = moveName,
+                                    moveResolutionSource = ev.moveResolutionSource,
+                                    hpBeforePct = hpBefore,
+                                    hpAfterPct = hpAfter,
+                                    actualHpDropPct = actualDrop,
+                                    expectedDmgPct = expectedDmg,
+                                    detail = "Unshielded $moveName from ${ev.actor.uppercase()} $attackerSpecies dropped defender HP by ${actualDrop}% (${hpBefore}% -> ${hpAfter}%) vs expected PvPoke ${expectedDmg}% (diff ${diff}%)"
+                                )
+                            )
+                        }
+                    }
+                }
+
+                prevUserShields = ev.userShieldsRemaining
+                prevOppShields = ev.oppShieldsRemaining
+            }
+
+            return anomalies
+        }
+
+        /**
+         * Uploads pending v5.10 AI training & anomaly battle records to the dedicated `ai-telemetry-logs`
+         * branch in `sportsfan986/silphscope-pvp` (with automatic community Issue relay + Gist backup fallback
+         * for non-collaborator GitHub accounts).
+         */
+        fun uploadPendingAiTelemetryBatchBlocking(
+            prefs: SharedPreferences,
+            gson: Gson,
+            forceUpload: Boolean = false,
+            minBattlesRequired: Int = 1
+        ): Pair<Boolean, String> {
+            if (isAiTelemetryUploadInFlight) {
+                return false to "AI Telemetry upload already in progress..."
+            }
+            val pending = loadPendingAiTelemetryLogsStatic(prefs, gson)
+            if (pending.isEmpty()) {
+                return true to "No pending AI telemetry battles to upload (0 queued)."
+            }
+            if (!forceUpload && pending.size < minBattlesRequired) {
+                return false to "Waiting for $minBattlesRequired battles (${pending.size}/$minBattlesRequired queued)."
+            }
+            val token = getEffectiveSyncToken(prefs)
+            if (token.isEmpty()) {
+                return false to "Sign in with GitHub in Settings to auto-upload AI training & anomaly logs."
+            }
+
+            isAiTelemetryUploadInFlight = true
+            try {
+                var username = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty()
+                if (username.isEmpty()) {
+                    username = fetchGitHubUsernameBlocking(token)
+                    if (username.isNotEmpty()) {
+                        prefs.edit().putString(PREFS_KEY_SYNC_GITHUB_USERNAME, username).apply()
+                    }
+                }
+                val safeUser = (username.ifBlank { "trainer" }).replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
+                val devHash = getDeviceTelemetryHashStatic(prefs)
+                val nowMs = System.currentTimeMillis()
+                val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply {
+                    timeZone = java.util.TimeZone.getTimeZone("UTC")
+                }.format(java.util.Date(nowMs))
+
+                val enrichedPending = pending.map { rec ->
+                    if (rec.uploaderHandle == "anonymous" && safeUser.isNotBlank()) {
+                        rec.copy(uploaderHandle = safeUser, deviceHash = devHash)
+                    } else {
+                        rec
+                    }
+                }
+
+                val batchId = "batch_${nowMs}_${safeUser}_${devHash}"
+                val batchPath = "batches/$dateStr/$batchId.jsonl"
+                val jsonlContent = enrichedPending.joinToString("\n") { gson.toJson(it) } + "\n"
+                val totalAnomalies = enrichedPending.sumOf { it.anomalyCount }
+                val highSevCount = enrichedPending.count { it.hasHighSeverityAnomaly }
+
+                val httpClient = OkHttpClient()
+                val repoBaseUrl = "https://api.github.com/repos/sportsfan986/silphscope-pvp"
+
+                // Tier 1: Direct commit to dedicated `ai-telemetry-logs` branch (isolated from main & CI builds)
+                val encodedBatchB64 = android.util.Base64.encodeToString(
+                    jsonlContent.toByteArray(Charsets.UTF_8),
+                    android.util.Base64.NO_WRAP
+                )
+                val putBatchBody = gson.toJson(
+                    mapOf(
+                        "message" to "telemetry(v5.10): $batchId (${enrichedPending.size} battles, $totalAnomalies anomalies) by @$safeUser",
+                        "content" to encodedBatchB64,
+                        "branch" to AI_TELEMETRY_BRANCH
+                    )
+                ).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+
+                val putBatchReq = Request.Builder()
+                    .url("$repoBaseUrl/contents/$batchPath")
+                    .put(putBatchBody)
+                    .header("Authorization", "Bearer $token")
+                    .header("Accept", "application/vnd.github+json")
+                    .build()
+
+                var uploadedViaDirectBranch = false
+                var directBranchErrorCode = 0
+                httpClient.newCall(putBatchReq).execute().use { resp ->
+                    if (resp.isSuccessful) {
+                        uploadedViaDirectBranch = true
+                    } else {
+                        directBranchErrorCode = resp.code
+                    }
+                }
+
+                if (uploadedViaDirectBranch) {
+                    // Update `manifest.json` on `ai-telemetry-logs` so AI Studio can inspect 1 lightweight file to discover new batches
+                    try {
+                        val manifestUrl = "$repoBaseUrl/contents/manifest.json"
+                        var existingManifest = AiTelemetryManifest(schemaVersion = "5.10", updatedAtMs = nowMs)
+                        var manifestSha = ""
+                        val getManifestReq = Request.Builder()
+                            .url("$manifestUrl?ref=$AI_TELEMETRY_BRANCH")
+                            .header("Authorization", "Bearer $token")
+                            .header("Accept", "application/vnd.github+json")
+                            .build()
+                        httpClient.newCall(getManifestReq).execute().use { mResp ->
+                            if (mResp.isSuccessful) {
+                                val root = JsonParser.parseString(mResp.body?.string().orEmpty()).asJsonObject
+                                manifestSha = root.get("sha")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                                val b64 = root.get("content")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                                if (b64.isNotBlank()) {
+                                    val dec = String(
+                                        android.util.Base64.decode(b64.replace("\n", "").replace("\r", ""), android.util.Base64.DEFAULT),
+                                        Charsets.UTF_8
+                                    )
+                                    existingManifest = try {
+                                        gson.fromJson(dec, AiTelemetryManifest::class.java) ?: existingManifest
+                                    } catch (_: Exception) { existingManifest }
+                                }
+                            }
+                        }
+                        val newEntry = AiTelemetryManifestEntry(
+                            batchId = batchId,
+                            path = batchPath,
+                            uploadedAtMs = nowMs,
+                            uploader = safeUser,
+                            deviceHash = devHash,
+                            appVersion = "5.10",
+                            battleCount = enrichedPending.size,
+                            anomalyCount = totalAnomalies,
+                            highSeverityCount = highSevCount
+                        )
+                        val updatedBatches = (existingManifest.batches.filter { it.batchId != batchId } + newEntry).takeLast(1500)
+                        val updatedManifest = AiTelemetryManifest(
+                            schemaVersion = "5.10",
+                            updatedAtMs = nowMs,
+                            totalBatches = updatedBatches.size,
+                            totalBattles = updatedBatches.sumOf { it.battleCount },
+                            totalAnomalies = updatedBatches.sumOf { it.anomalyCount },
+                            batches = updatedBatches
+                        )
+                        val manifestB64 = android.util.Base64.encodeToString(
+                            gson.toJson(updatedManifest).toByteArray(Charsets.UTF_8),
+                            android.util.Base64.NO_WRAP
+                        )
+                        val putManifestMap = mutableMapOf<String, Any>(
+                            "message" to "telemetry(v5.10): update manifest.json for $batchId",
+                            "content" to manifestB64,
+                            "branch" to AI_TELEMETRY_BRANCH
+                        )
+                        if (manifestSha.isNotEmpty()) {
+                            putManifestMap["sha"] = manifestSha
+                        }
+                        val putManifestReq = Request.Builder()
+                            .url(manifestUrl)
+                            .put(gson.toJson(putManifestMap).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
+                            .header("Authorization", "Bearer $token")
+                            .header("Accept", "application/vnd.github+json")
+                            .build()
+                        httpClient.newCall(putManifestReq).execute().close()
+                    } catch (_: Exception) {}
+                } else {
+                    // Tier 2 Community User Fallback: Any authenticated GitHub user can submit an Issue to the public repository,
+                    // which `.github/workflows/ingest-community-telemetry.yml` automatically commits into `ai-telemetry-logs` and closes!
+                    var uploadedViaCommunityRelay = false
+                    try {
+                        val metaHeader = gson.toJson(
+                            AiTelemetryManifestEntry(
+                                batchId = batchId,
+                                path = batchPath,
+                                uploadedAtMs = nowMs,
+                                uploader = safeUser,
+                                deviceHash = devHash,
+                                appVersion = "5.10",
+                                battleCount = enrichedPending.size,
+                                anomalyCount = totalAnomalies,
+                                highSeverityCount = highSevCount
+                            )
+                        )
+                        val issueBodyText = buildString {
+                            appendLine("### SilphScope PvP v5.10 Community AI Telemetry Batch")
+                            appendLine("- **Batch ID**: `$batchId`")
+                            appendLine("- **Target Path**: `$batchPath` (`$AI_TELEMETRY_BRANCH`)")
+                            appendLine("- **Battles**: ${enrichedPending.size} (Anomalies detected: $totalAnomalies, High-Severity: $highSevCount)")
+                            appendLine("<!-- AI_TELEMETRY_BATCH_META: $metaHeader -->")
+                            appendLine("```jsonl")
+                            append(jsonlContent)
+                            appendLine("```")
+                        }
+                        val issuePayload = gson.toJson(
+                            mapOf(
+                                "title" to "[AI-TELEMETRY-BATCH] $batchId (${enrichedPending.size} battles)",
+                                "body" to issueBodyText
+                            )
+                        ).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+                        val issueReq = Request.Builder()
+                            .url("$repoBaseUrl/issues")
+                            .post(issuePayload)
+                            .header("Authorization", "Bearer $token")
+                            .header("Accept", "application/vnd.github+json")
+                            .build()
+                        httpClient.newCall(issueReq).execute().use { iResp ->
+                            if (iResp.isSuccessful) {
+                                uploadedViaCommunityRelay = true
+                            }
+                        }
+                    } catch (_: Exception) {}
+
+                    if (!uploadedViaCommunityRelay) {
+                        return false to "Telemetry upload failed (HTTP $directBranchErrorCode). Check GitHub login in Settings."
+                    }
+                }
+
+                // Clear uploaded records from pending queue
+                val uploadedIds = enrichedPending.map { it.battleId }.toSet()
+                val remaining = loadPendingAiTelemetryLogsStatic(prefs, gson).filter { it.battleId !in uploadedIds }
+                val totalUploadedSoFar = prefs.getInt(PREFS_KEY_TOTAL_AI_TELEMETRY_UPLOADED_COUNT, 0) + enrichedPending.size
+                val statusMsg = "Uploaded ${enrichedPending.size} battle${if (enrichedPending.size == 1) "" else "s"} ($totalAnomalies anomal${if (totalAnomalies == 1) "y" else "ies"}) to GitHub @$AI_TELEMETRY_BRANCH"
+                prefs.edit()
+                    .putString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(remaining))
+                    .putLong(PREFS_KEY_LAST_AI_TELEMETRY_UPLOAD_MS, nowMs)
+                    .putInt(PREFS_KEY_TOTAL_AI_TELEMETRY_UPLOADED_COUNT, totalUploadedSoFar)
+                    .putString(PREFS_KEY_LAST_AI_TELEMETRY_UPLOAD_STATUS, statusMsg)
+                    .apply()
+
+                return true to statusMsg
+            } catch (e: Exception) {
+                return false to "Telemetry upload error: ${e.localizedMessage ?: "Network error"}"
+            } finally {
+                isAiTelemetryUploadInFlight = false
+            }
+        }
+
+        /**
+         * Trigger #1 (Once Daily on App Launch):
+         * Runs in background on app launch if `autoUploadEnabled`, signed in to GitHub,
+         * at least 1 battle is pending, and `nowMs - lastUploadMs >= 24h` (or `>= 5` battles pending).
+         */
+        fun triggerAutoUploadOnAppLaunchAsync(
+            prefs: SharedPreferences,
+            gson: Gson,
+            onComplete: ((Boolean, String) -> Unit)? = null
+        ) {
+            val autoEnabled = prefs.getBoolean(PREFS_KEY_AUTO_UPLOAD_AI_LOGS, false)
+            if (!autoEnabled || getEffectiveSyncToken(prefs).isEmpty()) return
+            val pending = loadPendingAiTelemetryLogsStatic(prefs, gson)
+            if (pending.isEmpty()) return
+            val nowMs = System.currentTimeMillis()
+            val lastUploadMs = prefs.getLong(PREFS_KEY_LAST_AI_TELEMETRY_UPLOAD_MS, 0L)
+            val isDailyDue = (nowMs - lastUploadMs) >= AI_TELEMETRY_DAILY_INTERVAL_MS
+            val hasFiveReady = pending.size >= AI_TELEMETRY_MIN_BATTLES_ON_STOP
+            if (!isDailyDue && !hasFiveReady) return
+
+            kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
+                val (ok, msg) = uploadPendingAiTelemetryBatchBlocking(
+                    prefs = prefs,
+                    gson = gson,
+                    forceUpload = true,
+                    minBattlesRequired = 1
+                )
+                if (onComplete != null) {
+                    Handler(Looper.getMainLooper()).post {
+                        try {
+                            onComplete.invoke(ok, msg)
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+        }
+
+        /**
+         * Trigger #2 (On Overlay Stop if >= 5 Battles Ready Since Last Upload):
+         * Runs in background whenever the floating overlay is stopped and at least 5 battles are queued.
+         */
+        fun triggerAutoUploadOnOverlayStopAsync(
+            prefs: SharedPreferences,
+            gson: Gson,
+            onComplete: ((Boolean, String) -> Unit)? = null
+        ) {
+            val autoEnabled = prefs.getBoolean(PREFS_KEY_AUTO_UPLOAD_AI_LOGS, false)
+            if (!autoEnabled || getEffectiveSyncToken(prefs).isEmpty()) return
+            val pending = loadPendingAiTelemetryLogsStatic(prefs, gson)
+            if (pending.size < AI_TELEMETRY_MIN_BATTLES_ON_STOP) return
+
+            kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
+                val (ok, msg) = uploadPendingAiTelemetryBatchBlocking(
+                    prefs = prefs,
+                    gson = gson,
+                    forceUpload = false,
+                    minBattlesRequired = AI_TELEMETRY_MIN_BATTLES_ON_STOP
+                )
+                if (onComplete != null) {
+                    Handler(Looper.getMainLooper()).post {
+                        try {
+                            onComplete.invoke(ok, msg)
+                        } catch (_: Exception) {}
+                    }
+                }
             }
         }
 
@@ -10263,7 +10952,17 @@ class OverlayService : LifecycleService() {
         val userEnergy: Int? = null,
         val oppEnergy: Int? = null,
         val turnIndex: Int? = null,
-        val scanTurnOffsetMs: Long? = null
+        val scanTurnOffsetMs: Long? = null,
+        // v5.10: AI Training & Anomaly Detection Telemetry
+        val preThrowEnergy: Int? = null,
+        val requiredMoveEnergy: Int? = null,
+        val energyDeficit: Int? = null,
+        val expectedMoveDmgPct: Int? = null,
+        val leftCircleFillBeforePct: Int? = null,
+        val rightCircleFillBeforePct: Int? = null,
+        val leftCircleFillAfterPct: Int? = null,
+        val rightCircleFillAfterPct: Int? = null,
+        val moveResolutionSource: String? = null
     )
 
     data class AiTrainingLogRecord(
@@ -11622,6 +12321,9 @@ class OverlayService : LifecycleService() {
                     isInstanceRunning = false
                     hasActiveMediaProjection = false
                     notifyRunningStateChanged()
+                    if (::prefs.isInitialized) {
+                        triggerAutoUploadOnOverlayStopAsync(prefs, gson)
+                    }
                     stopSelf()
                 }
             }
@@ -11629,6 +12331,9 @@ class OverlayService : LifecycleService() {
                 isInstanceRunning = false
                 hasActiveMediaProjection = false
                 notifyRunningStateChanged()
+                if (::prefs.isInitialized) {
+                    triggerAutoUploadOnOverlayStopAsync(prefs, gson)
+                }
                 stopSelf()
             }
         }
@@ -15135,9 +15840,15 @@ class OverlayService : LifecycleService() {
                         }
                         val lastOppEvIdx = battleTimelineEvents.indexOfLast { it.type == "CHARGED_ATTACK" && it.actor == "opp" }
                         if (lastOppEvIdx >= 0 && battleTimelineEvents[lastOppEvIdx].inferredMoveName != moveName) {
-                            battleTimelineEvents[lastOppEvIdx] = battleTimelineEvents[lastOppEvIdx].copy(
+                            val prevEv = battleTimelineEvents[lastOppEvIdx]
+                            val preE = prevEv.preThrowEnergy
+                            val newDeficit = if (preE != null && preE < trueCost) (trueCost - preE) else 0
+                            battleTimelineEvents[lastOppEvIdx] = prevEv.copy(
                                 inferredMoveName = moveName,
-                                oppEnergy = oppSlotEnergy[resolvedOppSlotIdx]
+                                oppEnergy = oppSlotEnergy[resolvedOppSlotIdx],
+                                requiredMoveEnergy = trueCost,
+                                energyDeficit = newDeficit,
+                                moveResolutionSource = "BANNER_OCR"
                             )
                             updatedRetroactive = true
                         }
@@ -16925,6 +17636,20 @@ class OverlayService : LifecycleService() {
                     val cmpEventT = getElapsedBattleSeconds()
                     val cmpPlayerRemSec = if (playerSwapEndTimeMs > nowMs) ceil((playerSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
                     val cmpOppRemSec = if (oppSwapEndTimeMs > nowMs) ceil((oppSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
+                    val cmpExpectedDmgPct = calculateChargedMoveDamagePercent(
+                        attacker = userMetaForStats,
+                        defender = oppMetaForStats,
+                        moveName = cmpResolvedUserMove,
+                        isAttackerShadow = isUserShadForStats,
+                        isDefenderShadow = isOpponentShadow
+                    )
+                    val cmpRawPreEnergy = preChargeUserEnergy.coerceIn(0, 100)
+                    val cmpEnergyDeficit = max(0, cmpUserCost - cmpRawPreEnergy)
+                    val cmpMoveSource = when {
+                        cmpBannerMove != null -> "BANNER_OCR"
+                        cmpPreCircleMove != null -> "PRE_CIRCLE_READY"
+                        else -> "DEFAULT_FALLBACK"
+                    }
                     battleTimelineEvents.add(
                         BattleTimelineEvent(
                             type = "CHARGED_ATTACK",
@@ -16949,7 +17674,14 @@ class OverlayService : LifecycleService() {
                             userEnergy = playerSlotEnergy[activeUserIdx],
                             oppEnergy = oppSlotEnergy[cmpDefenderOppIdx],
                             turnIndex = battleTurnIndex,
-                            scanTurnOffsetMs = scanTurnOffsetMs
+                            scanTurnOffsetMs = scanTurnOffsetMs,
+                            preThrowEnergy = cmpRawPreEnergy,
+                            requiredMoveEnergy = cmpUserCost,
+                            energyDeficit = cmpEnergyDeficit,
+                            expectedMoveDmgPct = cmpExpectedDmgPct,
+                            leftCircleFillBeforePct = preChargeLeftFillPct.takeIf { it >= 0 },
+                            rightCircleFillBeforePct = preChargeRightFillPct.takeIf { it >= 0 },
+                            moveResolutionSource = cmpMoveSource
                         )
                     )
                     lastChargedAttackLoggedMs = nowMs
@@ -17471,6 +18203,16 @@ class OverlayService : LifecycleService() {
                 needsPostSwapOrMoveTurnReindex = true
 
                 val formattedAttackerName = formatOpponentNameWithShadow(attackerOppRawName)
+                val oppRawPreEnergy = pendingChargedAttackPreOppEnergy.coerceIn(0, 100)
+                val oppEnergyDeficit = max(0, totalTargetEnergy - oppRawPreEnergy)
+                val oppExpectedDmgPct = resolvedOppMove?.let { rMove ->
+                    candPairs.find { it.first.equals(rMove, ignoreCase = true) }?.second
+                }
+                val oppMoveSource = when {
+                    bannerOppMove != null -> "BANNER_OCR"
+                    strictHpMove != null || bestGuessHpMove != null -> "HP_DELTA"
+                    else -> "DEFAULT_FALLBACK"
+                }
                 battleTimelineEvents.add(
                     BattleTimelineEvent(
                         type = "CHARGED_ATTACK",
@@ -17495,7 +18237,12 @@ class OverlayService : LifecycleService() {
                         userEnergy = playerSlotEnergy[activeUserIdx],
                         oppEnergy = oppSlotEnergy[attackerOppSlotIdx],
                         turnIndex = battleTurnIndex,
-                        scanTurnOffsetMs = scanTurnOffsetMs
+                        scanTurnOffsetMs = scanTurnOffsetMs,
+                        preThrowEnergy = oppRawPreEnergy,
+                        requiredMoveEnergy = totalTargetEnergy,
+                        energyDeficit = oppEnergyDeficit,
+                        expectedMoveDmgPct = oppExpectedDmgPct,
+                        moveResolutionSource = oppMoveSource
                     )
                 )
                 lastChargedAttackLoggedMs = nowMs
@@ -17784,6 +18531,16 @@ class OverlayService : LifecycleService() {
                 needsPostSwapOrMoveTurnReindex = true
 
                 val formattedDefenderOppName = formatOpponentNameWithShadow(defenderOppRawName)
+                val userRawPreEnergy = preChargeUserEnergy.coerceIn(0, 100)
+                val userEnergyDeficit = max(0, totalUserEnergy - userRawPreEnergy)
+                val userExpectedDmgPct = candPairs.find { it.first.equals(resolvedUserMove, ignoreCase = true) }?.second
+                val userMoveSource = when {
+                    bannerUserMove != null -> "BANNER_OCR"
+                    postCircleInferredMove != null -> "POST_CIRCLE_FIT"
+                    preCircleInferredMove != null -> "PRE_CIRCLE_READY"
+                    hpInferredUserMove != null -> "HP_DELTA"
+                    else -> "DEFAULT_FALLBACK"
+                }
                 battleTimelineEvents.add(
                     BattleTimelineEvent(
                         type = "CHARGED_ATTACK",
@@ -17808,7 +18565,16 @@ class OverlayService : LifecycleService() {
                         userEnergy = playerSlotEnergy[activeUserIdx],
                         oppEnergy = oppSlotEnergy[defenderOppIdx],
                         turnIndex = battleTurnIndex,
-                        scanTurnOffsetMs = scanTurnOffsetMs
+                        scanTurnOffsetMs = scanTurnOffsetMs,
+                        preThrowEnergy = userRawPreEnergy,
+                        requiredMoveEnergy = totalUserEnergy,
+                        energyDeficit = userEnergyDeficit,
+                        expectedMoveDmgPct = userExpectedDmgPct,
+                        leftCircleFillBeforePct = preChargeLeftFillPct.takeIf { it >= 0 },
+                        rightCircleFillBeforePct = preChargeRightFillPct.takeIf { it >= 0 },
+                        leftCircleFillAfterPct = sampledLeftChargeBtnFillPct.takeIf { it >= 0 },
+                        rightCircleFillAfterPct = sampledRightChargeBtnFillPct.takeIf { it >= 0 },
+                        moveResolutionSource = userMoveSource
                     )
                 )
                 lastChargedAttackLoggedMs = nowMs
@@ -20123,33 +20889,124 @@ class OverlayService : LifecycleService() {
         }
         existingLogs.add(0, newEntry)
 
-        // Save detailed timestamped AI Training Log record to separate store & auto-purge records > 7 days old
-        val aiType = object : TypeToken<List<AiTrainingLogRecord>>() {}.type
-        val existingAiLogs: MutableList<AiTrainingLogRecord> = try {
-            gson.fromJson<List<AiTrainingLogRecord>>(prefs.getString(PREFS_KEY_AI_TRAINING_LOGS, "[]"), aiType)
-                ?.filter { (nowMs - it.timestampMs) <= AI_LOG_RETENTION_MS }
-                ?.toMutableList()
-                ?: mutableListOf()
-        } catch (_: Exception) {
-            mutableListOf()
-        }
-        if (finalTimelineEvents.isNotEmpty()) {
-            existingAiLogs.removeAll { it.battleId == battleId }
-            existingAiLogs.add(
-                0,
-                AiTrainingLogRecord(
-                    battleId = battleId,
-                    timestampMs = nowMs,
-                    league = league,
-                    scanHzMode = currentScanHzMode,
-                    turnOffsetMs = scanTurnOffsetMs,
-                    timelineEvents = finalTimelineEvents
-                )
+        // v5.10: Build rich AI Training & Anomaly Telemetry record and queue for GitHub `ai-telemetry-logs` upload
+        runV510AiTelemetryMigrationAndWipeStatic(prefs)
+        val userTeamSpecs = (0..2).mapNotNull { idx ->
+            val slotMember = preset?.pokemon?.getOrNull(idx)
+            val sName = slotMember?.name ?: userMons.getOrNull(idx) ?: return@mapNotNull null
+            val sShadow = sName.contains("Shadow", ignoreCase = true)
+            val sMeta = computeEffectiveCombatStats(getPokemonMeta(sName, league, sShadow), league, slotMember?.cp, slotMember?.ivs)
+            val fMove = slotMember?.fastMove?.takeIf { it.isNotBlank() } ?: sMeta.defaultFastMove
+            val fTurns = resolveFastTurnsStatic(fMove, sMeta.fastTurns)
+            val fEnergy = resolveFastEnergyStatic(fMove, fTurns)
+            val c1Move = slotMember?.chargedMove1?.takeIf { it.isNotBlank() } ?: sMeta.chargedMove1
+            val c2Move = slotMember?.chargedMove2?.takeIf { it.isNotBlank() } ?: sMeta.chargedMove2
+            val c1Stats = resolveChargedMoveStatsStatic(c1Move, sMeta.types.firstOrNull() ?: "normal")
+            val c2Stats = resolveChargedMoveStatsStatic(c2Move, sMeta.types.firstOrNull() ?: "normal")
+            val c1Cost = (c1Stats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[c1Move] ?: 45).coerceIn(35, 100)
+            val c2Cost = (c2Stats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[c2Move] ?: 55).coerceIn(35, 100)
+            AiTelemetrySlotSpec(
+                slotIndex = idx,
+                species = sName,
+                cp = slotMember?.cp,
+                ivs = slotMember?.ivs,
+                fastMove = fMove,
+                fastTurns = fTurns,
+                fastEnergy = fEnergy,
+                chargedMove1 = c1Move,
+                chargedMove1Energy = c1Cost,
+                chargedMove2 = c2Move,
+                chargedMove2Energy = c2Cost,
+                finalHpPct = endUserHpList.getOrElse(idx) { 0 },
+                finalEnergy = if (hasLiveOpponents) playerSlotEnergy.getOrElse(idx) { 0 } else 0,
+                fainted = (endUserHpList.getOrElse(idx) { 0 } <= 0)
             )
         }
+        val oppTeamSpecs = formattedOpponents.mapIndexed { idx, oppName ->
+            val oppShad = oppName.contains("Shadow", ignoreCase = true)
+            val oppMeta = computeEffectiveCombatStats(getPokemonMeta(oppName, league, oppShad), league)
+            val fOverride = detectedOppFastMoveOverride.getOrNull(idx)?.takeIf { it.isNotBlank() }
+            val fMove = fOverride ?: oppMeta.defaultFastMove
+            val fTurns = resolveFastTurnsStatic(fMove, oppMeta.fastTurns)
+            val fEnergy = resolveFastEnergyStatic(fMove, fTurns)
+            AiTelemetryOppSlotSpec(
+                slotIndex = idx,
+                species = oppName,
+                isShadow = oppShad,
+                inferredFastMove = fMove,
+                fastMoveConfirmed = oppFastMoveConfirmed.getOrElse(idx) { false },
+                fastMoveStatus = oppFastMoveStatus.getOrElse(idx) { "unconfirmed" },
+                fastTurns = fTurns,
+                fastEnergy = fEnergy,
+                confirmedChargedMoves = confirmedOppChargedMoves.getOrNull(idx)?.toList() ?: emptyList(),
+                finalHpPct = endOppHpList.getOrElse(idx) { 0 },
+                finalEnergy = if (hasLiveOpponents) oppSlotEnergy.getOrElse(idx) { 0 } else 0,
+                fainted = (endOppHpList.getOrElse(idx) { 0 } <= 0)
+            )
+        }
+        val detectedAnomalies = detectBattleAnomaliesStatic(
+            league = league,
+            userTeamSpecs = userTeamSpecs,
+            oppTeamSpecs = oppTeamSpecs,
+            timelineEvents = finalTimelineEvents
+        )
+        val scannerConfigMap = mapOf(
+            "scanHzMode" to currentScanHzMode,
+            "turnOffsetMs" to scanTurnOffsetMs,
+            "hpTrackingEnabled" to enableHpTracking,
+            "energyTrackingEnabled" to enableEnergyTracking,
+            "hpDebounceSamples" to activeHpDebounceSamples,
+            "energyDebounceSamples" to activeEnergyDebounceSamples,
+            "debounceTolerancePct" to activeDebounceTolerancePct,
+            "proactiveEnergyLeadMs" to activeProactiveEnergyLeadMs,
+            "chargeCirclePriorityMode" to chargeCirclePriorityMode,
+            "altFastMoveDetectEnabled" to enableAltFastMoveDetect,
+            "fastDetectTurnOffset" to fastDetectTurnOffset
+        )
+        val githubUser = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty().ifEmpty { "anonymous" }
+        val v510Record = AiTelemetryBattleRecordV510(
+            schemaVersion = "5.10",
+            battleId = battleId,
+            timestampMs = nowMs,
+            appVersion = "5.10",
+            uploaderHandle = githubUser,
+            deviceHash = getDeviceTelemetryHashStatic(prefs),
+            deviceModel = Build.MODEL ?: "Android",
+            combatMode = if (isShow6CombatMode) "show6" else "gbl",
+            league = league,
+            teamName = teamName,
+            teamArchetype = preset?.archetype ?: "ABC",
+            result = normalizedResult,
+            leadMatchup = resolvedLead,
+            battleDurationSec = durationSec,
+            bmfScore = quality?.pPre,
+            execWae = quality?.execWae,
+            adherenceRatePct = adherencePct,
+            recommendationsIssuedCount = recsIssued,
+            recommendationsFollowedCount = recsFollowed,
+            firstSwapActor = firstSwapActor,
+            switchAdvantage = switchAdvantage,
+            userShieldsRemaining = endUserShields,
+            oppShieldsRemaining = endOppShields,
+            userFaints = finalUserFaints,
+            oppFaints = finalOppFaints,
+            scannerSettings = scannerConfigMap,
+            userTeamSpecs = userTeamSpecs,
+            oppTeamSpecs = oppTeamSpecs,
+            anomalies = detectedAnomalies,
+            anomalyCount = detectedAnomalies.size,
+            hasHighSeverityAnomaly = detectedAnomalies.any { it.severity == "HIGH" },
+            timelineEvents = finalTimelineEvents
+        )
+        val pendingQueue = loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
+        pendingQueue.removeAll { it.battleId == battleId }
+        pendingQueue.add(v510Record)
+        val totalAnomaliesDetected = prefs.getInt(PREFS_KEY_TOTAL_AI_ANOMALIES_DETECTED_COUNT, 0) + detectedAnomalies.size
         prefs.edit()
             .putString(targetBattleLogsPrefKey, gson.toJson(existingLogs))
-            .putString(PREFS_KEY_AI_TRAINING_LOGS, gson.toJson(existingAiLogs))
+            .putString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(pendingQueue.takeLast(200)))
+            .putInt(PREFS_KEY_TOTAL_AI_ANOMALIES_DETECTED_COUNT, totalAnomaliesDetected)
+            .remove(PREFS_KEY_AI_TRAINING_LOGS)
             .apply()
 
         // Ensure opponent list and timeline state are cleared for the next battle after logging
@@ -22467,6 +23324,9 @@ class OverlayService : LifecycleService() {
         isInstanceRunning = false
         hasActiveMediaProjection = false
         notifyRunningStateChanged()
+        if (::prefs.isInitialized) {
+            triggerAutoUploadOnOverlayStopAsync(prefs, gson)
+        }
         battleLoopJob?.cancel()
 
         try {
@@ -22618,6 +23478,9 @@ class OverlayService : LifecycleService() {
         @JavascriptInterface
         fun stopOverlayAndOpenBattleLog() {
             Handler(Looper.getMainLooper()).post {
+                if (::prefs.isInitialized) {
+                    triggerAutoUploadOnOverlayStopAsync(prefs, gson)
+                }
                 try {
                     val launchIntent = Intent(this@OverlayService, MainActivity::class.java).apply {
                         action = ACTION_OPEN_BATTLE_LOG

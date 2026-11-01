@@ -82,7 +82,7 @@
                 android:id="@+id/tv_app_main_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Real-Time PvP Floating Overlay • v5.04"
+                android:text="Real-Time PvP Floating Overlay • v5.10"
                 android:textSize="11sp"
                 android:textColor="#94a3b8"
                 android:layout_marginTop="1dp" />
@@ -3173,6 +3173,68 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="Sync Status: Not signed in (Local storage active)"
+                    android:textColor="#94a3b8"
+                    android:textSize="10sp"
+                    android:layout_marginTop="4dp" />
+
+                <!-- v5.10 AI Training & Anomaly Telemetry Auto-Upload Section -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="#1e293b"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="6dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🤖 AI Training &amp; Anomaly Telemetry Auto-Upload (v5.10)"
+                    android:textColor="#38bdf8"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Automatically uploads detailed battle timelines &amp; detected energy/HP/shield anomalies (e.g. fast-move energy deficits) to the isolated ai-telemetry-logs branch once daily on app launch &amp; on overlay stop when ≥5 battles are ready."
+                    android:textColor="#94a3b8"
+                    android:textSize="10sp"
+                    android:layout_marginTop="2dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="6dp">
+
+                    <Button
+                        android:id="@+id/btn_toggle_auto_upload_ai_logs"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="🤖 Auto-Upload AI Logs: OFF"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#f8fafc"
+                        android:layout_marginEnd="6dp" />
+
+                    <Button
+                        android:id="@+id/btn_upload_ai_logs_now"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:text="☁️ Upload AI Logs"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#0284c7"
+                        android:textColor="#ffffff" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/text_ai_telemetry_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="AI Telemetry: 0 pending battles • Auto-upload: OFF"
                     android:textColor="#94a3b8"
                     android:textSize="10sp"
                     android:layout_marginTop="4dp" />

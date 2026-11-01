@@ -82,7 +82,7 @@
                 android:id="@+id/tv_app_main_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Real-Time PvP Floating Overlay • v5.01"
+                android:text="Real-Time PvP Floating Overlay • v5.10"
                 android:textSize="11sp"
                 android:textColor="#94a3b8"
                 android:layout_marginTop="1dp" />
@@ -658,6 +658,19 @@
                                 android:textColor="#fbbf24" />
 
                             <Button
+                                android:id="@+id/btn_flip_active_my6_opp6"
+                                android:layout_width="wrap_content"
+                                android:layout_height="30dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="7dp"
+                                android:text="⇄ Flip My/Opp"
+                                android:textSize="9sp"
+                                android:textStyle="bold"
+                                android:backgroundTint="#334155"
+                                android:textColor="#fcd34d"
+                                android:layout_marginEnd="4dp" />
+
+                            <Button
                                 android:id="@+id/btn_edit_active_opp6"
                                 android:layout_width="wrap_content"
                                 android:layout_height="30dp"
@@ -667,6 +680,17 @@
                                 android:backgroundTint="#be123c"
                                 android:textColor="#ffffff" />
                         </LinearLayout>
+
+                        <Button
+                            android:id="@+id/btn_load_most_likely_opp6"
+                            android:layout_width="match_parent"
+                            android:layout_height="32dp"
+                            android:text="🔥 Load Most Likely Meta Opponent Team (6) of Format"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:backgroundTint="#881337"
+                            android:textColor="#fecdd3"
+                            android:layout_marginTop="3dp" />
 
                         <LinearLayout
                             android:layout_width="match_parent"
@@ -1332,6 +1356,39 @@
                     </LinearLayout>
                 </LinearLayout>
 
+                <!-- League & Limited Meta Filter Tabs for My Teams -->
+                <LinearLayout
+                    android:id="@+id/layout_presets_league_filter_bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#1e293b"
+                    android:padding="8dp"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:id="@+id/tv_presets_league_filter_title"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🛡️ Filter My Teams by League / Limited Meta:"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold"
+                        android:textColor="#38bdf8"
+                        android:layout_marginBottom="4dp" />
+
+                    <HorizontalScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:scrollbars="none">
+
+                        <LinearLayout
+                            android:id="@+id/layout_presets_league_filter_chips"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal" />
+                    </HorizontalScrollView>
+                </LinearLayout>
+
                 <LinearLayout
                     android:id="@+id/layout_presets_list"
                     android:layout_width="match_parent"
@@ -1427,6 +1484,95 @@
                         android:backgroundTint="#334155"
                         android:textColor="#cbd5e1" />
                 </LinearLayout>
+            </LinearLayout>
+
+            <!-- ===================================================================
+                 0B. PVPOKE GITHUB LIMITED METAS IMPORTER & DUAL SELECTOR (v5.04)
+                 =================================================================== -->
+            <LinearLayout
+                android:id="@+id/card_settings_limited_metas"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#0f172a"
+                android:padding="10dp"
+                android:layout_marginBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="🌐 PvPoke GitHub Limited Metas Selector (GBL &amp; Battle Frontier)"
+                        android:textColor="#c084fc"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <Button
+                        android:id="@+id/btn_sync_pvpoke_limited_metas"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:minWidth="0dp"
+                        android:paddingHorizontal="10dp"
+                        android:text="🔄 Sync PvPoke Metas"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#7c3aed"
+                        android:textColor="#ffffff" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tv_pvpoke_limited_metas_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Grouped into 🟢 Current, 🔜 Upcoming &amp; 🕒 Recent (Obsolete Archived Formats Hidden)"
+                    android:textColor="#34d399"
+                    android:textSize="10sp"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="6dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="6dp">
+
+                    <Button
+                        android:id="@+id/btn_open_gbl_limited_metas_dialog"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="🛡️ Select GBL Metas (0)"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#0284c7"
+                        android:textColor="#ffffff"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_open_show6_limited_metas_dialog"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="🏛️ Select Show 6 Metas (0)"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#d97706"
+                        android:textColor="#0f172a" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tv_pinned_limited_metas_summary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Pinned Metas: None (Standard Leagues active)"
+                    android:textColor="#cbd5e1"
+                    android:textSize="10sp" />
             </LinearLayout>
 
             <!-- ===================================================================
@@ -3030,6 +3176,68 @@
                     android:textColor="#94a3b8"
                     android:textSize="10sp"
                     android:layout_marginTop="4dp" />
+
+                <!-- v5.10 AI Training & Anomaly Telemetry Auto-Upload Section -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="#1e293b"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="6dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="🤖 AI Training &amp; Anomaly Telemetry Auto-Upload (v5.10)"
+                    android:textColor="#38bdf8"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Automatically uploads detailed battle timelines &amp; detected energy/HP/shield anomalies (e.g. fast-move energy deficits) to the isolated ai-telemetry-logs branch once daily on app launch &amp; on overlay stop when ≥5 battles are ready."
+                    android:textColor="#94a3b8"
+                    android:textSize="10sp"
+                    android:layout_marginTop="2dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="6dp">
+
+                    <Button
+                        android:id="@+id/btn_toggle_auto_upload_ai_logs"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="🤖 Auto-Upload AI Logs: OFF"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#f8fafc"
+                        android:layout_marginEnd="6dp" />
+
+                    <Button
+                        android:id="@+id/btn_upload_ai_logs_now"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:text="☁️ Upload AI Logs"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#0284c7"
+                        android:textColor="#ffffff" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/text_ai_telemetry_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="AI Telemetry: 0 pending battles • Auto-upload: OFF"
+                    android:textColor="#94a3b8"
+                    android:textSize="10sp"
+                    android:layout_marginTop="4dp" />
             </LinearLayout>
 
             <!-- ===================================================================
@@ -3162,7 +3370,7 @@
                     android:id="@+id/tv_bf_sheets_status"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Battle Frontier Data: Season 3 Cycle 1 Usage &amp; Cores Active"
+                    android:text="Active Season 3 Cycle 1 — GL: 124 Mons / 25 Cores • Spectral: 66 Mons / 25 Cores • Cauldron: 69 Mons / 25 Cores • Master: 87 Mons / 25 Cores (Total: 346 Mons • 100 Cores)"
                     android:textColor="#34d399"
                     android:textSize="10sp"
                     android:layout_marginTop="4dp"

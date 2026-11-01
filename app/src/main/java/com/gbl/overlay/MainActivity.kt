@@ -211,6 +211,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSyncDevicesSettings: Button
     private lateinit var btnSyncBundleSettings: Button
     private lateinit var textSyncStatus: TextView
+    private lateinit var btnToggleAutoUploadAiLogs: Button
+    private lateinit var btnUploadAiLogsNow: Button
+    private lateinit var textAiTelemetryStatus: TextView
     private lateinit var textTierDefinitionsSummary: TextView
     private lateinit var editTierSwMin: EditText
     private lateinit var editTierWMin: EditText
@@ -555,19 +558,19 @@ class MainActivity : AppCompatActivity() {
             prefs.edit()
                 .putBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
                 .putBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
-                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 501)
+                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 510)
                 .apply()
-        } else if (prevInstalledVerCode < 501) {
-            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 501).apply()
+        } else if (prevInstalledVerCode < 510) {
+            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 510).apply()
         }
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? MediaProjectionManager
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "5.04"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "5.10"
         } catch (_: Exception) {
-            "5.04"
+            "5.10"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -579,6 +582,20 @@ class MainActivity : AppCompatActivity() {
         fetchSeasonsFromScrapedDuck()
         syncOverlayRunningUiState()
         handleIncomingNavigationAndTaskerIntent(intent)
+        maybeShowFirstRunAiTelemetryOptInPrompt()
+        OverlayService.maybeAutoUploadAiTelemetryAsync(
+            applicationContext,
+            gson,
+            reason = "DAILY_APP_LAUNCH",
+            requireMinBattles = false
+        ) { _, _ ->
+            runOnUiThread {
+                if (!isFinishing && ::prefs.isInitialized) {
+                    updateAiTelemetryStatusUi()
+                    renderBattleLogPage()
+                }
+            }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -600,6 +617,19 @@ class MainActivity : AppCompatActivity() {
             checkPendingGitHubDeviceLoginOnResume()
             // Automatically pull & reconcile deltas from the other device on every app open / resume
             triggerTwoDeviceCloudSync(silent = true)
+            // v5.10: Once-daily AI & Anomaly telemetry upload check on app launch/resume
+            OverlayService.maybeAutoUploadAiTelemetryAsync(
+                applicationContext,
+                gson,
+                reason = "DAILY_APP_LAUNCH",
+                requireMinBattles = false
+            ) { _, _ ->
+                runOnUiThread {
+                    if (!isFinishing && ::prefs.isInitialized) {
+                        updateAiTelemetryStatusUi()
+                    }
+                }
+            }
         }
     }
 
@@ -1296,6 +1326,9 @@ class MainActivity : AppCompatActivity() {
         btnSyncDevicesSettings = findViewById(R.id.btn_sync_devices_settings)
         btnSyncBundleSettings = findViewById(R.id.btn_sync_bundle_settings)
         textSyncStatus = findViewById(R.id.text_sync_status)
+        btnToggleAutoUploadAiLogs = findViewById(R.id.btn_toggle_auto_upload_ai_logs)
+        btnUploadAiLogsNow = findViewById(R.id.btn_upload_ai_logs_now)
+        textAiTelemetryStatus = findViewById(R.id.text_ai_telemetry_status)
         textTierDefinitionsSummary = findViewById(R.id.text_tier_definitions_summary)
         editTierSwMin = findViewById(R.id.edit_tier_sw_min)
         editTierWMin = findViewById(R.id.edit_tier_w_min)
@@ -1433,6 +1466,45 @@ class MainActivity : AppCompatActivity() {
 
         btnSyncBundleSettings.setOnClickListener {
             showSyncBundleDialog()
+        }
+
+        btnToggleAutoUploadAiLogs.setOnClickListener {
+            val current = prefs.getBoolean(OverlayService.PREFS_KEY_AUTO_UPLOAD_AI_LOGS, false)
+            val next = !current
+            prefs.edit()
+                .putBoolean(OverlayService.PREFS_KEY_AUTO_UPLOAD_AI_LOGS, next)
+                .putBoolean(OverlayService.PREFS_KEY_AI_TELEMETRY_PROMPT_SHOWN, true)
+                .apply()
+            updateAiTelemetryStatusUi()
+            if (next) {
+                if (OverlayService.getEffectiveSyncToken(prefs).isEmpty()) {
+                    Toast.makeText(
+                        this,
+                        "🤖 Auto-Upload Enabled! Sign in with GitHub so logs can upload to branch '${OverlayService.AI_TELEMETRY_REPO_BRANCH}'.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    startGitHubOAuthDeviceFlow()
+                } else {
+                    Toast.makeText(
+                        this,
+                        "🤖 Auto-Upload Enabled! Uploading any queued AI & anomaly logs...",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    triggerManualAiTelemetryUpload(silentIfEmpty = true)
+                }
+            } else {
+                Toast.makeText(this, "⚪ AI & Anomaly Log Auto-Upload turned OFF.", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnUploadAiLogsNow.setOnClickListener {
+            saveSyncCredentialsFromInputs()
+            if (OverlayService.getEffectiveSyncToken(prefs).isEmpty()) {
+                Toast.makeText(this, "Sign in with GitHub first to upload AI & Anomaly logs.", Toast.LENGTH_LONG).show()
+                startGitHubOAuthDeviceFlow()
+            } else {
+                triggerManualAiTelemetryUpload(silentIfEmpty = false)
+            }
         }
 
         loadAndRenderHpDebounceUi()
@@ -1948,6 +2020,120 @@ class MainActivity : AppCompatActivity() {
             btnGithubLoginSettings.setTextColor(0xFFFFFFFF.toInt())
             textSyncStatus.text = "⚪ Not signed in (Local-only) • Tap 'Login with GitHub' to enable multi-device auto-sync"
         }
+        updateAiTelemetryStatusUi()
+    }
+
+    private fun updateAiTelemetryStatusUi() {
+        if (!::btnToggleAutoUploadAiLogs.isInitialized || !::textAiTelemetryStatus.isInitialized) return
+        val enabled = prefs.getBoolean(OverlayService.PREFS_KEY_AUTO_UPLOAD_AI_LOGS, false)
+        val token = OverlayService.getEffectiveSyncToken(prefs)
+        val pendingLogs = OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson)
+        val pendingBattles = pendingLogs.size
+        val pendingAnomalies = pendingLogs.sumOf { it.anomalies.size }
+        val lastAt = prefs.getLong(OverlayService.PREFS_KEY_AI_TELEMETRY_LAST_UPLOAD_AT, 0L)
+        val totalUploaded = prefs.getInt(OverlayService.PREFS_KEY_AI_TELEMETRY_UPLOADED_COUNT, 0)
+        val lastBranch = prefs.getString(OverlayService.PREFS_KEY_AI_TELEMETRY_LAST_BRANCH, OverlayService.AI_TELEMETRY_REPO_BRANCH)
+            ?: OverlayService.AI_TELEMETRY_REPO_BRANCH
+        val timeFmt = java.text.SimpleDateFormat("MMM d, h:mm a", java.util.Locale.US)
+        val lastStr = if (lastAt > 0L) timeFmt.format(java.util.Date(lastAt)) else "Never"
+
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        if (enabled) {
+            btnToggleAutoUploadAiLogs.text = "🤖 Auto-Upload: ON"
+            btnToggleAutoUploadAiLogs.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            btnToggleAutoUploadAiLogs.setTextColor(0xFFFFFFFF.toInt())
+        } else {
+            btnToggleAutoUploadAiLogs.text = "🤖 Auto-Upload: OFF"
+            btnToggleAutoUploadAiLogs.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
+            btnToggleAutoUploadAiLogs.setTextColor(0xFFFFFFFF.toInt())
+        }
+
+        val statePrefix = when {
+            enabled && token.isNotEmpty() -> "🟢 Auto-Upload ON (Branch: $lastBranch)"
+            enabled && token.isEmpty() -> "🟡 Auto-Upload ON (Requires GitHub Login)"
+            else -> "⚪ Auto-Upload OFF"
+        }
+        textAiTelemetryStatus.text =
+            "$statePrefix • Pending queue: $pendingBattles battles ($pendingAnomalies anomalies) • Total uploaded & purged: $totalUploaded • Last upload: $lastStr"
+    }
+
+    private fun triggerManualAiTelemetryUpload(silentIfEmpty: Boolean) {
+        val pendingLogs = OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson)
+        if (pendingLogs.isEmpty()) {
+            updateAiTelemetryStatusUi()
+            if (!silentIfEmpty) {
+                Toast.makeText(
+                    this,
+                    "✅ Queue is already empty (0 pending AI/anomaly logs — all uploaded & purged).",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            return
+        }
+        textAiTelemetryStatus.text = "⏳ Uploading ${pendingLogs.size} battle logs to '${OverlayService.AI_TELEMETRY_REPO_BRANCH}' & purging local queue..."
+        lifecycleScope.launch(Dispatchers.IO) {
+            val (ok, msg, count) = OverlayService.uploadPendingAiTelemetryToGitHubBranchBlocking(
+                applicationContext,
+                prefs,
+                gson,
+                reason = "MANUAL_BUTTON"
+            )
+            withContext(Dispatchers.Main) {
+                updateAiTelemetryStatusUi()
+                renderBattleLogPage()
+                if (ok) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "✅ Uploaded $count AI/anomaly battle logs & purged from phone storage!",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else if (!silentIfEmpty) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "⚠️ AI log upload failed: $msg",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun maybeShowFirstRunAiTelemetryOptInPrompt() {
+        val alreadyShown = prefs.getBoolean(OverlayService.PREFS_KEY_AI_TELEMETRY_PROMPT_SHOWN, false)
+        if (alreadyShown) return
+        prefs.edit().putBoolean(OverlayService.PREFS_KEY_AI_TELEMETRY_PROMPT_SHOWN, true).apply()
+
+        val hasToken = OverlayService.getEffectiveSyncToken(prefs).isNotEmpty()
+        val msg = "Help improve SilphScope PvP's AI decision engine and automatic energy/move anomaly detection!\n\n" +
+            "• Automatically detects corner cases (e.g., when an opponent throws a charged move with fewer detected fast moves than required, missed fast moves, or move OCR fallbacks).\n" +
+            "• Uploads compact JSONL batches to the isolated '${OverlayService.AI_TELEMETRY_REPO_BRANCH}' branch (never clutters main branch history).\n" +
+            "• Runs automatically once per day on app launch and on overlay stop when ≥${OverlayService.AI_TELEMETRY_MIN_BATTLES_ON_STOP} battles are queued.\n" +
+            "• Automatically purges uploaded AI logs from your phone right after upload to keep local storage tiny.\n\n" +
+            if (hasToken) {
+                "Your GitHub account is already connected — tap Enable to turn on automatic AI & Anomaly Log uploads!"
+            } else {
+                "Tap 'Login & Enable' to connect GitHub and enable automatic AI & Anomaly Log uploads (you can toggle this anytime in Settings)."
+            }
+
+        AlertDialog.Builder(this)
+            .setTitle("🤖 Enable AI & Anomaly Log Auto-Upload? (v5.10)")
+            .setMessage(msg)
+            .setPositiveButton(if (hasToken) "✅ Enable Auto-Upload" else "🔑 Login & Enable") { _, _ ->
+                prefs.edit()
+                    .putBoolean(OverlayService.PREFS_KEY_AUTO_UPLOAD_AI_LOGS, true)
+                    .putBoolean(OverlayService.PREFS_KEY_AI_TELEMETRY_PROMPT_SHOWN, true)
+                    .apply()
+                updateAiTelemetryStatusUi()
+                if (OverlayService.getEffectiveSyncToken(prefs).isEmpty()) {
+                    startGitHubOAuthDeviceFlow()
+                } else {
+                    triggerManualAiTelemetryUpload(silentIfEmpty = true)
+                }
+            }
+            .setNegativeButton("Not Now") { _, _ ->
+                updateAiTelemetryStatusUi()
+            }
+            .show()
     }
 
     private fun handleGitHubLoginButtonTap() {
@@ -2396,36 +2582,39 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Loads 7-day rolling AI Training Logs (`gbl_ai_training_logs_v1`) and automatically purges
-     * any records older than 7 days (`OverlayService.AI_LOG_RETENTION_MS`).
+     * v5.10: Loads pending AI & Anomaly Telemetry records (`gbl_ai_telemetry_pending_v1`) mapped to
+     * `AiTrainingLogRecord` for interactive replay and quality calculations before they are uploaded & purged.
      */
     private fun loadAiTrainingLogs(): List<OverlayService.AiTrainingLogRecord> {
-        val raw = prefs.getString(OverlayService.PREFS_KEY_AI_TRAINING_LOGS, null) ?: return emptyList()
-        return try {
-            val nowMs = System.currentTimeMillis()
-            val cutoffMs = nowMs - OverlayService.AI_LOG_RETENTION_MS
-            val type = object : TypeToken<List<OverlayService.AiTrainingLogRecord>>() {}.type
-            val parsed: List<OverlayService.AiTrainingLogRecord> = gson.fromJson<List<OverlayService.AiTrainingLogRecord>>(raw, type) ?: emptyList()
-            val deleted = loadDeletedLogIds().toSet()
-            val fresh = parsed.filter { it.timestampMs >= cutoffMs && it.battleId !in deleted }
-                .distinctBy { it.battleId }
-                .sortedByDescending { it.timestampMs }
-            if (fresh.size != parsed.size) {
-                prefs.edit().putString(OverlayService.PREFS_KEY_AI_TRAINING_LOGS, gson.toJson(fresh)).apply()
+        val pending = OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson)
+        val deleted = loadDeletedLogIds().toSet()
+        return pending
+            .filter { it.battleId !in deleted }
+            .map { rec ->
+                OverlayService.AiTrainingLogRecord(
+                    battleId = rec.battleId,
+                    timestampMs = rec.timestampMs,
+                    league = rec.league,
+                    combatMode = rec.combatMode,
+                    result = rec.result,
+                    leadMatchup = rec.leadMatchup,
+                    finalUserHpPct = rec.finalUserHpPct,
+                    finalOppHpPct = rec.finalOppHpPct,
+                    userShieldsRemaining = rec.userShieldsRemaining,
+                    oppShieldsRemaining = rec.oppShieldsRemaining,
+                    firstSwapActor = rec.firstSwapActor,
+                    switchAdvantage = rec.switchAdvantage,
+                    userTeam = rec.userTeam,
+                    opponentTeam = rec.opponentTeam,
+                    quality = rec.quality,
+                    timelineEvents = rec.timelineEvents
+                )
             }
-            fresh
-        } catch (_: Exception) {
-            emptyList()
-        }
     }
 
     private fun saveAiTrainingLogs(logs: List<OverlayService.AiTrainingLogRecord>) {
-        val cutoffMs = System.currentTimeMillis() - OverlayService.AI_LOG_RETENTION_MS
-        val fresh = logs.filter { it.timestampMs >= cutoffMs }
-            .distinctBy { it.battleId }
-            .sortedByDescending { it.timestampMs }
-            .take(250)
-        prefs.edit().putString(OverlayService.PREFS_KEY_AI_TRAINING_LOGS, gson.toJson(fresh)).apply()
+        // v5.10: AI logs are stored in PREFS_KEY_AI_TELEMETRY_PENDING and purged automatically upon upload to GitHub.
+        prefs.edit().remove(OverlayService.PREFS_KEY_AI_TRAINING_LOGS).apply()
     }
 
     /**
@@ -4460,40 +4649,27 @@ class MainActivity : AppCompatActivity() {
             "This Week (Last 7 Days) — Summary",
             "Current Season (${currSeason.name} • Since ${dateFmt.format(java.util.Date(currSeason.startMs))}) — Summary",
             "Previous Season (${dateFmt.format(java.util.Date(prevSeason.startMs))} – ${dateFmt.format(java.util.Date(prevSeason.endMs))}) — Summary",
-            "All Time — Summary",
-            "🤖 AI Training Detailed Log (JSONL Dataset • Today)",
-            "🤖 AI Training Detailed Log (JSONL Dataset • All Time)"
+            "All Time — Summary"
         )
-        val keys = arrayOf("DAY", "YESTERDAY", "WEEK", "CURRENT_SEASON", "PREVIOUS_SEASON", "ALL_TIME", "AI_TRAIN_DAY", "AI_TRAIN_ALL")
+        val keys = arrayOf("DAY", "YESTERDAY", "WEEK", "CURRENT_SEASON", "PREVIOUS_SEASON", "ALL_TIME")
 
         AlertDialog.Builder(this)
-            .setTitle(if (isShareIntent) "📤 Share Battle Log / AI Training Data" else "📋 Copy Battle Log / AI Training Data")
+            .setTitle(if (isShareIntent) "📤 Share Battle Log Summary" else "📋 Copy Battle Log Summary")
             .setItems(options) { _, which ->
-                val chosenKey = keys.getOrElse(which) { "ALL_TIME" }
-                val isAiDataset = chosenKey.startsWith("AI_TRAIN_")
-                val timeKey = if (chosenKey == "AI_TRAIN_DAY") "DAY" else if (chosenKey == "AI_TRAIN_ALL") "ALL_TIME" else chosenKey
-                val exportText = if (isAiDataset) {
-                    buildAiTrainingDatasetExport(
-                        allLogs,
-                        selectedLogLeagueFilter,
-                        selectedLogTeamFilter,
-                        timeKey
-                    )
-                } else {
-                    buildPlainTextExport(
-                        allLogs,
-                        selectedLogLeagueFilter,
-                        selectedLogTeamFilter,
-                        timeKey
-                    )
-                }
+                val timeKey = keys.getOrElse(which) { "ALL_TIME" }
+                val exportText = buildPlainTextExport(
+                    allLogs,
+                    selectedLogLeagueFilter,
+                    selectedLogTeamFilter,
+                    timeKey
+                )
                 if (isShareIntent) {
                     val sendIntent = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
-                        putExtra(Intent.EXTRA_SUBJECT, if (isAiDataset) "SilphScope PvP AI Training Dataset (JSONL)" else "SilphScope PvP Battle Log")
+                        putExtra(Intent.EXTRA_SUBJECT, "SilphScope PvP Battle Log")
                         putExtra(Intent.EXTRA_TEXT, exportText)
                     }
-                    startActivity(Intent.createChooser(sendIntent, if (isAiDataset) "Share SilphScope AI Training Log" else "Share SilphScope PvP Battle Log"))
+                    startActivity(Intent.createChooser(sendIntent, "Share SilphScope PvP Battle Log"))
                 } else {
                     val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                     cm.setPrimaryClip(android.content.ClipData.newPlainText("SilphScope PvP Export", exportText))
@@ -4632,44 +4808,6 @@ class MainActivity : AppCompatActivity() {
         val hasWatermark = prefs.getBoolean(OverlayService.PREFS_KEY_SHOW_THEME_WATERMARK, true) && activeTheme.emblemDrawableRes != null
         val aiLogsById = loadAiTrainingLogs().associateBy { it.battleId }
         val nowRenderMs = System.currentTimeMillis()
-
-        // v3.50 AI Training Log 7-Day Split & Cleanup Banner + One-Tap Cleanup Action
-        val aiBannerRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
-            setBackgroundColor(0xFF0F172A.toInt())
-            val pH = (8 * density).toInt()
-            val pV = (6 * density).toInt()
-            setPadding(pH, pV, pH, pV)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                bottomMargin = (6 * density).toInt()
-            }
-        }
-        val aiBannerTv = TextView(this).apply {
-            text = "🤖 7d AI Training Store: ${aiLogsById.size} active (<7d full replay) • Main Logs: ${allLogs.size} permanent"
-            setTextColor(0xFF94A3B8.toInt())
-            textSize = 10f
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        }
-        val aiSplitBtn = TextView(this).apply {
-            text = "⚡ Split & Purge >7d"
-            setTextColor(0xFF38BDF8.toInt())
-            textSize = 10f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            val pH = (7 * density).toInt()
-            val pV = (3 * density).toInt()
-            setPadding(pH, pV, pH, pV)
-            setBackgroundColor(0xFF1E293B.toInt())
-            setOnClickListener {
-                runOneTimeAiLogSplitAndCleanup(silent = false)
-            }
-        }
-        aiBannerRow.addView(aiBannerTv)
-        aiBannerRow.addView(aiSplitBtn)
-        battleLogContainer.addView(aiBannerRow)
 
         for ((dayStr, dayEntries) in groupedByDay) {
             val dWins = dayEntries.count { it.result.equals("WIN", ignoreCase = true) }
@@ -4996,13 +5134,12 @@ class MainActivity : AppCompatActivity() {
                     setPadding(0, (6 * density).toInt(), 0, 0)
                 }
 
-                val hasRecentAiLog = aiLogsById.containsKey(entry.id) ||
-                    (entry.timelineEvents.isNotEmpty() && (nowRenderMs - entry.timestampMs) <= OverlayService.AI_LOG_RETENTION_MS)
+                val hasRecentAiLog = aiLogsById.containsKey(entry.id) || entry.timelineEvents.isNotEmpty()
                 val replayHintBtn = TextView(this).apply {
                     text = if (hasRecentAiLog) {
-                        "🎬 Replay Matrix + 7d AI Timeline"
+                        "🎬 Replay Matrix + Turn Timeline"
                     } else {
-                        "🔍 Summary Matrix Replay (>7d)"
+                        "🔍 Summary Matrix Replay"
                     }
                     setTextColor(if (hasRecentAiLog) 0xFF38BDF8.toInt() else 0xFF94A3B8.toInt())
                     textSize = 11f
@@ -5393,19 +5530,20 @@ class MainActivity : AppCompatActivity() {
                 "\n${entryQuality.badgeLabel} • BMF: ${bmfInt}% • Exec WAE: $waeStr"
             } else ""
 
-            val aiRecord = loadAiTrainingLogs().find { it.battleId == entry.id }
-            val replayEvents = aiRecord?.timelineEvents?.takeIf { it.isNotEmpty() } ?: entry.timelineEvents
-            val isWithin7Days = (System.currentTimeMillis() - entry.timestampMs) <= OverlayService.AI_LOG_RETENTION_MS
+            val pendingTelemetry = OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson).find { it.battleId == entry.id }
+            val replayEvents = pendingTelemetry?.timelineEvents?.takeIf { it.isNotEmpty() } ?: entry.timelineEvents
             val uSh = entry.userShieldsRemaining ?: entry.quality?.userShieldsRemaining ?: 0
             val oSh = entry.oppShieldsRemaining ?: entry.quality?.oppShieldsRemaining ?: 0
             val swapInfoLine = "\n🛡️ End Shields: ${uSh}S vs ${oSh}S • 1st Swap: ${entry.firstSwapActor ?: "NONE"} (${entry.switchAdvantage ?: "NEUTRAL"})"
-            val aiTimelineLine = if (replayEvents.isNotEmpty() && isWithin7Days) {
+            val anomalyCount = pendingTelemetry?.anomalies?.size ?: 0
+            val anomalySummary = if (anomalyCount > 0) " • ⚠️ $anomalyCount anomaly event(s) queued" else ""
+            val aiTimelineLine = if (replayEvents.isNotEmpty()) {
                 val sampleEvents = replayEvents.take(5).joinToString(" → ") { ev ->
                     "t=${ev.t.toInt()}s ${ev.type}"
                 }
-                "\n🤖 7-Day AI Timeline (${replayEvents.size} events): $sampleEvents"
+                "\n🤖 Pending AI Timeline (${replayEvents.size} events$anomalySummary): $sampleEvents"
             } else {
-                "\n📦 Summary Replay Mode (Detailed AI timestamp log >7 days auto-purged)"
+                "\n📦 Summary Matrix Replay (AI telemetry uploaded & purged from device)"
             }
 
             val hintTv = TextView(this).apply {
@@ -5854,6 +5992,19 @@ class MainActivity : AppCompatActivity() {
             stopService(Intent(this, OverlayService::class.java))
         } catch (_: Exception) {}
         syncOverlayRunningUiState()
+        // v5.10: Auto-upload pending AI & anomaly logs when overlay stops and >= 5 battles are queued
+        OverlayService.maybeAutoUploadAiTelemetryAsync(
+            applicationContext,
+            gson,
+            reason = "OVERLAY_STOP",
+            requireMinBattles = true
+        ) { _, _ ->
+            runOnUiThread {
+                if (!isFinishing && ::prefs.isInitialized) {
+                    updateAiTelemetryStatusUi()
+                }
+            }
+        }
     }
 
     /**

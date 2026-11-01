@@ -5288,7 +5288,7 @@ export default function App() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'SilphScope_PvP_v5.02_Android_Project.zip';
+      a.download = 'SilphScope_PvP_v5.10_Android_Project.zip';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -5538,7 +5538,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v5.04 • Android Native Overlay
+                  v5.10 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -11636,7 +11636,7 @@ export default function App() {
                   <span className="text-sm font-extrabold text-amber-300 flex items-center gap-2">
                     <span>{appCombatMode === 'show6' ? '🏛️' : '🛡️'} App Combat Mode (Standard GBL vs. Show 6 Battle Frontier)</span>
                     <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 text-[10px] font-mono">
-                      v5.04
+                      v5.10
                     </span>
                   </span>
                   <span className="text-xs text-slate-400 block mt-0.5">
@@ -13614,34 +13614,6 @@ export default function App() {
                       className="px-3 py-1.5 rounded-xl bg-emerald-600/25 hover:bg-emerald-600/40 border border-emerald-400/50 text-emerald-200 text-xs font-bold transition"
                     >
                       📤 Share Log Summary
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const jsonl = buildAiTrainingDatasetJsonl(filteredLogs);
-                        navigator.clipboard.writeText(jsonl);
-                        const blob = new Blob([jsonl], { type: 'application/x-ndjson' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `silphscope-ai-training-logs-${logFilterTimeframe.toLowerCase()}.jsonl`;
-                        a.click();
-                        URL.revokeObjectURL(url);
-                        setStartBattleToast('🤖 Exported & Copied AI Training Logs (JSONL)!');
-                        setTimeout(() => setStartBattleToast(null), 2200);
-                      }}
-                      className="px-3 py-1.5 rounded-xl bg-amber-500/25 hover:bg-amber-500/40 border border-amber-400/50 text-amber-200 text-xs font-bold transition"
-                      title="Export detailed battle logs with all player/opponent actions, recommendations, swap clocks, and outcomes in JSONL format for decision-tree AI training"
-                    >
-                      🤖 Export AI Training Logs (JSONL)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => runOneTimeAiLogSplitAndCleanup(false)}
-                      className="px-3 py-1.5 rounded-xl bg-cyan-600/25 hover:bg-cyan-600/40 border border-cyan-400/50 text-cyan-200 text-xs font-bold transition"
-                      title="Run one-time split of embedded AI timeline logs into separate 7-day rolling store (gbl_ai_training_logs_v1) and purge AI logs older than 7 days"
-                    >
-                      ⚡ Split AI Logs &amp; Purge &gt;7d ({aiTrainingLogs.length} active)
                     </button>
                     <button
                       type="button"
