@@ -2074,9 +2074,7 @@ class MainActivity : AppCompatActivity() {
         val pendingBattles = pendingLogs.size
         val pendingAnomalies = pendingLogs.sumOf { it.anomalies.size }
         val pendingSettingsChanges = OverlayService.loadPendingSettingsChangesStatic(prefs, gson).size
-        val profileSig = OverlayService.computeDebounceSettingsProfileSignatureStatic(
-            OverlayService.buildDebounceAndSettlingSettingsMapStatic(prefs)
-        )
+        val profileSig = OverlayService.computeDebounceSettingsProfileSignatureStatic(prefs)
         val lastAt = prefs.getLong(OverlayService.PREFS_KEY_LAST_AI_TELEMETRY_UPLOAD_MS, 0L)
         val totalUploaded = prefs.getInt(OverlayService.PREFS_KEY_TOTAL_AI_TELEMETRY_UPLOADED_COUNT, 0)
         val lastBranch = OverlayService.AI_TELEMETRY_BRANCH
@@ -2123,8 +2121,7 @@ class MainActivity : AppCompatActivity() {
             if (queuedSettingsCount > 0) {
                 OverlayService.uploadSettingsChangeHistoryBlocking(
                     prefs = prefs,
-                    gson = gson,
-                    githubToken = OverlayService.getEffectiveSyncToken(prefs)
+                    gson = gson
                 )
             }
             val (ok, msg) = if (queuedCount > 0) {
