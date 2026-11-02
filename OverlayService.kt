@@ -6767,7 +6767,7 @@ class OverlayService : LifecycleService() {
                 var latestStart = defaultStartMs
                 for (el in arr) {
                     if (!el.isJsonObject) continue
-                    val sMs = el.asJsonObject.optLong("startMs") ?: continue
+                    val sMs = el.asJsonObject.get("startMs")?.takeIf { !it.isJsonNull }?.asLong ?: continue
                     if (sMs in 1000000000000L..nowMs && sMs >= latestStart) {
                         latestStart = sMs
                     }
@@ -7329,7 +7329,7 @@ class OverlayService : LifecycleService() {
                     val cnt = histPairCounts[pair] ?: 0
                     val synScore = synPairSynergyScore[pair] ?: if (cnt > 0) min(96, 78 + cnt * 3) else 76
                     val archLabel = when {
-                        cnt >= 2 -> "Personal Core ($cntx)"
+                        cnt >= 2 -> "Personal Core (${cnt}x)"
                         isShow6 && sheetPairWeights.containsKey(pair) -> "Frontier Core"
                         synScore >= 85 -> "Synergy Core"
                         else -> "Meta Core"

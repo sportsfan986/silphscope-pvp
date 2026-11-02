@@ -11125,7 +11125,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             OverlayService.getEnabledGblLeaguesStatic(prefs)
         }
-        val prefLeagueKey = if (isShow6) OverlayService.PREFS_KEY_META_SELECTED_LEAGUE_SHOW6 else OverlayService.PREFS_KEY_META_SELECTED_LEAGUE_GBL
+        val prefLeagueKey = if (isShow6) OverlayService.PREFS_KEY_META_TAB_LEAGUE_SHOW6 else OverlayService.PREFS_KEY_META_TAB_LEAGUE_GBL
         val defaultLeague = if (isShow6) "BATTLE FRONTIER (SPECTRAL)" else "GREAT LEAGUE"
         val savedLeague = prefs.getString(prefLeagueKey, defaultLeague) ?: defaultLeague
 
@@ -11139,7 +11139,7 @@ class MainActivity : AppCompatActivity() {
             override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
                 if (isUpdatingMetaLeagueSpinner) return
                 val chosenLg = enabledLeagues.getOrElse(position) { defaultLeague }
-                val key = if (isShow6CombatMode()) OverlayService.PREFS_KEY_META_SELECTED_LEAGUE_SHOW6 else OverlayService.PREFS_KEY_META_SELECTED_LEAGUE_GBL
+                val key = if (isShow6CombatMode()) OverlayService.PREFS_KEY_META_TAB_LEAGUE_SHOW6 else OverlayService.PREFS_KEY_META_TAB_LEAGUE_GBL
                 prefs.edit().putString(key, chosenLg).apply()
                 OverlayService.syncTierThresholdsFromPrefs(prefs)
                 refreshMetaTabDashboard()
@@ -11189,7 +11189,7 @@ class MainActivity : AppCompatActivity() {
             val inactiveTint = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
 
             // 1. Season Log Weight % (-1 = Auto, or 0..100 in steps of 5 -> progress 0..21)
-            val logWeightPct = if (show6Now) OverlayService.activeMetaLogWeightPctShow6 else OverlayService.activeMetaLogWeightPctGbl
+            val logWeightPct = if (show6Now) OverlayService.activeShow6MetaLogWeightPct else OverlayService.activeGblMetaLogWeightPct
             val progressVal = if (logWeightPct < 0) 0 else ((logWeightPct.coerceIn(0, 100) / 5) + 1).coerceIn(1, 21)
             seekLogWeight?.progress = progressVal
             tvLogWeightLabel?.text = if (logWeightPct < 0) {
@@ -11199,7 +11199,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             // 2. Recency Decay Factor (0.00, 0.025, 0.05, 0.08, 0.12)
-            val decayLambda = if (show6Now) OverlayService.activeMetaDecayFactorShow6 else OverlayService.activeMetaDecayFactorGbl
+            val decayLambda = if (show6Now) OverlayService.activeShow6MetaDecayFactor else OverlayService.activeGblMetaDecayFactor
             val decayButtons = listOf(
                 0.00f to btnDecayFlat,
                 0.025f to btnDecaySlow,
@@ -11239,14 +11239,14 @@ class MainActivity : AppCompatActivity() {
 
         seekLogWeight?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                val pct = if (progress <= 0) -1 else ((progress - 1) * 5).coerceIn(0, 100)
-                tvLogWeightLabel?.text = if (pct < 0) {
+                val pct = if (progress <= 0) 70 else ((progress - 1) * 5).coerceIn(0, 100)
+                tvLogWeightLabel?.text = if (progress <= 0) {
                     "Auto (Scales 0%→70% over 50 matches)"
                 } else {
                     "${pct}% Logs / ${100 - pct}% Baseline"
                 }
                 if (fromUser) {
-                    val key = if (isShow6CombatMode()) OverlayService.PREFS_KEY_META_LOG_WEIGHT_PCT_SHOW6 else OverlayService.PREFS_KEY_META_LOG_WEIGHT_PCT_GBL
+                    val key = if (isShow6CombatMode()) OverlayService.PREFS_KEY_SHOW6_META_LOG_WEIGHT_PCT else OverlayService.PREFS_KEY_GBL_META_LOG_WEIGHT_PCT
                     prefs.edit().putInt(key, pct).apply()
                     OverlayService.syncTierThresholdsFromPrefs(prefs)
                     recalculateAllPresetsWithSeasonMetaAsync()
@@ -11258,7 +11258,7 @@ class MainActivity : AppCompatActivity() {
         })
 
         fun saveMetaDecayLambda(lambdaVal: Float) {
-            val key = if (isShow6CombatMode()) OverlayService.PREFS_KEY_META_DECAY_FACTOR_SHOW6 else OverlayService.PREFS_KEY_META_DECAY_FACTOR_GBL
+            val key = if (isShow6CombatMode()) OverlayService.PREFS_KEY_SHOW6_META_DECAY_FACTOR else OverlayService.PREFS_KEY_GBL_META_DECAY_FACTOR
             prefs.edit().putFloat(key, lambdaVal).apply()
             syncMetaTuningControlsFromPrefs()
             recalculateAllPresetsWithSeasonMetaAsync()
@@ -11310,20 +11310,20 @@ class MainActivity : AppCompatActivity() {
         btnResetDefaults?.setOnClickListener {
             if (isShow6CombatMode()) {
                 prefs.edit()
-                    .putInt(OverlayService.PREFS_KEY_META_LOG_WEIGHT_PCT_SHOW6, OverlayService.DEFAULT_META_LOG_WEIGHT_PCT)
-                    .putFloat(OverlayService.PREFS_KEY_META_DECAY_FACTOR_SHOW6, OverlayService.DEFAULT_META_DECAY_FACTOR)
+                    .putInt(OverlayService.PREFS_KEY_SHOW6_META_LOG_WEIGHT_PCT, OverlayService.DEFAULT_SHOW6_META_LOG_WEIGHT_PCT)
+                    .putFloat(OverlayService.PREFS_KEY_SHOW6_META_DECAY_FACTOR, OverlayService.DEFAULT_SHOW6_META_DECAY_FACTOR)
                     .putInt(OverlayService.PREFS_KEY_LIMITED_STD_BLEND_PCT_SHOW6, OverlayService.DEFAULT_LIMITED_STD_BLEND_PCT_SHOW6)
                     .putFloat(OverlayService.PREFS_KEY_LIMITED_STD_DECAY_SHOW6, OverlayService.DEFAULT_LIMITED_STD_DECAY_SHOW6)
                     .apply()
-                Toast.makeText(this, "Restored Show 6 Meta Defaults (Auto Weight • Std 0.05 Decay • 25% Std Cup Blend)", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Restored Show 6 Meta Defaults (60% Max Log Weight • Std 0.05 Decay • 25% Std Cup Blend)", Toast.LENGTH_SHORT).show()
             } else {
                 prefs.edit()
-                    .putInt(OverlayService.PREFS_KEY_META_LOG_WEIGHT_PCT_GBL, OverlayService.DEFAULT_META_LOG_WEIGHT_PCT)
-                    .putFloat(OverlayService.PREFS_KEY_META_DECAY_FACTOR_GBL, OverlayService.DEFAULT_META_DECAY_FACTOR)
+                    .putInt(OverlayService.PREFS_KEY_GBL_META_LOG_WEIGHT_PCT, OverlayService.DEFAULT_GBL_META_LOG_WEIGHT_PCT)
+                    .putFloat(OverlayService.PREFS_KEY_GBL_META_DECAY_FACTOR, OverlayService.DEFAULT_GBL_META_DECAY_FACTOR)
                     .putInt(OverlayService.PREFS_KEY_LIMITED_STD_BLEND_PCT_GBL, OverlayService.DEFAULT_LIMITED_STD_BLEND_PCT_GBL)
                     .putFloat(OverlayService.PREFS_KEY_LIMITED_STD_DECAY_GBL, OverlayService.DEFAULT_LIMITED_STD_DECAY_GBL)
                     .apply()
-                Toast.makeText(this, "Restored GBL Blind 3 Meta Defaults (Auto Weight • Std 0.05 Decay • 50% Std Cup Blend + Fast Fade)", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Restored GBL Blind 3 Meta Defaults (70% Max Log Weight • Std 0.05 Decay • 50% Std Cup Blend + Fast Fade)", Toast.LENGTH_SHORT).show()
             }
             syncMetaTuningControlsFromPrefs()
             recalculateAllPresetsWithSeasonMetaAsync()
@@ -11343,8 +11343,9 @@ class MainActivity : AppCompatActivity() {
 
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         val isShow6 = isShow6CombatMode()
-        val selectedLeague = spinnerLeague.selectedItem?.toString()
-            ?: (if (isShow6) OverlayService.activeMetaSelectedLeagueShow6 else OverlayService.activeMetaSelectedLeagueGbl)
+        val prefLeagueKey = if (isShow6) OverlayService.PREFS_KEY_META_TAB_LEAGUE_SHOW6 else OverlayService.PREFS_KEY_META_TAB_LEAGUE_GBL
+        val fallbackLg = prefs.getString(prefLeagueKey, if (isShow6) "BATTLE FRONTIER (SPECTRAL)" else "GREAT LEAGUE") ?: "GREAT LEAGUE"
+        val selectedLeague = spinnerLeague.selectedItem?.toString() ?: fallbackLg
         val isLimitedCup = OverlayService.isLimitedCupFormatStatic(selectedLeague)
         layoutLimitedSection?.visibility = if (isLimitedCup) android.view.View.VISIBLE else android.view.View.GONE
 
@@ -11380,21 +11381,24 @@ class MainActivity : AppCompatActivity() {
 
         metaDashboardJob?.cancel()
         metaDashboardJob = lifecycleScope.launch(Dispatchers.Default) {
+            val dist = OverlayService.computeBlendedSeasonMetaStatic(
+                league = selectedLeague,
+                seasonLogs = seasonLogs,
+                isShow6 = isShow6,
+                sameCpStandardLogs = sameCpStdLogs,
+                empiricalOnlyLimit = empiricalLimit
+            )
             val topCores = OverlayService.computeBlendedSeasonMetaCoresStatic(
                 league = selectedLeague,
                 seasonLogs = seasonLogs,
-                isShow6Mode = isShow6,
-                sameCpStandardSeasonLogs = sameCpStdLogs,
+                isShow6 = isShow6,
+                sameCpStandardLogs = sameCpStdLogs,
                 empiricalOnlyLimit = empiricalLimit,
                 maxCores = 20
             )
             val topPokemon = OverlayService.buildTopMetaPokemonEntriesStatic(
-                league = selectedLeague,
-                seasonLogs = seasonLogs,
-                isShow6Mode = isShow6,
-                sameCpStandardSeasonLogs = sameCpStdLogs,
-                empiricalOnlyLimit = empiricalLimit,
-                maxEntries = 30
+                dist = dist,
+                limit = 30
             )
 
             withContext(Dispatchers.Main) {
@@ -11431,17 +11435,12 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
 
-                        val sharePct = String.format(java.util.Locale.US, "%.1f%%", core.blendedShare * 100.0)
-                        val seenTag = if (core.seenCount > 0) " • Seen ${core.seenCount}x" else ""
-                        val srcBadge = when (core.sourceLabel) {
-                            "LOG+SYN" -> "📊 Log+Syn"
-                            "LOGGED" -> "📜 Logged"
-                            "BF_SHEET" -> "🏛️ Sheet"
-                            else -> "🌐 Synergy"
-                        }
+                        val sharePct = String.format(java.util.Locale.US, "%.1f%%", core.blendedPairPct)
+                        val seenTag = if (core.logPairCount > 0) " • Seen ${core.logPairCount}x" else ""
+                        val srcBadge = core.roleArchetype
 
                         val leftTv = TextView(this@MainActivity).apply {
-                            text = "#${idx + 1}  ${core.pokemonA}  +  ${core.pokemonB}"
+                            text = "#${idx + 1}  ${core.monA}  +  ${core.monB}"
                             setTextColor(0xFFF8FAFC.toInt())
                             textSize = 11.5f
                             setTypeface(typeface, android.graphics.Typeface.BOLD)
@@ -11451,8 +11450,8 @@ class MainActivity : AppCompatActivity() {
                             text = "$sharePct ($srcBadge$seenTag)"
                             setTextColor(
                                 when {
-                                    core.seenCount >= 2 -> 0xFF34D399.toInt()
-                                    core.seenCount == 1 -> 0xFF38BDF8.toInt()
+                                    core.logPairCount >= 2 -> 0xFF34D399.toInt()
+                                    core.logPairCount == 1 -> 0xFF38BDF8.toInt()
                                     else -> theme.secondaryAccentColor
                                 }
                             )
@@ -11495,10 +11494,11 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
 
-                        val fieldPct = String.format(java.util.Locale.US, "%.1f%%", entry.fieldShare * 100.0)
-                        val leadPct = String.format(java.util.Locale.US, "%.1f%%", entry.leadShare * 100.0)
-                        val rankTag = if (entry.pvpokeRank < 900) "PvP #${entry.pvpokeRank}" else "Unranked"
-                        val seenTag = if (entry.seenCount > 0) " • Seen ${entry.seenCount}x (${entry.leadSeenCount}L)" else ""
+                        val fieldPct = String.format(java.util.Locale.US, "%.1f%%", entry.blendedSharePct)
+                        val leadPct = String.format(java.util.Locale.US, "%.1f%%", entry.leadSharePct)
+                        val pvpRank = entry.pvpokeRank ?: 999
+                        val rankTag = if (pvpRank < 900) "PvP #$pvpRank" else "Unranked"
+                        val seenTag = if (entry.logSeenCount > 0) " • Seen ${entry.logSeenCount}x" else ""
 
                         val leftTv = TextView(this@MainActivity).apply {
                             text = "#${idx + 1}  ${entry.name}  ($rankTag)"
@@ -11511,8 +11511,8 @@ class MainActivity : AppCompatActivity() {
                             text = "Field $fieldPct • Lead $leadPct$seenTag"
                             setTextColor(
                                 when {
-                                    entry.seenCount >= 3 -> 0xFF34D399.toInt()
-                                    entry.seenCount >= 1 -> 0xFF38BDF8.toInt()
+                                    entry.logSeenCount >= 3 -> 0xFF34D399.toInt()
+                                    entry.logSeenCount >= 1 -> 0xFF38BDF8.toInt()
                                     else -> 0xFFCBD5E1.toInt()
                                 }
                             )
