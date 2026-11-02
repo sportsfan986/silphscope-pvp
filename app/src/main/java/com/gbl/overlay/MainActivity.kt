@@ -572,9 +572,9 @@ class MainActivity : AppCompatActivity() {
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "5.12"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "5.13"
         } catch (_: Exception) {
-            "5.12"
+            "5.13"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -1552,7 +1552,14 @@ class MainActivity : AppCompatActivity() {
             val nextEnabled = !currentEnabled
             prefs.edit().putBoolean(OverlayService.PREFS_KEY_ENERGY_UPDATE_TOASTS, nextEnabled).apply()
             OverlayService.syncTierThresholdsFromPrefs(prefs)
+            OverlayService.recordDebounceSettingsChangeIfNeededStatic(
+                prefs = prefs,
+                gson = gson,
+                triggerSource = "toggle_energy_update_toasts",
+                triggerImmediateUpload = true
+            )
             loadAndRenderEnergyDebounceUi()
+            updateAiTelemetryStatusUi()
         }
 
         loadAndRenderTierThresholdsUi()
@@ -1752,7 +1759,14 @@ class MainActivity : AppCompatActivity() {
             val currentMode = prefs.getString(PREFS_KEY_OPP_COUNT_MODE, "my_fasts") ?: "my_fasts"
             val nextMode = if (currentMode == "my_fasts") "opp_fasts" else "my_fasts"
             prefs.edit().putString(PREFS_KEY_OPP_COUNT_MODE, nextMode).apply()
+            OverlayService.recordDebounceSettingsChangeIfNeededStatic(
+                prefs = prefs,
+                gson = gson,
+                triggerSource = "toggle_opp_count_basis",
+                triggerImmediateUpload = true
+            )
             updateOppCountBasisUi()
+            updateAiTelemetryStatusUi()
 
             if (isOverlayRunning) {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
@@ -1827,7 +1841,14 @@ class MainActivity : AppCompatActivity() {
             val currentEnableHp = prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
             val nextEnableHp = !currentEnableHp
             prefs.edit().putBoolean(PREFS_KEY_ENABLE_HP_TRACKING, nextEnableHp).apply()
+            OverlayService.recordDebounceSettingsChangeIfNeededStatic(
+                prefs = prefs,
+                gson = gson,
+                triggerSource = "toggle_hp_tracking",
+                triggerImmediateUpload = true
+            )
             updateHpTrackingUi()
+            updateAiTelemetryStatusUi()
 
             if (isOverlayRunning) {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
@@ -1842,7 +1863,14 @@ class MainActivity : AppCompatActivity() {
             val currentEnableEnergy = prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
             val nextEnableEnergy = !currentEnableEnergy
             prefs.edit().putBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, nextEnableEnergy).apply()
+            OverlayService.recordDebounceSettingsChangeIfNeededStatic(
+                prefs = prefs,
+                gson = gson,
+                triggerSource = "toggle_energy_tracking",
+                triggerImmediateUpload = true
+            )
             updateEnergyTrackingUi()
+            updateAiTelemetryStatusUi()
 
             if (isOverlayRunning) {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
@@ -1865,7 +1893,14 @@ class MainActivity : AppCompatActivity() {
             }
             prefs.edit().putString(OverlayService.PREFS_KEY_CHARGE_CIRCLE_PRIORITY_MODE, nextMode).apply()
             OverlayService.syncTierThresholdsFromPrefs(prefs)
+            OverlayService.recordDebounceSettingsChangeIfNeededStatic(
+                prefs = prefs,
+                gson = gson,
+                triggerSource = "cycle_charge_circle_priority",
+                triggerImmediateUpload = true
+            )
             updateChargeCirclePriorityUi()
+            updateAiTelemetryStatusUi()
 
             if (isOverlayRunning) {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
@@ -1884,7 +1919,14 @@ class MainActivity : AppCompatActivity() {
             val nextEnable = !currentEnable
             prefs.edit().putBoolean(OverlayService.PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT, nextEnable).apply()
             OverlayService.syncTierThresholdsFromPrefs(prefs)
+            OverlayService.recordDebounceSettingsChangeIfNeededStatic(
+                prefs = prefs,
+                gson = gson,
+                triggerSource = "toggle_alt_fast_move_detect",
+                triggerImmediateUpload = true
+            )
             updateAltFastMoveDetectUi()
+            updateAiTelemetryStatusUi()
 
             if (isOverlayRunning) {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
@@ -1899,7 +1941,14 @@ class MainActivity : AppCompatActivity() {
             val currentOffset = prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2)
             val nextOffset = (currentOffset + 1) % 3
             prefs.edit().putInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, nextOffset).apply()
+            OverlayService.recordDebounceSettingsChangeIfNeededStatic(
+                prefs = prefs,
+                gson = gson,
+                triggerSource = "cycle_fast_detect_turn_offset",
+                triggerImmediateUpload = true
+            )
             updateFastDetectOffsetUi()
+            updateAiTelemetryStatusUi()
 
             if (isOverlayRunning) {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
@@ -2021,10 +2070,13 @@ class MainActivity : AppCompatActivity() {
     private fun updateAiTelemetryStatusUi() {
         if (!::btnToggleAutoUploadAiLogs.isInitialized || !::textAiTelemetryStatus.isInitialized) return
         val enabled = prefs.getBoolean(OverlayService.PREFS_KEY_AUTO_UPLOAD_AI_LOGS, false)
-        val token = OverlayService.getEffectiveSyncToken(prefs)
         val pendingLogs = OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson)
         val pendingBattles = pendingLogs.size
         val pendingAnomalies = pendingLogs.sumOf { it.anomalies.size }
+        val pendingSettingsChanges = OverlayService.loadPendingSettingsChangesStatic(prefs, gson).size
+        val profileSig = OverlayService.computeDebounceSettingsProfileSignatureStatic(
+            OverlayService.buildDebounceAndSettlingSettingsMapStatic(prefs)
+        )
         val lastAt = prefs.getLong(OverlayService.PREFS_KEY_LAST_AI_TELEMETRY_UPLOAD_MS, 0L)
         val totalUploaded = prefs.getInt(OverlayService.PREFS_KEY_TOTAL_AI_TELEMETRY_UPLOADED_COUNT, 0)
         val lastBranch = OverlayService.AI_TELEMETRY_BRANCH
@@ -2047,38 +2099,51 @@ class MainActivity : AppCompatActivity() {
             else -> "⚪ Auto-Upload OFF"
         }
         textAiTelemetryStatus.text =
-            "$statePrefix • Pending queue: $pendingBattles battles ($pendingAnomalies anomalies) • Total uploaded & purged: $totalUploaded • Last upload: $lastStr"
+            "$statePrefix • Debounce Profile: $profileSig ($pendingSettingsChanges pending changes) • Pending queue: $pendingBattles battles ($pendingAnomalies anomalies) • Total uploaded & purged: $totalUploaded • Last upload: $lastStr"
     }
 
     private fun triggerManualAiTelemetryUpload(silentIfEmpty: Boolean) {
         val pendingLogs = OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson)
-        if (pendingLogs.isEmpty()) {
+        val pendingSettings = OverlayService.loadPendingSettingsChangesStatic(prefs, gson)
+        if (pendingLogs.isEmpty() && pendingSettings.isEmpty()) {
             updateAiTelemetryStatusUi()
             if (!silentIfEmpty) {
                 Toast.makeText(
                     this,
-                    "✅ Queue is already empty (0 pending AI/anomaly logs — all uploaded & purged).",
+                    "✅ Queue is already empty (0 pending AI/anomaly logs or settings changes — all uploaded & purged).",
                     Toast.LENGTH_SHORT
                 ).show()
             }
             return
         }
         val queuedCount = pendingLogs.size
-        textAiTelemetryStatus.text = "⏳ Uploading $queuedCount battle logs to '${OverlayService.AI_TELEMETRY_BRANCH}' & purging local queue..."
+        val queuedSettingsCount = pendingSettings.size
+        textAiTelemetryStatus.text = "⏳ Uploading $queuedCount battle logs & $queuedSettingsCount settings changes to '${OverlayService.AI_TELEMETRY_BRANCH}'..."
         lifecycleScope.launch(Dispatchers.IO) {
-            val (ok, msg) = OverlayService.uploadPendingAiTelemetryBatchBlocking(
-                prefs = prefs,
-                gson = gson,
-                forceUpload = true,
-                minBattlesRequired = 1
-            )
+            if (queuedSettingsCount > 0) {
+                OverlayService.uploadSettingsChangeHistoryBlocking(
+                    prefs = prefs,
+                    gson = gson,
+                    githubToken = OverlayService.getEffectiveSyncToken(prefs)
+                )
+            }
+            val (ok, msg) = if (queuedCount > 0) {
+                OverlayService.uploadPendingAiTelemetryBatchBlocking(
+                    prefs = prefs,
+                    gson = gson,
+                    forceUpload = true,
+                    minBattlesRequired = 1
+                )
+            } else {
+                true to "Uploaded $queuedSettingsCount settings change(s)"
+            }
             withContext(Dispatchers.Main) {
                 updateAiTelemetryStatusUi()
                 renderBattleLogPage()
                 if (ok) {
                     Toast.makeText(
                         this@MainActivity,
-                        "✅ Uploaded $queuedCount AI/anomaly battle logs & purged from phone storage!",
+                        "✅ Uploaded $queuedCount AI/anomaly battle logs & $queuedSettingsCount settings changes!",
                         Toast.LENGTH_LONG
                     ).show()
                 } else if (!silentIfEmpty) {
@@ -2100,7 +2165,7 @@ class MainActivity : AppCompatActivity() {
         val hasToken = OverlayService.getEffectiveSyncToken(prefs).isNotEmpty()
         val msg = "Help improve SilphScope PvP's AI decision engine and automatic energy/move anomaly detection!\n\n" +
             "• Automatically detects corner cases (e.g., when an opponent throws a charged move with fewer detected fast moves than required, missed fast moves, or move OCR fallbacks).\n" +
-            "• Uploads compact JSONL batches to the isolated '${OverlayService.AI_TELEMETRY_BRANCH}' branch (never clutters main branch history).\n" +
+            "• Uploads compact JSONL batches (with cropped WebP HUD thumbnails on HIGH anomalies and debounce/settling settings profiles) to the isolated '${OverlayService.AI_TELEMETRY_BRANCH}' branch (never clutters main branch history).\n" +
             "• Runs automatically once per day on app launch and on overlay stop when ≥${OverlayService.AI_TELEMETRY_MIN_BATTLES_ON_STOP} battles are queued.\n" +
             "• Automatically purges uploaded AI logs from your phone right after upload to keep local storage tiny.\n\n" +
             if (hasToken) {
@@ -2110,7 +2175,7 @@ class MainActivity : AppCompatActivity() {
             }
 
         AlertDialog.Builder(this)
-            .setTitle("🤖 Enable AI & Anomaly Log Auto-Upload? (v5.12)")
+            .setTitle("🤖 Enable AI & Anomaly Log Auto-Upload? (v5.13)")
             .setMessage(msg)
             .setPositiveButton("✅ Enable Auto-Upload") { _, _ ->
                 prefs.edit()
@@ -4176,7 +4241,14 @@ class MainActivity : AppCompatActivity() {
         val clamped = tol.coerceIn(0, 3)
         prefs.edit().putInt(OverlayService.PREFS_KEY_DEBOUNCE_TOLERANCE_PCT, clamped).apply()
         OverlayService.syncTierThresholdsFromPrefs(prefs)
+        OverlayService.recordDebounceSettingsChangeIfNeededStatic(
+            prefs = prefs,
+            gson = gson,
+            triggerSource = "save_debounce_tolerance_pct",
+            triggerImmediateUpload = true
+        )
         loadAndRenderHpDebounceUi()
+        updateAiTelemetryStatusUi()
         if (showToast) {
             Toast.makeText(
                 this,
@@ -4191,7 +4263,14 @@ class MainActivity : AppCompatActivity() {
         val tol = OverlayService.activeDebounceTolerancePct.coerceIn(0, 3)
         prefs.edit().putInt(OverlayService.PREFS_KEY_HP_DEBOUNCE_SAMPLES, clamped).apply()
         OverlayService.syncTierThresholdsFromPrefs(prefs)
+        OverlayService.recordDebounceSettingsChangeIfNeededStatic(
+            prefs = prefs,
+            gson = gson,
+            triggerSource = "save_hp_debounce_samples",
+            triggerImmediateUpload = true
+        )
         loadAndRenderHpDebounceUi()
+        updateAiTelemetryStatusUi()
         if (showToast) {
             Toast.makeText(
                 this,
@@ -4286,7 +4365,14 @@ class MainActivity : AppCompatActivity() {
         val valid = if (leadMs in listOf(0, 200, 300, 400)) leadMs else OverlayService.DEFAULT_PROACTIVE_ENERGY_LEAD_MS
         prefs.edit().putInt(OverlayService.PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS, valid).apply()
         OverlayService.syncTierThresholdsFromPrefs(prefs)
+        OverlayService.recordDebounceSettingsChangeIfNeededStatic(
+            prefs = prefs,
+            gson = gson,
+            triggerSource = "save_proactive_energy_lead_ms",
+            triggerImmediateUpload = true
+        )
         loadAndRenderEnergyDebounceUi()
+        updateAiTelemetryStatusUi()
         if (isOverlayRunning) {
             val updateIntent = Intent(this, OverlayService::class.java).apply {
                 action = OverlayService.ACTION_UPDATE_SETTINGS
@@ -4307,7 +4393,14 @@ class MainActivity : AppCompatActivity() {
         val clamped = samples.coerceIn(2, 4)
         prefs.edit().putInt(OverlayService.PREFS_KEY_ENERGY_DEBOUNCE_SAMPLES, clamped).apply()
         OverlayService.syncTierThresholdsFromPrefs(prefs)
+        OverlayService.recordDebounceSettingsChangeIfNeededStatic(
+            prefs = prefs,
+            gson = gson,
+            triggerSource = "save_energy_debounce_samples",
+            triggerImmediateUpload = true
+        )
         loadAndRenderEnergyDebounceUi()
+        updateAiTelemetryStatusUi()
         if (showToast) {
             Toast.makeText(
                 this,

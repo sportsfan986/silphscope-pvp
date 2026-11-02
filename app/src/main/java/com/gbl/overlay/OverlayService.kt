@@ -159,6 +159,10 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_TOTAL_AI_TELEMETRY_UPLOADED_COUNT = "gbl_total_ai_telemetry_uploaded_count_v510"
         const val PREFS_KEY_TOTAL_AI_ANOMALIES_DETECTED_COUNT = "gbl_total_ai_anomalies_detected_count_v510"
         const val PREFS_KEY_DEVICE_TELEMETRY_HASH = "gbl_device_telemetry_hash_v510"
+        // v5.13: Debounce Filters & Settling Delays Change Telemetry Constants
+        const val PREFS_KEY_LAST_DEBOUNCE_SETTINGS_SNAPSHOT_V513 = "gbl_last_debounce_settings_snapshot_v513"
+        const val PREFS_KEY_PENDING_SETTINGS_CHANGES_V513 = "gbl_pending_settings_changes_v513"
+        const val PREFS_KEY_SETTINGS_CHANGE_HISTORY_V513 = "gbl_settings_change_history_v513"
         const val AI_TELEMETRY_BRANCH = "ai-telemetry-logs"
         const val AI_TELEMETRY_MIN_BATTLES_ON_STOP = 5
         const val AI_TELEMETRY_DAILY_INTERVAL_MS = 24L * 60L * 60L * 1000L
@@ -281,6 +285,7 @@ class OverlayService : LifecycleService() {
             }
             activeShow6UsageWeightPct = prefs.getInt(PREFS_KEY_SHOW6_USAGE_WEIGHT_PCT, DEFAULT_SHOW6_USAGE_WEIGHT_PCT).coerceIn(0, 100)
             loadCachedBattleFrontierUsageAndCores(prefs)
+            recordDebounceSettingsChangeIfNeededStatic(prefs, Gson(), "settings_sync", triggerImmediateUpload = false)
         }
         const val PREFS_KEY_SYNC_GIST_ID = "gbl_sync_gist_id"
         const val PREFS_KEY_SYNC_LAST_AT = "gbl_sync_last_at"
@@ -1251,7 +1256,22 @@ class OverlayService : LifecycleService() {
             val expectedDmgPct: Int? = null,
             val shieldsBefore: Int? = null,
             val shieldsAfter: Int? = null,
-            val detail: String = ""
+            val detail: String = "",
+            val screenshotWebpBase64: String? = null
+        )
+
+        data class AiTelemetrySettingsChangeEvent(
+            val id: String = "",
+            val timestampMs: Long = System.currentTimeMillis(),
+            val appVersion: String = "5.13",
+            val uploaderHandle: String = "anonymous",
+            val deviceHash: String = "",
+            val triggerSource: String = "settings_ui",
+            val changedKeys: List<String> = emptyList(),
+            val previousSettings: Map<String, Any> = emptyMap(),
+            val newSettings: Map<String, Any> = emptyMap(),
+            val settingsProfileSignature: String = "",
+            val activeDebouncesAndDelays: Map<String, Any> = emptyMap()
         )
 
         data class AiTelemetrySlotSpec(
@@ -1287,10 +1307,10 @@ class OverlayService : LifecycleService() {
         )
 
         data class AiTelemetryBattleRecordV510(
-            val schemaVersion: String = "5.10",
+            val schemaVersion: String = "5.13",
             val battleId: String = "",
             val timestampMs: Long = System.currentTimeMillis(),
-            val appVersion: String = "5.10",
+            val appVersion: String = "5.13",
             val uploaderHandle: String = "anonymous",
             val deviceHash: String = "",
             val deviceModel: String = Build.MODEL ?: "Android",
@@ -1313,6 +1333,8 @@ class OverlayService : LifecycleService() {
             val userFaints: Int = 0,
             val oppFaints: Int = 0,
             val scannerSettings: Map<String, Any> = emptyMap(),
+            val settingsProfileSignature: String = "",
+            val settingsChanges: List<AiTelemetrySettingsChangeEvent> = emptyList(),
             val userTeamSpecs: List<AiTelemetrySlotSpec> = emptyList(),
             val oppTeamSpecs: List<AiTelemetryOppSlotSpec> = emptyList(),
             val anomalies: List<BattleAnomalyRecord> = emptyList(),
@@ -1327,14 +1349,14 @@ class OverlayService : LifecycleService() {
             val uploadedAtMs: Long = 0L,
             val uploader: String = "",
             val deviceHash: String = "",
-            val appVersion: String = "5.10",
+            val appVersion: String = "5.13",
             val battleCount: Int = 0,
             val anomalyCount: Int = 0,
             val highSeverityCount: Int = 0
         )
 
         data class AiTelemetryManifest(
-            val schemaVersion: String = "5.10",
+            val schemaVersion: String = "5.13",
             val updatedAtMs: Long = 0L,
             val totalBatches: Int = 0,
             val totalBattles: Int = 0,
@@ -1349,6 +1371,257 @@ class OverlayService : LifecycleService() {
             val hash = Integer.toHexString(rawSeed.hashCode()).lowercase().padStart(8, '0').take(8)
             prefs.edit().putString(PREFS_KEY_DEVICE_TELEMETRY_HASH, hash).apply()
             return hash
+        }
+
+        /**
+         * v5.13: Builds a comprehensive snapshot of all user-configurable debounce filters, tolerances,
+         * proactive lead windows, and active post-cutscene / KO settling delay constants so every settings
+         * change and battle log can be directly correlated with anomaly rates.
+         */
+        fun buildDebounceAndSettlingSettingsMapStatic(
+            prefs: SharedPreferences,
+            scanHzMode: String = "10HZ_HP",
+            scanTurnOffsetMs: Long = 0L
+        ): Map<String, Any> {
+            val hpSamples = prefs.getInt(PREFS_KEY_HP_DEBOUNCE_SAMPLES, DEFAULT_HP_DEBOUNCE_SAMPLES).coerceIn(2, 4)
+            val energySamples = prefs.getInt(PREFS_KEY_ENERGY_DEBOUNCE_SAMPLES, DEFAULT_ENERGY_DEBOUNCE_SAMPLES).coerceIn(2, 4)
+            val tolPct = prefs.getInt(PREFS_KEY_DEBOUNCE_TOLERANCE_PCT, DEFAULT_DEBOUNCE_TOLERANCE_PCT).coerceIn(0, 3)
+            val leadMs = prefs.getInt(PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS, DEFAULT_PROACTIVE_ENERGY_LEAD_MS).let {
+                if (it in listOf(0, 200, 300, 400)) it else DEFAULT_PROACTIVE_ENERGY_LEAD_MS
+            }
+            val circlePriority = prefs.getString("charge_circle_priority_mode", "smart_hybrid") ?: "smart_hybrid"
+            val altFastDetect = prefs.getBoolean("enable_alt_fast_move_detect", true)
+            val fastTurnOffset = prefs.getInt("fast_detect_turn_offset", 0).coerceIn(0, 2)
+            val hpTracking = prefs.getBoolean("enable_hp_tracking", true)
+            val energyTracking = prefs.getBoolean("enable_energy_tracking", true)
+            return mapOf(
+                "scanHzMode" to scanHzMode,
+                "turnOffsetMs" to scanTurnOffsetMs,
+                "hpTrackingEnabled" to hpTracking,
+                "energyTrackingEnabled" to energyTracking,
+                "hpDebounceSamples" to hpSamples,
+                "hpDebounceWindowMs" to (hpSamples * 100),
+                "energyDebounceSamples" to energySamples,
+                "energyDebounceWindowMs" to (energySamples * 100),
+                "debounceTolerancePct" to tolPct,
+                "proactiveEnergyLeadMs" to leadMs,
+                "chargeCirclePriorityMode" to circlePriority,
+                "altFastMoveDetectEnabled" to altFastDetect,
+                "fastDetectTurnOffset" to fastTurnOffset,
+                "postChargeReturnSettleMinMs" to 1800,
+                "postCutsceneHpSettleWindowMs" to 4500,
+                "koConfirmFrames" to 6,
+                "koConfirmSettlingDelayMs" to 600,
+                "topCountdownConfirmFrames" to 2,
+                "topCountdownClearFrames" to 3,
+                "faintSyncWindowSec" to 16.0
+            )
+        }
+
+        fun computeDebounceSettingsProfileSignatureStatic(prefs: SharedPreferences): String {
+            val hpSamples = prefs.getInt(PREFS_KEY_HP_DEBOUNCE_SAMPLES, DEFAULT_HP_DEBOUNCE_SAMPLES).coerceIn(2, 4)
+            val energySamples = prefs.getInt(PREFS_KEY_ENERGY_DEBOUNCE_SAMPLES, DEFAULT_ENERGY_DEBOUNCE_SAMPLES).coerceIn(2, 4)
+            val tolPct = prefs.getInt(PREFS_KEY_DEBOUNCE_TOLERANCE_PCT, DEFAULT_DEBOUNCE_TOLERANCE_PCT).coerceIn(0, 3)
+            val leadMs = prefs.getInt(PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS, DEFAULT_PROACTIVE_ENERGY_LEAD_MS).let {
+                if (it in listOf(0, 200, 300, 400)) it else DEFAULT_PROACTIVE_ENERGY_LEAD_MS
+            }
+            val circlePriority = (prefs.getString("charge_circle_priority_mode", "smart_hybrid") ?: "smart_hybrid").uppercase()
+            val altFastDetect = if (prefs.getBoolean("enable_alt_fast_move_detect", true)) 1 else 0
+            val fastTurnOffset = prefs.getInt("fast_detect_turn_offset", 0).coerceIn(0, 2)
+            return "HP${hpSamples}_E${energySamples}_TOL${tolPct}_LEAD${leadMs}_${circlePriority}_ALT${altFastDetect}_OFF${fastTurnOffset}_SETTLE4500_KO6"
+        }
+
+        fun loadPendingSettingsChangesStatic(prefs: SharedPreferences, gson: Gson): List<AiTelemetrySettingsChangeEvent> {
+            val raw = prefs.getString(PREFS_KEY_PENDING_SETTINGS_CHANGES_V513, null) ?: return emptyList()
+            return try {
+                val type = object : TypeToken<List<AiTelemetrySettingsChangeEvent>>() {}.type
+                val parsed: List<AiTelemetrySettingsChangeEvent> = gson.fromJson(raw, type) ?: emptyList()
+                parsed.distinctBy { it.id }.sortedBy { it.timestampMs }
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+
+        fun loadSettingsChangeHistoryStatic(prefs: SharedPreferences, gson: Gson): List<AiTelemetrySettingsChangeEvent> {
+            val raw = prefs.getString(PREFS_KEY_SETTINGS_CHANGE_HISTORY_V513, null) ?: return emptyList()
+            return try {
+                val type = object : TypeToken<List<AiTelemetrySettingsChangeEvent>>() {}.type
+                val parsed: List<AiTelemetrySettingsChangeEvent> = gson.fromJson(raw, type) ?: emptyList()
+                parsed.distinctBy { it.id }.sortedBy { it.timestampMs }
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+
+        /**
+         * v5.13: Detects any change to user settings that pertain to debounce filters, error tolerances,
+         * proactive energy lead windows, circle priority mode, or fast-move turn offset, records a timestamped
+         * `AiTelemetrySettingsChangeEvent`, queues it for inclusion with the next battle log & telemetry batch,
+         * and optionally uploads `users/<safeUser>/settings_changes.jsonl` immediately in the background.
+         */
+        fun recordDebounceSettingsChangeIfNeededStatic(
+            prefs: SharedPreferences,
+            gson: Gson,
+            triggerSource: String = "settings_ui",
+            triggerImmediateUpload: Boolean = false
+        ): AiTelemetrySettingsChangeEvent? {
+            return try {
+                val currentFullMap = buildDebounceAndSettlingSettingsMapStatic(prefs)
+                val trackedKeys = listOf(
+                    "hpTrackingEnabled",
+                    "energyTrackingEnabled",
+                    "hpDebounceSamples",
+                    "hpDebounceWindowMs",
+                    "energyDebounceSamples",
+                    "energyDebounceWindowMs",
+                    "debounceTolerancePct",
+                    "proactiveEnergyLeadMs",
+                    "chargeCirclePriorityMode",
+                    "altFastMoveDetectEnabled",
+                    "fastDetectTurnOffset",
+                    "postChargeReturnSettleMinMs",
+                    "postCutsceneHpSettleWindowMs",
+                    "koConfirmFrames",
+                    "koConfirmSettlingDelayMs",
+                    "topCountdownConfirmFrames",
+                    "topCountdownClearFrames",
+                    "faintSyncWindowSec"
+                )
+                val currentTracked = trackedKeys.associateWith { k -> currentFullMap[k] ?: "" }
+                val prevRaw = prefs.getString(PREFS_KEY_LAST_DEBOUNCE_SETTINGS_SNAPSHOT_V513, null)
+                if (prevRaw.isNullOrBlank()) {
+                    prefs.edit().putString(PREFS_KEY_LAST_DEBOUNCE_SETTINGS_SNAPSHOT_V513, gson.toJson(currentTracked)).apply()
+                    return null
+                }
+                val mapType = object : TypeToken<Map<String, Any>>() {}.type
+                val prevMap: Map<String, Any> = try {
+                    gson.fromJson(prevRaw, mapType) ?: emptyMap()
+                } catch (_: Exception) {
+                    emptyMap()
+                }
+                val changedKeys = mutableListOf<String>()
+                val prevDiff = mutableMapOf<String, Any>()
+                val newDiff = mutableMapOf<String, Any>()
+                for (k in trackedKeys) {
+                    val oldVal = prevMap[k]?.toString()?.removeSuffix(".0") ?: ""
+                    val newVal = currentTracked[k]?.toString()?.removeSuffix(".0") ?: ""
+                    if (oldVal != newVal) {
+                        changedKeys.add(k)
+                        prevDiff[k] = prevMap[k] ?: oldVal
+                        newDiff[k] = currentTracked[k] ?: newVal
+                    }
+                }
+                if (changedKeys.isEmpty()) return null
+
+                val nowMs = System.currentTimeMillis()
+                val devHash = getDeviceTelemetryHashStatic(prefs)
+                val username = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty().ifEmpty { "trainer_$devHash" }
+                val sig = computeDebounceSettingsProfileSignatureStatic(prefs)
+                val event = AiTelemetrySettingsChangeEvent(
+                    id = "cfg_${nowMs}_${(100..999).random()}",
+                    timestampMs = nowMs,
+                    appVersion = "5.13",
+                    uploaderHandle = username,
+                    deviceHash = devHash,
+                    triggerSource = triggerSource,
+                    changedKeys = changedKeys,
+                    previousSettings = prevDiff,
+                    newSettings = newDiff,
+                    settingsProfileSignature = sig,
+                    activeDebouncesAndDelays = currentTracked
+                )
+                val pendingList = (loadPendingSettingsChangesStatic(prefs, gson) + event).distinctBy { it.id }.takeLast(100)
+                val historyList = (loadSettingsChangeHistoryStatic(prefs, gson) + event).distinctBy { it.id }.takeLast(200)
+                prefs.edit()
+                    .putString(PREFS_KEY_LAST_DEBOUNCE_SETTINGS_SNAPSHOT_V513, gson.toJson(currentTracked))
+                    .putString(PREFS_KEY_PENDING_SETTINGS_CHANGES_V513, gson.toJson(pendingList))
+                    .putString(PREFS_KEY_SETTINGS_CHANGE_HISTORY_V513, gson.toJson(historyList))
+                    .apply()
+
+                if (triggerImmediateUpload && prefs.getBoolean(PREFS_KEY_AUTO_UPLOAD_AI_LOGS, false)) {
+                    kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
+                        try {
+                            uploadSettingsChangeHistoryBlocking(prefs, gson)
+                        } catch (_: Exception) {}
+                    }
+                }
+                event
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        fun uploadSettingsChangeHistoryBlocking(prefs: SharedPreferences, gson: Gson): Boolean {
+            val pendingChanges = loadPendingSettingsChangesStatic(prefs, gson)
+            if (pendingChanges.isEmpty()) return true
+            val historyChanges = loadSettingsChangeHistoryStatic(prefs, gson).ifEmpty { pendingChanges }
+            val userToken = getEffectiveSyncToken(prefs).trim()
+            val relayToken = getBuiltInTelemetryRelayTokenStatic()
+            val primaryToken = userToken.ifEmpty { relayToken }
+            if (primaryToken.isEmpty()) return false
+
+            var username = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty()
+            if (username.isEmpty() && userToken.isNotEmpty()) {
+                username = fetchGitHubUsernameBlocking(userToken)
+                if (username.isNotEmpty()) {
+                    prefs.edit().putString(PREFS_KEY_SYNC_GITHUB_USERNAME, username).apply()
+                }
+            }
+            val devHash = getDeviceTelemetryHashStatic(prefs)
+            val safeUser = (username.ifBlank { "trainer_$devHash" }).replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
+            val settingsPath = "users/$safeUser/settings_changes.jsonl"
+            val jsonlContent = historyChanges.joinToString("\n") { ev ->
+                val enriched = if (ev.uploaderHandle.isBlank() || ev.uploaderHandle.startsWith("trainer_")) {
+                    ev.copy(uploaderHandle = safeUser, deviceHash = devHash, appVersion = "5.13")
+                } else ev
+                gson.toJson(enriched)
+            } + "\n"
+            val b64Content = android.util.Base64.encodeToString(jsonlContent.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
+            val httpClient = OkHttpClient()
+            val repoBaseUrl = "https://api.github.com/repos/sportsfan986/silphscope-pvp"
+
+            fun tryPutSettingsFile(authToken: String): Boolean {
+                var existingSha = ""
+                val getReq = Request.Builder()
+                    .url("$repoBaseUrl/contents/$settingsPath?ref=$AI_TELEMETRY_BRANCH")
+                    .header("Authorization", "Bearer $authToken")
+                    .header("Accept", "application/vnd.github+json")
+                    .build()
+                httpClient.newCall(getReq).execute().use { gResp ->
+                    if (gResp.isSuccessful) {
+                        val obj = JsonParser.parseString(gResp.body?.string().orEmpty()).asJsonObject
+                        existingSha = obj.get("sha")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                    }
+                }
+                val putMap = mutableMapOf<String, Any>(
+                    "message" to "telemetry(v5.13): settings_changes (${pendingChanges.size} new, ${historyChanges.size} total) by @$safeUser",
+                    "content" to b64Content,
+                    "branch" to AI_TELEMETRY_BRANCH
+                )
+                if (existingSha.isNotEmpty()) {
+                    putMap["sha"] = existingSha
+                }
+                val putReq = Request.Builder()
+                    .url("$repoBaseUrl/contents/$settingsPath")
+                    .put(gson.toJson(putMap).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
+                    .header("Authorization", "Bearer $authToken")
+                    .header("Accept", "application/vnd.github+json")
+                    .build()
+                httpClient.newCall(putReq).execute().use { pResp ->
+                    return pResp.isSuccessful
+                }
+            }
+
+            var ok = try { tryPutSettingsFile(primaryToken) } catch (_: Exception) { false }
+            if (!ok && primaryToken != relayToken && relayToken.isNotEmpty()) {
+                ok = try { tryPutSettingsFile(relayToken) } catch (_: Exception) { false }
+            }
+            if (ok) {
+                val uploadedIds = pendingChanges.map { it.id }.toSet()
+                val remaining = loadPendingSettingsChangesStatic(prefs, gson).filter { it.id !in uploadedIds }
+                prefs.edit().putString(PREFS_KEY_PENDING_SETTINGS_CHANGES_V513, gson.toJson(remaining)).apply()
+            }
+            return ok
         }
 
         /**
@@ -1393,6 +1666,7 @@ class OverlayService : LifecycleService() {
          * to automatically detect anomalies (e.g. charged move thrown with less energy tracked than move cost
          * like the Xerneas fast-move energy issue, unexpected HP drops vs PvPoke damage, shield desyncs,
          * circle-fill drift, or fallback species/moves).
+         * v5.13: Attaches lightweight cropped WebP HUD thumbnails (`screenshotWebpBase64`) to up to 3 `HIGH` severity anomalies.
          */
         fun detectBattleAnomaliesStatic(
             league: String,
@@ -1401,6 +1675,7 @@ class OverlayService : LifecycleService() {
             timelineEvents: List<BattleTimelineEvent>
         ): List<BattleAnomalyRecord> {
             val anomalies = mutableListOf<BattleAnomalyRecord>()
+            var attachedHighScreenshots = 0
 
             // 1. Check species & move specs for fallback / missing GameMaster entries
             for (u in userTeamSpecs) {
@@ -1484,10 +1759,15 @@ class OverlayService : LifecycleService() {
 
                     // A. ENERGY_DEFICIT_THROW: Move thrown when tracked energy < required move energy (e.g. Xerneas Geomancy / fast move EPT mismatch)
                     if (deficit > 0 && preEnergy != null && reqEnergy != null) {
+                        val sev = if (deficit >= 8) "HIGH" else "WARN"
+                        val thumb = if (sev == "HIGH" && attachedHighScreenshots < 3 && !ev.hudThumbnailWebpBase64.isNullOrBlank()) {
+                            attachedHighScreenshots++
+                            ev.hudThumbnailWebpBase64
+                        } else null
                         anomalies.add(
                             BattleAnomalyRecord(
                                 type = "ENERGY_DEFICIT_THROW",
-                                severity = if (deficit >= 8) "HIGH" else "WARN",
+                                severity = sev,
                                 tSec = ev.t,
                                 actor = ev.actor,
                                 species = attackerSpecies,
@@ -1500,7 +1780,8 @@ class OverlayService : LifecycleService() {
                                 residualEnergyAfter = if (isUser) ev.userEnergy else ev.oppEnergy,
                                 leftCircleFillPct = ev.leftCircleFillBeforePct,
                                 rightCircleFillPct = ev.rightCircleFillBeforePct,
-                                detail = "${ev.actor.uppercase()} $attackerSpecies threw $moveName (${reqEnergy}E) with only ${preEnergy}E tracked (deficit -${deficit}E; fast=${fastMoveName ?: "?"} ${fastTurns ?: "?"}t/${fastEnergy ?: "?"}e, src=${ev.moveResolutionSource ?: "?"})"
+                                detail = "${ev.actor.uppercase()} $attackerSpecies threw $moveName (${reqEnergy}E) with only ${preEnergy}E tracked (deficit -${deficit}E; fast=${fastMoveName ?: "?"} ${fastTurns ?: "?"}t/${fastEnergy ?: "?"}e, src=${ev.moveResolutionSource ?: "?"})",
+                                screenshotWebpBase64 = thumb
                             )
                         )
                     }
@@ -1541,6 +1822,10 @@ class OverlayService : LifecycleService() {
 
                     if (hpBefore != null && hpAfter != null && actualDrop != null) {
                         if (!wasShielded && hpBefore >= 20 && (expectedDmg == null || expectedDmg >= 15) && actualDrop <= 2) {
+                            val thumb = if (attachedHighScreenshots < 3 && !ev.hudThumbnailWebpBase64.isNullOrBlank()) {
+                                attachedHighScreenshots++
+                                ev.hudThumbnailWebpBase64
+                            } else null
                             anomalies.add(
                                 BattleAnomalyRecord(
                                     type = "SHIELD_DESYNC",
@@ -1555,7 +1840,8 @@ class OverlayService : LifecycleService() {
                                     expectedDmgPct = expectedDmg,
                                     shieldsBefore = if (isUser) prevOppShields else prevUserShields,
                                     shieldsAfter = if (isUser) ev.oppShieldsRemaining else ev.userShieldsRemaining,
-                                    detail = "Unshielded $moveName from ${ev.actor.uppercase()} $attackerSpecies caused only ${actualDrop}% HP drop (${hpBefore}% -> ${hpAfter}%, expected ~${expectedDmg ?: "?"}%) without shield decrement"
+                                    detail = "Unshielded $moveName from ${ev.actor.uppercase()} $attackerSpecies caused only ${actualDrop}% HP drop (${hpBefore}% -> ${hpAfter}%, expected ~${expectedDmg ?: "?"}%) without shield decrement",
+                                    screenshotWebpBase64 = thumb
                                 )
                             )
                         } else if (wasShielded && actualDrop >= 12 && hpAfter > 0) {
@@ -1578,10 +1864,15 @@ class OverlayService : LifecycleService() {
                             )
                         } else if (!wasShielded && hpAfter > 0 && expectedDmg != null && kotlin.math.abs(actualDrop - expectedDmg) >= 20) {
                             val diff = kotlin.math.abs(actualDrop - expectedDmg)
+                            val sev = if (diff >= 32) "HIGH" else "WARN"
+                            val thumb = if (sev == "HIGH" && attachedHighScreenshots < 3 && !ev.hudThumbnailWebpBase64.isNullOrBlank()) {
+                                attachedHighScreenshots++
+                                ev.hudThumbnailWebpBase64
+                            } else null
                             anomalies.add(
                                 BattleAnomalyRecord(
                                     type = "UNEXPECTED_HP_DELTA",
-                                    severity = if (diff >= 32) "HIGH" else "WARN",
+                                    severity = sev,
                                     tSec = ev.t,
                                     actor = ev.actor,
                                     species = attackerSpecies,
@@ -1591,7 +1882,8 @@ class OverlayService : LifecycleService() {
                                     hpAfterPct = hpAfter,
                                     actualHpDropPct = actualDrop,
                                     expectedDmgPct = expectedDmg,
-                                    detail = "Unshielded $moveName from ${ev.actor.uppercase()} $attackerSpecies dropped defender HP by ${actualDrop}% (${hpBefore}% -> ${hpAfter}%) vs expected PvPoke ${expectedDmg}% (diff ${diff}%)"
+                                    detail = "Unshielded $moveName from ${ev.actor.uppercase()} $attackerSpecies dropped defender HP by ${actualDrop}% (${hpBefore}% -> ${hpAfter}%) vs expected PvPoke ${expectedDmg}% (diff ${diff}%)",
+                                    screenshotWebpBase64 = thumb
                                 )
                             )
                         }
@@ -1629,8 +1921,16 @@ class OverlayService : LifecycleService() {
             if (isAiTelemetryUploadInFlight) {
                 return false to "AI Telemetry upload already in progress..."
             }
+            recordDebounceSettingsChangeIfNeededStatic(prefs, gson, "telemetry_upload_check", triggerImmediateUpload = false)
             val pending = loadPendingAiTelemetryLogsStatic(prefs, gson)
+            val pendingSettingsChanges = loadPendingSettingsChangesStatic(prefs, gson)
             if (pending.isEmpty()) {
+                if (pendingSettingsChanges.isNotEmpty()) {
+                    val cfgOk = try { uploadSettingsChangeHistoryBlocking(prefs, gson) } catch (_: Exception) { false }
+                    if (cfgOk) {
+                        return true to "Uploaded ${pendingSettingsChanges.size} debounce/settling settings change${if (pendingSettingsChanges.size == 1) "" else "s"} to GitHub @$AI_TELEMETRY_BRANCH"
+                    }
+                }
                 return true to "No pending AI telemetry battles to upload (0 queued)."
             }
             if (!forceUpload && pending.size < minBattlesRequired) {
@@ -1659,12 +1959,20 @@ class OverlayService : LifecycleService() {
                     timeZone = java.util.TimeZone.getTimeZone("UTC")
                 }.format(java.util.Date(nowMs))
 
-                val enrichedPending = pending.map { rec ->
-                    if ((rec.uploaderHandle == "anonymous" || rec.uploaderHandle.isBlank()) && safeUser.isNotBlank()) {
-                        rec.copy(uploaderHandle = safeUser, deviceHash = devHash, appVersion = "5.12")
+                val currentProfileSig = computeDebounceSettingsProfileSignatureStatic(prefs)
+                val allRecentChanges = loadSettingsChangeHistoryStatic(prefs, gson).takeLast(20)
+                val enrichedPending = pending.mapIndexed { idx, rec ->
+                    val baseRec = if ((rec.uploaderHandle == "anonymous" || rec.uploaderHandle.isBlank()) && safeUser.isNotBlank()) {
+                        rec.copy(uploaderHandle = safeUser, deviceHash = devHash, appVersion = "5.13", schemaVersion = "5.13")
                     } else {
-                        rec.copy(appVersion = "5.12")
+                        rec.copy(appVersion = "5.13", schemaVersion = "5.13")
                     }
+                    val withSig = if (baseRec.settingsProfileSignature.isBlank()) {
+                        baseRec.copy(settingsProfileSignature = currentProfileSig)
+                    } else baseRec
+                    if (idx == pending.lastIndex && withSig.settingsChanges.isEmpty() && allRecentChanges.isNotEmpty()) {
+                        withSig.copy(settingsChanges = allRecentChanges)
+                    } else withSig
                 }
 
                 val batchId = "batch_${nowMs}_${safeUser}_${devHash}"
@@ -1686,7 +1994,7 @@ class OverlayService : LifecycleService() {
                 fun tryPutBatchToBranch(targetBranch: String, targetPath: String, authToken: String): Pair<Boolean, Int> {
                     val bodyStr = gson.toJson(
                         mapOf(
-                            "message" to "telemetry(v5.12): $batchId (${enrichedPending.size} battles, $totalAnomalies anomalies) by @$safeUser",
+                            "message" to "telemetry(v5.13): $batchId (${enrichedPending.size} battles, $totalAnomalies anomalies) by @$safeUser",
                             "content" to encodedBatchB64,
                             "branch" to targetBranch
                         )
@@ -1742,7 +2050,7 @@ class OverlayService : LifecycleService() {
                 fun updateBranchManifest(targetBranch: String, manifestPath: String, storedBatchPath: String, authToken: String) {
                     try {
                         val manifestUrl = "$repoBaseUrl/contents/$manifestPath"
-                        var existingManifest = AiTelemetryManifest(schemaVersion = "5.12", updatedAtMs = nowMs)
+                        var existingManifest = AiTelemetryManifest(schemaVersion = "5.13", updatedAtMs = nowMs)
                         var manifestSha = ""
                         val getManifestReq = Request.Builder()
                             .url("$manifestUrl?ref=$targetBranch")
@@ -1771,14 +2079,14 @@ class OverlayService : LifecycleService() {
                             uploadedAtMs = nowMs,
                             uploader = safeUser,
                             deviceHash = devHash,
-                            appVersion = "5.12",
+                            appVersion = "5.13",
                             battleCount = enrichedPending.size,
                             anomalyCount = totalAnomalies,
                             highSeverityCount = highSevCount
                         )
                         val updatedBatches = (existingManifest.batches.filter { it.batchId != batchId } + newEntry).takeLast(1500)
                         val updatedManifest = AiTelemetryManifest(
-                            schemaVersion = "5.12",
+                            schemaVersion = "5.13",
                             updatedAtMs = nowMs,
                             totalBatches = updatedBatches.size,
                             totalBattles = updatedBatches.sumOf { it.battleCount },
@@ -1790,7 +2098,7 @@ class OverlayService : LifecycleService() {
                             android.util.Base64.NO_WRAP
                         )
                         val putManifestMap = mutableMapOf<String, Any>(
-                            "message" to "telemetry(v5.12): update $manifestPath for $batchId",
+                            "message" to "telemetry(v5.13): update $manifestPath for $batchId",
                             "content" to manifestB64,
                             "branch" to targetBranch
                         )
@@ -1835,6 +2143,9 @@ class OverlayService : LifecycleService() {
                         tryPutBatchToBranch(AI_TELEMETRY_BRANCH, userBatchPath, effectiveBranchToken)
                     } catch (_: Exception) {}
                     updateBranchManifest(AI_TELEMETRY_BRANCH, "manifest.json", batchPath, effectiveBranchToken)
+                    try {
+                        uploadSettingsChangeHistoryBlocking(prefs, gson)
+                    } catch (_: Exception) {}
                 } else {
                     // Tier 2: Fallback to `sync-vault` branch (`ai_telemetry/$batchPath`)
                     val syncVaultPath = "ai_telemetry/$batchPath"
@@ -1856,14 +2167,14 @@ class OverlayService : LifecycleService() {
                                 uploadedAtMs = nowMs,
                                 uploader = safeUser,
                                 deviceHash = devHash,
-                                appVersion = "5.12",
+                                appVersion = "5.13",
                                 battleCount = enrichedPending.size,
                                 anomalyCount = totalAnomalies,
                                 highSeverityCount = highSevCount
                             )
                         )
                         val issueBodyText = buildString {
-                            appendLine("### SilphScope PvP v5.12 Community AI Telemetry Batch")
+                            appendLine("### SilphScope PvP v5.13 Community AI Telemetry Batch")
                             appendLine("- **Batch ID**: `$batchId`")
                             appendLine("- **Target Path**: `$batchPath` (`$AI_TELEMETRY_BRANCH`)")
                             appendLine("- **Battles**: ${enrichedPending.size} (Anomalies detected: $totalAnomalies, High-Severity: $highSevCount)")
@@ -1898,7 +2209,7 @@ class OverlayService : LifecycleService() {
                     try {
                         val telemetryManifestFile = "silphscope_pvp_ai_telemetry_manifest.json"
                         var telemetryGistId = ""
-                        var existingManifest = AiTelemetryManifest(schemaVersion = "5.12", updatedAtMs = nowMs)
+                        var existingManifest = AiTelemetryManifest(schemaVersion = "5.13", updatedAtMs = nowMs)
 
                         val listGistsReq = Request.Builder()
                             .url("https://api.github.com/gists?per_page=100")
@@ -1947,14 +2258,14 @@ class OverlayService : LifecycleService() {
                             uploadedAtMs = nowMs,
                             uploader = safeUser,
                             deviceHash = devHash,
-                            appVersion = "5.12",
+                            appVersion = "5.13",
                             battleCount = enrichedPending.size,
                             anomalyCount = totalAnomalies,
                             highSeverityCount = highSevCount
                         )
                         val updatedBatches = (existingManifest.batches.filter { it.batchId != batchId } + newEntry).takeLast(1500)
                         val updatedManifest = AiTelemetryManifest(
-                            schemaVersion = "5.12",
+                            schemaVersion = "5.13",
                             updatedAtMs = nowMs,
                             totalBatches = updatedBatches.size,
                             totalBattles = updatedBatches.sumOf { it.battleCount },
@@ -1963,7 +2274,7 @@ class OverlayService : LifecycleService() {
                         )
 
                         val gistBodyMap = mapOf(
-                            "description" to "SilphScope PvP v5.12 AI Training & Anomaly Telemetry Vault (@$safeUser)",
+                            "description" to "SilphScope PvP v5.13 AI Training & Anomaly Telemetry Vault (@$safeUser)",
                             "public" to true,
                             "files" to mapOf(
                                 telemetryManifestFile to mapOf("content" to gson.toJson(updatedManifest)),
@@ -2007,6 +2318,7 @@ class OverlayService : LifecycleService() {
                 val statusMsg = "Uploaded ${enrichedPending.size} battle${if (enrichedPending.size == 1) "" else "s"} ($totalAnomalies anomal${if (totalAnomalies == 1) "y" else "ies"}) to GitHub $uploadedDestinationLabel"
                 prefs.edit()
                     .putString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(remaining))
+                    .remove(PREFS_KEY_PENDING_SETTINGS_CHANGES_V513)
                     .putLong(PREFS_KEY_LAST_AI_TELEMETRY_UPLOAD_MS, nowMs)
                     .putInt(PREFS_KEY_TOTAL_AI_TELEMETRY_UPLOADED_COUNT, totalUploadedSoFar)
                     .putString(PREFS_KEY_LAST_AI_TELEMETRY_UPLOAD_STATUS, statusMsg)
@@ -10927,7 +11239,10 @@ class OverlayService : LifecycleService() {
         proactiveStepPrePhaseOppTurns = 0
     }
 
-    private fun rollbackPendingProactiveStep(markAnchorRolledBack: Boolean = true) {
+    private fun rollbackPendingProactiveStep(
+        markAnchorRolledBack: Boolean = true,
+        preserveOppSubTurnEnergy: Boolean = false
+    ) {
         if (proactiveStepPending) {
             val sIdx = proactiveStepSlotIdx
             if (sIdx in 0..2) {
@@ -10935,14 +11250,16 @@ class OverlayService : LifecycleService() {
                 playerSlotTurnsOnField[sIdx] = (playerSlotTurnsOnField[sIdx] - proactiveStepAddedTurns).coerceAtLeast(0)
                 lastToastedSlotEnergy[sIdx] = proactiveStepPreEnergy.coerceIn(0, 100)
             }
-            val oIdx = if (confirmedMoveOppSlotIdx in 0..2) confirmedMoveOppSlotIdx else proactiveStepPreOppSlotIdx
-            if (oIdx in 0..2) {
-                oppSlotEnergy[oIdx] = (if (confirmedMoveOppSlotIdx in 0..2) confirmedMoveOppEnergy else proactiveStepPreOppEnergy).coerceIn(0, 100)
-                oppSlotTurnsOnField[oIdx] = (if (confirmedMoveOppSlotIdx in 0..2) confirmedMoveOppTurnsOnField else proactiveStepPreOppTurnsOnField).coerceAtLeast(0)
+            if (!preserveOppSubTurnEnergy) {
+                val oIdx = if (confirmedMoveOppSlotIdx in 0..2) confirmedMoveOppSlotIdx else proactiveStepPreOppSlotIdx
+                if (oIdx in 0..2) {
+                    oppSlotEnergy[oIdx] = (if (confirmedMoveOppSlotIdx in 0..2) confirmedMoveOppEnergy else proactiveStepPreOppEnergy).coerceIn(0, 100)
+                    oppSlotTurnsOnField[oIdx] = (if (confirmedMoveOppSlotIdx in 0..2) confirmedMoveOppTurnsOnField else proactiveStepPreOppTurnsOnField).coerceAtLeast(0)
+                }
+                phaseOppTurns = (if (confirmedMoveOppSlotIdx in 0..2) confirmedMovePhaseOppTurns else proactiveStepPrePhaseOppTurns).coerceAtLeast(0)
             }
-            phaseOppTurns = (if (confirmedMoveOppSlotIdx in 0..2) confirmedMovePhaseOppTurns else proactiveStepPrePhaseOppTurns).coerceAtLeast(0)
             clearPendingProactiveStep()
-        } else if (phasePlayerTurns > confirmedPhasePlayerTurns) {
+        } else if (phasePlayerTurns > confirmedPhasePlayerTurns && !preserveOppSubTurnEnergy) {
             val oIdx = confirmedMoveOppSlotIdx
             if (oIdx in 0..2) {
                 oppSlotEnergy[oIdx] = confirmedMoveOppEnergy.coerceIn(0, 100)
@@ -10961,6 +11278,57 @@ class OverlayService : LifecycleService() {
     private val nearCeilingStepStartMs = LongArray(3) { 0L }
     private val playerSlotCeilingLatched100 = BooleanArray(3) { false }
     private var pendingChargedAttackPreOppEnergy: Int = 0
+    private var lastUserChargedAttackLoggedMs: Long = 0L
+    private var lastUserChargedPreOppHp: Int = 100
+    private var activeFrameScreenBitmap: Bitmap? = null
+    private var pendingChargedAttackHudThumbB64: String? = null
+
+    /**
+     * v5.13: Captures a compact 320x210 composite HUD strip (Top HP/Balls/Countdown + Mid Move Banner + Bottom Charge Circles)
+     * encoded as WebP quality 55 (~6-9 KB Base64) so HIGH severity anomalies have visual proof without bloating logs.
+     */
+    private fun captureCompactHudStripWebpBase64(screen: Bitmap? = activeFrameScreenBitmap): String? {
+        val src = screen ?: return null
+        if (src.isRecycled || src.width < 100 || src.height < 200) return null
+        return try {
+            val w = src.width
+            val h = src.height
+            val outW = 320
+            val outH = 210
+            val composite = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(composite)
+            val paint = Paint(Paint.FILTER_BITMAP_FLAG)
+            // Band 1: Top HUD (HP bars, shields, Pokéballs, 5s/10s top countdown circle): 0.03h..0.17h -> 0..66px
+            canvas.drawBitmap(
+                src,
+                android.graphics.Rect(0, (h * 0.03f).toInt(), w, (h * 0.17f).toInt()),
+                android.graphics.Rect(0, 0, outW, 66),
+                paint
+            )
+            // Band 2: Mid Move Banner / Shield Prompt text: 0.36h..0.52h -> 66..134px
+            canvas.drawBitmap(
+                src,
+                android.graphics.Rect(0, (h * 0.36f).toInt(), w, (h * 0.52f).toInt()),
+                android.graphics.Rect(0, 66, outW, 134),
+                paint
+            )
+            // Band 3: Bottom Charged Move Circles & Switch Prompt: 0.74h..0.95h -> 134..210px
+            canvas.drawBitmap(
+                src,
+                android.graphics.Rect(0, (h * 0.74f).toInt(), w, (h * 0.95f).toInt()),
+                android.graphics.Rect(0, 134, outW, outH),
+                paint
+            )
+            val baos = java.io.ByteArrayOutputStream()
+            @Suppress("DEPRECATION")
+            composite.compress(Bitmap.CompressFormat.WEBP, 55, baos)
+            composite.recycle()
+            android.util.Base64.encodeToString(baos.toByteArray(), android.util.Base64.NO_WRAP)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private var shieldHexagonSeenDuringPrompt: Boolean = false
     private var sampledShieldHexagonVisible: Boolean = false
     private var shieldHexagonConfirmFrames: Int = 0
@@ -11318,7 +11686,8 @@ class OverlayService : LifecycleService() {
         val rightCircleFillBeforePct: Int? = null,
         val leftCircleFillAfterPct: Int? = null,
         val rightCircleFillAfterPct: Int? = null,
-        val moveResolutionSource: String? = null
+        val moveResolutionSource: String? = null,
+        val hudThumbnailWebpBase64: String? = null
     )
 
     data class AiTrainingLogRecord(
@@ -13008,7 +13377,8 @@ class OverlayService : LifecycleService() {
         sampledShieldHexagonVisible = false
         shieldHexagonConfirmFrames = 0
         sampledTopRightNameplateVisible = detectTopRightOpponentNameplate(screen, w, h)
-        sampledTopCountdownCircleVisible = detectTopCountdownCircle(screen, w, h)
+        // v5.13 Fix 1: Never treat the 10-second post-faint switch countdown circle as a 5-second opponent charged attack circle
+        sampledTopCountdownCircleVisible = if (isPostFaintSwitchPromptActive) false else detectTopCountdownCircle(screen, w, h)
         if (sampledTopCountdownCircleVisible) {
             topCountdownCircleConfirmFrames = (topCountdownCircleConfirmFrames + 1).coerceAtMost(30)
             topCountdownCircleMissingFrames = 0
@@ -13018,7 +13388,7 @@ class OverlayService : LifecycleService() {
             }
         } else {
             topCountdownCircleMissingFrames = (topCountdownCircleMissingFrames + 1).coerceAtMost(30)
-            if (topCountdownCircleMissingFrames >= 3) {
+            if (topCountdownCircleMissingFrames >= 3 || isPostFaintSwitchPromptActive) {
                 topCountdownCircleConfirmFrames = 0
                 isTopCountdownCircleActive = false
             }
@@ -13114,18 +13484,22 @@ class OverlayService : LifecycleService() {
             }
         } else null
 
-        screen.recycle()
-
         // Immediately advance the 100ms Pixel HUD & Sliver Latch-and-Lock + Energy State Machine
         // using the latest cached OCR lines so 0.5s GBL turns are never delayed by ML Kit OCR!
-        if (!isBattleMenuScreen(cachedOcrOppLines, cachedOcrPlayerTopLines, cachedOcrPlayerMoveLines)) {
-            updateSteadyFrameBallAndShieldState()
-            updateLiveHpAndChargedAttackState(
-                cachedOcrOppLines,
-                cachedOcrPlayerTopLines,
-                cachedOcrPlayerMoveLines,
-                cachedOcrMidBannerLines
-            )
+        activeFrameScreenBitmap = screen
+        try {
+            if (!isBattleMenuScreen(cachedOcrOppLines, cachedOcrPlayerTopLines, cachedOcrPlayerMoveLines)) {
+                updateSteadyFrameBallAndShieldState()
+                updateLiveHpAndChargedAttackState(
+                    cachedOcrOppLines,
+                    cachedOcrPlayerTopLines,
+                    cachedOcrPlayerMoveLines,
+                    cachedOcrMidBannerLines
+                )
+            }
+        } finally {
+            activeFrameScreenBitmap = null
+            screen.recycle()
         }
 
         // Launch asynchronous ML Kit OCR pass in background without blocking the 10Hz pixel loop
@@ -15233,34 +15607,50 @@ class OverlayService : LifecycleService() {
     }
 
     /**
-     * v5.12: Retroactively syncs the most recent unshielded `CHARGED_ATTACK` event when a `FAINT` occurs
-     * within 6.5 seconds of the charged attack (eliminating `UNEXPECTED_HP_DELTA` & `SHIELD_DESYNC` when
-     * the defender faints and their HP bar disappears before settling at 0%).
+     * v5.12 / v5.13: Retroactively syncs the most recent unshielded `CHARGED_ATTACK` event when a `FAINT` occurs
+     * within 16.0 seconds of the charged attack (eliminating `UNEXPECTED_HP_DELTA` & `SHIELD_DESYNC` when
+     * the defender faints and their HP bar disappears before settling at 0%, including match-ending KOs).
      */
     private fun syncRecentUnshieldedChargedAttackOnFaint(faintedActor: String, eventElapsedSec: Double) {
+        syncRecentUnshieldedChargedAttackOnFaintInList(
+            events = battleTimelineEvents,
+            faintedActor = faintedActor,
+            eventElapsedSec = eventElapsedSec,
+            userHpList = playerSlotHpPct.toList(),
+            oppHpList = oppSlotHpPct.toList()
+        )
+    }
+
+    private fun syncRecentUnshieldedChargedAttackOnFaintInList(
+        events: MutableList<BattleTimelineEvent>,
+        faintedActor: String,
+        eventElapsedSec: Double,
+        userHpList: List<Int>? = null,
+        oppHpList: List<Int>? = null
+    ) {
         val expectedAttacker = if (faintedActor == "opp") "user" else "opp"
-        val lastChargeIdx = battleTimelineEvents.indexOfLast {
+        val lastChargeIdx = events.indexOfLast {
             it.type == "CHARGED_ATTACK" && it.actor == expectedAttacker
         }
         if (lastChargeIdx < 0) return
-        val ev = battleTimelineEvents[lastChargeIdx]
+        val ev = events[lastChargeIdx]
         val dt = (eventElapsedSec - ev.t).coerceAtLeast(0.0)
-        if (dt > 6.5) return
+        if (dt > 16.0) return
         val wasExplicitlyShielded = if (faintedActor == "opp") {
-            battleTimelineEvents.drop(lastChargeIdx + 1).any { it.type == "SHIELD" && it.actor == "opp" }
+            events.drop(lastChargeIdx + 1).any { it.type == "SHIELD" && it.actor == "opp" }
         } else {
-            battleTimelineEvents.drop(lastChargeIdx + 1).any { it.type == "SHIELD" && it.actor == "user" }
+            events.drop(lastChargeIdx + 1).any { it.type == "SHIELD" && it.actor == "user" }
         }
         if (wasExplicitlyShielded) return
         val hpBefore = (ev.hpBeforePct ?: 100).coerceIn(1, 100)
         if ((ev.hpAfterPct ?: 0) > 0 || ev.shielded == true) {
-            battleTimelineEvents[lastChargeIdx] = ev.copy(
+            events[lastChargeIdx] = ev.copy(
                 shielded = false,
                 pokemonShielded = null,
                 hpAfterPct = 0,
                 hpDeltaPct = hpBefore,
-                userSlotHpPct = playerSlotHpPct.toList(),
-                oppSlotHpPct = oppSlotHpPct.toList()
+                userSlotHpPct = userHpList ?: ev.userSlotHpPct,
+                oppSlotHpPct = oppHpList ?: ev.oppSlotHpPct
             )
         }
     }
@@ -16227,20 +16617,29 @@ class OverlayService : LifecycleService() {
                     if (pendingChargedAttackActor.isEmpty() && (nowMs - lastChargedAttackLoggedMs) <= 4500L && lastChargedPromptActor == "opp") {
                         val mStats = resolveChargedMoveStatsStatic(moveName, oppMeta?.types?.firstOrNull() ?: "normal")
                         val trueCost = (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[moveName] ?: 50).coerceIn(35, 100)
-                        val diff = trueCost - lastOppChargeDeductedEnergySnapshot
+                        val oppFastNameRetro = detectedOppFastMoveOverride[resolvedOppSlotIdx]?.takeIf { it.isNotBlank() }
+                            ?: oppMeta?.defaultFastMove ?: "Tackle"
+                        val oppFastTurnsRetro = resolveFastTurnsStatic(oppFastNameRetro, oppMeta?.fastTurns ?: 2).coerceIn(1, 5)
+                        val oppFastERetro = resolveFastEnergyStatic(oppFastNameRetro, oppFastTurnsRetro).coerceIn(2, 20)
+                        val lastOppEvIdx = battleTimelineEvents.indexOfLast { it.type == "CHARGED_ATTACK" && it.actor == "opp" }
+                        val prevPreE = if (lastOppEvIdx >= 0) battleTimelineEvents[lastOppEvIdx].preThrowEnergy else null
+                        val inFlightBonusE = if (prevPreE != null && trueCost > prevPreE && (trueCost - prevPreE) <= oppFastERetro) {
+                            oppFastERetro
+                        } else 0
+                        val diff = trueCost - lastOppChargeDeductedEnergySnapshot - inFlightBonusE
                         if (diff != 0 && lastOppChargeDeductedEnergySnapshot > 0) {
                             oppSlotEnergy[resolvedOppSlotIdx] = (oppSlotEnergy[resolvedOppSlotIdx] - diff).coerceIn(0, 100)
                             lastOppChargeDeductedEnergySnapshot = trueCost
                             updatedRetroactive = true
                         }
-                        val lastOppEvIdx = battleTimelineEvents.indexOfLast { it.type == "CHARGED_ATTACK" && it.actor == "opp" }
-                        if (lastOppEvIdx >= 0 && battleTimelineEvents[lastOppEvIdx].inferredMoveName != moveName) {
+                        if (lastOppEvIdx >= 0 && (battleTimelineEvents[lastOppEvIdx].inferredMoveName != moveName || inFlightBonusE > 0)) {
                             val prevEv = battleTimelineEvents[lastOppEvIdx]
-                            val preE = prevEv.preThrowEnergy
-                            val newDeficit = if (preE != null && preE < trueCost) (trueCost - preE) else 0
+                            val adjustedPreE = prevEv.preThrowEnergy?.let { (it + inFlightBonusE).coerceAtMost(100) }
+                            val newDeficit = if (adjustedPreE != null && adjustedPreE < trueCost) (trueCost - adjustedPreE) else 0
                             battleTimelineEvents[lastOppEvIdx] = prevEv.copy(
                                 inferredMoveName = moveName,
                                 oppEnergy = oppSlotEnergy[resolvedOppSlotIdx],
+                                preThrowEnergy = adjustedPreE,
                                 requiredMoveEnergy = trueCost,
                                 energyDeficit = newDeficit,
                                 moveResolutionSource = "BANNER_OCR"
@@ -16696,7 +17095,14 @@ class OverlayService : LifecycleService() {
             (nowMs - lastChargedAttackLoggedMs) > 1200L
 
         if (hasBattleStarted && !canAccumulateFastEnergy && (proactiveStepPending || phasePlayerTurns > confirmedPhasePlayerTurns)) {
-            rollbackPendingProactiveStep(markAnchorRolledBack = false)
+            val isOpponentThrowingNow = isAttackIncomingPromptActive ||
+                hasAttackIncomingText ||
+                (isTopCountdownCircleActive && !isPostFaintSwitchPromptActive) ||
+                pendingChargedAttackActor == "opp"
+            rollbackPendingProactiveStep(
+                markAnchorRolledBack = false,
+                preserveOppSubTurnEnergy = isOpponentThrowingNow
+            )
             hpChanged = true
         }
 
@@ -16714,7 +17120,6 @@ class OverlayService : LifecycleService() {
             !hasUserChargedBannerText &&
             !isUserMinigameSwipePhaseActive &&
             (sampledPlayerHpPct in 1..100 ||
-                sampledOppHpPct in 1..100 ||
                 hasAttackIncomingText ||
                 isAttackIncomingPromptActive ||
                 pendingChargedAttackActor == "opp")
@@ -16834,17 +17239,26 @@ class OverlayService : LifecycleService() {
                     hpChanged = true
                 }
 
-                // v4.01/v4.02: Retroactive unshielded opponent move confirmation or upgrade if player HP drop finishes settling 100-400ms AFTER Section 4 reconciled!
+                // v4.01/v4.02/v5.13: Retroactive unshielded opponent move confirmation AND HP delta update if player HP drop finishes settling 100-4500ms AFTER Section 4 reconciled!
                 val postChargeDropFromPre = pendingChargedAttackPreUserHp - confirmedPlayerHp
                 if (pendingChargedAttackActor.isEmpty() &&
                     lastChargedPromptActor == "opp" &&
-                    (nowMs - lastChargedAttackLoggedMs) in 1L..2800L &&
+                    (nowMs - lastChargedAttackLoggedMs) in 1L..4500L &&
                     lastOppChargedAttackerSlotIdx in 0..2 &&
                     postChargeDropFromPre >= 5
                 ) {
                     val lastOppEvIdx = battleTimelineEvents.indexOfLast { it.type == "CHARGED_ATTACK" && it.actor == "opp" }
                     val existingInferred = if (lastOppEvIdx >= 0) battleTimelineEvents[lastOppEvIdx].inferredMoveName else null
                     val existingDelta = if (lastOppEvIdx >= 0) (battleTimelineEvents[lastOppEvIdx].hpDeltaPct ?: 0) else 0
+                    // v5.13 Fix 2: ALWAYS update settled hpAfterPct and hpDeltaPct even when moveResolutionSource == "BANNER_OCR"
+                    if (lastOppEvIdx >= 0 && battleTimelineEvents[lastOppEvIdx].shielded == false && postChargeDropFromPre > existingDelta + 2) {
+                        battleTimelineEvents[lastOppEvIdx] = battleTimelineEvents[lastOppEvIdx].copy(
+                            hpAfterPct = confirmedPlayerHp,
+                            hpDeltaPct = postChargeDropFromPre,
+                            userSlotHpPct = playerSlotHpPct.toList()
+                        )
+                        hpChanged = true
+                    }
                     val canUpgradeHpGuess = existingInferred.isNullOrBlank() ||
                         (lastOppChargeHpInferredMoveName.isNotEmpty() &&
                             existingInferred == lastOppChargeHpInferredMoveName &&
@@ -16976,7 +17390,7 @@ class OverlayService : LifecycleService() {
                         pendingChargedAttackPreOppSlotHp[activeOppIdx] = confirmedOppHp
                     }
                     hpChanged = true
-                } else if (realOppDrop > 25 && !isCleanShieldCallHpWindow) {
+                } else if (realOppDrop > 25 && (!isCleanShieldCallHpWindow || (lastUserChargedAttackLoggedMs > 0L && (nowMs - lastUserChargedAttackLoggedMs) <= 4500L))) {
                     lastScannedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     confirmedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     oppSlotHpPct[activeOppIdx] = confirmedOppHp
@@ -16990,11 +17404,21 @@ class OverlayService : LifecycleService() {
                     hpChanged = true
                 }
 
-                // v5.12: Retroactive unshielded player CHARGED_ATTACK HP delta update if opponent HP drop finishes settling 100-2800ms after Section 4 reconciled!
-                val postUserChargeDropFromPre = pendingChargedAttackPreOppHp - confirmedOppHp
-                if (pendingChargedAttackActor.isEmpty() &&
-                    lastChargedPromptActor == "user" &&
-                    (nowMs - lastChargedAttackLoggedMs) in 1L..2800L &&
+                // v5.12 / v5.13: Retroactive unshielded player CHARGED_ATTACK HP delta update if opponent HP drop finishes settling 100-4500ms after Section 4 reconciled
+                // (even if an opponent Charged Move prompt begins immediately after the player's move lands)!
+                val recentUserChargeMs = max(
+                    if (lastChargedPromptActor == "user") lastChargedAttackLoggedMs else 0L,
+                    lastUserChargedAttackLoggedMs
+                )
+                val preOppHpRef = if (lastUserChargedAttackLoggedMs > 0L && (nowMs - lastUserChargedAttackLoggedMs) <= 4500L) {
+                    lastUserChargedPreOppHp
+                } else {
+                    pendingChargedAttackPreOppHp
+                }
+                val postUserChargeDropFromPre = preOppHpRef - confirmedOppHp
+                if (pendingChargedAttackActor != "user" &&
+                    recentUserChargeMs > 0L &&
+                    (nowMs - recentUserChargeMs) in 1L..4500L &&
                     postUserChargeDropFromPre >= 5
                 ) {
                     val lastUserEvIdx = battleTimelineEvents.indexOfLast { it.type == "CHARGED_ATTACK" && it.actor == "user" }
@@ -17701,6 +18125,8 @@ class OverlayService : LifecycleService() {
         }
 
         // Snapshot stable normal-combat energy whenever both floating HP bars and top Pokéballs are visible
+        // v5.13 Fix 4: NEVER overwrite lastStableLeftChargeFillPct / lastStableRightChargeFillPct with raw undebounced
+        // lastScannedLeftChargeFillPct / lastScannedRightChargeFillPct here (which shrinks to 2%-7% during tap zoom-in)!
         if (hasVisibleCombatHud &&
             (sampledLeftChargeBtnFillPct in 0..300 || sampledRightChargeBtnFillPct in 0..300 || (sampledPlayerHpPct in 1..100 && sampledOppHpPct in 1..100)) &&
             pendingChargedAttackActor.isEmpty() &&
@@ -17718,12 +18144,6 @@ class OverlayService : LifecycleService() {
                 lastStableNormalCombatMs = nowMs
             }
             lastStableNormalCombatEnergy = confirmedCombatEnergy
-            if (lastScannedLeftChargeFillPct[activeUserIdx] in 0..300) {
-                lastStableLeftChargeFillPct = lastScannedLeftChargeFillPct[activeUserIdx]
-            }
-            if (lastScannedRightChargeFillPct[activeUserIdx] in 0..300) {
-                lastStableRightChargeFillPct = lastScannedRightChargeFillPct[activeUserIdx]
-            }
         }
 
         // 1D. v3.88 / v4.12 / v5.12: Opponent Fast Move Energy Indexed Directly to Player Turns (with <100E Stall Rollback & >=100E Stall Clock)
@@ -18012,9 +18432,8 @@ class OverlayService : LifecycleService() {
             lastSteadyMoveButtonsSeenMs = nowMs
         }
 
-        // 2. Detect Opponent Charged Attack (v4.06 / v4.10: Driven by the top-center 5-second countdown circle detector AND/OR
-        //    "Attack incoming!" OCR text, gated on `isHudHiddenForOpponentPrompt` so tall/glowing Pokémon antlers at the top
-        //    of the screen never prematurely hide the Shield Decision Overlay or trigger Section 4 before the attack lands!)
+        // 2. Detect Opponent Charged Attack (v4.06 / v4.10 / v5.13: Driven by the top-center 5-second countdown circle detector AND/OR
+        //    "Attack incoming!" OCR text, gated on `isHudHiddenForOpponentPrompt` and never triggered by `sampledOppHpPct` alone when player HP is missing!)
         val isOpponentCountdownCircleActive = isTopCountdownCircleActive &&
             !isPostFaintSwitchPromptActive &&
             !sampledTopRightNameplateVisible &&
@@ -18022,7 +18441,6 @@ class OverlayService : LifecycleService() {
             !hasUserChargedBannerText &&
             !isUserMinigameSwipePhaseActive &&
             (sampledPlayerHpPct in 1..100 ||
-                sampledOppHpPct in 1..100 ||
                 hasAttackIncomingText ||
                 isAttackIncomingPromptActive ||
                 pendingChargedAttackActor == "opp")
@@ -18156,11 +18574,14 @@ class OverlayService : LifecycleService() {
                             expectedMoveDmgPct = cmpExpectedDmgPct,
                             leftCircleFillBeforePct = preChargeLeftFillPct.takeIf { it >= 0 },
                             rightCircleFillBeforePct = preChargeRightFillPct.takeIf { it >= 0 },
-                            moveResolutionSource = cmpMoveSource
+                            moveResolutionSource = cmpMoveSource,
+                            hudThumbnailWebpBase64 = pendingChargedAttackHudThumbB64
                         )
                     )
                     lastChargedAttackLoggedMs = nowMs
                     lastChargedAttackLoggedActor = "user"
+                    lastUserChargedAttackLoggedMs = nowMs
+                    lastUserChargedPreOppHp = cmpHpBefore
                     pendingChargedAttackActor = ""
                     pendingChargedAttackDeductedEnergy = 0
                     pendingUserChargeConfirmedByOcr = false
@@ -18178,11 +18599,20 @@ class OverlayService : LifecycleService() {
             predictedOppSlotHpPct[activeOppIdx] = oppSlotHpPct[activeOppIdx]
             if (pendingChargedAttackActor != "opp" && ((nowMs - lastChargedAttackLoggedMs) > 2200L || lastChargedAttackLoggedActor == "user")) {
                 hasBattleStarted = true
-                rollbackPendingProactiveStep(markAnchorRolledBack = false)
+                // v5.13 Fix 3: Preserve opponent sub-turn energy when the opponent throws mid-exchange
+                rollbackPendingProactiveStep(markAnchorRolledBack = false, preserveOppSubTurnEnergy = true)
                 proactiveRolledBackAnchorMs = 0L
+                pendingChargedAttackHudThumbB64 = captureCompactHudStripWebpBase64()
                 val throwerOppIdx = activeOppIdx.coerceIn(0, 2)
-                // Opponent shield prompt confirmed (v5.12: Reconcile strictly against confirmedPhasePlayerTurns without phantom turn padding)
-                val maxTurnBeforeNextPlayerSample = max(confirmedPhasePlayerTurns, phaseOppTurns)
+                val activeSubTurnWindowMs = (userFastTurnsForStats * 500L + 350L).coerceAtLeast(850L)
+                val effectivePlayerTurnsAtOppThrow = if (lastConfirmedPlayerFastMoveMs > 0L &&
+                    (nowMs - lastConfirmedPlayerFastMoveMs) in 1L..activeSubTurnWindowMs
+                ) {
+                    max(confirmedPhasePlayerTurns, phasePlayerTurns)
+                } else {
+                    confirmedPhasePlayerTurns
+                }
+                val maxTurnBeforeNextPlayerSample = max(effectivePlayerTurnsAtOppThrow, phaseOppTurns)
                 if (maxTurnBeforeNextPlayerSample > 0) {
                     val maxOptimalOppMoves = ceil(maxTurnBeforeNextPlayerSample.toDouble() / oppFastTurnsForStats.toDouble()).toInt()
                     val creditedOppSoFar = phaseOppTurns / oppFastTurnsForStats
@@ -18322,11 +18752,19 @@ class OverlayService : LifecycleService() {
                 rollbackPendingProactiveStep(markAnchorRolledBack = false)
                 proactiveRolledBackAnchorMs = 0L
                 pendingUserChargeConfirmedByOcr = hasUserChargedBannerText
+                pendingChargedAttackHudThumbB64 = captureCompactHudStripWebpBase64()
 
                 val bestStableLeftFill = max(lastStableLeftChargeFillPct, prevStableLeftChargeFillPct)
                 val bestStableRightFill = max(lastStableRightChargeFillPct, prevStableRightChargeFillPct)
-                preChargeLeftFillPct = if (bestStableLeftFill > 0) bestStableLeftFill else lastScannedLeftChargeFillPct[activeUserIdx].coerceAtLeast(0)
-                preChargeRightFillPct = if (bestStableRightFill > 0) bestStableRightFill else lastScannedRightChargeFillPct[activeUserIdx].coerceAtLeast(0)
+                val rawPreLeft = if (bestStableLeftFill > 0) bestStableLeftFill else lastScannedLeftChargeFillPct[activeUserIdx].coerceAtLeast(0)
+                val rawPreRight = if (bestStableRightFill > 0) bestStableRightFill else lastScannedRightChargeFillPct[activeUserIdx].coerceAtLeast(0)
+                val bankedEForCircles = max(playerSlotEnergy[activeUserIdx], lastStableNormalCombatEnergy).coerceIn(0, 100)
+                preChargeLeftFillPct = if (bankedEForCircles >= userMove1Energy && rawPreLeft < 85) {
+                    ((bankedEForCircles * 100.0) / userMove1Energy.toDouble()).roundToInt().coerceIn(95, 200)
+                } else rawPreLeft
+                preChargeRightFillPct = if (hasSecondUserMove && bankedEForCircles >= userMove2Energy && rawPreRight < 85) {
+                    ((bankedEForCircles * 100.0) / userMove2Energy.toDouble()).roundToInt().coerceIn(95, 200)
+                } else rawPreRight
 
                 // Ensure banked energy is at least as high as any visibly ready circle (>= 95% fill) or cheapestUserEnergy
                 // v5.12: Top up playerSlotEnergy for up to 1 fast move of tap lag WITHOUT inflating confirmedPhasePlayerTurns or opponent energy!
@@ -18440,11 +18878,11 @@ class OverlayService : LifecycleService() {
             (hasReturnedCombatCircles || (nowMs - pendingChargedAttackStartMs) >= 5800L) &&
             (hasReturnedTopHudOrCircles || (nowMs - attackIncomingDetectedAtMs) >= 1500L) &&
             ((sampledPlayerHpPct in 1..100 && playerSlotHpConfirmFrames[activeUserIdx] >= reqHpDebounce && (!sampledPlayerHasPendingDmg || (nowMs - pendingChargedAttackStartMs) >= 7200L)) ||
-                (hasReturnedCombatCircles && (sampledPlayerHpPct == -1 || (nowMs - pendingChargedAttackStartMs) >= 7500L) && (nowMs - pendingChargedAttackStartMs) >= 5200L))) ||
+                (hasReturnedCombatCircles && (postOppChargedMissingPlayerHpFrames >= 6 || (nowMs - pendingChargedAttackStartMs) >= 7500L) && (nowMs - pendingChargedAttackStartMs) >= 5200L))) ||
             (pendingChargedAttackActor == "user" &&
                 (hasReturnedCombatCircles || (nowMs - pendingChargedAttackStartMs) >= 5800L) &&
                 ((sampledOppHpPct in 1..100 && oppSlotHpConfirmFrames[activeOppIdx] >= reqHpDebounce && (!sampledOppHasPendingDmg || (nowMs - pendingChargedAttackStartMs) >= 7200L)) ||
-                    (hasReturnedCombatCircles && (sampledOppHpPct == -1 || (nowMs - pendingChargedAttackStartMs) >= 7500L) && (nowMs - pendingChargedAttackStartMs) >= 5200L)))
+                    (hasReturnedCombatCircles && (postUserChargedMissingOppHpFrames >= 6 || (nowMs - pendingChargedAttackStartMs) >= 7500L) && (nowMs - pendingChargedAttackStartMs) >= 5200L)))
         if (pendingChargedAttackActor.isNotEmpty() &&
             (nowMs - pendingChargedAttackStartMs) >= 1800L &&
             !hasUserChargedBannerText &&
@@ -18613,6 +19051,21 @@ class OverlayService : LifecycleService() {
                     // Tier 3 Fallback: Lowest energy viable opponent move on the thrower to err on the side of opponent having more energy
                     attackerCheapestOppEnergy
                 }
+                // v5.13 Fix 3: 1-Fast-Move Mid-Turn Throw Tolerance:
+                // If an opponent throws a confirmed higher-cost move (e.g. 50E Close Combat) while pre-throw energy is within
+                // 1 fast move (`totalTargetEnergy - pendingChargedAttackPreOppEnergy in 1..attackerFastEnergy`), credit that
+                // 1 in-flight opponent fast move before computing residual energy and deficit.
+                val attackerFastName = detectedOppFastMoveOverride[attackerOppSlotIdx]?.takeIf { it.isNotBlank() }
+                    ?: attackerOppMeta.defaultFastMove
+                val attackerFastTurns = resolveFastTurnsStatic(attackerFastName, attackerOppMeta.fastTurns).coerceIn(1, 5)
+                val attackerFastEnergy = resolveFastEnergyStatic(attackerFastName, attackerFastTurns).coerceIn(2, 20)
+                if (resolvedOppMove != null && (totalTargetEnergy - pendingChargedAttackPreOppEnergy) in 1..attackerFastEnergy) {
+                    pendingChargedAttackPreOppEnergy = (pendingChargedAttackPreOppEnergy + attackerFastEnergy).coerceAtMost(100)
+                    if (attackerOppSlotIdx in 0..2) {
+                        oppSlotEnergy[attackerOppSlotIdx] = (oppSlotEnergy[attackerOppSlotIdx] + attackerFastEnergy).coerceIn(0, 100)
+                        oppSlotTurnsOnField[attackerOppSlotIdx] = (oppSlotTurnsOnField[attackerOppSlotIdx] + attackerFastTurns).coerceAtLeast(0)
+                    }
+                }
                 val alreadyDeducted = pendingChargedAttackDeductedEnergy.coerceAtLeast(0)
                 val extraToDeduct = (totalTargetEnergy - alreadyDeducted).coerceAtLeast(0)
                 if (extraToDeduct > 0 && attackerOppSlotIdx in 0..2) {
@@ -18712,9 +19165,11 @@ class OverlayService : LifecycleService() {
                         requiredMoveEnergy = totalTargetEnergy,
                         energyDeficit = oppEnergyDeficit,
                         expectedMoveDmgPct = oppExpectedDmgPct,
-                        moveResolutionSource = oppMoveSource
+                        moveResolutionSource = oppMoveSource,
+                        hudThumbnailWebpBase64 = pendingChargedAttackHudThumbB64
                     )
                 )
+                pendingChargedAttackHudThumbB64 = null
                 lastChargedAttackLoggedMs = nowMs
                 lastChargedAttackLoggedActor = "opp"
                 pendingChargedAttackActor = ""
@@ -19050,11 +19505,15 @@ class OverlayService : LifecycleService() {
                         rightCircleFillBeforePct = preChargeRightFillPct.takeIf { it >= 0 },
                         leftCircleFillAfterPct = sampledLeftChargeBtnFillPct.takeIf { it >= 0 },
                         rightCircleFillAfterPct = sampledRightChargeBtnFillPct.takeIf { it >= 0 },
-                        moveResolutionSource = userMoveSource
+                        moveResolutionSource = userMoveSource,
+                        hudThumbnailWebpBase64 = pendingChargedAttackHudThumbB64
                     )
                 )
+                pendingChargedAttackHudThumbB64 = null
                 lastChargedAttackLoggedMs = nowMs
                 lastChargedAttackLoggedActor = "user"
+                lastUserChargedAttackLoggedMs = nowMs
+                lastUserChargedPreOppHp = hpBefore
                 pendingChargedAttackActor = ""
                 pendingUserChargeConfirmedByOcr = false
                 pendingChargedAttackDeductedEnergy = 0
@@ -20010,16 +20469,32 @@ class OverlayService : LifecycleService() {
                 rightChargeFillConfirmFrames[newSlotIdx] = 0
                 leftChargeFillDebounceStartMs[newSlotIdx] = 0L
                 rightChargeFillDebounceStartMs[newSlotIdx] = 0L
-                resetSlotEnergyTracking(newSlotIdx, playerSlotEnergy[newSlotIdx].coerceIn(0, 100),
+                val switchLeague = currentPreset?.league ?: "GREAT LEAGUE"
+                val switchSlotMember = currentPreset?.pokemon?.getOrNull(newSlotIdx)
+                val switchMonName = switchSlotMember?.name ?: newSlotName
+                val switchMeta = getPokemonMeta(switchMonName, switchLeague, switchMonName.contains("Shadow", ignoreCase = true))
+                val switchType = switchMeta.types.firstOrNull() ?: "normal"
+                val swC1Name = switchSlotMember?.chargedMove1?.takeIf { it.isNotBlank() } ?: switchMeta.chargedMove1
+                val swC2Name = switchSlotMember?.chargedMove2?.takeIf { it.isNotBlank() } ?: switchMeta.chargedMove2
+                val swC1Cost = (resolveChargedMoveStatsStatic(swC1Name, switchType).energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[swC1Name] ?: 45).coerceIn(35, 100)
+                val swC2Cost = (resolveChargedMoveStatsStatic(swC2Name, switchType).energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[swC2Name] ?: 55).coerceIn(35, 100)
+                val bankedSwE = playerSlotEnergy[newSlotIdx].coerceIn(0, 100)
+                resetSlotEnergyTracking(
+                    newSlotIdx,
+                    bankedSwE,
+                    cost1 = swC1Cost,
+                    cost2 = swC2Cost,
                     clearThirdFillLatches = false
                 )
-                phaseStartPlayerEnergy = playerSlotEnergy[newSlotIdx].coerceIn(0, 100)
-                lastStableNormalCombatEnergy = playerSlotEnergy[newSlotIdx]
-                prevStableNormalCombatEnergy = playerSlotEnergy[newSlotIdx]
-                lastStableLeftChargeFillPct = 0
-                lastStableRightChargeFillPct = 0
-                prevStableLeftChargeFillPct = 0
-                prevStableRightChargeFillPct = 0
+                phaseStartPlayerEnergy = bankedSwE
+                lastStableNormalCombatEnergy = bankedSwE
+                prevStableNormalCombatEnergy = bankedSwE
+                val seededLeftFill = ((bankedSwE * 100.0) / swC1Cost.toDouble()).roundToInt().coerceIn(0, 300)
+                val seededRightFill = ((bankedSwE * 100.0) / swC2Cost.toDouble()).roundToInt().coerceIn(0, 300)
+                lastStableLeftChargeFillPct = seededLeftFill
+                lastStableRightChargeFillPct = seededRightFill
+                prevStableLeftChargeFillPct = seededLeftFill
+                prevStableRightChargeFillPct = seededRightFill
                 lastDetectedBannerMoveName = ""
                 lastDetectedBannerMoveActor = ""
                 lastDetectedBannerMoveTimeMs = 0L
@@ -21133,11 +21608,14 @@ class OverlayService : LifecycleService() {
         pendingChargedAttackActor = ""
         pendingChargedAttackStartMs = 0L
         pendingChargedAttackDeductedEnergy = 0
+        pendingChargedAttackHudThumbB64 = null
         missingBothHpBarsFrames = 0
         missingTopBallsWithHpBarsFrames = 0
         lastSteadyMoveButtonsSeenMs = 0L
         lastChargedAttackLoggedMs = 0L
         lastChargedAttackLoggedActor = ""
+        lastUserChargedAttackLoggedMs = 0L
+        lastUserChargedPreOppHp = 100
         lastUserChargedMoveBannerResolvedMs = 0L
         pendingUserChargeConfirmedByOcr = false
         lastRecommendedAction = ""
@@ -21449,25 +21927,22 @@ class OverlayService : LifecycleService() {
             oppTeamSpecs = oppTeamSpecs,
             timelineEvents = finalTimelineEvents
         )
-        val scannerConfigMap = mapOf(
-            "scanHzMode" to currentScanHzMode,
-            "turnOffsetMs" to scanTurnOffsetMs,
-            "hpTrackingEnabled" to enableHpTracking,
-            "energyTrackingEnabled" to enableEnergyTracking,
-            "hpDebounceSamples" to activeHpDebounceSamples,
-            "energyDebounceSamples" to activeEnergyDebounceSamples,
-            "debounceTolerancePct" to activeDebounceTolerancePct,
-            "proactiveEnergyLeadMs" to activeProactiveEnergyLeadMs,
-            "chargeCirclePriorityMode" to chargeCirclePriorityMode,
-            "altFastMoveDetectEnabled" to enableAltFastMoveDetect,
-            "fastDetectTurnOffset" to fastDetectTurnOffset
+        recordDebounceSettingsChangeIfNeededStatic(prefs, gson, "battle_logged", triggerImmediateUpload = false)
+        val scannerConfigMap = buildDebounceAndSettlingSettingsMapStatic(
+            prefs = prefs,
+            scanHzMode = currentScanHzMode,
+            scanTurnOffsetMs = scanTurnOffsetMs
         )
+        val profileSig = computeDebounceSettingsProfileSignatureStatic(prefs)
+        val recentSettingsChanges = loadPendingSettingsChangesStatic(prefs, gson).ifEmpty {
+            loadSettingsChangeHistoryStatic(prefs, gson).takeLast(10)
+        }
         val githubUser = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty().ifEmpty { "anonymous" }
         val v510Record = AiTelemetryBattleRecordV510(
-            schemaVersion = "5.12",
+            schemaVersion = "5.13",
             battleId = battleId,
             timestampMs = nowMs,
-            appVersion = "5.12",
+            appVersion = "5.13",
             uploaderHandle = githubUser,
             deviceHash = getDeviceTelemetryHashStatic(prefs),
             deviceModel = Build.MODEL ?: "Android",
@@ -21490,6 +21965,8 @@ class OverlayService : LifecycleService() {
             userFaints = finalUserFaints,
             oppFaints = finalOppFaints,
             scannerSettings = scannerConfigMap,
+            settingsProfileSignature = profileSig,
+            settingsChanges = recentSettingsChanges,
             userTeamSpecs = userTeamSpecs,
             oppTeamSpecs = oppTeamSpecs,
             anomalies = detectedAnomalies,

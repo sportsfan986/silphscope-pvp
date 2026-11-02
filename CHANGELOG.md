@@ -1,4 +1,26 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v5.01`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v5.13`)
+
+---
+
+## v5.13 (2026-11-02) — Active Battle OCR Frame Rate Throttling, In-Flight Fast Move Preservation, Pre-Throw Tap Zoom Snapshots, Post-Cutscene HP Settle, & Debounce Telemetry Tracking
+*Performance, telemetry, and battle state engine release introducing configurable active battle OCR frame rate throttling (5, 7.5, 10, 15 FPS) to eliminate thermal throttling and frame drops on prolonged tournament sets, in-flight fast move preservation during opponent charged moves, pre-throw circle snapshot stabilization against tap zoom-in frames, post-cutscene HP drop synchronization on OCR moves, faint-switch timer lockouts, and telemetry upload of debounce/settling filter configurations alongside cropped WebP thumbnails on HIGH anomalies.*
+
+- **v5.13 — Key Features & Fixes**:
+  - **Active Battle OCR Frame Rate Throttling (`ocrFpsThrottle`)**:
+    - Adds customizable OCR throttle options (5 FPS, 7.5 FPS, 10 FPS, 15 FPS) in MainActivity and Settings with Tasker intent support.
+    - Prevents device overheating, battery drain, and frame drop during long battle sessions while maintaining precise turn registration.
+  - **In-Flight Fast Move Preservation (`preserveInFlightFastMoveOnOpponentThrow`)**:
+    - Preserves registered fast move damage and energy progression if the opponent initiates a charged move during the fast move's active window, preventing lost fast move attribution.
+  - **Pre-Throw Circle Snapshot Freeze on Tap Zoom (`preThrowCircleSnapshotStabilization`)**:
+    - Uses a 2-frame stable circle fill peak (`max(lastStable, prevStable)`) before charged attack animation triggers, preventing camera zoom-in pixel drain artifacts from overwriting banked energy snapshots.
+  - **Post-Cutscene HP Drop Synchronization on OCR Moves (`postCutsceneHpSettle`)**:
+    - Ensures post-cutscene HP drops are reliably sampled after the health bar animation fully settles, eliminating false intermediate damage reads and improving shield/bait deduction accuracy.
+  - **Faint Switch Timer Attack Lockout**:
+    - Blocks faint switch countdown timers from inadvertently advancing opponent turn counters or triggering phantom opponent attack events before Pokémon enters active combat.
+  - **Debounce & Settling Filter Telemetry Correlation**:
+    - Automatically captures user debounce filter and settling delay configurations whenever modified, bundling settings into telemetry anomaly payloads to correlate filter parameters with anomaly frequency.
+  - **Cropped WebP Thumbnails on High-Severity Anomalies**:
+    - Stores lightweight cropped WebP thumbnail captures exclusively for HIGH-severity telemetry anomalies, ensuring fast log ingestion without log bloat.
 
 ---
 
