@@ -42,35 +42,35 @@ export const ANDROID_FILES: AndroidProjectFile[] = [
     path: "app/build.gradle.kts",
     name: "app/build.gradle.kts",
     category: "gradle",
-    description: "App module Gradle dependencies (v5.13) including ML Kit Text Recognition, OkHttp, and Gson.",
+    description: "App module Gradle dependencies (v6.00, versionCode 1600) including ML Kit Text Recognition, OkHttp, and Gson.",
     content: appGradleContent
   },
   {
     path: "app/src/main/java/com/gbl/overlay/MainActivity.kt",
     name: "MainActivity.kt",
     category: "kotlin",
-    description: "Manages permissions, Standard GBL vs. Show 6 Mode toggle, Teams of 6 & Teams of 3, Dual Show 6 Team Builders, per-league persisted Whitelist/Banlist, and overlay launch.",
+    description: "Manages permissions, 4-tab navigation (Teams, Battle Log, Settings, Meta), collapsible Meta tuning drawer, Limited Cup same-CP standard league blending, and AI Advice HUD position (Bottom default vs Top).",
     content: mainActivityContent
   },
   {
     path: "app/src/main/java/com/gbl/overlay/OverlayService.kt",
     name: "OverlayService.kt",
     category: "kotlin",
-    description: "Foreground service with Show 6 Pick-3 & Blind Show 6 engines, known Opponent 6 backline AI constraint, independent Show 6 battle logs, and 3v3 shield/damage matrix.",
+    description: "Foreground service with 4-Pillar Condensed 2-Line AI Tactical Coach, unified throw/catch timing alerts, Tank-to-Reach-Move shield math, and personalized blended season meta & core engine.",
     content: overlayServiceContent
   },
   {
     path: "app/src/main/assets/overlay.html",
     name: "overlay.html (Assets)",
     category: "html",
-    description: "Ultra-transparent glass HUD with theme accent tinting, Reset Opp, Shadow/Form toggles, 3-letter damage rows, and static throw turn reminders.",
+    description: "Ultra-transparent glass HUD with Bottom (default) or Top 2-Line AI Tactical Coach banner, solid/blinking throw & catch timing alerts, and opponent backline predictions.",
     content: overlayHtmlContent
   },
   {
     path: "app/src/main/res/layout/activity_main.xml",
     name: "activity_main.xml",
     category: "layout",
-    description: "Main activity UI layout with GBL/Battle Frontier mode logos, Show 6 Mode Hub (6v6 Pick-3 & Blind Show 6 Builders), Settings Combat Mode toggle, and team presets list.",
+    description: "Main activity UI layout (v6.00) with 4th 📊 Meta tab, default-collapsed Meta Settings/Limited Cups/Spreadsheet Importer drawer, Top Meta Cores & Top Meta Pokémon tables, and AI Advice HUD position selector.",
     content: activityMainXmlContent
   },
   {

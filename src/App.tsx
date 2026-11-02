@@ -677,12 +677,101 @@ function renderThemeOverlayIcon(themeId: string, sizePx: number = 14) {
 }
 
 export default function App() {
-  // Navigation tabs (reordered: Teams, Battle Logs, Settings, Help, Math Validator)
-  const [activeTab, setActiveTab] = useState<'simulator' | 'presets' | 'battle_log' | 'settings' | 'help' | 'turn_matrix' | 'android_code' | 'math_validator'>('simulator');
+  // Navigation tabs (reordered: Teams, Battle Logs, Settings, Meta, Help, Math Validator)
+  const [activeTab, setActiveTab] = useState<'simulator' | 'presets' | 'battle_log' | 'settings' | 'meta' | 'help' | 'turn_matrix' | 'android_code' | 'math_validator'>('simulator');
   const [validatorLeague, setValidatorLeague] = useState<LeagueType>('GREAT LEAGUE');
   const [validatorSubTab, setValidatorSubTab] = useState<'matrix_cards' | 'form_changes' | 'aegislash_audit' | 'cross_validation'>('matrix_cards');
   const [selectedCardSpecies, setSelectedCardSpecies] = useState<string>('Melmetal');
   const [expandedFormId, setExpandedFormId] = useState<string>('morpeko-forms');
+
+  // v6.00 AI Advice HUD Position ("bottom" default for higher visibility vs "top")
+  const [aiAdviceHudPosition, setAiAdviceHudPositionState] = useState<'bottom' | 'top'>(() => {
+    try {
+      return localStorage.getItem('gbl_ai_advice_hud_position') === 'top' ? 'top' : 'bottom';
+    } catch {
+      return 'bottom';
+    }
+  });
+  const handleSetAiAdviceHudPosition = (pos: 'bottom' | 'top') => {
+    setAiAdviceHudPositionState(pos);
+    try {
+      localStorage.setItem('gbl_ai_advice_hud_position', pos);
+    } catch {}
+  };
+
+  // v6.00 📊 Meta Tab State (Mode-Independent League Selectors, Scope Toggle & Collapsible Drawer Default Collapsed)
+  const [metaTabGblLeague, setMetaTabGblLeague] = useState<LeagueType>(() => {
+    try {
+      return (localStorage.getItem('gbl_meta_tab_league_gbl') as LeagueType) || 'GREAT LEAGUE';
+    } catch {
+      return 'GREAT LEAGUE';
+    }
+  });
+  const [metaTabShow6League, setMetaTabShow6League] = useState<LeagueType>(() => {
+    try {
+      return (localStorage.getItem('gbl_meta_tab_league_show6') as LeagueType) || 'Battle Frontier (Spectral)';
+    } catch {
+      return 'Battle Frontier (Spectral)';
+    }
+  });
+  const [metaTabScope, setMetaTabScope] = useState<'season' | 'last25' | 'last50'>('season');
+  const [isMetaSettingsOpen, setIsMetaSettingsOpen] = useState<boolean>(false);
+  const [gblLogWeightCapPct, setGblLogWeightCapPct] = useState<number>(() => {
+    try {
+      const saved = Number(localStorage.getItem('gbl_meta_log_weight_cap_pct'));
+      if (!Number.isNaN(saved) && saved >= 0 && saved <= 100) return saved;
+    } catch {}
+    return 70;
+  });
+  const [gblRecencyDecay, setGblRecencyDecay] = useState<0.02 | 0.04 | 0.07>(() => {
+    try {
+      const saved = Number(localStorage.getItem('gbl_meta_recency_decay_lambda'));
+      if (saved === 0.02 || saved === 0.04 || saved === 0.07) return saved;
+    } catch {}
+    return 0.04;
+  });
+  const [show6RecencyDecay, setShow6RecencyDecay] = useState<0.02 | 0.04 | 0.07>(() => {
+    try {
+      const saved = Number(localStorage.getItem('gbl_show6_recency_decay_lambda'));
+      if (saved === 0.02 || saved === 0.04 || saved === 0.07) return saved;
+    } catch {}
+    return 0.04;
+  });
+  // v6.00 Limited Cup Same-CP Standard League Blending (GBL Blind 3 default: 50% weight & Fast 0.10 decay; Show 6 default: 25% weight & Std 0.06 decay)
+  const [limitedStdBlendPctGbl, setLimitedStdBlendPctGbl] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('gbl_limited_std_blend_pct_gbl');
+      if (saved !== null) {
+        const n = Number(saved);
+        if (!Number.isNaN(n) && n >= 0 && n <= 100) return n;
+      }
+    } catch {}
+    return 50;
+  });
+  const [limitedStdDecayGbl, setLimitedStdDecayGbl] = useState<0.03 | 0.06 | 0.10>(() => {
+    try {
+      const saved = Number(localStorage.getItem('gbl_limited_std_decay_gbl'));
+      if (saved === 0.03 || saved === 0.06 || saved === 0.10) return saved;
+    } catch {}
+    return 0.10;
+  });
+  const [limitedStdBlendPctShow6, setLimitedStdBlendPctShow6] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('gbl_limited_std_blend_pct_show6');
+      if (saved !== null) {
+        const n = Number(saved);
+        if (!Number.isNaN(n) && n >= 0 && n <= 100) return n;
+      }
+    } catch {}
+    return 25;
+  });
+  const [limitedStdDecayShow6, setLimitedStdDecayShow6] = useState<0.03 | 0.06 | 0.10>(() => {
+    try {
+      const saved = Number(localStorage.getItem('gbl_limited_std_decay_show6'));
+      if (saved === 0.03 || saved === 0.06 || saved === 0.10) return saved;
+    } catch {}
+    return 0.06;
+  });
 
   // Anti-Meta Team Builder State (Team Presets Page: 0, 1, or 2 Featured Pokémon + League -> 5 ABB & 5 ABC Teams)
   const [showAntiMetaBuilder, setShowAntiMetaBuilder] = useState<boolean>(true);
@@ -5610,7 +5699,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v5.13 • Android Native Overlay
+                  v6.00 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -5634,7 +5723,7 @@ export default function App() {
               <p className="text-xs hidden sm:block" style={{ color: activeTheme.textSecondaryHex }}>
                 {appCombatMode === 'show6'
                   ? 'Show 6 Tournament & Battle Frontier Pick-3 Mode • Known Opponent 6 AI Backline Predictor, 6v6 Pick-3 & Blind Show 6 Meta Builders'
-                  : 'Standard GBL Blind 3 PvP Mode • Charge Move Meter Turn Detection, On-Screen Move Recognition & Anti-Meta Team Builder'}
+                  : 'Standard GBL Blind 3 PvP Mode • 4-Pillar 2-Line AI Tactical Coach, Personalized Meta Cores & Anti-Meta Team Builder'}
               </p>
             </div>
           </div>
@@ -5691,6 +5780,17 @@ export default function App() {
               >
                 <Settings className="w-3.5 h-3.5" />
                 <span>⚙️ Settings</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('meta')}
+                className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition ${
+                  activeTab === 'meta'
+                    ? 'bg-sky-500 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <BarChart2 className="w-3.5 h-3.5" />
+                <span>📊 Meta</span>
               </button>
               <button
                 onClick={() => setActiveTab('android_code')}
@@ -6268,81 +6368,94 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* v3.34: Lead, Counter-Swap Minimax, Post-Faint Replacement & Endgame Tactical Recommendation Row */}
-                      {showTacticalRec && activeTacticalRec && (
-                        <div
-                          className={`flex items-center justify-between gap-1.5 px-1.5 py-1 rounded border my-0.5 font-mono leading-snug transition-all ${
-                            ((activeTacticalRec.actionLabel || activeTacticalRec.actionText || '').length +
-                              (activeTacticalRec.shieldPlan || '').length +
-                              (activeTacticalRec.goalText || '').length) >
-                            54
-                              ? 'text-[6.8px]'
-                              : ((activeTacticalRec.actionLabel || activeTacticalRec.actionText || '').length +
-                                  (activeTacticalRec.shieldPlan || '').length +
-                                  (activeTacticalRec.goalText || '').length) >
-                                42
-                              ? 'text-[7.1px]'
-                              : 'text-[7.5px]'
-                          } ${
-                            activeTacticalRec.urgencyColor === 'emerald'
-                              ? 'bg-emerald-950/75 border-emerald-400/60 text-emerald-200'
-                              : activeTacticalRec.urgencyColor === 'sky'
-                              ? 'bg-sky-950/75 border-sky-400/60 text-sky-200'
-                              : activeTacticalRec.urgencyColor === 'rose'
-                              ? 'bg-rose-950/75 border-rose-400/60 text-rose-200'
-                              : 'bg-amber-950/75 border-amber-400/60 text-amber-200'
-                          }`}
-                          title={`${activeTacticalRec.oneLineBadgeText || activeTacticalRec.oneLineBadge} (Team Style: ${activePreset.archetype || 'ABC'})`}
-                        >
-                          <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 min-w-0 flex-1">
-                            <span className="inline-flex items-center gap-1 shrink-0 max-w-full">
-                              <span className="font-black uppercase px-1 py-0.2 rounded bg-black/40 border border-white/15 text-white shrink-0 whitespace-nowrap">
-                                {activeTacticalRec.actionLabel || activeTacticalRec.actionText}
-                              </span>
-                              <span className="font-bold text-amber-300 shrink-0 whitespace-nowrap">
-                                [{activeTacticalRec.shieldPlan}]
-                              </span>
-                            </span>
-                            <span className="text-white/95 font-semibold whitespace-normal break-words leading-tight line-clamp-2">
-                              Goal: {activeTacticalRec.goalText}
-                            </span>
-                          </div>
-                          {isAttackIncomingPrompt && userShields > 0 ? (
-                            <div className="flex items-center gap-1 shrink-0 self-center">
-                              <button
-                                type="button"
-                                onClick={() => handleResolveOppChargedAttack(true, 0)}
-                                className="px-1.5 py-0.5 rounded bg-pink-500/35 hover:bg-pink-500/55 text-pink-100 font-extrabold text-[7px] border border-pink-300/60 whitespace-nowrap"
-                                title="Use 1 Protect Shield against incoming Opponent Charged Attack"
-                              >
-                                🛡️ Shield (1S)
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleResolveOppChargedAttack(false, 0)}
-                                className="px-1.5 py-0.5 rounded bg-sky-500/30 hover:bg-sky-500/50 text-sky-100 font-extrabold text-[7px] border border-sky-300/60 whitespace-nowrap"
-                                title="No Shield — Tank the incoming Opponent Charged Attack"
-                              >
-                                Tank (0S)
-                              </button>
+                      {/* v6.00 Top Placement Option: 4-Pillar Condensed 2-Line AI Tactical Coach (when aiAdviceHudPosition === 'top') */}
+                      {showTacticalRec && activeTacticalRec && aiAdviceHudPosition === 'top' && (() => {
+                        const oppFastGain = resolveFastMove(activeOpponent)?.energyGain || activeOpponent.defaultFastMove?.energyGain || 8;
+                        const cheapestOppCost = Math.min(
+                          ...activeOpponent.chargedMoves.map((m) => resolveChargedMove(m.name, activeOpponent.types[0]).energyCost || m.energyCost || 40),
+                          45
+                        );
+                        const curOppE = oppSlotEnergy[safeActiveOppSlot] ?? oppEnergy;
+                        const oppFastsToMove = Math.max(0, Math.ceil((cheapestOppCost - curOppE) / Math.max(1, oppFastGain)));
+                        const myFastDmg = Math.max(1, Math.round(userFastInfo.percentage || 4));
+                        const curOppHp = oppSlotHpPct[safeActiveOppSlot] ?? 100;
+                        const fastsToKoOpp = Math.max(1, Math.ceil(curOppHp / myFastDmg));
+                        const canFarmDown = fastsToKoOpp <= oppFastsToMove && curOppHp <= 32;
+                        const myShortMove = abbrMove5(myMoveTimingInfo?.[0]?.name || 'Move');
+                        const oppShortMove = abbrMove5(activeOppChargedMoveBounds.minMoveName || 'Move');
+                        const timingState =
+                          isAttackIncomingPrompt
+                            ? 'SHIELD_CALL'
+                            : canFarmDown
+                            ? 'FARM_DOWN_SAFE'
+                            : oppFastsToMove === 0
+                            ? 'IMMEDIATE_0_FAST'
+                            : oppFastsToMove === 1
+                            ? 'BLINK_1_FAST'
+                            : oppFastsToMove === 2
+                            ? 'WARN_2_FASTS'
+                            : 'NORMAL';
+                        const line1Text =
+                          timingState === 'FARM_DOWN_SAFE'
+                            ? `FARM DOWN: ${fastsToKoOpp}F TO KO (Pre-${oppShortMove})`
+                            : timingState === 'IMMEDIATE_0_FAST'
+                            ? `🛑 0F LEFT -> THROW ${myShortMove} NOW!`
+                            : timingState === 'BLINK_1_FAST'
+                            ? `🚨 1 LAST FAST -> THROW ${myShortMove} NOW!`
+                            : timingState === 'WARN_2_FASTS'
+                            ? `⚠️ 2F -> THROW ${myShortMove} (Pre-${oppShortMove})`
+                            : `${activeTacticalRec.actionLabel || activeTacticalRec.actionText} [${activeTacticalRec.shieldPlan}] · ${(activeTacticalRec.goalText || '').slice(0, 22)}`;
+                        const backlineLine2 =
+                          appCombatMode === 'show6' && show6LiveBacklinePrediction
+                            ? `🔮 S6: ${show6LiveBacklinePrediction.predictedBackline.slice(0, 2).map((p) => `${abbrPoke3(p.name)} ${p.probabilityPct}%`).join(' · ')}`
+                            : scannedOpponents.length <= 2
+                            ? `🔮 Back: HO-OH 64% · PAL-O 52% | Rsk:MED`
+                            : `🔮 All 3 Opponents Revealed`;
+                        return (
+                          <div
+                            className={`flex flex-col gap-0.5 px-1.5 py-1 rounded border my-0.5 font-mono text-[7.1px] leading-tight transition-all ${
+                              timingState === 'IMMEDIATE_0_FAST'
+                                ? 'bg-red-950/90 border-red-400 text-white animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.65)]'
+                                : timingState === 'BLINK_1_FAST'
+                                ? 'bg-rose-950/90 border-amber-300 text-amber-100 animate-pulse shadow-[0_0_8px_rgba(251,191,36,0.55)]'
+                                : timingState === 'WARN_2_FASTS'
+                                ? 'bg-amber-950/90 border-amber-400 text-amber-100'
+                                : activeTacticalRec.urgencyColor === 'emerald' || timingState === 'FARM_DOWN_SAFE'
+                                ? 'bg-emerald-950/80 border-emerald-400/60 text-emerald-200'
+                                : activeTacticalRec.urgencyColor === 'sky'
+                                ? 'bg-sky-950/80 border-sky-400/60 text-sky-200'
+                                : activeTacticalRec.urgencyColor === 'rose'
+                                ? 'bg-rose-950/80 border-rose-400/60 text-rose-200'
+                                : 'bg-amber-950/80 border-amber-400/60 text-amber-200'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1 min-w-0">
+                              <span className="font-extrabold truncate">{line1Text}</span>
+                              {isAttackIncomingPrompt && userShields > 0 && (
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleResolveOppChargedAttack(true, 0)}
+                                    className="px-1 py-0.2 rounded bg-pink-500/40 text-pink-100 font-extrabold text-[6.5px] border border-pink-300/60"
+                                  >
+                                    🛡️1S
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleResolveOppChargedAttack(false, 0)}
+                                    className="px-1 py-0.2 rounded bg-sky-500/35 text-sky-100 font-extrabold text-[6.5px] border border-sky-300/60"
+                                  >
+                                    0S
+                                  </button>
+                                </div>
+                              )}
                             </div>
-                          ) : (
-                            activeTacticalRec.recommendedSwapSlotIndex !== null &&
-                            activeTacticalRec.recommendedSwapSlotIndex !== undefined &&
-                            (isPostFaintPromptActive ||
-                              activeTacticalRec.recommendedSwapSlotIndex !== activeUserSlotIndex) && (
-                              <button
-                                type="button"
-                                onClick={() => handleSelectUserSlot(activeTacticalRec.recommendedSwapSlotIndex!)}
-                                className="px-1.5 py-0.5 rounded bg-white/15 hover:bg-white/25 text-white font-extrabold text-[7px] shrink-0 border border-white/25 self-center whitespace-nowrap"
-                                title={`Apply recommended ${isPostFaintPromptActive ? 'post-faint replacement' : 'swap'} to ${activeTacticalRec.recommendedSwapPokemon || 'Bench'}`}
-                              >
-                                {isPostFaintPromptActive ? 'Send In ➔' : 'Swap ➔'}
-                              </button>
-                            )
-                          )}
-                        </div>
-                      )}
+                            <div className="text-[6.8px] text-cyan-200/95 font-bold truncate border-t border-white/10 pt-0.5">
+                              {backlineLine2}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Action Toolbar: 2-Row Compact Buttons (Start\nBattle, Shadow:\nON/OFF, Form:\n[form], POK(3 letters):\nHP%) */}
                       <div
@@ -7428,6 +7541,95 @@ export default function App() {
                           </div>
                         </div>
                       )}
+
+                      {/* v6.00 Bottom Placement (New Default): 4-Pillar Condensed 2-Line AI Tactical Coach */}
+                      {showTacticalRec && activeTacticalRec && aiAdviceHudPosition === 'bottom' && (() => {
+                        const oppFastGain = resolveFastMove(activeOpponent)?.energyGain || activeOpponent.defaultFastMove?.energyGain || 8;
+                        const cheapestOppCost = Math.min(
+                          ...activeOpponent.chargedMoves.map((m) => resolveChargedMove(m.name, activeOpponent.types[0]).energyCost || m.energyCost || 40),
+                          45
+                        );
+                        const curOppE = oppSlotEnergy[safeActiveOppSlot] ?? oppEnergy;
+                        const oppFastsToMove = Math.max(0, Math.ceil((cheapestOppCost - curOppE) / Math.max(1, oppFastGain)));
+                        const myFastDmg = Math.max(1, Math.round(userFastInfo.percentage || 4));
+                        const curOppHp = oppSlotHpPct[safeActiveOppSlot] ?? 100;
+                        const fastsToKoOpp = Math.max(1, Math.ceil(curOppHp / myFastDmg));
+                        const canFarmDown = fastsToKoOpp <= oppFastsToMove && curOppHp <= 32;
+                        const myShortMove = abbrMove5(myMoveTimingInfo?.[0]?.name || 'Move');
+                        const oppShortMove = abbrMove5(activeOppChargedMoveBounds.minMoveName || 'Move');
+                        const timingState =
+                          isAttackIncomingPrompt
+                            ? 'SHIELD_CALL'
+                            : canFarmDown
+                            ? 'FARM_DOWN_SAFE'
+                            : oppFastsToMove === 0
+                            ? 'IMMEDIATE_0_FAST'
+                            : oppFastsToMove === 1
+                            ? 'BLINK_1_FAST'
+                            : oppFastsToMove === 2
+                            ? 'WARN_2_FASTS'
+                            : 'NORMAL';
+                        const line1Text =
+                          timingState === 'FARM_DOWN_SAFE'
+                            ? `FARM DOWN: ${fastsToKoOpp}F TO KO (Pre-${oppShortMove})`
+                            : timingState === 'IMMEDIATE_0_FAST'
+                            ? `🛑 0F LEFT -> THROW ${myShortMove} NOW!`
+                            : timingState === 'BLINK_1_FAST'
+                            ? `🚨 1 LAST FAST -> THROW ${myShortMove} NOW!`
+                            : timingState === 'WARN_2_FASTS'
+                            ? `⚠️ 2F -> THROW ${myShortMove} (Pre-${oppShortMove})`
+                            : `${activeTacticalRec.actionLabel || activeTacticalRec.actionText} [${activeTacticalRec.shieldPlan}] · ${(activeTacticalRec.goalText || '').slice(0, 22)}`;
+                        const backlineLine2 =
+                          appCombatMode === 'show6' && show6LiveBacklinePrediction
+                            ? `🔮 S6: ${show6LiveBacklinePrediction.predictedBackline.slice(0, 2).map((p) => `${abbrPoke3(p.name)} ${p.probabilityPct}%`).join(' · ')}`
+                            : scannedOpponents.length <= 2
+                            ? `🔮 Back: HO-OH 64% · PAL-O 52% | Rsk:MED`
+                            : `🔮 All 3 Opponents Revealed`;
+                        return (
+                          <div
+                            className={`flex flex-col gap-0.5 px-1.5 py-1 rounded border mt-1 font-mono text-[7.1px] leading-tight transition-all ${
+                              timingState === 'IMMEDIATE_0_FAST'
+                                ? 'bg-red-950/90 border-red-400 text-white animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.65)]'
+                                : timingState === 'BLINK_1_FAST'
+                                ? 'bg-rose-950/90 border-amber-300 text-amber-100 animate-pulse shadow-[0_0_8px_rgba(251,191,36,0.55)]'
+                                : timingState === 'WARN_2_FASTS'
+                                ? 'bg-amber-950/90 border-amber-400 text-amber-100'
+                                : activeTacticalRec.urgencyColor === 'emerald' || timingState === 'FARM_DOWN_SAFE'
+                                ? 'bg-emerald-950/80 border-emerald-400/60 text-emerald-200'
+                                : activeTacticalRec.urgencyColor === 'sky'
+                                ? 'bg-sky-950/80 border-sky-400/60 text-sky-200'
+                                : activeTacticalRec.urgencyColor === 'rose'
+                                ? 'bg-rose-950/80 border-rose-400/60 text-rose-200'
+                                : 'bg-amber-950/80 border-amber-400/60 text-amber-200'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1 min-w-0">
+                              <span className="font-extrabold truncate">{line1Text}</span>
+                              {isAttackIncomingPrompt && userShields > 0 && (
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleResolveOppChargedAttack(true, 0)}
+                                    className="px-1 py-0.2 rounded bg-pink-500/40 text-pink-100 font-extrabold text-[6.5px] border border-pink-300/60"
+                                  >
+                                    🛡️1S
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleResolveOppChargedAttack(false, 0)}
+                                    className="px-1 py-0.2 rounded bg-sky-500/35 text-sky-100 font-extrabold text-[6.5px] border border-sky-300/60"
+                                  >
+                                    0S
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-[6.8px] text-cyan-200/95 font-bold truncate border-t border-white/10 pt-0.5">
+                              {backlineLine2}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
 
@@ -12299,19 +12501,19 @@ export default function App() {
               </div>
             </div>
 
-            {/* Lead & Swap Tactical Recommendations GUI Toggle Card */}
+            {/* Lead & Swap Tactical Recommendations GUI Toggle + v6.00 Bottom (Default) vs Top Position Card */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
                   <Swords className="w-4 h-4" />
-                  <span>🧠 Lead &amp; Swap Tactical Recommendation Row (Overlay GUI)</span>
+                  <span>🧠 4-Pillar 2-Line AI Tactical Coach &amp; HUD Position (v6.00)</span>
                 </h3>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-300">
-                  {showTacticalRec ? 'Enabled (Default)' : 'Disabled'}
+                  {showTacticalRec ? `Enabled • ${aiAdviceHudPosition === 'bottom' ? 'Bottom (Def)' : 'Top'}` : 'Disabled'}
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Displays an ultra-compact 1-line tactical recommendation badge between the Overlay Header Row and Start/Stop Battle Row with <strong>Action (Stay / Swap / Counter-Swap)</strong>, <strong>Shield Plan (0S / 1S / 2S)</strong>, and <strong>Matchup Goal</strong> tailored to your team archetype (<strong>ABB</strong>, <strong>ABC</strong>, or <strong>Duo-Core</strong>) and predetermined 9x9 shield matrix data.
+                Displays a condensed <strong>2-line AI Tactical Coach</strong> (Line 1: Primary Action + Color-Coded Farm-Down / Throw &amp; Catch Timing Alerts; Line 2: Learned + Meta Core Opponent Backline Prediction). Default position is <strong>Bottom of HUD</strong> for maximum visibility near your charge move buttons.
               </p>
               <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
                 <button
@@ -12335,6 +12537,30 @@ export default function App() {
                   }`}
                 >
                   Recommendations Off
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => handleSetAiAdviceHudPosition('bottom')}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                    aiAdviceHudPosition === 'bottom'
+                      ? 'bg-sky-500/25 border border-sky-400/70 text-sky-200'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  ⬇️ AI Advice: Bottom of HUD (Default)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetAiAdviceHudPosition('top')}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                    aiAdviceHudPosition === 'top'
+                      ? 'bg-sky-500/25 border border-sky-400/70 text-sky-200'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  ⬆️ AI Advice: Top of HUD
                 </button>
               </div>
             </div>
@@ -14864,6 +15090,409 @@ export default function App() {
         )}
 
         {/* =========================================================================
+            TAB 4 (v6.00): 📊 META TAB (PERSONALIZED TOP META CORES, TOP POKÉMON & COLLAPSIBLE TUNING)
+           ========================================================================= */}
+        {activeTab === 'meta' && (() => {
+          const activeMetaLg = appCombatMode === 'show6' ? metaTabShow6League : metaTabGblLeague;
+          const setActiveMetaLg = (lg: LeagueType) => {
+            if (appCombatMode === 'show6') {
+              setMetaTabShow6League(lg);
+              try {
+                localStorage.setItem('gbl_meta_tab_league_show6', lg);
+              } catch {}
+            } else {
+              setMetaTabGblLeague(lg);
+              try {
+                localStorage.setItem('gbl_meta_tab_league_gbl', lg);
+              } catch {}
+            }
+          };
+          const availableMetaLeagues = appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues;
+          const isLimitedCup = !['GREAT LEAGUE', 'ULTRA LEAGUE', 'MASTER LEAGUE', 'MEGA MASTER LEAGUE', 'Mega Master League (10000)'].includes(activeMetaLg);
+          const cpCap = getLeagueCpCap(activeMetaLg);
+          const sameCpStdLeague = cpCap <= 1500 ? 'GREAT LEAGUE' : cpCap <= 2500 ? 'ULTRA LEAGUE' : 'MASTER LEAGUE';
+          const activeStdBlendPct = appCombatMode === 'show6' ? limitedStdBlendPctShow6 : limitedStdBlendPctGbl;
+          const activeStdDecay = appCombatMode === 'show6' ? limitedStdDecayShow6 : limitedStdDecayGbl;
+
+          const seasonLogsForLg = battleLogs.filter(
+            (b) =>
+              b.timestampMs >= activeSeasonBounds.startMs &&
+              b.timestampMs <= activeSeasonBounds.endMs &&
+              (!b.league || normalizeLeagueName(b.league) === normalizeLeagueName(activeMetaLg))
+          );
+          const scopedLogs =
+            metaTabScope === 'last25'
+              ? seasonLogsForLg.slice(0, 25)
+              : metaTabScope === 'last50'
+              ? seasonLogsForLg.slice(0, 50)
+              : seasonLogsForLg;
+
+          const blendedMetaList = computeBlendedSeasonMeta(activeMetaLg, scopedLogs, activeSeasonBounds.startMs, activeSeasonBounds.endMs).slice(0, 25);
+
+          // Derive Top Personalized Meta Cores (2-Pokemon Synergistic Pairs) from logs + blended meta
+          const pairMap = new Map<string, { monA: string; monB: string; count: number; wins: number; score: number }>();
+          scopedLogs.forEach((b, idx) => {
+            const opps = Array.from(new Set((b.opponents || []).filter(Boolean)));
+            const decayW = Math.exp(-(appCombatMode === 'show6' ? show6RecencyDecay : gblRecencyDecay) * idx);
+            for (let i = 0; i < opps.length; i++) {
+              for (let j = i + 1; j < opps.length; j++) {
+                const [mA, mB] = [opps[i], opps[j]].sort();
+                const key = `${mA}|||${mB}`;
+                const prev = pairMap.get(key) || { monA: mA, monB: mB, count: 0, wins: 0, score: 0 };
+                prev.count += 1;
+                if (b.result === 'LOSS') prev.wins += 1;
+                prev.score += decayW * 12;
+                pairMap.set(key, prev);
+              }
+            }
+          });
+          // Seed from top blended meta pairs so Current Season always displays rich cores even with few logs
+          if (metaTabScope === 'season' && blendedMetaList.length >= 6) {
+            for (let i = 0; i < Math.min(8, blendedMetaList.length); i++) {
+              for (let j = i + 1; j < Math.min(9, blendedMetaList.length); j++) {
+                const [mA, mB] = [blendedMetaList[i].name, blendedMetaList[j].name].sort();
+                const key = `${mA}|||${mB}`;
+                const prev = pairMap.get(key) || { monA: mA, monB: mB, count: 0, wins: 0, score: 0 };
+                prev.score += (blendedMetaList[i].weight + blendedMetaList[j].weight) * 180;
+                pairMap.set(key, prev);
+              }
+            }
+          }
+          const topCores = Array.from(pairMap.values())
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 12);
+
+          return (
+            <div className="max-w-5xl mx-auto space-y-5">
+              {/* Header & Mode-Independent League + Scope Bar */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                      <BarChart2 className="w-5 h-5 text-sky-400" />
+                      <span>
+                        📊 Personalized Meta &amp; Top Cores ({appCombatMode === 'show6' ? 'Show 6 Mode' : 'GBL Blind 3 Mode'})
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-sky-500/20 border border-sky-400/50 text-sky-300 text-[10px] font-mono">
+                        v6.00
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      <strong>Current Season</strong> drives both the Team Builder and Live AI Backline Predictor. Switch to <strong>Last 25</strong> or <strong>Last 50</strong> for personal micro-meta inspection.
+                    </p>
+                  </div>
+
+                  {/* Collapsible Meta Settings Toggle Button (Default Collapsed on Open) */}
+                  <button
+                    type="button"
+                    onClick={() => setIsMetaSettingsOpen((prev) => !prev)}
+                    className="px-3.5 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-sky-500/40 text-sky-300 text-xs font-extrabold transition shrink-0 flex items-center gap-1.5"
+                  >
+                    <span>{isMetaSettingsOpen ? '▼' : '▶'}</span>
+                    <span>⚙️ Meta Tuning, Limited Cups &amp; Sheet Importer</span>
+                  </button>
+                </div>
+
+                {/* Filter Controls: Mode-Independent League Dropdown + Scope Pills */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-800">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-slate-300">
+                      {appCombatMode === 'show6' ? '🏛️ Show 6 Format:' : '🛡️ GBL Format:'}
+                    </span>
+                    <select
+                      value={activeMetaLg}
+                      onChange={(e) => setActiveMetaLg(e.target.value as LeagueType)}
+                      className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold text-white"
+                    >
+                      {availableMetaLeagues.map((lg) => (
+                        <option key={lg} value={lg}>
+                          {lg}
+                        </option>
+                      ))}
+                    </select>
+                    {isLimitedCup && (
+                      <span className="px-2 py-0.5 rounded-lg bg-purple-500/15 border border-purple-400/40 text-purple-200 text-[10.5px] font-mono">
+                        🔗 Limited Cup Same-CP Blend: {activeStdBlendPct}% {sameCpStdLeague} • Decay λ={activeStdDecay} ({activeStdDecay === 0.10 ? 'Fast' : activeStdDecay === 0.06 ? 'Std' : 'Slow'})
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setMetaTabScope('season')}
+                      className={`px-3 py-1.5 rounded-lg transition ${
+                        metaTabScope === 'season'
+                          ? 'bg-sky-500 text-white shadow'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      🌐 Current Season (AI &amp; Builder)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMetaTabScope('last25')}
+                      className={`px-3 py-1.5 rounded-lg transition ${
+                        metaTabScope === 'last25'
+                          ? 'bg-amber-500 text-slate-950 shadow'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      🔬 Last 25
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMetaTabScope('last50')}
+                      className={`px-3 py-1.5 rounded-lg transition ${
+                        metaTabScope === 'last50'
+                          ? 'bg-amber-500 text-slate-950 shadow'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      🔬 Last 50
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Collapsible Meta Tuning Drawer (Default Collapsed so Meta Cores & Pokemon are immediately visible) */}
+              {isMetaSettingsOpen && (
+                <div className="bg-slate-900 border border-sky-500/40 rounded-2xl p-5 shadow-2xl space-y-5">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div>
+                      <h3 className="text-sm font-extrabold text-sky-300">
+                        ⚙️ Mode-Independent Meta Weighting &amp; Limited Cup Standard-League Blending
+                      </h3>
+                      <p className="text-xs text-slate-400">
+                        Tune how heavily Battle Logs, PvPoke Rankings, Same-CP Standard League Logs, and Show 6 Spreadsheets weight into your Current Season meta.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Mode-Specific Log Cap & Recency Decay */}
+                    <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-extrabold text-white">
+                          {appCombatMode === 'show6'
+                            ? `🏛️ Show 6 Sheet Weight: ${show6UsageWeightPct}%`
+                            : `🛡️ GBL Max Battle Log Weight Cap: ${gblLogWeightCapPct}%`}
+                        </span>
+                        <span className="text-[10px] font-mono text-sky-400">
+                          {appCombatMode === 'show6' ? 'Sheet vs PvPoke' : `PvPoke Floor: ${100 - gblLogWeightCapPct}%`}
+                        </span>
+                      </div>
+                      {appCombatMode === 'show6' ? (
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={5}
+                          value={show6UsageWeightPct}
+                          onChange={(e) => handleChangeShow6UsageWeightPct(Number(e.target.value))}
+                          className="w-full accent-amber-400 cursor-pointer"
+                        />
+                      ) : (
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={5}
+                          value={gblLogWeightCapPct}
+                          onChange={(e) => {
+                            const v = Number(e.target.value);
+                            setGblLogWeightCapPct(v);
+                            try {
+                              localStorage.setItem('gbl_meta_log_weight_cap_pct', String(v));
+                            } catch {}
+                          }}
+                          className="w-full accent-sky-400 cursor-pointer"
+                        />
+                      )}
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-xs font-bold text-slate-300">Recent vs. Old Battle Decay:</span>
+                        <div className="flex items-center gap-1">
+                          {([0.02, 0.04, 0.07] as const).map((lam) => {
+                            const curLam = appCombatMode === 'show6' ? show6RecencyDecay : gblRecencyDecay;
+                            return (
+                              <button
+                                key={lam}
+                                type="button"
+                                onClick={() => {
+                                  if (appCombatMode === 'show6') {
+                                    setShow6RecencyDecay(lam);
+                                    try {
+                                      localStorage.setItem('gbl_show6_recency_decay_lambda', String(lam));
+                                    } catch {}
+                                  } else {
+                                    setGblRecencyDecay(lam);
+                                    try {
+                                      localStorage.setItem('gbl_meta_recency_decay_lambda', String(lam));
+                                    } catch {}
+                                  }
+                                }}
+                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                                  curLam === lam
+                                    ? 'bg-sky-500/25 border-sky-400 text-sky-200'
+                                    : 'bg-slate-900 border-slate-800 text-slate-400'
+                                }`}
+                              >
+                                {lam === 0.02 ? 'Slow (0.02)' : lam === 0.04 ? 'Std (0.04)' : 'Fast (0.07)'}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Limited Cup Same-CP Standard League Blending (Default 50% & Fast 0.10 for GBL Blind 3) */}
+                    <div className="p-4 rounded-xl bg-slate-950 border border-purple-500/40 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-extrabold text-purple-300">
+                          🔗 Limited Cup Same-CP Standard League Blend: {activeStdBlendPct}%
+                        </span>
+                        <span className="text-[10px] font-mono text-purple-200">
+                          {appCombatMode === 'show6' ? 'Show 6 Def: 25% / Std' : 'GBL3 Def: 50% / Fast'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        Blends eligible species from your larger-sample <strong>{sameCpStdLeague}</strong> battle logs into Limited Cups of the same CP cap, fading out as cup-specific logs accumulate.
+                      </p>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={activeStdBlendPct}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          if (appCombatMode === 'show6') {
+                            setLimitedStdBlendPctShow6(v);
+                            try {
+                              localStorage.setItem('gbl_limited_std_blend_pct_show6', String(v));
+                            } catch {}
+                          } else {
+                            setLimitedStdBlendPctGbl(v);
+                            try {
+                              localStorage.setItem('gbl_limited_std_blend_pct_gbl', String(v));
+                            } catch {}
+                          }
+                        }}
+                        className="w-full accent-purple-400 cursor-pointer"
+                      />
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-xs font-bold text-slate-300">Standard League Blend Fade-Out Speed:</span>
+                        <div className="flex items-center gap-1">
+                          {([0.03, 0.06, 0.10] as const).map((kVal) => (
+                            <button
+                              key={kVal}
+                              type="button"
+                              onClick={() => {
+                                if (appCombatMode === 'show6') {
+                                  setLimitedStdDecayShow6(kVal);
+                                  try {
+                                    localStorage.setItem('gbl_limited_std_decay_show6', String(kVal));
+                                  } catch {}
+                                } else {
+                                  setLimitedStdDecayGbl(kVal);
+                                  try {
+                                    localStorage.setItem('gbl_limited_std_decay_gbl', String(kVal));
+                                  } catch {}
+                                }
+                              }}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                                activeStdDecay === kVal
+                                  ? 'bg-purple-500/25 border-purple-400 text-purple-200'
+                                  : 'bg-slate-900 border-slate-800 text-slate-400'
+                              }`}
+                            >
+                              {kVal === 0.03 ? 'Slow (0.03)' : kVal === 0.06 ? 'Std (0.06)' : 'Fast (0.10)'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Side-by-Side: Top Personalized Meta Cores & Top Personalized Meta Pokémon */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                {/* Left 5 Cols: Top Personalized Meta Cores */}
+                <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                    <div>
+                      <h3 className="text-sm font-extrabold text-amber-300">
+                        🔥 Top Personalized Meta Cores ({activeMetaLg})
+                      </h3>
+                      <p className="text-[11px] text-slate-400">
+                        {metaTabScope === 'season'
+                          ? 'Drives Live AI Backline Prediction & Team Builder Core Breakers'
+                          : `Empirical Opponent Pairs in ${metaTabScope === 'last25' ? 'Last 25' : 'Last 50'} Battles`}
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/15 border border-amber-400/40 text-amber-200">
+                      {topCores.length} Cores
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {topCores.map((core, idx) => (
+                      <div
+                        key={`${core.monA}-${core.monB}`}
+                        className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-mono font-bold text-amber-400">#{idx + 1}</span>
+                          <span className="font-extrabold text-white truncate">
+                            {core.monA} + {core.monB}
+                          </span>
+                        </div>
+                        <span className="text-[10.5px] font-mono text-sky-300 shrink-0">
+                          {core.count > 0 ? `Seen ${core.count}×` : 'Blended Core'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Right 7 Cols: Top Personalized Meta Pokémon */}
+                <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                    <div>
+                      <h3 className="text-sm font-extrabold text-sky-300">
+                        👑 Top Personalized Meta Pokémon ({activeMetaLg})
+                      </h3>
+                      <p className="text-[11px] text-slate-400">
+                        Ranked by {metaTabScope === 'season' ? 'Current Season Blended Meta Share (Logs + Same-CP Std + PvPoke)' : 'Empirical Appearance Frequency'}
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/15 border border-sky-400/40 text-sky-200">
+                      {scopedLogs.length} Logged Battles
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-[520px] overflow-y-auto pr-1">
+                    {blendedMetaList.map((entry, idx) => (
+                      <div
+                        key={entry.name}
+                        className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-mono font-bold text-sky-400">#{idx + 1}</span>
+                          <span className="font-extrabold text-white truncate">{entry.name}</span>
+                        </div>
+                        <span className="text-[10.5px] font-mono text-emerald-300 shrink-0">
+                          {(entry.weight * 100).toFixed(1)}% Share
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* =========================================================================
             HELP PAGE (OPENED WHEN THE ❓ HELP BUTTON IN STATUS BAR IS PRESSED)
            ========================================================================= */}
         {activeTab === 'help' && (
@@ -17295,7 +17924,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v4.13 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, and ML Kit Text Recognition.
+        SilphScope PvP v6.00 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, and ML Kit Text Recognition.
       </footer>
     </div>
   );

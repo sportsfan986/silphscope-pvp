@@ -153,10 +153,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnNavTeams: Button
     private lateinit var btnNavSettings: Button
     private lateinit var btnNavBattleLog: Button
+    private lateinit var btnNavMeta: Button
     private lateinit var btnOverlayQuickHelp: Button
     private lateinit var pageTeams: android.view.View
     private lateinit var pageSettings: android.view.View
     private lateinit var pageBattleLog: android.view.View
+    private lateinit var pageMeta: android.view.View
     private lateinit var pageHelp: android.view.View
     private lateinit var btnReparseBattlesSettings: Button
     private lateinit var textReparseBattlesStatus: TextView
@@ -168,6 +170,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textBattleToastsDesc: TextView
     private lateinit var btnToggleTacticalRec: Button
     private lateinit var textTacticalRecDesc: TextView
+    private lateinit var btnCycleAiAdviceHudPos: Button
+    private lateinit var textAiAdviceHudPosDesc: TextView
     private lateinit var btnToggleShieldDecisionOverlay: Button
     private lateinit var textShieldDecisionOverlayDesc: TextView
     private lateinit var btnToggleHpTracking: Button
@@ -274,6 +278,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var switchShowThemeWatermark: Switch
     private var currentActivePage: String = "teams"
     private var isUpdatingThemeSpinner = false
+    private var selectedMetaTabScope: String = "SEASON"
+    private var isMetaSettingsDrawerExpanded: Boolean = false
+    private var isUpdatingMetaLeagueSpinner: Boolean = false
+    private var metaDashboardJob: kotlinx.coroutines.Job? = null
 
     private val APP_THEME_COLLECTION: List<AppThemePalette> by lazy {
         listOf(
@@ -561,10 +569,10 @@ class MainActivity : AppCompatActivity() {
             prefs.edit()
                 .putBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
                 .putBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
-                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 510)
+                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 1600)
                 .apply()
-        } else if (prevInstalledVerCode < 510) {
-            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 510).apply()
+        } else if (prevInstalledVerCode < 1600) {
+            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 1600).apply()
         }
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         runV511LeagueRemapAndCleanup()
@@ -572,9 +580,9 @@ class MainActivity : AppCompatActivity() {
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "5.13"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "6.00"
         } catch (_: Exception) {
-            "5.13"
+            "6.00"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -710,6 +718,11 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        if (pageExtra.equals("meta", ignoreCase = true)) {
+            switchMainPage("meta")
+            return
+        }
+
         if (pageExtra.equals("help", ignoreCase = true)) {
             switchMainPage("help")
             return
@@ -798,6 +811,9 @@ class MainActivity : AppCompatActivity() {
         pageTeams.visibility = if (page == "teams") android.view.View.VISIBLE else android.view.View.GONE
         pageBattleLog.visibility = if (page == "battle_log") android.view.View.VISIBLE else android.view.View.GONE
         pageSettings.visibility = if (page == "settings") android.view.View.VISIBLE else android.view.View.GONE
+        if (::pageMeta.isInitialized) {
+            pageMeta.visibility = if (page == "meta") android.view.View.VISIBLE else android.view.View.GONE
+        }
         pageHelp.visibility = if (page == "help") android.view.View.VISIBLE else android.view.View.GONE
 
         val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
@@ -818,6 +834,11 @@ class MainActivity : AppCompatActivity() {
         btnNavSettings.backgroundTintList = if (page == "settings") activeBg else inactiveBg
         btnNavSettings.setTextColor(if (page == "settings") activeText else inactiveText)
 
+        if (::btnNavMeta.isInitialized) {
+            btnNavMeta.backgroundTintList = if (page == "meta") activeBg else inactiveBg
+            btnNavMeta.setTextColor(if (page == "meta") activeText else inactiveText)
+        }
+
         if (::btnOverlayQuickHelp.isInitialized) {
             btnOverlayQuickHelp.backgroundTintList = if (page == "help") activeBg else helpDefaultBg
             btnOverlayQuickHelp.setTextColor(if (page == "help") activeText else theme.secondaryAccentColor)
@@ -825,6 +846,8 @@ class MainActivity : AppCompatActivity() {
 
         if (page == "battle_log") {
             renderBattleLogPage()
+        } else if (page == "meta") {
+            refreshMetaTabDashboard()
         }
     }
 
@@ -1233,6 +1256,7 @@ class MainActivity : AppCompatActivity() {
         if (::btnToggleOppChargedMoves.isInitialized) updateOppChargedMovesUi()
         if (::btnToggleBattleToasts.isInitialized) updateBattleToastsUi()
         if (::btnToggleTacticalRec.isInitialized) updateTacticalRecUi()
+        if (::btnCycleAiAdviceHudPos.isInitialized) updateAiAdviceHudPosUi()
         if (::btnToggleShieldDecisionOverlay.isInitialized) updateShieldDecisionOverlayUi()
         if (::btnToggleHpTracking.isInitialized) updateHpTrackingUi()
         if (::btnToggleEnergyTracking.isInitialized) updateEnergyTrackingUi()
@@ -1263,10 +1287,12 @@ class MainActivity : AppCompatActivity() {
         btnNavTeams = findViewById(R.id.btn_nav_teams)
         btnNavSettings = findViewById(R.id.btn_nav_settings)
         btnNavBattleLog = findViewById(R.id.btn_nav_battle_log)
+        btnNavMeta = findViewById(R.id.btn_nav_meta)
         btnOverlayQuickHelp = findViewById(R.id.btn_overlay_quick_help)
         pageTeams = findViewById(R.id.page_teams)
         pageSettings = findViewById(R.id.page_settings)
         pageBattleLog = findViewById(R.id.page_battle_log)
+        pageMeta = findViewById(R.id.page_meta)
         pageHelp = findViewById(R.id.page_help)
         btnReparseBattlesSettings = findViewById(R.id.btn_reparse_battles_settings)
         textReparseBattlesStatus = findViewById(R.id.text_reparse_battles_status)
@@ -1278,6 +1304,8 @@ class MainActivity : AppCompatActivity() {
         textBattleToastsDesc = findViewById(R.id.text_battle_toasts_desc)
         btnToggleTacticalRec = findViewById(R.id.btn_toggle_tactical_rec)
         textTacticalRecDesc = findViewById(R.id.text_tactical_rec_desc)
+        btnCycleAiAdviceHudPos = findViewById(R.id.btn_cycle_ai_advice_hud_pos)
+        textAiAdviceHudPosDesc = findViewById(R.id.text_ai_advice_hud_pos_desc)
         btnToggleShieldDecisionOverlay = findViewById(R.id.btn_toggle_shield_decision_overlay)
         textShieldDecisionOverlayDesc = findViewById(R.id.text_shield_decision_overlay_desc)
         btnToggleHpTracking = findViewById(R.id.btn_toggle_hp_tracking)
@@ -1423,6 +1451,7 @@ class MainActivity : AppCompatActivity() {
         btnNavTeams.setOnClickListener { switchMainPage("teams") }
         btnNavBattleLog.setOnClickListener { switchMainPage("battle_log") }
         btnNavSettings.setOnClickListener { switchMainPage("settings") }
+        btnNavMeta.setOnClickListener { switchMainPage("meta") }
 
         btnOverlayQuickHelp.setOnClickListener {
             switchMainPage("help")
@@ -1435,6 +1464,7 @@ class MainActivity : AppCompatActivity() {
         updateOppChargedMovesUi()
         updateBattleToastsUi()
         updateTacticalRecUi()
+        updateAiAdviceHudPosUi()
         updateShieldDecisionOverlayUi()
         updateHpTrackingUi()
         updateEnergyTrackingUi()
@@ -1675,6 +1705,7 @@ class MainActivity : AppCompatActivity() {
 
         setupAntiMetaTeamBuilderUi()
         setupShow6ModeHubUi()
+        setupMetaTabUi()
 
         btnLogManualBattle.setOnClickListener {
             showEditOrCreateBattleLogDialog(null)
@@ -1817,6 +1848,25 @@ class MainActivity : AppCompatActivity() {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
                     action = OverlayService.ACTION_UPDATE_SETTINGS
                     putExtra(OverlayService.EXTRA_SHOW_TACTICAL_RECOMMENDATIONS, nextShow)
+                }
+                startService(updateIntent)
+            }
+        }
+
+        btnCycleAiAdviceHudPos.setOnClickListener {
+            val currentPos = prefs.getString(
+                OverlayService.PREFS_KEY_AI_ADVICE_HUD_POSITION,
+                OverlayService.DEFAULT_AI_ADVICE_HUD_POSITION
+            ) ?: OverlayService.DEFAULT_AI_ADVICE_HUD_POSITION
+            val nextPos = if (currentPos.equals("top", ignoreCase = true)) "bottom" else "top"
+            prefs.edit().putString(OverlayService.PREFS_KEY_AI_ADVICE_HUD_POSITION, nextPos).apply()
+            OverlayService.syncTierThresholdsFromPrefs(prefs)
+            updateAiAdviceHudPosUi()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_AI_ADVICE_HUD_POSITION, nextPos)
                 }
                 startService(updateIntent)
             }
@@ -2172,7 +2222,7 @@ class MainActivity : AppCompatActivity() {
             }
 
         AlertDialog.Builder(this)
-            .setTitle("🤖 Enable AI & Anomaly Log Auto-Upload? (v5.13)")
+            .setTitle("🤖 Enable AI & Anomaly Log Auto-Upload? (v6.00)")
             .setMessage(msg)
             .setPositiveButton("✅ Enable Auto-Upload") { _, _ ->
                 prefs.edit()
@@ -6113,12 +6163,32 @@ class MainActivity : AppCompatActivity() {
             btnToggleTacticalRec.text = "Recs On"
             btnToggleTacticalRec.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
             btnToggleTacticalRec.setTextColor(0xFFFFFFFF.toInt())
-            textTacticalRecDesc.text = "Default: Shows 1-line Action, Shield Plan & Matchup Goal row in Overlay"
+            textTacticalRecDesc.text = "Default: Shows 2-Line 4-Pillar AI Tactical Coach & Backline Prediction in Overlay"
         } else {
             btnToggleTacticalRec.text = "Recs Off"
             btnToggleTacticalRec.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
             btnToggleTacticalRec.setTextColor(theme.primaryTextColor)
-            textTacticalRecDesc.text = "Active: Tactical Recommendation row hidden in Overlay"
+            textTacticalRecDesc.text = "Active: 2-Line AI Tactical Coach row hidden in Overlay"
+        }
+    }
+
+    private fun updateAiAdviceHudPosUi() {
+        if (!::btnCycleAiAdviceHudPos.isInitialized) return
+        val pos = prefs.getString(
+            OverlayService.PREFS_KEY_AI_ADVICE_HUD_POSITION,
+            OverlayService.DEFAULT_AI_ADVICE_HUD_POSITION
+        ) ?: OverlayService.DEFAULT_AI_ADVICE_HUD_POSITION
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        if (pos.equals("top", ignoreCase = true)) {
+            btnCycleAiAdviceHudPos.text = "Top"
+            btnCycleAiAdviceHudPos.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
+            btnCycleAiAdviceHudPos.setTextColor(0xFFFFFFFF.toInt())
+            textAiAdviceHudPosDesc.text = "Active: Top (Classic Position — Between Header & Toolbar)"
+        } else {
+            btnCycleAiAdviceHudPos.text = "Bottom (Def)"
+            btnCycleAiAdviceHudPos.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            btnCycleAiAdviceHudPos.setTextColor(0xFFFFFFFF.toInt())
+            textAiAdviceHudPosDesc.text = "Default: Bottom (Below My Attacks for Maximum Mid-Battle Visibility)"
         }
     }
 
@@ -6370,6 +6440,10 @@ class MainActivity : AppCompatActivity() {
             putExtra(OverlayService.EXTRA_ENABLE_4_CHARGED_MOVES, prefs.getBoolean(PREFS_KEY_ENABLE_4_CHARGED_MOVES, false))
             putExtra(OverlayService.EXTRA_DISABLE_BATTLE_TOASTS, prefs.getBoolean(PREFS_KEY_DISABLE_BATTLE_TOASTS, false))
             putExtra(OverlayService.EXTRA_SHOW_TACTICAL_RECOMMENDATIONS, prefs.getBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, true))
+            putExtra(
+                OverlayService.EXTRA_AI_ADVICE_HUD_POSITION,
+                prefs.getString(OverlayService.PREFS_KEY_AI_ADVICE_HUD_POSITION, OverlayService.DEFAULT_AI_ADVICE_HUD_POSITION)
+            )
             putExtra(OverlayService.EXTRA_SHOW_SHIELD_DECISION_OVERLAY, prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true))
             putExtra(OverlayService.EXTRA_ENABLE_HP_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false))
             putExtra(OverlayService.EXTRA_ENABLE_ENERGY_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false))
@@ -7296,6 +7370,10 @@ class MainActivity : AppCompatActivity() {
         refreshPresetsUi()
         setupBattleLogFilters()
         renderBattleLogPage()
+        setupMetaTabUi()
+        if (currentActivePage == "meta") {
+            refreshMetaTabDashboard()
+        }
 
         if (isOverlayRunning) {
             val updateIntent = Intent(this, OverlayService::class.java).apply {
@@ -8027,6 +8105,8 @@ class MainActivity : AppCompatActivity() {
                     btnSyncPvPokeMetas.text = "🔄 Sync Ranked Limited Metas from PvPoke GitHub"
                     updateLimitedMetasSummaryLabels()
                     setupAntiMetaTeamBuilderUi()
+                    setupMetaTabUi()
+                    if (currentActivePage == "meta") refreshMetaTabDashboard()
                     refreshPresetsUi()
                     Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
                 }
@@ -8174,10 +8254,13 @@ class MainActivity : AppCompatActivity() {
                     setupAntiMetaTeamBuilderUi()
                     setupShow6ModeHubUi()
                     setupBattleLogFilters()
+                    setupMetaTabUi()
+                    if (currentActivePage == "meta") refreshMetaTabDashboard()
                     refreshPresetsUi()
                     lifecycleScope.launch(Dispatchers.IO) {
                         val synced = OverlayService.syncPinnedLimitedMetaRankingsBlocking(prefs, filesDir)
                         withContext(Dispatchers.Main) {
+                            if (currentActivePage == "meta") refreshMetaTabDashboard()
                             Toast.makeText(
                                 this@MainActivity,
                                 "✅ Saved ${orderedSelected.size} optional metas + forced defaults ($synced rankings synced from PvPoke GitHub)!",
@@ -8242,6 +8325,9 @@ class MainActivity : AppCompatActivity() {
                 tvShow6UsageWeightLabel?.text = "${p}% Usage & Cores / ${100 - p}% PvPoke"
                 if (fromUser) {
                     prefs.edit().putInt(OverlayService.PREFS_KEY_SHOW6_USAGE_WEIGHT_PCT, p).apply()
+                    if (currentActivePage == "meta") {
+                        refreshMetaTabDashboard()
+                    }
                 }
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
@@ -8259,6 +8345,9 @@ class MainActivity : AppCompatActivity() {
                     btnSyncBfSheets.isEnabled = true
                     btnSyncBfSheets.text = "📥 Save Links & Import Battle Frontier Usage + Cores"
                     tvBfSheetsStatus?.text = msg
+                    if (currentActivePage == "meta") {
+                        refreshMetaTabDashboard()
+                    }
                     Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
                 }
             }
@@ -10956,6 +11045,9 @@ class MainActivity : AppCompatActivity() {
                         dbStatusText.text = formatDbAndLeagueStatusText()
                         btnDownloadDb.isEnabled = true
                         reparseAllCompletedBattles(silent = true)
+                        if (currentActivePage == "meta") {
+                            refreshMetaTabDashboard()
+                        }
                         Toast.makeText(this@MainActivity, "PvPoke gamemaster & all 4 league rankings synced!", Toast.LENGTH_SHORT).show()
                     }
                 }
@@ -10964,6 +11056,473 @@ class MainActivity : AppCompatActivity() {
                     dbStatusText.text = "Database Sync Failed: ${e.localizedMessage}\n${formatDbAndLeagueStatusText()}"
                     btnDownloadDb.isEnabled = true
                     Toast.makeText(this@MainActivity, "Sync error: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    /**
+     * v6.00: 4th Navigation Tab — Personalized Meta & Top Cores Dashboard (📊 Meta)
+     * - Mode-independent League Selector & Meta Blending controls (GBL Blind 3 vs Show 6 Battle Frontier)
+     * - Limited Cup Same-CP Standard League Blending (50% weight & Fast 0.10 decay default for GBL Blind 3)
+     * - Collapsible Meta Settings, Limited Cups & Sheet Importer Drawer (collapsed by default on open)
+     * - Scope Toggle: Current Season (drives AI & Team Builder) | Last 25 | Last 50 (personal inspection only)
+     */
+    private fun setupMetaTabUi() {
+        val spinnerLeague = findViewById<Spinner>(R.id.spinner_meta_tab_league) ?: return
+        val tvModeBadge = findViewById<TextView>(R.id.tv_meta_mode_badge)
+        val btnScopeSeason = findViewById<Button>(R.id.btn_meta_scope_season)
+        val btnScopeLast25 = findViewById<Button>(R.id.btn_meta_scope_last25)
+        val btnScopeLast50 = findViewById<Button>(R.id.btn_meta_scope_last50)
+        val btnToggleDrawer = findViewById<Button>(R.id.btn_toggle_meta_settings_drawer)
+        val layoutDrawer = findViewById<LinearLayout>(R.id.layout_meta_settings_drawer)
+
+        val tvTuningCardTitle = findViewById<TextView>(R.id.tv_meta_tuning_card_title)
+        val btnResetDefaults = findViewById<Button>(R.id.btn_reset_meta_tuning_defaults)
+        val tvLogWeightLabel = findViewById<TextView>(R.id.tv_meta_log_weight_label)
+        val seekLogWeight = findViewById<SeekBar>(R.id.seek_meta_log_weight)
+        val btnDecayFlat = findViewById<Button>(R.id.btn_meta_decay_flat)
+        val btnDecaySlow = findViewById<Button>(R.id.btn_meta_decay_slow)
+        val btnDecayStd = findViewById<Button>(R.id.btn_meta_decay_std)
+        val btnDecayFast = findViewById<Button>(R.id.btn_meta_decay_fast)
+        val btnDecayUltra = findViewById<Button>(R.id.btn_meta_decay_ultra)
+
+        val tvLimitedStdBlendLabel = findViewById<TextView>(R.id.tv_limited_std_blend_label)
+        val seekLimitedStdBlendPct = findViewById<SeekBar>(R.id.seek_limited_std_blend_pct)
+        val btnLimDecaySlow = findViewById<Button>(R.id.btn_lim_decay_slow)
+        val btnLimDecayStd = findViewById<Button>(R.id.btn_lim_decay_std)
+        val btnLimDecayFast = findViewById<Button>(R.id.btn_lim_decay_fast)
+
+        val isShow6 = isShow6CombatMode()
+        tvModeBadge?.text = if (isShow6) "🏛️ SHOW 6 MODE" else "🛡️ GBL BLIND 3"
+        tvModeBadge?.setTextColor(if (isShow6) 0xFFFBBF24.toInt() else 0xFF38BDF8.toInt())
+        tvTuningCardTitle?.text = if (isShow6) {
+            "⚙️ Show 6 Season Blending (Logs vs. Sheet/PvPoke & Decay)"
+        } else {
+            "⚙️ GBL Blind 3 Season Blending (Logs vs. PvPoke & Decay)"
+        }
+
+        // Keep collapsible drawer collapsed by default unless explicitly expanded by user in this session
+        layoutDrawer?.visibility = if (isMetaSettingsDrawerExpanded) android.view.View.VISIBLE else android.view.View.GONE
+        btnToggleDrawer?.text = if (isMetaSettingsDrawerExpanded) {
+            "⚙️ Meta Settings, Limited Cups & Sheet Importer ▲"
+        } else {
+            "⚙️ Meta Settings, Limited Cups & Sheet Importer ▼"
+        }
+        btnToggleDrawer?.setOnClickListener {
+            isMetaSettingsDrawerExpanded = !isMetaSettingsDrawerExpanded
+            layoutDrawer?.visibility = if (isMetaSettingsDrawerExpanded) android.view.View.VISIBLE else android.view.View.GONE
+            btnToggleDrawer.text = if (isMetaSettingsDrawerExpanded) {
+                "⚙️ Meta Settings, Limited Cups & Sheet Importer ▲"
+            } else {
+                "⚙️ Meta Settings, Limited Cups & Sheet Importer ▼"
+            }
+        }
+
+        // Populate mode-independent League Spinner
+        val enabledLeagues = if (isShow6) {
+            OverlayService.getEnabledShow6LeaguesStatic(prefs)
+        } else {
+            OverlayService.getEnabledGblLeaguesStatic(prefs)
+        }
+        val prefLeagueKey = if (isShow6) OverlayService.PREFS_KEY_META_SELECTED_LEAGUE_SHOW6 else OverlayService.PREFS_KEY_META_SELECTED_LEAGUE_GBL
+        val defaultLeague = if (isShow6) "BATTLE FRONTIER (SPECTRAL)" else "GREAT LEAGUE"
+        val savedLeague = prefs.getString(prefLeagueKey, defaultLeague) ?: defaultLeague
+
+        isUpdatingMetaLeagueSpinner = true
+        spinnerLeague.adapter = createThemedSpinnerAdapter(enabledLeagues)
+        val lgIdx = enabledLeagues.indexOfFirst { it.equals(savedLeague, ignoreCase = true) }.takeIf { it >= 0 } ?: 0
+        spinnerLeague.setSelection(lgIdx, false)
+        isUpdatingMetaLeagueSpinner = false
+
+        spinnerLeague.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                if (isUpdatingMetaLeagueSpinner) return
+                val chosenLg = enabledLeagues.getOrElse(position) { defaultLeague }
+                val key = if (isShow6CombatMode()) OverlayService.PREFS_KEY_META_SELECTED_LEAGUE_SHOW6 else OverlayService.PREFS_KEY_META_SELECTED_LEAGUE_GBL
+                prefs.edit().putString(key, chosenLg).apply()
+                OverlayService.syncTierThresholdsFromPrefs(prefs)
+                refreshMetaTabDashboard()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        fun updateScopeButtonsUi() {
+            val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+            val activeTint = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            val inactiveTint = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+            val pairs = listOf(
+                "SEASON" to btnScopeSeason,
+                "LAST_25" to btnScopeLast25,
+                "LAST_50" to btnScopeLast50
+            )
+            for ((scopeKey, btn) in pairs) {
+                val active = selectedMetaTabScope == scopeKey
+                btn?.backgroundTintList = if (active) activeTint else inactiveTint
+                btn?.setTextColor(if (active) 0xFFFFFFFF.toInt() else theme.secondaryTextColor)
+            }
+        }
+
+        btnScopeSeason?.setOnClickListener {
+            selectedMetaTabScope = "SEASON"
+            updateScopeButtonsUi()
+            refreshMetaTabDashboard()
+        }
+        btnScopeLast25?.setOnClickListener {
+            selectedMetaTabScope = "LAST_25"
+            updateScopeButtonsUi()
+            refreshMetaTabDashboard()
+        }
+        btnScopeLast50?.setOnClickListener {
+            selectedMetaTabScope = "LAST_50"
+            updateScopeButtonsUi()
+            refreshMetaTabDashboard()
+        }
+        updateScopeButtonsUi()
+
+        fun syncMetaTuningControlsFromPrefs() {
+            OverlayService.syncTierThresholdsFromPrefs(prefs)
+            val show6Now = isShow6CombatMode()
+            val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+            val activeTint = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            val activeSecTint = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
+            val inactiveTint = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+
+            // 1. Season Log Weight % (-1 = Auto, or 0..100 in steps of 5 -> progress 0..21)
+            val logWeightPct = if (show6Now) OverlayService.activeMetaLogWeightPctShow6 else OverlayService.activeMetaLogWeightPctGbl
+            val progressVal = if (logWeightPct < 0) 0 else ((logWeightPct.coerceIn(0, 100) / 5) + 1).coerceIn(1, 21)
+            seekLogWeight?.progress = progressVal
+            tvLogWeightLabel?.text = if (logWeightPct < 0) {
+                "Auto (Scales 0%→70% over 50 matches)"
+            } else {
+                "${logWeightPct}% Logs / ${100 - logWeightPct}% Baseline"
+            }
+
+            // 2. Recency Decay Factor (0.00, 0.025, 0.05, 0.08, 0.12)
+            val decayLambda = if (show6Now) OverlayService.activeMetaDecayFactorShow6 else OverlayService.activeMetaDecayFactorGbl
+            val decayButtons = listOf(
+                0.00f to btnDecayFlat,
+                0.025f to btnDecaySlow,
+                0.05f to btnDecayStd,
+                0.08f to btnDecayFast,
+                0.12f to btnDecayUltra
+            )
+            for ((targetLambda, btn) in decayButtons) {
+                val selected = kotlin.math.abs(decayLambda - targetLambda) < 0.008f
+                btn?.backgroundTintList = if (selected) activeTint else inactiveTint
+                btn?.setTextColor(if (selected) 0xFFFFFFFF.toInt() else theme.secondaryTextColor)
+            }
+
+            // 3. Limited Cup Same-CP Standard League Blend % (0..75 in steps of 5 -> progress 0..15)
+            val limStdPct = if (show6Now) OverlayService.activeLimitedStdBlendPctShow6 else OverlayService.activeLimitedStdBlendPctGbl
+            val limDecay = if (show6Now) OverlayService.activeLimitedStdDecayShow6 else OverlayService.activeLimitedStdDecayGbl
+            seekLimitedStdBlendPct?.progress = (limStdPct.coerceIn(0, 75) / 5).coerceIn(0, 15)
+            val limDecayLabel = when {
+                limDecay >= 0.085f -> "Fast"
+                limDecay <= 0.045f -> "Slow"
+                else -> "Std"
+            }
+            val defTag = if (!show6Now && limStdPct == 50 && limDecayLabel == "Fast") " (Default)" else ""
+            tvLimitedStdBlendLabel?.text = "${limStdPct}% Std League • $limDecayLabel Fade$defTag"
+
+            val limDecayButtons = listOf(
+                0.03f to btnLimDecaySlow,
+                0.06f to btnLimDecayStd,
+                0.10f to btnLimDecayFast
+            )
+            for ((targetLimDecay, btn) in limDecayButtons) {
+                val selected = kotlin.math.abs(limDecay - targetLimDecay) < 0.015f
+                btn?.backgroundTintList = if (selected) activeSecTint else inactiveTint
+                btn?.setTextColor(if (selected) 0xFFFFFFFF.toInt() else theme.secondaryTextColor)
+            }
+        }
+
+        seekLogWeight?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val pct = if (progress <= 0) -1 else ((progress - 1) * 5).coerceIn(0, 100)
+                tvLogWeightLabel?.text = if (pct < 0) {
+                    "Auto (Scales 0%→70% over 50 matches)"
+                } else {
+                    "${pct}% Logs / ${100 - pct}% Baseline"
+                }
+                if (fromUser) {
+                    val key = if (isShow6CombatMode()) OverlayService.PREFS_KEY_META_LOG_WEIGHT_PCT_SHOW6 else OverlayService.PREFS_KEY_META_LOG_WEIGHT_PCT_GBL
+                    prefs.edit().putInt(key, pct).apply()
+                    OverlayService.syncTierThresholdsFromPrefs(prefs)
+                    recalculateAllPresetsWithSeasonMetaAsync()
+                    refreshMetaTabDashboard()
+                }
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        fun saveMetaDecayLambda(lambdaVal: Float) {
+            val key = if (isShow6CombatMode()) OverlayService.PREFS_KEY_META_DECAY_FACTOR_SHOW6 else OverlayService.PREFS_KEY_META_DECAY_FACTOR_GBL
+            prefs.edit().putFloat(key, lambdaVal).apply()
+            syncMetaTuningControlsFromPrefs()
+            recalculateAllPresetsWithSeasonMetaAsync()
+            refreshMetaTabDashboard()
+        }
+
+        btnDecayFlat?.setOnClickListener { saveMetaDecayLambda(0.00f) }
+        btnDecaySlow?.setOnClickListener { saveMetaDecayLambda(0.025f) }
+        btnDecayStd?.setOnClickListener { saveMetaDecayLambda(0.05f) }
+        btnDecayFast?.setOnClickListener { saveMetaDecayLambda(0.08f) }
+        btnDecayUltra?.setOnClickListener { saveMetaDecayLambda(0.12f) }
+
+        seekLimitedStdBlendPct?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val pct = (progress.coerceIn(0, 15) * 5).coerceIn(0, 75)
+                val show6Now = isShow6CombatMode()
+                val limDecay = if (show6Now) OverlayService.activeLimitedStdDecayShow6 else OverlayService.activeLimitedStdDecayGbl
+                val limDecayLabel = when {
+                    limDecay >= 0.085f -> "Fast"
+                    limDecay <= 0.045f -> "Slow"
+                    else -> "Std"
+                }
+                val defTag = if (!show6Now && pct == 50 && limDecayLabel == "Fast") " (Default)" else ""
+                tvLimitedStdBlendLabel?.text = "${pct}% Std League • $limDecayLabel Fade$defTag"
+                if (fromUser) {
+                    val key = if (show6Now) OverlayService.PREFS_KEY_LIMITED_STD_BLEND_PCT_SHOW6 else OverlayService.PREFS_KEY_LIMITED_STD_BLEND_PCT_GBL
+                    prefs.edit().putInt(key, pct).apply()
+                    OverlayService.syncTierThresholdsFromPrefs(prefs)
+                    recalculateAllPresetsWithSeasonMetaAsync()
+                    refreshMetaTabDashboard()
+                }
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        fun saveLimitedStdDecay(decayVal: Float) {
+            val key = if (isShow6CombatMode()) OverlayService.PREFS_KEY_LIMITED_STD_DECAY_SHOW6 else OverlayService.PREFS_KEY_LIMITED_STD_DECAY_GBL
+            prefs.edit().putFloat(key, decayVal).apply()
+            syncMetaTuningControlsFromPrefs()
+            recalculateAllPresetsWithSeasonMetaAsync()
+            refreshMetaTabDashboard()
+        }
+
+        btnLimDecaySlow?.setOnClickListener { saveLimitedStdDecay(0.03f) }
+        btnLimDecayStd?.setOnClickListener { saveLimitedStdDecay(0.06f) }
+        btnLimDecayFast?.setOnClickListener { saveLimitedStdDecay(0.10f) }
+
+        btnResetDefaults?.setOnClickListener {
+            if (isShow6CombatMode()) {
+                prefs.edit()
+                    .putInt(OverlayService.PREFS_KEY_META_LOG_WEIGHT_PCT_SHOW6, OverlayService.DEFAULT_META_LOG_WEIGHT_PCT)
+                    .putFloat(OverlayService.PREFS_KEY_META_DECAY_FACTOR_SHOW6, OverlayService.DEFAULT_META_DECAY_FACTOR)
+                    .putInt(OverlayService.PREFS_KEY_LIMITED_STD_BLEND_PCT_SHOW6, OverlayService.DEFAULT_LIMITED_STD_BLEND_PCT_SHOW6)
+                    .putFloat(OverlayService.PREFS_KEY_LIMITED_STD_DECAY_SHOW6, OverlayService.DEFAULT_LIMITED_STD_DECAY_SHOW6)
+                    .apply()
+                Toast.makeText(this, "Restored Show 6 Meta Defaults (Auto Weight • Std 0.05 Decay • 25% Std Cup Blend)", Toast.LENGTH_SHORT).show()
+            } else {
+                prefs.edit()
+                    .putInt(OverlayService.PREFS_KEY_META_LOG_WEIGHT_PCT_GBL, OverlayService.DEFAULT_META_LOG_WEIGHT_PCT)
+                    .putFloat(OverlayService.PREFS_KEY_META_DECAY_FACTOR_GBL, OverlayService.DEFAULT_META_DECAY_FACTOR)
+                    .putInt(OverlayService.PREFS_KEY_LIMITED_STD_BLEND_PCT_GBL, OverlayService.DEFAULT_LIMITED_STD_BLEND_PCT_GBL)
+                    .putFloat(OverlayService.PREFS_KEY_LIMITED_STD_DECAY_GBL, OverlayService.DEFAULT_LIMITED_STD_DECAY_GBL)
+                    .apply()
+                Toast.makeText(this, "Restored GBL Blind 3 Meta Defaults (Auto Weight • Std 0.05 Decay • 50% Std Cup Blend + Fast Fade)", Toast.LENGTH_SHORT).show()
+            }
+            syncMetaTuningControlsFromPrefs()
+            recalculateAllPresetsWithSeasonMetaAsync()
+            refreshMetaTabDashboard()
+        }
+
+        syncMetaTuningControlsFromPrefs()
+    }
+
+    private fun refreshMetaTabDashboard() {
+        val spinnerLeague = findViewById<Spinner>(R.id.spinner_meta_tab_league) ?: return
+        val coresSubtitle = findViewById<TextView>(R.id.tv_meta_cores_subtitle)
+        val coresContainer = findViewById<LinearLayout>(R.id.container_meta_top_cores) ?: return
+        val pokemonSubtitle = findViewById<TextView>(R.id.tv_meta_pokemon_subtitle)
+        val pokemonContainer = findViewById<LinearLayout>(R.id.container_meta_top_pokemon) ?: return
+        val layoutLimitedSection = findViewById<LinearLayout>(R.id.layout_limited_cup_blend_section)
+
+        OverlayService.syncTierThresholdsFromPrefs(prefs)
+        val isShow6 = isShow6CombatMode()
+        val selectedLeague = spinnerLeague.selectedItem?.toString()
+            ?: (if (isShow6) OverlayService.activeMetaSelectedLeagueShow6 else OverlayService.activeMetaSelectedLeagueGbl)
+        val isLimitedCup = OverlayService.isLimitedCupFormatStatic(selectedLeague)
+        layoutLimitedSection?.visibility = if (isLimitedCup) android.view.View.VISIBLE else android.view.View.GONE
+
+        val empiricalLimit: Int? = when (selectedMetaTabScope) {
+            "LAST_25" -> 25
+            "LAST_50" -> 50
+            else -> null
+        }
+
+        val (currSeason, _) = getCurrentAndPreviousSeason()
+        val allLogs = loadBattleLogs()
+        val seasonLogs = getCurrentSeasonLogsForLeague(selectedLeague, allLogs)
+        val sameCpStdLogs = if (isLimitedCup && empiricalLimit == null) {
+            val stdLg = OverlayService.getSameCpStandardLeagueKeyStatic(selectedLeague)
+            getCurrentSeasonLogsForLeague(stdLg, allLogs)
+        } else {
+            emptyList()
+        }
+
+        val scopeBanner = when (empiricalLimit) {
+            25 -> "Last 25 Battles (Personal Inspection Only — Does Not Drive AI/Team Builder)"
+            50 -> "Last 50 Battles (Personal Inspection Only — Does Not Drive AI/Team Builder)"
+            else -> {
+                val limExtra = if (isLimitedCup && sameCpStdLogs.isNotEmpty()) {
+                    val pct = if (isShow6) OverlayService.activeLimitedStdBlendPctShow6 else OverlayService.activeLimitedStdBlendPctGbl
+                    " + ${pct}% Same-CP Std League (${sameCpStdLogs.size} logs)"
+                } else ""
+                "Current Season (${currSeason.name} • ${seasonLogs.size} cup logs$limExtra • Drives Live AI & Team Builder)"
+            }
+        }
+        coresSubtitle?.text = "$selectedLeague • $scopeBanner"
+        pokemonSubtitle?.text = "$selectedLeague • $scopeBanner"
+
+        metaDashboardJob?.cancel()
+        metaDashboardJob = lifecycleScope.launch(Dispatchers.Default) {
+            val topCores = OverlayService.computeBlendedSeasonMetaCoresStatic(
+                league = selectedLeague,
+                seasonLogs = seasonLogs,
+                isShow6Mode = isShow6,
+                sameCpStandardSeasonLogs = sameCpStdLogs,
+                empiricalOnlyLimit = empiricalLimit,
+                maxCores = 20
+            )
+            val topPokemon = OverlayService.buildTopMetaPokemonEntriesStatic(
+                league = selectedLeague,
+                seasonLogs = seasonLogs,
+                isShow6Mode = isShow6,
+                sameCpStandardSeasonLogs = sameCpStdLogs,
+                empiricalOnlyLimit = empiricalLimit,
+                maxEntries = 30
+            )
+
+            withContext(Dispatchers.Main) {
+                val density = resources.displayMetrics.density
+                val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+
+                coresContainer.removeAllViews()
+                if (topCores.isEmpty()) {
+                    val emptyTv = TextView(this@MainActivity).apply {
+                        text = if (empiricalLimit != null) {
+                            "No logged opponent backline pairs found in your $selectedLeague battle logs yet. Log battles or switch to 'Current Season' to view blended meta cores."
+                        } else {
+                            "Syncing PvPoke rankings & meta cores for $selectedLeague..."
+                        }
+                        setTextColor(0xFF94A3B8.toInt())
+                        textSize = 11f
+                        setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
+                    }
+                    coresContainer.addView(emptyTv)
+                } else {
+                    topCores.take(15).forEachIndexed { idx, core ->
+                        val row = LinearLayout(this@MainActivity).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            gravity = android.view.Gravity.CENTER_VERTICAL
+                            setBackgroundColor(if (idx % 2 == 0) 0xFF0F172A.toInt() else 0xFF162238.toInt())
+                            val padH = (8 * density).toInt()
+                            val padV = (6 * density).toInt()
+                            setPadding(padH, padV, padH, padV)
+                            layoutParams = LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT
+                            ).apply {
+                                bottomMargin = (3 * density).toInt()
+                            }
+                        }
+
+                        val sharePct = String.format(java.util.Locale.US, "%.1f%%", core.blendedShare * 100.0)
+                        val seenTag = if (core.seenCount > 0) " • Seen ${core.seenCount}x" else ""
+                        val srcBadge = when (core.sourceLabel) {
+                            "LOG+SYN" -> "📊 Log+Syn"
+                            "LOGGED" -> "📜 Logged"
+                            "BF_SHEET" -> "🏛️ Sheet"
+                            else -> "🌐 Synergy"
+                        }
+
+                        val leftTv = TextView(this@MainActivity).apply {
+                            text = "#${idx + 1}  ${core.pokemonA}  +  ${core.pokemonB}"
+                            setTextColor(0xFFF8FAFC.toInt())
+                            textSize = 11.5f
+                            setTypeface(typeface, android.graphics.Typeface.BOLD)
+                            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                        }
+                        val rightTv = TextView(this@MainActivity).apply {
+                            text = "$sharePct ($srcBadge$seenTag)"
+                            setTextColor(
+                                when {
+                                    core.seenCount >= 2 -> 0xFF34D399.toInt()
+                                    core.seenCount == 1 -> 0xFF38BDF8.toInt()
+                                    else -> theme.secondaryAccentColor
+                                }
+                            )
+                            textSize = 10.5f
+                            setTypeface(typeface, android.graphics.Typeface.BOLD)
+                        }
+                        row.addView(leftTv)
+                        row.addView(rightTv)
+                        coresContainer.addView(row)
+                    }
+                }
+
+                pokemonContainer.removeAllViews()
+                if (topPokemon.isEmpty()) {
+                    val emptyTv = TextView(this@MainActivity).apply {
+                        text = if (empiricalLimit != null) {
+                            "No opponent Pokémon recorded in your $selectedLeague battle logs yet."
+                        } else {
+                            "Syncing PvPoke rankings for $selectedLeague..."
+                        }
+                        setTextColor(0xFF94A3B8.toInt())
+                        textSize = 11f
+                        setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
+                    }
+                    pokemonContainer.addView(emptyTv)
+                } else {
+                    topPokemon.take(25).forEachIndexed { idx, entry ->
+                        val row = LinearLayout(this@MainActivity).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            gravity = android.view.Gravity.CENTER_VERTICAL
+                            setBackgroundColor(if (idx % 2 == 0) 0xFF0F172A.toInt() else 0xFF162238.toInt())
+                            val padH = (8 * density).toInt()
+                            val padV = (6 * density).toInt()
+                            setPadding(padH, padV, padH, padV)
+                            layoutParams = LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT
+                            ).apply {
+                                bottomMargin = (3 * density).toInt()
+                            }
+                        }
+
+                        val fieldPct = String.format(java.util.Locale.US, "%.1f%%", entry.fieldShare * 100.0)
+                        val leadPct = String.format(java.util.Locale.US, "%.1f%%", entry.leadShare * 100.0)
+                        val rankTag = if (entry.pvpokeRank < 900) "PvP #${entry.pvpokeRank}" else "Unranked"
+                        val seenTag = if (entry.seenCount > 0) " • Seen ${entry.seenCount}x (${entry.leadSeenCount}L)" else ""
+
+                        val leftTv = TextView(this@MainActivity).apply {
+                            text = "#${idx + 1}  ${entry.name}  ($rankTag)"
+                            setTextColor(0xFFF8FAFC.toInt())
+                            textSize = 11.5f
+                            setTypeface(typeface, android.graphics.Typeface.BOLD)
+                            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                        }
+                        val rightTv = TextView(this@MainActivity).apply {
+                            text = "Field $fieldPct • Lead $leadPct$seenTag"
+                            setTextColor(
+                                when {
+                                    entry.seenCount >= 3 -> 0xFF34D399.toInt()
+                                    entry.seenCount >= 1 -> 0xFF38BDF8.toInt()
+                                    else -> 0xFFCBD5E1.toInt()
+                                }
+                            )
+                            textSize = 10f
+                            setTypeface(typeface, android.graphics.Typeface.BOLD)
+                        }
+                        row.addView(leftTv)
+                        row.addView(rightTv)
+                        pokemonContainer.addView(row)
+                    }
                 }
             }
         }
@@ -11124,6 +11683,10 @@ class TaskerOverlayActivity : Activity() {
             putExtra(OverlayService.EXTRA_OPP_COUNT_MODE, prefs.getString("opp_count_mode", "my_fasts") ?: "my_fasts")
             putExtra(OverlayService.EXTRA_ENABLE_4_CHARGED_MOVES, prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_4_CHARGED_MOVES, false))
             putExtra(OverlayService.EXTRA_DISABLE_BATTLE_TOASTS, prefs.getBoolean(OverlayService.PREFS_KEY_DISABLE_BATTLE_TOASTS, false))
+            putExtra(
+                OverlayService.EXTRA_AI_ADVICE_HUD_POSITION,
+                prefs.getString(OverlayService.PREFS_KEY_AI_ADVICE_HUD_POSITION, OverlayService.DEFAULT_AI_ADVICE_HUD_POSITION)
+            )
             putExtra(OverlayService.EXTRA_SHOW_SHIELD_DECISION_OVERLAY, prefs.getBoolean(OverlayService.PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true))
             putExtra(
                 OverlayService.EXTRA_CHARGE_CIRCLE_PRIORITY_MODE,
@@ -11236,6 +11799,10 @@ class TaskerBroadcastReceiver : BroadcastReceiver() {
                         putExtra(OverlayService.EXTRA_OPP_COUNT_MODE, prefs.getString("opp_count_mode", "my_fasts") ?: "my_fasts")
                         putExtra(OverlayService.EXTRA_ENABLE_4_CHARGED_MOVES, prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_4_CHARGED_MOVES, false))
                         putExtra(OverlayService.EXTRA_DISABLE_BATTLE_TOASTS, prefs.getBoolean(OverlayService.PREFS_KEY_DISABLE_BATTLE_TOASTS, false))
+                        putExtra(
+                            OverlayService.EXTRA_AI_ADVICE_HUD_POSITION,
+                            prefs.getString(OverlayService.PREFS_KEY_AI_ADVICE_HUD_POSITION, OverlayService.DEFAULT_AI_ADVICE_HUD_POSITION)
+                        )
                         putExtra(OverlayService.EXTRA_SHOW_SHIELD_DECISION_OVERLAY, prefs.getBoolean(OverlayService.PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true))
                         putExtra(
                             OverlayService.EXTRA_CHARGE_CIRCLE_PRIORITY_MODE,

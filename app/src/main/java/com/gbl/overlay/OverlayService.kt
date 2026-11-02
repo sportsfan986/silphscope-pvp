@@ -129,11 +129,14 @@ class OverlayService : LifecycleService() {
         const val EXTRA_FAST_DETECT_TURN_OFFSET = "extra_fast_detect_turn_offset"
         const val EXTRA_CHARGE_CIRCLE_PRIORITY_MODE = "extra_charge_circle_priority_mode"
         const val EXTRA_ENABLE_ALT_FAST_MOVE_DETECT = "extra_enable_alt_fast_move_detect"
+        const val EXTRA_AI_ADVICE_HUD_POSITION = "extra_ai_advice_hud_position"
 
         const val PREFS_KEY_ENABLE_4_CHARGED_MOVES = "enable_4_charged_moves"
         const val PREFS_KEY_DISABLE_BATTLE_TOASTS = "disable_battle_toasts"
         const val PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS = "show_tactical_recommendations"
         const val PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY = "show_shield_decision_overlay"
+        const val PREFS_KEY_AI_ADVICE_HUD_POSITION = "ai_advice_hud_position"
+        const val DEFAULT_AI_ADVICE_HUD_POSITION = "bottom" // "bottom" (new v6.00 default) | "top"
         const val PREFS_KEY_ENABLE_HP_TRACKING = "enable_hp_tracking"
         const val PREFS_KEY_ENABLE_ENERGY_TRACKING = "enable_energy_tracking"
         const val PREFS_KEY_FAST_DETECT_TURN_OFFSET = "fast_detect_turn_offset"
@@ -149,6 +152,26 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_BATTLE_LOGS = "gbl_battle_logs_v1"
         const val PREFS_KEY_AI_TRAINING_LOGS = "gbl_ai_training_logs_v1"
         const val PREFS_KEY_AI_LOGS_SPLIT_DONE = "gbl_ai_logs_split_v350_done"
+        // v6.00: Mode-Independent Meta Tab, Season Blending & Limited Cup Standard League Blending Constants
+        const val PREFS_KEY_META_TAB_LEAGUE_GBL = "gbl_meta_tab_league_gbl_v600"
+        const val PREFS_KEY_META_TAB_LEAGUE_SHOW6 = "gbl_meta_tab_league_show6_v600"
+        const val PREFS_KEY_META_TAB_SCOPE = "gbl_meta_tab_scope_v600" // "season" | "last25" | "last50"
+        const val PREFS_KEY_GBL_META_LOG_WEIGHT_PCT = "gbl_meta_log_weight_pct_v600"
+        const val DEFAULT_GBL_META_LOG_WEIGHT_PCT = 70
+        const val PREFS_KEY_SHOW6_META_LOG_WEIGHT_PCT = "gbl_show6_meta_log_weight_pct_v600"
+        const val DEFAULT_SHOW6_META_LOG_WEIGHT_PCT = 60
+        const val PREFS_KEY_GBL_META_DECAY_FACTOR = "gbl_meta_decay_factor_v600"
+        const val DEFAULT_GBL_META_DECAY_FACTOR = 0.05f
+        const val PREFS_KEY_SHOW6_META_DECAY_FACTOR = "gbl_show6_meta_decay_factor_v600"
+        const val DEFAULT_SHOW6_META_DECAY_FACTOR = 0.05f
+        const val PREFS_KEY_LIMITED_STD_BLEND_PCT_GBL = "gbl_limited_std_blend_pct_gbl_v600"
+        const val DEFAULT_LIMITED_STD_BLEND_PCT_GBL = 50
+        const val PREFS_KEY_LIMITED_STD_BLEND_PCT_SHOW6 = "gbl_limited_std_blend_pct_show6_v600"
+        const val DEFAULT_LIMITED_STD_BLEND_PCT_SHOW6 = 25
+        const val PREFS_KEY_LIMITED_STD_DECAY_GBL = "gbl_limited_std_decay_gbl_v600"
+        const val DEFAULT_LIMITED_STD_DECAY_GBL = 0.10f // Fast (0.10) default for GBL Limited Cups
+        const val PREFS_KEY_LIMITED_STD_DECAY_SHOW6 = "gbl_limited_std_decay_show6_v600"
+        const val DEFAULT_LIMITED_STD_DECAY_SHOW6 = 0.06f // Std (0.06) default for Show 6 Limited Cups
         // v5.10: AI Training & Anomaly Telemetry Auto-Upload Constants
         const val PREFS_KEY_AI_TELEMETRY_V510_MIGRATED = "gbl_ai_telemetry_v510_migrated"
         const val PREFS_KEY_AI_TELEMETRY_ONBOARDING_SHOWN = "gbl_ai_telemetry_v510_onboarding_shown"
@@ -265,7 +288,15 @@ class OverlayService : LifecycleService() {
         @Volatile var activeMachPlayableMin: Int = DEFAULT_MACH_PLAYABLE_MIN
         @Volatile var activeMachRiskyMin: Int = DEFAULT_MACH_RISKY_MIN
 
-
+        @Volatile var activeAiAdviceHudPosition: String = DEFAULT_AI_ADVICE_HUD_POSITION
+        @Volatile var activeGblMetaLogWeightPct: Int = DEFAULT_GBL_META_LOG_WEIGHT_PCT
+        @Volatile var activeShow6MetaLogWeightPct: Int = DEFAULT_SHOW6_META_LOG_WEIGHT_PCT
+        @Volatile var activeGblMetaDecayFactor: Float = DEFAULT_GBL_META_DECAY_FACTOR
+        @Volatile var activeShow6MetaDecayFactor: Float = DEFAULT_SHOW6_META_DECAY_FACTOR
+        @Volatile var activeLimitedStdBlendPctGbl: Int = DEFAULT_LIMITED_STD_BLEND_PCT_GBL
+        @Volatile var activeLimitedStdBlendPctShow6: Int = DEFAULT_LIMITED_STD_BLEND_PCT_SHOW6
+        @Volatile var activeLimitedStdDecayGbl: Float = DEFAULT_LIMITED_STD_DECAY_GBL
+        @Volatile var activeLimitedStdDecayShow6: Float = DEFAULT_LIMITED_STD_DECAY_SHOW6
 
         fun syncTierThresholdsFromPrefs(prefs: SharedPreferences) {
             activeTierSwMin = prefs.getInt(PREFS_KEY_TIER_SW_MIN, DEFAULT_TIER_SW_MIN).coerceIn(150, 950)
@@ -283,6 +314,16 @@ class OverlayService : LifecycleService() {
             activeProactiveEnergyLeadMs = prefs.getInt(PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS, DEFAULT_PROACTIVE_ENERGY_LEAD_MS).let {
                 if (it in listOf(0, 200, 300, 400)) it else DEFAULT_PROACTIVE_ENERGY_LEAD_MS
             }
+            activeAiAdviceHudPosition = (prefs.getString(PREFS_KEY_AI_ADVICE_HUD_POSITION, DEFAULT_AI_ADVICE_HUD_POSITION) ?: DEFAULT_AI_ADVICE_HUD_POSITION)
+                .lowercase().let { if (it == "top") "top" else "bottom" }
+            activeGblMetaLogWeightPct = prefs.getInt(PREFS_KEY_GBL_META_LOG_WEIGHT_PCT, DEFAULT_GBL_META_LOG_WEIGHT_PCT).coerceIn(0, 100)
+            activeShow6MetaLogWeightPct = prefs.getInt(PREFS_KEY_SHOW6_META_LOG_WEIGHT_PCT, DEFAULT_SHOW6_META_LOG_WEIGHT_PCT).coerceIn(0, 100)
+            activeGblMetaDecayFactor = prefs.getFloat(PREFS_KEY_GBL_META_DECAY_FACTOR, DEFAULT_GBL_META_DECAY_FACTOR).coerceIn(0.0f, 0.25f)
+            activeShow6MetaDecayFactor = prefs.getFloat(PREFS_KEY_SHOW6_META_DECAY_FACTOR, DEFAULT_SHOW6_META_DECAY_FACTOR).coerceIn(0.0f, 0.25f)
+            activeLimitedStdBlendPctGbl = prefs.getInt(PREFS_KEY_LIMITED_STD_BLEND_PCT_GBL, DEFAULT_LIMITED_STD_BLEND_PCT_GBL).coerceIn(0, 100)
+            activeLimitedStdBlendPctShow6 = prefs.getInt(PREFS_KEY_LIMITED_STD_BLEND_PCT_SHOW6, DEFAULT_LIMITED_STD_BLEND_PCT_SHOW6).coerceIn(0, 100)
+            activeLimitedStdDecayGbl = prefs.getFloat(PREFS_KEY_LIMITED_STD_DECAY_GBL, DEFAULT_LIMITED_STD_DECAY_GBL).coerceIn(0.01f, 0.30f)
+            activeLimitedStdDecayShow6 = prefs.getFloat(PREFS_KEY_LIMITED_STD_DECAY_SHOW6, DEFAULT_LIMITED_STD_DECAY_SHOW6).coerceIn(0.01f, 0.30f)
             activeShow6UsageWeightPct = prefs.getInt(PREFS_KEY_SHOW6_USAGE_WEIGHT_PCT, DEFAULT_SHOW6_USAGE_WEIGHT_PCT).coerceIn(0, 100)
             loadCachedBattleFrontierUsageAndCores(prefs)
             recordDebounceSettingsChangeIfNeededStatic(prefs, Gson(), "settings_sync", triggerImmediateUpload = false)
@@ -6654,10 +6695,147 @@ class OverlayService : LifecycleService() {
         data class BlendedSeasonMetaDistribution(
             val leadWeights: Map<String, Double>,
             val fieldWeights: Map<String, Double>,
+            val backWeights: Map<String, Double> = emptyMap(),
             val seasonMatchCount: Int,
+            val sameCpStdMatchCount: Int = 0,
             val histWeightPct: Int,
-            val metaWeightPct: Int
+            val stdCupWeightPct: Int = 0,
+            val sheetWeightPct: Int = 0,
+            val metaWeightPct: Int,
+            val rawSeenCounts: Map<String, Int> = emptyMap(),
+            val pvpokeRankMap: Map<String, Int> = emptyMap()
         )
+
+        data class BlendedMetaPokemonEntry(
+            val rank: Int,
+            val name: String,
+            val blendedSharePct: Double,
+            val leadSharePct: Double,
+            val backSharePct: Double,
+            val logSeenCount: Int,
+            val pvpokeRank: Int?
+        )
+
+        data class BlendedMetaCoreEntry(
+            val rank: Int,
+            val monA: String,
+            val monB: String,
+            val blendedPairPct: Double,
+            val logPairCount: Int,
+            val synergyScore: Int,
+            val roleArchetype: String
+        )
+
+        data class BacklineCandidatePrediction(
+            val name: String,
+            val code: String,
+            val likelihoodPct: Int,
+            val hardCountersMySwap: Boolean,
+            val bestRoleVsMe: String
+        )
+
+        data class BacklinePredictionResult(
+            val candidates: List<BacklineCandidatePrediction>,
+            val swapPunishRiskPct: Int,
+            val swapPunishThreatCode: String,
+            val hudLine2Text: String
+        )
+
+        fun isLimitedCupFormatStatic(league: String): Boolean {
+            val u = league.trim().uppercase()
+            if (u == "GREAT LEAGUE" || u == "ULTRA LEAGUE" || u == "MASTER LEAGUE") return false
+            if (u == "GREAT LEAGUE (1500)" || u == "ULTRA LEAGUE (2500)" || u == "MASTER LEAGUE (10000)") return false
+            return true
+        }
+
+        fun getSameCpStandardLeagueKeyStatic(league: String): String {
+            val cpCap = getLeagueCpCapStatic(league)
+            return when {
+                cpCap <= 1500 -> "GREAT LEAGUE"
+                cpCap == 2500 -> "ULTRA LEAGUE"
+                else -> "MASTER LEAGUE"
+            }
+        }
+
+        fun loadCurrentSeasonStartMsStatic(prefs: SharedPreferences?): Long {
+            val defaultStartMs = 1772571600000L // GBL Season 26 start fallback
+            if (prefs == null) return defaultStartMs
+            val raw = prefs.getString(PREFS_KEY_GBL_SEASONS_JSON, null) ?: return defaultStartMs
+            return try {
+                val arr = JsonParser.parseString(raw).asJsonArray
+                val nowMs = System.currentTimeMillis()
+                var latestStart = defaultStartMs
+                for (el in arr) {
+                    if (!el.isJsonObject) continue
+                    val sMs = el.asJsonObject.optLong("startMs") ?: continue
+                    if (sMs in 1000000000000L..nowMs && sMs >= latestStart) {
+                        latestStart = sMs
+                    }
+                }
+                latestStart
+            } catch (_: Exception) {
+                defaultStartMs
+            }
+        }
+
+        fun loadSeasonLogsForLeagueStatic(
+            prefs: SharedPreferences?,
+            gson: Gson,
+            league: String,
+            isShow6: Boolean = false,
+            empiricalLimit: Int? = null
+        ): List<Pair<Long, List<String>>> {
+            if (prefs == null) return emptyList()
+            val prefKey = if (isShow6) PREFS_KEY_SHOW6_BATTLE_LOGS else PREFS_KEY_BATTLE_LOGS
+            val rawJson = prefs.getString(prefKey, "[]") ?: "[]"
+            val records: List<SyncBattleLogRecord> = try {
+                gson.fromJson(rawJson, object : TypeToken<List<SyncBattleLogRecord>>() {}.type) ?: emptyList()
+            } catch (_: Exception) {
+                emptyList()
+            }
+            if (records.isEmpty()) return emptyList()
+            val targetNorm = normalizeLeagueKeyStatic(league)
+            val targetRemapped = remapLegacyLeagueForModeStatic(league, isShow6)
+            val seasonStartMs = loadCurrentSeasonStartMsStatic(prefs)
+
+            val matching = records.filter { rec ->
+                val recNorm = normalizeLeagueKeyStatic(rec.league)
+                val recRemap = remapLegacyLeagueForModeStatic(rec.league, isShow6)
+                val leagueMatches = rec.league.equals(league, ignoreCase = true) ||
+                    recNorm.equals(targetNorm, ignoreCase = true) ||
+                    recRemap.equals(targetRemapped, ignoreCase = true)
+                val validOpps = rec.opponents.any { it.isNotBlank() && !it.equals("Waiting...", ignoreCase = true) }
+                val inSeason = if (empiricalLimit != null) true else rec.timestampMs >= seasonStartMs
+                leagueMatches && validOpps && inSeason
+            }.sortedByDescending { it.timestampMs }
+
+            val sliced = if (empiricalLimit != null && empiricalLimit > 0) matching.take(empiricalLimit) else matching
+            return sliced.map { it.timestampMs to it.opponents }
+        }
+
+        fun loadSameCpStandardSeasonLogsForLimitedCupStatic(
+            prefs: SharedPreferences?,
+            gson: Gson,
+            league: String,
+            isShow6: Boolean = false
+        ): List<Pair<Long, List<String>>> {
+            if (prefs == null || !isLimitedCupFormatStatic(league)) return emptyList()
+            val stdLeague = getSameCpStandardLeagueKeyStatic(league)
+            val rawStdLogs = loadSeasonLogsForLeagueStatic(prefs, gson, stdLeague, isShow6 = false, empiricalLimit = null)
+            if (rawStdLogs.isEmpty()) return emptyList()
+            val normCup = normalizeLeagueKeyStatic(league)
+            val eligiblePool = getTop100MetaCandidatesForLeagueStatic(normCup, 350).map { it.name }
+                .ifEmpty { getTopMetaPoolForLeagueStatic(league) }
+            val eligibleBaseSet = eligiblePool.map { FormResolver.extractBaseSpecies(it).lowercase() }.toSet()
+            if (eligibleBaseSet.isEmpty()) return rawStdLogs
+            return rawStdLogs.mapNotNull { (ts, opps) ->
+                val filteredOpps = opps.filter { o ->
+                    val b = FormResolver.extractBaseSpecies(o).lowercase()
+                    b.isNotEmpty() && b in eligibleBaseSet
+                }
+                if (filteredOpps.isNotEmpty()) ts to filteredOpps else null
+            }
+        }
 
         data class TeamArchetypeEvaluationResult(
             val orderedSlots: List<TeamMember>,
@@ -6718,11 +6896,19 @@ class OverlayService : LifecycleService() {
 
         fun computeBlendedSeasonMetaStatic(
             league: String,
-            seasonLogs: List<Pair<Long, List<String>>>
+            seasonLogs: List<Pair<Long, List<String>>>,
+            isShow6: Boolean = false,
+            customLogWeightPct: Int? = null,
+            customDecayFactor: Double? = null,
+            sameCpStandardLogs: List<Pair<Long, List<String>>> = emptyList(),
+            customLimitedStdBlendPct: Int? = null,
+            customLimitedStdDecay: Double? = null,
+            customSheetWeightPct: Int? = null,
+            empiricalOnlyLimit: Int? = null
         ): BlendedSeasonMetaDistribution {
             val normKey = normalizeLeagueKeyStatic(league)
             val rankedPool = TOP_30_RANKED_POOL_CACHE[normKey] ?: run {
-                val computed = getTop100MetaCandidatesForLeagueStatic(normKey, 100)
+                val computed = getTop100MetaCandidatesForLeagueStatic(normKey, 120)
                     .map { it.name }
                     .ifEmpty { getTopMetaPoolForLeagueStatic(league) }
                 if (DYNAMIC_POKEMON_DATABASE.isNotEmpty()) {
@@ -6731,67 +6917,766 @@ class OverlayService : LifecycleService() {
                 computed
             }
 
+            val pvpokeRankMap = LinkedHashMap<String, Int>()
+            rankedPool.forEachIndexed { idx, name ->
+                pvpokeRankMap.putIfAbsent(name, idx + 1)
+            }
+            val eligibleLowerMap = rankedPool.associateBy { it.lowercase() }
+            val eligibleBaseMap = rankedPool.associateBy { FormResolver.extractBaseSpecies(it).lowercase() }
+
             val rawMeta = LinkedHashMap<String, Double>()
             var rawMetaSum = 0.0
             rankedPool.forEachIndexed { idx, name ->
-                val w = kotlin.math.exp(-0.05 * idx.toDouble())
+                val w = kotlin.math.exp(-0.045 * idx.toDouble())
                 rawMeta[name] = (rawMeta[name] ?: 0.0) + w
                 rawMetaSum += w
             }
             val pMeta = rawMeta.mapValues { (_, v) -> if (rawMetaSum > 0.0) v / rawMetaSum else 0.0 }
 
-            // Sort current-season logs newest-first so k=1 is most recent and decays via exp(-0.05 * (k - 1))
-            val sortedLogs = seasonLogs
+            // Sort current-season logs newest-first
+            val sortedAllLogs = seasonLogs
                 .filter { it.second.any { opp -> opp.isNotBlank() && !opp.equals("Waiting...", ignoreCase = true) } }
                 .sortedByDescending { it.first }
+            val sortedLogs = if (empiricalOnlyLimit != null && empiricalOnlyLimit > 0) {
+                sortedAllLogs.take(empiricalOnlyLimit)
+            } else {
+                sortedAllLogs
+            }
 
             val nMatches = sortedLogs.size
-            val wHist = if (nMatches > 0) 0.70 * min(1.0, nMatches.toDouble() / 50.0) else 0.0
-            val wMeta = 1.0 - wHist
+            val lambda = (customDecayFactor ?: (if (isShow6) activeShow6MetaDecayFactor.toDouble() else activeGblMetaDecayFactor.toDouble()))
+                .coerceIn(0.0, 0.25)
 
             val rawHistLead = LinkedHashMap<String, Double>()
             var rawHistLeadSum = 0.0
+            val rawHistBack = LinkedHashMap<String, Double>()
+            var rawHistBackSum = 0.0
             val rawHistField = LinkedHashMap<String, Double>()
             var rawHistFieldSum = 0.0
+            val rawSeenCounts = LinkedHashMap<String, Int>()
 
             sortedLogs.forEachIndexed { idx, (_, opps) ->
-                val recencyWeight = kotlin.math.exp(-0.05 * idx.toDouble())
-                val leadName = opps.firstOrNull()?.trim().orEmpty()
-                if (leadName.isNotEmpty() && !leadName.equals("Waiting...", ignoreCase = true)) {
-                    rawHistLead[leadName] = (rawHistLead[leadName] ?: 0.0) + recencyWeight
+                val recencyWeight = if (empiricalOnlyLimit != null) 1.0 else kotlin.math.exp(-lambda * idx.toDouble())
+                val cleanedOpps = opps.map { it.trim() }.filter { it.isNotEmpty() && !it.equals("Waiting...", ignoreCase = true) }
+                cleanedOpps.firstOrNull()?.let { leadName ->
+                    val canonical = eligibleLowerMap[leadName.lowercase()] ?: leadName
+                    rawHistLead[canonical] = (rawHistLead[canonical] ?: 0.0) + recencyWeight
                     rawHistLeadSum += recencyWeight
                 }
-                opps.forEach { oppRaw ->
-                    val cleaned = oppRaw.trim()
-                    if (cleaned.isNotEmpty() && !cleaned.equals("Waiting...", ignoreCase = true)) {
-                        rawHistField[cleaned] = (rawHistField[cleaned] ?: 0.0) + recencyWeight
-                        rawHistFieldSum += recencyWeight
+                cleanedOpps.drop(1).forEach { backName ->
+                    val canonical = eligibleLowerMap[backName.lowercase()] ?: backName
+                    rawHistBack[canonical] = (rawHistBack[canonical] ?: 0.0) + recencyWeight
+                    rawHistBackSum += recencyWeight
+                }
+                cleanedOpps.forEach { oppRaw ->
+                    val canonical = eligibleLowerMap[oppRaw.lowercase()] ?: oppRaw
+                    rawHistField[canonical] = (rawHistField[canonical] ?: 0.0) + recencyWeight
+                    rawHistFieldSum += recencyWeight
+                    rawSeenCounts[canonical] = (rawSeenCounts[canonical] ?: 0) + 1
+                }
+            }
+
+            // Limited Cup Same-CP Standard League Blending (eligible species only, fades out as cup logs grow)
+            val isLimitedCup = isLimitedCupFormatStatic(league)
+            val sortedStdLogs = if (empiricalOnlyLimit == null && isLimitedCup && sameCpStandardLogs.isNotEmpty()) {
+                sameCpStandardLogs
+                    .filter { it.second.any { opp -> opp.isNotBlank() && !opp.equals("Waiting...", ignoreCase = true) } }
+                    .sortedByDescending { it.first }
+            } else emptyList()
+
+            val rawStdLead = LinkedHashMap<String, Double>()
+            var rawStdLeadSum = 0.0
+            val rawStdBack = LinkedHashMap<String, Double>()
+            var rawStdBackSum = 0.0
+            val rawStdField = LinkedHashMap<String, Double>()
+            var rawStdFieldSum = 0.0
+
+            sortedStdLogs.forEachIndexed { idx, (_, opps) ->
+                val recW = kotlin.math.exp(-lambda * idx.toDouble())
+                val cleaned = opps.mapNotNull { raw ->
+                    val tr = raw.trim()
+                    if (tr.isEmpty() || tr.equals("Waiting...", ignoreCase = true)) null
+                    else eligibleLowerMap[tr.lowercase()] ?: eligibleBaseMap[FormResolver.extractBaseSpecies(tr).lowercase()]
+                }
+                cleaned.firstOrNull()?.let { lName ->
+                    rawStdLead[lName] = (rawStdLead[lName] ?: 0.0) + recW
+                    rawStdLeadSum += recW
+                }
+                cleaned.drop(1).forEach { bName ->
+                    rawStdBack[bName] = (rawStdBack[bName] ?: 0.0) + recW
+                    rawStdBackSum += recW
+                }
+                cleaned.forEach { fName ->
+                    rawStdField[fName] = (rawStdField[fName] ?: 0.0) + recW
+                    rawStdFieldSum += recW
+                }
+            }
+
+            // Show 6 Battle Frontier Google Spreadsheet usage distribution
+            val rawSheetField = LinkedHashMap<String, Double>()
+            var rawSheetSum = 0.0
+            if (isShow6 && empiricalOnlyLimit == null) {
+                for (sp in rankedPool) {
+                    val uPct = getShow6UsagePctStatic(normKey, sp)
+                    if (uPct > 0.0) {
+                        rawSheetField[sp] = uPct
+                        rawSheetSum += uPct
                     }
                 }
             }
 
-            val allSpecies = (pMeta.keys + rawHistLead.keys + rawHistField.keys).distinct()
+            val maxLogW = ((customLogWeightPct ?: if (isShow6) activeShow6MetaLogWeightPct else activeGblMetaLogWeightPct).coerceIn(0, 100)) / 100.0
+            val stdBlendMaxW = ((customLimitedStdBlendPct ?: if (isShow6) activeLimitedStdBlendPctShow6 else activeLimitedStdBlendPctGbl).coerceIn(0, 100)) / 100.0
+            val stdDecayBeta = (customLimitedStdDecay ?: (if (isShow6) activeLimitedStdDecayShow6.toDouble() else activeLimitedStdDecayGbl.toDouble())).coerceIn(0.01, 0.30)
+            val sheetPrefW = ((customSheetWeightPct ?: activeShow6UsageWeightPct).coerceIn(0, 100)) / 100.0
+
+            val wHist: Double
+            val wStdCup: Double
+            val wSheet: Double
+            val wMeta: Double
+
+            if (empiricalOnlyLimit != null) {
+                wHist = if (nMatches > 0) 1.0 else 0.0
+                wStdCup = 0.0
+                wSheet = 0.0
+                wMeta = if (nMatches > 0) 0.0 else 1.0
+            } else {
+                val rawWHist = if (nMatches > 0) maxLogW * min(1.0, nMatches.toDouble() / 50.0) else 0.0
+                val remAfterHist = (1.0 - rawWHist).coerceAtLeast(0.0)
+                val rawWStd = if (isLimitedCup && rawStdFieldSum > 0.0) {
+                    min(remAfterHist * 0.85, stdBlendMaxW * kotlin.math.exp(-stdDecayBeta * nMatches.toDouble()))
+                } else 0.0
+                val remAfterStd = (remAfterHist - rawWStd).coerceAtLeast(0.0)
+                val rawWSheet = if (isShow6 && rawSheetSum > 0.0) {
+                    remAfterStd * sheetPrefW
+                } else 0.0
+                val rawWMeta = (remAfterStd - rawWSheet).coerceAtLeast(0.0)
+                val sumW = (rawWHist + rawWStd + rawWSheet + rawWMeta).takeIf { it > 0.0 } ?: 1.0
+                wHist = rawWHist / sumW
+                wStdCup = rawWStd / sumW
+                wSheet = rawWSheet / sumW
+                wMeta = rawWMeta / sumW
+            }
+
+            val allSpecies = if (empiricalOnlyLimit != null && nMatches > 0) {
+                (rawHistField.keys + rawHistLead.keys + rawHistBack.keys).distinct()
+            } else {
+                (pMeta.keys + rawHistLead.keys + rawHistField.keys + rawStdField.keys + rawSheetField.keys).distinct()
+            }
+
             val leadWeights = LinkedHashMap<String, Double>()
             val fieldWeights = LinkedHashMap<String, Double>()
+            val backWeights = LinkedHashMap<String, Double>()
 
             for (sp in allSpecies) {
                 val mProb = pMeta[sp] ?: 0.0
-                val lProb = if (rawHistLeadSum > 0.0) (rawHistLead[sp] ?: 0.0) / rawHistLeadSum else mProb
-                val fProb = if (rawHistFieldSum > 0.0) (rawHistField[sp] ?: 0.0) / rawHistFieldSum else mProb
-                leadWeights[sp] = wHist * lProb + wMeta * mProb
-                fieldWeights[sp] = wHist * fProb + wMeta * mProb
+                val sProb = if (rawSheetSum > 0.0) (rawSheetField[sp] ?: 0.0) / rawSheetSum else mProb
+                val lHistProb = if (rawHistLeadSum > 0.0) (rawHistLead[sp] ?: 0.0) / rawHistLeadSum else mProb
+                val fHistProb = if (rawHistFieldSum > 0.0) (rawHistField[sp] ?: 0.0) / rawHistFieldSum else mProb
+                val bHistProb = if (rawHistBackSum > 0.0) (rawHistBack[sp] ?: 0.0) / rawHistBackSum else fHistProb
+
+                val lStdProb = if (rawStdLeadSum > 0.0) (rawStdLead[sp] ?: 0.0) / rawStdLeadSum else mProb
+                val fStdProb = if (rawStdFieldSum > 0.0) (rawStdField[sp] ?: 0.0) / rawStdFieldSum else mProb
+                val bStdProb = if (rawStdBackSum > 0.0) (rawStdBack[sp] ?: 0.0) / rawStdBackSum else fStdProb
+
+                leadWeights[sp] = wHist * lHistProb + wStdCup * lStdProb + wSheet * sProb + wMeta * mProb
+                fieldWeights[sp] = wHist * fHistProb + wStdCup * fStdProb + wSheet * sProb + wMeta * mProb
+                backWeights[sp] = wHist * bHistProb + wStdCup * bStdProb + wSheet * sProb + wMeta * mProb
             }
 
             val lTotal = leadWeights.values.sum().takeIf { it > 0.0 } ?: 1.0
             val fTotal = fieldWeights.values.sum().takeIf { it > 0.0 } ?: 1.0
+            val bTotal = backWeights.values.sum().takeIf { it > 0.0 } ?: 1.0
 
             return BlendedSeasonMetaDistribution(
                 leadWeights = leadWeights.mapValues { it.value / lTotal },
                 fieldWeights = fieldWeights.mapValues { it.value / fTotal },
+                backWeights = backWeights.mapValues { it.value / bTotal },
                 seasonMatchCount = nMatches,
+                sameCpStdMatchCount = sortedStdLogs.size,
                 histWeightPct = (wHist * 100.0).roundToInt(),
-                metaWeightPct = (wMeta * 100.0).roundToInt()
+                stdCupWeightPct = (wStdCup * 100.0).roundToInt(),
+                sheetWeightPct = (wSheet * 100.0).roundToInt(),
+                metaWeightPct = (wMeta * 100.0).roundToInt(),
+                rawSeenCounts = rawSeenCounts,
+                pvpokeRankMap = pvpokeRankMap
             )
+        }
+
+        fun buildTopMetaPokemonEntriesStatic(
+            dist: BlendedSeasonMetaDistribution,
+            limit: Int = 35
+        ): List<BlendedMetaPokemonEntry> {
+            return dist.fieldWeights.entries
+                .filter { it.value > 0.0005 }
+                .sortedByDescending { it.value }
+                .take(limit)
+                .mapIndexed { idx, (name, fProb) ->
+                    val lProb = dist.leadWeights[name] ?: 0.0
+                    val bProb = dist.backWeights[name] ?: fProb
+                    BlendedMetaPokemonEntry(
+                        rank = idx + 1,
+                        name = name,
+                        blendedSharePct = ((fProb * 1000.0).roundToInt() / 10.0),
+                        leadSharePct = ((lProb * 1000.0).roundToInt() / 10.0),
+                        backSharePct = ((bProb * 1000.0).roundToInt() / 10.0),
+                        logSeenCount = dist.rawSeenCounts[name] ?: 0,
+                        pvpokeRank = dist.pvpokeRankMap[name]
+                    )
+                }
+        }
+
+        /**
+         * v6.00: In-App Personalized & Blended Top Meta Cores Engine.
+         * Combines:
+         * 1. Recency-weighted empirical pair co-occurrence from current-season battle logs,
+         * 2. Same-CP Standard League eligible pair co-occurrence (for Limited Cups),
+         * 3. In-app PvPoke defensive type-coverage & role synergy pairs from the Top 36 league candidates, and
+         * 4. Imported Battle Frontier Google Spreadsheet Core usage (when in Show 6 mode).
+         */
+        fun computeBlendedSeasonMetaCoresStatic(
+            league: String,
+            seasonLogs: List<Pair<Long, List<String>>>,
+            isShow6: Boolean = false,
+            customLogWeightPct: Int? = null,
+            customDecayFactor: Double? = null,
+            sameCpStandardLogs: List<Pair<Long, List<String>>> = emptyList(),
+            customLimitedStdBlendPct: Int? = null,
+            customLimitedStdDecay: Double? = null,
+            customSheetWeightPct: Int? = null,
+            empiricalOnlyLimit: Int? = null,
+            maxCores: Int = 20
+        ): List<BlendedMetaCoreEntry> {
+            val dist = computeBlendedSeasonMetaStatic(
+                league = league,
+                seasonLogs = seasonLogs,
+                isShow6 = isShow6,
+                customLogWeightPct = customLogWeightPct,
+                customDecayFactor = customDecayFactor,
+                sameCpStandardLogs = sameCpStandardLogs,
+                customLimitedStdBlendPct = customLimitedStdBlendPct,
+                customLimitedStdDecay = customLimitedStdDecay,
+                customSheetWeightPct = customSheetWeightPct,
+                empiricalOnlyLimit = empiricalOnlyLimit
+            )
+            val normKey = normalizeLeagueKeyStatic(league)
+            val lambda = (customDecayFactor ?: (if (isShow6) activeShow6MetaDecayFactor.toDouble() else activeGblMetaDecayFactor.toDouble()))
+                .coerceIn(0.0, 0.25)
+
+            fun canonicalPairKey(a: String, b: String): Pair<String, String> {
+                return if (a.compareTo(b, ignoreCase = true) <= 0) a to b else b to a
+            }
+
+            val topSpecies = dist.fieldWeights.entries.sortedByDescending { it.value }.map { it.key }.take(40)
+            val canonicalByBase = LinkedHashMap<String, String>()
+            for (sp in topSpecies) {
+                canonicalByBase.putIfAbsent(FormResolver.extractBaseSpecies(sp).lowercase(), sp)
+            }
+
+            fun resolveCanonicalSpecies(raw: String): String {
+                val tr = raw.trim()
+                val b = FormResolver.extractBaseSpecies(tr).lowercase()
+                return canonicalByBase[b] ?: tr
+            }
+
+            // 1. Empirical pair weights & raw counts from season logs
+            val sortedAll = seasonLogs
+                .filter { it.second.size >= 2 }
+                .sortedByDescending { it.first }
+            val sortedLogs = if (empiricalOnlyLimit != null && empiricalOnlyLimit > 0) sortedAll.take(empiricalOnlyLimit) else sortedAll
+
+            val histPairWeights = LinkedHashMap<Pair<String, String>, Double>()
+            val histPairCounts = LinkedHashMap<Pair<String, String>, Int>()
+            var histPairSum = 0.0
+
+            sortedLogs.forEachIndexed { idx, (_, opps) ->
+                val recW = if (empiricalOnlyLimit != null) 1.0 else kotlin.math.exp(-lambda * idx.toDouble())
+                val distinctOpps = opps.map { resolveCanonicalSpecies(it) }
+                    .filter { it.isNotBlank() && !it.equals("Waiting...", ignoreCase = true) }
+                    .distinctBy { FormResolver.extractBaseSpecies(it).lowercase() }
+                for (i in 0 until distinctOpps.size) {
+                    for (j in (i + 1) until distinctOpps.size) {
+                        val pk = canonicalPairKey(distinctOpps[i], distinctOpps[j])
+                        histPairWeights[pk] = (histPairWeights[pk] ?: 0.0) + recW
+                        histPairCounts[pk] = (histPairCounts[pk] ?: 0) + 1
+                        histPairSum += recW
+                    }
+                }
+            }
+
+            if (empiricalOnlyLimit != null && histPairCounts.isNotEmpty()) {
+                val totalMatches = max(1, sortedLogs.size)
+                return histPairWeights.entries
+                    .sortedByDescending { it.value }
+                    .take(maxCores)
+                    .mapIndexed { idx, (pair, _) ->
+                        val cnt = histPairCounts[pair] ?: 1
+                        val pct = ((cnt * 1000.0) / totalMatches.toDouble()).roundToInt() / 10.0
+                        BlendedMetaCoreEntry(
+                            rank = idx + 1,
+                            monA = pair.first,
+                            monB = pair.second,
+                            blendedPairPct = pct,
+                            logPairCount = cnt,
+                            synergyScore = 82,
+                            roleArchetype = "Logged Core"
+                        )
+                    }
+            }
+
+            // 2. Same-CP Standard League eligible pair weights for Limited Cups
+            val stdPairWeights = LinkedHashMap<Pair<String, String>, Double>()
+            var stdPairSum = 0.0
+            if (empiricalOnlyLimit == null && isLimitedCupFormatStatic(league) && sameCpStandardLogs.isNotEmpty()) {
+                sameCpStandardLogs.sortedByDescending { it.first }.forEachIndexed { idx, (_, opps) ->
+                    val recW = kotlin.math.exp(-lambda * idx.toDouble())
+                    val distinctOpps = opps.map { resolveCanonicalSpecies(it) }
+                        .filter { it.isNotBlank() && !it.equals("Waiting...", ignoreCase = true) }
+                        .distinctBy { FormResolver.extractBaseSpecies(it).lowercase() }
+                    for (i in 0 until distinctOpps.size) {
+                        for (j in (i + 1) until distinctOpps.size) {
+                            val pk = canonicalPairKey(distinctOpps[i], distinctOpps[j])
+                            stdPairWeights[pk] = (stdPairWeights[pk] ?: 0.0) + recW
+                            stdPairSum += recW
+                        }
+                    }
+                }
+            }
+
+            // 3. Show 6 Battle Frontier Spreadsheet Core weights
+            val sheetPairWeights = LinkedHashMap<Pair<String, String>, Double>()
+            var sheetPairSum = 0.0
+            if (isShow6 && empiricalOnlyLimit == null) {
+                val bfCores = BATTLE_FRONTIER_CORES_MAP[normKey] ?: BATTLE_FRONTIER_CORES_MAP["GREAT LEAGUE"].orEmpty()
+                for (c in bfCores) {
+                    val pk = canonicalPairKey(resolveCanonicalSpecies(c.monA), resolveCanonicalSpecies(c.monB))
+                    if (!FormResolver.extractBaseSpecies(pk.first).equals(FormResolver.extractBaseSpecies(pk.second), ignoreCase = true)) {
+                        sheetPairWeights[pk] = (sheetPairWeights[pk] ?: 0.0) + c.usagePct
+                        sheetPairSum += c.usagePct
+                    }
+                }
+            }
+
+            // 4. In-App Synthetic Defensive & Role Synergy Core Priors across top 26 field species
+            val synPairWeights = LinkedHashMap<Pair<String, String>, Double>()
+            val synPairSynergyScore = LinkedHashMap<Pair<String, String>, Int>()
+            var synPairSum = 0.0
+            val topPoolForCores = topSpecies.take(26)
+            val metaTypesMap = HashMap<String, List<String>>()
+            val weaksMap = HashMap<String, Set<String>>()
+            val resistsMap = HashMap<String, Set<String>>()
+            for (sp in topPoolForCores) {
+                val m = resolveRecommendedMovesForSpecies(sp, normKey)
+                val tList = m?.types ?: listOf("normal")
+                metaTypesMap[sp] = tList
+                val wks = ALL_18_TYPES.filter { atkT -> getTypeEffectivenessStatic(atkT, tList) >= 1.4 }.toSet()
+                val rss = ALL_18_TYPES.filter { atkT -> getTypeEffectivenessStatic(atkT, tList) <= 0.7 }.toSet()
+                weaksMap[sp] = wks
+                resistsMap[sp] = rss
+            }
+
+            for (i in 0 until topPoolForCores.size) {
+                for (j in (i + 1) until topPoolForCores.size) {
+                    val a = topPoolForCores[i]
+                    val b = topPoolForCores[j]
+                    if (FormResolver.extractBaseSpecies(a).equals(FormResolver.extractBaseSpecies(b), ignoreCase = true)) continue
+                    val wA = weaksMap[a] ?: emptySet()
+                    val rA = resistsMap[a] ?: emptySet()
+                    val wB = weaksMap[b] ?: emptySet()
+                    val rB = resistsMap[b] ?: emptySet()
+                    val sharedWeak = wA.intersect(wB).size
+                    if (sharedWeak >= 2) continue
+                    val aCoversB = wB.count { it in rA }
+                    val bCoversA = wA.count { it in rB }
+                    val coverageFactor = 1.0 + 0.32 * (aCoversB + bCoversA) - 0.38 * sharedWeak
+                    if (coverageFactor <= 0.65) continue
+                    val pA = dist.fieldWeights[a] ?: 0.01
+                    val pB = dist.fieldWeights[b] ?: 0.01
+                    val synW = kotlin.math.sqrt(pA * pB) * coverageFactor
+                    val pk = canonicalPairKey(a, b)
+                    synPairWeights[pk] = synW
+                    synPairSum += synW
+                    val synScore = (68 + (aCoversB + bCoversA) * 7 - sharedWeak * 9).coerceIn(50, 99)
+                    synPairSynergyScore[pk] = synScore
+                }
+            }
+
+            val wHist = dist.histWeightPct / 100.0
+            val wStd = dist.stdCupWeightPct / 100.0
+            val wSheet = dist.sheetWeightPct / 100.0
+            val wMeta = dist.metaWeightPct / 100.0
+
+            val allPairs = (histPairWeights.keys + stdPairWeights.keys + sheetPairWeights.keys + synPairWeights.keys).distinct()
+            val combined = LinkedHashMap<Pair<String, String>, Double>()
+            for (pk in allPairs) {
+                val hP = if (histPairSum > 0.0) (histPairWeights[pk] ?: 0.0) / histPairSum else 0.0
+                val stP = if (stdPairSum > 0.0) (stdPairWeights[pk] ?: 0.0) / stdPairSum else 0.0
+                val shP = if (sheetPairSum > 0.0) (sheetPairWeights[pk] ?: 0.0) / sheetPairSum else 0.0
+                val syP = if (synPairSum > 0.0) (synPairWeights[pk] ?: 0.0) / synPairSum else 0.0
+                val score = wHist * hP + wStd * stP + wSheet * shP + wMeta * syP
+                if (score > 0.0) {
+                    combined[pk] = score
+                }
+            }
+
+            val totalScore = combined.values.sum().takeIf { it > 0.0 } ?: 1.0
+            return combined.entries
+                .sortedByDescending { it.value }
+                .take(maxCores)
+                .mapIndexed { idx, (pair, rawVal) ->
+                    val normPct = ((rawVal / totalScore) * 240.0).coerceIn(0.8, 68.0)
+                    val roundedPct = (normPct * 10.0).roundToInt() / 10.0
+                    val cnt = histPairCounts[pair] ?: 0
+                    val synScore = synPairSynergyScore[pair] ?: if (cnt > 0) min(96, 78 + cnt * 3) else 76
+                    val archLabel = when {
+                        cnt >= 2 -> "Personal Core ($cntx)"
+                        isShow6 && sheetPairWeights.containsKey(pair) -> "Frontier Core"
+                        synScore >= 85 -> "Synergy Core"
+                        else -> "Meta Core"
+                    }
+                    BlendedMetaCoreEntry(
+                        rank = idx + 1,
+                        monA = pair.first,
+                        monB = pair.second,
+                        blendedPairPct = roundedPct,
+                        logPairCount = cnt,
+                        synergyScore = synScore,
+                        roleArchetype = archLabel
+                    )
+                }
+        }
+
+        /**
+         * v6.00 Pillar 1 & Pillar 2: Live Opponent Backline Predictor & Swap Hard-Counter Risk Evaluator.
+         */
+        fun predictOpponentBacklineStatic(
+            league: String,
+            revealedOpponents: List<String>,
+            myTeamSlots: List<TeamMember>,
+            myActiveSlotIdx: Int,
+            playerFaintedSlots: BooleanArray,
+            isShow6: Boolean,
+            knownShow6UnrevealedPool: List<String>,
+            seasonLogs: List<Pair<Long, List<String>>>,
+            sameCpStandardLogs: List<Pair<Long, List<String>>>
+        ): BacklinePredictionResult {
+            val cleanRevealed = revealedOpponents
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && !it.equals("Waiting...", ignoreCase = true) }
+                .distinctBy { FormResolver.extractBaseSpecies(it).lowercase() }
+
+            if (cleanRevealed.isEmpty() || cleanRevealed.size >= 3) {
+                return BacklinePredictionResult(
+                    candidates = emptyList(),
+                    swapPunishRiskPct = 0,
+                    swapPunishThreatCode = "NONE",
+                    hudLine2Text = ""
+                )
+            }
+
+            val dist = computeBlendedSeasonMetaStatic(
+                league = league,
+                seasonLogs = seasonLogs,
+                isShow6 = isShow6,
+                sameCpStandardLogs = sameCpStandardLogs
+            )
+            val cores = computeBlendedSeasonMetaCoresStatic(
+                league = league,
+                seasonLogs = seasonLogs,
+                isShow6 = isShow6,
+                sameCpStandardLogs = sameCpStandardLogs,
+                maxCores = 30
+            )
+
+            val revealedBases = cleanRevealed.map { FormResolver.extractBaseSpecies(it).lowercase() }.toSet()
+            val candidatePool = if (isShow6 && knownShow6UnrevealedPool.isNotEmpty()) {
+                knownShow6UnrevealedPool.filter { FormResolver.extractBaseSpecies(it).lowercase() !in revealedBases }
+            } else {
+                dist.backWeights.entries
+                    .sortedByDescending { it.value }
+                    .map { it.key }
+                    .filter { FormResolver.extractBaseSpecies(it).lowercase() !in revealedBases }
+                    .take(24)
+            }
+
+            if (candidatePool.isEmpty()) {
+                return BacklinePredictionResult(
+                    candidates = emptyList(),
+                    swapPunishRiskPct = 0,
+                    swapPunishThreatCode = "NONE",
+                    hudLine2Text = ""
+                )
+            }
+
+            val normLeague = normalizeLeagueKeyStatic(league)
+            // Compute weakness types of revealed opponents so we can boost backline candidates that cover them
+            val revealedWeaknesses = HashSet<String>()
+            for (rev in cleanRevealed) {
+                val rMeta = resolveRecommendedMovesForSpecies(rev, normLeague)
+                val rTypes = rMeta?.types ?: listOf("normal")
+                for (t in ALL_18_TYPES) {
+                    if (getTypeEffectivenessStatic(t, rTypes) >= 1.4) {
+                        revealedWeaknesses.add(t)
+                    }
+                }
+            }
+
+            // Identify user's primary bench swap slot
+            val aliveBenchIdx = (0..2).filter { !playerFaintedSlots.getOrElse(it) { false } && it != myActiveSlotIdx }
+            val primarySwapSlot = aliveBenchIdx.firstOrNull()?.let { myTeamSlots.getOrNull(it) } ?: myTeamSlots.getOrNull(1)
+
+            val rawScores = LinkedHashMap<String, Double>()
+            val hardCountersSwapMap = HashMap<String, Boolean>()
+
+            for (cand in candidatePool) {
+                val candBase = FormResolver.extractBaseSpecies(cand).lowercase()
+                var corePartnerBoost = 0.0
+                for (rev in cleanRevealed) {
+                    val revBase = FormResolver.extractBaseSpecies(rev).lowercase()
+                    val matchedCore = cores.firstOrNull { c ->
+                        val aB = FormResolver.extractBaseSpecies(c.monA).lowercase()
+                        val bB = FormResolver.extractBaseSpecies(c.monB).lowercase()
+                        (aB == candBase && bB == revBase) || (aB == revBase && bB == candBase)
+                    }
+                    if (matchedCore != null) {
+                        corePartnerBoost += matchedCore.blendedPairPct * 0.035 + matchedCore.logPairCount * 0.18
+                    }
+                }
+
+                val candMeta = resolveRecommendedMovesForSpecies(cand, normLeague)
+                val candTypes = candMeta?.types ?: listOf("normal")
+                val coveredCount = revealedWeaknesses.count { wk -> getTypeEffectivenessStatic(wk, candTypes) <= 0.7 }
+                val coverageBoost = 1.0 + coveredCount * 0.22
+                val fieldPrior = (dist.backWeights[cand] ?: dist.fieldWeights[cand] ?: 0.02).coerceAtLeast(0.008)
+
+                val score = (0.55 * corePartnerBoost + 0.45 * (fieldPrior * 12.0)) * coverageBoost
+                rawScores[cand] = score.coerceAtLeast(0.01)
+
+                if (primarySwapSlot != null) {
+                    val swapBrVsCand = getOverlayRealtimeMatchupRatingStatic(
+                        myName = primarySwapSlot.name,
+                        oppName = cand,
+                        userShields = 1,
+                        oppShields = 1,
+                        league = normLeague,
+                        myFastMove = primarySwapSlot.fastMove,
+                        myCharged1 = primarySwapSlot.chargedMove1,
+                        myCharged2 = primarySwapSlot.chargedMove2,
+                        myCp = primarySwapSlot.cp,
+                        myIvs = primarySwapSlot.ivs
+                    )
+                    hardCountersSwapMap[cand] = swapBrVsCand <= 375
+                } else {
+                    hardCountersSwapMap[cand] = false
+                }
+            }
+
+            val totalRaw = rawScores.values.sum().takeIf { it > 0.0 } ?: 1.0
+            val unrevealedSlotsCount = (3 - cleanRevealed.size).coerceIn(1, 2)
+            val sortedCands = rawScores.entries.sortedByDescending { it.value }
+
+            var swapPunishProbSum = 0.0
+            var topPunishThreatCode = ""
+            for ((cand, sc) in sortedCands.take(6)) {
+                val p = sc / totalRaw
+                if (hardCountersSwapMap[cand] == true) {
+                    swapPunishProbSum += p
+                    if (topPunishThreatCode.isEmpty()) {
+                        topPunishThreatCode = abbrPokeCompactStatic(cand)
+                    }
+                }
+            }
+            val swapPunishRiskPct = (swapPunishProbSum * 100.0 * (if (unrevealedSlotsCount == 2) 1.35 else 1.0))
+                .roundToInt()
+                .coerceIn(5, 95)
+
+            val topPredictions = sortedCands.take(3).mapIndexed { i, (cand, sc) ->
+                val rawShare = (sc / totalRaw)
+                val scaledPct = (rawShare * (if (unrevealedSlotsCount == 2) 155.0 else 115.0))
+                    .roundToInt()
+                    .coerceIn(12, 89)
+                BacklineCandidatePrediction(
+                    name = cand,
+                    code = abbrPokeCompactStatic(cand),
+                    likelihoodPct = scaledPct,
+                    hardCountersMySwap = hardCountersSwapMap[cand] == true,
+                    bestRoleVsMe = if (i == 0) "Core" else "Cover"
+                )
+            }
+
+            val top2Str = topPredictions.take(2).joinToString(" · ") { "${it.code} ${it.likelihoodPct}%" }
+            val riskTag = when {
+                swapPunishRiskPct >= 55 -> "Rsk:HI"
+                swapPunishRiskPct >= 35 -> "Rsk:MD"
+                else -> "Rsk:LO"
+            }
+            val prefix = if (cleanRevealed.size == 1) "🔮 Back:" else "🔮 3rd:"
+            val hudLine2 = "$prefix $top2Str | $riskTag"
+
+            return BacklinePredictionResult(
+                candidates = topPredictions,
+                swapPunishRiskPct = swapPunishRiskPct,
+                swapPunishThreatCode = topPunishThreatCode.ifEmpty { topPredictions.firstOrNull()?.code ?: "BACK" },
+                hudLine2Text = hudLine2
+            )
+        }
+
+        fun abbrPokeCompactStatic(name: String, isShadow: Boolean = false): String {
+            if (name.isBlank() || name.equals("Waiting...", ignoreCase = true)) return "OPP"
+            val sh = isShadow || name.startsWith("Shadow ", ignoreCase = true) || name.contains("(Shadow)", ignoreCase = true)
+            val clean = name
+                .replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("\\s*\\(Shadow\\)", RegexOption.IGNORE_CASE), "")
+                .trim()
+            val lower = clean.lowercase()
+            val mapped = when {
+                lower.contains("palkia") && lower.contains("origin") -> "PAL-O"
+                lower.contains("dialga") && lower.contains("origin") -> "DIA-O"
+                lower.contains("giratina") && lower.contains("origin") -> "GIR-O"
+                lower.contains("giratina") && lower.contains("altered") -> "GIR-A"
+                lower.contains("zacian") && lower.contains("crowned") -> "ZAC-C"
+                lower.contains("zamazenta") && lower.contains("crowned") -> "ZAM-C"
+                lower.contains("necrozma") && lower.contains("dusk") -> "NDM"
+                lower.contains("necrozma") && lower.contains("dawn") -> "NDW"
+                lower.contains("kyurem") && lower.contains("white") -> "KYU-W"
+                lower.contains("kyurem") && lower.contains("black") -> "KYU-B"
+                lower.contains("landorus") && lower.contains("therian") -> "LND-T"
+                lower.contains("enamorus") && lower.contains("therian") -> "ENM-T"
+                lower.contains("keldeo") -> "KELD"
+                lower.contains("ho-oh") || lower == "ho oh" -> "HO-OH"
+                lower.contains("zygarde") -> "ZYG"
+                lower.contains("xerneas") -> "XERN"
+                lower.contains("yveltal") -> "YVEL"
+                lower.contains("solgaleo") -> "SOLG"
+                lower.contains("lunala") -> "LUNA"
+                lower.contains("mewtwo") -> "M2"
+                lower.contains("kyogre") -> "KYOG"
+                lower.contains("groudon") -> "GROU"
+                lower.contains("rhyperior") -> "RHYP"
+                lower.contains("florges") -> "FLRG"
+                lower.contains("primarina") -> "PRIM"
+                lower.contains("feraligatr") -> "FERAL"
+                lower.contains("clodsire") -> "CLOD"
+                lower.contains("mandibuzz") -> "MANDI"
+                lower.contains("annihilape") -> "APE"
+                lower.contains("azumarill") -> "AZU"
+                lower.contains("bastiodon") -> "BASTI"
+                lower.contains("wigglytuff") -> "WIGG"
+                lower.contains("talonflame") -> "TALON"
+                lower.contains("weezing") && lower.contains("galar") -> "GWEEZ"
+                lower.contains("corsola") && lower.contains("galar") -> "GCORS"
+                lower.contains("moltres") && lower.contains("galar") -> "GMOLT"
+                lower.contains("stunfisk") && lower.contains("galar") -> "GFISK"
+                lower.contains("ninetales") && lower.contains("alola") -> "A9T"
+                lower.contains("sandslash") && lower.contains("alola") -> "ASAND"
+                lower.contains("muk") && lower.contains("alola") -> "AMUK"
+                lower.contains("marowak") && lower.contains("alola") -> "AWAK"
+                lower.contains("deoxys") && lower.contains("defense") -> "DD"
+                lower.contains("urshifu") && lower.contains("single") -> "URS-S"
+                lower.contains("urshifu") && lower.contains("rapid") -> "URS-R"
+                else -> {
+                    val base = clean
+                        .replace(Regex("^(Kanto|Alolan|Galarian|Hisuian|Paldean|Mega|Primal)\\s+", RegexOption.IGNORE_CASE), "")
+                        .split(Regex("[\\s(]+"))
+                        .firstOrNull()
+                        ?.uppercase() ?: "MON"
+                    base.take(5)
+                }
+            }
+            return if (sh && !mapped.startsWith("S-")) {
+                "S${mapped.replace("-", "").take(4)}"
+            } else {
+                mapped.take(5)
+            }
+        }
+
+        fun abbrMoveCompactStatic(moveName: String): String {
+            if (moveName.isBlank()) return "Move"
+            val lower = moveName.trim().lowercase()
+            return when (lower) {
+                "spacial rend" -> "SpRend"
+                "aqua tail" -> "AqTail"
+                "roar of time" -> "RoTime"
+                "iron head" -> "IrHead"
+                "draco meteor" -> "DrMet"
+                "close combat" -> "ClsCmb"
+                "wild charge" -> "WldChg"
+                "play rough" -> "PlyRgh"
+                "behemoth blade" -> "BhBlde"
+                "behemoth bash" -> "BhBash"
+                "sacred fire" -> "SacFir"
+                "brave bird" -> "BrvBrd"
+                "sunsteel strike" -> "SunStk"
+                "moongeist beam" -> "MnBeam"
+                "dark pulse" -> "DrkPls"
+                "outrage" -> "Outrg"
+                "fusion bolt" -> "FsBolt"
+                "fusion flare" -> "FsFlar"
+                "glaciate" -> "Glciat"
+                "freeze shock" -> "FrzShk"
+                "ice burn" -> "IceBrn"
+                "secret sword" -> "SecSw"
+                "sacred sword" -> "SacSw"
+                "sandsear storm" -> "SndStm"
+                "stone edge" -> "StnEdg"
+                "superpower" -> "SprPwr"
+                "rock slide" -> "RckSld"
+                "mud bomb" -> "MdBomb"
+                "rock wrecker" -> "RckWrk"
+                "breaking swipe" -> "BrkSwp"
+                "surf" -> "Surf"
+                "crunch" -> "Crunch"
+                "earthquake" -> "Eq"
+                "moonblast" -> "Mnblst"
+                "geomancy" -> "Geomn"
+                "oblivion wing" -> "ObWing"
+                "focus blast" -> "FocBls"
+                "psystrike" -> "Psystk"
+                "shadow ball" -> "ShBall"
+                "origin pulse" -> "OrPuls"
+                "precipice blades" -> "PrBlde"
+                "fire punch" -> "FirPnc"
+                "ice punch" -> "IcePnc"
+                "thunder punch" -> "ThdPnc"
+                "dynamic punch" -> "DynPnc"
+                "hydro cannon" -> "HydCan"
+                "ice beam" -> "IceBm"
+                "foul play" -> "FlPlay"
+                "aerial ace" -> "AerAce"
+                "night slash" -> "NgtSlh"
+                "icy wind" -> "IcyWnd"
+                "swift" -> "Swift"
+                "body slam" -> "BdySlm"
+                "disarming voice" -> "DisVc"
+                "psyshock" -> "Psysck"
+                "meteor mash" -> "MetMsh"
+                "nature's madness" -> "NatMad"
+                "dazzling gleam" -> "DazGlm"
+                "sludge wave" -> "SlgWav"
+                "sludge bomb" -> "SlgBmb"
+                "overheat" -> "OvrHt"
+                "blast burn" -> "BlsBrn"
+                "frenzy plant" -> "FrzPlt"
+                "leaf blade" -> "LfBlde"
+                "drill run" -> "DrlRun"
+                "high horsepower" -> "HiHors"
+                "scald" -> "Scald"
+                "liquidation" -> "Liquid"
+                "rage fist" -> "RgFist"
+                "aura wheel" -> "AuWhl"
+                "brutal swing" -> "BrtSwg"
+                "trailblaze" -> "Trlblz"
+                "flame charge" -> "FlmChg"
+                else -> {
+                    val clean = moveName.replace(Regex("[()\\-]"), " ").trim()
+                    val words = clean.split(Regex("\\s+")).filter { it.isNotEmpty() }
+                    if (words.size >= 2) {
+                        (words[0].take(3) + words[1].take(3)).take(6)
+                    } else {
+                        clean.take(6)
+                    }
+                }
+            }
         }
 
         fun evaluateOrAutoOrderTeamStatic(
@@ -10905,6 +11790,7 @@ class OverlayService : LifecycleService() {
     private var disableBattleToasts = false
     private var showTacticalRecommendations = true
     private var showShieldDecisionOverlay = true
+    private var aiAdviceHudPosition = DEFAULT_AI_ADVICE_HUD_POSITION
     private var overlayScalePct = 78
     private var overlayTransparencyPct = 72
     private var appThemeId = "dialga_shiny_midnight"
@@ -11825,6 +12711,8 @@ class OverlayService : LifecycleService() {
         disableBattleToasts = prefs.getBoolean(PREFS_KEY_DISABLE_BATTLE_TOASTS, false)
         showTacticalRecommendations = prefs.getBoolean(PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS, true)
         showShieldDecisionOverlay = prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true)
+        aiAdviceHudPosition = (prefs.getString(PREFS_KEY_AI_ADVICE_HUD_POSITION, DEFAULT_AI_ADVICE_HUD_POSITION) ?: DEFAULT_AI_ADVICE_HUD_POSITION)
+            .lowercase().let { if (it == "top") "top" else "bottom" }
         enableHpTracking = prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
         enableEnergyTracking = prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
         chargeCirclePriorityMode = prefs.getString(PREFS_KEY_CHARGE_CIRCLE_PRIORITY_MODE, DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE)
@@ -11962,7 +12850,11 @@ class OverlayService : LifecycleService() {
         val dmgPct: Int,
         val remHpPct: Int,
         val isKo: Boolean,
-        val isFunded: Boolean
+        val isFunded: Boolean,
+        val canReachNextMoveIfTanked: Boolean = true,
+        val fastsToNextMoveIfTanked: Int = 0,
+        val fastsShortIfTanked: Int = 0,
+        val userTargetMoveShort: String = ""
     )
 
     private fun hideShieldDecisionOverlay() {
@@ -12191,6 +13083,34 @@ class OverlayService : LifecycleService() {
             return
         }
 
+        // v6.00 Pillar 4: Tank Incoming Charged Move & Farm to Next Charged Move Before Fainting
+        val userEnergyNow = playerSlotEnergy.getOrElse(clampedUserIdx) { 0 }.coerceIn(0, 100)
+        val userFastMoveName = userSlotCfg?.fastMove?.takeIf { it.isNotBlank() } ?: userMeta.defaultFastMove
+        val userFastTurns = resolveFastTurnsStatic(userFastMoveName, userMeta.fastTurns).coerceAtLeast(1)
+        val userFastEnergy = resolveFastEnergyStatic(userFastMoveName, userFastTurns).coerceAtLeast(1)
+        val uMove1 = userSlotCfg?.chargedMove1?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove1
+        val uMove2 = userSlotCfg?.chargedMove2?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove2
+        val uCost1 = (resolveChargedMoveStatsStatic(uMove1, userMeta.types.firstOrNull() ?: "normal").energyCost.takeIf { it > 0 } ?: 50).coerceIn(35, 100)
+        val uCost2 = (resolveChargedMoveStatsStatic(uMove2, userMeta.types.firstOrNull() ?: "normal").energyCost.takeIf { it > 0 } ?: 50).coerceIn(35, 100)
+        val (targetUserMoveName, targetUserMoveCost) = if (uCost1 <= uCost2) uMove1 to uCost1 else uMove2 to uCost2
+        val targetUserMoveShort = abbrMoveCompactStatic(targetUserMoveName)
+        val myFastsNeededForNextMove = if (userEnergyNow >= targetUserMoveCost) {
+            0
+        } else {
+            kotlin.math.ceil((targetUserMoveCost - userEnergyNow).toDouble() / userFastEnergy.toDouble()).toInt().coerceAtLeast(1)
+        }
+        val oppFastOverride = detectedOppFastMoveOverride.getOrNull(clampedOppIdx)?.takeIf { it.isNotBlank() }
+        val oppFastMoveName = oppFastOverride ?: oppMeta.defaultFastMove
+        val oppFastTurns = resolveFastTurnsStatic(oppFastMoveName, oppMeta.fastTurns).coerceAtLeast(1)
+        val oppFastExactDmgPct = calculateFastMoveExactDamagePercent(
+            attacker = oppMeta,
+            defender = userMeta,
+            fastMoveName = oppFastMoveName,
+            fastTurns = oppFastTurns,
+            isAttackerShadow = isOppShad,
+            isDefenderShadow = isUserShad
+        ).coerceAtLeast(0.5)
+
         val allMoveRows = candidateMoveNames.map { mName ->
             val mStats = resolveChargedMoveStatsStatic(mName, oppMeta.types.firstOrNull() ?: "normal")
             val cost = (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[mName] ?: 50).coerceIn(35, 100)
@@ -12204,13 +13124,30 @@ class OverlayService : LifecycleService() {
             val remHp = (userHpPct - dmg).coerceAtLeast(0)
             val isKo = dmg >= userHpPct
             val isFunded = preThrowOppEnergy >= cost
+            val oppFastsSurvivedAfterHit = if (isKo || remHp <= 1) {
+                0
+            } else {
+                kotlin.math.floor((remHp - 1).toDouble() / oppFastExactDmgPct).toInt().coerceAtLeast(0)
+            }
+            val turnsSurvivedAfterHit = oppFastsSurvivedAfterHit * oppFastTurns
+            val myTurnsNeeded = myFastsNeededForNextMove * userFastTurns
+            val canReachIfTanked = !isKo && (myFastsNeededForNextMove == 0 || turnsSurvivedAfterHit >= myTurnsNeeded)
+            val fastsShort = if (canReachIfTanked || isKo) {
+                0
+            } else {
+                kotlin.math.ceil((myTurnsNeeded - turnsSurvivedAfterHit).toDouble() / userFastTurns.toDouble()).toInt().coerceAtLeast(1)
+            }
             ShieldOverlayMoveRow(
                 moveName = mName,
                 energyCost = cost,
                 dmgPct = dmg,
                 remHpPct = remHp,
                 isKo = isKo,
-                isFunded = isFunded
+                isFunded = isFunded,
+                canReachNextMoveIfTanked = canReachIfTanked,
+                fastsToNextMoveIfTanked = myFastsNeededForNextMove,
+                fastsShortIfTanked = fastsShort,
+                userTargetMoveShort = targetUserMoveShort
             )
         }
 
@@ -12223,41 +13160,48 @@ class OverlayService : LifecycleService() {
         val fundedMoves = normalizedRows.filter { it.isFunded }.sortedByDescending { it.dmgPct }
         val unfundedMoves = normalizedRows.filter { !it.isFunded }.sortedBy { it.energyCost }
 
-        // Requirement 2c + User Revision (Red / Orange / Yellow / Green):
-        // - RED: All funded moves in 2a will KO
-        // - ORANGE: At least one funded move in 2a KOs AND at least one funded move in 2a does NOT KO
-        // - YELLOW: No funded move in 2a KOs, but at least one unfunded move in 2b would KO
-        // - GREEN: No moves in 2a or 2b will KO
         val allFundedKo = fundedMoves.isNotEmpty() && fundedMoves.all { it.isKo }
         val someFundedKo = fundedMoves.any { it.isKo } && fundedMoves.any { !it.isKo }
+        val anyFundedGetsFarmedBeforeMove = fundedMoves.any { !it.isKo && !it.canReachNextMoveIfTanked }
         val unfundedKo = fundedMoves.none { it.isKo } && unfundedMoves.any { it.isKo }
+        val worstFarmedRow = fundedMoves.firstOrNull { !it.isKo && !it.canReachNextMoveIfTanked }
 
         val (bgColor, strokeColor, headerVerdictText) = when {
             allFundedKo -> Triple(
                 Color.parseColor("#F07F1D1D"), // Deep Crimson Red
                 Color.parseColor("#EF4444"),   // Bright Red border
-                "🛡️ SHIELD CALL: ALL FUNDED KO!"
+                "🛡️ SHIELD (1S): ALL FUNDED KO!"
             )
             someFundedKo -> Triple(
                 Color.parseColor("#F07C2D12"), // Deep Burnt Orange
                 Color.parseColor("#F97316"),   // Bright Orange border
-                "🛡️ SHIELD CALL: DANGER / BAIT MIX"
+                "🛡️ SHIELD / BAIT MIX: NUKE KOs!"
+            )
+            anyFundedGetsFarmedBeforeMove -> Triple(
+                Color.parseColor("#F07C2D12"), // Deep Burnt Orange (Pillar 4 Farmed-Down Alert)
+                Color.parseColor("#FB923C"),
+                "🛡️ SHIELD (1S): TANK DIES ${worstFarmedRow?.fastsShortIfTanked ?: 1}F SHORT OF $targetUserMoveShort!"
             )
             unfundedKo -> Triple(
                 Color.parseColor("#F0713F12"), // Deep Amber Yellow
                 Color.parseColor("#EAB308"),   // Bright Yellow border
-                "🛡️ SHIELD CALL: FUNDED SURVIVES (UNFUNDED KO)"
+                "🛡️ TANK (0S) -> $targetUserMoveShort IN ${myFastsNeededForNextMove}F (Unfunded KO)"
             )
             else -> Triple(
                 Color.parseColor("#F0064E3B"), // Deep Emerald Green
                 Color.parseColor("#10B981"),   // Bright Green border
-                "🛡️ SHIELD CALL: SAFE TO TANK"
+                if (myFastsNeededForNextMove == 0) {
+                    "🛡️ TANK (0S): $targetUserMoveShort READY!"
+                } else {
+                    "🛡️ TANK (0S) -> REACH $targetUserMoveShort IN ${myFastsNeededForNextMove}F!"
+                }
             )
         }
 
-        val oppShort = formatOpponentNameWithShadow(oppMeta.name)
-        val lockedTag = if (twoMovesLocked) " • 2 Moves Locked" else ""
-        val headerLineText = "$headerVerdictText  •  $oppShort (${effectiveBankedE}e) vs ${userMeta.name} (${userHpPct}% HP)$lockedTag"
+        val oppShort = abbrPokeCompactStatic(oppMeta.name, isOppShad)
+        val userShort = abbrPokeCompactStatic(userMeta.name, isUserShad)
+        val lockedTag = if (twoMovesLocked) " • 2M" else ""
+        val headerLineText = "$headerVerdictText  •  $oppShort(${effectiveBankedE}e) vs $userShort(${userHpPct}%)$lockedTag"
 
         val nowMs = System.currentTimeMillis()
         val isFirstShow = !isShieldDecisionOverlayVisible
@@ -12387,7 +13331,7 @@ class OverlayService : LifecycleService() {
                         }
                     }
 
-                    // 2a: Funded Candidate Moves (individual rows with 4-tier color-coded remaining HP pill badge)
+                    // 2a: Funded Candidate Moves (individual rows with 4-tier color-coded remaining HP pill badge + Pillar 4 Next-Move Reachability)
                     for (m in fundedMoves) {
                         val rowLayout = LinearLayout(this).apply {
                             orientation = LinearLayout.HORIZONTAL
@@ -12395,17 +13339,32 @@ class OverlayService : LifecycleService() {
                             setPadding(0, (1.5f * density).toInt(), 0, (1.5f * density).toInt())
                         }
                         val prefixTv = TextView(this).apply {
-                            text = "⚡ ${m.moveName} (${m.energyCost}e)  →  "
+                            text = "⚡ ${abbrMoveCompactStatic(m.moveName)} (${m.energyCost}e) → "
                             setTextColor(if (m.isKo) Color.parseColor("#FECDD3") else Color.parseColor("#BAE6FD"))
-                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.2f)
+                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.0f)
                             typeface = Typeface.create("sans-serif", Typeface.BOLD)
                         }
                         val badgeTv = createRemainingHpBadge(m.remHpPct, m.isKo, isFunded = true)
+                        val reachTag = when {
+                            m.isKo -> " (-${m.dmgPct}%)"
+                            m.canReachNextMoveIfTanked -> if (m.fastsToNextMoveIfTanked == 0) {
+                                " • ✓ ${m.userTargetMoveShort} RDY"
+                            } else {
+                                " • ✓ ${m.userTargetMoveShort} in ${m.fastsToNextMoveIfTanked}F"
+                            }
+                            else -> " • ⚠️ Dies ${m.fastsShortIfTanked}F short of ${m.userTargetMoveShort}!"
+                        }
                         val suffixTv = TextView(this).apply {
-                            text = "  (-${m.dmgPct}% dmg)"
-                            setTextColor(if (m.isKo) Color.parseColor("#FECDD3") else Color.parseColor("#BAE6FD"))
-                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.6f)
-                            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+                            text = reachTag
+                            setTextColor(
+                                when {
+                                    m.isKo -> Color.parseColor("#FECDD3")
+                                    !m.canReachNextMoveIfTanked -> Color.parseColor("#FDBA74")
+                                    else -> Color.parseColor("#6EE7B7")
+                                }
+                            )
+                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.2f)
+                            typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
                         }
                         rowLayout.addView(prefixTv)
                         rowLayout.addView(badgeTv)
@@ -12902,6 +13861,14 @@ class OverlayService : LifecycleService() {
                 } else {
                     prefs.getBoolean(PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT, DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT)
                 }
+                aiAdviceHudPosition = if (intent?.hasExtra(EXTRA_AI_ADVICE_HUD_POSITION) == true) {
+                    (intent.getStringExtra(EXTRA_AI_ADVICE_HUD_POSITION) ?: DEFAULT_AI_ADVICE_HUD_POSITION).lowercase()
+                        .let { if (it == "top") "top" else "bottom" }
+                } else {
+                    (prefs.getString(PREFS_KEY_AI_ADVICE_HUD_POSITION, DEFAULT_AI_ADVICE_HUD_POSITION) ?: DEFAULT_AI_ADVICE_HUD_POSITION).lowercase()
+                        .let { if (it == "top") "top" else "bottom" }
+                }
+                overlayView?.evaluateJavascript("if (window.setAiAdviceHudPosition) setAiAdviceHudPosition('$aiAdviceHudPosition');", null)
                 syncTierThresholdsFromPrefs(prefs)
 
                 val requestedTeamName = intent?.getStringExtra(EXTRA_TEAM_NAME)
@@ -13015,6 +13982,14 @@ class OverlayService : LifecycleService() {
                 } else {
                     enableAltFastMoveDetect = prefs.getBoolean(PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT, enableAltFastMoveDetect)
                 }
+                if (intent?.hasExtra(EXTRA_AI_ADVICE_HUD_POSITION) == true) {
+                    aiAdviceHudPosition = (intent.getStringExtra(EXTRA_AI_ADVICE_HUD_POSITION) ?: DEFAULT_AI_ADVICE_HUD_POSITION).lowercase()
+                        .let { if (it == "top") "top" else "bottom" }
+                } else {
+                    aiAdviceHudPosition = (prefs.getString(PREFS_KEY_AI_ADVICE_HUD_POSITION, aiAdviceHudPosition) ?: aiAdviceHudPosition).lowercase()
+                        .let { if (it == "top") "top" else "bottom" }
+                }
+                overlayView?.evaluateJavascript("if (window.setAiAdviceHudPosition) setAiAdviceHudPosition('$aiAdviceHudPosition');", null)
                 syncTierThresholdsFromPrefs(prefs)
                 val updatedScalePct = intent?.getIntExtra(
                     EXTRA_OVERLAY_SCALE_PCT,
@@ -22946,6 +23921,7 @@ class OverlayService : LifecycleService() {
                 "activeUserHpPct" to waitingActiveUserHp,
                 "activeOppHpPct" to 100,
                 "teamArchetype" to (currentPreset?.archetype ?: "ABC"),
+                "aiAdviceHudPosition" to aiAdviceHudPosition,
                 "showTacticalRec" to (showTacticalRecommendations && (isBattleActive || isReplayMode)),
                 "showTacticalRecommendations" to (showTacticalRecommendations && (isBattleActive || isReplayMode)),
                 "tacticalRec" to if (isBattleActive || isReplayMode) mapOf(
@@ -22954,8 +23930,12 @@ class OverlayService : LifecycleService() {
                     "action" to "AWAITING LEAD",
                     "actionLabel" to "[${(currentPreset?.archetype ?: "ABC").uppercase()}] AWAITING LEAD",
                     "shieldPlan" to "2S",
-                    "goal" to "Scan opponent lead to compute plan",
-                    "goalText" to "Scan opponent lead to compute plan",
+                    "goal" to "🔮 Back: Scanning opponent lead...",
+                    "goalText" to "🔮 Back: Scanning opponent lead...",
+                    "line1Text" to "[${(currentPreset?.archetype ?: "ABC").uppercase()}] AWAITING LEAD · [2S]",
+                    "line2Text" to "🔮 Back: Scanning opponent lead...",
+                    "backlineText" to "🔮 Back: Scanning opponent lead...",
+                    "timingAlertLevel" to "NORMAL",
                     "tone" to "neutral",
                     "urgencyColor" to "sky",
                     "recommendedSwapSlotIndex" to -1
@@ -22966,8 +23946,12 @@ class OverlayService : LifecycleService() {
                     "action" to "AWAITING LEAD",
                     "actionLabel" to "[${(currentPreset?.archetype ?: "ABC").uppercase()}] AWAITING LEAD",
                     "shieldPlan" to "2S",
-                    "goal" to "Scan opponent lead to compute plan",
-                    "goalText" to "Scan opponent lead to compute plan",
+                    "goal" to "🔮 Back: Scanning opponent lead...",
+                    "goalText" to "🔮 Back: Scanning opponent lead...",
+                    "line1Text" to "[${(currentPreset?.archetype ?: "ABC").uppercase()}] AWAITING LEAD · [2S]",
+                    "line2Text" to "🔮 Back: Scanning opponent lead...",
+                    "backlineText" to "🔮 Back: Scanning opponent lead...",
+                    "timingAlertLevel" to "NORMAL",
                     "tone" to "neutral",
                     "urgencyColor" to "sky",
                     "recommendedSwapSlotIndex" to -1
@@ -23778,41 +24762,159 @@ class OverlayService : LifecycleService() {
             candidateScoreMap[bName] = compScore
         }
 
+        // v6.00 Pillar 1: Personalized Blended Backline Prediction (Meta Cores + Learned Season Logs + Same-CP Std League Blend)
+        val currentSeasonLogsForAi = if (::prefs.isInitialized) {
+            loadSeasonLogsForLeagueStatic(prefs, gson, activeLeague, isShow6 = isShow6ModeActive)
+        } else emptyList()
+        val sameCpStdLogsForAi = if (::prefs.isInitialized) {
+            loadSameCpStandardSeasonLogsForLimitedCupStatic(prefs, gson, activeLeague, isShow6 = isShow6ModeActive)
+        } else emptyList()
+        val backlinePred = predictOpponentBacklineStatic(
+            league = activeLeague,
+            revealedOpponents = displayList,
+            myTeamSlots = teamSlotsList.filterNotNull(),
+            myActiveSlotIdx = activeSlotIdxSafe,
+            playerFaintedSlots = playerFaintedSlots,
+            isShow6 = isShow6ModeActive,
+            knownShow6UnrevealedPool = knownShow6UnrevealedPool,
+            seasonLogs = currentSeasonLogsForAi,
+            sameCpStandardLogs = sameCpStdLogsForAi
+        )
+
         var recPhase = if (isLeadPhase) "LEAD" else "MIDGAME"
         var recAction = "STAY IN"
         var recGoal = "Hold Switch Adv"
         var recTone = "stay"
         var recSwapIdx = -1
+        var timingAlertLevel = "NORMAL" // "NORMAL" | "WARN_2_FASTS" | "BLINK_1_FAST" | "IMMEDIATE_0_FAST"
 
         val oppSwitchLockActive = !lastOppSwitchWasFaint && oppSwapRemainingSec >= 12
         val oppCanCounterSwap = lastOppSwitchWasFaint || oppSwapRemainingSec <= 8
 
+        // v6.00 Pillar 3 & Pillar 4 Live Fast-Move / Energy / Catch Timing Math
+        val activeUserEnergyNow = playerSlotEnergy.getOrElse(activeSlotIdxSafe) { 0 }.coerceIn(0, 100)
+        val activeOppEnergyNow = oppSlotEnergy.getOrElse(activeOppSlotSafe) { 0 }.coerceIn(0, 100)
+        val userFastExactDmgPct = calculateFastMoveExactDamagePercent(
+            attacker = userMeta,
+            defender = oppMeta,
+            fastMoveName = userFastMoveName,
+            fastTurns = userFastTurns,
+            isAttackerShadow = isUserShadow,
+            isDefenderShadow = isOpponentShadow
+        ).coerceAtLeast(0.4)
+        val oppFastExactDmgPct = calculateFastMoveExactDamagePercent(
+            attacker = oppMeta,
+            defender = userMeta,
+            fastMoveName = oppFastMoveName,
+            fastTurns = oppFastTurns,
+            isAttackerShadow = isOpponentShadow,
+            isDefenderShadow = isUserShadow
+        ).coerceAtLeast(0.4)
+
+        val myFastsToKoOpp = if (activeOppHp <= 0) 0 else kotlin.math.ceil(activeOppHp.toDouble() / userFastExactDmgPct).toInt().coerceAtLeast(1)
+        val oppFastsToKoMe = if (activeUserHp <= 0) 0 else kotlin.math.ceil(activeUserHp.toDouble() / oppFastExactDmgPct).toInt().coerceAtLeast(1)
+
+        // Player's cheapest / highest-priority next charged move
+        val uMove1Cost = (resolveChargedMoveStatsStatic(userMove1Name, userMeta.types.firstOrNull() ?: "normal").energyCost.takeIf { it > 0 } ?: 50).coerceIn(35, 100)
+        val uMove2Cost = (resolveChargedMoveStatsStatic(userMove2Name, userMeta.types.firstOrNull() ?: "normal").energyCost.takeIf { it > 0 } ?: 50).coerceIn(35, 100)
+        val (myBestMoveName, myBestMoveCost) = when {
+            myMove1Pct >= activeOppHp && activeUserEnergyNow >= uMove1Cost -> userMove1Name to uMove1Cost
+            myMove2Pct >= activeOppHp && activeUserEnergyNow >= uMove2Cost -> userMove2Name to uMove2Cost
+            uMove1Cost <= uMove2Cost -> userMove1Name to uMove1Cost
+            else -> userMove2Name to uMove2Cost
+        }
+        val myBestMoveShort = abbrMoveCompactStatic(myBestMoveName)
+        val myFastsNeededForNextMove = if (activeUserEnergyNow >= myBestMoveCost) {
+            0
+        } else {
+            kotlin.math.ceil((myBestMoveCost - activeUserEnergyNow).toDouble() / userFastEnergy.toDouble()).toInt().coerceAtLeast(1)
+        }
+
+        // Opponent's next threatening charged move & turns until ready
+        val oppCheapestMoveRow = oppMoveTimingRows.minByOrNull { (it["energy"] as? Int) ?: 50 }
+        val oppNextMoveName = (oppCheapestMoveRow?.get("name") as? String) ?: oppMeta.chargedMove1
+        val oppNextMoveShort = abbrMoveCompactStatic(oppNextMoveName)
+        val oppNextMoveCost = ((oppCheapestMoveRow?.get("energy") as? Int) ?: 45).coerceIn(35, 100)
+        val oppFastsToNextMove = if (activeOppEnergyNow >= oppNextMoveCost) {
+            0
+        } else {
+            kotlin.math.ceil((oppNextMoveCost - activeOppEnergyNow).toDouble() / oppFastEnergy.toDouble()).toInt().coerceAtLeast(1)
+        }
+        val turnsUntilOppCharged = oppFastsToNextMove * oppFastTurns
+        val safeMyFastsBeforeOppMove = when {
+            oppFastsToNextMove <= 0 -> 0
+            winsCmp -> (turnsUntilOppCharged / userFastTurns).coerceAtLeast(0)
+            else -> ((turnsUntilOppCharged - 1).coerceAtLeast(0) / userFastTurns)
+        }
+        val canFarmDownBeforeOppMove = activeOppHp in 1..38 &&
+            myFastsToKoOpp <= safeMyFastsBeforeOppMove &&
+            myFastsToKoOpp < oppFastsToKoMe &&
+            myFastsToKoOpp <= 6
+
+        // Evaluate Catch Viability on alive bench teammates against oppNextMoveName
+        var bestCatchBenchIdx = -1
+        var bestCatchBenchCode = ""
+        if (canPlayerSwap && aliveBenchIndices.isNotEmpty() && !isPostFaintSwitchPromptActive) {
+            val nextMoveTeamDmgs = (oppCheapestMoveRow?.get("teamDamages") as? List<*>)
+            var bestCatchScore = -999
+            for (bIdx in aliveBenchIndices) {
+                val bHp = playerSlotHpPct[bIdx].coerceIn(1, 100)
+                val bName = teamNames.getOrElse(bIdx) { "Slot ${bIdx + 1}" }
+                val dmgEntry = nextMoveTeamDmgs?.getOrNull(bIdx) as? Map<*, *>
+                val bDmgPct = (dmgEntry?.get("dmgPct") as? Int) ?: 40
+                val bEff = (dmgEntry?.get("eff") as? Double) ?: 1.0
+                val isResistedTankCatch = bHp > bDmgPct + 15 && (bEff <= 0.72 || bDmgPct <= 26) && (maxOppMoveDmgPct >= activeUserHp - 15 || oppNextMoveCost <= 50)
+                val isSacrificialLowHpCatch = bHp in 1..20 && activeUserHp >= 40 && maxOppMoveDmgPct >= 35
+                if (isResistedTankCatch || isSacrificialLowHpCatch) {
+                    val catchScore = if (isSacrificialLowHpCatch) 90 else (75 - bDmgPct)
+                    if (catchScore > bestCatchScore) {
+                        bestCatchScore = catchScore
+                        bestCatchBenchIdx = bIdx
+                        bestCatchBenchCode = abbrPokeCompactStatic(bName)
+                    }
+                }
+            }
+        }
+
+        // Pillar 4 math for Incoming Charged Move prompt (Tank & Reach Next Charged Move Before Fainting)
+        val postHitHpAfterPrimaryMove = (confirmedUserHp - minOppMoveDmgPct).coerceAtLeast(0)
+        val oppFastsSurvivedAfterHit = if (postHitHpAfterPrimaryMove <= 1) {
+            0
+        } else {
+            kotlin.math.floor((postHitHpAfterPrimaryMove - 1).toDouble() / oppFastExactDmgPct).toInt().coerceAtLeast(0)
+        }
+        val turnsSurvivedAfterHit = oppFastsSurvivedAfterHit * oppFastTurns
+        val canTankAndReachNextMove = postHitHpAfterPrimaryMove >= 8 &&
+            !oppNukeKosActive &&
+            (myFastsNeededForNextMove == 0 || turnsSurvivedAfterHit >= myFastsNeededForNextMove * userFastTurns)
+        val fastsShortAfterTank = if (canTankAndReachNextMove) {
+            0
+        } else {
+            kotlin.math.ceil(((myFastsNeededForNextMove * userFastTurns) - turnsSurvivedAfterHit).toDouble() / userFastTurns.toDouble()).toInt().coerceAtLeast(1)
+        }
+
         if (isAttackIncomingPromptActive && playerShieldsRemaining >= 1 && !isPostFaintSwitchPromptActive) {
-            // 0. v3.44: INSTANT "ATTACK INCOMING!" SHIELD CALLOUT (Top 2 Moves Only + 1-Extra-Frame Confirmed HP + Attack 3/4 KO Warning)
+            // Pillar 4: INSTANT "ATTACK INCOMING!" SHIELD CALLOUT + Tank-to-Reach-Next-Move Evaluation
             recPhase = "SHIELD_CALL"
             val maxMoveKos = maxOppMoveDmgPct >= confirmedUserHp - 8
             val minMoveKos = minOppMoveDmgPct >= confirmedUserHp - 5
             val healthyBenchExists = aliveBenchIndices.any { confirmedPlayerSlotHpPct[it] >= 55 && slotBr(it, playerShieldsRemaining, oppShieldsRemaining) >= activeTierWMin }
             if (minMoveKos || (maxMoveKos && (curBr >= activeTierLMax || !healthyBenchExists || playerAliveCount == 1))) {
-                recAction = "SHIELD (1S)"
-                shieldPlanStr = "Use 1S"
+                recAction = "SHIELD (1S) · KO RISK"
+                shieldPlanStr = "1S"
                 recTone = "swap"
-                val baseGoal = if (minMoveKos) {
-                    "Top-2 Any Move KOs (${minOppMoveDmgPct}%+ vs ${confirmedUserHp}% HP)"
-                } else {
-                    "Top-2 Nuke KOs (${maxOppMoveDmgPct}% vs ${confirmedUserHp}% HP) — Shield"
-                }
-                recGoal = if (hasAltMoveKoRisk) "$baseGoal • $altKoGoalWarning" else baseGoal
+                recGoal = "${oppNextMoveShort} KOs (${maxOppMoveDmgPct}% vs ${confirmedUserHp}% HP)"
+            } else if (!minMoveKos && !canTankAndReachNextMove && activeOppHp > 20 && (curBr >= activeTierSlMax || playerAliveCount == 1)) {
+                recAction = "SHIELD (1S) -> DIES ${fastsShortAfterTank}F SHORT OF $myBestMoveShort!"
+                shieldPlanStr = "1S"
+                recTone = "swap"
+                recGoal = "Tank leaves ${postHitHpAfterPrimaryMove}% HP (Farmed before $myBestMoveShort)"
             } else {
-                recAction = if (hasAltMoveKoRisk) "NO SHIELD (⚠️${topAltKo?.first ?: "M3"} KO RISK)" else "NO SHIELD (TANK IT)"
-                shieldPlanStr = if (hasAltMoveKoRisk) "Save ${playerShieldsRemaining}S ($altKoBadgeShort)" else "Save ${playerShieldsRemaining}S"
+                val reachStr = if (myFastsNeededForNextMove == 0) "$myBestMoveShort RDY" else "$myBestMoveShort IN ${myFastsNeededForNextMove}F"
+                recAction = if (hasAltMoveKoRisk) "TANK (0S) · ⚠️${topAltKo?.first ?: "M3"} KO" else "TANK (0S) -> $reachStr"
+                shieldPlanStr = "0S"
                 recTone = if (hasAltMoveKoRisk) "bait" else "stay"
-                val baseGoal = if (maxOppMoveDmgPct < confirmedUserHp - 15) {
-                    "Survives Top-2 (${maxOppMoveDmgPct}% vs ${confirmedUserHp}% HP)"
-                } else {
-                    "Tank Top-2 & Farm w/ Backline"
-                }
-                recGoal = if (hasAltMoveKoRisk) "$baseGoal • $altKoGoalWarning" else baseGoal
+                recGoal = "Survives at ${postHitHpAfterPrimaryMove}% HP & fires $myBestMoveShort"
             }
         } else if (isPostFaintSwitchPromptActive && aliveBenchIndices.isNotEmpty()) {
             // 1. POST-FAINT "Switch in a new Pokémon?" Replacement Recommendation
@@ -23822,215 +24924,276 @@ class OverlayService : LifecycleService() {
             }
             val bestIdx = sortedBench.first()
             val secondIdx = sortedBench.getOrNull(1)
-            val bestCode = abbrPokemon3(teamNames[bestIdx])
+            val bestCode = abbrPokeCompactStatic(teamNames[bestIdx])
             val bestBr = slotBr(bestIdx, playerShieldsRemaining, oppShieldsRemaining)
             val bestHp = playerSlotHpPct[bestIdx].coerceIn(1, 100)
-            val holdText = if (secondIdx != null) " (HOLD ${abbrPokemon3(teamNames[secondIdx])})" else ""
-            recAction = "SEND IN -> $bestCode$holdText"
+            val holdText = if (secondIdx != null) " (HOLD ${abbrPokeCompactStatic(teamNames[secondIdx])})" else ""
+            recAction = "SEND -> $bestCode$holdText"
             recSwapIdx = bestIdx
             recTone = if (bestBr >= activeTierWMin) "stay" else "counter"
-            shieldPlanStr = if (playerShieldsRemaining > 0) "Keep ${playerShieldsRemaining}S" else "0S"
+            shieldPlanStr = if (playerShieldsRemaining > 0) "${playerShieldsRemaining}S" else "0S"
             recGoal = when {
-                oppSwapRemainingSec >= 12 -> "Punish ${oppSwapRemainingSec}s Lock ($bestCode ${bestHp}% vs Opp ${activeOppHp}%)"
-                oppAliveCount == 1 -> "Close Last Opp ($bestCode ${bestHp}% vs Opp ${activeOppHp}%)"
-                revealedBenchOpponents.isNotEmpty() && secondIdx != null ->
-                    "Save ${abbrPokemon3(teamNames[secondIdx])} for ${abbrPokemon3(revealedBenchOpponents.first())}"
-                else -> "Best Re-Entry ($bestCode ${bestHp}% vs Opp ${activeOppHp}%)"
+                oppSwapRemainingSec >= 12 -> "Punish ${oppSwapRemainingSec}s Lock ($bestCode ${bestHp}%)"
+                oppAliveCount == 1 -> "Close Last Opp ($bestCode ${bestHp}%)"
+                else -> "Best Entry ($bestCode ${bestHp}% vs ${activeOppHp}%)"
             }
-        } else if (activeOppHp in 1..22 && activeUserHp >= 28) {
-            // 1B. v3.41: FAST-MOVE FARM-DOWN CALLOUT (Opponent in red HP range)
-            recAction = "FARM DOWN (NO THROW)"
-            shieldPlanStr = if (maxOppMoveDmgPct >= activeUserHp - 5 && playerShieldsRemaining > 0) "1S if Thrown" else "0S"
-            recGoal = "Opp at ${activeOppHp}% HP (You ${activeUserHp}%) — Fast-Move Farm & Bank Energy"
+        } else if (canFarmDownBeforeOppMove) {
+            // Pillar 3A: Exact Fast-Move Farm-Down Before Opponent Reaches Next Charged Move
+            recPhase = "FARM_DOWN"
+            recAction = "FARM DOWN: ${myFastsToKoOpp}F TO KO"
+            shieldPlanStr = "0S"
+            recGoal = "No Throw · Opp ${oppFastsToNextMove}F (${turnsUntilOppCharged}T) to $oppNextMoveShort"
             recTone = "stay"
+            timingAlertLevel = "NORMAL"
+        } else if (
+            enableEnergyTracking &&
+            safeMyFastsBeforeOppMove in 0..2 &&
+            activeOppHp > 12 &&
+            (myFastsNeededForNextMove <= safeMyFastsBeforeOppMove || bestCatchBenchIdx in 0..2)
+        ) {
+            // Pillar 3B: Unified Throw & Catch Timing Countdown (2F Highlight -> 1F Blink -> 0F Immediate)
+            recPhase = "THROW_CATCH_TIMING"
+            val canThrowMineBeforeOpp = myFastsNeededForNextMove <= safeMyFastsBeforeOppMove
+            val useCatchCall = !canThrowMineBeforeOpp && bestCatchBenchIdx in 0..2 ||
+                (bestCatchBenchIdx in 0..2 && oppShieldsRemaining > 0 && curBr <= activeTierLMax)
+            if (useCatchCall && bestCatchBenchIdx in 0..2) {
+                recSwapIdx = bestCatchBenchIdx
+                when (safeMyFastsBeforeOppMove) {
+                    2 -> {
+                        timingAlertLevel = "WARN_2_FASTS"
+                        recAction = "⚠️ 2F -> CATCH $oppNextMoveShort ON $bestCatchBenchCode"
+                        recTone = "bait"
+                    }
+                    1 -> {
+                        timingAlertLevel = "BLINK_1_FAST"
+                        recAction = "🚨 1 LAST FAST -> CATCH ON $bestCatchBenchCode!"
+                        recTone = "swap"
+                    }
+                    else -> {
+                        timingAlertLevel = "IMMEDIATE_0_FAST"
+                        recAction = "🛑 0F LEFT -> CATCH $oppNextMoveShort ON $bestCatchBenchCode!"
+                        recTone = "swap"
+                    }
+                }
+                recGoal = "Opp ${activeOppEnergyNow}E/${oppNextMoveCost}E ($oppNextMoveShort)"
+            } else {
+                when (safeMyFastsBeforeOppMove) {
+                    2 -> {
+                        timingAlertLevel = "WARN_2_FASTS"
+                        recAction = "⚠️ 2F -> THROW $myBestMoveShort (Pre-$oppNextMoveShort)"
+                        recTone = "bait"
+                    }
+                    1 -> {
+                        timingAlertLevel = "BLINK_1_FAST"
+                        recAction = "🚨 1 LAST FAST -> THROW $myBestMoveShort NOW!"
+                        recTone = "swap"
+                    }
+                    else -> {
+                        timingAlertLevel = "IMMEDIATE_0_FAST"
+                        recAction = "🛑 0F LEFT -> THROW $myBestMoveShort NOW!"
+                        recTone = "swap"
+                    }
+                }
+                recGoal = "Beat Opp $oppNextMoveShort (${activeOppEnergyNow}E/${oppNextMoveCost}E)"
+            }
         } else if (playerAliveCount == 1 && oppAliveCount == 1) {
-            // 2A. 1v1 ENDGAME AWARENESS (Never says "Maintain Alignment" or "Save Shields for Backline")
+            // 2A. 1v1 ENDGAME AWARENESS
             recPhase = "ENDGAME"
             if (playerShieldsRemaining > 0 && oppShieldsRemaining == 0) {
                 recAction = "CLOSE 1v1 (BURN ${playerShieldsRemaining}S)"
                 shieldPlanStr = "${playerShieldsRemaining}S"
-                recGoal = "Shield 1st Charged to Close (You ${activeUserHp}% vs Opp ${activeOppHp}%)"
+                recGoal = "Shield 1st Move to Close (${activeUserHp}% vs ${activeOppHp}%)"
                 recTone = if (curBr >= 500) "stay" else "bait"
             } else if (playerShieldsRemaining > 0 && oppShieldsRemaining > 0) {
                 val needBait = br0s < 480 && br1s >= 500
-                recAction = if (needBait) "CLOSE 1v1 (BAIT->NUKE)" else "CLOSE 1v1 (COMMIT ${playerShieldsRemaining}S)"
+                recAction = if (needBait) "1v1 BAIT -> NUKE" else "1v1 COMMIT ${playerShieldsRemaining}S"
                 shieldPlanStr = "${playerShieldsRemaining}S"
-                recGoal = if (needBait) "Strip Last Opp Shield (You ${activeUserHp}% vs Opp ${activeOppHp}%)" else "Out-Pace 1v1 (You ${activeUserHp}% vs Opp ${activeOppHp}%)"
+                recGoal = "Out-Pace 1v1 ($myBestMoveShort in ${myFastsNeededForNextMove}F)"
                 recTone = if (curBr >= 500) "stay" else "bait"
             } else {
-                recAction = "CLOSE 1v1 (0S RACE)"
+                recAction = if (myFastsToKoOpp <= safeMyFastsBeforeOppMove) "1v1 FARM (${myFastsToKoOpp}F)" else "1v1 RACE -> $myBestMoveShort"
                 shieldPlanStr = "0S"
-                recGoal = if (br0s >= 500) "Win 0S Race (You ${activeUserHp}% vs Opp ${activeOppHp}%)" else "Catch or Sneak Fast Move (You ${activeUserHp}% vs Opp ${activeOppHp}%)"
+                recGoal = "You ${myFastsNeededForNextMove}F to $myBestMoveShort vs Opp ${oppFastsToNextMove}F to $oppNextMoveShort"
                 recTone = if (br0s >= 500) "stay" else "swap"
             }
         } else if (playerAliveCount >= 2 && oppAliveCount == 1) {
-            // 2B. 2v1 ENDGAME AWARENESS (Opponent has 2 fainted)
+            // 2B. 2v1 ENDGAME AWARENESS
             recPhase = "ENDGAME"
             val bestBenchIdx = aliveBenchIndices.maxByOrNull { slotBr(it, playerShieldsRemaining, oppShieldsRemaining) }
             val bestBenchBr = if (bestBenchIdx != null) slotBr(bestBenchIdx, playerShieldsRemaining, oppShieldsRemaining) else curBr
-            val bestBenchCode = if (bestBenchIdx != null) abbrPokemon3(teamNames[bestBenchIdx]) else "BACK"
+            val bestBenchCode = if (bestBenchIdx != null) abbrPokeCompactStatic(teamNames[bestBenchIdx]) else "BACK"
             if (canPlayerSwap && bestBenchIdx != null && bestBenchBr >= curBr + 75 && curBr < 475) {
                 recAction = "SWAP -> $bestBenchCode TO CLOSE"
                 recSwapIdx = bestBenchIdx
                 recTone = "stay"
-                recGoal = "Last Opp Mon at ${activeOppHp}% HP (No Opp Bench Left)"
+                recGoal = "Last Opp at ${activeOppHp}% HP"
             } else {
                 recAction = if (curBr >= activeTierWMin) "2v1 PRESS -> FINISH" else "2v1 CHIP FOR $bestBenchCode"
                 recTone = "stay"
-                recGoal = "Opp Last Mon at ${activeOppHp}% HP (${playerAliveCount}v1 Advantage)"
+                recGoal = "Last Opp at ${activeOppHp}% HP (${playerAliveCount}v1 Adv)"
             }
         } else if (playerAliveCount == 1 && oppAliveCount >= 2) {
-            // 2C. 1v2 ENDGAME AWARENESS (Player has 2 fainted)
+            // 2C. 1v2 ENDGAME AWARENESS
             recPhase = "ENDGAME"
-            val backOppCode = revealedBenchOpponents.firstOrNull()?.let { abbrPokemon3(it) } ?: "BACK"
+            val backOppCode = revealedBenchOpponents.firstOrNull()?.let { abbrPokeCompactStatic(it) }
+                ?: backlinePred.candidates.firstOrNull()?.code
+                ?: "BACK"
             recAction = if (playerShieldsRemaining > 0) "1v2 FARM FOR $backOppCode" else "1v2 OVERFARM & NUKE"
             shieldPlanStr = if (playerShieldsRemaining > 0) "Hold 1S" else "0S"
-            recGoal = "Bank Energy Before $backOppCode Enters (You ${activeUserHp}% vs Opp ${activeOppHp}%)"
+            recGoal = "Bank E Before $backOppCode Enters"
             recTone = if (curBr >= 500) "bait" else "swap"
         } else if (isLeadPhase) {
+            // Pillar 2: Lead Swap / Stay Advice Conditioned on Backline Hard-Counter Risk
             val pivotIdx = if (1 in aliveBenchIndices) 1 else aliveBenchIndices.firstOrNull()
-            val pivotCode = if (pivotIdx != null) abbrPokemon3(teamNames[pivotIdx]) else "SWAP"
-            val corePartnerCode = abbrPokemon3(teamNames.getOrElse(2) { p1Name })
+            val pivotCode = if (pivotIdx != null) abbrPokeCompactStatic(teamNames[pivotIdx]) else "SWAP"
             val backlineWeakToLead = (1..2).any { bIdx -> slotBr(bIdx, curEqS, curEqS) <= activeTierLMax }
+            val highBacklinePunishRisk = backlinePred.swapPunishRiskPct >= 45
 
             if (curBr >= activeTierSwMin) {
-                recAction = "STAY IN"
-                recGoal = if (oppNukeKosActive && playerShieldsRemaining > 0) "Dominate Lead • Shield Nuke (${maxOppMoveDmgPct}% vs ${activeUserHp}%)" else "Dominate Lead & Hold Switch (You ${activeUserHp}% vs Opp ${activeOppHp}%)"
+                recAction = "STAY IN (WIN LEAD)"
+                recGoal = "Dominate & Hold Switch"
                 recTone = "stay"
             } else if (curBr >= activeTierWMin) {
                 recAction = "STAY IN"
-                recGoal = if (br0s >= activeTierWMin && !oppNukeKosActive) "Win 0S & Bank Energy (You ${activeUserHp}% vs Opp ${activeOppHp}%)" else "Commit $shieldPlanStr for Switch (You ${activeUserHp}% vs Opp ${activeOppHp}%)"
+                recGoal = if (br0s >= activeTierWMin && !oppNukeKosActive) "Win 0S & Bank Energy" else "Commit $shieldPlanStr for Switch"
                 recTone = "stay"
             } else if (teamArchetype == "ABB" && backlineWeakToLead && curBr >= activeTierSlMax) {
-                recAction = "STAY IN (ABB)"
-                recGoal = "Eliminate Backline Threat (You ${activeUserHp}% vs Opp ${activeOppHp}%)"
+                recAction = "STAY IN (ABB LEAD)"
+                recGoal = "Chip Backline Threat"
                 recTone = "stay"
             } else if (curBr > activeTierLMax) {
-                if (teamArchetype == "ABB" && pivotIdx != null && canPlayerSwap) {
+                if (teamArchetype == "ABB" && pivotIdx != null && canPlayerSwap && !highBacklinePunishRisk) {
                     recAction = "CHIP -> SWAP $pivotCode"
-                    recGoal = "Soft Chip & Lure Backline Counter (You ${activeUserHp}% vs Opp ${activeOppHp}%)"
+                    recGoal = "Lure Threat (SwpRsk ${backlinePred.swapPunishRiskPct}%)"
                     recTone = "bait"
                     recSwapIdx = pivotIdx
                 } else {
                     recAction = "STAY / SOFT LOSE"
-                    recGoal = if (br0s >= 450 && !oppNukeKosActive) "Soft Lose 0S -> Farm Down (You ${activeUserHp}% vs Opp ${activeOppHp}%)" else "Play +1 Shield Adv (You ${activeUserHp}% vs Opp ${activeOppHp}%)"
+                    recGoal = "Play +1S or Farm Down"
                     recTone = "bait"
                 }
             } else {
+                // Negative Lead: Pillar 2 checks whether blind-swapping gets hard-countered by predicted backline
                 if (canPlayerSwap && pivotIdx != null) {
-                    recAction = if (teamArchetype == "ABB") "BAIT -> $pivotCode" else "SWAP -> $pivotCode"
-                    recGoal = when (teamArchetype) {
-                        "ABB" -> "Lure Threat & Farm w/ ${abbrPokemon3(p1Name)}"
-                        "DUO" -> "Push Shield/Switch -> Farm w/ $corePartnerCode"
-                        else -> "Fight for Switch or +1 Shield Adv"
+                    if (highBacklinePunishRisk && teamArchetype != "ABB") {
+                        recAction = if (bestCatchBenchIdx in 0..2) {
+                            recSwapIdx = bestCatchBenchIdx
+                            "CHIP -> CATCH ON $bestCatchBenchCode"
+                        } else {
+                            "STAY · CHIP (SwpRsk:${backlinePred.swapPunishThreatCode})"
+                        }
+                        recGoal = "High Swap Punish (${backlinePred.swapPunishThreatCode} ${backlinePred.swapPunishRiskPct}%)"
+                        recTone = "bait"
+                    } else {
+                        recAction = if (teamArchetype == "ABB") "ABB BAIT -> $pivotCode" else "SWAP -> $pivotCode"
+                        recGoal = "Low Punish Rsk (${backlinePred.swapPunishRiskPct}%) · Flip Switch"
+                        recTone = "swap"
+                        recSwapIdx = pivotIdx
                     }
-                    recTone = "swap"
-                    recSwapIdx = pivotIdx
                 } else {
                     recAction = "SOFT LOSE 0S"
-                    recGoal = "No Shields -> Farm w/ Backline"
+                    recGoal = "Save Shields -> Farm w/ Backline"
                     recTone = "bait"
                 }
             }
         } else if (curBr <= activeTierLMax && aliveBenchIndices.isNotEmpty()) {
-            // 3. COUNTER-SWAP MINIMAX (Differentiates Faint Replacement vs. Manual Swap using BOTH Swap Clocks & Persistent Bench HP)
+            // 3. COUNTER-SWAP MINIMAX + Backline Punish Risk
             val bestCounterIdx = aliveBenchIndices.maxByOrNull { idx ->
                 candidateScoreMap[teamNames.getOrElse(idx) { "" }] ?: slotBr(idx, playerShieldsRemaining, oppShieldsRemaining)
             } ?: aliveBenchIndices.first()
             val bestCounterBr = slotBr(bestCounterIdx, playerShieldsRemaining, oppShieldsRemaining)
             val bestCounterHp = playerSlotHpPct[bestCounterIdx].coerceIn(1, 100)
-            val bestCounterCode = abbrPokemon3(teamNames[bestCounterIdx])
+            val bestCounterCode = abbrPokeCompactStatic(teamNames[bestCounterIdx])
 
             if (!canPlayerSwap && playerSwapRemainingSec > 0) {
-                recAction = "LOCKED (${playerSwapRemainingSec}s) • CHIP"
+                recAction = "LOCKED (${playerSwapRemainingSec}s) · CHIP"
                 shieldPlanStr = if (oppNukeKosActive && playerShieldsRemaining > 0 && playerAliveCount <= 2) "1S" else "0S"
-                recGoal = "Wait ${playerSwapRemainingSec}s or Faint -> $bestCounterCode (${bestCounterHp}% HP)"
+                recGoal = "Wait ${playerSwapRemainingSec}s or Faint -> $bestCounterCode"
                 recTone = "swap"
             } else if (bestCounterHp < 25 && activeOppHp > 25 && activeUserHp >= 35) {
-                // Do not swap a critically low (<25% HP) bench Pokémon into fast-move farm-down
                 recAction = "STAY / CHIP (SAVE $bestCounterCode)"
                 shieldPlanStr = "0S"
-                recGoal = "$bestCounterCode at ${bestCounterHp}% HP — Chip First"
+                recGoal = "$bestCounterCode at ${bestCounterHp}% HP"
                 recTone = "bait"
             } else if (oppSwitchLockActive && bestCounterBr > curBr + 45) {
-                // Opponent manual-swapped and locked their swap timer!
                 recPhase = "OPP_SWAP"
                 recAction = "PUNISH LOCK -> $bestCounterCode"
-                recGoal = "Opp Locked ${oppSwapRemainingSec}s • Farm w/ $bestCounterCode (${bestCounterHp}% HP)"
+                recGoal = "Opp Locked ${oppSwapRemainingSec}s • Farm w/ $bestCounterCode"
                 recTone = "counter"
                 recSwapIdx = bestCounterIdx
             } else if (oppCanCounterSwap && oppAliveCount > 1 && bestCounterBr > curBr + 45) {
-                // Opponent entered after a faint (or their swap timer is ready <= 8s): run Counter-Swap Minimax
                 val worstRespBr = candidateWorstRespMap[bestCounterIdx] ?: 440
                 val branchAScore = (bestCounterBr * 0.35 + worstRespBr * 0.65 - 45.0).roundToInt()
                 val branchBScore = (br0s * 0.45 + bestCounterBr * 0.55).roundToInt()
-                if (branchBScore >= branchAScore && curBr >= 360) {
+                if ((branchBScore >= branchAScore || backlinePred.swapPunishRiskPct >= 50) && curBr >= 355) {
                     recPhase = "FAINT_ENTRY"
-                    recAction = "STAY & CHIP (HOLD SWAP)"
+                    recAction = "STAY & CHIP (HOLD $bestCounterCode)"
                     shieldPlanStr = "0S"
-                    recGoal = "Opp Swap Ready (${oppSwapRemainingSec}s) -> Free $bestCounterCode (${bestCounterHp}%) After Faint"
+                    recGoal = "Avoid Counter-Swap (Rsk ${backlinePred.swapPunishRiskPct}%)"
                     recTone = "bait"
                 } else {
                     recPhase = "OPP_SWAP"
                     recAction = "SAFE PIVOT -> $bestCounterCode"
-                    recGoal = "Flip Tempo w/ $bestCounterCode (${bestCounterHp}% vs Opp ${activeOppHp}%)"
+                    recGoal = "Flip Tempo w/ $bestCounterCode (${bestCounterHp}%)"
                     recTone = "counter"
                     recSwapIdx = bestCounterIdx
                 }
             } else if (bestCounterBr > curBr + 45) {
                 recAction = "COUNTER -> $bestCounterCode"
-                recGoal = if (bestCounterBr >= activeTierWMin) "Punish Swap w/ $bestCounterCode (${bestCounterHp}% HP)" else "Neutralize & Take Shields ($bestCounterCode ${bestCounterHp}%)"
+                recGoal = "Punish w/ $bestCounterCode (${bestCounterHp}% HP)"
                 recTone = "counter"
                 recSwapIdx = bestCounterIdx
             } else {
-                recAction = "STAY / CHIP"
-                recGoal = "Chip & Soft Lose 0S (You ${activeUserHp}% vs Opp ${activeOppHp}%)"
+                recAction = "STAY / CHIP 0S"
+                recGoal = "Soft Lose -> Farm w/ Backline"
                 recTone = "bait"
             }
-        } else if (activeSlotIdxSafe > 0) {
-            val leadAlive = !playerFaintedSlots[0]
-            val farmPartnerCode = if (leadAlive) abbrPokemon3(p1Name) else abbrPokemon3(teamNames.getOrElse(2) { p1Name })
-            if (activeSlotIdxSafe == 1 && teamArchetype == "ABB") {
-                recAction = if (curBr >= activeTierWMin) "PRESSURE (B1)" else "BAIT SHIELDS"
-                recGoal = if (curBr >= activeTierWMin) "Flip Switch (You ${activeUserHp}% vs Opp ${activeOppHp}%)" else "Draw Threat -> Farm w/ $farmPartnerCode"
-                recTone = if (curBr >= activeTierWMin) "stay" else "bait"
-            } else if (activeSlotIdxSafe == 1) {
-                recAction = if (curBr >= activeTierWMin) "FIGHT SWITCH" else "SOFT LOSE (PIVOT)"
-                recGoal = if (curBr >= activeTierWMin) "Win Switch Adv (You ${activeUserHp}% vs Opp ${activeOppHp}%)" else "Force Shield Adv -> Farm w/ $farmPartnerCode"
-                recTone = if (curBr >= activeTierWMin) "stay" else "bait"
-            } else {
-                recAction = if (curBr >= activeTierWMin) "SWEEP / CLOSE" else "OUTPACE / CHIP"
-                recGoal = if (curBr >= activeTierWMin) "Close Match (You ${activeUserHp}% vs Opp ${activeOppHp}%)" else "Land Heavy Charge (You ${activeUserHp}% vs Opp ${activeOppHp}%)"
-                recTone = if (curBr >= activeTierWMin) "stay" else "bait"
-            }
         } else {
-            recAction = if (curBr >= activeTierWMin) "STAY IN" else "SOFT LOSE 0S"
+            recAction = if (curBr >= activeTierWMin) "STAY IN ($myBestMoveShort)" else "SOFT LOSE 0S"
             recGoal = if (curBr >= activeTierWMin) {
-                if (oppSwitchLockActive) "Farm Locked Opp (${oppSwapRemainingSec}s • Opp ${activeOppHp}%)" else "Hold Tempo (You ${activeUserHp}% vs Opp ${activeOppHp}%)"
+                if (oppSwitchLockActive) "Farm Locked Opp (${oppSwapRemainingSec}s)" else "Throw $myBestMoveShort pre-$oppNextMoveShort"
             } else {
-                "Chip 0S -> Setup Backline (You ${activeUserHp}% vs Opp ${activeOppHp}%)"
+                "Chip 0S -> Setup Backline"
             }
             recTone = if (curBr >= activeTierWMin) "stay" else "bait"
         }
 
-        if (hasAltMoveKoRisk && !oppNukeKosActive && recPhase != "SHIELD_CALL" && recPhase != "POST_FAINT_SWAP" && !recGoal.contains("⚠️")) {
-            recGoal = "$recGoal • $altKoGoalWarning"
-        }
-        if (topShow6UnrevealedCoreNote != null && revealedBenchOpponents.size < 2 && !recGoal.contains("Core Watch")) {
-            recGoal = "$recGoal • $topShow6UnrevealedCoreNote"
+        // Line 2: Persistent Condensed Opponent Backline Prediction (or Revealed Bench Status if all 3 revealed)
+        val recBacklineText = when {
+            backlinePred.hudLine2Text.isNotEmpty() -> backlinePred.hudLine2Text
+            revealedBenchOpponents.isNotEmpty() -> {
+                val benchParts = displayList.mapIndexedNotNull { idx, oName ->
+                    if (idx == activeOppSlotSafe) null
+                    else {
+                        val bHp = if (idx in 0..2 && oppFaintedSlots[idx]) 0 else oppSlotHpPct.getOrElse(idx) { 100 }
+                        val bE = if (idx in 0..2 && oppFaintedSlots[idx]) 0 else oppSlotEnergy.getOrElse(idx) { 0 }
+                        val code = abbrPokeCompactStatic(oName)
+                        if (bHp <= 0) "$code:KO" else "$code:${bHp}%/${bE}E"
+                    }
+                }
+                "📋 Opp Bench: ${benchParts.joinToString(" · ")}"
+            }
+            else -> "🎯 $recGoal"
         }
 
-        val recUrgencyColor = when (recTone) {
-            "stay" -> "emerald"
-            "counter" -> "sky"
-            "swap" -> "rose"
-            "bait" -> "amber"
+        val recUrgencyColor = when {
+            timingAlertLevel == "IMMEDIATE_0_FAST" || timingAlertLevel == "BLINK_1_FAST" -> "rose"
+            timingAlertLevel == "WARN_2_FASTS" -> "amber"
+            recTone == "stay" -> "emerald"
+            recTone == "counter" -> "sky"
+            recTone == "swap" -> "rose"
+            recTone == "bait" -> "amber"
             else -> "sky"
         }
-        val recActionLabel = if (recPhase == "SHIELD_CALL") "[SHIELD CALL] $recAction" else "[$teamArchetype] $recAction"
+        val recActionLabel = when (recPhase) {
+            "SHIELD_CALL" -> "[SHIELD] $recAction"
+            "THROW_CATCH_TIMING", "FARM_DOWN" -> recAction
+            else -> "[$teamArchetype] $recAction"
+        }
+        val recLine1Text = "$recActionLabel · [$shieldPlanStr]"
 
         lastRecommendedAction = recActionLabel
-        lastRecommendedGoal = recGoal
+        lastRecommendedGoal = "$recGoal | $recBacklineText"
         lastRecommendedPhase = recPhase
         lastRecommendedSwapSlotIdx = recSwapIdx
         lastRecommendedCandidateScores = candidateScoreMap
@@ -24041,8 +25204,14 @@ class OverlayService : LifecycleService() {
             "action" to recAction,
             "actionLabel" to recActionLabel,
             "shieldPlan" to shieldPlanStr,
-            "goal" to recGoal,
-            "goalText" to recGoal,
+            "goal" to recBacklineText,
+            "goalText" to recBacklineText,
+            "tacticalSubGoal" to recGoal,
+            "line1Text" to recLine1Text,
+            "line2Text" to recBacklineText,
+            "backlineText" to recBacklineText,
+            "timingAlertLevel" to timingAlertLevel,
+            "swapPunishRiskPct" to backlinePred.swapPunishRiskPct,
             "tone" to recTone,
             "urgencyColor" to recUrgencyColor,
             "recommendedSwapSlotIndex" to recSwapIdx,
@@ -24069,6 +25238,7 @@ class OverlayService : LifecycleService() {
             "fastDetectTurnOffset" to fastDetectTurnOffset,
             "overlayTransparencyPct" to overlayTransparencyPct,
             "appThemeId" to appThemeId,
+            "aiAdviceHudPosition" to aiAdviceHudPosition,
             "isOverlayMinimized" to isOverlayMinimized,
             "maxHorizonTurns" to maxHorizonTurns,
             "isOpponentShadow" to isOpponentShadow,

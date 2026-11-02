@@ -1,4 +1,30 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v5.13`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.00`)
+
+---
+
+## v6.00 (2026-11-02) — 4-Pillar Condensed 2-Line AI Tactical Coach, Unified Throw & Catch Timing Alerts, Bottom Default HUD Position, Personalized Blended Meta & Cores Engine, Limited Cup Same-CP Standard League Blending (`50%` / `Fast` Default), & New `📊 Meta` Dashboard Tab
+*Major milestone release (`v6.00`, `versionCode = 1600`) overhauling the live in-battle AI recommendation banner into a high-contrast, ultra-condensed 2-line Tactical Coach positioned at the **Bottom** of the HUD by default (configurable to **Top** in Settings), integrating unified Fast-Move Farm Down + Throw & Catch Timing visual alerts (`WARN_2_FASTS` solid highlight, `BLINK_1_FAST` blinking last-fast warning, `IMMEDIATE_0_FAST`), Tank-to-Reach-Move post-hit survival math, in-app Personalized Meta & Meta Core derivation, Limited Cup Same-CP Standard League blending (`50%` weight & `Fast` `0.10` decay default for GBL Blind 3), and a dedicated 4th **`📊 Meta`** navigation tab with a default-collapsed Meta Settings drawer.*
+
+- **v6.00 — Key Features & Architecture**:
+  - **4-Pillar Condensed 2-Line AI Tactical Coach (`#sky-tactical-rec-row`)**:
+    - **Condensed Names & Strict Width Budget**: Abbreviates Pokémon (`PAL-O`, `ZAC-C`, `HO-OH`, `NDM`, $\le 5$ chars) and Charged Moves (`SecSw`, `AqTail`, `ClsCmb`, `MetMsh`, $\le 6$ chars) so neither line ever overruns the floating overlay window ($\le 38$ chars/line).
+    - **Configurable HUD Placement (`Bottom` [New Default] vs. `Top`)**: Defaults to the **Bottom** of the floating HUD (directly below `My Attacks`) for maximum mid-battle visibility, with a one-tap toggle in `⚙️ Settings -> Overlay` (`PREFS_KEY_AI_ADVICE_HUD_POSITION`, Tasker extra `EXTRA_AI_ADVICE_HUD_POSITION`) to place it at the `Top`.
+    - **Pillar 1 (Line 2 — Live Opponent Backline Prediction)**: Predicts the opponent's unrevealed backline in Blind 3 GBL using your personalized current-season blended meta cores + type-coverage synergy when 1 (`🔮 Back: PAL-O 68% · HO-OH 52% | Rsk:HI`) or 2 (`🔮 3rd: HO-OH 74% · KYU-W 48%`) opponents are revealed.
+    - **Pillar 2 (Line 1 — Lead Swap / Stay Advice Based on Backline Hard-Counter Risk)**: Audits whether the opponent's predicted backline holds a hard counter (`BR <= 375`) to your bench swap. Recommends `STAY · CHIP (SwpRsk: HO-OH)` or `CHIP -> CATCH ON ...` when swap punish risk is high ($\ge 45\%$), and `SWAP -> XERN` when swap punish risk is low ($< 45\%$) in a bad lead.
+    - **Pillar 3 (Line 1 — Exact Fast-Move Farm Down vs. Unified Throw & Catch Timing)**:
+      - **Safe Farm Down**: Displays `FARM DOWN: ${N}F TO KO` (Emerald) when your fast moves KO the opponent before they reach their next charged move.
+      - **2 Fast Moves Before Throw or Catch (`WARN_2_FASTS`)**: Solid High-Contrast Amber Highlight (`⚠️ 2F -> THROW ${MyMv} (Pre-${OppMv})` or `⚠️ 2F -> CATCH ${OppMv} ON ${CatchMon}`).
+      - **1 Fast Move Before Last Chance (`BLINK_1_FAST`)**: Blinking Crimson/Amber Alert (`🚨 1 LAST FAST -> THROW ${MyMv} NOW!` or `🚨 1 LAST FAST -> CATCH ON ${CatchMon}!`) so you know to throw 1 final fast move and immediately fire your charged move or swap to catch without over-tapping.
+      - **0 Fast Moves Left (`IMMEDIATE_0_FAST`)**: Rapid Crimson Blink (`🛑 0F LEFT -> THROW ${MyMv} NOW!` or `🛑 0F LEFT -> CATCH ${OppMv} ON ${CatchMon}!`).
+    - **Pillar 4 (Incoming Charged Move — Tank & Farm to Next Charged Move Before Fainting)**: Computes exact post-hit HP and fast-move survival turns on both the `"Attack incoming!"` Shield Decision Overlay and Line 1 (`TANK (0S) -> ${MyMv} IN ${N}F` vs. `SHIELD (1S) -> DIES ${K}F SHORT OF ${MyMv}!`).
+  - **Unified Mode-Independent Blended Meta & Core Engine + Limited Cup Same-CP Standard League Blending**:
+    - Unifies **Team Builder**, **Live AI Backline Prediction**, and the **`📊 Meta` tab's `Current Season` view** on the same seasonal blending algorithm (`computeBlendedSeasonMetaStatic` & `computeBlendedSeasonMetaCoresStatic`), auto-resetting each GBL season.
+    - **Mode-Independent Settings**: Blind 3 (GBL Mode) and Show 6 (Battle Frontier Mode) maintain independent League Selectors, Log Weight %, and Recency Decay $\lambda$.
+    - **Limited Cup Same-CP Standard League Blending**: Blends eligible species from your larger-sample Standard Open League logs of the same CP cap (`1500` $\to$ Great, `2500` $\to$ Ultra, `>2500` $\to$ Master) into Limited Cups, defaulting to **`50%` Standard League weight** and **`Fast` (`0.10`) fade** for GBL Blind 3 Limited Metas (and `25%` / `Std` `0.06` for Show 6), with user-adjustable Blend % (`0%–75%`) and Decay (`Slow`, `Std`, `Fast`).
+  - **New 4th Navigation Tab (`📊 Meta`) & Decluttered `⚙️ Settings`**:
+    - Added **`📊 Meta`** after `⚙️ Settings` (`⚔️ Teams | 📜 Battle Log | ⚙️ Settings | 📊 Meta`) with **Top Meta Cores** and **Top Meta Pokémon** tables visible immediately on open.
+    - **View Scope Toggle**: Switch between **`Current Season`** (drives AI & Team Builder) and **`Last 25` / `Last 50` Battles** (purely empirical personal meta inspection without altering AI or Team Builder weights).
+    - **Default-Collapsed Meta Settings Drawer**: Moved all purely meta-related settings (Season Blending sliders, Limited Cup Standard League Blending controls, Show 6 Battle Frontier Google Spreadsheet Importer & Weighting, PvPoke GitHub Limited Metas Selector, and PvPoke Live Database Sync) out of `⚙️ Settings` into a collapsible drawer inside `📊 Meta` that defaults to collapsed on open.
 
 ---
 
