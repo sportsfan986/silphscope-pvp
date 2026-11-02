@@ -82,7 +82,7 @@
                 android:id="@+id/tv_app_main_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Real-Time PvP Floating Overlay • v5.11"
+                android:text="Real-Time PvP Floating Overlay • v5.12"
                 android:textSize="11sp"
                 android:textColor="#94a3b8"
                 android:layout_marginTop="1dp" />
@@ -3188,7 +3188,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="🤖 AI Training &amp; Anomaly Telemetry Auto-Upload (v5.11)"
+                    android:text="🤖 AI Training &amp; Anomaly Telemetry Auto-Upload (v5.12)"
                     android:textColor="#38bdf8"
                     android:textSize="11sp"
                     android:textStyle="bold" />

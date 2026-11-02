@@ -572,9 +572,9 @@ class MainActivity : AppCompatActivity() {
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "5.11"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "5.12"
         } catch (_: Exception) {
-            "5.11"
+            "5.12"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -2043,8 +2043,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val statePrefix = when {
-            enabled && token.isNotEmpty() -> "🟢 Auto-Upload ON (Branch: $lastBranch)"
-            enabled && token.isEmpty() -> "🟡 Auto-Upload ON (Requires GitHub Login)"
+            enabled -> "🟢 Auto-Upload ON (Branch: $lastBranch)"
             else -> "⚪ Auto-Upload OFF"
         }
         textAiTelemetryStatus.text =
@@ -2111,19 +2110,15 @@ class MainActivity : AppCompatActivity() {
             }
 
         AlertDialog.Builder(this)
-            .setTitle("🤖 Enable AI & Anomaly Log Auto-Upload? (v5.11)")
+            .setTitle("🤖 Enable AI & Anomaly Log Auto-Upload? (v5.12)")
             .setMessage(msg)
-            .setPositiveButton(if (hasToken) "✅ Enable Auto-Upload" else "🔑 Login & Enable") { _, _ ->
+            .setPositiveButton("✅ Enable Auto-Upload") { _, _ ->
                 prefs.edit()
                     .putBoolean(OverlayService.PREFS_KEY_AUTO_UPLOAD_AI_LOGS, true)
                     .putBoolean(OverlayService.PREFS_KEY_AI_TELEMETRY_ONBOARDING_SHOWN, true)
                     .apply()
                 updateAiTelemetryStatusUi()
-                if (OverlayService.getEffectiveSyncToken(prefs).isEmpty()) {
-                    startGitHubOAuthDeviceFlow()
-                } else {
-                    triggerManualAiTelemetryUpload(silentIfEmpty = true)
-                }
+                triggerManualAiTelemetryUpload(silentIfEmpty = true)
             }
             .setNegativeButton("Not Now") { _, _ ->
                 updateAiTelemetryStatusUi()

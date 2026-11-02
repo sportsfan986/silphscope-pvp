@@ -1,0 +1,84 @@
+name: Relay External User Telemetry to ai-telemetry-logs Branch
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  relay-telemetry:
+    if: startsWith(github.event.issue.title, '[AI-TELEMETRY-BATCH]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ai-telemetry-logs branch
+        uses: actions/checkout@v4
+        with:
+          ref: ai-telemetry-logs
+          fetch-depth: 1
+
+      - name: Extract and commit telemetry batch
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_USER: ${{ github.event.issue.user.login }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node - << 'EOF'
+          const fs = require('fs');
+          const path = require('path');
+
+          const body = process.env.ISSUE_BODY || '';
+          const user = (process.env.ISSUE_USER || 'external').replace(/[^a-zA-Z0-9_-]/g, '_');
+          const match = body.match(/```jsonl\s*([\s\S]*?)```/);
+          if (!match || !match[1].trim()) {
+            console.log('No jsonl payload found in issue body.');
+            process.exit(0);
+          }
+          const jsonl = match[1].trim() + '\n';
+          const lines = jsonl.trim().split(/\r?\n/).filter(Boolean);
+
+          const titleParts = (process.env.ISSUE_TITLE || '').split(/\s+/);
+          const rawBatchId = titleParts[1] || `batch_${Date.now()}_${user}`;
+          const batchId = rawBatchId.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const dayFolder = new Date().toISOString().slice(0, 10);
+
+          const batchPath = path.join('batches', dayFolder, `${batchId}.jsonl`);
+          const userBatchPath = path.join('users', user, `${batchId}.jsonl`);
+
+          fs.mkdirSync(path.dirname(batchPath), { recursive: true });
+          fs.mkdirSync(path.dirname(userBatchPath), { recursive: true });
+          fs.writeFileSync(batchPath, jsonl, 'utf8');
+          fs.writeFileSync(userBatchPath, jsonl, 'utf8');
+
+          let manifest = { schemaVersion: 1, updatedAt: Date.now(), totalBatches: 0, batches: [] };
+          if (fs.existsSync('manifest.json')) {
+            try {
+              manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+            } catch {}
+          }
+          if (!Array.isArray(manifest.batches)) manifest.batches = [];
+          manifest.batches.push({
+            batchId,
+            path: batchPath,
+            userPath: userBatchPath,
+            uploadedAt: Date.now(),
+            uploadedBy: user,
+            battleCount: lines.length
+          });
+          manifest.updatedAt = Date.now();
+          manifest.totalBatches = manifest.batches.length;
+          fs.writeFileSync('manifest.json', JSON.stringify(manifest, null, 2), 'utf8');
+          EOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add batches/ users/ manifest.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(telemetry): relay issue #${ISSUE_NUMBER} from @${ISSUE_USER}"
+            git push origin ai-telemetry-logs
+          fi
+          gh issue close "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --comment "✅ Telemetry batch automatically archived to \`ai-telemetry-logs\` branch."
