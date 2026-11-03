@@ -151,6 +151,9 @@ import {
   getForcedGblLeagues,
   getForcedShow6Leagues,
   isBattleFrontierCupTitle,
+  isCurrentBattleFrontierCup,
+  resolveLeagueCpTier,
+  matchesTwoTierLeagueFilter,
   getLimitedMetaSheetAliases,
   setLimitedMetaSheetAlias,
   getLeagueCpCap,
@@ -1186,10 +1189,13 @@ export default function App() {
         setSelectedOpponentLeague('AUTO');
       }
     }
+    setActiveTeamsCpTierFilter('ALL');
     setActiveTeamsLeagueFilter('ALL');
+    setLogFilterCpTier('ALL');
+    setLogFilterLeague('ALL LEAGUES');
     setStartBattleToast(
       mode === 'show6'
-        ? '🏛️ Switched to Show 6 Mode (Great / Spectral / Cauldron / Master • Independent Teams, Trash & Battle Logs)'
+        ? '🏛️ Switched to Show 6 Mode (Spectral / Cauldron / Master • Independent Teams, Trash & Battle Logs)'
         : '🛡️ Switched to Standard GBL Mode (Blind 3 PvP • Independent Teams, Trash & Battle Logs)'
     );
     setTimeout(() => setStartBattleToast(null), 2200);
@@ -1413,7 +1419,8 @@ export default function App() {
     return DEFAULT_SEASONS_FALLBACK;
   });
 
-  // Battle Log Filter & Modal States
+  // Battle Log Filter & Modal States (v6.05 2-Tier CP Range -> Cup / Format Filter)
+  const [logFilterCpTier, setLogFilterCpTier] = useState<'ALL' | 'GREAT' | 'ULTRA' | 'MASTER'>('ALL');
   const [logFilterLeague, setLogFilterLeague] = useState<string>('ALL LEAGUES');
   const [logFilterTeamId, setLogFilterTeamId] = useState<string>('ALL TEAMS');
   const [logFilterTimeframe, setLogFilterTimeframe] = useState<'DAY' | 'YESTERDAY' | 'WEEK' | 'CURRENT_SEASON' | 'PREVIOUS_SEASON' | 'ALL'>('ALL');
@@ -1894,8 +1901,9 @@ export default function App() {
   }, [presets, selectedPresetId]);
 
   // ============================================================================
-  // PVPOKE LIMITED METAS CATALOG, PINNED METAS PER MODE, & MY TEAMS FILTER TABS
+  // PVPOKE LIMITED METAS CATALOG, PINNED METAS PER MODE, & MY TEAMS 2-TIER FILTER TABS
   // ============================================================================
+  const [activeTeamsCpTierFilter, setActiveTeamsCpTierFilter] = useState<'ALL' | 'GREAT' | 'ULTRA' | 'MASTER'>('ALL');
   const [activeTeamsLeagueFilter, setActiveTeamsLeagueFilter] = useState<'ALL' | LeagueType>('ALL');
   const [limitedMetaCatalog, setLimitedMetaCatalog] = useState<LimitedMetaFormat[]>(() => getLimitedMetaCatalog());
   const [pinnedGblMetas, setPinnedGblMetasState] = useState<string[]>(() => getPinnedGblLimitedMetas());
@@ -5763,7 +5771,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v6.04 • Android Native Overlay
+                  v6.05 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -10367,114 +10375,197 @@ export default function App() {
               );
             })()}
 
-            {/* League & Limited Meta Filter Tabs for My Teams (Dedicated Teams per Format) */}
-            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mr-1">
-                  {appCombatMode === 'show6' ? '🏛️ Show 6 Trios Filter:' : '🛡️ GBL Blind 3 Filter:'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setActiveTeamsLeagueFilter('ALL')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-extrabold border transition ${
-                    activeTeamsLeagueFilter === 'ALL'
-                      ? 'bg-sky-500 text-slate-950 border-sky-400 shadow'
-                      : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
-                  }`}
-                >
-                  All Teams ({presets.length})
-                </button>
-                {(appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues)
-                  .filter((lg) => !isOldCupForMode(lg, appCombatMode))
-                  .map((lg) => {
-                  const count = presets.filter((p) => p.league === lg).length;
-                  const shortName =
-                    lg === 'GREAT LEAGUE'
-                      ? 'Great'
-                      : lg === 'ULTRA LEAGUE'
-                      ? 'Ultra'
-                      : lg === 'MASTER LEAGUE'
-                      ? 'Master'
-                      : lg === 'MEGA MASTER LEAGUE'
-                      ? 'Mega ML'
-                      : lg === 'Battle Frontier (Spectral)'
-                      ? 'BF Spectral'
-                      : lg === 'Battle Frontier (Cauldron)'
-                      ? 'BF Cauldron'
-                      : lg === 'Battle Frontier (Master)'
-                      ? 'BF Master'
-                      : lg;
-                  return (
+            {/* 2-Tier League & Cup Filter Tabs for My Teams (Tier 1: CP Range -> Tier 2: Cup / Format + Old Cups) */}
+            {(() => {
+              const modeActiveCups = (appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues).filter(
+                (lg) => !isOldCupForMode(lg, appCombatMode)
+              );
+              const formatCupSubLabel = (lg: string) => {
+                const u = lg.trim().toUpperCase();
+                if (u === 'GREAT LEAGUE' || u === 'ULTRA LEAGUE' || u === 'MASTER LEAGUE') return 'Open / Standard';
+                if (u.includes('MEGA')) return `Mega (${lg})`;
+                if (lg === 'Battle Frontier (Spectral)' || u === 'BATTLE FRONTIER (SPECTRAL)') return 'BF Spectral';
+                if (lg === 'Battle Frontier (Cauldron)' || u === 'BATTLE FRONTIER (CAULDRON)') return 'BF Cauldron';
+                if (lg === 'Battle Frontier (Master)' || u === 'BATTLE FRONTIER (MASTER)') return 'BF Master';
+                return lg;
+              };
+              const sortTierCups = (cups: string[]) =>
+                [...cups].sort((a, b) => {
+                  const rank = (x: string) => {
+                    const u = x.trim().toUpperCase();
+                    if (u === 'GREAT LEAGUE' || u === 'ULTRA LEAGUE' || u === 'MASTER LEAGUE') return 0;
+                    if (u.includes('MEGA')) return 1;
+                    return 2;
+                  };
+                  const ra = rank(a);
+                  const rb = rank(b);
+                  return ra !== rb ? ra - rb : a.localeCompare(b);
+                });
+
+              const tier1Options: Array<{ key: 'ALL' | 'GREAT' | 'ULTRA' | 'MASTER'; label: string; count: number }> = [
+                { key: 'ALL', label: 'All CP Tiers', count: presets.length },
+                {
+                  key: 'GREAT',
+                  label: 'Great (≤1500)',
+                  count: presets.filter((p) => resolveLeagueCpTier(p.league) === 'GREAT').length
+                },
+                {
+                  key: 'ULTRA',
+                  label: 'Ultra (2500)',
+                  count: presets.filter((p) => resolveLeagueCpTier(p.league) === 'ULTRA').length
+                },
+                {
+                  key: 'MASTER',
+                  label: 'Master (10000)',
+                  count: presets.filter((p) => resolveLeagueCpTier(p.league) === 'MASTER').length
+                }
+              ];
+
+              const tierPresets =
+                activeTeamsCpTierFilter === 'ALL'
+                  ? presets
+                  : presets.filter((p) => resolveLeagueCpTier(p.league) === activeTeamsCpTierFilter);
+              const tierActiveCups =
+                activeTeamsCpTierFilter === 'ALL'
+                  ? []
+                  : sortTierCups(modeActiveCups.filter((lg) => resolveLeagueCpTier(lg) === activeTeamsCpTierFilter));
+              const tierOldCupsCount =
+                activeTeamsCpTierFilter === 'ALL'
+                  ? 0
+                  : tierPresets.filter((p) => isOldCupForMode(p.league, appCombatMode)).length;
+              const tierName =
+                activeTeamsCpTierFilter === 'GREAT'
+                  ? 'Great'
+                  : activeTeamsCpTierFilter === 'ULTRA'
+                  ? 'Ultra'
+                  : 'Master';
+
+              return (
+                <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 space-y-2.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mr-1">
+                        {appCombatMode === 'show6' ? '🏛️ Tier 1 — CP Range:' : '🛡️ Tier 1 — CP Range:'}
+                      </span>
+                      {tier1Options.map((t1) => {
+                        const isSelected = activeTeamsCpTierFilter === t1.key;
+                        return (
+                          <button
+                            key={t1.key}
+                            type="button"
+                            onClick={() => {
+                              setActiveTeamsCpTierFilter(t1.key);
+                              setActiveTeamsLeagueFilter(t1.key === 'ALL' ? 'ALL' : (`TIER:${t1.key}` as LeagueType));
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold border transition flex items-center gap-1.5 ${
+                              isSelected
+                                ? 'bg-sky-500 text-slate-950 border-sky-400 shadow'
+                                : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                            }`}
+                          >
+                            <span>{t1.label}</span>
+                            <span
+                              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                                isSelected
+                                  ? 'bg-slate-950/25 text-slate-950 font-black'
+                                  : 'bg-slate-800 text-slate-400'
+                              }`}
+                            >
+                              {t1.count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                     <button
-                      key={lg}
                       type="button"
-                      onClick={() => setActiveTeamsLeagueFilter(lg)}
-                      className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 ${
-                        activeTeamsLeagueFilter === lg
-                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow'
-                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
-                      }`}
+                      onClick={() => setActiveTab('settings')}
+                      className="text-[11px] font-bold text-purple-300 hover:text-purple-200 underline shrink-0"
                     >
-                      <span>{shortName}</span>
-                      <span
-                        className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                          activeTeamsLeagueFilter === lg
-                            ? 'bg-slate-950/25 text-slate-950 font-black'
-                            : 'bg-slate-800 text-slate-400'
+                      ⚙️ + Pin PvPoke Limited Metas in Settings
+                    </button>
+                  </div>
+
+                  {activeTeamsCpTierFilter !== 'ALL' && (
+                    <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-800/80">
+                      <span className="text-[10.5px] font-extrabold uppercase tracking-wider text-emerald-400 mr-1">
+                        🏆 Tier 2 — {tierName} Cup:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTeamsLeagueFilter(`TIER:${activeTeamsCpTierFilter}` as LeagueType)}
+                        className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 ${
+                          activeTeamsLeagueFilter === `TIER:${activeTeamsCpTierFilter}` || activeTeamsLeagueFilter === 'ALL'
+                            ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow'
+                            : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
                         }`}
                       >
-                        {count}
-                      </span>
-                    </button>
-                  );
-                })}
-                {(() => {
-                  const oldCupsCount = presets.filter((p) => isOldCupForMode(p.league, appCombatMode)).length;
-                  if (oldCupsCount === 0 && activeTeamsLeagueFilter !== 'OLD_CUPS') return null;
-                  return (
-                    <button
-                      type="button"
-                      onClick={() => setActiveTeamsLeagueFilter('OLD_CUPS')}
-                      title="Teams from unsynced/unchecked cups or cups outside the 4-week active window"
-                      className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 ${
-                        activeTeamsLeagueFilter === 'OLD_CUPS'
-                          ? 'bg-amber-500 text-slate-950 border-amber-400 shadow'
-                          : 'bg-slate-950 border-amber-500/40 text-amber-300 hover:border-amber-400'
-                      }`}
-                    >
-                      <span>🗄️ Old Cups</span>
-                      <span
-                        className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                          activeTeamsLeagueFilter === 'OLD_CUPS'
-                            ? 'bg-slate-950/25 text-slate-950 font-black'
-                            : 'bg-amber-500/20 text-amber-300'
-                        }`}
-                      >
-                        {oldCupsCount}
-                      </span>
-                    </button>
-                  );
-                })()}
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab('settings')}
-                className="text-[11px] font-bold text-purple-300 hover:text-purple-200 underline shrink-0"
-              >
-                ⚙️ + Pin PvPoke Limited Metas in Settings
-              </button>
-            </div>
+                        <span>All {tierName} Cups</span>
+                        <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-slate-950/25">
+                          {tierPresets.length}
+                        </span>
+                      </button>
+                      {tierActiveCups.map((lg) => {
+                        const count = tierPresets.filter((p) => p.league.toLowerCase() === lg.toLowerCase()).length;
+                        const isSelected = activeTeamsLeagueFilter.toLowerCase() === lg.toLowerCase();
+                        return (
+                          <button
+                            key={lg}
+                            type="button"
+                            onClick={() => setActiveTeamsLeagueFilter(lg)}
+                            className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 ${
+                              isSelected
+                                ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow'
+                                : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                            }`}
+                          >
+                            <span>{formatCupSubLabel(lg)}</span>
+                            <span
+                              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                                isSelected
+                                  ? 'bg-slate-950/25 text-slate-950 font-black'
+                                  : 'bg-slate-800 text-slate-400'
+                              }`}
+                            >
+                              {count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                      {(tierOldCupsCount > 0 || activeTeamsLeagueFilter === `OLD_CUPS:${activeTeamsCpTierFilter}`) && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveTeamsLeagueFilter(`OLD_CUPS:${activeTeamsCpTierFilter}` as LeagueType)}
+                          title={`Teams from unsynced/unchecked or expired >4w ${tierName} cups`}
+                          className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 ${
+                            activeTeamsLeagueFilter === `OLD_CUPS:${activeTeamsCpTierFilter}`
+                              ? 'bg-amber-500 text-slate-950 border-amber-400 shadow'
+                              : 'bg-slate-950 border-amber-500/40 text-amber-300 hover:border-amber-400'
+                          }`}
+                        >
+                          <span>🗄️ Old Cups</span>
+                          <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-amber-500/20">
+                            {tierOldCupsCount}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Presets Grid (Unified Anti-Meta Generator Look & Feel + Key Wins / Threats / Core Breakers Summary) */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               {presets
                 .map((preset, presetIdx) => ({ preset, presetIdx }))
                 .filter(({ preset }) =>
-                  activeTeamsLeagueFilter === 'ALL'
-                    ? true
-                    : activeTeamsLeagueFilter === 'OLD_CUPS'
-                    ? isOldCupForMode(preset.league, appCombatMode)
-                    : preset.league === activeTeamsLeagueFilter
+                  matchesTwoTierLeagueFilter(
+                    preset.league,
+                    activeTeamsCpTierFilter,
+                    activeTeamsLeagueFilter,
+                    appCombatMode
+                  )
                 )
                 .map(({ preset, presetIdx }) => {
                 const isSelected = preset.id === selectedPresetId;
@@ -12364,7 +12455,8 @@ export default function App() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
                       {groupFormats.map((fmt) => {
-                        const isForcedShow6BF = isBattleFrontierCupTitle(fmt.title || fmt.label, fmt.cup);
+                        const isForcedShow6BF =
+                          isCurrentBattleFrontierCup(fmt.title || fmt.label, fmt.cup) && fmt.status === 'CURRENT';
                         const isStandardOpenCup = fmt.cup === 'all';
                         const isPinnedGbl = isStandardOpenCup || pinnedGblMetas.includes(fmt.id);
                         const isPinnedShow6 = isForcedShow6BF || pinnedShow6Metas.includes(fmt.id);
@@ -13560,28 +13652,6 @@ export default function App() {
                 </div>
               </div>
             </div>
-
-            {/* Retroactive Battle Log Damage & Win Quality Reparse Card */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <span className="text-sm font-bold text-emerald-400 block">
-                    Reparse Completed Battles (Damage &amp; WAE)
-                  </span>
-                  <span className="text-xs text-slate-400 block mt-0.5">
-                    {reparseBattlesStatus}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleReparseAllCompletedBattles(false)}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition shrink-0 shadow-lg shadow-emerald-600/20"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>🔄 Reparse All</span>
-                </button>
-              </div>
-            </div>
           </div>
         )}
 
@@ -13608,12 +13678,12 @@ export default function App() {
             startOfYesterday.setDate(startOfYesterday.getDate() - 1);
             const sevenDaysAgo = nowMs - 7 * 24 * 60 * 60 * 1000;
             return entries.filter((e) => {
-              const leagueOk =
-                logFilterLeague === 'ALL LEAGUES'
-                  ? true
-                  : logFilterLeague === 'OLD_CUPS'
-                  ? isOldCupForMode(e.league, appCombatMode)
-                  : e.league.toUpperCase() === logFilterLeague.toUpperCase();
+              const leagueOk = matchesTwoTierLeagueFilter(
+                e.league,
+                logFilterCpTier,
+                logFilterLeague,
+                appCombatMode
+              );
               const teamOk =
                 logFilterTeamId === 'ALL TEAMS' ||
                 e.presetId === logFilterTeamId ||
@@ -14054,29 +14124,131 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Filter & Export Controls Card */}
+              {/* Filter & Export Controls Card (2-Tier CP Range -> Cup / Format Filter) */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">League Filter</label>
+                    <label className="block text-[10px] font-bold uppercase text-sky-400 mb-1">
+                      Tier 1 — CP Range
+                    </label>
                     <select
-                      value={logFilterLeague}
-                      onChange={(e) => setLogFilterLeague(e.target.value)}
+                      value={logFilterCpTier}
+                      onChange={(e) => {
+                        const nextTier = e.target.value as 'ALL' | 'GREAT' | 'ULTRA' | 'MASTER';
+                        setLogFilterCpTier(nextTier);
+                        setLogFilterLeague(nextTier === 'ALL' ? 'ALL LEAGUES' : `TIER:${nextTier}`);
+                        setLogFilterTeamId('ALL TEAMS');
+                      }}
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-semibold"
                     >
-                      <option value="ALL LEAGUES">ALL LEAGUES</option>
-                      {(appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues)
-                        .filter((lg) => !isOldCupForMode(lg, appCombatMode))
-                        .map((lg) => (
-                          <option key={lg} value={lg}>
-                            {lg}
-                          </option>
-                        ))}
-                      {(() => {
-                        const oldCupLogsCount = battleLogs.filter((e) => isOldCupForMode(e.league, appCombatMode)).length;
-                        if (oldCupLogsCount === 0 && logFilterLeague !== 'OLD_CUPS') return null;
-                        return <option value="OLD_CUPS">🗄️ Old Cups ({oldCupLogsCount})</option>;
-                      })()}
+                      <option value="ALL">All CP Tiers ({battleLogs.length})</option>
+                      <option value="GREAT">
+                        Great ≤1500 ({battleLogs.filter((b) => resolveLeagueCpTier(b.league) === 'GREAT').length})
+                      </option>
+                      <option value="ULTRA">
+                        Ultra 2500 ({battleLogs.filter((b) => resolveLeagueCpTier(b.league) === 'ULTRA').length})
+                      </option>
+                      <option value="MASTER">
+                        Master 10000 ({battleLogs.filter((b) => resolveLeagueCpTier(b.league) === 'MASTER').length})
+                      </option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-emerald-400 mb-1">
+                      Tier 2 — Cup / Format
+                    </label>
+                    <select
+                      value={logFilterLeague}
+                      onChange={(e) => {
+                        setLogFilterLeague(e.target.value);
+                        setLogFilterTeamId('ALL TEAMS');
+                      }}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-semibold"
+                    >
+                      {logFilterCpTier === 'ALL' ? (
+                        <>
+                          <option value="ALL LEAGUES">All Cups ({battleLogs.length})</option>
+                          {(appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues)
+                            .filter((lg) => !isOldCupForMode(lg, appCombatMode))
+                            .map((lg) => {
+                              const c = battleLogs.filter((b) => b.league.toLowerCase() === lg.toLowerCase()).length;
+                              return (
+                                <option key={lg} value={lg}>
+                                  {lg} ({c})
+                                </option>
+                              );
+                            })}
+                          {(() => {
+                            const oldCupLogsCount = battleLogs.filter((e) =>
+                              isOldCupForMode(e.league, appCombatMode)
+                            ).length;
+                            if (oldCupLogsCount === 0 && logFilterLeague !== 'OLD_CUPS') return null;
+                            return <option value="OLD_CUPS">🗄️ Old Cups ({oldCupLogsCount})</option>;
+                          })()}
+                        </>
+                      ) : (
+                        (() => {
+                          const tierName =
+                            logFilterCpTier === 'GREAT'
+                              ? 'Great'
+                              : logFilterCpTier === 'ULTRA'
+                              ? 'Ultra'
+                              : 'Master';
+                          const tierLogs = battleLogs.filter((b) => resolveLeagueCpTier(b.league) === logFilterCpTier);
+                          const tierActiveCups = (
+                            appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues
+                          )
+                            .filter(
+                              (lg) =>
+                                !isOldCupForMode(lg, appCombatMode) && resolveLeagueCpTier(lg) === logFilterCpTier
+                            )
+                            .sort((a, b) => {
+                              const rank = (x: string) => {
+                                const u = x.trim().toUpperCase();
+                                if (u === 'GREAT LEAGUE' || u === 'ULTRA LEAGUE' || u === 'MASTER LEAGUE') return 0;
+                                if (u.includes('MEGA')) return 1;
+                                return 2;
+                              };
+                              const ra = rank(a);
+                              const rb = rank(b);
+                              return ra !== rb ? ra - rb : a.localeCompare(b);
+                            });
+                          const tierOldLogsCount = tierLogs.filter((b) =>
+                            isOldCupForMode(b.league, appCombatMode)
+                          ).length;
+                          const formatSubOption = (lg: string) => {
+                            const u = lg.trim().toUpperCase();
+                            if (u === 'GREAT LEAGUE' || u === 'ULTRA LEAGUE' || u === 'MASTER LEAGUE') {
+                              return `Open / Standard (${lg})`;
+                            }
+                            if (u.includes('MEGA')) return `Mega (${lg})`;
+                            return lg;
+                          };
+                          return (
+                            <>
+                              <option value={`TIER:${logFilterCpTier}`}>
+                                All {tierName} Cups ({tierLogs.length})
+                              </option>
+                              {tierActiveCups.map((lg) => {
+                                const c = tierLogs.filter(
+                                  (b) => b.league.toLowerCase() === lg.toLowerCase()
+                                ).length;
+                                return (
+                                  <option key={lg} value={lg}>
+                                    {formatSubOption(lg)} ({c})
+                                  </option>
+                                );
+                              })}
+                              {(tierOldLogsCount > 0 || logFilterLeague === `OLD_CUPS:${logFilterCpTier}`) && (
+                                <option value={`OLD_CUPS:${logFilterCpTier}`}>
+                                  🗄️ Old Cups ({tierOldLogsCount})
+                                </option>
+                              )}
+                            </>
+                          );
+                        })()
+                      )}
                     </select>
                   </div>
 
@@ -14087,12 +14259,21 @@ export default function App() {
                       onChange={(e) => setLogFilterTeamId(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-semibold"
                     >
-                      <option value="ALL TEAMS">All Teams ({presets.length})</option>
-                      {presets.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} ({p.league.split(' ')[0]})
-                        </option>
-                      ))}
+                      {(() => {
+                        const matchingPresets = presets.filter((p) =>
+                          matchesTwoTierLeagueFilter(p.league, logFilterCpTier, logFilterLeague, appCombatMode)
+                        );
+                        return (
+                          <>
+                            <option value="ALL TEAMS">All Teams ({matchingPresets.length})</option>
+                            {matchingPresets.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} ({p.league.split(' ')[0]})
+                              </option>
+                            ))}
+                          </>
+                        );
+                      })()}
                     </select>
                   </div>
 

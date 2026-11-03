@@ -498,6 +498,19 @@ class OverlayService : LifecycleService() {
                 cupSlug.equals("cauldron", ignoreCase = true)
         }
 
+        fun isCurrentBattleFrontierCupStatic(titleOrKey: String, cupSlug: String = ""): Boolean {
+            val t = titleOrKey.trim().lowercase()
+            val c = cupSlug.trim().lowercase()
+            return c == "spectral" ||
+                c == "cauldron" ||
+                c == "battlefrontiermaster" ||
+                t.contains("battle frontier (spectral)") ||
+                t.contains("battle frontier (cauldron)") ||
+                t.contains("battle frontier (master)") ||
+                t == "spectral cup" ||
+                t == "cauldron cup"
+        }
+
         fun formatCatalogLeagueKeyStatic(rawTitle: String, cp: Int, cupSlug: String = ""): String {
             val cleanNoCp = rawTitle.trim().replace(Regex("\\s*\\((500|1500|2500|10000)\\)\\s*$"), "").trim()
             if (isBattleFrontierFormatTitleStatic(cleanNoCp, cupSlug)) {
@@ -596,10 +609,11 @@ class OverlayService : LifecycleService() {
                 } catch (_: Exception) {}
             }
 
-            // Filter out RECENT formats older than 4 weeks UNLESS still checked/pinned or Battle Frontier forced
+            // Filter out RECENT formats older than 4 weeks UNLESS still checked/pinned or a CURRENT Battle Frontier forced cup
             val filtered = byKey.values.filter { item ->
                 val isPinned = item.leagueKey.lowercase() in pinnedKeysLower
-                val isBfForced = isBattleFrontierFormatTitleStatic(item.title, item.cup)
+                val isBfForced = item.lifecycleStatus.equals("CURRENT", ignoreCase = true) &&
+                    isCurrentBattleFrontierCupStatic(item.title.ifBlank { item.leagueKey }, item.cup)
                 !isExpiredLimitedMetaStatic(item, nowMs) || isPinned || isBfForced
             }
             val sorted = sortLimitedMetasByLifecycleStatic(filtered)
@@ -618,7 +632,8 @@ class OverlayService : LifecycleService() {
                 val parsed: List<LimitedMetaFormat> = Gson().fromJson(raw, type) ?: return
                 val kept = parsed.filter { item ->
                     val isPinned = item.leagueKey.lowercase() in pinnedKeysLower
-                    val isBfForced = isBattleFrontierFormatTitleStatic(item.title, item.cup)
+                    val isBfForced = item.lifecycleStatus.equals("CURRENT", ignoreCase = true) &&
+                        isCurrentBattleFrontierCupStatic(item.title.ifBlank { item.leagueKey }, item.cup)
                     !isExpiredLimitedMetaStatic(item, nowMs) || isPinned || isBfForced
                 }
                 if (kept.size != parsed.size) {
@@ -637,7 +652,10 @@ class OverlayService : LifecycleService() {
         fun getForcedShow6LeaguesStatic(prefs: SharedPreferences? = null): List<String> {
             val catalog = getLimitedMetaCatalogStatic(prefs)
             val bfFromCatalog = catalog
-                .filter { isBattleFrontierFormatTitleStatic(it.title, it.cup) || isBattleFrontierFormatTitleStatic(it.leagueKey, it.cup) }
+                .filter {
+                    it.lifecycleStatus.equals("CURRENT", ignoreCase = true) &&
+                        (isCurrentBattleFrontierCupStatic(it.title, it.cup) || isCurrentBattleFrontierCupStatic(it.leagueKey, it.cup))
+                }
                 .map { it.leagueKey.uppercase() }
                 .distinct()
                 .sorted()
@@ -650,6 +668,61 @@ class OverlayService : LifecycleService() {
                     "BATTLE FRONTIER (SPECTRAL)"
                 )
             }
+        }
+
+        fun resolveLeagueCpTierStatic(rawLeague: String, prefs: SharedPreferences? = null): String {
+            val upper = rawLeague.trim().uppercase()
+            if (upper.isEmpty()) return "GREAT"
+            if (upper.contains("(10000)") || upper.contains("MASTER") || upper == "BATTLE FRONTIER (MASTER)") {
+                return "MASTER"
+            }
+            if (upper.contains("(2500)") || upper.contains("ULTRA") || upper.contains("CAULDRON")) {
+                return "ULTRA"
+            }
+            if (upper.contains("(1500)") || upper.contains("(500)") || upper.contains("GREAT") || upper.contains("SPECTRAL") || upper.contains("LITTLE")) {
+                return "GREAT"
+            }
+            val cat = LAST_LOADED_META_CATALOG.find {
+                it.leagueKey.equals(rawLeague.trim(), ignoreCase = true) || it.title.equals(rawLeague.trim(), ignoreCase = true)
+            } ?: if (prefs != null) {
+                getLimitedMetaCatalogStatic(prefs).find {
+                    it.leagueKey.equals(rawLeague.trim(), ignoreCase = true) || it.title.equals(rawLeague.trim(), ignoreCase = true)
+                }
+            } else null
+            return when (cat?.cp) {
+                10000 -> "MASTER"
+                2500 -> "ULTRA"
+                else -> "GREAT"
+            }
+        }
+
+        fun matchesEncodedLeagueFilterStatic(
+            entryLeague: String,
+            filterSpec: String,
+            isShow6: Boolean,
+            prefs: SharedPreferences
+        ): Boolean {
+            val spec = filterSpec.trim()
+            if (spec.isEmpty() || spec.equals("ALL", ignoreCase = true) || spec.equals("ALL LEAGUES", ignoreCase = true)) {
+                return true
+            }
+            if (spec.startsWith("TIER:", ignoreCase = true)) {
+                val targetTier = spec.substringAfter(":").trim().uppercase()
+                return resolveLeagueCpTierStatic(entryLeague, prefs).equals(targetTier, ignoreCase = true)
+            }
+            if (spec.startsWith("OLD_CUPS:", ignoreCase = true)) {
+                val targetTier = spec.substringAfter(":").trim().uppercase()
+                return resolveLeagueCpTierStatic(entryLeague, prefs).equals(targetTier, ignoreCase = true) &&
+                    isOldCupForModeStatic(entryLeague, isShow6, prefs)
+            }
+            if (spec.equals("OLD_CUPS", ignoreCase = true)) {
+                return isOldCupForModeStatic(entryLeague, isShow6, prefs)
+            }
+            return entryLeague.trim().equals(spec, ignoreCase = true) ||
+                remapLegacyLeagueForModeStatic(entryLeague, isShow6).equals(
+                    remapLegacyLeagueForModeStatic(spec, isShow6),
+                    ignoreCase = true
+                )
         }
 
         fun remapLegacyLeagueForModeStatic(rawLeague: String, isShow6: Boolean): String {
@@ -10954,7 +11027,7 @@ class OverlayService : LifecycleService() {
                             val commitMs = fetchCupLastCommitMs(cup) ?: prev?.lastSeenAt ?: (nowMs - 21L * 86400_000L)
                             val ageMs = nowMs - commitMs
                             val isPinned = leagueKey.lowercase() in pinnedKeysLower
-                            val isBfForced = isBattleFrontierFormatTitleStatic(rawTitle, cup)
+                            val isBfForced = isCurrentBattleFrontierCupStatic(rawTitle, cup)
                             // Skip unpinned cups older than 4 weeks
                             if (ageMs > FOUR_WEEKS_MS && !isPinned && !isBfForced) continue
 
@@ -10968,7 +11041,7 @@ class OverlayService : LifecycleService() {
                                 cup = cup,
                                 cp = cp,
                                 leagueKey = leagueKey,
-                                category = if (isBfForced) "battle_frontier" else (prev?.category ?: "gbl"),
+                                category = if (isBattleFrontierFormatTitleStatic(rawTitle, cup)) "battle_frontier" else (prev?.category ?: "gbl"),
                                 lifecycleStatus = status,
                                 rankingsUrl = rankingsUrl,
                                 sheetTabAlias = prev?.sheetTabAlias ?: cup,
@@ -10986,7 +11059,7 @@ class OverlayService : LifecycleService() {
                 val bConn = (java.net.URL(branchesUrl).openConnection() as java.net.HttpURLConnection).apply {
                     connectTimeout = 5000
                     readTimeout = 5000
-                    setRequestProperty("User-Agent", "SilphScopePvP/5.10")
+                    setRequestProperty("User-Agent", "SilphScopePvP/6.05")
                 }
                 if (bConn.responseCode in 200..299) {
                     val bArr = JsonParser.parseString(bConn.inputStream.bufferedReader().use { it.readText() }).asJsonArray
@@ -10998,7 +11071,7 @@ class OverlayService : LifecycleService() {
                         val fConn = (java.net.URL(branchFormatsUrl).openConnection() as java.net.HttpURLConnection).apply {
                             connectTimeout = 4500
                             readTimeout = 4500
-                            setRequestProperty("User-Agent", "SilphScopePvP/5.10")
+                            setRequestProperty("User-Agent", "SilphScopePvP/6.05")
                         }
                         if (fConn.responseCode in 200..299) {
                             val fArr = JsonParser.parseString(fConn.inputStream.bufferedReader().use { it.readText() }).asJsonArray
@@ -11039,10 +11112,11 @@ class OverlayService : LifecycleService() {
                 }
             } catch (_: Exception) {}
 
-            // 3. Enforce 4-week (28-day) expiration: keep expired RECENT metas ONLY if still checked/pinned or Battle Frontier forced
+            // 3. Enforce 4-week (28-day) expiration: keep expired RECENT metas ONLY if still checked/pinned or CURRENT Battle Frontier forced
             val filtered = byKey.values.filter { item ->
                 val isPinned = item.leagueKey.lowercase() in pinnedKeysLower
-                val isBfForced = isBattleFrontierFormatTitleStatic(item.title, item.cup)
+                val isBfForced = item.lifecycleStatus.equals("CURRENT", ignoreCase = true) &&
+                    isCurrentBattleFrontierCupStatic(item.title.ifBlank { item.leagueKey }, item.cup)
                 !isExpiredLimitedMetaStatic(item, nowMs) || isPinned || isBfForced
             }
 
@@ -18855,19 +18929,21 @@ class OverlayService : LifecycleService() {
         val isUserMinigameSwipePhaseActive = pendingChargedAttackActor == "user" &&
             !hasUserBannerResolvedSinceThrow &&
             (nowMs - pendingChargedAttackStartMs) < 2300L
-        val isOpponentCountdownWindowEarly = isTopCountdownCircleActive &&
+        val isOpponentCountdownWindowEarly = (isTopCountdownCircleActive || sampledTopCountdownCircleVisible) &&
             !isPostFaintSwitchPromptActive &&
             !sampledTopRightNameplateVisible &&
             isHudHiddenForOpponentPrompt &&
             !hasUserChargedBannerText &&
             !isUserMinigameSwipePhaseActive &&
             (sampledPlayerHpPct in 1..100 ||
+                sampledOppHpPct in 1..100 ||
                 hasAttackIncomingText ||
                 isAttackIncomingPromptActive ||
                 pendingChargedAttackActor == "opp")
         val isShieldCallWindowEarly = isOpponentCountdownWindowEarly ||
             hasAttackIncomingText ||
             isAttackIncomingPromptActive ||
+            (pendingChargedAttackActor == "opp" && (nowMs - pendingChargedAttackStartMs) <= 4800L && (sampledPlayerHpPct in 1..100 || sampledOppHpPct in 1..100)) ||
             (playerShieldsRemaining == 0 && missingBottomCirclesWithOppHpFrames >= 6 && !isUserMinigameSwipePhaseActive)
         val isPostChargeReturnWindow = pendingChargedAttackActor.isNotEmpty() &&
             !isShieldCallWindowEarly &&
@@ -18887,10 +18963,12 @@ class OverlayService : LifecycleService() {
             !isPostFaintSwitchPromptActive &&
             !hasUserChargedBannerText &&
             missingBothHpBarsFrames == 0
-        val canSampleStableHpBars = isCleanCombatHpWindow || isCleanShieldCallHpWindow || isPostChargeReturnWindow
+        val isOpponentThrowingHpRescanWindow = isCleanShieldCallHpWindow ||
+            (pendingChargedAttackActor == "opp" && (isAttackIncomingPromptActive || isTopCountdownCircleActive || hasAttackIncomingText))
+        val canSampleStableHpBars = isCleanCombatHpWindow || isCleanShieldCallHpWindow || isPostChargeReturnWindow || isOpponentThrowingHpRescanWindow
 
         // Reset HP confirm frame counters while inside a charged move cutscene before combat circles return
-        if (pendingChargedAttackActor.isNotEmpty() && !areChargeCirclesVisibleNow && !isCleanShieldCallHpWindow) {
+        if (pendingChargedAttackActor.isNotEmpty() && !areChargeCirclesVisibleNow && !isCleanShieldCallHpWindow && !isOpponentThrowingHpRescanWindow) {
             playerSlotHpConfirmFrames.fill(0)
             oppSlotHpConfirmFrames.fill(0)
         }
@@ -18915,7 +18993,7 @@ class OverlayService : LifecycleService() {
             )
         }
 
-        // 1A. v3.89: Player HP Bar Scan (N-Sample ±2% Debounce + Upward Self-Correction + Shield-Call Clean HP Sync):
+        // 1A. v3.89 / v6.05: Player HP Bar Scan (N-Sample ±2% Debounce + Upward Self-Correction + Always Rescan When Opponent Throws Charged Move):
         //     Tracks player HP% and cumulative opponent fast-move damage (solely for Non-Standard Opponent Fast Move Detector 1E).
         if (!isPostFaintSwitchPromptActive && sampledPlayerHpPct in 1..100 && !playerFaintedSlots[activeUserIdx] && canSampleStableHpBars) {
             playerFinalMissingHpFrames = 0
@@ -18931,7 +19009,8 @@ class OverlayService : LifecycleService() {
                 pendingConfirmPlayerSlotHpPct[activeUserIdx] = sampledPlayerHpPct
                 playerSlotHpConfirmFrames[activeUserIdx] = 1
             }
-            val isPlayerHpConfirmed = playerSlotHpConfirmFrames[activeUserIdx] >= reqHpDebounce
+            val effectivePlayerHpDebounce = if (isOpponentThrowingHpRescanWindow) 2 else reqHpDebounce
+            val isPlayerHpConfirmed = playerSlotHpConfirmFrames[activeUserIdx] >= effectivePlayerHpDebounce
             val confirmedPlayerHp = pendingConfirmPlayerSlotHpPct[activeUserIdx].coerceIn(1, 100)
 
             if (isPlayerHpConfirmed) {
@@ -18954,11 +19033,12 @@ class OverlayService : LifecycleService() {
                     oppCumulativeFastDmgPct[activeOppIdx] = (oppCumulativeFastDmgPct[activeOppIdx] + realUserDrop).coerceIn(0, 300)
                 }
 
-                // v6.04: Block large (>4%) upward HP self-correction while a charged attack is active or within 2500ms of defending a charged attack unless a switch occurred
+                // v6.04 / v6.05: Block large (>4%) upward HP self-correction while a PLAYER charged attack is active or within 2500ms of defending an opp charged attack unless a switch occurred or opponent is actively throwing a new charged move
                 val isRecentPlayerSwitch = (nowMs - lastPlayerSwitchTimeMs) in 0L..2500L
                 val isBlockingPostChargeUserUpwardJump = !isRecentPlayerSwitch &&
+                    !isOpponentThrowingHpRescanWindow &&
                     (confirmedPlayerHp - currentPlayerHp) > 4 &&
-                    (pendingChargedAttackActor.isNotEmpty() ||
+                    (pendingChargedAttackActor == "user" ||
                         (lastOppChargedAttackLoggedMs > 0L &&
                             (nowMs - lastOppChargedAttackLoggedMs) in 0L..2500L &&
                             activeUserIdx == lastOppChargedDefenderUserSlotIdx))
@@ -18974,12 +19054,7 @@ class OverlayService : LifecycleService() {
                     playerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     playerSlotPreFaintHpPct[activeUserIdx] = confirmedPlayerHp
                     predictedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
-                    // v6.04: Only allow small (<= 4%) upward settle or confirmed switch to update `pendingChargedAttackPreUserHp`
-                    if ((isCleanShieldCallHpWindow || (pendingChargedAttackActor == "opp" && isAttackIncomingPromptActive)) &&
-                        (pendingChargedAttackActor != "opp" || (nowMs - pendingChargedAttackStartMs) <= 1400L) &&
-                        confirmedPlayerHp > pendingChargedAttackPreUserHp &&
-                        (isRecentPlayerSwitch || (confirmedPlayerHp - pendingChargedAttackPreUserHp) <= 4)
-                    ) {
+                    if (isOpponentThrowingHpRescanWindow) {
                         pendingChargedAttackPreUserHp = confirmedPlayerHp
                         pendingChargedAttackPreUserSlotHp[activeUserIdx] = confirmedPlayerHp
                     }
@@ -18987,12 +19062,15 @@ class OverlayService : LifecycleService() {
                     pendingPlayerLowHpSample = -1
                     hpChanged = true
                 } else if (realUserDrop in minOppFastDmgThreshold..25) {
-                    // v4.02: NEVER overwrite `pendingChargedAttackPreUserHp` downward!
                     lastScannedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     predictedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     confirmedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     playerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     playerSlotPreFaintHpPct[activeUserIdx] = confirmedPlayerHp
+                    if (isOpponentThrowingHpRescanWindow) {
+                        pendingChargedAttackPreUserHp = confirmedPlayerHp
+                        pendingChargedAttackPreUserSlotHp[activeUserIdx] = confirmedPlayerHp
+                    }
                     pendingPlayerLowHpSlot = -1
                     pendingPlayerLowHpSample = -1
                     hpChanged = true
@@ -19002,16 +19080,28 @@ class OverlayService : LifecycleService() {
                     playerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     playerSlotPreFaintHpPct[activeUserIdx] = confirmedPlayerHp
                     predictedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
+                    if (isOpponentThrowingHpRescanWindow) {
+                        pendingChargedAttackPreUserHp = confirmedPlayerHp
+                        pendingChargedAttackPreUserSlotHp[activeUserIdx] = confirmedPlayerHp
+                    }
                     hpChanged = true
-                } else if (realUserDrop > 25 && !isCleanShieldCallHpWindow) {
-                    // Sync large (>25%) unshielded HP drops in clean combat / post-charge return (never during pre-impact Shield Call prompt)
+                } else if (realUserDrop > 25 || (isOpponentThrowingHpRescanWindow && confirmedPlayerHp != currentPlayerHp)) {
+                    // v6.05: Always sync player HP drops >25% AND always rescan/sync player HP when opponent is throwing a charged move!
                     lastScannedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     confirmedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     playerSlotHpPct[activeUserIdx] = confirmedPlayerHp
                     playerSlotPreFaintHpPct[activeUserIdx] = confirmedPlayerHp
                     predictedPlayerSlotHpPct[activeUserIdx] = confirmedPlayerHp
+                    if (isOpponentThrowingHpRescanWindow) {
+                        pendingChargedAttackPreUserHp = confirmedPlayerHp
+                        pendingChargedAttackPreUserSlotHp[activeUserIdx] = confirmedPlayerHp
+                    }
                     pendingPlayerLowHpSlot = -1
                     pendingPlayerLowHpSample = -1
+                    hpChanged = true
+                } else if (isOpponentThrowingHpRescanWindow && pendingChargedAttackPreUserHp != confirmedPlayerHp) {
+                    pendingChargedAttackPreUserHp = confirmedPlayerHp
+                    pendingChargedAttackPreUserSlotHp[activeUserIdx] = confirmedPlayerHp
                     hpChanged = true
                 }
 
@@ -19137,7 +19227,7 @@ class OverlayService : LifecycleService() {
             playerSlotHpConfirmFrames[activeUserIdx] = 0
         }
 
-        // 1B. v3.89 / v6.04: Opponent HP Bar Scan (N-Sample ±2% Debounce + Upward Self-Correction + Post-Charge Settle & Override):
+        // 1B. v3.89 / v6.05: Opponent HP Bar Scan (N-Sample ±2% Debounce + Upward Self-Correction + Always Rescan When Opponent Throws Charged Move):
         //     Tracks opponent HP% only; never credits fast-move turns or adjusts player energy.
         if (sampledOppHpPct in 1..100 && !oppFaintedSlots[activeOppIdx] && canSampleStableHpBars) {
             oppFinalMissingHpFrames = 0
@@ -19153,7 +19243,8 @@ class OverlayService : LifecycleService() {
                 pendingConfirmOppSlotHpPct[activeOppIdx] = sampledOppHpPct
                 oppSlotHpConfirmFrames[activeOppIdx] = 1
             }
-            val isOppHpConfirmed = oppSlotHpConfirmFrames[activeOppIdx] >= reqHpDebounce
+            val effectiveOppHpDebounce = if (isOpponentThrowingHpRescanWindow) 2 else reqHpDebounce
+            val isOppHpConfirmed = oppSlotHpConfirmFrames[activeOppIdx] >= effectiveOppHpDebounce
             val confirmedOppHp = pendingConfirmOppSlotHpPct[activeOppIdx].coerceIn(1, 100)
 
             if (isOppHpConfirmed) {
@@ -19167,11 +19258,12 @@ class OverlayService : LifecycleService() {
                 val halfUserDmg = max(1, (userExactDmgPct * 0.50).roundToInt())
                 val minUserFastDmgThreshold = halfUserDmg
 
-                // v6.04: Block large (>4%) upward opponent HP jumps while a charged attack is active or within 2500ms of defending a charged attack unless a switch occurred
+                // v6.04 / v6.05: Block large (>4%) upward opponent HP jumps while a PLAYER charged attack is active or within 2500ms of defending a player charged attack unless a switch occurred or opponent is throwing
                 val isRecentOppSwitch = (nowMs - lastOppSwitchTimeMs) in 0L..2500L
                 val isBlockingPostChargeOppUpwardJump = !isRecentOppSwitch &&
+                    !isOpponentThrowingHpRescanWindow &&
                     (confirmedOppHp - currentOppHp) > 4 &&
-                    (pendingChargedAttackActor.isNotEmpty() ||
+                    (pendingChargedAttackActor == "user" ||
                         (lastUserChargedAttackLoggedMs > 0L &&
                             (nowMs - lastUserChargedAttackLoggedMs) in 0L..2500L &&
                             activeOppIdx == lastUserChargedDefenderOppSlotIdx))
@@ -19187,9 +19279,7 @@ class OverlayService : LifecycleService() {
                     oppSlotHpPct[activeOppIdx] = confirmedOppHp
                     oppSlotPreFaintHpPct[activeOppIdx] = confirmedOppHp
                     predictedOppSlotHpPct[activeOppIdx] = confirmedOppHp
-                    if ((isCleanShieldCallHpWindow || (pendingChargedAttackActor == "opp" && isAttackIncomingPromptActive)) &&
-                        (isRecentOppSwitch || kotlin.math.abs(confirmedOppHp - pendingChargedAttackPreOppHp) <= 4)
-                    ) {
+                    if (isOpponentThrowingHpRescanWindow) {
                         pendingChargedAttackPreOppHp = confirmedOppHp
                         pendingChargedAttackPreOppSlotHp[activeOppIdx] = confirmedOppHp
                     }
@@ -19205,7 +19295,7 @@ class OverlayService : LifecycleService() {
                     if (confirmedOppHp < oppSlotLowestHpPct[activeOppIdx]) {
                         oppSlotLowestHpPct[activeOppIdx] = confirmedOppHp
                     }
-                    if (isCleanShieldCallHpWindow || (pendingChargedAttackActor == "opp" && isAttackIncomingPromptActive)) {
+                    if (isOpponentThrowingHpRescanWindow) {
                         pendingChargedAttackPreOppHp = confirmedOppHp
                         pendingChargedAttackPreOppSlotHp[activeOppIdx] = confirmedOppHp
                     }
@@ -19221,12 +19311,13 @@ class OverlayService : LifecycleService() {
                         oppSlotLowestHpPct[activeOppIdx] = confirmedOppHp
                     }
                     predictedOppSlotHpPct[activeOppIdx] = confirmedOppHp
-                    if (isCleanShieldCallHpWindow || (pendingChargedAttackActor == "opp" && isAttackIncomingPromptActive)) {
+                    if (isOpponentThrowingHpRescanWindow) {
                         pendingChargedAttackPreOppHp = confirmedOppHp
                         pendingChargedAttackPreOppSlotHp[activeOppIdx] = confirmedOppHp
                     }
                     hpChanged = true
-                } else if (realOppDrop > 25 && (!isCleanShieldCallHpWindow || (lastUserChargedAttackLoggedMs > 0L && (nowMs - lastUserChargedAttackLoggedMs) <= 4500L))) {
+                } else if (realOppDrop > 25 || (isOpponentThrowingHpRescanWindow && confirmedOppHp != currentOppHp)) {
+                    // v6.05: Always sync opponent HP drops >25% AND always rescan/sync opponent HP when opponent is throwing a charged move!
                     lastScannedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     confirmedOppSlotHpPct[activeOppIdx] = confirmedOppHp
                     oppSlotHpPct[activeOppIdx] = confirmedOppHp
@@ -19235,8 +19326,16 @@ class OverlayService : LifecycleService() {
                         oppSlotLowestHpPct[activeOppIdx] = confirmedOppHp
                     }
                     predictedOppSlotHpPct[activeOppIdx] = confirmedOppHp
+                    if (isOpponentThrowingHpRescanWindow) {
+                        pendingChargedAttackPreOppHp = confirmedOppHp
+                        pendingChargedAttackPreOppSlotHp[activeOppIdx] = confirmedOppHp
+                    }
                     pendingOppLowHpSlot = -1
                     pendingOppLowHpSample = -1
+                    hpChanged = true
+                } else if (isOpponentThrowingHpRescanWindow && pendingChargedAttackPreOppHp != confirmedOppHp) {
+                    pendingChargedAttackPreOppHp = confirmedOppHp
+                    pendingChargedAttackPreOppSlotHp[activeOppIdx] = confirmedOppHp
                     hpChanged = true
                 }
 
@@ -20552,7 +20651,10 @@ class OverlayService : LifecycleService() {
                 lastOppChargeHpInferredMoveName = ""
                 pendingChargedAttackWasOppCatch = false
                 for (i in 0..2) {
-                    val preJumpUserHp = if ((nowMs - playerSlotLastBigJumpMs[i]) <= 2500L &&
+                    val liveUserCandidate = if (i == activeUserIdx && sampledPlayerHpPct in 1..100 && pendingConfirmPlayerSlotHpPct[i] in 1..100) {
+                        pendingConfirmPlayerSlotHpPct[i].coerceIn(1, 100)
+                    } else null
+                    val preJumpUserHp = liveUserCandidate ?: if ((nowMs - playerSlotLastBigJumpMs[i]) <= 2500L &&
                         (nowMs - lastPlayerSwitchTimeMs) > 2500L &&
                         playerSlotPriorHpPct[i] in 1..100
                     ) {
@@ -20561,7 +20663,17 @@ class OverlayService : LifecycleService() {
                         confirmedPlayerSlotHpPct[i].takeIf { it in 1..100 } ?: playerSlotHpPct[i].coerceIn(1, 100)
                     }
                     pendingChargedAttackPreUserSlotHp[i] = preJumpUserHp
-                    val preJumpOppHp = if ((nowMs - oppSlotLastBigJumpMs[i]) <= 2500L &&
+                    if (i == activeUserIdx && liveUserCandidate != null) {
+                        playerSlotHpPct[i] = liveUserCandidate
+                        confirmedPlayerSlotHpPct[i] = liveUserCandidate
+                        lastScannedPlayerSlotHpPct[i] = liveUserCandidate
+                        playerSlotPreFaintHpPct[i] = liveUserCandidate
+                        predictedPlayerSlotHpPct[i] = liveUserCandidate
+                    }
+                    val liveOppCandidate = if (i == throwerOppIdx && sampledOppHpPct in 1..100 && pendingConfirmOppSlotHpPct[i] in 1..100) {
+                        pendingConfirmOppSlotHpPct[i].coerceIn(1, 100)
+                    } else null
+                    val preJumpOppHp = liveOppCandidate ?: if ((nowMs - oppSlotLastBigJumpMs[i]) <= 2500L &&
                         (nowMs - lastOppSwitchTimeMs) > 2500L &&
                         oppSlotPriorHpPct[i] in 1..100
                     ) {
@@ -20570,10 +20682,17 @@ class OverlayService : LifecycleService() {
                         confirmedOppSlotHpPct[i].takeIf { it in 1..100 } ?: oppSlotHpPct[i].coerceIn(1, 100)
                     }
                     pendingChargedAttackPreOppSlotHp[i] = preJumpOppHp
+                    if (i == throwerOppIdx && liveOppCandidate != null) {
+                        oppSlotHpPct[i] = liveOppCandidate
+                        confirmedOppSlotHpPct[i] = liveOppCandidate
+                        lastScannedOppSlotHpPct[i] = liveOppCandidate
+                        oppSlotPreFaintHpPct[i] = liveOppCandidate
+                        predictedOppSlotHpPct[i] = liveOppCandidate
+                    }
                 }
                 pendingChargedAttackPreOppBalls = oppPokeballCount
                 pendingChargedAttackPreUserBalls = playerPokeballCount
-                // v6.04: Lock pre-charge HP to last confirmed debounced slot HP (never a 1-frame camera zoom-in spike)
+                // v6.05: Always sync pre-charge HP to live rescanned player & opponent HP when opponent throws charged move
                 pendingChargedAttackPreUserHp = pendingChargedAttackPreUserSlotHp[activeUserIdx].coerceIn(1, 100)
                 pendingChargedAttackPreOppHp = pendingChargedAttackPreOppSlotHp[throwerOppIdx].coerceIn(1, 100)
                 pendingChargedAttackPreUserShields = playerShieldsRemaining
@@ -21023,6 +21142,16 @@ class OverlayService : LifecycleService() {
                     !playerFaintedSlots[defenderUserIdx] &&
                     (hpDelta <= 3 || (hpDelta <= userShieldChipCap && maxCandidateExpectedDmgPct >= 35))
                 val shielded = shieldDropped || isChipShielded
+                if (!shielded && defenderUserIdx in 0..2) {
+                    // v6.05: Persist post-charge unshielded HP directly into playerSlotHpPct so slot state never stays stuck at pre-charge HP!
+                    playerSlotHpPct[defenderUserIdx] = postHp
+                    confirmedPlayerSlotHpPct[defenderUserIdx] = postHp
+                    lastScannedPlayerSlotHpPct[defenderUserIdx] = postHp
+                    predictedPlayerSlotHpPct[defenderUserIdx] = postHp
+                    if (postHp > 0) {
+                        playerSlotPreFaintHpPct[defenderUserIdx] = postHp
+                    }
+                }
                 var didAutoDecrUserShield = false
                 if (isChipShielded && hpDelta in 4..userShieldChipCap && playerShieldsRemaining > 0) {
                     val nextShields = (playerShieldsRemaining - 1).coerceIn(0, 2)
@@ -21392,6 +21521,19 @@ class OverlayService : LifecycleService() {
                     !oppFaintedSlots[defenderOppIdx] &&
                     (hpDelta <= 3 || (hpDelta <= oppShieldChipCap && maxUserCandExpectedDmgPct >= 35))
                 val shielded = shieldDropped || isOppChipShielded
+                if (!shielded && defenderOppIdx in 0..2) {
+                    // v6.05: Persist post-charge unshielded HP directly into oppSlotHpPct so slot state never stays stuck at pre-charge HP!
+                    oppSlotHpPct[defenderOppIdx] = postHp
+                    confirmedOppSlotHpPct[defenderOppIdx] = postHp
+                    lastScannedOppSlotHpPct[defenderOppIdx] = postHp
+                    predictedOppSlotHpPct[defenderOppIdx] = postHp
+                    if (postHp in 1 until oppSlotLowestHpPct[defenderOppIdx]) {
+                        oppSlotLowestHpPct[defenderOppIdx] = postHp
+                    }
+                    if (postHp > 0) {
+                        oppSlotPreFaintHpPct[defenderOppIdx] = postHp
+                    }
+                }
                 var didAutoDecrOppShield = false
                 if (isOppChipShielded && hpDelta in 4..oppShieldChipCap && oppShieldsRemaining > 0) {
                     val nextShields = (oppShieldsRemaining - 1).coerceIn(0, 2)
@@ -24360,10 +24502,10 @@ class OverlayService : LifecycleService() {
         )
         val githubUser = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty().ifEmpty { "anonymous" }
         val v510Record = AiTelemetryBattleRecordV510(
-            schemaVersion = "6.04",
+            schemaVersion = "6.05",
             battleId = battleId,
             timestampMs = nowMs,
-            appVersion = "6.04",
+            appVersion = "6.05",
             uploaderHandle = githubUser,
             deviceHash = getDeviceTelemetryHashStatic(prefs),
             deviceModel = Build.MODEL ?: "Android",

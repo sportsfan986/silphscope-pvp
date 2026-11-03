@@ -160,8 +160,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var pageBattleLog: android.view.View
     private lateinit var pageMeta: android.view.View
     private lateinit var pageHelp: android.view.View
-    private lateinit var btnReparseBattlesSettings: Button
-    private lateinit var textReparseBattlesStatus: TextView
     private lateinit var btnToggleOppCountBasis: Button
     private lateinit var textOppCountBasisDesc: TextView
     private lateinit var btnToggleOppChargedMoves: Button
@@ -248,6 +246,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnLogManualBattle: Button
     private lateinit var btnSyncBattleLog: Button
     private lateinit var btnClearBattleLog: Button
+    private lateinit var spinnerLogFilterCpTier: Spinner
     private lateinit var spinnerLogFilterLeague: Spinner
     private lateinit var spinnerLogFilterTeam: Spinner
     private lateinit var spinnerLogFilterTimeframe: Spinner
@@ -468,10 +467,12 @@ class MainActivity : AppCompatActivity() {
     private var pendingUndoAction: (() -> Unit)? = null
     private var undoHideJob: kotlinx.coroutines.Job? = null
 
+    private var selectedLogCpTierFilter: String = "ALL"
     private var selectedLogLeagueFilter: String = "ALL"
     private var selectedLogTeamFilter: String = "ALL"
     private var selectedLogTimeframeFilter: String = "ALL_TIME"
     private var isUpdatingLogFilterSpinners = false
+    private var selectedPresetsCpTierFilter: String = "ALL"
     private var selectedPresetsLeagueFilter: String = "ALL"
 
     private fun isShow6CombatMode(): Boolean {
@@ -580,9 +581,9 @@ class MainActivity : AppCompatActivity() {
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "6.02"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "6.05"
         } catch (_: Exception) {
-            "6.02"
+            "6.05"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -1235,10 +1236,6 @@ class MainActivity : AppCompatActivity() {
             btnDownloadDb.backgroundTintList = secondaryBtnTint
             btnDownloadDb.setTextColor(0xFFFFFFFF.toInt())
         }
-        if (::btnReparseBattlesSettings.isInitialized) {
-            btnReparseBattlesSettings.backgroundTintList = primaryBtnTint
-            btnReparseBattlesSettings.setTextColor(0xFFFFFFFF.toInt())
-        }
         findViewById<Button>(R.id.btn_copy_tasker_start)?.let {
             it.backgroundTintList = primaryBtnTint
             it.setTextColor(0xFFFFFFFF.toInt())
@@ -1297,8 +1294,6 @@ class MainActivity : AppCompatActivity() {
         pageBattleLog = findViewById(R.id.page_battle_log)
         pageMeta = findViewById(R.id.page_meta)
         pageHelp = findViewById(R.id.page_help)
-        btnReparseBattlesSettings = findViewById(R.id.btn_reparse_battles_settings)
-        textReparseBattlesStatus = findViewById(R.id.text_reparse_battles_status)
         btnToggleOppCountBasis = findViewById(R.id.btn_toggle_opp_count_basis)
         textOppCountBasisDesc = findViewById(R.id.text_opp_count_basis_desc)
         btnToggleOppChargedMoves = findViewById(R.id.btn_toggle_opp_charged_moves)
@@ -1385,6 +1380,7 @@ class MainActivity : AppCompatActivity() {
         btnLogManualBattle = findViewById(R.id.btn_log_manual_battle)
         btnSyncBattleLog = findViewById(R.id.btn_sync_battle_log)
         btnClearBattleLog = findViewById(R.id.btn_clear_battle_log)
+        spinnerLogFilterCpTier = findViewById(R.id.spinner_log_filter_cp_tier)
         spinnerLogFilterLeague = findViewById(R.id.spinner_log_filter_league)
         spinnerLogFilterTeam = findViewById(R.id.spinner_log_filter_team)
         spinnerLogFilterTimeframe = findViewById(R.id.spinner_log_filter_timeframe)
@@ -1705,10 +1701,6 @@ class MainActivity : AppCompatActivity() {
 
         btnDownloadDb.setOnClickListener {
             downloadPvPokeGamemaster()
-        }
-
-        btnReparseBattlesSettings.setOnClickListener {
-            reparseAllCompletedBattles(silent = false)
         }
 
         btnAddPreset.setOnClickListener {
@@ -3238,9 +3230,6 @@ class MainActivity : AppCompatActivity() {
      * Dynamic Execution WAE (Delta_Q_final), Primary Performance Badges, and Contextual Flags.
      */
     private fun reparseAllCompletedBattles(silent: Boolean) {
-        if (!silent && ::btnReparseBattlesSettings.isInitialized) {
-            btnReparseBattlesSettings.isEnabled = false
-        }
         lifecycleScope.launch(Dispatchers.Default) {
             try {
                 val cacheFile = File(filesDir, "pvpoke_gamemaster.json")
@@ -3317,13 +3306,6 @@ class MainActivity : AppCompatActivity() {
             val aggWae = OverlayService.calculateAggregateWAEStatic(reparsedActive.map { it.quality })
 
             withContext(Dispatchers.Main) {
-                if (::btnReparseBattlesSettings.isInitialized) {
-                    btnReparseBattlesSettings.isEnabled = true
-                }
-                if (::textReparseBattlesStatus.isInitialized) {
-                    val timeFmt = java.text.SimpleDateFormat("h:mm a", java.util.Locale.US).format(java.util.Date(nowMs))
-                    textReparseBattlesStatus.text = "✅ Reparsed ${reparsedActive.size} battle(s) at $timeFmt • Ranked: ${aggWae.rankedCount} • Exec WAE: ${aggWae.formatted} • Luck: ${aggWae.luckFormatted}"
-                }
                 refreshPresetsUi()
                 renderBattleLogPage()
                 updateSyncStatusUi()
@@ -3828,8 +3810,30 @@ class MainActivity : AppCompatActivity() {
         dialogRef.show()
     }
 
+    private fun formatTier2CupChipLabel(leagueKey: String): String {
+        val u = leagueKey.trim().uppercase()
+        return when {
+            u == "GREAT LEAGUE" || u == "ULTRA LEAGUE" || u == "MASTER LEAGUE" -> "Open / Standard"
+            u.contains("MEGA") -> "Mega ($leagueKey)"
+            else -> leagueKey
+        }
+    }
+
+    private fun sortCupsWithinTier(cups: List<String>): List<String> {
+        return cups.distinct().sortedWith(
+            compareBy<String> { lg ->
+                val u = lg.trim().uppercase()
+                when {
+                    u == "GREAT LEAGUE" || u == "ULTRA LEAGUE" || u == "MASTER LEAGUE" -> 0
+                    u.contains("MEGA") -> 1
+                    else -> 2
+                }
+            }.thenBy { it }
+        )
+    }
+
     private fun setupBattleLogFilters() {
-        if (!::spinnerLogFilterLeague.isInitialized) return
+        if (!::spinnerLogFilterLeague.isInitialized || !::spinnerLogFilterCpTier.isInitialized) return
         isUpdatingLogFilterSpinners = true
 
         val isShow6 = isShow6CombatMode()
@@ -3840,33 +3844,83 @@ class MainActivity : AppCompatActivity() {
         }).filterNot { OverlayService.isOldCupForModeStatic(it, isShow6, prefs) }
 
         val allLogs = loadBattleLogs()
-        val oldCupLogsCount = allLogs.count { OverlayService.isOldCupForModeStatic(it.league, isShow6, prefs) }
 
-        val dynamicLabels = mutableListOf("All Leagues")
-        val dynamicKeys = mutableListOf("ALL")
-        for (lg in activeEnabledLeagues) {
-            dynamicLabels.add(lg)
-            dynamicKeys.add(lg)
+        // Tier 1: CP Range (All, Great <=1500, Ultra 2500, Master 10000)
+        val cpTierKeys = listOf("ALL", "GREAT", "ULTRA", "MASTER")
+        val cpTierLabels = listOf(
+            "All CP (${allLogs.size})",
+            "Great ≤1500 (${allLogs.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "GREAT" }})",
+            "Ultra 2500 (${allLogs.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "ULTRA" }})",
+            "Master 10000 (${allLogs.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "MASTER" }})"
+        )
+        spinnerLogFilterCpTier.adapter = createThemedSpinnerAdapter(cpTierLabels)
+        val cpTierIdx = cpTierKeys.indexOfFirst { it.equals(selectedLogCpTierFilter, ignoreCase = true) }.takeIf { it >= 0 } ?: 0
+        if (cpTierIdx == 0 && !selectedLogCpTierFilter.equals("ALL", ignoreCase = true)) {
+            selectedLogCpTierFilter = "ALL"
         }
-        if (oldCupLogsCount > 0 || selectedLogLeagueFilter == "OLD_CUPS") {
-            dynamicLabels.add("Old Cups ($oldCupLogsCount)")
-            dynamicKeys.add("OLD_CUPS")
+        spinnerLogFilterCpTier.setSelection(cpTierIdx, false)
+
+        // Tier 2: Cup / Format within selected CP tier (defaults to showing all cups in that CP range first)
+        val dynamicLabels = mutableListOf<String>()
+        val dynamicKeys = mutableListOf<String>()
+        if (selectedLogCpTierFilter == "ALL") {
+            val oldCupLogsCount = allLogs.count { OverlayService.isOldCupForModeStatic(it.league, isShow6, prefs) }
+            dynamicLabels.add("All Cups (${allLogs.size})")
+            dynamicKeys.add("ALL")
+            for (lg in sortCupsWithinTier(activeEnabledLeagues)) {
+                val c = allLogs.count { it.league.equals(lg, ignoreCase = true) }
+                dynamicLabels.add("$lg ($c)")
+                dynamicKeys.add(lg)
+            }
+            if (oldCupLogsCount > 0 || selectedLogLeagueFilter == "OLD_CUPS") {
+                dynamicLabels.add("Old Cups ($oldCupLogsCount)")
+                dynamicKeys.add("OLD_CUPS")
+            }
+        } else {
+            val tierKey = selectedLogCpTierFilter.uppercase()
+            val tierDisplayName = when (tierKey) {
+                "GREAT" -> "Great"
+                "ULTRA" -> "Ultra"
+                else -> "Master"
+            }
+            val tierTotalLogs = allLogs.count { OverlayService.resolveLeagueCpTierStatic(it.league) == tierKey }
+            val defaultTierCupKey = "TIER:$tierKey"
+            dynamicLabels.add("All $tierDisplayName Cups ($tierTotalLogs)")
+            dynamicKeys.add(defaultTierCupKey)
+
+            val tierActiveCups = sortCupsWithinTier(
+                activeEnabledLeagues.filter { OverlayService.resolveLeagueCpTierStatic(it) == tierKey }
+            )
+            for (lg in tierActiveCups) {
+                val c = allLogs.count { it.league.equals(lg, ignoreCase = true) }
+                dynamicLabels.add("${formatTier2CupChipLabel(lg)} ($c)")
+                dynamicKeys.add(lg)
+            }
+
+            val tierOldCupCount = allLogs.count {
+                OverlayService.resolveLeagueCpTierStatic(it.league) == tierKey &&
+                    OverlayService.isOldCupForModeStatic(it.league, isShow6, prefs)
+            }
+            val tierOldKey = "OLD_CUPS:$tierKey"
+            if (tierOldCupCount > 0 || selectedLogLeagueFilter.equals(tierOldKey, ignoreCase = true)) {
+                dynamicLabels.add("Old Cups ($tierOldCupCount)")
+                dynamicKeys.add(tierOldKey)
+            }
         }
 
         val leagueLabels = dynamicLabels.toList()
         val leagueKeys = dynamicKeys.toList()
         spinnerLogFilterLeague.adapter = createThemedSpinnerAdapter(leagueLabels)
-        val lgIdx = leagueKeys.indexOfFirst { it.equals(selectedLogLeagueFilter, ignoreCase = true) }.takeIf { it >= 0 } ?: 0
-        if (lgIdx == 0 && !selectedLogLeagueFilter.equals("ALL", ignoreCase = true)) {
-            selectedLogLeagueFilter = "ALL"
+        var lgIdx = leagueKeys.indexOfFirst { it.equals(selectedLogLeagueFilter, ignoreCase = true) }
+        if (lgIdx < 0) {
+            lgIdx = 0
+            selectedLogLeagueFilter = leagueKeys.firstOrNull() ?: "ALL"
         }
         spinnerLogFilterLeague.setSelection(lgIdx, false)
 
         val allPresets = loadPresets()
-        val matchingPresets = when {
-            selectedLogLeagueFilter == "ALL" -> allPresets
-            selectedLogLeagueFilter == "OLD_CUPS" -> allPresets.filter { OverlayService.isOldCupForModeStatic(it.league, isShow6, prefs) }
-            else -> allPresets.filter { it.league.equals(selectedLogLeagueFilter, ignoreCase = true) }
+        val matchingPresets = allPresets.filter {
+            OverlayService.matchesEncodedLeagueFilterStatic(it.league, selectedLogLeagueFilter, isShow6, prefs)
         }
         val teamLabels = listOf("All Teams") + matchingPresets.map { it.name }
         val teamKeys = listOf("ALL") + matchingPresets.map { it.name }
@@ -3897,10 +3951,25 @@ class MainActivity : AppCompatActivity() {
         val tfIdx = timeframeKeys.indexOf(selectedLogTimeframeFilter).takeIf { it >= 0 } ?: 0
         spinnerLogFilterTimeframe.setSelection(tfIdx, false)
 
+        spinnerLogFilterCpTier.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                if (isUpdatingLogFilterSpinners) return
+                val nextCpTier = cpTierKeys.getOrElse(position) { "ALL" }
+                if (nextCpTier != selectedLogCpTierFilter) {
+                    selectedLogCpTierFilter = nextCpTier
+                    selectedLogLeagueFilter = if (nextCpTier == "ALL") "ALL" else "TIER:$nextCpTier"
+                    selectedLogTeamFilter = "ALL"
+                    setupBattleLogFilters()
+                    renderBattleLogPage()
+                }
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
         spinnerLogFilterLeague.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
                 if (isUpdatingLogFilterSpinners) return
-                val nextLg = leagueKeys.getOrElse(position) { "ALL" }
+                val nextLg = leagueKeys.getOrElse(position) { if (selectedLogCpTierFilter == "ALL") "ALL" else "TIER:$selectedLogCpTierFilter" }
                 if (nextLg != selectedLogLeagueFilter) {
                     selectedLogLeagueFilter = nextLg
                     selectedLogTeamFilter = "ALL"
@@ -3912,15 +3981,19 @@ class MainActivity : AppCompatActivity() {
         }
 
         spinnerLogFilterTeam.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                if (isUpdatingLogFilterSpinners) return
-                val nextTm = teamKeys.getOrElse(position) { "ALL" }
-                if (nextTm != selectedLogTeamFilter) {
-                    selectedLogTeamFilter = nextTm
-                    renderBattleLogPage()
+            override fun onItemSelected(parent: AdapterView<*>?, view: AdapterView<*>?, position: Int, id: Long) {}
+        }.let {
+            object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                    if (isUpdatingLogFilterSpinners) return
+                    val nextTm = teamKeys.getOrElse(position) { "ALL" }
+                    if (nextTm != selectedLogTeamFilter) {
+                        selectedLogTeamFilter = nextTm
+                        renderBattleLogPage()
+                    }
                 }
+                override fun onNothingSelected(parent: AdapterView<*>?) {}
             }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
         spinnerLogFilterTimeframe.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -3957,11 +4030,7 @@ class MainActivity : AppCompatActivity() {
         val sevenDaysAgoMs = startOfTodayMs - 6L * 86400000L
 
         return logs.filter { entry ->
-            val leagueOk = when {
-                leagueFilter == "ALL" -> true
-                leagueFilter == "OLD_CUPS" -> OverlayService.isOldCupForModeStatic(entry.league, isShow6, prefs)
-                else -> entry.league.equals(leagueFilter, ignoreCase = true)
-            }
+            val leagueOk = OverlayService.matchesEncodedLeagueFilterStatic(entry.league, leagueFilter, isShow6, prefs)
             val teamOk = teamFilter == "ALL" || entry.userTeamName.equals(teamFilter, ignoreCase = true)
             val timeOk = when (timeframeKey) {
                 "DAY" -> entry.timestampMs >= startOfTodayMs
@@ -6964,8 +7033,12 @@ class MainActivity : AppCompatActivity() {
         val allPresets = loadPresets()
         val selectedId = prefs.getString(PREFS_KEY_SELECTED_PRESET, null) ?: allPresets.firstOrNull()?.id
 
-        // Render League & Limited Meta filter tabs above My Teams (with "Old Cups" tab for unsynced or >4w expired cups)
+        // Render 2-Tier League & Cup filter tabs above My Teams:
+        // Tier 1: CP Range (All, Great <=1500, Ultra 2500, Master 10000)
+        // Tier 2: Cup / Format within selected CP tier (All <Tier>, Open / Standard, Mega, Limited / BF, Old Cups)
         val filterChipsContainer = findViewById<LinearLayout>(R.id.layout_presets_league_filter_chips)
+        val subFilterScroll = findViewById<android.view.View>(R.id.scroll_presets_cup_subfilter)
+        val subFilterChipsContainer = findViewById<LinearLayout>(R.id.layout_presets_cup_subfilter_chips)
         val filterTitleTv = findViewById<TextView>(R.id.tv_presets_league_filter_title)
         val isShow6 = isShow6CombatMode()
         val enabledModeLeagues = (if (isShow6) {
@@ -6974,41 +7047,29 @@ class MainActivity : AppCompatActivity() {
             OverlayService.getEnabledGblLeaguesStatic(prefs)
         }).filterNot { OverlayService.isOldCupForModeStatic(it, isShow6, prefs) }
 
-        val oldCupPresetsCount = allPresets.count { OverlayService.isOldCupForModeStatic(it.league, isShow6, prefs) }
-        val activeNonOldTabs = enabledModeLeagues.distinct()
-        val allFilterTabs = buildList {
-            add("ALL")
-            addAll(activeNonOldTabs)
-            if (oldCupPresetsCount > 0) add("OLD_CUPS")
+        val cpTierTabs = listOf(
+            "ALL" to "All (${allPresets.size})",
+            "GREAT" to "Great ≤1500 (${allPresets.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "GREAT" }})",
+            "ULTRA" to "Ultra 2500 (${allPresets.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "ULTRA" }})",
+            "MASTER" to "Master 10000 (${allPresets.count { OverlayService.resolveLeagueCpTierStatic(it.league) == "MASTER" }})"
+        )
+        if (cpTierTabs.none { it.first.equals(selectedPresetsCpTierFilter, ignoreCase = true) }) {
+            selectedPresetsCpTierFilter = "ALL"
         }
-        if (selectedPresetsLeagueFilter != "ALL" && allFilterTabs.none { it.equals(selectedPresetsLeagueFilter, ignoreCase = true) }) {
-            selectedPresetsLeagueFilter = if (oldCupPresetsCount > 0 && OverlayService.isOldCupForModeStatic(selectedPresetsLeagueFilter, isShow6, prefs)) {
-                "OLD_CUPS"
-            } else {
-                "ALL"
-            }
-        }
+
         filterTitleTv?.text = if (isShow6) {
-            "🗂️ Filter Show 6 Teams by Format (${allPresets.size} Total)"
+            "🗂️ Filter Show 6 Teams by CP Tier & Cup (${allPresets.size} Total)"
         } else {
-            "🗂️ Filter GBL Blind 3 Teams by League & Limited Meta (${allPresets.size} Total)"
+            "🗂️ Filter GBL Blind 3 Teams by CP Tier & Cup (${allPresets.size} Total)"
         }
+
+        val density = resources.displayMetrics.density
         filterChipsContainer?.let { chipRow ->
             chipRow.removeAllViews()
-            val density = resources.displayMetrics.density
-            for (tab in allFilterTabs) {
-                val count = when (tab) {
-                    "ALL" -> allPresets.size
-                    "OLD_CUPS" -> oldCupPresetsCount
-                    else -> allPresets.count { it.league.equals(tab, ignoreCase = true) }
-                }
-                val isSelectedTab = tab.equals(selectedPresetsLeagueFilter, ignoreCase = true)
+            for ((tierKey, tierLabel) in cpTierTabs) {
+                val isSelectedTier = tierKey.equals(selectedPresetsCpTierFilter, ignoreCase = true)
                 val chipBtn = Button(this).apply {
-                    text = when (tab) {
-                        "ALL" -> "All ($count)"
-                        "OLD_CUPS" -> "Old Cups ($count)"
-                        else -> "$tab ($count)"
-                    }
+                    text = tierLabel
                     textSize = 9.5f
                     isAllCaps = false
                     minHeight = 0
@@ -7019,12 +7080,12 @@ class MainActivity : AppCompatActivity() {
                     val vPad = (5 * density).toInt()
                     setPadding(hPad, vPad, hPad, vPad)
                     backgroundTintList = android.content.res.ColorStateList.valueOf(
-                        if (isSelectedTab) {
+                        if (isSelectedTier) {
                             if (isShow6) 0xFFD97706.toInt() else 0xFF0284C7.toInt()
                         } else 0xFF1E293B.toInt()
                     )
                     setTextColor(
-                        if (isSelectedTab) {
+                        if (isSelectedTier) {
                             if (isShow6) 0xFF0F172A.toInt() else 0xFFFFFFFF.toInt()
                         } else 0xFFCBD5E1.toInt()
                     )
@@ -7035,7 +7096,8 @@ class MainActivity : AppCompatActivity() {
                         marginEnd = (6 * density).toInt()
                     }
                     setOnClickListener {
-                        selectedPresetsLeagueFilter = tab
+                        selectedPresetsCpTierFilter = tierKey
+                        selectedPresetsLeagueFilter = if (tierKey == "ALL") "ALL" else "TIER:$tierKey"
                         refreshPresetsUi()
                     }
                 }
@@ -7043,10 +7105,87 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val presets = when {
-            selectedPresetsLeagueFilter == "ALL" -> allPresets
-            selectedPresetsLeagueFilter == "OLD_CUPS" -> allPresets.filter { OverlayService.isOldCupForModeStatic(it.league, isShow6, prefs) }
-            else -> allPresets.filter { it.league.equals(selectedPresetsLeagueFilter, ignoreCase = true) }
+        if (selectedPresetsCpTierFilter == "ALL") {
+            selectedPresetsLeagueFilter = "ALL"
+            subFilterScroll?.visibility = android.view.View.GONE
+            subFilterChipsContainer?.removeAllViews()
+        } else {
+            val tierKey = selectedPresetsCpTierFilter.uppercase()
+            val tierDisplayName = when (tierKey) {
+                "GREAT" -> "Great"
+                "ULTRA" -> "Ultra"
+                else -> "Master"
+            }
+            val tierPresets = allPresets.filter { OverlayService.resolveLeagueCpTierStatic(it.league) == tierKey }
+            val tierOldCount = tierPresets.count { OverlayService.isOldCupForModeStatic(it.league, isShow6, prefs) }
+            val tierActiveCups = sortCupsWithinTier(
+                enabledModeLeagues.filter { OverlayService.resolveLeagueCpTierStatic(it) == tierKey }
+            )
+            val defaultTierFilter = "TIER:$tierKey"
+            val oldTierFilter = "OLD_CUPS:$tierKey"
+
+            val tier2Tabs = buildList<Pair<String, String>> {
+                add(defaultTierFilter to "All $tierDisplayName (${tierPresets.size})")
+                for (cup in tierActiveCups) {
+                    val c = tierPresets.count { it.league.equals(cup, ignoreCase = true) }
+                    add(cup to "${formatTier2CupChipLabel(cup)} ($c)")
+                }
+                if (tierOldCount > 0) {
+                    add(oldTierFilter to "Old Cups ($tierOldCount)")
+                }
+            }
+
+            if (tier2Tabs.none { it.first.equals(selectedPresetsLeagueFilter, ignoreCase = true) }) {
+                selectedPresetsLeagueFilter = if (tierOldCount > 0 &&
+                    OverlayService.resolveLeagueCpTierStatic(selectedPresetsLeagueFilter) == tierKey &&
+                    OverlayService.isOldCupForModeStatic(selectedPresetsLeagueFilter, isShow6, prefs)
+                ) {
+                    oldTierFilter
+                } else {
+                    defaultTierFilter
+                }
+            }
+
+            subFilterScroll?.visibility = android.view.View.VISIBLE
+            subFilterChipsContainer?.let { subRow ->
+                subRow.removeAllViews()
+                for ((subKey, subLabel) in tier2Tabs) {
+                    val isSelectedSub = subKey.equals(selectedPresetsLeagueFilter, ignoreCase = true)
+                    val subBtn = Button(this).apply {
+                        text = subLabel
+                        textSize = 9.0f
+                        isAllCaps = false
+                        minHeight = 0
+                        minimumHeight = 0
+                        minWidth = 0
+                        minimumWidth = 0
+                        val hPad = (9 * density).toInt()
+                        val vPad = (4 * density).toInt()
+                        setPadding(hPad, vPad, hPad, vPad)
+                        backgroundTintList = android.content.res.ColorStateList.valueOf(
+                            if (isSelectedSub) 0xFF0D9488.toInt() else 0xFF0F172A.toInt()
+                        )
+                        setTextColor(
+                            if (isSelectedSub) 0xFFFFFFFF.toInt() else 0xFF94A3B8.toInt()
+                        )
+                        layoutParams = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT
+                        ).apply {
+                            marginEnd = (5 * density).toInt()
+                        }
+                        setOnClickListener {
+                            selectedPresetsLeagueFilter = subKey
+                            refreshPresetsUi()
+                        }
+                    }
+                    subRow.addView(subBtn)
+                }
+            }
+        }
+
+        val presets = allPresets.filter {
+            OverlayService.matchesEncodedLeagueFilterStatic(it.league, selectedPresetsLeagueFilter, isShow6, prefs)
         }
 
         var hasUncomputedMetrics = false
@@ -8392,10 +8531,15 @@ class MainActivity : AppCompatActivity() {
 
             val rows = mutableListOf<SelectorRow>()
             if (isShow6ModeSelector) {
-                // 1. Forced top items: all catalog cups containing "Battle Frontier" (ALL CAPS)
+                // 1. Forced top items: ONLY current active Battle Frontier cups (Spectral, Cauldron, Master)
                 val forcedBfFormats = catalog
-                    .filter { OverlayService.isBattleFrontierFormatTitleStatic(it.title, it.cup) || OverlayService.isBattleFrontierFormatTitleStatic(it.leagueKey, it.cup) }
-                    .sortedBy { it.leagueKey }
+                    .filter {
+                        (OverlayService.isCurrentBattleFrontierCupStatic(it.title, it.cup) ||
+                            OverlayService.isCurrentBattleFrontierCupStatic(it.leagueKey, it.cup)) &&
+                            it.lifecycleStatus == "CURRENT"
+                    }
+                    .sortedBy { it.cp }
+                val forcedKeysSet = forcedBfFormats.map { it.leagueKey.uppercase() }.toSet()
                 for (m in forcedBfFormats) {
                     val megaTag = if (m.allowsMega) " • 🧬 Max 1 Mega" else ""
                     rows.add(
@@ -8417,11 +8561,9 @@ class MainActivity : AppCompatActivity() {
                         )
                     )
                 }
-                // 3. Remaining user-selectable limited metas (Title Case with CP in parentheses)
+                // 3. Remaining user-selectable limited metas (including older/non-current cups)
                 val optionalLimited = catalog.filterNot {
-                    it.category == "standard_open" ||
-                        OverlayService.isBattleFrontierFormatTitleStatic(it.title, it.cup) ||
-                        OverlayService.isBattleFrontierFormatTitleStatic(it.leagueKey, it.cup)
+                    it.category == "standard_open" || it.leagueKey.uppercase() in forcedKeysSet
                 }
                 for (m in optionalLimited) {
                     val isExpired = OverlayService.isExpiredLimitedMetaStatic(m, nowMs)

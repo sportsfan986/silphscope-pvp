@@ -455,6 +455,77 @@ export function isBattleFrontierCupTitle(rawTitleOrLabel: string, cupSlug = ""):
   );
 }
 
+/**
+ * v6.05: Returns true ONLY for the currently active Battle Frontier Show 6 formats:
+ * - Spectral (1500 CP)
+ * - Cauldron (2500 CP)
+ * - Master (10000 CP)
+ * Historical/older Battle Frontier cups from PvPoke's gamemaster["cups"] archive are not forced.
+ */
+export function isCurrentBattleFrontierCup(rawTitleOrLabel: string, cupSlug = ""): boolean {
+  const t = (rawTitleOrLabel || "").trim().toLowerCase();
+  const c = (cupSlug || "").trim().toLowerCase();
+  if (c === "spectral" || c === "cauldron" || c === "battlefrontiermaster") return true;
+  if (!t.includes("battle frontier")) return false;
+  return (
+    t.includes("(spectral)") ||
+    t.includes("(cauldron)") ||
+    t.includes("(master)") ||
+    t.endsWith(" spectral") ||
+    t.endsWith(" cauldron") ||
+    t.endsWith(" master")
+  );
+}
+
+export function resolveLeagueCpTier(league: string | undefined): "GREAT" | "ULTRA" | "MASTER" {
+  const trimmed = (league || "").trim();
+  const u = trimmed.toUpperCase();
+  if (u === "MASTER LEAGUE" || u === "MEGA MASTER LEAGUE" || u === "BATTLE FRONTIER (MASTER)") return "MASTER";
+  if (u === "ULTRA LEAGUE" || u === "BATTLE FRONTIER (CAULDRON)") return "ULTRA";
+  if (u === "GREAT LEAGUE" || u === "BATTLE FRONTIER (SPECTRAL)") return "GREAT";
+
+  const parenMatch = trimmed.match(/\((\d+)\)\s*$/);
+  if (parenMatch) {
+    const cpVal = Number(parenMatch[1]) || 1500;
+    if (cpVal >= 10000) return "MASTER";
+    if (cpVal === 2500) return "ULTRA";
+    return "GREAT";
+  }
+
+  const catMatch = DYNAMIC_LIMITED_META_CATALOG.find(
+    (m) => m.label.toLowerCase() === trimmed.toLowerCase() || m.id.toLowerCase() === trimmed.toLowerCase()
+  );
+  if (catMatch) {
+    if (catMatch.cp >= 10000) return "MASTER";
+    if (catMatch.cp === 2500) return "ULTRA";
+    return "GREAT";
+  }
+
+  if (u.includes("MASTER") || u.includes("10000")) return "MASTER";
+  if (u.includes("ULTRA") || u.includes("CAULDRON") || u.includes("2500")) return "ULTRA";
+  return "GREAT";
+}
+
+export function matchesTwoTierLeagueFilter(
+  entryLeague: string | undefined,
+  cpTierFilter: "ALL" | "GREAT" | "ULTRA" | "MASTER",
+  cupSubFilter: string,
+  mode: "gbl" | "show6"
+): boolean {
+  if (cpTierFilter === "ALL") {
+    if (!cupSubFilter || cupSubFilter === "ALL" || cupSubFilter === "ALL LEAGUES") return true;
+    if (cupSubFilter === "OLD_CUPS") return isOldCupForMode(entryLeague, mode);
+    return (entryLeague || "").trim().toLowerCase() === cupSubFilter.trim().toLowerCase();
+  }
+  const entryTier = resolveLeagueCpTier(entryLeague);
+  if (entryTier !== cpTierFilter) return false;
+  if (!cupSubFilter || cupSubFilter === "ALL" || cupSubFilter.startsWith("TIER:")) return true;
+  if (cupSubFilter === "OLD_CUPS" || cupSubFilter.startsWith("OLD_CUPS:")) {
+    return isOldCupForMode(entryLeague, mode);
+  }
+  return (entryLeague || "").trim().toLowerCase() === cupSubFilter.trim().toLowerCase();
+}
+
 export function getForcedGblLeagues(): LeagueType[] {
   return ["GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE"];
 }
@@ -462,7 +533,10 @@ export function getForcedGblLeagues(): LeagueType[] {
 export function getForcedShow6Leagues(): LeagueType[] {
   const out: LeagueType[] = [];
   for (const item of DYNAMIC_LIMITED_META_CATALOG) {
-    if (isBattleFrontierCupTitle(item.title || item.label, item.cup)) {
+    if (
+      isCurrentBattleFrontierCup(item.title || item.label, item.cup) &&
+      (item.status === "CURRENT" || item.lifecycle === "CURRENT")
+    ) {
       const cleanUpper = (item.title || item.label)
         .replace(/\s*\(\d+\)\s*$/, "")
         .trim()
@@ -15995,9 +16069,9 @@ export async function fetchPvPokeLimitedMetasFromGitHub(): Promise<{
   const discoveredByLabel = new Map<string, LimitedMetaFormat>();
   for (const [lbl, prev] of previousByLabel.entries()) {
     const isStandardOpen = prev.cup === "all";
-    const isBattleFrontier = isBattleFrontierCupTitle(prev.title || prev.label, prev.cup);
+    const isCurrentBF = isCurrentBattleFrontierCup(prev.title || prev.label, prev.cup);
     const nextStatus: LimitedMetaLifecycleStatus =
-      isStandardOpen || isBattleFrontier || prev.cup === "mega"
+      isStandardOpen || isCurrentBF || prev.cup === "mega"
         ? "CURRENT"
         : prev.status === "CURRENT"
         ? "RECENT"
@@ -16099,6 +16173,7 @@ export async function fetchPvPokeLimitedMetasFromGitHub(): Promise<{
         if (liveCupCpSet.has(`${cup}_${cp}`)) continue;
 
         const isBF = isBattleFrontierCupTitle(rawTitle, cup);
+        const isCurrentBF = isCurrentBattleFrontierCup(rawTitle, cup);
         const cleanTitle = isBF
           ? rawTitle.replace(/\s*\(\d+\)\s*$/, "").trim().toUpperCase()
           : toPvPokeTitleCase(rawTitle);
@@ -16106,11 +16181,11 @@ export async function fetchPvPokeLimitedMetasFromGitHub(): Promise<{
         const prev = previousByLabel.get(label);
         const commitMs = (await fetchCupLastCommitMs(cup)) ?? prev?.lastSeenAt ?? nowMs - 21 * 86400_000;
         const ageMs = nowMs - commitMs;
-        const isPinned = pinnedLower.has(label.toLowerCase()) || isBF;
+        const isPinned = pinnedLower.has(label.toLowerCase()) || isCurrentBF;
         if (ageMs > FOUR_WEEKS_MS && !isPinned) continue;
 
         const status: LimitedMetaLifecycleStatus =
-          isBF ? "CURRENT" : ageMs <= sevenDaysMs && !prev ? "UPCOMING" : "RECENT";
+          isCurrentBF ? "CURRENT" : ageMs <= sevenDaysMs && !prev ? "UPCOMING" : "RECENT";
         candidateList.push({
           cup,
           cp,

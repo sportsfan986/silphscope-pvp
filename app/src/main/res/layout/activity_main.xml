@@ -1391,7 +1391,7 @@
                         android:id="@+id/tv_presets_league_filter_title"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="🛡️ Filter My Teams by League / Limited Meta:"
+                        android:text="🛡️ Filter My Teams by CP Tier &amp; Cup:"
                         android:textSize="10.5sp"
                         android:textStyle="bold"
                         android:textColor="#38bdf8"
@@ -1404,6 +1404,21 @@
 
                         <LinearLayout
                             android:id="@+id/layout_presets_league_filter_chips"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal" />
+                    </HorizontalScrollView>
+
+                    <HorizontalScrollView
+                        android:id="@+id/scroll_presets_cup_subfilter"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="5dp"
+                        android:visibility="gone"
+                        android:scrollbars="none">
+
+                        <LinearLayout
+                            android:id="@+id/layout_presets_cup_subfilter_chips"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:orientation="horizontal" />
@@ -3359,61 +3374,6 @@
             </LinearLayout>
 
             <!-- ===================================================================
-                 4. BATTLE LOG REPARSE MAINTENANCE (PvPoke & Meta Importers moved to 📊 Meta tab)
-                 =================================================================== -->
-            <!-- Retroactive Battle Log Damage & Win Quality Reparse Card -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:layout_marginTop="8dp"
-                android:background="#0f172a"
-                android:padding="10dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical"
-                        android:layout_marginEnd="8dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Reparse Completed Battles (Damage &amp; WAE)"
-                            android:textColor="#34d399"
-                            android:textSize="12sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/text_reparse_battles_status"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Re-evaluates all logged battles with latest 2.56x dual-type &amp; Shadow 1.2x damage + Win Quality (WAE) metrics"
-                            android:textColor="#94a3b8"
-                            android:textSize="10sp"
-                            android:layout_marginTop="2dp" />
-                    </LinearLayout>
-
-                    <Button
-                        android:id="@+id/btn_reparse_battles_settings"
-                        android:layout_width="wrap_content"
-                        android:layout_height="36dp"
-                        android:backgroundTint="#059669"
-                        android:textColor="#ffffff"
-                        android:textSize="11sp"
-                        android:textStyle="bold"
-                        android:text="🔄 Reparse All" />
-                </LinearLayout>
-            </LinearLayout>
-
-            <!-- ===================================================================
                  5. TASKER AUTOMATION HOOKS CARD
                  =================================================================== -->
             <LinearLayout
@@ -3585,7 +3545,7 @@
                 android:textColor="#cbd5e1" />
         </LinearLayout>
 
-        <!-- Filter Row 1: League & Team Preset Filters -->
+        <!-- Filter Row 1: 2-Tier CP Range + Cup Filter & Team Preset Filter -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -3593,21 +3553,30 @@
             android:layout_marginBottom="6dp">
 
             <Spinner
+                android:id="@+id/spinner_log_filter_cp_tier"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="0.9"
+                android:background="#1e293b"
+                android:paddingHorizontal="4dp"
+                android:layout_marginEnd="4dp" />
+
+            <Spinner
                 android:id="@+id/spinner_log_filter_league"
                 android:layout_width="0dp"
                 android:layout_height="36dp"
-                android:layout_weight="1"
+                android:layout_weight="1.15"
                 android:background="#1e293b"
-                android:paddingHorizontal="6dp"
-                android:layout_marginEnd="6dp" />
+                android:paddingHorizontal="4dp"
+                android:layout_marginEnd="4dp" />
 
             <Spinner
                 android:id="@+id/spinner_log_filter_team"
                 android:layout_width="0dp"
                 android:layout_height="36dp"
-                android:layout_weight="1.2"
+                android:layout_weight="0.95"
                 android:background="#1e293b"
-                android:paddingHorizontal="6dp" />
+                android:paddingHorizontal="4dp" />
         </LinearLayout>
 
         <!-- Filter Row 2: Timeframe Filter (Day/Week/Current Season/Prev Season/All) + Copy & Share -->
