@@ -518,7 +518,6 @@ class MainActivity : AppCompatActivity() {
         Triple("GREAT LEAGUE", "pvpoke_rankings_gl.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-1500.json"),
         Triple("ULTRA LEAGUE", "pvpoke_rankings_ul.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-2500.json"),
         Triple("MASTER LEAGUE", "pvpoke_rankings_ml.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-10000.json"),
-        Triple("MEGA MASTER LEAGUE (10000)", "pvpoke_rankings_mega_ml.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-10000.json"),
         Triple("BATTLE FRONTIER (SPECTRAL)", "pvpoke_rankings_bf_spectral.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/spectral/overall/rankings-1500.json"),
         Triple("BATTLE FRONTIER (CAULDRON)", "pvpoke_rankings_bf_cauldron.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/cauldron/overall/rankings-2500.json"),
         Triple("BATTLE FRONTIER (MASTER)", "pvpoke_rankings_bf_master.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/battlefrontiermaster/overall/rankings-10000.json")
@@ -2776,13 +2775,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun runV511LeagueRemapAndCleanup() {
         try {
-            val firstTime = !prefs.getBoolean(OverlayService.PREFS_KEY_V511_LEAGUE_REMAP_DONE, false)
-            if (firstTime) {
-                val gblPinned = OverlayService.getPinnedGblLimitedMetasStatic(prefs).toMutableList()
-                if (gblPinned.none { it.equals("Mega Master League (10000)", ignoreCase = true) }) {
-                    gblPinned.add(0, "Mega Master League (10000)")
-                    OverlayService.setPinnedGblLimitedMetasStatic(prefs, gblPinned)
-                }
+            if (!prefs.getBoolean(OverlayService.PREFS_KEY_V511_LEAGUE_REMAP_DONE, false)) {
                 prefs.edit().putBoolean(OverlayService.PREFS_KEY_V511_LEAGUE_REMAP_DONE, true).apply()
             }
 
@@ -6618,10 +6611,10 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        statusText.text = "Status: Ensuring all 4 league rankings JSONs are loaded..."
-        dbStatusText.text = "Syncing PvPoke GameMaster & all 4 leagues before launching overlay..."
+        statusText.text = "Status: Ensuring selected league rankings JSONs are loaded..."
+        dbStatusText.text = "Syncing PvPoke GameMaster & selected leagues before launching overlay..."
         btnToggleOverlay.isEnabled = false
-        Toast.makeText(this, "Downloading/verifying all 4 league rankings before launching overlay...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Downloading/verifying selected league rankings before launching overlay...", Toast.LENGTH_SHORT).show()
 
         lifecycleScope.launch(Dispatchers.IO) {
             var didDownloadAny = false
@@ -6643,6 +6636,7 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
+                OverlayService.syncPinnedLimitedMetaRankingsBlocking(prefs, filesDir)
 
                 val cacheFile = File(filesDir, "pvpoke_gamemaster.json")
                 if (cacheFile.exists() && cacheFile.length() > 1000 && OverlayService.DYNAMIC_POKEMON_DATABASE.isEmpty()) {
@@ -6671,10 +6665,10 @@ class MainActivity : AppCompatActivity() {
                 if (OverlayService.areAllFourLeaguesLoaded()) {
                     launchOverlayServiceNow(resultCode, data)
                 } else {
-                    statusText.text = "Status: Waiting for all 4 league rankings JSONs"
+                    statusText.text = "Status: Waiting for league rankings JSONs"
                     Toast.makeText(
                         this@MainActivity,
-                        "All 4 league rankings JSONs must be downloaded before launching overlay. Check connection and tap Sync PvPoke.",
+                        "Base league rankings JSONs must be downloaded before launching overlay. Check connection and tap Sync PvPoke.",
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -8528,6 +8522,7 @@ class MainActivity : AppCompatActivity() {
                     lifecycleScope.launch(Dispatchers.IO) {
                         val synced = OverlayService.syncPinnedLimitedMetaRankingsBlocking(prefs, filesDir)
                         withContext(Dispatchers.Main) {
+                            dbStatusText.text = formatDbAndLeagueStatusText()
                             if (currentActivePage == "meta") refreshMetaTabDashboard()
                             Toast.makeText(
                                 this@MainActivity,
@@ -11213,21 +11208,18 @@ class MainActivity : AppCompatActivity() {
             "Not synced"
         }
         val gmCount = OverlayService.getGamemasterLoadedCount()
-        val glCount = OverlayService.getLeagueRankingsCount("GREAT LEAGUE")
-        val ulCount = OverlayService.getLeagueRankingsCount("ULTRA LEAGUE")
-        val mlCount = OverlayService.getLeagueRankingsCount("MASTER LEAGUE")
-        val megaCount = OverlayService.getLeagueRankingsCount("MEGA MASTER LEAGUE")
-        return "Last Updated: $dateStr • GameMaster: $gmCount Pokémon\nLeagues Loaded — GL: $glCount • UL: $ulCount • ML: $mlCount • Mega: $megaCount"
+        val selectedSummary = OverlayService.formatSelectedLeaguesStatusSummaryStatic(prefs)
+        return "Last Updated: $dateStr • GameMaster: $gmCount Pokémon\nSelected Leagues Loaded — $selectedSummary"
     }
 
     /**
-     * PVPOKE GAMEMASTER + LEAGUE RANKINGS DOWNLOAD & CACHE:
-     * Downloads raw live PvPoke gamemaster.json + GL/UL/ML/Mega Master rankings JSONs
+     * PVPOKE GAMEMASTER + SELECTED LEAGUE RANKINGS DOWNLOAD & CACHE:
+     * Downloads raw live PvPoke gamemaster.json + rankings JSONs for all selected leagues
      */
     private fun checkGamemasterCache() {
         val cacheFile = File(filesDir, "pvpoke_gamemaster.json")
         if (cacheFile.exists()) {
-            dbStatusText.text = "Loading cached PvPoke GameMaster & 4 League Rankings..."
+            dbStatusText.text = "Loading cached PvPoke GameMaster & Selected League Rankings..."
             lifecycleScope.launch(Dispatchers.IO) {
                 var didDownloadMissing = false
                 try {
@@ -11269,7 +11261,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         } else {
-            dbStatusText.text = "PvPoke Database: Not cached (syncing all 4 leagues...)"
+            dbStatusText.text = "PvPoke Database: Not cached (syncing selected leagues...)"
             lifecycleScope.launch(Dispatchers.Default) {
                 runOneTimeAiLogSplitAndCleanup(silent = true)
                 migrateExistingBattleLogs()
@@ -11279,7 +11271,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun downloadPvPokeGamemaster() {
-        dbStatusText.text = "Downloading PvPoke gamemaster.json + GL/UL/ML/Mega rankings..."
+        dbStatusText.text = "Downloading PvPoke gamemaster.json + selected league rankings..."
         btnDownloadDb.isEnabled = false
 
         lifecycleScope.launch(Dispatchers.IO) {
@@ -11298,6 +11290,7 @@ class MainActivity : AppCompatActivity() {
                         }
                     } catch (_: Exception) {}
                 }
+                OverlayService.syncPinnedLimitedMetaRankingsBlocking(prefs, filesDir, forceRefresh = true)
 
                 val request = Request.Builder().url(GAMEMASTER_URL).build()
                 client.newCall(request).execute().use { response ->
@@ -11309,6 +11302,7 @@ class MainActivity : AppCompatActivity() {
                     OverlayService.parseGamemasterJsonStatic(bodyString)
                     prefs.edit().putLong(PREFS_KEY_LAST_SYNC_TIMESTAMP, System.currentTimeMillis()).apply()
 
+                    val selectedCount = OverlayService.getSelectedLeaguesRankingsCountsStatic(prefs).size
                     withContext(Dispatchers.Main) {
                         dbStatusText.text = formatDbAndLeagueStatusText()
                         btnDownloadDb.isEnabled = true
@@ -11316,7 +11310,7 @@ class MainActivity : AppCompatActivity() {
                         if (currentActivePage == "meta") {
                             refreshMetaTabDashboard()
                         }
-                        Toast.makeText(this@MainActivity, "PvPoke gamemaster & all 4 league rankings synced!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "PvPoke gamemaster & $selectedCount selected league rankings synced!", Toast.LENGTH_SHORT).show()
                     }
                 }
             } catch (e: Exception) {

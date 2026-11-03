@@ -1975,10 +1975,12 @@ export default function App() {
     setPinnedGblLimitedMetas(next);
     setPinnedGblMetasState(next);
     setLimitedMetaCatalog(getLimitedMetaCatalog());
+    setDbTelemetry(getPvPokeDatabaseTelemetry());
     if (!exists) {
       setStartBattleToast(`🔄 Fetching PvPoke rankings for ${metaId}...`);
       const count = await syncLimitedMetaRankings(metaId);
       setLimitedMetaCatalog(getLimitedMetaCatalog());
+      setDbTelemetry(getPvPokeDatabaseTelemetry());
       setStartBattleToast(
         count > 0
           ? `✅ Pinned "${metaId}" to Standard GBL (${count} ranked Pokémon synced from PvPoke GitHub)!`
@@ -2008,10 +2010,12 @@ export default function App() {
     setPinnedShow6LimitedMetas(next);
     setPinnedShow6MetasState(next);
     setLimitedMetaCatalog(getLimitedMetaCatalog());
+    setDbTelemetry(getPvPokeDatabaseTelemetry());
     if (!exists) {
       setStartBattleToast(`🔄 Fetching PvPoke rankings for ${metaId}...`);
       const count = await syncLimitedMetaRankings(metaId);
       setLimitedMetaCatalog(getLimitedMetaCatalog());
+      setDbTelemetry(getPvPokeDatabaseTelemetry());
       setStartBattleToast(
         count > 0
           ? `🏛️ Pinned "${metaId}" to Battle Frontier / Show 6 (${count} ranked Pokémon synced)!`
@@ -2973,17 +2977,15 @@ export default function App() {
       .catch(() => {});
   }, []);
 
-  // Auto-sync PvPoke gamemaster.json + 4 league rankings JSONs on startup
+  // Auto-sync PvPoke gamemaster.json + selected league rankings JSONs on startup
   useEffect(() => {
     let mounted = true;
     syncPvPokeDataAndRankings()
       .then((res) => {
         if (!mounted) return;
-        const gl = res.rankingsCount['GREAT LEAGUE'] || 0;
-        const ul = res.rankingsCount['ULTRA LEAGUE'] || 0;
-        const ml = res.rankingsCount['MASTER LEAGUE'] || 0;
-        const mega = res.rankingsCount['MEGA MASTER LEAGUE'] || 0;
-        const totalRanked = gl + ul + ml + mega;
+        const tel = getPvPokeDatabaseTelemetry();
+        setDbTelemetry(tel);
+        const totalRanked = tel.selectedLeagues.reduce((sum, item) => sum + item.count, 0);
         const nowStr = new Date().toLocaleString('en-US', {
           month: 'short',
           day: 'numeric',
@@ -2991,14 +2993,14 @@ export default function App() {
           hour: 'numeric',
           minute: '2-digit'
         });
-        setDbTelemetry(getPvPokeDatabaseTelemetry());
         if (totalRanked > 0) {
           setLastSyncedAt(nowStr);
           try {
             localStorage.setItem('gbl_last_sync_timestamp', nowStr);
           } catch {}
+          const summaryStr = tel.selectedLeagues.map((l) => `${l.shortLabel}: ${l.count}`).join(' • ');
           setPvPokeSyncStatus(
-            `Last Updated: ${nowStr} • GameMaster: ${res.syncedCount} Pokémon • GL: ${gl} • UL: ${ul} • ML: ${ml} • Mega: ${mega}`
+            `Last Updated: ${nowStr} • GameMaster: ${res.syncedCount} Pokémon • ${summaryStr}`
           );
           setPresets((prev) =>
             recalculateAllPresetsMetrics(
@@ -3018,14 +3020,12 @@ export default function App() {
 
   const handleManualPvPokeSync = async () => {
     setIsSyncingPvPoke(true);
-    setPvPokeSyncStatus('Syncing gamemaster + GL/UL/ML/Mega rankings...');
+    setPvPokeSyncStatus('Syncing gamemaster + selected league rankings...');
     try {
       const res = await syncPvPokeDataAndRankings();
-      const gl = res.rankingsCount['GREAT LEAGUE'] || 0;
-      const ul = res.rankingsCount['ULTRA LEAGUE'] || 0;
-      const ml = res.rankingsCount['MASTER LEAGUE'] || 0;
-      const mega = res.rankingsCount['MEGA MASTER LEAGUE'] || 0;
-      const totalRanked = gl + ul + ml + mega;
+      const tel = getPvPokeDatabaseTelemetry();
+      setDbTelemetry(tel);
+      const totalRanked = tel.selectedLeagues.reduce((sum, item) => sum + item.count, 0);
       const nowStr = new Date().toLocaleString('en-US', {
         month: 'short',
         day: 'numeric',
@@ -3033,7 +3033,6 @@ export default function App() {
         hour: 'numeric',
         minute: '2-digit'
       });
-      setDbTelemetry(getPvPokeDatabaseTelemetry());
       if (totalRanked > 0) {
         setLastSyncedAt(nowStr);
         try {
@@ -3041,9 +3040,10 @@ export default function App() {
         } catch {}
       }
       recalculateAllPresetsWithSeasonMeta(presets, battleLogs);
+      const summaryStr = tel.selectedLeagues.map((l) => `${l.shortLabel}: ${l.count}`).join(' • ');
       setPvPokeSyncStatus(
         totalRanked > 0
-          ? `Last Updated: ${nowStr} • GameMaster: ${res.syncedCount} Pokémon • GL: ${gl} • UL: ${ul} • ML: ${ml} • Mega: ${mega}`
+          ? `Last Updated: ${nowStr} • GameMaster: ${res.syncedCount} Pokémon • ${summaryStr}`
           : `Loaded ${res.syncedCount} species (offline fallback)`
       );
     } catch {
@@ -5763,7 +5763,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v6.03 • Android Native Overlay
+                  v6.04 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -7948,12 +7948,12 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Live PvPoke GameMaster & 4-League Rankings Status Card */}
+                {/* Live PvPoke GameMaster & Selected League Rankings Status Card */}
                 <div className="mb-4 p-3 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <div>
                       <span className="text-xs font-bold text-slate-200 block">
-                        PvPoke Live Database &amp; 4-League Status
+                        PvPoke Live Database &amp; Selected League Status ({dbTelemetry.selectedLeagues.length} Leagues)
                       </span>
                       <span className="text-[10px] text-slate-400 font-mono">
                         Last Updated: <strong className="text-emerald-400">{lastSyncedAt}</strong>
@@ -7968,27 +7968,19 @@ export default function App() {
                       <span>{isSyncingPvPoke ? 'Syncing...' : 'Sync PvPoke'}</span>
                     </button>
                   </div>
-                  <div className="grid grid-cols-5 gap-1.5 text-center text-[10px] font-mono">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-center text-[10px] font-mono">
                     <div className="p-1.5 rounded bg-slate-900 border border-slate-800">
                       <span className="text-slate-400 block text-[9px]">GameMaster</span>
                       <strong className="text-white">{dbTelemetry.gmCount}</strong>
                     </div>
-                    <div className="p-1.5 rounded bg-slate-900 border border-slate-800">
-                      <span className="text-sky-400 block text-[9px]">GL (1500)</span>
-                      <strong className="text-white">{dbTelemetry.glCount}</strong>
-                    </div>
-                    <div className="p-1.5 rounded bg-slate-900 border border-slate-800">
-                      <span className="text-amber-400 block text-[9px]">UL (2500)</span>
-                      <strong className="text-white">{dbTelemetry.ulCount}</strong>
-                    </div>
-                    <div className="p-1.5 rounded bg-slate-900 border border-slate-800">
-                      <span className="text-purple-400 block text-[9px]">ML (10000)</span>
-                      <strong className="text-white">{dbTelemetry.mlCount}</strong>
-                    </div>
-                    <div className="p-1.5 rounded bg-slate-900 border border-slate-800">
-                      <span className="text-emerald-400 block text-[9px]">Mega ML</span>
-                      <strong className="text-white">{dbTelemetry.megaCount}</strong>
-                    </div>
+                    {dbTelemetry.selectedLeagues.map((lg) => (
+                      <div key={lg.key} className="p-1.5 rounded bg-slate-900 border border-slate-800">
+                        <span className="text-sky-400 block text-[9px] truncate" title={lg.key}>
+                          {lg.shortLabel}
+                        </span>
+                        <strong className="text-white">{lg.count}</strong>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -9784,7 +9776,7 @@ export default function App() {
                   onClick={handleManualPvPokeSync}
                   disabled={isSyncingPvPoke}
                   className="py-2.5 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sky-300 font-bold text-xs flex items-center gap-1.5 transition"
-                  title="Fetch latest PvPoke gamemaster.json + GL/UL/ML/Mega Master rankings JSONs"
+                  title="Fetch latest PvPoke gamemaster.json + selected league rankings JSONs"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isSyncingPvPoke ? 'animate-spin' : ''}`} />
                   <span>{isSyncingPvPoke ? 'Syncing Rankings...' : 'Sync PvPoke + Rankings'}</span>
@@ -13401,7 +13393,7 @@ export default function App() {
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <span className="text-sm font-bold text-white block">
-                    PvPoke Live Database &amp; 4-League Rankings
+                    PvPoke Live Database &amp; Selected League Rankings ({dbTelemetry.selectedLeagues.length} Leagues)
                   </span>
                   <span className="text-xs text-slate-400 font-mono">
                     Last Updated: <strong className="text-emerald-400">{lastSyncedAt}</strong>
@@ -13416,27 +13408,19 @@ export default function App() {
                   <span>{isSyncingPvPoke ? 'Syncing...' : 'Sync PvPoke'}</span>
                 </button>
               </div>
-              <div className="grid grid-cols-5 gap-2 text-center text-xs font-mono">
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-2 text-center text-xs font-mono">
                 <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
                   <span className="text-slate-400 block text-[10px]">GameMaster</span>
                   <strong className="text-white text-sm">{dbTelemetry.gmCount}</strong>
                 </div>
-                <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="text-sky-400 block text-[10px]">GL (1500)</span>
-                  <strong className="text-white text-sm">{dbTelemetry.glCount}</strong>
-                </div>
-                <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="text-amber-400 block text-[10px]">UL (2500)</span>
-                  <strong className="text-white text-sm">{dbTelemetry.ulCount}</strong>
-                </div>
-                <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="text-purple-400 block text-[10px]">ML (10000)</span>
-                  <strong className="text-white text-sm">{dbTelemetry.mlCount}</strong>
-                </div>
-                <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
-                  <span className="text-emerald-400 block text-[10px]">Mega ML</span>
-                  <strong className="text-white text-sm">{dbTelemetry.megaCount}</strong>
-                </div>
+                {dbTelemetry.selectedLeagues.map((lg) => (
+                  <div key={lg.key} className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                    <span className="text-sky-400 block text-[10px] truncate" title={lg.key}>
+                      {lg.shortLabel}
+                    </span>
+                    <strong className="text-white text-sm">{lg.count}</strong>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -15354,7 +15338,7 @@ export default function App() {
                         📊 Personalized Meta &amp; Top Cores ({appCombatMode === 'show6' ? 'Show 6 Mode' : 'GBL Blind 3 Mode'})
                       </span>
                       <span className="px-2 py-0.5 rounded bg-sky-500/20 border border-sky-400/50 text-sky-300 text-[10px] font-mono">
-                        v6.03
+                        v6.04
                       </span>
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
@@ -18106,7 +18090,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v6.03 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, and ML Kit Text Recognition.
+        SilphScope PvP v6.04 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, and ML Kit Text Recognition.
       </footer>
     </div>
   );

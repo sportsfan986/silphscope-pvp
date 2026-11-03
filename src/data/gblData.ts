@@ -496,7 +496,7 @@ export function getPinnedGblLimitedMetas(): string[] {
   } catch {
     // ignore
   }
-  return ["Mega Master League (10000)"];
+  return [];
 }
 
 export function getPinnedShow6LimitedMetas(): string[] {
@@ -5520,6 +5520,12 @@ export async function syncPvPokeDataAndRankings(): Promise<{
     }
   }
 
+  try {
+    await syncLimitedMetaRankings();
+  } catch {
+    // ignore limited meta sync errors
+  }
+
   return {
     syncedCount: Object.keys(POKEMON_DATABASE).length,
     rankingsCount: {
@@ -5534,6 +5540,18 @@ export async function syncPvPokeDataAndRankings(): Promise<{
   };
 }
 
+export function formatShortSelectedLeagueLabel(leagueKey: string): string {
+  const upper = (leagueKey || "").trim().toUpperCase();
+  if (upper === "GREAT LEAGUE" || upper === "GREAT LEAGUE (1500)") return "GL (1500)";
+  if (upper === "ULTRA LEAGUE" || upper === "ULTRA LEAGUE (2500)") return "UL (2500)";
+  if (upper === "MASTER LEAGUE" || upper === "MASTER LEAGUE (10000)") return "ML (10000)";
+  if (upper.includes("MEGA MASTER") || upper === "MASTER LEAGUE (MEGA) (10000)") return "Mega ML";
+  if (upper.includes("BATTLE FRONTIER") && upper.includes("SPECTRAL")) return "BF (Spectral)";
+  if (upper.includes("BATTLE FRONTIER") && upper.includes("CAULDRON")) return "BF (Cauldron)";
+  if (upper.includes("BATTLE FRONTIER") && upper.includes("MASTER")) return "BF (Master)";
+  return (leagueKey || "").trim();
+}
+
 export function getPvPokeDatabaseTelemetry(): {
   gmCount: number;
   glCount: number;
@@ -5541,18 +5559,42 @@ export function getPvPokeDatabaseTelemetry(): {
   mlCount: number;
   megaCount: number;
   areAllFourLeaguesLoaded: boolean;
+  selectedLeagues: Array<{ key: string; shortLabel: string; count: number }>;
 } {
   const glCount = LIVE_RANKINGS_MAP["GREAT LEAGUE"]?.size ?? 0;
   const ulCount = LIVE_RANKINGS_MAP["ULTRA LEAGUE"]?.size ?? 0;
   const mlCount = LIVE_RANKINGS_MAP["MASTER LEAGUE"]?.size ?? 0;
   const megaCount = LIVE_RANKINGS_MAP["MEGA MASTER LEAGUE"]?.size ?? 0;
+
+  const rawSelected = [...getEnabledGblLeagues(), ...getEnabledShow6Leagues()];
+  const seenShort = new Set<string>();
+  const selectedLeagues: Array<{ key: string; shortLabel: string; count: number }> = [];
+  for (const lg of rawSelected) {
+    const trimmed = (lg || "").trim();
+    if (!trimmed) continue;
+    const shortLabel = formatShortSelectedLeagueLabel(trimmed);
+    const dedupKey = shortLabel.toUpperCase();
+    if (seenShort.has(dedupKey)) continue;
+    seenShort.add(dedupKey);
+    const upper = trimmed.toUpperCase();
+    const norm = normalizeLeagueName(trimmed);
+    const count =
+      LIVE_RANKINGS_MAP[trimmed]?.size ??
+      LIVE_RANKINGS_MAP[upper]?.size ??
+      LIVE_RANKINGS_MAP[norm]?.size ??
+      LIVE_RANKINGS_MAP[norm.toUpperCase()]?.size ??
+      0;
+    selectedLeagues.push({ key: trimmed, shortLabel, count });
+  }
+
   return {
     gmCount: Object.keys(POKEMON_DATABASE).length,
     glCount,
     ulCount,
     mlCount,
     megaCount,
-    areAllFourLeaguesLoaded: glCount > 0 && ulCount > 0 && mlCount > 0 && megaCount > 0
+    areAllFourLeaguesLoaded: glCount > 0 && ulCount > 0 && mlCount > 0,
+    selectedLeagues
   };
 }
 
