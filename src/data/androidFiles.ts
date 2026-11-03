@@ -42,21 +42,21 @@ export const ANDROID_FILES: AndroidProjectFile[] = [
     path: "app/build.gradle.kts",
     name: "app/build.gradle.kts",
     category: "gradle",
-    description: "App module Gradle dependencies (v6.01, versionCode 1601) including ML Kit Text Recognition, OkHttp, and Gson.",
+    description: "App module Gradle dependencies (v6.02, versionCode 1602) including ML Kit Text Recognition, OkHttp, and Gson.",
     content: appGradleContent
   },
   {
     path: "app/src/main/java/com/gbl/overlay/MainActivity.kt",
     name: "MainActivity.kt",
     category: "kotlin",
-    description: "Manages permissions, 4-tab navigation (Teams, Battle Log, Settings, Meta), collapsible Meta tuning drawer, Limited Cup same-CP standard league blending, and AI Advice HUD position (Bottom default vs Top).",
+    description: "Manages permissions, 4-tab navigation (Teams, Battle Log, Settings, Meta), v6.02 optimal scanner defaults migration, Alt Fast-Move Strictness, Pre-Zoom Shield Chip Tolerance, and Swap-Throw Rollback controls.",
     content: mainActivityContent
   },
   {
     path: "app/src/main/java/com/gbl/overlay/OverlayService.kt",
     name: "OverlayService.kt",
     category: "kotlin",
-    description: "Foreground service with 4-Pillar Condensed 2-Line AI Tactical Coach, unified throw/catch timing alerts, Tank-to-Reach-Move shield math, and personalized blended season meta & core engine.",
+    description: "Foreground service with Swap-and-Immediate-Throw banner attribution & conditional rollback, strict multi-cycle non-standard fast-move detector, 25s faint KO sync, and zero-lag 5-profile post-battle shadow telemetry.",
     content: overlayServiceContent
   },
   {
@@ -70,7 +70,7 @@ export const ANDROID_FILES: AndroidProjectFile[] = [
     path: "app/src/main/res/layout/activity_main.xml",
     name: "activity_main.xml",
     category: "layout",
-    description: "Main activity UI layout (v6.01) with 4th 📊 Meta tab, default-collapsed Meta Settings/Limited Cups/Spreadsheet Importer drawer, GBL Blind 3 Limited Cup Same-CP Standard League Blend (50% default fade start), Top Meta Cores & Top Meta Pokémon tables, and AI Advice HUD position selector.",
+    description: "Main activity UI layout (v6.02) with 4th 📊 Meta tab, v6.02 Scanner Tuning controls (Strict Alt Fast Detector, ≤8% Shield Chip Tolerance, 4.0s Swap-Throw Rollback), and AI Advice HUD position selector.",
     content: activityMainXmlContent
   },
   {

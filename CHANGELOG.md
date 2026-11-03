@@ -1,4 +1,26 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.01`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.02`)
+
+---
+
+## v6.02 (2026-11-03) — Swap-and-Immediate-Throw Attribution & Rollback, Strict Multi-Cycle Fast-Move Detector, 25s Faint KO Sync, Optimal Scanner Defaults Migration, & Zero-Lag 5-Profile Post-Battle Shadow Telemetry
+*Accuracy, anomaly-elimination, and telemetry benchmark release (`v6.02`, `versionCode = 1602`) resolving swap-and-immediate-throw attribution via banner Pokémon name matching + conditional post-throw rollback (`tryRollbackRecentSwapAndImmediateThrow`), hardening non-standard opponent fast-move overrides with strict multi-cycle proof, fixing match-ending 0% HP KO drops and 25s faint-to-throw retroactive sync, crediting 1 in-flight fast move on 2nd-move tap lag, migrating existing installs to optimal scanner defaults (`HP = ON`, `Energy = ON`, `2` samples, `±2%` tolerance, `200ms` lead, `+1t` offset), and adding a zero-lag 5-profile post-battle shadow telemetry evaluator.*
+
+- **v6.02 — Key Features & Anomaly Fixes**:
+  - **3-Layer Swap-and-Immediate-Throw Attribution & Conditional Rollback**:
+    - **Layer 1 (Banner Pokémon Name Attribution & Unseen Backline Registration)**: Matches `<Pokemon>` in `"<Pokemon> used <Move>!"` against all 3 user slots (`0..2`), all known opponent bench slots (`0..2`), and the full PvPoke database (`findPokemonInText`) when an unseen 2nd/3rd opponent Pokémon swaps in and immediately throws before top-right nameplate OCR runs. Automatically registers the unseen opponent slot, switches the active index, and refunds any provisional energy deduction on the previous slot.
+    - **Layer 2 (Post-Throw Nameplate Swap Rollback — `tryRollbackRecentSwapAndImmediateThrow`)**: Records a `PendingChargedMoveAttributionSnapshot` on every charged attack. If top nameplate OCR detects a new Pokémon within the configurable rollback window (default **`4.0s`**) and the thrown move belongs to the newly detected Pokémon's moveset (or the previous slot lacked energy/moveset compatibility), SilphScope rolls back the energy deduction and move lock from the old slot and applies them to the newly swapped Pokémon.
+    - **Layer 3 (Pre-Throw HP Jump Hint)**: Flags `preThrowLikelySwapFromHpJump = true` when either side's active HP jumps by `>= 15%` within `1200ms` prior to camera zoom.
+  - **Strict Multi-Turn & Multi-Cycle Non-Standard Opponent Fast-Move Detector (Section 1E)**:
+    - Requires **`>= 10` opponent turns**, **`>= 3` completed cycles** of both standard and candidate fast moves, **`>= 12.0%` cumulative fast-move damage**, **`>= 0.25` confidence advantage**, and **`>= 4.0%` per-turn error improvement** in `Strict` mode (default), and blocks un-inferable `Hidden Power (*)` moves from being auto-assigned via HP drops alone (eliminating false overrides on Ho-Oh, Dawn Wings Necrozma, and Ursaluna).
+  - **Remaining `v5.13` Anomaly Fixes**:
+    - **Pre-Zoom 1-Fast-Move Chip Shield Heuristic (`<= 8%` Default)**: Treats post-cutscene HP drops `<= max(8%, 1 opp fast move + 2%)` when `expectedUnshieldedDmg >= 18%` as a **Shielded Charged Attack (`0S -> 1S`) + 1 pre-zoom opponent fast move** instead of an unshielded bait move.
+    - **Retroactive Delayed `[SHIELD]` Debounce Sync (`<= 4.0s`)**: Automatically updates a recent opposing `CHARGED_ATTACK` (`<= 4.0s`) from `shielded = false` to `shielded = true` if shield icon pixel debounce finishes slightly after Section 4.
+    - **Lethal Disappearing HP Bar KO Detection & 25s Faint Sync Window**: Forces `0%` HP when a Pokémon's HP bar vanishes from a lethal hit (`1..55%` pre-cutscene HP) and widens `syncRecentUnshieldedChargedAttackOnFaintInList` from `12s` to **`25s`**.
+    - **Player 2nd-Move Tap Lag 1-Fast-Move Credit & `ENERGY_CAP_DRIFT` Suppression**: Credits `+1` in-flight player fast move when throwing a higher-cost 2nd charged move within 1 fast move of the pre-throw circle peak, and suppresses false `ENERGY_CAP_DRIFT` logs when `userEnergy` already covers `deductedCost`.
+  - **One-Time `v6.02` Optimal Scanner Defaults Migration & New Tuning Controls**:
+    - Migrates existing and new installs once (`PREFS_KEY_V602_SCANNER_DEFAULTS_MIGRATED`) to optimal defaults: `HP Tracking = ON`, `Energy Counting = ON`, `2 Samples`, `±2% Tolerance`, `200ms Proactive Lead`, `+1 Turn Fast Detect Offset` (supporting `0..3` turns), `Strict Alt Fast Detector`, `<= 8% Shield Chip Tolerance`, and `4.0s Swap-Throw Rollback Window`.
+  - **Zero-Lag Post-Battle 5-Profile Shadow Telemetry (`shadowProfileBenchmark`)**:
+    - Records a compact scalar `BattleSensorTick` ring buffer at 10Hz during combat (`0%` active combat CPU/OCR overhead) and evaluates **5 scanner profiles** (`ACTIVE_USER`, `V602_RECOMMENDED`, `ULTRA_FAST_150MS`, `CONSERVATIVE_3_SAMPLE`, `AGGRESSIVE_ALT_FAST`) once after battle ends so AI telemetry can rank which parameter combination achieves the lowest anomaly count.
 
 ---
 

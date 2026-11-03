@@ -203,6 +203,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textAltFastMoveDetectDesc: TextView
     private lateinit var btnCycleFastDetectOffset: Button
     private lateinit var textFastDetectOffsetDesc: TextView
+    private lateinit var btnCycleAltFastStrictness: Button
+    private lateinit var textAltFastStrictnessDesc: TextView
+    private lateinit var btnCycleShieldChipTol: Button
+    private lateinit var textShieldChipTolDesc: TextView
+    private lateinit var btnCycleSwapRollbackWindow: Button
+    private lateinit var textSwapRollbackWindowDesc: TextView
     private lateinit var seekbarOverlayScale: SeekBar
     private lateinit var textOverlayScaleValue: TextView
     private lateinit var textOverlayScaleDefaultTick: TextView
@@ -563,16 +569,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         prefs = getSharedPreferences("gbl_overlay_prefs", Context.MODE_PRIVATE)
-        // v3.60: Default HP Tracking and Energy Tracking to OFF for any user that has not installed 3.40 or higher
+        // v6.02: Run one-time optimal scanner defaults migration (HP=ON, Energy=ON, 2 samples, ±2% tol, 200ms lead, +1t offset, strict alt fast, 8% chip tol, 4.0s swap rollback)
+        OverlayService.runV602ScannerDefaultsMigrationStatic(prefs)
         val prevInstalledVerCode = prefs.getInt(PREFS_KEY_INSTALLED_VERSION_CODE, 0)
-        if (prevInstalledVerCode < 340) {
-            prefs.edit()
-                .putBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
-                .putBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
-                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 1601)
-                .apply()
-        } else if (prevInstalledVerCode < 1601) {
-            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 1601).apply()
+        if (prevInstalledVerCode < 1602) {
+            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 1602).apply()
         }
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         runV511LeagueRemapAndCleanup()
@@ -580,9 +581,9 @@ class MainActivity : AppCompatActivity() {
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "6.01"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "6.02"
         } catch (_: Exception) {
-            "6.01"
+            "6.02"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -1263,6 +1264,9 @@ class MainActivity : AppCompatActivity() {
         if (::btnCycleChargeCirclePriority.isInitialized) updateChargeCirclePriorityUi()
         if (::btnToggleAltFastMoveDetect.isInitialized) updateAltFastMoveDetectUi()
         if (::btnCycleFastDetectOffset.isInitialized) updateFastDetectOffsetUi()
+        if (::btnCycleAltFastStrictness.isInitialized) updateAltFastStrictnessUi()
+        if (::btnCycleShieldChipTol.isInitialized) updateShieldChipTolUi()
+        if (::btnCycleSwapRollbackWindow.isInitialized) updateSwapRollbackWindowUi()
         if (::presetsContainer.isInitialized && presetsContainer.childCount > 0) {
             refreshPresetsUi()
         }
@@ -1337,6 +1341,12 @@ class MainActivity : AppCompatActivity() {
         textAltFastMoveDetectDesc = findViewById(R.id.text_alt_fast_move_detect_desc)
         btnCycleFastDetectOffset = findViewById(R.id.btn_cycle_fast_detect_offset)
         textFastDetectOffsetDesc = findViewById(R.id.text_fast_detect_offset_desc)
+        btnCycleAltFastStrictness = findViewById(R.id.btn_cycle_alt_fast_strictness)
+        textAltFastStrictnessDesc = findViewById(R.id.text_alt_fast_strictness_desc)
+        btnCycleShieldChipTol = findViewById(R.id.btn_cycle_shield_chip_tol)
+        textShieldChipTolDesc = findViewById(R.id.text_shield_chip_tol_desc)
+        btnCycleSwapRollbackWindow = findViewById(R.id.btn_cycle_swap_rollback_window)
+        textSwapRollbackWindowDesc = findViewById(R.id.text_swap_rollback_window_desc)
         seekbarOverlayScale = findViewById(R.id.seekbar_overlay_scale)
         textOverlayScaleValue = findViewById(R.id.text_overlay_scale_value)
         textOverlayScaleDefaultTick = findViewById(R.id.text_overlay_scale_default_tick)
@@ -1471,6 +1481,9 @@ class MainActivity : AppCompatActivity() {
         updateChargeCirclePriorityUi()
         updateAltFastMoveDetectUi()
         updateFastDetectOffsetUi()
+        updateAltFastStrictnessUi()
+        updateShieldChipTolUi()
+        updateSwapRollbackWindowUi()
 
         editSyncGithubToken.setText(prefs.getString(PREFS_KEY_SYNC_GITHUB_TOKEN, "") ?: "")
         editSyncGistId.setText(prefs.getString(PREFS_KEY_SYNC_GIST_ID, "") ?: "")
@@ -1888,7 +1901,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnToggleHpTracking.setOnClickListener {
-            val currentEnableHp = prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
+            val currentEnableHp = prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, OverlayService.DEFAULT_ENABLE_HP_TRACKING)
             val nextEnableHp = !currentEnableHp
             prefs.edit().putBoolean(PREFS_KEY_ENABLE_HP_TRACKING, nextEnableHp).apply()
             OverlayService.recordDebounceSettingsChangeIfNeededStatic(
@@ -1910,7 +1923,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnToggleEnergyTracking.setOnClickListener {
-            val currentEnableEnergy = prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
+            val currentEnableEnergy = prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, OverlayService.DEFAULT_ENABLE_ENERGY_TRACKING)
             val nextEnableEnergy = !currentEnableEnergy
             prefs.edit().putBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, nextEnableEnergy).apply()
             OverlayService.recordDebounceSettingsChangeIfNeededStatic(
@@ -1988,9 +2001,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnCycleFastDetectOffset.setOnClickListener {
-            val currentOffset = prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2)
-            val nextOffset = (currentOffset + 1) % 3
+            val currentOffset = prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, OverlayService.DEFAULT_FAST_DETECT_TURN_OFFSET).coerceIn(0, 3)
+            val nextOffset = (currentOffset + 1) % 4
             prefs.edit().putInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, nextOffset).apply()
+            OverlayService.syncTierThresholdsFromPrefs(prefs)
             OverlayService.recordDebounceSettingsChangeIfNeededStatic(
                 prefs = prefs,
                 gson = gson,
@@ -2004,6 +2018,98 @@ class MainActivity : AppCompatActivity() {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
                     action = OverlayService.ACTION_UPDATE_SETTINGS
                     putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, nextOffset)
+                }
+                startService(updateIntent)
+            }
+        }
+
+        btnCycleAltFastStrictness.setOnClickListener {
+            val currentMode = prefs.getString(
+                OverlayService.PREFS_KEY_ALT_FAST_DETECT_STRICTNESS,
+                OverlayService.DEFAULT_ALT_FAST_DETECT_STRICTNESS
+            ) ?: OverlayService.DEFAULT_ALT_FAST_DETECT_STRICTNESS
+            val nextMode = when (currentMode.lowercase()) {
+                "strict" -> "balanced"
+                "balanced" -> "aggressive"
+                else -> "strict"
+            }
+            prefs.edit().putString(OverlayService.PREFS_KEY_ALT_FAST_DETECT_STRICTNESS, nextMode).apply()
+            OverlayService.syncTierThresholdsFromPrefs(prefs)
+            OverlayService.recordDebounceSettingsChangeIfNeededStatic(
+                prefs = prefs,
+                gson = gson,
+                triggerSource = "cycle_alt_fast_strictness",
+                triggerImmediateUpload = true
+            )
+            updateAltFastStrictnessUi()
+            updateAiTelemetryStatusUi()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_ALT_FAST_DETECT_STRICTNESS, nextMode)
+                }
+                startService(updateIntent)
+            }
+        }
+
+        btnCycleShieldChipTol.setOnClickListener {
+            val currentTol = prefs.getInt(
+                OverlayService.PREFS_KEY_SHIELD_CHIP_TOLERANCE_PCT,
+                OverlayService.DEFAULT_SHIELD_CHIP_TOLERANCE_PCT
+            )
+            val nextTol = when (currentTol) {
+                8 -> 10
+                10 -> 3
+                3 -> 6
+                else -> 8
+            }
+            prefs.edit().putInt(OverlayService.PREFS_KEY_SHIELD_CHIP_TOLERANCE_PCT, nextTol).apply()
+            OverlayService.syncTierThresholdsFromPrefs(prefs)
+            OverlayService.recordDebounceSettingsChangeIfNeededStatic(
+                prefs = prefs,
+                gson = gson,
+                triggerSource = "cycle_shield_chip_tolerance_pct",
+                triggerImmediateUpload = true
+            )
+            updateShieldChipTolUi()
+            updateAiTelemetryStatusUi()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_SHIELD_CHIP_TOLERANCE_PCT, nextTol)
+                }
+                startService(updateIntent)
+            }
+        }
+
+        btnCycleSwapRollbackWindow.setOnClickListener {
+            val currentMs = prefs.getInt(
+                OverlayService.PREFS_KEY_SWAP_THROW_ROLLBACK_WINDOW_MS,
+                OverlayService.DEFAULT_SWAP_THROW_ROLLBACK_WINDOW_MS
+            )
+            val nextMs = when (currentMs) {
+                4000 -> 5000
+                5000 -> 0
+                0 -> 3000
+                else -> 4000
+            }
+            prefs.edit().putInt(OverlayService.PREFS_KEY_SWAP_THROW_ROLLBACK_WINDOW_MS, nextMs).apply()
+            OverlayService.syncTierThresholdsFromPrefs(prefs)
+            OverlayService.recordDebounceSettingsChangeIfNeededStatic(
+                prefs = prefs,
+                gson = gson,
+                triggerSource = "cycle_swap_throw_rollback_window_ms",
+                triggerImmediateUpload = true
+            )
+            updateSwapRollbackWindowUi()
+            updateAiTelemetryStatusUi()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_SWAP_THROW_ROLLBACK_WINDOW_MS, nextMs)
                 }
                 startService(updateIntent)
             }
@@ -2222,7 +2328,7 @@ class MainActivity : AppCompatActivity() {
             }
 
         AlertDialog.Builder(this)
-            .setTitle("🤖 Enable AI & Anomaly Log Auto-Upload? (v6.01)")
+            .setTitle("🤖 Enable AI & Anomaly Log Auto-Upload? (v6.02)")
             .setMessage(msg)
             .setPositiveButton("✅ Enable Auto-Upload") { _, _ ->
                 prefs.edit()
@@ -4369,9 +4475,9 @@ class MainActivity : AppCompatActivity() {
         if (::textProactiveEnergyLeadDesc.isInitialized) {
             textProactiveEnergyLeadDesc.text = when (leadMs) {
                 0 -> "Off (0ms) — Waits for debounced circle confirmation; continues charging opponent at 100% player energy with charge-scene gates"
-                200 -> "Active: 200ms — Advances player & opponent energy 200ms early (including opp clock at 100E); auto-rolls back on charge-scene cut or >500ms lag"
+                300 -> "Active: 300ms — Advances player & opponent energy 300ms early (including opp clock at 100E); auto-rolls back on charge-scene cut or >500ms lag"
                 400 -> "Active: 400ms — Advances player & opponent energy 400ms early (including opp clock at 100E); auto-rolls back on charge-scene cut or >500ms lag"
-                else -> "Default: 300ms — Advances player & opponent energy ~300ms early (keeps charging opp at 100E with charge-scene gates); auto-rolls back if >500ms lag"
+                else -> "Default: 200ms — Advances player & opponent energy ~200ms early (keeps charging opp at 100E with charge-scene gates); auto-rolls back if >500ms lag"
             }
         }
 
@@ -4397,7 +4503,7 @@ class MainActivity : AppCompatActivity() {
             }
             val leadSummary = when (leadMs) {
                 0 -> "Off (0ms — Waits for debounced circle + 100E opp clock)"
-                300 -> "300ms (Default • ~300ms early + charges opp at 100E with charge-scene gates)"
+                200 -> "200ms (Default • ~200ms early + charges opp at 100E with charge-scene gates)"
                 else -> "${leadMs}ms (~${leadMs}ms early + charges opp at 100E with charge-scene gates)"
             }
             val toastStatus = if (toastsOn) "Enabled" else "Muted"
@@ -6211,35 +6317,35 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateHpTrackingUi() {
         if (!::btnToggleHpTracking.isInitialized) return
-        val enabled = prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
+        val enabled = prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, OverlayService.DEFAULT_ENABLE_HP_TRACKING)
         val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
         if (enabled) {
             btnToggleHpTracking.text = "HP On"
             btnToggleHpTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
             btnToggleHpTracking.setTextColor(0xFFFFFFFF.toInt())
-            textHpTrackingDesc.text = "Active: Live 2D floating HP bar scanning & N-sample (±2%) upward self-correction enabled"
+            textHpTrackingDesc.text = "Default: Enabled (Live 2D floating HP bar scanning & 2-sample ±2% upward self-correction)"
         } else {
             btnToggleHpTracking.text = "HP Off"
             btnToggleHpTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
             btnToggleHpTracking.setTextColor(theme.primaryTextColor)
-            textHpTrackingDesc.text = "Default: Disabled (Opt-in via Settings to scan floating HP bars)"
+            textHpTrackingDesc.text = "Active: Disabled (Floating HP bar scanning turned off)"
         }
     }
 
     private fun updateEnergyTrackingUi() {
         if (!::btnToggleEnergyTracking.isInitialized) return
-        val enabled = prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
+        val enabled = prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, OverlayService.DEFAULT_ENABLE_ENERGY_TRACKING)
         val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
         if (enabled) {
             btnToggleEnergyTracking.text = "Energy On"
             btnToggleEnergyTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
             btnToggleEnergyTracking.setTextColor(0xFFFFFFFF.toInt())
-            textEnergyTrackingDesc.text = "Active: Slowest Charge Move Meter Debounce & Direct Snap enabled"
+            textEnergyTrackingDesc.text = "Default: Enabled (Slowest Charge Move Meter Debounce & Direct Snap)"
         } else {
             btnToggleEnergyTracking.text = "Energy Off"
             btnToggleEnergyTracking.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
             btnToggleEnergyTracking.setTextColor(theme.primaryTextColor)
-            textEnergyTrackingDesc.text = "Default: Disabled (Opt-in for Slowest Charge Move Meter Debounce & Snap)"
+            textEnergyTrackingDesc.text = "Active: Disabled (Slowest Charge Move Meter Debounce turned off)"
         }
     }
 
@@ -6294,26 +6400,131 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateFastDetectOffsetUi() {
         if (!::btnCycleFastDetectOffset.isInitialized) return
-        val offset = prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2)
+        val offset = prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, OverlayService.DEFAULT_FAST_DETECT_TURN_OFFSET).coerceIn(0, 3)
         val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
         when (offset) {
             0 -> {
                 btnCycleFastDetectOffset.text = "+0 Turns"
-                btnCycleFastDetectOffset.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-                btnCycleFastDetectOffset.setTextColor(0xFFFFFFFF.toInt())
-                textFastDetectOffsetDesc.text = "Default: +0 Turns (Samples at first damage-registration turn >= 10% standard HP damage)"
-            }
-            1 -> {
-                btnCycleFastDetectOffset.text = "+1 Turn"
                 btnCycleFastDetectOffset.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
                 btnCycleFastDetectOffset.setTextColor(0xFFFFFFFF.toInt())
-                textFastDetectOffsetDesc.text = "Active: +1 Turn Delay (Samples 1 turn after >= 10% damage-registration turn)"
+                textFastDetectOffsetDesc.text = "Active: +0 Turns (Samples immediately on damage-registration turn)"
             }
-            else -> {
+            1 -> {
+                btnCycleFastDetectOffset.text = "+1 Turn (Def)"
+                btnCycleFastDetectOffset.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+                btnCycleFastDetectOffset.setTextColor(0xFFFFFFFF.toInt())
+                textFastDetectOffsetDesc.text = "Default: +1 Turn (Waits 1 extra turn for HP bar drain animation to settle)"
+            }
+            2 -> {
                 btnCycleFastDetectOffset.text = "+2 Turns"
                 btnCycleFastDetectOffset.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
                 btnCycleFastDetectOffset.setTextColor(0xFFFFFFFF.toInt())
-                textFastDetectOffsetDesc.text = "Active: +2 Turns Delay (Samples 2 turns after >= 10% damage-registration turn)"
+                textFastDetectOffsetDesc.text = "Active: +2 Turns Delay (Samples 2 turns after damage-registration turn)"
+            }
+            else -> {
+                btnCycleFastDetectOffset.text = "+3 Turns"
+                btnCycleFastDetectOffset.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
+                btnCycleFastDetectOffset.setTextColor(0xFFFFFFFF.toInt())
+                textFastDetectOffsetDesc.text = "Active: +3 Turns Delay (Maximum settling buffer for 4–5t fast moves)"
+            }
+        }
+    }
+
+    private fun updateAltFastStrictnessUi() {
+        if (!::btnCycleAltFastStrictness.isInitialized) return
+        val mode = (prefs.getString(
+            OverlayService.PREFS_KEY_ALT_FAST_DETECT_STRICTNESS,
+            OverlayService.DEFAULT_ALT_FAST_DETECT_STRICTNESS
+        ) ?: OverlayService.DEFAULT_ALT_FAST_DETECT_STRICTNESS).lowercase()
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        when (mode) {
+            "balanced" -> {
+                btnCycleAltFastStrictness.text = "Balanced (8t)"
+                btnCycleAltFastStrictness.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
+                btnCycleAltFastStrictness.setTextColor(0xFFFFFFFF.toInt())
+                textAltFastStrictnessDesc.text = "Active: Balanced (Requires ≥8t, ≥2 completed cycles & ≥9% HP drop)"
+            }
+            "aggressive" -> {
+                btnCycleAltFastStrictness.text = "Aggressive (4t)"
+                btnCycleAltFastStrictness.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+                btnCycleAltFastStrictness.setTextColor(theme.primaryTextColor)
+                textAltFastStrictnessDesc.text = "Active: Aggressive (Legacy v5.12 — ≥4t, ≥1 cycle & ≥6% HP drop)"
+            }
+            else -> {
+                btnCycleAltFastStrictness.text = "Strict (Def)"
+                btnCycleAltFastStrictness.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+                btnCycleAltFastStrictness.setTextColor(0xFFFFFFFF.toInt())
+                textAltFastStrictnessDesc.text = "Default: Strict (Requires ≥10t, ≥3 cycles & ≥12% HP drop; blocks Hidden Power false overrides)"
+            }
+        }
+    }
+
+    private fun updateShieldChipTolUi() {
+        if (!::btnCycleShieldChipTol.isInitialized) return
+        val tol = prefs.getInt(
+            OverlayService.PREFS_KEY_SHIELD_CHIP_TOLERANCE_PCT,
+            OverlayService.DEFAULT_SHIELD_CHIP_TOLERANCE_PCT
+        )
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        when (tol) {
+            10 -> {
+                btnCycleShieldChipTol.text = "±10% HP"
+                btnCycleShieldChipTol.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
+                btnCycleShieldChipTol.setTextColor(0xFFFFFFFF.toInt())
+                textShieldChipTolDesc.text = "Active: ±10% HP (Wide tolerance for heavy fast moves like Incinerate/Volt Switch before zoom)"
+            }
+            3 -> {
+                btnCycleShieldChipTol.text = "±3% HP"
+                btnCycleShieldChipTol.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+                btnCycleShieldChipTol.setTextColor(theme.primaryTextColor)
+                textShieldChipTolDesc.text = "Active: ±3% HP (Strict 1 HP chip only — may miss shields when 1 fast move lands pre-zoom)"
+            }
+            6 -> {
+                btnCycleShieldChipTol.text = "±6% HP"
+                btnCycleShieldChipTol.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
+                btnCycleShieldChipTol.setTextColor(0xFFFFFFFF.toInt())
+                textShieldChipTolDesc.text = "Active: ±6% HP (Balanced chip tolerance for 2–3 turn fast moves)"
+            }
+            else -> {
+                btnCycleShieldChipTol.text = "±8% HP (Def)"
+                btnCycleShieldChipTol.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+                btnCycleShieldChipTol.setTextColor(0xFFFFFFFF.toInt())
+                textShieldChipTolDesc.text = "Default: ±8% HP (Catches shielded charged moves when 1 pre-zoom fast move chips 4–8% HP)"
+            }
+        }
+    }
+
+    private fun updateSwapRollbackWindowUi() {
+        if (!::btnCycleSwapRollbackWindow.isInitialized) return
+        val winMs = prefs.getInt(
+            OverlayService.PREFS_KEY_SWAP_THROW_ROLLBACK_WINDOW_MS,
+            OverlayService.DEFAULT_SWAP_THROW_ROLLBACK_WINDOW_MS
+        )
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        when (winMs) {
+            5000 -> {
+                btnCycleSwapRollbackWindow.text = "5.0s"
+                btnCycleSwapRollbackWindow.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
+                btnCycleSwapRollbackWindow.setTextColor(0xFFFFFFFF.toInt())
+                textSwapRollbackWindowDesc.text = "Active: 5.0s Window (Extended post-throw swap OCR rollback window)"
+            }
+            0 -> {
+                btnCycleSwapRollbackWindow.text = "Off (0s)"
+                btnCycleSwapRollbackWindow.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+                btnCycleSwapRollbackWindow.setTextColor(theme.primaryTextColor)
+                textSwapRollbackWindowDesc.text = "Active: Off (Post-throw nameplate OCR rollback disabled; uses banner OCR only)"
+            }
+            3000 -> {
+                btnCycleSwapRollbackWindow.text = "3.0s"
+                btnCycleSwapRollbackWindow.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
+                btnCycleSwapRollbackWindow.setTextColor(0xFFFFFFFF.toInt())
+                textSwapRollbackWindowDesc.text = "Active: 3.0s Window (Tighter post-throw swap OCR rollback window)"
+            }
+            else -> {
+                btnCycleSwapRollbackWindow.text = "4.0s (Def)"
+                btnCycleSwapRollbackWindow.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+                btnCycleSwapRollbackWindow.setTextColor(0xFFFFFFFF.toInt())
+                textSwapRollbackWindowDesc.text = "Default: 4.0s (Refunds old slot & re-attributes energy/move if swap OCR arrives within 4.0s after throw)"
             }
         }
     }
@@ -6445,8 +6656,8 @@ class MainActivity : AppCompatActivity() {
                 prefs.getString(OverlayService.PREFS_KEY_AI_ADVICE_HUD_POSITION, OverlayService.DEFAULT_AI_ADVICE_HUD_POSITION)
             )
             putExtra(OverlayService.EXTRA_SHOW_SHIELD_DECISION_OVERLAY, prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true))
-            putExtra(OverlayService.EXTRA_ENABLE_HP_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false))
-            putExtra(OverlayService.EXTRA_ENABLE_ENERGY_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false))
+            putExtra(OverlayService.EXTRA_ENABLE_HP_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, OverlayService.DEFAULT_ENABLE_HP_TRACKING))
+            putExtra(OverlayService.EXTRA_ENABLE_ENERGY_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, OverlayService.DEFAULT_ENABLE_ENERGY_TRACKING))
             putExtra(
                 OverlayService.EXTRA_CHARGE_CIRCLE_PRIORITY_MODE,
                 prefs.getString(OverlayService.PREFS_KEY_CHARGE_CIRCLE_PRIORITY_MODE, OverlayService.DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE)
@@ -6455,7 +6666,19 @@ class MainActivity : AppCompatActivity() {
                 OverlayService.EXTRA_ENABLE_ALT_FAST_MOVE_DETECT,
                 prefs.getBoolean(OverlayService.PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT, OverlayService.DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT)
             )
-            putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2))
+            putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, OverlayService.DEFAULT_FAST_DETECT_TURN_OFFSET).coerceIn(0, 3))
+            putExtra(
+                OverlayService.EXTRA_ALT_FAST_DETECT_STRICTNESS,
+                prefs.getString(OverlayService.PREFS_KEY_ALT_FAST_DETECT_STRICTNESS, OverlayService.DEFAULT_ALT_FAST_DETECT_STRICTNESS)
+            )
+            putExtra(
+                OverlayService.EXTRA_SHIELD_CHIP_TOLERANCE_PCT,
+                prefs.getInt(OverlayService.PREFS_KEY_SHIELD_CHIP_TOLERANCE_PCT, OverlayService.DEFAULT_SHIELD_CHIP_TOLERANCE_PCT)
+            )
+            putExtra(
+                OverlayService.EXTRA_SWAP_THROW_ROLLBACK_WINDOW_MS,
+                prefs.getInt(OverlayService.PREFS_KEY_SWAP_THROW_ROLLBACK_WINDOW_MS, OverlayService.DEFAULT_SWAP_THROW_ROLLBACK_WINDOW_MS)
+            )
             putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt(PREFS_KEY_OVERLAY_SCALE_PCT, DEFAULT_OVERLAY_SCALE_PCT))
             putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, DEFAULT_OVERLAY_TRANSPARENCY_PCT))
             putExtra(OverlayService.EXTRA_APP_THEME_ID, prefs.getString(OverlayService.PREFS_KEY_APP_THEME_ID, "slate") ?: "slate")

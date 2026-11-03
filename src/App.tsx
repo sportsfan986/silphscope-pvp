@@ -871,20 +871,28 @@ export default function App() {
     } catch {}
   };
 
-  // v3.60 Opt-In Settings: Live HP Bar Tracking & Live Energy Counting (Default OFF for users < v3.40)
+  // v6.02 One-Time Optimal Scanner Defaults Migration (HP = ON, Energy = ON, 2 Samples, ±2% Tol, 200ms Lead, +1t Offset, Strict Alt Fast, 8% Chip Tol, 4.0s Swap Rollback)
   const [enableHpTracking, setEnableHpTracking] = useState<boolean>(() => {
     try {
-      const prevVer = Number(localStorage.getItem('gbl_installed_version_code') || '0');
-      if (prevVer < 340) {
-        localStorage.setItem('gbl_enable_hp_tracking', 'false');
-        localStorage.setItem('gbl_enable_energy_tracking', 'false');
-        localStorage.setItem('gbl_installed_version_code', '360');
-        return false;
+      const migrated602 = localStorage.getItem('gbl_v602_scanner_defaults_migrated') === 'true';
+      if (!migrated602) {
+        localStorage.setItem('gbl_v602_scanner_defaults_migrated', 'true');
+        localStorage.setItem('gbl_installed_version_code', '1602');
+        localStorage.setItem('gbl_enable_hp_tracking', 'true');
+        localStorage.setItem('gbl_enable_energy_tracking', 'true');
+        localStorage.setItem('gbl_hp_debounce_samples', '2');
+        localStorage.setItem('gbl_energy_debounce_samples', '2');
+        localStorage.setItem('gbl_proactive_energy_lead_ms', '200');
+        localStorage.setItem('gbl_fast_detect_turn_offset', '1');
+        localStorage.setItem('gbl_alt_fast_detect_strictness', 'strict');
+        localStorage.setItem('gbl_shield_chip_tolerance_pct', '8');
+        localStorage.setItem('gbl_swap_throw_rollback_window_ms', '4000');
+        return true;
       }
-      localStorage.setItem('gbl_installed_version_code', '360');
-      return localStorage.getItem('gbl_enable_hp_tracking') === 'true';
+      const saved = localStorage.getItem('gbl_enable_hp_tracking');
+      return saved === null ? true : saved === 'true';
     } catch {
-      return false;
+      return true;
     }
   });
 
@@ -897,9 +905,10 @@ export default function App() {
 
   const [enableEnergyTracking, setEnableEnergyTracking] = useState<boolean>(() => {
     try {
-      return localStorage.getItem('gbl_enable_energy_tracking') === 'true';
+      const saved = localStorage.getItem('gbl_enable_energy_tracking');
+      return saved === null ? true : saved === 'true';
     } catch {
-      return false;
+      return true;
     }
   });
 
@@ -942,13 +951,16 @@ export default function App() {
     } catch {}
   };
 
-  // v4.12 Settings: Proactive Fast-Move Energy Lead Time (0ms Off, 200ms, 300ms Default, 400ms) with >500ms 1-Turn Lag Rollback
+  // v6.02 Settings: Proactive Fast-Move Energy Lead Time (0ms Off, 200ms Default, 300ms, 400ms) with >500ms 1-Turn Lag Rollback
   const [proactiveEnergyLeadMs, setProactiveEnergyLeadMs] = useState<0 | 200 | 300 | 400>(() => {
     try {
-      const saved = Number(localStorage.getItem('gbl_proactive_energy_lead_ms'));
-      if (saved === 0 || saved === 200 || saved === 300 || saved === 400) return saved;
+      const saved = localStorage.getItem('gbl_proactive_energy_lead_ms');
+      if (saved !== null) {
+        const num = Number(saved);
+        if (num === 0 || num === 200 || num === 300 || num === 400) return num;
+      }
     } catch {}
-    return 300;
+    return 200;
   });
 
   const updateProactiveEnergyLeadMs = (leadMs: 0 | 200 | 300 | 400) => {
@@ -976,18 +988,70 @@ export default function App() {
     });
   };
 
-  const [fastDetectTurnOffset, setFastDetectTurnOffset] = useState<0 | 1 | 2>(() => {
+  const [fastDetectTurnOffset, setFastDetectTurnOffset] = useState<0 | 1 | 2 | 3>(() => {
     try {
-      const saved = Number(localStorage.getItem('gbl_fast_detect_turn_offset'));
-      if (saved === 1 || saved === 2) return saved;
+      const saved = localStorage.getItem('gbl_fast_detect_turn_offset');
+      if (saved !== null) {
+        const num = Number(saved);
+        if (num === 0 || num === 1 || num === 2 || num === 3) return num;
+      }
     } catch {}
-    return 0;
+    return 1;
   });
 
-  const handleSetFastDetectTurnOffset = (offset: 0 | 1 | 2) => {
+  const handleSetFastDetectTurnOffset = (offset: 0 | 1 | 2 | 3) => {
     setFastDetectTurnOffset(offset);
     try {
       localStorage.setItem('gbl_fast_detect_turn_offset', String(offset));
+    } catch {}
+  };
+
+  // v6.02 New Scanner Tuning Controls: Alt Fast Strictness, Pre-Zoom Shield Chip Tolerance, Swap-Throw Rollback Window
+  const [altFastDetectStrictness, setAltFastDetectStrictness] = useState<'strict' | 'balanced' | 'aggressive'>(() => {
+    try {
+      const saved = localStorage.getItem('gbl_alt_fast_detect_strictness');
+      if (saved === 'strict' || saved === 'balanced' || saved === 'aggressive') return saved;
+    } catch {}
+    return 'strict';
+  });
+
+  const handleSetAltFastDetectStrictness = (mode: 'strict' | 'balanced' | 'aggressive') => {
+    setAltFastDetectStrictness(mode);
+    try {
+      localStorage.setItem('gbl_alt_fast_detect_strictness', mode);
+    } catch {}
+  };
+
+  const [shieldChipTolerancePct, setShieldChipTolerancePct] = useState<3 | 6 | 8 | 10>(() => {
+    try {
+      const saved = Number(localStorage.getItem('gbl_shield_chip_tolerance_pct'));
+      if (saved === 3 || saved === 6 || saved === 8 || saved === 10) return saved;
+    } catch {}
+    return 8;
+  });
+
+  const handleSetShieldChipTolerancePct = (tol: 3 | 6 | 8 | 10) => {
+    setShieldChipTolerancePct(tol);
+    try {
+      localStorage.setItem('gbl_shield_chip_tolerance_pct', String(tol));
+    } catch {}
+  };
+
+  const [swapThrowRollbackWindowMs, setSwapThrowRollbackWindowMs] = useState<0 | 3000 | 4000 | 5000>(() => {
+    try {
+      const saved = localStorage.getItem('gbl_swap_throw_rollback_window_ms');
+      if (saved !== null) {
+        const num = Number(saved);
+        if (num === 0 || num === 3000 || num === 4000 || num === 5000) return num;
+      }
+    } catch {}
+    return 4000;
+  });
+
+  const handleSetSwapThrowRollbackWindowMs = (winMs: 0 | 3000 | 4000 | 5000) => {
+    setSwapThrowRollbackWindowMs(winMs);
+    try {
+      localStorage.setItem('gbl_swap_throw_rollback_window_ms', String(winMs));
     } catch {}
   };
 
@@ -5699,7 +5763,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v6.01 • Android Native Overlay
+                  v6.02 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -12518,7 +12582,7 @@ export default function App() {
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
                   <Swords className="w-4 h-4" />
-                  <span>🧠 4-Pillar 2-Line AI Tactical Coach &amp; HUD Position (v6.01)</span>
+                  <span>🧠 4-Pillar 2-Line AI Tactical Coach &amp; HUD Position (v6.02)</span>
                 </h3>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-300">
                   {showTacticalRec ? `Enabled • ${aiAdviceHudPosition === 'bottom' ? 'Bottom (Def)' : 'Top'}` : 'Disabled'}
@@ -12577,31 +12641,20 @@ export default function App() {
               </div>
             </div>
 
-            {/* v3.60 Opt-In Settings: Live HP Bar Tracking & Live Energy Counting (Default OFF) */}
+            {/* v6.02 Default ON Settings: Live HP Bar Tracking & Live Energy Counting */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
-                  <span>❤️ Live HP Bar Tracking (Overlay)</span>
+                  <span>❤️ Live HP Bar Tracking (Overlay • v6.02 Default ON)</span>
                 </h3>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
-                  {enableHpTracking ? 'ON (Opted In)' : 'OFF (Default)'}
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-300">
+                  {enableHpTracking ? 'ON (Default)' : 'OFF'}
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                <strong>Disabled by default</strong> (including for users upgrading from &lt; v3.40). Opt in to display live Player &amp; Opponent HP% badges on the floating overlay header, 3v3 matrix rows, and team buttons.
+                <strong>Enabled by default in v6.02</strong>. Displays live Player &amp; Opponent HP% badges on the floating overlay header, 3v3 matrix rows, and team buttons, and powers 25s faint KO sync and swap-throw attribution.
               </p>
               <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => handleSetEnableHpTracking(false)}
-                  className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
-                    !enableHpTracking
-                      ? 'bg-slate-800 border border-slate-600 text-slate-200'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  HP Tracking: OFF (Default)
-                </button>
                 <button
                   type="button"
                   onClick={() => handleSetEnableHpTracking(true)}
@@ -12611,7 +12664,18 @@ export default function App() {
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  HP Tracking: ON (Opt In)
+                  HP Tracking: ON (Default)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetEnableHpTracking(false)}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                    !enableHpTracking
+                      ? 'bg-slate-800 border border-slate-600 text-slate-200'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  HP Tracking: OFF
                 </button>
               </div>
             </div>
@@ -12621,10 +12685,10 @@ export default function App() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
-                    <span>❤️ HP Bar Meter Debounce &amp; Upward Self-Correction (v3.89)</span>
+                    <span>❤️ HP Bar Meter Debounce &amp; Upward Self-Correction (v6.02)</span>
                   </h3>
                   <p className="text-xs text-slate-400 mt-1">
-                    Requires <strong>N consecutive matching HP bar samples</strong> (<code>±2%</code> tolerance) before updating, locks out noisy charged-move animation frames, and immediately <strong>self-corrects upward</strong> on clean stable HP bars (including during Shield Call prompts).
+                    Requires <strong>N consecutive matching HP bar samples</strong> (<code>±2%</code> default tolerance) before updating, detects lethal disappearing HP bar KOs, and immediately <strong>self-corrects upward</strong> on clean stable HP bars.
                   </p>
                 </div>
               </div>
@@ -12633,7 +12697,7 @@ export default function App() {
                 <div>
                   • Active: {hpDebounceSamples} Matching Samples ({hpDebounceSamples === 2 ? 'Default • Fastest Response' : hpDebounceSamples === 3 ? 'Balanced Noise Rejection' : 'Strict Filtering'}, ±2% HP Tolerance)
                 </div>
-                <div>• Upward Self-Correction: Enabled (Recovers from artificially low glitch readings)</div>
+                <div>• Lethal Disappearing HP Bar KO Sync: Enabled (25s faint-to-throw retroactive window)</div>
                 <div>• Shield Call Prompts: Always corrects with clean stable HP meters</div>
               </div>
 
@@ -12663,27 +12727,16 @@ export default function App() {
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-bold text-sky-400 flex items-center gap-2">
-                  <span>⚡ Live Energy &amp; Fast-Move Counting (Overlay)</span>
+                  <span>⚡ Live Energy &amp; Fast-Move Counting (Overlay • v6.02 Default ON)</span>
                 </h3>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
-                  {enableEnergyTracking ? 'ON (Opted In)' : 'OFF (Default)'}
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/15 border border-sky-500/40 text-sky-300">
+                  {enableEnergyTracking ? 'ON (Default)' : 'OFF'}
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                <strong>Disabled by default</strong> (including for users upgrading from &lt; v3.40). Opt in to run the v3.60 predictive + self-correcting bias-error fast-move energy loop and display live Energy &amp; Charged Move READY badges on the overlay.
+                <strong>Enabled by default in v6.02</strong>. Runs the predictive + self-correcting fast-move energy loop with 2nd-move tap lag compensation and displays live Energy &amp; Charged Move READY badges on the overlay.
               </p>
               <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => handleSetEnableEnergyTracking(false)}
-                  className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
-                    !enableEnergyTracking
-                      ? 'bg-slate-800 border border-slate-600 text-slate-200'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  Energy Counting: OFF (Default)
-                </button>
                 <button
                   type="button"
                   onClick={() => handleSetEnableEnergyTracking(true)}
@@ -12693,29 +12746,40 @@ export default function App() {
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                    Energy Counting: ON (Opt In)
+                  Energy Counting: ON (Default)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetEnableEnergyTracking(false)}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                    !enableEnergyTracking
+                      ? 'bg-slate-800 border border-slate-600 text-slate-200'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Energy Counting: OFF
                 </button>
               </div>
             </div>
 
-            {/* v4.12 Energy Meter Debounce, Proactive ~300ms Lead & Slowest Move Snap Card */}
+            {/* v6.02 Energy Meter Debounce, Proactive ~200ms Lead & Slowest Move Snap Card */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
                   <h3 className="text-sm font-bold text-sky-400 flex items-center gap-2">
-                    <span>⚡ Energy Meter Debounce &amp; Proactive Lead (v4.12)</span>
+                    <span>⚡ Energy Meter Debounce &amp; Proactive Lead (v6.02)</span>
                   </h3>
                   <p className="text-xs text-slate-400 mt-1">
-                    Combines a low-latency <strong>circle fill debounce</strong> (<code>±2%</code> tolerance) on your slowest charge move (<code>max(cost1, cost2)</code>) with <strong>Proactive Fast-Move Energy Lead</strong> (applies Player &amp; Opponent fast-move energy <code>{proactiveEnergyLeadMs}ms</code> early and auto-corrects if the actual debounced circle lags by more than one <code>500ms</code> turn).
+                    Combines a low-latency <strong>circle fill debounce</strong> (<code>±2%</code> tolerance) on your slowest charge move (<code>max(cost1, cost2)</code>) with <strong>Proactive Fast-Move Energy Lead</strong> (default <code>200ms</code> early, matching 2-sample debounce latency at 10Hz).
                   </p>
                 </div>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300 space-y-1">
                 <div>• <strong className="text-sky-400">Active Debounce</strong> = {energyDebounceSamples} Matching Samples <span className="text-slate-500">(Default: 2 • ±2% Circle Fill Tolerance)</span></div>
-                <div>• <strong className="text-cyan-300">Proactive Energy Lead</strong> = {proactiveEnergyLeadMs === 0 ? 'Off (0ms)' : `${proactiveEnergyLeadMs}ms Early`} <span className="text-slate-500">(Auto-rollback if circle confirmation lags &gt; 1 turn / 500ms)</span></div>
-                <div>• <strong className="text-emerald-300">Dual-Fill Detection</strong> = 0%–100% Base Fill + 100%–200% White Border &amp; Advancing White Meniscus Line</div>
-                <div>• <strong className="text-amber-300">Post-Charge Lock</strong> = Deducts provisional move cost from banked energy, verifies via post-throw circle snap</div>
+                <div>• <strong className="text-cyan-300">Proactive Energy Lead</strong> = {proactiveEnergyLeadMs === 0 ? 'Off (0ms)' : `${proactiveEnergyLeadMs}ms Early`} <span className="text-slate-500">(Default: 200ms • Auto-rollback if circle lags &gt; 500ms)</span></div>
+                <div>• <strong className="text-emerald-300">2nd-Move Tap Lag Credit</strong> = Credits +1 in-flight fast move when circle peak + 1 fast move covers 2nd move cost</div>
+                <div>• <strong className="text-amber-300">ENERGY_CAP_DRIFT Filter</strong> = Suppresses false cap-drift logs when tracked energy already covers thrown move</div>
                 <div>• <strong className="text-violet-300">Live Energy Update Toasts</strong> = {energyUpdateToasts ? 'Enabled (⚡ [Move] ([Cost]E) • Circle [X]% → [Y]E)' : 'Muted'}</div>
               </div>
 
@@ -12736,18 +12800,18 @@ export default function App() {
                 ))}
               </div>
 
-              {/* v4.12 Proactive Fast-Move Energy Lead Selector */}
+              {/* v6.02 Proactive Fast-Move Energy Lead Selector */}
               <div className="space-y-2 pt-2 border-t border-slate-800">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-sky-300">
-                    ⚡ Proactive Fast-Move Energy Lead Time (v4.12)
+                    ⚡ Proactive Fast-Move Energy Lead Time (v6.02 Default: 200ms)
                   </label>
                   <span className="text-[10px] font-mono text-sky-400">
                     {proactiveEnergyLeadMs === 0 ? 'Off (0ms)' : `${proactiveEnergyLeadMs}ms Early • >500ms Lag Rollback`}
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Applies Player &amp; Opponent fast-move energy and turn counts early before the 200ms debounce finishes so energy transitions right on the turn boundary for end-of-turn swap/catch/throw decisions. Rolls back automatically if actual circle confirmation lags by more than one 500ms turn.
+                  Applies Player &amp; Opponent fast-move energy and turn counts early before the 200ms debounce finishes so energy transitions right on the turn boundary without phantom pre-turn ticks.
                 </p>
                 <div className="grid grid-cols-4 gap-2">
                   {([0, 200, 300, 400] as const).map((leadVal) => (
@@ -12761,7 +12825,7 @@ export default function App() {
                           : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
                       }`}
                     >
-                      {leadVal === 0 ? 'Off (0ms)' : leadVal === 300 ? '300ms (Def)' : `${leadVal}ms`}
+                      {leadVal === 0 ? 'Off (0ms)' : leadVal === 200 ? '200ms (Def)' : `${leadVal}ms`}
                     </button>
                   ))}
                 </div>
@@ -12790,21 +12854,21 @@ export default function App() {
               </div>
             </div>
 
-            {/* v3.80 Non-Standard Opponent Fast Move Detection Turn Offset (0 / +1 / +2 Turns) */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
+            {/* v6.02 Non-Standard Opponent Fast Move Detection Turn Offset (0 / +1 Default / +2 / +3 Turns) & Strictness */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-bold text-amber-400 flex items-center gap-2">
-                  <span>🔍 Non-Standard Fast Move Detection Offset (v3.80)</span>
+                  <span>🔍 Non-Standard Fast Move Detection Offset &amp; Strictness (v6.02)</span>
                 </h3>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300">
-                  +{fastDetectTurnOffset} {fastDetectTurnOffset === 1 ? 'Turn' : 'Turns'} {fastDetectTurnOffset === 0 ? '(Default)' : 'Delay'}
+                  +{fastDetectTurnOffset}t {fastDetectTurnOffset === 1 ? '(Def)' : ''} • {altFastDetectStrictness.toUpperCase()}
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Controls when SilphScope samples player HP to confirm or override the opponent&apos;s fast move once the standard moveset should deal <code>&ge; 10%</code> HP damage. Default <code>+0 Turns</code> samples at the first damage-registration turn (e.g., turn <code>3/6/9/12</code> for a 3-turn move); choose <code>+1 Turn</code> or <code>+2 Turns</code> to delay sampling without recompiling.
+                Default <code>+1 Turn</code> waits <code>500ms</code> after a multi-turn fast move hits so the player&apos;s HP bar animation finishes draining before comparing standard vs. non-standard fast move damage. <strong>Strict (Default)</strong> requires <code>&ge; 10</code> elapsed turns, <code>&ge; 3</code> completed cycles, <code>&ge; 12%</code> cumulative fast damage, and blocks un-inferable <code>Hidden Power (*)</code> overrides.
               </p>
-              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
-                {([0, 1, 2] as const).map((offsetVal) => (
+              <div className="grid grid-cols-4 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
+                {([0, 1, 2, 3] as const).map((offsetVal) => (
                   <button
                     key={offsetVal}
                     type="button"
@@ -12815,9 +12879,91 @@ export default function App() {
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    +{offsetVal} {offsetVal === 1 ? 'Turn' : 'Turns'}{offsetVal === 0 ? ' (Default)' : ''}
+                    +{offsetVal} {offsetVal === 1 ? 'Turn (Def)' : offsetVal === 0 ? 'Turns' : 'Turns'}
                   </button>
                 ))}
+              </div>
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
+                {(['strict', 'balanced', 'aggressive'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => handleSetAltFastDetectStrictness(mode)}
+                    className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                      altFastDetectStrictness === mode
+                        ? 'bg-emerald-500/25 border border-emerald-400/70 text-emerald-200'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {mode === 'strict' ? 'Strict (Def • ≥3 Cyc)' : mode === 'balanced' ? 'Balanced (≥2 Cyc)' : 'Aggressive (1 Cyc)'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* v6.02 Swap-Throw Rollback, Pre-Zoom Shield Chip Tolerance & 5-Profile Shadow Telemetry Card */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-bold text-cyan-400 flex items-center gap-2">
+                  <span>🔄 Swap-Throw Attribution Rollback, Shield Chip Tolerance &amp; Shadow Telemetry (v6.02)</span>
+                </h3>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/15 border border-cyan-500/40 text-cyan-300">
+                  Chip ≤{shieldChipTolerancePct}% • Rollback {swapThrowRollbackWindowMs === 0 ? 'Off' : `${(swapThrowRollbackWindowMs / 1000).toFixed(1)}s`}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Matches <code>&quot;&lt;Pokemon&gt; used &lt;Move&gt;!&quot;</code> against all 3 user slots, known opponent bench slots, and the full PvPoke database when a Pokémon swaps in and immediately throws before nameplate OCR updates. If top nameplate OCR reveals a new Pokémon within the rollback window whose moveset owns the move, SilphScope refunds the previous slot&apos;s energy and transfers move lock + deduction to the newly swapped Pokémon.
+              </p>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-300 block">
+                  🛡️ Pre-Zoom Fast-Move Chip Shield Tolerance (Treats ≤X% HP drop during charged move zoom as Shielded + 1 fast move)
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {([3, 6, 8, 10] as const).map((tol) => (
+                    <button
+                      key={tol}
+                      type="button"
+                      onClick={() => handleSetShieldChipTolerancePct(tol)}
+                      className={`py-2 px-2 rounded-xl text-xs font-bold border transition ${
+                        shieldChipTolerancePct === tol
+                          ? 'bg-sky-500/25 border-sky-400 text-sky-200'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      ≤{tol}%{tol === 8 ? ' (Def)' : ''}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-slate-800">
+                <label className="text-xs font-bold text-slate-300 block">
+                  🔄 Post-Throw Nameplate Swap Rollback Window (Refunds old slot &amp; transfers energy/move lock on late swap OCR)
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {([0, 3000, 4000, 5000] as const).map((winMs) => (
+                    <button
+                      key={winMs}
+                      type="button"
+                      onClick={() => handleSetSwapThrowRollbackWindowMs(winMs)}
+                      className={`py-2 px-2 rounded-xl text-xs font-bold border transition ${
+                        swapThrowRollbackWindowMs === winMs
+                          ? 'bg-emerald-500/25 border-emerald-400 text-emerald-200'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {winMs === 0 ? 'Off (0s)' : winMs === 4000 ? '4.0s (Def)' : `${(winMs / 1000).toFixed(1)}s`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 font-mono text-[11px] text-slate-300 space-y-1">
+                <div className="text-cyan-300 font-bold">📊 Zero-Lag Post-Battle 5-Profile Shadow Telemetry (0% Active Combat CPU Overhead):</div>
+                <div>• Records lightweight scalar ticks during battle and replays 5 candidate profiles once after battle ends:</div>
+                <div className="text-slate-400 pl-2">1. <strong className="text-emerald-300">ACTIVE_USER</strong> (Your live GUI settings) vs. 2. <strong className="text-sky-300">V602_RECOMMENDED</strong> (2-sample, ±2%, 200ms, +1t, Strict)</div>
+                <div className="text-slate-400 pl-2">3. <strong className="text-amber-300">ULTRA_FAST_150MS</strong> vs. 4. <strong className="text-violet-300">CONSERVATIVE_3_SAMPLE</strong> vs. 5. <strong className="text-rose-300">AGGRESSIVE_ALT_FAST</strong></div>
               </div>
             </div>
 
@@ -15196,7 +15342,7 @@ export default function App() {
                         📊 Personalized Meta &amp; Top Cores ({appCombatMode === 'show6' ? 'Show 6 Mode' : 'GBL Blind 3 Mode'})
                       </span>
                       <span className="px-2 py-0.5 rounded bg-sky-500/20 border border-sky-400/50 text-sky-300 text-[10px] font-mono">
-                        v6.01
+                        v6.02
                       </span>
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
@@ -17948,7 +18094,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v6.01 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, and ML Kit Text Recognition.
+        SilphScope PvP v6.02 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, and ML Kit Text Recognition.
       </footer>
     </div>
   );

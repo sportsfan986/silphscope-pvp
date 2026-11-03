@@ -82,7 +82,7 @@
                 android:id="@+id/tv_app_main_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Real-Time PvP Floating Overlay • v6.01"
+                android:text="Real-Time PvP Floating Overlay • v6.02"
                 android:textSize="11sp"
                 android:textColor="#94a3b8"
                 android:layout_marginTop="1dp" />
@@ -2148,7 +2148,7 @@
                         android:id="@+id/text_hp_tracking_desc"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Default: Disabled (Opt-in via Settings to scan floating HP bars)"
+                        android:text="Default: Enabled (Live 2D floating HP bar scanning &amp; 2-sample ±2% upward self-correction)"
                         android:textColor="#94a3b8"
                         android:textSize="10sp" />
                 </LinearLayout>
@@ -2157,9 +2157,9 @@
                     android:id="@+id/btn_toggle_hp_tracking"
                     android:layout_width="wrap_content"
                     android:layout_height="36dp"
-                    android:text="HP Off"
+                    android:text="HP On"
                     android:textSize="11sp"
-                    android:backgroundTint="#334155"
+                    android:backgroundTint="#0284c7"
                     android:textColor="#ffffff" />
             </LinearLayout>
 
@@ -2283,11 +2283,11 @@
                         android:layout_width="0dp"
                         android:layout_height="36dp"
                         android:layout_weight="1"
-                        android:text="±1% (Def)"
+                        android:text="±1%"
                         android:textSize="10sp"
                         android:textStyle="bold"
-                        android:backgroundTint="#10b981"
-                        android:textColor="#ffffff"
+                        android:backgroundTint="#334155"
+                        android:textColor="#e2e8f0"
                         android:layout_marginEnd="4dp" />
 
                     <Button
@@ -2295,11 +2295,11 @@
                         android:layout_width="0dp"
                         android:layout_height="36dp"
                         android:layout_weight="1"
-                        android:text="±2%"
+                        android:text="±2% (Def)"
                         android:textSize="10sp"
                         android:textStyle="bold"
-                        android:backgroundTint="#334155"
-                        android:textColor="#e2e8f0"
+                        android:backgroundTint="#10b981"
+                        android:textColor="#ffffff"
                         android:layout_marginEnd="4dp" />
 
                     <Button
@@ -2345,7 +2345,7 @@
                         android:id="@+id/text_energy_tracking_desc"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Default: Disabled (Opt-in for slowest charge move circle debounce &amp; snap)"
+                        android:text="Default: Enabled (Slowest charge move circle debounce &amp; direct snap)"
                         android:textColor="#94a3b8"
                         android:textSize="10sp" />
                 </LinearLayout>
@@ -2354,9 +2354,9 @@
                     android:id="@+id/btn_toggle_energy_tracking"
                     android:layout_width="wrap_content"
                     android:layout_height="36dp"
-                    android:text="Energy Off"
+                    android:text="Energy On"
                     android:textSize="11sp"
-                    android:backgroundTint="#334155"
+                    android:backgroundTint="#0284c7"
                     android:textColor="#ffffff" />
             </LinearLayout>
 
@@ -2382,7 +2382,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="• Active: 2 Matching Samples (Default • Fastest Response, ±2% Fill Tolerance)
-• Proactive Fast-Move Energy Lead: 300ms (Default • ~300ms early + charges opp at 100E with charge-scene gates)
+• Proactive Fast-Move Energy Lead: 200ms (Default • ~200ms early + charges opp at 100E with charge-scene gates)
 • Live Energy &amp; Circle % Battle Toasts: Enabled"
                     android:textColor="#94a3b8"
                     android:textSize="10sp"
@@ -2433,7 +2433,7 @@
                         android:textColor="#94a3b8" />
                 </LinearLayout>
 
-                <!-- v4.12 / v4.13: Proactive Fast-Move Energy Lead Time Selector (0 / 200 / 300 / 400ms) -->
+                <!-- v6.02: Proactive Fast-Move Energy Lead Time Selector (0 / 200 (Def) / 300 / 400ms) -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -2447,7 +2447,7 @@
                     android:id="@+id/text_proactive_energy_lead_desc"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Default: 300ms — Advances player &amp; opponent energy ~300ms early (keeps charging opp at 100E with charge-scene gates); auto-rolls back if &gt;500ms lag"
+                    android:text="Default: 200ms — Advances player &amp; opponent energy ~200ms early (keeps charging opp at 100E with charge-scene gates); auto-rolls back if &gt;500ms lag"
                     android:textColor="#94a3b8"
                     android:textSize="9.5sp"
                     android:layout_marginTop="1dp" />
@@ -2476,12 +2476,12 @@
                         android:layout_width="0dp"
                         android:layout_height="34dp"
                         android:layout_weight="1"
-                        android:text="200ms"
+                        android:text="200ms (Def)"
                         android:textSize="9.5sp"
                         android:textStyle="bold"
                         android:singleLine="true"
-                        android:backgroundTint="#334155"
-                        android:textColor="#94a3b8"
+                        android:backgroundTint="#0284c7"
+                        android:textColor="#ffffff"
                         android:layout_marginEnd="4dp" />
 
                     <Button
@@ -2489,12 +2489,12 @@
                         android:layout_width="0dp"
                         android:layout_height="34dp"
                         android:layout_weight="1"
-                        android:text="300ms (Def)"
+                        android:text="300ms"
                         android:textSize="9.5sp"
                         android:textStyle="bold"
                         android:singleLine="true"
-                        android:backgroundTint="#0284c7"
-                        android:textColor="#ffffff"
+                        android:backgroundTint="#334155"
+                        android:textColor="#94a3b8"
                         android:layout_marginEnd="4dp" />
 
                     <Button
@@ -2645,7 +2645,7 @@
                     android:textColor="#ffffff" />
             </LinearLayout>
 
-            <!-- v3.80: Non-Standard Fast Move Detection Turn Offset (0 / +1 / +2 Turns) -->
+            <!-- v6.02: Non-Standard Fast Move Detection Turn Offset (0 / +1 (Def) / +2 / +3 Turns) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -2659,7 +2659,8 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:orientation="vertical">
+                    android:orientation="vertical"
+                    android:paddingEnd="8dp">
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -2673,7 +2674,7 @@
                         android:id="@+id/text_fast_detect_offset_desc"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Default: +0 Turns (Samples at exact 3/6/9... turn multiple where Std &gt;= 10% HP)"
+                        android:text="Default: +1 Turn (Waits 1 extra turn for HP bar drain animation to settle)"
                         android:textColor="#94a3b8"
                         android:textSize="10sp" />
                 </LinearLayout>
@@ -2682,8 +2683,144 @@
                     android:id="@+id/btn_cycle_fast_detect_offset"
                     android:layout_width="wrap_content"
                     android:layout_height="36dp"
-                    android:text="+0 Turns"
-                    android:textSize="11sp"
+                    android:text="+1 Turn (Def)"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#0284c7"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
+            <!-- v6.02: Opponent Alt Fast Move Override Strictness (Strict / Balanced / Aggressive) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:background="#0f172a"
+                android:padding="10dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:paddingEnd="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🛡️ Alt Fast Move Override Strictness (v6.02)"
+                        android:textColor="#e2e8f0"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_alt_fast_strictness_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: Strict (Requires ≥10t, ≥3 cycles &amp; ≥12% HP drop; blocks Hidden Power false overrides)"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_cycle_alt_fast_strictness"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="Strict (Def)"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#0284c7"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
+            <!-- v6.02: 1-Fast-Move Chip Shield Detection Tolerance (±8% Def / ±10% / ±3% / ±6%) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:background="#0f172a"
+                android:padding="10dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:paddingEnd="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🛡️ 1-Fast Chip Shield Detection Tolerance (v6.02)"
+                        android:textColor="#e2e8f0"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_shield_chip_tol_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: ±8% HP (Catches shielded charged moves when 1 pre-zoom fast move chips 4–8% HP)"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_cycle_shield_chip_tol"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="±8% HP (Def)"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#0284c7"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
+            <!-- v6.02: Swap-and-Immediate-Throw Post-OCR Rollback Window (4.0s Def / 5.0s / Off / 3.0s) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:background="#0f172a"
+                android:padding="10dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:paddingEnd="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🔄 Swap-and-Throw Post-OCR Rollback Window (v6.02)"
+                        android:textColor="#e2e8f0"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_swap_rollback_window_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: 4.0s (Refunds old slot &amp; re-attributes energy/move if swap OCR arrives within 4.0s after throw)"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_cycle_swap_rollback_window"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="4.0s (Def)"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold"
                     android:backgroundTint="#0284c7"
                     android:textColor="#ffffff" />
             </LinearLayout>
@@ -3169,7 +3306,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="🤖 AI Training &amp; Anomaly Telemetry Auto-Upload (v5.10)"
+                    android:text="🤖 AI Training, Anomaly &amp; 5-Profile Shadow Telemetry (v6.02)"
                     android:textColor="#38bdf8"
                     android:textSize="11sp"
                     android:textStyle="bold" />
