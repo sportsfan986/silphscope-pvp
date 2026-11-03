@@ -4088,7 +4088,7 @@ export function computeEffectiveStatsForLeague(
  * Live PvPoke Rankings lists parsed from rankings-1500.json, rankings-2500.json, and rankings-10000.json.
  * Serves as the authoritative source of truth for Top Meta, DB scores, and recommended movesets.
  */
-export const LIVE_RANKINGS_LIST: Record<LeagueType, PokemonRankingEntry[]> = {
+export const LIVE_RANKINGS_LIST: Record<string, PokemonRankingEntry[]> = {
   "GREAT LEAGUE": [
     { speciesId: "clodsire", score: 95.1, moves: { fastMoves: [{ moveId: "POISON_STING", uses: 2200 }], chargedMoves: [{ moveId: "EARTHQUAKE", uses: 2000 }, { moveId: "STONE_EDGE", uses: 1500 }] }, moveset: ["POISON_STING", "EARTHQUAKE", "STONE_EDGE"] },
     { speciesId: "feraligatr", score: 94.3, moves: { fastMoves: [{ moveId: "SHADOW_CLAW", uses: 2300 }], chargedMoves: [{ moveId: "HYDRO_CANNON", uses: 2400 }, { moveId: "ICE_BEAM", uses: 1200 }] }, moveset: ["SHADOW_CLAW", "HYDRO_CANNON", "ICE_BEAM"] },

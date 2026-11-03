@@ -2043,8 +2043,8 @@ export default function App() {
   // User's Clarifying Answer #3: Method to choose Option 2 (Comma/Newline Text Paste) or Option 3 (Autocomplete Chip Picker)
   const [blindShow6InputMethod, setBlindShow6InputMethod] = useState<'text' | 'chips'>('chips');
 
-  const [show6WhitelistByLeague, setShow6WhitelistByLeague] = useState<Record<LeagueType, string[]>>(() => {
-    const emptyMap: Record<LeagueType, string[]> = {
+  const [show6WhitelistByLeague, setShow6WhitelistByLeague] = useState<Record<string, string[]>>(() => {
+    const emptyMap: Record<string, string[]> = {
       'GREAT LEAGUE': [],
       'ULTRA LEAGUE': [],
       'MASTER LEAGUE': [],
@@ -2065,8 +2065,8 @@ export default function App() {
     return emptyMap;
   });
 
-  const [show6BanlistByLeague, setShow6BanlistByLeague] = useState<Record<LeagueType, string[]>>(() => {
-    const emptyMap: Record<LeagueType, string[]> = {
+  const [show6BanlistByLeague, setShow6BanlistByLeague] = useState<Record<string, string[]>>(() => {
+    const emptyMap: Record<string, string[]> = {
       'GREAT LEAGUE': [],
       'ULTRA LEAGUE': [],
       'MASTER LEAGUE': [],
@@ -6405,9 +6405,15 @@ export default function App() {
                             : timingState === 'WARN_2_FASTS'
                             ? `⚠️ 2F -> THROW ${myShortMove} (Pre-${oppShortMove})`
                             : `${activeTacticalRec.actionLabel || activeTacticalRec.actionText} [${activeTacticalRec.shieldPlan}] · ${(activeTacticalRec.goalText || '').slice(0, 22)}`;
+                        const s6PairsTop =
+                          show6LiveBacklinePrediction?.mostLikelyPairs ||
+                          show6LiveBacklinePrediction?.predictions ||
+                          [];
                         const backlineLine2 =
                           appCombatMode === 'show6' && show6LiveBacklinePrediction
-                            ? `🔮 S6: ${show6LiveBacklinePrediction.predictedBackline.slice(0, 2).map((p) => `${abbrPoke3(p.name)} ${p.probabilityPct}%`).join(' · ')}`
+                            ? s6PairsTop.length > 0
+                              ? `🔮 S6: ${s6PairsTop.slice(0, 2).map((p) => `${(p.backlineNames || []).map((n) => abbrPoke3(n)).join('+')} ${p.probabilityPct}%`).join(' · ')}`
+                              : `🔮 S6: ${show6LiveBacklinePrediction.tacticalSummary.slice(0, 42)}`
                             : scannedOpponents.length <= 2
                             ? `🔮 Back: HO-OH 64% · PAL-O 52% | Rsk:MED`
                             : `🔮 All 3 Opponents Revealed`;
@@ -7579,9 +7585,15 @@ export default function App() {
                             : timingState === 'WARN_2_FASTS'
                             ? `⚠️ 2F -> THROW ${myShortMove} (Pre-${oppShortMove})`
                             : `${activeTacticalRec.actionLabel || activeTacticalRec.actionText} [${activeTacticalRec.shieldPlan}] · ${(activeTacticalRec.goalText || '').slice(0, 22)}`;
+                        const s6PairsBot =
+                          show6LiveBacklinePrediction?.mostLikelyPairs ||
+                          show6LiveBacklinePrediction?.predictions ||
+                          [];
                         const backlineLine2 =
                           appCombatMode === 'show6' && show6LiveBacklinePrediction
-                            ? `🔮 S6: ${show6LiveBacklinePrediction.predictedBackline.slice(0, 2).map((p) => `${abbrPoke3(p.name)} ${p.probabilityPct}%`).join(' · ')}`
+                            ? s6PairsBot.length > 0
+                              ? `🔮 S6: ${s6PairsBot.slice(0, 2).map((p) => `${(p.backlineNames || []).map((n) => abbrPoke3(n)).join('+')} ${p.probabilityPct}%`).join(' · ')}`
+                              : `🔮 S6: ${show6LiveBacklinePrediction.tacticalSummary.slice(0, 42)}`
                             : scannedOpponents.length <= 2
                             ? `🔮 Back: HO-OH 64% · PAL-O 52% | Rsk:MED`
                             : `🔮 All 3 Opponents Revealed`;
