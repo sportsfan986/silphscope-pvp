@@ -2222,9 +2222,12 @@ class OverlayService : LifecycleService() {
                     val isNonStd = oSpec.fastMoveStatus.equals("confirmed_non_standard", ignoreCase = true) ||
                         oSpec.inferredFastMove.startsWith("Hidden Power", ignoreCase = true)
                     if (isNonStd && spec.altFastStrictness == "strict" && oSpec.inferredFastMove.startsWith("Hidden Power", ignoreCase = true)) {
-                        val meta = getPokemonMeta(oSpec.species, league, oSpec.isShadow)
-                        val stdFast = meta.defaultFastMove
-                        val stdTurns = resolveFastTurnsStatic(stdFast, meta.fastTurns).coerceIn(1, 5)
+                        val dbMeta = POKEMON_DB.find {
+                            it.name.equals(oSpec.species, ignoreCase = true) ||
+                                it.baseSpecies.equals(FormResolver.extractBaseSpecies(oSpec.species), ignoreCase = true)
+                        }
+                        val stdFast = dbMeta?.defaultFastMove ?: "Incinerate"
+                        val stdTurns = resolveFastTurnsStatic(stdFast, dbMeta?.fastTurns ?: 2).coerceIn(1, 5)
                         val stdE = resolveFastEnergyStatic(stdFast, stdTurns).coerceIn(2, 20)
                         oSpec.copy(
                             inferredFastMove = stdFast,
@@ -17967,7 +17970,7 @@ class OverlayService : LifecycleService() {
                         uBase.length >= 3 && (normActor == uBase || normActor.contains(uBase) || levenshteinDistance(normActor, uBase) <= 1)
                     } == true
                     if (!isUserTeamActor) {
-                        val dbMatched = findPokemonInText(rawActorPart, activeLeague)
+                        val dbMatched = findPokemonInText(rawActorPart)
                         if (dbMatched != null) {
                             val candPool = buildOppPoolForName(dbMatched.name, false)
                             if (candPool != null && matchBestMove(candPool.second) != null) {
@@ -18790,16 +18793,17 @@ class OverlayService : LifecycleService() {
             currentBattleSensorTicks.add(
                 BattleSensorTick(
                     tMs = nowMs,
-                    userSlotIdx = activeUserIdx,
-                    oppSlotIdx = activeOppIdx,
-                    rawPlayerHpPct = sampledPlayerHpPct,
-                    rawOppHpPct = sampledOppHpPct,
-                    rawLeftFillPct = sampledLeftChargeBtnFillPct,
-                    rawRightFillPct = sampledRightChargeBtnFillPct,
+                    playerHpPct = sampledPlayerHpPct,
+                    oppHpPct = sampledOppHpPct,
+                    leftFillPct = sampledLeftChargeBtnFillPct,
+                    rightFillPct = sampledRightChargeBtnFillPct,
+                    playerShields = sampledPlayerShields,
+                    oppShields = sampledOppShields,
                     playerBalls = sampledPlayerBalls,
                     oppBalls = sampledOppBalls,
-                    playerShields = sampledPlayerShields,
-                    oppShields = sampledOppShields
+                    activeUserIdx = activeUserIdx,
+                    activeOppIdx = activeOppIdx,
+                    isCutsceneActive = pendingChargedAttackActor.isNotEmpty() || !areChargeCirclesVisibleNow
                 )
             )
         }
@@ -24025,13 +24029,12 @@ class OverlayService : LifecycleService() {
             lastClearedSensorTicksSnapshot
         }
         val shadowBenchmarkMap = evaluateShadowSettingsProfilesStatic(
+            prefs = prefs,
             league = league,
             userTeamSpecs = userTeamSpecs,
             oppTeamSpecs = oppTeamSpecs,
             timelineEvents = finalTimelineEvents,
-            sensorTicks = sensorTicksForShadow,
-            activeSettingsMap = scannerConfigMap,
-            activeAnomalies = detectedAnomalies
+            sensorTicks = sensorTicksForShadow
         )
         val githubUser = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty().ifEmpty { "anonymous" }
         val v510Record = AiTelemetryBattleRecordV510(
