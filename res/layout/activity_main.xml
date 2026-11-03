@@ -82,7 +82,7 @@
                 android:id="@+id/tv_app_main_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Real-Time PvP Floating Overlay • v5.10"
+                android:text="Real-Time PvP Floating Overlay • v6.01"
                 android:textSize="11sp"
                 android:textColor="#94a3b8"
                 android:layout_marginTop="1dp" />
@@ -149,7 +149,7 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- 3-Page Navigation Switcher Bar (Teams | Battle Log | Settings) -->
+    <!-- 4-Page Navigation Switcher Bar (Teams | Battle Log | Settings | Meta) -->
     <LinearLayout
         android:id="@+id/layout_nav_bar"
         android:layout_width="match_parent"
@@ -164,34 +164,55 @@
             android:layout_width="0dp"
             android:layout_height="38dp"
             android:layout_weight="1"
+            android:minWidth="0dp"
+            android:paddingHorizontal="4dp"
             android:text="⚔️ Teams"
-            android:textSize="11sp"
+            android:textSize="10.5sp"
             android:textStyle="bold"
             android:singleLine="true"
             android:backgroundTint="#0284c7"
             android:textColor="#ffffff"
-            android:layout_marginEnd="4dp" />
+            android:layout_marginEnd="3dp" />
 
         <Button
             android:id="@+id/btn_nav_battle_log"
             android:layout_width="0dp"
             android:layout_height="38dp"
-            android:layout_weight="1"
+            android:layout_weight="1.08"
+            android:minWidth="0dp"
+            android:paddingHorizontal="4dp"
             android:text="📜 Battle Log"
-            android:textSize="11sp"
+            android:textSize="10.5sp"
             android:textStyle="bold"
             android:singleLine="true"
             android:backgroundTint="#1e293b"
             android:textColor="#94a3b8"
-            android:layout_marginEnd="4dp" />
+            android:layout_marginEnd="3dp" />
 
         <Button
             android:id="@+id/btn_nav_settings"
             android:layout_width="0dp"
             android:layout_height="38dp"
-            android:layout_weight="1"
+            android:layout_weight="1.04"
+            android:minWidth="0dp"
+            android:paddingHorizontal="4dp"
             android:text="⚙️ Settings"
-            android:textSize="11sp"
+            android:textSize="10.5sp"
+            android:textStyle="bold"
+            android:singleLine="true"
+            android:backgroundTint="#1e293b"
+            android:textColor="#94a3b8"
+            android:layout_marginEnd="3dp" />
+
+        <Button
+            android:id="@+id/btn_nav_meta"
+            android:layout_width="0dp"
+            android:layout_height="38dp"
+            android:layout_weight="0.95"
+            android:minWidth="0dp"
+            android:paddingHorizontal="4dp"
+            android:text="📊 Meta"
+            android:textSize="10.5sp"
             android:textStyle="bold"
             android:singleLine="true"
             android:backgroundTint="#1e293b"
@@ -1486,94 +1507,7 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- ===================================================================
-                 0B. PVPOKE GITHUB LIMITED METAS IMPORTER & DUAL SELECTOR (v5.04)
-                 =================================================================== -->
-            <LinearLayout
-                android:id="@+id/card_settings_limited_metas"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="#0f172a"
-                android:padding="10dp"
-                android:layout_marginBottom="8dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="🌐 PvPoke GitHub Limited Metas Selector (GBL &amp; Battle Frontier)"
-                        android:textColor="#c084fc"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-
-                    <Button
-                        android:id="@+id/btn_sync_pvpoke_limited_metas"
-                        android:layout_width="wrap_content"
-                        android:layout_height="32dp"
-                        android:minWidth="0dp"
-                        android:paddingHorizontal="10dp"
-                        android:text="🔄 Sync PvPoke Metas"
-                        android:textSize="10sp"
-                        android:textStyle="bold"
-                        android:backgroundTint="#7c3aed"
-                        android:textColor="#ffffff" />
-                </LinearLayout>
-
-                <TextView
-                    android:id="@+id/tv_pvpoke_limited_metas_status"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Grouped into 🟢 Current, 🔜 Upcoming &amp; 🕒 Recent (Obsolete Archived Formats Hidden)"
-                    android:textColor="#34d399"
-                    android:textSize="10sp"
-                    android:layout_marginTop="2dp"
-                    android:layout_marginBottom="6dp" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="6dp">
-
-                    <Button
-                        android:id="@+id/btn_open_gbl_limited_metas_dialog"
-                        android:layout_width="0dp"
-                        android:layout_height="36dp"
-                        android:layout_weight="1"
-                        android:text="🛡️ Select GBL Metas (0)"
-                        android:textSize="10sp"
-                        android:textStyle="bold"
-                        android:backgroundTint="#0284c7"
-                        android:textColor="#ffffff"
-                        android:layout_marginEnd="4dp" />
-
-                    <Button
-                        android:id="@+id/btn_open_show6_limited_metas_dialog"
-                        android:layout_width="0dp"
-                        android:layout_height="36dp"
-                        android:layout_weight="1"
-                        android:text="🏛️ Select Show 6 Metas (0)"
-                        android:textSize="10sp"
-                        android:textStyle="bold"
-                        android:backgroundTint="#d97706"
-                        android:textColor="#0f172a" />
-                </LinearLayout>
-
-                <TextView
-                    android:id="@+id/tv_pinned_limited_metas_summary"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Pinned Metas: None (Standard Leagues active)"
-                    android:textColor="#cbd5e1"
-                    android:textSize="10sp" />
-            </LinearLayout>
+            <!-- Note: PvPoke Limited Metas, Show 6 Sheet Import, and Meta Blending moved to 📊 Meta tab in v6.00 -->
 
             <!-- ===================================================================
                  1. APP & OVERLAY THEME + SIZE & TRANSPARENCY GROUP (TOP OF SETTINGS)
@@ -2068,7 +2002,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="🧠 Lead &amp; Swap Tactical Recommendation Row"
+                        android:text="🧠 2-Line 4-Pillar AI Tactical Coach &amp; Backline HUD"
                         android:textColor="#34d399"
                         android:textSize="12sp"
                         android:textStyle="bold" />
@@ -2077,7 +2011,7 @@
                         android:id="@+id/text_tactical_rec_desc"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Default: Enabled — 1-line Action, Shield Plan &amp; Goal row in Overlay"
+                        android:text="Default: Enabled — 2-line Action/Throw/Catch Alert + Backline Prediction"
                         android:textColor="#94a3b8"
                         android:textSize="10sp" />
                 </LinearLayout>
@@ -2089,6 +2023,53 @@
                     android:text="Recs On"
                     android:textSize="11sp"
                     android:backgroundTint="#059669"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
+            <!-- v6.00: AI Advice HUD Position Setting (Bottom [Default] vs Top) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:paddingTop="8dp"
+                android:background="#0f172a"
+                android:paddingHorizontal="10dp"
+                android:paddingBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:paddingEnd="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📍 AI Advice HUD Position (Bottom vs Top)"
+                        android:textColor="#38bdf8"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_ai_advice_hud_pos_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: Bottom of HUD (Below My Attacks for closer eye-line visibility)"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_cycle_ai_advice_hud_pos"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="Bottom (Def)"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#0284c7"
                     android:textColor="#ffffff" />
             </LinearLayout>
 
@@ -3241,183 +3222,8 @@
             </LinearLayout>
 
             <!-- ===================================================================
-                 4. PVPOKE DATABASE & BATTLE LOG REPARSE MAINTENANCE
+                 4. BATTLE LOG REPARSE MAINTENANCE (PvPoke & Meta Importers moved to 📊 Meta tab)
                  =================================================================== -->
-            <!-- PvPoke Database & 4-League Sync Card -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:layout_marginTop="8dp"
-                android:background="#0f172a"
-                android:padding="10dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="PvPoke Live Database &amp; 4 Leagues"
-                        android:textColor="#38bdf8"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-
-                    <Button
-                        android:id="@+id/btn_download_db"
-                        android:layout_width="wrap_content"
-                        android:layout_height="36dp"
-                        android:backgroundTint="#334155"
-                        android:textColor="#ffffff"
-                        android:textSize="11sp"
-                        android:text="Sync PvPoke" />
-                </LinearLayout>
-
-                <TextView
-                    android:id="@+id/text_db_status"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="PvPoke Database: Cached (Checking...)"
-                    android:textColor="#cbd5e1"
-                    android:textSize="11sp"
-                    android:lineSpacingExtra="2dp"
-                    android:layout_marginTop="4dp" />
-            </LinearLayout>
-
-            <!-- Battle Frontier Meta Usage (Week - All) & Most-Used Cores Sync + Weighting Card -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:layout_marginTop="8dp"
-                android:background="#0f172a"
-                android:padding="10dp">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="🏛️ Battle Frontier Meta Usage &amp; Most-Used Cores (Show 6)"
-                    android:textColor="#fbbf24"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Imports Pokémon Usage % (Week - All) and Most-Used Cores from Google Sheets. Editable for future Battle Frontier seasons."
-                    android:textColor="#94a3b8"
-                    android:textSize="10sp"
-                    android:layout_marginTop="2dp"
-                    android:layout_marginBottom="6dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="📊 Meta Usage Sheet URL (Week - All):"
-                    android:textColor="#cbd5e1"
-                    android:textSize="10sp"
-                    android:textStyle="bold" />
-
-                <EditText
-                    android:id="@+id/edit_bf_usage_sheet_url"
-                    android:layout_width="match_parent"
-                    android:layout_height="34dp"
-                    android:background="#1e293b"
-                    android:paddingHorizontal="8dp"
-                    android:singleLine="true"
-                    android:text="https://docs.google.com/spreadsheets/d/1PD_1CVCMvD1WuubJCHHrS2HKSoECZgscZuiKF07XidM/edit?gid=466174368#gid=466174368"
-                    android:textColor="#f8fafc"
-                    android:textSize="10sp"
-                    android:layout_marginTop="2dp"
-                    android:layout_marginBottom="6dp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🔥 Most-Used Cores Sheet URL:"
-                    android:textColor="#cbd5e1"
-                    android:textSize="10sp"
-                    android:textStyle="bold" />
-
-                <EditText
-                    android:id="@+id/edit_bf_cores_sheet_url"
-                    android:layout_width="match_parent"
-                    android:layout_height="34dp"
-                    android:background="#1e293b"
-                    android:paddingHorizontal="8dp"
-                    android:singleLine="true"
-                    android:text="https://docs.google.com/spreadsheets/d/14P0XFd8uTgdMMieYB_4n2-2cRY057qeh9J5yG85JHtg/edit?gid=94099054#gid=94099054"
-                    android:textColor="#f8fafc"
-                    android:textSize="10sp"
-                    android:layout_marginTop="2dp"
-                    android:layout_marginBottom="6dp" />
-
-                <Button
-                    android:id="@+id/btn_sync_bf_sheets"
-                    android:layout_width="match_parent"
-                    android:layout_height="36dp"
-                    android:backgroundTint="#d97706"
-                    android:textColor="#0f172a"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:text="📥 Save Links &amp; Import Battle Frontier Usage + Cores" />
-
-                <TextView
-                    android:id="@+id/tv_bf_sheets_status"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Active Season 3 Cycle 1 — GL: 124 Mons / 25 Cores • Spectral: 66 Mons / 25 Cores • Cauldron: 69 Mons / 25 Cores • Master: 87 Mons / 25 Cores (Total: 346 Mons • 100 Cores)"
-                    android:textColor="#34d399"
-                    android:textSize="10sp"
-                    android:layout_marginTop="4dp"
-                    android:layout_marginBottom="8dp" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="⚖️ Show 6 Usage &amp; Core Weight vs PvPoke Rankings"
-                        android:textColor="#f8fafc"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/tv_show6_usage_weight_label"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="65% Usage &amp; Cores / 35% PvPoke"
-                        android:textColor="#fbbf24"
-                        android:textSize="10sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-
-                <SeekBar
-                    android:id="@+id/seek_show6_usage_weight"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:max="100"
-                    android:progress="65"
-                    android:layout_marginTop="4dp" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Weights Show 6 simulations against higher-usage meta teams &amp; common cores vs raw PvPoke rankings (Default: 65% Usage &amp; Cores / 35% PvPoke)."
-                    android:textColor="#94a3b8"
-                    android:textSize="9sp"
-                    android:layout_marginTop="2dp" />
-            </LinearLayout>
-
             <!-- Retroactive Battle Log Damage & Win Quality Reparse Card -->
             <LinearLayout
                 android:layout_width="match_parent"
@@ -3925,7 +3731,757 @@
     </LinearLayout>
 
     <!-- ===================================================================
-         PAGE 4: HELP & COMPLETE USER GUIDE (Opened when tapping ❓ Help button)
+         PAGE 4: META HUB & PERSONALIZED CORE DASHBOARD (v6.00)
+         =================================================================== -->
+    <LinearLayout
+        android:id="@+id/page_meta"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <!-- Header & Mode-Independent League + Scope Bar -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="6dp">
+
+            <TextView
+                android:id="@+id/tv_meta_page_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:text="📊 Personalized Meta &amp; Cores"
+                android:textSize="14.5sp"
+                android:textStyle="bold"
+                android:textColor="#e2e8f0" />
+
+            <TextView
+                android:id="@+id/tv_meta_mode_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🛡️ Blind 3 GBL"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:textColor="#38bdf8"
+                android:background="#1e293b"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="3dp" />
+        </LinearLayout>
+
+        <!-- League Selector + Scope Switcher (Current Season | Last 25 | Last 50) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="6dp">
+
+            <Spinner
+                android:id="@+id/spinner_meta_tab_league"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1.15"
+                android:background="#1e293b"
+                android:paddingHorizontal="6dp"
+                android:layout_marginEnd="5dp" />
+
+            <Button
+                android:id="@+id/btn_meta_scope_season"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="0.82"
+                android:minWidth="0dp"
+                android:paddingHorizontal="3dp"
+                android:singleLine="true"
+                android:text="Season"
+                android:textSize="9.5sp"
+                android:textStyle="bold"
+                android:backgroundTint="#0284c7"
+                android:textColor="#ffffff"
+                android:layout_marginEnd="3dp" />
+
+            <Button
+                android:id="@+id/btn_meta_scope_last25"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="0.65"
+                android:minWidth="0dp"
+                android:paddingHorizontal="3dp"
+                android:singleLine="true"
+                android:text="Last 25"
+                android:textSize="9.5sp"
+                android:textStyle="bold"
+                android:backgroundTint="#1e293b"
+                android:textColor="#94a3b8"
+                android:layout_marginEnd="3dp" />
+
+            <Button
+                android:id="@+id/btn_meta_scope_last50"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="0.65"
+                android:minWidth="0dp"
+                android:paddingHorizontal="3dp"
+                android:singleLine="true"
+                android:text="Last 50"
+                android:textSize="9.5sp"
+                android:textStyle="bold"
+                android:backgroundTint="#1e293b"
+                android:textColor="#94a3b8" />
+        </LinearLayout>
+
+        <!-- Collapsible Meta Tuning, Limited Cups & Sheet Importer Header Button (Default Collapsed) -->
+        <Button
+            android:id="@+id/btn_toggle_meta_settings_drawer"
+            android:layout_width="match_parent"
+            android:layout_height="34dp"
+            android:minHeight="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="⚙️ Meta Tuning, Limited Cups &amp; Sheet Import ▸"
+            android:textSize="10.5sp"
+            android:textStyle="bold"
+            android:backgroundTint="#1e293b"
+            android:textColor="#38bdf8"
+            android:layout_marginBottom="6dp" />
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="16dp">
+
+                <!-- ===============================================================
+                     COLLAPSIBLE META SETTINGS DRAWER (Default: GONE on open)
+                     =============================================================== -->
+                <LinearLayout
+                    android:id="@+id/layout_meta_settings_drawer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:layout_marginBottom="8dp">
+
+                    <!-- 1. Mode-Independent Season Blending & Recency Decay Card -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="#0f172a"
+                        android:padding="10dp"
+                        android:layout_marginBottom="8dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <TextView
+                                android:id="@+id/tv_meta_tuning_card_title"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="⚖️ Season Meta Blending &amp; Recency Decay (GBL Mode)"
+                                android:textColor="#38bdf8"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <Button
+                                android:id="@+id/btn_reset_meta_tuning_defaults"
+                                android:layout_width="wrap_content"
+                                android:layout_height="28dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="8dp"
+                                android:text="↺ Defaults"
+                                android:textSize="9.5sp"
+                                android:backgroundTint="#334155"
+                                android:textColor="#e2e8f0" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Drives Live AI Backline Prediction, Team Builder &amp; Current Season view. Stored independently for GBL Blind 3 vs Show 6."
+                            android:textColor="#94a3b8"
+                            android:textSize="9.5sp"
+                            android:layout_marginTop="2dp"
+                            android:layout_marginBottom="6dp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="📊 Battle Logs vs PvPoke Baseline Weight"
+                                android:textColor="#e2e8f0"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tv_meta_log_weight_label"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Auto (Ramps to 75%)"
+                                android:textColor="#34d399"
+                                android:textSize="10.5sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <SeekBar
+                            android:id="@+id/seek_meta_log_weight"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:max="21"
+                            android:progress="0"
+                            android:layout_marginTop="3dp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="⏱️ Recency Decay Factor (Recent vs Older Season Battles):"
+                            android:textColor="#cbd5e1"
+                            android:textSize="10.5sp"
+                            android:textStyle="bold"
+                            android:layout_marginTop="6dp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginTop="4dp">
+
+                            <Button
+                                android:id="@+id/btn_meta_decay_flat"
+                                android:layout_width="0dp"
+                                android:layout_height="32dp"
+                                android:layout_weight="1"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="2dp"
+                                android:text="Flat 0"
+                                android:textSize="9sp"
+                                android:backgroundTint="#334155"
+                                android:textColor="#cbd5e1"
+                                android:layout_marginEnd="3dp" />
+
+                            <Button
+                                android:id="@+id/btn_meta_decay_slow"
+                                android:layout_width="0dp"
+                                android:layout_height="32dp"
+                                android:layout_weight="1"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="2dp"
+                                android:text="Slow"
+                                android:textSize="9sp"
+                                android:backgroundTint="#334155"
+                                android:textColor="#cbd5e1"
+                                android:layout_marginEnd="3dp" />
+
+                            <Button
+                                android:id="@+id/btn_meta_decay_std"
+                                android:layout_width="0dp"
+                                android:layout_height="32dp"
+                                android:layout_weight="1.15"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="2dp"
+                                android:text="Std (Def)"
+                                android:textSize="9sp"
+                                android:backgroundTint="#0284c7"
+                                android:textColor="#ffffff"
+                                android:layout_marginEnd="3dp" />
+
+                            <Button
+                                android:id="@+id/btn_meta_decay_fast"
+                                android:layout_width="0dp"
+                                android:layout_height="32dp"
+                                android:layout_weight="1"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="2dp"
+                                android:text="Fast"
+                                android:textSize="9sp"
+                                android:backgroundTint="#334155"
+                                android:textColor="#cbd5e1"
+                                android:layout_marginEnd="3dp" />
+
+                            <Button
+                                android:id="@+id/btn_meta_decay_ultra"
+                                android:layout_width="0dp"
+                                android:layout_height="32dp"
+                                android:layout_weight="1"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="2dp"
+                                android:text="Ultra"
+                                android:textSize="9sp"
+                                android:backgroundTint="#334155"
+                                android:textColor="#cbd5e1" />
+                        </LinearLayout>
+
+                        <!-- 2. Limited Cup Same-CP Standard League Blending Controls -->
+                        <LinearLayout
+                            android:id="@+id/layout_limited_cup_blend_section"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:layout_marginTop="8dp"
+                            android:paddingTop="8dp">
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:background="#1e293b"
+                                android:layout_marginBottom="6dp" />
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                android:gravity="center_vertical">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="🏆 GBL Blind 3: Limited Cup Same-CP Std League Blend"
+                                    android:textColor="#c084fc"
+                                    android:textSize="11sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:id="@+id/tv_limited_std_blend_label"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="50% Start Fade • Fast Decay (Default)"
+                                    android:textColor="#e9d5ff"
+                                    android:textSize="10sp"
+                                    android:textStyle="bold" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Gives you a head start in GBL Limited Cups (e.g., Halloween Cup or Mega Great vs. regular Great League) by blending eligible Pokémon from your Same-CP Standard League logs starting at 50% (0 cup battles) and fading out as you log Limited Cup battles (Default: 50% start fade • Fast decay)."
+                                android:textColor="#94a3b8"
+                                android:textSize="9.5sp"
+                                android:layout_marginTop="2dp" />
+
+                            <SeekBar
+                                android:id="@+id/seek_limited_std_blend_pct"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:max="15"
+                                android:progress="10"
+                                android:layout_marginTop="3dp" />
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                android:gravity="center_vertical"
+                                android:layout_marginTop="4dp">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Fade Decay:"
+                                    android:textColor="#cbd5e1"
+                                    android:textSize="10sp"
+                                    android:textStyle="bold"
+                                    android:layout_marginEnd="6dp" />
+
+                                <Button
+                                    android:id="@+id/btn_lim_decay_slow"
+                                    android:layout_width="0dp"
+                                    android:layout_height="30dp"
+                                    android:layout_weight="1"
+                                    android:minWidth="0dp"
+                                    android:paddingHorizontal="3dp"
+                                    android:text="Slow (0.03)"
+                                    android:textSize="9sp"
+                                    android:backgroundTint="#334155"
+                                    android:textColor="#cbd5e1"
+                                    android:layout_marginEnd="4dp" />
+
+                                <Button
+                                    android:id="@+id/btn_lim_decay_std"
+                                    android:layout_width="0dp"
+                                    android:layout_height="30dp"
+                                    android:layout_weight="1"
+                                    android:minWidth="0dp"
+                                    android:paddingHorizontal="3dp"
+                                    android:text="Std (0.06)"
+                                    android:textSize="9sp"
+                                    android:backgroundTint="#334155"
+                                    android:textColor="#cbd5e1"
+                                    android:layout_marginEnd="4dp" />
+
+                                <Button
+                                    android:id="@+id/btn_lim_decay_fast"
+                                    android:layout_width="0dp"
+                                    android:layout_height="30dp"
+                                    android:layout_weight="1"
+                                    android:minWidth="0dp"
+                                    android:paddingHorizontal="3dp"
+                                    android:text="Fast (0.10 Def)"
+                                    android:textSize="9sp"
+                                    android:backgroundTint="#7c3aed"
+                                    android:textColor="#ffffff" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- 3. PvPoke GitHub Limited Metas Importer & Dual Selector (Moved from Settings) -->
+                    <LinearLayout
+                        android:id="@+id/card_settings_limited_metas"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="#0f172a"
+                        android:padding="10dp"
+                        android:layout_marginBottom="8dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="🌐 PvPoke GitHub Limited Metas Selector (GBL &amp; Battle Frontier)"
+                                android:textColor="#c084fc"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <Button
+                                android:id="@+id/btn_sync_pvpoke_limited_metas"
+                                android:layout_width="wrap_content"
+                                android:layout_height="32dp"
+                                android:minWidth="0dp"
+                                android:paddingHorizontal="10dp"
+                                android:text="🔄 Sync PvPoke Metas"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:backgroundTint="#7c3aed"
+                                android:textColor="#ffffff" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tv_pvpoke_limited_metas_status"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Grouped into 🟢 Current, 🔜 Upcoming &amp; 🕒 Recent (Obsolete Archived Formats Hidden)"
+                            android:textColor="#34d399"
+                            android:textSize="10sp"
+                            android:layout_marginTop="2dp"
+                            android:layout_marginBottom="6dp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginBottom="6dp">
+
+                            <Button
+                                android:id="@+id/btn_open_gbl_limited_metas_dialog"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:text="🛡️ Select GBL Metas (0)"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:backgroundTint="#0284c7"
+                                android:textColor="#ffffff"
+                                android:layout_marginEnd="4dp" />
+
+                            <Button
+                                android:id="@+id/btn_open_show6_limited_metas_dialog"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:text="🏛️ Select Show 6 Metas (0)"
+                                android:textSize="10sp"
+                                android:textStyle="bold"
+                                android:backgroundTint="#d97706"
+                                android:textColor="#0f172a" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tv_pinned_limited_metas_summary"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Pinned Metas: None (Standard Leagues active)"
+                            android:textColor="#cbd5e1"
+                            android:textSize="10sp" />
+                    </LinearLayout>
+
+                    <!-- 4. Battle Frontier Meta Usage (Week - All) & Most-Used Cores Sync + Weighting Card (Moved from Settings) -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="#0f172a"
+                        android:padding="10dp"
+                        android:layout_marginBottom="8dp">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="🏛️ Battle Frontier Meta Usage &amp; Most-Used Cores (Show 6)"
+                            android:textColor="#fbbf24"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Imports Pokémon Usage % (Week - All) and Most-Used Cores from Google Sheets. Editable for future Battle Frontier seasons."
+                            android:textColor="#94a3b8"
+                            android:textSize="10sp"
+                            android:layout_marginTop="2dp"
+                            android:layout_marginBottom="6dp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="📊 Meta Usage Sheet URL (Week - All):"
+                            android:textColor="#cbd5e1"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <EditText
+                            android:id="@+id/edit_bf_usage_sheet_url"
+                            android:layout_width="match_parent"
+                            android:layout_height="34dp"
+                            android:background="#1e293b"
+                            android:paddingHorizontal="8dp"
+                            android:singleLine="true"
+                            android:text="https://docs.google.com/spreadsheets/d/1PD_1CVCMvD1WuubJCHHrS2HKSoECZgscZuiKF07XidM/edit?gid=466174368#gid=466174368"
+                            android:textColor="#f8fafc"
+                            android:textSize="10sp"
+                            android:layout_marginTop="2dp"
+                            android:layout_marginBottom="6dp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🔥 Most-Used Cores Sheet URL:"
+                            android:textColor="#cbd5e1"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <EditText
+                            android:id="@+id/edit_bf_cores_sheet_url"
+                            android:layout_width="match_parent"
+                            android:layout_height="34dp"
+                            android:background="#1e293b"
+                            android:paddingHorizontal="8dp"
+                            android:singleLine="true"
+                            android:text="https://docs.google.com/spreadsheets/d/14P0XFd8uTgdMMieYB_4n2-2cRY057qeh9J5yG85JHtg/edit?gid=94099054#gid=94099054"
+                            android:textColor="#f8fafc"
+                            android:textSize="10sp"
+                            android:layout_marginTop="2dp"
+                            android:layout_marginBottom="6dp" />
+
+                        <Button
+                            android:id="@+id/btn_sync_bf_sheets"
+                            android:layout_width="match_parent"
+                            android:layout_height="36dp"
+                            android:backgroundTint="#d97706"
+                            android:textColor="#0f172a"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:text="📥 Save Links &amp; Import Battle Frontier Usage + Cores" />
+
+                        <TextView
+                            android:id="@+id/tv_bf_sheets_status"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Active Season 3 Cycle 1 — GL: 124 Mons / 25 Cores • Spectral: 66 Mons / 25 Cores • Cauldron: 69 Mons / 25 Cores • Master: 87 Mons / 25 Cores (Total: 346 Mons • 100 Cores)"
+                            android:textColor="#34d399"
+                            android:textSize="10sp"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="8dp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="⚖️ Show 6 Sheet Weight vs PvPoke Rankings"
+                                android:textColor="#f8fafc"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tv_show6_usage_weight_label"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="65% Usage &amp; Cores / 35% PvPoke"
+                                android:textColor="#fbbf24"
+                                android:textSize="10sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <SeekBar
+                            android:id="@+id/seek_show6_usage_weight"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:max="100"
+                            android:progress="65"
+                            android:layout_marginTop="4dp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Weights Show 6 meta &amp; cores against imported Google Sheet usage vs raw PvPoke rankings (Default: 65% Sheet / 35% PvPoke)."
+                            android:textColor="#94a3b8"
+                            android:textSize="9sp"
+                            android:layout_marginTop="2dp" />
+                    </LinearLayout>
+
+                    <!-- 5. PvPoke Live Database & 4-League Sync Card (Moved from Settings) -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:background="#0f172a"
+                        android:padding="10dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="PvPoke Live Database &amp; Rankings Sync"
+                                android:textColor="#38bdf8"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <Button
+                                android:id="@+id/btn_download_db"
+                                android:layout_width="wrap_content"
+                                android:layout_height="36dp"
+                                android:backgroundTint="#334155"
+                                android:textColor="#ffffff"
+                                android:textSize="11sp"
+                                android:text="Sync PvPoke" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/text_db_status"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="PvPoke Database: Cached (Checking...)"
+                            android:textColor="#cbd5e1"
+                            android:textSize="11sp"
+                            android:lineSpacingExtra="2dp"
+                            android:layout_marginTop="4dp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- ===============================================================
+                     IMMEDIATELY VISIBLE: TOP META CORES & TOP META POKEMON
+                     =============================================================== -->
+                <!-- Section A: Top Meta Cores (2-Pokémon & 3-Pokémon Lines) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#1e293b"
+                    android:padding="10dp"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="🔥 Top Meta Cores (Drives Live Backline Prediction)"
+                        android:textColor="#fbbf24"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tv_meta_cores_subtitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Current Season Blended Cores • Auto-resets each GBL Season"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp"
+                        android:layout_marginTop="2dp"
+                        android:layout_marginBottom="6dp" />
+
+                    <LinearLayout
+                        android:id="@+id/container_meta_top_cores"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
+                </LinearLayout>
+
+                <!-- Section B: Top Meta Pokémon (Blended Usage + Role Breakdown) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#1e293b"
+                    android:padding="10dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="🏆 Top Meta Pokémon (Lead / Swap / Closer Breakdown)"
+                        android:textColor="#38bdf8"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tv_meta_pokemon_subtitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Current Season Blended Meta (Drives AI &amp; Anti-Meta Team Builder)"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp"
+                        android:layout_marginTop="2dp"
+                        android:layout_marginBottom="6dp" />
+
+                    <LinearLayout
+                        android:id="@+id/container_meta_top_pokemon"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
+    </LinearLayout>
+
+    <!-- ===================================================================
+         PAGE 5: HELP & COMPLETE USER GUIDE (Opened when tapping ❓ Help button)
          =================================================================== -->
     <ScrollView
         android:id="@+id/page_help"

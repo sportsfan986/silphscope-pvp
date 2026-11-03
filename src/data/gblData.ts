@@ -8987,12 +8987,18 @@ export function canonicalizeMetaPokemonName(rawName: string): string {
 export function computeBlendedSeasonMeta(
   league: string,
   seasonBattleLogs?: Array<{ timestampMs: number; league: string; opponents: string[] }>,
-  currentSeason?: { startMs: number; endMs: number }
+  currentSeason?: { startMs: number; endMs: number } | number,
+  endMsArg?: number
 ): BlendedSeasonMetaDistribution {
   const normLeague = normalizeLeagueName(league);
+  const seasonBounds =
+    typeof currentSeason === "number"
+      ? { startMs: currentSeason, endMs: typeof endMsArg === "number" ? endMsArg : Number.MAX_SAFE_INTEGER }
+      : currentSeason;
 
   // Meta depth of 100 for evaluating team and role battle rankings
   const metaSpecies = getLeagueTopMetaSpeciesNames(normLeague, 100);
+  const eligibleLowerSet = new Set(metaSpecies.map((m) => (canonicalizeMetaPokemonName(m) || m).toLowerCase()));
   const pMeta = new Map<string, number>();
   let totalMetaWeight = 0;
   metaSpecies.forEach((monName, idx) => {
@@ -9007,14 +9013,34 @@ export function computeBlendedSeasonMeta(
     }
   }
 
+  let logCapPct = 70;
+  let decayLambda = 0.05;
+  let limStdBlendPct = 50; // 50% default starting point of fade for GBL Blind 3 Limited Cups
+  let limStdDecay = 0.10; // Fast (0.10) default fade decay
+  try {
+    if (typeof localStorage !== "undefined") {
+      const savedCap = Number(localStorage.getItem("gbl_meta_log_weight_cap_pct"));
+      if (!Number.isNaN(savedCap) && savedCap >= 0 && savedCap <= 100) logCapPct = savedCap;
+      const savedLam = Number(localStorage.getItem("gbl_meta_recency_decay_lambda"));
+      if (!Number.isNaN(savedLam) && savedLam > 0 && savedLam <= 0.25) decayLambda = savedLam;
+      const savedStdPct = localStorage.getItem("gbl_limited_std_blend_pct_gbl_v601") ?? localStorage.getItem("gbl_limited_std_blend_pct_gbl");
+      if (savedStdPct !== null) {
+        const n = Number(savedStdPct);
+        if (!Number.isNaN(n) && n >= 0 && n <= 100) limStdBlendPct = n;
+      }
+      const savedStdDec = Number(localStorage.getItem("gbl_limited_std_decay_gbl_v601") ?? localStorage.getItem("gbl_limited_std_decay_gbl"));
+      if (!Number.isNaN(savedStdDec) && savedStdDec > 0 && savedStdDec <= 0.30) limStdDecay = savedStdDec;
+    }
+  } catch {}
+
   // Filter logs strictly to current season & matching league, sorted newest-first (k = 1 most recent)
   const matchingLogs = (seasonBattleLogs || [])
     .filter((entry) => {
       if (!entry || !Array.isArray(entry.opponents) || entry.opponents.length === 0) return false;
       const entryLeague = normalizeLeagueName(entry.league || "");
       if (entryLeague !== normLeague) return false;
-      if (currentSeason && currentSeason.startMs > 0 && currentSeason.endMs > currentSeason.startMs) {
-        if (entry.timestampMs < currentSeason.startMs || entry.timestampMs > currentSeason.endMs) {
+      if (seasonBounds && seasonBounds.startMs > 0 && seasonBounds.endMs > seasonBounds.startMs) {
+        if (entry.timestampMs < seasonBounds.startMs || entry.timestampMs > seasonBounds.endMs) {
           return false;
         }
       }
@@ -9023,9 +9049,29 @@ export function computeBlendedSeasonMeta(
     })
     .sort((a, b) => b.timestampMs - a.timestampMs);
 
-  const N = matchingLogs.length;
-  const wHist = 0.70 * Math.min(1.0, N / 50.0);
-  const wMeta = 1.0 - wHist;
+  const isGblLimitedCup =
+    !isBattleFrontierLeague(normLeague) &&
+    normLeague !== "GREAT LEAGUE" &&
+    normLeague !== "ULTRA LEAGUE" &&
+    normLeague !== "MASTER LEAGUE";
+  const cpCap = getLeagueCpCap(normLeague);
+  const sameCpStdLeague = cpCap <= 1500 ? "GREAT LEAGUE" : cpCap <= 2500 ? "ULTRA LEAGUE" : "MASTER LEAGUE";
+
+  const matchingStdLogs = isGblLimitedCup
+    ? (seasonBattleLogs || [])
+        .filter((entry) => {
+          if (!entry || !Array.isArray(entry.opponents) || entry.opponents.length === 0) return false;
+          const entryLeague = normalizeLeagueName(entry.league || "");
+          if (entryLeague !== sameCpStdLeague) return false;
+          if (seasonBounds && seasonBounds.startMs > 0 && seasonBounds.endMs > seasonBounds.startMs) {
+            if (entry.timestampMs < seasonBounds.startMs || entry.timestampMs > seasonBounds.endMs) {
+              return false;
+            }
+          }
+          return true;
+        })
+        .sort((a, b) => b.timestampMs - a.timestampMs)
+    : [];
 
   const pHistLead = new Map<string, number>();
   const pHistField = new Map<string, number>();
@@ -9033,8 +9079,7 @@ export function computeBlendedSeasonMeta(
   let totalHistFieldWeight = 0;
 
   matchingLogs.forEach((entry, idx) => {
-    // k = idx + 1 (1-indexed from newest match k=1 to oldest match k=N)
-    const wMatch = Math.exp(-0.05 * idx);
+    const wMatch = Math.exp(-decayLambda * idx);
     const leadOpp = canonicalizeMetaPokemonName(entry.opponents[0] || "");
     if (leadOpp) {
       pHistLead.set(leadOpp, (pHistLead.get(leadOpp) || 0) + wMatch);
@@ -9050,52 +9095,87 @@ export function computeBlendedSeasonMeta(
   });
 
   if (totalHistLeadWeight > 0) {
-    for (const [k, v] of pHistLead.entries()) {
-      pHistLead.set(k, v / totalHistLeadWeight);
-    }
+    for (const [k, v] of pHistLead.entries()) pHistLead.set(k, v / totalHistLeadWeight);
   }
   if (totalHistFieldWeight > 0) {
-    for (const [k, v] of pHistField.entries()) {
-      pHistField.set(k, v / totalHistFieldWeight);
-    }
+    for (const [k, v] of pHistField.entries()) pHistField.set(k, v / totalHistFieldWeight);
   }
 
-  const allLeadSpecies = new Set<string>([...pMeta.keys(), ...pHistLead.keys()]);
-  const allFieldSpecies = new Set<string>([...pMeta.keys(), ...pHistField.keys()]);
+  const pStdLead = new Map<string, number>();
+  const pStdField = new Map<string, number>();
+  let totalStdLeadWeight = 0;
+  let totalStdFieldWeight = 0;
+
+  matchingStdLogs.forEach((entry, idx) => {
+    const wMatch = Math.exp(-decayLambda * idx);
+    const eligibleOpps = entry.opponents
+      .slice(0, 3)
+      .map((raw) => canonicalizeMetaPokemonName(raw || ""))
+      .filter((name) => Boolean(name) && (eligibleLowerSet.size === 0 || eligibleLowerSet.has(name.toLowerCase())));
+    if (eligibleOpps[0]) {
+      pStdLead.set(eligibleOpps[0], (pStdLead.get(eligibleOpps[0]) || 0) + wMatch);
+      totalStdLeadWeight += wMatch;
+    }
+    eligibleOpps.forEach((oppName) => {
+      pStdField.set(oppName, (pStdField.get(oppName) || 0) + wMatch);
+      totalStdFieldWeight += wMatch;
+    });
+  });
+
+  if (totalStdLeadWeight > 0) {
+    for (const [k, v] of pStdLead.entries()) pStdLead.set(k, v / totalStdLeadWeight);
+  }
+  if (totalStdFieldWeight > 0) {
+    for (const [k, v] of pStdField.entries()) pStdField.set(k, v / totalStdFieldWeight);
+  }
+
+  const N = matchingLogs.length;
+  const rawWHist = N > 0 ? (logCapPct / 100.0) * Math.min(1.0, N / 50.0) : 0;
+  const remAfterHist = Math.max(0, 1.0 - rawWHist);
+  const rawWStd =
+    isGblLimitedCup && totalStdFieldWeight > 0
+      ? Math.min(remAfterHist, (limStdBlendPct / 100.0) * Math.exp(-limStdDecay * N))
+      : 0;
+  const rawWMeta = Math.max(0, remAfterHist - rawWStd);
+  const sumW = rawWHist + rawWStd + rawWMeta || 1.0;
+  const wHist = rawWHist / sumW;
+  const wStd = rawWStd / sumW;
+  const wMeta = rawWMeta / sumW;
+
+  const allLeadSpecies = new Set<string>([...pMeta.keys(), ...pHistLead.keys(), ...pStdLead.keys()]);
+  const allFieldSpecies = new Set<string>([...pMeta.keys(), ...pHistField.keys(), ...pStdField.keys()]);
 
   const leadProbabilities = new Map<string, number>();
   const fieldProbabilities = new Map<string, number>();
 
-  if (totalHistLeadWeight === 0 || wHist === 0) {
-    for (const [k, v] of pMeta.entries()) leadProbabilities.set(k, v);
-  } else {
-    let sumLead = 0;
-    for (const sp of allLeadSpecies) {
-      const val = wHist * (pHistLead.get(sp) || 0) + wMeta * (pMeta.get(sp) || 0);
-      if (val > 0) {
-        leadProbabilities.set(sp, val);
-        sumLead += val;
-      }
-    }
-    if (sumLead > 0) {
-      for (const [k, v] of leadProbabilities.entries()) leadProbabilities.set(k, v / sumLead);
+  let sumLead = 0;
+  for (const sp of allLeadSpecies) {
+    const mP = pMeta.get(sp) || 0;
+    const hP = totalHistLeadWeight > 0 ? pHistLead.get(sp) || 0 : mP;
+    const sP = totalStdLeadWeight > 0 ? pStdLead.get(sp) || 0 : mP;
+    const val = wHist * hP + wStd * sP + wMeta * mP;
+    if (val > 0) {
+      leadProbabilities.set(sp, val);
+      sumLead += val;
     }
   }
+  if (sumLead > 0) {
+    for (const [k, v] of leadProbabilities.entries()) leadProbabilities.set(k, v / sumLead);
+  }
 
-  if (totalHistFieldWeight === 0 || wHist === 0) {
-    for (const [k, v] of pMeta.entries()) fieldProbabilities.set(k, v);
-  } else {
-    let sumField = 0;
-    for (const sp of allFieldSpecies) {
-      const val = wHist * (pHistField.get(sp) || 0) + wMeta * (pMeta.get(sp) || 0);
-      if (val > 0) {
-        fieldProbabilities.set(sp, val);
-        sumField += val;
-      }
+  let sumField = 0;
+  for (const sp of allFieldSpecies) {
+    const mP = pMeta.get(sp) || 0;
+    const hP = totalHistFieldWeight > 0 ? pHistField.get(sp) || 0 : mP;
+    const sP = totalStdFieldWeight > 0 ? pStdField.get(sp) || 0 : mP;
+    const val = wHist * hP + wStd * sP + wMeta * mP;
+    if (val > 0) {
+      fieldProbabilities.set(sp, val);
+      sumField += val;
     }
-    if (sumField > 0) {
-      for (const [k, v] of fieldProbabilities.entries()) fieldProbabilities.set(k, v / sumField);
-    }
+  }
+  if (sumField > 0) {
+    for (const [k, v] of fieldProbabilities.entries()) fieldProbabilities.set(k, v / sumField);
   }
 
   return {

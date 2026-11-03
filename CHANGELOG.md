@@ -1,4 +1,14 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.00`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.01`)
+
+---
+
+## v6.01 (2026-11-03) — GBL Blind 3 Limited Cup Same-CP Standard League Blend Visibility, `50%` Default Fade Start & 1500 CP Cup Mapping Fix
+*Hotfix release (`v6.01`, `versionCode = 1601`) fixing the Limited Cup Same-CP Standard League Blend setting so it is always visible in **GBL Blind 3** mode (and hidden in Show 6 mode), enforcing the **`50%` default starting point of the fade** (at `0` cup battles with `Fast` `0.10` decay), fixing 1500 CP Limited Cup mapping (e.g., Halloween Cup, Mega Great League $\to$ Great League), and automatically resolving Same-CP Standard League logs across Team Builder, Live AI Backline Prediction, and the `📊 Meta` dashboard.*
+
+- **v6.01 — Key Fixes**:
+  - **Always-Visible in GBL Blind 3 Mode (Hidden in Show 6 Mode)**: Fixed `layout_limited_cup_blend_section` visibility in `📊 Meta -> Meta Tuning` so it is always visible when in **GBL Blind 3** mode (even while viewing Open Great/Ultra/Master League) and hidden in Show 6 mode.
+  - **`50%` Default Starting Point of Fade (`Fast` `0.10` Decay)**: Enforces `50%` as the default starting weight of the fade at `0` Limited Cup battles (`PREFS_KEY_LIMITED_STD_BLEND_PCT_GBL = 50`, `DEFAULT_LIMITED_STD_DECAY_GBL = 0.10f`), decaying exponentially as cup-specific logs accumulate.
+  - **1500 CP Limited Cup Resolution & Unified Team Builder / AI Blending**: Fixed `getLeagueCpCapStatic` so 1500 CP cups without `"Great"` in their title (such as `Halloween Cup`, `Sunshine Cup`, `Fantasy Cup`, `Spring Cup`, `Love Cup`) map to `1500` (`GREAT LEAGUE`) rather than falling through to `10000`, and automatically caches/injects Same-CP Standard League logs into `computeBlendedSeasonMetaStatic`, `computeBlendedSeasonMetaCoresStatic`, and `computeRoleWeightedTop100MetaStatic` (Team Builder).
 
 ---
 

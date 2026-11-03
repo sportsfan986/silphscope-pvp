@@ -737,10 +737,10 @@ export default function App() {
     } catch {}
     return 0.04;
   });
-  // v6.00 Limited Cup Same-CP Standard League Blending (GBL Blind 3 default: 50% weight & Fast 0.10 decay; Show 6 default: 25% weight & Std 0.06 decay)
+  // v6.01 GBL Blind 3 Limited Cup Same-CP Standard League Blending (Default: 50% fade start weight & Fast 0.10 decay)
   const [limitedStdBlendPctGbl, setLimitedStdBlendPctGbl] = useState<number>(() => {
     try {
-      const saved = localStorage.getItem('gbl_limited_std_blend_pct_gbl');
+      const saved = localStorage.getItem('gbl_limited_std_blend_pct_gbl_v601');
       if (saved !== null) {
         const n = Number(saved);
         if (!Number.isNaN(n) && n >= 0 && n <= 100) return n;
@@ -750,7 +750,7 @@ export default function App() {
   });
   const [limitedStdDecayGbl, setLimitedStdDecayGbl] = useState<0.03 | 0.06 | 0.10>(() => {
     try {
-      const saved = Number(localStorage.getItem('gbl_limited_std_decay_gbl'));
+      const saved = Number(localStorage.getItem('gbl_limited_std_decay_gbl_v601'));
       if (saved === 0.03 || saved === 0.06 || saved === 0.10) return saved;
     } catch {}
     return 0.10;
@@ -5699,7 +5699,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v6.00 • Android Native Overlay
+                  v6.01 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -12506,7 +12506,7 @@ export default function App() {
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
                   <Swords className="w-4 h-4" />
-                  <span>🧠 4-Pillar 2-Line AI Tactical Coach &amp; HUD Position (v6.00)</span>
+                  <span>🧠 4-Pillar 2-Line AI Tactical Coach &amp; HUD Position (v6.01)</span>
                 </h3>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-300">
                   {showTacticalRec ? `Enabled • ${aiAdviceHudPosition === 'bottom' ? 'Bottom (Def)' : 'Top'}` : 'Disabled'}
@@ -15108,11 +15108,13 @@ export default function App() {
             }
           };
           const availableMetaLeagues = appCombatMode === 'show6' ? enabledShow6Leagues : enabledGblLeagues;
-          const isLimitedCup = !['GREAT LEAGUE', 'ULTRA LEAGUE', 'MASTER LEAGUE', 'MEGA MASTER LEAGUE', 'Mega Master League (10000)'].includes(activeMetaLg);
+          const isLimitedCup =
+            appCombatMode !== 'show6' &&
+            !['GREAT LEAGUE', 'ULTRA LEAGUE', 'MASTER LEAGUE'].includes(normalizeLeagueName(activeMetaLg));
           const cpCap = getLeagueCpCap(activeMetaLg);
           const sameCpStdLeague = cpCap <= 1500 ? 'GREAT LEAGUE' : cpCap <= 2500 ? 'ULTRA LEAGUE' : 'MASTER LEAGUE';
-          const activeStdBlendPct = appCombatMode === 'show6' ? limitedStdBlendPctShow6 : limitedStdBlendPctGbl;
-          const activeStdDecay = appCombatMode === 'show6' ? limitedStdDecayShow6 : limitedStdDecayGbl;
+          const activeStdBlendPct = limitedStdBlendPctGbl;
+          const activeStdDecay = limitedStdDecayGbl;
 
           const seasonLogsForLg = battleLogs.filter(
             (b) =>
@@ -15127,7 +15129,15 @@ export default function App() {
               ? seasonLogsForLg.slice(0, 50)
               : seasonLogsForLg;
 
-          const blendedMetaList = computeBlendedSeasonMeta(activeMetaLg, scopedLogs, activeSeasonBounds.startMs, activeSeasonBounds.endMs).slice(0, 25);
+          const blendedDist = computeBlendedSeasonMeta(
+            activeMetaLg,
+            metaTabScope === 'season' ? battleLogs : scopedLogs,
+            activeSeasonBounds
+          );
+          const blendedMetaList = Array.from(blendedDist.fieldProbabilities.entries())
+            .map(([name, weight]) => ({ name, weight }))
+            .sort((a, b) => b.weight - a.weight)
+            .slice(0, 25);
 
           // Derive Top Personalized Meta Cores (2-Pokemon Synergistic Pairs) from logs + blended meta
           const pairMap = new Map<string, { monA: string; monB: string; count: number; wins: number; score: number }>();
@@ -15174,7 +15184,7 @@ export default function App() {
                         📊 Personalized Meta &amp; Top Cores ({appCombatMode === 'show6' ? 'Show 6 Mode' : 'GBL Blind 3 Mode'})
                       </span>
                       <span className="px-2 py-0.5 rounded bg-sky-500/20 border border-sky-400/50 text-sky-300 text-[10px] font-mono">
-                        v6.00
+                        v6.01
                       </span>
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
@@ -15210,9 +15220,9 @@ export default function App() {
                         </option>
                       ))}
                     </select>
-                    {isLimitedCup && (
+                    {appCombatMode !== 'show6' && (
                       <span className="px-2 py-0.5 rounded-lg bg-purple-500/15 border border-purple-400/40 text-purple-200 text-[10.5px] font-mono">
-                        🔗 Limited Cup Same-CP Blend: {activeStdBlendPct}% {sameCpStdLeague} • Decay λ={activeStdDecay} ({activeStdDecay === 0.10 ? 'Fast' : activeStdDecay === 0.06 ? 'Std' : 'Slow'})
+                        🔗 Limited Cup Same-CP Start Fade: {activeStdBlendPct}% {sameCpStdLeague} • Decay λ={activeStdDecay} ({activeStdDecay === 0.10 ? 'Fast' : activeStdDecay === 0.06 ? 'Std' : 'Slow'})
                       </span>
                     )}
                   </div>
@@ -15261,10 +15271,10 @@ export default function App() {
                   <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                     <div>
                       <h3 className="text-sm font-extrabold text-sky-300">
-                        ⚙️ Mode-Independent Meta Weighting &amp; Limited Cup Standard-League Blending
+                        ⚙️ Mode-Independent Meta Weighting &amp; GBL Blind 3 Limited Cup Standard-League Blend
                       </h3>
                       <p className="text-xs text-slate-400">
-                        Tune how heavily Battle Logs, PvPoke Rankings, Same-CP Standard League Logs, and Show 6 Spreadsheets weight into your Current Season meta.
+                        Tune how heavily Battle Logs, PvPoke Rankings, GBL Blind 3 Same-CP Standard League Logs, and Show 6 Spreadsheets weight into your Current Season meta.
                       </p>
                     </div>
                   </div>
@@ -15345,73 +15355,75 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Limited Cup Same-CP Standard League Blending (Default 50% & Fast 0.10 for GBL Blind 3) */}
-                    <div className="p-4 rounded-xl bg-slate-950 border border-purple-500/40 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-extrabold text-purple-300">
-                          🔗 Limited Cup Same-CP Standard League Blend: {activeStdBlendPct}%
-                        </span>
-                        <span className="text-[10px] font-mono text-purple-200">
-                          {appCombatMode === 'show6' ? 'Show 6 Def: 25% / Std' : 'GBL3 Def: 50% / Fast'}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-400">
-                        Blends eligible species from your larger-sample <strong>{sameCpStdLeague}</strong> battle logs into Limited Cups of the same CP cap, fading out as cup-specific logs accumulate.
-                      </p>
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        step={5}
-                        value={activeStdBlendPct}
-                        onChange={(e) => {
-                          const v = Number(e.target.value);
-                          if (appCombatMode === 'show6') {
-                            setLimitedStdBlendPctShow6(v);
-                            try {
-                              localStorage.setItem('gbl_limited_std_blend_pct_show6', String(v));
-                            } catch {}
-                          } else {
+                    {/* GBL Blind 3 Only: Limited Cup Same-CP Standard League Blending (Default 50% Start Fade & Fast 0.10 Decay) */}
+                    {appCombatMode !== 'show6' ? (
+                      <div className="p-4 rounded-xl bg-slate-950 border border-purple-500/40 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold text-purple-300">
+                            🏆 GBL Blind 3: Limited Cup Same-CP Std Blend ({activeStdBlendPct}% Start Fade)
+                          </span>
+                          <span className="text-[10px] font-mono text-purple-200">
+                            GBL3 Def: 50% Start / Fast
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          Gives you a head start in GBL Limited Cups (e.g., Halloween Cup or Mega Great vs. regular <strong>{sameCpStdLeague}</strong>) by blending eligible species from your Standard League logs starting at <strong>{activeStdBlendPct}%</strong> (at 0 cup battles) and fading out as cup logs accumulate.
+                        </p>
+                        <input
+                          type="range"
+                          min={0}
+                          max={75}
+                          step={5}
+                          value={activeStdBlendPct}
+                          onChange={(e) => {
+                            const v = Number(e.target.value);
                             setLimitedStdBlendPctGbl(v);
                             try {
-                              localStorage.setItem('gbl_limited_std_blend_pct_gbl', String(v));
+                              localStorage.setItem('gbl_limited_std_blend_pct_gbl_v601', String(v));
                             } catch {}
-                          }
-                        }}
-                        className="w-full accent-purple-400 cursor-pointer"
-                      />
-                      <div className="flex items-center justify-between pt-1">
-                        <span className="text-xs font-bold text-slate-300">Standard League Blend Fade-Out Speed:</span>
-                        <div className="flex items-center gap-1">
-                          {([0.03, 0.06, 0.10] as const).map((kVal) => (
-                            <button
-                              key={kVal}
-                              type="button"
-                              onClick={() => {
-                                if (appCombatMode === 'show6') {
-                                  setLimitedStdDecayShow6(kVal);
-                                  try {
-                                    localStorage.setItem('gbl_limited_std_decay_show6', String(kVal));
-                                  } catch {}
-                                } else {
+                          }}
+                          className="w-full accent-purple-400 cursor-pointer"
+                        />
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-xs font-bold text-slate-300">Standard League Blend Fade-Out Speed:</span>
+                          <div className="flex items-center gap-1">
+                            {([0.03, 0.06, 0.10] as const).map((kVal) => (
+                              <button
+                                key={kVal}
+                                type="button"
+                                onClick={() => {
                                   setLimitedStdDecayGbl(kVal);
                                   try {
-                                    localStorage.setItem('gbl_limited_std_decay_gbl', String(kVal));
+                                    localStorage.setItem('gbl_limited_std_decay_gbl_v601', String(kVal));
                                   } catch {}
-                                }
-                              }}
-                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
-                                activeStdDecay === kVal
-                                  ? 'bg-purple-500/25 border-purple-400 text-purple-200'
-                                  : 'bg-slate-900 border-slate-800 text-slate-400'
-                              }`}
-                            >
-                              {kVal === 0.03 ? 'Slow (0.03)' : kVal === 0.06 ? 'Std (0.06)' : 'Fast (0.10)'}
-                            </button>
-                          ))}
+                                }}
+                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                                  activeStdDecay === kVal
+                                    ? 'bg-purple-500/25 border-purple-400 text-purple-200'
+                                    : 'bg-slate-900 border-slate-800 text-slate-400'
+                                }`}
+                              >
+                                {kVal === 0.03 ? 'Slow (0.03)' : kVal === 0.06 ? 'Std (0.06)' : 'Fast (0.10 Def)'}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="p-4 rounded-xl bg-slate-950 border border-amber-500/30 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold text-amber-300">
+                            🏛️ Show 6 Battle Frontier Usage &amp; Cores Blend
+                          </span>
+                          <span className="text-[10px] font-mono text-amber-200">
+                            {show6UsageWeightPct}% Sheet / {100 - show6UsageWeightPct}% PvPoke
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          Show 6 mode blends your Show 6 battle logs with imported Battle Frontier Google Spreadsheet Usage &amp; Most-Used Cores. (Limited Cup Same-CP Standard League Blend is a GBL Blind 3 setting.)
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -17924,7 +17936,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v6.00 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, and ML Kit Text Recognition.
+        SilphScope PvP v6.01 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, and ML Kit Text Recognition.
       </footer>
     </div>
   );

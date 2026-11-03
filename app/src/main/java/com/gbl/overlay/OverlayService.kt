@@ -164,14 +164,14 @@ class OverlayService : LifecycleService() {
         const val DEFAULT_GBL_META_DECAY_FACTOR = 0.05f
         const val PREFS_KEY_SHOW6_META_DECAY_FACTOR = "gbl_show6_meta_decay_factor_v600"
         const val DEFAULT_SHOW6_META_DECAY_FACTOR = 0.05f
-        const val PREFS_KEY_LIMITED_STD_BLEND_PCT_GBL = "gbl_limited_std_blend_pct_gbl_v600"
-        const val DEFAULT_LIMITED_STD_BLEND_PCT_GBL = 50
+        const val PREFS_KEY_LIMITED_STD_BLEND_PCT_GBL = "gbl_limited_std_blend_pct_gbl_v601"
+        const val DEFAULT_LIMITED_STD_BLEND_PCT_GBL = 50 // 50% default starting point of fade for GBL Blind 3 Limited Cups
         const val PREFS_KEY_LIMITED_STD_BLEND_PCT_SHOW6 = "gbl_limited_std_blend_pct_show6_v600"
-        const val DEFAULT_LIMITED_STD_BLEND_PCT_SHOW6 = 25
-        const val PREFS_KEY_LIMITED_STD_DECAY_GBL = "gbl_limited_std_decay_gbl_v600"
+        const val DEFAULT_LIMITED_STD_BLEND_PCT_SHOW6 = 0
+        const val PREFS_KEY_LIMITED_STD_DECAY_GBL = "gbl_limited_std_decay_gbl_v601"
         const val DEFAULT_LIMITED_STD_DECAY_GBL = 0.10f // Fast (0.10) default for GBL Limited Cups
         const val PREFS_KEY_LIMITED_STD_DECAY_SHOW6 = "gbl_limited_std_decay_show6_v600"
-        const val DEFAULT_LIMITED_STD_DECAY_SHOW6 = 0.06f // Std (0.06) default for Show 6 Limited Cups
+        const val DEFAULT_LIMITED_STD_DECAY_SHOW6 = 0.06f
         // v5.10: AI Training & Anomaly Telemetry Auto-Upload Constants
         const val PREFS_KEY_AI_TELEMETRY_V510_MIGRATED = "gbl_ai_telemetry_v510_migrated"
         const val PREFS_KEY_AI_TELEMETRY_ONBOARDING_SHOWN = "gbl_ai_telemetry_v510_onboarding_shown"
@@ -297,6 +297,34 @@ class OverlayService : LifecycleService() {
         @Volatile var activeLimitedStdBlendPctShow6: Int = DEFAULT_LIMITED_STD_BLEND_PCT_SHOW6
         @Volatile var activeLimitedStdDecayGbl: Float = DEFAULT_LIMITED_STD_DECAY_GBL
         @Volatile var activeLimitedStdDecayShow6: Float = DEFAULT_LIMITED_STD_DECAY_SHOW6
+        private val CACHED_GBL_STD_SEASON_LOGS = java.util.concurrent.ConcurrentHashMap<String, List<Pair<Long, List<String>>>>()
+
+        fun refreshCachedGblStandardLeagueLogsStatic(prefs: SharedPreferences, gson: Gson = Gson()) {
+            try {
+                for (stdLg in listOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE")) {
+                    CACHED_GBL_STD_SEASON_LOGS[stdLg] = loadSeasonLogsForLeagueStatic(prefs, gson, stdLg, isShow6 = false, empiricalLimit = null)
+                }
+            } catch (_: Exception) {}
+        }
+
+        fun resolveCachedSameCpStandardLogsForCupStatic(league: String): List<Pair<Long, List<String>>> {
+            if (!isLimitedCupFormatStatic(league)) return emptyList()
+            val stdLeague = getSameCpStandardLeagueKeyStatic(league)
+            val rawStdLogs = CACHED_GBL_STD_SEASON_LOGS[stdLeague] ?: return emptyList()
+            if (rawStdLogs.isEmpty()) return emptyList()
+            val normCup = normalizeLeagueKeyStatic(league)
+            val eligiblePool = getTop100MetaCandidatesForLeagueStatic(normCup, 350).map { it.name }
+                .ifEmpty { getTopMetaPoolForLeagueStatic(league) }
+            val eligibleBaseSet = eligiblePool.map { FormResolver.extractBaseSpecies(it).lowercase() }.toSet()
+            if (eligibleBaseSet.isEmpty()) return rawStdLogs
+            return rawStdLogs.mapNotNull { (ts, opps) ->
+                val filteredOpps = opps.filter { o ->
+                    val b = FormResolver.extractBaseSpecies(o).lowercase()
+                    b.isNotEmpty() && b in eligibleBaseSet
+                }
+                if (filteredOpps.isNotEmpty()) ts to filteredOpps else null
+            }
+        }
 
         fun syncTierThresholdsFromPrefs(prefs: SharedPreferences) {
             activeTierSwMin = prefs.getInt(PREFS_KEY_TIER_SW_MIN, DEFAULT_TIER_SW_MIN).coerceIn(150, 950)
@@ -326,6 +354,7 @@ class OverlayService : LifecycleService() {
             activeLimitedStdDecayShow6 = prefs.getFloat(PREFS_KEY_LIMITED_STD_DECAY_SHOW6, DEFAULT_LIMITED_STD_DECAY_SHOW6).coerceIn(0.01f, 0.30f)
             activeShow6UsageWeightPct = prefs.getInt(PREFS_KEY_SHOW6_USAGE_WEIGHT_PCT, DEFAULT_SHOW6_USAGE_WEIGHT_PCT).coerceIn(0, 100)
             loadCachedBattleFrontierUsageAndCores(prefs)
+            refreshCachedGblStandardLeagueLogsStatic(prefs)
             recordDebounceSettingsChangeIfNeededStatic(prefs, Gson(), "settings_sync", triggerImmediateUpload = false)
         }
         const val PREFS_KEY_SYNC_GIST_ID = "gbl_sync_gist_id"
@@ -691,15 +720,16 @@ class OverlayService : LifecycleService() {
         }
 
         fun getLeagueCpCapStatic(league: String, prefs: SharedPreferences? = null): Int {
-            val cat = getLimitedMetaCatalogStatic(prefs).find { it.leagueKey.equals(league, ignoreCase = true) }
+            val catalog = if (prefs != null) getLimitedMetaCatalogStatic(prefs) else LAST_LOADED_META_CATALOG.ifEmpty { getLimitedMetaCatalogStatic(null) }
+            val cat = catalog.find { it.leagueKey.equals(league, ignoreCase = true) || it.title.equals(league, ignoreCase = true) }
             if (cat != null) return cat.cp
             val parenMatch = Regex("\\((500|1500|2500|10000)\\)").find(league)
             if (parenMatch != null) return parenMatch.groupValues[1].toIntOrNull() ?: 1500
             val u = league.uppercase()
             if (u.contains("LITTLE")) return 500
-            if (u.contains("GREAT") || u.contains("SPECTRAL") || u.contains("SPELLCRAFT") || u.contains("LAGOON")) return 1500
+            if (u.contains("MASTER")) return 10000
             if (u.contains("ULTRA") || u.contains("CAULDRON") || u.contains("(UL)")) return 2500
-            return 10000
+            return 1500
         }
 
         fun hasMegaInRankingsMapStatic(league: String): Boolean {
@@ -6745,6 +6775,7 @@ class OverlayService : LifecycleService() {
             val u = league.trim().uppercase()
             if (u == "GREAT LEAGUE" || u == "ULTRA LEAGUE" || u == "MASTER LEAGUE") return false
             if (u == "GREAT LEAGUE (1500)" || u == "ULTRA LEAGUE (2500)" || u == "MASTER LEAGUE (10000)") return false
+            if (u.startsWith("BATTLE FRONTIER")) return false
             return true
         }
 
@@ -6819,9 +6850,10 @@ class OverlayService : LifecycleService() {
             league: String,
             isShow6: Boolean = false
         ): List<Pair<Long, List<String>>> {
-            if (prefs == null || !isLimitedCupFormatStatic(league)) return emptyList()
+            if (prefs == null || isShow6 || !isLimitedCupFormatStatic(league)) return emptyList()
             val stdLeague = getSameCpStandardLeagueKeyStatic(league)
             val rawStdLogs = loadSeasonLogsForLeagueStatic(prefs, gson, stdLeague, isShow6 = false, empiricalLimit = null)
+            CACHED_GBL_STD_SEASON_LOGS[stdLeague] = rawStdLogs
             if (rawStdLogs.isEmpty()) return emptyList()
             val normCup = normalizeLeagueKeyStatic(league)
             val eligiblePool = getTop100MetaCandidatesForLeagueStatic(normCup, 350).map { it.name }
@@ -6976,10 +7008,13 @@ class OverlayService : LifecycleService() {
                 }
             }
 
-            // Limited Cup Same-CP Standard League Blending (eligible species only, fades out as cup logs grow)
-            val isLimitedCup = isLimitedCupFormatStatic(league)
-            val sortedStdLogs = if (empiricalOnlyLimit == null && isLimitedCup && sameCpStandardLogs.isNotEmpty()) {
-                sameCpStandardLogs
+            // GBL Blind 3 Limited Cup Same-CP Standard League Blending (eligible species only, starts at 50% default and fades out as cup logs grow)
+            val isLimitedCup = !isShow6 && isLimitedCupFormatStatic(league)
+            val resolvedStdLogs = if (isLimitedCup) {
+                sameCpStandardLogs.ifEmpty { resolveCachedSameCpStandardLogsForCupStatic(league) }
+            } else emptyList()
+            val sortedStdLogs = if (empiricalOnlyLimit == null && isLimitedCup && resolvedStdLogs.isNotEmpty()) {
+                resolvedStdLogs
                     .filter { it.second.any { opp -> opp.isNotBlank() && !opp.equals("Waiting...", ignoreCase = true) } }
                     .sortedByDescending { it.first }
             } else emptyList()
@@ -7026,8 +7061,8 @@ class OverlayService : LifecycleService() {
             }
 
             val maxLogW = ((customLogWeightPct ?: if (isShow6) activeShow6MetaLogWeightPct else activeGblMetaLogWeightPct).coerceIn(0, 100)) / 100.0
-            val stdBlendMaxW = ((customLimitedStdBlendPct ?: if (isShow6) activeLimitedStdBlendPctShow6 else activeLimitedStdBlendPctGbl).coerceIn(0, 100)) / 100.0
-            val stdDecayBeta = (customLimitedStdDecay ?: (if (isShow6) activeLimitedStdDecayShow6.toDouble() else activeLimitedStdDecayGbl.toDouble())).coerceIn(0.01, 0.30)
+            val stdBlendMaxW = ((customLimitedStdBlendPct ?: activeLimitedStdBlendPctGbl).coerceIn(0, 100)) / 100.0
+            val stdDecayBeta = (customLimitedStdDecay ?: activeLimitedStdDecayGbl.toDouble()).coerceIn(0.01, 0.30)
             val sheetPrefW = ((customSheetWeightPct ?: activeShow6UsageWeightPct).coerceIn(0, 100)) / 100.0
 
             val wHist: Double
@@ -7044,7 +7079,7 @@ class OverlayService : LifecycleService() {
                 val rawWHist = if (nMatches > 0) maxLogW * min(1.0, nMatches.toDouble() / 50.0) else 0.0
                 val remAfterHist = (1.0 - rawWHist).coerceAtLeast(0.0)
                 val rawWStd = if (isLimitedCup && rawStdFieldSum > 0.0) {
-                    min(remAfterHist * 0.85, stdBlendMaxW * kotlin.math.exp(-stdDecayBeta * nMatches.toDouble()))
+                    min(remAfterHist, stdBlendMaxW * kotlin.math.exp(-stdDecayBeta * nMatches.toDouble()))
                 } else 0.0
                 val remAfterStd = (remAfterHist - rawWStd).coerceAtLeast(0.0)
                 val rawWSheet = if (isShow6 && rawSheetSum > 0.0) {
@@ -7224,11 +7259,14 @@ class OverlayService : LifecycleService() {
                     }
             }
 
-            // 2. Same-CP Standard League eligible pair weights for Limited Cups
+            // 2. Same-CP Standard League eligible pair weights for GBL Blind 3 Limited Cups
             val stdPairWeights = LinkedHashMap<Pair<String, String>, Double>()
             var stdPairSum = 0.0
-            if (empiricalOnlyLimit == null && isLimitedCupFormatStatic(league) && sameCpStandardLogs.isNotEmpty()) {
-                sameCpStandardLogs.sortedByDescending { it.first }.forEachIndexed { idx, (_, opps) ->
+            val resolvedCoreStdLogs = if (!isShow6 && isLimitedCupFormatStatic(league)) {
+                sameCpStandardLogs.ifEmpty { resolveCachedSameCpStandardLogsForCupStatic(league) }
+            } else emptyList()
+            if (empiricalOnlyLimit == null && !isShow6 && isLimitedCupFormatStatic(league) && resolvedCoreStdLogs.isNotEmpty()) {
+                resolvedCoreStdLogs.sortedByDescending { it.first }.forEachIndexed { idx, (_, opps) ->
                     val recW = kotlin.math.exp(-lambda * idx.toDouble())
                     val distinctOpps = opps.map { resolveCanonicalSpecies(it) }
                         .filter { it.isNotBlank() && !it.equals("Waiting...", ignoreCase = true) }
@@ -9025,8 +9063,10 @@ class OverlayService : LifecycleService() {
                 .sortedByDescending { it.first }
 
             val nMatches = sortedLogs.size
-            val wHist = if (nMatches > 0) 0.70 * min(1.0, nMatches.toDouble() / 50.0) else 0.0
-            val wMeta = 1.0 - wHist
+            val lambda = activeGblMetaDecayFactor.toDouble().coerceIn(0.0, 0.25)
+            val maxLogW = (activeGblMetaLogWeightPct.coerceIn(0, 100)) / 100.0
+            val isLimCup = isLimitedCupFormatStatic(normLeague)
+            val stdLogsForCup = if (isLimCup) resolveCachedSameCpStandardLogsForCupStatic(normLeague) else emptyList()
 
             val histLead = LinkedHashMap<String, Double>()
             val histSwap = LinkedHashMap<String, Double>()
@@ -9038,7 +9078,7 @@ class OverlayService : LifecycleService() {
             var sumHF = 0.0
 
             sortedLogs.forEachIndexed { idx, (_, opps) ->
-                val recW = kotlin.math.exp(-0.04 * idx.toDouble())
+                val recW = kotlin.math.exp(-lambda * idx.toDouble())
                 val cleaned = opps.take(3).map { it.trim() }.filter { it.isNotEmpty() && !it.equals("Waiting...", ignoreCase = true) }
                 cleaned.getOrNull(0)?.let { o0 ->
                     histLead[o0] = (histLead[o0] ?: 0.0) + recW
@@ -9058,12 +9098,62 @@ class OverlayService : LifecycleService() {
                 }
             }
 
-            val allSpecies = (top100Species + histField.keys + histLead.keys).distinct()
+            val stdLead = LinkedHashMap<String, Double>()
+            val stdSwap = LinkedHashMap<String, Double>()
+            val stdCloser = LinkedHashMap<String, Double>()
+            val stdField = LinkedHashMap<String, Double>()
+            var sumSL = 0.0
+            var sumSS = 0.0
+            var sumSC = 0.0
+            var sumSF = 0.0
+
+            val eligibleByBase = top100Species.associateBy { FormResolver.extractBaseSpecies(it).lowercase() }
+            stdLogsForCup.sortedByDescending { it.first }.forEachIndexed { idx, (_, opps) ->
+                val recW = kotlin.math.exp(-lambda * idx.toDouble())
+                val cleaned = opps.take(3).mapNotNull { raw ->
+                    val tr = raw.trim()
+                    if (tr.isEmpty() || tr.equals("Waiting...", ignoreCase = true)) null
+                    else candidateByName[tr.lowercase()]?.name ?: eligibleByBase[FormResolver.extractBaseSpecies(tr).lowercase()]
+                }
+                cleaned.getOrNull(0)?.let { o0 ->
+                    stdLead[o0] = (stdLead[o0] ?: 0.0) + recW
+                    sumSL += recW
+                }
+                cleaned.getOrNull(1)?.let { o1 ->
+                    stdSwap[o1] = (stdSwap[o1] ?: 0.0) + recW
+                    sumSS += recW
+                }
+                cleaned.getOrNull(2)?.let { o2 ->
+                    stdCloser[o2] = (stdCloser[o2] ?: 0.0) + recW
+                    sumSC += recW
+                }
+                cleaned.forEach { op ->
+                    stdField[op] = (stdField[op] ?: 0.0) + recW
+                    sumSF += recW
+                }
+            }
+
+            val rawWHist = if (nMatches > 0) maxLogW * min(1.0, nMatches.toDouble() / 50.0) else 0.0
+            val remAfterHist = (1.0 - rawWHist).coerceAtLeast(0.0)
+            val stdBlendMaxW = (activeLimitedStdBlendPctGbl.coerceIn(0, 100)) / 100.0
+            val stdDecayBeta = activeLimitedStdDecayGbl.toDouble().coerceIn(0.01, 0.30)
+            val rawWStd = if (isLimCup && sumSF > 0.0) {
+                min(remAfterHist, stdBlendMaxW * kotlin.math.exp(-stdDecayBeta * nMatches.toDouble()))
+            } else 0.0
+            val rawWMeta = (remAfterHist - rawWStd).coerceAtLeast(0.0)
+            val sumWeights = (rawWHist + rawWStd + rawWMeta).takeIf { it > 0.0 } ?: 1.0
+            val wHist = rawWHist / sumWeights
+            val wStd = rawWStd / sumWeights
+            val wMeta = rawWMeta / sumWeights
+
+            val allSpecies = (top100Species + histField.keys + histLead.keys + stdField.keys).distinct()
 
             fun blendRoleMap(
                 synMap: Map<String, Double>,
                 hMap: Map<String, Double>,
-                hSum: Double
+                hSum: Double,
+                sMap: Map<String, Double>,
+                sSum: Double
             ): Map<String, Double> {
                 val out = LinkedHashMap<String, Double>()
                 var total = 0.0
@@ -9074,7 +9164,12 @@ class OverlayService : LifecycleService() {
                         sumHF > 0.0 -> (histField[sp] ?: 0.0) / sumHF
                         else -> mP
                     }
-                    val v = wHist * hP + wMeta * mP
+                    val sP = when {
+                        sSum > 0.0 -> (sMap[sp] ?: 0.0) / sSum
+                        sumSF > 0.0 -> (stdField[sp] ?: 0.0) / sumSF
+                        else -> mP
+                    }
+                    val v = wHist * hP + wStd * sP + wMeta * mP
                     if (v > 0.0) {
                         out[sp] = v
                         total += v
@@ -9084,10 +9179,10 @@ class OverlayService : LifecycleService() {
                 return out.mapValues { it.value / denom }
             }
 
-            val leadWeights = blendRoleMap(pSynL, histLead, sumHL)
-            val swapWeights = blendRoleMap(pSynS, histSwap, sumHS)
-            val closerWeights = blendRoleMap(pSynC, histCloser, sumHC)
-            val fieldWeights = blendRoleMap(pSynF, histField, sumHF)
+            val leadWeights = blendRoleMap(pSynL, histLead, sumHL, stdLead, sumSL)
+            val swapWeights = blendRoleMap(pSynS, histSwap, sumHS, stdSwap, sumSS)
+            val closerWeights = blendRoleMap(pSynC, histCloser, sumHC, stdCloser, sumSC)
+            val fieldWeights = blendRoleMap(pSynF, histField, sumHF, stdField, sumSF)
 
             val sortedField = fieldWeights.entries.sortedByDescending { it.value }.map { it.key }
             val top50Threats = sortedField.take(50).ifEmpty { top100Species.take(50) }

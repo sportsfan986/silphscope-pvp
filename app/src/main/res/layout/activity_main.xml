@@ -82,7 +82,7 @@
                 android:id="@+id/tv_app_main_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Real-Time PvP Floating Overlay • v6.00"
+                android:text="Real-Time PvP Floating Overlay • v6.01"
                 android:textSize="11sp"
                 android:textColor="#94a3b8"
                 android:layout_marginTop="1dp" />
@@ -4057,7 +4057,7 @@
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
                                     android:layout_weight="1"
-                                    android:text="🏆 Limited Cup Same-CP Standard League Blend"
+                                    android:text="🏆 GBL Blind 3: Limited Cup Same-CP Std League Blend"
                                     android:textColor="#c084fc"
                                     android:textSize="11sp"
                                     android:textStyle="bold" />
@@ -4066,7 +4066,7 @@
                                     android:id="@+id/tv_limited_std_blend_label"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="50% Std Cup (Fast Decay)"
+                                    android:text="50% Start Fade • Fast Decay (Default)"
                                     android:textColor="#e9d5ff"
                                     android:textSize="10sp"
                                     android:textStyle="bold" />
@@ -4075,7 +4075,7 @@
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:text="Blends eligible Pokémon from your larger-sample Standard Open League (GL/UL/ML of same CP cap) into Limited Cups, fading out as you log more Limited Cup battles (GBL Default: 50% weight • Fast decay)."
+                                android:text="Gives you a head start in GBL Limited Cups (e.g., Halloween Cup or Mega Great vs. regular Great League) by blending eligible Pokémon from your Same-CP Standard League logs starting at 50% (0 cup battles) and fading out as you log Limited Cup battles (Default: 50% start fade • Fast decay)."
                                 android:textColor="#94a3b8"
                                 android:textSize="9.5sp"
                                 android:layout_marginTop="2dp" />

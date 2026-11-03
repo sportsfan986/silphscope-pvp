@@ -42,7 +42,7 @@ export const ANDROID_FILES: AndroidProjectFile[] = [
     path: "app/build.gradle.kts",
     name: "app/build.gradle.kts",
     category: "gradle",
-    description: "App module Gradle dependencies (v6.00, versionCode 1600) including ML Kit Text Recognition, OkHttp, and Gson.",
+    description: "App module Gradle dependencies (v6.01, versionCode 1601) including ML Kit Text Recognition, OkHttp, and Gson.",
     content: appGradleContent
   },
   {
@@ -70,7 +70,7 @@ export const ANDROID_FILES: AndroidProjectFile[] = [
     path: "app/src/main/res/layout/activity_main.xml",
     name: "activity_main.xml",
     category: "layout",
-    description: "Main activity UI layout (v6.00) with 4th 📊 Meta tab, default-collapsed Meta Settings/Limited Cups/Spreadsheet Importer drawer, Top Meta Cores & Top Meta Pokémon tables, and AI Advice HUD position selector.",
+    description: "Main activity UI layout (v6.01) with 4th 📊 Meta tab, default-collapsed Meta Settings/Limited Cups/Spreadsheet Importer drawer, GBL Blind 3 Limited Cup Same-CP Standard League Blend (50% default fade start), Top Meta Cores & Top Meta Pokémon tables, and AI Advice HUD position selector.",
     content: activityMainXmlContent
   },
   {

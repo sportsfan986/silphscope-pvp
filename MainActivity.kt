@@ -569,10 +569,10 @@ class MainActivity : AppCompatActivity() {
             prefs.edit()
                 .putBoolean(PREFS_KEY_ENABLE_HP_TRACKING, false)
                 .putBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, false)
-                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 1600)
+                .putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 1601)
                 .apply()
-        } else if (prevInstalledVerCode < 1600) {
-            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 1600).apply()
+        } else if (prevInstalledVerCode < 1601) {
+            prefs.edit().putInt(PREFS_KEY_INSTALLED_VERSION_CODE, 1601).apply()
         }
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         runV511LeagueRemapAndCleanup()
@@ -580,9 +580,9 @@ class MainActivity : AppCompatActivity() {
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "6.00"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "6.01"
         } catch (_: Exception) {
-            "6.00"
+            "6.01"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -2222,7 +2222,7 @@ class MainActivity : AppCompatActivity() {
             }
 
         AlertDialog.Builder(this)
-            .setTitle("🤖 Enable AI & Anomaly Log Auto-Upload? (v6.00)")
+            .setTitle("🤖 Enable AI & Anomaly Log Auto-Upload? (v6.01)")
             .setMessage(msg)
             .setPositiveButton("✅ Enable Auto-Upload") { _, _ ->
                 prefs.edit()
@@ -11213,17 +11213,19 @@ class MainActivity : AppCompatActivity() {
                 btn?.setTextColor(if (selected) 0xFFFFFFFF.toInt() else theme.secondaryTextColor)
             }
 
-            // 3. Limited Cup Same-CP Standard League Blend % (0..75 in steps of 5 -> progress 0..15)
-            val limStdPct = if (show6Now) OverlayService.activeLimitedStdBlendPctShow6 else OverlayService.activeLimitedStdBlendPctGbl
-            val limDecay = if (show6Now) OverlayService.activeLimitedStdDecayShow6 else OverlayService.activeLimitedStdDecayGbl
+            // 3. GBL Blind 3 Only: Limited Cup Same-CP Standard League Blend % (0..75 in steps of 5 -> progress 0..15, default 50% start fade & Fast 0.10 decay)
+            val layoutLimitedSection = findViewById<LinearLayout>(R.id.layout_limited_cup_blend_section)
+            layoutLimitedSection?.visibility = if (show6Now) android.view.View.GONE else android.view.View.VISIBLE
+            val limStdPct = OverlayService.activeLimitedStdBlendPctGbl
+            val limDecay = OverlayService.activeLimitedStdDecayGbl
             seekLimitedStdBlendPct?.progress = (limStdPct.coerceIn(0, 75) / 5).coerceIn(0, 15)
             val limDecayLabel = when {
                 limDecay >= 0.085f -> "Fast"
                 limDecay <= 0.045f -> "Slow"
                 else -> "Std"
             }
-            val defTag = if (!show6Now && limStdPct == 50 && limDecayLabel == "Fast") " (Default)" else ""
-            tvLimitedStdBlendLabel?.text = "${limStdPct}% Std League • $limDecayLabel Fade$defTag"
+            val defTag = if (limStdPct == 50 && limDecayLabel == "Fast") " (Default)" else ""
+            tvLimitedStdBlendLabel?.text = "${limStdPct}% Start Fade • $limDecayLabel Decay$defTag"
 
             val limDecayButtons = listOf(
                 0.03f to btnLimDecaySlow,
@@ -11274,18 +11276,16 @@ class MainActivity : AppCompatActivity() {
         seekLimitedStdBlendPct?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 val pct = (progress.coerceIn(0, 15) * 5).coerceIn(0, 75)
-                val show6Now = isShow6CombatMode()
-                val limDecay = if (show6Now) OverlayService.activeLimitedStdDecayShow6 else OverlayService.activeLimitedStdDecayGbl
+                val limDecay = OverlayService.activeLimitedStdDecayGbl
                 val limDecayLabel = when {
                     limDecay >= 0.085f -> "Fast"
                     limDecay <= 0.045f -> "Slow"
                     else -> "Std"
                 }
-                val defTag = if (!show6Now && pct == 50 && limDecayLabel == "Fast") " (Default)" else ""
-                tvLimitedStdBlendLabel?.text = "${pct}% Std League • $limDecayLabel Fade$defTag"
+                val defTag = if (pct == 50 && limDecayLabel == "Fast") " (Default)" else ""
+                tvLimitedStdBlendLabel?.text = "${pct}% Start Fade • $limDecayLabel Decay$defTag"
                 if (fromUser) {
-                    val key = if (show6Now) OverlayService.PREFS_KEY_LIMITED_STD_BLEND_PCT_SHOW6 else OverlayService.PREFS_KEY_LIMITED_STD_BLEND_PCT_GBL
-                    prefs.edit().putInt(key, pct).apply()
+                    prefs.edit().putInt(OverlayService.PREFS_KEY_LIMITED_STD_BLEND_PCT_GBL, pct).apply()
                     OverlayService.syncTierThresholdsFromPrefs(prefs)
                     recalculateAllPresetsWithSeasonMetaAsync()
                     refreshMetaTabDashboard()
@@ -11296,8 +11296,7 @@ class MainActivity : AppCompatActivity() {
         })
 
         fun saveLimitedStdDecay(decayVal: Float) {
-            val key = if (isShow6CombatMode()) OverlayService.PREFS_KEY_LIMITED_STD_DECAY_SHOW6 else OverlayService.PREFS_KEY_LIMITED_STD_DECAY_GBL
-            prefs.edit().putFloat(key, decayVal).apply()
+            prefs.edit().putFloat(OverlayService.PREFS_KEY_LIMITED_STD_DECAY_GBL, decayVal).apply()
             syncMetaTuningControlsFromPrefs()
             recalculateAllPresetsWithSeasonMetaAsync()
             refreshMetaTabDashboard()
@@ -11312,10 +11311,8 @@ class MainActivity : AppCompatActivity() {
                 prefs.edit()
                     .putInt(OverlayService.PREFS_KEY_SHOW6_META_LOG_WEIGHT_PCT, OverlayService.DEFAULT_SHOW6_META_LOG_WEIGHT_PCT)
                     .putFloat(OverlayService.PREFS_KEY_SHOW6_META_DECAY_FACTOR, OverlayService.DEFAULT_SHOW6_META_DECAY_FACTOR)
-                    .putInt(OverlayService.PREFS_KEY_LIMITED_STD_BLEND_PCT_SHOW6, OverlayService.DEFAULT_LIMITED_STD_BLEND_PCT_SHOW6)
-                    .putFloat(OverlayService.PREFS_KEY_LIMITED_STD_DECAY_SHOW6, OverlayService.DEFAULT_LIMITED_STD_DECAY_SHOW6)
                     .apply()
-                Toast.makeText(this, "Restored Show 6 Meta Defaults (60% Max Log Weight • Std 0.05 Decay • 25% Std Cup Blend)", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Restored Show 6 Meta Defaults (60% Max Log Weight • Std 0.05 Decay)", Toast.LENGTH_SHORT).show()
             } else {
                 prefs.edit()
                     .putInt(OverlayService.PREFS_KEY_GBL_META_LOG_WEIGHT_PCT, OverlayService.DEFAULT_GBL_META_LOG_WEIGHT_PCT)
@@ -11323,7 +11320,7 @@ class MainActivity : AppCompatActivity() {
                     .putInt(OverlayService.PREFS_KEY_LIMITED_STD_BLEND_PCT_GBL, OverlayService.DEFAULT_LIMITED_STD_BLEND_PCT_GBL)
                     .putFloat(OverlayService.PREFS_KEY_LIMITED_STD_DECAY_GBL, OverlayService.DEFAULT_LIMITED_STD_DECAY_GBL)
                     .apply()
-                Toast.makeText(this, "Restored GBL Blind 3 Meta Defaults (70% Max Log Weight • Std 0.05 Decay • 50% Std Cup Blend + Fast Fade)", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Restored GBL Blind 3 Meta Defaults (70% Max Log Weight • Std 0.05 Decay • 50% Std Cup Start Fade + Fast Decay)", Toast.LENGTH_SHORT).show()
             }
             syncMetaTuningControlsFromPrefs()
             recalculateAllPresetsWithSeasonMetaAsync()
@@ -11343,11 +11340,11 @@ class MainActivity : AppCompatActivity() {
 
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         val isShow6 = isShow6CombatMode()
+        layoutLimitedSection?.visibility = if (!isShow6) android.view.View.VISIBLE else android.view.View.GONE
         val prefLeagueKey = if (isShow6) OverlayService.PREFS_KEY_META_TAB_LEAGUE_SHOW6 else OverlayService.PREFS_KEY_META_TAB_LEAGUE_GBL
         val fallbackLg = prefs.getString(prefLeagueKey, if (isShow6) "BATTLE FRONTIER (SPECTRAL)" else "GREAT LEAGUE") ?: "GREAT LEAGUE"
         val selectedLeague = spinnerLeague.selectedItem?.toString() ?: fallbackLg
-        val isLimitedCup = OverlayService.isLimitedCupFormatStatic(selectedLeague)
-        layoutLimitedSection?.visibility = if (isLimitedCup) android.view.View.VISIBLE else android.view.View.GONE
+        val isLimitedCup = !isShow6 && OverlayService.isLimitedCupFormatStatic(selectedLeague)
 
         val empiricalLimit: Int? = when (selectedMetaTabScope) {
             "LAST_25" -> 25
@@ -11370,8 +11367,9 @@ class MainActivity : AppCompatActivity() {
             50 -> "Last 50 Battles (Personal Inspection Only — Does Not Drive AI/Team Builder)"
             else -> {
                 val limExtra = if (isLimitedCup && sameCpStdLogs.isNotEmpty()) {
-                    val pct = if (isShow6) OverlayService.activeLimitedStdBlendPctShow6 else OverlayService.activeLimitedStdBlendPctGbl
-                    " + ${pct}% Same-CP Std League (${sameCpStdLogs.size} logs)"
+                    val pct = OverlayService.activeLimitedStdBlendPctGbl
+                    val stdLgName = OverlayService.getSameCpStandardLeagueKeyStatic(selectedLeague)
+                    " + ${pct}% Start Fade from $stdLgName (${sameCpStdLogs.size} logs)"
                 } else ""
                 "Current Season (${currSeason.name} • ${seasonLogs.size} cup logs$limExtra • Drives Live AI & Team Builder)"
             }
