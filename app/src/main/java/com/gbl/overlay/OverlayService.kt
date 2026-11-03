@@ -2222,12 +2222,16 @@ class OverlayService : LifecycleService() {
                     val isNonStd = oSpec.fastMoveStatus.equals("confirmed_non_standard", ignoreCase = true) ||
                         oSpec.inferredFastMove.startsWith("Hidden Power", ignoreCase = true)
                     if (isNonStd && spec.altFastStrictness == "strict" && oSpec.inferredFastMove.startsWith("Hidden Power", ignoreCase = true)) {
-                        val dbMeta = POKEMON_DB.find {
-                            it.name.equals(oSpec.species, ignoreCase = true) ||
-                                it.baseSpecies.equals(FormResolver.extractBaseSpecies(oSpec.species), ignoreCase = true)
+                        val spNorm = oSpec.species.lowercase()
+                        val stdFast = when {
+                            spNorm.contains("ho-oh") || spNorm.contains("ho oh") || spNorm.contains("skeledirge") || spNorm.contains("talonflame") -> "Incinerate"
+                            spNorm.contains("gastrodon") || spNorm.contains("rhyperior") -> "Mud Slap"
+                            spNorm.contains("togekiss") -> "Charm"
+                            spNorm.contains("suicune") -> "Snarl"
+                            spNorm.contains("regigigas") -> "Lock On"
+                            else -> "Tackle"
                         }
-                        val stdFast = dbMeta?.defaultFastMove ?: "Incinerate"
-                        val stdTurns = resolveFastTurnsStatic(stdFast, dbMeta?.fastTurns ?: 2).coerceIn(1, 5)
+                        val stdTurns = resolveFastTurnsStatic(stdFast, 2).coerceIn(1, 5)
                         val stdE = resolveFastEnergyStatic(stdFast, stdTurns).coerceIn(2, 20)
                         oSpec.copy(
                             inferredFastMove = stdFast,
