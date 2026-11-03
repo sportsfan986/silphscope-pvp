@@ -5743,6 +5743,21 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
+                val dropAiBtn = if (hasRecentAiLog) {
+                    TextView(this).apply {
+                        text = "🚫 Drop AI Log"
+                        setTextColor(0xFFFBBF24.toInt())
+                        textSize = 11f
+                        setTypeface(typeface, android.graphics.Typeface.BOLD)
+                        val padH = (8 * density).toInt()
+                        val padV = (3 * density).toInt()
+                        setPadding(padH, padV, padH, padV)
+                        setOnClickListener {
+                            dropOnlyAiTelemetryForBattle(entry)
+                        }
+                    }
+                } else null
+
                 val delBtn = TextView(this).apply {
                     text = "🗑️ Delete"
                     setTextColor(0xFFF87171.toInt())
@@ -5757,6 +5772,9 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 actionsRow.addView(replayHintBtn)
+                if (dropAiBtn != null) {
+                    actionsRow.addView(dropAiBtn)
+                }
                 actionsRow.addView(editBtn)
                 actionsRow.addView(delBtn)
 
@@ -5771,6 +5789,28 @@ class MainActivity : AppCompatActivity() {
         applyCurrentAppThemeToSubtree(battleLogContainer)
     }
 
+    private fun dropOnlyAiTelemetryForBattle(entry: BattleLogEntry) {
+        val pendingQueue = OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
+        val removedFromQueue = pendingQueue.removeAll { it.battleId == entry.id }
+        if (removedFromQueue) {
+            prefs.edit().putString(OverlayService.PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(pendingQueue)).apply()
+        }
+        if (entry.timelineEvents.isNotEmpty()) {
+            val updatedLogs = loadBattleLogs().map {
+                if (it.id == entry.id) it.copy(timelineEvents = emptyList(), updatedAt = System.currentTimeMillis()) else it
+            }
+            saveBattleLogs(updatedLogs)
+        }
+        renderBattleLogPage()
+        updateSyncStatusUi()
+        val oppSummary = entry.opponents.firstOrNull() ?: "Opponent"
+        Toast.makeText(
+            this,
+            "🚫 Dropped AI telemetry for ${entry.result} vs $oppSummary (Win/Loss record kept)",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
     private fun deleteBattleLogEntry(entry: BattleLogEntry) {
         val trash = loadDeletedBattlesTrash().toMutableList()
         trash.removeAll { it.id == entry.id }
@@ -5782,6 +5822,11 @@ class MainActivity : AppCompatActivity() {
         val delIds = loadDeletedLogIds().toMutableList()
         delIds.add(entry.id)
         saveDeletedLogIds(delIds)
+        // Also remove from pending AI telemetry queue when deleting the battle log entry
+        val pendingQueue = OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
+        if (pendingQueue.removeAll { it.battleId == entry.id }) {
+            prefs.edit().putString(OverlayService.PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(pendingQueue)).apply()
+        }
         renderBattleLogPage()
         updateSyncStatusUi()
         triggerTwoDeviceCloudSync(silent = true)

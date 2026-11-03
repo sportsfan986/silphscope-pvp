@@ -12991,6 +12991,37 @@ class OverlayService : LifecycleService() {
     private var lastClearedUserShieldsRemaining: Int = 2
     private var lastClearedOppShieldsRemaining: Int = 2
 
+    // v6.03: Scanned CP per team slot + Auto End-of-Battle & Telemetry Ignore state
+    private val playerSlotCp = IntArray(3) { 0 }
+    private val oppSlotCp = IntArray(3) { 0 }
+    private var autoEndCandidateResult: String = ""
+    private var autoEndCandidateFrames: Int = 0
+    private var lastLoggedBattleId: String = ""
+    private var lastLoggedBattleResult: String = "WIN"
+    private var lastLoggedBattleLead: String = "NEUTRAL"
+    private var lastLoggedBattleOpponents: List<String> = emptyList()
+    private var lastLoggedBattleTelemetryIgnored: Boolean = false
+    private var lastLoggedBattleWasAuto: Boolean = false
+    private var lastLoggedBattleTimeMs: Long = 0L
+
+    private fun extractCpFromOcrLines(lines: List<Text.Line>): Int? {
+        for (line in lines) {
+            val raw = line.text.trim()
+            if (isOverlayHudSelfText(raw.lowercase())) continue
+            val m1 = Regex("(?i)\\bcp\\s*(\\d{2,4})\\b").find(raw)
+            if (m1 != null) {
+                val v = m1.groupValues.getOrNull(1)?.toIntOrNull()
+                if (v != null && v in 10..6000) return v
+            }
+            val m2 = Regex("(?i)\\bcp(\\d{2,4})\\b").find(raw.replace(" ", ""))
+            if (m2 != null) {
+                val v = m2.groupValues.getOrNull(1)?.toIntOrNull()
+                if (v != null && v in 10..6000) return v
+            }
+        }
+        return null
+    }
+
     private fun getElapsedBattleSeconds(eventTimeMs: Long = System.currentTimeMillis()): Double {
         if (battleClockAnchorMs <= 0L) return 0.0
         val diffMs = (eventTimeMs - battleClockAnchorMs).coerceAtLeast(0L)
@@ -15138,6 +15169,13 @@ class OverlayService : LifecycleService() {
                                     handleMidBannerUsedMoveLines(midBannerLines)
                                     // v4.05: Immediately evaluate "Attack incoming!" OCR trigger on the Main thread upon OCR completion!
                                     updateLiveHpAndChargedAttackState(
+                                        oppLines,
+                                        playerTopLines,
+                                        playerMoveLines,
+                                        midBannerLines
+                                    )
+                                    // v6.03: Auto-detect End of Battle (Win / Loss / Tie) & auto-log
+                                    checkAndHandleAutoEndOfBattle(
                                         oppLines,
                                         playerTopLines,
                                         playerMoveLines,
@@ -21739,6 +21777,10 @@ class OverlayService : LifecycleService() {
                 val newOppSlotIdx = detectedOpponents.indexOfFirst {
                     FormResolver.extractBaseSpecies(it).equals(newBaseSpecies, ignoreCase = true)
                 }
+                val scannedOppCp = extractCpFromOcrLines(sortedLines)
+                if (newOppSlotIdx in 0..2 && scannedOppCp != null) {
+                    oppSlotCp[newOppSlotIdx] = scannedOppCp
+                }
                 // Resurrection Guard: Any Pokémon entering the field is 100% alive (restore its last known pre-faint HP%)
                 if (newOppSlotIdx in 0..2 && oppFaintedSlots[newOppSlotIdx]) {
                     oppFaintedSlots[newOppSlotIdx] = false
@@ -22073,6 +22115,14 @@ class OverlayService : LifecycleService() {
                 if (anyLineHasShadow && !manualShadowOverrides.containsKey(newBaseSpecies) && !isOpponentShadow) {
                     isOpponentShadow = true
                     manualShadowOverrides[newBaseSpecies] = true
+                    recalculateAndPushBattleData()
+                }
+                val curOppIdx = detectedOpponents.indexOfFirst {
+                    FormResolver.extractBaseSpecies(it).equals(newBaseSpecies, ignoreCase = true)
+                }
+                val scannedOppCp = extractCpFromOcrLines(sortedLines)
+                if (curOppIdx in 0..2 && scannedOppCp != null && oppSlotCp[curOppIdx] != scannedOppCp) {
+                    oppSlotCp[curOppIdx] = scannedOppCp
                     recalculateAndPushBattleData()
                 }
             }
@@ -23260,6 +23310,14 @@ class OverlayService : LifecycleService() {
             }
             .sortedBy { it.boundingBox?.top ?: 0 }
 
+        val scannedPlayerCpNow = extractCpFromOcrLines(playerTopLines)
+        if (scannedPlayerCpNow != null) {
+            val curActiveIdxForCp = preset.pokemon.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) }.coerceAtLeast(0)
+            if (curActiveIdxForCp in 0..2 && playerSlotCp[curActiveIdxForCp] != scannedPlayerCpNow) {
+                playerSlotCp[curActiveIdxForCp] = scannedPlayerCpNow
+            }
+        }
+
         // Score every team slot across all valid top lines and find each slot's best (lowest) score
         val slotBestScores = mutableMapOf<Int, Int>()
         for (line in candidateTopLines) {
@@ -23539,6 +23597,12 @@ class OverlayService : LifecycleService() {
         lastNormalCombatOppShadow = false
         playerSlotEnergy.fill(0)
         oppSlotEnergy.fill(0)
+        playerSlotCp.fill(0)
+        oppSlotCp.fill(0)
+        autoEndCandidateResult = ""
+        autoEndCandidateFrames = 0
+        lastLoggedBattleId = ""
+        lastLoggedBattleWasAuto = false
         playerSlotTurnsOnField.fill(0)
         oppSlotTurnsOnField.fill(0)
         playerSlotCurrentMoveTurns.fill(0)
@@ -23778,7 +23842,12 @@ class OverlayService : LifecycleService() {
         showBattleToast("🛑 Battle Stopped — Log Win/Loss or Start Next")
     }
 
-    fun logBattleResultFromOverlay(result: String, leadOverride: String?) {
+    fun logBattleResultFromOverlay(
+        result: String,
+        leadOverride: String?,
+        ignoreAiTelemetry: Boolean = false,
+        isAutoDetected: Boolean = false
+    ) {
         val normalizedResult = if (result.equals("LOSS", ignoreCase = true)) "LOSS" else "WIN"
         val isWin = normalizedResult == "WIN"
         val fallbackLead = if (detectedOpponents.isNotEmpty()) currentLeadMatchup else lastClearedLeadMatchupSnapshot
@@ -24042,10 +24111,10 @@ class OverlayService : LifecycleService() {
         )
         val githubUser = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty().ifEmpty { "anonymous" }
         val v510Record = AiTelemetryBattleRecordV510(
-            schemaVersion = "6.02",
+            schemaVersion = "6.03",
             battleId = battleId,
             timestampMs = nowMs,
-            appVersion = "6.02",
+            appVersion = "6.03",
             uploaderHandle = githubUser,
             deviceHash = getDeviceTelemetryHashStatic(prefs),
             deviceModel = Build.MODEL ?: "Android",
@@ -24080,14 +24149,30 @@ class OverlayService : LifecycleService() {
         )
         val pendingQueue = loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
         pendingQueue.removeAll { it.battleId == battleId }
-        pendingQueue.add(v510Record)
-        val totalAnomaliesDetected = prefs.getInt(PREFS_KEY_TOTAL_AI_ANOMALIES_DETECTED_COUNT, 0) + detectedAnomalies.size
+        if (!ignoreAiTelemetry) {
+            pendingQueue.add(v510Record)
+        }
+        val totalAnomaliesDetected = if (!ignoreAiTelemetry) {
+            prefs.getInt(PREFS_KEY_TOTAL_AI_ANOMALIES_DETECTED_COUNT, 0) + detectedAnomalies.size
+        } else {
+            prefs.getInt(PREFS_KEY_TOTAL_AI_ANOMALIES_DETECTED_COUNT, 0)
+        }
         prefs.edit()
             .putString(targetBattleLogsPrefKey, gson.toJson(existingLogs))
             .putString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(pendingQueue.takeLast(200)))
             .putInt(PREFS_KEY_TOTAL_AI_ANOMALIES_DETECTED_COUNT, totalAnomaliesDetected)
             .remove(PREFS_KEY_AI_TRAINING_LOGS)
             .apply()
+
+        lastLoggedBattleId = battleId
+        lastLoggedBattleResult = normalizedResult
+        lastLoggedBattleLead = resolvedLead
+        lastLoggedBattleOpponents = formattedOpponents
+        lastLoggedBattleTelemetryIgnored = ignoreAiTelemetry
+        lastLoggedBattleWasAuto = isAutoDetected
+        lastLoggedBattleTimeMs = nowMs
+        autoEndCandidateResult = ""
+        autoEndCandidateFrames = 0
 
         // Ensure opponent list and timeline state are cleared for the next battle after logging
         lastClearedOpponentsSnapshot = emptyList()
@@ -24130,7 +24215,9 @@ class OverlayService : LifecycleService() {
                 "NEGATIVE" -> "Neg Lead"
                 else -> "Neu Lead"
             }
-            showBattleToast("✓ Logged $normalizedResult ($leadShort) • ${formattedOpponents.joinToString(", ").ifEmpty { "No opponents" }}")
+            val autoPrefix = if (isAutoDetected) "⚡ Auto-Logged " else "✓ Logged "
+            val aiNote = if (ignoreAiTelemetry) " [AI Log Ignored]" else ""
+            showBattleToast("$autoPrefix$normalizedResult ($leadShort)$aiNote • ${formattedOpponents.joinToString(", ").ifEmpty { "No opponents" }}")
         }
 
         // Always trigger background 2-device delta sync after logging a battle
@@ -24139,6 +24226,179 @@ class OverlayService : LifecycleService() {
                 syncWithGitHubGistBlocking(prefs, gson)
             } catch (_: Exception) {}
         }
+    }
+
+    /**
+     * v6.03: Automatically detects end-of-battle ("YOU WIN!", "GOOD EFFORT", "TIME'S UP!", or 3rd Pokémon KO + HUD exit)
+     * and auto-logs the match result with a post-battle bar for Undo / Flip W-L / Ignore AI Telemetry.
+     */
+    private fun checkAndHandleAutoEndOfBattle(
+        oppLines: List<Text.Line>,
+        playerTopLines: List<Text.Line>,
+        playerMoveLines: List<Text.Line>,
+        midBannerLines: List<Text.Line>
+    ) {
+        if (!isBattleActive || isWaitingForOpponent || detectedOpponents.isEmpty()) {
+            autoEndCandidateResult = ""
+            autoEndCandidateFrames = 0
+            return
+        }
+        val elapsedSec = getElapsedBattleSeconds()
+        if (elapsedSec < 12.0) return
+
+        val allLines = oppLines + playerTopLines + playerMoveLines + midBannerLines
+        val combinedNorm = allLines.joinToString(" ") { it.text.lowercase().replace(Regex("[^a-z0-9\\s']"), " ") }
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+        val hasWinBanner = combinedNorm.contains("you win") ||
+            combinedNorm.contains("victory") ||
+            combinedNorm.contains("won the battle")
+        val hasLossBanner = combinedNorm.contains("good effort") ||
+            combinedNorm.contains("you lose") ||
+            combinedNorm.contains("defeat")
+        val hasTimeUpBanner = combinedNorm.contains("time's up") ||
+            combinedNorm.contains("times up") ||
+            combinedNorm.contains("battle tied")
+
+        val textDetectedResult: String? = when {
+            hasWinBanner -> "WIN"
+            hasLossBanner -> "LOSS"
+            hasTimeUpBanner -> {
+                val uAlive = (3 - playerFaintedSlots.count { it }).coerceIn(0, 3)
+                val oAlive = (3 - oppFaintedSlots.count { it }).coerceIn(0, 3)
+                if (uAlive > oAlive) "WIN"
+                else if (uAlive < oAlive) "LOSS"
+                else {
+                    val uHpSum = (0..2).sumOf { if (playerFaintedSlots[it]) 0 else playerSlotHpPct[it].coerceIn(0, 100) }
+                    val oHpSum = (0..2).sumOf { if (oppFaintedSlots[it]) 0 else oppSlotHpPct[it].coerceIn(0, 100) }
+                    if (uHpSum >= oHpSum) "WIN" else "LOSS"
+                }
+            }
+            else -> null
+        }
+
+        // Structural 3rd-Pokémon KO + HUD exit fallback when elapsedSec >= 25s
+        val structuralResult: String? = if (textDetectedResult == null && elapsedSec >= 25.0 && missingBothHpBarsFrames >= 3 && isAllCombatHudGone) {
+            val activeUIdx = currentPreset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) }?.takeIf { it in 0..2 } ?: 0
+            val activeOIdx = detectedOpponents.indexOfFirst {
+                FormResolver.extractBaseSpecies(it).equals(activeOpponentSpecies, ignoreCase = true)
+            }.takeIf { it in 0..2 } ?: 0
+            val priorOppFaints = (0..2).count { it != activeOIdx && oppFaintedSlots[it] }
+            val priorUserFaints = (0..2).count { it != activeUIdx && playerFaintedSlots[it] }
+            val oppAllFainted = oppFaintedSlots.count { it } >= 3 ||
+                (detectedOpponents.size >= 3 && priorOppFaints >= 2 && oppSlotHpPct[activeOIdx] <= 18 && playerSlotHpPct[activeUIdx] > 0)
+            val userAllFainted = playerFaintedSlots.count { it } >= 3 ||
+                (priorUserFaints >= 2 && playerSlotHpPct[activeUIdx] <= 18 && oppSlotHpPct[activeOIdx] > 0)
+            when {
+                oppAllFainted && !userAllFainted -> "WIN"
+                userAllFainted && !oppAllFainted -> "LOSS"
+                else -> null
+            }
+        } else null
+
+        val candidate = textDetectedResult ?: structuralResult
+        if (candidate != null) {
+            if (autoEndCandidateResult == candidate) {
+                autoEndCandidateFrames++
+            } else {
+                autoEndCandidateResult = candidate
+                autoEndCandidateFrames = 1
+            }
+            val requiredFrames = if (textDetectedResult != null) 1 else 2
+            if (autoEndCandidateFrames >= requiredFrames) {
+                stopCurrentBattle()
+                logBattleResultFromOverlay(
+                    result = candidate,
+                    leadOverride = currentLeadMatchup,
+                    ignoreAiTelemetry = false,
+                    isAutoDetected = true
+                )
+            }
+        } else {
+            autoEndCandidateResult = ""
+            autoEndCandidateFrames = 0
+        }
+    }
+
+    fun ignoreTelemetryForBattle(battleId: String) {
+        val targetId = battleId.ifBlank { lastLoggedBattleId }
+        if (targetId.isBlank()) return
+        val pendingQueue = loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
+        val removed = pendingQueue.removeAll { it.battleId == targetId }
+        if (removed) {
+            prefs.edit().putString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(pendingQueue)).apply()
+        }
+        if (targetId == lastLoggedBattleId) {
+            lastLoggedBattleTelemetryIgnored = true
+        }
+        recalculateAndPushBattleData()
+        showBattleToast("🚫 AI Telemetry Ignored for Battle (Win/Loss Record Kept)")
+    }
+
+    fun flipAutoLoggedBattleResult(battleId: String) {
+        val targetId = battleId.ifBlank { lastLoggedBattleId }
+        if (targetId.isBlank()) return
+        val isShow6CombatMode = prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
+        val targetBattleLogsPrefKey = if (isShow6CombatMode) PREFS_KEY_SHOW6_BATTLE_LOGS else PREFS_KEY_BATTLE_LOGS
+        val logsType = object : TypeToken<List<SyncBattleLogRecord>>() {}.type
+        val existingLogs: MutableList<SyncBattleLogRecord> = try {
+            gson.fromJson<List<SyncBattleLogRecord>>(prefs.getString(targetBattleLogsPrefKey, "[]"), logsType)?.toMutableList()
+                ?: mutableListOf()
+        } catch (_: Exception) {
+            mutableListOf()
+        }
+        val idx = existingLogs.indexOfFirst { it.id == targetId }
+        if (idx >= 0) {
+            val old = existingLogs[idx]
+            val flipped = if (old.result == "WIN") "LOSS" else "WIN"
+            existingLogs[idx] = old.copy(result = flipped, updatedAt = System.currentTimeMillis())
+            prefs.edit().putString(targetBattleLogsPrefKey, gson.toJson(existingLogs)).apply()
+            if (targetId == lastLoggedBattleId) {
+                lastLoggedBattleResult = flipped
+            }
+            val pendingQueue = loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
+            val pIdx = pendingQueue.indexOfFirst { it.battleId == targetId }
+            if (pIdx >= 0) {
+                pendingQueue[pIdx] = pendingQueue[pIdx].copy(result = flipped)
+                prefs.edit().putString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(pendingQueue)).apply()
+            }
+            recalculateAndPushBattleData()
+            showBattleToast("🔄 Updated Battle Result to $flipped")
+        }
+    }
+
+    fun undoAutoLoggedBattle(battleId: String) {
+        val targetId = battleId.ifBlank { lastLoggedBattleId }
+        if (targetId.isBlank()) return
+        val isShow6CombatMode = prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
+        val targetBattleLogsPrefKey = if (isShow6CombatMode) PREFS_KEY_SHOW6_BATTLE_LOGS else PREFS_KEY_BATTLE_LOGS
+        val logsType = object : TypeToken<List<SyncBattleLogRecord>>() {}.type
+        val existingLogs: MutableList<SyncBattleLogRecord> = try {
+            gson.fromJson<List<SyncBattleLogRecord>>(prefs.getString(targetBattleLogsPrefKey, "[]"), logsType)?.toMutableList()
+                ?: mutableListOf()
+        } catch (_: Exception) {
+            mutableListOf()
+        }
+        existingLogs.removeAll { it.id == targetId }
+        val pendingQueue = loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
+        pendingQueue.removeAll { it.battleId == targetId }
+        prefs.edit()
+            .putString(targetBattleLogsPrefKey, gson.toJson(existingLogs))
+            .putString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(pendingQueue))
+            .apply()
+        if (targetId == lastLoggedBattleId) {
+            lastLoggedBattleId = ""
+            lastLoggedBattleWasAuto = false
+        }
+        recalculateAndPushBattleData()
+        showBattleToast("↩️ Undid Auto-Logged Battle")
+    }
+
+    fun dismissAutoLoggedBanner() {
+        lastLoggedBattleId = ""
+        lastLoggedBattleWasAuto = false
+        recalculateAndPushBattleData()
     }
 
     fun toggleShadowModifier() {
@@ -25051,6 +25311,18 @@ class OverlayService : LifecycleService() {
                 "playerSlotEverOnField" to playerSlotEverOnField.toList(),
                 "activeUserHpPct" to waitingActiveUserHp,
                 "activeOppHpPct" to 100,
+                "activeUserCp" to (playerSlotCp.getOrElse(activeUserSlotIndex.coerceIn(0, 2)) { 0 }.takeIf { it > 0 } ?: (activeSlot?.cp ?: 0)),
+                "activeOppCp" to 0,
+                "playerSlotCp" to (0..2).map { idx -> playerSlotCp[idx].takeIf { it > 0 } ?: (currentPreset?.pokemon?.getOrNull(idx)?.cp ?: 0) },
+                "oppSlotCp" to oppSlotCp.toList(),
+                "autoLoggedBanner" to if (!isBattleActive && lastLoggedBattleId.isNotBlank() && (nowMs - lastLoggedBattleTimeMs) <= 45000L) mapOf(
+                    "battleId" to lastLoggedBattleId,
+                    "result" to lastLoggedBattleResult,
+                    "leadMatchup" to lastLoggedBattleLead,
+                    "opponents" to lastLoggedBattleOpponents,
+                    "telemetryIgnored" to lastLoggedBattleTelemetryIgnored,
+                    "isAutoDetected" to lastLoggedBattleWasAuto
+                ) else null,
                 "teamArchetype" to (currentPreset?.archetype ?: "ABC"),
                 "aiAdviceHudPosition" to aiAdviceHudPosition,
                 "showTacticalRec" to (showTacticalRecommendations && (isBattleActive || isReplayMode)),
@@ -26411,6 +26683,18 @@ class OverlayService : LifecycleService() {
             "playerSlotEverOnField" to playerSlotEverOnField.toList(),
             "activeUserHpPct" to activeUserHp,
             "activeOppHpPct" to activeOppHp,
+            "activeUserCp" to (playerSlotCp.getOrElse(activeSlotIdxSafe) { 0 }.takeIf { it > 0 } ?: (activeSlot?.cp ?: 0)),
+            "activeOppCp" to oppSlotCp.getOrElse(activeOppSlotSafe) { 0 },
+            "playerSlotCp" to (0..2).map { idx -> playerSlotCp[idx].takeIf { it > 0 } ?: (currentPreset?.pokemon?.getOrNull(idx)?.cp ?: 0) },
+            "oppSlotCp" to oppSlotCp.toList(),
+            "autoLoggedBanner" to if (!isBattleActive && lastLoggedBattleId.isNotBlank() && (nowMs - lastLoggedBattleTimeMs) <= 45000L) mapOf(
+                "battleId" to lastLoggedBattleId,
+                "result" to lastLoggedBattleResult,
+                "leadMatchup" to lastLoggedBattleLead,
+                "opponents" to lastLoggedBattleOpponents,
+                "telemetryIgnored" to lastLoggedBattleTelemetryIgnored,
+                "isAutoDetected" to lastLoggedBattleWasAuto
+            ) else null,
             "activeUserEnergy" to playerSlotEnergy.getOrElse(activeSlotIdxSafe) { 0 }.coerceIn(0, 100),
             "activeOppEnergy" to oppSlotEnergy.getOrElse(activeOppSlotSafe) { 0 }.coerceIn(0, 100),
             "activeOppMoveReady" to ((scannedOpponentsData.getOrNull(activeOppSlotSafe)?.get("isMoveReady") as? Boolean) ?: false),
@@ -26704,7 +26988,42 @@ class OverlayService : LifecycleService() {
         @JavascriptInterface
         fun logBattleResult(result: String, leadMatchup: String) {
             Handler(Looper.getMainLooper()).post {
-                this@OverlayService.logBattleResultFromOverlay(result, leadMatchup)
+                this@OverlayService.logBattleResultFromOverlay(result, leadMatchup, ignoreAiTelemetry = false, isAutoDetected = false)
+            }
+        }
+
+        @JavascriptInterface
+        fun logBattleResultWithTelemetryFlag(result: String, leadMatchup: String, ignoreTelemetry: Boolean) {
+            Handler(Looper.getMainLooper()).post {
+                this@OverlayService.logBattleResultFromOverlay(result, leadMatchup, ignoreAiTelemetry = ignoreTelemetry, isAutoDetected = false)
+            }
+        }
+
+        @JavascriptInterface
+        fun ignoreLastBattleTelemetry(battleId: String) {
+            Handler(Looper.getMainLooper()).post {
+                this@OverlayService.ignoreTelemetryForBattle(battleId)
+            }
+        }
+
+        @JavascriptInterface
+        fun flipAutoLoggedBattleResult(battleId: String) {
+            Handler(Looper.getMainLooper()).post {
+                this@OverlayService.flipAutoLoggedBattleResult(battleId)
+            }
+        }
+
+        @JavascriptInterface
+        fun undoAutoLoggedBattle(battleId: String) {
+            Handler(Looper.getMainLooper()).post {
+                this@OverlayService.undoAutoLoggedBattle(battleId)
+            }
+        }
+
+        @JavascriptInterface
+        fun dismissAutoLoggedBanner() {
+            Handler(Looper.getMainLooper()).post {
+                this@OverlayService.dismissAutoLoggedBanner()
             }
         }
 

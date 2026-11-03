@@ -5763,7 +5763,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v6.02 • Android Native Overlay
+                  v6.03 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -6258,13 +6258,9 @@ export default function App() {
                         textShadow: '0 1px 2px rgba(0, 0, 0, 0.98), 0 0 4px rgba(0, 0, 0, 0.95)'
                       }}
                     >
-                      {/* v3.64 Header row: Dark charged-move row background + Minimize/Pause OCR icon + Dual HP:xxxms/OCR:xxxms badge + Right-aligned My [Health, Energy, Shield] | Opp [Shields, Health, Energy] */}
+                      {/* v6.03 Header row: Transparent background + Minimize/Pause OCR icon + OCR:101/495ms badge (colorized when active, grey when inactive) + Mirrored [CP, HP, Energy, Shield] | [Shield, Energy, HP, CP] */}
                       <div
-                        className="flex items-center justify-between gap-1 px-1 py-0.5 mb-0.5 rounded border"
-                        style={{
-                          backgroundColor: `rgba(2, 6, 23, ${Math.min(0.95, Math.max(0.22, ((100 - overlayTransparencyPct) / 100) * 0.72))})`,
-                          borderColor: 'rgba(148, 163, 184, 0.16)'
-                        }}
+                        className="flex items-center justify-between gap-1 px-0.5 py-0.5 mb-0.5"
                       >
                         <div className="flex items-center gap-1 shrink-0 font-mono text-[7px] font-extrabold">
                           <button
@@ -6311,20 +6307,36 @@ export default function App() {
                             {renderThemeOverlayIcon(activeTheme.id, 13)}
                           </button>
                           <span
-                            className="px-1 py-0.5 rounded border border-cyan-400/55 bg-slate-900/80 text-cyan-200 leading-none shrink-0"
-                            title="Pixel HP Scan Loop & ML Kit OCR Loop Update Rates in ms"
+                            className={`px-1 py-0.5 rounded border leading-none shrink-0 transition ${
+                              isBattleActive
+                                ? 'border-cyan-400/65 bg-cyan-950/85 text-cyan-200 shadow-sm'
+                                : 'border-slate-500/40 bg-slate-900/60 text-slate-400'
+                            }`}
+                            title={
+                              isBattleActive
+                                ? 'Active Battle Scanning — Pixel HP: 101ms • ML Kit OCR: 495ms'
+                                : 'Inactive (1 Hz Standby) — Pixel HP & ML Kit OCR rates'
+                            }
                           >
                             {isBattleActive
-                              ? `HP:100ms/OCR:${scanHzMode === '2Hz' ? '750ms' : '950ms'}`
+                              ? `OCR:101/${scanHzMode === '2Hz' ? '495' : '820'}ms`
                               : scannedOpponents.length > 0
-                              ? `HP:100ms/OCR:${scanHzMode === '2Hz' ? '750ms' : '950ms'}`
-                              : 'HP:---ms/OCR:---ms'}
+                              ? `OCR:101/${scanHzMode === '2Hz' ? '495' : '820'}ms`
+                              : 'OCR:---/---ms'}
                           </span>
                         </div>
 
-                        {/* Right-aligned cluster: My [Health, Energy, Shield] | Opp [Shields, Health, Energy] */}
+                        {/* Right-aligned cluster: Mirrored My [CP, Health, Energy, Shield] | Opp [Shield, Energy, Health, CP] */}
                         <div className="flex items-center justify-end gap-0.5 ml-auto shrink-0 font-mono text-[7px] font-extrabold">
-                          {/* My Health, Energy, Shield badges */}
+                          {/* My CP, Health, Energy, Shield badges */}
+                          {(activePreset.pokemon[activeUserSlotIndex]?.cp ?? 1500) > 0 && (
+                            <span
+                              className="px-1 py-0.5 rounded border border-slate-400/45 bg-slate-800/85 text-slate-200 leading-none shrink-0"
+                              title={`My Active Pokémon CP: ${activePreset.pokemon[activeUserSlotIndex]?.cp ?? 1500}`}
+                            >
+                              CP{activePreset.pokemon[activeUserSlotIndex]?.cp ?? 1500}
+                            </span>
+                          )}
                           {enableHpTracking && (
                             <span
                               className={`px-1 py-0.5 rounded border leading-none shrink-0 ${
@@ -6375,7 +6387,7 @@ export default function App() {
                           {/* Small vertical bar separator between My badges and Opponent badges */}
                           <span className="text-slate-400/75 px-0.5 select-none leading-none font-bold">|</span>
 
-                          {/* Opp Shields, Health, Energy badges */}
+                          {/* Opp Shield, Energy, Health, CP badges (mirrored symmetry) */}
                           <button
                             type="button"
                             onClick={(e) => {
@@ -6393,22 +6405,6 @@ export default function App() {
                             <span className="text-[7px]">🛡️</span>
                             <span>{oppShields}</span>
                           </button>
-                          {enableHpTracking && (
-                            <span
-                              className={`px-1 py-0.5 rounded border leading-none shrink-0 ${
-                                (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 0
-                                  ? 'text-slate-400 bg-slate-900/60 border-slate-700 line-through'
-                                  : (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 22
-                                  ? 'text-rose-200 bg-rose-950/70 border-rose-400/70'
-                                  : (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 50
-                                  ? 'text-amber-200 bg-amber-950/70 border-amber-400/70'
-                                  : 'text-emerald-200 bg-emerald-950/70 border-emerald-400/70'
-                              }`}
-                              title={`Active Opponent Pokémon HP: ${oppSlotHpPct[safeActiveOppSlot] ?? 100}%`}
-                            >
-                              {oppSlotHpPct[safeActiveOppSlot] ?? 100}%
-                            </span>
-                          )}
                           {enableEnergyTracking && (() => {
                             const activeOppE = oppSlotEnergy[safeActiveOppSlot] ?? oppEnergy;
                             const cheapestOppCost = Math.min(
@@ -6429,6 +6425,30 @@ export default function App() {
                               </span>
                             );
                           })()}
+                          {enableHpTracking && (
+                            <span
+                              className={`px-1 py-0.5 rounded border leading-none shrink-0 ${
+                                (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 0
+                                  ? 'text-slate-400 bg-slate-900/60 border-slate-700 line-through'
+                                  : (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 22
+                                  ? 'text-rose-200 bg-rose-950/70 border-rose-400/70'
+                                  : (oppSlotHpPct[safeActiveOppSlot] ?? 100) <= 50
+                                  ? 'text-amber-200 bg-amber-950/70 border-amber-400/70'
+                                  : 'text-emerald-200 bg-emerald-950/70 border-emerald-400/70'
+                              }`}
+                              title={`Active Opponent Pokémon HP: ${oppSlotHpPct[safeActiveOppSlot] ?? 100}%`}
+                            >
+                              {oppSlotHpPct[safeActiveOppSlot] ?? 100}%
+                            </span>
+                          )}
+                          {!isWaitingOpponent && (
+                            <span
+                              className="px-1 py-0.5 rounded border border-slate-400/45 bg-slate-800/85 text-slate-200 leading-none shrink-0"
+                              title="Opponent Active Pokémon CP (scanned via OCR)"
+                            >
+                              CP{activeOpponentLeague.includes('ULTRA') ? 2498 : activeOpponentLeague.includes('MASTER') ? 4280 : 1498}
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -6902,17 +6922,9 @@ export default function App() {
                       )}
 
                       {/* 3v3 Matchup Matrix Dots (FIXED Discovery Order: #1 1st seen, #2 2nd seen, #3 3rd seen) */}
+                      {!(isWaitingOpponent || scannedOpponents.length === 0) && (
                       <div className="my-1 py-1 px-1.5 bg-black/20 rounded flex flex-col gap-0.5 text-[9.5px]">
-                        {isWaitingOpponent || scannedOpponents.length === 0 ? (
-                          <div className="text-[9px] text-slate-200 flex items-center justify-between py-1 px-1.5 bg-black/35 rounded border border-white/10">
-                            <div className="flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                              <span>1 Hz OCR scanning opponent &amp; active lead...</span>
-                            </div>
-                            <span className="text-[8px] text-amber-300 font-mono">Standby</span>
-                          </div>
-                        ) : (
-                          <>
+                        <>
                             <div className="flex items-center justify-between gap-1.5 px-1.5 pb-1 mb-0.5 border-b border-white/10">
                               <span className="text-[7.5px] font-bold text-slate-400 tracking-tight truncate">
                                 OPP / MY BANKED E
@@ -7030,8 +7042,8 @@ export default function App() {
                               );
                             })}
                           </>
-                        )}
                       </div>
+                      )}
 
                       {/* Opponent Attacks & My Attacks (Segmented Range Bars + 3-Column Damage Matrices with Vertical Highlight) */}
                       {!isWaitingOpponent && scannedOpponents.length > 0 && (
@@ -15342,7 +15354,7 @@ export default function App() {
                         📊 Personalized Meta &amp; Top Cores ({appCombatMode === 'show6' ? 'Show 6 Mode' : 'GBL Blind 3 Mode'})
                       </span>
                       <span className="px-2 py-0.5 rounded bg-sky-500/20 border border-sky-400/50 text-sky-300 text-[10px] font-mono">
-                        v6.02
+                        v6.03
                       </span>
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
@@ -18094,7 +18106,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v6.02 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, and ML Kit Text Recognition.
+        SilphScope PvP v6.03 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, and ML Kit Text Recognition.
       </footer>
     </div>
   );

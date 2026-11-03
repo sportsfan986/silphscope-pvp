@@ -80,16 +80,15 @@
             z-index: 1;
         }
 
-        /* Header Row (Matched to Charged Move Row Background for High Readability) */
+        /* Header Row (v6.03: Transparent background — individual badge highlights make text readable) */
         .header-row {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 3px;
-            background: rgba(2, 6, 23, var(--row-bg-alpha));
-            border: 1px solid rgba(148, 163, 184, 0.16);
-            border-radius: 4px;
-            padding: 2px 4px;
+            gap: 2.5px;
+            background: transparent;
+            border: none;
+            padding: 1px 2px;
         }
 
         .sword-minimize-btn {
@@ -152,12 +151,54 @@
             border-radius: 3px;
             line-height: 1.15;
             color: #67e8f9;
-            background: rgba(8, 51, 68, 0.78);
-            border: 1px solid rgba(56, 189, 248, 0.55);
+            background: rgba(8, 51, 68, 0.84);
+            border: 1px solid rgba(56, 189, 248, 0.62);
             font-variant-numeric: tabular-nums;
             white-space: nowrap;
             flex-shrink: 0;
             letter-spacing: -0.2px;
+            transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+        }
+
+        .header-ocr-ms-badge.ocr-active {
+            color: #67e8f9;
+            background: rgba(8, 51, 68, 0.86);
+            border-color: rgba(56, 189, 248, 0.68);
+            box-shadow: 0 0 4px rgba(56, 189, 248, 0.22);
+        }
+
+        .header-ocr-ms-badge.ocr-inactive {
+            color: #94a3b8;
+            background: rgba(15, 23, 42, 0.62);
+            border-color: rgba(100, 116, 139, 0.38);
+            box-shadow: none;
+        }
+
+        .cp-slot-pill {
+            font-size: 6.6px;
+            font-weight: 800;
+            padding: 0.5px 2.5px;
+            border-radius: 3px;
+            line-height: 1.15;
+            color: #e2e8f0;
+            background: rgba(30, 41, 59, 0.85);
+            border: 1px solid rgba(148, 163, 184, 0.45);
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+            flex-shrink: 0;
+            letter-spacing: -0.15px;
+        }
+
+        .menu-btn-ignore-ai {
+            background: rgba(51, 65, 85, 0.75);
+            color: #cbd5e1;
+            border: 1px solid rgba(148, 163, 184, 0.4);
+        }
+
+        .menu-btn-ignore-ai.active {
+            background: rgba(127, 29, 29, 0.85);
+            color: #fecaca;
+            border: 1px solid rgba(248, 113, 113, 0.75);
         }
 
         .header-badges-cluster {
@@ -1333,7 +1374,7 @@
     <!-- OPTION 1: Top-Left Sky Trench (Transparent, Full-Width Header, 3-Column Threat Matrices) -->
     <div id="mode-sky-trench" class="glass-panel">
         <div id="overlay-watermark-bg" class="overlay-watermark-bg hidden"></div>
-        <!-- Header v3.60: Minimize/Pause OCR Icon (2s hold -> Stop Overlay & Battle Log), OCR Rate (ms), My [HP, Energy, Shield] Badges, Opp [Shield, HP, Energy] Badges -->
+        <!-- Header v6.03: Minimize/Pause OCR Icon, OCR:hp/ocr ms badge (colorized when active, grey when inactive), Mirrored [CP, HP, E, Shield] | [Shield, E, HP, CP] -->
         <div class="header-row">
             <button id="btn-minimize-sword" type="button" class="sword-minimize-btn"
                 onpointerdown="startMinimizeHold(event)"
@@ -1342,9 +1383,10 @@
                 onclick="handleMinimizeSwordClick(event)"
                 oncontextmenu="event.preventDefault(); return false;"
                 title="Tap: Minimize & pause OCR • Hold 2s: Stop overlay & open Battle Log">⚔️</button>
-            <span id="sky-ocr-ms-badge" class="header-ocr-ms-badge" title="Pixel HP scan loop & ML Kit OCR update rates in milliseconds">HP:---ms/OCR:---ms</span>
+            <span id="sky-ocr-ms-badge" class="header-ocr-ms-badge ocr-inactive" title="Pixel HP scan loop & ML Kit OCR update rates in milliseconds">OCR:---/---ms</span>
             <div class="header-badges-cluster">
                 <div class="header-side-group">
+                    <span id="sky-player-cp-pill" class="cp-slot-pill hidden" title="Your Active Pokémon CP">CP—</span>
                     <span id="sky-player-hp-pill" class="hp-slot-pill hp-high hidden" title="Your Active Pokémon Live HP%">100%</span>
                     <span id="sky-player-energy-pill" class="energy-slot-pill building hidden" title="Your Active Pokémon Energy">0E</span>
                     <button id="btn-player-shields" type="button" class="hud-shield-btn player-shield" onclick="cyclePlayerShields(event)" title="Your shields remaining (Tap to cycle 2->1->0->2)">
@@ -1356,8 +1398,9 @@
                     <button id="btn-opp-shields" type="button" class="hud-shield-btn opp-shield" onclick="cycleOpponentShields(event)" title="Opponent shields remaining (Tap to cycle 2->1->0->2)">
                         <span class="shield-glyph">🛡️</span><span id="txt-opp-shields" class="shield-val">2</span>
                     </button>
-                    <span id="sky-opp-hp-pill" class="hp-slot-pill hp-high hidden" title="Opponent Active Pokémon Live HP%">100%</span>
                     <span id="sky-opp-energy-pill" class="energy-slot-pill building hidden" title="Opponent Active Pokémon Energy">0E</span>
+                    <span id="sky-opp-hp-pill" class="hp-slot-pill hp-high hidden" title="Opponent Active Pokémon Live HP%">100%</span>
+                    <span id="sky-opp-cp-pill" class="cp-slot-pill hidden" title="Opponent Active Pokémon CP">CP—</span>
                 </div>
             </div>
         </div>
@@ -1385,9 +1428,14 @@
 
         <!-- In-Overlay Post-Stop Log Result Action Bar -->
         <div id="start-battle-menu" class="start-battle-menu hidden">
-            <button id="btn-lead-matchup" class="menu-btn menu-btn-lead-neu" onclick="cycleLeadMatchup()" title="Tap to cycle Lead Matchup: Favorable / Neutral / Negative">
-                Lead: Neu
-            </button>
+            <div style="display:flex; gap:2.5px; align-items:center;">
+                <button id="btn-lead-matchup" class="menu-btn menu-btn-lead-neu" onclick="cycleLeadMatchup()" title="Tap to cycle Lead Matchup: Favorable / Neutral / Negative">
+                    Lead: Neu
+                </button>
+                <button id="btn-ignore-telemetry-toggle" class="menu-btn menu-btn-ignore-ai" onclick="toggleIgnoreTelemetryNextLog()" title="Skip AI anomaly telemetry for this battle (e.g. PoGO Auto-Catcher text in OCR region) while keeping Win/Loss record">
+                    🚫 No AI Log
+                </button>
+            </div>
             <div style="display:flex; gap:2.5px; align-items:center;">
                 <button class="menu-btn menu-btn-win" onclick="logBattleFromOverlay('WIN')" title="Log Win for the stopped battle">
                     🏆 Win
@@ -1401,13 +1449,27 @@
             </div>
         </div>
 
-        <!-- 3v3 Matchup Matrix Dots (Full Opponent Names, Fixed 1st/2nd/3rd Order) -->
-        <div class="matrix-container" id="sky-matrix-body">
-            <div style="display:flex; align-items:center; gap:6px; color:#cbd5e1; font-size:9px; padding:2px 0;">
-                <span class="scan-indicator"></span>
-                <span>1 Hz OCR scanning opponent & active lead...</span>
+        <!-- v6.03: Post-Battle Auto-Logged / Quick Edit & Ignore AI Telemetry Bar -->
+        <div id="auto-logged-banner" class="start-battle-menu hidden">
+            <span id="auto-logged-status-text" style="font-size:8px; font-weight:800; color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">⚡ Logged WIN</span>
+            <div style="display:flex; gap:2.5px; align-items:center; flex-shrink:0;">
+                <button class="menu-btn menu-btn-lead-neu" onclick="flipAutoLoggedResult()" title="Flip logged result between WIN and LOSS">
+                    🔄 Flip W/L
+                </button>
+                <button id="btn-auto-ignore-ai" class="menu-btn menu-btn-ignore-ai" onclick="ignoreAutoLoggedTelemetry()" title="Delete AI anomaly telemetry for this battle (e.g. Auto-Catcher interference) while keeping Win/Loss record">
+                    🚫 Drop AI Log
+                </button>
+                <button class="menu-btn menu-btn-loss" onclick="undoAutoLoggedResult()" title="Undo and delete this logged battle">
+                    ↩️ Undo
+                </button>
+                <button class="menu-btn menu-btn-close" onclick="dismissAutoLoggedBar()" title="Dismiss banner">
+                    ✕
+                </button>
             </div>
         </div>
+
+        <!-- 3v3 Matchup Matrix Dots (Full Opponent Names, Fixed 1st/2nd/3rd Order) -->
+        <div class="matrix-container hidden" id="sky-matrix-body"></div>
 
         <!-- Opponent Attacks (Segmented Bars + 3-Column Team Damage Matrix with Vertical Active Highlight) -->
         <div class="timing-rows-container">
@@ -2484,8 +2546,31 @@
             }
         }
 
+        let ignoreTelemetryOnManualLog = false;
+
+        function toggleIgnoreTelemetryNextLog() {
+            ignoreTelemetryOnManualLog = !ignoreTelemetryOnManualLog;
+            const btn = document.getElementById("btn-ignore-telemetry-toggle");
+            if (btn) {
+                if (ignoreTelemetryOnManualLog) {
+                    btn.classList.add("active");
+                    btn.textContent = "🚫 AI Log: OFF";
+                } else {
+                    btn.classList.remove("active");
+                    btn.textContent = "🚫 No AI Log";
+                }
+            }
+        }
+
         function logBattleFromOverlay(resultStr) {
             const lead = (battleData.leadMatchup || "NEUTRAL").toUpperCase();
+            const skipAi = !!ignoreTelemetryOnManualLog;
+            ignoreTelemetryOnManualLog = false;
+            const toggleBtn = document.getElementById("btn-ignore-telemetry-toggle");
+            if (toggleBtn) {
+                toggleBtn.classList.remove("active");
+                toggleBtn.textContent = "🚫 No AI Log";
+            }
             isBattleActive = false;
             closeStartBattleMenu();
             clearOverlayMatrixImmediate("NEUTRAL");
@@ -2503,9 +2588,52 @@
             } else {
                 buttonToastActive = false;
             }
-            if (window.AndroidOverlay && window.AndroidOverlay.logBattleResult) {
+            if (window.AndroidOverlay && window.AndroidOverlay.logBattleResultWithTelemetryFlag) {
+                window.AndroidOverlay.logBattleResultWithTelemetryFlag(resultStr, lead, skipAi);
+            } else if (window.AndroidOverlay && window.AndroidOverlay.logBattleResult) {
                 window.AndroidOverlay.logBattleResult(resultStr, lead);
             }
+        }
+
+        function ignoreAutoLoggedTelemetry() {
+            const bId = (battleData.autoLoggedBanner && battleData.autoLoggedBanner.battleId) ? battleData.autoLoggedBanner.battleId : "";
+            if (battleData.autoLoggedBanner) {
+                battleData.autoLoggedBanner.telemetryIgnored = true;
+            }
+            render();
+            if (window.AndroidOverlay && window.AndroidOverlay.ignoreLastBattleTelemetry) {
+                window.AndroidOverlay.ignoreLastBattleTelemetry(bId);
+            }
+        }
+
+        function flipAutoLoggedResult() {
+            const bId = (battleData.autoLoggedBanner && battleData.autoLoggedBanner.battleId) ? battleData.autoLoggedBanner.battleId : "";
+            if (battleData.autoLoggedBanner) {
+                battleData.autoLoggedBanner.result = battleData.autoLoggedBanner.result === "WIN" ? "LOSS" : "WIN";
+            }
+            render();
+            if (window.AndroidOverlay && window.AndroidOverlay.flipAutoLoggedBattleResult) {
+                window.AndroidOverlay.flipAutoLoggedBattleResult(bId);
+            }
+        }
+
+        function undoAutoLoggedResult() {
+            const bId = (battleData.autoLoggedBanner && battleData.autoLoggedBanner.battleId) ? battleData.autoLoggedBanner.battleId : "";
+            battleData.autoLoggedBanner = null;
+            render();
+            if (window.AndroidOverlay && window.AndroidOverlay.undoAutoLoggedBattle) {
+                window.AndroidOverlay.undoAutoLoggedBattle(bId);
+            }
+            setTimeout(notifyHeight, 25);
+        }
+
+        function dismissAutoLoggedBar() {
+            battleData.autoLoggedBanner = null;
+            render();
+            if (window.AndroidOverlay && window.AndroidOverlay.dismissAutoLoggedBanner) {
+                window.AndroidOverlay.dismissAutoLoggedBanner();
+            }
+            setTimeout(notifyHeight, 25);
         }
 
         function onBattleLoggedToast(resultStr, leadStr) {
@@ -2768,16 +2896,77 @@
                     ? (liveHpMs > 0 ? liveHpMs : avgHpMs)
                     : (avgHpMs > 0 ? avgHpMs : liveHpMs);
 
-                const hpPart = displayHpMs > 0 ? `${displayHpMs}ms` : "---ms";
-                const ocrPart = displayOcrMs > 0 ? `${displayOcrMs}ms` : "---ms";
-                ocrMsBadgeEl.textContent = `HP:${hpPart}/OCR:${ocrPart}`;
+                const hpNum = displayHpMs > 0 ? `${displayHpMs}` : "---";
+                const ocrNum = displayOcrMs > 0 ? `${displayOcrMs}` : "---";
+                ocrMsBadgeEl.textContent = `OCR:${hpNum}/${ocrNum}ms`;
+                ocrMsBadgeEl.className = `header-ocr-ms-badge ${isBattleActive ? "ocr-active" : "ocr-inactive"}`;
                 if (displayHpMs > 0 || displayOcrMs > 0) {
                     const isAvgLabel = (!isBattleActive && (avgHpMs > 0 || avgScanMs > 0));
                     ocrMsBadgeEl.title = isAvgLabel
-                        ? `Last Battle Avg — Pixel HP Loop: ${hpPart} • ML Kit OCR: ${ocrPart}`
-                        : `Live Scan Rate — Pixel HP Loop: ${hpPart} • ML Kit OCR: ${ocrPart}`;
+                        ? `Inactive (1 Hz Standby) • Last Battle Avg — Pixel HP: ${hpNum}ms • ML Kit OCR: ${ocrNum}ms`
+                        : `Active Battle Scanning — Pixel HP: ${hpNum}ms • ML Kit OCR: ${ocrNum}ms`;
                 } else {
-                    ocrMsBadgeEl.title = "HP & OCR Update Rates: awaiting first scan";
+                    ocrMsBadgeEl.title = isBattleActive
+                        ? "Active Battle Scanning — awaiting first scan"
+                        : "Inactive (1 Hz Standby) — awaiting first scan";
+                }
+            }
+
+            // v6.03: Render Auto-Logged / Recent Battle Bar when battle is stopped
+            const autoBannerEl = document.getElementById("auto-logged-banner");
+            if (autoBannerEl) {
+                const ab = (!isBattleActive && !startBattleMenuOpen && battleData.autoLoggedBanner) ? battleData.autoLoggedBanner : null;
+                if (ab && ab.battleId) {
+                    autoBannerEl.classList.remove("hidden");
+                    const stEl = document.getElementById("auto-logged-status-text");
+                    const ignBtn = document.getElementById("btn-auto-ignore-ai");
+                    const isWinAb = ab.result === "WIN";
+                    const prefixAb = ab.isAutoDetected ? "⚡ Auto" : "✓ Logged";
+                    const colorAb = isWinAb ? "#4ade80" : "#f87171";
+                    if (stEl) {
+                        stEl.innerHTML = `<span style="color:${colorAb};">${prefixAb} ${ab.result}</span>${ab.telemetryIgnored ? ' <span style="color:#fca5a5;">(AI Ignored)</span>' : ''}`;
+                    }
+                    if (ignBtn) {
+                        if (ab.telemetryIgnored) {
+                            ignBtn.classList.add("active");
+                            ignBtn.textContent = "🚫 AI Dropped";
+                        } else {
+                            ignBtn.classList.remove("active");
+                            ignBtn.textContent = "🚫 Drop AI Log";
+                        }
+                    }
+                } else {
+                    autoBannerEl.classList.add("hidden");
+                }
+            }
+
+            const pSlotCpArr = Array.isArray(battleData.playerSlotCp) ? battleData.playerSlotCp : [0, 0, 0];
+            const oSlotCpArr = Array.isArray(battleData.oppSlotCp) ? battleData.oppSlotCp : [0, 0, 0];
+            const activeUserCpVal = (typeof battleData.activeUserCp === "number" && battleData.activeUserCp > 0)
+                ? Math.round(battleData.activeUserCp)
+                : (typeof pSlotCpArr[activeSlotIdx] === "number" && pSlotCpArr[activeSlotIdx] > 0 ? Math.round(pSlotCpArr[activeSlotIdx]) : 0);
+            const activeOppCpVal = (!isWaitingState && typeof battleData.activeOppCp === "number" && battleData.activeOppCp > 0)
+                ? Math.round(battleData.activeOppCp)
+                : (!isWaitingState && typeof oSlotCpArr[activeOppSlotIdx] === "number" && oSlotCpArr[activeOppSlotIdx] > 0 ? Math.round(oSlotCpArr[activeOppSlotIdx]) : 0);
+
+            const playerCpPillEl = document.getElementById("sky-player-cp-pill");
+            if (playerCpPillEl) {
+                if (activeUserCpVal > 0) {
+                    playerCpPillEl.className = "cp-slot-pill";
+                    playerCpPillEl.textContent = `CP${activeUserCpVal}`;
+                    playerCpPillEl.title = `Your Active Pokémon CP: ${activeUserCpVal}`;
+                } else {
+                    playerCpPillEl.className = "cp-slot-pill hidden";
+                }
+            }
+            const oppCpPillEl = document.getElementById("sky-opp-cp-pill");
+            if (oppCpPillEl) {
+                if (!isWaitingState && activeOppCpVal > 0) {
+                    oppCpPillEl.className = "cp-slot-pill";
+                    oppCpPillEl.textContent = `CP${activeOppCpVal}`;
+                    oppCpPillEl.title = `Opponent Active Pokémon CP: ${activeOppCpVal}`;
+                } else {
+                    oppCpPillEl.className = "cp-slot-pill hidden";
                 }
             }
 
@@ -2925,12 +3114,8 @@
                 }
 
                 if (matrixBody) {
-                    matrixBody.innerHTML = `
-                        <div style="display:flex; align-items:center; gap:6px; color:#cbd5e1; font-size:9px; padding:2px 0;">
-                            <span class="scan-indicator"></span>
-                            <span>1 Hz OCR scanning top-left & top-right headers...</span>
-                        </div>
-                    `;
+                    matrixBody.innerHTML = "";
+                    matrixBody.classList.add("hidden");
                 }
             } else {
                 const shadPrefix = battleData.isOpponentShadow ? "SHADOW " : "";
@@ -3084,6 +3269,7 @@
                 //    v3.88: Top row shows player banked energy (e.g. D:60E | L:0E | K:-E) directly above each 3-dot column
                 try {
                     if (matrixBody && battleData.scannedOpponents && battleData.scannedOpponents.length > 0) {
+                        matrixBody.classList.remove("hidden");
                         const ordLabels = ["1st", "2nd", "3rd"];
                         const pSlotEnergyArr = Array.isArray(battleData.playerSlotEnergy) ? battleData.playerSlotEnergy : [0, 0, 0];
                         const pSlotEverArr = Array.isArray(battleData.playerSlotEverOnField) ? battleData.playerSlotEverOnField : [true, false, false];
