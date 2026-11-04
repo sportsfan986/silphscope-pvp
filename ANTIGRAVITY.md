@@ -2,7 +2,7 @@
 
 > **Target Audience**: Antigravity agents, Claude/Gemini coding assistants, and core developers maintaining or extending **SilphScope PvP**.  
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v6.07` (`versionCode = 1607`)  
+> **Current Version**: `v6.10` (`versionCode = 1610`)  
 > **Primary Branches**: `main` (source code & releases), `ai-telemetry-logs` (isolated telemetry, DVR recordings & anomaly traces).
 
 ---
@@ -202,6 +202,29 @@ The HUD displays a compact, high-contrast 2-line tactical recommendation banner 
   - **CI Verification**: GitHub Actions run `41898378954` succeeded cleanly, publishing `silphscope-pvp-v6.07.apk`.
 
 ---
+
+### Turn 6 — Platform Migration to Antigravity & Parity Release (v6.10)
+- **User Request**:
+  1. Rev version numbers to `6.10`.
+  2. Add release notes/changelog communicating moving project development environment from Google AI Studio to Google Antigravity.
+  3. Maintain zero intentional changes from `v6.07`.
+  4. Perform release build locally first, resolve any build issues, and push to GitHub to trigger CI after verification.
+  5. Ensure version string is properly updated everywhere it appears.
+- **Toolchain Setup & Verification**:
+  - Configured local Eclipse Temurin JDK 17 (`17.0.21+9`) and Android SDK 35 (`build-tools;35.0.0`, `platforms;android-35`, `platform-tools`).
+  - Set persistent user environment variables `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, and updated user `Path`.
+  - Generated `local.properties` and protected `.gradle/` and `local.properties` in `.gitignore`.
+  - Verified with `apksigner` that the local keystore (`app/release.keystore`) signing certificate SHA-256 (`42:A3:7F:A2:...`) and SHA-1 (`59:5E:4E:A3:...`) match the official GitHub release build 100% bit-for-bit.
+- **Delivered Changes (v6.10)**:
+  - `VERSION`: Updated to `v6.10`.
+  - `app/build.gradle.kts` & `app_build.gradle.kts`: Bumped `versionCode = 1610`, `versionName = "6.10"`.
+  - `MainActivity.kt` & `app/.../MainActivity.kt`: Updated version fallback to `"6.10"`.
+  - `OverlayService.kt` & `app/.../OverlayService.kt`: Updated telemetry record `schemaVersion = "6.10"`, `appVersion = "6.10"`, and DVR telemetry commit headers.
+  - `package.json`: Updated `"version": "6.10.0"`.
+  - `src/App.tsx`: Updated footer version string to `v6.10`.
+  - `README.md`: Updated title tag to `(v6.10)`.
+  - `CHANGELOG.md`: Added `v6.10` release notes detailing the AI Studio to Antigravity migration.
+  - `ANTIGRAVITY.md`: Logged Turn 6 decisions and bumped current version to `v6.10` (`1610`).
 
 ## 5. Antigravity Agent Operational Runbook
 

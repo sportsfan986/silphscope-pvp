@@ -596,9 +596,9 @@ class MainActivity : AppCompatActivity() {
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "6.07"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "6.10"
         } catch (_: Exception) {
-            "6.07"
+            "6.10"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()

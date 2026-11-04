@@ -1676,10 +1676,10 @@ class OverlayService : LifecycleService() {
         )
 
         data class AiTelemetryBattleRecordV510(
-            val schemaVersion: String = "6.07",
+            val schemaVersion: String = "6.10",
             val battleId: String = "",
             val timestampMs: Long = System.currentTimeMillis(),
-            val appVersion: String = "6.07",
+            val appVersion: String = "6.10",
             val uploaderHandle: String = "anonymous",
             val deviceHash: String = "",
             val deviceModel: String = Build.MODEL ?: "Android",
@@ -2870,7 +2870,7 @@ class OverlayService : LifecycleService() {
                 var traceOk = putFileToTelemetryBranch(
                     traceRepoPath,
                     combinedTraceBytes,
-                    "dvr(v6.07): deep frame trace for $cleanBattleId by @$safeUser",
+                    "dvr(v6.10): deep frame trace for $cleanBattleId by @$safeUser",
                     effectiveToken
                 )
                 if (!traceOk && effectiveToken != relayToken && relayToken.isNotEmpty()) {
@@ -2878,7 +2878,7 @@ class OverlayService : LifecycleService() {
                     traceOk = putFileToTelemetryBranch(
                         traceRepoPath,
                         combinedTraceBytes,
-                        "dvr(v6.07): deep frame trace for $cleanBattleId by @$safeUser",
+                        "dvr(v6.10): deep frame trace for $cleanBattleId by @$safeUser",
                         effectiveToken
                     )
                 }
@@ -2889,7 +2889,7 @@ class OverlayService : LifecycleService() {
                     videoOk = putFileToTelemetryBranch(
                         videoRepoPath,
                         mp4Bytes,
-                        "dvr(v6.07): full-screen battle video (${mp4Bytes.size / 1024} KB) for $cleanBattleId by @$safeUser",
+                        "dvr(v6.10): full-screen battle video (${mp4Bytes.size / 1024} KB) for $cleanBattleId by @$safeUser",
                         effectiveToken
                     )
                 }
@@ -25173,10 +25173,10 @@ class OverlayService : LifecycleService() {
         val expectedDvrTracePath = if (wasDvrRecordedThisBattle) "recordings/$safeUserForDvr/${cleanBattleIdForDvr}_deep_trace.jsonl" else null
 
         val v510Record = AiTelemetryBattleRecordV510(
-            schemaVersion = "6.07",
+            schemaVersion = "6.10",
             battleId = battleId,
             timestampMs = nowMs,
-            appVersion = "6.07",
+            appVersion = "6.10",
             uploaderHandle = githubUser,
             deviceHash = devHashForDvr,
             deviceModel = Build.MODEL ?: "Android",
