@@ -1051,6 +1051,59 @@ export default function App() {
     return 4000;
   });
 
+  // v6.06: Haptics & Tactical Vibration Alerts (Synchronized with Swap Clock & Charged Move Blink Indicators)
+  const [hapticMasterEnabled, setHapticMasterEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('gbl_haptic_master_enabled');
+      if (saved !== null) return saved === 'true';
+    } catch {}
+    return true;
+  });
+  const [hapticOppSwapEnabled, setHapticOppSwapEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('gbl_haptic_opp_swap_enabled');
+      if (saved !== null) return saved === 'true';
+    } catch {}
+    return true;
+  });
+  const [hapticOppSwapWarnSec, setHapticOppSwapWarnSec] = useState<number>(() => {
+    try {
+      const saved = Number(localStorage.getItem('gbl_haptic_opp_swap_warn_sec'));
+      if (saved >= 2 && saved <= 10) return saved;
+    } catch {}
+    return 5;
+  });
+  const [hapticOppChargeWarnEnabled, setHapticOppChargeWarnEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('gbl_haptic_opp_charge_warn_enabled');
+      if (saved !== null) return saved === 'true';
+    } catch {}
+    return true;
+  });
+  const [hapticChargeTimingFasts, setHapticChargeTimingFasts] = useState<1 | 2>(() => {
+    try {
+      const saved = Number(localStorage.getItem('gbl_haptic_charge_timing_fasts'));
+      if (saved === 1 || saved === 2) return saved;
+    } catch {}
+    return 1;
+  });
+
+  const triggerWebSinglePulse = () => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(80);
+      }
+    } catch {}
+  };
+
+  const triggerWebDoublePulse = () => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([80, 80, 80]);
+      }
+    } catch {}
+  };
+
   const handleSetSwapThrowRollbackWindowMs = (winMs: 0 | 3000 | 4000 | 5000) => {
     setSwapThrowRollbackWindowMs(winMs);
     try {
@@ -6482,7 +6535,7 @@ export default function App() {
                             ? 'FARM_DOWN_SAFE'
                             : oppFastsToMove === 0
                             ? 'IMMEDIATE_0_FAST'
-                            : oppFastsToMove === 1
+                            : oppFastsToMove >= 1 && oppFastsToMove <= hapticChargeTimingFasts
                             ? 'BLINK_1_FAST'
                             : oppFastsToMove === 2
                             ? 'WARN_2_FASTS'
@@ -6493,7 +6546,9 @@ export default function App() {
                             : timingState === 'IMMEDIATE_0_FAST'
                             ? `🛑 0F LEFT -> THROW ${myShortMove} NOW!`
                             : timingState === 'BLINK_1_FAST'
-                            ? `🚨 1 LAST FAST -> THROW ${myShortMove} NOW!`
+                            ? oppFastsToMove === 1
+                              ? `🚨 1 LAST FAST -> THROW ${myShortMove} NOW!`
+                              : `🚨 ${oppFastsToMove}F -> THROW ${myShortMove} (Pre-${oppShortMove})!`
                             : timingState === 'WARN_2_FASTS'
                             ? `⚠️ 2F -> THROW ${myShortMove} (Pre-${oppShortMove})`
                             : `${activeTacticalRec.actionLabel || activeTacticalRec.actionText} [${activeTacticalRec.shieldPlan}] · ${(activeTacticalRec.goalText || '').slice(0, 22)}`;
@@ -7114,6 +7169,8 @@ export default function App() {
                                         ? 'text-cyan-300 bg-cyan-950/70 border-cyan-400/80 animate-pulse'
                                         : oppSwapRemainingSec <= 0
                                         ? 'text-[#FF3B30] bg-red-950/60 border-red-500/60 shadow-[0_0_6px_rgba(255,59,48,0.35)]'
+                                        : oppSwapRemainingSec <= hapticOppSwapWarnSec
+                                        ? 'text-white bg-rose-600/90 border-rose-300 animate-pulse shadow-[0_0_7px_rgba(244,63,94,0.85)]'
                                         : oppSwapRemainingSec < 10
                                         ? 'text-[#FFD700] bg-amber-950/60 border-amber-400/60'
                                         : 'text-white bg-black/45 border-white/40'
@@ -7654,7 +7711,7 @@ export default function App() {
                             ? 'FARM_DOWN_SAFE'
                             : oppFastsToMove === 0
                             ? 'IMMEDIATE_0_FAST'
-                            : oppFastsToMove === 1
+                            : oppFastsToMove >= 1 && oppFastsToMove <= hapticChargeTimingFasts
                             ? 'BLINK_1_FAST'
                             : oppFastsToMove === 2
                             ? 'WARN_2_FASTS'
@@ -7665,7 +7722,9 @@ export default function App() {
                             : timingState === 'IMMEDIATE_0_FAST'
                             ? `🛑 0F LEFT -> THROW ${myShortMove} NOW!`
                             : timingState === 'BLINK_1_FAST'
-                            ? `🚨 1 LAST FAST -> THROW ${myShortMove} NOW!`
+                            ? oppFastsToMove === 1
+                              ? `🚨 1 LAST FAST -> THROW ${myShortMove} NOW!`
+                              : `🚨 ${oppFastsToMove}F -> THROW ${myShortMove} (Pre-${oppShortMove})!`
                             : timingState === 'WARN_2_FASTS'
                             ? `⚠️ 2F -> THROW ${myShortMove} (Pre-${oppShortMove})`
                             : `${activeTacticalRec.actionLabel || activeTacticalRec.actionText} [${activeTacticalRec.shieldPlan}] · ${(activeTacticalRec.goalText || '').slice(0, 22)}`;
@@ -12327,6 +12386,149 @@ export default function App() {
             </div>
 
             {/* ===================================================================
+                1B. HAPTICS & TACTICAL VIBRATION ALERTS (v6.06)
+               =================================================================== */}
+            <div className="p-5 rounded-2xl bg-slate-900 border border-sky-500/35 shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                <div>
+                  <span className="text-sm font-extrabold text-sky-400">
+                    📳 Haptics &amp; Tactical Vibration Alerts (v6.06)
+                  </span>
+                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                    Distinct short pulses synchronized with the visual blink indicators on the floating overlay: <strong className="text-amber-300">80ms single pulse</strong> when Opponent Swap Clock reaches the warning threshold, and <strong className="text-rose-300">80ms double pulse</strong> when Opponent is 1 (or 2) fast moves away from throwing.
+                  </p>
+                </div>
+                <label className="inline-flex items-center gap-2 cursor-pointer shrink-0 bg-slate-950 border border-slate-800 px-3 py-2 rounded-xl">
+                  <span className="text-xs font-bold text-slate-200">Master Haptics</span>
+                  <input
+                    type="checkbox"
+                    checked={hapticMasterEnabled}
+                    onChange={(e) => {
+                      const next = e.target.checked;
+                      setHapticMasterEnabled(next);
+                      try { localStorage.setItem('gbl_haptic_master_enabled', String(next)); } catch {}
+                    }}
+                    className="w-4 h-4 accent-sky-400 rounded cursor-pointer"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* 1. Opponent Swap Clock Alert */}
+                <div className="p-4 rounded-xl bg-slate-950/90 border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-xs font-bold text-white">Opponent Swap Clock Alert (80ms Single Pulse)</div>
+                      <div className="text-[10px] text-slate-400">Tied to Swap Clock warning blink threshold</div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={triggerWebSinglePulse}
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-400 font-mono font-bold text-[10px] border border-slate-700 transition"
+                      >
+                        Test 1x
+                      </button>
+                      <input
+                        type="checkbox"
+                        checked={hapticOppSwapEnabled}
+                        onChange={(e) => {
+                          const next = e.target.checked;
+                          setHapticOppSwapEnabled(next);
+                          try { localStorage.setItem('gbl_haptic_opp_swap_enabled', String(next)); } catch {}
+                        }}
+                        className="w-4 h-4 accent-amber-400 rounded cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-300">Blink &amp; Vibration Threshold:</span>
+                      <span className="font-mono font-bold text-amber-400">
+                        ≤ {hapticOppSwapWarnSec}s {hapticOppSwapWarnSec === 5 ? '(Default)' : ''}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={2}
+                      max={10}
+                      step={1}
+                      value={hapticOppSwapWarnSec}
+                      onChange={(e) => {
+                        const sec = Number(e.target.value);
+                        setHapticOppSwapWarnSec(sec);
+                        try { localStorage.setItem('gbl_haptic_opp_swap_warn_sec', String(sec)); } catch {}
+                      }}
+                      className="w-full accent-amber-400 cursor-pointer h-2 bg-slate-800 rounded-lg"
+                    />
+                  </div>
+                </div>
+
+                {/* 2. Opponent Charged Move Warning */}
+                <div className="p-4 rounded-xl bg-slate-950/90 border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-xs font-bold text-white">Opp Charged Move Alert (80ms Double Pulse)</div>
+                      <div className="text-[10px] text-slate-400">Tied to Tactical Recommendation blinking throw/catch warning</div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={triggerWebDoublePulse}
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-rose-400 font-mono font-bold text-[10px] border border-slate-700 transition"
+                      >
+                        Test 2x
+                      </button>
+                      <input
+                        type="checkbox"
+                        checked={hapticOppChargeWarnEnabled}
+                        onChange={(e) => {
+                          const next = e.target.checked;
+                          setHapticOppChargeWarnEnabled(next);
+                          try { localStorage.setItem('gbl_haptic_opp_charge_warn_enabled', String(next)); } catch {}
+                        }}
+                        className="w-4 h-4 accent-rose-500 rounded cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <span className="text-[11px] text-slate-300">Blink &amp; Double-Pulse Lead:</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHapticChargeTimingFasts(1);
+                          try { localStorage.setItem('gbl_haptic_charge_timing_fasts', '1'); } catch {}
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition ${
+                          hapticChargeTimingFasts === 1
+                            ? 'bg-rose-600 text-white shadow'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        }`}
+                      >
+                        1 Fast Away (Default)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHapticChargeTimingFasts(2);
+                          try { localStorage.setItem('gbl_haptic_charge_timing_fasts', '2'); } catch {}
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition ${
+                          hapticChargeTimingFasts === 2
+                            ? 'bg-rose-600 text-white shadow'
+                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        }`}
+                      >
+                        2 Fasts Away
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ===================================================================
                 PVPOKE GITHUB LIMITED METAS IMPORTER & DUAL SELECTOR (GBL + SHOW 6)
                =================================================================== */}
             <div className="p-5 rounded-2xl bg-slate-900 border border-purple-500/40 shadow-xl space-y-4">
@@ -14544,6 +14746,122 @@ export default function App() {
                   </strong>
                 </div>
               </div>
+
+              {/* v6.06: Lead-Loss Recovery Rate & Safe-Swap Efficiency Summary Banner */}
+              {(() => {
+                const favLogs = filteredLogs.filter((l) => l.leadMatchup === 'FAVORABLE');
+                const favWins = favLogs.filter((l) => l.result === 'WIN').length;
+                const favLosses = favLogs.filter((l) => l.result === 'LOSS').length;
+                const favTotal = favWins + favLosses;
+                const favPct = favTotal > 0 ? Math.round((favWins / favTotal) * 100) : null;
+
+                const negLogs = filteredLogs.filter(
+                  (l) =>
+                    l.leadMatchup === 'NEGATIVE' ||
+                    (l.leadMatchup !== 'FAVORABLE' && (l as any).firstSwapActor === 'user')
+                );
+                const negWins = negLogs.filter((l) => l.result === 'WIN').length;
+                const negLosses = negLogs.filter((l) => l.result === 'LOSS').length;
+                const negTotal = negWins + negLosses;
+                const negPct = negTotal > 0 ? Math.round((negWins / negTotal) * 100) : null;
+                const recGrade =
+                  negPct === null
+                    ? '—'
+                    : negPct >= 45
+                    ? 'S'
+                    : negPct >= 35
+                    ? 'A'
+                    : negPct >= 25
+                    ? 'B'
+                    : 'C';
+
+                const swapStats = new Map<string, { wins: number; total: number }>();
+                for (const entry of negLogs) {
+                  if (entry.result !== 'WIN' && entry.result !== 'LOSS') continue;
+                  const evs: any[] = (entry as any).timelineEvents || [];
+                  const firstUserSwitch = evs.find(
+                    (ev) =>
+                      String(ev.type || '').toUpperCase() === 'SWITCH' &&
+                      String(ev.actor || '').toLowerCase() === 'user'
+                  );
+                  const swapMon =
+                    firstUserSwitch?.pokemonEntering ||
+                    firstUserSwitch?.activePokemon ||
+                    entry.userPokemon?.[1] ||
+                    '';
+                  if (swapMon) {
+                    const prev = swapStats.get(swapMon) || { wins: 0, total: 0 };
+                    swapStats.set(swapMon, {
+                      wins: prev.wins + (entry.result === 'WIN' ? 1 : 0),
+                      total: prev.total + 1
+                    });
+                  }
+                }
+                const sortedSwaps = Array.from(swapStats.entries()).sort((a, b) => {
+                  if (b[1].wins !== a[1].wins) return b[1].wins - a[1].wins;
+                  const rA = a[1].wins / Math.max(1, a[1].total);
+                  const rB = b[1].wins / Math.max(1, b[1].total);
+                  if (rB !== rA) return rB - rA;
+                  return b[1].total - a[1].total;
+                });
+                const mvpEntry = sortedSwaps[0];
+                const mvpPct = mvpEntry ? Math.round((mvpEntry[1].wins / Math.max(1, mvpEntry[1].total)) * 100) : null;
+
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-950/90 border border-slate-800 rounded-2xl px-4 py-3 shadow-lg">
+                    <div className="flex items-center justify-between sm:flex-col sm:items-start gap-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        LEAD WON CONVERSION
+                      </span>
+                      <strong
+                        className={`text-sm sm:text-base font-extrabold tabular-nums ${
+                          favPct === null
+                            ? 'text-slate-400'
+                            : favPct >= 70
+                            ? 'text-emerald-400'
+                            : favPct >= 55
+                            ? 'text-amber-400'
+                            : 'text-rose-400'
+                        }`}
+                      >
+                        {favPct === null ? '—% (0W-0L)' : `${favPct}% · ${favWins}W-${favLosses}L`}
+                      </strong>
+                    </div>
+                    <div className="flex items-center justify-between sm:flex-col sm:items-start gap-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        LEAD LOST RECOVERY RATE
+                      </span>
+                      <strong
+                        className={`text-sm sm:text-base font-extrabold tabular-nums ${
+                          negPct === null
+                            ? 'text-slate-400'
+                            : negPct >= 45
+                            ? 'text-emerald-400'
+                            : negPct >= 35
+                            ? 'text-sky-400'
+                            : negPct >= 25
+                            ? 'text-amber-400'
+                            : 'text-rose-400'
+                        }`}
+                      >
+                        {negPct === null
+                          ? '—% (0W-0L)'
+                          : `${negPct}% [${recGrade}] · ${negWins}W-${negLosses}L`}
+                      </strong>
+                    </div>
+                    <div className="flex items-center justify-between sm:flex-col sm:items-start gap-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        SAFE-SWAP MVP
+                      </span>
+                      <strong className="text-sm sm:text-base font-extrabold text-amber-300 tabular-nums">
+                        {mvpEntry && mvpPct !== null
+                          ? `${mvpEntry[0]} · ${mvpPct}% (${mvpEntry[1].wins}/${mvpEntry[1].total})`
+                          : '—'}
+                      </strong>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Battle Log List Container */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">

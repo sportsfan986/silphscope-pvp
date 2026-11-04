@@ -380,6 +380,24 @@
             animation: throwImmediateBlink 0.22s infinite !important;
             border-width: 1.5px !important;
         }
+        @keyframes oppSwapWarnBlink {
+            0%, 100% {
+                background-color: rgba(244, 63, 94, 0.88);
+                border-color: #fda4af;
+                color: #ffffff;
+                box-shadow: 0 0 7px rgba(244, 63, 94, 0.85);
+            }
+            50% {
+                background-color: rgba(245, 158, 11, 0.38);
+                border-color: #fde047;
+                color: #fef08a;
+                box-shadow: 0 0 4px rgba(250, 204, 21, 0.55);
+            }
+        }
+        .opp-swap-blink-warning {
+            animation: oppSwapWarnBlink 0.42s infinite !important;
+            font-weight: 900 !important;
+        }
         .tactical-rec-line1 {
             display: flex;
             align-items: center;
@@ -2254,12 +2272,26 @@
             render();
         };
 
-        // v3.34: Dynamic Color-Coded Swap Countdown Timers with 1st-Frame Provisional [1F] Validity Bit
+        // v3.34 & v6.06: Dynamic Color-Coded Swap Countdown Timers with Synchronized Blink & Haptic Trigger
         function updateSwapClockBadge(element, prefix, seconds, isOpponent, isLatched) {
             if (!element) return;
             const latchTag = (isLatched === false) ? " [1F]" : "";
             const text = seconds <= 0 ? `${prefix}: 0s${latchTag}` : `${prefix}: ${seconds}s${latchTag}`;
             element.textContent = text;
+            const warnSec = (typeof battleData.hapticOppSwapWarnSec === "number" && battleData.hapticOppSwapWarnSec >= 2)
+                ? battleData.hapticOppSwapWarnSec
+                : 5;
+            const isOppSwapWarnWindow = isOpponent && isLatched !== false && seconds > 0 && seconds <= warnSec;
+            if (isOppSwapWarnWindow) {
+                element.classList.add("opp-swap-blink-warning");
+                if (window.AndroidOverlay && window.AndroidOverlay.triggerSwapClockHapticIfNeeded && battleData.oppSwapEndTimeMs > 0) {
+                    try {
+                        window.AndroidOverlay.triggerSwapClockHapticIfNeeded(battleData.oppSwapEndTimeMs);
+                    } catch (err) {}
+                }
+            } else {
+                element.classList.remove("opp-swap-blink-warning");
+            }
             if (isLatched === false) {
                 element.style.color = "#67E8F9";
                 element.style.borderColor = "rgba(56, 189, 248, 0.85)";

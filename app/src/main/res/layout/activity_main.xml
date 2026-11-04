@@ -1859,6 +1859,264 @@
             </LinearLayout>
 
             <!-- ===================================================================
+                 1B. HAPTICS & TACTICAL VIBRATION ALERTS (v6.06)
+                 =================================================================== -->
+            <LinearLayout
+                android:id="@+id/card_settings_haptics_group"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#0f172a"
+                android:padding="10dp"
+                android:layout_marginTop="8dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="📳 Haptics &amp; Tactical Vibration Alerts (v6.06)"
+                    android:textColor="#38bdf8"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Distinct short pulses synchronized with the visual blink indicators on the floating overlay: 80ms single pulse when Opponent Swap Clock reaches the warning threshold, and 80ms double pulse when Opponent is 1 (or 2) fast moves away from throwing."
+                    android:textColor="#94a3b8"
+                    android:textSize="10sp"
+                    android:lineSpacingExtra="1.5dp"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- Master Haptics Switch -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="#1e293b"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="6dp"
+                    android:layout_marginBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Master Tactical Vibration Alerts"
+                            android:textColor="#f8fafc"
+                            android:textSize="11.5sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Enable or mute all overlay haptic vibration pulses"
+                            android:textColor="#94a3b8"
+                            android:textSize="9.5sp" />
+                    </LinearLayout>
+
+                    <Switch
+                        android:id="@+id/switch_haptic_master"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+
+                <!-- 1. Opponent Swap Clock Warning (< 5s Single Pulse + Synchronized Blink) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#1e293b"
+                    android:padding="8dp"
+                    android:layout_marginBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Opponent Swap Clock Alert (80ms Single Pulse)"
+                                android:textColor="#e2e8f0"
+                                android:textSize="11.5sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Tied to #sky-opp-swap-clock warning blink threshold"
+                                android:textColor="#94a3b8"
+                                android:textSize="9.5sp" />
+                        </LinearLayout>
+
+                        <Button
+                            android:id="@+id/btn_test_haptic_swap"
+                            android:layout_width="wrap_content"
+                            android:layout_height="30dp"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="8dp"
+                            android:text="Test 1x"
+                            android:textSize="9.5sp"
+                            android:backgroundTint="#334155"
+                            android:textColor="#38bdf8"
+                            android:layout_marginEnd="6dp" />
+
+                        <Switch
+                            android:id="@+id/switch_haptic_opp_swap"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="true" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="6dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Blink &amp; Vibration Threshold (Seconds Left):"
+                            android:textColor="#cbd5e1"
+                            android:textSize="10.5sp" />
+
+                        <TextView
+                            android:id="@+id/text_haptic_opp_swap_sec_val"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="≤ 5s (Default)"
+                            android:textColor="#fbbf24"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <SeekBar
+                        android:id="@+id/seekbar_haptic_opp_swap_sec"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:max="8"
+                        android:progress="3"
+                        android:progressTint="#fbbf24"
+                        android:thumbTint="#fbbf24" />
+                </LinearLayout>
+
+                <!-- 2. Opponent Charged Move Warning (1 Fast Away Double Pulse + Synchronized Blink) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#1e293b"
+                    android:padding="8dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Opp Charged Move Alert (80ms Double Pulse)"
+                                android:textColor="#e2e8f0"
+                                android:textSize="11.5sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Tied to Tactical Recommendation blinking throw/catch warning"
+                                android:textColor="#94a3b8"
+                                android:textSize="9.5sp" />
+                        </LinearLayout>
+
+                        <Button
+                            android:id="@+id/btn_test_haptic_charge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="30dp"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="8dp"
+                            android:text="Test 2x"
+                            android:textSize="9.5sp"
+                            android:backgroundTint="#334155"
+                            android:textColor="#f43f5e"
+                            android:layout_marginEnd="6dp" />
+
+                        <Switch
+                            android:id="@+id/switch_haptic_opp_charge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="true" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="6dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Blink &amp; Double-Pulse Lead:"
+                            android:textColor="#cbd5e1"
+                            android:textSize="10.5sp" />
+
+                        <Button
+                            android:id="@+id/btn_haptic_charge_1f"
+                            android:layout_width="wrap_content"
+                            android:layout_height="32dp"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="10dp"
+                            android:text="1 Fast Away (Default)"
+                            android:textSize="10sp"
+                            android:backgroundTint="#e11d48"
+                            android:textColor="#ffffff"
+                            android:layout_marginEnd="4dp" />
+
+                        <Button
+                            android:id="@+id/btn_haptic_charge_2f"
+                            android:layout_width="wrap_content"
+                            android:layout_height="32dp"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="10dp"
+                            android:text="2 Fasts Away"
+                            android:textSize="10sp"
+                            android:backgroundTint="#334155"
+                            android:textColor="#cbd5e1" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- ===================================================================
                  2. OVERLAY HUD BEHAVIOR & MATCHUP THRESHOLDS
                  =================================================================== -->
             <!-- Opponent Fast Move Count Basis Setting -->
@@ -3820,6 +4078,102 @@
                     android:textSize="10.5sp"
                     android:textStyle="bold"
                     android:layout_marginTop="2dp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- v6.06: Lead-Loss Recovery Rate & Safe-Swap Efficiency Summary Banner -->
+        <LinearLayout
+            android:id="@+id/layout_battle_log_lead_recovery_banner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:background="#0f172a"
+            android:paddingVertical="6dp"
+            android:paddingHorizontal="8dp"
+            android:layout_marginBottom="8dp"
+            android:gravity="center_vertical">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="0.95"
+                android:orientation="vertical"
+                android:layout_marginEnd="4dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:singleLine="true"
+                    android:text="LEAD WON CONV."
+                    android:textColor="#94a3b8"
+                    android:textSize="7.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/text_lead_won_winrate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:singleLine="true"
+                    android:text="—% (0W-0L)"
+                    android:textColor="#34d399"
+                    android:textSize="9.5sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="1dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1.15"
+                android:orientation="vertical"
+                android:layout_marginEnd="4dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:singleLine="true"
+                    android:text="LEAD LOST RECOVERY"
+                    android:textColor="#94a3b8"
+                    android:textSize="7.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/text_lead_lost_recovery"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:singleLine="true"
+                    android:text="—% (0W-0L)"
+                    android:textColor="#38bdf8"
+                    android:textSize="9.5sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="1dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1.2"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:singleLine="true"
+                    android:text="SAFE-SWAP MVP"
+                    android:textColor="#94a3b8"
+                    android:textSize="7.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/text_safe_swap_mvp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:singleLine="true"
+                    android:text="—"
+                    android:textColor="#fbbf24"
+                    android:textSize="9.5sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="1dp" />
             </LinearLayout>
         </LinearLayout>
 

@@ -281,6 +281,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var viewSwatchAccent2: android.view.View
     private lateinit var viewSwatchOverlay: android.view.View
     private lateinit var switchShowThemeWatermark: Switch
+    private lateinit var switchHapticMaster: Switch
+    private lateinit var switchHapticOppSwap: Switch
+    private lateinit var seekbarHapticOppSwapSec: SeekBar
+    private lateinit var textHapticOppSwapSecVal: TextView
+    private lateinit var btnTestHapticSwap: Button
+    private lateinit var switchHapticOppCharge: Switch
+    private lateinit var btnHapticCharge1F: Button
+    private lateinit var btnHapticCharge2F: Button
+    private lateinit var btnTestHapticCharge: Button
+    private lateinit var textLeadWonWinrate: TextView
+    private lateinit var textLeadLostRecovery: TextView
+    private lateinit var textSafeSwapMvp: TextView
     private var currentActivePage: String = "teams"
     private var isUpdatingThemeSpinner = false
     private var selectedMetaTabScope: String = "SEASON"
@@ -1413,6 +1425,97 @@ class MainActivity : AppCompatActivity() {
         viewSwatchAccent2 = findViewById(R.id.view_swatch_accent2)
         viewSwatchOverlay = findViewById(R.id.view_swatch_overlay)
         switchShowThemeWatermark = findViewById(R.id.switch_show_theme_watermark)
+        switchHapticMaster = findViewById(R.id.switch_haptic_master)
+        switchHapticOppSwap = findViewById(R.id.switch_haptic_opp_swap)
+        seekbarHapticOppSwapSec = findViewById(R.id.seekbar_haptic_opp_swap_sec)
+        textHapticOppSwapSecVal = findViewById(R.id.text_haptic_opp_swap_sec_val)
+        btnTestHapticSwap = findViewById(R.id.btn_test_haptic_swap)
+        switchHapticOppCharge = findViewById(R.id.switch_haptic_opp_charge)
+        btnHapticCharge1F = findViewById(R.id.btn_haptic_charge_1f)
+        btnHapticCharge2F = findViewById(R.id.btn_haptic_charge_2f)
+        btnTestHapticCharge = findViewById(R.id.btn_test_haptic_charge)
+        textLeadWonWinrate = findViewById(R.id.text_lead_won_winrate)
+        textLeadLostRecovery = findViewById(R.id.text_lead_lost_recovery)
+        textSafeSwapMvp = findViewById(R.id.text_safe_swap_mvp)
+
+        // v6.06: Initialize Haptics & Tactical Vibration Alert Controls
+        val masterHapticOn = prefs.getBoolean(OverlayService.PREFS_KEY_HAPTIC_MASTER_ENABLED, OverlayService.DEFAULT_HAPTIC_MASTER_ENABLED)
+        val oppSwapHapticOn = prefs.getBoolean(OverlayService.PREFS_KEY_HAPTIC_OPP_SWAP_ENABLED, OverlayService.DEFAULT_HAPTIC_OPP_SWAP_ENABLED)
+        val oppSwapWarnSec = prefs.getInt(OverlayService.PREFS_KEY_HAPTIC_OPP_SWAP_WARN_SEC, OverlayService.DEFAULT_HAPTIC_OPP_SWAP_WARN_SEC).coerceIn(2, 10)
+        val oppChargeHapticOn = prefs.getBoolean(OverlayService.PREFS_KEY_HAPTIC_OPP_CHARGE_WARN_ENABLED, OverlayService.DEFAULT_HAPTIC_OPP_CHARGE_WARN_ENABLED)
+        val chargeTimingFasts = prefs.getInt(OverlayService.PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS, OverlayService.DEFAULT_HAPTIC_CHARGE_TIMING_FASTS).coerceIn(1, 2)
+
+        switchHapticMaster.isChecked = masterHapticOn
+        switchHapticOppSwap.isChecked = oppSwapHapticOn
+        seekbarHapticOppSwapSec.progress = (oppSwapWarnSec - 2).coerceIn(0, 8)
+        textHapticOppSwapSecVal.text = if (oppSwapWarnSec == 5) "≤ 5s (Default)" else "≤ ${oppSwapWarnSec}s"
+        switchHapticOppCharge.isChecked = oppChargeHapticOn
+
+        fun updateHapticChargeLeadButtonsUi(fasts: Int) {
+            val is1F = fasts <= 1
+            btnHapticCharge1F.backgroundTintList = android.content.res.ColorStateList.valueOf(
+                if (is1F) 0xFFE11D48.toInt() else 0xFF334155.toInt()
+            )
+            btnHapticCharge1F.setTextColor(if (is1F) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
+            btnHapticCharge2F.backgroundTintList = android.content.res.ColorStateList.valueOf(
+                if (!is1F) 0xFFE11D48.toInt() else 0xFF334155.toInt()
+            )
+            btnHapticCharge2F.setTextColor(if (!is1F) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
+        }
+        updateHapticChargeLeadButtonsUi(chargeTimingFasts)
+
+        fun pushHapticSettingsToOverlay() {
+            OverlayService.syncTierThresholdsFromPrefs(prefs)
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                }
+                startService(updateIntent)
+            }
+        }
+
+        switchHapticMaster.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean(OverlayService.PREFS_KEY_HAPTIC_MASTER_ENABLED, isChecked).apply()
+            pushHapticSettingsToOverlay()
+        }
+        switchHapticOppSwap.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean(OverlayService.PREFS_KEY_HAPTIC_OPP_SWAP_ENABLED, isChecked).apply()
+            pushHapticSettingsToOverlay()
+        }
+        seekbarHapticOppSwapSec.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val sec = (progress + 2).coerceIn(2, 10)
+                textHapticOppSwapSecVal.text = if (sec == 5) "≤ 5s (Default)" else "≤ ${sec}s"
+                if (fromUser) {
+                    prefs.edit().putInt(OverlayService.PREFS_KEY_HAPTIC_OPP_SWAP_WARN_SEC, sec).apply()
+                    pushHapticSettingsToOverlay()
+                }
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+        btnTestHapticSwap.setOnClickListener {
+            OverlayService.triggerSingleHapticPulseStatic(this)
+            Toast.makeText(this, "📳 80ms Single Pulse (Swap Clock Alert)", Toast.LENGTH_SHORT).show()
+        }
+        switchHapticOppCharge.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean(OverlayService.PREFS_KEY_HAPTIC_OPP_CHARGE_WARN_ENABLED, isChecked).apply()
+            pushHapticSettingsToOverlay()
+        }
+        btnHapticCharge1F.setOnClickListener {
+            prefs.edit().putInt(OverlayService.PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS, 1).apply()
+            updateHapticChargeLeadButtonsUi(1)
+            pushHapticSettingsToOverlay()
+        }
+        btnHapticCharge2F.setOnClickListener {
+            prefs.edit().putInt(OverlayService.PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS, 2).apply()
+            updateHapticChargeLeadButtonsUi(2)
+            pushHapticSettingsToOverlay()
+        }
+        btnTestHapticCharge.setOnClickListener {
+            OverlayService.triggerDoubleHapticPulseStatic(this)
+            Toast.makeText(this, "📳📳 80ms Double Pulse (Charged Move Alert)", Toast.LENGTH_SHORT).show()
+        }
 
         isUpdatingThemeSpinner = true
         val themeLabels = APP_THEME_COLLECTION.map { it.label }
@@ -5256,6 +5359,84 @@ class MainActivity : AppCompatActivity() {
                     else -> 0xFF94A3B8.toInt()
                 }
             )
+        }
+
+        // v6.06: Compute Lead Won Conversion, Lead-Loss Recovery Rate & Safe-Swap MVP
+        if (::textLeadWonWinrate.isInitialized && ::textLeadLostRecovery.isInitialized && ::textSafeSwapMvp.isInitialized) {
+            val favLogs = filtered.filter { it.leadMatchup.equals("FAVORABLE", ignoreCase = true) }
+            val favWins = favLogs.count { it.result.equals("WIN", ignoreCase = true) }
+            val favLosses = favLogs.count { it.result.equals("LOSS", ignoreCase = true) }
+            val favTotal = favWins + favLosses
+            val favPct = if (favTotal > 0) Math.round((favWins.toDouble() / favTotal.toDouble()) * 100.0).toInt() else 0
+            textLeadWonWinrate.text = if (favTotal == 0) "—% (0W-0L)" else "$favPct% (${favWins}W-${favLosses}L)"
+            textLeadWonWinrate.setTextColor(
+                when {
+                    favTotal == 0 -> 0xFF94A3B8.toInt()
+                    favPct >= 70 -> 0xFF34D399.toInt()
+                    favPct >= 55 -> 0xFFFBBF24.toInt()
+                    else -> 0xFFF43F5E.toInt()
+                }
+            )
+
+            val negLogs = filtered.filter {
+                it.leadMatchup.equals("NEGATIVE", ignoreCase = true) ||
+                    (!it.leadMatchup.equals("FAVORABLE", ignoreCase = true) && it.firstSwapActor.equals("user", ignoreCase = true))
+            }
+            val negWins = negLogs.count { it.result.equals("WIN", ignoreCase = true) }
+            val negLosses = negLogs.count { it.result.equals("LOSS", ignoreCase = true) }
+            val negTotal = negWins + negLosses
+            val negPct = if (negTotal > 0) Math.round((negWins.toDouble() / negTotal.toDouble()) * 100.0).toInt() else 0
+            val recGrade = when {
+                negTotal == 0 -> "—"
+                negPct >= 45 -> "S"
+                negPct >= 35 -> "A"
+                negPct >= 25 -> "B"
+                else -> "C"
+            }
+            textLeadLostRecovery.text = if (negTotal == 0) "—% (0W-0L)" else "$negPct% [$recGrade] (${negWins}W-${negLosses}L)"
+            textLeadLostRecovery.setTextColor(
+                when {
+                    negTotal == 0 -> 0xFF94A3B8.toInt()
+                    negPct >= 45 -> 0xFF34D399.toInt()
+                    negPct >= 35 -> 0xFF38BDF8.toInt()
+                    negPct >= 25 -> 0xFFFBBF24.toInt()
+                    else -> 0xFFF43F5E.toInt()
+                }
+            )
+
+            // Safe-Swap MVP: Identify the user safe-swap Pokémon with the best recovery record in lost/pivoted leads
+            val swapStats = mutableMapOf<String, Pair<Int, Int>>() // speciesName -> (wins, total)
+            for (entry in negLogs) {
+                val isWin = entry.result.equals("WIN", ignoreCase = true)
+                val isLoss = entry.result.equals("LOSS", ignoreCase = true)
+                if (!isWin && !isLoss) continue
+                val firstUserSwitchMon = entry.timelineEvents.firstOrNull {
+                    it.type.equals("SWITCH", ignoreCase = true) && it.actor.equals("user", ignoreCase = true)
+                }?.let { ev ->
+                    ev.pokemonEntering?.takeIf { it.isNotBlank() } ?: ev.activePokemon.takeIf { it.isNotBlank() }
+                } ?: entry.userPokemon.getOrNull(1)?.takeIf { it.isNotBlank() }
+                if (!firstUserSwitchMon.isNullOrBlank()) {
+                    val prev = swapStats[firstUserSwitchMon] ?: (0 to 0)
+                    swapStats[firstUserSwitchMon] = (prev.first + if (isWin) 1 else 0) to (prev.second + 1)
+                }
+            }
+            val bestSwap = swapStats.entries
+                .sortedWith(
+                    compareByDescending<Map.Entry<String, Pair<Int, Int>>> { it.value.first }
+                        .thenByDescending { it.value.first.toDouble() / it.value.second.coerceAtLeast(1).toDouble() }
+                        .thenByDescending { it.value.second }
+                )
+                .firstOrNull()
+            if (bestSwap != null && bestSwap.value.second > 0) {
+                val (sWins, sTotal) = bestSwap.value
+                val sPct = Math.round((sWins.toDouble() / sTotal.toDouble()) * 100.0).toInt()
+                val shortMon = OverlayService.abbrPokeCompactStatic(bestSwap.key)
+                textSafeSwapMvp.text = "$shortMon $sPct% ($sWins/${sTotal})"
+                textSafeSwapMvp.setTextColor(if (sPct >= 40) 0xFFFBBF24.toInt() else 0xFFCBD5E1.toInt())
+            } else {
+                textSafeSwapMvp.text = "—"
+                textSafeSwapMvp.setTextColor(0xFF94A3B8.toInt())
+            }
         }
 
         battleLogContainer.removeAllViews()

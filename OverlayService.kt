@@ -287,6 +287,18 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_SHIELD_CHIP_TOLERANCE_PCT = "gbl_shield_chip_tolerance_pct"
         const val DEFAULT_SHIELD_CHIP_TOLERANCE_PCT = 10 // 6 | 10 (Default) | 14
 
+        // v6.06: Haptics & Tactical Vibration Alerts (Synchronized with Swap Clock & Charged Move Blink Indicators)
+        const val PREFS_KEY_HAPTIC_MASTER_ENABLED = "gbl_haptic_master_enabled"
+        const val DEFAULT_HAPTIC_MASTER_ENABLED = true
+        const val PREFS_KEY_HAPTIC_OPP_SWAP_ENABLED = "gbl_haptic_opp_swap_enabled"
+        const val DEFAULT_HAPTIC_OPP_SWAP_ENABLED = true
+        const val PREFS_KEY_HAPTIC_OPP_SWAP_WARN_SEC = "gbl_haptic_opp_swap_warn_sec"
+        const val DEFAULT_HAPTIC_OPP_SWAP_WARN_SEC = 5 // 2..10s
+        const val PREFS_KEY_HAPTIC_OPP_CHARGE_WARN_ENABLED = "gbl_haptic_opp_charge_warn_enabled"
+        const val DEFAULT_HAPTIC_OPP_CHARGE_WARN_ENABLED = true
+        const val PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS = "gbl_haptic_charge_timing_fasts"
+        const val DEFAULT_HAPTIC_CHARGE_TIMING_FASTS = 1 // 1 or 2 fast moves
+
         @Volatile var activeEnergyDebounceSamples: Int = DEFAULT_ENERGY_DEBOUNCE_SAMPLES
         @Volatile var activeEnergyUpdateToasts: Boolean = DEFAULT_ENERGY_UPDATE_TOASTS
         @Volatile var activeHpDebounceSamples: Int = DEFAULT_HP_DEBOUNCE_SAMPLES
@@ -295,6 +307,49 @@ class OverlayService : LifecycleService() {
         @Volatile var activeSwapThrowRollbackWindowMs: Int = DEFAULT_SWAP_THROW_ROLLBACK_WINDOW_MS
         @Volatile var activeAltFastDetectStrictness: String = DEFAULT_ALT_FAST_DETECT_STRICTNESS
         @Volatile var activeShieldChipTolerancePct: Int = DEFAULT_SHIELD_CHIP_TOLERANCE_PCT
+        @Volatile var activeHapticMasterEnabled: Boolean = DEFAULT_HAPTIC_MASTER_ENABLED
+        @Volatile var activeHapticOppSwapEnabled: Boolean = DEFAULT_HAPTIC_OPP_SWAP_ENABLED
+        @Volatile var activeHapticOppSwapWarnSec: Int = DEFAULT_HAPTIC_OPP_SWAP_WARN_SEC
+        @Volatile var activeHapticOppChargeWarnEnabled: Boolean = DEFAULT_HAPTIC_OPP_CHARGE_WARN_ENABLED
+        @Volatile var activeHapticChargeTimingFasts: Int = DEFAULT_HAPTIC_CHARGE_TIMING_FASTS
+
+        @Suppress("DEPRECATION")
+        fun triggerSingleHapticPulseStatic(context: Context) {
+            try {
+                val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
+                    vm?.defaultVibrator
+                } else {
+                    context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+                } ?: return
+                if (!vibrator.hasVibrator()) return
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(android.os.VibrationEffect.createOneShot(80L, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                } else {
+                    vibrator.vibrate(80L)
+                }
+            } catch (_: Exception) {}
+        }
+
+        @Suppress("DEPRECATION")
+        fun triggerDoubleHapticPulseStatic(context: Context) {
+            try {
+                val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
+                    vm?.defaultVibrator
+                } else {
+                    context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+                } ?: return
+                if (!vibrator.hasVibrator()) return
+                val timings = longArrayOf(0L, 80L, 80L, 80L)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val amplitudes = intArrayOf(0, 255, 0, 255)
+                    vibrator.vibrate(android.os.VibrationEffect.createWaveform(timings, amplitudes, -1))
+                } else {
+                    vibrator.vibrate(timings, -1)
+                }
+            } catch (_: Exception) {}
+        }
 
         @Volatile var activeTierSwMin: Int = DEFAULT_TIER_SW_MIN
         @Volatile var activeTierWMin: Int = DEFAULT_TIER_W_MIN
@@ -404,6 +459,11 @@ class OverlayService : LifecycleService() {
             activeLimitedStdDecayGbl = prefs.getFloat(PREFS_KEY_LIMITED_STD_DECAY_GBL, DEFAULT_LIMITED_STD_DECAY_GBL).coerceIn(0.01f, 0.30f)
             activeLimitedStdDecayShow6 = prefs.getFloat(PREFS_KEY_LIMITED_STD_DECAY_SHOW6, DEFAULT_LIMITED_STD_DECAY_SHOW6).coerceIn(0.01f, 0.30f)
             activeShow6UsageWeightPct = prefs.getInt(PREFS_KEY_SHOW6_USAGE_WEIGHT_PCT, DEFAULT_SHOW6_USAGE_WEIGHT_PCT).coerceIn(0, 100)
+            activeHapticMasterEnabled = prefs.getBoolean(PREFS_KEY_HAPTIC_MASTER_ENABLED, DEFAULT_HAPTIC_MASTER_ENABLED)
+            activeHapticOppSwapEnabled = prefs.getBoolean(PREFS_KEY_HAPTIC_OPP_SWAP_ENABLED, DEFAULT_HAPTIC_OPP_SWAP_ENABLED)
+            activeHapticOppSwapWarnSec = prefs.getInt(PREFS_KEY_HAPTIC_OPP_SWAP_WARN_SEC, DEFAULT_HAPTIC_OPP_SWAP_WARN_SEC).coerceIn(2, 10)
+            activeHapticOppChargeWarnEnabled = prefs.getBoolean(PREFS_KEY_HAPTIC_OPP_CHARGE_WARN_ENABLED, DEFAULT_HAPTIC_OPP_CHARGE_WARN_ENABLED)
+            activeHapticChargeTimingFasts = prefs.getInt(PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS, DEFAULT_HAPTIC_CHARGE_TIMING_FASTS).coerceIn(1, 2)
             loadCachedBattleFrontierUsageAndCores(prefs)
             refreshCachedGblStandardLeagueLogsStatic(prefs)
             recordDebounceSettingsChangeIfNeededStatic(prefs, Gson(), "settings_sync", triggerImmediateUpload = false)
@@ -2603,14 +2663,14 @@ class OverlayService : LifecycleService() {
                             uploadedAtMs = nowMs,
                             uploader = safeUser,
                             deviceHash = devHash,
-                            appVersion = "5.13",
+                            appVersion = "6.06",
                             battleCount = enrichedPending.size,
                             anomalyCount = totalAnomalies,
                             highSeverityCount = highSevCount
                         )
                         val updatedBatches = (existingManifest.batches.filter { it.batchId != batchId } + newEntry).takeLast(1500)
                         val updatedManifest = AiTelemetryManifest(
-                            schemaVersion = "5.13",
+                            schemaVersion = "6.06",
                             updatedAtMs = nowMs,
                             totalBatches = updatedBatches.size,
                             totalBattles = updatedBatches.sumOf { it.battleCount },
@@ -2622,7 +2682,7 @@ class OverlayService : LifecycleService() {
                             android.util.Base64.NO_WRAP
                         )
                         val putManifestMap = mutableMapOf<String, Any>(
-                            "message" to "telemetry(v5.13): update $manifestPath for $batchId",
+                            "message" to "telemetry(v6.06): update $manifestPath for $batchId",
                             "content" to manifestB64,
                             "branch" to targetBranch
                         )
@@ -2691,14 +2751,14 @@ class OverlayService : LifecycleService() {
                                 uploadedAtMs = nowMs,
                                 uploader = safeUser,
                                 deviceHash = devHash,
-                                appVersion = "5.13",
+                                appVersion = "6.06",
                                 battleCount = enrichedPending.size,
                                 anomalyCount = totalAnomalies,
                                 highSeverityCount = highSevCount
                             )
                         )
                         val issueBodyText = buildString {
-                            appendLine("### SilphScope PvP v5.13 Community AI Telemetry Batch")
+                            appendLine("### SilphScope PvP v6.06 Community AI Telemetry Batch")
                             appendLine("- **Batch ID**: `$batchId`")
                             appendLine("- **Target Path**: `$batchPath` (`$AI_TELEMETRY_BRANCH`)")
                             appendLine("- **Battles**: ${enrichedPending.size} (Anomalies detected: $totalAnomalies, High-Severity: $highSevCount)")
@@ -2782,14 +2842,14 @@ class OverlayService : LifecycleService() {
                             uploadedAtMs = nowMs,
                             uploader = safeUser,
                             deviceHash = devHash,
-                            appVersion = "5.13",
+                            appVersion = "6.06",
                             battleCount = enrichedPending.size,
                             anomalyCount = totalAnomalies,
                             highSeverityCount = highSevCount
                         )
                         val updatedBatches = (existingManifest.batches.filter { it.batchId != batchId } + newEntry).takeLast(1500)
                         val updatedManifest = AiTelemetryManifest(
-                            schemaVersion = "5.13",
+                            schemaVersion = "6.06",
                             updatedAtMs = nowMs,
                             totalBatches = updatedBatches.size,
                             totalBattles = updatedBatches.sumOf { it.battleCount },
@@ -2798,7 +2858,7 @@ class OverlayService : LifecycleService() {
                         )
 
                         val gistBodyMap = mapOf(
-                            "description" to "SilphScope PvP v5.13 AI Training & Anomaly Telemetry Vault (@$safeUser)",
+                            "description" to "SilphScope PvP v6.06 AI Training & Anomaly Telemetry Vault (@$safeUser)",
                             "public" to true,
                             "files" to mapOf(
                                 telemetryManifestFile to mapOf("content" to gson.toJson(updatedManifest)),
@@ -3733,7 +3793,13 @@ class OverlayService : LifecycleService() {
             "Petal Blizzard" to MoveStats("Petal Blizzard", "grass", 110, 65),
             "Mystical Fire" to MoveStats("Mystical Fire", "fire", 60, 45),
             "Gyro Ball" to MoveStats("Gyro Ball", "steel", 80, 50),
-            "Dive" to MoveStats("Dive", "water", 50, 40)
+            "Dive" to MoveStats("Dive", "water", 50, 40),
+            "Skull Bash" to MoveStats("Skull Bash", "normal", 130, 75),
+            "Beak Blast" to MoveStats("Beak Blast", "flying", 110, 55),
+            "Rock Blast" to MoveStats("Rock Blast", "rock", 50, 40),
+            "Brick Break" to MoveStats("Brick Break", "fighting", 40, 35),
+            "Poltergeist" to MoveStats("Poltergeist", "ghost", 140, 75),
+            "Boomburst" to MoveStats("Boomburst", "normal", 150, 70)
         )
 
         private val WHITESPACE_REGEX = Regex("\\s+")
@@ -4040,7 +4106,13 @@ class OverlayService : LifecycleService() {
             PokemonMeta("Tinkaton", "tinkaton", "tinkaton", "Base", listOf("fairy", "steel"), 2488, "Fairy Wind", 2, "Gigaton Hammer", "Bulldoze", 42, 36, atk = 155.0, def = 196.0, hp = 198, glRank = 40, ulRank = 32, mlRank = 260, chargedMove3 = "Play Rough", chargedMove4 = "Heavy Slam", isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "12/15/15"),
             PokemonMeta("Rillaboom", "rillaboom", "rillaboom", "Base", listOf("grass"), 2485, "Scratch", 1, "Drum Beating", "Earth Power", 36, 44, atk = 239.0, def = 168.0, hp = 225, glRank = 82, ulRank = 45, mlRank = 88, chargedMove3 = "Frenzy Plant", isRawBaseStats = true, defaultIvsGl = "5/15/13", defaultIvsUl = "4/14/15"),
             PokemonMeta("Cetitan", "cetitan", "cetitan", "Base", listOf("ice"), 2495, "Powder Snow", 2, "Body Slam", "Avalanche", 26, 44, atk = 208.0, def = 123.0, hp = 347, glRank = 57, ulRank = 38, mlRank = 95, isRawBaseStats = true, defaultIvsGl = "4/13/10", defaultIvsUl = "4/15/15"),
-            PokemonMeta("Bellibolt", "bellibolt", "bellibolt", "Base", listOf("electric"), 2492, "Sucker Punch", 2, "Discharge", "Zap Cannon", 34, 56, atk = 184.0, def = 165.0, hp = 240, glRank = 75, ulRank = 42, mlRank = 220, isRawBaseStats = true, defaultIvsGl = "4/15/12", defaultIvsUl = "4/15/15")
+            PokemonMeta("Bellibolt", "bellibolt", "bellibolt", "Base", listOf("electric"), 2492, "Sucker Punch", 2, "Discharge", "Zap Cannon", 34, 56, atk = 184.0, def = 165.0, hp = 240, glRank = 75, ulRank = 42, mlRank = 220, isRawBaseStats = true, defaultIvsGl = "4/15/12", defaultIvsUl = "4/15/15"),
+            PokemonMeta("Toucannon", "toucannon", "toucannon", "Base", listOf("normal", "flying"), 2488, "Bullet Seed", 3, "Beak Blast", "Drill Peck", 42, 34, atk = 222.0, def = 146.0, hp = 190, glRank = 95, ulRank = 88, mlRank = 290, chargedMove3 = "Rock Blast", isRawBaseStats = true, defaultIvsGl = "4/14/15", defaultIvsUl = "4/15/15"),
+            PokemonMeta("Golurk", "golurk", "golurk", "Base", listOf("ground", "ghost"), 2488, "Mud-Slap", 3, "Shadow Punch", "Dynamic Punch", 28, 42, atk = 222.0, def = 154.0, hp = 205, glRank = 45, ulRank = 42, mlRank = 240, chargedMove3 = "Earth Power", chargedMove4 = "Poltergeist", isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "4/15/15"),
+            PokemonMeta("Dondozo", "dondozo", "dondozo", "Base", listOf("water"), 2488, "Waterfall", 3, "Surf", "Liquidation", 34, 38, atk = 178.0, def = 178.0, hp = 312, glRank = 55, ulRank = 35, mlRank = 180, chargedMove3 = "Body Slam", isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "4/15/15"),
+            PokemonMeta("Volcanion", "volcanion", "volcanion", "Base", listOf("fire", "water"), 3985, "Incinerate", 5, "Overheat", "Earth Power", 64, 46, atk = 252.0, def = 216.0, hp = 190, glRank = 140, ulRank = 65, mlRank = 28, chargedMove3 = "Sludge Bomb", chargedMove4 = "Hydro Pump", isRawBaseStats = true, defaultIvsGl = "10/14/14", defaultIvsUl = "10/15/15"),
+            PokemonMeta("Kommo-o", "kommo_o", "kommo-o", "Base", listOf("dragon", "fighting"), 2488, "Dragon Tail", 3, "Clanging Scales", "Close Combat", 48, 46, atk = 222.0, def = 240.0, hp = 181, glRank = 48, ulRank = 30, mlRank = 95, chargedMove3 = "Brick Break", chargedMove4 = "Boomburst", isRawBaseStats = true, defaultIvsGl = "4/14/15", defaultIvsUl = "4/15/14"),
+            PokemonMeta("Regidrago", "regidrago", "regidrago", "Base", listOf("dragon"), 2488, "Dragon Breath", 1, "Breaking Swipe", "Outrage", 26, 48, atk = 202.0, def = 101.0, hp = 400, glRank = 62, ulRank = 36, mlRank = 110, chargedMove3 = "Dragon Pulse", isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "4/15/15")
         )
 
         // Dynamically loaded species & moves from PvPoke gamemaster.json (1,100+ Pokémon)
@@ -4139,7 +4211,13 @@ class OverlayService : LifecycleService() {
             "virizion" to listOf("Double Kick", "Quick Attack"),
             "registeel" to listOf("Lock-On", "Metal Claw"),
             "melmetal" to listOf("Thunder Shock"),
-            "tapu_fini" to listOf("Water Gun", "Hidden Power")
+            "tapu_fini" to listOf("Water Gun", "Hidden Power"),
+            "toucannon" to listOf("Bullet Seed", "Peck", "Rock Smash"),
+            "golurk" to listOf("Mud-Slap", "Astonish"),
+            "dondozo" to listOf("Waterfall", "Tackle"),
+            "volcanion" to listOf("Incinerate", "Water Gun"),
+            "kommo_o" to listOf("Dragon Tail", "Poison Jab"),
+            "regidrago" to listOf("Dragon Breath", "Bite")
         )
 
         val FALLBACK_SPECIES_CHARGED_POOL: Map<String, List<String>> = mapOf(
@@ -4228,7 +4306,13 @@ class OverlayService : LifecycleService() {
             "virizion" to listOf("Sacred Sword", "Leaf Blade", "Stone Edge"),
             "registeel" to listOf("Focus Blast", "Zap Cannon", "Flash Cannon"),
             "melmetal" to listOf("Double Iron Bash", "Superpower", "Rock Slide", "Thunderbolt", "Flash Cannon", "Hyper Beam"),
-            "tapu_fini" to listOf("Surf", "Nature's Madness", "Moonblast", "Ice Beam")
+            "tapu_fini" to listOf("Surf", "Nature's Madness", "Moonblast", "Ice Beam"),
+            "toucannon" to listOf("Beak Blast", "Drill Peck", "Rock Blast", "Flash Cannon"),
+            "golurk" to listOf("Shadow Punch", "Dynamic Punch", "Earth Power", "Poltergeist"),
+            "dondozo" to listOf("Surf", "Liquidation", "Body Slam", "Outrage", "Hydro Pump"),
+            "volcanion" to listOf("Overheat", "Earth Power", "Sludge Bomb", "Hydro Pump"),
+            "kommo_o" to listOf("Clanging Scales", "Close Combat", "Brick Break", "Boomburst", "Dragon Claw"),
+            "regidrago" to listOf("Breaking Swipe", "Outrage", "Dragon Pulse", "Hyper Beam")
         )
 
         val FAST_MOVE_ENERGY: Map<String, Int> = mapOf(
@@ -4539,7 +4623,14 @@ class OverlayService : LifecycleService() {
             "Stomp" to 40,
             "Petal Blizzard" to 65,
             "Mystical Fire" to 45,
-            "Gyro Ball" to 50
+            "Gyro Ball" to 50,
+            "Dive" to 40,
+            "Skull Bash" to 75,
+            "Beak Blast" to 55,
+            "Rock Blast" to 40,
+            "Brick Break" to 35,
+            "Poltergeist" to 75,
+            "Boomburst" to 70
         )
 
         private val STATIC_MOVE_ENERGY_LOOKUP: Map<String, Int> by lazy {
@@ -18396,6 +18487,32 @@ class OverlayService : LifecycleService() {
                         val oppFastTurnsRetro = resolveFastTurnsStatic(oppFastNameRetro, oppMeta?.fastTurns ?: 2).coerceIn(1, 5)
                         val oppFastERetro = resolveFastEnergyStatic(oppFastNameRetro, oppFastTurnsRetro).coerceIn(2, 20)
                         val lastOppEvIdx = battleTimelineEvents.indexOfLast { it.type == "CHARGED_ATTACK" && it.actor == "opp" }
+                        // v6.06: Recompute expectedMoveDmgPct when BANNER_OCR retroactively confirms moveName
+                        val retroAttackerRaw = detectedOpponents.getOrNull(resolvedOppSlotIdx) ?: oppMeta?.name ?: activeOpponentName
+                        val retroAttackerBase = FormResolver.extractBaseSpecies(retroAttackerRaw).lowercase()
+                        val retroAttackerShad = manualShadowOverrides[retroAttackerBase] ?: isOpponentShadow
+                        val retroAttackerMeta = computeEffectiveCombatStats(
+                            oppMeta ?: getPokemonMeta(retroAttackerRaw, activeLeague, retroAttackerShad),
+                            activeLeague,
+                            oppSlotCp.getOrNull(resolvedOppSlotIdx)?.takeIf { it > 0 }
+                        )
+                        val retroDefUserIdx = resolvedUserSlotIdx.coerceIn(0, 2)
+                        val retroDefCfg = preset?.pokemon?.getOrNull(retroDefUserIdx)
+                        val retroDefName = retroDefCfg?.name ?: resolvedUserMonName
+                        val retroDefShad = retroDefName.contains("Shadow", ignoreCase = true)
+                        val retroDefMeta = computeEffectiveCombatStats(
+                            getPokemonMeta(retroDefName, activeLeague, retroDefShad),
+                            activeLeague,
+                            retroDefCfg?.cp,
+                            retroDefCfg?.ivs
+                        )
+                        val retroExpectedDmgPct = calculateChargedMoveDamagePercent(
+                            attacker = retroAttackerMeta,
+                            defender = retroDefMeta,
+                            moveName = moveName,
+                            isAttackerShadow = retroAttackerShad,
+                            isDefenderShadow = retroDefShad
+                        )
                         // v6.02: If late banner OCR also reveals a different opponent slot threw the move than lastOppChargedAttackerSlotIdx,
                         // refund the old slot and deduct from resolvedOppSlotIdx!
                         if (lastOppChargedAttackerSlotIdx in 0..2 && lastOppChargedAttackerSlotIdx != resolvedOppSlotIdx && lastOppChargeDeductedEnergySnapshot > 0) {
@@ -18418,6 +18535,7 @@ class OverlayService : LifecycleService() {
                                     preThrowEnergy = newPreE,
                                     requiredMoveEnergy = trueCost,
                                     energyDeficit = 0,
+                                    expectedMoveDmgPct = retroExpectedDmgPct,
                                     moveResolutionSource = "BANNER_OCR"
                                 )
                             }
@@ -18433,7 +18551,7 @@ class OverlayService : LifecycleService() {
                                 lastOppChargeDeductedEnergySnapshot = trueCost
                                 updatedRetroactive = true
                             }
-                            if (lastOppEvIdx >= 0 && (battleTimelineEvents[lastOppEvIdx].inferredMoveName != moveName || inFlightBonusE > 0)) {
+                            if (lastOppEvIdx >= 0 && (battleTimelineEvents[lastOppEvIdx].inferredMoveName != moveName || inFlightBonusE > 0 || battleTimelineEvents[lastOppEvIdx].expectedMoveDmgPct == null)) {
                                 val prevEv = battleTimelineEvents[lastOppEvIdx]
                                 val adjustedPreE = prevEv.preThrowEnergy?.let { (it + inFlightBonusE).coerceAtMost(100) }
                                 val newDeficit = if (adjustedPreE != null && adjustedPreE < trueCost) (trueCost - adjustedPreE) else 0
@@ -18443,6 +18561,7 @@ class OverlayService : LifecycleService() {
                                     preThrowEnergy = adjustedPreE,
                                     requiredMoveEnergy = trueCost,
                                     energyDeficit = newDeficit,
+                                    expectedMoveDmgPct = retroExpectedDmgPct,
                                     moveResolutionSource = "BANNER_OCR"
                                 )
                                 updatedRetroactive = true
@@ -21200,11 +21319,41 @@ class OverlayService : LifecycleService() {
                     // Tier 3 Fallback: Lowest energy viable opponent move on the thrower to err on the side of opponent having more energy
                     attackerCheapestOppEnergy
                 }
-                // v5.13 Fix 3: 1-Fast-Move Mid-Turn Throw Tolerance:
-                val attackerFastName = detectedOppFastMoveOverride[attackerOppSlotIdx]?.takeIf { it.isNotBlank() }
+                // v5.13 Fix 3 & v6.06 Equal/Higher-EPT Fast Move Promotion on Deficit Throw:
+                var attackerFastName = detectedOppFastMoveOverride[attackerOppSlotIdx]?.takeIf { it.isNotBlank() }
                     ?: attackerOppMeta.defaultFastMove
-                val attackerFastTurns = resolveFastTurnsStatic(attackerFastName, attackerOppMeta.fastTurns).coerceIn(1, 5)
-                val attackerFastEnergy = resolveFastEnergyStatic(attackerFastName, attackerFastTurns).coerceIn(2, 20)
+                var attackerFastTurns = resolveFastTurnsStatic(attackerFastName, attackerOppMeta.fastTurns).coerceIn(1, 5)
+                var attackerFastEnergy = resolveFastEnergyStatic(attackerFastName, attackerFastTurns).coerceIn(2, 20)
+                if (resolvedOppMove != null && (totalTargetEnergy - pendingChargedAttackPreOppEnergy) > attackerFastEnergy && attackerOppSlotIdx in 0..2) {
+                    val curEpt = attackerFastEnergy.toDouble() / attackerFastTurns.toDouble()
+                    val legalFastPool = getAvailableMovePoolForSpeciesStatic(attackerOppMeta.name, activeLeague).first
+                    val slotTurns = oppSlotTurnsOnField[attackerOppSlotIdx].coerceAtLeast(attackerFastTurns)
+                    val bestHigherEptFast = legalFastPool.filter { candFast ->
+                        !candFast.equals(attackerFastName, ignoreCase = true)
+                    }.mapNotNull { candFast ->
+                        val cTurns = resolveFastTurnsStatic(candFast, attackerFastTurns).coerceIn(1, 5)
+                        val cEnergy = resolveFastEnergyStatic(candFast, cTurns).coerceIn(2, 20)
+                        val cEpt = cEnergy.toDouble() / cTurns.toDouble()
+                        val estGenerated = ((slotTurns + cTurns - 1) / cTurns) * cEnergy
+                        if (cEpt > curEpt + 0.05 && estGenerated >= totalTargetEnergy - cEnergy) {
+                            Triple(candFast, cTurns, cEnergy)
+                        } else null
+                    }.maxByOrNull { it.third.toDouble() / it.second.toDouble() }
+                    if (bestHigherEptFast != null) {
+                        val (newFast, newTurns, newEnergy) = bestHigherEptFast
+                        detectedOppFastMoveOverride[attackerOppSlotIdx] = newFast
+                        oppFastMoveConfirmed[attackerOppSlotIdx] = true
+                        oppFastMoveStatus[attackerOppSlotIdx] = "confirmed"
+                        val approxFastsDone = max(1, (pendingChargedAttackPreOppEnergy + attackerFastEnergy - 1) / max(1, attackerFastEnergy))
+                        val recalcPreEnergy = max(totalTargetEnergy, (approxFastsDone * newEnergy).coerceIn(0, 100))
+                        val energyGainDelta = (recalcPreEnergy - pendingChargedAttackPreOppEnergy).coerceAtLeast(0)
+                        pendingChargedAttackPreOppEnergy = recalcPreEnergy
+                        oppSlotEnergy[attackerOppSlotIdx] = (oppSlotEnergy[attackerOppSlotIdx] + energyGainDelta).coerceIn(0, 100)
+                        attackerFastName = newFast
+                        attackerFastTurns = newTurns
+                        attackerFastEnergy = newEnergy
+                    }
+                }
                 if (resolvedOppMove != null && (totalTargetEnergy - pendingChargedAttackPreOppEnergy) in 1..attackerFastEnergy) {
                     pendingChargedAttackPreOppEnergy = (pendingChargedAttackPreOppEnergy + attackerFastEnergy).coerceAtMost(100)
                     if (attackerOppSlotIdx in 0..2) {
@@ -21276,6 +21425,13 @@ class OverlayService : LifecycleService() {
                 val oppEnergyDeficit = max(0, totalTargetEnergy - oppRawPreEnergy)
                 val oppExpectedDmgPct = resolvedOppMove?.let { rMove ->
                     candPairs.find { it.first.equals(rMove, ignoreCase = true) }?.second
+                        ?: calculateChargedMoveDamagePercent(
+                            attacker = attackerOppMeta,
+                            defender = defenderUserMeta,
+                            moveName = rMove,
+                            isAttackerShadow = attackerOppShadow,
+                            isDefenderShadow = defenderUserShadow
+                        )
                 }
                 val oppMoveSource = when {
                     bannerOppMove != null -> "BANNER_OCR"
@@ -23819,6 +23975,9 @@ class OverlayService : LifecycleService() {
      * ACTION: RESET OPPONENT (Start New Battle)
      * Clears opponent team & manual form/shadow overrides while keeping 1 Hz OCR continuously active
      */
+    @Volatile private var lastSwapHapticAlertEpochMs: Long = 0L
+    @Volatile private var lastChargeWarnHapticKey: String = ""
+
     fun startNewBattle() {
         // Snapshot opponents and lead matchup before clearing, so if the user taps
         // "Start Battle" (which immediately empties the matrix) and then taps "Win" or "Loss",
@@ -23872,6 +24031,8 @@ class OverlayService : LifecycleService() {
         // v2.34: Reset Swap Clocks, Shields, Pokéball Faint state & post-switch verification state
         playerSwapEndTimeMs = 0L
         oppSwapEndTimeMs = 0L
+        lastSwapHapticAlertEpochMs = 0L
+        lastChargeWarnHapticKey = ""
         playerPokeballCount = 3
         oppPokeballCount = 3
         playerShieldsRemaining = 2
@@ -24502,10 +24663,10 @@ class OverlayService : LifecycleService() {
         )
         val githubUser = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty().ifEmpty { "anonymous" }
         val v510Record = AiTelemetryBattleRecordV510(
-            schemaVersion = "6.05",
+            schemaVersion = "6.06",
             battleId = battleId,
             timestampMs = nowMs,
-            appVersion = "6.05",
+            appVersion = "6.06",
             uploaderHandle = githubUser,
             deviceHash = getDeviceTelemetryHashStatic(prefs),
             deviceModel = Build.MODEL ?: "Android",
@@ -25213,6 +25374,12 @@ class OverlayService : LifecycleService() {
                 FormResolver.resolveBestDefaultVariant(variants.first(), cleanNoShadow, activeLeague)
             } else {
                 allMeta.find { it.speciesId.equals(cleanNoShadow.replace(" ", "_"), ignoreCase = true) }
+                    ?: allMeta.firstOrNull {
+                        base.length >= 4 && (
+                            it.baseSpecies.startsWith(base, ignoreCase = true) ||
+                            levenshteinDistance(it.baseSpecies.lowercase(), base.lowercase()) <= 2
+                        )
+                    }
                     ?: PokemonMeta(
                         name = name,
                         speciesId = base,
@@ -25687,6 +25854,8 @@ class OverlayService : LifecycleService() {
                 "playerSwapEndTimeMs" to playerSwapEndTimeMs,
                 "oppSwapRemainingSec" to oppSwapRemainingSec,
                 "oppSwapEndTimeMs" to oppSwapEndTimeMs,
+                "hapticOppSwapWarnSec" to activeHapticOppSwapWarnSec,
+                "hapticChargeTimingFasts" to activeHapticChargeTimingFasts,
                 "playerPokeballs" to playerPokeballCount,
                 "oppPokeballs" to oppPokeballCount,
                 "playerShields" to playerShieldsRemaining,
@@ -26746,22 +26915,28 @@ class OverlayService : LifecycleService() {
             (myFastsNeededForNextMove <= safeMyFastsBeforeOppMove || bestCatchBenchIdx in 0..2)
         ) {
             // Pillar 3B: Unified Throw & Catch Timing Countdown (2F Highlight -> 1F Blink -> 0F Immediate)
+            // v6.06: Tie BLINK_1_FAST & double vibration alert to configurable `activeHapticChargeTimingFasts` (1 or 2 fast moves)
             recPhase = "THROW_CATCH_TIMING"
             val canThrowMineBeforeOpp = myFastsNeededForNextMove <= safeMyFastsBeforeOppMove
             val useCatchCall = !canThrowMineBeforeOpp && bestCatchBenchIdx in 0..2 ||
                 (bestCatchBenchIdx in 0..2 && oppShieldsRemaining > 0 && curBr <= activeTierLMax)
+            val chargeWarnBlinkThreshold = activeHapticChargeTimingFasts.coerceIn(1, 2)
             if (useCatchCall && bestCatchBenchIdx in 0..2) {
                 recSwapIdx = bestCatchBenchIdx
-                when (safeMyFastsBeforeOppMove) {
-                    2 -> {
+                when {
+                    safeMyFastsBeforeOppMove in 1..chargeWarnBlinkThreshold -> {
+                        timingAlertLevel = "BLINK_1_FAST"
+                        recAction = if (safeMyFastsBeforeOppMove == 1) {
+                            "🚨 1 LAST FAST -> CATCH ON $bestCatchBenchCode!"
+                        } else {
+                            "🚨 ${safeMyFastsBeforeOppMove}F -> CATCH $oppNextMoveShort ON $bestCatchBenchCode!"
+                        }
+                        recTone = "swap"
+                    }
+                    safeMyFastsBeforeOppMove == 2 -> {
                         timingAlertLevel = "WARN_2_FASTS"
                         recAction = "⚠️ 2F -> CATCH $oppNextMoveShort ON $bestCatchBenchCode"
                         recTone = "bait"
-                    }
-                    1 -> {
-                        timingAlertLevel = "BLINK_1_FAST"
-                        recAction = "🚨 1 LAST FAST -> CATCH ON $bestCatchBenchCode!"
-                        recTone = "swap"
                     }
                     else -> {
                         timingAlertLevel = "IMMEDIATE_0_FAST"
@@ -26771,16 +26946,20 @@ class OverlayService : LifecycleService() {
                 }
                 recGoal = "Opp ${activeOppEnergyNow}E/${oppNextMoveCost}E ($oppNextMoveShort)"
             } else {
-                when (safeMyFastsBeforeOppMove) {
-                    2 -> {
+                when {
+                    safeMyFastsBeforeOppMove in 1..chargeWarnBlinkThreshold -> {
+                        timingAlertLevel = "BLINK_1_FAST"
+                        recAction = if (safeMyFastsBeforeOppMove == 1) {
+                            "🚨 1 LAST FAST -> THROW $myBestMoveShort NOW!"
+                        } else {
+                            "🚨 ${safeMyFastsBeforeOppMove}F -> THROW $myBestMoveShort (Pre-$oppNextMoveShort)!"
+                        }
+                        recTone = "swap"
+                    }
+                    safeMyFastsBeforeOppMove == 2 -> {
                         timingAlertLevel = "WARN_2_FASTS"
                         recAction = "⚠️ 2F -> THROW $myBestMoveShort (Pre-$oppNextMoveShort)"
                         recTone = "bait"
-                    }
-                    1 -> {
-                        timingAlertLevel = "BLINK_1_FAST"
-                        recAction = "🚨 1 LAST FAST -> THROW $myBestMoveShort NOW!"
-                        recTone = "swap"
                     }
                     else -> {
                         timingAlertLevel = "IMMEDIATE_0_FAST"
@@ -27018,6 +27197,29 @@ class OverlayService : LifecycleService() {
             "candidateScores" to candidateScoreMap
         )
 
+        // v6.06: Synchronized Haptic Alerts for Opponent Swap Clock (< warnSec) & Opponent 1-Fast-From-Charged-Move Blink
+        if (isBattleActive && !isReplayMode && !isWaitingForOpponent) {
+            if (oppSwitchValidityLatched && oppSwapEndTimeMs > nowMs && oppSwapRemainingSec in 1..activeHapticOppSwapWarnSec) {
+                if (lastSwapHapticAlertEpochMs != oppSwapEndTimeMs) {
+                    lastSwapHapticAlertEpochMs = oppSwapEndTimeMs
+                    if (activeHapticMasterEnabled && activeHapticOppSwapEnabled) {
+                        triggerSingleHapticPulseStatic(this@OverlayService)
+                    }
+                }
+            }
+            if (timingAlertLevel == "BLINK_1_FAST") {
+                val chargeCycleKey = "$activeOppSlotSafe:${oppNextMoveName}:${activeOppEnergyNow / max(1, oppFastEnergy)}"
+                if (lastChargeWarnHapticKey != chargeCycleKey) {
+                    lastChargeWarnHapticKey = chargeCycleKey
+                    if (activeHapticMasterEnabled && activeHapticOppChargeWarnEnabled) {
+                        triggerDoubleHapticPulseStatic(this@OverlayService)
+                    }
+                }
+            } else if (safeMyFastsBeforeOppMove > activeHapticChargeTimingFasts) {
+                lastChargeWarnHapticKey = ""
+            }
+        }
+
         val battlePayload = mapOf(
             "activeOpponent" to oppMeta.name,
             "activeOpponentFastMove" to oppFastMoveName,
@@ -27055,6 +27257,8 @@ class OverlayService : LifecycleService() {
             "playerSwapEndTimeMs" to playerSwapEndTimeMs,
             "oppSwapRemainingSec" to oppSwapRemainingSec,
             "oppSwapEndTimeMs" to oppSwapEndTimeMs,
+            "hapticOppSwapWarnSec" to activeHapticOppSwapWarnSec,
+            "hapticChargeTimingFasts" to activeHapticChargeTimingFasts,
             "playerSwitchValidityLatched" to playerSwitchValidityLatched,
             "oppSwitchValidityLatched" to oppSwitchValidityLatched,
             "isPostFaintSwitchPromptActive" to isPostFaintSwitchPromptActive,
@@ -27431,6 +27635,17 @@ class OverlayService : LifecycleService() {
         fun toggleOpponentShadow() {
             Handler(Looper.getMainLooper()).post {
                 this@OverlayService.toggleShadowModifier()
+            }
+        }
+
+        @JavascriptInterface
+        fun triggerSwapClockHapticIfNeeded(swapEndTimeMs: Long) {
+            if (!isBattleActive || isReplayMode || swapEndTimeMs <= 0L) return
+            if (lastSwapHapticAlertEpochMs != swapEndTimeMs) {
+                lastSwapHapticAlertEpochMs = swapEndTimeMs
+                if (activeHapticMasterEnabled && activeHapticOppSwapEnabled) {
+                    triggerSingleHapticPulseStatic(this@OverlayService)
+                }
             }
         }
 

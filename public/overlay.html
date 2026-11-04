@@ -80,16 +80,15 @@
             z-index: 1;
         }
 
-        /* Header Row (Matched to Charged Move Row Background for High Readability) */
+        /* Header Row (v6.03: Transparent background — individual badge highlights make text readable) */
         .header-row {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 3px;
-            background: rgba(2, 6, 23, var(--row-bg-alpha));
-            border: 1px solid rgba(148, 163, 184, 0.16);
-            border-radius: 4px;
-            padding: 2px 4px;
+            gap: 2.5px;
+            background: transparent;
+            border: none;
+            padding: 1px 2px;
         }
 
         .sword-minimize-btn {
@@ -152,12 +151,54 @@
             border-radius: 3px;
             line-height: 1.15;
             color: #67e8f9;
-            background: rgba(8, 51, 68, 0.78);
-            border: 1px solid rgba(56, 189, 248, 0.55);
+            background: rgba(8, 51, 68, 0.84);
+            border: 1px solid rgba(56, 189, 248, 0.62);
             font-variant-numeric: tabular-nums;
             white-space: nowrap;
             flex-shrink: 0;
             letter-spacing: -0.2px;
+            transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+        }
+
+        .header-ocr-ms-badge.ocr-active {
+            color: #67e8f9;
+            background: rgba(8, 51, 68, 0.86);
+            border-color: rgba(56, 189, 248, 0.68);
+            box-shadow: 0 0 4px rgba(56, 189, 248, 0.22);
+        }
+
+        .header-ocr-ms-badge.ocr-inactive {
+            color: #94a3b8;
+            background: rgba(15, 23, 42, 0.62);
+            border-color: rgba(100, 116, 139, 0.38);
+            box-shadow: none;
+        }
+
+        .cp-slot-pill {
+            font-size: 6.6px;
+            font-weight: 800;
+            padding: 0.5px 2.5px;
+            border-radius: 3px;
+            line-height: 1.15;
+            color: #e2e8f0;
+            background: rgba(30, 41, 59, 0.85);
+            border: 1px solid rgba(148, 163, 184, 0.45);
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+            flex-shrink: 0;
+            letter-spacing: -0.15px;
+        }
+
+        .menu-btn-ignore-ai {
+            background: rgba(51, 65, 85, 0.75);
+            color: #cbd5e1;
+            border: 1px solid rgba(148, 163, 184, 0.4);
+        }
+
+        .menu-btn-ignore-ai.active {
+            background: rgba(127, 29, 29, 0.85);
+            color: #fecaca;
+            border: 1px solid rgba(248, 113, 113, 0.75);
         }
 
         .header-badges-cluster {
@@ -252,23 +293,52 @@
             line-height: 1;
         }
 
-        /* v3.32: Dynamic Resizing & Intelligent 2-Line Wrapping Tactical Recommendation Row */
+        /* v6.00: Condensed 2-Line 4-Pillar AI Tactical Coach + Throw/Catch Timing Blink Alerts */
+        @keyframes throwBlink {
+            0%, 100% {
+                background: rgba(220, 38, 38, 0.94);
+                border-color: #fef08a;
+                color: #ffffff;
+                box-shadow: 0 0 8px rgba(239, 68, 68, 0.85);
+            }
+            50% {
+                background: rgba(217, 119, 6, 0.94);
+                border-color: #ffffff;
+                color: #fef9c3;
+                box-shadow: 0 0 8px rgba(245, 158, 11, 0.85);
+            }
+        }
+        @keyframes throwImmediateBlink {
+            0%, 100% {
+                background: rgba(185, 28, 28, 0.96);
+                border-color: #fde047;
+                color: #ffffff;
+                box-shadow: 0 0 10px rgba(248, 113, 113, 0.95);
+            }
+            50% {
+                background: rgba(127, 29, 29, 0.96);
+                border-color: #fca5a5;
+                color: #fef08a;
+                box-shadow: 0 0 4px rgba(220, 38, 38, 0.75);
+            }
+        }
         .tactical-rec-row {
             display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 4px;
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: center;
+            gap: 1.5px;
             padding: 2.5px 4.5px;
             border-radius: 4px;
-            font-size: 7.5px;
+            font-size: 7.4px;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-            line-height: 1.22;
-            white-space: normal;
-            overflow: visible;
+            line-height: 1.18;
+            white-space: nowrap;
+            overflow: hidden;
             height: auto;
-            min-height: 15px;
+            min-height: 22px;
             border: 1px solid rgba(56, 189, 248, 0.45);
-            background: rgba(8, 47, 73, 0.72);
+            background: rgba(8, 47, 73, 0.78);
             color: #e0f2fe;
             box-sizing: border-box;
         }
@@ -276,51 +346,92 @@
             display: none !important;
         }
         .tactical-rec-row.rec-emerald {
-            border-color: rgba(52, 211, 153, 0.65);
-            background: rgba(6, 78, 59, 0.78);
+            border-color: rgba(52, 211, 153, 0.68);
+            background: rgba(6, 78, 59, 0.82);
             color: #d1fae5;
         }
         .tactical-rec-row.rec-sky {
-            border-color: rgba(56, 189, 248, 0.65);
-            background: rgba(12, 74, 110, 0.78);
+            border-color: rgba(56, 189, 248, 0.68);
+            background: rgba(12, 74, 110, 0.82);
             color: #e0f2fe;
         }
         .tactical-rec-row.rec-amber {
-            border-color: rgba(251, 191, 36, 0.65);
-            background: rgba(120, 53, 15, 0.78);
+            border-color: rgba(251, 191, 36, 0.72);
+            background: rgba(120, 53, 15, 0.84);
             color: #fef3c7;
         }
         .tactical-rec-row.rec-rose {
-            border-color: rgba(251, 113, 133, 0.65);
-            background: rgba(136, 19, 55, 0.78);
+            border-color: rgba(251, 113, 133, 0.72);
+            background: rgba(136, 19, 55, 0.84);
             color: #ffe4e6;
+        }
+        /* v6.00 Timing Alert States: 2-Fast Solid Amber Highlight & 1-Fast / 0-Fast Blink */
+        .tactical-rec-row.timing-warn-2 {
+            background: rgba(180, 83, 9, 0.92) !important;
+            border: 1.4px solid #fbbf24 !important;
+            color: #fef9c3 !important;
+            box-shadow: 0 0 6px rgba(251, 191, 36, 0.65);
+        }
+        .tactical-rec-row.timing-blink-1 {
+            animation: throwBlink 0.35s infinite !important;
+            border-width: 1.5px !important;
+        }
+        .tactical-rec-row.timing-immediate-0 {
+            animation: throwImmediateBlink 0.22s infinite !important;
+            border-width: 1.5px !important;
+        }
+        @keyframes oppSwapWarnBlink {
+            0%, 100% {
+                background-color: rgba(244, 63, 94, 0.88);
+                border-color: #fda4af;
+                color: #ffffff;
+                box-shadow: 0 0 7px rgba(244, 63, 94, 0.85);
+            }
+            50% {
+                background-color: rgba(245, 158, 11, 0.38);
+                border-color: #fde047;
+                color: #fef08a;
+                box-shadow: 0 0 4px rgba(250, 204, 21, 0.55);
+            }
+        }
+        .opp-swap-blink-warning {
+            animation: oppSwapWarnBlink 0.42s infinite !important;
+            font-weight: 900 !important;
+        }
+        .tactical-rec-line1 {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 4px;
+            min-width: 0;
+            width: 100%;
         }
         .tactical-rec-left {
             display: flex;
-            flex-wrap: wrap;
             align-items: center;
-            column-gap: 4px;
-            row-gap: 1.5px;
+            gap: 3.5px;
             flex: 1 1 auto;
             min-width: 0;
+            overflow: hidden;
         }
         .tactical-rec-badges {
             display: inline-flex;
             align-items: center;
-            gap: 3px;
+            gap: 2.5px;
             flex-shrink: 0;
-            max-width: 100%;
         }
         .tactical-rec-action {
             font-weight: 900;
             text-transform: uppercase;
-            padding: 1px 3.5px;
-            border-radius: 3px;
+            padding: 0.5px 3px;
+            border-radius: 2.5px;
             background: rgba(0, 0, 0, 0.45);
-            border: 1px solid rgba(255, 255, 255, 0.22);
+            border: 1px solid rgba(255, 255, 255, 0.24);
             color: #ffffff;
             white-space: nowrap;
-            flex-shrink: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 245px;
         }
         .tactical-rec-shield {
             font-weight: 800;
@@ -330,24 +441,42 @@
         }
         .tactical-rec-goal {
             font-weight: 700;
-            color: #f8fafc;
-            white-space: normal;
-            overflow-wrap: break-word;
-            word-break: break-word;
-            line-height: 1.22;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
+            color: #e2e8f0;
+            white-space: nowrap;
             overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.15;
+            min-width: 0;
+        }
+        .tactical-rec-line2 {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 4px;
+            min-width: 0;
+            width: 100%;
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+            padding-top: 1px;
+        }
+        .tactical-rec-backline {
+            font-weight: 800;
+            font-size: 7.1px;
+            color: #a5f3fc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1 1 auto;
+            min-width: 0;
+            letter-spacing: -0.15px;
         }
         .tactical-rec-swap-btn {
-            background: rgba(255, 255, 255, 0.16);
-            border: 1px solid rgba(255, 255, 255, 0.32);
+            background: rgba(255, 255, 255, 0.18);
+            border: 1px solid rgba(255, 255, 255, 0.36);
             color: #ffffff;
-            font-size: 7px;
+            font-size: 6.8px;
             font-weight: 800;
             border-radius: 3px;
-            padding: 1.5px 4px;
+            padding: 1px 3.5px;
             cursor: pointer;
             flex-shrink: 0;
             align-self: center;
@@ -1263,7 +1392,7 @@
     <!-- OPTION 1: Top-Left Sky Trench (Transparent, Full-Width Header, 3-Column Threat Matrices) -->
     <div id="mode-sky-trench" class="glass-panel">
         <div id="overlay-watermark-bg" class="overlay-watermark-bg hidden"></div>
-        <!-- Header v3.60: Minimize/Pause OCR Icon (2s hold -> Stop Overlay & Battle Log), OCR Rate (ms), My [HP, Energy, Shield] Badges, Opp [Shield, HP, Energy] Badges -->
+        <!-- Header v6.03: Minimize/Pause OCR Icon, OCR:hp/ocr ms badge (colorized when active, grey when inactive), Mirrored [CP, HP, E, Shield] | [Shield, E, HP, CP] -->
         <div class="header-row">
             <button id="btn-minimize-sword" type="button" class="sword-minimize-btn"
                 onpointerdown="startMinimizeHold(event)"
@@ -1272,9 +1401,10 @@
                 onclick="handleMinimizeSwordClick(event)"
                 oncontextmenu="event.preventDefault(); return false;"
                 title="Tap: Minimize & pause OCR • Hold 2s: Stop overlay & open Battle Log">⚔️</button>
-            <span id="sky-ocr-ms-badge" class="header-ocr-ms-badge" title="Pixel HP scan loop & ML Kit OCR update rates in milliseconds">HP:---ms/OCR:---ms</span>
+            <span id="sky-ocr-ms-badge" class="header-ocr-ms-badge ocr-inactive" title="Pixel HP scan loop & ML Kit OCR update rates in milliseconds">OCR:---/---ms</span>
             <div class="header-badges-cluster">
                 <div class="header-side-group">
+                    <span id="sky-player-cp-pill" class="cp-slot-pill hidden" title="Your Active Pokémon CP">CP—</span>
                     <span id="sky-player-hp-pill" class="hp-slot-pill hp-high hidden" title="Your Active Pokémon Live HP%">100%</span>
                     <span id="sky-player-energy-pill" class="energy-slot-pill building hidden" title="Your Active Pokémon Energy">0E</span>
                     <button id="btn-player-shields" type="button" class="hud-shield-btn player-shield" onclick="cyclePlayerShields(event)" title="Your shields remaining (Tap to cycle 2->1->0->2)">
@@ -1286,23 +1416,15 @@
                     <button id="btn-opp-shields" type="button" class="hud-shield-btn opp-shield" onclick="cycleOpponentShields(event)" title="Opponent shields remaining (Tap to cycle 2->1->0->2)">
                         <span class="shield-glyph">🛡️</span><span id="txt-opp-shields" class="shield-val">2</span>
                     </button>
-                    <span id="sky-opp-hp-pill" class="hp-slot-pill hp-high hidden" title="Opponent Active Pokémon Live HP%">100%</span>
                     <span id="sky-opp-energy-pill" class="energy-slot-pill building hidden" title="Opponent Active Pokémon Energy">0E</span>
+                    <span id="sky-opp-hp-pill" class="hp-slot-pill hp-high hidden" title="Opponent Active Pokémon Live HP%">100%</span>
+                    <span id="sky-opp-cp-pill" class="cp-slot-pill hidden" title="Opponent Active Pokémon CP">CP—</span>
                 </div>
             </div>
         </div>
 
-        <!-- v3.32: Dynamic Resizing & Intelligent 2-Line Lead & Swap Tactical Recommendation Row -->
-        <div id="sky-tactical-rec-row" class="tactical-rec-row hidden">
-            <div class="tactical-rec-left">
-                <span class="tactical-rec-badges">
-                    <span id="sky-rec-action" class="tactical-rec-action">STAY IN</span>
-                    <span id="sky-rec-shield" class="tactical-rec-shield">[1S]</span>
-                </span>
-                <span id="sky-rec-goal" class="tactical-rec-goal">Goal: Hold Switch Adv</span>
-            </div>
-            <button id="sky-rec-swap-btn" type="button" class="tactical-rec-swap-btn hidden" onclick="applyRecommendedSwap()">Swap ➔</button>
-        </div>
+        <!-- v6.00: Top slot anchor for AI Tactical Coach when configured to "top" -->
+        <div id="sky-tactical-rec-top-slot"></div>
 
         <!-- Toolbar: 2-Row Start/Stop Battle Trigger, Shadow Toggle, Form Cycler, and 3-Letter Active Team Chips -->
         <div class="action-toolbar">
@@ -1324,9 +1446,14 @@
 
         <!-- In-Overlay Post-Stop Log Result Action Bar -->
         <div id="start-battle-menu" class="start-battle-menu hidden">
-            <button id="btn-lead-matchup" class="menu-btn menu-btn-lead-neu" onclick="cycleLeadMatchup()" title="Tap to cycle Lead Matchup: Favorable / Neutral / Negative">
-                Lead: Neu
-            </button>
+            <div style="display:flex; gap:2.5px; align-items:center;">
+                <button id="btn-lead-matchup" class="menu-btn menu-btn-lead-neu" onclick="cycleLeadMatchup()" title="Tap to cycle Lead Matchup: Favorable / Neutral / Negative">
+                    Lead: Neu
+                </button>
+                <button id="btn-ignore-telemetry-toggle" class="menu-btn menu-btn-ignore-ai" onclick="toggleIgnoreTelemetryNextLog()" title="Skip AI anomaly telemetry for this battle (e.g. PoGO Auto-Catcher text in OCR region) while keeping Win/Loss record">
+                    🚫 No AI Log
+                </button>
+            </div>
             <div style="display:flex; gap:2.5px; align-items:center;">
                 <button class="menu-btn menu-btn-win" onclick="logBattleFromOverlay('WIN')" title="Log Win for the stopped battle">
                     🏆 Win
@@ -1340,13 +1467,27 @@
             </div>
         </div>
 
-        <!-- 3v3 Matchup Matrix Dots (Full Opponent Names, Fixed 1st/2nd/3rd Order) -->
-        <div class="matrix-container" id="sky-matrix-body">
-            <div style="display:flex; align-items:center; gap:6px; color:#cbd5e1; font-size:9px; padding:2px 0;">
-                <span class="scan-indicator"></span>
-                <span>1 Hz OCR scanning opponent & active lead...</span>
+        <!-- v6.03: Post-Battle Auto-Logged / Quick Edit & Ignore AI Telemetry Bar -->
+        <div id="auto-logged-banner" class="start-battle-menu hidden">
+            <span id="auto-logged-status-text" style="font-size:8px; font-weight:800; color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">⚡ Logged WIN</span>
+            <div style="display:flex; gap:2.5px; align-items:center; flex-shrink:0;">
+                <button class="menu-btn menu-btn-lead-neu" onclick="flipAutoLoggedResult()" title="Flip logged result between WIN and LOSS">
+                    🔄 Flip W/L
+                </button>
+                <button id="btn-auto-ignore-ai" class="menu-btn menu-btn-ignore-ai" onclick="ignoreAutoLoggedTelemetry()" title="Delete AI anomaly telemetry for this battle (e.g. Auto-Catcher interference) while keeping Win/Loss record">
+                    🚫 Drop AI Log
+                </button>
+                <button class="menu-btn menu-btn-loss" onclick="undoAutoLoggedResult()" title="Undo and delete this logged battle">
+                    ↩️ Undo
+                </button>
+                <button class="menu-btn menu-btn-close" onclick="dismissAutoLoggedBar()" title="Dismiss banner">
+                    ✕
+                </button>
             </div>
         </div>
+
+        <!-- 3v3 Matchup Matrix Dots (Full Opponent Names, Fixed 1st/2nd/3rd Order) -->
+        <div class="matrix-container hidden" id="sky-matrix-body"></div>
 
         <!-- Opponent Attacks (Segmented Bars + 3-Column Team Damage Matrix with Vertical Active Highlight) -->
         <div class="timing-rows-container">
@@ -1400,6 +1541,25 @@
                 <div id="sky-my-dmg-headers" class="dmg-col-headers"></div>
             </div>
             <div id="sky-my-move-timing-rows" style="display:flex; flex-direction:column; gap:1px;"></div>
+        </div>
+
+        <!-- v6.00: Bottom slot anchor (Default) for Condensed 2-Line 4-Pillar AI Tactical Coach -->
+        <div id="sky-tactical-rec-bottom-slot">
+            <div id="sky-tactical-rec-row" class="tactical-rec-row hidden">
+                <div class="tactical-rec-line1">
+                    <div class="tactical-rec-left">
+                        <span class="tactical-rec-badges">
+                            <span id="sky-rec-action" class="tactical-rec-action">STAY · CHIP</span>
+                            <span id="sky-rec-shield" class="tactical-rec-shield">[1S]</span>
+                        </span>
+                        <span id="sky-rec-goal" class="tactical-rec-goal hidden"></span>
+                    </div>
+                    <button id="sky-rec-swap-btn" type="button" class="tactical-rec-swap-btn hidden" onclick="applyRecommendedSwap()">Swap ➔</button>
+                </div>
+                <div id="sky-rec-line2-wrap" class="tactical-rec-line2">
+                    <span id="sky-rec-backline" class="tactical-rec-backline">🔮 Back: Scanning opponent lead...</span>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -2007,31 +2167,44 @@
             notifyHeight();
         }
 
+        let activeAiAdviceHudPosition = "bottom";
+
+        window.setAiAdviceHudPosition = function(pos) {
+            const norm = String(pos || "bottom").toLowerCase() === "top" ? "top" : "bottom";
+            activeAiAdviceHudPosition = norm;
+            try {
+                const recRowEl = document.getElementById("sky-tactical-rec-row");
+                const topSlotEl = document.getElementById("sky-tactical-rec-top-slot");
+                const bottomSlotEl = document.getElementById("sky-tactical-rec-bottom-slot");
+                if (recRowEl && topSlotEl && bottomSlotEl) {
+                    const targetParent = norm === "top" ? topSlotEl : bottomSlotEl;
+                    if (recRowEl.parentElement !== targetParent) {
+                        targetParent.appendChild(recRowEl);
+                    }
+                }
+            } catch (e) {}
+            notifyHeight();
+        };
+
         function fitTacticalRecRow() {
             try {
                 const recRowEl = document.getElementById("sky-tactical-rec-row");
                 if (!recRowEl || recRowEl.classList.contains("hidden")) return;
                 const actEl = document.getElementById("sky-rec-action");
                 const shEl = document.getElementById("sky-rec-shield");
-                const goalEl = document.getElementById("sky-rec-goal");
-                const leftEl = recRowEl.querySelector(".tactical-rec-left");
-                const totalChars = ((actEl && actEl.textContent) || "").length
-                    + ((shEl && shEl.textContent) || "").length
-                    + ((goalEl && goalEl.textContent) || "").length;
+                const backEl = document.getElementById("sky-rec-backline");
+                const line1Len = ((actEl && actEl.textContent) || "").length + ((shEl && shEl.textContent) || "").length;
+                const line2Len = ((backEl && backEl.textContent) || "").length;
+                const maxLineChars = Math.max(line1Len, line2Len);
 
-                let baseFont = 7.5;
-                if (totalChars > 60) baseFont = 6.8;
-                else if (totalChars > 50) baseFont = 7.1;
-                else if (totalChars > 42) baseFont = 7.3;
+                let baseFont = 7.4;
+                if (maxLineChars > 44) baseFont = 6.6;
+                else if (maxLineChars > 38) baseFont = 6.9;
+                else if (maxLineChars > 34) baseFont = 7.1;
 
                 recRowEl.style.fontSize = baseFont + "px";
-
-                if (leftEl) {
-                    const candidateSizes = [baseFont, 7.1, 6.8, 6.5];
-                    for (let i = 0; i < candidateSizes.length; i++) {
-                        recRowEl.style.fontSize = candidateSizes[i] + "px";
-                        if (leftEl.offsetHeight <= 25) break;
-                    }
+                if (backEl) {
+                    backEl.style.fontSize = Math.max(6.4, baseFont - 0.2) + "px";
                 }
             } catch (e) {}
         }
@@ -2099,12 +2272,26 @@
             render();
         };
 
-        // v3.34: Dynamic Color-Coded Swap Countdown Timers with 1st-Frame Provisional [1F] Validity Bit
+        // v3.34 & v6.06: Dynamic Color-Coded Swap Countdown Timers with Synchronized Blink & Haptic Trigger
         function updateSwapClockBadge(element, prefix, seconds, isOpponent, isLatched) {
             if (!element) return;
             const latchTag = (isLatched === false) ? " [1F]" : "";
             const text = seconds <= 0 ? `${prefix}: 0s${latchTag}` : `${prefix}: ${seconds}s${latchTag}`;
             element.textContent = text;
+            const warnSec = (typeof battleData.hapticOppSwapWarnSec === "number" && battleData.hapticOppSwapWarnSec >= 2)
+                ? battleData.hapticOppSwapWarnSec
+                : 5;
+            const isOppSwapWarnWindow = isOpponent && isLatched !== false && seconds > 0 && seconds <= warnSec;
+            if (isOppSwapWarnWindow) {
+                element.classList.add("opp-swap-blink-warning");
+                if (window.AndroidOverlay && window.AndroidOverlay.triggerSwapClockHapticIfNeeded && battleData.oppSwapEndTimeMs > 0) {
+                    try {
+                        window.AndroidOverlay.triggerSwapClockHapticIfNeeded(battleData.oppSwapEndTimeMs);
+                    } catch (err) {}
+                }
+            } else {
+                element.classList.remove("opp-swap-blink-warning");
+            }
             if (isLatched === false) {
                 element.style.color = "#67E8F9";
                 element.style.borderColor = "rgba(56, 189, 248, 0.85)";
@@ -2391,8 +2578,31 @@
             }
         }
 
+        let ignoreTelemetryOnManualLog = false;
+
+        function toggleIgnoreTelemetryNextLog() {
+            ignoreTelemetryOnManualLog = !ignoreTelemetryOnManualLog;
+            const btn = document.getElementById("btn-ignore-telemetry-toggle");
+            if (btn) {
+                if (ignoreTelemetryOnManualLog) {
+                    btn.classList.add("active");
+                    btn.textContent = "🚫 AI Log: OFF";
+                } else {
+                    btn.classList.remove("active");
+                    btn.textContent = "🚫 No AI Log";
+                }
+            }
+        }
+
         function logBattleFromOverlay(resultStr) {
             const lead = (battleData.leadMatchup || "NEUTRAL").toUpperCase();
+            const skipAi = !!ignoreTelemetryOnManualLog;
+            ignoreTelemetryOnManualLog = false;
+            const toggleBtn = document.getElementById("btn-ignore-telemetry-toggle");
+            if (toggleBtn) {
+                toggleBtn.classList.remove("active");
+                toggleBtn.textContent = "🚫 No AI Log";
+            }
             isBattleActive = false;
             closeStartBattleMenu();
             clearOverlayMatrixImmediate("NEUTRAL");
@@ -2410,9 +2620,52 @@
             } else {
                 buttonToastActive = false;
             }
-            if (window.AndroidOverlay && window.AndroidOverlay.logBattleResult) {
+            if (window.AndroidOverlay && window.AndroidOverlay.logBattleResultWithTelemetryFlag) {
+                window.AndroidOverlay.logBattleResultWithTelemetryFlag(resultStr, lead, skipAi);
+            } else if (window.AndroidOverlay && window.AndroidOverlay.logBattleResult) {
                 window.AndroidOverlay.logBattleResult(resultStr, lead);
             }
+        }
+
+        function ignoreAutoLoggedTelemetry() {
+            const bId = (battleData.autoLoggedBanner && battleData.autoLoggedBanner.battleId) ? battleData.autoLoggedBanner.battleId : "";
+            if (battleData.autoLoggedBanner) {
+                battleData.autoLoggedBanner.telemetryIgnored = true;
+            }
+            render();
+            if (window.AndroidOverlay && window.AndroidOverlay.ignoreLastBattleTelemetry) {
+                window.AndroidOverlay.ignoreLastBattleTelemetry(bId);
+            }
+        }
+
+        function flipAutoLoggedResult() {
+            const bId = (battleData.autoLoggedBanner && battleData.autoLoggedBanner.battleId) ? battleData.autoLoggedBanner.battleId : "";
+            if (battleData.autoLoggedBanner) {
+                battleData.autoLoggedBanner.result = battleData.autoLoggedBanner.result === "WIN" ? "LOSS" : "WIN";
+            }
+            render();
+            if (window.AndroidOverlay && window.AndroidOverlay.flipAutoLoggedBattleResult) {
+                window.AndroidOverlay.flipAutoLoggedBattleResult(bId);
+            }
+        }
+
+        function undoAutoLoggedResult() {
+            const bId = (battleData.autoLoggedBanner && battleData.autoLoggedBanner.battleId) ? battleData.autoLoggedBanner.battleId : "";
+            battleData.autoLoggedBanner = null;
+            render();
+            if (window.AndroidOverlay && window.AndroidOverlay.undoAutoLoggedBattle) {
+                window.AndroidOverlay.undoAutoLoggedBattle(bId);
+            }
+            setTimeout(notifyHeight, 25);
+        }
+
+        function dismissAutoLoggedBar() {
+            battleData.autoLoggedBanner = null;
+            render();
+            if (window.AndroidOverlay && window.AndroidOverlay.dismissAutoLoggedBanner) {
+                window.AndroidOverlay.dismissAutoLoggedBanner();
+            }
+            setTimeout(notifyHeight, 25);
         }
 
         function onBattleLoggedToast(resultStr, leadStr) {
@@ -2519,6 +2772,9 @@
                 }
                 if (data.appThemeId) {
                     window.setOverlayTheme(data.appThemeId);
+                }
+                if (data.aiAdviceHudPosition) {
+                    window.setAiAdviceHudPosition(data.aiAdviceHudPosition);
                 }
                 if (data.isOverlayMinimized !== undefined && data.isOverlayMinimized !== isMinimized) {
                     setOverlayMinimizedState(data.isOverlayMinimized);
@@ -2672,16 +2928,77 @@
                     ? (liveHpMs > 0 ? liveHpMs : avgHpMs)
                     : (avgHpMs > 0 ? avgHpMs : liveHpMs);
 
-                const hpPart = displayHpMs > 0 ? `${displayHpMs}ms` : "---ms";
-                const ocrPart = displayOcrMs > 0 ? `${displayOcrMs}ms` : "---ms";
-                ocrMsBadgeEl.textContent = `HP:${hpPart}/OCR:${ocrPart}`;
+                const hpNum = displayHpMs > 0 ? `${displayHpMs}` : "---";
+                const ocrNum = displayOcrMs > 0 ? `${displayOcrMs}` : "---";
+                ocrMsBadgeEl.textContent = `OCR:${hpNum}/${ocrNum}ms`;
+                ocrMsBadgeEl.className = `header-ocr-ms-badge ${isBattleActive ? "ocr-active" : "ocr-inactive"}`;
                 if (displayHpMs > 0 || displayOcrMs > 0) {
                     const isAvgLabel = (!isBattleActive && (avgHpMs > 0 || avgScanMs > 0));
                     ocrMsBadgeEl.title = isAvgLabel
-                        ? `Last Battle Avg — Pixel HP Loop: ${hpPart} • ML Kit OCR: ${ocrPart}`
-                        : `Live Scan Rate — Pixel HP Loop: ${hpPart} • ML Kit OCR: ${ocrPart}`;
+                        ? `Inactive (1 Hz Standby) • Last Battle Avg — Pixel HP: ${hpNum}ms • ML Kit OCR: ${ocrNum}ms`
+                        : `Active Battle Scanning — Pixel HP: ${hpNum}ms • ML Kit OCR: ${ocrNum}ms`;
                 } else {
-                    ocrMsBadgeEl.title = "HP & OCR Update Rates: awaiting first scan";
+                    ocrMsBadgeEl.title = isBattleActive
+                        ? "Active Battle Scanning — awaiting first scan"
+                        : "Inactive (1 Hz Standby) — awaiting first scan";
+                }
+            }
+
+            // v6.03: Render Auto-Logged / Recent Battle Bar when battle is stopped
+            const autoBannerEl = document.getElementById("auto-logged-banner");
+            if (autoBannerEl) {
+                const ab = (!isBattleActive && !startBattleMenuOpen && battleData.autoLoggedBanner) ? battleData.autoLoggedBanner : null;
+                if (ab && ab.battleId) {
+                    autoBannerEl.classList.remove("hidden");
+                    const stEl = document.getElementById("auto-logged-status-text");
+                    const ignBtn = document.getElementById("btn-auto-ignore-ai");
+                    const isWinAb = ab.result === "WIN";
+                    const prefixAb = ab.isAutoDetected ? "⚡ Auto" : "✓ Logged";
+                    const colorAb = isWinAb ? "#4ade80" : "#f87171";
+                    if (stEl) {
+                        stEl.innerHTML = `<span style="color:${colorAb};">${prefixAb} ${ab.result}</span>${ab.telemetryIgnored ? ' <span style="color:#fca5a5;">(AI Ignored)</span>' : ''}`;
+                    }
+                    if (ignBtn) {
+                        if (ab.telemetryIgnored) {
+                            ignBtn.classList.add("active");
+                            ignBtn.textContent = "🚫 AI Dropped";
+                        } else {
+                            ignBtn.classList.remove("active");
+                            ignBtn.textContent = "🚫 Drop AI Log";
+                        }
+                    }
+                } else {
+                    autoBannerEl.classList.add("hidden");
+                }
+            }
+
+            const pSlotCpArr = Array.isArray(battleData.playerSlotCp) ? battleData.playerSlotCp : [0, 0, 0];
+            const oSlotCpArr = Array.isArray(battleData.oppSlotCp) ? battleData.oppSlotCp : [0, 0, 0];
+            const activeUserCpVal = (typeof battleData.activeUserCp === "number" && battleData.activeUserCp > 0)
+                ? Math.round(battleData.activeUserCp)
+                : (typeof pSlotCpArr[activeSlotIdx] === "number" && pSlotCpArr[activeSlotIdx] > 0 ? Math.round(pSlotCpArr[activeSlotIdx]) : 0);
+            const activeOppCpVal = (!isWaitingState && typeof battleData.activeOppCp === "number" && battleData.activeOppCp > 0)
+                ? Math.round(battleData.activeOppCp)
+                : (!isWaitingState && typeof oSlotCpArr[activeOppSlotIdx] === "number" && oSlotCpArr[activeOppSlotIdx] > 0 ? Math.round(oSlotCpArr[activeOppSlotIdx]) : 0);
+
+            const playerCpPillEl = document.getElementById("sky-player-cp-pill");
+            if (playerCpPillEl) {
+                if (activeUserCpVal > 0) {
+                    playerCpPillEl.className = "cp-slot-pill";
+                    playerCpPillEl.textContent = `CP${activeUserCpVal}`;
+                    playerCpPillEl.title = `Your Active Pokémon CP: ${activeUserCpVal}`;
+                } else {
+                    playerCpPillEl.className = "cp-slot-pill hidden";
+                }
+            }
+            const oppCpPillEl = document.getElementById("sky-opp-cp-pill");
+            if (oppCpPillEl) {
+                if (!isWaitingState && activeOppCpVal > 0) {
+                    oppCpPillEl.className = "cp-slot-pill";
+                    oppCpPillEl.textContent = `CP${activeOppCpVal}`;
+                    oppCpPillEl.title = `Opponent Active Pokémon CP: ${activeOppCpVal}`;
+                } else {
+                    oppCpPillEl.className = "cp-slot-pill hidden";
                 }
             }
 
@@ -2812,10 +3129,15 @@
                         const actEl = document.getElementById("sky-rec-action");
                         const shEl = document.getElementById("sky-rec-shield");
                         const goalEl = document.getElementById("sky-rec-goal");
+                        const backEl = document.getElementById("sky-rec-backline");
                         const swBtn = document.getElementById("sky-rec-swap-btn");
                         if (actEl) actEl.textContent = `[${archWait}] AWAITING LEAD`;
                         if (shEl) shEl.textContent = "[2S]";
-                        if (goalEl) goalEl.textContent = "Goal: Scan opponent lead for live plan";
+                        if (goalEl) {
+                            goalEl.textContent = "";
+                            goalEl.classList.add("hidden");
+                        }
+                        if (backEl) backEl.textContent = "🔮 Back: Scan opp lead for meta core pred";
                         if (swBtn) swBtn.classList.add("hidden");
                         fitTacticalRecRow();
                     } else {
@@ -2824,12 +3146,8 @@
                 }
 
                 if (matrixBody) {
-                    matrixBody.innerHTML = `
-                        <div style="display:flex; align-items:center; gap:6px; color:#cbd5e1; font-size:9px; padding:2px 0;">
-                            <span class="scan-indicator"></span>
-                            <span>1 Hz OCR scanning top-left & top-right headers...</span>
-                        </div>
-                    `;
+                    matrixBody.innerHTML = "";
+                    matrixBody.classList.add("hidden");
                 }
             } else {
                 const shadPrefix = battleData.isOpponentShadow ? "SHADOW " : "";
@@ -2869,24 +3187,29 @@
                     myCmpBadgeEl.title = winsCmp ? "Your Pokémon wins CMP tie" : "Your Pokémon loses CMP tie";
                 }
 
-                // Render Lead & Swap Tactical Recommendation Row (between header-row and action-toolbar)
+                // v6.00: Render 2-Line 4-Pillar AI Tactical Coach + Backline Prediction & Throw/Catch Timing Blink
                 try {
+                    if (battleData.aiAdviceHudPosition && battleData.aiAdviceHudPosition !== activeAiAdviceHudPosition) {
+                        window.setAiAdviceHudPosition(battleData.aiAdviceHudPosition);
+                    }
                     const recRowEl = document.getElementById("sky-tactical-rec-row");
                     const showRec = (isBattleActive || isReplay) && battleData.showTacticalRec !== false && battleData.showTacticalRecommendations !== false;
                     const rawRec = battleData.tacticalRec || battleData.tacticalRecommendation;
                     const arch = String((rawRec && rawRec.archetype) || battleData.teamArchetype || "ABC").toUpperCase();
 
-                    let actionLabel = "";
+                    let line1Display = "";
                     let shieldPlan = "1S";
-                    let goalText = "Hold Alignment";
+                    let line2Display = "";
                     let urg = "sky";
+                    let timingAlertLevel = "NONE";
                     let recSlot = -1;
 
-                    if (rawRec && (rawRec.actionLabel || rawRec.action)) {
-                        const rawAction = String(rawRec.actionLabel || rawRec.action);
-                        actionLabel = rawAction.startsWith("[") ? rawAction : `[${arch}] ${rawAction}`;
+                    if (rawRec && (rawRec.line1Text || rawRec.actionLabel || rawRec.action)) {
+                        const rawAct = String(rawRec.line1Text || rawRec.actionLabel || rawRec.action);
+                        line1Display = rawAct;
                         shieldPlan = String(rawRec.shieldPlan || "1S");
-                        goalText = String(rawRec.goalText || rawRec.goal || "Hold Alignment");
+                        line2Display = String(rawRec.backlineText || rawRec.line2Text || rawRec.goalText || rawRec.goal || "🔮 Back: Analyzing meta cores...");
+                        timingAlertLevel = String(rawRec.timingAlertLevel || "NONE").toUpperCase();
                         if (rawRec.urgencyColor) {
                             urg = rawRec.urgencyColor;
                         } else if (rawRec.tone === "stay") {
@@ -2917,39 +3240,52 @@
                         const isNeutral = curTier === "N";
                         shieldPlan = tiers[0] === "SW" || tiers[0] === "W" ? "0S" : (tiers[1] === "SW" || tiers[1] === "W" ? "1S" : (pShields >= 2 && (tiers[2] === "SW" || tiers[2] === "W") ? "2S" : "0S"));
                         if (isWin) {
-                            actionLabel = `[${arch}] STAY IN`;
-                            goalText = curTier === "SW" ? "Dominate & Hold Switch" : "Win & Maintain Alignment";
+                            line1Display = curTier === "SW" ? "FARM DOWN / HOLD SWITCH" : "STAY · WIN ALIGNMENT";
                             urg = "emerald";
                         } else if (isNeutral) {
-                            actionLabel = `[${arch}] STAY / SOFT LOSE`;
-                            goalText = "Play +1 Shield or Farm Down";
+                            line1Display = "STAY · PACE 0-SNEAK THROW";
                             urg = "amber";
                         } else {
                             const pivotSlot = activeSlotIdx === 0 ? 1 : 0;
                             const pivotMon = (teamList[pivotSlot] && (teamList[pivotSlot].code || abbrPoke(teamList[pivotSlot].name, false))) || "SWAP";
-                            actionLabel = `[${arch}] SWAP -> ${pivotMon}`;
-                            goalText = arch === "ABB" ? "Bait Backline Threat" : "Fight for Switch or +1S";
+                            line1Display = `SWAP -> ${pivotMon}`;
                             urg = "rose";
                             recSlot = pivotSlot;
                         }
+                        line2Display = `🔮 [${arch}] Back: Core pred active`;
                     }
 
                     if (recRowEl) {
-                        if (showRec && actionLabel) {
-                            recRowEl.className = `tactical-rec-row rec-${urg}`;
+                        if (showRec && line1Display) {
+                            let timingCls = "";
+                            if (timingAlertLevel === "IMMEDIATE_0_FAST") {
+                                timingCls = " timing-immediate-0";
+                            } else if (timingAlertLevel === "BLINK_1_FAST") {
+                                timingCls = " timing-blink-1";
+                            } else if (timingAlertLevel === "WARN_2_FASTS") {
+                                timingCls = " timing-warn-2";
+                            }
+                            recRowEl.className = `tactical-rec-row rec-${urg}${timingCls}`;
                             const actEl = document.getElementById("sky-rec-action");
                             const shEl = document.getElementById("sky-rec-shield");
                             const goalEl = document.getElementById("sky-rec-goal");
+                            const backEl = document.getElementById("sky-rec-backline");
                             const swBtn = document.getElementById("sky-rec-swap-btn");
-                            if (actEl) actEl.textContent = actionLabel;
+                            if (actEl) actEl.textContent = line1Display;
                             if (shEl) shEl.textContent = `[${shieldPlan}]`;
-                            if (goalEl) goalEl.textContent = `Goal: ${goalText}`;
+                            if (goalEl) {
+                                goalEl.textContent = "";
+                                goalEl.classList.add("hidden");
+                            }
+                            if (backEl) {
+                                backEl.textContent = line2Display;
+                            }
                             if (swBtn) {
                                 const isPostFaint = !!(battleData.isPostFaintSwitchPromptActive || (rawRec && rawRec.phase === "POST_FAINT_SWAP"));
                                 if (recSlot >= 0 && recSlot <= 2 && (isPostFaint || recSlot !== activeSlotIdx)) {
                                     swBtn.classList.remove("hidden");
                                     swBtn.setAttribute("data-swap-slot", String(recSlot));
-                                    swBtn.textContent = isPostFaint ? "Send In ➔" : "Swap ➔";
+                                    swBtn.textContent = isPostFaint ? "Send ➔" : "Swap ➔";
                                 } else {
                                     swBtn.classList.add("hidden");
                                 }
@@ -2965,6 +3301,7 @@
                 //    v3.88: Top row shows player banked energy (e.g. D:60E | L:0E | K:-E) directly above each 3-dot column
                 try {
                     if (matrixBody && battleData.scannedOpponents && battleData.scannedOpponents.length > 0) {
+                        matrixBody.classList.remove("hidden");
                         const ordLabels = ["1st", "2nd", "3rd"];
                         const pSlotEnergyArr = Array.isArray(battleData.playerSlotEnergy) ? battleData.playerSlotEnergy : [0, 0, 0];
                         const pSlotEverArr = Array.isArray(battleData.playerSlotEverOnField) ? battleData.playerSlotEverOnField : [true, false, false];

@@ -12,6 +12,7 @@
     <!-- Network permissions to fetch PvPoke live gamemaster data -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:allowBackup="true"
@@ -25,20 +26,93 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:theme="@style/Theme.GBLOverlay">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="com.gbl.overlay.ACTION_OPEN_BATTLE_LOG" />
+                <action android:name="com.gbl.overlay.BATTLE_LOG" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="silphscope" android:host="battle_log" />
+                <data android:scheme="gbl" android:host="battle_log" />
+            </intent-filter>
         </activity>
+
+        <!-- Tasker Launch App Shortcut Activity Alias to open directly to the Battle Log page -->
+        <activity-alias
+            android:name=".BattleLogActivity"
+            android:targetActivity=".MainActivity"
+            android:label="SilphScope Battle Log"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <action android:name="com.gbl.overlay.ACTION_OPEN_BATTLE_LOG" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- Headless Translucent Activity for Tasker Start/Stop Overlay without opening main app UI -->
+        <activity
+            android:name=".TaskerOverlayActivity"
+            android:exported="true"
+            android:label="SilphScope Tasker Overlay"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:launchMode="singleInstance"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:noHistory="false"
+            android:configChanges="orientation|screenSize|keyboardHidden">
+            <intent-filter>
+                <action android:name="com.gbl.overlay.ACTION_START_OVERLAY" />
+                <action android:name="com.gbl.overlay.ACTION_STOP_OVERLAY" />
+                <action android:name="com.gbl.overlay.ACTION_TOGGLE_OVERLAY" />
+                <action android:name="com.gbl.overlay.ACTION_MINIMIZE_OVERLAY" />
+                <action android:name="com.gbl.overlay.ACTION_RESTORE_OVERLAY" />
+                <action android:name="com.gbl.overlay.START" />
+                <action android:name="com.gbl.overlay.STOP" />
+                <action android:name="com.gbl.overlay.TOGGLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- BroadcastReceiver for Tasker Send Intent (Target: Broadcast Receiver) -->
+        <receiver
+            android:name=".TaskerBroadcastReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.gbl.overlay.ACTION_START_OVERLAY" />
+                <action android:name="com.gbl.overlay.ACTION_STOP_OVERLAY" />
+                <action android:name="com.gbl.overlay.ACTION_TOGGLE_OVERLAY" />
+                <action android:name="com.gbl.overlay.ACTION_MINIMIZE_OVERLAY" />
+                <action android:name="com.gbl.overlay.ACTION_RESTORE_OVERLAY" />
+                <action android:name="com.gbl.overlay.ACTION_OPEN_BATTLE_LOG" />
+                <action android:name="com.gbl.overlay.START" />
+                <action android:name="com.gbl.overlay.STOP" />
+                <action android:name="com.gbl.overlay.TOGGLE" />
+                <action android:name="com.gbl.overlay.BATTLE_LOG" />
+            </intent-filter>
+        </receiver>
 
         <!-- Foreground Service for floating overlay & in-memory screen analysis -->
         <service
             android:name=".OverlayService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="mediaProjection" />
+            android:foregroundServiceType="mediaProjection|specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Real-time PvP battle overlay HUD and Tasker automation control" />
+        </service>
 
     </application>
 </manifest>
