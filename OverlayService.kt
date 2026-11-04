@@ -27640,7 +27640,7 @@ class OverlayService : LifecycleService() {
 
         @JavascriptInterface
         fun triggerSwapClockHapticIfNeeded(swapEndTimeMs: Long) {
-            if (!isBattleActive || isReplayMode || swapEndTimeMs <= 0L) return
+            if (!isBattleActive || isWaitingForOpponent || swapEndTimeMs <= 0L) return
             if (lastSwapHapticAlertEpochMs != swapEndTimeMs) {
                 lastSwapHapticAlertEpochMs = swapEndTimeMs
                 if (activeHapticMasterEnabled && activeHapticOppSwapEnabled) {

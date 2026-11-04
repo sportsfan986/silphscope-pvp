@@ -5410,14 +5410,16 @@ class MainActivity : AppCompatActivity() {
                 val isWin = entry.result.equals("WIN", ignoreCase = true)
                 val isLoss = entry.result.equals("LOSS", ignoreCase = true)
                 if (!isWin && !isLoss) continue
-                val firstUserSwitchMon = entry.timelineEvents.firstOrNull {
-                    it.type.equals("SWITCH", ignoreCase = true) && it.actor.equals("user", ignoreCase = true)
+                val firstUserSwitchMon: String? = entry.timelineEvents.firstOrNull {
+                    (it.type.equals("SWAP", ignoreCase = true) || it.type.equals("SWITCH", ignoreCase = true)) &&
+                        it.actor.equals("user", ignoreCase = true)
                 }?.let { ev ->
-                    ev.pokemonEntering?.takeIf { it.isNotBlank() } ?: ev.activePokemon.takeIf { it.isNotBlank() }
+                    ev.pokemonIn?.takeIf { it.isNotBlank() } ?: ev.activePokemon?.takeIf { it.isNotBlank() }
                 } ?: entry.userPokemon.getOrNull(1)?.takeIf { it.isNotBlank() }
                 if (!firstUserSwitchMon.isNullOrBlank()) {
-                    val prev = swapStats[firstUserSwitchMon] ?: (0 to 0)
-                    swapStats[firstUserSwitchMon] = (prev.first + if (isWin) 1 else 0) to (prev.second + 1)
+                    val key: String = firstUserSwitchMon
+                    val prev = swapStats[key] ?: (0 to 0)
+                    swapStats[key] = (prev.first + if (isWin) 1 else 0) to (prev.second + 1)
                 }
             }
             val bestSwap = swapStats.entries
