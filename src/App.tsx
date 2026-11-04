@@ -5838,7 +5838,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v6.05 • Android Native Overlay
+                  v6.10 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
