@@ -2344,6 +2344,20 @@ export default function App() {
       return getBattleFrontierCountsSummary('Pre-loaded Season 3 Cycle 1');
     }
   });
+  const [showOneBattleDvrBtn, setShowOneBattleDvrBtn] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('gbl_show_one_battle_dvr_btn') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [isOneBattleDvrArmed, setIsOneBattleDvrArmed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('gbl_arm_one_battle_dvr') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   const handleChangeShow6UsageWeightPct = (val: number) => {
     const clamped = Math.max(0, Math.min(100, Math.round(val)));
@@ -13681,6 +13695,84 @@ export default function App() {
             </div>
 
             {/* ===================================================================
+                CARD 3B: 1-BATTLE FULL-SCREEN DVR & ENHANCED ENERGY/HP DIAGNOSTICS (v6.07)
+               =================================================================== */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                <div>
+                  <span className="text-sm font-bold text-white block">
+                    🎥 1-Battle Full-Screen DVR + Deep Frame Trace &amp; Energy/HP Diagnostics (v6.07)
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    Zero-lag hardware H.264 544×1184 recording reusing existing OCR frames with burned-in timestamp header (<code className="text-amber-300">F#0042 T+14.35s U:88%(88%)/35E O:23%(23%)/7E</code>) + frame-by-frame <code className="text-sky-300">_deep_trace.jsonl</code> auto-uploaded to GitHub <code className="text-emerald-300">ai-telemetry-logs</code>.
+                  </span>
+                </div>
+                <span
+                  className={`px-2.5 py-1 rounded-xl text-[10px] font-bold font-mono shrink-0 border ${
+                    isOneBattleDvrArmed
+                      ? 'bg-rose-500/20 border-rose-500/50 text-rose-300'
+                      : 'bg-slate-950 border-slate-800 text-slate-400'
+                  }`}
+                >
+                  {isOneBattleDvrArmed ? '🔴 ARMED (1 BATTLE)' : '⚪ DISARMED'}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !showOneBattleDvrBtn;
+                    setShowOneBattleDvrBtn(next);
+                    try {
+                      localStorage.setItem('gbl_show_one_battle_dvr_btn', String(next));
+                    } catch {}
+                  }}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition ${
+                    showOneBattleDvrBtn
+                      ? 'bg-sky-600 border-sky-400 text-white'
+                      : 'bg-slate-950 border-slate-800 text-slate-300'
+                  }`}
+                >
+                  🎥 Overlay 1-Battle DVR Btn: {showOneBattleDvrBtn ? 'ON' : 'OFF'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !isOneBattleDvrArmed;
+                    setIsOneBattleDvrArmed(next);
+                    try {
+                      localStorage.setItem('gbl_arm_one_battle_dvr', String(next));
+                    } catch {}
+                  }}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition ${
+                    isOneBattleDvrArmed
+                      ? 'bg-rose-600 border-rose-400 text-white shadow-lg shadow-rose-600/25'
+                      : 'bg-amber-600 hover:bg-amber-500 border-amber-400 text-white'
+                  }`}
+                >
+                  {isOneBattleDvrArmed ? '🔴 DVR ARMED (Tap to Disarm)' : '🔴 Arm 1-Battle DVR'}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] font-mono pt-1">
+                <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                  <span className="text-sky-400 font-bold block">1. Raw vs. Committed HP% + Row Y</span>
+                  <span className="text-slate-400">Logs raw pixel fill, committed debounced HP%, and locked scan row Y every tick.</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                  <span className="text-amber-400 font-bold block">2. Post-Cutscene Dual-HP Audit</span>
+                  <span className="text-slate-400">Audits +220ms, +650ms &amp; +1200ms HP rescans for both players after every charged move.</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                  <span className="text-emerald-400 font-bold block">3. Energy Mutation Ledger</span>
+                  <span className="text-slate-400">Tracks FAST_CADENCE, CIRCLE_FILL_SYNC, POST_THROW_DEDUCT, SWAP_BANK &amp; RETRO_FIX.</span>
+                </div>
+              </div>
+            </div>
+
+            {/* ===================================================================
                 CARD 4: PVPOKE DATABASE & RETROACTIVE REPARSE MAINTENANCE
                =================================================================== */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
@@ -18589,7 +18681,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v6.04 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, and ML Kit Text Recognition.
+        SilphScope PvP v6.07 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
       </footer>
     </div>
   );

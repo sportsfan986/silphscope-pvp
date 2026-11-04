@@ -15,9 +15,14 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.graphics.Rect
+import android.graphics.RectF
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.ImageReader
+import android.media.MediaCodec
+import android.media.MediaCodecInfo
+import android.media.MediaFormat
+import android.media.MediaMuxer
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
@@ -25,8 +30,10 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
+import android.os.Process
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.Surface
 import android.view.WindowManager
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -299,6 +306,14 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS = "gbl_haptic_charge_timing_fasts"
         const val DEFAULT_HAPTIC_CHARGE_TIMING_FASTS = 1 // 1 or 2 fast moves
 
+        // v6.07: 1-Battle Full-Screen DVR & Frame-Synced Deep Logger Constants
+        const val PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN = "gbl_show_one_battle_dvr_btn"
+        const val DEFAULT_SHOW_ONE_BATTLE_DVR_BTN = false
+        const val PREFS_KEY_ARM_ONE_BATTLE_DVR = "gbl_arm_one_battle_dvr"
+        const val PREFS_KEY_LAST_DVR_UPLOAD_MS = "gbl_last_dvr_upload_ms"
+        const val PREFS_KEY_LAST_DVR_UPLOAD_PATH = "gbl_last_dvr_upload_path"
+        const val PREFS_KEY_TOTAL_DVR_UPLOADED_COUNT = "gbl_total_dvr_uploaded_count"
+
         @Volatile var activeEnergyDebounceSamples: Int = DEFAULT_ENERGY_DEBOUNCE_SAMPLES
         @Volatile var activeEnergyUpdateToasts: Boolean = DEFAULT_ENERGY_UPDATE_TOASTS
         @Volatile var activeHpDebounceSamples: Int = DEFAULT_HP_DEBOUNCE_SAMPLES
@@ -312,6 +327,10 @@ class OverlayService : LifecycleService() {
         @Volatile var activeHapticOppSwapWarnSec: Int = DEFAULT_HAPTIC_OPP_SWAP_WARN_SEC
         @Volatile var activeHapticOppChargeWarnEnabled: Boolean = DEFAULT_HAPTIC_OPP_CHARGE_WARN_ENABLED
         @Volatile var activeHapticChargeTimingFasts: Int = DEFAULT_HAPTIC_CHARGE_TIMING_FASTS
+        @Volatile var activeShowOneBattleDvrBtn: Boolean = DEFAULT_SHOW_ONE_BATTLE_DVR_BTN
+        @Volatile var activeOneBattleDvrArmed: Boolean = false
+        @Volatile var activeOneBattleDvrRecording: Boolean = false
+        @Volatile var activeOneBattleDvrFrames: Int = 0
 
         @Suppress("DEPRECATION")
         fun triggerSingleHapticPulseStatic(context: Context) {
@@ -464,6 +483,12 @@ class OverlayService : LifecycleService() {
             activeHapticOppSwapWarnSec = prefs.getInt(PREFS_KEY_HAPTIC_OPP_SWAP_WARN_SEC, DEFAULT_HAPTIC_OPP_SWAP_WARN_SEC).coerceIn(2, 10)
             activeHapticOppChargeWarnEnabled = prefs.getBoolean(PREFS_KEY_HAPTIC_OPP_CHARGE_WARN_ENABLED, DEFAULT_HAPTIC_OPP_CHARGE_WARN_ENABLED)
             activeHapticChargeTimingFasts = prefs.getInt(PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS, DEFAULT_HAPTIC_CHARGE_TIMING_FASTS).coerceIn(1, 2)
+            activeShowOneBattleDvrBtn = prefs.getBoolean(PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, DEFAULT_SHOW_ONE_BATTLE_DVR_BTN)
+            if (!activeShowOneBattleDvrBtn) {
+                activeOneBattleDvrArmed = false
+            } else {
+                activeOneBattleDvrArmed = prefs.getBoolean(PREFS_KEY_ARM_ONE_BATTLE_DVR, false)
+            }
             loadCachedBattleFrontierUsageAndCores(prefs)
             refreshCachedGblStandardLeagueLogsStatic(prefs)
             recordDebounceSettingsChangeIfNeededStatic(prefs, Gson(), "settings_sync", triggerImmediateUpload = false)
@@ -1561,11 +1586,100 @@ class OverlayService : LifecycleService() {
             val fainted: Boolean = false
         )
 
+        /**
+         * v6.07: Post-Cutscene Dual-HP Rescan Audit Record.
+         * Captures the exact progression of both players' HP bars before and after a charged move cutscene
+         * (+220ms, +650ms, +1200ms) alongside shield detection and expected PvPoke damage.
+         */
+        data class PostCutsceneHpAuditRecord(
+            val tSec: Double = 0.0,
+            val actor: String = "user",
+            val attackerSpecies: String = "",
+            val defenderSpecies: String = "",
+            val moveName: String = "",
+            val shielded: Boolean = false,
+            val expectedDmgPct: Int? = null,
+            val userHpPre: Int = 100,
+            val userHpScan220ms: Int = -1,
+            val userHpScan650ms: Int = -1,
+            val userHpScan1200ms: Int = -1,
+            val userHpCommittedAfter: Int = 100,
+            val userHpRowY: Int = -1,
+            val oppHpPre: Int = 100,
+            val oppHpScan220ms: Int = -1,
+            val oppHpScan650ms: Int = -1,
+            val oppHpScan1200ms: Int = -1,
+            val oppHpCommittedAfter: Int = 100,
+            val oppHpRowY: Int = -1
+        )
+
+        /**
+         * v6.07: Turn-by-Turn Energy Mutation Ledger Entry.
+         * Records every energy transition with its attribution source (FAST_CADENCE, CIRCLE_FILL_SYNC,
+         * POST_THROW_DEDUCT, SWAP_BANK, RETRO_SWAP_OR_MOVE_FIX) and fast turn count since last cutscene.
+         */
+        data class EnergyLedgerEntry(
+            val tSec: Double = 0.0,
+            val actor: String = "user", // "user" | "opp"
+            val slotIdx: Int = 0,
+            val species: String = "",
+            val energyBefore: Int = 0,
+            val energyAfter: Int = 0,
+            val deltaEnergy: Int = 0,
+            val source: String = "FAST_CADENCE",
+            val turnsSinceLastCutscene: Int = 0,
+            val leftCircleFillPct: Int = -1,
+            val rightCircleFillPct: Int = -1
+        )
+
+        /**
+         * v6.07: 1-Battle DVR Frame-Synced Deep Analysis Trace Entry (`_deep_trace.jsonl`).
+         * Correlates 1:1 with the burned-in frame number (`F#0001`) and millisecond timestamp (`T+00.00s`)
+         * on the full-screen recorded Pokémon GO battle MP4 video.
+         */
+        data class BattleDeepTraceFrame(
+            val frameIdx: Int = 0,
+            val timestampMs: Long = 0L,
+            val videoElapsedMs: Long = 0L,
+            val battleElapsedMs: Long = 0L,
+            val rawUserHpPct: Int = -1,
+            val committedUserHpPct: Int = 100,
+            val userHpRowY: Int = -1,
+            val rawOppHpPct: Int = -1,
+            val committedOppHpPct: Int = 100,
+            val oppHpRowY: Int = -1,
+            val leftCircleFillPct: Int = -1,
+            val rightCircleFillPct: Int = -1,
+            val userEnergy: Int = 0,
+            val oppEnergy: Int = 0,
+            val energySource: String = "FAST_CADENCE",
+            val userShields: Int = 2,
+            val oppShields: Int = 2,
+            val userBalls: Int = 3,
+            val oppBalls: Int = 3,
+            val activeUserIdx: Int = 0,
+            val activeOppIdx: Int = 0,
+            val activeUserSpecies: String = "",
+            val activeOppSpecies: String = "",
+            val isCutsceneActive: Boolean = false,
+            val pendingChargeActor: String = "",
+            val isTopCountdownActive: Boolean = false,
+            val playerSwapRemainingSec: Int = 0,
+            val oppSwapRemainingSec: Int = 0,
+            val ocrOppTopText: String = "",
+            val ocrUserTopText: String = "",
+            val ocrMidBannerText: String = "",
+            val ocrBottomMovesText: String = "",
+            val recommendedPhase: String = "",
+            val recommendedAction: String = "",
+            val recommendedGoal: String = ""
+        )
+
         data class AiTelemetryBattleRecordV510(
-            val schemaVersion: String = "6.02",
+            val schemaVersion: String = "6.07",
             val battleId: String = "",
             val timestampMs: Long = System.currentTimeMillis(),
-            val appVersion: String = "6.02",
+            val appVersion: String = "6.07",
             val uploaderHandle: String = "anonymous",
             val deviceHash: String = "",
             val deviceModel: String = Build.MODEL ?: "Android",
@@ -1596,12 +1710,17 @@ class OverlayService : LifecycleService() {
             val anomalyCount: Int = 0,
             val hasHighSeverityAnomaly: Boolean = false,
             val timelineEvents: List<BattleTimelineEvent> = emptyList(),
-            val shadowProfileBenchmark: Map<String, Any> = emptyMap()
+            val shadowProfileBenchmark: Map<String, Any> = emptyMap(),
+            val postCutsceneHpAudits: List<PostCutsceneHpAuditRecord> = emptyList(),
+            val energyLedger: List<EnergyLedgerEntry> = emptyList(),
+            val hpAndEnergyDiagnosticsSummary: Map<String, Any> = emptyMap(),
+            val dvrVideoPath: String? = null,
+            val dvrDeepTracePath: String? = null
         )
 
         /**
-         * v6.02: Compact 10Hz scalar sensor tick recorded in RAM during combat with zero CPU overhead.
-         * Used after battle completion to evaluate multi-profile shadow settings and parameter sensitivity sweeps.
+         * v6.02 / v6.07: Compact 10Hz scalar sensor tick recorded in RAM during combat with zero CPU overhead.
+         * Includes raw vs. committed HP%, detected HP bar Y-row lock coordinates, and energy mutation attribution.
          */
         data class BattleSensorTick(
             val tMs: Long,
@@ -1615,7 +1734,14 @@ class OverlayService : LifecycleService() {
             val oppBalls: Int,
             val activeUserIdx: Int,
             val activeOppIdx: Int,
-            val isCutsceneActive: Boolean
+            val isCutsceneActive: Boolean,
+            val committedPlayerHpPct: Int = playerHpPct,
+            val committedOppHpPct: Int = oppHpPct,
+            val playerHpRowY: Int = -1,
+            val oppHpRowY: Int = -1,
+            val userEnergy: Int = 0,
+            val oppEnergy: Int = 0,
+            val energyMutationSource: String = "NONE"
         )
 
         data class AiTelemetryManifestEntry(
@@ -2479,6 +2605,317 @@ class OverlayService : LifecycleService() {
                 "profiles" to profileResults,
                 "parameterSensitivitySweeps" to paramSweeps
             )
+        }
+
+        /**
+         * v6.07: Builds Post-Cutscene Dual-HP Rescan Audits (+220ms / +650ms / +1200ms),
+         * Turn-by-Turn Energy Mutation Ledger entries, and HP/Energy diagnostic summary metrics
+         * from the 10Hz scalar sensor trace (`sensorTicks`) and timeline checkpoints.
+         */
+        fun buildEnhancedHpAndEnergyDiagnosticsStatic(
+            userTeamSpecs: List<AiTelemetrySlotSpec>,
+            oppTeamSpecs: List<AiTelemetryOppSlotSpec>,
+            timelineEvents: List<BattleTimelineEvent>,
+            sensorTicks: List<BattleSensorTick>
+        ): Triple<List<PostCutsceneHpAuditRecord>, List<EnergyLedgerEntry>, Map<String, Any>> {
+            if (sensorTicks.isEmpty()) {
+                return Triple(emptyList(), emptyList(), emptyMap())
+            }
+            val t0Ms = sensorTicks.first().tMs
+            val audits = mutableListOf<PostCutsceneHpAuditRecord>()
+            for (ev in timelineEvents) {
+                if (!ev.type.equals("CHARGED_ATTACK", ignoreCase = true)) continue
+                val evRelMs = (ev.t * 1000.0).toLong()
+                val evAbsMs = t0Ms + evRelMs
+                val preTick = sensorTicks.lastOrNull { it.tMs <= evAbsMs - 400L && !it.isCutsceneActive }
+                    ?: sensorTicks.lastOrNull { it.tMs <= evAbsMs }
+                val tick220 = sensorTicks.firstOrNull { it.tMs >= evAbsMs + 150L && it.tMs <= evAbsMs + 420L }
+                val tick650 = sensorTicks.firstOrNull { it.tMs >= evAbsMs + 450L && it.tMs <= evAbsMs + 900L }
+                val tick1200 = sensorTicks.firstOrNull { it.tMs >= evAbsMs + 950L && it.tMs <= evAbsMs + 1650L }
+                val postCommittedTick = tick1200 ?: tick650 ?: tick220 ?: sensorTicks.firstOrNull { it.tMs >= evAbsMs }
+
+                val isUserAtk = ev.actor.equals("user", ignoreCase = true)
+                val atkSpecies = ev.activePokemon.orEmpty()
+                val defSpecies = if (isUserAtk) {
+                    oppTeamSpecs.getOrNull(postCommittedTick?.activeOppIdx ?: 0)?.species.orEmpty()
+                } else {
+                    userTeamSpecs.getOrNull(postCommittedTick?.activeUserIdx ?: 0)?.species.orEmpty()
+                }
+                val userPre = if (!isUserAtk && ev.hpBeforePct != null) ev.hpBeforePct else (preTick?.committedPlayerHpPct ?: 100)
+                val oppPre = if (isUserAtk && ev.hpBeforePct != null) ev.hpBeforePct else (preTick?.committedOppHpPct ?: 100)
+                val userAfter = if (!isUserAtk && ev.hpAfterPct != null) ev.hpAfterPct else (postCommittedTick?.committedPlayerHpPct ?: userPre)
+                val oppAfter = if (isUserAtk && ev.hpAfterPct != null) ev.hpAfterPct else (postCommittedTick?.committedOppHpPct ?: oppPre)
+
+                audits.add(
+                    PostCutsceneHpAuditRecord(
+                        tSec = ev.t,
+                        actor = ev.actor,
+                        attackerSpecies = atkSpecies,
+                        defenderSpecies = defSpecies,
+                        moveName = ev.inferredMoveName.orEmpty(),
+                        shielded = ev.shielded == true,
+                        expectedDmgPct = ev.expectedMoveDmgPct,
+                        userHpPre = userPre,
+                        userHpScan220ms = tick220?.playerHpPct ?: -1,
+                        userHpScan650ms = tick650?.playerHpPct ?: -1,
+                        userHpScan1200ms = tick1200?.playerHpPct ?: -1,
+                        userHpCommittedAfter = userAfter,
+                        userHpRowY = postCommittedTick?.playerHpRowY ?: -1,
+                        oppHpPre = oppPre,
+                        oppHpScan220ms = tick220?.oppHpPct ?: -1,
+                        oppHpScan650ms = tick650?.oppHpPct ?: -1,
+                        oppHpScan1200ms = tick1200?.oppHpPct ?: -1,
+                        oppHpCommittedAfter = oppAfter,
+                        oppHpRowY = postCommittedTick?.oppHpRowY ?: -1
+                    )
+                )
+            }
+
+            val ledger = mutableListOf<EnergyLedgerEntry>()
+            val sourceCounts = mutableMapOf<String, Int>()
+            var prevUserE = sensorTicks.first().userEnergy
+            var prevOppE = sensorTicks.first().oppEnergy
+            var prevUserIdx = sensorTicks.first().activeUserIdx
+            var prevOppIdx = sensorTicks.first().activeOppIdx
+            var turnsSinceCutscene = 0
+            var lastTurnStepMs = t0Ms
+
+            var rawVsCommittedUserDiffFrames = 0
+            var rawVsCommittedOppDiffFrames = 0
+            val validUserYs = mutableListOf<Int>()
+            val validOppYs = mutableListOf<Int>()
+
+            for (tick in sensorTicks) {
+                if (tick.isCutsceneActive) {
+                    turnsSinceCutscene = 0
+                    lastTurnStepMs = tick.tMs
+                } else {
+                    if (tick.tMs - lastTurnStepMs >= 500L) {
+                        turnsSinceCutscene += ((tick.tMs - lastTurnStepMs) / 500L).toInt().coerceIn(1, 4)
+                        lastTurnStepMs = tick.tMs
+                    }
+                    if (tick.playerHpPct in 1..100 && kotlin.math.abs(tick.playerHpPct - tick.committedPlayerHpPct) >= 5) {
+                        rawVsCommittedUserDiffFrames++
+                    }
+                    if (tick.oppHpPct in 1..100 && kotlin.math.abs(tick.oppHpPct - tick.committedOppHpPct) >= 5) {
+                        rawVsCommittedOppDiffFrames++
+                    }
+                    if (tick.playerHpRowY > 0) validUserYs.add(tick.playerHpRowY)
+                    if (tick.oppHpRowY > 0) validOppYs.add(tick.oppHpRowY)
+                }
+
+                val relSec = ((tick.tMs - t0Ms).coerceAtLeast(0L) / 100.0).roundToInt() / 10.0
+                if (tick.userEnergy != prevUserE || tick.activeUserIdx != prevUserIdx) {
+                    val src = when {
+                        tick.activeUserIdx != prevUserIdx -> "SWAP_BANK"
+                        tick.energyMutationSource.isNotBlank() && tick.energyMutationSource != "NONE" -> tick.energyMutationSource
+                        tick.userEnergy < prevUserE -> "POST_THROW_DEDUCT"
+                        tick.leftFillPct in 1..300 || tick.rightFillPct in 1..300 -> "CIRCLE_FILL_SYNC"
+                        else -> "FAST_CADENCE"
+                    }
+                    sourceCounts[src] = (sourceCounts[src] ?: 0) + 1
+                    if (ledger.size < 250) {
+                        ledger.add(
+                            EnergyLedgerEntry(
+                                tSec = relSec,
+                                actor = "user",
+                                slotIdx = tick.activeUserIdx,
+                                species = userTeamSpecs.getOrNull(tick.activeUserIdx)?.species.orEmpty(),
+                                energyBefore = prevUserE,
+                                energyAfter = tick.userEnergy,
+                                deltaEnergy = tick.userEnergy - prevUserE,
+                                source = src,
+                                turnsSinceLastCutscene = turnsSinceCutscene,
+                                leftCircleFillPct = tick.leftFillPct,
+                                rightCircleFillPct = tick.rightFillPct
+                            )
+                        )
+                    }
+                    prevUserE = tick.userEnergy
+                    prevUserIdx = tick.activeUserIdx
+                }
+                if (tick.oppEnergy != prevOppE || tick.activeOppIdx != prevOppIdx) {
+                    val src = when {
+                        tick.activeOppIdx != prevOppIdx -> "SWAP_BANK"
+                        tick.oppEnergy < prevOppE -> "POST_THROW_DEDUCT"
+                        else -> "FAST_CADENCE"
+                    }
+                    sourceCounts["OPP_$src"] = (sourceCounts["OPP_$src"] ?: 0) + 1
+                    if (ledger.size < 250) {
+                        ledger.add(
+                            EnergyLedgerEntry(
+                                tSec = relSec,
+                                actor = "opp",
+                                slotIdx = tick.activeOppIdx,
+                                species = oppTeamSpecs.getOrNull(tick.activeOppIdx)?.species.orEmpty(),
+                                energyBefore = prevOppE,
+                                energyAfter = tick.oppEnergy,
+                                deltaEnergy = tick.oppEnergy - prevOppE,
+                                source = src,
+                                turnsSinceLastCutscene = turnsSinceCutscene,
+                                leftCircleFillPct = -1,
+                                rightCircleFillPct = -1
+                            )
+                        )
+                    }
+                    prevOppE = tick.oppEnergy
+                    prevOppIdx = tick.activeOppIdx
+                }
+            }
+
+            val userYMin = validUserYs.minOrNull() ?: -1
+            val userYMax = validUserYs.maxOrNull() ?: -1
+            val oppYMin = validOppYs.minOrNull() ?: -1
+            val oppYMax = validOppYs.maxOrNull() ?: -1
+            val summary = mapOf<String, Any>(
+                "rawVsCommittedUserHpDivergenceFrames" to rawVsCommittedUserDiffFrames,
+                "rawVsCommittedOppHpDivergenceFrames" to rawVsCommittedOppDiffFrames,
+                "userHpRowYMin" to userYMin,
+                "userHpRowYMax" to userYMax,
+                "userHpRowYSpanPx" to if (userYMin > 0 && userYMax >= userYMin) (userYMax - userYMin) else 0,
+                "oppHpRowYMin" to oppYMin,
+                "oppHpRowYMax" to oppYMax,
+                "oppHpRowYSpanPx" to if (oppYMin > 0 && oppYMax >= oppYMin) (oppYMax - oppYMin) else 0,
+                "postCutsceneAuditCount" to audits.size,
+                "energyLedgerCount" to ledger.size,
+                "energyMutationsBySource" to sourceCounts
+            )
+            return Triple(audits, ledger, summary)
+        }
+
+        /**
+         * v6.07: Auto-uploads the 1-Battle Full-Screen DVR `.mp4` video and its frame-synced `_deep_trace.jsonl`
+         * directly to `recordings/<safeUser>/<battleId>_video.mp4` and `recordings/<safeUser>/<battleId>_deep_trace.jsonl`
+         * on the `ai-telemetry-logs` branch in `sportsfan986/silphscope-pvp`.
+         */
+        fun uploadBattleDvrBundleToGitHubBlocking(
+            prefs: SharedPreferences,
+            gson: Gson,
+            battleId: String,
+            summaryRecord: AiTelemetryBattleRecordV510,
+            mp4File: File,
+            traceFile: File
+        ): Pair<Boolean, String> {
+            return try {
+                val userToken = getEffectiveSyncToken(prefs).trim()
+                val relayToken = getBuiltInTelemetryRelayTokenStatic()
+                val primaryToken = userToken.ifEmpty { relayToken }
+                if (primaryToken.isEmpty()) {
+                    return false to "No GitHub token available for DVR upload."
+                }
+                val devHash = getDeviceTelemetryHashStatic(prefs)
+                val username = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty()
+                val safeUser = (username.ifBlank { "trainer_$devHash" }).replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
+                val cleanBattleId = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
+                val videoRepoPath = "recordings/$safeUser/${cleanBattleId}_video.mp4"
+                val traceRepoPath = "recordings/$safeUser/${cleanBattleId}_deep_trace.jsonl"
+                val repoBaseUrl = "https://api.github.com/repos/sportsfan986/silphscope-pvp"
+
+                val httpClient = OkHttpClient.Builder()
+                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .writeTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+
+                fun putFileToTelemetryBranch(repoPath: String, rawBytes: ByteArray, commitMsg: String, token: String): Boolean {
+                    val b64 = android.util.Base64.encodeToString(rawBytes, android.util.Base64.NO_WRAP)
+                    var existingSha = ""
+                    val getReq = Request.Builder()
+                        .url("$repoBaseUrl/contents/$repoPath?ref=$AI_TELEMETRY_BRANCH")
+                        .header("Authorization", "Bearer $token")
+                        .header("Accept", "application/vnd.github+json")
+                        .build()
+                    try {
+                        httpClient.newCall(getReq).execute().use { gResp ->
+                            if (gResp.isSuccessful) {
+                                val obj = JsonParser.parseString(gResp.body?.string().orEmpty()).asJsonObject
+                                existingSha = obj.get("sha")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                            }
+                        }
+                    } catch (_: Exception) {}
+
+                    val putMap = mutableMapOf<String, Any>(
+                        "message" to commitMsg,
+                        "content" to b64,
+                        "branch" to AI_TELEMETRY_BRANCH
+                    )
+                    if (existingSha.isNotEmpty()) {
+                        putMap["sha"] = existingSha
+                    }
+                    val putReq = Request.Builder()
+                        .url("$repoBaseUrl/contents/$repoPath")
+                        .put(gson.toJson(putMap).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
+                        .header("Authorization", "Bearer $token")
+                        .header("Accept", "application/vnd.github+json")
+                        .build()
+                    httpClient.newCall(putReq).execute().use { pResp ->
+                        return pResp.isSuccessful
+                    }
+                }
+
+                // Prepend Battle Summary Header Line 0 to deep_trace.jsonl
+                val headerJson = gson.toJson(
+                    mapOf(
+                        "recordType" to "BATTLE_DVR_SUMMARY_HEADER",
+                        "battleId" to battleId,
+                        "videoRepoPath" to videoRepoPath,
+                        "traceRepoPath" to traceRepoPath,
+                        "battleSummary" to summaryRecord
+                    )
+                ) + "\n"
+                val traceBodyBytes = if (traceFile.exists()) traceFile.readBytes() else ByteArray(0)
+                val combinedTraceBytes = headerJson.toByteArray(Charsets.UTF_8) + traceBodyBytes
+
+                var effectiveToken = primaryToken
+                var traceOk = putFileToTelemetryBranch(
+                    traceRepoPath,
+                    combinedTraceBytes,
+                    "dvr(v6.07): deep frame trace for $cleanBattleId by @$safeUser",
+                    effectiveToken
+                )
+                if (!traceOk && effectiveToken != relayToken && relayToken.isNotEmpty()) {
+                    effectiveToken = relayToken
+                    traceOk = putFileToTelemetryBranch(
+                        traceRepoPath,
+                        combinedTraceBytes,
+                        "dvr(v6.07): deep frame trace for $cleanBattleId by @$safeUser",
+                        effectiveToken
+                    )
+                }
+
+                var videoOk = false
+                if (mp4File.exists() && mp4File.length() > 0L) {
+                    val mp4Bytes = mp4File.readBytes()
+                    videoOk = putFileToTelemetryBranch(
+                        videoRepoPath,
+                        mp4Bytes,
+                        "dvr(v6.07): full-screen battle video (${mp4Bytes.size / 1024} KB) for $cleanBattleId by @$safeUser",
+                        effectiveToken
+                    )
+                }
+
+                val nowMs = System.currentTimeMillis()
+                if (traceOk || videoOk) {
+                    val prevCount = prefs.getInt(PREFS_KEY_TOTAL_DVR_UPLOADED_COUNT, 0)
+                    prefs.edit()
+                        .putLong(PREFS_KEY_LAST_DVR_UPLOAD_MS, nowMs)
+                        .putString(PREFS_KEY_LAST_DVR_UPLOAD_PATH, videoRepoPath)
+                        .putInt(PREFS_KEY_TOTAL_DVR_UPLOADED_COUNT, prevCount + 1)
+                        .apply()
+                }
+                try { mp4File.delete() } catch (_: Exception) {}
+                try { traceFile.delete() } catch (_: Exception) {}
+
+                if (videoOk && traceOk) {
+                    true to "🎥 Uploaded 1-Battle Video & Deep Trace ($cleanBattleId) to @$AI_TELEMETRY_BRANCH"
+                } else if (traceOk) {
+                    true to "📋 Uploaded 1-Battle Deep Trace ($cleanBattleId) to @$AI_TELEMETRY_BRANCH"
+                } else {
+                    false to "⚠️ 1-Battle DVR upload failed"
+                }
+            } catch (e: Exception) {
+                false to "⚠️ DVR upload error: ${e.localizedMessage ?: "Network error"}"
+            }
         }
 
         /**
@@ -12591,6 +13028,25 @@ class OverlayService : LifecycleService() {
     private val oppSlotPriorHpPct = IntArray(3) { 100 }
     private val oppSlotLowestHpPct = IntArray(3) { 100 }
     private val playerSlotLastBigJumpMs = LongArray(3) { 0L }
+
+    // v6.07: 1-Battle Full-Screen Hardware DVR & Frame-Synced Deep Trace Logger + HP/Energy Diagnostic Fields
+    private var dvrThread: HandlerThread? = null
+    private var dvrHandler: Handler? = null
+    private var dvrMediaCodec: MediaCodec? = null
+    private var dvrMediaMuxer: MediaMuxer? = null
+    private var dvrInputSurface: Surface? = null
+    private var dvrVideoTrackIndex: Int = -1
+    private var dvrMuxerStarted: Boolean = false
+    private var dvrMp4File: File? = null
+    private var dvrTraceFile: File? = null
+    private var dvrTraceWriter: java.io.BufferedWriter? = null
+    private var dvrRecordingStartMs: Long = 0L
+    private var dvrFrameCount: Int = 0
+    private var dvrVideoWidth: Int = 544
+    private var dvrVideoHeight: Int = 1184
+    private var sampledPlayerHpRowY: Int = -1
+    private var sampledOppHpRowY: Int = -1
+    private var lastEnergyMutationSource: String = "NONE"
     private val oppSlotLastBigJumpMs = LongArray(3) { 0L }
     private var pendingPlayerLowHpSlot: Int = -1
     private var pendingPlayerLowHpSample: Int = -1
@@ -13481,6 +13937,8 @@ class OverlayService : LifecycleService() {
 
         imageReaderThread = HandlerThread("GBLImageReaderThread").apply { start() }
         imageReaderHandler = Handler(imageReaderThread!!.looper)
+        dvrThread = HandlerThread("GBLBattleDvrThread", Process.THREAD_PRIORITY_BACKGROUND).apply { start() }
+        dvrHandler = Handler(dvrThread!!.looper)
 
         createNotificationChannel()
         setupDefaultPresetsIfNeeded()
@@ -15219,6 +15677,9 @@ class OverlayService : LifecycleService() {
                     cachedOcrPlayerMoveLines,
                     cachedOcrMidBannerLines
                 )
+            }
+            if (activeOneBattleDvrArmed && (isBattleActive || hasBattleStarted) && !isWaitingForOpponent) {
+                recordOneBattleDvrFrameAndTraceAsync(screen, currentFrameTimestampMs)
             }
         } finally {
             activeFrameScreenBitmap = null
@@ -17986,15 +18447,19 @@ class OverlayService : LifecycleService() {
             val pendingPct = if (hasPendingDmg) {
                 ((medianPendingW.toFloat() / medianFullInteriorW.toFloat()) * 100f).roundToInt().coerceIn(1, 35)
             } else 0
+            val medianRowY = top + validCluster[validCluster.size / 2].ry
             if (isOpponent) {
                 sampledOppHasPendingDmg = hasPendingDmg
                 sampledOppPendingDmgPct = pendingPct
+                sampledOppHpRowY = medianRowY
             } else {
                 sampledPlayerHasPendingDmg = hasPendingDmg
                 sampledPlayerPendingDmgPct = pendingPct
+                sampledPlayerHpRowY = medianRowY
             }
             ((medianWFill.toFloat() / medianFullInteriorW.toFloat()) * 100f).roundToInt().coerceIn(1, 100)
         } catch (_: Exception) {
+            if (isOpponent) sampledOppHpRowY = -1 else sampledPlayerHpRowY = -1
             -1
         }
     }
@@ -19092,7 +19557,9 @@ class OverlayService : LifecycleService() {
             oppSlotHpConfirmFrames.fill(0)
         }
 
-        // v6.02: Record lightweight 10Hz scalar sensor tick for post-battle multi-profile shadow telemetry (0% combat CPU lag)
+        lastEnergyMutationSource = "NONE"
+
+        // v6.02 / v6.07: Record lightweight 10Hz scalar sensor tick for post-battle multi-profile shadow telemetry & HP/Energy root-cause diagnostics (0% combat CPU lag)
         if (hasBattleStarted && currentBattleSensorTicks.size < 4000) {
             currentBattleSensorTicks.add(
                 BattleSensorTick(
@@ -19107,7 +19574,14 @@ class OverlayService : LifecycleService() {
                     oppBalls = sampledOppBalls,
                     activeUserIdx = activeUserIdx,
                     activeOppIdx = activeOppIdx,
-                    isCutsceneActive = pendingChargedAttackActor.isNotEmpty() || !areChargeCirclesVisibleNow
+                    isCutsceneActive = pendingChargedAttackActor.isNotEmpty() || !areChargeCirclesVisibleNow,
+                    committedPlayerHpPct = playerSlotHpPct[activeUserIdx].coerceIn(0, 100),
+                    committedOppHpPct = oppSlotHpPct[activeOppIdx].coerceIn(0, 100),
+                    playerHpRowY = sampledPlayerHpRowY,
+                    oppHpRowY = sampledOppHpRowY,
+                    userEnergy = playerSlotEnergy[activeUserIdx].coerceIn(0, 100),
+                    oppEnergy = oppSlotEnergy[activeOppIdx].coerceIn(0, 100),
+                    energyMutationSource = "NONE"
                 )
             )
         }
@@ -21994,6 +22468,29 @@ class OverlayService : LifecycleService() {
             }
         }
 
+        if (currentBattleSensorTicks.isNotEmpty() && currentBattleSensorTicks.last().tMs == nowMs) {
+            val lastIdx = currentBattleSensorTicks.lastIndex
+            val prevTick = currentBattleSensorTicks[lastIdx]
+            val finalUserE = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
+            val finalOppE = oppSlotEnergy[activeOppIdx].coerceIn(0, 100)
+            val resolvedEnergySrc = when {
+                lastEnergyMutationSource != "NONE" -> lastEnergyMutationSource
+                finalUserE < prevTick.userEnergy || finalOppE < prevTick.oppEnergy -> "POST_THROW_DEDUCT"
+                observedPlayerChargeBarStep -> "CIRCLE_FILL_SYNC"
+                finalUserE > prevTick.userEnergy || finalOppE > prevTick.oppEnergy -> "FAST_CADENCE"
+                else -> "NONE"
+            }
+            currentBattleSensorTicks[lastIdx] = prevTick.copy(
+                committedPlayerHpPct = playerSlotHpPct[activeUserIdx].coerceIn(0, 100),
+                committedOppHpPct = oppSlotHpPct[activeOppIdx].coerceIn(0, 100),
+                playerHpRowY = sampledPlayerHpRowY,
+                oppHpRowY = sampledOppHpRowY,
+                userEnergy = finalUserE,
+                oppEnergy = finalOppE,
+                energyMutationSource = resolvedEnergySrc
+            )
+        }
+
         if (hpChanged) {
             recalculateAndPushBattleData()
         }
@@ -24661,14 +25158,27 @@ class OverlayService : LifecycleService() {
             timelineEvents = finalTimelineEvents,
             sensorTicks = sensorTicksForShadow
         )
+        val (postCutsceneAudits, energyLedger, hpEnergyDiagSummary) = buildEnhancedHpAndEnergyDiagnosticsStatic(
+            userTeamSpecs = userTeamSpecs,
+            oppTeamSpecs = oppTeamSpecs,
+            timelineEvents = finalTimelineEvents,
+            sensorTicks = sensorTicksForShadow
+        )
+        val wasDvrRecordedThisBattle = !ignoreAiTelemetry && (activeOneBattleDvrRecording || (activeOneBattleDvrArmed && activeOneBattleDvrFrames > 0))
         val githubUser = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty().ifEmpty { "anonymous" }
+        val devHashForDvr = getDeviceTelemetryHashStatic(prefs)
+        val safeUserForDvr = (githubUser.takeIf { it != "anonymous" } ?: "trainer_$devHashForDvr").replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
+        val cleanBattleIdForDvr = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
+        val expectedDvrVideoPath = if (wasDvrRecordedThisBattle) "recordings/$safeUserForDvr/${cleanBattleIdForDvr}_video.mp4" else null
+        val expectedDvrTracePath = if (wasDvrRecordedThisBattle) "recordings/$safeUserForDvr/${cleanBattleIdForDvr}_deep_trace.jsonl" else null
+
         val v510Record = AiTelemetryBattleRecordV510(
-            schemaVersion = "6.06",
+            schemaVersion = "6.07",
             battleId = battleId,
             timestampMs = nowMs,
-            appVersion = "6.06",
+            appVersion = "6.07",
             uploaderHandle = githubUser,
-            deviceHash = getDeviceTelemetryHashStatic(prefs),
+            deviceHash = devHashForDvr,
             deviceModel = Build.MODEL ?: "Android",
             combatMode = if (isShow6CombatMode) "show6" else "gbl",
             league = league,
@@ -24697,7 +25207,12 @@ class OverlayService : LifecycleService() {
             anomalyCount = detectedAnomalies.size,
             hasHighSeverityAnomaly = detectedAnomalies.any { it.severity == "HIGH" },
             timelineEvents = finalTimelineEvents,
-            shadowProfileBenchmark = shadowBenchmarkMap
+            shadowProfileBenchmark = shadowBenchmarkMap,
+            postCutsceneHpAudits = postCutsceneAudits,
+            energyLedger = energyLedger,
+            hpAndEnergyDiagnosticsSummary = hpEnergyDiagSummary,
+            dvrVideoPath = expectedDvrVideoPath,
+            dvrDeepTracePath = expectedDvrTracePath
         )
         val pendingQueue = loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
         pendingQueue.removeAll { it.battleId == battleId }
@@ -24715,6 +25230,12 @@ class OverlayService : LifecycleService() {
             .putInt(PREFS_KEY_TOTAL_AI_ANOMALIES_DETECTED_COUNT, totalAnomaliesDetected)
             .remove(PREFS_KEY_AI_TRAINING_LOGS)
             .apply()
+
+        if (wasDvrRecordedThisBattle) {
+            finalizeAndUploadOneBattleDvrAsync(battleId, v510Record)
+        } else if (activeOneBattleDvrRecording) {
+            abortOneBattleDvrAsync(disarm = true)
+        }
 
         lastLoggedBattleId = battleId
         lastLoggedBattleResult = normalizedResult
@@ -27259,6 +27780,10 @@ class OverlayService : LifecycleService() {
             "oppSwapEndTimeMs" to oppSwapEndTimeMs,
             "hapticOppSwapWarnSec" to activeHapticOppSwapWarnSec,
             "hapticChargeTimingFasts" to activeHapticChargeTimingFasts,
+            "showOneBattleDvrBtn" to activeShowOneBattleDvrBtn,
+            "isOneBattleDvrArmed" to activeOneBattleDvrArmed,
+            "isOneBattleDvrRecording" to activeOneBattleDvrRecording,
+            "oneBattleDvrFrames" to activeOneBattleDvrFrames,
             "playerSwitchValidityLatched" to playerSwitchValidityLatched,
             "oppSwitchValidityLatched" to oppSwitchValidityLatched,
             "isPostFaintSwitchPromptActive" to isPostFaintSwitchPromptActive,
@@ -27486,6 +28011,10 @@ class OverlayService : LifecycleService() {
         battleLoopJob?.cancel()
 
         try {
+            releaseDvrResourcesLocked(deleteFiles = true)
+            dvrThread?.quitSafely()
+            dvrThread = null
+            dvrHandler = null
             virtualDisplay?.release()
             virtualDisplay = null
             mediaProjection?.stop()
@@ -27522,6 +28051,355 @@ class OverlayService : LifecycleService() {
         }
     }
 
+    // =========================================================================
+    // v6.07: 1-BATTLE HARDWARE H.264 DVR & FRAME-SYNCED DEEP TRACE ENGINE
+    // =========================================================================
+
+    private fun toggleArmOneBattleDvrFromOverlay() {
+        if (!activeShowOneBattleDvrBtn) {
+            showBattleToast("Enable '1-Battle DVR Button' in App Settings first.")
+            return
+        }
+        val nextArmed = !activeOneBattleDvrArmed
+        activeOneBattleDvrArmed = nextArmed
+        prefs.edit().putBoolean(PREFS_KEY_ARM_ONE_BATTLE_DVR, nextArmed).apply()
+        if (!nextArmed && activeOneBattleDvrRecording) {
+            abortOneBattleDvrAsync(disarm = true)
+            showBattleToast("⏹️ 1-Battle DVR Disarmed & Stopped")
+        } else if (nextArmed) {
+            showBattleToast("🔴 Armed 1-Battle Full-Screen DVR + Deep Trace (Auto-uploads after match)")
+        } else {
+            showBattleToast("⚪ 1-Battle DVR Disarmed")
+        }
+        recalculateAndPushBattleData()
+    }
+
+    private fun recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap, nowMs: Long) {
+        val handler = dvrHandler ?: return
+        if (screen.isRecycled) return
+        val targetW = 544
+        val targetH = (((screen.height.toFloat() / screen.width.toFloat()) * targetW.toFloat()).toInt() / 16 * 16).coerceIn(640, 1440)
+        val scaledBmp = try {
+            Bitmap.createScaledBitmap(screen, targetW, targetH, true)
+        } catch (_: Exception) {
+            null
+        } ?: return
+
+        val uIdx = (currentPreset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) } ?: 0).coerceIn(0, 2)
+        val activeOppBase = FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
+        val oIdx = if (detectedOpponents.isNotEmpty()) {
+            detectedOpponents.indexOfFirst {
+                FormResolver.extractBaseSpecies(it).equals(activeOppBase, ignoreCase = true)
+            }.let { if (it in 0..2) it else 0 }
+        } else 0
+
+        val battleElapsed = if (battleClockAnchorMs > 0L) (nowMs - battleClockAnchorMs).coerceAtLeast(0L) else 0L
+        val pSwapRem = if (playerSwapEndTimeMs > nowMs) ceil((playerSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
+        val oSwapRem = if (oppSwapEndTimeMs > nowMs) ceil((oppSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
+
+        val draftTrace = BattleDeepTraceFrame(
+            frameIdx = 0,
+            timestampMs = nowMs,
+            videoElapsedMs = 0L,
+            battleElapsedMs = battleElapsed,
+            rawUserHpPct = sampledPlayerHpPct,
+            committedUserHpPct = playerSlotHpPct.getOrElse(uIdx) { 100 },
+            userHpRowY = sampledPlayerHpRowY,
+            rawOppHpPct = sampledOppHpPct,
+            committedOppHpPct = oppSlotHpPct.getOrElse(oIdx) { 100 },
+            oppHpRowY = sampledOppHpRowY,
+            leftCircleFillPct = sampledLeftChargeBtnFillPct,
+            rightCircleFillPct = sampledRightChargeBtnFillPct,
+            userEnergy = playerSlotEnergy.getOrElse(uIdx) { 0 },
+            oppEnergy = oppSlotEnergy.getOrElse(oIdx) { 0 },
+            energySource = lastEnergyMutationSource,
+            userShields = playerShieldsRemaining,
+            oppShields = oppShieldsRemaining,
+            userBalls = playerPokeballCount,
+            oppBalls = oppPokeballCount,
+            activeUserIdx = uIdx,
+            activeOppIdx = oIdx,
+            activeUserSpecies = activeUserPokemonName.orEmpty(),
+            activeOppSpecies = activeOpponentName,
+            isCutsceneActive = pendingChargedAttackActor.isNotEmpty() || (sampledLeftChargeBtnFillPct == -1 && sampledRightChargeBtnFillPct == -1),
+            pendingChargeActor = pendingChargedAttackActor,
+            isTopCountdownActive = isTopCountdownCircleActive,
+            playerSwapRemainingSec = pSwapRem,
+            oppSwapRemainingSec = oSwapRem,
+            ocrOppTopText = cachedOcrOppLines.joinToString(" | ") { it.text },
+            ocrUserTopText = cachedOcrPlayerTopLines.joinToString(" | ") { it.text },
+            ocrMidBannerText = cachedOcrMidBannerLines.joinToString(" | ") { it.text },
+            ocrBottomMovesText = cachedOcrPlayerMoveLines.joinToString(" | ") { it.text },
+            recommendedPhase = lastRecommendedPhase,
+            recommendedAction = lastRecommendedAction,
+            recommendedGoal = lastRecommendedGoal
+        )
+
+        handler.post {
+            try {
+                if (!activeOneBattleDvrArmed) {
+                    scaledBmp.recycle()
+                    return@post
+                }
+                if (!activeOneBattleDvrRecording) {
+                    startDvrEncoderLocked(targetW, targetH, nowMs)
+                }
+                if (!activeOneBattleDvrRecording) {
+                    scaledBmp.recycle()
+                    return@post
+                }
+                dvrFrameCount++
+                activeOneBattleDvrFrames = dvrFrameCount
+                val vidElapsed = (nowMs - dvrRecordingStartMs).coerceAtLeast(0L)
+                val finalTrace = draftTrace.copy(
+                    frameIdx = dvrFrameCount,
+                    videoElapsedMs = vidElapsed
+                )
+
+                val surf = dvrInputSurface
+                if (surf != null) {
+                    val canvas = surf.lockCanvas(null)
+                    try {
+                        canvas.drawBitmap(scaledBmp, 0f, 0f, null)
+                        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = Color.argb(210, 9, 13, 22)
+                            style = Paint.Style.FILL
+                        }
+                        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = Color.argb(220, 56, 189, 248)
+                            style = Paint.Style.STROKE
+                            strokeWidth = 1.5f
+                        }
+                        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = Color.WHITE
+                            textSize = 13.5f
+                            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+                        }
+                        val stamp = String.format(
+                            java.util.Locale.US,
+                            "F#%04d T+%05.2fs U:%d%%(%d%%)/%dE O:%d%%(%d%%)/%dE",
+                            finalTrace.frameIdx,
+                            finalTrace.battleElapsedMs / 1000.0,
+                            finalTrace.committedUserHpPct,
+                            finalTrace.rawUserHpPct,
+                            finalTrace.userEnergy,
+                            finalTrace.committedOppHpPct,
+                            finalTrace.rawOppHpPct,
+                            finalTrace.oppEnergy
+                        )
+                        val bannerRect = RectF(6f, 4f, targetW - 6f, 26f)
+                        canvas.drawRoundRect(bannerRect, 5f, 5f, bgPaint)
+                        canvas.drawRoundRect(bannerRect, 5f, 5f, borderPaint)
+                        canvas.drawText(stamp, 12f, 19.5f, textPaint)
+                    } finally {
+                        surf.unlockCanvasAndPost(canvas)
+                    }
+                    drainDvrEncoderLocked(endOfStream = false)
+                }
+                dvrTraceWriter?.write(gson.toJson(finalTrace) + "\n")
+                if (dvrFrameCount % 10 == 0) {
+                    dvrTraceWriter?.flush()
+                }
+            } catch (_: Exception) {
+            } finally {
+                if (!scaledBmp.isRecycled) {
+                    scaledBmp.recycle()
+                }
+            }
+        }
+    }
+
+    private fun startDvrEncoderLocked(width: Int, height: Int, startMs: Long) {
+        releaseDvrResourcesLocked(deleteFiles = true)
+        try {
+            dvrVideoWidth = width
+            dvrVideoHeight = height
+            val mp4 = File(cacheDir, "dvr_live_battle.mp4")
+            val trace = File(cacheDir, "dvr_live_deep_trace.jsonl")
+            if (mp4.exists()) mp4.delete()
+            if (trace.exists()) trace.delete()
+            dvrMp4File = mp4
+            dvrTraceFile = trace
+            dvrTraceWriter = trace.bufferedWriter(Charsets.UTF_8)
+
+            val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
+                setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+                setInteger(MediaFormat.KEY_BIT_RATE, 700_000)
+                setInteger(MediaFormat.KEY_FRAME_RATE, 10)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
+            }
+            val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+            codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            val surface = codec.createInputSurface()
+            codec.start()
+
+            val muxer = MediaMuxer(mp4.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            dvrMediaCodec = codec
+            dvrInputSurface = surface
+            dvrMediaMuxer = muxer
+            dvrVideoTrackIndex = -1
+            dvrMuxerStarted = false
+            dvrRecordingStartMs = startMs
+            dvrFrameCount = 0
+            activeOneBattleDvrFrames = 0
+            activeOneBattleDvrRecording = true
+        } catch (_: Exception) {
+            releaseDvrResourcesLocked(deleteFiles = true)
+        }
+    }
+
+    private fun drainDvrEncoderLocked(endOfStream: Boolean) {
+        val codec = dvrMediaCodec ?: return
+        val muxer = dvrMediaMuxer ?: return
+        try {
+            if (endOfStream) {
+                try {
+                    codec.signalEndOfInputStream()
+                } catch (_: Exception) {}
+            }
+            val bufferInfo = MediaCodec.BufferInfo()
+            var loops = 0
+            while (loops < 60) {
+                loops++
+                val outIndex = codec.dequeueOutputBuffer(bufferInfo, if (endOfStream) 10_000L else 0L)
+                if (outIndex == MediaCodec.INFO_TRY_AGAIN_LATER) {
+                    if (!endOfStream) break
+                } else if (outIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    if (!dvrMuxerStarted) {
+                        dvrVideoTrackIndex = muxer.addTrack(codec.outputFormat)
+                        muxer.start()
+                        dvrMuxerStarted = true
+                    }
+                } else if (outIndex >= 0) {
+                    val encodedData = codec.getOutputBuffer(outIndex)
+                    if (encodedData != null) {
+                        if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
+                            bufferInfo.size = 0
+                        }
+                        if (bufferInfo.size != 0 && dvrMuxerStarted && dvrVideoTrackIndex >= 0) {
+                            encodedData.position(bufferInfo.offset)
+                            encodedData.limit(bufferInfo.offset + bufferInfo.size)
+                            muxer.writeSampleData(dvrVideoTrackIndex, encodedData, bufferInfo)
+                        }
+                    }
+                    codec.releaseOutputBuffer(outIndex, false)
+                    if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                        break
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun releaseDvrResourcesLocked(deleteFiles: Boolean) {
+        activeOneBattleDvrRecording = false
+        activeOneBattleDvrFrames = 0
+        try {
+            dvrTraceWriter?.flush()
+            dvrTraceWriter?.close()
+        } catch (_: Exception) {}
+        dvrTraceWriter = null
+
+        try {
+            dvrInputSurface?.release()
+        } catch (_: Exception) {}
+        dvrInputSurface = null
+
+        try {
+            dvrMediaCodec?.stop()
+        } catch (_: Exception) {}
+        try {
+            dvrMediaCodec?.release()
+        } catch (_: Exception) {}
+        dvrMediaCodec = null
+
+        try {
+            if (dvrMuxerStarted) {
+                dvrMediaMuxer?.stop()
+            }
+        } catch (_: Exception) {}
+        try {
+            dvrMediaMuxer?.release()
+        } catch (_: Exception) {}
+        dvrMediaMuxer = null
+        dvrVideoTrackIndex = -1
+        dvrMuxerStarted = false
+
+        if (deleteFiles) {
+            try { dvrMp4File?.delete() } catch (_: Exception) {}
+            try { dvrTraceFile?.delete() } catch (_: Exception) {}
+            dvrMp4File = null
+            dvrTraceFile = null
+        }
+    }
+
+    private fun abortOneBattleDvrAsync(disarm: Boolean) {
+        if (disarm) {
+            activeOneBattleDvrArmed = false
+            if (::prefs.isInitialized) {
+                prefs.edit().putBoolean(PREFS_KEY_ARM_ONE_BATTLE_DVR, false).apply()
+            }
+        }
+        dvrHandler?.post {
+            releaseDvrResourcesLocked(deleteFiles = true)
+        }
+    }
+
+    private fun finalizeAndUploadOneBattleDvrAsync(
+        battleId: String,
+        summaryRecord: AiTelemetryBattleRecordV510
+    ) {
+        activeOneBattleDvrArmed = false
+        if (::prefs.isInitialized) {
+            prefs.edit().putBoolean(PREFS_KEY_ARM_ONE_BATTLE_DVR, false).apply()
+        }
+        val handler = dvrHandler ?: return
+        handler.post {
+            try {
+                drainDvrEncoderLocked(endOfStream = true)
+            } catch (_: Exception) {}
+            val rawMp4 = dvrMp4File
+            val rawTrace = dvrTraceFile
+            releaseDvrResourcesLocked(deleteFiles = false)
+            if (rawMp4 == null && rawTrace == null) return@post
+
+            val cleanId = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
+            val finalMp4 = File(cacheDir, "${cleanId}_video.mp4")
+            val finalTrace = File(cacheDir, "${cleanId}_deep_trace.jsonl")
+            try {
+                if (rawMp4 != null && rawMp4.exists()) rawMp4.renameTo(finalMp4)
+                if (rawTrace != null && rawTrace.exists()) rawTrace.renameTo(finalTrace)
+            } catch (_: Exception) {}
+
+            Handler(Looper.getMainLooper()).post {
+                recalculateAndPushBattleData()
+                showBattleToast("🎥 Uploading 1-Battle Video & Deep Log to GitHub...")
+            }
+
+            lifecycleScope.launch(Dispatchers.IO) {
+                val (dvrOk, dvrMsg) = uploadBattleDvrBundleToGitHubBlocking(
+                    prefs = prefs,
+                    gson = gson,
+                    battleId = battleId,
+                    summaryRecord = summaryRecord,
+                    mp4File = finalMp4,
+                    traceFile = finalTrace
+                )
+                try {
+                    uploadPendingAiTelemetryBatchBlocking(
+                        prefs = prefs,
+                        gson = gson,
+                        forceUpload = true,
+                        minBattlesRequired = 1
+                    )
+                } catch (_: Exception) {}
+                withContext(Dispatchers.Main) {
+                    showBattleToast(dvrMsg, if (dvrOk) Toast.LENGTH_LONG else Toast.LENGTH_SHORT)
+                }
+            }
+        }
+    }
+
     override fun onBind(intent: Intent): IBinder? {
         super.onBind(intent)
         return null
@@ -27534,6 +28412,13 @@ class OverlayService : LifecycleService() {
         @JavascriptInterface
         fun onLayoutSwitched(newMode: String) {
             Handler(Looper.getMainLooper()).post { applyLayoutMode(newMode) }
+        }
+
+        @JavascriptInterface
+        fun toggleArmOneBattleDvr() {
+            Handler(Looper.getMainLooper()).post {
+                this@OverlayService.toggleArmOneBattleDvrFromOverlay()
+            }
         }
 
         @JavascriptInterface

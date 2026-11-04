@@ -222,6 +222,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnToggleAutoUploadAiLogs: Button
     private lateinit var btnUploadAiLogsNow: Button
     private lateinit var textAiTelemetryStatus: TextView
+    private lateinit var btnToggleShowOneBattleDvr: Button
+    private lateinit var btnArmOneBattleDvrNow: Button
+    private lateinit var textOneBattleDvrStatus: TextView
     private lateinit var textTierDefinitionsSummary: TextView
     private lateinit var editTierSwMin: EditText
     private lateinit var editTierWMin: EditText
@@ -593,9 +596,9 @@ class MainActivity : AppCompatActivity() {
 
         initViews()
         val appVer = try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "6.05"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "6.07"
         } catch (_: Exception) {
-            "6.05"
+            "6.07"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -1368,6 +1371,9 @@ class MainActivity : AppCompatActivity() {
         btnToggleAutoUploadAiLogs = findViewById(R.id.btn_toggle_auto_upload_ai_logs)
         btnUploadAiLogsNow = findViewById(R.id.btn_upload_ai_logs_now)
         textAiTelemetryStatus = findViewById(R.id.text_ai_telemetry_status)
+        btnToggleShowOneBattleDvr = findViewById(R.id.btn_toggle_show_one_battle_dvr)
+        btnArmOneBattleDvrNow = findViewById(R.id.btn_arm_one_battle_dvr_now)
+        textOneBattleDvrStatus = findViewById(R.id.text_one_battle_dvr_status)
         textTierDefinitionsSummary = findViewById(R.id.text_tier_definitions_summary)
         editTierSwMin = findViewById(R.id.edit_tier_sw_min)
         editTierWMin = findViewById(R.id.edit_tier_w_min)
@@ -1641,6 +1647,36 @@ class MainActivity : AppCompatActivity() {
             } else {
                 triggerManualAiTelemetryUpload(silentIfEmpty = false)
             }
+        }
+
+        btnToggleShowOneBattleDvr.setOnClickListener {
+            val current = prefs.getBoolean(OverlayService.PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, false)
+            val next = !current
+            prefs.edit().putBoolean(OverlayService.PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, next).apply()
+            OverlayService.syncTierThresholdsFromPrefs(prefs)
+            updateAiTelemetryStatusUi()
+            val msg = if (next) {
+                "🎥 Overlay 'DVR' button enabled! Tap it in the overlay (or 'Arm 1-Battle DVR' here) before a match."
+            } else {
+                "⚪ Overlay 'DVR' button hidden."
+            }
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+
+        btnArmOneBattleDvrNow.setOnClickListener {
+            val currentArmed = prefs.getBoolean(OverlayService.PREFS_KEY_ARM_ONE_BATTLE_DVR, false)
+            val nextArmed = !currentArmed
+            prefs.edit()
+                .putBoolean(OverlayService.PREFS_KEY_ARM_ONE_BATTLE_DVR, nextArmed)
+                .apply()
+            OverlayService.syncTierThresholdsFromPrefs(prefs)
+            updateAiTelemetryStatusUi()
+            val msg = if (nextArmed) {
+                "🔴 1-Battle DVR ARMED! Next battle will record full-screen MP4 + timestamp header + deep trace JSONL and auto-upload to GitHub."
+            } else {
+                "⚪ 1-Battle DVR disarmed."
+            }
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
         }
 
         loadAndRenderHpDebounceUi()
@@ -2348,6 +2384,40 @@ class MainActivity : AppCompatActivity() {
         }
         textAiTelemetryStatus.text =
             "$statePrefix • Debounce Profile: $profileSig ($pendingSettingsChanges pending changes) • Pending queue: $pendingBattles battles ($pendingAnomalies anomalies) • Total uploaded & purged: $totalUploaded • Last upload: $lastStr"
+
+        if (::btnToggleShowOneBattleDvr.isInitialized && ::btnArmOneBattleDvrNow.isInitialized && ::textOneBattleDvrStatus.isInitialized) {
+            val showBtn = prefs.getBoolean(OverlayService.PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, false)
+            val isArmed = prefs.getBoolean(OverlayService.PREFS_KEY_ARM_ONE_BATTLE_DVR, false)
+            val dvrUploadedCount = prefs.getInt(OverlayService.PREFS_KEY_TOTAL_DVR_UPLOADED_COUNT, 0)
+            val lastDvrAt = prefs.getLong(OverlayService.PREFS_KEY_LAST_DVR_UPLOAD_MS, 0L)
+            val lastDvrPath = prefs.getString(OverlayService.PREFS_KEY_LAST_DVR_UPLOAD_PATH, "") ?: ""
+            val lastDvrStr = if (lastDvrAt > 0L) timeFmt.format(java.util.Date(lastDvrAt)) else "Never"
+
+            if (showBtn) {
+                btnToggleShowOneBattleDvr.text = "🎥 Overlay 1-Battle DVR Btn: ON"
+                btnToggleShowOneBattleDvr.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+                btnToggleShowOneBattleDvr.setTextColor(0xFFFFFFFF.toInt())
+            } else {
+                btnToggleShowOneBattleDvr.text = "🎥 Overlay 1-Battle DVR Btn: OFF"
+                btnToggleShowOneBattleDvr.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF334155.toInt())
+                btnToggleShowOneBattleDvr.setTextColor(0xFFF8FAFC.toInt())
+            }
+
+            if (isArmed) {
+                btnArmOneBattleDvrNow.text = "🔴 DVR ARMED (Tap to Disarm)"
+                btnArmOneBattleDvrNow.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFDC2626.toInt())
+                btnArmOneBattleDvrNow.setTextColor(0xFFFFFFFF.toInt())
+            } else {
+                btnArmOneBattleDvrNow.text = "🔴 Arm 1-Battle DVR"
+                btnArmOneBattleDvrNow.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
+                btnArmOneBattleDvrNow.setTextColor(0xFFFFFFFF.toInt())
+            }
+
+            val armStateLabel = if (isArmed) "🔴 ARMED FOR NEXT BATTLE (Auto-disarms after 1 match)" else "⚪ Disarmed"
+            val pathTail = if (lastDvrPath.isNotEmpty()) " ($lastDvrPath)" else ""
+            textOneBattleDvrStatus.text =
+                "$armStateLabel • Overlay Button: ${if (showBtn) "ON" else "OFF"} • DVR Bundles Uploaded: $dvrUploadedCount • Last DVR Upload: $lastDvrStr$pathTail"
+        }
     }
 
     private fun triggerManualAiTelemetryUpload(silentIfEmpty: Boolean) {

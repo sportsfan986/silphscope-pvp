@@ -1348,6 +1348,24 @@
             padding: 2px 4px;
         }
 
+        .hud-btn.btn-dvr {
+            background: rgba(30, 41, 59, 0.85);
+            color: #cbd5e1;
+            border: 1px solid rgba(148, 163, 184, 0.45);
+        }
+        .hud-btn.btn-dvr.armed {
+            background: rgba(217, 119, 6, 0.32);
+            color: #fde68a;
+            border: 1px solid rgba(251, 191, 36, 0.75);
+            box-shadow: 0 0 6px rgba(245, 158, 11, 0.35);
+        }
+        .hud-btn.btn-dvr.recording {
+            background: rgba(220, 38, 38, 0.38);
+            color: #fecaca;
+            border: 1px solid #ef4444;
+            animation: pulse 1.1s infinite;
+        }
+
         .hidden {
             display: none !important;
         }
@@ -1437,6 +1455,9 @@
                 </button>
                 <button id="btn-cycle-form" class="hud-btn btn-form disabled" onclick="cycleForm()" disabled title="Cycle regional or alternate form">
                     <span class="btn-row-top">Form:</span><span class="btn-row-sub">Base</span>
+                </button>
+                <button id="btn-dvr-rec-one" class="hud-btn btn-dvr hidden" onclick="toggleArmOneBattleDvr()" title="Arm 1-Battle Full-Screen MP4 Video + Deep Frame Log (Auto-uploads to GitHub & disarms after 1 battle)">
+                    <span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">OFF</span>
                 </button>
             </div>
             <div id="sky-team-chips" class="team-chips-group">
@@ -2066,6 +2087,15 @@
                 try {
                     window.parent.postMessage({ type: "SILPH_STOP_OVERLAY_OPEN_BATTLE_LOG" }, "*");
                 } catch (e) {}
+            }
+        }
+
+        function toggleArmOneBattleDvr() {
+            if (window.AndroidOverlay && window.AndroidOverlay.toggleArmOneBattleDvr) {
+                window.AndroidOverlay.toggleArmOneBattleDvr();
+            } else {
+                battleData.isOneBattleDvrArmed = !battleData.isOneBattleDvrArmed;
+                render();
             }
         }
 
@@ -3103,6 +3133,28 @@
             if (myShortEl) {
                 const myHpSuffix = hpTrackingEnabled ? ` ${activeUserHpVal}%` : "";
                 myShortEl.textContent = isWaitingState ? `${my3Letter}${myHpSuffix}` : `${my3Letter}${myHpSuffix} · ${userFastTelemetry}`;
+            }
+
+            const dvrBtnEl = document.getElementById("btn-dvr-rec-one");
+            if (dvrBtnEl) {
+                const showDvr = !!battleData.showOneBattleDvrBtn;
+                if (!showDvr) {
+                    dvrBtnEl.classList.add("hidden");
+                } else {
+                    dvrBtnEl.classList.remove("hidden");
+                    const isRec = !!battleData.isOneBattleDvrRecording;
+                    const isArmed = !!battleData.isOneBattleDvrArmed;
+                    const recFrames = Number(battleData.oneBattleDvrFrames || 0);
+                    dvrBtnEl.classList.toggle("recording", isRec);
+                    dvrBtnEl.classList.toggle("armed", !isRec && isArmed);
+                    if (isRec) {
+                        dvrBtnEl.innerHTML = `<span class="btn-row-top">🔴 REC</span><span class="btn-row-sub">F#${recFrames}</span>`;
+                    } else if (isArmed) {
+                        dvrBtnEl.innerHTML = `<span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">ARMED</span>`;
+                    } else {
+                        dvrBtnEl.innerHTML = `<span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">OFF</span>`;
+                    }
+                }
             }
 
             if (isWaitingState) {

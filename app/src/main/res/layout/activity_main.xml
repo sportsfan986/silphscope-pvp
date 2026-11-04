@@ -3629,6 +3629,44 @@
                     android:textColor="#94a3b8"
                     android:textSize="10sp"
                     android:layout_marginTop="4dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="8dp">
+
+                    <Button
+                        android:id="@+id/btn_toggle_show_one_battle_dvr"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="🎥 Overlay 1-Battle DVR Btn: OFF"
+                        android:textSize="9.5sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#f8fafc"
+                        android:layout_marginEnd="6dp" />
+
+                    <Button
+                        android:id="@+id/btn_arm_one_battle_dvr_now"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:text="🔴 Arm 1-Battle DVR"
+                        android:textSize="9.5sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#d97706"
+                        android:textColor="#ffffff" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/text_one_battle_dvr_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="1-Battle DVR: Disarmed • Hardware H.264 544×1184 + Timestamp Banner + Deep Frame JSONL (Auto-uploads &amp; purges)"
+                    android:textColor="#94a3b8"
+                    android:textSize="9.5sp"
+                    android:layout_marginTop="4dp" />
             </LinearLayout>
 
             <!-- ===================================================================
