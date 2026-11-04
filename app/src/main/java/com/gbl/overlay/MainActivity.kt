@@ -3981,19 +3981,15 @@ class MainActivity : AppCompatActivity() {
         }
 
         spinnerLogFilterTeam.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: AdapterView<*>?, position: Int, id: Long) {}
-        }.let {
-            object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                    if (isUpdatingLogFilterSpinners) return
-                    val nextTm = teamKeys.getOrElse(position) { "ALL" }
-                    if (nextTm != selectedLogTeamFilter) {
-                        selectedLogTeamFilter = nextTm
-                        renderBattleLogPage()
-                    }
+            override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                if (isUpdatingLogFilterSpinners) return
+                val nextTm = teamKeys.getOrElse(position) { "ALL" }
+                if (nextTm != selectedLogTeamFilter) {
+                    selectedLogTeamFilter = nextTm
+                    renderBattleLogPage()
                 }
-                override fun onNothingSelected(parent: AdapterView<*>?) {}
             }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
         spinnerLogFilterTimeframe.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
