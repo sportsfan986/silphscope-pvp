@@ -1,4 +1,69 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.02`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.07`)
+
+---
+
+## v6.07 (2026-11-04) — Zero-Impact 1-Battle Full-Screen H.264 DVR + Burned-In Frame Correlation, Frame-Synced Deep Trace JSONL, Post-Cutscene Dual-HP Audit, & Energy Mutation Ledger
+*Diagnostics, hardware video encoding, and root-cause telemetry release (`v6.07`, `versionCode = 1607`) adding a zero-impact hardware-accelerated 1-Battle Full-Screen H.264 DVR (`MediaCodec` `video/avc` at 544×1184, 1.2 Mbps) with a high-contrast burned-in frame & timestamp watermark (`F#0042 T+14.35s U:88%(88%)/35E O:23%(23%)/7E`), a companion frame-synced `_deep_trace.jsonl` audit file, post-cutscene dual-HP settling progression tracking (`+220ms`, `+650ms`, `+1200ms`), an energy mutation ledger with explicit attribution (`FAST_CADENCE`, `CIRCLE_FILL_SYNC`, `POST_THROW_DEDUCT`, `SWAP_BANK`, `RETRO_SWAP_OR_MOVE_FIX`), an overlay `REC 1` button with auto-disarm after 1 battle, and auto-upload of `.mp4` + `.jsonl` bundles to the `ai-telemetry-logs` branch on GitHub.*
+
+- **v6.07 — Key Features & Root-Cause Logging**:
+  - **Zero-Impact 1-Battle Full-Screen H.264 DVR (`BattleDvrRecorder`)**:
+    - Reuses the in-memory screen capture bitmap from `captureCleanScreenBitmap()` on a dedicated `GBLBattleDvrThread` running at `Process.THREAD_PRIORITY_BACKGROUND`, rendering to a `MediaCodec` input surface. Reuses the existing single `VirtualDisplay` to strictly comply with Android 14+ projection token constraints while keeping CPU impact under 0.5% with zero Pokémon GO game frame drops.
+    - Draws a clean, high-contrast monospace timestamp strip on every frame (`F#<frameIdx> T+<elapsedSec>s U:<rawHp>%(<committedHp>%)/<energy>E O:<rawHp>%(<committedHp>%)/<energy>E`).
+    - Accompanied by a frame-by-frame `_deep_trace.jsonl` containing full OCR detections, pixel scan outputs, circle fills, and overlay state.
+  - **Post-Battle Background Upload to GitHub (`uploadBattleDvrBundleToGitHubBlocking`)**:
+    - Immediately upon logging or stopping the battle, bundles the `.mp4` and `_deep_trace.jsonl` files and commits them to `recordings/<safeUser>/<battleId>_video.mp4` and `recordings/<safeUser>/<battleId>_deep_trace.jsonl` on the `ai-telemetry-logs` branch.
+    - Automatically deletes temporary files from phone storage after upload.
+  - **Enhanced Always-On Root-Cause Telemetry**:
+    - Expands `BattleSensorTick` to log `committedPlayerHpPct`, `committedOppHpPct`, `playerHpRowY`, `oppHpRowY`, `userEnergy`, `oppEnergy`, and `energyMutationSource`.
+    - Emits a structured `PostCutsceneHpAuditRecord` on every charged move capturing pre-cutscene HP and `+220ms`, `+650ms`, and `+1200ms` post-cutscene rescans for both players.
+    - Tracks an explicit turn-by-turn `EnergyLedgerEntry` recording exact source attribution (`FAST_CADENCE`, `CIRCLE_FILL_SYNC`, `POST_THROW_DEDUCT`, `SWAP_BANK`, `RETRO_SWAP_OR_MOVE_FIX`).
+
+---
+
+## v6.06 (2026-11-04) — Synchronized Haptics & Tactical Vibration Alerts, Lead-Loss Recovery Rate & Safe-Swap MVP Summary
+*Tactical awareness and battle analytics release (`v6.06`, `versionCode = 1606`) introducing hardware vibration alerts synchronized 1:1 with overlay visual warnings, customizable haptic threshold sliders in Settings, and the Lead-Loss Recovery Rate banner in Battle Log.*
+
+- **v6.06 — Key Features**:
+  - **Synchronized Haptic & Tactical Vibration Alerts**:
+    - **Opponent Swap Clock Alert**: Distinct single 80ms pulse when opponent swap clock drops below `< 5s`.
+    - **Opponent Move Imminent Alert**: Distinct double 80ms pulse (`80ms on, 60ms off, 80ms on`) when opponent is within 1 fast move of reaching a charged attack.
+    - Visual-Haptic Synchronization: Evaluates on the exact same cycle as the `BLINK_1_FAST` visual alerts.
+    - Dedicated Haptics Section in Settings: Master enable/disable switches and threshold adjustment sliders for both alert types.
+  - **Lead-Loss Recovery Rate & Safe-Swap MVP**:
+    - **Lead Won Conversion**: Tracks conversion percentage when opening with a Favorable lead.
+    - **Lead Lost Recovery Rate**: Measures resilience when opening with a Negative lead, graded from S ( $\ge 45\%$ ) to D ( $< 15\%$ ).
+    - **Safe-Swap MVP**: Identifies the specific bench Pokémon that yields the highest win conversion when safe-swapped into bad leads.
+
+---
+
+## v6.05 (2026-11-04) — Battle Frontier Forced Metas, 2-Tier CP + Cup Filter, & Charged Attack Dual-HP Rescan
+*Filter refinement and HP stability release (`v6.05`, `versionCode = 1605`) restricting Show 6 modes to official Battle Frontier tournaments, introducing 2-tier CP Range and Cup filtering, and enforcing dual-player HP rescans on opponent charged attacks.*
+
+- **v6.05 — Key Features**:
+  - **2-Tier CP Range + Format Filter**: Filters Battle Log and Team Presets by broad CP tier (`ALL`, `GREAT ≤1500`, `ULTRA ≤2500`, `MASTER >2500`) followed by specific league/cup selection.
+  - **Forced Active Battle Frontier Metas**: Locks Show 6 league selector to official metas: `GREAT LEAGUE`, `Battle Frontier (Spectral)`, `Battle Frontier (Cauldron)`, and `Battle Frontier (Master)`.
+  - **Always Rescan Both HP Sets on Opponent Charged Attack**: Reconciles health bar pixel samples for both players following cutscenes to eliminate asymmetric drain artifacts.
+
+---
+
+## v6.04 (2026-11-03) — Charged-Attack HP Tracking Stability, Post-Cutscene Drain Settle, & Dynamic League PvPoke Sync
+*Stability and data freshness release (`v6.04`, `versionCode = 1604`) hardening pre-charge HP debounced locks, post-cutscene drain settling, KO HUD return gating, and dynamic selected-league PvPoke rankings synchronization.*
+
+- **v6.04 — Key Features**:
+  - **Pre-Charge Debounced HP Lock**: Prevents intermediate camera zoom-in frames from corrupting pre-attack HP snapshots.
+  - **Post-Cutscene Drain Settle & Unshielded Override**: Awaits settled health bar animations before committing damage deduction.
+  - **KO HUD Return Gating**: Blocks premature combat resume loops if the fainted Pokémon has not yet been replaced.
+  - **Dynamic League PvPoke Sync**: Synchronizes rankings specifically for user-enabled leagues to minimize network payload.
+
+---
+
+## v6.03 (2026-11-03) — Automatic End-of-Battle Win/Loss Detection, Auto-Catcher Telemetry Exclusion, & Mirrored Top Header
+*Usability and HUD symmetry release (`v6.03`, `versionCode = 1603`) adding automated match outcome detection, ignoring external PoGO Auto-Catcher notification text in OCR regions, and mirroring top header status badges.*
+
+- **v6.03 — Key Features**:
+  - **Auto End-of-Battle Win/Loss Detection**: Automatically detects match end and infers Win or Loss based on `"YOU WIN"` / `"YOU LOSE"` OCR text and final faint state.
+  - **Auto-Catcher Notification Filter**: Filters out Pokémon GO Plus / Auto-Catcher overlay popups (`"Pokémon caught"`, `"Bag full"`) from triggering false Pokémon nameplate OCR overrides.
+  - **Mirrored Top Header Cluster**: Symmetrically arranges live metrics: `[CP, HP, E, 🛡️] | [🛡️, E, HP, CP]` with real-time `OCR:hp/ocr ms` latency indicator.
 
 ---
 

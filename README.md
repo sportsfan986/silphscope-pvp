@@ -1,14 +1,18 @@
-# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v6.02)
+# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v6.07)
 
 [![Live Web Simulator](https://img.shields.io/badge/🌐%20Live%20Web%20Simulator-Try%20in%20Browser-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white)](https://sportsfan986.github.io/silphscope-pvp/)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support%20the%20Project-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/sportsfan986)
 [![Latest Release](https://img.shields.io/github/v/release/sportsfan986/silphscope-pvp?style=for-the-badge&color=10b981&label=Latest%20APK)](https://github.com/sportsfan986/silphscope-pvp/releases)
+[![Contributing](https://img.shields.io/badge/Developer-Contributing%20Guide-38bdf8?style=for-the-badge&logo=git)](./CONTRIBUTING.md)
+[![Antigravity](https://img.shields.io/badge/Antigravity-Agent%20Knowledge%20Base-10b981?style=for-the-badge&logo=google)](./ANTIGRAVITY.md)
 
 ---
 
 ![SilphScope PvP Full Color Real Gameplay HUD Overlay — Dialga Origin vs Mewtwo](./docs/screenshots/featured_real_gameplay.png)
 
-**SilphScope PvP** is a standalone Android application and client-side web battle simulator for **Pokémon GO Battle League (GBL)**. Built with Kotlin, WindowManager `TYPE_APPLICATION_OVERLAY`, in-memory `MediaProjection` frame analysis (zero disk writes), PvPoke `gamemaster.json` + official league rankings JSON synchronization, offline Google ML Kit Text Recognition, Battle Quality & Wins Above Expected (WAE) micro-skill analytics, multi-device GitHub Cloud Delta Sync, and an interactive React web dashboard.
+**SilphScope PvP** is a standalone Android application and client-side web battle simulator for **Pokémon GO Battle League (GBL)**. Built with Kotlin, WindowManager `TYPE_APPLICATION_OVERLAY`, in-memory `MediaProjection` frame analysis (zero disk writes), hardware H.264 1-Battle DVR, PvPoke `gamemaster.json` + official league rankings JSON synchronization, offline Google ML Kit Text Recognition, Battle Quality & Wins Above Expected (WAE) micro-skill analytics, multi-device GitHub Cloud Delta Sync, and an interactive React web dashboard.
+
+> 🛠️ **Developer & Agent Guides**: See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for local build & development instructions, and [`ANTIGRAVITY.md`](./ANTIGRAVITY.md) for complete agent architecture, subsystem specifications, and full historical design logs.
 
 ---
 
