@@ -662,7 +662,7 @@ internal fun OverlayService.Companion.buildDebounceAndSettlingSettingsMapStatic(
     }
     return mapOf(
         "appVersion" to APP_VERSION,
-        "versionCode" to 1620,
+        "versionCode" to 1621,
         "scanHzMode" to scanHzMode,
         "turnOffsetMs" to scanTurnOffsetMs,
         "hpTrackingEnabled" to hpTracking,
@@ -1730,7 +1730,7 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
             mapOf(
                 "recordType" to "BATTLE_DVR_SUMMARY_HEADER",
                 "appVersion" to resolvedDvrVer,
-                "versionCode" to 1620,
+                "versionCode" to 1621,
                 "battleId" to battleId,
                 "videoRepoPath" to videoRepoPath,
                 "traceRepoPath" to traceRepoPath,

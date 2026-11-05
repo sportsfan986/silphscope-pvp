@@ -501,7 +501,7 @@ class MainActivity : AppCompatActivity() {
         val appVer = try {
             packageManager.getPackageInfo(packageName, 0).versionName ?: OverlayService.APP_VERSION
         } catch (_: Exception) {
-            "6.20"
+            "6.21"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -6402,6 +6402,7 @@ class MainActivity : AppCompatActivity() {
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.allowFileAccess = true
+                settings.allowContentAccess = false
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
                 setBackgroundColor(0x00000000)
@@ -6470,6 +6471,13 @@ class MainActivity : AppCompatActivity() {
                     showEditOrCreateBattleLogDialog(entry)
                 }
                 .show()
+            dialog.setOnDismissListener {
+                try {
+                    replayWebView.stopLoading()
+                    (replayWebView.parent as? android.view.ViewGroup)?.removeView(replayWebView)
+                    replayWebView.destroy()
+                } catch (_: Exception) {}
+            }
             styleThemedAlertDialog(dialog)
         } catch (e: Exception) {
             Toast.makeText(this, "Error opening Battle Recap: ${e.localizedMessage}", Toast.LENGTH_LONG).show()

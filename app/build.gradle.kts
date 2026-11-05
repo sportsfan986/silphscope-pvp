@@ -1,7 +1,15 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
+val keystoreProps = Properties().apply {
+    rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+fun signingValue(key: String): String? =
+    System.getenv(key)?.takeIf { it.isNotBlank() } ?: keystoreProps.getProperty(key)?.takeIf { it.isNotBlank() }
 
 android {
     namespace = "com.gbl.overlay"
@@ -9,22 +17,30 @@ android {
 
     defaultConfig {
         applicationId = "com.gbl.overlay"
-        minSdk = 26
+        // Android 12 (API 31): enables APK Signature Scheme v3 key rotation across all supported
+        // devices and enforces modern foreground-service / PendingIntent security boundaries.
+        minSdk = 31
         targetSdk = 35
-        versionCode = 1620
-        versionName = "6.20"
+        versionCode = 1621
+        versionName = "6.21"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
         create("release") {
-            val ksFile = file("release.keystore")
-            if (ksFile.exists()) {
-                storeFile = ksFile
-                storePassword = System.getenv("RELEASE_STORE_PASSWORD") ?: "gblrelease123"
-                keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "gblkey"
-                keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: "gblrelease123"
+            val ksPath = signingValue("RELEASE_KEYSTORE_PATH")
+            if (ksPath != null) {
+                val ksFile = file(ksPath)
+                if (ksFile.exists()) {
+                    storeFile = ksFile
+                    storePassword = signingValue("RELEASE_STORE_PASSWORD")
+                    keyAlias = signingValue("RELEASE_KEY_ALIAS")
+                    keyPassword = signingValue("RELEASE_KEY_PASSWORD")
+                    enableV1Signing = false
+                    enableV2Signing = false
+                    enableV3Signing = true
+                }
             }
         }
     }
@@ -33,14 +49,13 @@ android {
         release {
             isMinifyEnabled = false
             val relSigning = signingConfigs.findByName("release")
-            if (relSigning?.storeFile?.exists() == true) {
-                try {
-                    signingConfig = relSigning
-                } catch (_: Exception) {
-                    signingConfig = signingConfigs.getByName("debug")
-                }
-            } else {
-                signingConfig = signingConfigs.getByName("debug")
+            signingConfig = when {
+                relSigning?.storeFile?.exists() == true -> relSigning
+                System.getenv("REQUIRE_RELEASE_SIGNING") == "true" ->
+                    throw GradleException(
+                        "Release signing is required (REQUIRE_RELEASE_SIGNING=true), but RELEASE_KEYSTORE_PATH is missing or does not exist."
+                    )
+                else -> signingConfigs.getByName("debug")
             }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

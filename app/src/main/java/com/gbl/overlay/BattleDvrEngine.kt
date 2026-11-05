@@ -71,6 +71,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -117,16 +118,43 @@ internal fun OverlayService.toggleArmOneBattleDvrFromOverlay() {
     recalculateAndPushBattleData()
 }
 
+private val dvrFrameInFlight = AtomicBoolean(false)
+private val dvrBannerBgPaint by lazy {
+    Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(210, 9, 13, 22)
+        style = Paint.Style.FILL
+    }
+}
+private val dvrBannerBorderPaint by lazy {
+    Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(220, 56, 189, 248)
+        style = Paint.Style.STROKE
+        strokeWidth = 1.5f
+    }
+}
+private val dvrBannerTextPaint by lazy {
+    Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textSize = 13.5f
+        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+    }
+}
+
 internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap, nowMs: Long) {
     val handler = dvrHandler ?: return
     if (screen.isRecycled) return
+    if (!dvrFrameInFlight.compareAndSet(false, true)) return
     val targetW = 544
     val targetH = (((screen.height.toFloat() / screen.width.toFloat()) * targetW.toFloat()).toInt() / 16 * 16).coerceIn(640, 1440)
     val scaledBmp = try {
         Bitmap.createScaledBitmap(screen, targetW, targetH, true)
     } catch (_: Exception) {
         null
-    } ?: return
+    }
+    if (scaledBmp == null) {
+        dvrFrameInFlight.set(false)
+        return
+    }
 
     val uIdx = (currentPreset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) } ?: 0).coerceIn(0, 2)
     val activeOppBase = FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
@@ -201,23 +229,13 @@ internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap,
 
             val surf = dvrInputSurface
             if (surf != null) {
-                val canvas = surf.lockCanvas(null)
+                val canvas = try {
+                    surf.lockHardwareCanvas()
+                } catch (_: Exception) {
+                    surf.lockCanvas(null)
+                }
                 try {
                     canvas.drawBitmap(scaledBmp, 0f, 0f, null)
-                    val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = Color.argb(210, 9, 13, 22)
-                        style = Paint.Style.FILL
-                    }
-                    val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = Color.argb(220, 56, 189, 248)
-                        style = Paint.Style.STROKE
-                        strokeWidth = 1.5f
-                    }
-                    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = Color.WHITE
-                        textSize = 13.5f
-                        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-                    }
                     val stamp = String.format(
                         java.util.Locale.US,
                         "v%s F#%04d T+%05.2fs U:%d%%(%d%%)/%dE O:%d%%(%d%%)/%dE",
@@ -232,9 +250,9 @@ internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap,
                         finalTrace.oppEnergy
                     )
                     val bannerRect = RectF(6f, 4f, targetW - 6f, 26f)
-                    canvas.drawRoundRect(bannerRect, 5f, 5f, bgPaint)
-                    canvas.drawRoundRect(bannerRect, 5f, 5f, borderPaint)
-                    canvas.drawText(stamp, 12f, 19.5f, textPaint)
+                    canvas.drawRoundRect(bannerRect, 5f, 5f, dvrBannerBgPaint)
+                    canvas.drawRoundRect(bannerRect, 5f, 5f, dvrBannerBorderPaint)
+                    canvas.drawText(stamp, 12f, 19.5f, dvrBannerTextPaint)
                 } finally {
                     surf.unlockCanvasAndPost(canvas)
                 }
@@ -246,6 +264,7 @@ internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap,
             }
         } catch (_: Exception) {
         } finally {
+            dvrFrameInFlight.set(false)
             if (!scaledBmp.isRecycled) {
                 scaledBmp.recycle()
             }

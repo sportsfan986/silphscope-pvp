@@ -1,4 +1,23 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.20`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.21`)
+
+---
+
+## v6.21 (2026-11-05) — APK Signature Scheme v3 Key Rotation (`minSdk 31`), Security Audit Hardening, DVR `lockHardwareCanvas` Backpressure & Strict TypeScript Toolchain
+*Security, stability, performance, and build-pipeline release (`v6.21`, `versionCode = 1621`) migrating APK release signing to a 4096-bit RSA key in encrypted GitHub Actions Secrets with APK Signature Scheme v3 Key Rotation Lineage (preserving seamless in-place updates for existing installations while revoking the legacy key's capabilities), hardening Android WebView & service lifecycles, fixing Web Show 6 vs. GBL storage key isolation and idle re-render overhead, and enabling strict TypeScript verification in CI.*
+
+- **v6.21 — Security 1: APK Signature Scheme v3 Key Rotation & GitHub Secrets Signing Pipeline (`app/build.gradle.kts`, `.github/workflows/android.yml`, `.gitignore`)**:
+  - **Seamless In-Place Upgrade via v3 Signing Lineage**: Raised `minSdk` to `31` (Android 12) and generated a cryptographic APK Signature Scheme v3 rotation lineage (`apksigner rotate`) chaining the original certificate (`CN=GBL Battle Matrix`) to a new 4096-bit RSA release key (`CN=SilphScope PvP`, `SHA384withRSA`) with all capabilities (`rollback`, `installed-data`, `permission`, `shared-uid`, `auth`) revoked on the legacy key. Existing installations upgrade in-place without uninstalling or losing battle logs, and permanently reject the legacy key afterward.
+  - **Zero-Keystore Repository & Hardened CI**: Removed `app/release.keystore` from Git, added `*.keystore`/`*.jks`/`*.lineage`/`keystore.properties` to `.gitignore`, moved signing credentials into encrypted GitHub Actions Secrets (`RELEASE_KEYSTORE_B64`, `RELEASE_LINEAGE_B64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_PASSWORD`, `RELEASE_KEY_ALIAS`), and eliminated shell interpolation of workflow inputs in `.github/workflows/android.yml`.
+
+- **v6.21 — Security & Stability 2: Android WebView Hardening, Main-Thread IPC & Lifecycle Teardown (`AndroidManifest.xml`, `OverlayService.kt`, `MainActivity.kt`, `BattleDvrEngine.kt`, `TaskerIntegration.kt`, `overlay.html`)**:
+  - **WebView XSS Prevention & Teardown**: Added `escapeHtml()` across dynamic team/opponent names and titles in `overlay.html`, disabled content access (`allowContentAccess = false`) and mixed-content overrides, closed ML Kit `textRecognizer` and called `overlayView.destroy()` in `OverlayService.onDestroy()`, and destroyed `replayWebView` on replay dialog dismiss in `MainActivity.kt`.
+  - **Main-Looper `@JavascriptInterface` Marshaling & Idle Loop Throttling**: Wrapped `onSelectPreset`, `triggerSwapClockHapticIfNeeded`, and `updateContentHeight` in `Handler(Looper.getMainLooper()).post` to prevent off-thread `WindowManager` and state races, throttled `startBattleOcrLoop` when `mediaProjection == null` or the HUD is minimized, and set `android:allowBackup="false"` in `AndroidManifest.xml`.
+  - **Hardware DVR `lockHardwareCanvas()` & Frame Backpressure**: Switched `BattleDvrEngine.kt` surface rendering from `lockCanvas(null)` to `lockHardwareCanvas()`, hoisted banner `Paint`/`Typeface` instances, added an `AtomicBoolean` in-flight guard so slow frames drop cleanly without queueing scaled bitmaps, and wrapped `TaskerBroadcastReceiver`'s `startForegroundService` in a safe fallback.
+
+- **v6.21 — Performance & Toolchain 3: Web Storage Key Isolation, Idle Timer Gating, CSP & Strict TypeScript (`src/App.tsx`, `index.html`, `tsconfig.json`, `package.json`, `.github/workflows/deploy-pages.yml`)**:
+  - **Mode-Aware Storage Keys & One-Time Migration Gate**: Fixed `handleReparseAllCompletedBattles` and `migrateExistingBattleLogs` in `src/App.tsx` to use `activeBattleLogStorageKey` and `activeDeletedBattlesTrashStorageKey` (preventing Show 6 mode from overwriting GBL battle logs/trash) and gated `runOneTimeAiLogSplitAndCleanup` on `gbl_ai_logs_split_v350_done`.
+  - **Eliminated Idle 5Hz Root Re-Renders**: Gated the swap clock `setInterval` in `src/App.tsx` so it runs only while `playerSwapEndTimeMs > now` or `oppSwapEndTimeMs > now`, reducing idle CPU usage to 0%.
+  - **Content-Security-Policy, Least-Privilege PAT Scope & Strict CI**: Added a `Content-Security-Policy` meta header in `index.html`, narrowed the web GitHub token creation link to `scopes=gist`, enabled `"strict": true` in `tsconfig.json`, moved build tools to `devDependencies`, and upgraded `.github/workflows/deploy-pages.yml` to Node 22 + `npm ci` + `npm run lint`.
 
 ---
 

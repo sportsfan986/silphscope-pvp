@@ -1829,6 +1829,15 @@
             return clean.substring(0, 5);
         }
 
+        function escapeHtml(str) {
+            return String(str == null ? "" : str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+        }
+
         function abbrPoke(name, isShadow) {
             if (!name || name === "Waiting...") return "OPP";
             const clean = String(name)
@@ -2906,7 +2915,7 @@
                         const faintStyle = isFainted ? 'opacity:0.45; text-decoration:line-through;' : '';
                         const subText = hpTrackingOnForChips ? `${slotHp}%` : (isFainted ? "0%" : (isActive ? "ACT" : "RDY"));
                         const subColor = hpTrackingOnForChips || isFainted ? hpColor : (isActive ? "#67e8f9" : "#94a3b8");
-                        return `<button class="chip-btn ${isActive && !isFainted ? 'active' : ''} ${isFainted ? 'col-fainted' : ''}" style="${faintStyle}" onclick="selectUserPokemonByIndex(${mIdx})" title="Active lead: ${fullName}${isFainted ? ' (Fainted 0% HP)' : (hpTrackingOnForChips ? ' (' + slotHp + '% HP)' : '')}"><span class="btn-row-top">${poke3}:</span><span class="btn-row-sub" style="color:${subColor};">${subText}</span></button>`;
+                        return `<button class="chip-btn ${isActive && !isFainted ? 'active' : ''} ${isFainted ? 'col-fainted' : ''}" style="${faintStyle}" onclick="selectUserPokemonByIndex(${mIdx})" title="Active lead: ${escapeHtml(fullName)}${isFainted ? ' (Fainted 0% HP)' : (hpTrackingOnForChips ? ' (' + slotHp + '% HP)' : '')}"><span class="btn-row-top">${escapeHtml(poke3)}:</span><span class="btn-row-sub" style="color:${subColor};">${subText}</span></button>`;
                     }).join("");
                 }
             } catch (e) {
@@ -3402,7 +3411,7 @@
                             const cls = eSuffix === "-E"
                                 ? "unseen-energy"
                                 : (clampedE > 0 && !isFainted ? "has-energy" : "");
-                            return `<span class="matrix-col-slot"><span class="team-initial ${cls}" title="${member.name || init}: ${eSuffix === '-E' ? 'Never entered field (-E)' : ('Banked Energy ' + eSuffix)}">${init}:${eSuffix}</span></span>`;
+                            return `<span class="matrix-col-slot"><span class="team-initial ${cls}" title="${escapeHtml(member.name || init)}: ${eSuffix === '-E' ? 'Never entered field (-E)' : ('Banked Energy ' + escapeHtml(eSuffix))}">${escapeHtml(init)}:${escapeHtml(eSuffix)}</span></span>`;
                         };
                         const matrixHeaderHtml = `
                         <div class="matrix-header-row">
@@ -3449,7 +3458,7 @@
                             <div class="matrix-row ${isActiveOpp ? 'active-lead' : ''}" onclick="swapOpponentByIndex(${idx})" style="cursor:pointer;${rowFaintStyle}" title="${isActiveOpp ? 'Active Opponent (' + ordTag + ' seen, ' + oppSlotHp + '% HP, ' + oppEnergyText + ')' : 'Tap to inspect/activate (' + ordTag + ' seen, ' + oppSlotHp + '% HP, ' + oppEnergyText + ')'}">
                                 <span class="matrix-opp-name" title="${fullOppDisplay} (${oppSlotHp}% HP • ${oppEnergyText})">
                                     <span style="color:${isActiveOpp ? '#38bdf8' : '#64748b'}; font-weight:700; font-size:7.5px; margin-right:3px;">${ordTag}</span>
-                                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;${oppFainted ? 'text-decoration:line-through;' : ''}">${fullOppDisplay}</span>
+                                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;${oppFainted ? 'text-decoration:line-through;' : ''}">${escapeHtml(fullOppDisplay)}</span>
                                     ${hpBadgeHtml}${energyBadgeHtml}
                                 </span>
                                 <div class="matrix-team-block">
@@ -3478,7 +3487,7 @@
                             const slotHp = isFainted ? 0 : Math.max(0, Math.min(100, Math.round(rawHp)));
                             const hpColor = isFainted ? "#64748b" : (slotHp > 50 ? "#6ee7b7" : (slotHp > 20 ? "#fde047" : "#fca5a5"));
                             const faintCls = isFainted ? "col-fainted" : "";
-                            return `<span class="dmg-col-hdr ${isAct && !isFainted ? 'active-col' : ''} ${faintCls}" onclick="selectUserPokemonByIndex(${idx})" style="cursor:pointer;" title="${member.name || code} (${slotHp}% HP)"><span class="dmg-col-hdr-code">${code}</span><span class="dmg-col-hdr-hp" style="color:${hpColor};">${slotHp}%</span></span>`;
+                            return `<span class="dmg-col-hdr ${isAct && !isFainted ? 'active-col' : ''} ${faintCls}" onclick="selectUserPokemonByIndex(${idx})" style="cursor:pointer;" title="${escapeHtml(member.name || code)} (${slotHp}% HP)"><span class="dmg-col-hdr-code">${escapeHtml(code)}</span><span class="dmg-col-hdr-hp" style="color:${hpColor};">${slotHp}%</span></span>`;
                         }).join("");
                     }
 
@@ -3587,7 +3596,7 @@
                             const hpColor = !opp ? "#475569" : (isFainted ? "#64748b" : (slotHp > 50 ? "#6ee7b7" : (slotHp > 20 ? "#fde047" : "#fca5a5")));
                             const faintCls = isFainted ? "col-fainted" : "";
                             const clickAttr = opp ? `onclick="swapOpponentByIndex(${idx})" style="cursor:pointer;" title="${opp.name || code} (${slotHp}% HP)"` : "";
-                            return `<span class="dmg-col-hdr ${opp && isAct && !isFainted ? 'active-col' : ''} ${faintCls}" ${clickAttr}><span class="dmg-col-hdr-code">${code}</span><span class="dmg-col-hdr-hp" style="color:${hpColor};">${hpText}</span></span>`;
+                            return `<span class="dmg-col-hdr ${opp && isAct && !isFainted ? 'active-col' : ''} ${faintCls}" ${clickAttr}><span class="dmg-col-hdr-code">${escapeHtml(code)}</span><span class="dmg-col-hdr-hp" style="color:${hpColor};">${hpText}</span></span>`;
                         }).join("");
                     }
 
@@ -3707,7 +3716,7 @@
                     if (horizonThrow) horizonThrow.textContent = battleData.throwHorizonText || "1st, 3rd, 5th";
                     if (horizonDots && battleData.scannedOpponents && battleData.scannedOpponents.length > 0) {
                         horizonDots.innerHTML = battleData.scannedOpponents.map((opp, idx) => `
-                            <strong>${opp.name}</strong> <span class="shield-dots">${renderTierDots(opp.matrix ? opp.matrix.p1 : "W,N,L")}</span>
+                            <strong>${escapeHtml(opp.name)}</strong> <span class="shield-dots">${renderTierDots(opp.matrix ? opp.matrix.p1 : "W,N,L")}</span>
                             ${idx < battleData.scannedOpponents.length - 1 ? ' • ' : ''}
                         `).join("");
                         if (horizonDmg) {

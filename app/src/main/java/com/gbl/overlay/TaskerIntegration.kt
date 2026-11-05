@@ -299,7 +299,13 @@ class TaskerBroadcastReceiver : BroadcastReceiver() {
                         putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(OverlayService.PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 72))
                         putExtra(OverlayService.EXTRA_APP_THEME_ID, prefs.getString(OverlayService.PREFS_KEY_APP_THEME_ID, "slate") ?: "slate")
                     }
-                    ContextCompat.startForegroundService(context, srvIntent)
+                    try {
+                        ContextCompat.startForegroundService(context, srvIntent)
+                    } catch (_: Exception) {
+                        try {
+                            context.startService(srvIntent)
+                        } catch (_: Exception) {}
+                    }
                 } else {
                     val actIntent = Intent(context, TaskerOverlayActivity::class.java).apply {
                         action = OverlayService.ACTION_START_OVERLAY

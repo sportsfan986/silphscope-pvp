@@ -11,4 +11,8 @@ public/assets/aistudio/
 *.mp4
 .gradle/
 local.properties
+keystore.properties
+*.keystore
+*.jks
+*.lineage
 

@@ -855,6 +855,8 @@ export default function App() {
   });
 
   const deletedBattlesTrash = appCombatMode === 'show6' ? show6DeletedBattlesTrash : gblDeletedBattlesTrash;
+  const activeDeletedBattlesTrashStorageKey =
+    appCombatMode === 'show6' ? 'gbl_show6_deleted_battles_trash_v1' : 'gbl_deleted_battles_trash_v1';
 
   const [gblDeletedTeamsTrash, setGblDeletedTeamsTrash] = useState<TeamPreset[]>(() => {
     try {
@@ -2406,7 +2408,7 @@ export default function App() {
   const handleReparseAllCompletedBattles = (silent: boolean = false) => {
     const reparsedActive = reparseAllCompletedBattleLogs(battleLogs, presets, activeBattleLogStorageKey);
     setBattleLogs(reparsedActive);
-    const reparsedTrash = reparseAllCompletedBattleLogs(deletedBattlesTrash, presets, 'gbl_deleted_battles_trash_v1');
+    const reparsedTrash = reparseAllCompletedBattleLogs(deletedBattlesTrash, presets, activeDeletedBattlesTrashStorageKey);
     saveDeletedBattlesTrashToStorage(reparsedTrash);
     const agg = calculateAggregateWAE(reparsedActive, presets);
     const timeStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
@@ -2433,16 +2435,20 @@ export default function App() {
       } catch {}
       return;
     }
-    const migActive = migrateExistingBattleLogs(battleLogs, presets, 'gbl_battle_logs_v1');
+    const migActive = migrateExistingBattleLogs(battleLogs, presets, activeBattleLogStorageKey);
     if (migActive.didMigrate) {
       setBattleLogs(migActive.logs);
     }
-    const migTrash = migrateExistingBattleLogs(deletedBattlesTrash, presets, 'gbl_deleted_battles_trash_v1');
+    const migTrash = migrateExistingBattleLogs(deletedBattlesTrash, presets, activeDeletedBattlesTrashStorageKey);
     if (migTrash.didMigrate) {
       saveDeletedBattlesTrashToStorage(migTrash.logs);
     }
-    runOneTimeAiLogSplitAndCleanup(true);
-  }, [presets]);
+    try {
+      if (localStorage.getItem('gbl_ai_logs_split_v350_done') !== 'true') {
+        runOneTimeAiLogSplitAndCleanup(true);
+      }
+    } catch {}
+  }, [presets, appCombatMode]);
 
   // Battle Simulation State (Fixed Opponent Discovery Order: [1st seen, 2nd seen, 3rd seen])
   const [activeOpponentKey, setActiveOpponentKey] = useState<string>('Zacian (Crowned)');
@@ -2506,11 +2512,18 @@ export default function App() {
   };
 
   useEffect(() => {
+    const now = Date.now();
+    if (playerSwapEndTimeMs <= now && oppSwapEndTimeMs <= now) return;
+    setNowMs(now);
     const timer = setInterval(() => {
-      setNowMs(Date.now());
-    }, 200);
+      const tick = Date.now();
+      setNowMs(tick);
+      if (playerSwapEndTimeMs <= tick && oppSwapEndTimeMs <= tick) {
+        clearInterval(timer);
+      }
+    }, 250);
     return () => clearInterval(timer);
-  }, []);
+  }, [playerSwapEndTimeMs, oppSwapEndTimeMs]);
 
   const playerSwapRemainingSec = Math.max(0, Math.ceil((playerSwapEndTimeMs - nowMs) / 1000));
   const oppSwapRemainingSec = Math.max(0, Math.ceil((oppSwapEndTimeMs - nowMs) / 1000));
@@ -5323,7 +5336,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v6.20 • Android Native Overlay
+                  v6.21 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -11650,7 +11663,7 @@ export default function App() {
                   <span className="text-sm font-extrabold text-amber-300 flex items-center gap-2">
                     <span>{appCombatMode === 'show6' ? '🏛️' : '🛡️'} App Combat Mode (Standard GBL vs. Show 6 Battle Frontier)</span>
                     <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 text-[10px] font-mono">
-                      v6.20
+                      v6.21
                     </span>
                   </span>
                   <span className="text-xs text-slate-400 block mt-0.5">
@@ -12997,7 +13010,7 @@ export default function App() {
 
               <div className="flex flex-wrap gap-2">
                 <a
-                  href="https://github.com/settings/tokens/new?description=SilphScope+PvP+Cloud+Sync&scopes=gist,repo"
+                  href="https://github.com/settings/tokens/new?description=SilphScope+PvP+Cloud+Sync&scopes=gist"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-lg shadow-emerald-600/20"
@@ -15912,7 +15925,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v6.20 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
+        SilphScope PvP v6.21 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
       </footer>
     </div>
   );

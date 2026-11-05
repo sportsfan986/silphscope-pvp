@@ -2,7 +2,7 @@
 
 > **Target Audience**: Antigravity agents, Claude/Gemini coding assistants, and core developers maintaining or extending **SilphScope PvP**.  
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v6.20` (`versionCode = 1620`)  
+> **Current Version**: `v6.21` (`versionCode = 1621`)  
 > **Primary Branches**: `main` (source code & releases), `ai-telemetry-logs` (isolated telemetry, DVR recordings & anomaly traces).
 
 ---
@@ -218,6 +218,13 @@ The HUD displays a compact, high-contrast 2-line tactical recommendation banner 
   - `PokemonDatabase.kt`, `OverlayService.kt`, `src/data/pokemonDb.ts`: Added all 18 `*_PLUS` moves (`Fell Stinger+`, `Volt Tackle+`, `Zap Cannon+`, `Acid Spray+`, `Liquidation+`, `Outrage+`, `Dynamic Punch+`, `Future Sight+`, `Drill Peck+`, `Dark Pulse+`, `Night Shade+`, `Brave Bird+`, `Ominous Wind+`, `Seed Bomb+`, `Mystical Fire+`, `Surf+`, `Psybeam+`, `Brick Break+`), all 18 Super Mega species base stats, `SUPER_MEGA_PLUS_MOVES` / `DYNAMIC_SUPER_MEGA_PLUS_MOVES` (`extraChargedMoves` ingestion), and `resolveMegaPlusMoveStatic` / `resolveMegaPlusMove` gated strictly on `isMegaAllowedInLeague`.
   - `PokemonDatabase.kt`, `TeamAndMetaEngine.kt`, `src/data/pokemonDb.ts`, `src/data/combatSimulator.ts`, `src/data/teamAndMetaEngine.ts`: Upgraded `simulateTurnByTurnChargedCycleStatic` / `simulateTurnByTurnChargedCycle` to accept an optional 3rd `+` move (`c3`) and evaluate role-agnostic single throws, back-to-back spam pairs ($m_a \to m_a$, such as $35\text{E} \to 35\text{E}$ vs. $75\text{E}$ nukes), and 1S/2S multi-throw sequences across all available moves.
   - `PixelScannerEngine.kt`, `OverlayService.kt`, `overlay.html`, `MainActivity.kt`, `src/App.tsx`: Added 3-button charge circle pixel scanning (`cx = 0.2150w, cy = 0.8930h` Left Move 1, `cx = 0.5000w, cy = 0.8375h` Center-Raised `+` Move, `cx = 0.7820w, cy = 0.8930h` Right Move 2) with 2-button fallback, 3-move post-throw energy deduction, 3rd player move HUD row, and `[+ <PlusMove>]` / `[Mega4]` badges in Presets, Autocomplete, Anti-Meta Builder, and Team Editor.
+
+### Turn 10 — Security Audit Remediation, APK Signature Scheme v3 Key Rotation & Toolchain Hardening (v6.21)
+- **User Request**: Perform full security/performance/toolchain audit, raise `minSdk` to Android 12 (`31`), implement APK Signature Scheme v3 key rotation with a 4096-bit RSA key stored in GitHub Actions Secrets so existing installations update seamlessly in-place while revoking the old key's capabilities, apply all remaining security/performance fixes, and release as `v6.21` via GitHub Actions CI/CD.
+- **Delivered Changes (v6.21)**:
+  - `app/build.gradle.kts`, `.github/workflows/android.yml`, `.gitignore`: Raised `minSdk = 31` (Android 12), removed `app/release.keystore` from Git, provisioned encrypted GitHub Actions secrets (`RELEASE_KEYSTORE_B64`, `RELEASE_LINEAGE_B64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_PASSWORD`, `RELEASE_KEY_ALIAS`), and configured `apksigner` APK Signature Scheme v3 key rotation with capabilities revoked on the prior signer.
+  - `AndroidManifest.xml`, `OverlayService.kt`, `MainActivity.kt`, `BattleDvrEngine.kt`, `TaskerIntegration.kt`, `overlay.html`: Set `android:allowBackup="false"`, added `escapeHtml()` across HUD dynamic strings, marshaled all `@JavascriptInterface` mutations onto the main Looper, closed `textRecognizer` and destroyed WebViews on teardown, switched DVR rendering to `lockHardwareCanvas()` with `AtomicBoolean` backpressure, and guarded `startForegroundService` in `TaskerBroadcastReceiver`.
+  - `src/App.tsx`, `index.html`, `tsconfig.json`, `package.json`, `.github/workflows/deploy-pages.yml`: Fixed Show 6 vs. GBL trash/migration storage keys, gated swap countdown interval ticks so idle tabs consume zero re-renders, narrowed web PAT link scope to `gist`, added a strict `Content-Security-Policy`, enabled TypeScript `"strict": true`, and upgraded GitHub Pages CI to Node 22 + `npm ci` + `npm run lint`.
 
 ---
 
