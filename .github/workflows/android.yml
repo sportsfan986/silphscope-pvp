@@ -29,13 +29,11 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: ${{ github.event_name == 'pull_request' && 'read' || 'write' }}
 
     steps:
       - name: Checkout repository
