@@ -42,7 +42,7 @@ export const ANDROID_FILES: AndroidProjectFile[] = [
     path: "app/build.gradle.kts",
     name: "app/build.gradle.kts",
     category: "gradle",
-    description: "App module Gradle dependencies (v6.02, versionCode 1602) including ML Kit Text Recognition, OkHttp, and Gson.",
+    description: "App module Gradle dependencies (v6.10, versionCode 1610) including ML Kit Text Recognition, OkHttp, and Gson.",
     content: appGradleContent
   },
   {
