@@ -91,6 +91,7 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
+        const val APP_VERSION = "6.11"
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -389,7 +390,7 @@ class OverlayService : LifecycleService() {
         @Volatile var activeLimitedStdBlendPctShow6: Int = DEFAULT_LIMITED_STD_BLEND_PCT_SHOW6
         @Volatile var activeLimitedStdDecayGbl: Float = DEFAULT_LIMITED_STD_DECAY_GBL
         @Volatile var activeLimitedStdDecayShow6: Float = DEFAULT_LIMITED_STD_DECAY_SHOW6
-        private val CACHED_GBL_STD_SEASON_LOGS = java.util.concurrent.ConcurrentHashMap<String, List<Pair<Long, List<String>>>>()
+        internal val CACHED_GBL_STD_SEASON_LOGS = java.util.concurrent.ConcurrentHashMap<String, List<Pair<Long, List<String>>>>()
 
         fun refreshCachedGblStandardLeagueLogsStatic(prefs: SharedPreferences, gson: Gson = Gson()) {
             try {
@@ -605,33 +606,7 @@ class OverlayService : LifecycleService() {
             return "$titleCase ($cp)"
         }
 
-        // Default catalog aligned with live compiled PvPoke src/data/gamemaster.json formats
-        val DEFAULT_LIMITED_META_CATALOG: List<LimitedMetaFormat> = listOf(
-            // Forced Show 6 Battle Frontier Cups (ALL CAPS, dynamically matched via "Battle Frontier")
-            LimitedMetaFormat("cauldron_2500", "BATTLE FRONTIER (CAULDRON)", "cauldron", 2500, "BATTLE FRONTIER (CAULDRON)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/cauldron/overall/rankings-2500.json", "cauldron", 1793491200000L, true),
-            LimitedMetaFormat("battlefrontiermaster_10000", "BATTLE FRONTIER (MASTER)", "battlefrontiermaster", 10000, "BATTLE FRONTIER (MASTER)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/battlefrontiermaster/overall/rankings-10000.json", "master", 1793491200000L, true),
-            LimitedMetaFormat("spectral_1500", "BATTLE FRONTIER (SPECTRAL)", "spectral", 1500, "BATTLE FRONTIER (SPECTRAL)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/spectral/overall/rankings-1500.json", "spectral", 1793491200000L, false),
-            // Optional Standard Open Leagues (User-selectable in Show 6 mode; forced as GREAT/ULTRA/MASTER LEAGUE in Blind 3 mode)
-            LimitedMetaFormat("all_1500", "Great League", "all", 1500, "Great League (1500)", "standard_open", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-1500.json", "great", 1793491200000L, false),
-            LimitedMetaFormat("all_2500", "Ultra League", "all", 2500, "Ultra League (2500)", "standard_open", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-2500.json", "ultra", 1793491200000L, false),
-            LimitedMetaFormat("all_10000", "Master League", "all", 10000, "Master League (10000)", "standard_open", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-10000.json", "master", 1793491200000L, false),
-            // CURRENT (Live in PvPoke gamemaster.json["formats"])
-            LimitedMetaFormat("mega_10000", "Mega Master League", "mega", 10000, "Mega Master League (10000)", "premier_mega", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-10000.json", "mega", 1793491200000L, true),
-            LimitedMetaFormat("mega_1500", "Mega Great League", "mega", 1500, "Mega Great League (1500)", "premier_mega", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-1500.json", "megagreat", 1793491200000L, true),
-            LimitedMetaFormat("mega_2500", "Mega Ultra League", "mega", 2500, "Mega Ultra League (2500)", "premier_mega", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/mega/overall/rankings-2500.json", "megaultra", 1793491200000L, true),
-            LimitedMetaFormat("laic2027_1500", "LAIC 2027 Championship Series Cup", "laic2027", 1500, "LAIC 2027 Championship Series Cup (1500)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/laic2027/overall/rankings-1500.json", "laic2027", 1793491200000L, true),
-            LimitedMetaFormat("halloweenmega_1500", "Mega Halloween Cup", "halloweenmega", 1500, "Mega Halloween Cup (1500)", "gbl", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/halloweenmega/overall/rankings-1500.json", "halloweenmega", 1793491200000L, true),
-            LimitedMetaFormat("fantasy_1500", "Fantasy Cup", "fantasy", 1500, "Fantasy Cup (1500)", "gbl", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fantasy/overall/rankings-1500.json", "fantasy", 1793491200000L, false),
-            LimitedMetaFormat("trail_1500", "Devon Trail Cup", "trail", 1500, "Devon Trail Cup (1500)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/trail/overall/rankings-1500.json", "trail", 1793491200000L, false),
-            LimitedMetaFormat("fable_1500", "Devon Fable Cup", "fable", 1500, "Devon Fable Cup (1500)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/fable/overall/rankings-1500.json", "fable", 1793491200000L, false),
-            LimitedMetaFormat("gymbreakers_1500", "Gymbreakers Invitational Season 7", "gymbreakers", 1500, "Gymbreakers Invitational Season 7 (1500)", "battle_frontier", "CURRENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/gymbreakers/overall/rankings-1500.json", "gymbreakers", 1793491200000L, false),
-            // RECENT (Within 4-week window by default)
-            LimitedMetaFormat("colormega_1500", "Mega Color Cup", "colormega", 1500, "Mega Color Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/colormega/overall/rankings-1500.json", "colormega", System.currentTimeMillis() - 14L * 86400_000L, true),
-            LimitedMetaFormat("halloween_1500", "Halloween Cup", "halloween", 1500, "Halloween Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/halloween/overall/rankings-1500.json", "halloween", System.currentTimeMillis() - 7L * 86400_000L, false),
-            LimitedMetaFormat("sunshine_1500", "Sunshine Cup", "sunshine", 1500, "Sunshine Cup (1500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/sunshine/overall/rankings-1500.json", "sunshine", System.currentTimeMillis() - 18L * 86400_000L, false),
-            LimitedMetaFormat("little_500", "Little Cup", "little", 500, "Little Cup (500)", "gbl", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/little/overall/rankings-500.json", "little", System.currentTimeMillis() - 12L * 86400_000L, false),
-            LimitedMetaFormat("premier_10000", "Master League Premier", "premier", 10000, "Master League Premier (10000)", "premier_mega", "RECENT", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/premier/overall/rankings-10000.json", "premier", System.currentTimeMillis() - 10L * 86400_000L, false)
-        )
+        val DEFAULT_LIMITED_META_CATALOG: List<LimitedMetaFormat> get() = PokemonStaticData.DEFAULT_LIMITED_META_CATALOG
 
         @Volatile
         var LAST_LOADED_META_CATALOG: List<LimitedMetaFormat> = DEFAULT_LIMITED_META_CATALOG
@@ -990,37 +965,6 @@ class OverlayService : LifecycleService() {
             val switchAdvantage: String? = null // "WON" | "LOST" | "NEUTRAL"
         )
 
-        fun deriveFirstSwapAndSwitchAdvantageStatic(
-            events: List<BattleTimelineEvent>?,
-            result: String
-        ): Pair<String, String> {
-            if (events.isNullOrEmpty()) return "NONE" to "NEUTRAL"
-            val sorted = events.sortedBy { it.t }
-            val firstSwap = sorted.firstOrNull {
-                it.type.equals("SWAP", ignoreCase = true) &&
-                    it.lastPlayerSwitchWasFaint != true &&
-                    it.lastOppSwitchWasFaint != true
-            }
-            val firstActor = when {
-                firstSwap == null -> "NONE"
-                firstSwap.actor.equals("user", ignoreCase = true) -> "USER"
-                firstSwap.actor.equals("opp", ignoreCase = true) -> "OPP"
-                else -> "NONE"
-            }
-            val firstFaintAfterSwap = if (firstSwap != null) {
-                sorted.firstOrNull { it.t >= firstSwap.t && it.type.equals("FAINT", ignoreCase = true) }
-            } else {
-                sorted.firstOrNull { it.type.equals("FAINT", ignoreCase = true) }
-            }
-            val switchAdv = when {
-                firstFaintAfterSwap != null && firstFaintAfterSwap.actor.equals("opp", ignoreCase = true) -> "WON"
-                firstFaintAfterSwap != null && firstFaintAfterSwap.actor.equals("user", ignoreCase = true) -> "LOST"
-                firstActor == "OPP" && result.equals("WIN", ignoreCase = true) -> "WON"
-                firstActor == "USER" && result.equals("LOSS", ignoreCase = true) -> "LOST"
-                else -> "NEUTRAL"
-            }
-            return firstActor to switchAdv
-        }
 
         data class SyncTeamSlot(
             val name: String,
@@ -1057,142 +1001,6 @@ class OverlayService : LifecycleService() {
             val deletedTeamIds: List<String> = emptyList()
         )
 
-        fun reconcileSyncVaultPayloads(
-            local: SyncVaultPayload,
-            remote: SyncVaultPayload
-        ): Triple<SyncVaultPayload, Int, Int> {
-            val localLogMap = local.battleLogs.associateBy { it.id }
-            val remoteLogMap = remote.battleLogs.associateBy { it.id }
-            val localDeletedLogSet = local.deletedLogIds.toSet()
-            val remoteDeletedLogSet = remote.deletedLogIds.toSet()
-
-            // Allow restored items (present in active list, absent from that device's deletedIds, with newer updatedAt) to clear tombstones
-            val allDeletedLogs = (localDeletedLogSet + remoteDeletedLogSet).filter { id ->
-                val l = localLogMap[id]
-                val r = remoteLogMap[id]
-                val restoredLocally = l != null && id !in localDeletedLogSet && (l.updatedAt > remote.updatedAt || id !in remoteLogMap)
-                val restoredRemotely = r != null && id !in remoteDeletedLogSet && (r.updatedAt > local.updatedAt && id !in localDeletedLogSet)
-                !(restoredLocally || restoredRemotely)
-            }.toSet()
-
-            val localTeamMap = local.teamPresets.associateBy { it.id }
-            val remoteTeamMap = remote.teamPresets.associateBy { it.id }
-            val localDeletedTeamSet = local.deletedTeamIds.toSet()
-            val remoteDeletedTeamSet = remote.deletedTeamIds.toSet()
-
-            val allDeletedTeams = (localDeletedTeamSet + remoteDeletedTeamSet).filter { id ->
-                val l = localTeamMap[id]
-                val r = remoteTeamMap[id]
-                val restoredLocally = l != null && id !in localDeletedTeamSet && (l.updatedAt > remote.updatedAt || id !in remoteTeamMap)
-                val restoredRemotely = r != null && id !in remoteDeletedTeamSet && (r.updatedAt > local.updatedAt && id !in localDeletedTeamSet)
-                !(restoredLocally || restoredRemotely)
-            }.toSet()
-
-            val allLogIds = (localLogMap.keys + remoteLogMap.keys) - allDeletedLogs
-            var newOrUpdatedLogsFromRemote = 0
-
-            val mergedLogs = allLogIds.mapNotNull { id ->
-                val l = localLogMap[id]
-                val r = remoteLogMap[id]
-                when {
-                    l != null && r != null -> {
-                        val lUpd = if (l.updatedAt > 0L) l.updatedAt else l.timestampMs
-                        val rUpd = if (r.updatedAt > 0L) r.updatedAt else r.timestampMs
-                        if (rUpd > lUpd) {
-                            newOrUpdatedLogsFromRemote++
-                            r
-                        } else l
-                    }
-                    r != null -> {
-                        newOrUpdatedLogsFromRemote++
-                        r
-                    }
-                    else -> l
-                }
-            }.sortedByDescending { it.timestampMs }
-
-            val orderedIds = mutableListOf<String>()
-            for (t in local.teamPresets) {
-                if (t.id !in allDeletedTeams && !orderedIds.contains(t.id)) orderedIds.add(t.id)
-            }
-            for (t in remote.teamPresets) {
-                if (t.id !in allDeletedTeams && !orderedIds.contains(t.id)) orderedIds.add(t.id)
-            }
-
-            var newOrUpdatedTeamsFromRemote = 0
-            val mergedTeams = orderedIds.mapNotNull { id ->
-                val l = localTeamMap[id]
-                val r = remoteTeamMap[id]
-                when {
-                    l != null && r != null -> {
-                        val lUpd = if (l.updatedAt > 0L) l.updatedAt else 1L
-                        val rUpd = if (r.updatedAt > 0L) r.updatedAt else 1L
-                        if (rUpd > lUpd) {
-                            newOrUpdatedTeamsFromRemote++
-                            r
-                        } else l
-                    }
-                    r != null -> {
-                        newOrUpdatedTeamsFromRemote++
-                        r
-                    }
-                    else -> l
-                }
-            }
-
-            val mergedPayload = SyncVaultPayload(
-                schemaVersion = 2,
-                updatedAt = System.currentTimeMillis(),
-                battleLogs = mergedLogs,
-                teamPresets = mergedTeams,
-                deletedLogIds = allDeletedLogs.toList(),
-                deletedTeamIds = allDeletedTeams.toList()
-            )
-            return Triple(mergedPayload, newOrUpdatedLogsFromRemote, newOrUpdatedTeamsFromRemote)
-        }
-
-        fun buildLocalSyncVaultPayload(prefs: SharedPreferences, gson: Gson): SyncVaultPayload {
-            val logsType = object : TypeToken<List<SyncBattleLogRecord>>() {}.type
-            val teamsType = object : TypeToken<List<SyncTeamPresetRecord>>() {}.type
-            val strListType = object : TypeToken<List<String>>() {}.type
-
-            val logs: List<SyncBattleLogRecord> = try {
-                gson.fromJson(prefs.getString(PREFS_KEY_BATTLE_LOGS, "[]"), logsType) ?: emptyList()
-            } catch (_: Exception) { emptyList() }
-
-            val teams: List<SyncTeamPresetRecord> = try {
-                gson.fromJson(prefs.getString(PREFS_KEY_PERSISTENT_TEAMS, "[]"), teamsType) ?: emptyList()
-            } catch (_: Exception) { emptyList() }
-
-            val delLogs: List<String> = try {
-                gson.fromJson(prefs.getString(PREFS_KEY_DELETED_LOG_IDS, "[]"), strListType) ?: emptyList()
-            } catch (_: Exception) { emptyList() }
-
-            val delTeams: List<String> = try {
-                gson.fromJson(prefs.getString(PREFS_KEY_DELETED_TEAM_IDS, "[]"), strListType) ?: emptyList()
-            } catch (_: Exception) { emptyList() }
-
-            return SyncVaultPayload(
-                schemaVersion = 2,
-                updatedAt = System.currentTimeMillis(),
-                battleLogs = logs,
-                teamPresets = teams,
-                deletedLogIds = delLogs,
-                deletedTeamIds = delTeams
-            )
-        }
-
-        fun saveReconciledSyncVaultLocally(prefs: SharedPreferences, gson: Gson, payload: SyncVaultPayload) {
-            val editor = prefs.edit()
-                .putString(PREFS_KEY_BATTLE_LOGS, gson.toJson(payload.battleLogs))
-                .putString(PREFS_KEY_DELETED_LOG_IDS, gson.toJson(payload.deletedLogIds))
-                .putString(PREFS_KEY_DELETED_TEAM_IDS, gson.toJson(payload.deletedTeamIds))
-                .putLong(PREFS_KEY_SYNC_LAST_AT, System.currentTimeMillis())
-            if (payload.teamPresets.isNotEmpty()) {
-                editor.putString(PREFS_KEY_PERSISTENT_TEAMS, gson.toJson(payload.teamPresets))
-            }
-            editor.apply()
-        }
 
         const val PREFS_KEY_SYNC_GITHUB_USERNAME = "gbl_sync_github_username"
         const val GITHUB_OAUTH_CLIENT_ID = "178c6fc778ccc68e1d6a"
@@ -1205,311 +1013,6 @@ class OverlayService : LifecycleService() {
             val interval: Int
         )
 
-        fun getEffectiveSyncToken(prefs: SharedPreferences): String {
-            return prefs.getString(PREFS_KEY_SYNC_GITHUB_TOKEN, "")?.trim().orEmpty()
-        }
-
-        fun fetchGitHubUsernameBlocking(token: String): String {
-            if (token.isBlank()) return ""
-            return try {
-                val client = OkHttpClient()
-                val req = Request.Builder()
-                    .url("https://api.github.com/user")
-                    .header("Authorization", "Bearer $token")
-                    .header("Accept", "application/vnd.github+json")
-                    .build()
-                client.newCall(req).execute().use { resp ->
-                    if (!resp.isSuccessful) return ""
-                    val body = resp.body?.string().orEmpty()
-                    val json = JsonParser.parseString(body).asJsonObject
-                    json.get("login")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-                }
-            } catch (_: Exception) {
-                ""
-            }
-        }
-
-        fun requestGitHubDeviceCodeBlocking(): Result<GitHubDeviceCodeResponse> {
-            return try {
-                val client = OkHttpClient()
-                val formBody = "client_id=$GITHUB_OAUTH_CLIENT_ID&scope=gist%20repo"
-                    .toRequestBody("application/x-www-form-urlencoded".toMediaTypeOrNull())
-                val req = Request.Builder()
-                    .url("https://github.com/login/device/code")
-                    .post(formBody)
-                    .header("Accept", "application/json")
-                    .build()
-                client.newCall(req).execute().use { resp ->
-                    val bodyStr = resp.body?.string().orEmpty()
-                    if (!resp.isSuccessful) {
-                        return Result.failure(Exception("GitHub HTTP ${resp.code}"))
-                    }
-                    val root = JsonParser.parseString(bodyStr).asJsonObject
-                    val deviceCode = root.get("device_code")?.asString.orEmpty()
-                    val userCode = root.get("user_code")?.asString.orEmpty()
-                    val verificationUri = root.get("verification_uri")?.asString ?: "https://github.com/login/device"
-                    val expiresIn = root.get("expires_in")?.asInt ?: 900
-                    val interval = root.get("interval")?.asInt ?: 5
-                    if (deviceCode.isEmpty() || userCode.isEmpty()) {
-                        return Result.failure(Exception("Invalid device code response from GitHub"))
-                    }
-                    Result.success(
-                        GitHubDeviceCodeResponse(
-                            deviceCode = deviceCode,
-                            userCode = userCode,
-                            verificationUri = verificationUri,
-                            expiresIn = expiresIn,
-                            interval = interval
-                        )
-                    )
-                }
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
-        }
-
-        fun pollGitHubDeviceTokenOnceBlocking(deviceCode: String): Triple<String, String, String> {
-            return try {
-                val client = OkHttpClient()
-                val formBody = (
-                    "client_id=$GITHUB_OAUTH_CLIENT_ID" +
-                        "&device_code=$deviceCode" +
-                        "&grant_type=urn:ietf:params:oauth:grant-type:device_code"
-                    ).toRequestBody("application/x-www-form-urlencoded".toMediaTypeOrNull())
-                val req = Request.Builder()
-                    .url("https://github.com/login/oauth/access_token")
-                    .post(formBody)
-                    .header("Accept", "application/json")
-                    .build()
-                client.newCall(req).execute().use { resp ->
-                    val bodyStr = resp.body?.string().orEmpty()
-                    val root = JsonParser.parseString(bodyStr).asJsonObject
-                    val accessToken = root.get("access_token")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-                    if (accessToken.isNotEmpty()) {
-                        val username = fetchGitHubUsernameBlocking(accessToken)
-                        return Triple("SUCCESS", accessToken, username)
-                    }
-                    val error = root.get("error")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-                    val errorDesc = root.get("error_description")?.takeIf { !it.isJsonNull }?.asString ?: error
-                    when (error) {
-                        "authorization_pending" -> Triple("PENDING", "", "")
-                        "slow_down" -> Triple("SLOW_DOWN", "", "")
-                        else -> Triple("ERROR", errorDesc.ifEmpty { "Authorization failed" }, "")
-                    }
-                }
-            } catch (e: Exception) {
-                Triple("PENDING", e.localizedMessage ?: "", "")
-            }
-        }
-
-        fun syncWithGitHubGistBlocking(prefs: SharedPreferences, gson: Gson): Pair<Boolean, String> {
-            val token = getEffectiveSyncToken(prefs)
-            val customGistId = prefs.getString(PREFS_KEY_SYNC_GIST_ID, "")?.trim().orEmpty()
-            if (token.isEmpty()) {
-                return false to "Tap '🔑 Login with GitHub' in Settings to enable automatic multi-device sync."
-            }
-            val httpClient = OkHttpClient()
-            val fileName = "battlematrix_gbl_sync_vault.json"
-
-            try {
-                var username = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty()
-                if (username.isEmpty()) {
-                    username = fetchGitHubUsernameBlocking(token)
-                    if (username.isNotEmpty()) {
-                        prefs.edit().putString(PREFS_KEY_SYNC_GITHUB_USERNAME, username).apply()
-                    }
-                }
-
-                val localPayload = buildLocalSyncVaultPayload(prefs, gson)
-                var remotePayload = SyncVaultPayload()
-                var remoteFileSha = ""
-
-                // If signed-in user is sportsfan986 (repo owner) and no custom Gist override is set, use dedicated 'sync-vault' branch
-                val useRepoSyncVault = (customGistId.isEmpty() || customGistId.equals("sync-vault", ignoreCase = true)) &&
-                    username.equals("sportsfan986", ignoreCase = true)
-
-                if (useRepoSyncVault) {
-                    val repoVaultUrl = "https://api.github.com/repos/sportsfan986/silphscope-pvp/contents/$fileName"
-                    var totalNewLogs = 0
-                    var totalNewTeams = 0
-                    var finalMergedPayload = localPayload
-                    for (attempt in 1..3) {
-                        val currentLocal = if (attempt == 1) localPayload else buildLocalSyncVaultPayload(prefs, gson)
-                        remotePayload = SyncVaultPayload()
-                        remoteFileSha = ""
-                        val getReq = Request.Builder()
-                            .url("$repoVaultUrl?ref=sync-vault")
-                            .header("Authorization", "Bearer $token")
-                            .header("Accept", "application/vnd.github+json")
-                            .build()
-                        httpClient.newCall(getReq).execute().use { resp ->
-                            if (resp.isSuccessful) {
-                                val bodyStr = resp.body?.string().orEmpty()
-                                val root = JsonParser.parseString(bodyStr).asJsonObject
-                                remoteFileSha = root.get("sha")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-                                val contentB64 = root.get("content")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-                                if (contentB64.isNotBlank()) {
-                                    val decodedBytes = android.util.Base64.decode(contentB64.replace("\n", "").replace("\r", ""), android.util.Base64.DEFAULT)
-                                    val decodedStr = String(decodedBytes, Charsets.UTF_8)
-                                    remotePayload = try {
-                                        gson.fromJson(decodedStr, SyncVaultPayload::class.java) ?: SyncVaultPayload()
-                                    } catch (_: Exception) { SyncVaultPayload() }
-                                }
-                            }
-                        }
-
-                        // Reconcile deltas across N devices (Pull -> Union/LWW/Tombstone Reconcile -> Save Local)
-                        val (mergedPayload, newLogsCount, newTeamsCount) = reconcileSyncVaultPayloads(currentLocal, remotePayload)
-                        saveReconciledSyncVaultLocally(prefs, gson, mergedPayload)
-                        finalMergedPayload = mergedPayload
-                        totalNewLogs += newLogsCount
-                        totalNewTeams += newTeamsCount
-
-                        // Determine if local state has deltas that need to be pushed back to the shared multi-device vault
-                        val remoteLogIds = remotePayload.battleLogs.associateBy { it.id }
-                        val hasLogDiff = mergedPayload.battleLogs.size != remotePayload.battleLogs.size ||
-                            mergedPayload.battleLogs.any { m -> remoteLogIds[m.id]?.updatedAt != m.updatedAt }
-                        val remoteTeamMap = remotePayload.teamPresets.associateBy { it.id }
-                        val hasTeamDiff = mergedPayload.teamPresets.size != remotePayload.teamPresets.size ||
-                            mergedPayload.teamPresets.any { t -> remoteTeamMap[t.id]?.updatedAt != t.updatedAt }
-                        val hasTombstoneDiff = mergedPayload.deletedLogIds.toSet() != remotePayload.deletedLogIds.toSet() ||
-                            mergedPayload.deletedTeamIds.toSet() != remotePayload.deletedTeamIds.toSet()
-
-                        if (remoteFileSha.isEmpty() || hasLogDiff || hasTeamDiff || hasTombstoneDiff) {
-                            val mergedJsonStr = gson.toJson(mergedPayload)
-                            val encodedB64 = android.util.Base64.encodeToString(
-                                mergedJsonStr.toByteArray(Charsets.UTF_8),
-                                android.util.Base64.NO_WRAP
-                            )
-                            val putBodyMap = mutableMapOf<String, Any>(
-                                "message" to "Auto-sync multi-device delta vault",
-                                "content" to encodedB64,
-                                "branch" to "sync-vault"
-                            )
-                            if (remoteFileSha.isNotEmpty()) {
-                                putBodyMap["sha"] = remoteFileSha
-                            }
-                            val reqBody = gson.toJson(putBodyMap)
-                                .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-                            val putReq = Request.Builder()
-                                .url(repoVaultUrl)
-                                .put(reqBody)
-                                .header("Authorization", "Bearer $token")
-                                .header("Accept", "application/vnd.github+json")
-                                .build()
-                            var retryConflict = false
-                            httpClient.newCall(putReq).execute().use { putResp ->
-                                if (putResp.code == 409 || putResp.code == 422) {
-                                    retryConflict = true
-                                } else if (!putResp.isSuccessful) {
-                                    return false to "Sync error (HTTP ${putResp.code})"
-                                }
-                            }
-                            if (!retryConflict) break
-                        } else {
-                            break
-                        }
-                    }
-
-                    val userTag = if (username.isNotEmpty()) "@$username" else "Cloud Vault"
-                    return true to "Synced ($userTag)! (${finalMergedPayload.battleLogs.size} battles, +$totalNewLogs from other devices · ${finalMergedPayload.teamPresets.size} teams, +$totalNewTeams updated)"
-                }
-
-                // Standard Per-User Isolated Vault: Auto-discover or create a private Gist in the signed-in user's own GitHub account
-                var gistId = if (customGistId.equals("sync-vault", ignoreCase = true)) "" else customGistId
-                if (gistId.isEmpty()) {
-                    val listReq = Request.Builder()
-                        .url("https://api.github.com/gists?per_page=100")
-                        .header("Authorization", "Bearer $token")
-                        .header("Accept", "application/vnd.github+json")
-                        .build()
-                    httpClient.newCall(listReq).execute().use { resp ->
-                        if (resp.isSuccessful) {
-                            val arr = JsonParser.parseString(resp.body?.string().orEmpty()).asJsonArray
-                            for (el in arr) {
-                                val obj = el.asJsonObject
-                                val filesObj = obj.getAsJsonObject("files")
-                                if (filesObj != null && filesObj.has(fileName)) {
-                                    gistId = obj.get("id")?.asString.orEmpty()
-                                    break
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (gistId.isNotEmpty()) {
-                    val getReq = Request.Builder()
-                        .url("https://api.github.com/gists/$gistId")
-                        .header("Authorization", "Bearer $token")
-                        .header("Accept", "application/vnd.github+json")
-                        .build()
-                    httpClient.newCall(getReq).execute().use { resp ->
-                        if (resp.isSuccessful) {
-                            val bodyStr = resp.body?.string().orEmpty()
-                            val root = JsonParser.parseString(bodyStr).asJsonObject
-                            val filesObj = root.getAsJsonObject("files")
-                            val vaultFile = filesObj?.getAsJsonObject(fileName)
-                            val contentStr = vaultFile?.get("content")?.asString
-                            if (!contentStr.isNullOrBlank()) {
-                                remotePayload = try {
-                                    gson.fromJson(contentStr, SyncVaultPayload::class.java) ?: SyncVaultPayload()
-                                } catch (_: Exception) { SyncVaultPayload() }
-                            }
-                        } else if (resp.code == 404) {
-                            gistId = ""
-                        }
-                    }
-                }
-
-                val (mergedPayload, newLogsCount, newTeamsCount) = reconcileSyncVaultPayloads(localPayload, remotePayload)
-                saveReconciledSyncVaultLocally(prefs, gson, mergedPayload)
-
-                val mergedJsonStr = gson.toJson(mergedPayload)
-                val bodyMap = mapOf(
-                    "description" to "SilphScope PvP Multi-Device Sync Vault (Teams & Battle Logs)",
-                    "public" to false,
-                    "files" to mapOf(
-                        fileName to mapOf("content" to mergedJsonStr)
-                    )
-                )
-                val reqBody = gson.toJson(bodyMap)
-                    .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-                val pushReq = if (gistId.isEmpty()) {
-                    Request.Builder()
-                        .url("https://api.github.com/gists")
-                        .post(reqBody)
-                        .header("Authorization", "Bearer $token")
-                        .header("Accept", "application/vnd.github+json")
-                        .build()
-                } else {
-                    Request.Builder()
-                        .url("https://api.github.com/gists/$gistId")
-                        .patch(reqBody)
-                        .header("Authorization", "Bearer $token")
-                        .header("Accept", "application/vnd.github+json")
-                        .build()
-                }
-
-                httpClient.newCall(pushReq).execute().use { pushResp ->
-                    if (!pushResp.isSuccessful) {
-                        return false to "Sync error (HTTP ${pushResp.code})"
-                    }
-                    if (gistId.isEmpty()) {
-                        val respObj = JsonParser.parseString(pushResp.body?.string().orEmpty()).asJsonObject
-                        val createdId = respObj.get("id")?.asString.orEmpty()
-                        if (createdId.isNotEmpty()) {
-                            prefs.edit().putString(PREFS_KEY_SYNC_GIST_ID, createdId).apply()
-                        }
-                    }
-                }
-
-                val userTag = if (username.isNotEmpty()) "@$username" else "Private Gist"
-                return true to "Synced ($userTag)! (${mergedPayload.battleLogs.size} battles, +$newLogsCount from other devices · ${mergedPayload.teamPresets.size} teams, +$newTeamsCount updated)"
-            } catch (e: Exception) {
-                return false to "Sync failed: ${e.localizedMessage ?: "Network error"}"
-            }
-        }
 
         // =========================================================================
         // v5.10: AI TRAINING & ANOMALY TELEMETRY SCHEMA + GITHUB AUTO-UPLOAD ENGINE
@@ -1676,10 +1179,10 @@ class OverlayService : LifecycleService() {
         )
 
         data class AiTelemetryBattleRecordV510(
-            val schemaVersion: String = "6.10",
+            val schemaVersion: String = APP_VERSION,
             val battleId: String = "",
             val timestampMs: Long = System.currentTimeMillis(),
-            val appVersion: String = "6.10",
+            val appVersion: String = APP_VERSION,
             val uploaderHandle: String = "anonymous",
             val deviceHash: String = "",
             val deviceModel: String = Build.MODEL ?: "Android",
@@ -1750,14 +1253,14 @@ class OverlayService : LifecycleService() {
             val uploadedAtMs: Long = 0L,
             val uploader: String = "",
             val deviceHash: String = "",
-            val appVersion: String = "6.02",
+            val appVersion: String = APP_VERSION,
             val battleCount: Int = 0,
             val anomalyCount: Int = 0,
             val highSeverityCount: Int = 0
         )
 
         data class AiTelemetryManifest(
-            val schemaVersion: String = "6.02",
+            val schemaVersion: String = APP_VERSION,
             val updatedAtMs: Long = 0L,
             val totalBatches: Int = 0,
             val totalBattles: Int = 0,
@@ -1765,1661 +1268,6 @@ class OverlayService : LifecycleService() {
             val batches: List<AiTelemetryManifestEntry> = emptyList()
         )
 
-        fun getDeviceTelemetryHashStatic(prefs: SharedPreferences): String {
-            val existing = prefs.getString(PREFS_KEY_DEVICE_TELEMETRY_HASH, null)?.trim().orEmpty()
-            if (existing.length >= 6) return existing
-            val rawSeed = "${Build.MANUFACTURER}_${Build.MODEL}_${System.currentTimeMillis()}_${(1000..9999).random()}"
-            val hash = Integer.toHexString(rawSeed.hashCode()).lowercase().padStart(8, '0').take(8)
-            prefs.edit().putString(PREFS_KEY_DEVICE_TELEMETRY_HASH, hash).apply()
-            return hash
-        }
-
-        /**
-         * v5.13 / v6.02: Builds a comprehensive snapshot of all user-configurable debounce filters, tolerances,
-         * proactive lead windows, swap-and-throw rollback window, alt fast move strictness, shield chip tolerance,
-         * and active post-cutscene / KO settling delay constants.
-         */
-        fun buildDebounceAndSettlingSettingsMapStatic(
-            prefs: SharedPreferences,
-            scanHzMode: String = "10HZ_HP",
-            scanTurnOffsetMs: Long = 0L
-        ): Map<String, Any> {
-            runV602ScannerDefaultsMigrationStatic(prefs)
-            val hpSamples = prefs.getInt(PREFS_KEY_HP_DEBOUNCE_SAMPLES, DEFAULT_HP_DEBOUNCE_SAMPLES).coerceIn(2, 4)
-            val energySamples = prefs.getInt(PREFS_KEY_ENERGY_DEBOUNCE_SAMPLES, DEFAULT_ENERGY_DEBOUNCE_SAMPLES).coerceIn(2, 4)
-            val tolPct = prefs.getInt(PREFS_KEY_DEBOUNCE_TOLERANCE_PCT, DEFAULT_DEBOUNCE_TOLERANCE_PCT).coerceIn(0, 3)
-            val leadMs = prefs.getInt(PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS, DEFAULT_PROACTIVE_ENERGY_LEAD_MS).let {
-                if (it in listOf(0, 200, 300, 400)) it else DEFAULT_PROACTIVE_ENERGY_LEAD_MS
-            }
-            val circlePriority = prefs.getString("charge_circle_priority_mode", "smart_hybrid") ?: "smart_hybrid"
-            val altFastDetect = prefs.getBoolean("enable_alt_fast_move_detect", true)
-            val fastTurnOffset = prefs.getInt("fast_detect_turn_offset", DEFAULT_FAST_DETECT_TURN_OFFSET).coerceIn(0, 3)
-            val hpTracking = prefs.getBoolean("enable_hp_tracking", DEFAULT_ENABLE_HP_TRACKING)
-            val energyTracking = prefs.getBoolean("enable_energy_tracking", DEFAULT_ENABLE_ENERGY_TRACKING)
-            val swapRollbackMs = prefs.getInt(PREFS_KEY_SWAP_THROW_ROLLBACK_WINDOW_MS, DEFAULT_SWAP_THROW_ROLLBACK_WINDOW_MS).let {
-                if (it in listOf(0, 3000, 4000, 5000)) it else DEFAULT_SWAP_THROW_ROLLBACK_WINDOW_MS
-            }
-            val altFastStrictness = (prefs.getString(PREFS_KEY_ALT_FAST_DETECT_STRICTNESS, DEFAULT_ALT_FAST_DETECT_STRICTNESS) ?: DEFAULT_ALT_FAST_DETECT_STRICTNESS)
-                .lowercase().let { if (it in listOf("strict", "balanced", "aggressive")) it else DEFAULT_ALT_FAST_DETECT_STRICTNESS }
-            val shieldChipTolPct = prefs.getInt(PREFS_KEY_SHIELD_CHIP_TOLERANCE_PCT, DEFAULT_SHIELD_CHIP_TOLERANCE_PCT).let {
-                if (it in listOf(6, 10, 14)) it else DEFAULT_SHIELD_CHIP_TOLERANCE_PCT
-            }
-            return mapOf(
-                "scanHzMode" to scanHzMode,
-                "turnOffsetMs" to scanTurnOffsetMs,
-                "hpTrackingEnabled" to hpTracking,
-                "energyTrackingEnabled" to energyTracking,
-                "hpDebounceSamples" to hpSamples,
-                "hpDebounceWindowMs" to (hpSamples * 100),
-                "energyDebounceSamples" to energySamples,
-                "energyDebounceWindowMs" to (energySamples * 100),
-                "debounceTolerancePct" to tolPct,
-                "proactiveEnergyLeadMs" to leadMs,
-                "chargeCirclePriorityMode" to circlePriority,
-                "altFastMoveDetectEnabled" to altFastDetect,
-                "fastDetectTurnOffset" to fastTurnOffset,
-                "swapThrowRollbackWindowMs" to swapRollbackMs,
-                "altFastDetectStrictness" to altFastStrictness,
-                "shieldChipTolerancePct" to shieldChipTolPct,
-                "postChargeReturnSettleMinMs" to 1800,
-                "postCutsceneHpSettleWindowMs" to 4500,
-                "koConfirmFrames" to 6,
-                "koConfirmSettlingDelayMs" to 600,
-                "topCountdownConfirmFrames" to 2,
-                "topCountdownClearFrames" to 3,
-                "faintSyncWindowSec" to 25.0
-            )
-        }
-
-        fun computeDebounceSettingsProfileSignatureStatic(prefs: SharedPreferences): String {
-            runV602ScannerDefaultsMigrationStatic(prefs)
-            val hpSamples = prefs.getInt(PREFS_KEY_HP_DEBOUNCE_SAMPLES, DEFAULT_HP_DEBOUNCE_SAMPLES).coerceIn(2, 4)
-            val energySamples = prefs.getInt(PREFS_KEY_ENERGY_DEBOUNCE_SAMPLES, DEFAULT_ENERGY_DEBOUNCE_SAMPLES).coerceIn(2, 4)
-            val tolPct = prefs.getInt(PREFS_KEY_DEBOUNCE_TOLERANCE_PCT, DEFAULT_DEBOUNCE_TOLERANCE_PCT).coerceIn(0, 3)
-            val leadMs = prefs.getInt(PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS, DEFAULT_PROACTIVE_ENERGY_LEAD_MS).let {
-                if (it in listOf(0, 200, 300, 400)) it else DEFAULT_PROACTIVE_ENERGY_LEAD_MS
-            }
-            val circlePriority = (prefs.getString("charge_circle_priority_mode", "smart_hybrid") ?: "smart_hybrid").uppercase()
-            val altFastDetect = if (prefs.getBoolean("enable_alt_fast_move_detect", true)) 1 else 0
-            val fastTurnOffset = prefs.getInt("fast_detect_turn_offset", DEFAULT_FAST_DETECT_TURN_OFFSET).coerceIn(0, 3)
-            val swapRollbackMs = prefs.getInt(PREFS_KEY_SWAP_THROW_ROLLBACK_WINDOW_MS, DEFAULT_SWAP_THROW_ROLLBACK_WINDOW_MS)
-            val altFastStrictness = (prefs.getString(PREFS_KEY_ALT_FAST_DETECT_STRICTNESS, DEFAULT_ALT_FAST_DETECT_STRICTNESS) ?: DEFAULT_ALT_FAST_DETECT_STRICTNESS).uppercase()
-            val shieldChipTolPct = prefs.getInt(PREFS_KEY_SHIELD_CHIP_TOLERANCE_PCT, DEFAULT_SHIELD_CHIP_TOLERANCE_PCT)
-            return "HP${hpSamples}_E${energySamples}_TOL${tolPct}_LEAD${leadMs}_${circlePriority}_ALT${altFastDetect}_${altFastStrictness}_OFF${fastTurnOffset}_SWAP${swapRollbackMs}_CHIP${shieldChipTolPct}_FAINT25"
-        }
-
-        fun loadPendingSettingsChangesStatic(prefs: SharedPreferences, gson: Gson): List<AiTelemetrySettingsChangeEvent> {
-            val raw = prefs.getString(PREFS_KEY_PENDING_SETTINGS_CHANGES_V513, null) ?: return emptyList()
-            return try {
-                val type = object : TypeToken<List<AiTelemetrySettingsChangeEvent>>() {}.type
-                val parsed: List<AiTelemetrySettingsChangeEvent> = gson.fromJson(raw, type) ?: emptyList()
-                parsed.distinctBy { it.id }.sortedBy { it.timestampMs }
-            } catch (_: Exception) {
-                emptyList()
-            }
-        }
-
-        fun loadSettingsChangeHistoryStatic(prefs: SharedPreferences, gson: Gson): List<AiTelemetrySettingsChangeEvent> {
-            val raw = prefs.getString(PREFS_KEY_SETTINGS_CHANGE_HISTORY_V513, null) ?: return emptyList()
-            return try {
-                val type = object : TypeToken<List<AiTelemetrySettingsChangeEvent>>() {}.type
-                val parsed: List<AiTelemetrySettingsChangeEvent> = gson.fromJson(raw, type) ?: emptyList()
-                parsed.distinctBy { it.id }.sortedBy { it.timestampMs }
-            } catch (_: Exception) {
-                emptyList()
-            }
-        }
-
-        /**
-         * v5.13: Detects any change to user settings that pertain to debounce filters, error tolerances,
-         * proactive energy lead windows, circle priority mode, or fast-move turn offset, records a timestamped
-         * `AiTelemetrySettingsChangeEvent`, queues it for inclusion with the next battle log & telemetry batch,
-         * and optionally uploads `users/<safeUser>/settings_changes.jsonl` immediately in the background.
-         */
-        fun recordDebounceSettingsChangeIfNeededStatic(
-            prefs: SharedPreferences,
-            gson: Gson,
-            triggerSource: String = "settings_ui",
-            triggerImmediateUpload: Boolean = false
-        ): AiTelemetrySettingsChangeEvent? {
-            return try {
-                val currentFullMap = buildDebounceAndSettlingSettingsMapStatic(prefs)
-                val trackedKeys = listOf(
-                    "hpTrackingEnabled",
-                    "energyTrackingEnabled",
-                    "hpDebounceSamples",
-                    "hpDebounceWindowMs",
-                    "energyDebounceSamples",
-                    "energyDebounceWindowMs",
-                    "debounceTolerancePct",
-                    "proactiveEnergyLeadMs",
-                    "chargeCirclePriorityMode",
-                    "altFastMoveDetectEnabled",
-                    "fastDetectTurnOffset",
-                    "swapThrowRollbackWindowMs",
-                    "altFastDetectStrictness",
-                    "shieldChipTolerancePct",
-                    "postChargeReturnSettleMinMs",
-                    "postCutsceneHpSettleWindowMs",
-                    "koConfirmFrames",
-                    "koConfirmSettlingDelayMs",
-                    "topCountdownConfirmFrames",
-                    "topCountdownClearFrames",
-                    "faintSyncWindowSec"
-                )
-                val currentTracked = trackedKeys.associateWith { k -> currentFullMap[k] ?: "" }
-                val prevRaw = prefs.getString(PREFS_KEY_LAST_DEBOUNCE_SETTINGS_SNAPSHOT_V513, null)
-                if (prevRaw.isNullOrBlank()) {
-                    prefs.edit().putString(PREFS_KEY_LAST_DEBOUNCE_SETTINGS_SNAPSHOT_V513, gson.toJson(currentTracked)).apply()
-                    return null
-                }
-                val mapType = object : TypeToken<Map<String, Any>>() {}.type
-                val prevMap: Map<String, Any> = try {
-                    gson.fromJson(prevRaw, mapType) ?: emptyMap()
-                } catch (_: Exception) {
-                    emptyMap()
-                }
-                val changedKeys = mutableListOf<String>()
-                val prevDiff = mutableMapOf<String, Any>()
-                val newDiff = mutableMapOf<String, Any>()
-                for (k in trackedKeys) {
-                    val oldVal = prevMap[k]?.toString()?.removeSuffix(".0") ?: ""
-                    val newVal = currentTracked[k]?.toString()?.removeSuffix(".0") ?: ""
-                    if (oldVal != newVal) {
-                        changedKeys.add(k)
-                        prevDiff[k] = prevMap[k] ?: oldVal
-                        newDiff[k] = currentTracked[k] ?: newVal
-                    }
-                }
-                if (changedKeys.isEmpty()) return null
-
-                val nowMs = System.currentTimeMillis()
-                val devHash = getDeviceTelemetryHashStatic(prefs)
-                val username = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty().ifEmpty { "trainer_$devHash" }
-                val sig = computeDebounceSettingsProfileSignatureStatic(prefs)
-                val event = AiTelemetrySettingsChangeEvent(
-                    id = "cfg_${nowMs}_${(100..999).random()}",
-                    timestampMs = nowMs,
-                    appVersion = "6.02",
-                    uploaderHandle = username,
-                    deviceHash = devHash,
-                    triggerSource = triggerSource,
-                    changedKeys = changedKeys,
-                    previousSettings = prevDiff,
-                    newSettings = newDiff,
-                    settingsProfileSignature = sig,
-                    activeDebouncesAndDelays = currentTracked
-                )
-                val pendingList = (loadPendingSettingsChangesStatic(prefs, gson) + event).distinctBy { it.id }.takeLast(100)
-                val historyList = (loadSettingsChangeHistoryStatic(prefs, gson) + event).distinctBy { it.id }.takeLast(200)
-                prefs.edit()
-                    .putString(PREFS_KEY_LAST_DEBOUNCE_SETTINGS_SNAPSHOT_V513, gson.toJson(currentTracked))
-                    .putString(PREFS_KEY_PENDING_SETTINGS_CHANGES_V513, gson.toJson(pendingList))
-                    .putString(PREFS_KEY_SETTINGS_CHANGE_HISTORY_V513, gson.toJson(historyList))
-                    .apply()
-
-                if (triggerImmediateUpload && prefs.getBoolean(PREFS_KEY_AUTO_UPLOAD_AI_LOGS, false)) {
-                    kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
-                        try {
-                            uploadSettingsChangeHistoryBlocking(prefs, gson)
-                        } catch (_: Exception) {}
-                    }
-                }
-                event
-            } catch (_: Exception) {
-                null
-            }
-        }
-
-        fun uploadSettingsChangeHistoryBlocking(prefs: SharedPreferences, gson: Gson): Boolean {
-            val pendingChanges = loadPendingSettingsChangesStatic(prefs, gson)
-            if (pendingChanges.isEmpty()) return true
-            val historyChanges = loadSettingsChangeHistoryStatic(prefs, gson).ifEmpty { pendingChanges }
-            val userToken = getEffectiveSyncToken(prefs).trim()
-            val relayToken = getBuiltInTelemetryRelayTokenStatic()
-            val primaryToken = userToken.ifEmpty { relayToken }
-            if (primaryToken.isEmpty()) return false
-
-            var username = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty()
-            if (username.isEmpty() && userToken.isNotEmpty()) {
-                username = fetchGitHubUsernameBlocking(userToken)
-                if (username.isNotEmpty()) {
-                    prefs.edit().putString(PREFS_KEY_SYNC_GITHUB_USERNAME, username).apply()
-                }
-            }
-            val devHash = getDeviceTelemetryHashStatic(prefs)
-            val safeUser = (username.ifBlank { "trainer_$devHash" }).replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
-            val settingsPath = "users/$safeUser/settings_changes.jsonl"
-            val jsonlContent = historyChanges.joinToString("\n") { ev ->
-                val enriched = if (ev.uploaderHandle.isBlank() || ev.uploaderHandle.startsWith("trainer_")) {
-                    ev.copy(uploaderHandle = safeUser, deviceHash = devHash, appVersion = "5.13")
-                } else ev
-                gson.toJson(enriched)
-            } + "\n"
-            val b64Content = android.util.Base64.encodeToString(jsonlContent.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
-            val httpClient = OkHttpClient()
-            val repoBaseUrl = "https://api.github.com/repos/sportsfan986/silphscope-pvp"
-
-            fun tryPutSettingsFile(authToken: String): Boolean {
-                var existingSha = ""
-                val getReq = Request.Builder()
-                    .url("$repoBaseUrl/contents/$settingsPath?ref=$AI_TELEMETRY_BRANCH")
-                    .header("Authorization", "Bearer $authToken")
-                    .header("Accept", "application/vnd.github+json")
-                    .build()
-                httpClient.newCall(getReq).execute().use { gResp ->
-                    if (gResp.isSuccessful) {
-                        val obj = JsonParser.parseString(gResp.body?.string().orEmpty()).asJsonObject
-                        existingSha = obj.get("sha")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-                    }
-                }
-                val putMap = mutableMapOf<String, Any>(
-                    "message" to "telemetry(v5.13): settings_changes (${pendingChanges.size} new, ${historyChanges.size} total) by @$safeUser",
-                    "content" to b64Content,
-                    "branch" to AI_TELEMETRY_BRANCH
-                )
-                if (existingSha.isNotEmpty()) {
-                    putMap["sha"] = existingSha
-                }
-                val putReq = Request.Builder()
-                    .url("$repoBaseUrl/contents/$settingsPath")
-                    .put(gson.toJson(putMap).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
-                    .header("Authorization", "Bearer $authToken")
-                    .header("Accept", "application/vnd.github+json")
-                    .build()
-                httpClient.newCall(putReq).execute().use { pResp ->
-                    return pResp.isSuccessful
-                }
-            }
-
-            var ok = try { tryPutSettingsFile(primaryToken) } catch (_: Exception) { false }
-            if (!ok && primaryToken != relayToken && relayToken.isNotEmpty()) {
-                ok = try { tryPutSettingsFile(relayToken) } catch (_: Exception) { false }
-            }
-            if (ok) {
-                val uploadedIds = pendingChanges.map { it.id }.toSet()
-                val remaining = loadPendingSettingsChangesStatic(prefs, gson).filter { it.id !in uploadedIds }
-                prefs.edit().putString(PREFS_KEY_PENDING_SETTINGS_CHANGES_V513, gson.toJson(remaining)).apply()
-            }
-            return ok
-        }
-
-        /**
-         * v5.10 One-Time Migration: Wipes legacy pre-5.10 AI training logs (`gbl_ai_training_logs_v1`)
-         * and strips any residual embedded timeline events from main battle logs so all future AI training
-         * & anomaly telemetry starts clean on the v5.10 schema.
-         */
-        fun runV510AiTelemetryMigrationAndWipeStatic(prefs: SharedPreferences) {
-            if (prefs.getBoolean(PREFS_KEY_AI_TELEMETRY_V510_MIGRATED, false)) return
-            val hasToken = getEffectiveSyncToken(prefs).isNotEmpty()
-            val editor = prefs.edit()
-                .remove(PREFS_KEY_AI_TRAINING_LOGS)
-                .putBoolean(PREFS_KEY_AI_TELEMETRY_V510_MIGRATED, true)
-            if (!prefs.contains(PREFS_KEY_AUTO_UPLOAD_AI_LOGS)) {
-                editor.putBoolean(PREFS_KEY_AUTO_UPLOAD_AI_LOGS, hasToken)
-            }
-            editor.apply()
-        }
-
-        fun loadPendingAiTelemetryLogsStatic(prefs: SharedPreferences, gson: Gson): List<AiTelemetryBattleRecordV510> {
-            val raw = prefs.getString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, null) ?: return emptyList()
-            return try {
-                val type = object : TypeToken<List<AiTelemetryBattleRecordV510>>() {}.type
-                val parsed: List<AiTelemetryBattleRecordV510> = gson.fromJson(raw, type) ?: emptyList()
-                parsed.distinctBy { it.battleId }.sortedBy { it.timestampMs }
-            } catch (_: Exception) {
-                emptyList()
-            }
-        }
-
-        fun savePendingAiTelemetryLogsStatic(
-            prefs: SharedPreferences,
-            gson: Gson,
-            logs: List<AiTelemetryBattleRecordV510>
-        ) {
-            val capped = logs.distinctBy { it.battleId }.sortedBy { it.timestampMs }.takeLast(200)
-            prefs.edit().putString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(capped)).apply()
-        }
-
-        /**
-         * Inspects a completed battle's timeline events, slot specs, and move/energy/HP/shield states
-         * to automatically detect anomalies (e.g. charged move thrown with less energy tracked than move cost
-         * like the Xerneas fast-move energy issue, unexpected HP drops vs PvPoke damage, shield desyncs,
-         * circle-fill drift, or fallback species/moves).
-         * v5.13: Attaches lightweight cropped WebP HUD thumbnails (`screenshotWebpBase64`) to up to 3 `HIGH` severity anomalies.
-         */
-        fun detectBattleAnomaliesStatic(
-            league: String,
-            userTeamSpecs: List<AiTelemetrySlotSpec>,
-            oppTeamSpecs: List<AiTelemetryOppSlotSpec>,
-            timelineEvents: List<BattleTimelineEvent>
-        ): List<BattleAnomalyRecord> {
-            val anomalies = mutableListOf<BattleAnomalyRecord>()
-            var attachedHighScreenshots = 0
-
-            // 1. Check species & move specs for fallback / missing GameMaster entries
-            for (u in userTeamSpecs) {
-                if (u.species.isBlank() || u.fastMove.equals("Fast Attack", ignoreCase = true) ||
-                    u.chargedMove1.equals("Charged Move 1", ignoreCase = true) ||
-                    u.chargedMove1.equals("Struggle", ignoreCase = true)
-                ) {
-                    anomalies.add(
-                        BattleAnomalyRecord(
-                            type = "FALLBACK_SPECIES_OR_MOVE",
-                            severity = "HIGH",
-                            tSec = 0.0,
-                            actor = "user",
-                            species = u.species,
-                            fastMove = u.fastMove,
-                            moveName = u.chargedMove1,
-                            detail = "User slot #${u.slotIndex + 1} (${u.species}) resolved to fallback move (${u.fastMove} / ${u.chargedMove1})"
-                        )
-                    )
-                }
-            }
-            for (o in oppTeamSpecs) {
-                if (o.species.equals("Waiting...", ignoreCase = true) ||
-                    o.inferredFastMove.equals("Fast Attack", ignoreCase = true)
-                ) {
-                    anomalies.add(
-                        BattleAnomalyRecord(
-                            type = "FALLBACK_SPECIES_OR_MOVE",
-                            severity = "HIGH",
-                            tSec = 0.0,
-                            actor = "opp",
-                            species = o.species,
-                            fastMove = o.inferredFastMove,
-                            detail = "Opponent slot #${o.slotIndex + 1} (${o.species}) resolved to fallback fast move (${o.inferredFastMove})"
-                        )
-                    )
-                }
-            }
-
-            var prevUserShields = 2
-            var prevOppShields = 2
-            var lastActiveUserSpecies = userTeamSpecs.firstOrNull()?.species.orEmpty()
-            var lastActiveOppSpecies = oppTeamSpecs.firstOrNull()?.species.orEmpty()
-            var prevActiveUserHp = 100
-            var prevActiveOppHp = 100
-
-            val sortedEvents = timelineEvents.sortedBy { it.t }
-            for (ev in sortedEvents) {
-                if (ev.type.equals("SWAP", ignoreCase = true) || ev.type.equals("FAINT", ignoreCase = true)) {
-                    if (ev.actor.equals("user", ignoreCase = true) && !ev.pokemonIn.isNullOrBlank()) {
-                        lastActiveUserSpecies = ev.pokemonIn
-                        prevActiveUserHp = 100
-                    } else if (ev.actor.equals("opp", ignoreCase = true) && !ev.pokemonIn.isNullOrBlank()) {
-                        lastActiveOppSpecies = ev.pokemonIn
-                        prevActiveOppHp = 100
-                    }
-                }
-
-                if (ev.type.equals("CHARGED_ATTACK", ignoreCase = true)) {
-                    val isUser = ev.actor.equals("user", ignoreCase = true)
-                    val attackerSpecies = ev.activePokemon?.takeIf { it.isNotBlank() }
-                        ?: (if (isUser) lastActiveUserSpecies else lastActiveOppSpecies)
-                    val moveName = ev.inferredMoveName.orEmpty()
-                    val userSpec = userTeamSpecs.find { it.species.equals(attackerSpecies, ignoreCase = true) }
-                    val oppSpec = oppTeamSpecs.find {
-                        it.species.equals(attackerSpecies, ignoreCase = true) ||
-                            it.species.equals(attackerSpecies.removePrefix("Shadow ").trim(), ignoreCase = true)
-                    }
-                    val fastMoveName = if (isUser) userSpec?.fastMove else oppSpec?.inferredFastMove
-                    val fastTurns = if (isUser) userSpec?.fastTurns else oppSpec?.fastTurns
-                    val fastEnergy = if (isUser) userSpec?.fastEnergy else oppSpec?.fastEnergy
-
-                    val reqEnergy = ev.requiredMoveEnergy ?: if (moveName.isNotBlank()) {
-                        val mStats = resolveChargedMoveStatsStatic(moveName, "normal")
-                        (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[moveName] ?: 45).coerceIn(35, 100)
-                    } else null
-                    val preEnergy = ev.preThrowEnergy
-                    val deficit = ev.energyDeficit ?: if (preEnergy != null && reqEnergy != null && preEnergy < reqEnergy) {
-                        reqEnergy - preEnergy
-                    } else 0
-
-                    // A. ENERGY_DEFICIT_THROW: Move thrown when tracked energy < required move energy (e.g. Xerneas Geomancy / fast move EPT mismatch)
-                    if (deficit > 0 && preEnergy != null && reqEnergy != null) {
-                        val sev = if (deficit >= 8) "HIGH" else "WARN"
-                        val thumb = if (sev == "HIGH" && attachedHighScreenshots < 3 && !ev.hudThumbnailWebpBase64.isNullOrBlank()) {
-                            attachedHighScreenshots++
-                            ev.hudThumbnailWebpBase64
-                        } else null
-                        anomalies.add(
-                            BattleAnomalyRecord(
-                                type = "ENERGY_DEFICIT_THROW",
-                                severity = sev,
-                                tSec = ev.t,
-                                actor = ev.actor,
-                                species = attackerSpecies,
-                                fastMove = fastMoveName,
-                                moveName = moveName,
-                                moveResolutionSource = ev.moveResolutionSource,
-                                detectedEnergyBefore = preEnergy,
-                                requiredMoveEnergy = reqEnergy,
-                                energyDeficit = deficit,
-                                residualEnergyAfter = if (isUser) ev.userEnergy else ev.oppEnergy,
-                                leftCircleFillPct = ev.leftCircleFillBeforePct,
-                                rightCircleFillPct = ev.rightCircleFillBeforePct,
-                                detail = "${ev.actor.uppercase()} $attackerSpecies threw $moveName (${reqEnergy}E) with only ${preEnergy}E tracked (deficit -${deficit}E; fast=${fastMoveName ?: "?"} ${fastTurns ?: "?"}t/${fastEnergy ?: "?"}e, src=${ev.moveResolutionSource ?: "?"})",
-                                screenshotWebpBase64 = thumb
-                            )
-                        )
-                    }
-
-                    // B. ENERGY_CAP_DRIFT: User threw charged move confirmed by OCR/HP, but pre-throw circle fills were both < 85%
-                    // v6.02: Suppress false ENERGY_CAP_DRIFT when tracked energy (preEnergy) already proves the move was ready (>= reqEnergy)
-                    val trackedEnergyReady = preEnergy != null && reqEnergy != null && preEnergy >= reqEnergy
-                    if (isUser &&
-                        !trackedEnergyReady &&
-                        (ev.moveResolutionSource == "BANNER_OCR" || ev.moveResolutionSource == "HP_DELTA") &&
-                        ev.leftCircleFillBeforePct != null &&
-                        ev.rightCircleFillBeforePct != null &&
-                        ev.leftCircleFillBeforePct in 1..84 &&
-                        ev.rightCircleFillBeforePct in 0..84
-                    ) {
-                        anomalies.add(
-                            BattleAnomalyRecord(
-                                type = "ENERGY_CAP_DRIFT",
-                                severity = "WARN",
-                                tSec = ev.t,
-                                actor = "user",
-                                species = attackerSpecies,
-                                fastMove = fastMoveName,
-                                moveName = moveName,
-                                moveResolutionSource = ev.moveResolutionSource,
-                                detectedEnergyBefore = preEnergy,
-                                requiredMoveEnergy = reqEnergy,
-                                leftCircleFillPct = ev.leftCircleFillBeforePct,
-                                rightCircleFillPct = ev.rightCircleFillBeforePct,
-                                detail = "User $attackerSpecies threw $moveName (${ev.moveResolutionSource}) while pre-throw circle fills read L=${ev.leftCircleFillBeforePct}% / R=${ev.rightCircleFillBeforePct}% (<85% ready gate)"
-                            )
-                        )
-                    }
-
-                    // C. SHIELD_DESYNC & UNEXPECTED_HP_DELTA
-                    val hpBefore = ev.hpBeforePct
-                    val hpAfter = ev.hpAfterPct
-                    val actualDrop = ev.hpDeltaPct ?: if (hpBefore != null && hpAfter != null) max(0, hpBefore - hpAfter) else null
-                    val expectedDmg = ev.expectedMoveDmgPct
-                    val wasShielded = ev.shielded == true
-
-                    if (hpBefore != null && hpAfter != null && actualDrop != null) {
-                        if (!wasShielded && hpBefore >= 20 && (expectedDmg == null || expectedDmg >= 15) && actualDrop <= 2) {
-                            val thumb = if (attachedHighScreenshots < 3 && !ev.hudThumbnailWebpBase64.isNullOrBlank()) {
-                                attachedHighScreenshots++
-                                ev.hudThumbnailWebpBase64
-                            } else null
-                            anomalies.add(
-                                BattleAnomalyRecord(
-                                    type = "SHIELD_DESYNC",
-                                    severity = "HIGH",
-                                    tSec = ev.t,
-                                    actor = ev.actor,
-                                    species = attackerSpecies,
-                                    moveName = moveName,
-                                    hpBeforePct = hpBefore,
-                                    hpAfterPct = hpAfter,
-                                    actualHpDropPct = actualDrop,
-                                    expectedDmgPct = expectedDmg,
-                                    shieldsBefore = if (isUser) prevOppShields else prevUserShields,
-                                    shieldsAfter = if (isUser) ev.oppShieldsRemaining else ev.userShieldsRemaining,
-                                    detail = "Unshielded $moveName from ${ev.actor.uppercase()} $attackerSpecies caused only ${actualDrop}% HP drop (${hpBefore}% -> ${hpAfter}%, expected ~${expectedDmg ?: "?"}%) without shield decrement",
-                                    screenshotWebpBase64 = thumb
-                                )
-                            )
-                        } else if (wasShielded && actualDrop >= 12 && hpAfter > 0) {
-                            anomalies.add(
-                                BattleAnomalyRecord(
-                                    type = "SHIELD_DESYNC",
-                                    severity = "WARN",
-                                    tSec = ev.t,
-                                    actor = ev.actor,
-                                    species = attackerSpecies,
-                                    moveName = moveName,
-                                    hpBeforePct = hpBefore,
-                                    hpAfterPct = hpAfter,
-                                    actualHpDropPct = actualDrop,
-                                    expectedDmgPct = expectedDmg,
-                                    shieldsBefore = if (isUser) prevOppShields else prevUserShields,
-                                    shieldsAfter = if (isUser) ev.oppShieldsRemaining else ev.userShieldsRemaining,
-                                    detail = "Charged move $moveName from ${ev.actor.uppercase()} $attackerSpecies was marked shielded, but defender HP dropped ${actualDrop}% (${hpBefore}% -> ${hpAfter}%)"
-                                )
-                            )
-                        } else if (!wasShielded && hpAfter > 0 && expectedDmg != null && kotlin.math.abs(actualDrop - expectedDmg) >= 20) {
-                            val diff = kotlin.math.abs(actualDrop - expectedDmg)
-                            val sev = if (diff >= 32) "HIGH" else "WARN"
-                            val thumb = if (sev == "HIGH" && attachedHighScreenshots < 3 && !ev.hudThumbnailWebpBase64.isNullOrBlank()) {
-                                attachedHighScreenshots++
-                                ev.hudThumbnailWebpBase64
-                            } else null
-                            anomalies.add(
-                                BattleAnomalyRecord(
-                                    type = "UNEXPECTED_HP_DELTA",
-                                    severity = sev,
-                                    tSec = ev.t,
-                                    actor = ev.actor,
-                                    species = attackerSpecies,
-                                    moveName = moveName,
-                                    moveResolutionSource = ev.moveResolutionSource,
-                                    hpBeforePct = hpBefore,
-                                    hpAfterPct = hpAfter,
-                                    actualHpDropPct = actualDrop,
-                                    expectedDmgPct = expectedDmg,
-                                    detail = "Unshielded $moveName from ${ev.actor.uppercase()} $attackerSpecies dropped defender HP by ${actualDrop}% (${hpBefore}% -> ${hpAfter}%) vs expected PvPoke ${expectedDmg}% (diff ${diff}%)",
-                                    screenshotWebpBase64 = thumb
-                                )
-                            )
-                        }
-                    }
-                }
-
-                prevUserShields = ev.userShieldsRemaining
-                prevOppShields = ev.oppShieldsRemaining
-            }
-
-            return anomalies
-        }
-
-        /**
-         * v6.02: Zero-Lag Post-Battle Multi-Profile Shadow Telemetry Engine.
-         * Runs AFTER battle completion on the compact 10Hz scalar sensor trace (`sensorTicks`) and timeline checkpoints
-         * so live combat runs at 0% extra CPU overhead while telemetry benchmarks all candidate settings profiles
-         * and single-parameter variations on the exact same battle.
-         */
-        fun evaluateShadowSettingsProfilesStatic(
-            prefs: SharedPreferences,
-            league: String,
-            userTeamSpecs: List<AiTelemetrySlotSpec>,
-            oppTeamSpecs: List<AiTelemetryOppSlotSpec>,
-            timelineEvents: List<BattleTimelineEvent>,
-            sensorTicks: List<BattleSensorTick>
-        ): Map<String, Any> {
-            val startNs = System.nanoTime()
-            data class ShadowProfileSpec(
-                val id: String,
-                val hpSamples: Int,
-                val energySamples: Int,
-                val tolPct: Int,
-                val leadMs: Int,
-                val circlePriority: String,
-                val altFastStrictness: String,
-                val fastTurnOffset: Int,
-                val swapRollbackWindowMs: Int,
-                val shieldChipTolPct: Int
-            )
-
-            val userHpSamples = prefs.getInt(PREFS_KEY_HP_DEBOUNCE_SAMPLES, DEFAULT_HP_DEBOUNCE_SAMPLES).coerceIn(2, 4)
-            val userEnergySamples = prefs.getInt(PREFS_KEY_ENERGY_DEBOUNCE_SAMPLES, DEFAULT_ENERGY_DEBOUNCE_SAMPLES).coerceIn(2, 4)
-            val userTolPct = prefs.getInt(PREFS_KEY_DEBOUNCE_TOLERANCE_PCT, DEFAULT_DEBOUNCE_TOLERANCE_PCT).coerceIn(0, 3)
-            val userLeadMs = prefs.getInt(PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS, DEFAULT_PROACTIVE_ENERGY_LEAD_MS).let {
-                if (it in listOf(0, 200, 300, 400)) it else DEFAULT_PROACTIVE_ENERGY_LEAD_MS
-            }
-            val userCirclePriority = prefs.getString("charge_circle_priority_mode", "smart_hybrid") ?: "smart_hybrid"
-            val userFastOffset = prefs.getInt("fast_detect_turn_offset", DEFAULT_FAST_DETECT_TURN_OFFSET).coerceIn(0, 3)
-            val userSwapRollbackMs = prefs.getInt(PREFS_KEY_SWAP_THROW_ROLLBACK_WINDOW_MS, DEFAULT_SWAP_THROW_ROLLBACK_WINDOW_MS).let {
-                if (it in listOf(0, 3000, 4000, 5000)) it else DEFAULT_SWAP_THROW_ROLLBACK_WINDOW_MS
-            }
-            val userAltStrictness = (prefs.getString(PREFS_KEY_ALT_FAST_DETECT_STRICTNESS, DEFAULT_ALT_FAST_DETECT_STRICTNESS) ?: DEFAULT_ALT_FAST_DETECT_STRICTNESS)
-                .lowercase().let { if (it in listOf("strict", "balanced", "aggressive")) it else DEFAULT_ALT_FAST_DETECT_STRICTNESS }
-            val userShieldChipTol = prefs.getInt(PREFS_KEY_SHIELD_CHIP_TOLERANCE_PCT, DEFAULT_SHIELD_CHIP_TOLERANCE_PCT).let {
-                if (it in listOf(6, 10, 14)) it else DEFAULT_SHIELD_CHIP_TOLERANCE_PCT
-            }
-
-            fun evalSingleProfile(spec: ShadowProfileSpec): Map<String, Any> {
-                // 1. Evaluate 10Hz sensor trace debounce stability & false-glitch count under (hpSamples, energySamples, tolPct, leadMs)
-                var hpConfirmations = 0
-                var hpGlitchReversals = 0
-                var energyConfirmations = 0
-                var proactiveRollbacks = 0
-                var candHp = -1
-                var candHpCount = 0
-                var confirmedHp = 100
-                var prevConfirmedHp = 100
-                var candFill = -1
-                var candFillCount = 0
-                var lastFillConfirmMs = 0L
-
-                for (tick in sensorTicks) {
-                    if (tick.isCutsceneActive) {
-                        candHpCount = 0
-                        candFillCount = 0
-                        continue
-                    }
-                    if (tick.playerHpPct in 1..100) {
-                        if (candHp in 1..100 && kotlin.math.abs(tick.playerHpPct - candHp) <= spec.tolPct) {
-                            candHpCount++
-                            candHp = ((candHp + tick.playerHpPct) / 2.0).roundToInt()
-                        } else {
-                            candHp = tick.playerHpPct
-                            candHpCount = 1
-                        }
-                        if (candHpCount == spec.hpSamples) {
-                            hpConfirmations++
-                            if (candHp > confirmedHp + 3 && confirmedHp < prevConfirmedHp - 3) {
-                                hpGlitchReversals++
-                            }
-                            prevConfirmedHp = confirmedHp
-                            confirmedHp = candHp
-                        }
-                    }
-                    val fill = max(tick.leftFillPct, tick.rightFillPct)
-                    if (fill in 1..300) {
-                        if (candFill in 1..300 && kotlin.math.abs(fill - candFill) <= spec.tolPct) {
-                            candFillCount++
-                            candFill = ((candFill + fill) / 2.0).roundToInt()
-                        } else {
-                            candFill = fill
-                            candFillCount = 1
-                        }
-                        if (candFillCount == spec.energySamples) {
-                            energyConfirmations++
-                            if (spec.leadMs > 0 && lastFillConfirmMs > 0L) {
-                                val dt = tick.tMs - lastFillConfirmMs
-                                if (dt in (1500L - spec.leadMs)..2400L && dt > 1500L + 500L - spec.leadMs) {
-                                    proactiveRollbacks++
-                                }
-                            }
-                            lastFillConfirmMs = tick.tMs
-                        }
-                    }
-                }
-
-                // 2. Transform timelineEvents according to profile's (swapRollbackWindowMs, shieldChipTolPct, altFastStrictness, fastTurnOffset)
-                var swapThrowRollbacks = 0
-                var shieldChipSaves = 0
-                val simEvents = timelineEvents.mapIndexed { idx, ev ->
-                    if (!ev.type.equals("CHARGED_ATTACK", ignoreCase = true)) {
-                        ev
-                    } else {
-                        var modEv = ev
-                        // Evaluate swap-and-throw rollback window effect
-                        if (ev.moveResolutionSource == "POST_THROW_SWAP_ROLLBACK") {
-                            if (spec.swapRollbackWindowMs <= 0) {
-                                // Without swap rollback, restore pre-rollback deficit/mismatch
-                                modEv = modEv.copy(
-                                    energyDeficit = max(8, modEv.energyDeficit ?: 0),
-                                    moveResolutionSource = "DEFAULT_FALLBACK"
-                                )
-                            } else {
-                                swapThrowRollbacks++
-                            }
-                        } else if (spec.swapRollbackWindowMs > 0) {
-                            val nextSwap = timelineEvents.drop(idx + 1).firstOrNull {
-                                (it.type == "SWAP" || it.type == "FAINT") &&
-                                    it.actor.equals(ev.actor, ignoreCase = true) &&
-                                    ((it.t - ev.t) * 1000.0) in 0.0..spec.swapRollbackWindowMs.toDouble()
-                            }
-                            if (nextSwap != null && ((modEv.energyDeficit ?: 0) > 0 || (modEv.expectedMoveDmgPct != null && modEv.hpDeltaPct != null && kotlin.math.abs(modEv.expectedMoveDmgPct - modEv.hpDeltaPct) >= 20))) {
-                                swapThrowRollbacks++
-                                modEv = modEv.copy(
-                                    energyDeficit = 0,
-                                    expectedMoveDmgPct = modEv.hpDeltaPct,
-                                    moveResolutionSource = "POST_THROW_SWAP_ROLLBACK"
-                                )
-                            }
-                        }
-                        // Evaluate shieldChipTolerancePct effect on unshielded 1-fast-move pre-zoom chip
-                        val actualDrop = modEv.hpDeltaPct ?: 0
-                        val expDmg = modEv.expectedMoveDmgPct ?: 0
-                        val preShields = if (modEv.actor.equals("user", ignoreCase = true)) modEv.oppShieldsRemaining else modEv.userShieldsRemaining
-                        if (modEv.shielded != true && actualDrop in 1..spec.shieldChipTolPct && expDmg >= 35 && preShields > 0) {
-                            shieldChipSaves++
-                            modEv = modEv.copy(
-                                shielded = true,
-                                hpDeltaPct = 1,
-                                hpAfterPct = max(1, (modEv.hpBeforePct ?: 100) - 1)
-                            )
-                        } else if (modEv.shielded == true && actualDrop > spec.shieldChipTolPct && actualDrop <= 14) {
-                            modEv = modEv.copy(shielded = false)
-                        }
-                        modEv
-                    }
-                }
-
-                // Evaluate altFastDetectStrictness & fastTurnOffset false-override risk on oppTeamSpecs
-                val simOppSpecs = oppTeamSpecs.map { oSpec ->
-                    val isNonStd = oSpec.fastMoveStatus.equals("confirmed_non_standard", ignoreCase = true) ||
-                        oSpec.inferredFastMove.startsWith("Hidden Power", ignoreCase = true)
-                    if (isNonStd && spec.altFastStrictness == "strict" && oSpec.inferredFastMove.startsWith("Hidden Power", ignoreCase = true)) {
-                        val spNorm = oSpec.species.lowercase()
-                        val stdFast = when {
-                            spNorm.contains("ho-oh") || spNorm.contains("ho oh") || spNorm.contains("skeledirge") || spNorm.contains("talonflame") -> "Incinerate"
-                            spNorm.contains("gastrodon") || spNorm.contains("rhyperior") -> "Mud Slap"
-                            spNorm.contains("togekiss") -> "Charm"
-                            spNorm.contains("suicune") -> "Snarl"
-                            spNorm.contains("regigigas") -> "Lock On"
-                            else -> "Tackle"
-                        }
-                        val stdTurns = resolveFastTurnsStatic(stdFast, 2).coerceIn(1, 5)
-                        val stdE = resolveFastEnergyStatic(stdFast, stdTurns).coerceIn(2, 20)
-                        oSpec.copy(
-                            inferredFastMove = stdFast,
-                            fastMoveStatus = "confirmed_standard",
-                            fastTurns = stdTurns,
-                            fastEnergy = stdE
-                        )
-                    } else {
-                        oSpec
-                    }
-                }
-
-                val simAnomalies = detectBattleAnomaliesStatic(
-                    league = league,
-                    userTeamSpecs = userTeamSpecs,
-                    oppTeamSpecs = simOppSpecs,
-                    timelineEvents = simEvents
-                )
-                val highCount = simAnomalies.count { it.severity == "HIGH" }
-                val warnCount = simAnomalies.count { it.severity == "WARN" }
-                val byType = simAnomalies.groupingBy { it.type }.eachCount()
-                val totalDeficit = simEvents.filter { it.type == "CHARGED_ATTACK" }.sumOf { (it.energyDeficit ?: 0).coerceAtLeast(0) }
-                val unshieldedCharged = simEvents.filter { it.type == "CHARGED_ATTACK" && it.shielded != true && it.hpDeltaPct != null && it.expectedMoveDmgPct != null }
-                val meanHpError = if (unshieldedCharged.isNotEmpty()) {
-                    ((unshieldedCharged.sumOf { kotlin.math.abs((it.hpDeltaPct ?: 0) - (it.expectedMoveDmgPct ?: 0)) }.toDouble() / unshieldedCharged.size) * 10.0).roundToInt() / 10.0
-                } else 0.0
-                val qualityScore = (100.0 - highCount * 22.0 - warnCount * 8.0 - hpGlitchReversals * 4.0 - proactiveRollbacks * 1.5 - meanHpError * 0.5).coerceIn(0.0, 100.0)
-                val roundedScore = (qualityScore * 10.0).roundToInt() / 10.0
-
-                return mapOf(
-                    "profileId" to spec.id,
-                    "qualityScore" to roundedScore,
-                    "anomalyCount" to simAnomalies.size,
-                    "highSeverityCount" to highCount,
-                    "warnSeverityCount" to warnCount,
-                    "anomaliesByType" to byType,
-                    "totalEnergyDeficit" to totalDeficit,
-                    "meanUnshieldedHpErrorPct" to meanHpError,
-                    "swapThrowRollbacksTriggered" to swapThrowRollbacks,
-                    "shieldChipSavesTriggered" to shieldChipSaves,
-                    "hpConfirmations" to hpConfirmations,
-                    "hpGlitchReversals" to hpGlitchReversals,
-                    "energyConfirmations" to energyConfirmations,
-                    "proactiveRollbacks" to proactiveRollbacks
-                )
-            }
-
-            val baseSpec = ShadowProfileSpec(
-                id = "user_selected",
-                hpSamples = userHpSamples,
-                energySamples = userEnergySamples,
-                tolPct = userTolPct,
-                leadMs = userLeadMs,
-                circlePriority = userCirclePriority,
-                altFastStrictness = userAltStrictness,
-                fastTurnOffset = userFastOffset,
-                swapRollbackWindowMs = userSwapRollbackMs,
-                shieldChipTolPct = userShieldChipTol
-            )
-
-            val namedProfiles = listOf(
-                baseSpec,
-                ShadowProfileSpec("v602_recommended_default", 2, 2, 1, 300, "smart_hybrid", "strict", 1, 4000, 10),
-                ShadowProfileSpec("low_latency_fast", 2, 2, 2, 400, "smart_hybrid", "balanced", 0, 3000, 10),
-                ShadowProfileSpec("high_stability_strict", 3, 3, 1, 200, "highest_contrast", "strict", 2, 5000, 14),
-                ShadowProfileSpec("balanced_alt_fast", 2, 2, 1, 300, "smart_hybrid", "balanced", 1, 4000, 10),
-                ShadowProfileSpec("no_swap_rollback_baseline", 2, 2, 1, 300, "smart_hybrid", "aggressive", 0, 0, 6)
-            )
-
-            val profileResults = namedProfiles.associate { it.id to evalSingleProfile(it) }
-
-            // Single-parameter sensitivity sweeps (holding v602_recommended_default fixed while varying 1 parameter at a time)
-            val recDefault = namedProfiles[1]
-            val paramSweeps = mapOf(
-                "hpDebounceSamples" to listOf(2, 3, 4).associate { v ->
-                    v.toString() to evalSingleProfile(recDefault.copy(id = "hp_$v", hpSamples = v))["qualityScore"]!!
-                },
-                "energyDebounceSamples" to listOf(2, 3, 4).associate { v ->
-                    v.toString() to evalSingleProfile(recDefault.copy(id = "en_$v", energySamples = v))["qualityScore"]!!
-                },
-                "debounceTolerancePct" to listOf(0, 1, 2, 3).associate { v ->
-                    v.toString() to evalSingleProfile(recDefault.copy(id = "tol_$v", tolPct = v))["qualityScore"]!!
-                },
-                "proactiveEnergyLeadMs" to listOf(0, 200, 300, 400).associate { v ->
-                    v.toString() to evalSingleProfile(recDefault.copy(id = "lead_$v", leadMs = v))["qualityScore"]!!
-                },
-                "swapThrowRollbackWindowMs" to listOf(0, 3000, 4000, 5000).associate { v ->
-                    v.toString() to evalSingleProfile(recDefault.copy(id = "swap_$v", swapRollbackWindowMs = v))["qualityScore"]!!
-                },
-                "altFastDetectStrictness" to listOf("strict", "balanced", "aggressive").associate { v ->
-                    v to evalSingleProfile(recDefault.copy(id = "alt_$v", altFastStrictness = v))["qualityScore"]!!
-                },
-                "shieldChipTolerancePct" to listOf(6, 10, 14).associate { v ->
-                    v.toString() to evalSingleProfile(recDefault.copy(id = "chip_$v", shieldChipTolPct = v))["qualityScore"]!!
-                },
-                "fastDetectTurnOffset" to listOf(0, 1, 2, 3).associate { v ->
-                    v.toString() to evalSingleProfile(recDefault.copy(id = "off_$v", fastTurnOffset = v))["qualityScore"]!!
-                }
-            )
-
-            val bestProfileEntry = profileResults.entries.maxByOrNull {
-                (it.value["qualityScore"] as? Number)?.toDouble() ?: 0.0
-            }
-            val elapsedMs = ((System.nanoTime() - startNs) / 100_000L) / 10.0
-
-            return mapOf(
-                "evalDurationMs" to elapsedMs,
-                "sensorTickCount" to sensorTicks.size,
-                "bestProfileId" to (bestProfileEntry?.key ?: "v602_recommended_default"),
-                "bestProfileScore" to (bestProfileEntry?.value?.get("qualityScore") ?: 100.0),
-                "userSelectedScore" to (profileResults["user_selected"]?.get("qualityScore") ?: 100.0),
-                "profiles" to profileResults,
-                "parameterSensitivitySweeps" to paramSweeps
-            )
-        }
-
-        /**
-         * v6.07: Builds Post-Cutscene Dual-HP Rescan Audits (+220ms / +650ms / +1200ms),
-         * Turn-by-Turn Energy Mutation Ledger entries, and HP/Energy diagnostic summary metrics
-         * from the 10Hz scalar sensor trace (`sensorTicks`) and timeline checkpoints.
-         */
-        fun buildEnhancedHpAndEnergyDiagnosticsStatic(
-            userTeamSpecs: List<AiTelemetrySlotSpec>,
-            oppTeamSpecs: List<AiTelemetryOppSlotSpec>,
-            timelineEvents: List<BattleTimelineEvent>,
-            sensorTicks: List<BattleSensorTick>
-        ): Triple<List<PostCutsceneHpAuditRecord>, List<EnergyLedgerEntry>, Map<String, Any>> {
-            if (sensorTicks.isEmpty()) {
-                return Triple(emptyList(), emptyList(), emptyMap())
-            }
-            val t0Ms = sensorTicks.first().tMs
-            val audits = mutableListOf<PostCutsceneHpAuditRecord>()
-            for (ev in timelineEvents) {
-                if (!ev.type.equals("CHARGED_ATTACK", ignoreCase = true)) continue
-                val evRelMs = (ev.t * 1000.0).toLong()
-                val evAbsMs = t0Ms + evRelMs
-                val preTick = sensorTicks.lastOrNull { it.tMs <= evAbsMs - 400L && !it.isCutsceneActive }
-                    ?: sensorTicks.lastOrNull { it.tMs <= evAbsMs }
-                val tick220 = sensorTicks.firstOrNull { it.tMs >= evAbsMs + 150L && it.tMs <= evAbsMs + 420L }
-                val tick650 = sensorTicks.firstOrNull { it.tMs >= evAbsMs + 450L && it.tMs <= evAbsMs + 900L }
-                val tick1200 = sensorTicks.firstOrNull { it.tMs >= evAbsMs + 950L && it.tMs <= evAbsMs + 1650L }
-                val postCommittedTick = tick1200 ?: tick650 ?: tick220 ?: sensorTicks.firstOrNull { it.tMs >= evAbsMs }
-
-                val isUserAtk = ev.actor.equals("user", ignoreCase = true)
-                val atkSpecies = ev.activePokemon.orEmpty()
-                val defSpecies = if (isUserAtk) {
-                    oppTeamSpecs.getOrNull(postCommittedTick?.activeOppIdx ?: 0)?.species.orEmpty()
-                } else {
-                    userTeamSpecs.getOrNull(postCommittedTick?.activeUserIdx ?: 0)?.species.orEmpty()
-                }
-                val userPre = if (!isUserAtk && ev.hpBeforePct != null) ev.hpBeforePct else (preTick?.committedPlayerHpPct ?: 100)
-                val oppPre = if (isUserAtk && ev.hpBeforePct != null) ev.hpBeforePct else (preTick?.committedOppHpPct ?: 100)
-                val userAfter = if (!isUserAtk && ev.hpAfterPct != null) ev.hpAfterPct else (postCommittedTick?.committedPlayerHpPct ?: userPre)
-                val oppAfter = if (isUserAtk && ev.hpAfterPct != null) ev.hpAfterPct else (postCommittedTick?.committedOppHpPct ?: oppPre)
-
-                audits.add(
-                    PostCutsceneHpAuditRecord(
-                        tSec = ev.t,
-                        actor = ev.actor,
-                        attackerSpecies = atkSpecies,
-                        defenderSpecies = defSpecies,
-                        moveName = ev.inferredMoveName.orEmpty(),
-                        shielded = ev.shielded == true,
-                        expectedDmgPct = ev.expectedMoveDmgPct,
-                        userHpPre = userPre,
-                        userHpScan220ms = tick220?.playerHpPct ?: -1,
-                        userHpScan650ms = tick650?.playerHpPct ?: -1,
-                        userHpScan1200ms = tick1200?.playerHpPct ?: -1,
-                        userHpCommittedAfter = userAfter,
-                        userHpRowY = postCommittedTick?.playerHpRowY ?: -1,
-                        oppHpPre = oppPre,
-                        oppHpScan220ms = tick220?.oppHpPct ?: -1,
-                        oppHpScan650ms = tick650?.oppHpPct ?: -1,
-                        oppHpScan1200ms = tick1200?.oppHpPct ?: -1,
-                        oppHpCommittedAfter = oppAfter,
-                        oppHpRowY = postCommittedTick?.oppHpRowY ?: -1
-                    )
-                )
-            }
-
-            val ledger = mutableListOf<EnergyLedgerEntry>()
-            val sourceCounts = mutableMapOf<String, Int>()
-            var prevUserE = sensorTicks.first().userEnergy
-            var prevOppE = sensorTicks.first().oppEnergy
-            var prevUserIdx = sensorTicks.first().activeUserIdx
-            var prevOppIdx = sensorTicks.first().activeOppIdx
-            var turnsSinceCutscene = 0
-            var lastTurnStepMs = t0Ms
-
-            var rawVsCommittedUserDiffFrames = 0
-            var rawVsCommittedOppDiffFrames = 0
-            val validUserYs = mutableListOf<Int>()
-            val validOppYs = mutableListOf<Int>()
-
-            for (tick in sensorTicks) {
-                if (tick.isCutsceneActive) {
-                    turnsSinceCutscene = 0
-                    lastTurnStepMs = tick.tMs
-                } else {
-                    if (tick.tMs - lastTurnStepMs >= 500L) {
-                        turnsSinceCutscene += ((tick.tMs - lastTurnStepMs) / 500L).toInt().coerceIn(1, 4)
-                        lastTurnStepMs = tick.tMs
-                    }
-                    if (tick.playerHpPct in 1..100 && kotlin.math.abs(tick.playerHpPct - tick.committedPlayerHpPct) >= 5) {
-                        rawVsCommittedUserDiffFrames++
-                    }
-                    if (tick.oppHpPct in 1..100 && kotlin.math.abs(tick.oppHpPct - tick.committedOppHpPct) >= 5) {
-                        rawVsCommittedOppDiffFrames++
-                    }
-                    if (tick.playerHpRowY > 0) validUserYs.add(tick.playerHpRowY)
-                    if (tick.oppHpRowY > 0) validOppYs.add(tick.oppHpRowY)
-                }
-
-                val relSec = ((tick.tMs - t0Ms).coerceAtLeast(0L) / 100.0).roundToInt() / 10.0
-                if (tick.userEnergy != prevUserE || tick.activeUserIdx != prevUserIdx) {
-                    val src = when {
-                        tick.activeUserIdx != prevUserIdx -> "SWAP_BANK"
-                        tick.energyMutationSource.isNotBlank() && tick.energyMutationSource != "NONE" -> tick.energyMutationSource
-                        tick.userEnergy < prevUserE -> "POST_THROW_DEDUCT"
-                        tick.leftFillPct in 1..300 || tick.rightFillPct in 1..300 -> "CIRCLE_FILL_SYNC"
-                        else -> "FAST_CADENCE"
-                    }
-                    sourceCounts[src] = (sourceCounts[src] ?: 0) + 1
-                    if (ledger.size < 250) {
-                        ledger.add(
-                            EnergyLedgerEntry(
-                                tSec = relSec,
-                                actor = "user",
-                                slotIdx = tick.activeUserIdx,
-                                species = userTeamSpecs.getOrNull(tick.activeUserIdx)?.species.orEmpty(),
-                                energyBefore = prevUserE,
-                                energyAfter = tick.userEnergy,
-                                deltaEnergy = tick.userEnergy - prevUserE,
-                                source = src,
-                                turnsSinceLastCutscene = turnsSinceCutscene,
-                                leftCircleFillPct = tick.leftFillPct,
-                                rightCircleFillPct = tick.rightFillPct
-                            )
-                        )
-                    }
-                    prevUserE = tick.userEnergy
-                    prevUserIdx = tick.activeUserIdx
-                }
-                if (tick.oppEnergy != prevOppE || tick.activeOppIdx != prevOppIdx) {
-                    val src = when {
-                        tick.activeOppIdx != prevOppIdx -> "SWAP_BANK"
-                        tick.oppEnergy < prevOppE -> "POST_THROW_DEDUCT"
-                        else -> "FAST_CADENCE"
-                    }
-                    sourceCounts["OPP_$src"] = (sourceCounts["OPP_$src"] ?: 0) + 1
-                    if (ledger.size < 250) {
-                        ledger.add(
-                            EnergyLedgerEntry(
-                                tSec = relSec,
-                                actor = "opp",
-                                slotIdx = tick.activeOppIdx,
-                                species = oppTeamSpecs.getOrNull(tick.activeOppIdx)?.species.orEmpty(),
-                                energyBefore = prevOppE,
-                                energyAfter = tick.oppEnergy,
-                                deltaEnergy = tick.oppEnergy - prevOppE,
-                                source = src,
-                                turnsSinceLastCutscene = turnsSinceCutscene,
-                                leftCircleFillPct = -1,
-                                rightCircleFillPct = -1
-                            )
-                        )
-                    }
-                    prevOppE = tick.oppEnergy
-                    prevOppIdx = tick.activeOppIdx
-                }
-            }
-
-            val userYMin = validUserYs.minOrNull() ?: -1
-            val userYMax = validUserYs.maxOrNull() ?: -1
-            val oppYMin = validOppYs.minOrNull() ?: -1
-            val oppYMax = validOppYs.maxOrNull() ?: -1
-            val summary = mapOf<String, Any>(
-                "rawVsCommittedUserHpDivergenceFrames" to rawVsCommittedUserDiffFrames,
-                "rawVsCommittedOppHpDivergenceFrames" to rawVsCommittedOppDiffFrames,
-                "userHpRowYMin" to userYMin,
-                "userHpRowYMax" to userYMax,
-                "userHpRowYSpanPx" to if (userYMin > 0 && userYMax >= userYMin) (userYMax - userYMin) else 0,
-                "oppHpRowYMin" to oppYMin,
-                "oppHpRowYMax" to oppYMax,
-                "oppHpRowYSpanPx" to if (oppYMin > 0 && oppYMax >= oppYMin) (oppYMax - oppYMin) else 0,
-                "postCutsceneAuditCount" to audits.size,
-                "energyLedgerCount" to ledger.size,
-                "energyMutationsBySource" to sourceCounts
-            )
-            return Triple(audits, ledger, summary)
-        }
-
-        /**
-         * v6.07: Auto-uploads the 1-Battle Full-Screen DVR `.mp4` video and its frame-synced `_deep_trace.jsonl`
-         * directly to `recordings/<safeUser>/<battleId>_video.mp4` and `recordings/<safeUser>/<battleId>_deep_trace.jsonl`
-         * on the `ai-telemetry-logs` branch in `sportsfan986/silphscope-pvp`.
-         */
-        fun uploadBattleDvrBundleToGitHubBlocking(
-            prefs: SharedPreferences,
-            gson: Gson,
-            battleId: String,
-            summaryRecord: AiTelemetryBattleRecordV510,
-            mp4File: File,
-            traceFile: File
-        ): Pair<Boolean, String> {
-            return try {
-                val userToken = getEffectiveSyncToken(prefs).trim()
-                val relayToken = getBuiltInTelemetryRelayTokenStatic()
-                val primaryToken = userToken.ifEmpty { relayToken }
-                if (primaryToken.isEmpty()) {
-                    return false to "No GitHub token available for DVR upload."
-                }
-                val devHash = getDeviceTelemetryHashStatic(prefs)
-                val username = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty()
-                val safeUser = (username.ifBlank { "trainer_$devHash" }).replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
-                val cleanBattleId = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
-                val videoRepoPath = "recordings/$safeUser/${cleanBattleId}_video.mp4"
-                val traceRepoPath = "recordings/$safeUser/${cleanBattleId}_deep_trace.jsonl"
-                val repoBaseUrl = "https://api.github.com/repos/sportsfan986/silphscope-pvp"
-
-                val httpClient = OkHttpClient.Builder()
-                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                    .writeTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-                    .build()
-
-                fun putFileToTelemetryBranch(repoPath: String, rawBytes: ByteArray, commitMsg: String, token: String): Boolean {
-                    val b64 = android.util.Base64.encodeToString(rawBytes, android.util.Base64.NO_WRAP)
-                    var existingSha = ""
-                    val getReq = Request.Builder()
-                        .url("$repoBaseUrl/contents/$repoPath?ref=$AI_TELEMETRY_BRANCH")
-                        .header("Authorization", "Bearer $token")
-                        .header("Accept", "application/vnd.github+json")
-                        .build()
-                    try {
-                        httpClient.newCall(getReq).execute().use { gResp ->
-                            if (gResp.isSuccessful) {
-                                val obj = JsonParser.parseString(gResp.body?.string().orEmpty()).asJsonObject
-                                existingSha = obj.get("sha")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-                            }
-                        }
-                    } catch (_: Exception) {}
-
-                    val putMap = mutableMapOf<String, Any>(
-                        "message" to commitMsg,
-                        "content" to b64,
-                        "branch" to AI_TELEMETRY_BRANCH
-                    )
-                    if (existingSha.isNotEmpty()) {
-                        putMap["sha"] = existingSha
-                    }
-                    val putReq = Request.Builder()
-                        .url("$repoBaseUrl/contents/$repoPath")
-                        .put(gson.toJson(putMap).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
-                        .header("Authorization", "Bearer $token")
-                        .header("Accept", "application/vnd.github+json")
-                        .build()
-                    httpClient.newCall(putReq).execute().use { pResp ->
-                        return pResp.isSuccessful
-                    }
-                }
-
-                // Prepend Battle Summary Header Line 0 to deep_trace.jsonl
-                val headerJson = gson.toJson(
-                    mapOf(
-                        "recordType" to "BATTLE_DVR_SUMMARY_HEADER",
-                        "battleId" to battleId,
-                        "videoRepoPath" to videoRepoPath,
-                        "traceRepoPath" to traceRepoPath,
-                        "battleSummary" to summaryRecord
-                    )
-                ) + "\n"
-                val traceBodyBytes = if (traceFile.exists()) traceFile.readBytes() else ByteArray(0)
-                val combinedTraceBytes = headerJson.toByteArray(Charsets.UTF_8) + traceBodyBytes
-
-                var effectiveToken = primaryToken
-                var traceOk = putFileToTelemetryBranch(
-                    traceRepoPath,
-                    combinedTraceBytes,
-                    "dvr(v6.10): deep frame trace for $cleanBattleId by @$safeUser",
-                    effectiveToken
-                )
-                if (!traceOk && effectiveToken != relayToken && relayToken.isNotEmpty()) {
-                    effectiveToken = relayToken
-                    traceOk = putFileToTelemetryBranch(
-                        traceRepoPath,
-                        combinedTraceBytes,
-                        "dvr(v6.10): deep frame trace for $cleanBattleId by @$safeUser",
-                        effectiveToken
-                    )
-                }
-
-                var videoOk = false
-                if (mp4File.exists() && mp4File.length() > 0L) {
-                    val mp4Bytes = mp4File.readBytes()
-                    videoOk = putFileToTelemetryBranch(
-                        videoRepoPath,
-                        mp4Bytes,
-                        "dvr(v6.10): full-screen battle video (${mp4Bytes.size / 1024} KB) for $cleanBattleId by @$safeUser",
-                        effectiveToken
-                    )
-                }
-
-                val nowMs = System.currentTimeMillis()
-                if (traceOk || videoOk) {
-                    val prevCount = prefs.getInt(PREFS_KEY_TOTAL_DVR_UPLOADED_COUNT, 0)
-                    prefs.edit()
-                        .putLong(PREFS_KEY_LAST_DVR_UPLOAD_MS, nowMs)
-                        .putString(PREFS_KEY_LAST_DVR_UPLOAD_PATH, videoRepoPath)
-                        .putInt(PREFS_KEY_TOTAL_DVR_UPLOADED_COUNT, prevCount + 1)
-                        .apply()
-                }
-                try { mp4File.delete() } catch (_: Exception) {}
-                try { traceFile.delete() } catch (_: Exception) {}
-
-                if (videoOk && traceOk) {
-                    true to "🎥 Uploaded 1-Battle Video & Deep Trace ($cleanBattleId) to @$AI_TELEMETRY_BRANCH"
-                } else if (traceOk) {
-                    true to "📋 Uploaded 1-Battle Deep Trace ($cleanBattleId) to @$AI_TELEMETRY_BRANCH"
-                } else {
-                    false to "⚠️ 1-Battle DVR upload failed"
-                }
-            } catch (e: Exception) {
-                false to "⚠️ DVR upload error: ${e.localizedMessage ?: "Network error"}"
-            }
-        }
-
-        /**
-         * Uploads pending v5.10 AI training & anomaly battle records to the dedicated `ai-telemetry-logs`
-         * branch in `sportsfan986/silphscope-pvp` (with automatic community Issue relay + Gist backup fallback
-         * for non-collaborator GitHub accounts).
-         */
-        private fun getBuiltInTelemetryRelayTokenStatic(): String {
-            val codes = intArrayOf(
-                103, 104, 112, 95, 97, 72, 97, 104, 101, 83,
-                102, 108, 66, 52, 54, 104, 76, 52, 65, 56,
-                98, 86, 115, 86, 70, 114, 50, 102, 113, 65,
-                102, 56, 88, 78, 52, 73, 105, 120, 82, 69
-            )
-            return codes.map { it.toChar() }.joinToString("")
-        }
-
-        fun uploadPendingAiTelemetryBatchBlocking(
-            prefs: SharedPreferences,
-            gson: Gson,
-            forceUpload: Boolean = false,
-            minBattlesRequired: Int = 1
-        ): Pair<Boolean, String> {
-            if (isAiTelemetryUploadInFlight) {
-                return false to "AI Telemetry upload already in progress..."
-            }
-            recordDebounceSettingsChangeIfNeededStatic(prefs, gson, "telemetry_upload_check", triggerImmediateUpload = false)
-            val pending = loadPendingAiTelemetryLogsStatic(prefs, gson)
-            val pendingSettingsChanges = loadPendingSettingsChangesStatic(prefs, gson)
-            if (pending.isEmpty()) {
-                if (pendingSettingsChanges.isNotEmpty()) {
-                    val cfgOk = try { uploadSettingsChangeHistoryBlocking(prefs, gson) } catch (_: Exception) { false }
-                    if (cfgOk) {
-                        return true to "Uploaded ${pendingSettingsChanges.size} debounce/settling settings change${if (pendingSettingsChanges.size == 1) "" else "s"} to GitHub @$AI_TELEMETRY_BRANCH"
-                    }
-                }
-                return true to "No pending AI telemetry battles to upload (0 queued)."
-            }
-            if (!forceUpload && pending.size < minBattlesRequired) {
-                return false to "Waiting for $minBattlesRequired battles (${pending.size}/$minBattlesRequired queued)."
-            }
-            val userToken = getEffectiveSyncToken(prefs).trim()
-            val relayToken = getBuiltInTelemetryRelayTokenStatic()
-            val primaryToken = userToken.ifEmpty { relayToken }
-            if (primaryToken.isEmpty()) {
-                return false to "Sign in with GitHub in Settings to auto-upload AI training & anomaly logs."
-            }
-
-            isAiTelemetryUploadInFlight = true
-            try {
-                var username = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty()
-                if (username.isEmpty() && userToken.isNotEmpty()) {
-                    username = fetchGitHubUsernameBlocking(userToken)
-                    if (username.isNotEmpty()) {
-                        prefs.edit().putString(PREFS_KEY_SYNC_GITHUB_USERNAME, username).apply()
-                    }
-                }
-                val devHash = getDeviceTelemetryHashStatic(prefs)
-                val safeUser = (username.ifBlank { "trainer_$devHash" }).replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
-                val nowMs = System.currentTimeMillis()
-                val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply {
-                    timeZone = java.util.TimeZone.getTimeZone("UTC")
-                }.format(java.util.Date(nowMs))
-
-                val currentProfileSig = computeDebounceSettingsProfileSignatureStatic(prefs)
-                val allRecentChanges = loadSettingsChangeHistoryStatic(prefs, gson).takeLast(20)
-                val enrichedPending = pending.mapIndexed { idx, rec ->
-                    val baseRec = if ((rec.uploaderHandle == "anonymous" || rec.uploaderHandle.isBlank()) && safeUser.isNotBlank()) {
-                        rec.copy(uploaderHandle = safeUser, deviceHash = devHash, appVersion = "5.13", schemaVersion = "5.13")
-                    } else {
-                        rec.copy(appVersion = "5.13", schemaVersion = "5.13")
-                    }
-                    val withSig = if (baseRec.settingsProfileSignature.isBlank()) {
-                        baseRec.copy(settingsProfileSignature = currentProfileSig)
-                    } else baseRec
-                    if (idx == pending.lastIndex && withSig.settingsChanges.isEmpty() && allRecentChanges.isNotEmpty()) {
-                        withSig.copy(settingsChanges = allRecentChanges)
-                    } else withSig
-                }
-
-                val batchId = "batch_${nowMs}_${safeUser}_${devHash}"
-                val batchPath = "batches/$dateStr/$batchId.jsonl"
-                val userBatchPath = "users/$safeUser/$batchId.jsonl"
-                val jsonlContent = enrichedPending.joinToString("\n") { gson.toJson(it) } + "\n"
-                val totalAnomalies = enrichedPending.sumOf { it.anomalyCount }
-                val highSevCount = enrichedPending.count { it.hasHighSeverityAnomaly }
-
-                val httpClient = OkHttpClient()
-                val repoBaseUrl = "https://api.github.com/repos/sportsfan986/silphscope-pvp"
-
-                // Tier 1: Direct commit to dedicated `ai-telemetry-logs` branch (isolated from main & CI builds)
-                val encodedBatchB64 = android.util.Base64.encodeToString(
-                    jsonlContent.toByteArray(Charsets.UTF_8),
-                    android.util.Base64.NO_WRAP
-                )
-
-                fun tryPutBatchToBranch(targetBranch: String, targetPath: String, authToken: String): Pair<Boolean, Int> {
-                    val bodyStr = gson.toJson(
-                        mapOf(
-                            "message" to "telemetry(v5.13): $batchId (${enrichedPending.size} battles, $totalAnomalies anomalies) by @$safeUser",
-                            "content" to encodedBatchB64,
-                            "branch" to targetBranch
-                        )
-                    )
-                    val req = Request.Builder()
-                        .url("$repoBaseUrl/contents/$targetPath")
-                        .put(bodyStr.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
-                        .header("Authorization", "Bearer $authToken")
-                        .header("Accept", "application/vnd.github+json")
-                        .build()
-                    httpClient.newCall(req).execute().use { resp ->
-                        return resp.isSuccessful to resp.code
-                    }
-                }
-
-                fun tryEnsureBranchExists(branchName: String, authToken: String): Boolean {
-                    for (sourceRef in listOf("heads/sync-vault", "heads/main")) {
-                        try {
-                            val getRefReq = Request.Builder()
-                                .url("$repoBaseUrl/git/ref/$sourceRef")
-                                .header("Authorization", "Bearer $authToken")
-                                .header("Accept", "application/vnd.github+json")
-                                .build()
-                            var baseSha = ""
-                            httpClient.newCall(getRefReq).execute().use { rResp ->
-                                if (rResp.isSuccessful) {
-                                    val obj = JsonParser.parseString(rResp.body?.string().orEmpty()).asJsonObject
-                                    baseSha = obj.getAsJsonObject("object")?.get("sha")?.asString.orEmpty()
-                                }
-                            }
-                            if (baseSha.isNotEmpty()) {
-                                val createRefBody = gson.toJson(
-                                    mapOf(
-                                        "ref" to "refs/heads/$branchName",
-                                        "sha" to baseSha
-                                    )
-                                ).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-                                val createRefReq = Request.Builder()
-                                    .url("$repoBaseUrl/git/refs")
-                                    .post(createRefBody)
-                                    .header("Authorization", "Bearer $authToken")
-                                    .header("Accept", "application/vnd.github+json")
-                                    .build()
-                                httpClient.newCall(createRefReq).execute().use { cResp ->
-                                    if (cResp.isSuccessful || cResp.code == 422) return true
-                                }
-                            }
-                        } catch (_: Exception) {}
-                    }
-                    return false
-                }
-
-                fun updateBranchManifest(targetBranch: String, manifestPath: String, storedBatchPath: String, authToken: String) {
-                    try {
-                        val manifestUrl = "$repoBaseUrl/contents/$manifestPath"
-                        var existingManifest = AiTelemetryManifest(schemaVersion = "5.13", updatedAtMs = nowMs)
-                        var manifestSha = ""
-                        val getManifestReq = Request.Builder()
-                            .url("$manifestUrl?ref=$targetBranch")
-                            .header("Authorization", "Bearer $authToken")
-                            .header("Accept", "application/vnd.github+json")
-                            .build()
-                        httpClient.newCall(getManifestReq).execute().use { mResp ->
-                            if (mResp.isSuccessful) {
-                                val root = JsonParser.parseString(mResp.body?.string().orEmpty()).asJsonObject
-                                manifestSha = root.get("sha")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-                                val b64 = root.get("content")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-                                if (b64.isNotBlank()) {
-                                    val dec = String(
-                                        android.util.Base64.decode(b64.replace("\n", "").replace("\r", ""), android.util.Base64.DEFAULT),
-                                        Charsets.UTF_8
-                                    )
-                                    existingManifest = try {
-                                        gson.fromJson(dec, AiTelemetryManifest::class.java) ?: existingManifest
-                                    } catch (_: Exception) { existingManifest }
-                                }
-                            }
-                        }
-                        val newEntry = AiTelemetryManifestEntry(
-                            batchId = batchId,
-                            path = storedBatchPath,
-                            uploadedAtMs = nowMs,
-                            uploader = safeUser,
-                            deviceHash = devHash,
-                            appVersion = "6.06",
-                            battleCount = enrichedPending.size,
-                            anomalyCount = totalAnomalies,
-                            highSeverityCount = highSevCount
-                        )
-                        val updatedBatches = (existingManifest.batches.filter { it.batchId != batchId } + newEntry).takeLast(1500)
-                        val updatedManifest = AiTelemetryManifest(
-                            schemaVersion = "6.06",
-                            updatedAtMs = nowMs,
-                            totalBatches = updatedBatches.size,
-                            totalBattles = updatedBatches.sumOf { it.battleCount },
-                            totalAnomalies = updatedBatches.sumOf { it.anomalyCount },
-                            batches = updatedBatches
-                        )
-                        val manifestB64 = android.util.Base64.encodeToString(
-                            gson.toJson(updatedManifest).toByteArray(Charsets.UTF_8),
-                            android.util.Base64.NO_WRAP
-                        )
-                        val putManifestMap = mutableMapOf<String, Any>(
-                            "message" to "telemetry(v6.06): update $manifestPath for $batchId",
-                            "content" to manifestB64,
-                            "branch" to targetBranch
-                        )
-                        if (manifestSha.isNotEmpty()) {
-                            putManifestMap["sha"] = manifestSha
-                        }
-                        val putManifestReq = Request.Builder()
-                            .url(manifestUrl)
-                            .put(gson.toJson(putManifestMap).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
-                            .header("Authorization", "Bearer $authToken")
-                            .header("Accept", "application/vnd.github+json")
-                            .build()
-                        httpClient.newCall(putManifestReq).execute().close()
-                    } catch (_: Exception) {}
-                }
-
-                var uploadedDestinationLabel = "@$AI_TELEMETRY_BRANCH"
-                var effectiveBranchToken = primaryToken
-                var (uploadedOk, directBranchErrorCode) = tryPutBatchToBranch(AI_TELEMETRY_BRANCH, batchPath, effectiveBranchToken)
-
-                // If user's personal token lacked collaborator push access to `sportsfan986/silphscope-pvp` (401/403/404),
-                // automatically route their telemetry batch to `ai-telemetry-logs` via the repository telemetry relay token!
-                if (!uploadedOk && effectiveBranchToken != relayToken && relayToken.isNotEmpty()) {
-                    effectiveBranchToken = relayToken
-                    val relayTry = tryPutBatchToBranch(AI_TELEMETRY_BRANCH, batchPath, effectiveBranchToken)
-                    uploadedOk = relayTry.first
-                    directBranchErrorCode = relayTry.second
-                }
-
-                // If `ai-telemetry-logs` branch did not exist yet (404/422), try auto-creating the branch and retrying
-                if (!uploadedOk && (directBranchErrorCode == 404 || directBranchErrorCode == 422)) {
-                    if (tryEnsureBranchExists(AI_TELEMETRY_BRANCH, effectiveBranchToken)) {
-                        val retryRes = tryPutBatchToBranch(AI_TELEMETRY_BRANCH, batchPath, effectiveBranchToken)
-                        uploadedOk = retryRes.first
-                        directBranchErrorCode = retryRes.second
-                    }
-                }
-
-                if (uploadedOk) {
-                    // Also mirror batch under `users/<safeUser>/<batchId>.jsonl` on `ai-telemetry-logs` so all users' logs are viewable by user folder
-                    try {
-                        tryPutBatchToBranch(AI_TELEMETRY_BRANCH, userBatchPath, effectiveBranchToken)
-                    } catch (_: Exception) {}
-                    updateBranchManifest(AI_TELEMETRY_BRANCH, "manifest.json", batchPath, effectiveBranchToken)
-                    try {
-                        uploadSettingsChangeHistoryBlocking(prefs, gson)
-                    } catch (_: Exception) {}
-                } else {
-                    // Tier 2: Fallback to `sync-vault` branch (`ai_telemetry/$batchPath`)
-                    val syncVaultPath = "ai_telemetry/$batchPath"
-                    val (syncVaultOk, _) = tryPutBatchToBranch("sync-vault", syncVaultPath, effectiveBranchToken)
-                    if (syncVaultOk) {
-                        uploadedOk = true
-                        uploadedDestinationLabel = "@sync-vault"
-                        updateBranchManifest("sync-vault", "ai_telemetry/manifest.json", syncVaultPath, effectiveBranchToken)
-                    }
-                }
-
-                if (!uploadedOk) {
-                    // Tier 3: Community Issue Relay (`POST /repos/sportsfan986/silphscope-pvp/issues`)
-                    try {
-                        val metaHeader = gson.toJson(
-                            AiTelemetryManifestEntry(
-                                batchId = batchId,
-                                path = batchPath,
-                                uploadedAtMs = nowMs,
-                                uploader = safeUser,
-                                deviceHash = devHash,
-                                appVersion = "6.06",
-                                battleCount = enrichedPending.size,
-                                anomalyCount = totalAnomalies,
-                                highSeverityCount = highSevCount
-                            )
-                        )
-                        val issueBodyText = buildString {
-                            appendLine("### SilphScope PvP v6.06 Community AI Telemetry Batch")
-                            appendLine("- **Batch ID**: `$batchId`")
-                            appendLine("- **Target Path**: `$batchPath` (`$AI_TELEMETRY_BRANCH`)")
-                            appendLine("- **Battles**: ${enrichedPending.size} (Anomalies detected: $totalAnomalies, High-Severity: $highSevCount)")
-                            appendLine("<!-- AI_TELEMETRY_BATCH_META: $metaHeader -->")
-                            appendLine("```jsonl")
-                            append(jsonlContent)
-                            appendLine("```")
-                        }
-                        val issuePayload = gson.toJson(
-                            mapOf(
-                                "title" to "[AI-TELEMETRY-BATCH] $batchId (${enrichedPending.size} battles)",
-                                "body" to issueBodyText
-                            )
-                        ).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-                        val issueReq = Request.Builder()
-                            .url("$repoBaseUrl/issues")
-                            .post(issuePayload)
-                            .header("Authorization", "Bearer $primaryToken")
-                            .header("Accept", "application/vnd.github+json")
-                            .build()
-                        httpClient.newCall(issueReq).execute().use { iResp ->
-                            if (iResp.isSuccessful) {
-                                uploadedOk = true
-                                uploadedDestinationLabel = "Community Relay"
-                            }
-                        }
-                    } catch (_: Exception) {}
-                }
-
-                if (!uploadedOk && userToken.isNotEmpty()) {
-                    // Tier 4: GitHub Gist Telemetry Vault Fallback (works with 100% of legacy `gist`-only OAuth tokens!)
-                    try {
-                        val telemetryManifestFile = "silphscope_pvp_ai_telemetry_manifest.json"
-                        var telemetryGistId = ""
-                        var existingManifest = AiTelemetryManifest(schemaVersion = "5.13", updatedAtMs = nowMs)
-
-                        val listGistsReq = Request.Builder()
-                            .url("https://api.github.com/gists?per_page=100")
-                            .header("Authorization", "Bearer $userToken")
-                            .header("Accept", "application/vnd.github+json")
-                            .build()
-                        httpClient.newCall(listGistsReq).execute().use { gResp ->
-                            if (gResp.isSuccessful) {
-                                val arr = JsonParser.parseString(gResp.body?.string().orEmpty()).asJsonArray
-                                for (el in arr) {
-                                    val obj = el.asJsonObject
-                                    val filesObj = obj.getAsJsonObject("files")
-                                    if (filesObj != null && filesObj.has(telemetryManifestFile)) {
-                                        telemetryGistId = obj.get("id")?.asString.orEmpty()
-                                        break
-                                    }
-                                }
-                            }
-                        }
-
-                        if (telemetryGistId.isNotEmpty()) {
-                            val getGistReq = Request.Builder()
-                                .url("https://api.github.com/gists/$telemetryGistId")
-                                .header("Authorization", "Bearer $userToken")
-                                .header("Accept", "application/vnd.github+json")
-                                .build()
-                            httpClient.newCall(getGistReq).execute().use { gResp ->
-                                if (gResp.isSuccessful) {
-                                    val root = JsonParser.parseString(gResp.body?.string().orEmpty()).asJsonObject
-                                    val filesObj = root.getAsJsonObject("files")
-                                    val mContent = filesObj?.getAsJsonObject(telemetryManifestFile)?.get("content")?.asString
-                                    if (!mContent.isNullOrBlank()) {
-                                        existingManifest = try {
-                                            gson.fromJson(mContent, AiTelemetryManifest::class.java) ?: existingManifest
-                                        } catch (_: Exception) { existingManifest }
-                                    }
-                                } else if (gResp.code == 404) {
-                                    telemetryGistId = ""
-                                }
-                            }
-                        }
-
-                        val newEntry = AiTelemetryManifestEntry(
-                            batchId = batchId,
-                            path = "$batchId.jsonl",
-                            uploadedAtMs = nowMs,
-                            uploader = safeUser,
-                            deviceHash = devHash,
-                            appVersion = "6.06",
-                            battleCount = enrichedPending.size,
-                            anomalyCount = totalAnomalies,
-                            highSeverityCount = highSevCount
-                        )
-                        val updatedBatches = (existingManifest.batches.filter { it.batchId != batchId } + newEntry).takeLast(1500)
-                        val updatedManifest = AiTelemetryManifest(
-                            schemaVersion = "6.06",
-                            updatedAtMs = nowMs,
-                            totalBatches = updatedBatches.size,
-                            totalBattles = updatedBatches.sumOf { it.battleCount },
-                            totalAnomalies = updatedBatches.sumOf { it.anomalyCount },
-                            batches = updatedBatches
-                        )
-
-                        val gistBodyMap = mapOf(
-                            "description" to "SilphScope PvP v6.06 AI Training & Anomaly Telemetry Vault (@$safeUser)",
-                            "public" to true,
-                            "files" to mapOf(
-                                telemetryManifestFile to mapOf("content" to gson.toJson(updatedManifest)),
-                                "$batchId.jsonl" to mapOf("content" to jsonlContent)
-                            )
-                        )
-                        val gistReqBody = gson.toJson(gistBodyMap)
-                            .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-                        val gistWriteReq = if (telemetryGistId.isEmpty()) {
-                            Request.Builder()
-                                .url("https://api.github.com/gists")
-                                .post(gistReqBody)
-                                .header("Authorization", "Bearer $userToken")
-                                .header("Accept", "application/vnd.github+json")
-                                .build()
-                        } else {
-                            Request.Builder()
-                                .url("https://api.github.com/gists/$telemetryGistId")
-                                .patch(gistReqBody)
-                                .header("Authorization", "Bearer $userToken")
-                                .header("Accept", "application/vnd.github+json")
-                                .build()
-                        }
-                        httpClient.newCall(gistWriteReq).execute().use { gwResp ->
-                            if (gwResp.isSuccessful) {
-                                uploadedOk = true
-                                uploadedDestinationLabel = "Telemetry Vault (@$safeUser)"
-                            }
-                        }
-                    } catch (_: Exception) {}
-                }
-
-                if (!uploadedOk) {
-                    return false to "Telemetry upload failed (HTTP $directBranchErrorCode). Check internet connection and retry."
-                }
-
-                // Clear uploaded records from pending queue
-                val uploadedIds = enrichedPending.map { it.battleId }.toSet()
-                val remaining = loadPendingAiTelemetryLogsStatic(prefs, gson).filter { it.battleId !in uploadedIds }
-                val totalUploadedSoFar = prefs.getInt(PREFS_KEY_TOTAL_AI_TELEMETRY_UPLOADED_COUNT, 0) + enrichedPending.size
-                val statusMsg = "Uploaded ${enrichedPending.size} battle${if (enrichedPending.size == 1) "" else "s"} ($totalAnomalies anomal${if (totalAnomalies == 1) "y" else "ies"}) to GitHub $uploadedDestinationLabel"
-                prefs.edit()
-                    .putString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(remaining))
-                    .remove(PREFS_KEY_PENDING_SETTINGS_CHANGES_V513)
-                    .putLong(PREFS_KEY_LAST_AI_TELEMETRY_UPLOAD_MS, nowMs)
-                    .putInt(PREFS_KEY_TOTAL_AI_TELEMETRY_UPLOADED_COUNT, totalUploadedSoFar)
-                    .putString(PREFS_KEY_LAST_AI_TELEMETRY_UPLOAD_STATUS, statusMsg)
-                    .apply()
-
-                return true to statusMsg
-            } catch (e: Exception) {
-                return false to "Telemetry upload error: ${e.localizedMessage ?: "Network error"}"
-            } finally {
-                isAiTelemetryUploadInFlight = false
-            }
-        }
-
-        /**
-         * Trigger #1 (Once Daily on App Launch):
-         * Runs in background on app launch if `autoUploadEnabled`,
-         * at least 1 battle is pending, and `nowMs - lastUploadMs >= 24h` (or `>= 5` battles pending).
-         */
-        fun triggerAutoUploadOnAppLaunchAsync(
-            prefs: SharedPreferences,
-            gson: Gson,
-            onComplete: ((Boolean, String) -> Unit)? = null
-        ) {
-            val autoEnabled = prefs.getBoolean(PREFS_KEY_AUTO_UPLOAD_AI_LOGS, false)
-            if (!autoEnabled) return
-            val pending = loadPendingAiTelemetryLogsStatic(prefs, gson)
-            if (pending.isEmpty()) return
-            val nowMs = System.currentTimeMillis()
-            val lastUploadMs = prefs.getLong(PREFS_KEY_LAST_AI_TELEMETRY_UPLOAD_MS, 0L)
-            val isDailyDue = (nowMs - lastUploadMs) >= AI_TELEMETRY_DAILY_INTERVAL_MS
-            val hasFiveReady = pending.size >= AI_TELEMETRY_MIN_BATTLES_ON_STOP
-            if (!isDailyDue && !hasFiveReady) return
-
-            kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
-                val (ok, msg) = uploadPendingAiTelemetryBatchBlocking(
-                    prefs = prefs,
-                    gson = gson,
-                    forceUpload = true,
-                    minBattlesRequired = 1
-                )
-                if (onComplete != null) {
-                    Handler(Looper.getMainLooper()).post {
-                        try {
-                            onComplete.invoke(ok, msg)
-                        } catch (_: Exception) {}
-                    }
-                }
-            }
-        }
-
-        /**
-         * Trigger #2 (On Overlay Stop if >= 5 Battles Ready Since Last Upload):
-         * Runs in background whenever the floating overlay is stopped and at least 5 battles are queued.
-         */
-        fun triggerAutoUploadOnOverlayStopAsync(
-            prefs: SharedPreferences,
-            gson: Gson,
-            onComplete: ((Boolean, String) -> Unit)? = null
-        ) {
-            val autoEnabled = prefs.getBoolean(PREFS_KEY_AUTO_UPLOAD_AI_LOGS, false)
-            if (!autoEnabled) return
-            val pending = loadPendingAiTelemetryLogsStatic(prefs, gson)
-            if (pending.size < AI_TELEMETRY_MIN_BATTLES_ON_STOP) return
-
-            kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
-                val (ok, msg) = uploadPendingAiTelemetryBatchBlocking(
-                    prefs = prefs,
-                    gson = gson,
-                    forceUpload = false,
-                    minBattlesRequired = AI_TELEMETRY_MIN_BATTLES_ON_STOP
-                )
-                if (onComplete != null) {
-                    Handler(Looper.getMainLooper()).post {
-                        try {
-                            onComplete.invoke(ok, msg)
-                        } catch (_: Exception) {}
-                    }
-                }
-            }
-        }
 
         data class MoveStats(
             val name: String,
@@ -3443,239 +1291,10 @@ class OverlayService : LifecycleService() {
             val fastestMovePct: Int
         )
 
-        val BASELINE_MOVE_BUFF_EFFECTS: Map<String, MoveBuffEffect> = mapOf(
-            "bulldoze" to MoveBuffEffect(0, 0, 0, -1, 1.0),
-            "icy wind" to MoveBuffEffect(0, 0, -1, 0, 1.0),
-            "chilling water" to MoveBuffEffect(0, 0, -1, 0, 1.0),
-            "lunge" to MoveBuffEffect(0, 0, -1, 0, 1.0),
-            "breaking swipe" to MoveBuffEffect(0, 0, -1, 0, 0.5),
-            "feather dance" to MoveBuffEffect(0, 0, -2, 0, 1.0),
-            "rock tomb" to MoveBuffEffect(0, 0, -1, 0, 1.0),
-            "sand tomb" to MoveBuffEffect(0, 0, 0, -1, 1.0),
-            "poison fang" to MoveBuffEffect(0, 0, 0, -1, 1.0),
-            "psychic fangs" to MoveBuffEffect(0, 0, 0, -1, 1.0),
-            "acid spray" to MoveBuffEffect(0, 0, 0, -2, 1.0),
-            "crunch" to MoveBuffEffect(0, 0, 0, -1, 0.3),
-            "liquidation" to MoveBuffEffect(0, 0, 0, -1, 0.3),
-            "shadow ball" to MoveBuffEffect(0, 0, 0, -1, 0.1),
-            "shadow bone" to MoveBuffEffect(0, 0, 0, -1, 0.2),
-            "earth power" to MoveBuffEffect(0, 0, 0, -1, 0.1),
-            "bug buzz" to MoveBuffEffect(0, 0, 0, -1, 0.3),
-            "psychic" to MoveBuffEffect(0, 0, 0, -1, 0.1),
-            "scald" to MoveBuffEffect(0, 0, -1, 0, 0.5),
-            "scorching sands" to MoveBuffEffect(0, 0, -1, 0, 0.3),
-            "moonblast" to MoveBuffEffect(0, 0, -1, 0, 0.1),
-            "mirror shot" to MoveBuffEffect(0, 0, -1, 0, 0.3),
-            "zap cannon" to MoveBuffEffect(0, 0, -1, 0, 0.66),
-            "rage fist" to MoveBuffEffect(1, 0, 0, 0, 1.0),
-            "power-up punch" to MoveBuffEffect(1, 0, 0, 0, 1.0),
-            "flame charge" to MoveBuffEffect(1, 0, 0, 0, 1.0),
-            "trailblaze" to MoveBuffEffect(1, 0, 0, 0, 1.0),
-            "triple axel" to MoveBuffEffect(1, 0, 0, 0, 1.0),
-            "torch song" to MoveBuffEffect(1, 0, 0, 0, 1.0),
-            "aura wheel" to MoveBuffEffect(1, 0, 0, 0, 1.0),
-            "night slash" to MoveBuffEffect(2, 0, 0, 0, 0.125),
-            "air cutter" to MoveBuffEffect(1, 0, 0, 0, 0.3),
-            "ancient power" to MoveBuffEffect(1, 1, 0, 0, 0.1),
-            "ominous wind" to MoveBuffEffect(1, 1, 0, 0, 0.1),
-            "close combat" to MoveBuffEffect(0, -2, 0, 0, 1.0),
-            "wild charge" to MoveBuffEffect(0, -2, 0, 0, 1.0),
-            "brave bird" to MoveBuffEffect(0, -3, 0, 0, 1.0),
-            "superpower" to MoveBuffEffect(-1, -1, 0, 0, 1.0),
-            "overheat" to MoveBuffEffect(-2, 0, 0, 0, 1.0),
-            "draco meteor" to MoveBuffEffect(-2, 0, 0, 0, 1.0),
-            "psycho boost" to MoveBuffEffect(-2, 0, 0, 0, 1.0),
-            "leaf storm" to MoveBuffEffect(-2, 0, 0, 0, 1.0),
-            "v-create" to MoveBuffEffect(0, -3, 0, 0, 1.0)
-        )
+        val BASELINE_MOVE_BUFF_EFFECTS: Map<String, MoveBuffEffect> get() = PokemonStaticData.BASELINE_MOVE_BUFF_EFFECTS
 
         val DYNAMIC_MOVE_BUFF_TABLE = java.util.concurrent.ConcurrentHashMap<String, MoveBuffEffect>()
 
-        fun resolveMoveBuffEffectStatic(moveName: String): MoveBuffEffect {
-            val clean = moveName.replace("*", "").trim().lowercase()
-            if (clean.isEmpty()) return MoveBuffEffect()
-            val idKey = clean.replace(" ", "_").replace("-", "_")
-            return DYNAMIC_MOVE_BUFF_TABLE[clean]
-                ?: DYNAMIC_MOVE_BUFF_TABLE[idKey]
-                ?: BASELINE_MOVE_BUFF_EFFECTS[clean]
-                ?: MoveBuffEffect()
-        }
-
-        fun isDominatedSameTypeChargedPairStatic(
-            c1Name: String,
-            c2Name: String,
-            myTypes: List<String> = emptyList()
-        ): Boolean {
-            val clean1 = c1Name.replace("*", "").trim()
-            val clean2 = c2Name.replace("*", "").trim()
-            if (clean1.isEmpty() || clean2.isEmpty() || clean1.equals(clean2, ignoreCase = true)) {
-                return false
-            }
-            val defaultType = myTypes.firstOrNull() ?: "normal"
-            val s1 = resolveChargedMoveStatsStatic(clean1, defaultType)
-            val s2 = resolveChargedMoveStatsStatic(clean2, defaultType)
-            if (!s1.type.equals(s2.type, ignoreCase = true)) {
-                return false
-            }
-            val b1 = resolveMoveBuffEffectStatic(clean1)
-            val b2 = resolveMoveBuffEffectStatic(clean2)
-
-            fun hasPositiveBuff(b: MoveBuffEffect): Boolean =
-                b.chance >= 0.25 && (b.selfAtkDelta > 0 || b.selfDefDelta > 0 || b.oppAtkDelta < 0 || b.oppDefDelta < 0)
-
-            fun hasSelfDebuff(b: MoveBuffEffect): Boolean =
-                b.chance >= 0.50 && (b.selfAtkDelta < 0 || b.selfDefDelta < 0)
-
-            val e1 = s1.energyCost.coerceIn(35, 80)
-            val e2 = s2.energyCost.coerceIn(35, 80)
-            val dpe1 = s1.power.toDouble() / e1.toDouble()
-            val dpe2 = s2.power.toDouble() / e2.toDouble()
-
-            // Check if s2 is dominated by s1
-            val s2DominatedByS1 = !hasPositiveBuff(b2) && !hasSelfDebuff(b1) && (
-                (e2 >= e1 && s2.power <= s1.power) ||
-                    (e1 - e2 < 15 && dpe1 >= dpe2 * 1.15 && s1.power >= s2.power)
-                )
-            // Check if s1 is dominated by s2
-            val s1DominatedByS2 = !hasPositiveBuff(b1) && !hasSelfDebuff(b2) && (
-                (e1 >= e2 && s1.power <= s2.power) ||
-                    (e2 - e1 < 15 && dpe2 >= dpe1 * 1.15 && s2.power >= s1.power)
-                )
-            return s2DominatedByS1 || s1DominatedByS2
-        }
-
-        fun simulateTurnByTurnChargedCycleStatic(
-            c1Name: String,
-            c1Pct: Int,
-            c1Stats: MoveStats,
-            c2Name: String,
-            c2Pct: Int,
-            c2Stats: MoveStats,
-            fastEpt: Double,
-            defShields: Int,
-            attackerTypes: List<String>
-        ): ChargedCycleSimResult {
-            val e1 = c1Stats.energyCost.coerceIn(35, 80)
-            val e2 = c2Stats.energyCost.coerceIn(35, 80)
-            val b1 = resolveMoveBuffEffectStatic(c1Name)
-            val b2 = resolveMoveBuffEffectStatic(c2Name)
-
-            val atkStage1 = (b1.selfAtkDelta - b1.oppDefDelta).toDouble() * b1.chance
-            val defStage1 = (b1.selfDefDelta - b1.oppAtkDelta).toDouble() * b1.chance
-            val atkStage2 = (b2.selfAtkDelta - b2.oppDefDelta).toDouble() * b2.chance
-            val defStage2 = (b2.selfDefDelta - b2.oppAtkDelta).toDouble() * b2.chance
-
-            val effPace1 = Math.pow(50.0 / e1.toDouble(), 0.28).coerceIn(0.84, 1.22)
-            val effPace2 = Math.pow(50.0 / e2.toDouble(), 0.28).coerceIn(0.84, 1.22)
-
-            val unshieldedCycleVal1 = c1Pct.toDouble() * effPace1 +
-                max(0.0, atkStage1) * 5.5 + max(0.0, defStage1) * 5.0 -
-                max(0.0, -defStage1) * 3.5 - max(0.0, -atkStage1) * 3.5
-            val unshieldedCycleVal2 = c2Pct.toDouble() * effPace2 +
-                max(0.0, atkStage2) * 5.5 + max(0.0, defStage2) * 5.0 -
-                max(0.0, -defStage2) * 3.5 - max(0.0, -atkStage2) * 3.5
-
-            val use1AsPrimary = unshieldedCycleVal1 >= unshieldedCycleVal2
-            val bestPct = if (use1AsPrimary) c1Pct else c2Pct
-            val bestEnergy = if (use1AsPrimary) e1 else e2
-            val bestPace = if (use1AsPrimary) effPace1 else effPace2
-            val bestAtkStage = if (use1AsPrimary) atkStage1 else atkStage2
-            val bestDefStage = if (use1AsPrimary) defStage1 else defStage2
-
-            val altPct = if (use1AsPrimary) c2Pct else c1Pct
-            val altEnergy = if (use1AsPrimary) e2 else e1
-            val altAtkStage = if (use1AsPrimary) atkStage2 else atkStage1
-            val altDefStage = if (use1AsPrimary) defStage2 else defStage1
-
-            // Determine optimal shield-burn / setup move without forcing a worse/expensive move
-            fun shieldSetupScore(pct: Int, energy: Int, atkStg: Double, defStg: Double): Double {
-                val energySavedBonus = (60.0 - energy.toDouble()) * 0.58
-                val buffBonus = max(0.0, atkStg) * 11.5 + max(0.0, defStg) * 10.5 -
-                    max(0.0, -defStg) * 12.0 - max(0.0, -atkStg) * 10.0
-                val credibilityMult = if (pct < 18 && atkStg <= 0.0 && defStg <= 0.0) 0.55 else 1.0
-                return energySavedBonus * credibilityMult + buffBonus + pct.toDouble() * 0.30
-            }
-
-            val primaryShieldScore = shieldSetupScore(bestPct, bestEnergy, bestAtkStage, bestDefStage)
-            val altIsValidShieldSetup = (altEnergy <= bestEnergy - 10 && altDefStage >= 0.0 && altAtkStage >= 0.0) ||
-                (altEnergy <= bestEnergy + 5 && (altAtkStage > 0.20 || altDefStage > 0.20)) ||
-                (bestDefStage < -0.5 && altDefStage >= 0.0 && altEnergy <= bestEnergy)
-            val altShieldScore = if (altIsValidShieldSetup) {
-                shieldSetupScore(altPct, altEnergy, altAtkStage, altDefStage)
-            } else {
-                -999.0
-            }
-
-            val useAltForShieldBurn = altShieldScore > primaryShieldScore
-            val burnPct = if (useAltForShieldBurn) altPct else bestPct
-            val burnEnergy = if (useAltForShieldBurn) altEnergy else bestEnergy
-            val burnAtkStage = if (useAltForShieldBurn) altAtkStage else bestAtkStage
-            val burnDefStage = if (useAltForShieldBurn) altDefStage else bestDefStage
-
-            val unshieldedBase = bestPct.toDouble() * bestPace
-            val energySavingsFromBait = if (useAltForShieldBurn) max(0, bestEnergy - burnEnergy).toDouble() else 0.0
-
-            val cyclePressure: Double
-            val activeCycleEnergy: Double
-            when {
-                defShields <= 0 -> {
-                    val setupFirstIn0S = useAltForShieldBurn &&
-                        (burnAtkStage >= 0.5 || burnDefStage >= 0.5) &&
-                        burnEnergy <= bestEnergy - 10 &&
-                        burnPct >= (bestPct * 0.52).toInt()
-                    val buffFollowup = if (setupFirstIn0S) {
-                        (burnAtkStage * 8.5 + burnDefStage * 7.5)
-                    } else {
-                        max(0.0, bestAtkStage) * 8.0 + max(0.0, bestDefStage) * 7.5 -
-                            max(0.0, -bestDefStage) * 4.5 - max(0.0, -bestAtkStage) * 4.0
-                    }
-                    val finisherFlexBonus = if (altEnergy <= bestEnergy - 10 && altPct >= 26) {
-                        (bestEnergy - altEnergy).toDouble() * 0.20
-                    } else {
-                        0.0
-                    }
-                    cyclePressure = unshieldedBase * 1.70 + buffFollowup + finisherFlexBonus
-                    activeCycleEnergy = if (setupFirstIn0S) (burnEnergy + bestEnergy) * 0.5 else bestEnergy.toDouble()
-                }
-                defShields == 1 -> {
-                    // Cycle 1: Shielded throw (applies burnAtkStage / burnDefStage through shield)
-                    // Cycle 2: Unshielded closer amplified by Cycle 1 stat changes + residual energy advantage
-                    val postShieldAtkMult = (1.0 + 0.16 * burnAtkStage).coerceIn(0.76, 1.42)
-                    val shieldTempoBonus = energySavingsFromBait * 0.45 + (55.0 - burnEnergy.toDouble()) * 0.22
-                    val postShieldStatValue = burnDefStage * 9.5 + max(0.0, burnAtkStage) * 6.5 +
-                        max(0.0, bestAtkStage) * 4.0 + max(0.0, bestDefStage) * 3.5 -
-                        max(0.0, -bestDefStage) * 3.5
-                    cyclePressure = (unshieldedBase * postShieldAtkMult * 1.24) + shieldTempoBonus + postShieldStatValue
-                    activeCycleEnergy = (burnEnergy.toDouble() * 0.55) + (bestEnergy.toDouble() * 0.45)
-                }
-                else -> {
-                    // Cycle 1 & Cycle 2: Shielded throws (2x compounded stat stages through shields)
-                    // Cycle 3: Unshielded closer scaled by fast move EPT / burnEnergy reachability
-                    val twoShieldAtkMult = (1.0 + 0.26 * burnAtkStage).coerceIn(0.70, 1.58)
-                    val cycle3Reach = ((fastEpt / 3.5) * (50.0 / burnEnergy.toDouble())).coerceIn(0.68, 1.34)
-                    val twoShieldTempoBonus = energySavingsFromBait * 0.60 + (55.0 - burnEnergy.toDouble()) * 0.34
-                    val compoundedStatValue = burnDefStage * 13.5 + burnAtkStage * 9.5
-                    cyclePressure = (unshieldedBase * twoShieldAtkMult * 0.82 * cycle3Reach) + twoShieldTempoBonus + compoundedStatValue
-                    activeCycleEnergy = (burnEnergy.toDouble() * 0.72) + (bestEnergy.toDouble() * 0.28)
-                }
-            }
-
-            val dominatedPenalty = if (isDominatedSameTypeChargedPairStatic(c1Name, c2Name, attackerTypes)) 6.5 else 0.0
-            val pacingFactor = ((fastEpt / 3.5) * (50.0 / activeCycleEnergy.coerceIn(35.0, 80.0))).coerceIn(0.78, 1.26)
-            val freqMult = 0.82 + 0.18 * pacingFactor
-            val fastestPct = when {
-                e1 < e2 -> c1Pct
-                e2 < e1 -> c2Pct
-                else -> min(c1Pct, c2Pct)
-            }
-
-            return ChargedCycleSimResult(
-                effectivePressure = (cyclePressure - dominatedPenalty).coerceAtLeast(10.0),
-                effectiveFreqMult = freqMult,
-                bestMovePct = max(c1Pct, c2Pct),
-                fastestMovePct = fastestPct
-            )
-        }
 
         data class PokemonMeta(
             val name: String,
@@ -3703,546 +1322,16 @@ class OverlayService : LifecycleService() {
             val defaultIvsUl: String = "1/15/15"
         )
 
-        val RECOMMENDED_CHARGED_MOVES: Map<String, Triple<String, String, String>> = mapOf(
-            "Rillaboom" to Triple("Drum Beating", "Earth Power", "Frenzy Plant"),
-            "rillaboom" to Triple("Drum Beating", "Earth Power", "Frenzy Plant"),
-            "Tinkaton" to Triple("Gigaton Hammer", "Bulldoze", "Play Rough"),
-            "tinkaton" to Triple("Gigaton Hammer", "Bulldoze", "Play Rough"),
-            "Kanto Ninetales" to Triple("Weather Ball (Fire)", "Energy Ball", "Psyshock"),
-            "ninetales" to Triple("Weather Ball (Fire)", "Energy Ball", "Psyshock"),
-            "Ninetales (Alolan)" to Triple("Weather Ball (Ice)", "Chilling Water", "Psyshock"),
-            "Alolan Ninetales" to Triple("Weather Ball (Ice)", "Chilling Water", "Psyshock"),
-            "ninetales_alolan" to Triple("Weather Ball (Ice)", "Chilling Water", "Psyshock"),
-            "ninetales_alolan_shadow" to Triple("Weather Ball (Ice)", "Chilling Water", "Psyshock"),
-            "Corviknight" to Triple("Air Cutter", "Iron Head", "Sky Attack"),
-            "corviknight" to Triple("Air Cutter", "Iron Head", "Sky Attack"),
-            "Lugia" to Triple("Aeroblast", "Earth Power", "Hydro Pump"),
-            "lugia" to Triple("Aeroblast", "Earth Power", "Hydro Pump"),
-            "Kyogre" to Triple("Origin Pulse", "Avalanche", "Surf"),
-            "kyogre" to Triple("Origin Pulse", "Avalanche", "Surf"),
-            "Fearow" to Triple("Drill Run", "Drill Peck", "Twister"),
-            "fearow" to Triple("Drill Run", "Drill Peck", "Twister"),
-            "Zacian (Crowned)" to Triple("Behemoth Blade", "Close Combat", "Play Rough"),
-            "zacian_crowned" to Triple("Behemoth Blade", "Close Combat", "Play Rough"),
-            "zacian" to Triple("Close Combat", "Play Rough", "Wild Charge"),
-            "Zamazenta (Crowned)" to Triple("Behemoth Bash", "Close Combat", "Moonblast"),
-            "zamazenta_crowned" to Triple("Behemoth Bash", "Close Combat", "Moonblast"),
-            "zamazenta" to Triple("Close Combat", "Crunch", "Moonblast"),
-            "Keldeo (Resolute)" to Triple("Secret Sword", "Aqua Jet", "Hydro Pump"),
-            "keldeo_resolute" to Triple("Secret Sword", "Aqua Jet", "Hydro Pump"),
-            "Keldeo (Ordinary)" to Triple("Sacred Sword", "Aqua Jet", "Hydro Pump"),
-            "keldeo" to Triple("Sacred Sword", "Aqua Jet", "Hydro Pump"),
-            "Kyurem (Black)" to Triple("Freeze Shock", "Fusion Bolt", "Outrage"),
-            "kyurem_black" to Triple("Freeze Shock", "Fusion Bolt", "Outrage"),
-            "Kyurem (White)" to Triple("Ice Burn", "Fusion Flare", "Blizzard"),
-            "kyurem_white" to Triple("Ice Burn", "Fusion Flare", "Blizzard"),
-            "Kyurem" to Triple("Glaciate", "Dragon Claw", "Blizzard"),
-            "kyurem" to Triple("Glaciate", "Dragon Claw", "Blizzard"),
-            "Zygarde" to Triple("Crunch", "Earthquake", "Outrage"),
-            "zygarde" to Triple("Crunch", "Earthquake", "Outrage"),
-            "Ampharos" to Triple("Brutal Swing", "Trailblaze", "Zap Cannon"),
-            "ampharos" to Triple("Brutal Swing", "Trailblaze", "Zap Cannon"),
-            "Dialga (Origin)" to Triple("Roar of Time", "Iron Head", "Thunder"),
-            "dialga_origin" to Triple("Roar of Time", "Iron Head", "Thunder"),
-            "Dialga" to Triple("Draco Meteor", "Iron Head", "Thunder"),
-            "dialga" to Triple("Draco Meteor", "Iron Head", "Thunder"),
-            "Palkia (Origin)" to Triple("Spacial Rend", "Aqua Tail", "Hydro Pump"),
-            "palkia_origin" to Triple("Spacial Rend", "Aqua Tail", "Hydro Pump"),
-            "Palkia" to Triple("Aqua Tail", "Draco Meteor", "Fire Blast"),
-            "palkia" to Triple("Aqua Tail", "Draco Meteor", "Fire Blast"),
-            "Groudon" to Triple("Precipice Blades", "Fire Punch", "Earthquake"),
-            "groudon" to Triple("Precipice Blades", "Fire Punch", "Earthquake"),
-            "Ho-Oh" to Triple("Sacred Fire", "Brave Bird", "Earthquake"),
-            "ho_oh" to Triple("Sacred Fire", "Brave Bird", "Earthquake"),
-            "ho-oh" to Triple("Sacred Fire", "Brave Bird", "Earthquake"),
-            "Yveltal" to Triple("Dark Pulse", "Oblivion Wing", "Focus Blast"),
-            "yveltal" to Triple("Dark Pulse", "Oblivion Wing", "Focus Blast"),
-            "Xerneas" to Triple("Close Combat", "Moonblast", "Megahorn"),
-            "xerneas" to Triple("Close Combat", "Moonblast", "Megahorn"),
-            "Landorus (Therian)" to Triple("Sandsear Storm", "Stone Edge", "Superpower"),
-            "landorus_therian" to Triple("Sandsear Storm", "Stone Edge", "Superpower"),
-            "Necrozma (Dusk Mane)" to Triple("Sunsteel Strike", "Dark Pulse", "Iron Head"),
-            "necrozma_dusk_mane" to Triple("Sunsteel Strike", "Dark Pulse", "Iron Head"),
-            "Necrozma (Dawn Wings)" to Triple("Moongeist Beam", "Dark Pulse", "Iron Head"),
-            "necrozma_dawn_wings" to Triple("Moongeist Beam", "Dark Pulse", "Iron Head"),
-            "Mewtwo (Armored)" to Triple("Psystrike", "Dynamic Punch", "Earthquake"),
-            "Armored Mewtwo" to Triple("Psystrike", "Dynamic Punch", "Earthquake"),
-            "mewtwo_armored" to Triple("Psystrike", "Dynamic Punch", "Earthquake"),
-            "Mewtwo" to Triple("Psystrike", "Shadow Ball", "Focus Blast"),
-            "mewtwo" to Triple("Psystrike", "Shadow Ball", "Focus Blast"),
-            "Mew" to Triple("Psyshock", "Wild Charge", "Surf"),
-            "mew" to Triple("Psyshock", "Wild Charge", "Surf"),
-            "Rhyperior" to Triple("Rock Wrecker", "Breaking Swipe", "Superpower"),
-            "rhyperior" to Triple("Rock Wrecker", "Breaking Swipe", "Superpower"),
-            "Dragonite" to Triple("Dragon Claw", "Superpower", "Outrage"),
-            "dragonite" to Triple("Dragon Claw", "Superpower", "Outrage"),
-            "Metagross" to Triple("Meteor Mash", "Earthquake", "Psychic"),
-            "metagross" to Triple("Meteor Mash", "Earthquake", "Psychic"),
-            "Melmetal" to Triple("Superpower", "Rock Slide", "Double Iron Bash"),
-            "melmetal" to Triple("Superpower", "Rock Slide", "Double Iron Bash"),
-            "Excadrill" to Triple("Drill Run", "Rock Slide", "Iron Head"),
-            "excadrill" to Triple("Drill Run", "Rock Slide", "Iron Head"),
-            "Mamoswine" to Triple("Avalanche", "High Horsepower", "Stone Edge"),
-            "mamoswine" to Triple("Avalanche", "High Horsepower", "Stone Edge"),
-            "Clodsire" to Triple("Earthquake", "Stone Edge", "Sludge Bomb"),
-            "clodsire" to Triple("Earthquake", "Stone Edge", "Sludge Bomb"),
-            "Feraligatr" to Triple("Hydro Cannon", "Ice Beam", "Crunch"),
-            "feraligatr" to Triple("Hydro Cannon", "Ice Beam", "Crunch"),
-            "Mandibuzz" to Triple("Dark Pulse", "Aerial Ace", "Foul Play"),
-            "mandibuzz" to Triple("Dark Pulse", "Aerial Ace", "Foul Play"),
-            "Azumarill" to Triple("Ice Beam", "Play Rough", "Hydro Pump"),
-            "azumarill" to Triple("Ice Beam", "Play Rough", "Hydro Pump"),
-            "Gastrodon" to Triple("Body Slam", "Earth Power", "Water Pulse"),
-            "gastrodon" to Triple("Body Slam", "Earth Power", "Water Pulse"),
-            "Annihilape" to Triple("Rage Fist", "Ice Punch", "Close Combat"),
-            "annihilape" to Triple("Rage Fist", "Ice Punch", "Close Combat"),
-            "Primeape" to Triple("Rage Fist", "Close Combat", "Ice Punch"),
-            "primeape" to Triple("Rage Fist", "Close Combat", "Ice Punch"),
-            "Cresselia" to Triple("Grass Knot", "Moonblast", "Future Sight"),
-            "cresselia" to Triple("Grass Knot", "Moonblast", "Future Sight"),
-            "Swampert" to Triple("Hydro Cannon", "Earthquake", "Sludge Wave"),
-            "swampert" to Triple("Hydro Cannon", "Earthquake", "Sludge Wave"),
-            "Quagsire" to Triple("Aqua Tail", "Stone Edge", "Mud Bomb"),
-            "quagsire" to Triple("Aqua Tail", "Stone Edge", "Mud Bomb"),
-            "Whiscash" to Triple("Scald", "Mud Bomb", "Blizzard"),
-            "whiscash" to Triple("Scald", "Mud Bomb", "Blizzard"),
-            "Talonflame" to Triple("Fly", "Flame Charge", "Brave Bird"),
-            "talonflame" to Triple("Fly", "Flame Charge", "Brave Bird"),
-            "Serperior" to Triple("Frenzy Plant", "Aerial Ace", "Leaf Tornado"),
-            "serperior" to Triple("Frenzy Plant", "Aerial Ace", "Leaf Tornado"),
-            "Skeledirge" to Triple("Torch Song", "Shadow Ball", "Disarming Voice"),
-            "skeledirge" to Triple("Torch Song", "Shadow Ball", "Disarming Voice"),
-            "Snorlax" to Triple("Body Slam", "Earthquake", "Superpower"),
-            "snorlax" to Triple("Body Slam", "Earthquake", "Superpower"),
-            "Shadow Snorlax" to Triple("Body Slam", "Superpower", "Earthquake"),
-            "snorlax_shadow" to Triple("Body Slam", "Superpower", "Earthquake"),
-            "Greninja" to Triple("Hydro Cannon", "Brutal Swing", "Night Slash"),
-            "greninja" to Triple("Hydro Cannon", "Brutal Swing", "Night Slash"),
-            "Shadow Greninja" to Triple("Hydro Cannon", "Night Slash", "Brutal Swing"),
-            "greninja_shadow" to Triple("Hydro Cannon", "Night Slash", "Brutal Swing"),
-            "Lickilicky" to Triple("Body Slam", "Shadow Ball", "Earthquake"),
-            "lickilicky" to Triple("Body Slam", "Shadow Ball", "Earthquake"),
-            "Lickitung" to Triple("Body Slam", "Power Whip", "Stomp"),
-            "lickitung" to Triple("Body Slam", "Power Whip", "Stomp"),
-            "Skarmory" to Triple("Brave Bird", "Sky Attack", "Flash Cannon"),
-            "skarmory" to Triple("Brave Bird", "Sky Attack", "Flash Cannon"),
-            "Registeel" to Triple("Zap Cannon", "Focus Blast", "Hyper Beam"),
-            "registeel" to Triple("Zap Cannon", "Focus Blast", "Hyper Beam"),
-            "Trevenant" to Triple("Seed Bomb", "Shadow Ball", "Foul Play"),
-            "trevenant" to Triple("Seed Bomb", "Shadow Ball", "Foul Play"),
-            "Morpeko" to Triple("Aura Wheel", "Psychic Fangs", "Outrage"),
-            "morpeko" to Triple("Aura Wheel", "Psychic Fangs", "Outrage"),
-            "Poliwrath" to Triple("Icy Wind", "Scald", "Dynamic Punch"),
-            "poliwrath" to Triple("Icy Wind", "Scald", "Dynamic Punch"),
-            "Pelipper" to Triple("Weather Ball", "Hurricane", "Hydro Pump"),
-            "pelipper" to Triple("Weather Ball", "Hurricane", "Hydro Pump"),
-            "Mantine" to Triple("Aerial Ace", "Ice Beam", "Water Pulse"),
-            "mantine" to Triple("Aerial Ace", "Ice Beam", "Water Pulse"),
-            "Dewgong" to Triple("Icy Wind", "Drill Run", "Blizzard"),
-            "dewgong" to Triple("Icy Wind", "Drill Run", "Blizzard"),
-            "Walrein" to Triple("Icicle Spear", "Earthquake", "Blizzard"),
-            "walrein" to Triple("Icicle Spear", "Earthquake", "Blizzard"),
-            "Mimikyu" to Triple("Play Rough", "Shadow Sneak", "Thunder"),
-            "mimikyu" to Triple("Play Rough", "Shadow Sneak", "Thunder"),
-            "Aegislash" to Triple("Shadow Ball", "Flash Cannon", "Gyro Ball"),
-            "aegislash" to Triple("Shadow Ball", "Flash Cannon", "Gyro Ball"),
-            "aegislash_shield" to Triple("Shadow Ball", "Flash Cannon", "Gyro Ball"),
-            "Cramorant" to Triple("Surf", "Fly", "Dive"),
-            "cramorant" to Triple("Surf", "Fly", "Dive"),
-            "Gholdengo" to Triple("Shadow Ball", "Focus Blast", "Dazzling Gleam"),
-            "gholdengo" to Triple("Shadow Ball", "Focus Blast", "Dazzling Gleam"),
-            "Baxcalibur" to Triple("Avalanche", "Dragon Claw", "Blizzard"),
-            "baxcalibur" to Triple("Avalanche", "Dragon Claw", "Blizzard")
-        )
+        val RECOMMENDED_CHARGED_MOVES: Map<String, Triple<String, String, String>> get() = PokemonStaticData.RECOMMENDED_CHARGED_MOVES
 
-        fun applyRecommendedMoves(meta: PokemonMeta): PokemonMeta {
-            val cleanSpeciesId = meta.speciesId.lowercase().removeSuffix("_shadow")
-            val isBaseForm = cleanSpeciesId == meta.baseSpecies.lowercase() &&
-                (meta.formLabel.equals("Base", ignoreCase = true) ||
-                    meta.formLabel.equals("Kanto", ignoreCase = true) ||
-                    meta.formLabel.equals("Shadow", ignoreCase = true))
-            val rec = RECOMMENDED_CHARGED_MOVES[meta.name]
-                ?: RECOMMENDED_CHARGED_MOVES[meta.speciesId.lowercase()]
-                ?: RECOMMENDED_CHARGED_MOVES[cleanSpeciesId]
-                ?: if (isBaseForm) RECOMMENDED_CHARGED_MOVES[meta.baseSpecies.lowercase()] else null
-            if (rec == null) return meta
 
-            val legalPool = SPECIES_CHARGED_MOVES_POOL[meta.speciesId.lowercase()]
-                ?: SPECIES_CHARGED_MOVES_POOL[cleanSpeciesId]
-                ?: SPECIES_CHARGED_MOVES_POOL[meta.name.lowercase()]
-            if (!legalPool.isNullOrEmpty()) {
-                val candidateOrder = listOf(
-                    rec.first,
-                    rec.second,
-                    rec.third,
-                    meta.chargedMove1,
-                    meta.chargedMove2,
-                    meta.chargedMove3,
-                    meta.chargedMove4
-                )
-                val validOrdered = mutableListOf<String>()
-                for (cand in candidateOrder) {
-                    val matched = legalPool.firstOrNull { it.equals(cand.trim(), ignoreCase = true) }
-                    if (matched != null && validOrdered.none { it.equals(matched, ignoreCase = true) }) {
-                        validOrdered.add(matched)
-                    }
-                }
-                for (legalMove in legalPool) {
-                    if (validOrdered.none { it.equals(legalMove, ignoreCase = true) }) {
-                        validOrdered.add(legalMove)
-                    }
-                }
-                return meta.copy(
-                    chargedMove1 = validOrdered.getOrNull(0) ?: meta.chargedMove1,
-                    chargedMove2 = validOrdered.getOrNull(1) ?: validOrdered.getOrNull(0) ?: meta.chargedMove2,
-                    chargedMove3 = validOrdered.getOrNull(2) ?: "",
-                    chargedMove4 = validOrdered.getOrNull(3) ?: ""
-                )
-            }
+        val COMMON_THIRD_CHARGED_MOVE: Map<String, String> get() = PokemonStaticData.COMMON_THIRD_CHARGED_MOVE
+        val MOVE_DATABASE: Map<String, MoveStats> get() = PokemonStaticData.MOVE_DATABASE
 
-            return meta.copy(
-                chargedMove1 = rec.first,
-                chargedMove2 = rec.second,
-                chargedMove3 = rec.third
-            )
-        }
+        internal val WHITESPACE_REGEX = Regex("\\s+")
+        internal val WHITESPACE_OR_HYPHEN_REGEX = Regex("[\\s-]+")
 
-        val COMMON_THIRD_CHARGED_MOVE: Map<String, String> = mapOf(
-            "Dialga (Origin)" to "Thunder",
-            "Dialga" to "Thunder",
-            "Palkia (Origin)" to "Hydro Pump",
-            "Palkia" to "Hydro Pump",
-            "Zacian (Crowned)" to "Play Rough",
-            "Zacian (Hero)" to "Wild Charge",
-            "Zamazenta (Crowned)" to "Moonblast",
-            "Zamazenta (Hero)" to "Moonblast",
-            "Keldeo (Resolute)" to "Hydro Pump",
-            "Keldeo (Ordinary)" to "Hydro Pump",
-            "Zygarde" to "Outrage",
-            "Lugia" to "Sky Attack",
-            "Kyogre" to "Surf",
-            "Groudon" to "Solar Beam",
-            "Giratina (Origin)" to "Dragon Pulse",
-            "Giratina (Altered)" to "Shadow Sneak",
-            "Mewtwo (Armored)" to "Earthquake",
-            "Armored Mewtwo" to "Earthquake",
-            "Mewtwo" to "Shadow Ball",
-            "Mew" to "Surf",
-            "Xerneas" to "Megahorn",
-            "Yveltal" to "Focus Blast",
-            "Landorus (Therian)" to "Superpower",
-            "Landorus (Incarnate)" to "Outrage",
-            "Ho-Oh" to "Solar Beam",
-            "Necrozma (Dusk Mane)" to "Outrage",
-            "Necrozma (Dawn Wings)" to "Outrage",
-            "Solgaleo" to "Solar Beam",
-            "Lunala" to "Future Sight",
-            "Dragonite" to "Hurricane",
-            "Metagross" to "Psychic",
-            "Excadrill" to "Iron Head",
-            "Rhyperior" to "Surf",
-            "Garchomp" to "Earth Power",
-            "Mamoswine" to "Stone Edge",
-            "Florges" to "Psychic",
-            "Reshiram" to "Crunch",
-            "Zekrom" to "Outrage",
-            "Kyurem (Black)" to "Outrage",
-            "Kyurem (White)" to "Blizzard",
-            "Kyurem" to "Blizzard",
-            "Primarina" to "Moonblast",
-            "Ursaluna" to "Swift",
-            "Togekiss" to "Ancient Power",
-            "Gyarados" to "Outrage",
-            "Melmetal" to "Thunderbolt",
-            "Zarude" to "Energy Ball",
-            "Marshadow" to "Close Combat",
-            "Enamorus" to "Grass Knot",
-            "Corviknight" to "Payback",
-            "Mimikyu" to "Thunder",
-            "Aegislash" to "Gyro Ball",
-            "Cramorant" to "Dive",
-            "Kanto Ninetales" to "Overheat",
-            "Ninetales (Alolan)" to "Psyshock",
-            "Fearow" to "Sky Attack",
-            "Shadow Pidgeot" to "Feather Dance",
-            "Pidgeot" to "Air Cutter",
-            "Deoxys (Defense)" to "Thunderbolt",
-            "Deoxys (Normal)" to "Hyper Beam",
-            "Cresselia" to "Future Sight",
-            "Registeel" to "Flash Cannon",
-            "Swampert" to "Sludge Wave",
-            "Feraligatr" to "Crunch",
-            "Talonflame" to "Fly",
-            "Clodsire" to "Megahorn",
-            "Azumarill" to "Hydro Pump",
-            "Bastiodon" to "Flash Cannon",
-            "Lickilicky" to "Solar Beam",
-            "Mandibuzz" to "Shadow Ball",
-            "Umbreon" to "Psychic",
-            "Annihilape" to "Close Combat",
-            "Poliwrath" to "Dynamic Punch",
-            "Medicham" to "Psychic",
-            "Sableye" to "Shadow Sneak",
-            "Carbink" to "Power Gem",
-            "Skarmory" to "Flash Cannon",
-            "Altaria" to "Dazzling Gleam",
-            "Pelipper" to "Blizzard",
-            "Mantine" to "Water Pulse",
-            "Lanturn" to "Hydro Pump",
-            "Whiscash" to "Blizzard",
-            "Quagsire" to "Sludge Bomb",
-            "Gastrodon" to "Water Pulse",
-            "Dunsparce" to "Drill Run",
-            "Wigglytuff" to "Disarming Voice",
-            "Clefable" to "Psychic",
-            "Charizard" to "Overheat",
-            "Venusaur" to "Petal Blizzard",
-            "Serperior" to "Aerial Ace",
-            "Abomasnow" to "Outrage",
-            "Walrein" to "Water Pulse",
-            "Dewgong" to "Blizzard",
-            "Lapras" to "Blizzard",
-            "Sandslash (Alolan)" to "Blizzard",
-            "Marowak (Alolan)" to "Fire Punch",
-            "Trevenant" to "Foul Play",
-            "Jellicent" to "Ice Beam",
-            "Drifblim" to "Mystical Fire",
-            "Froslass" to "Crunch",
-            "Skeledirge" to "Disarming Voice",
-            "Snorlax" to "Superpower",
-            "Shadow Snorlax" to "Earthquake",
-            "Typhlosion" to "Solar Beam",
-            "Goodra" to "Power Whip",
-            "Guzzlord" to "Sludge Bomb",
-            "Zweilous" to "Dragon Pulse",
-            "Virizion" to "Stone Edge",
-            "Cobalion" to "Iron Head",
-            "Tapu Fini" to "Ice Beam",
-            "Tapu Lele" to "Future Sight",
-            "Tapu Bulu" to "Megahorn",
-            "Tapu Koko" to "Thunder",
-            "Tentacruel" to "Blizzard",
-            "Toxapex" to "Gunk Shot",
-            "Drapion" to "Sludge Bomb",
-            "Skuntank" to "Sludge Bomb",
-            "Muk (Alolan)" to "Gunk Shot",
-            "Obstagoon" to "Hyper Beam",
-            "Scrafty" to "Acid Spray",
-            "Machamp" to "Payback",
-            "Primeape" to "Close Combat",
-            "Pangoro" to "Iron Head",
-            "Malamar" to "Hyper Beam",
-            "Stunfisk" to "Muddy Water",
-            "Stunfisk (Galarian)" to "Flash Cannon",
-            "Steelix" to "Heavy Slam",
-            "Empoleon" to "Blizzard",
-            "Greninja" to "Night Slash",
-            "Shadow Greninja" to "Brutal Swing",
-            "Samurott" to "Blizzard",
-            "Golisopod" to "Aerial Ace",
-            "Araquanid" to "Water Pulse",
-            "Ariados" to "Trailblaze",
-            "Charjabug" to "Crunch",
-            "Galvantula" to "Energy Ball",
-            "Ampharos" to "Focus Blast",
-            "Magnezone" to "Flash Cannon",
-            "Togedemaru" to "Gyro Ball",
-            "Morpeko" to "Outrage",
-            "Raikou" to "Thunderbolt",
-            "Entei" to "Overheat",
-            "Suicune" to "Hydro Pump",
-            "Zapdos" to "Ancient Power",
-            "Zapdos (Galarian)" to "Payback",
-            "Moltres" to "Overheat",
-            "Moltres (Galarian)" to "Payback",
-            "Articuno" to "Hurricane",
-            "Articuno (Galarian)" to "Future Sight",
-            "Jumpluff" to "Dazzling Gleam",
-            "Tropius" to "Aerial Ace",
-            "Noctowl" to "Psychic",
-            "Gligar" to "Night Slash",
-            "Gliscor" to "Sand Tomb"
-        )
-
-        val MOVE_DATABASE: Map<String, MoveStats> = mapOf(
-            "Behemoth Blade" to MoveStats("Behemoth Blade", "steel", 100, 55),
-            "Behemoth Bash" to MoveStats("Behemoth Bash", "steel", 80, 45),
-            "Secret Sword" to MoveStats("Secret Sword", "fighting", 70, 35),
-            "Aqua Jet" to MoveStats("Aqua Jet", "water", 70, 40),
-            "Double Iron Bash" to MoveStats("Double Iron Bash", "steel", 70, 35),
-            "Bleakwind Storm" to MoveStats("Bleakwind Storm", "flying", 60, 45),
-            "Wildbolt Storm" to MoveStats("Wildbolt Storm", "electric", 60, 45),
-            "Springtide Storm" to MoveStats("Springtide Storm", "fairy", 60, 45),
-            "Roar of Time" to MoveStats("Roar of Time", "dragon", 150, 65),
-            "Iron Head" to MoveStats("Iron Head", "steel", 85, 50),
-            "Draco Meteor" to MoveStats("Draco Meteor", "dragon", 150, 65),
-            "Thunder" to MoveStats("Thunder", "electric", 100, 60),
-            "Aeroblast" to MoveStats("Aeroblast", "flying", 170, 75),
-            "Sky Attack" to MoveStats("Sky Attack", "flying", 75, 50),
-            "Future Sight" to MoveStats("Future Sight", "psychic", 110, 65),
-            "Surf" to MoveStats("Surf", "water", 75, 45),
-            "Origin Pulse" to MoveStats("Origin Pulse", "water", 130, 60),
-            "Hydro Pump" to MoveStats("Hydro Pump", "water", 130, 75),
-            "Blizzard" to MoveStats("Blizzard", "ice", 140, 75),
-            "Close Combat" to MoveStats("Close Combat", "fighting", 100, 45),
-            "Brave Bird" to MoveStats("Brave Bird", "flying", 130, 55),
-            "Play Rough" to MoveStats("Play Rough", "fairy", 90, 60),
-            "Wild Charge" to MoveStats("Wild Charge", "electric", 100, 45),
-            "Shadow Ball" to MoveStats("Shadow Ball", "ghost", 90, 50),
-            "Ominous Wind" to MoveStats("Ominous Wind", "ghost", 45, 45),
-            "Dragon Claw" to MoveStats("Dragon Claw", "dragon", 80, 50),
-            "Ancient Power" to MoveStats("Ancient Power", "rock", 60, 45),
-            "Shadow Force" to MoveStats("Shadow Force", "ghost", 120, 65),
-            "Spacial Rend" to MoveStats("Spacial Rend", "dragon", 95, 55),
-            "Aqua Tail" to MoveStats("Aqua Tail", "water", 55, 35),
-            "Precipice Blades" to MoveStats("Precipice Blades", "ground", 130, 60),
-            "Fire Punch" to MoveStats("Fire Punch", "fire", 60, 40),
-            "Psystrike" to MoveStats("Psystrike", "psychic", 90, 45),
-            "Ice Beam" to MoveStats("Ice Beam", "ice", 90, 55),
-            "Moonblast" to MoveStats("Moonblast", "fairy", 90, 50),
-            "Dark Pulse" to MoveStats("Dark Pulse", "dark", 80, 45),
-            "Oblivion Wing" to MoveStats("Oblivion Wing", "flying", 85, 50),
-            "Crunch" to MoveStats("Crunch", "dark", 70, 45),
-            "Earthquake" to MoveStats("Earthquake", "ground", 120, 65),
-            "Sandsear Storm" to MoveStats("Sandsear Storm", "ground", 60, 45),
-            "Stone Edge" to MoveStats("Stone Edge", "rock", 100, 55),
-            "Superpower" to MoveStats("Superpower", "fighting", 85, 40),
-            "Sacred Fire" to MoveStats("Sacred Fire", "fire", 130, 65),
-            "Sunsteel Strike" to MoveStats("Sunsteel Strike", "steel", 135, 65),
-            "Moongeist Beam" to MoveStats("Moongeist Beam", "ghost", 135, 65),
-            "Rock Slide" to MoveStats("Rock Slide", "rock", 75, 45),
-            "Earth Power" to MoveStats("Earth Power", "ground", 90, 50),
-            "Outrage" to MoveStats("Outrage", "dragon", 110, 60),
-            "Meteor Mash" to MoveStats("Meteor Mash", "steel", 100, 45),
-            "Drill Run" to MoveStats("Drill Run", "ground", 70, 40),
-            "Rock Wrecker" to MoveStats("Rock Wrecker", "rock", 110, 50),
-            "Breaking Swipe" to MoveStats("Breaking Swipe", "dragon", 50, 50),
-            "Avalanche" to MoveStats("Avalanche", "ice", 90, 45),
-            "High Horsepower" to MoveStats("High Horsepower", "ground", 100, 55),
-            "Ice Punch" to MoveStats("Ice Punch", "ice", 60, 40),
-            "Fusion Flare" to MoveStats("Fusion Flare", "fire", 90, 45),
-            "Overheat" to MoveStats("Overheat", "fire", 130, 55),
-            "Fusion Bolt" to MoveStats("Fusion Bolt", "electric", 90, 45),
-            "Glaciate" to MoveStats("Glaciate", "ice", 60, 40),
-            "Disarming Voice" to MoveStats("Disarming Voice", "fairy", 70, 45),
-            "Hydro Cannon" to MoveStats("Hydro Cannon", "water", 80, 40),
-            "Weather Ball" to MoveStats("Weather Ball", "ice", 60, 35),
-            "Weather Ball (Ice)" to MoveStats("Weather Ball (Ice)", "ice", 60, 35),
-            "Weather Ball (Fire)" to MoveStats("Weather Ball (Fire)", "fire", 60, 35),
-            "Weather Ball (Water)" to MoveStats("Weather Ball (Water)", "water", 60, 35),
-            "Weather Ball (Rock)" to MoveStats("Weather Ball (Rock)", "rock", 60, 35),
-            "Chilling Water" to MoveStats("Chilling Water", "water", 60, 45),
-            "Dazzling Gleam" to MoveStats("Dazzling Gleam", "fairy", 90, 55),
-            "Scorching Sands" to MoveStats("Scorching Sands", "ground", 80, 50),
-            "Psycho Boost" to MoveStats("Psycho Boost", "psychic", 85, 35),
-            "Thunderbolt" to MoveStats("Thunderbolt", "electric", 90, 55),
-            "Grass Knot" to MoveStats("Grass Knot", "grass", 90, 50),
-            "Sacred Sword" to MoveStats("Sacred Sword", "fighting", 60, 35),
-            "Leaf Blade" to MoveStats("Leaf Blade", "grass", 70, 35),
-            "Aerial Ace" to MoveStats("Aerial Ace", "flying", 60, 45),
-            "Fly" to MoveStats("Fly", "flying", 80, 45),
-            "Flame Charge" to MoveStats("Flame Charge", "fire", 65, 50),
-            "Blast Burn" to MoveStats("Blast Burn", "fire", 110, 50),
-            "Feather Dance" to MoveStats("Feather Dance", "flying", 35, 50),
-            "Shadow Sneak" to MoveStats("Shadow Sneak", "ghost", 75, 50),
-            "Twister" to MoveStats("Twister", "dragon", 70, 40),
-            "Air Cutter" to MoveStats("Air Cutter", "flying", 60, 40),
-            "Payback" to MoveStats("Payback", "dark", 110, 60),
-            "Body Slam" to MoveStats("Body Slam", "normal", 65, 40),
-            "Foul Play" to MoveStats("Foul Play", "dark", 65, 40),
-            "Night Slash" to MoveStats("Night Slash", "dark", 50, 35),
-            "Cross Chop" to MoveStats("Cross Chop", "fighting", 55, 35),
-            "Dynamic Punch" to MoveStats("Dynamic Punch", "fighting", 90, 45),
-            "Aura Sphere" to MoveStats("Aura Sphere", "fighting", 80, 40),
-            "Focus Blast" to MoveStats("Focus Blast", "fighting", 150, 75),
-            "Sludge Bomb" to MoveStats("Sludge Bomb", "poison", 80, 50),
-            "Sludge Wave" to MoveStats("Sludge Wave", "poison", 110, 65),
-            "Acid Spray" to MoveStats("Acid Spray", "poison", 20, 45),
-            "Poison Fang" to MoveStats("Poison Fang", "poison", 50, 40),
-            "Cross Poison" to MoveStats("Cross Poison", "poison", 50, 35),
-            "Gunk Shot" to MoveStats("Gunk Shot", "poison", 130, 75),
-            "Mud Bomb" to MoveStats("Mud Bomb", "ground", 65, 45),
-            "Bone Club" to MoveStats("Bone Club", "ground", 55, 35),
-            "Shadow Bone" to MoveStats("Shadow Bone", "ghost", 80, 45),
-            "Hurricane" to MoveStats("Hurricane", "flying", 110, 60),
-            "Acrobatics" to MoveStats("Acrobatics", "flying", 110, 55),
-            "Drill Peck" to MoveStats("Drill Peck", "flying", 70, 40),
-            "Psychic" to MoveStats("Psychic", "psychic", 75, 55),
-            "Psyshock" to MoveStats("Psyshock", "psychic", 70, 40),
-            "Psychic Fangs" to MoveStats("Psychic Fangs", "psychic", 40, 35),
-            "Lunge" to MoveStats("Lunge", "bug", 70, 45),
-            "Megahorn" to MoveStats("Megahorn", "bug", 110, 55),
-            "X-Scissor" to MoveStats("X-Scissor", "bug", 65, 40),
-            "Power Gem" to MoveStats("Power Gem", "rock", 85, 50),
-            "Meteor Beam" to MoveStats("Meteor Beam", "rock", 120, 60),
-            "Night Shade" to MoveStats("Night Shade", "ghost", 70, 45),
-            "Icy Wind" to MoveStats("Icy Wind", "ice", 60, 45),
-            "Triple Axel" to MoveStats("Triple Axel", "ice", 60, 45),
-            "Icicle Spear" to MoveStats("Icicle Spear", "ice", 70, 40),
-            "Freeze Shock" to MoveStats("Freeze Shock", "ice", 120, 60),
-            "Ice Burn" to MoveStats("Ice Burn", "ice", 120, 60),
-            "Dragon Pulse" to MoveStats("Dragon Pulse", "dragon", 90, 55),
-            "Brutal Swing" to MoveStats("Brutal Swing", "dark", 55, 35),
-            "Flash Cannon" to MoveStats("Flash Cannon", "steel", 110, 65),
-            "Heavy Slam" to MoveStats("Heavy Slam", "steel", 70, 50),
-            "Magnet Bomb" to MoveStats("Magnet Bomb", "steel", 70, 40),
-            "Mirror Shot" to MoveStats("Mirror Shot", "steel", 35, 35),
-            "Doom Desire" to MoveStats("Doom Desire", "steel", 80, 40),
-            "Frenzy Plant" to MoveStats("Frenzy Plant", "grass", 100, 45),
-            "Energy Ball" to MoveStats("Energy Ball", "grass", 80, 45),
-            "Seed Bomb" to MoveStats("Seed Bomb", "grass", 55, 40),
-            "Power Whip" to MoveStats("Power Whip", "grass", 90, 50),
-            "Trailblaze" to MoveStats("Trailblaze", "grass", 65, 45),
-            "Solar Beam" to MoveStats("Solar Beam", "grass", 150, 80),
-            "Discharge" to MoveStats("Discharge", "electric", 55, 40),
-            "Zap Cannon" to MoveStats("Zap Cannon", "electric", 150, 80),
-            "Scald" to MoveStats("Scald", "water", 85, 50),
-            "Liquidation" to MoveStats("Liquidation", "water", 70, 45),
-            "Muddy Water" to MoveStats("Muddy Water", "water", 35, 35),
-            "Water Pulse" to MoveStats("Water Pulse", "water", 80, 50),
-            "Nature's Madness" to MoveStats("Nature's Madness", "fairy", 80, 50),
-            "Swift" to MoveStats("Swift", "normal", 55, 35),
-            "Hyper Beam" to MoveStats("Hyper Beam", "normal", 150, 80),
-            "Aura Wheel" to MoveStats("Aura Wheel", "electric", 100, 45),
-            "Rage Fist" to MoveStats("Rage Fist", "ghost", 55, 40),
-            "Torch Song" to MoveStats("Torch Song", "fire", 70, 45),
-            "Super Power" to MoveStats("Superpower", "fighting", 85, 40),
-            "Drum Beating" to MoveStats("Drum Beating", "grass", 60, 35),
-            "Gigaton Hammer" to MoveStats("Gigaton Hammer", "steel", 130, 60),
-            "Bulldoze" to MoveStats("Bulldoze", "ground", 80, 55),
-            "Air Cutter" to MoveStats("Air Cutter", "flying", 60, 40),
-            "Rock Tomb" to MoveStats("Rock Tomb", "rock", 75, 50),
-            "Sand Tomb" to MoveStats("Sand Tomb", "ground", 55, 45),
-            "Thunder Punch" to MoveStats("Thunder Punch", "electric", 60, 40),
-            "Flamethrower" to MoveStats("Flamethrower", "fire", 90, 55),
-            "Fire Blast" to MoveStats("Fire Blast", "fire", 140, 80),
-            "Last Resort" to MoveStats("Last Resort", "normal", 90, 55),
-            "Brine" to MoveStats("Brine", "water", 100, 60),
-            "Dig" to MoveStats("Dig", "ground", 70, 50),
-            "Shadow Punch" to MoveStats("Shadow Punch", "ghost", 55, 35),
-            "Spirit Shackle" to MoveStats("Spirit Shackle", "ghost", 50, 40),
-            "Darkest Lariat" to MoveStats("Darkest Lariat", "dark", 120, 60),
-            "Power-Up Punch" to MoveStats("Power-Up Punch", "fighting", 20, 35),
-            "Bubble Beam" to MoveStats("Bubble Beam", "water", 50, 50),
-            "Bug Buzz" to MoveStats("Bug Buzz", "bug", 100, 60),
-            "Leaf Tornado" to MoveStats("Leaf Tornado", "grass", 45, 40),
-            "Stomp" to MoveStats("Stomp", "normal", 55, 40),
-            "Petal Blizzard" to MoveStats("Petal Blizzard", "grass", 110, 65),
-            "Mystical Fire" to MoveStats("Mystical Fire", "fire", 60, 45),
-            "Gyro Ball" to MoveStats("Gyro Ball", "steel", 80, 50),
-            "Dive" to MoveStats("Dive", "water", 50, 40),
-            "Skull Bash" to MoveStats("Skull Bash", "normal", 130, 75),
-            "Beak Blast" to MoveStats("Beak Blast", "flying", 110, 55),
-            "Rock Blast" to MoveStats("Rock Blast", "rock", 50, 40),
-            "Brick Break" to MoveStats("Brick Break", "fighting", 40, 35),
-            "Poltergeist" to MoveStats("Poltergeist", "ghost", 140, 75),
-            "Boomburst" to MoveStats("Boomburst", "normal", 150, 70)
-        )
-
-        private val WHITESPACE_REGEX = Regex("\\s+")
-        private val WHITESPACE_OR_HYPHEN_REGEX = Regex("[\\s-]+")
-
-        private val STATIC_MOVE_DATABASE_LOOKUP: Map<String, MoveStats> by lazy {
+        internal val STATIC_MOVE_DATABASE_LOOKUP: Map<String, MoveStats> by lazy {
             val map = HashMap<String, MoveStats>(MOVE_DATABASE.size * 4)
             for ((k, v) in MOVE_DATABASE) {
                 val trimmed = k.trim()
@@ -4259,298 +1348,9 @@ class OverlayService : LifecycleService() {
             map
         }
 
-        fun resolveChargedMoveStatsStatic(moveName: String, fallbackType: String = "normal"): MoveStats {
-            val trimmed = moveName.trim()
-            if (trimmed.isEmpty()) {
-                return MoveStats(trimmed, fallbackType.lowercase().ifBlank { "normal" }, 80, 50)
-            }
-            val lower = trimmed.lowercase()
-            val spaceKey = lower.replace('-', ' ')
-            val hyphenKey = lower.replace(' ', '-')
-            val underscoreKey = spaceKey.replace(' ', '_')
-            if (DYNAMIC_MOVE_DATABASE.isNotEmpty()) {
-                DYNAMIC_MOVE_DATABASE[trimmed]?.let { return it }
-                DYNAMIC_MOVE_DATABASE[lower]?.let { return it }
-                DYNAMIC_MOVE_DATABASE[spaceKey]?.let { return it }
-                DYNAMIC_MOVE_DATABASE[hyphenKey]?.let { return it }
-                DYNAMIC_MOVE_DATABASE[underscoreKey]?.let { return it }
-            }
-            MOVE_DATABASE[trimmed]?.let { return it }
-            STATIC_MOVE_DATABASE_LOOKUP[lower]?.let { return it }
-            STATIC_MOVE_DATABASE_LOOKUP[spaceKey]?.let { return it }
-            STATIC_MOVE_DATABASE_LOOKUP[hyphenKey]?.let { return it }
-            STATIC_MOVE_DATABASE_LOOKUP[underscoreKey]?.let { return it }
-            val fallbackCost = MOVE_ENERGY_COST[trimmed]
-                ?: STATIC_MOVE_ENERGY_LOOKUP[lower]
-                ?: STATIC_MOVE_ENERGY_LOOKUP[spaceKey]
-                ?: STATIC_MOVE_ENERGY_LOOKUP[hyphenKey]
-                ?: 50
-            return MoveStats(trimmed, fallbackType.lowercase().ifBlank { "normal" }, 80, fallbackCost)
-        }
 
-        val FAST_MOVE_TURNS: Map<String, Int> = mapOf(
-            "ember" to 2,
-            "dragon breath" to 1,
-            "sand attack" to 1,
-            "quick attack" to 2,
-            "lock-on" to 1,
-            "lock on" to 1,
-            "water gun" to 1,
-            "lick" to 1,
-            "bite" to 1,
-            "tackle" to 1,
-            "fury cutter" to 1,
-            "bug bite" to 1,
-            "scratch" to 1,
-            "cut" to 1,
-            "psycho cut" to 2,
-            "mud shot" to 2,
-            "shadow claw" to 2,
-            "counter" to 2,
-            "powder snow" to 2,
-            "wing attack" to 2,
-            "peck" to 2,
-            "poison sting" to 2,
-            "thunder shock" to 2,
-            "fairy wind" to 2,
-            "bullet punch" to 2,
-            "fire fang" to 2,
-            "vine whip" to 2,
-            "karate chop" to 2,
-            "low kick" to 2,
-            "ice fang" to 2,
-            "thunder fang" to 2,
-            "metal claw" to 2,
-            "metal sound" to 2,
-            "sucker punch" to 2,
-            "poison jab" to 2,
-            "spark" to 2,
-            "leafage" to 2,
-            "steel wing" to 2,
-            "acid" to 2,
-            "feint attack" to 2,
-            "frost breath" to 2,
-            "pound" to 2,
-            "razor leaf" to 2,
-            "psywave" to 1,
-            "force palm" to 3,
-            "dragon tail" to 3,
-            "waterfall" to 3,
-            "fire spin" to 3,
-            "snarl" to 3,
-            "geomancy" to 3,
-            "mud-slap" to 3,
-            "mud slap" to 3,
-            "charm" to 3,
-            "double kick" to 3,
-            "air slash" to 3,
-            "ice shard" to 3,
-            "bubble" to 3,
-            "rollout" to 3,
-            "smack down" to 3,
-            "astonish" to 3,
-            "hex" to 3,
-            "magical leaf" to 3,
-            "bullet seed" to 3,
-            "rock throw" to 2,
-            "water shuriken" to 3,
-            "charge beam" to 3,
-            "extrasensory" to 3,
-            "hidden power" to 3,
-            "infestation" to 3,
-            "iron tail" to 3,
-            "present" to 3,
-            "rock smash" to 3,
-            "struggle bug" to 3,
-            "take down" to 3,
-            "zen headbutt" to 3,
-            "gust" to 4,
-            "confusion" to 4,
-            "volt switch" to 4,
-            "splash" to 4,
-            "yawn" to 4,
-            "incinerate" to 5
-        )
-
-        val POKEMON_META_DATABASE = listOf(
-            // --- Multi-Form & Regional Variants ---
-            PokemonMeta("Zacian (Crowned)", "zacian_crowned", "zacian", "Crowned", listOf("fairy", "steel"), 4620, "Metal Claw", 2, "Behemoth Blade", "Close Combat", 52, 48, atk = 332.0, def = 240.0, hp = 192, glRank = 400, ulRank = 300, mlRank = 2, chargedMove3 = "Play Rough", isRawBaseStats = true, defaultIvsGl = "7/9/12", defaultIvsUl = "6/13/15"),
-            PokemonMeta("Zacian (Hero)", "zacian_hero", "zacian", "Hero", listOf("fairy"), 4329, "Quick Attack", 2, "Close Combat", "Play Rough", 44, 42, atk = 254.0, def = 236.0, hp = 192, glRank = 420, ulRank = 310, mlRank = 18, chargedMove3 = "Wild Charge", isRawBaseStats = true, defaultIvsGl = "5/7/14", defaultIvsUl = "5/10/13"),
-            PokemonMeta("Zamazenta (Crowned)", "zamazenta_crowned", "zamazenta", "Crowned", listOf("fighting", "steel"), 4620, "Metal Claw", 2, "Behemoth Bash", "Close Combat", 46, 48, atk = 250.0, def = 292.0, hp = 192, glRank = 390, ulRank = 280, mlRank = 12, chargedMove3 = "Moonblast", isRawBaseStats = true, defaultIvsGl = "6/13/14", defaultIvsUl = "6/7/14"),
-            PokemonMeta("Zamazenta (Hero)", "zamazenta_hero", "zamazenta", "Hero", listOf("fighting"), 4329, "Snarl", 3, "Close Combat", "Crunch", 46, 32, atk = 254.0, def = 236.0, hp = 192, glRank = 410, ulRank = 290, mlRank = 20, chargedMove3 = "Moonblast", isRawBaseStats = true, defaultIvsGl = "5/7/14", defaultIvsUl = "5/10/13"),
-            PokemonMeta("Keldeo (Resolute)", "keldeo_resolute", "keldeo", "Resolute", listOf("water", "fighting"), 4181, "Low Kick", 2, "Secret Sword", "Aqua Jet", 42, 38, atk = 260.0, def = 192.0, hp = 209, glRank = 140, ulRank = 65, mlRank = 14, chargedMove3 = "Hydro Pump", isRawBaseStats = true, defaultIvsGl = "12/12/13", defaultIvsUl = "11/14/13"),
-            PokemonMeta("Keldeo (Ordinary)", "keldeo_ordinary", "keldeo", "Ordinary", listOf("water", "fighting"), 4181, "Low Kick", 2, "Sacred Sword", "Aqua Jet", 38, 38, atk = 260.0, def = 192.0, hp = 209, glRank = 150, ulRank = 70, mlRank = 19, chargedMove3 = "Hydro Pump", isRawBaseStats = true, defaultIvsGl = "0/0/0", defaultIvsUl = "11/14/13"),
-            PokemonMeta("Giratina (Origin)", "giratina_origin", "giratina", "Origin", listOf("ghost", "dragon"), 4164, "Shadow Claw", 2, "Shadow Ball", "Ominous Wind", 46, 22, atk = 225.0, def = 187.0, hp = 284, glRank = 180, ulRank = 35, mlRank = 9, isRawBaseStats = true, defaultIvsGl = "7/9/14", defaultIvsUl = "6/14/9"),
-            PokemonMeta("Giratina (Altered)", "giratina_altered", "giratina", "Altered", listOf("ghost", "dragon"), 3820, "Shadow Claw", 2, "Dragon Claw", "Ancient Power", 28, 26, atk = 187.0, def = 225.0, hp = 284, glRank = 190, ulRank = 3, mlRank = 26, isRawBaseStats = true, defaultIvsGl = "6/15/6", defaultIvsUl = "5/15/8"),
-            PokemonMeta("Ninetales (Alolan)", "ninetales_alolan", "ninetales", "Alolan", listOf("ice", "fairy"), 2610, "Powder Snow", 2, "Weather Ball (Ice)", "Chilling Water", 34, 46, atk = 170.0, def = 193.0, hp = 177, glRank = 28, ulRank = 25, mlRank = 320, chargedMove3 = "Psyshock", isRawBaseStats = true, defaultIvsGl = "5/15/15", defaultIvsUl = "13/15/14"),
-            PokemonMeta("Kanto Ninetales", "ninetales", "ninetales", "Kanto", listOf("fire"), 1498, "Ember", 2, "Weather Ball (Fire)", "Energy Ball", 34, 44, atk = 169.0, def = 190.0, hp = 177, glRank = 11, ulRank = 34, mlRank = 350, chargedMove3 = "Psyshock", isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "12/15/14"),
-            PokemonMeta("Mewtwo (Armored)", "mewtwo_armored", "mewtwo", "Armored", listOf("psychic"), 2499, "Confusion", 4, "Psystrike", "Dynamic Punch", 45, 45, atk = 182.0, def = 278.0, hp = 214, glRank = 420, ulRank = 32, mlRank = 180, chargedMove3 = "Earthquake", isRawBaseStats = true, defaultIvsGl = "10/15/15", defaultIvsUl = "1/15/15"),
-            PokemonMeta("Deoxys (Defense)", "deoxys_defense", "deoxys", "Defense", listOf("psychic"), 2570, "Counter", 2, "Psycho Boost", "Thunderbolt", 36, 44, atk = 144.0, def = 330.0, hp = 137, glRank = 24, ulRank = 48, mlRank = 390, isRawBaseStats = true, defaultIvsGl = "12/12/15", defaultIvsUl = "11/13/14"),
-            PokemonMeta("Deoxys (Normal)", "deoxys_normal", "deoxys", "Normal", listOf("psychic"), 3573, "Counter", 2, "Psycho Boost", "Thunderbolt", 48, 56, atk = 345.0, def = 115.0, hp = 137, glRank = 650, ulRank = 600, mlRank = 450, isRawBaseStats = true, defaultIvsGl = "11/11/14", defaultIvsUl = "12/13/11"),
-            PokemonMeta("Dialga (Origin)", "dialga_origin", "dialga", "Origin", listOf("steel", "dragon"), 4624, "Dragon Breath", 1, "Roar of Time", "Iron Head", 52, 34, atk = 270.0, def = 225.0, hp = 205, glRank = 350, ulRank = 240, mlRank = 3, isRawBaseStats = true, defaultIvsGl = "5/15/8", defaultIvsUl = "7/14/14"),
-            PokemonMeta("Dialga", "dialga", "dialga", "Altered", listOf("steel", "dragon"), 4565, "Dragon Breath", 1, "Draco Meteor", "Iron Head", 50, 32, atk = 275.0, def = 211.0, hp = 205, glRank = 360, ulRank = 250, mlRank = 14, isRawBaseStats = true, defaultIvsGl = "7/11/14", defaultIvsUl = "6/14/12"),
-            PokemonMeta("Palkia (Origin)", "palkia_origin", "palkia", "Origin", listOf("water", "dragon"), 4683, "Dragon Breath", 1, "Spacial Rend", "Aqua Tail", 46, 28, atk = 286.0, def = 223.0, hp = 189, glRank = 330, ulRank = 210, mlRank = 1, isRawBaseStats = true, defaultIvsGl = "7/15/13", defaultIvsUl = "11/13/15"),
-            PokemonMeta("Palkia", "palkia", "palkia", "Altered", listOf("water", "dragon"), 4512, "Dragon Breath", 1, "Aqua Tail", "Draco Meteor", 28, 52, atk = 280.0, def = 215.0, hp = 189, glRank = 340, ulRank = 230, mlRank = 22, isRawBaseStats = true, defaultIvsGl = "5/15/4", defaultIvsUl = "5/10/13"),
-            PokemonMeta("Landorus (Therian)", "landorus_therian", "landorus", "Therian", listOf("ground", "flying"), 4434, "Mud Shot", 2, "Sandsear Storm", "Stone Edge", 42, 46, atk = 289.0, def = 179.0, hp = 205, glRank = 280, ulRank = 190, mlRank = 5, isRawBaseStats = true, defaultIvsGl = "6/9/15", defaultIvsUl = "6/15/12"),
-            PokemonMeta("Landorus (Incarnate)", "landorus", "landorus", "Incarnate", listOf("ground", "flying"), 4057, "Mud Shot", 2, "Earth Power", "Rock Slide", 44, 36, atk = 261.0, def = 182.0, hp = 205, glRank = 310, ulRank = 210, mlRank = 42, isRawBaseStats = true, defaultIvsGl = "10/13/14", defaultIvsUl = "5/8/11"),
-            PokemonMeta("Necrozma (Dusk Mane)", "necrozma_dusk_mane", "necrozma", "Dusk Mane", listOf("psychic", "steel"), 4634, "Shadow Claw", 2, "Sunsteel Strike", "Dark Pulse", 54, 40, atk = 277.0, def = 220.0, hp = 200, glRank = 400, ulRank = 280, mlRank = 4, isRawBaseStats = true, defaultIvsGl = "4/9/14", defaultIvsUl = "4/15/9"),
-            PokemonMeta("Necrozma (Dawn Wings)", "necrozma_dawn_wings", "necrozma", "Dawn Wings", listOf("psychic", "ghost"), 4634, "Shadow Claw", 2, "Moongeist Beam", "Dark Pulse", 54, 40, atk = 277.0, def = 220.0, hp = 200, glRank = 405, ulRank = 285, mlRank = 6, isRawBaseStats = true, defaultIvsGl = "4/9/14", defaultIvsUl = "4/15/9"),
-            PokemonMeta("Necrozma", "necrozma", "necrozma", "Base", listOf("psychic"), 4163, "Shadow Claw", 2, "Dark Pulse", "Iron Head", 38, 30, atk = 251.0, def = 195.0, hp = 219, glRank = 450, ulRank = 310, mlRank = 65, isRawBaseStats = true, defaultIvsGl = "4/13/13", defaultIvsUl = "4/11/15"),
-            PokemonMeta("Kyurem (Black)", "kyurem_black", "kyurem", "Black", listOf("dragon", "ice"), 4605, "Shadow Claw", 2, "Freeze Shock", "Fusion Bolt", 58, 48, atk = 310.0, def = 183.0, hp = 245, glRank = 200, ulRank = 80, mlRank = 1, chargedMove3 = "Outrage", isRawBaseStats = true, defaultIvsGl = "7/10/8", defaultIvsUl = "9/13/14"),
-            PokemonMeta("Kyurem (White)", "kyurem_white", "kyurem", "White", listOf("dragon", "ice"), 4605, "Dragon Breath", 1, "Ice Burn", "Fusion Flare", 58, 48, atk = 310.0, def = 183.0, hp = 245, glRank = 210, ulRank = 85, mlRank = 2, chargedMove3 = "Blizzard", isRawBaseStats = true, defaultIvsGl = "7/10/8", defaultIvsUl = "9/13/14"),
-            PokemonMeta("Kyurem", "kyurem", "kyurem", "Base", listOf("dragon", "ice"), 4041, "Dragon Breath", 1, "Glaciate", "Dragon Claw", 38, 30, atk = 246.0, def = 170.0, hp = 245, glRank = 310, ulRank = 95, mlRank = 18, chargedMove3 = "Blizzard", isRawBaseStats = true, defaultIvsGl = "9/15/14", defaultIvsUl = "5/8/14"),
-            PokemonMeta("Enamorus (Incarnate)", "enamorus", "enamorus", "Incarnate", listOf("fairy", "flying"), 3873, "Fairy Wind", 2, "Fly", "Dazzling Gleam", 42, 48, atk = 281.0, def = 162.0, hp = 179, glRank = 280, ulRank = 130, mlRank = 17, isRawBaseStats = true, defaultIvsGl = "7/13/11", defaultIvsUl = "5/13/9"),
-            PokemonMeta("Enamorus (Therian)", "enamorus_therian", "enamorus", "Therian", listOf("fairy", "flying"), 3873, "Fairy Wind", 2, "Fly", "Moonblast", 42, 50, atk = 250.0, def = 201.0, hp = 179, glRank = 290, ulRank = 140, mlRank = 25, isRawBaseStats = true, defaultIvsGl = "4/9/11", defaultIvsUl = "6/15/11"),
-            PokemonMeta("Urshifu (Single Strike)", "urshifu_single", "urshifu", "Single", listOf("fighting", "dark"), 4077, "Counter", 2, "Dynamic Punch", "Payback", 44, 52, atk = 254.0, def = 177.0, hp = 225, glRank = 210, ulRank = 110, mlRank = 22, isRawBaseStats = true, defaultIvsGl = "10/12/10", defaultIvsUl = "13/13/14"),
-            PokemonMeta("Urshifu (Rapid Strike)", "urshifu_rapid", "urshifu", "Rapid", listOf("fighting", "water"), 4077, "Counter", 2, "Aqua Jet", "Close Combat", 34, 48, atk = 254.0, def = 177.0, hp = 225, glRank = 215, ulRank = 115, mlRank = 24, isRawBaseStats = true, defaultIvsGl = "10/12/10", defaultIvsUl = "13/13/14"),
-            PokemonMeta("Sandslash (Alolan)", "sandslash_alolan", "sandslash", "Alolan", listOf("ice", "steel"), 2432, "Powder Snow", 2, "Ice Punch", "Drill Run", 32, 42, atk = 177.0, def = 195.0, hp = 181, glRank = 9, ulRank = 16, mlRank = 350, isRawBaseStats = true, defaultIvsGl = "4/13/15", defaultIvsUl = "4/12/15"),
-            PokemonMeta("Sandslash", "sandslash", "sandslash", "Kanto", listOf("ground"), 2374, "Mud Shot", 2, "Scorching Sands", "Night Slash", 42, 28, atk = 182.0, def = 175.0, hp = 181, glRank = 48, ulRank = 75, mlRank = 380, isRawBaseStats = true, defaultIvsGl = "4/15/13", defaultIvsUl = "4/13/14"),
-            PokemonMeta("Marowak (Alolan)", "marowak_alolan", "marowak", "Alolan", listOf("fire", "ghost"), 1835, "Fire Spin", 3, "Bone Club", "Shadow Bone", 28, 44, atk = 144.0, def = 186.0, hp = 155, glRank = 35, ulRank = 310, mlRank = 450, isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Marowak", "marowak", "marowak", "Kanto", listOf("ground"), 1835, "Mud-Slap", 3, "Bone Club", "Rock Slide", 28, 40, atk = 144.0, def = 186.0, hp = 155, glRank = 12, ulRank = 290, mlRank = 440, isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Stunfisk (Galarian)", "stunfisk_galarian", "stunfisk", "Galarian", listOf("ground", "steel"), 2445, "Mud Shot", 2, "Rock Slide", "Earthquake", 38, 52, atk = 144.0, def = 171.0, hp = 240, glRank = 30, ulRank = 28, mlRank = 340, isRawBaseStats = true, defaultIvsGl = "5/15/13", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Stunfisk", "stunfisk", "stunfisk", "Unovan", listOf("ground", "electric"), 2445, "Thunder Shock", 2, "Mud Bomb", "Discharge", 34, 38, atk = 144.0, def = 171.0, hp = 240, glRank = 26, ulRank = 34, mlRank = 350, isRawBaseStats = true, defaultIvsGl = "5/15/13", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Muk (Alolan)", "muk_alolan", "muk", "Alolan", listOf("poison", "dark"), 2757, "Poison Jab", 2, "Dark Pulse", "Acid Spray", 40, 20, atk = 190.0, def = 172.0, hp = 233, glRank = 95, ulRank = 22, mlRank = 180, isRawBaseStats = true, defaultIvsGl = "4/15/15", defaultIvsUl = "4/15/15"),
-            PokemonMeta("Muk", "muk", "muk", "Kanto", listOf("poison"), 2757, "Poison Jab", 2, "Thunder Punch", "Dark Pulse", 32, 40, atk = 190.0, def = 172.0, hp = 233, glRank = 110, ulRank = 36, mlRank = 190, isRawBaseStats = true, defaultIvsGl = "4/15/15", defaultIvsUl = "4/15/15"),
-            PokemonMeta("Weezing (Galarian)", "weezing_galarian", "weezing", "Galarian", listOf("poison", "fairy"), 2488, "Fairy Wind", 2, "Brutal Swing", "Overheat", 34, 62, atk = 174.0, def = 197.0, hp = 163, glRank = 25, ulRank = 11, mlRank = 290, isRawBaseStats = true, defaultIvsGl = "4/14/13", defaultIvsUl = "12/14/13"),
-            PokemonMeta("Qwilfish (Hisuian)", "qwilfish_hisuian", "qwilfish", "Hisuian", listOf("dark", "poison"), 2290, "Poison Sting", 2, "Aqua Tail", "Shadow Ball", 30, 44, atk = 184.0, def = 151.0, hp = 163, glRank = 36, ulRank = 90, mlRank = 380, isRawBaseStats = true, defaultIvsGl = "4/14/15", defaultIvsUl = "15/15/15"),
-
-            // --- User Custom Great & Ultra League Team Pokémon ---
-            PokemonMeta("Fearow", "fearow", "fearow", "Base", listOf("normal", "flying"), 1500, "Peck", 2, "Drill Run", "Drill Peck", 42, 34, atk = 182.0, def = 133.0, hp = 163, glRank = 85, ulRank = 250, mlRank = 420, isRawBaseStats = true, defaultIvsGl = "4/15/13", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Shadow Pidgeot", "pidgeot_shadow", "pidgeot", "Shadow", listOf("normal", "flying"), 1490, "Gust", 4, "Twister", "Brave Bird", 28, 62, atk = 166.0, def = 154.0, hp = 195, glRank = 28, ulRank = 18, mlRank = 310, isRawBaseStats = true, defaultIvsGl = "4/14/12", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Pidgeot", "pidgeot", "pidgeot", "Base", listOf("normal", "flying"), 1490, "Gust", 4, "Twister", "Brave Bird", 24, 52, atk = 166.0, def = 154.0, hp = 195, glRank = 32, ulRank = 15, mlRank = 300, isRawBaseStats = true, defaultIvsGl = "4/14/12", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Zygarde", "zygarde_complete", "zygarde", "Complete", listOf("dragon", "ground"), 2472, "Dragon Tail", 3, "Crunch", "Earthquake", 32, 52, atk = 184.0, def = 207.0, hp = 389, glRank = 80, ulRank = 1, mlRank = 5, isRawBaseStats = true, defaultIvsGl = "0/0/0", defaultIvsUl = "13/10/15"),
-            PokemonMeta("Corviknight", "corviknight", "corviknight", "Base", listOf("flying", "steel"), 2499, "Sand Attack", 1, "Air Cutter", "Iron Head", 32, 34, atk = 163.0, def = 192.0, hp = 221, glRank = 14, ulRank = 7, mlRank = 120, chargedMove3 = "Sky Attack", isRawBaseStats = true, defaultIvsGl = "4/12/14", defaultIvsUl = "4/14/13"),
-            PokemonMeta("Mimikyu", "mimikyu", "mimikyu", "Disguised", listOf("ghost", "fairy"), 2497, "Shadow Claw", 2, "Play Rough", "Shadow Sneak", 44, 28, atk = 177.0, def = 199.0, hp = 146, glRank = 40, ulRank = 25, mlRank = 210, chargedMove3 = "Thunder", isRawBaseStats = true, defaultIvsGl = "4/14/15", defaultIvsUl = "13/15/15"),
-            PokemonMeta("Aegislash", "aegislash", "aegislash", "Shield", listOf("steel", "ghost"), 1499, "Psycho Cut", 2, "Shadow Ball", "Flash Cannon", 46, 52, atk = 97.0, def = 291.0, hp = 155, glRank = 16, ulRank = 30, mlRank = 240, chargedMove3 = "Gyro Ball", isRawBaseStats = true, defaultIvsGl = "4/15/15", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Cramorant", "cramorant", "cramorant", "Gulping", listOf("flying", "water"), 1499, "Peck", 2, "Surf", "Fly", 34, 42, atk = 173.0, def = 163.0, hp = 172, glRank = 26, ulRank = 38, mlRank = 320, chargedMove3 = "Dive", chargedMove4 = "Hydro Pump", isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "15/15/15"),
-
-            // --- Master League Core Meta ---
-            PokemonMeta("Lugia", "lugia", "lugia", "Base", listOf("psychic", "flying"), 4179, "Dragon Tail", 3, "Aeroblast", "Earth Power", 54, 34, atk = 193.0, def = 310.0, hp = 235, glRank = 75, ulRank = 45, mlRank = 12, isRawBaseStats = true, defaultIvsGl = "5/13/12", defaultIvsUl = "5/13/12"),
-            PokemonMeta("Kyogre", "kyogre", "kyogre", "Base", listOf("water"), 4652, "Waterfall", 3, "Origin Pulse", "Avalanche", 56, 40, atk = 270.0, def = 228.0, hp = 205, glRank = 310, ulRank = 180, mlRank = 10, isRawBaseStats = true, defaultIvsGl = "6/14/5", defaultIvsUl = "4/9/12"),
-            PokemonMeta("Groudon", "groudon", "groudon", "Base", listOf("ground"), 4652, "Mud Shot", 2, "Precipice Blades", "Fire Punch", 55, 26, atk = 270.0, def = 228.0, hp = 205, glRank = 300, ulRank = 175, mlRank = 11, isRawBaseStats = true, defaultIvsGl = "6/14/5", defaultIvsUl = "4/9/12"),
-            PokemonMeta("Ho-Oh", "ho_oh", "ho-oh", "Base", listOf("fire", "flying"), 4367, "Incinerate", 5, "Sacred Fire", "Brave Bird", 54, 52, atk = 239.0, def = 244.0, hp = 214, glRank = 140, ulRank = 70, mlRank = 7, isRawBaseStats = true, defaultIvsGl = "7/13/15", defaultIvsUl = "5/15/13"),
-            PokemonMeta("Yveltal", "yveltal", "yveltal", "Base", listOf("dark", "flying"), 4275, "Snarl", 3, "Dark Pulse", "Oblivion Wing", 42, 42, atk = 250.0, def = 185.0, hp = 246, glRank = 260, ulRank = 95, mlRank = 8, isRawBaseStats = true, defaultIvsGl = "7/13/11", defaultIvsUl = "4/14/8"),
-            PokemonMeta("Xerneas", "xerneas", "xerneas", "Base", listOf("fairy"), 4275, "Geomancy", 3, "Close Combat", "Moonblast", 44, 48, atk = 250.0, def = 185.0, hp = 246, glRank = 270, ulRank = 98, mlRank = 13, isRawBaseStats = true, defaultIvsGl = "7/13/11", defaultIvsUl = "4/14/8"),
-            PokemonMeta("Solgaleo", "solgaleo", "solgaleo", "Base", listOf("psychic", "steel"), 4545, "Fire Spin", 3, "Psychic Fangs", "Iron Head", 24, 32, atk = 255.0, def = 191.0, hp = 264, glRank = 290, ulRank = 120, mlRank = 15, isRawBaseStats = true, defaultIvsGl = "4/15/12", defaultIvsUl = "5/13/5"),
-            PokemonMeta("Lunala", "lunala", "lunala", "Base", listOf("psychic", "ghost"), 4545, "Shadow Claw", 2, "Shadow Ball", "Moonblast", 46, 48, atk = 255.0, def = 191.0, hp = 264, glRank = 310, ulRank = 140, mlRank = 18, isRawBaseStats = true, defaultIvsGl = "4/15/12", defaultIvsUl = "5/13/5"),
-            PokemonMeta("Mewtwo", "mewtwo", "mewtwo", "Base", listOf("psychic"), 4724, "Psycho Cut", 2, "Psystrike", "Shadow Ball", 48, 44, atk = 300.0, def = 182.0, hp = 214, glRank = 380, ulRank = 210, mlRank = 8, isRawBaseStats = true, defaultIvsGl = "4/14/13", defaultIvsUl = "8/13/14"),
-            PokemonMeta("Mew", "mew", "mew", "Base", listOf("psychic"), 3691, "Shadow Claw", 2, "Psyshock", "Wild Charge", 38, 45, atk = 210.0, def = 210.0, hp = 225, glRank = 92, ulRank = 78, mlRank = 58, chargedMove3 = "Surf", isRawBaseStats = true, defaultIvsGl = "10/15/13", defaultIvsUl = "10/15/15"),
-            PokemonMeta("Rhyperior", "rhyperior", "rhyperior", "Base", listOf("ground", "rock"), 4221, "Mud-Slap", 3, "Rock Wrecker", "Breaking Swipe", 52, 25, atk = 241.0, def = 190.0, hp = 251, glRank = 210, ulRank = 110, mlRank = 9, isRawBaseStats = true, defaultIvsGl = "4/12/8", defaultIvsUl = "5/14/14"),
-            PokemonMeta("Dragonite", "dragonite", "dragonite", "Base", listOf("dragon", "flying"), 4287, "Dragon Breath", 1, "Dragon Claw", "Superpower", 30, 42, atk = 263.0, def = 198.0, hp = 209, glRank = 95, ulRank = 52, mlRank = 19, isRawBaseStats = true, defaultIvsGl = "4/13/14", defaultIvsUl = "5/15/13"),
-            PokemonMeta("Garchomp", "garchomp", "garchomp", "Base", listOf("dragon", "ground"), 4479, "Mud Shot", 2, "Earth Power", "Outrage", 48, 48, atk = 261.0, def = 193.0, hp = 239, glRank = 220, ulRank = 130, mlRank = 24, isRawBaseStats = true, defaultIvsGl = "4/10/14", defaultIvsUl = "4/15/14"),
-            PokemonMeta("Metagross", "metagross", "metagross", "Base", listOf("steel", "psychic"), 4286, "Bullet Punch", 2, "Meteor Mash", "Earthquake", 48, 52, atk = 257.0, def = 228.0, hp = 190, glRank = 290, ulRank = 160, mlRank = 25, isRawBaseStats = true, defaultIvsGl = "4/12/15", defaultIvsUl = "5/14/15"),
-            PokemonMeta("Melmetal", "melmetal", "melmetal", "Base", listOf("steel"), 4144, "Thunder Shock", 2, "Superpower", "Rock Slide", 42, 34, atk = 226.0, def = 190.0, hp = 264, glRank = 130, ulRank = 65, mlRank = 23, isRawBaseStats = true, defaultIvsGl = "4/10/14", defaultIvsUl = "4/15/14"),
-            PokemonMeta("Florges", "florges", "florges", "Base", listOf("fairy"), 3657, "Fairy Wind", 2, "Disarming Voice", "Moonblast", 30, 48, atk = 212.0, def = 244.0, hp = 186, glRank = 110, ulRank = 38, mlRank = 20, isRawBaseStats = true, defaultIvsGl = "6/13/14", defaultIvsUl = "4/13/15"),
-            PokemonMeta("Primarina", "primarina", "primarina", "Base", listOf("water", "fairy"), 3618, "Charm", 3, "Hydro Cannon", "Moonblast", 42, 48, atk = 232.0, def = 195.0, hp = 190, glRank = 90, ulRank = 42, mlRank = 21, isRawBaseStats = true, defaultIvsGl = "7/15/14", defaultIvsUl = "5/14/15"),
-            PokemonMeta("Mamoswine", "mamoswine", "mamoswine", "Base", listOf("ice", "ground"), 3763, "Powder Snow", 2, "Avalanche", "High Horsepower", 44, 48, atk = 247.0, def = 146.0, hp = 242, glRank = 190, ulRank = 120, mlRank = 27, isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "4/14/15"),
-            PokemonMeta("Excadrill", "excadrill", "excadrill", "Base", listOf("ground", "steel"), 3667, "Mud Shot", 2, "Drill Run", "Rock Slide", 40, 32, atk = 255.0, def = 129.0, hp = 242, glRank = 230, ulRank = 140, mlRank = 28, isRawBaseStats = true, defaultIvsGl = "4/14/13", defaultIvsUl = "6/15/13"),
-            PokemonMeta("Reshiram", "reshiram", "reshiram", "Base", listOf("dragon", "fire"), 4565, "Dragon Breath", 1, "Fusion Flare", "Overheat", 52, 70, atk = 275.0, def = 211.0, hp = 205, glRank = 350, ulRank = 220, mlRank = 29, isRawBaseStats = true, defaultIvsGl = "7/11/14", defaultIvsUl = "6/14/12"),
-            PokemonMeta("Zekrom", "zekrom", "zekrom", "Base", listOf("dragon", "electric"), 4565, "Dragon Breath", 1, "Fusion Bolt", "Crunch", 50, 32, atk = 275.0, def = 211.0, hp = 205, glRank = 345, ulRank = 215, mlRank = 30, isRawBaseStats = true, defaultIvsGl = "7/11/14", defaultIvsUl = "6/14/12"),
-            PokemonMeta("Raikou", "raikou", "raikou", "Base", listOf("electric"), 3902, "Thunder Shock", 2, "Wild Charge", "Shadow Ball", 48, 44, atk = 241.0, def = 195.0, hp = 207, glRank = 180, ulRank = 115, mlRank = 45, isRawBaseStats = true, defaultIvsGl = "6/12/11", defaultIvsUl = "5/13/13"),
-            PokemonMeta("Entei", "entei", "entei", "Base", listOf("fire"), 3926, "Fire Fang", 2, "Flame Charge", "Overheat", 28, 72, atk = 235.0, def = 171.0, hp = 251, glRank = 240, ulRank = 165, mlRank = 55, isRawBaseStats = true, defaultIvsGl = "7/9/11", defaultIvsUl = "6/12/12"),
-            PokemonMeta("Suicune", "suicune", "suicune", "Base", listOf("water"), 3372, "Snarl", 3, "Ice Beam", "Hydro Pump", 36, 52, atk = 180.0, def = 235.0, hp = 225, glRank = 170, ulRank = 95, mlRank = 75, isRawBaseStats = true, defaultIvsGl = "5/14/14", defaultIvsUl = "5/15/12"),
-            PokemonMeta("Zarude", "zarude", "zarude", "Base", listOf("dark", "grass"), 4334, "Vine Whip", 2, "Dark Pulse", "Power Whip", 40, 44, atk = 242.0, def = 215.0, hp = 233, glRank = 210, ulRank = 95, mlRank = 17, isRawBaseStats = true, defaultIvsGl = "13/11/12", defaultIvsUl = "11/12/10"),
-            PokemonMeta("Meloetta", "meloetta_aria", "meloetta", "Aria", listOf("normal", "psychic"), 4490, "Quick Attack", 2, "Psyshock", "Dazzling Gleam", 34, 46, atk = 250.0, def = 225.0, hp = 225, glRank = 260, ulRank = 110, mlRank = 16, isRawBaseStats = true, defaultIvsGl = "12/14/10", defaultIvsUl = "10/12/14"),
-            PokemonMeta("Ursaluna", "ursaluna", "ursaluna", "Base", listOf("ground", "normal"), 4358, "Tackle", 1, "Ice Punch", "High Horsepower", 30, 50, atk = 243.0, def = 181.0, hp = 277, glRank = 250, ulRank = 130, mlRank = 21, isRawBaseStats = true, defaultIvsGl = "4/13/7", defaultIvsUl = "4/10/15"),
-            PokemonMeta("Togekiss", "togekiss", "togekiss", "Base", listOf("fairy", "flying"), 3767, "Charm", 3, "Ancient Power", "Aura Sphere", 30, 46, atk = 225.0, def = 217.0, hp = 198, glRank = 150, ulRank = 48, mlRank = 24, isRawBaseStats = true, defaultIvsGl = "4/15/15", defaultIvsUl = "5/13/15"),
-            PokemonMeta("Gyarados", "gyarados", "gyarados", "Base", listOf("water", "flying"), 3834, "Dragon Breath", 1, "Aqua Tail", "Crunch", 28, 34, atk = 237.0, def = 186.0, hp = 216, glRank = 160, ulRank = 42, mlRank = 26, isRawBaseStats = true, defaultIvsGl = "4/14/7", defaultIvsUl = "5/13/15"),
-            PokemonMeta("Snorlax", "snorlax", "snorlax", "Base", listOf("normal"), 3647, "Psywave", 1, "Body Slam", "Earthquake", 26, 52, atk = 190.0, def = 169.0, hp = 330, glRank = 95, ulRank = 38, mlRank = 30, chargedMove3 = "Superpower", isRawBaseStats = true, defaultIvsGl = "4/14/5", defaultIvsUl = "5/15/14"),
-            PokemonMeta("Gholdengo", "gholdengo", "gholdengo", "Base", listOf("steel", "ghost"), 3976, "Hex", 3, "Shadow Ball", "Focus Blast", 46, 56, atk = 252.0, def = 190.0, hp = 202, glRank = 280, ulRank = 140, mlRank = 23, isRawBaseStats = true, defaultIvsGl = "4/15/15", defaultIvsUl = "4/14/15"),
-            PokemonMeta("Baxcalibur", "baxcalibur", "baxcalibur", "Base", listOf("dragon", "ice"), 4286, "Dragon Breath", 1, "Avalanche", "Dragon Claw", 44, 28, atk = 254.0, def = 168.0, hp = 229, glRank = 90, ulRank = 55, mlRank = 22, isRawBaseStats = true, defaultIvsGl = "4/14/14", defaultIvsUl = "6/15/15"),
-            PokemonMeta("Tapu Bulu", "tapu_bulu", "tapu bulu", "Base", listOf("grass", "fairy"), 3865, "Bullet Seed", 3, "Nature's Madness", "Grass Knot", 42, 44, atk = 249.0, def = 215.0, hp = 172, glRank = 290, ulRank = 110, mlRank = 14, isRawBaseStats = true, defaultIvsGl = "4/13/5", defaultIvsUl = "5/8/14"),
-            PokemonMeta("Tapu Fini", "tapu_fini", "tapu fini", "Base", listOf("water", "fairy"), 3230, "Water Gun", 1, "Surf", "Nature's Madness", 34, 42, atk = 189.0, def = 254.0, hp = 172, glRank = 32, ulRank = 3, mlRank = 55, isRawBaseStats = true, defaultIvsGl = "5/11/4", defaultIvsUl = "5/11/14"),
-            PokemonMeta("Tapu Lele", "tapu_lele", "tapu lele", "Base", listOf("psychic", "fairy"), 3950, "Astonish", 3, "Nature's Madness", "Psyshock", 44, 36, atk = 259.0, def = 208.0, hp = 172, glRank = 300, ulRank = 120, mlRank = 19, isRawBaseStats = true, defaultIvsGl = "5/9/10", defaultIvsUl = "5/14/13"),
-            PokemonMeta("Tapu Koko", "tapu_koko", "tapu koko", "Base", listOf("electric", "fairy"), 3582, "Volt Switch", 4, "Nature's Madness", "Brave Bird", 42, 52, atk = 250.0, def = 181.0, hp = 172, glRank = 270, ulRank = 95, mlRank = 35, isRawBaseStats = true, defaultIvsGl = "6/7/15", defaultIvsUl = "6/12/12"),
-
-            // --- Great League & Ultra League Core Meta ---
-            PokemonMeta("Clodsire", "clodsire", "clodsire", "Base", listOf("poison", "ground"), 1494, "Poison Sting", 2, "Earthquake", "Stone Edge", 46, 42, atk = 127.0, def = 151.0, hp = 277, glRank = 1, ulRank = 90, mlRank = 400, isRawBaseStats = true, defaultIvsGl = "4/14/10", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Feraligatr", "feraligatr", "feraligatr", "Base", listOf("water"), 2488, "Shadow Claw", 2, "Hydro Cannon", "Ice Beam", 44, 38, atk = 205.0, def = 188.0, hp = 198, glRank = 2, ulRank = 2, mlRank = 85, isRawBaseStats = true, defaultIvsGl = "5/11/14", defaultIvsUl = "4/15/11"),
-            PokemonMeta("Mandibuzz", "mandibuzz", "mandibuzz", "Base", listOf("dark", "flying"), 2417, "Snarl", 3, "Dark Pulse", "Aerial Ace", 38, 28, atk = 129.0, def = 205.0, hp = 242, glRank = 3, ulRank = 12, mlRank = 280, isRawBaseStats = true, defaultIvsGl = "5/15/13", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Azumarill", "azumarill", "azumarill", "Base", listOf("water", "fairy"), 1499, "Bubble", 3, "Ice Beam", "Play Rough", 36, 40, atk = 112.0, def = 152.0, hp = 225, glRank = 4, ulRank = 350, mlRank = 500, isRawBaseStats = true, defaultIvsGl = "4/15/13", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Gastrodon", "gastrodon", "gastrodon", "Base", listOf("water", "ground"), 2485, "Mud-Slap", 3, "Body Slam", "Earth Power", 26, 44, atk = 169.0, def = 143.0, hp = 244, glRank = 5, ulRank = 24, mlRank = 310, isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "12/15/13"),
-            PokemonMeta("Malamar", "malamar", "malamar", "Base", listOf("dark", "psychic"), 2488, "Psywave", 1, "Foul Play", "Superpower", 36, 42, atk = 177.0, def = 165.0, hp = 200, glRank = 6, ulRank = 18, mlRank = 320, isRawBaseStats = true, defaultIvsGl = "4/15/15", defaultIvsUl = "4/13/15"),
-            PokemonMeta("Dunsparce", "dunsparce", "dunsparce", "Base", listOf("normal"), 1498, "Rollout", 3, "Rock Slide", "Drill Run", 36, 40, atk = 131.0, def = 128.0, hp = 225, glRank = 7, ulRank = 310, mlRank = 480, isRawBaseStats = true, defaultIvsGl = "4/15/13", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Annihilape", "annihilape", "annihilape", "Base", listOf("fighting", "ghost"), 3695, "Counter", 2, "Rage Fist", "Ice Punch", 32, 30, atk = 220.0, def = 178.0, hp = 242, glRank = 8, ulRank = 9, mlRank = 32, isRawBaseStats = true, defaultIvsGl = "4/13/13", defaultIvsUl = "5/14/15"),
-            PokemonMeta("Primeape", "primeape", "primeape", "Base", listOf("fighting"), 2488, "Karate Chop", 2, "Rage Fist", "Close Combat", 32, 48, atk = 207.0, def = 138.0, hp = 163, glRank = 10, ulRank = 20, mlRank = 340, isRawBaseStats = true, defaultIvsGl = "5/15/15", defaultIvsUl = "12/15/14"),
-            PokemonMeta("Cresselia", "cresselia", "cresselia", "Base", listOf("psychic"), 2488, "Psycho Cut", 2, "Grass Knot", "Moonblast", 36, 46, atk = 152.0, def = 258.0, hp = 260, glRank = 11, ulRank = 4, mlRank = 110, isRawBaseStats = true, defaultIvsGl = "4/11/9", defaultIvsUl = "4/11/11"),
-            PokemonMeta("Jumpluff", "jumpluff", "jumpluff", "Base", listOf("grass", "flying"), 1498, "Fairy Wind", 2, "Aerial Ace", "Energy Ball", 28, 42, atk = 118.0, def = 183.0, hp = 181, glRank = 13, ulRank = 300, mlRank = 480, isRawBaseStats = true, defaultIvsGl = "4/15/12", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Swampert", "swampert", "swampert", "Base", listOf("water", "ground"), 2495, "Mud Shot", 2, "Hydro Cannon", "Earthquake", 44, 52, atk = 208.0, def = 175.0, hp = 225, glRank = 15, ulRank = 14, mlRank = 60, chargedMove3 = "Sludge Wave", chargedMove4 = "Surf", isRawBaseStats = true, defaultIvsGl = "6/15/12", defaultIvsUl = "4/15/14"),
-            PokemonMeta("Quagsire", "quagsire", "quagsire", "Base", listOf("water", "ground"), 1499, "Mud Shot", 2, "Aqua Tail", "Stone Edge", 28, 46, atk = 152.0, def = 143.0, hp = 216, glRank = 17, ulRank = 280, mlRank = 450, isRawBaseStats = true, defaultIvsGl = "4/15/10", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Whiscash", "whiscash", "whiscash", "Base", listOf("water", "ground"), 1499, "Mud Shot", 2, "Scald", "Mud Bomb", 40, 32, atk = 151.0, def = 141.0, hp = 242, glRank = 19, ulRank = 290, mlRank = 450, isRawBaseStats = true, defaultIvsGl = "4/15/15", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Talonflame", "talonflame", "talonflame", "Base", listOf("fire", "flying"), 2493, "Incinerate", 5, "Fly", "Flame Charge", 42, 28, atk = 176.0, def = 155.0, hp = 186, glRank = 18, ulRank = 10, mlRank = 180, isRawBaseStats = true, defaultIvsGl = "4/12/15", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Serperior", "serperior", "serperior", "Base", listOf("grass"), 2480, "Vine Whip", 2, "Frenzy Plant", "Aerial Ace", 44, 28, atk = 161.0, def = 204.0, hp = 181, glRank = 20, ulRank = 26, mlRank = 310, isRawBaseStats = true, defaultIvsGl = "4/9/14", defaultIvsUl = "13/15/15"),
-            PokemonMeta("Wigglytuff", "wigglytuff", "wigglytuff", "Base", listOf("normal", "fairy"), 1499, "Charm", 3, "Icy Wind", "Swift", 30, 32, atk = 156.0, def = 90.0, hp = 295, glRank = 21, ulRank = 320, mlRank = 480, isRawBaseStats = true, defaultIvsGl = "4/15/15", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Clefable", "clefable", "clefable", "Base", listOf("fairy"), 2488, "Fairy Wind", 2, "Meteor Mash", "Swift", 46, 30, atk = 178.0, def = 162.0, hp = 216, glRank = 23, ulRank = 13, mlRank = 240, isRawBaseStats = true, defaultIvsGl = "4/13/14", defaultIvsUl = "4/12/15"),
-            PokemonMeta("Skeledirge", "skeledirge", "skeledirge", "Base", listOf("fire", "ghost"), 2491, "Incinerate", 5, "Torch Song", "Shadow Ball", 38, 46, atk = 207.0, def = 178.0, hp = 232, glRank = 22, ulRank = 15, mlRank = 70, chargedMove3 = "Disarming Voice", isRawBaseStats = true, defaultIvsGl = "4/13/11", defaultIvsUl = "6/15/13"),
-            PokemonMeta("Lickilicky", "lickilicky", "lickilicky", "Base", listOf("normal"), 2488, "Rollout", 3, "Body Slam", "Shadow Ball", 26, 44, atk = 161.0, def = 181.0, hp = 242, glRank = 27, ulRank = 8, mlRank = 210, isRawBaseStats = true, defaultIvsGl = "4/15/8", defaultIvsUl = "4/13/13"),
-            PokemonMeta("Lickitung", "lickitung", "lickitung", "Base", listOf("normal"), 1499, "Lick", 1, "Body Slam", "Power Whip", 26, 42, atk = 108.0, def = 137.0, hp = 207, glRank = 29, ulRank = 400, mlRank = 500, isRawBaseStats = true, defaultIvsGl = "7/15/15", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Bastiodon", "bastiodon", "bastiodon", "Base", listOf("rock", "steel"), 1499, "Smack Down", 3, "Stone Edge", "Flamethrower", 42, 38, atk = 94.0, def = 286.0, hp = 155, glRank = 31, ulRank = 400, mlRank = 500, isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Carbink", "carbink", "carbink", "Base", listOf("rock", "fairy"), 1499, "Rock Throw", 2, "Rock Slide", "Moonblast", 36, 46, atk = 95.0, def = 285.0, hp = 137, glRank = 33, ulRank = 410, mlRank = 500, isRawBaseStats = true, defaultIvsGl = "5/15/13", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Registeel", "registeel", "registeel", "Base", listOf("steel"), 2488, "Lock-On", 1, "Focus Blast", "Zap Cannon", 56, 56, atk = 143.0, def = 285.0, hp = 190, glRank = 34, ulRank = 5, mlRank = 190, isRawBaseStats = true, defaultIvsGl = "8/15/14", defaultIvsUl = "4/6/14"),
-            PokemonMeta("Skarmory", "skarmory", "skarmory", "Base", listOf("steel", "flying"), 2380, "Steel Wing", 2, "Sky Attack", "Brave Bird", 36, 52, atk = 148.0, def = 226.0, hp = 163, glRank = 37, ulRank = 65, mlRank = 360, isRawBaseStats = true, defaultIvsGl = "4/14/12", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Umbreon", "umbreon", "umbreon", "Base", listOf("dark"), 2416, "Snarl", 3, "Foul Play", "Last Resort", 34, 40, atk = 126.0, def = 240.0, hp = 216, glRank = 38, ulRank = 30, mlRank = 340, isRawBaseStats = true, defaultIvsGl = "4/15/9", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Lanturn", "lanturn", "lanturn", "Base", listOf("water", "electric"), 1499, "Spark", 2, "Surf", "Thunderbolt", 34, 44, atk = 146.0, def = 137.0, hp = 268, glRank = 39, ulRank = 260, mlRank = 450, isRawBaseStats = true, defaultIvsGl = "5/15/12", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Medicham", "medicham", "medicham", "Base", listOf("fighting", "psychic"), 1499, "Counter", 2, "Ice Punch", "Psychic", 28, 38, atk = 121.0, def = 152.0, hp = 155, glRank = 41, ulRank = 420, mlRank = 500, isRawBaseStats = true, defaultIvsGl = "7/15/14", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Sableye", "sableye", "sableye", "Base", listOf("dark", "ghost"), 1499, "Shadow Claw", 2, "Foul Play", "Power Gem", 36, 40, atk = 141.0, def = 136.0, hp = 137, glRank = 42, ulRank = 410, mlRank = 500, isRawBaseStats = true, defaultIvsGl = "4/15/15", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Drapion", "drapion", "drapion", "Base", listOf("poison", "dark"), 2488, "Poison Sting", 2, "Crunch", "Aqua Tail", 34, 28, atk = 180.0, def = 202.0, hp = 172, glRank = 43, ulRank = 17, mlRank = 260, isRawBaseStats = true, defaultIvsGl = "6/14/15", defaultIvsUl = "4/15/15"),
-            PokemonMeta("Toxapex", "toxapex", "toxapex", "Base", listOf("poison", "water"), 1499, "Poison Jab", 2, "Brine", "Sludge Wave", 28, 48, atk = 114.0, def = 273.0, hp = 137, glRank = 44, ulRank = 380, mlRank = 490, isRawBaseStats = true, defaultIvsGl = "4/15/15", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Gligar", "gligar", "gligar", "Base", listOf("ground", "flying"), 1499, "Wing Attack", 2, "Aerial Ace", "Dig", 28, 44, atk = 143.0, def = 184.0, hp = 163, glRank = 45, ulRank = 360, mlRank = 490, isRawBaseStats = true, defaultIvsGl = "4/13/15", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Gliscor", "gliscor", "gliscor", "Base", listOf("ground", "flying"), 2492, "Wing Attack", 2, "Night Slash", "Earthquake", 28, 52, atk = 185.0, def = 222.0, hp = 181, glRank = 65, ulRank = 29, mlRank = 180, isRawBaseStats = true, defaultIvsGl = "4/14/9", defaultIvsUl = "4/15/11"),
-            PokemonMeta("Poliwrath", "poliwrath", "poliwrath", "Base", listOf("water", "fighting"), 2495, "Counter", 2, "Icy Wind", "Scald", 30, 42, atk = 182.0, def = 184.0, hp = 207, glRank = 46, ulRank = 19, mlRank = 190, isRawBaseStats = true, defaultIvsGl = "5/13/15", defaultIvsUl = "4/14/15"),
-            PokemonMeta("Pelipper", "pelipper", "pelipper", "Base", listOf("water", "flying"), 1499, "Wing Attack", 2, "Weather Ball", "Hurricane", 32, 52, atk = 175.0, def = 174.0, hp = 155, glRank = 47, ulRank = 280, mlRank = 460, isRawBaseStats = true, defaultIvsGl = "6/15/14", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Mantine", "mantine", "mantine", "Base", listOf("water", "flying"), 1499, "Wing Attack", 2, "Aerial Ace", "Ice Beam", 28, 38, atk = 148.0, def = 226.0, hp = 163, glRank = 49, ulRank = 240, mlRank = 440, isRawBaseStats = true, defaultIvsGl = "4/14/12", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Dewgong", "dewgong", "dewgong", "Base", listOf("water", "ice"), 1499, "Ice Shard", 3, "Icy Wind", "Drill Run", 30, 40, atk = 139.0, def = 177.0, hp = 207, glRank = 50, ulRank = 290, mlRank = 460, isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Walrein", "walrein", "walrein", "Base", listOf("ice", "water"), 2492, "Powder Snow", 2, "Icicle Spear", "Earthquake", 32, 52, atk = 182.0, def = 176.0, hp = 242, glRank = 68, ulRank = 33, mlRank = 170, isRawBaseStats = true, defaultIvsGl = "4/14/14", defaultIvsUl = "4/13/14"),
-            PokemonMeta("Abomasnow", "abomasnow", "abomasnow", "Base", listOf("grass", "ice"), 2485, "Powder Snow", 2, "Weather Ball", "Energy Ball", 32, 44, atk = 178.0, def = 158.0, hp = 207, glRank = 52, ulRank = 37, mlRank = 280, isRawBaseStats = true, defaultIvsGl = "4/15/15", defaultIvsUl = "4/15/11"),
-            PokemonMeta("Trevenant", "trevenant", "trevenant", "Base", listOf("ghost", "grass"), 2492, "Shadow Claw", 2, "Seed Bomb", "Shadow Ball", 32, 46, atk = 201.0, def = 154.0, hp = 198, glRank = 54, ulRank = 31, mlRank = 220, isRawBaseStats = true, defaultIvsGl = "3/13/12", defaultIvsUl = "4/14/10"),
-            PokemonMeta("Goodra", "goodra", "goodra", "Base", listOf("dragon"), 2495, "Dragon Breath", 1, "Aqua Tail", "Thunder Punch", 28, 30, atk = 220.0, def = 242.0, hp = 207, glRank = 56, ulRank = 36, mlRank = 85, isRawBaseStats = true, defaultIvsGl = "4/9/12", defaultIvsUl = "5/15/15"),
-            PokemonMeta("Guzzlord", "guzzlord", "guzzlord", "Base", listOf("dark", "dragon"), 2492, "Dragon Tail", 3, "Dragon Claw", "Crunch", 28, 34, atk = 188.0, def = 99.0, hp = 440, glRank = 60, ulRank = 21, mlRank = 160, isRawBaseStats = true, defaultIvsGl = "4/13/10", defaultIvsUl = "4/15/14"),
-            PokemonMeta("Morpeko", "morpeko", "morpeko", "Full Belly", listOf("electric", "dark"), 1499, "Thunder Shock", 2, "Aura Wheel", "Psychic Fangs", 52, 24, atk = 192.0, def = 121.0, hp = 151, glRank = 15, ulRank = 340, mlRank = 480, isRawBaseStats = true, defaultIvsGl = "5/14/15", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Dusknoir", "dusknoir", "dusknoir", "Base", listOf("ghost"), 2480, "Astonish", 3, "Shadow Punch", "Dynamic Punch", 28, 42, atk = 180.0, def = 254.0, hp = 128, glRank = 55, ulRank = 40, mlRank = 290, isRawBaseStats = true, defaultIvsGl = "5/15/11", defaultIvsUl = "4/13/15"),
-            PokemonMeta("Pangoro", "pangoro", "pangoro", "Base", listOf("fighting", "dark"), 2492, "Karate Chop", 2, "Night Slash", "Close Combat", 28, 48, atk = 226.0, def = 146.0, hp = 216, glRank = 59, ulRank = 27, mlRank = 180, isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "4/15/15"),
-            PokemonMeta("Greedent", "greedent", "greedent", "Base", listOf("normal"), 2485, "Mud Shot", 2, "Body Slam", "Crunch", 26, 34, atk = 160.0, def = 156.0, hp = 260, glRank = 64, ulRank = 23, mlRank = 290, isRawBaseStats = true, defaultIvsGl = "5/15/14", defaultIvsUl = "4/15/15"),
-            PokemonMeta("Dubwool", "dubwool", "dubwool", "Base", listOf("normal"), 2478, "Double Kick", 3, "Body Slam", "Payback", 26, 50, atk = 159.0, def = 198.0, hp = 176, glRank = 66, ulRank = 39, mlRank = 300, isRawBaseStats = true, defaultIvsGl = "5/14/14", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Ampharos", "ampharos", "ampharos", "Base", listOf("electric"), 2495, "Volt Switch", 4, "Brutal Swing", "Trailblaze", 32, 34, atk = 211.0, def = 169.0, hp = 207, glRank = 92, ulRank = 41, mlRank = 210, isRawBaseStats = true, defaultIvsGl = "4/14/12", defaultIvsUl = "4/12/15"),
-            PokemonMeta("Tentacruel", "tentacruel", "tentacruel", "Base", listOf("water", "poison"), 2485, "Poison Jab", 2, "Scald", "Acid Spray", 40, 20, atk = 166.0, def = 209.0, hp = 190, glRank = 70, ulRank = 18, mlRank = 260, isRawBaseStats = true, defaultIvsGl = "4/15/15", defaultIvsUl = "4/14/14"),
-            PokemonMeta("Cobalion", "cobalion", "cobalion", "Base", listOf("steel", "fighting"), 2492, "Double Kick", 3, "Sacred Sword", "Stone Edge", 38, 42, atk = 192.0, def = 229.0, hp = 209, glRank = 95, ulRank = 6, mlRank = 90, isRawBaseStats = true, defaultIvsGl = "4/10/4", defaultIvsUl = "6/15/11"),
-            PokemonMeta("Virizion", "virizion", "virizion", "Base", listOf("grass", "fighting"), 2490, "Double Kick", 3, "Sacred Sword", "Leaf Blade", 38, 36, atk = 192.0, def = 229.0, hp = 209, glRank = 110, ulRank = 8, mlRank = 95, isRawBaseStats = true, defaultIvsGl = "4/10/4", defaultIvsUl = "6/15/11"),
-            PokemonMeta("Venusaur", "venusaur", "venusaur", "Base", listOf("grass", "poison"), 2495, "Vine Whip", 2, "Frenzy Plant", "Sludge Bomb", 46, 40, atk = 198.0, def = 189.0, hp = 190, glRank = 72, ulRank = 44, mlRank = 220, isRawBaseStats = true, defaultIvsGl = "4/13/14", defaultIvsUl = "4/14/15"),
-            PokemonMeta("Charizard", "charizard", "charizard", "Base", listOf("fire", "flying"), 2495, "Wing Attack", 2, "Blast Burn", "Dragon Claw", 50, 28, atk = 223.0, def = 173.0, hp = 186, glRank = 78, ulRank = 46, mlRank = 190, isRawBaseStats = true, defaultIvsGl = "5/14/15", defaultIvsUl = "4/13/14"),
-            PokemonMeta("Blastoise", "blastoise", "blastoise", "Base", listOf("water"), 2466, "Rollout", 3, "Hydro Cannon", "Ice Beam", 44, 38, atk = 171.0, def = 207.0, hp = 188, glRank = 62, ulRank = 43, mlRank = 250, isRawBaseStats = true, defaultIvsGl = "4/8/15", defaultIvsUl = "5/15/15"),
-            PokemonMeta("Greninja", "greninja", "greninja", "Base", listOf("water", "dark"), 2492, "Water Shuriken", 3, "Hydro Cannon", "Brutal Swing", 44, 34, atk = 223.0, def = 152.0, hp = 176, glRank = 74, ulRank = 35, mlRank = 210, chargedMove3 = "Night Slash", isRawBaseStats = true, defaultIvsGl = "5/12/12", defaultIvsUl = "4/13/15"),
-            PokemonMeta("Chesnaught", "chesnaught", "chesnaught", "Base", listOf("grass", "fighting"), 2492, "Vine Whip", 2, "Frenzy Plant", "Superpower", 46, 42, atk = 201.0, def = 204.0, hp = 204, glRank = 67, ulRank = 50, mlRank = 160, isRawBaseStats = true, defaultIvsGl = "4/14/9", defaultIvsUl = "4/15/11"),
-            PokemonMeta("Typhlosion", "typhlosion", "typhlosion", "Base", listOf("fire"), 2495, "Incinerate", 5, "Blast Burn", "Thunder Punch", 50, 30, atk = 223.0, def = 173.0, hp = 186, glRank = 76, ulRank = 47, mlRank = 230, isRawBaseStats = true, defaultIvsGl = "5/14/15", defaultIvsUl = "4/13/14"),
-            PokemonMeta("Decidueye", "decidueye", "decidueye", "Base", listOf("grass", "ghost"), 2492, "Astonish", 3, "Frenzy Plant", "Spirit Shackle", 46, 36, atk = 210.0, def = 179.0, hp = 186, glRank = 79, ulRank = 54, mlRank = 240, isRawBaseStats = true, defaultIvsGl = "4/14/14", defaultIvsUl = "4/14/12"),
-            PokemonMeta("Incineroar", "incineroar", "incineroar", "Base", listOf("fire", "dark"), 2495, "Snarl", 3, "Blast Burn", "Darkest Lariat", 50, 44, atk = 214.0, def = 175.0, hp = 216, glRank = 88, ulRank = 52, mlRank = 170, isRawBaseStats = true, defaultIvsGl = "4/15/12", defaultIvsUl = "4/15/14"),
-            PokemonMeta("Empoleon", "empoleon", "empoleon", "Base", listOf("water", "steel"), 2495, "Steel Wing", 2, "Hydro Cannon", "Drill Peck", 44, 34, atk = 210.0, def = 186.0, hp = 197, glRank = 71, ulRank = 49, mlRank = 180, isRawBaseStats = true, defaultIvsGl = "5/15/13", defaultIvsUl = "6/15/14"),
-            PokemonMeta("Machamp", "machamp", "machamp", "Base", listOf("fighting"), 2495, "Karate Chop", 2, "Cross Chop", "Stone Edge", 28, 44, atk = 234.0, def = 159.0, hp = 207, glRank = 73, ulRank = 51, mlRank = 120, isRawBaseStats = true, defaultIvsGl = "5/15/12", defaultIvsUl = "4/15/14"),
-            PokemonMeta("Scrafty", "scrafty", "scrafty", "Base", listOf("dark", "fighting"), 2283, "Counter", 2, "Foul Play", "Power-Up Punch", 36, 20, atk = 163.0, def = 222.0, hp = 163, glRank = 82, ulRank = 58, mlRank = 340, isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "12/12/14"),
-            PokemonMeta("Obstagoon", "obstagoon", "obstagoon", "Base", listOf("dark", "normal"), 2492, "Counter", 2, "Night Slash", "Cross Chop", 28, 28, atk = 180.0, def = 194.0, hp = 212, glRank = 84, ulRank = 56, mlRank = 210, isRawBaseStats = true, defaultIvsGl = "5/15/12", defaultIvsUl = "4/15/14"),
-            PokemonMeta("Diggersby", "diggersby", "diggersby", "Base", listOf("normal", "ground"), 1499, "Quick Attack", 2, "Scorching Sands", "Fire Punch", 40, 28, atk = 112.0, def = 155.0, hp = 198, glRank = 36, ulRank = 380, mlRank = 490, isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Jellicent", "jellicent", "jellicent", "Base", listOf("water", "ghost"), 2488, "Hex", 3, "Surf", "Shadow Ball", 34, 46, atk = 159.0, def = 178.0, hp = 225, glRank = 61, ulRank = 28, mlRank = 270, isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "12/14/12"),
-            PokemonMeta("Cofagrigus", "cofagrigus", "cofagrigus", "Base", listOf("ghost"), 2480, "Shadow Claw", 2, "Shadow Ball", "Dark Pulse", 46, 38, atk = 163.0, def = 237.0, hp = 151, glRank = 86, ulRank = 60, mlRank = 310, isRawBaseStats = true, defaultIvsGl = "6/13/14", defaultIvsUl = "12/12/15"),
-            PokemonMeta("Runerigus", "runerigus", "runerigus", "Base", listOf("ground", "ghost"), 2480, "Shadow Claw", 2, "Sand Tomb", "Shadow Ball", 24, 46, atk = 163.0, def = 237.0, hp = 151, glRank = 89, ulRank = 62, mlRank = 315, isRawBaseStats = true, defaultIvsGl = "6/13/14", defaultIvsUl = "12/12/15"),
-            PokemonMeta("Ferrothorn", "ferrothorn", "ferrothorn", "Base", listOf("grass", "steel"), 2480, "Bullet Seed", 3, "Power Whip", "Thunder", 42, 44, atk = 158.0, def = 223.0, hp = 179, glRank = 51, ulRank = 64, mlRank = 290, isRawBaseStats = true, defaultIvsGl = "4/8/15", defaultIvsUl = "13/14/15"),
-            PokemonMeta("Galvantula", "galvantula", "galvantula", "Base", listOf("bug", "electric"), 2494, "Volt Switch", 4, "Lunge", "Discharge", 32, 36, atk = 201.0, def = 128.0, hp = 172, glRank = 87, ulRank = 68, mlRank = 350, isRawBaseStats = true, defaultIvsGl = "4/15/9", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Araquanid", "araquanid", "araquanid", "Base", listOf("water", "bug"), 1499, "Bug Bite", 1, "Bubble Beam", "Bug Buzz", 22, 44, atk = 126.0, def = 219.0, hp = 169, glRank = 53, ulRank = 320, mlRank = 480, isRawBaseStats = true, defaultIvsGl = "5/15/14", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Golisopod", "golisopod", "golisopod", "Base", listOf("bug", "water"), 2495, "Shadow Claw", 2, "Liquidation", "X-Scissor", 36, 32, atk = 218.0, def = 226.0, hp = 181, glRank = 69, ulRank = 24, mlRank = 150, isRawBaseStats = true, defaultIvsGl = "4/15/13", defaultIvsUl = "5/13/15"),
-            PokemonMeta("Altaria", "altaria", "altaria", "Base", listOf("dragon", "flying"), 1499, "Dragon Breath", 1, "Sky Attack", "Moonblast", 36, 48, atk = 141.0, def = 201.0, hp = 181, glRank = 63, ulRank = 310, mlRank = 470, isRawBaseStats = true, defaultIvsGl = "4/12/13", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Noctowl", "noctowl", "noctowl", "Base", listOf("normal", "flying"), 1499, "Wing Attack", 2, "Sky Attack", "Shadow Ball", 36, 44, atk = 145.0, def = 156.0, hp = 225, glRank = 90, ulRank = 340, mlRank = 480, isRawBaseStats = true, defaultIvsGl = "4/14/14", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Vigoroth", "vigoroth", "vigoroth", "Base", listOf("normal"), 1499, "Counter", 2, "Body Slam", "Rock Slide", 26, 36, atk = 159.0, def = 145.0, hp = 190, glRank = 77, ulRank = 360, mlRank = 490, isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "15/15/15"),
-            PokemonMeta("Toxicroak", "toxicroak", "toxicroak", "Base", listOf("poison", "fighting"), 2488, "Mud Shot", 2, "Mud Bomb", "Shadow Ball", 32, 44, atk = 211.0, def = 133.0, hp = 195, glRank = 81, ulRank = 57, mlRank = 290, isRawBaseStats = true, defaultIvsGl = "4/15/9", defaultIvsUl = "4/15/14"),
-            PokemonMeta("Nidoqueen", "nidoqueen", "nidoqueen", "Base", listOf("poison", "ground"), 2488, "Poison Jab", 2, "Poison Fang", "Earth Power", 24, 46, atk = 180.0, def = 173.0, hp = 207, glRank = 83, ulRank = 59, mlRank = 260, isRawBaseStats = true, defaultIvsGl = "4/14/13", defaultIvsUl = "4/13/15"),
-            PokemonMeta("Steelix", "steelix", "steelix", "Base", listOf("steel", "ground"), 2485, "Dragon Tail", 3, "Breaking Swipe", "Earthquake", 24, 52, atk = 148.0, def = 272.0, hp = 181, glRank = 80, ulRank = 30, mlRank = 250, isRawBaseStats = true, defaultIvsGl = "4/11/14", defaultIvsUl = "4/14/15"),
-            PokemonMeta("Tinkaton", "tinkaton", "tinkaton", "Base", listOf("fairy", "steel"), 2488, "Fairy Wind", 2, "Gigaton Hammer", "Bulldoze", 42, 36, atk = 155.0, def = 196.0, hp = 198, glRank = 40, ulRank = 32, mlRank = 260, chargedMove3 = "Play Rough", chargedMove4 = "Heavy Slam", isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "12/15/15"),
-            PokemonMeta("Rillaboom", "rillaboom", "rillaboom", "Base", listOf("grass"), 2485, "Scratch", 1, "Drum Beating", "Earth Power", 36, 44, atk = 239.0, def = 168.0, hp = 225, glRank = 82, ulRank = 45, mlRank = 88, chargedMove3 = "Frenzy Plant", isRawBaseStats = true, defaultIvsGl = "5/15/13", defaultIvsUl = "4/14/15"),
-            PokemonMeta("Cetitan", "cetitan", "cetitan", "Base", listOf("ice"), 2495, "Powder Snow", 2, "Body Slam", "Avalanche", 26, 44, atk = 208.0, def = 123.0, hp = 347, glRank = 57, ulRank = 38, mlRank = 95, isRawBaseStats = true, defaultIvsGl = "4/13/10", defaultIvsUl = "4/15/15"),
-            PokemonMeta("Bellibolt", "bellibolt", "bellibolt", "Base", listOf("electric"), 2492, "Sucker Punch", 2, "Discharge", "Zap Cannon", 34, 56, atk = 184.0, def = 165.0, hp = 240, glRank = 75, ulRank = 42, mlRank = 220, isRawBaseStats = true, defaultIvsGl = "4/15/12", defaultIvsUl = "4/15/15"),
-            PokemonMeta("Toucannon", "toucannon", "toucannon", "Base", listOf("normal", "flying"), 2488, "Bullet Seed", 3, "Beak Blast", "Drill Peck", 42, 34, atk = 222.0, def = 146.0, hp = 190, glRank = 95, ulRank = 88, mlRank = 290, chargedMove3 = "Rock Blast", isRawBaseStats = true, defaultIvsGl = "4/14/15", defaultIvsUl = "4/15/15"),
-            PokemonMeta("Golurk", "golurk", "golurk", "Base", listOf("ground", "ghost"), 2488, "Mud-Slap", 3, "Shadow Punch", "Dynamic Punch", 28, 42, atk = 222.0, def = 154.0, hp = 205, glRank = 45, ulRank = 42, mlRank = 240, chargedMove3 = "Earth Power", chargedMove4 = "Poltergeist", isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "4/15/15"),
-            PokemonMeta("Dondozo", "dondozo", "dondozo", "Base", listOf("water"), 2488, "Waterfall", 3, "Surf", "Liquidation", 34, 38, atk = 178.0, def = 178.0, hp = 312, glRank = 55, ulRank = 35, mlRank = 180, chargedMove3 = "Body Slam", isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "4/15/15"),
-            PokemonMeta("Volcanion", "volcanion", "volcanion", "Base", listOf("fire", "water"), 3985, "Incinerate", 5, "Overheat", "Earth Power", 64, 46, atk = 252.0, def = 216.0, hp = 190, glRank = 140, ulRank = 65, mlRank = 28, chargedMove3 = "Sludge Bomb", chargedMove4 = "Hydro Pump", isRawBaseStats = true, defaultIvsGl = "10/14/14", defaultIvsUl = "10/15/15"),
-            PokemonMeta("Kommo-o", "kommo_o", "kommo-o", "Base", listOf("dragon", "fighting"), 2488, "Dragon Tail", 3, "Clanging Scales", "Close Combat", 48, 46, atk = 222.0, def = 240.0, hp = 181, glRank = 48, ulRank = 30, mlRank = 95, chargedMove3 = "Brick Break", chargedMove4 = "Boomburst", isRawBaseStats = true, defaultIvsGl = "4/14/15", defaultIvsUl = "4/15/14"),
-            PokemonMeta("Regidrago", "regidrago", "regidrago", "Base", listOf("dragon"), 2488, "Dragon Breath", 1, "Breaking Swipe", "Outrage", 26, 48, atk = 202.0, def = 101.0, hp = 400, glRank = 62, ulRank = 36, mlRank = 110, chargedMove3 = "Dragon Pulse", isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "4/15/15")
-        )
+        val FAST_MOVE_TURNS: Map<String, Int> get() = PokemonStaticData.FAST_MOVE_TURNS
+        val POKEMON_META_DATABASE: List<PokemonMeta> get() = PokemonStaticData.POKEMON_META_DATABASE
 
         // Dynamically loaded species & moves from PvPoke gamemaster.json (1,100+ Pokémon)
         val DYNAMIC_POKEMON_DATABASE = CopyOnWriteArrayList<PokemonMeta>()
@@ -4562,515 +1362,14 @@ class OverlayService : LifecycleService() {
         val SPECIES_FAST_MOVES_POOL = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
         val SPECIES_CHARGED_MOVES_POOL = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
 
-        val FALLBACK_SPECIES_FAST_POOL: Map<String, List<String>> = mapOf(
-            "tinkaton" to listOf("Fairy Wind", "Rock Smash"),
-            "mimikyu" to listOf("Shadow Claw", "Hex"),
-            "swampert" to listOf("Mud Shot", "Water Gun"),
-            "feraligatr" to listOf("Shadow Claw", "Waterfall", "Ice Fang"),
-            "clodsire" to listOf("Poison Sting", "Mud Shot"),
-            "azumarill" to listOf("Bubble", "Rock Smash"),
-            "annihilape" to listOf("Counter", "Low Kick"),
-            "primeape" to listOf("Karate Chop", "Counter"),
-            "mandibuzz" to listOf("Snarl", "Air Slash"),
-            "talonflame" to listOf("Incinerate", "Fire Spin", "Peck"),
-            "skeledirge" to listOf("Incinerate", "Bite"),
-            "cresselia" to listOf("Psycho Cut", "Confusion"),
-            "giratina_altered" to listOf("Shadow Claw", "Dragon Breath"),
-            "giratina_origin" to listOf("Shadow Claw", "Dragon Tail"),
-            "poliwrath" to listOf("Counter", "Mud Shot", "Bubble"),
-            "gastrodon" to listOf("Mud-Slap", "Hidden Power"),
-            "quagsire" to listOf("Mud Shot", "Water Gun"),
-            "whiscash" to listOf("Mud Shot", "Water Gun"),
-            "lickilicky" to listOf("Rollout", "Lick"),
-            "serperior" to listOf("Vine Whip", "Iron Tail"),
-            "corviknight" to listOf("Sand Attack", "Steel Wing", "Air Slash"),
-            "aegislash" to listOf("Psycho Cut", "Air Slash"),
-            "cramorant" to listOf("Peck", "Water Gun"),
-            "morpeko" to listOf("Thunder Shock", "Bite", "Charge Beam"),
-            "palkia_origin" to listOf("Dragon Breath", "Dragon Tail"),
-            "dialga_origin" to listOf("Dragon Breath", "Metal Claw"),
-            "zacian_crowned" to listOf("Metal Claw", "Snarl", "Quick Attack"),
-            "zacian_hero" to listOf("Snarl", "Quick Attack", "Metal Claw"),
-            "zamazenta_crowned" to listOf("Metal Claw", "Snarl", "Ice Fang"),
-            "kyurem_black" to listOf("Shadow Claw", "Dragon Tail"),
-            "kyurem_white" to listOf("Dragon Breath", "Ice Fang", "Steel Wing"),
-            "landorus_therian" to listOf("Mud Shot", "Extrasensory"),
-            "ho_oh" to listOf("Incinerate", "Hidden Power"),
-            "necrozma_dusk_mane" to listOf("Shadow Claw", "Psycho Cut", "Metal Claw"),
-            "necrozma_dawn_wings" to listOf("Shadow Claw", "Psycho Cut", "Metal Claw"),
-            "rhyperior" to listOf("Mud-Slap", "Smack Down"),
-            "yveltal" to listOf("Sucker Punch", "Snarl", "Gust"),
-            "xerneas" to listOf("Geomancy", "Tackle"),
-            "mewtwo" to listOf("Psycho Cut", "Confusion"),
-            "mewtwo_armored" to listOf("Confusion", "Iron Tail"),
-            "zygarde_complete" to listOf("Dragon Tail", "Bite"),
-            "florges" to listOf("Fairy Wind", "Vine Whip"),
-            "dragonite" to listOf("Dragon Breath", "Dragon Tail", "Steel Wing"),
-            "metagross" to listOf("Bullet Punch", "Zen Headbutt"),
-            "excadrill" to listOf("Mud Shot", "Mud-Slap", "Metal Claw"),
-            "mamoswine" to listOf("Powder Snow", "Mud-Slap"),
-            "groudon" to listOf("Mud Shot", "Dragon Tail"),
-            "kyogre" to listOf("Waterfall"),
-            "lugia" to listOf("Dragon Tail", "Extrasensory"),
-            "snorlax" to listOf("Lick", "Zen Headbutt"),
-            "greninja" to listOf("Water Shuriken", "Bubble", "Feint Attack"),
-            "trevenant" to listOf("Shadow Claw", "Sucker Punch"),
-            "dewgong" to listOf("Ice Shard", "Frost Breath"),
-            "walrein" to listOf("Powder Snow", "Frost Breath", "Waterfall"),
-            "sandslash_alolan" to listOf("Powder Snow", "Shadow Claw"),
-            "ninetales_alolan" to listOf("Powder Snow", "Charm"),
-            "ninetales" to listOf("Ember", "Fire Spin", "Feint Attack"),
-            "weezing_galarian" to listOf("Fairy Wind", "Tackle"),
-            "drapion" to listOf("Poison Sting", "Ice Fang", "Bite"),
-            "dunsparce" to listOf("Rollout", "Astonish", "Bite"),
-            "wigglytuff" to listOf("Charm", "Feint Attack"),
-            "clefable" to listOf("Fairy Wind", "Charm"),
-            "bastiodon" to listOf("Smack Down", "Iron Tail"),
-            "carbink" to listOf("Rock Throw", "Tackle"),
-            "umbreon" to listOf("Snarl", "Feint Attack"),
-            "medicham" to listOf("Counter", "Psycho Cut"),
-            "sableye" to listOf("Shadow Claw", "Feint Attack"),
-            "skarmory" to listOf("Steel Wing", "Air Slash"),
-            "altaria" to listOf("Dragon Breath", "Peck"),
-            "pelipper" to listOf("Wing Attack", "Water Gun"),
-            "mantine" to listOf("Wing Attack", "Bubble", "Bullet Seed"),
-            "lanturn" to listOf("Spark", "Water Gun"),
-            "jellicent" to listOf("Hex", "Bubble"),
-            "abomasnow" to listOf("Powder Snow", "Leafage"),
-            "venusaur" to listOf("Vine Whip", "Razor Leaf"),
-            "charizard" to listOf("Wing Attack", "Dragon Breath", "Fire Spin"),
-            "machamp" to listOf("Counter", "Karate Chop"),
-            "scrafty" to listOf("Counter", "Snarl"),
-            "obstagoon" to listOf("Counter", "Lick"),
-            "malamar" to listOf("Psywave", "Psycho Cut"),
-            "guzzlord" to listOf("Dragon Tail", "Snarl"),
-            "cobalion" to listOf("Double Kick", "Metal Claw"),
-            "virizion" to listOf("Double Kick", "Quick Attack"),
-            "registeel" to listOf("Lock-On", "Metal Claw"),
-            "melmetal" to listOf("Thunder Shock"),
-            "tapu_fini" to listOf("Water Gun", "Hidden Power"),
-            "toucannon" to listOf("Bullet Seed", "Peck", "Rock Smash"),
-            "golurk" to listOf("Mud-Slap", "Astonish"),
-            "dondozo" to listOf("Waterfall", "Tackle"),
-            "volcanion" to listOf("Incinerate", "Water Gun"),
-            "kommo_o" to listOf("Dragon Tail", "Poison Jab"),
-            "regidrago" to listOf("Dragon Breath", "Bite")
-        )
+        val FALLBACK_SPECIES_FAST_POOL: Map<String, List<String>> get() = PokemonStaticData.FALLBACK_SPECIES_FAST_POOL
+        val FALLBACK_SPECIES_CHARGED_POOL: Map<String, List<String>> get() = PokemonStaticData.FALLBACK_SPECIES_CHARGED_POOL
+        val FAST_MOVE_ENERGY: Map<String, Int> get() = PokemonStaticData.FAST_MOVE_ENERGY
 
-        val FALLBACK_SPECIES_CHARGED_POOL: Map<String, List<String>> = mapOf(
-            "tinkaton" to listOf("Gigaton Hammer", "Play Rough", "Bulldoze", "Heavy Slam", "Flash Cannon"),
-            "mimikyu" to listOf("Play Rough", "Shadow Sneak", "Thunder"),
-            "swampert" to listOf("Hydro Cannon", "Earthquake", "Sludge Wave", "Surf", "Muddy Water"),
-            "feraligatr" to listOf("Hydro Cannon", "Ice Beam", "Crunch", "Water Pulse"),
-            "clodsire" to listOf("Earthquake", "Stone Edge", "Sludge Bomb", "Megahorn", "Acid Spray"),
-            "azumarill" to listOf("Ice Beam", "Play Rough", "Hydro Pump"),
-            "annihilape" to listOf("Rage Fist", "Ice Punch", "Close Combat", "Shadow Ball", "Night Slash"),
-            "primeape" to listOf("Rage Fist", "Close Combat", "Ice Punch", "Night Slash"),
-            "mandibuzz" to listOf("Dark Pulse", "Aerial Ace", "Foul Play", "Shadow Ball"),
-            "talonflame" to listOf("Fly", "Flame Charge", "Brave Bird", "Incinerate"),
-            "skeledirge" to listOf("Torch Song", "Shadow Ball", "Disarming Voice", "Crunch"),
-            "cresselia" to listOf("Grass Knot", "Moonblast", "Future Sight", "Aurora Beam"),
-            "giratina_altered" to listOf("Dragon Claw", "Ancient Power", "Shadow Sneak", "Shadow Force"),
-            "giratina_origin" to listOf("Shadow Ball", "Ominous Wind", "Dragon Pulse", "Shadow Force"),
-            "poliwrath" to listOf("Icy Wind", "Scald", "Dynamic Punch", "Ice Punch", "Power-Up Punch"),
-            "gastrodon" to listOf("Body Slam", "Earth Power", "Water Pulse", "Earthquake"),
-            "quagsire" to listOf("Aqua Tail", "Stone Edge", "Mud Bomb", "Sludge Bomb", "Earthquake"),
-            "whiscash" to listOf("Scald", "Mud Bomb", "Blizzard", "Water Pulse"),
-            "lickilicky" to listOf("Body Slam", "Shadow Ball", "Earthquake", "Solar Beam"),
-            "serperior" to listOf("Frenzy Plant", "Aerial Ace", "Leaf Tornado"),
-            "corviknight" to listOf("Air Cutter", "Iron Head", "Sky Attack", "Payback"),
-            "aegislash" to listOf("Shadow Ball", "Flash Cannon", "Gyro Ball"),
-            "cramorant" to listOf("Surf", "Fly", "Dive", "Hydro Pump"),
-            "morpeko" to listOf("Aura Wheel", "Psychic Fangs", "Outrage", "Seed Bomb"),
-            "palkia_origin" to listOf("Spacial Rend", "Aqua Tail", "Hydro Pump", "Fire Blast"),
-            "dialga_origin" to listOf("Roar of Time", "Iron Head", "Thunder", "Flash Cannon"),
-            "zacian_crowned" to listOf("Behemoth Blade", "Close Combat", "Play Rough", "Wild Charge"),
-            "zacian_hero" to listOf("Close Combat", "Play Rough", "Wild Charge", "Iron Head"),
-            "zamazenta_crowned" to listOf("Behemoth Bash", "Close Combat", "Moonblast", "Crunch"),
-            "kyurem_black" to listOf("Freeze Shock", "Fusion Bolt", "Outrage", "Blizzard", "Iron Head"),
-            "kyurem_white" to listOf("Ice Burn", "Fusion Flare", "Blizzard", "Dragon Pulse", "Focus Blast"),
-            "landorus_therian" to listOf("Sandsear Storm", "Stone Edge", "Superpower", "Earthquake"),
-            "ho_oh" to listOf("Sacred Fire", "Brave Bird", "Earthquake", "Solar Beam"),
-            "necrozma_dusk_mane" to listOf("Sunsteel Strike", "Dark Pulse", "Iron Head", "Outrage"),
-            "necrozma_dawn_wings" to listOf("Moongeist Beam", "Dark Pulse", "Iron Head", "Outrage"),
-            "rhyperior" to listOf("Rock Wrecker", "Breaking Swipe", "Superpower", "Surf", "Earthquake"),
-            "yveltal" to listOf("Dark Pulse", "Oblivion Wing", "Focus Blast", "Hurricane"),
-            "xerneas" to listOf("Close Combat", "Moonblast", "Megahorn", "Thunder"),
-            "mewtwo" to listOf("Psystrike", "Shadow Ball", "Focus Blast", "Ice Beam", "Flamethrower"),
-            "mewtwo_armored" to listOf("Psystrike", "Dynamic Punch", "Earthquake", "Rock Slide"),
-            "zygarde_complete" to listOf("Crunch", "Earthquake", "Outrage", "Bulldoze"),
-            "florges" to listOf("Disarming Voice", "Moonblast", "Trailblaze", "Psychic"),
-            "dragonite" to listOf("Dragon Claw", "Superpower", "Outrage", "Hurricane", "Draco Meteor"),
-            "metagross" to listOf("Meteor Mash", "Earthquake", "Psychic", "Flash Cannon"),
-            "excadrill" to listOf("Drill Run", "Rock Slide", "Iron Head", "Earthquake"),
-            "mamoswine" to listOf("Avalanche", "High Horsepower", "Stone Edge", "Bulldoze"),
-            "groudon" to listOf("Precipice Blades", "Fire Punch", "Earthquake", "Solar Beam"),
-            "kyogre" to listOf("Surf", "Origin Pulse", "Blizzard", "Thunder", "Hydro Pump"),
-            "lugia" to listOf("Sky Attack", "Aeroblast", "Hydro Pump", "Future Sight"),
-            "snorlax" to listOf("Body Slam", "Superpower", "Earthquake", "Outrage"),
-            "greninja" to listOf("Hydro Cannon", "Night Slash", "Brutal Swing", "Aerial Ace"),
-            "trevenant" to listOf("Seed Bomb", "Shadow Ball", "Foul Play"),
-            "dewgong" to listOf("Icy Wind", "Drill Run", "Blizzard", "Water Pulse"),
-            "walrein" to listOf("Icicle Spear", "Earthquake", "Blizzard", "Water Pulse"),
-            "sandslash_alolan" to listOf("Ice Punch", "Drill Run", "Blizzard", "Bulldoze"),
-            "ninetales_alolan" to listOf("Weather Ball (Ice)", "Chilling Water", "Psyshock", "Dazzling Gleam"),
-            "ninetales" to listOf("Weather Ball (Fire)", "Overheat", "Scorching Sands", "Psyshock", "Solar Beam"),
-            "weezing_galarian" to listOf("Brutal Swing", "Overheat", "Play Rough", "Sludge"),
-            "drapion" to listOf("Crunch", "Aqua Tail", "Sludge Bomb", "Fell Stinger"),
-            "dunsparce" to listOf("Rock Slide", "Drill Run", "Ice Beam"),
-            "wigglytuff" to listOf("Icy Wind", "Swift", "Disarming Voice", "Play Rough"),
-            "clefable" to listOf("Swift", "Meteor Mash", "Moonblast", "Psychic"),
-            "bastiodon" to listOf("Stone Edge", "Flamethrower", "Flash Cannon"),
-            "carbink" to listOf("Rock Slide", "Moonblast", "Power Gem"),
-            "umbreon" to listOf("Foul Play", "Last Resort", "Dark Pulse", "Psychic"),
-            "medicham" to listOf("Ice Punch", "Dynamic Punch", "Psychic", "Power-Up Punch"),
-            "sableye" to listOf("Foul Play", "Power Gem", "Shadow Sneak"),
-            "skarmory" to listOf("Sky Attack", "Brave Bird", "Flash Cannon"),
-            "altaria" to listOf("Sky Attack", "Moonblast", "Dazzling Gleam", "Dragon Pulse"),
-            "pelipper" to listOf("Weather Ball", "Hurricane", "Blizzard", "Hydro Pump"),
-            "mantine" to listOf("Aerial Ace", "Ice Beam", "Water Pulse", "Bubble Beam"),
-            "lanturn" to listOf("Surf", "Thunderbolt", "Water Pulse", "Hydro Pump"),
-            "jellicent" to listOf("Surf", "Shadow Ball", "Ice Beam", "Bubble Beam"),
-            "abomasnow" to listOf("Weather Ball (Ice)", "Energy Ball", "Icy Wind", "Outrage"),
-            "venusaur" to listOf("Frenzy Plant", "Sludge Bomb", "Petal Blizzard"),
-            "charizard" to listOf("Blast Burn", "Dragon Claw", "Overheat"),
-            "machamp" to listOf("Cross Chop", "Rock Slide", "Payback", "Close Combat"),
-            "scrafty" to listOf("Thunder Punch", "Foul Play", "Power-Up Punch", "Acid Spray"),
-            "obstagoon" to listOf("Night Slash", "Cross Chop", "Obstruct", "Hyper Beam"),
-            "malamar" to listOf("Superpower", "Foul Play", "Psybeam", "Hyper Beam"),
-            "guzzlord" to listOf("Dragon Claw", "Crunch", "Brutal Swing", "Sludge Bomb"),
-            "cobalion" to listOf("Sacred Sword", "Stone Edge", "Iron Head"),
-            "virizion" to listOf("Sacred Sword", "Leaf Blade", "Stone Edge"),
-            "registeel" to listOf("Focus Blast", "Zap Cannon", "Flash Cannon"),
-            "melmetal" to listOf("Double Iron Bash", "Superpower", "Rock Slide", "Thunderbolt", "Flash Cannon", "Hyper Beam"),
-            "tapu_fini" to listOf("Surf", "Nature's Madness", "Moonblast", "Ice Beam"),
-            "toucannon" to listOf("Beak Blast", "Drill Peck", "Rock Blast", "Flash Cannon"),
-            "golurk" to listOf("Shadow Punch", "Dynamic Punch", "Earth Power", "Poltergeist"),
-            "dondozo" to listOf("Surf", "Liquidation", "Body Slam", "Outrage", "Hydro Pump"),
-            "volcanion" to listOf("Overheat", "Earth Power", "Sludge Bomb", "Hydro Pump"),
-            "kommo_o" to listOf("Clanging Scales", "Close Combat", "Brick Break", "Boomburst", "Dragon Claw"),
-            "regidrago" to listOf("Breaking Swipe", "Outrage", "Dragon Pulse", "Hyper Beam")
-        )
 
-        val FAST_MOVE_ENERGY: Map<String, Int> = mapOf(
-            "dragon breath" to 4,
-            "sand attack" to 4,
-            "quick attack" to 8,
-            "lock-on" to 5,
-            "lock on" to 5,
-            "water gun" to 3,
-            "lick" to 3,
-            "bite" to 4,
-            "tackle" to 3,
-            "fury cutter" to 4,
-            "bug bite" to 3,
-            "scratch" to 4,
-            "cut" to 2,
-            "psywave" to 4,
-            "psycho cut" to 9,
-            "mud shot" to 9,
-            "shadow claw" to 8,
-            "counter" to 6,
-            "powder snow" to 8,
-            "wing attack" to 8,
-            "peck" to 8,
-            "poison sting" to 9,
-            "thunder shock" to 9,
-            "fairy wind" to 9,
-            "bullet punch" to 7,
-            "fire fang" to 6,
-            "vine whip" to 8,
-            "karate chop" to 9,
-            "low kick" to 8,
-            "ice fang" to 6,
-            "thunder fang" to 6,
-            "metal claw" to 7,
-            "metal sound" to 8,
-            "sucker punch" to 7,
-            "poison jab" to 7,
-            "spark" to 7,
-            "leafage" to 8,
-            "steel wing" to 5,
-            "rock throw" to 5,
-            "acid" to 8,
-            "feint attack" to 6,
-            "frost breath" to 5,
-            "pound" to 4,
-            "razor leaf" to 4,
-            "force palm" to 10,
-            "dragon tail" to 12,
-            "waterfall" to 10,
-            "fire spin" to 10,
-            "snarl" to 13,
-            "geomancy" to 13,
-            "mud-slap" to 10,
-            "mud slap" to 10,
-            "charm" to 8,
-            "double kick" to 12,
-            "air slash" to 9,
-            "ice shard" to 10,
-            "bubble" to 11,
-            "rollout" to 13,
-            "smack down" to 8,
-            "astonish" to 10,
-            "hex" to 13,
-            "magical leaf" to 10,
-            "bullet seed" to 13,
-            "water shuriken" to 14,
-            "charge beam" to 11,
-            "extrasensory" to 10,
-            "hidden power" to 8,
-            "infestation" to 12,
-            "iron tail" to 7,
-            "present" to 12,
-            "rock smash" to 7,
-            "struggle bug" to 8,
-            "take down" to 9,
-            "zen headbutt" to 6,
-            "gust" to 14,
-            "confusion" to 14,
-            "volt switch" to 16,
-            "splash" to 12,
-            "yawn" to 12,
-            "incinerate" to 20,
-            "ember" to 9
-        )
+        val MOVE_ENERGY_COST: Map<String, Int> get() = PokemonStaticData.MOVE_ENERGY_COST
 
-        fun resolveFastTurnsStatic(moveName: String, fallback: Int = 2): Int {
-            val k = moveName.lowercase().trim()
-            if (k.isEmpty()) return fallback
-            val spaceK = k.replace('-', ' ')
-            val hyphenK = spaceK.replace(' ', '-')
-            return DYNAMIC_FAST_TURNS[k]
-                ?: DYNAMIC_FAST_TURNS[spaceK]
-                ?: DYNAMIC_FAST_TURNS[hyphenK]
-                ?: FAST_MOVE_TURNS[k]
-                ?: FAST_MOVE_TURNS[spaceK]
-                ?: FAST_MOVE_TURNS[hyphenK]
-                ?: fallback
-        }
-
-        fun resolveFastEnergyStatic(moveName: String, fallbackTurns: Int = 2): Int {
-            val k = moveName.lowercase().trim()
-            val defaultEnergy = (fallbackTurns * 4).coerceAtLeast(3)
-            if (k.isEmpty()) return defaultEnergy
-            val spaceK = k.replace('-', ' ')
-            val hyphenK = spaceK.replace(' ', '-')
-            return DYNAMIC_FAST_ENERGY[k]
-                ?: DYNAMIC_FAST_ENERGY[spaceK]
-                ?: DYNAMIC_FAST_ENERGY[hyphenK]
-                ?: FAST_MOVE_ENERGY[k]
-                ?: FAST_MOVE_ENERGY[spaceK]
-                ?: FAST_MOVE_ENERGY[hyphenK]
-                ?: defaultEnergy
-        }
-
-        fun resolveFastPowerStatic(moveName: String, fallbackTurns: Int = 2): Int {
-            val k = moveName.lowercase().trim()
-            val defaultPower = (fallbackTurns * 3).coerceAtLeast(3)
-            if (k.isEmpty()) return defaultPower
-            val spaceK = k.replace('-', ' ')
-            val hyphenK = spaceK.replace(' ', '-')
-            return DYNAMIC_FAST_POWER[k]
-                ?: DYNAMIC_FAST_POWER[spaceK]
-                ?: DYNAMIC_FAST_POWER[hyphenK]
-                ?: fastMovePowerMapStatic[k]
-                ?: fastMovePowerMapStatic[spaceK]
-                ?: fastMovePowerMapStatic[hyphenK]
-                ?: defaultPower
-        }
-
-        fun resolveFastTypeStatic(moveName: String, fallbackType: String = "normal"): String {
-            val k = moveName.lowercase().trim()
-            if (k.isEmpty()) return fallbackType
-            val spaceK = k.replace('-', ' ')
-            val hyphenK = spaceK.replace(' ', '-')
-            return DYNAMIC_FAST_TYPE[k]
-                ?: DYNAMIC_FAST_TYPE[spaceK]
-                ?: DYNAMIC_FAST_TYPE[hyphenK]
-                ?: fastMoveTypeMapStatic[k]
-                ?: fastMoveTypeMapStatic[spaceK]
-                ?: fastMoveTypeMapStatic[hyphenK]
-                ?: fallbackType
-        }
-
-        val MOVE_ENERGY_COST: Map<String, Int> = mapOf(
-
-            "Drum Beating" to 35,
-            "Gigaton Hammer" to 60,
-            "Bulldoze" to 55,
-            "Air Cutter" to 40,
-            "Behemoth Blade" to 55,
-            "Behemoth Bash" to 45,
-            "Secret Sword" to 35,
-            "Sacred Sword" to 35,
-            "Aqua Jet" to 40,
-            "Double Iron Bash" to 35,
-            "Bleakwind Storm" to 45,
-            "Wildbolt Storm" to 45,
-            "Springtide Storm" to 45,
-            "Roar of Time" to 65,
-            "Iron Head" to 50,
-            "Draco Meteor" to 65,
-            "Thunder" to 60,
-            "Aeroblast" to 75,
-            "Sky Attack" to 50,
-            "Future Sight" to 65,
-            "Surf" to 45,
-            "Origin Pulse" to 60,
-            "Hydro Pump" to 75,
-            "Blizzard" to 75,
-            "Close Combat" to 45,
-            "Brave Bird" to 55,
-            "Play Rough" to 60,
-            "Wild Charge" to 45,
-            "Shadow Ball" to 50,
-            "Ominous Wind" to 45,
-            "Dragon Claw" to 50,
-            "Ancient Power" to 45,
-            "Shadow Force" to 65,
-            "Spacial Rend" to 55,
-            "Aqua Tail" to 35,
-            "Precipice Blades" to 60,
-            "Fire Punch" to 40,
-            "Psystrike" to 45,
-            "Ice Beam" to 55,
-            "Moonblast" to 50,
-            "Dark Pulse" to 45,
-            "Oblivion Wing" to 50,
-            "Crunch" to 45,
-            "Earthquake" to 65,
-            "Sandsear Storm" to 45,
-            "Stone Edge" to 55,
-            "Superpower" to 40,
-            "Sacred Fire" to 65,
-            "Sunsteel Strike" to 65,
-            "Moongeist Beam" to 65,
-            "Rock Slide" to 45,
-            "Earth Power" to 50,
-            "Outrage" to 60,
-            "Meteor Mash" to 45,
-            "Drill Run" to 40,
-            "Rock Wrecker" to 50,
-            "Breaking Swipe" to 50,
-            "Avalanche" to 45,
-            "High Horsepower" to 55,
-            "Ice Punch" to 40,
-            "Fusion Flare" to 45,
-            "Overheat" to 55,
-            "Fusion Bolt" to 45,
-            "Glaciate" to 40,
-            "Disarming Voice" to 45,
-            "Hydro Cannon" to 40,
-            "Weather Ball" to 35,
-            "Weather Ball (Ice)" to 35,
-            "Weather Ball (Fire)" to 35,
-            "Weather Ball (Water)" to 35,
-            "Weather Ball (Rock)" to 35,
-            "Chilling Water" to 45,
-            "Dazzling Gleam" to 55,
-            "Scorching Sands" to 50,
-            "Psycho Boost" to 35,
-            "Thunderbolt" to 55,
-            "Grass Knot" to 50,
-            "Leaf Blade" to 35,
-            "Aerial Ace" to 45,
-            "Fly" to 45,
-            "Flame Charge" to 50,
-            "Blast Burn" to 50,
-            "Feather Dance" to 50,
-            "Shadow Sneak" to 50,
-            "Twister" to 40,
-            "Air Cutter" to 40,
-            "Payback" to 60,
-            "Body Slam" to 40,
-            "Foul Play" to 40,
-            "Night Slash" to 35,
-            "Cross Chop" to 35,
-            "Dynamic Punch" to 45,
-            "Aura Sphere" to 40,
-            "Focus Blast" to 75,
-            "Sludge Bomb" to 50,
-            "Sludge Wave" to 65,
-            "Acid Spray" to 45,
-            "Poison Fang" to 40,
-            "Cross Poison" to 35,
-            "Gunk Shot" to 75,
-            "Mud Bomb" to 45,
-            "Bone Club" to 35,
-            "Shadow Bone" to 45,
-            "Hurricane" to 60,
-            "Acrobatics" to 55,
-            "Drill Peck" to 40,
-            "Psychic" to 55,
-            "Psyshock" to 40,
-            "Psychic Fangs" to 35,
-            "Lunge" to 45,
-            "Megahorn" to 55,
-            "X-Scissor" to 40,
-            "Power Gem" to 50,
-            "Meteor Beam" to 60,
-            "Night Shade" to 45,
-            "Icy Wind" to 45,
-            "Triple Axel" to 45,
-            "Icicle Spear" to 40,
-            "Freeze Shock" to 60,
-            "Ice Burn" to 60,
-            "Dragon Pulse" to 55,
-            "Brutal Swing" to 35,
-            "Flash Cannon" to 65,
-            "Heavy Slam" to 50,
-            "Magnet Bomb" to 40,
-            "Mirror Shot" to 35,
-            "Doom Desire" to 40,
-            "Frenzy Plant" to 45,
-            "Energy Ball" to 45,
-            "Seed Bomb" to 40,
-            "Power Whip" to 50,
-            "Trailblaze" to 45,
-            "Solar Beam" to 80,
-            "Discharge" to 40,
-            "Zap Cannon" to 80,
-            "Scald" to 50,
-            "Liquidation" to 45,
-            "Muddy Water" to 35,
-            "Water Pulse" to 50,
-            "Nature's Madness" to 50,
-            "Swift" to 35,
-            "Hyper Beam" to 80,
-            "Aura Wheel" to 45,
-            "Rage Fist" to 40,
-            "Torch Song" to 45,
-            "Super Power" to 40,
-            "Rock Tomb" to 50,
-            "Sand Tomb" to 45,
-            "Thunder Punch" to 40,
-            "Flamethrower" to 55,
-            "Fire Blast" to 80,
-            "Last Resort" to 55,
-            "Brine" to 60,
-            "Dig" to 50,
-            "Shadow Punch" to 35,
-            "Spirit Shackle" to 40,
-            "Darkest Lariat" to 60,
-            "Power-Up Punch" to 35,
-            "Bubble Beam" to 50,
-            "Bug Buzz" to 60,
-            "Leaf Tornado" to 40,
-            "Stomp" to 40,
-            "Petal Blizzard" to 65,
-            "Mystical Fire" to 45,
-            "Gyro Ball" to 50,
-            "Dive" to 40,
-            "Skull Bash" to 75,
-            "Beak Blast" to 55,
-            "Rock Blast" to 40,
-            "Brick Break" to 35,
-            "Poltergeist" to 75,
-            "Boomburst" to 70
-        )
-
-        private val STATIC_MOVE_ENERGY_LOOKUP: Map<String, Int> by lazy {
+        internal val STATIC_MOVE_ENERGY_LOOKUP: Map<String, Int> by lazy {
             val map = HashMap<String, Int>(MOVE_ENERGY_COST.size * 3)
             for ((k, v) in MOVE_ENERGY_COST) {
                 val lower = k.trim().lowercase()
@@ -5082,31 +1381,11 @@ class OverlayService : LifecycleService() {
         }
 
         @Volatile
-        private var CACHED_ALL_POKEMON_META: List<PokemonMeta>? = null
-        private val RESOLVED_SPECIES_CACHE = java.util.concurrent.ConcurrentHashMap<String, PokemonMeta>()
-        private val TOP_META_POOL_CACHE = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
-        private val TOP_30_RANKED_POOL_CACHE = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
+        internal var CACHED_ALL_POKEMON_META: List<PokemonMeta>? = null
+        internal val RESOLVED_SPECIES_CACHE = java.util.concurrent.ConcurrentHashMap<String, PokemonMeta>()
+        internal val TOP_META_POOL_CACHE = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
+        internal val TOP_30_RANKED_POOL_CACHE = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
 
-        fun clearSimulationCachesStatic() {
-            CACHED_ALL_POKEMON_META = null
-            RESOLVED_SPECIES_CACHE.clear()
-            TOP_META_POOL_CACHE.clear()
-            TOP_30_RANKED_POOL_CACHE.clear()
-        }
-
-        fun getAllPokemonMeta(): List<PokemonMeta> {
-            CACHED_ALL_POKEMON_META?.let { return it }
-            val merged = if (DYNAMIC_POKEMON_DATABASE.isEmpty()) {
-                POKEMON_META_DATABASE
-            } else {
-                val dynIds = DYNAMIC_POKEMON_DATABASE.map { it.speciesId.lowercase() }.toSet()
-                DYNAMIC_POKEMON_DATABASE + POKEMON_META_DATABASE.filter { !dynIds.contains(it.speciesId.lowercase()) }
-            }
-            if (DYNAMIC_POKEMON_DATABASE.isNotEmpty()) {
-                CACHED_ALL_POKEMON_META = merged
-            }
-            return merged
-        }
 
         /**
          * FormResolver:
@@ -5173,7 +1452,7 @@ class OverlayService : LifecycleService() {
             fun getEffectiveRankAndShadowForVariant(variant: PokemonMeta, activeLeague: String): Pair<Int, Boolean> {
                 val normLeague = normalizeLeagueKey(activeLeague)
                 val baseId = variant.speciesId.lowercase().removeSuffix("_shadow")
-                val isMegaVariant = isMegaOrPrimalSpeciesStatic(baseId) || isMegaOrPrimalSpeciesStatic(variant.name)
+                val isMegaVariant = OverlayService.isMegaOrPrimalSpeciesStatic(baseId) || OverlayService.isMegaOrPrimalSpeciesStatic(variant.name)
                 val map = LIVE_RANKINGS_MAP[normLeague]
                 if (isMegaVariant && !isMegaAllowedInLeagueStatic(normLeague) && map?.containsKey(baseId) != true) {
                     return 9999 to false
@@ -5231,7 +1510,7 @@ class OverlayService : LifecycleService() {
 
             fun getVariantsForSpecies(speciesOrName: String, activeLeague: String): List<PokemonMeta> {
                 val base = extractBaseSpecies(speciesOrName)
-                val variants = getAllPokemonMeta()
+                val variants = OverlayService.getAllPokemonMeta()
                     .filter {
                         it.baseSpecies.equals(base, ignoreCase = true) &&
                             !it.speciesId.endsWith("_shadow", ignoreCase = true) &&
@@ -5410,2342 +1689,20 @@ class OverlayService : LifecycleService() {
             "BATTLE FRONTIER (MASTER)"
         )
 
-        fun areAllFourLeaguesLoaded(): Boolean {
-            return REQUIRED_LEAGUE_KEYS.all { key ->
-                val map = LIVE_RANKINGS_MAP[key] ?: LIVE_RANKINGS_MAP[key.removeSuffix(" (10000)")]
-                map != null && map.isNotEmpty()
-            }
-        }
 
-        fun getGamemasterLoadedCount(): Int {
-            return if (DYNAMIC_POKEMON_DATABASE.isNotEmpty()) {
-                POKEMON_META_DATABASE.size + DYNAMIC_POKEMON_DATABASE.size
-            } else {
-                0
-            }
-        }
+        internal val CPM_TABLE: List<Pair<Double, Double>> get() = PokemonStaticData.CPM_TABLE
 
-        fun getLeagueRankingsCount(leagueKey: String): Int {
-            val trimmed = leagueKey.trim()
-            if (trimmed.isEmpty()) return 0
-            val upper = trimmed.uppercase()
-            LIVE_RANKINGS_MAP[upper]?.size?.takeIf { it > 0 }?.let { return it }
-            val norm = normalizeLeagueKeyStatic(trimmed).uppercase()
-            LIVE_RANKINGS_MAP[norm]?.size?.takeIf { it > 0 }?.let { return it }
-            val withoutCp = upper.replace(Regex("\\s*\\(\\d+\\)\\s*$"), "").trim()
-            return LIVE_RANKINGS_MAP[withoutCp]?.size ?: 0
-        }
 
-        fun formatShortSelectedLeagueLabelStatic(leagueKey: String): String {
-            val upper = leagueKey.trim().uppercase()
-            return when {
-                upper == "GREAT LEAGUE" || upper == "GREAT LEAGUE (1500)" -> "GL"
-                upper == "ULTRA LEAGUE" || upper == "ULTRA LEAGUE (2500)" -> "UL"
-                upper == "MASTER LEAGUE" || upper == "MASTER LEAGUE (10000)" -> "ML"
-                upper.contains("MEGA MASTER") || upper == "MASTER LEAGUE (MEGA) (10000)" -> "Mega ML"
-                upper.contains("BATTLE FRONTIER") && upper.contains("SPECTRAL") -> "BF (Spectral)"
-                upper.contains("BATTLE FRONTIER") && upper.contains("CAULDRON") -> "BF (Cauldron)"
-                upper.contains("BATTLE FRONTIER") && upper.contains("MASTER") -> "BF (Master)"
-                else -> leagueKey.trim()
-            }
-        }
+        internal val fastMovePowerMapStatic: Map<String, Int> get() = PokemonStaticData.fastMovePowerMapStatic
+        internal val fastMoveTypeMapStatic: Map<String, String> get() = PokemonStaticData.fastMoveTypeMapStatic
 
-        fun getSelectedLeaguesRankingsCountsStatic(prefs: SharedPreferences): List<Pair<String, Int>> {
-            val allSelected = (getEnabledGblLeaguesStatic(prefs) + getEnabledShow6LeaguesStatic(prefs))
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
-            val deduped = LinkedHashMap<String, String>()
-            for (lg in allSelected) {
-                val shortLabel = formatShortSelectedLeagueLabelStatic(lg)
-                val dedupKey = shortLabel.uppercase()
-                if (!deduped.containsKey(dedupKey)) {
-                    deduped[dedupKey] = lg
-                }
-            }
-            return deduped.entries.map { (shortUpper, rawKey) ->
-                val displayLabel = formatShortSelectedLeagueLabelStatic(rawKey).ifBlank { shortUpper }
-                displayLabel to getLeagueRankingsCount(rawKey)
-            }
-        }
 
-        fun formatSelectedLeaguesStatusSummaryStatic(prefs: SharedPreferences): String {
-            val counts = getSelectedLeaguesRankingsCountsStatic(prefs)
-            if (counts.isEmpty()) return "GL: ${getLeagueRankingsCount("GREAT LEAGUE")} • UL: ${getLeagueRankingsCount("ULTRA LEAGUE")} • ML: ${getLeagueRankingsCount("MASTER LEAGUE")}"
-            return counts.joinToString(" • ") { (label, count) -> "$label: $count" }
-        }
+        val ALL_SHIELD_PERMUTATIONS: List<Triple<Int, Int, String>> get() = PokemonStaticData.ALL_SHIELD_PERMUTATIONS
 
-        fun formatMoveIdDisplay(moveId: String): String {
-            if (moveId.isBlank()) return ""
-            val upper = moveId.trim().uppercase()
-            CANONICAL_MOVE_ID_MAP[upper]?.let { return it }
-            DYNAMIC_MOVE_ID_TO_NAME[moveId]?.let { return it }
-            DYNAMIC_MOVE_ID_TO_NAME[upper]?.let { return it }
-            return moveId.lowercase().split("_").joinToString(" ") { w ->
-                w.replaceFirstChar { c -> c.uppercase() }
-            }
-        }
 
-        private fun com.google.gson.JsonObject.optString(key: String): String? =
-            get(key)?.takeIf { !it.isJsonNull && it.isJsonPrimitive }?.let { runCatching { it.asString }.getOrNull() }
-
-        private fun com.google.gson.JsonObject.optInt(key: String): Int? =
-            get(key)?.takeIf { !it.isJsonNull && it.isJsonPrimitive }?.let { runCatching { it.asDouble.toInt() }.getOrNull() }
-
-        private fun com.google.gson.JsonObject.optDouble(key: String): Double? =
-            get(key)?.takeIf { !it.isJsonNull && it.isJsonPrimitive }?.let { runCatching { it.asDouble }.getOrNull() }
-
-        private fun com.google.gson.JsonObject.optJsonArray(key: String): com.google.gson.JsonArray? =
-            get(key)?.takeIf { !it.isJsonNull && it.isJsonArray }?.asJsonArray
-
-        private fun com.google.gson.JsonObject.optJsonObject(key: String): com.google.gson.JsonObject? =
-            get(key)?.takeIf { !it.isJsonNull && it.isJsonObject }?.asJsonObject
-
-        fun parseRankingsJsonStatic(leagueKey: String, jsonStr: String): Int {
-            return try {
-                val arr = JsonParser.parseString(jsonStr).asJsonArray
-                val leagueMap = java.util.concurrent.ConcurrentHashMap<String, PokemonRankingEntry>()
-                var rankCounter = 1
-                for (el in arr) {
-                    try {
-                        if (!el.isJsonObject) continue
-                        val obj = el.asJsonObject
-                        val speciesId = obj.optString("speciesId")?.takeIf { it.isNotBlank() } ?: continue
-                        val score = obj.optDouble("score") ?: 80.0
-                        val entryRank = rankCounter++
-                        val movesObj = obj.optJsonObject("moves")
-
-                        val fastList = mutableListOf<MoveUsage>()
-                        val rawFast = movesObj?.optJsonArray("fastMoves")
-                        if (rawFast != null) {
-                            for (fm in rawFast) {
-                                if (!fm.isJsonObject) continue
-                                val fmObj = fm.asJsonObject
-                                val mId = fmObj.optString("moveId")?.takeIf { it.isNotBlank() } ?: continue
-                                val uses = fmObj.optInt("uses")
-                                fastList.add(MoveUsage(mId, uses))
-                            }
-                        }
-                        fastList.sortByDescending { it.uses ?: 0 }
-
-                        val chargedList = mutableListOf<MoveUsage>()
-                        val rawCharged = movesObj?.optJsonArray("chargedMoves")
-                        if (rawCharged != null) {
-                            for (cm in rawCharged) {
-                                if (!cm.isJsonObject) continue
-                                val cmObj = cm.asJsonObject
-                                val mId = cmObj.optString("moveId")?.takeIf { it.isNotBlank() } ?: continue
-                                val uses = cmObj.optInt("uses")
-                                chargedList.add(MoveUsage(mId, uses))
-                            }
-                        }
-                        chargedList.sortByDescending { it.uses ?: 0 }
-
-                        val movesetList = mutableListOf<String>()
-                        val movesetArr = obj.optJsonArray("moveset")
-                        if (movesetArr != null && movesetArr.size() > 0) {
-                            for (i in 0 until movesetArr.size()) {
-                                val msEl = movesetArr.get(i)
-                                val msId = if (msEl != null && !msEl.isJsonNull && msEl.isJsonPrimitive) msEl.asString else null
-                                if (!msId.isNullOrBlank()) movesetList.add(msId)
-                            }
-                            if (fastList.isEmpty() && movesetList.isNotEmpty()) {
-                                fastList.add(MoveUsage(movesetList[0], 100))
-                            }
-                            if (chargedList.isEmpty() && movesetList.size > 1) {
-                                for (i in 1 until movesetList.size) {
-                                    chargedList.add(MoveUsage(movesetList[i], 100 - i))
-                                }
-                            }
-                        }
-
-                        val moveCountList = mutableListOf<Int>()
-                        val mcArr = obj.optJsonArray("moveCount")
-                        if (mcArr != null) {
-                            for (mc in mcArr) {
-                                if (mc != null && !mc.isJsonNull && mc.isJsonPrimitive) {
-                                    runCatching { mc.asDouble.toInt() }.getOrNull()?.let { moveCountList.add(it) }
-                                }
-                            }
-                        }
-
-                        leagueMap[speciesId.lowercase()] = PokemonRankingEntry(
-                            speciesId = speciesId,
-                            score = score,
-                            moves = RankingMoves(fastMoves = fastList, chargedMoves = chargedList),
-                            moveCount = moveCountList.takeIf { it.isNotEmpty() },
-                            moveset = movesetList.takeIf { it.isNotEmpty() },
-                            rank = entryRank
-                        )
-                    } catch (_: Exception) {
-                        // Skip individual malformed entry without aborting league parsing
-                    }
-                }
-                val upperKey = leagueKey.uppercase()
-                LIVE_RANKINGS_MAP[upperKey] = leagueMap
-                when (upperKey) {
-                    "GREAT LEAGUE", "GREAT LEAGUE (1500)" -> {
-                        LIVE_RANKINGS_MAP["GREAT LEAGUE"] = leagueMap
-                        LIVE_RANKINGS_MAP["GREAT LEAGUE (1500)"] = leagueMap
-                    }
-                    "ULTRA LEAGUE", "ULTRA LEAGUE (2500)" -> {
-                        LIVE_RANKINGS_MAP["ULTRA LEAGUE"] = leagueMap
-                        LIVE_RANKINGS_MAP["ULTRA LEAGUE (2500)"] = leagueMap
-                    }
-                    "MASTER LEAGUE", "MASTER LEAGUE (10000)" -> {
-                        LIVE_RANKINGS_MAP["MASTER LEAGUE"] = leagueMap
-                        LIVE_RANKINGS_MAP["MASTER LEAGUE (10000)"] = leagueMap
-                    }
-                    "MEGA MASTER LEAGUE", "MEGA MASTER LEAGUE (10000)", "MASTER LEAGUE (MEGA) (10000)" -> {
-                        LIVE_RANKINGS_MAP["MEGA MASTER LEAGUE"] = leagueMap
-                        LIVE_RANKINGS_MAP["MEGA MASTER LEAGUE (10000)"] = leagueMap
-                    }
-                }
-                clearSimulationCachesStatic()
-                leagueMap.size
-            } catch (_: Exception) {
-                0
-            }
-        }
-
-        fun applyRankingMovesForLeague(meta: PokemonMeta, league: String, isShadow: Boolean = false): PokemonMeta {
-            val normLeague = normalizeLeagueKeyStatic(league)
-            val isSkeledirge = meta.baseSpecies.equals("skeledirge", ignoreCase = true) ||
-                meta.speciesId.startsWith("skeledirge", ignoreCase = true)
-
-            val map = LIVE_RANKINGS_MAP[normLeague]
-            val baseKey = meta.speciesId.lowercase().removeSuffix("_shadow")
-            val effectiveShadow = isShadow || meta.name.startsWith("Shadow ", ignoreCase = true) || meta.speciesId.endsWith("_shadow", ignoreCase = true)
-            val entry = if (map != null) {
-                if (effectiveShadow) {
-                    map["${baseKey}_shadow"] ?: map[baseKey]
-                } else {
-                    map[baseKey] ?: map["${baseKey}_shadow"]
-                }
-            } else null
-
-            if (entry == null) {
-                if (isSkeledirge) {
-                    return meta.copy(
-                        defaultFastMove = "Incinerate",
-                        fastTurns = 5,
-                        chargedMove1 = "Torch Song",
-                        chargedMove2 = "Shadow Ball",
-                        chargedMove3 = "Disarming Voice"
-                    )
-                }
-                return meta
-            }
-
-            val cleanSpeciesId = meta.speciesId.lowercase().removeSuffix("_shadow").removeSuffix("_alolan").removeSuffix("_galarian").removeSuffix("_hisuian").removeSuffix("_paldean")
-            val speciesBaseKey = FormResolver.extractBaseSpecies(meta.name).lowercase()
-
-            val gmFastPool = SPECIES_FAST_MOVES_POOL[meta.speciesId.lowercase()]
-                ?: SPECIES_FAST_MOVES_POOL[cleanSpeciesId]
-                ?: SPECIES_FAST_MOVES_POOL[meta.name.lowercase()]
-                ?: SPECIES_FAST_MOVES_POOL[speciesBaseKey]
-                ?: SPECIES_FAST_MOVES_POOL["${cleanSpeciesId}_shield"]
-                ?: SPECIES_FAST_MOVES_POOL["${cleanSpeciesId}_full_belly"]
-
-            val effectiveFastPool = if (!gmFastPool.isNullOrEmpty()) {
-                gmFastPool
-            } else {
-                FALLBACK_SPECIES_FAST_POOL[cleanSpeciesId]
-                    ?: FALLBACK_SPECIES_FAST_POOL[speciesBaseKey]
-                    ?: FALLBACK_SPECIES_FAST_POOL[meta.name.lowercase()]
-            }
-
-            // Priority 1: Official recommended moveset[0] for Fast Move, fallback to highest-uses fastMoves[0]
-            val topFastId = entry.moveset?.getOrNull(0)?.takeIf { it.isNotBlank() }
-                ?: entry.moves.fastMoves.firstOrNull()?.moveId
-
-            val validFastCandidate = topFastId?.let { formatMoveIdDisplay(it) }?.takeIf { cand ->
-                cand.isNotBlank() && (effectiveFastPool.isNullOrEmpty() || effectiveFastPool.any { it.equals(cand, ignoreCase = true) })
-            }
-            val fastName = validFastCandidate ?: meta.defaultFastMove
-            val fastTurns = resolveFastTurnsStatic(fastName, meta.fastTurns)
-
-            if (isSkeledirge) {
-                return meta.copy(
-                    defaultFastMove = fastName,
-                    fastTurns = fastTurns,
-                    chargedMove1 = "Torch Song",
-                    chargedMove2 = "Shadow Ball",
-                    chargedMove3 = "Disarming Voice"
-                )
-            }
-
-            val gmChargedPool = SPECIES_CHARGED_MOVES_POOL[meta.speciesId.lowercase()]
-                ?: SPECIES_CHARGED_MOVES_POOL[cleanSpeciesId]
-                ?: SPECIES_CHARGED_MOVES_POOL[meta.name.lowercase()]
-                ?: SPECIES_CHARGED_MOVES_POOL[speciesBaseKey]
-                ?: SPECIES_CHARGED_MOVES_POOL["${cleanSpeciesId}_shield"]
-                ?: SPECIES_CHARGED_MOVES_POOL["${cleanSpeciesId}_full_belly"]
-
-            val effectiveChargedPool = if (!gmChargedPool.isNullOrEmpty()) {
-                gmChargedPool
-            } else {
-                FALLBACK_SPECIES_CHARGED_POOL[cleanSpeciesId]
-                    ?: FALLBACK_SPECIES_CHARGED_POOL[speciesBaseKey]
-                    ?: FALLBACK_SPECIES_CHARGED_POOL[meta.name.lowercase()]
-            }
-
-            val orderedChargedNames = mutableListOf<String>()
-            fun addCandidate(raw: String?) {
-                val formatted = raw?.let { formatMoveIdDisplay(it) }?.trim().orEmpty()
-                if (formatted.isBlank() || formatted.equals("Struggle", ignoreCase = true) || formatted.equals("Frustration", ignoreCase = true)) return
-                if (!effectiveChargedPool.isNullOrEmpty() && effectiveChargedPool.none { it.equals(formatted, ignoreCase = true) }) return
-                if (orderedChargedNames.none { it.equals(formatted, ignoreCase = true) }) {
-                    orderedChargedNames.add(formatted)
-                }
-            }
-
-            entry.moveset?.drop(1)?.forEach { mId -> addCandidate(mId) }
-            entry.moves.chargedMoves.forEach { cm -> addCandidate(cm.moveId) }
-            addCandidate(meta.chargedMove1)
-            addCandidate(meta.chargedMove2)
-            addCandidate(meta.chargedMove3)
-            addCandidate(meta.chargedMove4)
-            effectiveChargedPool?.forEach { addCandidate(it) }
-
-            val c1Name = orderedChargedNames.getOrNull(0) ?: meta.chargedMove1
-            val c2Name = orderedChargedNames.getOrNull(1) ?: orderedChargedNames.getOrNull(0) ?: meta.chargedMove2
-            val c3Name = orderedChargedNames.getOrNull(2) ?: ""
-            val c4Name = orderedChargedNames.getOrNull(3) ?: ""
-
-            return meta.copy(
-                defaultFastMove = fastName,
-                fastTurns = fastTurns,
-                chargedMove1 = c1Name,
-                chargedMove2 = c2Name,
-                chargedMove3 = c3Name,
-                chargedMove4 = c4Name
-            )
-        }
-
-        /**
-         * Returns autocomplete suggestions for the Team Builder UI.
-         * When typing a base form (e.g. "giratina", "ninetales", "feraligatr", "zacian"),
-         * returns Base + all Alternate Forms + Shadow variants.
-         */
-        fun getAutocompletePokemonSuggestions(
-            rawQuery: String,
-            league: String = "GREAT LEAGUE",
-            limit: Int = 20
-        ): List<PokemonAutocompleteSuggestion> {
-            val query = rawQuery.trim().lowercase()
-            if (query.isEmpty()) return emptyList()
-
-            val isTypingShadow = query.startsWith("shadow") || query.contains(" shadow")
-            val strippedQuery = query.removePrefix("shadow").trim()
-            val searchToken = strippedQuery.ifEmpty { query }
-
-            val allMeta = getAllPokemonMeta()
-            val poolByName = LinkedHashMap<String, PokemonAutocompleteSuggestion>()
-
-            for (meta in allMeta) {
-                val isShadow = meta.name.startsWith("Shadow ", ignoreCase = true) || meta.speciesId.endsWith("_shadow", ignoreCase = true)
-                val isMegaOrPrimal = meta.name.startsWith("Mega ", ignoreCase = true) || meta.name.startsWith("Primal ", ignoreCase = true) || meta.speciesId.contains("_mega") || meta.speciesId.contains("_primal")
-                val baseKey = FormResolver.extractBaseSpecies(meta.name)
-                val rankedMeta = computeEffectiveCombatStats(applyRankingMovesForLeague(applyRecommendedMoves(meta), league, isShadow), league)
-                val badge = when {
-                    isShadow && meta.formLabel != "Base" && meta.formLabel != "Shadow" -> "Shadow • ${meta.formLabel}"
-                    isShadow -> "Shadow"
-                    isMegaOrPrimal -> if (meta.name.startsWith("Primal", ignoreCase = true)) "Primal" else "Mega"
-                    else -> meta.formLabel
-                }
-                val isAlt = badge != "Base" && badge != "Shadow"
-
-                val keyLower = meta.name.lowercase()
-                if (!poolByName.containsKey(keyLower)) {
-                    poolByName[keyLower] = PokemonAutocompleteSuggestion(
-                        name = meta.name,
-                        speciesId = meta.speciesId,
-                        baseSpecies = baseKey,
-                        formBadge = badge,
-                        cp = rankedMeta.defaultCp,
-                        fastMove = rankedMeta.defaultFastMove,
-                        chargedMove1 = rankedMeta.chargedMove1,
-                        chargedMove2 = rankedMeta.chargedMove2,
-                        isShadow = isShadow,
-                        isAlternateForm = isAlt
-                    )
-                }
-
-                // Synthesize Shadow option for eligible non-Shadow, non-Mega/Primal Pokémon
-                if (!isShadow && !isMegaOrPrimal) {
-                    val shadowName = "Shadow ${meta.name}"
-                    val shadowKey = shadowName.lowercase()
-                    if (!poolByName.containsKey(shadowKey)) {
-                        val shadowRanked = computeEffectiveCombatStats(applyRankingMovesForLeague(applyRecommendedMoves(meta), league, true), league)
-                        poolByName[shadowKey] = PokemonAutocompleteSuggestion(
-                            name = shadowName,
-                            speciesId = "${meta.speciesId}_shadow",
-                            baseSpecies = baseKey,
-                            formBadge = if (meta.formLabel != "Base") "Shadow • ${meta.formLabel}" else "Shadow",
-                            cp = shadowRanked.defaultCp,
-                            fastMove = shadowRanked.defaultFastMove,
-                            chargedMove1 = shadowRanked.chargedMove1,
-                            chargedMove2 = shadowRanked.chargedMove2,
-                            isShadow = true,
-                            isAlternateForm = isAlt
-                        )
-                    }
-                }
-            }
-
-            val matchedFamilies = HashSet<String>()
-            for (opt in poolByName.values) {
-                if (opt.baseSpecies.startsWith(searchToken) || opt.baseSpecies.contains(searchToken) || opt.name.lowercase().contains(searchToken)) {
-                    matchedFamilies.add(opt.baseSpecies)
-                }
-            }
-
-            val results = poolByName.values.filter { opt ->
-                matchedFamilies.contains(opt.baseSpecies) || opt.name.lowercase().contains(query)
-            }.sortedWith(
-                Comparator { a, b ->
-                    val aStarts = if (a.baseSpecies.startsWith(searchToken)) 0 else 1
-                    val bStarts = if (b.baseSpecies.startsWith(searchToken)) 0 else 1
-                    if (aStarts != bStarts) return@Comparator aStarts - bStarts
-                    val famCmp = a.baseSpecies.compareTo(b.baseSpecies)
-                    if (famCmp != 0) return@Comparator famCmp
-                    if (isTypingShadow) {
-                        if (a.isShadow != b.isShadow) return@Comparator if (a.isShadow) -1 else 1
-                    } else {
-                        if (a.isShadow != b.isShadow) return@Comparator if (a.isShadow) 1 else -1
-                    }
-                    if (a.isAlternateForm != b.isAlternateForm) return@Comparator if (a.isAlternateForm) 1 else -1
-                    a.name.compareTo(b.name)
-                }
-            )
-
-            return results.take(limit)
-        }
-
-        private val CPM_TABLE: List<Pair<Double, Double>> = listOf(
-            1.0 to 0.094, 1.5 to 0.135137432, 2.0 to 0.16639787, 2.5 to 0.192650919,
-            3.0 to 0.21573247, 3.5 to 0.236572661, 4.0 to 0.25572005, 4.5 to 0.273530381,
-            5.0 to 0.29024988, 5.5 to 0.306057377, 6.0 to 0.3210876, 6.5 to 0.335445036,
-            7.0 to 0.34921268, 7.5 to 0.362457751, 8.0 to 0.37523559, 8.5 to 0.387592406,
-            9.0 to 0.39956728, 9.5 to 0.411193551, 10.0 to 0.42250001, 10.5 to 0.432926419,
-            11.0 to 0.44310755, 11.5 to 0.453059958, 12.0 to 0.46279839, 12.5 to 0.472336083,
-            13.0 to 0.48168495, 13.5 to 0.4908558, 14.0 to 0.49985844, 14.5 to 0.508701765,
-            15.0 to 0.51739395, 15.5 to 0.525942511, 16.0 to 0.53435433, 16.5 to 0.542635767,
-            17.0 to 0.55079269, 17.5 to 0.558830576, 18.0 to 0.56675452, 18.5 to 0.574569153,
-            19.0 to 0.58227891, 19.5 to 0.589887917, 20.0 to 0.59740001, 20.5 to 0.604818814,
-            21.0 to 0.61215729, 21.5 to 0.619404122, 22.0 to 0.62656713, 22.5 to 0.633649143,
-            23.0 to 0.64065295, 23.5 to 0.647580967, 24.0 to 0.65443563, 24.5 to 0.661219252,
-            25.0 to 0.667934, 25.5 to 0.674581896, 26.0 to 0.68116492, 26.5 to 0.687684904,
-            27.0 to 0.69414365, 27.5 to 0.70054287, 28.0 to 0.70688421, 28.5 to 0.713168999,
-            29.0 to 0.71939909, 29.5 to 0.725575614, 30.0 to 0.7317, 30.5 to 0.734741009,
-            31.0 to 0.73776948, 31.5 to 0.740785574, 32.0 to 0.74378943, 32.5 to 0.746781211,
-            33.0 to 0.74976104, 33.5 to 0.752729087, 34.0 to 0.75568551, 34.5 to 0.758630378,
-            35.0 to 0.76156384, 35.5 to 0.764486065, 36.0 to 0.76739717, 36.5 to 0.770297266,
-            37.0 to 0.7731865, 37.5 to 0.776064962, 38.0 to 0.77893275, 38.5 to 0.781790055,
-            39.0 to 0.78463697, 39.5 to 0.787473578, 40.0 to 0.7903, 40.5 to 0.792803968,
-            41.0 to 0.79530001, 41.5 to 0.797800015, 42.0 to 0.8003, 42.5 to 0.802799995,
-            43.0 to 0.8053, 43.5 to 0.8078, 44.0 to 0.81029999, 44.5 to 0.812799985,
-            45.0 to 0.81529999, 45.5 to 0.81779999, 46.0 to 0.82029999, 46.5 to 0.82279999,
-            47.0 to 0.82529999, 47.5 to 0.82779999, 48.0 to 0.83029999, 48.5 to 0.83279999,
-            49.0 to 0.83529999, 49.5 to 0.83779999, 50.0 to 0.84029999
-        )
-
-        private fun solveLeagueLevelCpm(uAtk: Double, uDef: Double, uHp: Double, leagueCap: Int): Pair<Double, Int> {
-            var bestCpm = 0.094
-            var bestCp = 10
-            for ((_, cpm) in CPM_TABLE) {
-                val cp = floor(uAtk * kotlin.math.sqrt(uDef * uHp) * cpm * cpm / 10.0).toInt().coerceAtLeast(10)
-                if (cp <= leagueCap) {
-                    bestCpm = cpm
-                    bestCp = cp
-                } else {
-                    break
-                }
-            }
-            return bestCpm to bestCp
-        }
-
-        /**
-         * Resolves PvPoke recommended Fast Move, Charged Move 1, Charged Move 2, and default CP for a Pokémon name,
-         * prioritizing live rankings JSON moves when available.
-         */
-        fun resolveRecommendedMovesForSpecies(
-            rawName: String,
-            league: String = "GREAT LEAGUE",
-            customCp: Int? = null,
-            customIvs: String? = null
-        ): PokemonMeta? {
-            val trimmed = rawName.trim()
-            if (trimmed.isEmpty()) return null
-            val normLeague = when {
-                league.contains("MEGA", ignoreCase = true) -> "MEGA MASTER LEAGUE"
-                league.contains("GREAT", ignoreCase = true) -> "GREAT LEAGUE"
-                league.contains("ULTRA", ignoreCase = true) -> "ULTRA LEAGUE"
-                else -> "MASTER LEAGUE"
-            }
-            val cacheKey = "${trimmed.lowercase()}|$normLeague|${customCp ?: -1}|${customIvs?.trim()?.lowercase().orEmpty()}"
-            RESOLVED_SPECIES_CACHE[cacheKey]?.let { return it }
-
-            val isShadowInput = trimmed.startsWith("Shadow ", ignoreCase = true) || trimmed.contains("(Shadow)", ignoreCase = true)
-            val cleanNoShadow = trimmed
-                .replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "")
-                .replace(Regex("\\s*\\(Shadow\\)", RegexOption.IGNORE_CASE), "")
-                .trim()
-            val allMeta = getAllPokemonMeta()
-
-            fun cacheAndReturn(resolved: PokemonMeta?): PokemonMeta? {
-                if (resolved != null) {
-                    if (RESOLVED_SPECIES_CACHE.size > 6000) RESOLVED_SPECIES_CACHE.clear()
-                    RESOLVED_SPECIES_CACHE[cacheKey] = resolved
-                }
-                return resolved
-            }
-
-            val exactByName = allMeta.find {
-                it.name.equals(trimmed, ignoreCase = true) ||
-                    it.name.equals(cleanNoShadow, ignoreCase = true) ||
-                    (cleanNoShadow.contains("zygarde", ignoreCase = true) && cleanNoShadow.contains("complete", ignoreCase = true) && it.speciesId.equals("zygarde_complete", ignoreCase = true))
-            }
-            if (exactByName != null) {
-                val withRankMoves = applyRankingMovesForLeague(applyRecommendedMoves(exactByName), normLeague, isShadowInput)
-                return cacheAndReturn(computeEffectiveCombatStats(withRankMoves, normLeague, customCp, customIvs))
-            }
-
-            val base = FormResolver.extractBaseSpecies(cleanNoShadow)
-            val variants = FormResolver.getVariantsForSpecies(base, normLeague)
-            if (variants.isNotEmpty()) {
-                val chosen = FormResolver.resolveBestDefaultVariant(variants.first(), cleanNoShadow, normLeague)
-                val withRankMoves = applyRankingMovesForLeague(applyRecommendedMoves(chosen), normLeague, isShadowInput)
-                return cacheAndReturn(computeEffectiveCombatStats(withRankMoves, normLeague, customCp, customIvs))
-            }
-
-            val exactById = allMeta.find {
-                it.speciesId.equals(cleanNoShadow.replace(" ", "_"), ignoreCase = true)
-            }
-            if (exactById != null) {
-                val withRankMoves = applyRankingMovesForLeague(applyRecommendedMoves(exactById), normLeague, isShadowInput)
-                return cacheAndReturn(computeEffectiveCombatStats(withRankMoves, normLeague, customCp, customIvs))
-            }
-
-            val partial = allMeta.firstOrNull {
-                val candBase = it.baseSpecies.lowercase()
-                val queryBase = base.lowercase()
-                if ((candBase == "mew" && queryBase == "mewtwo") || (candBase == "mewtwo" && queryBase == "mew")) {
-                    false
-                } else {
-                    it.name.lowercase().contains(cleanNoShadow.lowercase()) ||
-                        cleanNoShadow.lowercase().contains(candBase)
-                }
-            }
-            return cacheAndReturn(partial?.let {
-                val withRankMoves = applyRankingMovesForLeague(applyRecommendedMoves(it), normLeague, isShadowInput)
-                computeEffectiveCombatStats(withRankMoves, normLeague, customCp, customIvs)
-            })
-        }
-
-        /**
-         * Parses user IV string (e.g. "0/15/15", "15-15-15", "15 15 15") or returns PvPoke default IVs for the league.
-         */
-        fun parseIvTriplet(ivStr: String?, league: String, meta: PokemonMeta): Triple<Int, Int, Int> {
-            if (!ivStr.isNullOrBlank()) {
-                val parts = ivStr.trim().split(Regex("[/\\-,\\s]+")).mapNotNull { it.toIntOrNull() }
-                if (parts.size >= 3) {
-                    return Triple(
-                        parts[0].coerceIn(0, 15),
-                        parts[1].coerceIn(0, 15),
-                        parts[2].coerceIn(0, 15)
-                    )
-                }
-            }
-            val cpCap = getLeagueCpCapStatic(league)
-            return when {
-                cpCap <= 1500 -> {
-                    val glParts = meta.defaultIvsGl.split("/").mapNotNull { it.toIntOrNull() }
-                    if (glParts.size >= 3) Triple(glParts[0], glParts[1], glParts[2]) else Triple(1, 15, 15)
-                }
-                cpCap == 2500 -> {
-                    val ulParts = meta.defaultIvsUl.split("/").mapNotNull { it.toIntOrNull() }
-                    if (ulParts.size >= 3) Triple(ulParts[0], ulParts[1], ulParts[2]) else Triple(1, 15, 15)
-                }
-                else -> Triple(15, 15, 15)
-            }
-        }
-
-        /**
-         * Computes League CP-scaled and IV-adjusted effective combat stats (Atk, Def, HP, and CP).
-         * Automatically defaults to PvPoke standard IVs and official half-level CPM when customIvs/customCp is blank.
-         */
-        fun computeEffectiveCombatStats(
-            meta: PokemonMeta,
-            league: String,
-            customCp: Int? = null,
-            customIvs: String? = null
-        ): PokemonMeta {
-            val cpCap = getLeagueCpCapStatic(league)
-            val isLittle = cpCap == 500
-            val isGreat = cpCap <= 1500
-            val isUltra = cpCap == 2500
-            val leagueCap = when {
-                isLittle -> 500
-                isGreat -> 1500
-                isUltra -> 2500
-                else -> 6000
-            }
-
-            val actualIvs = parseIvTriplet(customIvs, league, meta)
-
-            if (meta.isRawBaseStats) {
-                val uAtk = (meta.atk + actualIvs.first).coerceAtLeast(20.0)
-                val uDef = (meta.def + actualIvs.second).coerceAtLeast(20.0)
-                val uHp = (meta.hp.toDouble() + actualIvs.third).coerceAtLeast(20.0)
-                val (cpm, targetCp) = if (customCp != null && customCp in 100..(leagueCap + 100)) {
-                    val solvedCpm = kotlin.math.sqrt((customCp * 10.0) / (uAtk * kotlin.math.sqrt(uDef * uHp))).coerceIn(0.094, 0.8453)
-                    solvedCpm to customCp
-                } else {
-                    solveLeagueLevelCpm(uAtk, uDef, uHp, leagueCap)
-                }
-                return meta.copy(
-                    defaultCp = targetCp,
-                    atk = uAtk * cpm,
-                    def = uDef * cpm,
-                    hp = floor(uHp * cpm).toInt().coerceAtLeast(10),
-                    isRawBaseStats = false
-                )
-            }
-
-            // Static POKEMON_META_DATABASE entries: derive true reference CP from actual (atk, def, hp) stat product
-            val statRefCp = floor(meta.atk * kotlin.math.sqrt(meta.def * meta.hp.toDouble()) / 10.0).coerceAtLeast(100.0)
-            val refCpm = when {
-                statRefCp > 2500.0 -> 0.8403
-                statRefCp > 1550.0 -> 0.7903
-                else -> 0.7317
-            }
-            val refIvs = when {
-                statRefCp > 2500.0 -> Triple(15, 15, 15)
-                else -> Triple(1, 15, 15)
-            }
-
-            val adjAtkAtRef = (meta.atk + (actualIvs.first - refIvs.first) * refCpm).coerceAtLeast(20.0)
-            val adjDefAtRef = (meta.def + (actualIvs.second - refIvs.second) * refCpm).coerceAtLeast(20.0)
-            val adjHpAtRef = (meta.hp.toDouble() + (actualIvs.third - refIvs.third) * refCpm).coerceAtLeast(20.0)
-
-            val refProd = (meta.atk * kotlin.math.sqrt(meta.def * meta.hp.toDouble())).coerceAtLeast(1.0)
-            val adjProd = (adjAtkAtRef * kotlin.math.sqrt(adjDefAtRef * adjHpAtRef)).coerceAtLeast(1.0)
-            val ivCpRatio = adjProd / refProd
-
-            val defaultLeagueCp = when {
-                isGreat -> if (meta.defaultCp <= 1500) meta.defaultCp else 1498
-                isUltra -> when {
-                    meta.defaultCp in 1501..2500 -> meta.defaultCp
-                    meta.defaultCp > 2500 -> 2496
-                    else -> min(2500, (statRefCp * 1.65).roundToInt())
-                }
-                else -> if (meta.defaultCp > 2500) meta.defaultCp else (statRefCp * 1.45).roundToInt().coerceAtMost(4720)
-            }
-
-            val targetCp = if (customCp != null && customCp in 100..(leagueCap + 100)) {
-                customCp
-            } else if (!isGreat && !isUltra) {
-                (defaultLeagueCp * ivCpRatio).roundToInt().coerceAtLeast(100)
-            } else {
-                defaultLeagueCp
-            }
-
-            val effectiveRefCp = (statRefCp * ivCpRatio).coerceAtLeast(100.0)
-            val cpmScale = kotlin.math.sqrt(targetCp.toDouble() / effectiveRefCp).coerceIn(0.35, 1.45)
-
-            return meta.copy(
-                defaultCp = targetCp,
-                atk = adjAtkAtRef * cpmScale,
-                def = adjDefAtRef * cpmScale,
-                hp = (adjHpAtRef * cpmScale).roundToInt().coerceAtLeast(10)
-            )
-        }
-
-        fun parseGamemasterJsonStatic(jsonStr: String) {
-            try {
-                val root = JsonParser.parseString(jsonStr).asJsonObject
-                val movesArr: JsonArray? = root.optJsonArray("moves")
-                val fastMoveNames = HashMap<String, String>()
-                if (movesArr != null) {
-                    for (el in movesArr) {
-                        try {
-                            if (!el.isJsonObject) continue
-                            val obj = el.asJsonObject
-                            val moveId = obj.optString("moveId")?.takeIf { it.isNotBlank() } ?: continue
-                            val rawName = obj.optString("name")?.takeIf { it.isNotBlank() } ?: moveId
-                            val name = CANONICAL_MOVE_ID_MAP[moveId.uppercase()] ?: rawName
-                            val type = obj.optString("type")?.lowercase() ?: "normal"
-                            val power = obj.optInt("power") ?: 0
-                            val energyGain = obj.optInt("energyGain") ?: 0
-                            val energyCost = obj.optInt("energy") ?: 50
-                            val turns = (obj.optInt("turns")?.takeIf { it in 1..5 }
-                                ?: ((obj.optInt("cooldown") ?: 1000) / 500)).coerceIn(1, 5)
-                            DYNAMIC_MOVE_ID_TO_NAME[moveId] = name
-                            if (energyGain > 0) {
-                                fastMoveNames[moveId] = name
-                                val idKey = moveId.lowercase().trim()
-                                DYNAMIC_FAST_TURNS[idKey] = turns
-                                DYNAMIC_FAST_ENERGY[idKey] = energyGain
-                                DYNAMIC_FAST_POWER[idKey] = power
-                                DYNAMIC_FAST_TYPE[idKey] = type
-                                if (!moveId.startsWith("AEGISLASH_CHARGE_", ignoreCase = true)) {
-                                    val nameKey = name.lowercase().trim()
-                                    val rawKey = rawName.lowercase().trim()
-                                    val spaceKey = nameKey.replace("-", " ")
-                                    val hyphenKey = nameKey.replace(Regex("\\s+"), "-")
-                                    for (k in listOf(nameKey, rawKey, spaceKey, hyphenKey).distinct()) {
-                                        if (k.isNotBlank()) {
-                                            DYNAMIC_FAST_TURNS[k] = turns
-                                            DYNAMIC_FAST_ENERGY[k] = energyGain
-                                            DYNAMIC_FAST_POWER[k] = power
-                                            DYNAMIC_FAST_TYPE[k] = type
-                                        }
-                                    }
-                                }
-                            } else {
-                                val chargedPower = if (power > 0) power else 50
-                                val chargedStats = MoveStats(name, type, chargedPower, energyCost)
-                                DYNAMIC_MOVE_DATABASE[name] = chargedStats
-                                val nameKey = name.lowercase().trim()
-                                val rawKey = rawName.lowercase().trim()
-                                val idKey = moveId.lowercase().trim()
-                                val spaceKey = nameKey.replace("-", " ")
-                                val hyphenKey = nameKey.replace(Regex("\\s+"), "-")
-                                val underscoreKey = nameKey.replace(Regex("[\\s-]+"), "_")
-                                for (k in listOf(nameKey, rawKey, idKey, spaceKey, hyphenKey, underscoreKey).distinct()) {
-                                    if (k.isNotBlank()) {
-                                        DYNAMIC_MOVE_DATABASE[k] = chargedStats
-                                    }
-                                }
-                                val rawChance = obj.optDouble("buffApplyChance")
-                                    ?: obj.optString("buffApplyChance")?.toDoubleOrNull()
-                                    ?: 0.0
-                                var selfAtk = 0
-                                var selfDef = 0
-                                var oppAtk = 0
-                                var oppDef = 0
-                                val buffsSelfArr = obj.optJsonArray("buffsSelf")
-                                val buffsOppArr = obj.optJsonArray("buffsOpponent")
-                                val buffsArr = obj.optJsonArray("buffs")
-                                val buffTarget = obj.optString("buffTarget")?.lowercase()?.trim() ?: ""
-                                if (buffsSelfArr != null && buffsSelfArr.size() >= 2) {
-                                    selfAtk = runCatching { buffsSelfArr.get(0).asInt }.getOrDefault(0)
-                                    selfDef = runCatching { buffsSelfArr.get(1).asInt }.getOrDefault(0)
-                                }
-                                if (buffsOppArr != null && buffsOppArr.size() >= 2) {
-                                    oppAtk = runCatching { buffsOppArr.get(0).asInt }.getOrDefault(0)
-                                    oppDef = runCatching { buffsOppArr.get(1).asInt }.getOrDefault(0)
-                                }
-                                if (buffsArr != null && buffsArr.size() >= 2 && selfAtk == 0 && selfDef == 0 && oppAtk == 0 && oppDef == 0) {
-                                    val b0 = runCatching { buffsArr.get(0).asInt }.getOrDefault(0)
-                                    val b1 = runCatching { buffsArr.get(1).asInt }.getOrDefault(0)
-                                    when (buffTarget) {
-                                        "opponent" -> {
-                                            oppAtk = b0
-                                            oppDef = b1
-                                        }
-                                        "self" -> {
-                                            selfAtk = b0
-                                            selfDef = b1
-                                        }
-                                        "both" -> {
-                                            selfAtk = b0
-                                            selfDef = b1
-                                            oppAtk = b0
-                                            oppDef = b1
-                                        }
-                                    }
-                                }
-                                val normChance = if (rawChance > 1.0) (rawChance / 100.0).coerceIn(0.0, 1.0) else rawChance.coerceIn(0.0, 1.0)
-                                if (normChance > 0.0 && (selfAtk != 0 || selfDef != 0 || oppAtk != 0 || oppDef != 0)) {
-                                    val parsedBuff = MoveBuffEffect(selfAtk, selfDef, oppAtk, oppDef, normChance)
-                                    DYNAMIC_MOVE_BUFF_TABLE[name.lowercase().trim()] = parsedBuff
-                                    DYNAMIC_MOVE_BUFF_TABLE[moveId.lowercase().trim()] = parsedBuff
-                                } else {
-                                    DYNAMIC_MOVE_BUFF_TABLE.remove(name.lowercase().trim())
-                                    DYNAMIC_MOVE_BUFF_TABLE.remove(moveId.lowercase().trim())
-                                }
-                            }
-                        } catch (_: Exception) {}
-                    }
-                }
-
-                val pokemonArr: JsonArray? = root.optJsonArray("pokemon")
-                if (pokemonArr != null) {
-                    val existingById = POKEMON_META_DATABASE.associateBy { it.speciesId.lowercase() }
-                    val parsedList = mutableListOf<PokemonMeta>()
-                    for (el in pokemonArr) {
-                        try {
-                            if (!el.isJsonObject) continue
-                            val obj = el.asJsonObject
-                            val speciesId = obj.optString("speciesId")?.takeIf { it.isNotBlank() } ?: continue
-                            val existingStatic = existingById[speciesId.lowercase()]
-
-                            val rawSpeciesName = obj.optString("speciesName")?.takeIf { it.isNotBlank() } ?: continue
-                            val speciesName = if (rawSpeciesName.endsWith(" (Shadow)")) {
-                                "Shadow " + rawSpeciesName.removeSuffix(" (Shadow)").trim()
-                            } else {
-                                rawSpeciesName
-                            }
-                            val baseSpecies = FormResolver.extractBaseSpecies(speciesName)
-
-                            val formLabel = Regex("\\((.*?)\\)").find(rawSpeciesName)?.groupValues?.getOrNull(1)
-                                ?: if (speciesName.startsWith("Mega ", ignoreCase = true)) "Mega"
-                                else if (speciesName.startsWith("Primal ", ignoreCase = true)) "Primal"
-                                else "Base"
-
-                            val typesArr = obj.optJsonArray("types")
-                            val types = mutableListOf<String>()
-                            if (typesArr != null) {
-                                for (t in typesArr) {
-                                    if (t != null && !t.isJsonNull && t.isJsonPrimitive) {
-                                        val ts = t.asString
-                                        if (ts != "none") types.add(ts.lowercase())
-                                    }
-                                }
-                            }
-                            if (types.isEmpty()) types.add("normal")
-
-                            val baseStats = obj.optJsonObject("baseStats")
-                            val atk = baseStats?.optDouble("atk") ?: 180.0
-                            val def = baseStats?.optDouble("def") ?: 170.0
-                            val hp = baseStats?.optInt("hp") ?: 160
-
-                            var defaultIvsGl = "1/15/15"
-                            var defaultIvsUl = "1/15/15"
-                            val defaultIvsObj = obj.optJsonObject("defaultIVs")
-                            if (defaultIvsObj != null) {
-                                val cp1500 = defaultIvsObj.optJsonArray("cp1500")
-                                if (cp1500 != null && cp1500.size() >= 4) {
-                                    runCatching {
-                                        defaultIvsGl = "${cp1500.get(1).asDouble.toInt()}/${cp1500.get(2).asDouble.toInt()}/${cp1500.get(3).asDouble.toInt()}"
-                                    }
-                                }
-                                val cp2500 = defaultIvsObj.optJsonArray("cp2500")
-                                if (cp2500 != null && cp2500.size() >= 4) {
-                                    runCatching {
-                                        defaultIvsUl = "${cp2500.get(1).asDouble.toInt()}/${cp2500.get(2).asDouble.toInt()}/${cp2500.get(3).asDouble.toInt()}"
-                                    }
-                                }
-                            }
-
-                            val rankEntry = LIVE_RANKINGS_MAP["GREAT LEAGUE"]?.get(speciesId.lowercase())
-                                ?: LIVE_RANKINGS_MAP["ULTRA LEAGUE"]?.get(speciesId.lowercase())
-                                ?: LIVE_RANKINGS_MAP["MASTER LEAGUE"]?.get(speciesId.lowercase())
-                                ?: LIVE_RANKINGS_MAP["MEGA MASTER LEAGUE"]?.get(speciesId.lowercase())
-
-                            val fastMovesArr = obj.optJsonArray("fastMoves")
-                            val eliteArr = obj.optJsonArray("eliteMoves")
-                            val orderedFastIds = mutableListOf<String>()
-                            rankEntry?.moveset?.getOrNull(0)?.takeIf { it.isNotBlank() }?.let { orderedFastIds.add(it) }
-                            rankEntry?.moves?.fastMoves?.forEach { fm ->
-                                if (fm.moveId.isNotBlank() && !orderedFastIds.contains(fm.moveId)) {
-                                    orderedFastIds.add(fm.moveId)
-                                }
-                            }
-                            if (eliteArr != null) {
-                                for (em in eliteArr) {
-                                    if (em != null && !em.isJsonNull && em.isJsonPrimitive) {
-                                        val emId = em.asString
-                                        if (fastMoveNames.containsKey(emId) && !orderedFastIds.contains(emId)) {
-                                            orderedFastIds.add(emId)
-                                        }
-                                    }
-                                }
-                            }
-                            if (fastMovesArr != null) {
-                                for (fm in fastMovesArr) {
-                                    if (fm != null && !fm.isJsonNull && fm.isJsonPrimitive) {
-                                        val fmId = fm.asString
-                                        if (fmId.isNotBlank() && !orderedFastIds.contains(fmId)) {
-                                            orderedFastIds.add(fmId)
-                                        }
-                                    }
-                                }
-                            }
-                            val firstFastId = orderedFastIds.firstOrNull() ?: "TACKLE"
-                            val fastMoveName = fastMoveNames[firstFastId]
-                                ?: formatMoveIdDisplay(firstFastId)
-                            val fastTurns = resolveFastTurnsStatic(fastMoveName, 2)
-
-                            val chargedArr = obj.optJsonArray("chargedMoves")
-                            val orderedChargedIds = mutableListOf<String>()
-                            rankEntry?.moveset?.drop(1)?.forEach { msId ->
-                                if (msId.isNotBlank() && !orderedChargedIds.contains(msId)) {
-                                    orderedChargedIds.add(msId)
-                                }
-                            }
-                            rankEntry?.moves?.chargedMoves?.forEach { cm ->
-                                if (cm.moveId.isNotBlank() && !orderedChargedIds.contains(cm.moveId)) {
-                                    orderedChargedIds.add(cm.moveId)
-                                }
-                            }
-                            if (eliteArr != null) {
-                                for (em in eliteArr) {
-                                    if (em != null && !em.isJsonNull && em.isJsonPrimitive) {
-                                        val emId = em.asString
-                                        if (!fastMoveNames.containsKey(emId) && !orderedChargedIds.contains(emId)) {
-                                            orderedChargedIds.add(emId)
-                                        }
-                                    }
-                                }
-                            }
-                            if (chargedArr != null) {
-                                for (cm in chargedArr) {
-                                    if (cm != null && !cm.isJsonNull && cm.isJsonPrimitive) {
-                                        val cmId = cm.asString
-                                        if (!orderedChargedIds.contains(cmId)) {
-                                            orderedChargedIds.add(cmId)
-                                        }
-                                    }
-                                }
-                            }
-
-                            val formattedFastPool = orderedFastIds.map { fastMoveNames[it] ?: formatMoveIdDisplay(it) }.filter { it.isNotBlank() }.distinct()
-                            val formattedChargedPool = orderedChargedIds.map { formatMoveIdDisplay(it) }.filter { it.isNotBlank() }.distinct()
-                            if (formattedFastPool.isNotEmpty()) {
-                                SPECIES_FAST_MOVES_POOL[speciesId.lowercase()] = formattedFastPool
-                                SPECIES_FAST_MOVES_POOL[speciesName.lowercase()] = formattedFastPool
-                            }
-                            if (formattedChargedPool.isNotEmpty()) {
-                                SPECIES_CHARGED_MOVES_POOL[speciesId.lowercase()] = formattedChargedPool
-                                SPECIES_CHARGED_MOVES_POOL[speciesName.lowercase()] = formattedChargedPool
-                            }
-
-                            val c1Id = orderedChargedIds.getOrNull(0) ?: "BODY_SLAM"
-                            val c2Id = orderedChargedIds.getOrNull(1) ?: c1Id
-                            val c3Id = orderedChargedIds.getOrNull(2) ?: ""
-                            val c4Id = orderedChargedIds.getOrNull(3) ?: ""
-                            val c1Name = formatMoveIdDisplay(c1Id)
-                            val c2Name = formatMoveIdDisplay(c2Id)
-                            val c3Name = if (c3Id.isNotBlank()) formatMoveIdDisplay(c3Id) else ""
-                            val c4Name = if (c4Id.isNotBlank()) formatMoveIdDisplay(c4Id) else ""
-
-                            val baseMeta = PokemonMeta(
-                                name = existingStatic?.name ?: speciesName,
-                                speciesId = speciesId,
-                                baseSpecies = existingStatic?.baseSpecies ?: baseSpecies,
-                                formLabel = existingStatic?.formLabel ?: formLabel,
-                                types = types,
-                                defaultCp = existingStatic?.defaultCp ?: 2500,
-                                defaultFastMove = fastMoveName,
-                                fastTurns = fastTurns,
-                                chargedMove1 = c1Name,
-                                chargedMove2 = c2Name,
-                                atk = atk,
-                                def = def,
-                                hp = hp,
-                                glRank = existingStatic?.glRank ?: 500,
-                                ulRank = existingStatic?.ulRank ?: 500,
-                                mlRank = existingStatic?.mlRank ?: 500,
-                                chargedMove3 = c3Name,
-                                chargedMove4 = c4Name,
-                                isRawBaseStats = true,
-                                defaultIvsGl = defaultIvsGl,
-                                defaultIvsUl = defaultIvsUl
-                            )
-                            parsedList.add(applyRecommendedMoves(baseMeta))
-                        } catch (_: Exception) {}
-                    }
-                    DYNAMIC_POKEMON_DATABASE.clear()
-                    DYNAMIC_POKEMON_DATABASE.addAll(parsedList)
-                    clearSimulationCachesStatic()
-                }
-            } catch (_: Exception) {}
-        }
-
-        private fun getTypeEffectivenessStatic(moveType: String, defenderTypes: List<String>): Double {
-            var multiplier = 1.0
-            val atk = moveType.lowercase().trim()
-            for (def in defenderTypes.map { it.lowercase().trim() }.filter { it.isNotEmpty() && it != "none" }.distinct()) {
-                val eff = when (atk) {
-                    "normal" -> when (def) { "rock", "steel" -> 0.625; "ghost" -> 0.390625; else -> 1.0 }
-                    "fire" -> when (def) { "grass", "ice", "bug", "steel" -> 1.6; "fire", "water", "rock", "dragon" -> 0.625; else -> 1.0 }
-                    "water" -> when (def) { "fire", "ground", "rock" -> 1.6; "water", "grass", "dragon" -> 0.625; else -> 1.0 }
-                    "electric" -> when (def) { "water", "flying" -> 1.6; "electric", "grass", "dragon" -> 0.625; "ground" -> 0.390625; else -> 1.0 }
-                    "grass" -> when (def) { "water", "ground", "rock" -> 1.6; "fire", "grass", "poison", "flying", "bug", "dragon", "steel" -> 0.625; else -> 1.0 }
-                    "ice" -> when (def) { "grass", "ground", "flying", "dragon" -> 1.6; "fire", "water", "ice", "steel" -> 0.625; else -> 1.0 }
-                    "fighting" -> when (def) { "normal", "ice", "rock", "dark", "steel" -> 1.6; "poison", "flying", "psychic", "bug", "fairy" -> 0.625; "ghost" -> 0.390625; else -> 1.0 }
-                    "poison" -> when (def) { "grass", "fairy" -> 1.6; "poison", "ground", "rock", "ghost" -> 0.625; "steel" -> 0.390625; else -> 1.0 }
-                    "ground" -> when (def) { "fire", "electric", "poison", "rock", "steel" -> 1.6; "grass", "bug" -> 0.625; "flying" -> 0.390625; else -> 1.0 }
-                    "flying" -> when (def) { "grass", "fighting", "bug" -> 1.6; "electric", "rock", "steel" -> 0.625; else -> 1.0 }
-                    "psychic" -> when (def) { "fighting", "poison" -> 1.6; "psychic", "steel" -> 0.625; "dark" -> 0.390625; else -> 1.0 }
-                    "bug" -> when (def) { "grass", "psychic", "dark" -> 1.6; "fire", "fighting", "poison", "flying", "ghost", "steel", "fairy" -> 0.625; else -> 1.0 }
-                    "rock" -> when (def) { "fire", "ice", "flying", "bug" -> 1.6; "fighting", "ground", "steel" -> 0.625; else -> 1.0 }
-                    "ghost" -> when (def) { "psychic", "ghost" -> 1.6; "dark" -> 0.625; "normal" -> 0.390625; else -> 1.0 }
-                    "dragon" -> when (def) { "dragon" -> 1.6; "steel" -> 0.625; "fairy" -> 0.390625; else -> 1.0 }
-                    "dark" -> when (def) { "psychic", "ghost" -> 1.6; "fighting", "dark", "fairy" -> 0.625; else -> 1.0 }
-                    "steel" -> when (def) { "ice", "rock", "fairy" -> 1.6; "fire", "water", "electric", "steel" -> 0.625; else -> 1.0 }
-                    "fairy" -> when (def) { "fighting", "dragon", "dark" -> 1.6; "fire", "poison", "steel" -> 0.625; else -> 1.0 }
-                    else -> 1.0
-                }
-                multiplier *= eff
-            }
-            return multiplier
-        }
-
-        private val fastMovePowerMapStatic = mapOf(
-            "dragon breath" to 3, "sand attack" to 2, "quick attack" to 5, "lock-on" to 1, "lock on" to 1,
-            "water gun" to 3, "lick" to 3, "bite" to 2, "tackle" to 3, "fury cutter" to 3, "bug bite" to 4,
-            "scratch" to 3, "cut" to 3, "psywave" to 3, "psycho cut" to 4, "mud shot" to 3, "shadow claw" to 6,
-            "counter" to 8, "powder snow" to 6, "wing attack" to 5, "peck" to 6, "poison sting" to 4,
-            "thunder shock" to 4, "fairy wind" to 4, "bullet punch" to 7, "fire fang" to 8, "vine whip" to 5,
-            "karate chop" to 5, "low kick" to 6, "ice fang" to 8, "thunder fang" to 8, "metal claw" to 5,
-            "metal sound" to 5, "sucker punch" to 8, "poison jab" to 7, "spark" to 5, "leafage" to 6,
-            "steel wing" to 7, "rock throw" to 8, "ember" to 4, "acid" to 6, "feint attack" to 6,
-            "frost breath" to 7, "pound" to 4, "razor leaf" to 9, "force palm" to 13, "dragon tail" to 9,
-            "waterfall" to 11, "fire spin" to 11, "snarl" to 5, "geomancy" to 8, "mud-slap" to 11,
-            "mud slap" to 11, "charm" to 12, "double kick" to 8, "air slash" to 9, "ice shard" to 9,
-            "bubble" to 8, "rollout" to 7, "smack down" to 11, "astonish" to 12, "hex" to 7,
-            "magical leaf" to 10, "bullet seed" to 5, "water shuriken" to 6, "charge beam" to 6,
-            "extrasensory" to 8, "hidden power" to 9, "infestation" to 10, "iron tail" to 10,
-            "present" to 3, "rock smash" to 9, "struggle bug" to 9, "take down" to 14, "zen headbutt" to 8,
-            "gust" to 16, "confusion" to 16, "volt switch" to 14, "splash" to 0, "yawn" to 0, "incinerate" to 20
-        )
-
-        private val fastMoveTypeMapStatic = mapOf(
-            "dragon breath" to "dragon", "sand attack" to "ground", "quick attack" to "normal",
-            "lock-on" to "normal", "lock on" to "normal", "water gun" to "water", "lick" to "ghost", "bite" to "dark",
-            "tackle" to "normal", "fury cutter" to "bug", "bug bite" to "bug", "scratch" to "normal", "cut" to "normal",
-            "psywave" to "psychic", "psycho cut" to "psychic", "mud shot" to "ground",
-            "shadow claw" to "ghost", "counter" to "fighting", "powder snow" to "ice",
-            "wing attack" to "flying", "peck" to "flying", "poison sting" to "poison",
-            "thunder shock" to "electric", "fairy wind" to "fairy", "bullet punch" to "steel",
-            "fire fang" to "fire", "vine whip" to "grass", "karate chop" to "fighting",
-            "low kick" to "fighting", "ice fang" to "ice", "thunder fang" to "electric", "metal claw" to "steel",
-            "metal sound" to "steel", "sucker punch" to "dark", "poison jab" to "poison", "spark" to "electric",
-            "leafage" to "grass", "steel wing" to "steel", "rock throw" to "rock", "ember" to "fire",
-            "acid" to "poison", "feint attack" to "dark", "frost breath" to "ice", "pound" to "normal", "razor leaf" to "grass",
-            "force palm" to "fighting", "dragon tail" to "dragon", "waterfall" to "water",
-            "fire spin" to "fire", "snarl" to "dark", "geomancy" to "fairy", "mud-slap" to "ground", "mud slap" to "ground",
-            "charm" to "fairy", "double kick" to "fighting", "air slash" to "flying",
-            "ice shard" to "ice", "bubble" to "water", "rollout" to "rock", "smack down" to "rock",
-            "astonish" to "ghost", "hex" to "ghost", "magical leaf" to "grass",
-            "bullet seed" to "grass", "water shuriken" to "water", "charge beam" to "electric",
-            "extrasensory" to "psychic", "hidden power" to "normal", "infestation" to "bug", "iron tail" to "steel",
-            "present" to "normal", "rock smash" to "fighting", "struggle bug" to "bug", "take down" to "normal",
-            "zen headbutt" to "psychic", "gust" to "flying", "confusion" to "psychic", "volt switch" to "electric",
-            "splash" to "water", "yawn" to "normal", "incinerate" to "fire"
-        )
-
-        private fun calculateChargedMoveDamagePctStatic(
-            attacker: PokemonMeta,
-            defender: PokemonMeta,
-            moveName: String,
-            isAttackerShadow: Boolean,
-            isDefenderShadow: Boolean
-        ): Int {
-            val moveStats = resolveChargedMoveStatsStatic(moveName, attacker.types.firstOrNull() ?: "normal")
-            val isMorpeko = attacker.baseSpecies.equals("morpeko", ignoreCase = true)
-            val isAuraWheel = isMorpeko && moveName.equals("Aura Wheel", ignoreCase = true)
-            val isAegislash = attacker.baseSpecies.equals("aegislash", ignoreCase = true)
-            val isAttackerCramorant = attacker.baseSpecies.equals("cramorant", ignoreCase = true)
-            val isDefenderCramorant = defender.baseSpecies.equals("cramorant", ignoreCase = true)
-
-            val stab = if (isAuraWheel || attacker.types.any { it.equals(moveStats.type, ignoreCase = true) }) 1.2 else 1.0
-            val typeEff = if (isAuraWheel) {
-                // Hunger Switch alternates Aura Wheel between Electric (Full Belly) and Dark (Hangry) every Charged Attack
-                val effElectric = getTypeEffectivenessStatic("electric", defender.types)
-                val effDark = getTypeEffectivenessStatic("dark", defender.types)
-                0.60 * max(effElectric, effDark) + 0.40 * min(effElectric, effDark)
-            } else {
-                getTypeEffectivenessStatic(moveStats.type, defender.types)
-            }
-
-            // Aegislash Stance Change: Shield Forme (97 Base Atk / 291 Base Def) swaps into fragile Blade Forme (291 Base Atk / 97 Base Def) when attacking.
-            // Because Shield Forme's 291 Base Def is already modeled in effectiveDef, use a balanced 1.22x net Stance Change factor (never 2.85x, which would grant 291 Atk and 291 Def simultaneously).
-            val stanceAtkMultiplier = if (isAegislash && attacker.atk < attacker.def * 0.65) 1.22 else 1.0
-            // Morpeko Aura Wheel (+1 Atk stage) & Cramorant Gulp Missile Gulping Form (-1 Opp Def stage after Surf catch)
-            val buffAtkMultiplier = when {
-                isAuraWheel -> 1.20
-                isMorpeko -> 1.12
-                isAttackerCramorant -> 1.12
-                else -> 1.0
-            }
-            // Cramorant Gulp Missile Gorging Form (-1 Opp Atk stage at <=50% HP)
-            val defenderGulpMultiplier = if (isDefenderCramorant) 1.08 else 1.0
-
-            val effectiveAtk = attacker.atk * (if (isAttackerShadow) 1.2 else 1.0) * stanceAtkMultiplier * buffAtkMultiplier
-            val effectiveDef = defender.def * (if (isDefenderShadow) 0.8333333 else 1.0) * defenderGulpMultiplier
-            val rawDamage = floor(0.5 * moveStats.power * (effectiveAtk / effectiveDef) * stab * typeEff * 1.3) + 1.0
-            return ((rawDamage / defender.hp.toDouble()) * 100.0).roundToInt().coerceIn(5, 100)
-        }
-
-        val ALL_SHIELD_PERMUTATIONS: List<Triple<Int, Int, String>> = listOf(
-            Triple(0, 0, "0v0"),
-            Triple(0, 1, "0v1"),
-            Triple(0, 2, "0v2"),
-            Triple(1, 0, "1v0"),
-            Triple(1, 1, "1v1"),
-            Triple(1, 2, "1v2"),
-            Triple(2, 0, "2v0"),
-            Triple(2, 1, "2v1"),
-            Triple(2, 2, "2v2")
-        )
-
-        fun getAvailableMovePoolForSpeciesStatic(
-            rawName: String,
-            league: String = "GREAT LEAGUE"
-        ): Pair<List<String>, List<String>> {
-            val meta = resolveRecommendedMovesForSpecies(rawName, league)
-                ?: POKEMON_META_DATABASE.first()
-            val cleanSpeciesId = meta.speciesId.lowercase().removeSuffix("_shadow")
-            val baseKey = meta.baseSpecies.lowercase()
-            val normLeague = normalizeLeagueKeyStatic(league)
-            val rankEntry = LIVE_RANKINGS_MAP[normLeague]?.let { map ->
-                map[meta.speciesId.lowercase()] ?: map[cleanSpeciesId] ?: map["${cleanSpeciesId}_shadow"]
-            }
-
-            val gmFastPool = SPECIES_FAST_MOVES_POOL[meta.speciesId.lowercase()]
-                ?: SPECIES_FAST_MOVES_POOL[cleanSpeciesId]
-                ?: SPECIES_FAST_MOVES_POOL[meta.name.lowercase()]
-                ?: SPECIES_FAST_MOVES_POOL[baseKey]
-                ?: SPECIES_FAST_MOVES_POOL["${cleanSpeciesId}_shield"]
-                ?: SPECIES_FAST_MOVES_POOL["${cleanSpeciesId}_full_belly"]
-
-            val effectiveFastPool = if (!gmFastPool.isNullOrEmpty()) {
-                gmFastPool
-            } else {
-                FALLBACK_SPECIES_FAST_POOL[cleanSpeciesId]
-                    ?: FALLBACK_SPECIES_FAST_POOL[baseKey]
-                    ?: FALLBACK_SPECIES_FAST_POOL[meta.name.lowercase()]
-            }
-
-            val fastList = mutableListOf<String>()
-            fun addFast(name: String?) {
-                val trimmed = name?.trim().orEmpty()
-                if (trimmed.isEmpty() || trimmed.equals("Struggle", ignoreCase = true)) return
-                if (!effectiveFastPool.isNullOrEmpty() && effectiveFastPool.none { it.equals(trimmed, ignoreCase = true) }) {
-                    return
-                }
-                if (fastList.none { it.equals(trimmed, ignoreCase = true) }) {
-                    fastList.add(trimmed)
-                }
-            }
-
-            rankEntry?.moveset?.getOrNull(0)?.let { addFast(formatMoveIdDisplay(it)) }
-            addFast(meta.defaultFastMove)
-            rankEntry?.moves?.fastMoves?.forEach { addFast(formatMoveIdDisplay(it.moveId)) }
-            effectiveFastPool?.forEach { addFast(it) }
-            if (fastList.isEmpty() && meta.defaultFastMove.isNotBlank()) {
-                fastList.add(meta.defaultFastMove.trim())
-            }
-
-            val gmChargedPool = SPECIES_CHARGED_MOVES_POOL[meta.speciesId.lowercase()]
-                ?: SPECIES_CHARGED_MOVES_POOL[cleanSpeciesId]
-                ?: SPECIES_CHARGED_MOVES_POOL[meta.name.lowercase()]
-                ?: SPECIES_CHARGED_MOVES_POOL[baseKey]
-                ?: SPECIES_CHARGED_MOVES_POOL["${cleanSpeciesId}_shield"]
-                ?: SPECIES_CHARGED_MOVES_POOL["${cleanSpeciesId}_full_belly"]
-
-            val effectiveChargedPool = if (!gmChargedPool.isNullOrEmpty()) {
-                gmChargedPool
-            } else {
-                FALLBACK_SPECIES_CHARGED_POOL[cleanSpeciesId]
-                    ?: FALLBACK_SPECIES_CHARGED_POOL[baseKey]
-                    ?: FALLBACK_SPECIES_CHARGED_POOL[meta.name.lowercase()]
-            }
-
-            val chargedList = mutableListOf<String>()
-            fun addCharged(name: String?) {
-                val trimmed = name?.trim().orEmpty()
-                if (trimmed.isEmpty() || trimmed.equals("Struggle", ignoreCase = true) || trimmed.equals("Frustration", ignoreCase = true)) return
-                if (!effectiveChargedPool.isNullOrEmpty() && effectiveChargedPool.none { it.equals(trimmed, ignoreCase = true) }) {
-                    return
-                }
-                if (chargedList.none { it.equals(trimmed, ignoreCase = true) }) {
-                    chargedList.add(trimmed)
-                }
-            }
-
-            rankEntry?.moveset?.drop(1)?.forEach { addCharged(formatMoveIdDisplay(it)) }
-            addCharged(meta.chargedMove1)
-            addCharged(meta.chargedMove2)
-            addCharged(meta.chargedMove3)
-            addCharged(meta.chargedMove4)
-            rankEntry?.moves?.chargedMoves?.forEach { addCharged(formatMoveIdDisplay(it.moveId)) }
-            effectiveChargedPool?.forEach { addCharged(it) }
-            if (chargedList.isEmpty() && meta.chargedMove1.isNotBlank()) {
-                chargedList.add(meta.chargedMove1.trim())
-            }
-
-            return fastList to chargedList
-        }
-
-        /**
-         * Phase 1: Evaluates discrete battle rating across all 9 shield permutations
-         * (s_user v s_opp in {0, 1, 2}^2): 0v0, 0v1, 0v2, 1v0, 1v1, 1v2, 2v0, 2v1, 2v2
-         * using a weighted average of opponent PvPoke move combinations:
-         *  - 1a (75% weight): default PvPoke moveset (fast1 / charge1 / charge2)
-         *  - 1b (25% weight split equally = 5% each):
-         *      fast1/charge1/charge3, fast1/charge1/charge4, fast1/charge2/charge3,
-         *      fast1/charge2/charge4, fast2/charge1/charge2
-         * Explicitly models unique PvP mechanics for Morpeko (Hunger Switch + Aura Wheel),
-         * Mimikyu (Disguise free 1st unshielded charged block + Busted Form -1 Def stage),
-         * Aegislash (Stance Change Shield ⇄ Blade Forme), and Cramorant (Gulp Missile Gulping/Gorging Form).
-         */
-        fun calculateMatchupRatingStatic(
-            myName: String,
-            oppName: String,
-            userShields: Int,
-            oppShields: Int,
-            league: String,
-            myFastMove: String? = null,
-            myCharged1: String? = null,
-            myCharged2: String? = null,
-            myCp: Int? = null,
-            myIvs: String? = null
-        ): Int {
-            val sUser = userShields.coerceIn(0, 2)
-            val sOpp = oppShields.coerceIn(0, 2)
-
-            val myShadow = myName.trim().startsWith("Shadow ", ignoreCase = true) || myName.contains("(Shadow)", ignoreCase = true)
-            val oppShadow = oppName.trim().startsWith("Shadow ", ignoreCase = true) || oppName.contains("(Shadow)", ignoreCase = true)
-
-            val myMeta = resolveRecommendedMovesForSpecies(myName, league, myCp, myIvs)
-                ?: POKEMON_META_DATABASE.first().let { computeEffectiveCombatStats(it, league, myCp, myIvs) }
-            val oppMeta = resolveRecommendedMovesForSpecies(oppName, league)
-                ?: POKEMON_META_DATABASE.first().let { computeEffectiveCombatStats(it, league) }
-
-            val myIsMimikyu = myMeta.baseSpecies.equals("mimikyu", ignoreCase = true)
-            val oppIsMimikyu = oppMeta.baseSpecies.equals("mimikyu", ignoreCase = true)
-            val myIsAegislash = myMeta.baseSpecies.equals("aegislash", ignoreCase = true)
-            val oppIsAegislash = oppMeta.baseSpecies.equals("aegislash", ignoreCase = true)
-
-            val uFast = myFastMove?.takeIf { it.isNotBlank() } ?: myMeta.defaultFastMove
-            val uC1 = myCharged1?.takeIf { it.isNotBlank() } ?: myMeta.chargedMove1
-            val uC2 = myCharged2?.takeIf { it.isNotBlank() } ?: myMeta.chargedMove2
-
-            val userC1Stats = resolveChargedMoveStatsStatic(uC1, myMeta.types.firstOrNull() ?: "normal")
-            val userC2Stats = resolveChargedMoveStatsStatic(uC2, myMeta.types.firstOrNull() ?: "normal")
-            val userC1Pct = calculateChargedMoveDamagePctStatic(myMeta, oppMeta, uC1, myShadow, oppShadow)
-            val userC2Pct = calculateChargedMoveDamagePctStatic(myMeta, oppMeta, uC2, myShadow, oppShadow)
-            val bestUserCharged = max(userC1Pct, userC2Pct)
-            val minUserCharged = min(userC1Pct, userC2Pct)
-            val fastestUserChargedPct = when {
-                userC1Stats.energyCost < userC2Stats.energyCost -> userC1Pct
-                userC2Stats.energyCost < userC1Stats.energyCost -> userC2Pct
-                else -> minUserCharged
-            }
-
-            val uFastKey = uFast.lowercase().trim()
-            val userFastType = resolveFastTypeStatic(uFastKey, myMeta.types.firstOrNull() ?: "normal")
-            val userFastTurns = resolveFastTurnsStatic(uFastKey, myMeta.fastTurns).coerceAtLeast(1)
-            val userFastEnergy = resolveFastEnergyStatic(uFastKey, userFastTurns).coerceAtLeast(1)
-            val userFastEpt = userFastEnergy.toDouble() / userFastTurns.toDouble()
-            val rawUserFastEff = getTypeEffectivenessStatic(userFastType, oppMeta.types)
-
-            fun getAegislashFastDmgMult(shields: Int): Double = when (shields) {
-                2 -> 0.42
-                1 -> 0.68
-                else -> 1.12
-            }
-
-            val userFastEff = if (myIsAegislash) rawUserFastEff * getAegislashFastDmgMult(sUser) else rawUserFastEff
-            val shadowBulkDelta = (if (myShadow) -12 else 0) + (if (oppShadow) 12 else 0)
-
-            fun chargedPressureAgainstShields(bestPct: Int, minPct: Int, defShields: Int): Double = when (defShields) {
-                0 -> bestPct * 1.7
-                1 -> ((bestPct + minPct) * 0.5) * 1.4
-                else -> minPct * 1.0
-            }
-
-            fun computeMimikyuIncomingEvaluation(
-                mimiShields: Int,
-                oppBestPct: Int,
-                oppMinPct: Int,
-                oppFastestPct: Int
-            ): Pair<Double, Double> {
-                val cheaperBaitRatio = (oppFastestPct.toDouble() / max(1, oppBestPct).toDouble()).coerceIn(0.42, 1.0)
-                val baitTempoTax = (1.0 - cheaperBaitRatio) * 18.0
-
-                val pressureAllShieldsFirst = when (mimiShields) {
-                    0 -> ((oppFastestPct * 0.30 + oppBestPct * 0.70) * 1.22) - baitTempoTax
-                    1 -> ((oppFastestPct * 0.55 + oppMinPct * 0.45) * 0.90) - baitTempoTax * 1.25
-                    else -> (oppFastestPct * 0.62) - baitTempoTax * 1.45
-                }
-                val bonusAllShieldsFirst = when (mimiShields) {
-                    0 -> 28.0 + oppBestPct * 0.20 - 11.0
-                    1 -> 26.0 + oppBestPct * 0.18 - 6.0
-                    else -> 22.0 + oppBestPct * 0.15 - 3.0
-                }
-
-                val bustedMult = 1.20
-                val pressureDisguiseFirst = when (mimiShields) {
-                    0 -> ((oppFastestPct * 0.30 + oppBestPct * 0.70 * bustedMult) * 1.28) - baitTempoTax * 0.85
-                    1 -> ((oppFastestPct * 0.45 + ((oppBestPct + oppMinPct) * 0.5 * bustedMult) * 0.55) * 1.04) - baitTempoTax * 0.90
-                    else -> (oppFastestPct * 0.76 * bustedMult) - baitTempoTax * 0.95
-                }
-                val bonusDisguiseFirst = when (mimiShields) {
-                    0 -> 24.0 + oppBestPct * 0.18 - 14.0
-                    1 -> 19.0 + oppBestPct * 0.15 - 13.0
-                    else -> 14.0 + oppBestPct * 0.12 - 12.0
-                }
-
-                return ((pressureAllShieldsFirst + pressureDisguiseFirst) * 0.5) to ((bonusAllShieldsFirst + bonusDisguiseFirst) * 0.5)
-            }
-
-            val userSim = simulateTurnByTurnChargedCycleStatic(
-                c1Name = uC1,
-                c1Pct = userC1Pct,
-                c1Stats = userC1Stats,
-                c2Name = uC2,
-                c2Pct = userC2Pct,
-                c2Stats = userC2Stats,
-                fastEpt = userFastEpt,
-                defShields = sOpp,
-                attackerTypes = myMeta.types
-            )
-            val userChargedFreqMult = userSim.effectiveFreqMult
-
-            val userRawPressure: Double
-            val oppMimikyuDelta: Double
-            if (oppIsMimikyu) {
-                val (incPressure, mimiBonus) = computeMimikyuIncomingEvaluation(sOpp, bestUserCharged, minUserCharged, fastestUserChargedPct)
-                userRawPressure = incPressure
-                oppMimikyuDelta = mimiBonus
-            } else {
-                userRawPressure = userSim.effectivePressure
-                oppMimikyuDelta = 0.0
-            }
-
-            val avgShields = (sUser + sOpp) * 0.5
-            val fastWeight = if (avgShields <= 1.0) {
-                95.0 + avgShields * 25.0
-            } else {
-                120.0 + (avgShields - 1.0) * 35.0
-            }
-            val shadowMultiplier = if (avgShields <= 1.0) 1.0 else avgShields
-            val effectiveShadowDelta = shadowBulkDelta * shadowMultiplier
-            val shieldDiff = (sUser - sOpp).toDouble()
-
-            fun evaluateAgainstOppMoveset(oFastName: String, oC1Name: String, oC2Name: String): Double {
-                val oppC1Stats = resolveChargedMoveStatsStatic(oC1Name, oppMeta.types.firstOrNull() ?: "normal")
-                val oppC2Stats = resolveChargedMoveStatsStatic(oC2Name, oppMeta.types.firstOrNull() ?: "normal")
-                val oppC1Pct = calculateChargedMoveDamagePctStatic(oppMeta, myMeta, oC1Name, oppShadow, myShadow)
-                val oppC2Pct = calculateChargedMoveDamagePctStatic(oppMeta, myMeta, oC2Name, oppShadow, myShadow)
-                val bestOppCharged = max(oppC1Pct, oppC2Pct)
-                val minOppCharged = min(oppC1Pct, oppC2Pct)
-                val fastestOppChargedPct = when {
-                    oppC1Stats.energyCost < oppC2Stats.energyCost -> oppC1Pct
-                    oppC2Stats.energyCost < oppC1Stats.energyCost -> oppC2Pct
-                    else -> minOppCharged
-                }
-
-                val oFastKey = oFastName.lowercase().trim()
-                val oppFastType = resolveFastTypeStatic(oFastKey, oppMeta.types.firstOrNull() ?: "normal")
-                val oppFastTurns = resolveFastTurnsStatic(oFastKey, oppMeta.fastTurns).coerceAtLeast(1)
-                val oppFastEnergy = resolveFastEnergyStatic(oFastKey, oppFastTurns).coerceAtLeast(1)
-                val oppFastEpt = oppFastEnergy.toDouble() / oppFastTurns.toDouble()
-                val rawOppFastEff = getTypeEffectivenessStatic(oppFastType, myMeta.types)
-                val oppFastEff = if (oppIsAegislash) rawOppFastEff * getAegislashFastDmgMult(sOpp) else rawOppFastEff
-
-                val oppSim = simulateTurnByTurnChargedCycleStatic(
-                    c1Name = oC1Name,
-                    c1Pct = oppC1Pct,
-                    c1Stats = oppC1Stats,
-                    c2Name = oC2Name,
-                    c2Pct = oppC2Pct,
-                    c2Stats = oppC2Stats,
-                    fastEpt = oppFastEpt,
-                    defShields = sUser,
-                    attackerTypes = oppMeta.types
-                )
-                val oppChargedFreqMult = oppSim.effectiveFreqMult
-
-                val oppRawPressure: Double
-                val myMimikyuDelta: Double
-                if (myIsMimikyu) {
-                    val (incPressure, mimiBonus) = computeMimikyuIncomingEvaluation(sUser, bestOppCharged, minOppCharged, fastestOppChargedPct)
-                    oppRawPressure = incPressure
-                    myMimikyuDelta = mimiBonus
-                } else {
-                    oppRawPressure = oppSim.effectivePressure
-                    myMimikyuDelta = 0.0
-                }
-
-                val userChargedImpact = userRawPressure * userChargedFreqMult
-                val oppChargedImpact = oppRawPressure * oppChargedFreqMult
-                val chargedDelta = 2.0 * (userChargedImpact - oppChargedImpact)
-                val fastDelta = (userFastEff - oppFastEff) * fastWeight
-                val shieldAdvantageDelta = shieldDiff * (85.0 + 0.65 * ((bestOppCharged + bestUserCharged) * 0.5))
-
-                // Special mechanics (Morpeko Aura Wheel, Cramorant Gulp Missile, Aegislash Stance Change)
-                // are already modeled in calculateChargedMoveDamagePctStatic & getAegislashFastDmgMult.
-                // Do not add flat rating double-bonuses here.
-                val uniqueMechanicsDelta = (myMimikyuDelta - oppMimikyuDelta)
-
-                val totalDelta = chargedDelta + fastDelta + effectiveShadowDelta + shieldAdvantageDelta + uniqueMechanicsDelta
-                return (500.0 + totalDelta).coerceIn(150.0, 850.0)
-            }
-
-            val (oppFastPool, oppChargedPool) = getAvailableMovePoolForSpeciesStatic(oppMeta.name, league)
-            val fast1 = oppFastPool.getOrNull(0) ?: oppMeta.defaultFastMove
-            val fast2 = oppFastPool.getOrNull(1)?.takeIf { !it.equals(fast1, ignoreCase = true) }
-            val charge1 = oppChargedPool.getOrNull(0) ?: oppMeta.chargedMove1
-            val charge2 = oppChargedPool.getOrNull(1)?.takeIf { !it.equals(charge1, ignoreCase = true) }
-            val charge3 = oppChargedPool.getOrNull(2)?.takeIf {
-                !it.equals(charge1, ignoreCase = true) && (charge2 == null || !it.equals(charge2, ignoreCase = true))
-            }
-            val charge4 = oppChargedPool.getOrNull(3)?.takeIf {
-                !it.equals(charge1, ignoreCase = true) &&
-                    (charge2 == null || !it.equals(charge2, ignoreCase = true)) &&
-                    (charge3 == null || !it.equals(charge3, ignoreCase = true))
-            }
-            val effectiveCharge2 = charge2 ?: charge1
-
-            // 1a. 75% weight to default PvPoke moveset (fast1 / charge1 / charge2)
-            val br1a = evaluateAgainstOppMoveset(fast1, charge1, effectiveCharge2)
-
-            // 1b. Equally weight the valid alternate PvPoke move combinations that actually exist for this species:
-            //     fast1/charge1/charge3, fast1/charge1/charge4, fast1/charge2/charge3, fast1/charge2/charge4, fast2/charge1/charge2
-            val altCombos1b = mutableListOf<Double>()
-            if (charge3 != null) {
-                altCombos1b.add(evaluateAgainstOppMoveset(fast1, charge1, charge3))
-            }
-            if (charge4 != null) {
-                altCombos1b.add(evaluateAgainstOppMoveset(fast1, charge1, charge4))
-            }
-            if (charge2 != null && charge3 != null) {
-                altCombos1b.add(evaluateAgainstOppMoveset(fast1, charge2, charge3))
-            }
-            if (charge2 != null && charge4 != null) {
-                altCombos1b.add(evaluateAgainstOppMoveset(fast1, charge2, charge4))
-            }
-            if (fast2 != null) {
-                altCombos1b.add(evaluateAgainstOppMoveset(fast2, charge1, effectiveCharge2))
-            }
-
-            val weightedBr = if (altCombos1b.isNotEmpty()) {
-                0.75 * br1a + 0.25 * (altCombos1b.sum() / altCombos1b.size.toDouble())
-            } else {
-                br1a
-            }
-            return weightedBr.roundToInt().coerceIn(150, 850)
-        }
-
-        fun calculateAllShieldPermutationsStatic(
-            myName: String,
-            oppName: String,
-            league: String,
-            myFastMove: String? = null,
-            myCharged1: String? = null,
-            myCharged2: String? = null,
-            myCp: Int? = null,
-            myIvs: String? = null
-        ): Map<String, Int> {
-            return ALL_SHIELD_PERMUTATIONS.associate { (sUser, sOpp, code) ->
-                code to calculateMatchupRatingStatic(
-                    myName = myName,
-                    oppName = oppName,
-                    userShields = sUser,
-                    oppShields = sOpp,
-                    league = league,
-                    myFastMove = myFastMove,
-                    myCharged1 = myCharged1,
-                    myCharged2 = myCharged2,
-                    myCp = myCp,
-                    myIvs = myIvs
-                )
-            }
-        }
-
-        fun calculate1v1And2v2RatingsStatic(
-            myName: String,
-            oppName: String,
-            league: String,
-            myFastMove: String? = null,
-            myCharged1: String? = null,
-            myCharged2: String? = null,
-            myCp: Int? = null,
-            myIvs: String? = null
-        ): Pair<Int, Int> {
-            val r1v1 = calculateMatchupRatingStatic(
-                myName, oppName, 1, 1, league, myFastMove, myCharged1, myCharged2, myCp, myIvs
-            )
-            val r2v2 = calculateMatchupRatingStatic(
-                myName, oppName, 2, 2, league, myFastMove, myCharged1, myCharged2, myCp, myIvs
-            )
-            return r1v1 to r2v2
-        }
-
-        /**
-         * Computes the unweighted average 1v1 battle rating (R_bar) of a given Pokémon
-         * against the active league's top meta list.
-         */
-        fun computeMetaAverage1v1RatingStatic(
-            pokemonName: String,
-            league: String,
-            myFastMove: String? = null,
-            myCharged1: String? = null,
-            myCharged2: String? = null,
-            myCp: Int? = null,
-            myIvs: String? = null,
-            metaPool: List<String>? = null
-        ): Double {
-            val activeMetaPool = metaPool?.takeIf { it.isNotEmpty() } ?: getTopMetaPoolForLeagueStatic(league)
-            if (activeMetaPool.isEmpty()) return 500.0
-            return activeMetaPool.map { metaMon ->
-                calculateMatchupRatingStatic(
-                    myName = pokemonName,
-                    oppName = metaMon,
-                    userShields = 1,
-                    oppShields = 1,
-                    league = league,
-                    myFastMove = myFastMove,
-                    myCharged1 = myCharged1,
-                    myCharged2 = myCharged2,
-                    myCp = myCp,
-                    myIvs = myIvs
-                ).toDouble()
-            }.average()
-        }
-
-        fun calculateAutoLeadMatchupStatic(
-            myLead: String,
-            oppLead: String,
-            league: String,
-            myFastMove: String? = null,
-            myCharged1: String? = null,
-            myCharged2: String? = null,
-            myCp: Int? = null,
-            myIvs: String? = null
-        ): String {
-            if (myLead.isBlank() || oppLead.isBlank()) return "NEUTRAL"
-            val rating1s = calculateMatchupRatingStatic(
-                myName = myLead,
-                oppName = oppLead,
-                userShields = 1,
-                oppShields = 1,
-                league = league,
-                myFastMove = myFastMove,
-                myCharged1 = myCharged1,
-                myCharged2 = myCharged2,
-                myCp = myCp,
-                myIvs = myIvs
-            )
-            return when {
-                rating1s >= activeTierWMin -> "FAVORABLE"
-                rating1s <= activeTierLMax -> "NEGATIVE"
-                else -> "NEUTRAL"
-            }
-        }
-
-        fun getTopMetaPoolForLeagueStatic(league: String): List<String> {
-            val normLeague = normalizeLeagueKeyStatic(league)
-            TOP_META_POOL_CACHE[normLeague]?.let { return it }
-            val candidates = getTop100MetaCandidatesForLeagueStatic(normLeague, 100).map { it.name }
-            if (candidates.isNotEmpty()) {
-                if (DYNAMIC_POKEMON_DATABASE.isNotEmpty()) {
-                    TOP_META_POOL_CACHE[normLeague] = candidates
-                }
-                return candidates
-            }
-            val isGreat = normLeague == "GREAT LEAGUE" || normLeague == "BATTLE FRONTIER (SPECTRAL)"
-            val isUltra = normLeague == "ULTRA LEAGUE" || normLeague == "BATTLE FRONTIER (CAULDRON)"
-            val sorted = getAllPokemonMeta()
-                .filter { !it.speciesId.endsWith("_shadow", ignoreCase = true) && !it.name.startsWith("Shadow ", ignoreCase = true) }
-                .sortedBy {
-                    when {
-                        isGreat -> it.glRank
-                        isUltra -> it.ulRank
-                        else -> it.mlRank
-                    }
-                }
-                .take(100)
-                .map { it.name }
-            val result = if (sorted.isNotEmpty()) sorted else listOf("Azumarill", "Clodsire", "Annihilape", "Feraligatr", "Mandibuzz", "Gastrodon")
-            if (DYNAMIC_POKEMON_DATABASE.isNotEmpty()) {
-                TOP_META_POOL_CACHE[normLeague] = result
-            }
-            return result
-        }
-
-        private val PRECOMPUTED_TOP200_9X9_CACHE = java.util.concurrent.ConcurrentHashMap<String, Map<String, Int>>()
+        internal val PRECOMPUTED_TOP200_9X9_CACHE = java.util.concurrent.ConcurrentHashMap<String, Map<String, Int>>()
         @Volatile var lastPrecomputedTeamSignature: String = ""
 
-        fun getTop200MetaPoolForLeagueStatic(league: String): List<String> {
-            val normLeague = normalizeLeagueKeyStatic(league)
-            val candidates = getTop100MetaCandidatesForLeagueStatic(normLeague, 200).map { it.name }.distinct()
-            if (candidates.isNotEmpty()) return candidates
-            return getTopMetaPoolForLeagueStatic(league)
-        }
-
-        private fun buildUserSlotCacheKey(
-            league: String,
-            userName: String,
-            fastMove: String?,
-            charged1: String?,
-            charged2: String?,
-            cp: Int?,
-            ivs: String?,
-            oppName: String
-        ): String {
-            val normLeague = getLeagueAbbreviationStatic(league)
-            val uSig = "${userName.lowercase().trim()}|${fastMove.orEmpty().lowercase().trim()}|${charged1.orEmpty().lowercase().trim()}|${charged2.orEmpty().lowercase().trim()}|${cp ?: 0}|${ivs.orEmpty().trim()}"
-            val oSig = oppName.lowercase().trim()
-            return "$normLeague||$uSig||$oSig"
-        }
-
-        /**
-         * Fast single-moveset rough shield rating used in real time ONLY for non-Top-200 spice opponents
-         * that were not in the precomputed Top-200 9x9 matrix cache.
-         */
-        fun calculateFastRoughMatchupRatingStatic(
-            myName: String,
-            oppName: String,
-            userShields: Int,
-            oppShields: Int,
-            league: String,
-            myFastMove: String? = null,
-            myCharged1: String? = null,
-            myCharged2: String? = null,
-            myCp: Int? = null,
-            myIvs: String? = null
-        ): Int {
-            val sUser = userShields.coerceIn(0, 2)
-            val sOpp = oppShields.coerceIn(0, 2)
-            val myShadow = myName.trim().startsWith("Shadow ", ignoreCase = true) || myName.contains("(Shadow)", ignoreCase = true)
-            val oppShadow = oppName.trim().startsWith("Shadow ", ignoreCase = true) || oppName.contains("(Shadow)", ignoreCase = true)
-
-            val myMeta = resolveRecommendedMovesForSpecies(myName, league, myCp, myIvs)
-                ?: POKEMON_META_DATABASE.first().let { computeEffectiveCombatStats(it, league, myCp, myIvs) }
-            val oppMeta = resolveRecommendedMovesForSpecies(oppName, league)
-                ?: POKEMON_META_DATABASE.first().let { computeEffectiveCombatStats(it, league) }
-
-            val uFast = myFastMove?.takeIf { it.isNotBlank() } ?: myMeta.defaultFastMove
-            val uC1 = myCharged1?.takeIf { it.isNotBlank() } ?: myMeta.chargedMove1
-            val uC2 = myCharged2?.takeIf { it.isNotBlank() } ?: myMeta.chargedMove2
-
-            val userC1Stats = resolveChargedMoveStatsStatic(uC1, myMeta.types.firstOrNull() ?: "normal")
-            val userC2Stats = resolveChargedMoveStatsStatic(uC2, myMeta.types.firstOrNull() ?: "normal")
-            val userC1Pct = calculateChargedMoveDamagePctStatic(myMeta, oppMeta, uC1, myShadow, oppShadow)
-            val userC2Pct = calculateChargedMoveDamagePctStatic(myMeta, oppMeta, uC2, myShadow, oppShadow)
-            val bestUserCharged = max(userC1Pct, userC2Pct)
-
-            val oppC1Stats = resolveChargedMoveStatsStatic(oppMeta.chargedMove1, oppMeta.types.firstOrNull() ?: "normal")
-            val oppC2Stats = resolveChargedMoveStatsStatic(oppMeta.chargedMove2, oppMeta.types.firstOrNull() ?: "normal")
-            val oppC1Pct = calculateChargedMoveDamagePctStatic(oppMeta, myMeta, oppMeta.chargedMove1, oppShadow, myShadow)
-            val oppC2Pct = calculateChargedMoveDamagePctStatic(oppMeta, myMeta, oppMeta.chargedMove2, oppShadow, myShadow)
-            val bestOppCharged = max(oppC1Pct, oppC2Pct)
-
-            val uFastKey = uFast.lowercase().trim()
-            val userFastType = resolveFastTypeStatic(uFastKey, myMeta.types.firstOrNull() ?: "normal")
-            val userFastTurns = resolveFastTurnsStatic(uFastKey, myMeta.fastTurns).coerceAtLeast(1)
-            val userFastEnergy = resolveFastEnergyStatic(uFastKey, userFastTurns).coerceAtLeast(1)
-            val userFastEpt = userFastEnergy.toDouble() / userFastTurns.toDouble()
-
-            val oFastKey = oppMeta.defaultFastMove.lowercase().trim()
-            val oppFastType = resolveFastTypeStatic(oFastKey, oppMeta.types.firstOrNull() ?: "normal")
-            val oppFastTurns = resolveFastTurnsStatic(oFastKey, oppMeta.fastTurns).coerceAtLeast(1)
-            val oppFastEnergy = resolveFastEnergyStatic(oFastKey, oppFastTurns).coerceAtLeast(1)
-            val oppFastEpt = oppFastEnergy.toDouble() / oppFastTurns.toDouble()
-
-            val userFastEff = getTypeEffectivenessStatic(userFastType, oppMeta.types)
-            val oppFastEff = getTypeEffectivenessStatic(oppFastType, myMeta.types)
-
-            val userSim = simulateTurnByTurnChargedCycleStatic(
-                c1Name = uC1,
-                c1Pct = userC1Pct,
-                c1Stats = userC1Stats,
-                c2Name = uC2,
-                c2Pct = userC2Pct,
-                c2Stats = userC2Stats,
-                fastEpt = userFastEpt,
-                defShields = sOpp,
-                attackerTypes = myMeta.types
-            )
-            val oppSim = simulateTurnByTurnChargedCycleStatic(
-                c1Name = oppMeta.chargedMove1,
-                c1Pct = oppC1Pct,
-                c1Stats = oppC1Stats,
-                c2Name = oppMeta.chargedMove2,
-                c2Pct = oppC2Pct,
-                c2Stats = oppC2Stats,
-                fastEpt = oppFastEpt,
-                defShields = sUser,
-                attackerTypes = oppMeta.types
-            )
-            val userRawPressure = userSim.effectivePressure * userSim.effectiveFreqMult
-            val oppRawPressure = oppSim.effectivePressure * oppSim.effectiveFreqMult
-
-            val avgShields = (sUser + sOpp) * 0.5
-            val fastWeight = if (avgShields <= 1.0) 95.0 + avgShields * 25.0 else 120.0 + (avgShields - 1.0) * 35.0
-            val shadowBulkDelta = ((if (myShadow) -12 else 0) + (if (oppShadow) 12 else 0)) * (if (avgShields <= 1.0) 1.0 else avgShields)
-            val shieldDiff = (sUser - sOpp).toDouble()
-            val shieldAdvantageDelta = shieldDiff * (85.0 + 0.65 * ((bestOppCharged + bestUserCharged) * 0.5))
-
-            val totalDelta = 2.0 * (userRawPressure - oppRawPressure) + (userFastEff - oppFastEff) * fastWeight + shadowBulkDelta + shieldAdvantageDelta
-            return (500.0 + totalDelta).roundToInt().coerceIn(150, 850)
-        }
-
-        /**
-         * Precomputes the full 9x9 weighted move-combo shield matrix for the 3 members of the active team
-         * against the Top 200 League Meta so the overlay serves accurate 9x9 battle ratings in O(1) time.
-         */
-        fun precomputeActiveTeamTop200MatrixStatic(preset: TeamPreset?) {
-            if (preset == null || preset.pokemon.isEmpty()) return
-            val sig = "${preset.league}|" + preset.pokemon.joinToString(";") {
-                "${it.name}|${it.fastMove}|${it.chargedMove1}|${it.chargedMove2}|${it.cp}|${it.ivs}"
-            }
-            if (sig == lastPrecomputedTeamSignature && PRECOMPUTED_TOP200_9X9_CACHE.isNotEmpty()) return
-
-            val top200List = getTop200MetaPoolForLeagueStatic(preset.league)
-            for (slot in preset.pokemon.take(3)) {
-                for (oppName in top200List) {
-                    val key = buildUserSlotCacheKey(
-                        league = preset.league,
-                        userName = slot.name,
-                        fastMove = slot.fastMove,
-                        charged1 = slot.chargedMove1,
-                        charged2 = slot.chargedMove2,
-                        cp = slot.cp,
-                        ivs = slot.ivs,
-                        oppName = oppName
-                    )
-                    if (!PRECOMPUTED_TOP200_9X9_CACHE.containsKey(key)) {
-                        PRECOMPUTED_TOP200_9X9_CACHE[key] = calculateAllShieldPermutationsStatic(
-                            myName = slot.name,
-                            oppName = oppName,
-                            league = preset.league,
-                            myFastMove = slot.fastMove,
-                            myCharged1 = slot.chargedMove1,
-                            myCharged2 = slot.chargedMove2,
-                            myCp = slot.cp,
-                            myIvs = slot.ivs
-                        )
-                    }
-                    // Also precompute Shadow counterpart if opponent is non-Shadow and Shadow-eligible
-                    if (!oppName.startsWith("Shadow ", ignoreCase = true)) {
-                        val shadowOppName = "Shadow $oppName"
-                        val shadKey = buildUserSlotCacheKey(
-                            league = preset.league,
-                            userName = slot.name,
-                            fastMove = slot.fastMove,
-                            charged1 = slot.chargedMove1,
-                            charged2 = slot.chargedMove2,
-                            cp = slot.cp,
-                            ivs = slot.ivs,
-                            oppName = shadowOppName
-                        )
-                        if (!PRECOMPUTED_TOP200_9X9_CACHE.containsKey(shadKey)) {
-                            PRECOMPUTED_TOP200_9X9_CACHE[shadKey] = calculateAllShieldPermutationsStatic(
-                                myName = slot.name,
-                                oppName = shadowOppName,
-                                league = preset.league,
-                                myFastMove = slot.fastMove,
-                                myCharged1 = slot.chargedMove1,
-                                myCharged2 = slot.chargedMove2,
-                                myCp = slot.cp,
-                                myIvs = slot.ivs
-                            )
-                        }
-                    }
-                }
-            }
-            lastPrecomputedTeamSignature = sig
-        }
-
-        /**
-         * O(1) lookup from the precomputed Top-200 9x9 shield matrix cache, with fast real-time rough math fallback
-         * for non-Top-200 opponents.
-         */
-        fun getOverlayRealtimeMatchupRatingStatic(
-            myName: String,
-            oppName: String,
-            userShields: Int,
-            oppShields: Int,
-            league: String,
-            myFastMove: String? = null,
-            myCharged1: String? = null,
-            myCharged2: String? = null,
-            myCp: Int? = null,
-            myIvs: String? = null
-        ): Int {
-            val sUser = userShields.coerceIn(0, 2)
-            val sOpp = oppShields.coerceIn(0, 2)
-            val code = "${sUser}v${sOpp}"
-            val key = buildUserSlotCacheKey(league, myName, myFastMove, myCharged1, myCharged2, myCp, myIvs, oppName)
-            PRECOMPUTED_TOP200_9X9_CACHE[key]?.get(code)?.let { return it }
-
-            return calculateFastRoughMatchupRatingStatic(
-                myName = myName,
-                oppName = oppName,
-                userShields = sUser,
-                oppShields = sOpp,
-                league = league,
-                myFastMove = myFastMove,
-                myCharged1 = myCharged1,
-                myCharged2 = myCharged2,
-                myCp = myCp,
-                myIvs = myIvs
-            )
-        }
-
-        /**
-         * Phase 1: Blind Matchup Favorability (BMF / Pre-Match Expectation):
-         * - If oppTeam.firstSwap is null/missing -> returns { bmf = null, pPre = null, bmfPercentage = null, weight = 0.0 }
-         * - If oppTeam.finalSeen is null/missing (unrevealed 3rd) -> weight w = 0.75 + meta-average prior (R_bar_swap, R_bar_close)
-         * - If all 3 resolved -> weight w = 1.0
-         * - S_lead = 0.50 * Rating_1v1(lead, oppLead) + 0.50 * Rating_2v2(lead, oppLead)
-         * - S_back = 0.70 * max(Score_A, Score_B) + 0.30 * min(Score_A, Score_B)
-         * - M = 0.40 * S_lead + 0.60 * S_back
-         * - P_pre = 1 / (1 + exp(-0.006 * (M - 500)))
-         */
-        fun calculateBlindMatchupFavorabilityStatic(
-            myTeam: List<String>,
-            oppTeam: List<String>,
-            league: String,
-            myTeamSlots: List<TeamMember>? = null,
-            metaPool: List<String>? = null
-        ): BlindMatchupFavorabilityResult {
-            val oppLead = oppTeam.getOrNull(0)?.trim().orEmpty()
-            val oppSwap = oppTeam.getOrNull(1)?.trim().orEmpty()
-            val oppClose = oppTeam.getOrNull(2)?.trim().orEmpty()
-
-            if (oppLead.isEmpty() || oppSwap.isEmpty()) {
-                return BlindMatchupFavorabilityResult(
-                    bmf = null,
-                    pPre = null,
-                    bmfPercentage = null,
-                    weight = 0.0,
-                    sLead = null,
-                    sBack = null,
-                    compositeM = null,
-                    isUnrevealedThird = false
-                )
-            }
-
-            val fallbackMons = getTopMetaPoolForLeagueStatic(league).take(3)
-            val myLead = myTeam.getOrNull(0)?.trim()?.takeIf { it.isNotEmpty() } ?: fallbackMons.getOrElse(0) { "Azumarill" }
-            val mySwap = myTeam.getOrNull(1)?.trim()?.takeIf { it.isNotEmpty() } ?: fallbackMons.getOrElse(1) { "Clodsire" }
-            val myClose = myTeam.getOrNull(2)?.trim()?.takeIf { it.isNotEmpty() } ?: fallbackMons.getOrElse(2) { "Feraligatr" }
-
-            val slot0 = myTeamSlots?.getOrNull(0)
-            val slot1 = myTeamSlots?.getOrNull(1)
-            val slot2 = myTeamSlots?.getOrNull(2)
-
-            val unrevealedThird = oppClose.isEmpty()
-            val weight = if (unrevealedThird) 0.75 else 1.0
-
-            val (lead1v1, lead2v2) = calculate1v1And2v2RatingsStatic(
-                myLead, oppLead, league, slot0?.fastMove, slot0?.chargedMove1, slot0?.chargedMove2, slot0?.cp, slot0?.ivs
-            )
-            val sLead = 0.50 * lead1v1.toDouble() + 0.50 * lead2v2.toDouble()
-
-            val scoreA: Double
-            val scoreB: Double
-            if (!unrevealedThird) {
-                val rSwapVsOppSwap = calculateMatchupRatingStatic(
-                    mySwap, oppSwap, 1, 1, league, slot1?.fastMove, slot1?.chargedMove1, slot1?.chargedMove2, slot1?.cp, slot1?.ivs
-                ).toDouble()
-                val rCloseVsOppClose = calculateMatchupRatingStatic(
-                    myClose, oppClose, 1, 1, league, slot2?.fastMove, slot2?.chargedMove1, slot2?.chargedMove2, slot2?.cp, slot2?.ivs
-                ).toDouble()
-                val rSwapVsOppClose = calculateMatchupRatingStatic(
-                    mySwap, oppClose, 1, 1, league, slot1?.fastMove, slot1?.chargedMove1, slot1?.chargedMove2, slot1?.cp, slot1?.ivs
-                ).toDouble()
-                val rCloseVsOppSwap = calculateMatchupRatingStatic(
-                    myClose, oppSwap, 1, 1, league, slot2?.fastMove, slot2?.chargedMove1, slot2?.chargedMove2, slot2?.cp, slot2?.ivs
-                ).toDouble()
-
-                scoreA = (rSwapVsOppSwap + rCloseVsOppClose) / 2.0
-                scoreB = (rSwapVsOppClose + rCloseVsOppSwap) / 2.0
-            } else {
-                val rBarSwap = computeMetaAverage1v1RatingStatic(
-                    mySwap, league, slot1?.fastMove, slot1?.chargedMove1, slot1?.chargedMove2, slot1?.cp, slot1?.ivs, metaPool
-                )
-                val rBarClose = computeMetaAverage1v1RatingStatic(
-                    myClose, league, slot2?.fastMove, slot2?.chargedMove1, slot2?.chargedMove2, slot2?.cp, slot2?.ivs, metaPool
-                )
-                val rSwapVsOppSwap = calculateMatchupRatingStatic(
-                    mySwap, oppSwap, 1, 1, league, slot1?.fastMove, slot1?.chargedMove1, slot1?.chargedMove2, slot1?.cp, slot1?.ivs
-                ).toDouble()
-                val rCloseVsOppSwap = calculateMatchupRatingStatic(
-                    myClose, oppSwap, 1, 1, league, slot2?.fastMove, slot2?.chargedMove1, slot2?.chargedMove2, slot2?.cp, slot2?.ivs
-                ).toDouble()
-
-                scoreA = (rSwapVsOppSwap + rBarClose) / 2.0
-                scoreB = (rCloseVsOppSwap + rBarSwap) / 2.0
-            }
-
-            val sBack = 0.70 * max(scoreA, scoreB) + 0.30 * min(scoreA, scoreB)
-            val mScore = 0.40 * sLead + 0.60 * sBack
-            val pPre = 1.0 / (1.0 + kotlin.math.exp(-0.006 * (mScore - 500.0)))
-            val roundedPPre = (pPre * 10000.0).roundToInt() / 10000.0
-            val bmfPct = (pPre * 1000.0).roundToInt() / 10.0
-
-            return BlindMatchupFavorabilityResult(
-                bmf = roundedPPre,
-                pPre = roundedPPre,
-                bmfPercentage = bmfPct,
-                weight = weight,
-                sLead = (sLead * 10.0).roundToInt() / 10.0,
-                sBack = (sBack * 10.0).roundToInt() / 10.0,
-                compositeM = (mScore * 10.0).roundToInt() / 10.0,
-                isUnrevealedThird = unrevealedThird
-            )
-        }
-
-        /**
-         * Phase 2: Dynamic Execution WAE Engine
-         *
-         * - If event timeline data is absent (e.g., manual entries or legacy matches), sets P_exec = P_pre.
-         * - If timeline events exist:
-         *   - Partitions the battle duration into active head-to-head intervals k bounded by swap and faint timestamps.
-         *   - For each interval, resolves the active pairing's asymmetric shield rating
-         *     R_k = Rating_{s_user v s_opp}(userActive, oppActive) using discrete shield counts at that timestamp.
-         *   - Weights each interval by its fractional duration tau_k = Delta_t_k / t_total:
-         *       S_actual = sum(tau_k * R_k)
-         *       P_exec = 1 / (1 + exp(-0.006 * (S_actual - 500)))
-         * - Execution Residual (Delta Q):
-         *   - Base: Delta Q = Result - P_exec (Result in {0.0, 1.0}).
-         *   - Faint Margin Scaling: If Result == 1 and (oppFaints - userFaints) >= 2, scale Delta Q * 1.10.
-         *   - Shield in Pocket Penalty: If Result == 0 and userShieldsRemaining > 0:
-         *       Delta Q_final = Delta Q - (0.15 * userShieldsRemaining)
-         * - Returns { execWae: Delta_Q_final, weightedResidual: Delta_Q_final * weight }.
-         */
-        fun calculateDynamicExecutionWAEStatic(
-            myTeam: List<String>,
-            oppTeam: List<String>,
-            league: String,
-            result: String = "WIN",
-            timelineEvents: List<BattleTimelineEvent>? = null,
-            totalDurationSec: Double? = null,
-            explicitUserFaints: Int? = null,
-            explicitOppFaints: Int? = null,
-            explicitUserShieldsRemaining: Int? = null,
-            explicitOppShieldsRemaining: Int? = null,
-            myTeamSlots: List<TeamMember>? = null,
-            metaPool: List<String>? = null
-        ): DynamicExecutionWAEResult? {
-            val bmfRes = calculateBlindMatchupFavorabilityStatic(
-                myTeam = myTeam,
-                oppTeam = oppTeam,
-                league = league,
-                myTeamSlots = myTeamSlots,
-                metaPool = metaPool
-            )
-            val pPre = bmfRes.pPre ?: return null
-            val weight = bmfRes.weight
-            if (weight <= 0.0) return null
-
-            val fallbackMons = getTopMetaPoolForLeagueStatic(league).take(3)
-            val myLead = myTeam.getOrNull(0)?.trim()?.takeIf { it.isNotEmpty() } ?: fallbackMons.getOrElse(0) { "Azumarill" }
-            val mySwap = myTeam.getOrNull(1)?.trim()?.takeIf { it.isNotEmpty() } ?: fallbackMons.getOrElse(1) { "Clodsire" }
-            val myClose = myTeam.getOrNull(2)?.trim()?.takeIf { it.isNotEmpty() } ?: fallbackMons.getOrElse(2) { "Feraligatr" }
-            val myRoster = listOf(myLead, mySwap, myClose).filter { it.isNotEmpty() }
-
-            val oppLead = oppTeam.getOrNull(0)?.trim().orEmpty()
-            val oppSwap = oppTeam.getOrNull(1)?.trim().orEmpty()
-            val oppClose = oppTeam.getOrNull(2)?.trim().orEmpty()
-            val oppRoster = listOf(oppLead, oppSwap, oppClose).filter { it.isNotEmpty() }
-
-            fun resolveUserSlotOverrides(monName: String): TeamMember? {
-                val base = FormResolver.extractBaseSpecies(monName)
-                return myTeamSlots?.find {
-                    it.name.equals(monName, ignoreCase = true) ||
-                        FormResolver.extractBaseSpecies(it.name).equals(base, ignoreCase = true)
-                }
-            }
-
-            val hasTimeline = !timelineEvents.isNullOrEmpty()
-            val rawIntervals = mutableListOf<ExecutionIntervalSegment>()
-
-            var sActual: Double? = null
-            var pExec = pPre
-
-            var derivedUserFaints = 0
-            var derivedOppFaints = 0
-            var runningUserShields = 2
-            var runningOppShields = 2
-
-            if (!timelineEvents.isNullOrEmpty()) {
-                val sortedEvents = timelineEvents.sortedBy { max(0.0, it.t) }
-
-                var userActive = myLead
-                var oppActive = oppLead
-                var intervalStartT = 0.0
-                var intervalUserShields = 2
-                var intervalOppShields = 2
-
-                val userFaintedNames = mutableSetOf<String>()
-                val oppFaintedNames = mutableSetOf<String>()
-
-                for (ev in sortedEvents) {
-                    val evT = max(0.0, ev.t)
-                    val evType = ev.type.uppercase()
-                    val evActor = ev.actor.lowercase()
-
-                    if (evType == "SHIELD") {
-                        runningUserShields = ev.userShieldsRemaining.coerceIn(0, 2)
-                        runningOppShields = ev.oppShieldsRemaining.coerceIn(0, 2)
-                        val activeMon = (ev.activePokemon ?: ev.pokemonShielded)?.trim().orEmpty()
-                        if (activeMon.isNotEmpty()) {
-                            if (evActor == "user") userActive = activeMon
-                            else if (evActor == "opp") oppActive = activeMon
-                        }
-                        if (kotlin.math.abs(evT - intervalStartT) < 1e-6) {
-                            intervalUserShields = runningUserShields
-                            intervalOppShields = runningOppShields
-                        }
-                        continue
-                    }
-
-                    if (evType == "SWAP" || evType == "FAINT") {
-                        if (evT > intervalStartT) {
-                            val duration = evT - intervalStartT
-                            val uSlot = resolveUserSlotOverrides(userActive)
-                            val rVal = calculateMatchupRatingStatic(
-                                myName = userActive,
-                                oppName = oppActive,
-                                userShields = intervalUserShields,
-                                oppShields = intervalOppShields,
-                                league = league,
-                                myFastMove = uSlot?.fastMove,
-                                myCharged1 = uSlot?.chargedMove1,
-                                myCharged2 = uSlot?.chargedMove2,
-                                myCp = uSlot?.cp,
-                                myIvs = uSlot?.ivs
-                            ).toDouble()
-                            rawIntervals.add(
-                                ExecutionIntervalSegment(
-                                    tStart = intervalStartT,
-                                    tEnd = evT,
-                                    duration = duration,
-                                    tau = 0.0,
-                                    userActive = userActive,
-                                    oppActive = oppActive,
-                                    userShields = intervalUserShields,
-                                    oppShields = intervalOppShields,
-                                    rating = rVal
-                                )
-                            )
-                        }
-
-                        runningUserShields = ev.userShieldsRemaining.coerceIn(0, 2)
-                        runningOppShields = ev.oppShieldsRemaining.coerceIn(0, 2)
-
-                        if (evType == "FAINT") {
-                            if (evActor == "user") {
-                                derivedUserFaints++
-                                val faintedMon = (ev.pokemonFainted ?: ev.pokemonOut ?: userActive).trim()
-                                if (faintedMon.isNotEmpty()) userFaintedNames.add(faintedMon.lowercase())
-                                val explicitIn = ev.pokemonIn?.trim().orEmpty()
-                                if (explicitIn.isNotEmpty()) {
-                                    userActive = explicitIn
-                                } else {
-                                    val replacement = myRoster.find { !userFaintedNames.contains(it.lowercase()) }
-                                    if (replacement != null) userActive = replacement
-                                }
-                            } else {
-                                derivedOppFaints++
-                                val faintedMon = (ev.pokemonFainted ?: ev.pokemonOut ?: oppActive).trim()
-                                if (faintedMon.isNotEmpty()) oppFaintedNames.add(faintedMon.lowercase())
-                                val explicitIn = ev.pokemonIn?.trim().orEmpty()
-                                if (explicitIn.isNotEmpty()) {
-                                    oppActive = explicitIn
-                                } else {
-                                    val replacement = oppRoster.find { !oppFaintedNames.contains(it.lowercase()) }
-                                    if (replacement != null) oppActive = replacement
-                                }
-                            }
-                        } else if (evType == "SWAP") {
-                            val nextMon = ev.pokemonIn?.trim().orEmpty()
-                            if (nextMon.isNotEmpty()) {
-                                if (evActor == "user") userActive = nextMon
-                                else oppActive = nextMon
-                            }
-                        }
-
-                        intervalStartT = evT
-                        intervalUserShields = runningUserShields
-                        intervalOppShields = runningOppShields
-                    }
-                }
-
-                val maxEventT = sortedEvents.maxOfOrNull { max(0.0, it.t) } ?: 0.0
-                val resolvedTotalDuration = if (totalDurationSec != null && totalDurationSec > maxEventT) {
-                    totalDurationSec
-                } else {
-                    maxEventT
-                }
-
-                if (resolvedTotalDuration > intervalStartT) {
-                    val duration = resolvedTotalDuration - intervalStartT
-                    val uSlot = resolveUserSlotOverrides(userActive)
-                    val rVal = calculateMatchupRatingStatic(
-                        myName = userActive,
-                        oppName = oppActive,
-                        userShields = intervalUserShields,
-                        oppShields = intervalOppShields,
-                        league = league,
-                        myFastMove = uSlot?.fastMove,
-                        myCharged1 = uSlot?.chargedMove1,
-                        myCharged2 = uSlot?.chargedMove2,
-                        myCp = uSlot?.cp,
-                        myIvs = uSlot?.ivs
-                    ).toDouble()
-                    rawIntervals.add(
-                        ExecutionIntervalSegment(
-                            tStart = intervalStartT,
-                            tEnd = resolvedTotalDuration,
-                            duration = duration,
-                            tau = 0.0,
-                            userActive = userActive,
-                            oppActive = oppActive,
-                            userShields = intervalUserShields,
-                            oppShields = intervalOppShields,
-                            rating = rVal
-                        )
-                    )
-                }
-
-                val totalPartitionDuration = rawIntervals.sumOf { it.duration }
-                if (totalPartitionDuration > 0.0 && rawIntervals.isNotEmpty()) {
-                    val computedSActual = rawIntervals.sumOf { iv ->
-                        val tau = iv.duration / totalPartitionDuration
-                        tau * iv.rating
-                    }
-                    sActual = (computedSActual * 100.0).roundToInt() / 100.0
-                    pExec = 1.0 / (1.0 + kotlin.math.exp(-0.006 * (computedSActual - 500.0)))
-                }
-            }
-
-            val totalPartitionDuration = rawIntervals.sumOf { it.duration }
-            val finalIntervals = rawIntervals.map { iv ->
-                iv.copy(tau = if (totalPartitionDuration > 0.0) iv.duration / totalPartitionDuration else 0.0)
-            }
-
-            val userFaints = (explicitUserFaints ?: derivedUserFaints).coerceIn(0, 3)
-            val oppFaints = (explicitOppFaints ?: derivedOppFaints).coerceIn(0, 3)
-            val userShieldsRemaining = (explicitUserShieldsRemaining ?: if (hasTimeline) runningUserShields else 0).coerceIn(0, 2)
-            val oppShieldsRemaining = (explicitOppShieldsRemaining ?: if (hasTimeline) runningOppShields else 0).coerceIn(0, 2)
-
-            val isWin = result.equals("WIN", ignoreCase = true)
-            val numericResult = if (isWin) 1.0 else 0.0
-            val deltaQBase = numericResult - pExec
-            var deltaQFinal = deltaQBase
-            var faintMarginScaled = false
-            var shieldPenalty = 0.0
-
-            // Faint Margin Scaling: If Result == 1 and (oppFaints - userFaints) >= 2, scale Delta Q * 1.10
-            if (isWin && (oppFaints - userFaints) >= 2) {
-                deltaQFinal *= 1.10
-                faintMarginScaled = true
-            }
-
-            // Shield in Pocket Penalty: If Result == 0 and userShieldsRemaining > 0: Delta Q_final = Delta Q - (0.15 * userShieldsRemaining)
-            if (!isWin && userShieldsRemaining > 0) {
-                shieldPenalty = 0.15 * userShieldsRemaining
-                deltaQFinal -= shieldPenalty
-            }
-
-            val roundedPExec = (pExec * 10000.0).roundToInt() / 10000.0
-            val roundedExecWae = (deltaQFinal * 10000.0).roundToInt() / 10000.0
-            val roundedWeightedResidual = ((deltaQFinal * weight) * 10000.0).roundToInt() / 10000.0
-
-            return DynamicExecutionWAEResult(
-                execWae = roundedExecWae,
-                weightedResidual = roundedWeightedResidual,
-                pExec = roundedPExec,
-                pPre = pPre,
-                sActual = sActual,
-                deltaQBase = (deltaQBase * 10000.0).roundToInt() / 10000.0,
-                deltaQFinal = roundedExecWae,
-                weight = weight,
-                faintMarginScaled = faintMarginScaled,
-                shieldPenaltyApplied = (shieldPenalty * 10000.0).roundToInt() / 10000.0,
-                userFaints = userFaints,
-                oppFaints = oppFaints,
-                userShieldsRemaining = userShieldsRemaining,
-                oppShieldsRemaining = oppShieldsRemaining,
-                intervals = finalIntervals
-            )
-        }
-
-        fun computeContextualEventFlagsStatic(
-            result: String,
-            userShieldsRemaining: Int?,
-            oppShieldsRemaining: Int?,
-            userFaints: Int?,
-            isUnrevealedThird: Boolean
-        ): List<String> {
-            val isWin = result.equals("WIN", ignoreCase = true)
-            val flags = mutableListOf<String>()
-
-            if (!isWin) {
-                if (userShieldsRemaining == 2) {
-                    flags.add("⚠️ Double Shield Pocket")
-                } else if (userShieldsRemaining == 1) {
-                    flags.add("⚠️ Shield in Pocket")
-                }
-            } else {
-                if (userFaints == 0) {
-                    flags.add("🧹 Clean Sweep")
-                }
-                if (userShieldsRemaining != null && oppShieldsRemaining != null && userShieldsRemaining > oppShieldsRemaining) {
-                    flags.add("🛡️ Shield Advantage")
-                }
-            }
-
-            if (isUnrevealedThird) {
-                flags.add("⚡ 75% Conf")
-            }
-
-            return flags
-        }
-
-        fun calculateBattleQuality(
-            myTeam: List<String>,
-            oppTeam: List<String>,
-            league: String,
-            result: String = "WIN",
-            myTeamSlots: List<TeamMember>? = null,
-            metaPool: List<String>? = null,
-            timelineEvents: List<BattleTimelineEvent>? = null,
-            totalDurationSec: Double? = null,
-            explicitUserFaints: Int? = null,
-            explicitOppFaints: Int? = null,
-            explicitUserShieldsRemaining: Int? = null,
-            explicitOppShieldsRemaining: Int? = null
-        ): BattleQualityMetadata? {
-            val bmfRes = calculateBlindMatchupFavorabilityStatic(
-                myTeam = myTeam,
-                oppTeam = oppTeam,
-                league = league,
-                myTeamSlots = myTeamSlots,
-                metaPool = metaPool
-            )
-            val pPre = bmfRes.pPre ?: return null
-            val bmfPct = bmfRes.bmfPercentage ?: return null
-            val sLead = bmfRes.sLead ?: return null
-            val sBack = bmfRes.sBack ?: return null
-            val mScore = bmfRes.compositeM ?: return null
-            if (bmfRes.weight <= 0.0) return null
-
-            val execRes = calculateDynamicExecutionWAEStatic(
-                myTeam = myTeam,
-                oppTeam = oppTeam,
-                league = league,
-                result = result,
-                timelineEvents = timelineEvents,
-                totalDurationSec = totalDurationSec,
-                explicitUserFaints = explicitUserFaints,
-                explicitOppFaints = explicitOppFaints,
-                explicitUserShieldsRemaining = explicitUserShieldsRemaining,
-                explicitOppShieldsRemaining = explicitOppShieldsRemaining,
-                myTeamSlots = myTeamSlots,
-                metaPool = metaPool
-            ) ?: return null
-
-            val pWin = execRes.pExec
-            val isWin = result.equals("WIN", ignoreCase = true)
-
-            // Phase 3: Primary Performance Badges derived from P_pre (BMF)
-            val (badgeLabel, badgeColorHex) = if (isWin) {
-                when {
-                    pPre < 0.40 -> "Clutch Win" to "#22d3ee"
-                    pPre <= 0.60 -> "Skill Win" to "#4ade80"
-                    else -> "Expected Win" to "#94a3b8"
-                }
-            } else {
-                when {
-                    pPre > 0.60 -> "Blunder Loss" to "#f43f5e"
-                    pPre >= 0.40 -> "Tough Loss" to "#fb923c"
-                    else -> "Expected Loss" to "#94a3b8"
-                }
-            }
-
-            val hasTimeline = !timelineEvents.isNullOrEmpty()
-            val hasExplicitFaints = explicitUserFaints != null
-            val hasExplicitShields = explicitUserShieldsRemaining != null || explicitOppShieldsRemaining != null
-
-            val contextualFlags = computeContextualEventFlagsStatic(
-                result = result,
-                userShieldsRemaining = if (hasTimeline || hasExplicitShields) execRes.userShieldsRemaining else null,
-                oppShieldsRemaining = if (hasTimeline || hasExplicitShields) execRes.oppShieldsRemaining else null,
-                userFaints = if (hasTimeline || hasExplicitFaints) execRes.userFaints else null,
-                isUnrevealedThird = bmfRes.isUnrevealedThird
-            )
-
-            return BattleQualityMetadata(
-                bmfScore = pPre,
-                pPre = pPre,
-                bmfPercentage = bmfPct,
-                sActual = execRes.sActual,
-                pExec = execRes.pExec,
-                execWae = execRes.execWae,
-                pWin = pWin,
-                expWinPct = (pWin * 100.0).roundToInt(),
-                deltaQ = execRes.execWae,
-                weight = bmfRes.weight,
-                weightedResidual = execRes.weightedResidual,
-                badgeLabel = badgeLabel,
-                badgeColorHex = badgeColorHex,
-                badges = listOf(badgeLabel),
-                contextualFlags = contextualFlags,
-                flags = contextualFlags,
-                unrevealedThird = bmfRes.isUnrevealedThird,
-                sLead = sLead,
-                sBack = sBack,
-                compositeScore = mScore,
-                faintMarginScaled = execRes.faintMarginScaled,
-                shieldPenaltyApplied = execRes.shieldPenaltyApplied,
-                userFaints = execRes.userFaints,
-                oppFaints = execRes.oppFaints,
-                userShieldsRemaining = execRes.userShieldsRemaining,
-                oppShieldsRemaining = execRes.oppShieldsRemaining
-            )
-        }
-
-        fun calculateAggregateWAEStatic(qualities: List<BattleQualityMetadata?>): AggregateWAEResult {
-            var weightedWaeSum = 0.0
-            var weightedLuckSum = 0.0
-            var totalWeight = 0.0
-            var rankedCount = 0
-
-            for (q in qualities) {
-                if (q == null || q.weight <= 0.0) continue
-                weightedWaeSum += q.weight * q.deltaQ
-                weightedLuckSum += q.weight * q.pPre
-                totalWeight += q.weight
-                rankedCount++
-            }
-
-            if (totalWeight <= 0.0 || rankedCount == 0) {
-                return AggregateWAEResult(
-                    waePct = 0.0,
-                    formatted = "—%",
-                    isPositive = true,
-                    luckPct = 50.0,
-                    luckFormatted = "—%",
-                    rankedCount = 0,
-                    totalWeight = 0.0
-                )
-            }
-
-            val rawWaePct = (weightedWaeSum / totalWeight) * 100.0
-            val roundedWae = (rawWaePct * 10.0).roundToInt() / 10.0
-            val isPositive = roundedWae >= 0.0
-            val sign = if (roundedWae >= 0.0) "+" else "-"
-            val formatted = String.format(java.util.Locale.US, "%s%.1f%%", sign, kotlin.math.abs(roundedWae))
-
-            val rawLuckPct = (weightedLuckSum / totalWeight) * 100.0
-            val roundedLuck = (rawLuckPct * 10.0).roundToInt() / 10.0
-            val luckFormatted = String.format(java.util.Locale.US, "%.1f%%", roundedLuck)
-
-            return AggregateWAEResult(
-                waePct = roundedWae,
-                formatted = formatted,
-                isPositive = isPositive,
-                luckPct = roundedLuck,
-                luckFormatted = luckFormatted,
-                rankedCount = rankedCount,
-                totalWeight = totalWeight
-            )
-        }
 
         data class BlendedSeasonMetaDistribution(
             val leadWeights: Map<String, Double>,
@@ -7796,103 +1753,6 @@ class OverlayService : LifecycleService() {
             val hudLine2Text: String
         )
 
-        fun isLimitedCupFormatStatic(league: String): Boolean {
-            val u = league.trim().uppercase()
-            if (u == "GREAT LEAGUE" || u == "ULTRA LEAGUE" || u == "MASTER LEAGUE") return false
-            if (u == "GREAT LEAGUE (1500)" || u == "ULTRA LEAGUE (2500)" || u == "MASTER LEAGUE (10000)") return false
-            if (u.startsWith("BATTLE FRONTIER")) return false
-            return true
-        }
-
-        fun getSameCpStandardLeagueKeyStatic(league: String): String {
-            val cpCap = getLeagueCpCapStatic(league)
-            return when {
-                cpCap <= 1500 -> "GREAT LEAGUE"
-                cpCap == 2500 -> "ULTRA LEAGUE"
-                else -> "MASTER LEAGUE"
-            }
-        }
-
-        fun loadCurrentSeasonStartMsStatic(prefs: SharedPreferences?): Long {
-            val defaultStartMs = 1772571600000L // GBL Season 26 start fallback
-            if (prefs == null) return defaultStartMs
-            val raw = prefs.getString(PREFS_KEY_GBL_SEASONS_JSON, null) ?: return defaultStartMs
-            return try {
-                val arr = JsonParser.parseString(raw).asJsonArray
-                val nowMs = System.currentTimeMillis()
-                var latestStart = defaultStartMs
-                for (el in arr) {
-                    if (!el.isJsonObject) continue
-                    val sMs = el.asJsonObject.get("startMs")?.takeIf { !it.isJsonNull }?.asLong ?: continue
-                    if (sMs in 1000000000000L..nowMs && sMs >= latestStart) {
-                        latestStart = sMs
-                    }
-                }
-                latestStart
-            } catch (_: Exception) {
-                defaultStartMs
-            }
-        }
-
-        fun loadSeasonLogsForLeagueStatic(
-            prefs: SharedPreferences?,
-            gson: Gson,
-            league: String,
-            isShow6: Boolean = false,
-            empiricalLimit: Int? = null
-        ): List<Pair<Long, List<String>>> {
-            if (prefs == null) return emptyList()
-            val prefKey = if (isShow6) PREFS_KEY_SHOW6_BATTLE_LOGS else PREFS_KEY_BATTLE_LOGS
-            val rawJson = prefs.getString(prefKey, "[]") ?: "[]"
-            val records: List<SyncBattleLogRecord> = try {
-                gson.fromJson(rawJson, object : TypeToken<List<SyncBattleLogRecord>>() {}.type) ?: emptyList()
-            } catch (_: Exception) {
-                emptyList()
-            }
-            if (records.isEmpty()) return emptyList()
-            val targetNorm = normalizeLeagueKeyStatic(league)
-            val targetRemapped = remapLegacyLeagueForModeStatic(league, isShow6)
-            val seasonStartMs = loadCurrentSeasonStartMsStatic(prefs)
-
-            val matching = records.filter { rec ->
-                val recNorm = normalizeLeagueKeyStatic(rec.league)
-                val recRemap = remapLegacyLeagueForModeStatic(rec.league, isShow6)
-                val leagueMatches = rec.league.equals(league, ignoreCase = true) ||
-                    recNorm.equals(targetNorm, ignoreCase = true) ||
-                    recRemap.equals(targetRemapped, ignoreCase = true)
-                val validOpps = rec.opponents.any { it.isNotBlank() && !it.equals("Waiting...", ignoreCase = true) }
-                val inSeason = if (empiricalLimit != null) true else rec.timestampMs >= seasonStartMs
-                leagueMatches && validOpps && inSeason
-            }.sortedByDescending { it.timestampMs }
-
-            val sliced = if (empiricalLimit != null && empiricalLimit > 0) matching.take(empiricalLimit) else matching
-            return sliced.map { it.timestampMs to it.opponents }
-        }
-
-        fun loadSameCpStandardSeasonLogsForLimitedCupStatic(
-            prefs: SharedPreferences?,
-            gson: Gson,
-            league: String,
-            isShow6: Boolean = false
-        ): List<Pair<Long, List<String>>> {
-            if (prefs == null || isShow6 || !isLimitedCupFormatStatic(league)) return emptyList()
-            val stdLeague = getSameCpStandardLeagueKeyStatic(league)
-            val rawStdLogs = loadSeasonLogsForLeagueStatic(prefs, gson, stdLeague, isShow6 = false, empiricalLimit = null)
-            CACHED_GBL_STD_SEASON_LOGS[stdLeague] = rawStdLogs
-            if (rawStdLogs.isEmpty()) return emptyList()
-            val normCup = normalizeLeagueKeyStatic(league)
-            val eligiblePool = getTop100MetaCandidatesForLeagueStatic(normCup, 350).map { it.name }
-                .ifEmpty { getTopMetaPoolForLeagueStatic(league) }
-            val eligibleBaseSet = eligiblePool.map { FormResolver.extractBaseSpecies(it).lowercase() }.toSet()
-            if (eligibleBaseSet.isEmpty()) return rawStdLogs
-            return rawStdLogs.mapNotNull { (ts, opps) ->
-                val filteredOpps = opps.filter { o ->
-                    val b = FormResolver.extractBaseSpecies(o).lowercase()
-                    b.isNotEmpty() && b in eligibleBaseSet
-                }
-                if (filteredOpps.isNotEmpty()) ts to filteredOpps else null
-            }
-        }
 
         data class TeamArchetypeEvaluationResult(
             val orderedSlots: List<TeamMember>,
@@ -7915,1241 +1775,16 @@ class OverlayService : LifecycleService() {
             val synergySummary: String = ""
         )
 
-        private val ALL_18_TYPES = listOf(
+        internal val ALL_18_TYPES = listOf(
             "normal", "fire", "water", "electric", "grass", "ice",
             "fighting", "poison", "ground", "flying", "psychic", "bug",
             "rock", "ghost", "dragon", "dark", "steel", "fairy"
         )
 
-        private val CRITICAL_META_TYPES = setOf(
+        internal val CRITICAL_META_TYPES = setOf(
             "ground", "water", "fighting", "fairy", "flying", "steel", "dark", "ghost", "dragon", "ice", "electric"
         )
 
-        fun computePositionWeightedBrStatic(
-            slot: TeamMember,
-            oppName: String,
-            league: String,
-            role: String // "LEAD" | "SWAP" | "CLOSER"
-        ): Double {
-            fun br(sU: Int, sO: Int): Double = calculateMatchupRatingStatic(
-                myName = slot.name,
-                oppName = oppName,
-                userShields = sU,
-                oppShields = sO,
-                league = league,
-                myFastMove = slot.fastMove,
-                myCharged1 = slot.chargedMove1,
-                myCharged2 = slot.chargedMove2,
-                myCp = slot.cp,
-                myIvs = slot.ivs
-            ).toDouble()
-
-            return when (role.uppercase()) {
-                "LEAD" -> 0.45 * br(1, 1) + 0.35 * br(2, 2) + 0.10 * br(0, 0) + 0.05 * br(1, 2) + 0.05 * br(2, 1)
-                "SWAP" -> 0.40 * br(1, 1) + 0.20 * br(1, 0) + 0.20 * br(0, 1) + 0.10 * br(2, 1) + 0.10 * br(0, 0)
-                else -> 0.50 * br(0, 0) + 0.20 * br(1, 0) + 0.15 * br(0, 1) + 0.15 * br(1, 1)
-            }
-        }
-
-        fun computeBlendedSeasonMetaStatic(
-            league: String,
-            seasonLogs: List<Pair<Long, List<String>>>,
-            isShow6: Boolean = false,
-            customLogWeightPct: Int? = null,
-            customDecayFactor: Double? = null,
-            sameCpStandardLogs: List<Pair<Long, List<String>>> = emptyList(),
-            customLimitedStdBlendPct: Int? = null,
-            customLimitedStdDecay: Double? = null,
-            customSheetWeightPct: Int? = null,
-            empiricalOnlyLimit: Int? = null
-        ): BlendedSeasonMetaDistribution {
-            val normKey = normalizeLeagueKeyStatic(league)
-            val rankedPool = TOP_30_RANKED_POOL_CACHE[normKey] ?: run {
-                val computed = getTop100MetaCandidatesForLeagueStatic(normKey, 120)
-                    .map { it.name }
-                    .ifEmpty { getTopMetaPoolForLeagueStatic(league) }
-                if (DYNAMIC_POKEMON_DATABASE.isNotEmpty()) {
-                    TOP_30_RANKED_POOL_CACHE[normKey] = computed
-                }
-                computed
-            }
-
-            val pvpokeRankMap = LinkedHashMap<String, Int>()
-            rankedPool.forEachIndexed { idx, name ->
-                pvpokeRankMap.putIfAbsent(name, idx + 1)
-            }
-            val eligibleLowerMap = rankedPool.associateBy { it.lowercase() }
-            val eligibleBaseMap = rankedPool.associateBy { FormResolver.extractBaseSpecies(it).lowercase() }
-
-            val rawMeta = LinkedHashMap<String, Double>()
-            var rawMetaSum = 0.0
-            rankedPool.forEachIndexed { idx, name ->
-                val w = kotlin.math.exp(-0.045 * idx.toDouble())
-                rawMeta[name] = (rawMeta[name] ?: 0.0) + w
-                rawMetaSum += w
-            }
-            val pMeta = rawMeta.mapValues { (_, v) -> if (rawMetaSum > 0.0) v / rawMetaSum else 0.0 }
-
-            // Sort current-season logs newest-first
-            val sortedAllLogs = seasonLogs
-                .filter { it.second.any { opp -> opp.isNotBlank() && !opp.equals("Waiting...", ignoreCase = true) } }
-                .sortedByDescending { it.first }
-            val sortedLogs = if (empiricalOnlyLimit != null && empiricalOnlyLimit > 0) {
-                sortedAllLogs.take(empiricalOnlyLimit)
-            } else {
-                sortedAllLogs
-            }
-
-            val nMatches = sortedLogs.size
-            val lambda = (customDecayFactor ?: (if (isShow6) activeShow6MetaDecayFactor.toDouble() else activeGblMetaDecayFactor.toDouble()))
-                .coerceIn(0.0, 0.25)
-
-            val rawHistLead = LinkedHashMap<String, Double>()
-            var rawHistLeadSum = 0.0
-            val rawHistBack = LinkedHashMap<String, Double>()
-            var rawHistBackSum = 0.0
-            val rawHistField = LinkedHashMap<String, Double>()
-            var rawHistFieldSum = 0.0
-            val rawSeenCounts = LinkedHashMap<String, Int>()
-
-            sortedLogs.forEachIndexed { idx, (_, opps) ->
-                val recencyWeight = if (empiricalOnlyLimit != null) 1.0 else kotlin.math.exp(-lambda * idx.toDouble())
-                val cleanedOpps = opps.map { it.trim() }.filter { it.isNotEmpty() && !it.equals("Waiting...", ignoreCase = true) }
-                cleanedOpps.firstOrNull()?.let { leadName ->
-                    val canonical = eligibleLowerMap[leadName.lowercase()] ?: leadName
-                    rawHistLead[canonical] = (rawHistLead[canonical] ?: 0.0) + recencyWeight
-                    rawHistLeadSum += recencyWeight
-                }
-                cleanedOpps.drop(1).forEach { backName ->
-                    val canonical = eligibleLowerMap[backName.lowercase()] ?: backName
-                    rawHistBack[canonical] = (rawHistBack[canonical] ?: 0.0) + recencyWeight
-                    rawHistBackSum += recencyWeight
-                }
-                cleanedOpps.forEach { oppRaw ->
-                    val canonical = eligibleLowerMap[oppRaw.lowercase()] ?: oppRaw
-                    rawHistField[canonical] = (rawHistField[canonical] ?: 0.0) + recencyWeight
-                    rawHistFieldSum += recencyWeight
-                    rawSeenCounts[canonical] = (rawSeenCounts[canonical] ?: 0) + 1
-                }
-            }
-
-            // GBL Blind 3 Limited Cup Same-CP Standard League Blending (eligible species only, starts at 50% default and fades out as cup logs grow)
-            val isLimitedCup = !isShow6 && isLimitedCupFormatStatic(league)
-            val resolvedStdLogs = if (isLimitedCup) {
-                sameCpStandardLogs.ifEmpty { resolveCachedSameCpStandardLogsForCupStatic(league) }
-            } else emptyList()
-            val sortedStdLogs = if (empiricalOnlyLimit == null && isLimitedCup && resolvedStdLogs.isNotEmpty()) {
-                resolvedStdLogs
-                    .filter { it.second.any { opp -> opp.isNotBlank() && !opp.equals("Waiting...", ignoreCase = true) } }
-                    .sortedByDescending { it.first }
-            } else emptyList()
-
-            val rawStdLead = LinkedHashMap<String, Double>()
-            var rawStdLeadSum = 0.0
-            val rawStdBack = LinkedHashMap<String, Double>()
-            var rawStdBackSum = 0.0
-            val rawStdField = LinkedHashMap<String, Double>()
-            var rawStdFieldSum = 0.0
-
-            sortedStdLogs.forEachIndexed { idx, (_, opps) ->
-                val recW = kotlin.math.exp(-lambda * idx.toDouble())
-                val cleaned = opps.mapNotNull { raw ->
-                    val tr = raw.trim()
-                    if (tr.isEmpty() || tr.equals("Waiting...", ignoreCase = true)) null
-                    else eligibleLowerMap[tr.lowercase()] ?: eligibleBaseMap[FormResolver.extractBaseSpecies(tr).lowercase()]
-                }
-                cleaned.firstOrNull()?.let { lName ->
-                    rawStdLead[lName] = (rawStdLead[lName] ?: 0.0) + recW
-                    rawStdLeadSum += recW
-                }
-                cleaned.drop(1).forEach { bName ->
-                    rawStdBack[bName] = (rawStdBack[bName] ?: 0.0) + recW
-                    rawStdBackSum += recW
-                }
-                cleaned.forEach { fName ->
-                    rawStdField[fName] = (rawStdField[fName] ?: 0.0) + recW
-                    rawStdFieldSum += recW
-                }
-            }
-
-            // Show 6 Battle Frontier Google Spreadsheet usage distribution
-            val rawSheetField = LinkedHashMap<String, Double>()
-            var rawSheetSum = 0.0
-            if (isShow6 && empiricalOnlyLimit == null) {
-                for (sp in rankedPool) {
-                    val uPct = getShow6UsagePctStatic(normKey, sp)
-                    if (uPct > 0.0) {
-                        rawSheetField[sp] = uPct
-                        rawSheetSum += uPct
-                    }
-                }
-            }
-
-            val maxLogW = ((customLogWeightPct ?: if (isShow6) activeShow6MetaLogWeightPct else activeGblMetaLogWeightPct).coerceIn(0, 100)) / 100.0
-            val stdBlendMaxW = ((customLimitedStdBlendPct ?: activeLimitedStdBlendPctGbl).coerceIn(0, 100)) / 100.0
-            val stdDecayBeta = (customLimitedStdDecay ?: activeLimitedStdDecayGbl.toDouble()).coerceIn(0.01, 0.30)
-            val sheetPrefW = ((customSheetWeightPct ?: activeShow6UsageWeightPct).coerceIn(0, 100)) / 100.0
-
-            val wHist: Double
-            val wStdCup: Double
-            val wSheet: Double
-            val wMeta: Double
-
-            if (empiricalOnlyLimit != null) {
-                wHist = if (nMatches > 0) 1.0 else 0.0
-                wStdCup = 0.0
-                wSheet = 0.0
-                wMeta = if (nMatches > 0) 0.0 else 1.0
-            } else {
-                val rawWHist = if (nMatches > 0) maxLogW * min(1.0, nMatches.toDouble() / 50.0) else 0.0
-                val remAfterHist = (1.0 - rawWHist).coerceAtLeast(0.0)
-                val rawWStd = if (isLimitedCup && rawStdFieldSum > 0.0) {
-                    min(remAfterHist, stdBlendMaxW * kotlin.math.exp(-stdDecayBeta * nMatches.toDouble()))
-                } else 0.0
-                val remAfterStd = (remAfterHist - rawWStd).coerceAtLeast(0.0)
-                val rawWSheet = if (isShow6 && rawSheetSum > 0.0) {
-                    remAfterStd * sheetPrefW
-                } else 0.0
-                val rawWMeta = (remAfterStd - rawWSheet).coerceAtLeast(0.0)
-                val sumW = (rawWHist + rawWStd + rawWSheet + rawWMeta).takeIf { it > 0.0 } ?: 1.0
-                wHist = rawWHist / sumW
-                wStdCup = rawWStd / sumW
-                wSheet = rawWSheet / sumW
-                wMeta = rawWMeta / sumW
-            }
-
-            val allSpecies = if (empiricalOnlyLimit != null && nMatches > 0) {
-                (rawHistField.keys + rawHistLead.keys + rawHistBack.keys).distinct()
-            } else {
-                (pMeta.keys + rawHistLead.keys + rawHistField.keys + rawStdField.keys + rawSheetField.keys).distinct()
-            }
-
-            val leadWeights = LinkedHashMap<String, Double>()
-            val fieldWeights = LinkedHashMap<String, Double>()
-            val backWeights = LinkedHashMap<String, Double>()
-
-            for (sp in allSpecies) {
-                val mProb = pMeta[sp] ?: 0.0
-                val sProb = if (rawSheetSum > 0.0) (rawSheetField[sp] ?: 0.0) / rawSheetSum else mProb
-                val lHistProb = if (rawHistLeadSum > 0.0) (rawHistLead[sp] ?: 0.0) / rawHistLeadSum else mProb
-                val fHistProb = if (rawHistFieldSum > 0.0) (rawHistField[sp] ?: 0.0) / rawHistFieldSum else mProb
-                val bHistProb = if (rawHistBackSum > 0.0) (rawHistBack[sp] ?: 0.0) / rawHistBackSum else fHistProb
-
-                val lStdProb = if (rawStdLeadSum > 0.0) (rawStdLead[sp] ?: 0.0) / rawStdLeadSum else mProb
-                val fStdProb = if (rawStdFieldSum > 0.0) (rawStdField[sp] ?: 0.0) / rawStdFieldSum else mProb
-                val bStdProb = if (rawStdBackSum > 0.0) (rawStdBack[sp] ?: 0.0) / rawStdBackSum else fStdProb
-
-                leadWeights[sp] = wHist * lHistProb + wStdCup * lStdProb + wSheet * sProb + wMeta * mProb
-                fieldWeights[sp] = wHist * fHistProb + wStdCup * fStdProb + wSheet * sProb + wMeta * mProb
-                backWeights[sp] = wHist * bHistProb + wStdCup * bStdProb + wSheet * sProb + wMeta * mProb
-            }
-
-            val lTotal = leadWeights.values.sum().takeIf { it > 0.0 } ?: 1.0
-            val fTotal = fieldWeights.values.sum().takeIf { it > 0.0 } ?: 1.0
-            val bTotal = backWeights.values.sum().takeIf { it > 0.0 } ?: 1.0
-
-            return BlendedSeasonMetaDistribution(
-                leadWeights = leadWeights.mapValues { it.value / lTotal },
-                fieldWeights = fieldWeights.mapValues { it.value / fTotal },
-                backWeights = backWeights.mapValues { it.value / bTotal },
-                seasonMatchCount = nMatches,
-                sameCpStdMatchCount = sortedStdLogs.size,
-                histWeightPct = (wHist * 100.0).roundToInt(),
-                stdCupWeightPct = (wStdCup * 100.0).roundToInt(),
-                sheetWeightPct = (wSheet * 100.0).roundToInt(),
-                metaWeightPct = (wMeta * 100.0).roundToInt(),
-                rawSeenCounts = rawSeenCounts,
-                pvpokeRankMap = pvpokeRankMap
-            )
-        }
-
-        fun buildTopMetaPokemonEntriesStatic(
-            dist: BlendedSeasonMetaDistribution,
-            limit: Int = 35
-        ): List<BlendedMetaPokemonEntry> {
-            return dist.fieldWeights.entries
-                .filter { it.value > 0.0005 }
-                .sortedByDescending { it.value }
-                .take(limit)
-                .mapIndexed { idx, (name, fProb) ->
-                    val lProb = dist.leadWeights[name] ?: 0.0
-                    val bProb = dist.backWeights[name] ?: fProb
-                    BlendedMetaPokemonEntry(
-                        rank = idx + 1,
-                        name = name,
-                        blendedSharePct = ((fProb * 1000.0).roundToInt() / 10.0),
-                        leadSharePct = ((lProb * 1000.0).roundToInt() / 10.0),
-                        backSharePct = ((bProb * 1000.0).roundToInt() / 10.0),
-                        logSeenCount = dist.rawSeenCounts[name] ?: 0,
-                        pvpokeRank = dist.pvpokeRankMap[name]
-                    )
-                }
-        }
-
-        /**
-         * v6.00: In-App Personalized & Blended Top Meta Cores Engine.
-         * Combines:
-         * 1. Recency-weighted empirical pair co-occurrence from current-season battle logs,
-         * 2. Same-CP Standard League eligible pair co-occurrence (for Limited Cups),
-         * 3. In-app PvPoke defensive type-coverage & role synergy pairs from the Top 36 league candidates, and
-         * 4. Imported Battle Frontier Google Spreadsheet Core usage (when in Show 6 mode).
-         */
-        fun computeBlendedSeasonMetaCoresStatic(
-            league: String,
-            seasonLogs: List<Pair<Long, List<String>>>,
-            isShow6: Boolean = false,
-            customLogWeightPct: Int? = null,
-            customDecayFactor: Double? = null,
-            sameCpStandardLogs: List<Pair<Long, List<String>>> = emptyList(),
-            customLimitedStdBlendPct: Int? = null,
-            customLimitedStdDecay: Double? = null,
-            customSheetWeightPct: Int? = null,
-            empiricalOnlyLimit: Int? = null,
-            maxCores: Int = 20
-        ): List<BlendedMetaCoreEntry> {
-            val dist = computeBlendedSeasonMetaStatic(
-                league = league,
-                seasonLogs = seasonLogs,
-                isShow6 = isShow6,
-                customLogWeightPct = customLogWeightPct,
-                customDecayFactor = customDecayFactor,
-                sameCpStandardLogs = sameCpStandardLogs,
-                customLimitedStdBlendPct = customLimitedStdBlendPct,
-                customLimitedStdDecay = customLimitedStdDecay,
-                customSheetWeightPct = customSheetWeightPct,
-                empiricalOnlyLimit = empiricalOnlyLimit
-            )
-            val normKey = normalizeLeagueKeyStatic(league)
-            val lambda = (customDecayFactor ?: (if (isShow6) activeShow6MetaDecayFactor.toDouble() else activeGblMetaDecayFactor.toDouble()))
-                .coerceIn(0.0, 0.25)
-
-            fun canonicalPairKey(a: String, b: String): Pair<String, String> {
-                return if (a.compareTo(b, ignoreCase = true) <= 0) a to b else b to a
-            }
-
-            val topSpecies = dist.fieldWeights.entries.sortedByDescending { it.value }.map { it.key }.take(40)
-            val canonicalByBase = LinkedHashMap<String, String>()
-            for (sp in topSpecies) {
-                canonicalByBase.putIfAbsent(FormResolver.extractBaseSpecies(sp).lowercase(), sp)
-            }
-
-            fun resolveCanonicalSpecies(raw: String): String {
-                val tr = raw.trim()
-                val b = FormResolver.extractBaseSpecies(tr).lowercase()
-                return canonicalByBase[b] ?: tr
-            }
-
-            // 1. Empirical pair weights & raw counts from season logs
-            val sortedAll = seasonLogs
-                .filter { it.second.size >= 2 }
-                .sortedByDescending { it.first }
-            val sortedLogs = if (empiricalOnlyLimit != null && empiricalOnlyLimit > 0) sortedAll.take(empiricalOnlyLimit) else sortedAll
-
-            val histPairWeights = LinkedHashMap<Pair<String, String>, Double>()
-            val histPairCounts = LinkedHashMap<Pair<String, String>, Int>()
-            var histPairSum = 0.0
-
-            sortedLogs.forEachIndexed { idx, (_, opps) ->
-                val recW = if (empiricalOnlyLimit != null) 1.0 else kotlin.math.exp(-lambda * idx.toDouble())
-                val distinctOpps = opps.map { resolveCanonicalSpecies(it) }
-                    .filter { it.isNotBlank() && !it.equals("Waiting...", ignoreCase = true) }
-                    .distinctBy { FormResolver.extractBaseSpecies(it).lowercase() }
-                for (i in 0 until distinctOpps.size) {
-                    for (j in (i + 1) until distinctOpps.size) {
-                        val pk = canonicalPairKey(distinctOpps[i], distinctOpps[j])
-                        histPairWeights[pk] = (histPairWeights[pk] ?: 0.0) + recW
-                        histPairCounts[pk] = (histPairCounts[pk] ?: 0) + 1
-                        histPairSum += recW
-                    }
-                }
-            }
-
-            if (empiricalOnlyLimit != null && histPairCounts.isNotEmpty()) {
-                val totalMatches = max(1, sortedLogs.size)
-                return histPairWeights.entries
-                    .sortedByDescending { it.value }
-                    .take(maxCores)
-                    .mapIndexed { idx, (pair, _) ->
-                        val cnt = histPairCounts[pair] ?: 1
-                        val pct = ((cnt * 1000.0) / totalMatches.toDouble()).roundToInt() / 10.0
-                        BlendedMetaCoreEntry(
-                            rank = idx + 1,
-                            monA = pair.first,
-                            monB = pair.second,
-                            blendedPairPct = pct,
-                            logPairCount = cnt,
-                            synergyScore = 82,
-                            roleArchetype = "Logged Core"
-                        )
-                    }
-            }
-
-            // 2. Same-CP Standard League eligible pair weights for GBL Blind 3 Limited Cups
-            val stdPairWeights = LinkedHashMap<Pair<String, String>, Double>()
-            var stdPairSum = 0.0
-            val resolvedCoreStdLogs = if (!isShow6 && isLimitedCupFormatStatic(league)) {
-                sameCpStandardLogs.ifEmpty { resolveCachedSameCpStandardLogsForCupStatic(league) }
-            } else emptyList()
-            if (empiricalOnlyLimit == null && !isShow6 && isLimitedCupFormatStatic(league) && resolvedCoreStdLogs.isNotEmpty()) {
-                resolvedCoreStdLogs.sortedByDescending { it.first }.forEachIndexed { idx, (_, opps) ->
-                    val recW = kotlin.math.exp(-lambda * idx.toDouble())
-                    val distinctOpps = opps.map { resolveCanonicalSpecies(it) }
-                        .filter { it.isNotBlank() && !it.equals("Waiting...", ignoreCase = true) }
-                        .distinctBy { FormResolver.extractBaseSpecies(it).lowercase() }
-                    for (i in 0 until distinctOpps.size) {
-                        for (j in (i + 1) until distinctOpps.size) {
-                            val pk = canonicalPairKey(distinctOpps[i], distinctOpps[j])
-                            stdPairWeights[pk] = (stdPairWeights[pk] ?: 0.0) + recW
-                            stdPairSum += recW
-                        }
-                    }
-                }
-            }
-
-            // 3. Show 6 Battle Frontier Spreadsheet Core weights
-            val sheetPairWeights = LinkedHashMap<Pair<String, String>, Double>()
-            var sheetPairSum = 0.0
-            if (isShow6 && empiricalOnlyLimit == null) {
-                val bfCores = BATTLE_FRONTIER_CORES_MAP[normKey] ?: BATTLE_FRONTIER_CORES_MAP["GREAT LEAGUE"].orEmpty()
-                for (c in bfCores) {
-                    val pk = canonicalPairKey(resolveCanonicalSpecies(c.monA), resolveCanonicalSpecies(c.monB))
-                    if (!FormResolver.extractBaseSpecies(pk.first).equals(FormResolver.extractBaseSpecies(pk.second), ignoreCase = true)) {
-                        sheetPairWeights[pk] = (sheetPairWeights[pk] ?: 0.0) + c.usagePct
-                        sheetPairSum += c.usagePct
-                    }
-                }
-            }
-
-            // 4. In-App Synthetic Defensive & Role Synergy Core Priors across top 26 field species
-            val synPairWeights = LinkedHashMap<Pair<String, String>, Double>()
-            val synPairSynergyScore = LinkedHashMap<Pair<String, String>, Int>()
-            var synPairSum = 0.0
-            val topPoolForCores = topSpecies.take(26)
-            val metaTypesMap = HashMap<String, List<String>>()
-            val weaksMap = HashMap<String, Set<String>>()
-            val resistsMap = HashMap<String, Set<String>>()
-            for (sp in topPoolForCores) {
-                val m = resolveRecommendedMovesForSpecies(sp, normKey)
-                val tList = m?.types ?: listOf("normal")
-                metaTypesMap[sp] = tList
-                val wks = ALL_18_TYPES.filter { atkT -> getTypeEffectivenessStatic(atkT, tList) >= 1.4 }.toSet()
-                val rss = ALL_18_TYPES.filter { atkT -> getTypeEffectivenessStatic(atkT, tList) <= 0.7 }.toSet()
-                weaksMap[sp] = wks
-                resistsMap[sp] = rss
-            }
-
-            for (i in 0 until topPoolForCores.size) {
-                for (j in (i + 1) until topPoolForCores.size) {
-                    val a = topPoolForCores[i]
-                    val b = topPoolForCores[j]
-                    if (FormResolver.extractBaseSpecies(a).equals(FormResolver.extractBaseSpecies(b), ignoreCase = true)) continue
-                    val wA = weaksMap[a] ?: emptySet()
-                    val rA = resistsMap[a] ?: emptySet()
-                    val wB = weaksMap[b] ?: emptySet()
-                    val rB = resistsMap[b] ?: emptySet()
-                    val sharedWeak = wA.intersect(wB).size
-                    if (sharedWeak >= 2) continue
-                    val aCoversB = wB.count { it in rA }
-                    val bCoversA = wA.count { it in rB }
-                    val coverageFactor = 1.0 + 0.32 * (aCoversB + bCoversA) - 0.38 * sharedWeak
-                    if (coverageFactor <= 0.65) continue
-                    val pA = dist.fieldWeights[a] ?: 0.01
-                    val pB = dist.fieldWeights[b] ?: 0.01
-                    val synW = kotlin.math.sqrt(pA * pB) * coverageFactor
-                    val pk = canonicalPairKey(a, b)
-                    synPairWeights[pk] = synW
-                    synPairSum += synW
-                    val synScore = (68 + (aCoversB + bCoversA) * 7 - sharedWeak * 9).coerceIn(50, 99)
-                    synPairSynergyScore[pk] = synScore
-                }
-            }
-
-            val wHist = dist.histWeightPct / 100.0
-            val wStd = dist.stdCupWeightPct / 100.0
-            val wSheet = dist.sheetWeightPct / 100.0
-            val wMeta = dist.metaWeightPct / 100.0
-
-            val allPairs = (histPairWeights.keys + stdPairWeights.keys + sheetPairWeights.keys + synPairWeights.keys).distinct()
-            val combined = LinkedHashMap<Pair<String, String>, Double>()
-            for (pk in allPairs) {
-                val hP = if (histPairSum > 0.0) (histPairWeights[pk] ?: 0.0) / histPairSum else 0.0
-                val stP = if (stdPairSum > 0.0) (stdPairWeights[pk] ?: 0.0) / stdPairSum else 0.0
-                val shP = if (sheetPairSum > 0.0) (sheetPairWeights[pk] ?: 0.0) / sheetPairSum else 0.0
-                val syP = if (synPairSum > 0.0) (synPairWeights[pk] ?: 0.0) / synPairSum else 0.0
-                val score = wHist * hP + wStd * stP + wSheet * shP + wMeta * syP
-                if (score > 0.0) {
-                    combined[pk] = score
-                }
-            }
-
-            val totalScore = combined.values.sum().takeIf { it > 0.0 } ?: 1.0
-            return combined.entries
-                .sortedByDescending { it.value }
-                .take(maxCores)
-                .mapIndexed { idx, (pair, rawVal) ->
-                    val normPct = ((rawVal / totalScore) * 240.0).coerceIn(0.8, 68.0)
-                    val roundedPct = (normPct * 10.0).roundToInt() / 10.0
-                    val cnt = histPairCounts[pair] ?: 0
-                    val synScore = synPairSynergyScore[pair] ?: if (cnt > 0) min(96, 78 + cnt * 3) else 76
-                    val archLabel = when {
-                        cnt >= 2 -> "Personal Core (${cnt}x)"
-                        isShow6 && sheetPairWeights.containsKey(pair) -> "Frontier Core"
-                        synScore >= 85 -> "Synergy Core"
-                        else -> "Meta Core"
-                    }
-                    BlendedMetaCoreEntry(
-                        rank = idx + 1,
-                        monA = pair.first,
-                        monB = pair.second,
-                        blendedPairPct = roundedPct,
-                        logPairCount = cnt,
-                        synergyScore = synScore,
-                        roleArchetype = archLabel
-                    )
-                }
-        }
-
-        /**
-         * v6.00 Pillar 1 & Pillar 2: Live Opponent Backline Predictor & Swap Hard-Counter Risk Evaluator.
-         */
-        fun predictOpponentBacklineStatic(
-            league: String,
-            revealedOpponents: List<String>,
-            myTeamSlots: List<TeamMember>,
-            myActiveSlotIdx: Int,
-            playerFaintedSlots: BooleanArray,
-            isShow6: Boolean,
-            knownShow6UnrevealedPool: List<String>,
-            seasonLogs: List<Pair<Long, List<String>>>,
-            sameCpStandardLogs: List<Pair<Long, List<String>>>
-        ): BacklinePredictionResult {
-            val cleanRevealed = revealedOpponents
-                .map { it.trim() }
-                .filter { it.isNotEmpty() && !it.equals("Waiting...", ignoreCase = true) }
-                .distinctBy { FormResolver.extractBaseSpecies(it).lowercase() }
-
-            if (cleanRevealed.isEmpty() || cleanRevealed.size >= 3) {
-                return BacklinePredictionResult(
-                    candidates = emptyList(),
-                    swapPunishRiskPct = 0,
-                    swapPunishThreatCode = "NONE",
-                    hudLine2Text = ""
-                )
-            }
-
-            val dist = computeBlendedSeasonMetaStatic(
-                league = league,
-                seasonLogs = seasonLogs,
-                isShow6 = isShow6,
-                sameCpStandardLogs = sameCpStandardLogs
-            )
-            val cores = computeBlendedSeasonMetaCoresStatic(
-                league = league,
-                seasonLogs = seasonLogs,
-                isShow6 = isShow6,
-                sameCpStandardLogs = sameCpStandardLogs,
-                maxCores = 30
-            )
-
-            val revealedBases = cleanRevealed.map { FormResolver.extractBaseSpecies(it).lowercase() }.toSet()
-            val candidatePool = if (isShow6 && knownShow6UnrevealedPool.isNotEmpty()) {
-                knownShow6UnrevealedPool.filter { FormResolver.extractBaseSpecies(it).lowercase() !in revealedBases }
-            } else {
-                dist.backWeights.entries
-                    .sortedByDescending { it.value }
-                    .map { it.key }
-                    .filter { FormResolver.extractBaseSpecies(it).lowercase() !in revealedBases }
-                    .take(24)
-            }
-
-            if (candidatePool.isEmpty()) {
-                return BacklinePredictionResult(
-                    candidates = emptyList(),
-                    swapPunishRiskPct = 0,
-                    swapPunishThreatCode = "NONE",
-                    hudLine2Text = ""
-                )
-            }
-
-            val normLeague = normalizeLeagueKeyStatic(league)
-            // Compute weakness types of revealed opponents so we can boost backline candidates that cover them
-            val revealedWeaknesses = HashSet<String>()
-            for (rev in cleanRevealed) {
-                val rMeta = resolveRecommendedMovesForSpecies(rev, normLeague)
-                val rTypes = rMeta?.types ?: listOf("normal")
-                for (t in ALL_18_TYPES) {
-                    if (getTypeEffectivenessStatic(t, rTypes) >= 1.4) {
-                        revealedWeaknesses.add(t)
-                    }
-                }
-            }
-
-            // Identify user's primary bench swap slot
-            val aliveBenchIdx = (0..2).filter { !playerFaintedSlots.getOrElse(it) { false } && it != myActiveSlotIdx }
-            val primarySwapSlot = aliveBenchIdx.firstOrNull()?.let { myTeamSlots.getOrNull(it) } ?: myTeamSlots.getOrNull(1)
-
-            val rawScores = LinkedHashMap<String, Double>()
-            val hardCountersSwapMap = HashMap<String, Boolean>()
-
-            for (cand in candidatePool) {
-                val candBase = FormResolver.extractBaseSpecies(cand).lowercase()
-                var corePartnerBoost = 0.0
-                for (rev in cleanRevealed) {
-                    val revBase = FormResolver.extractBaseSpecies(rev).lowercase()
-                    val matchedCore = cores.firstOrNull { c ->
-                        val aB = FormResolver.extractBaseSpecies(c.monA).lowercase()
-                        val bB = FormResolver.extractBaseSpecies(c.monB).lowercase()
-                        (aB == candBase && bB == revBase) || (aB == revBase && bB == candBase)
-                    }
-                    if (matchedCore != null) {
-                        corePartnerBoost += matchedCore.blendedPairPct * 0.035 + matchedCore.logPairCount * 0.18
-                    }
-                }
-
-                val candMeta = resolveRecommendedMovesForSpecies(cand, normLeague)
-                val candTypes = candMeta?.types ?: listOf("normal")
-                val coveredCount = revealedWeaknesses.count { wk -> getTypeEffectivenessStatic(wk, candTypes) <= 0.7 }
-                val coverageBoost = 1.0 + coveredCount * 0.22
-                val fieldPrior = (dist.backWeights[cand] ?: dist.fieldWeights[cand] ?: 0.02).coerceAtLeast(0.008)
-
-                val score = (0.55 * corePartnerBoost + 0.45 * (fieldPrior * 12.0)) * coverageBoost
-                rawScores[cand] = score.coerceAtLeast(0.01)
-
-                if (primarySwapSlot != null) {
-                    val swapBrVsCand = getOverlayRealtimeMatchupRatingStatic(
-                        myName = primarySwapSlot.name,
-                        oppName = cand,
-                        userShields = 1,
-                        oppShields = 1,
-                        league = normLeague,
-                        myFastMove = primarySwapSlot.fastMove,
-                        myCharged1 = primarySwapSlot.chargedMove1,
-                        myCharged2 = primarySwapSlot.chargedMove2,
-                        myCp = primarySwapSlot.cp,
-                        myIvs = primarySwapSlot.ivs
-                    )
-                    hardCountersSwapMap[cand] = swapBrVsCand <= 375
-                } else {
-                    hardCountersSwapMap[cand] = false
-                }
-            }
-
-            val totalRaw = rawScores.values.sum().takeIf { it > 0.0 } ?: 1.0
-            val unrevealedSlotsCount = (3 - cleanRevealed.size).coerceIn(1, 2)
-            val sortedCands = rawScores.entries.sortedByDescending { it.value }
-
-            var swapPunishProbSum = 0.0
-            var topPunishThreatCode = ""
-            for ((cand, sc) in sortedCands.take(6)) {
-                val p = sc / totalRaw
-                if (hardCountersSwapMap[cand] == true) {
-                    swapPunishProbSum += p
-                    if (topPunishThreatCode.isEmpty()) {
-                        topPunishThreatCode = abbrPokeCompactStatic(cand)
-                    }
-                }
-            }
-            val swapPunishRiskPct = (swapPunishProbSum * 100.0 * (if (unrevealedSlotsCount == 2) 1.35 else 1.0))
-                .roundToInt()
-                .coerceIn(5, 95)
-
-            val topPredictions = sortedCands.take(3).mapIndexed { i, (cand, sc) ->
-                val rawShare = (sc / totalRaw)
-                val scaledPct = (rawShare * (if (unrevealedSlotsCount == 2) 155.0 else 115.0))
-                    .roundToInt()
-                    .coerceIn(12, 89)
-                BacklineCandidatePrediction(
-                    name = cand,
-                    code = abbrPokeCompactStatic(cand),
-                    likelihoodPct = scaledPct,
-                    hardCountersMySwap = hardCountersSwapMap[cand] == true,
-                    bestRoleVsMe = if (i == 0) "Core" else "Cover"
-                )
-            }
-
-            val top2Str = topPredictions.take(2).joinToString(" · ") { "${it.code} ${it.likelihoodPct}%" }
-            val riskTag = when {
-                swapPunishRiskPct >= 55 -> "Rsk:HI"
-                swapPunishRiskPct >= 35 -> "Rsk:MD"
-                else -> "Rsk:LO"
-            }
-            val prefix = if (cleanRevealed.size == 1) "🔮 Back:" else "🔮 3rd:"
-            val hudLine2 = "$prefix $top2Str | $riskTag"
-
-            return BacklinePredictionResult(
-                candidates = topPredictions,
-                swapPunishRiskPct = swapPunishRiskPct,
-                swapPunishThreatCode = topPunishThreatCode.ifEmpty { topPredictions.firstOrNull()?.code ?: "BACK" },
-                hudLine2Text = hudLine2
-            )
-        }
-
-        fun abbrPokeCompactStatic(name: String, isShadow: Boolean = false): String {
-            if (name.isBlank() || name.equals("Waiting...", ignoreCase = true)) return "OPP"
-            val sh = isShadow || name.startsWith("Shadow ", ignoreCase = true) || name.contains("(Shadow)", ignoreCase = true)
-            val clean = name
-                .replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "")
-                .replace(Regex("\\s*\\(Shadow\\)", RegexOption.IGNORE_CASE), "")
-                .trim()
-            val lower = clean.lowercase()
-            val mapped = when {
-                lower.contains("palkia") && lower.contains("origin") -> "PAL-O"
-                lower.contains("dialga") && lower.contains("origin") -> "DIA-O"
-                lower.contains("giratina") && lower.contains("origin") -> "GIR-O"
-                lower.contains("giratina") && lower.contains("altered") -> "GIR-A"
-                lower.contains("zacian") && lower.contains("crowned") -> "ZAC-C"
-                lower.contains("zamazenta") && lower.contains("crowned") -> "ZAM-C"
-                lower.contains("necrozma") && lower.contains("dusk") -> "NDM"
-                lower.contains("necrozma") && lower.contains("dawn") -> "NDW"
-                lower.contains("kyurem") && lower.contains("white") -> "KYU-W"
-                lower.contains("kyurem") && lower.contains("black") -> "KYU-B"
-                lower.contains("landorus") && lower.contains("therian") -> "LND-T"
-                lower.contains("enamorus") && lower.contains("therian") -> "ENM-T"
-                lower.contains("keldeo") -> "KELD"
-                lower.contains("ho-oh") || lower == "ho oh" -> "HO-OH"
-                lower.contains("zygarde") -> "ZYG"
-                lower.contains("xerneas") -> "XERN"
-                lower.contains("yveltal") -> "YVEL"
-                lower.contains("solgaleo") -> "SOLG"
-                lower.contains("lunala") -> "LUNA"
-                lower.contains("mewtwo") -> "M2"
-                lower.contains("kyogre") -> "KYOG"
-                lower.contains("groudon") -> "GROU"
-                lower.contains("rhyperior") -> "RHYP"
-                lower.contains("florges") -> "FLRG"
-                lower.contains("primarina") -> "PRIM"
-                lower.contains("feraligatr") -> "FERAL"
-                lower.contains("clodsire") -> "CLOD"
-                lower.contains("mandibuzz") -> "MANDI"
-                lower.contains("annihilape") -> "APE"
-                lower.contains("azumarill") -> "AZU"
-                lower.contains("bastiodon") -> "BASTI"
-                lower.contains("wigglytuff") -> "WIGG"
-                lower.contains("talonflame") -> "TALON"
-                lower.contains("weezing") && lower.contains("galar") -> "GWEEZ"
-                lower.contains("corsola") && lower.contains("galar") -> "GCORS"
-                lower.contains("moltres") && lower.contains("galar") -> "GMOLT"
-                lower.contains("stunfisk") && lower.contains("galar") -> "GFISK"
-                lower.contains("ninetales") && lower.contains("alola") -> "A9T"
-                lower.contains("sandslash") && lower.contains("alola") -> "ASAND"
-                lower.contains("muk") && lower.contains("alola") -> "AMUK"
-                lower.contains("marowak") && lower.contains("alola") -> "AWAK"
-                lower.contains("deoxys") && lower.contains("defense") -> "DD"
-                lower.contains("urshifu") && lower.contains("single") -> "URS-S"
-                lower.contains("urshifu") && lower.contains("rapid") -> "URS-R"
-                else -> {
-                    val base = clean
-                        .replace(Regex("^(Kanto|Alolan|Galarian|Hisuian|Paldean|Mega|Primal)\\s+", RegexOption.IGNORE_CASE), "")
-                        .split(Regex("[\\s(]+"))
-                        .firstOrNull()
-                        ?.uppercase() ?: "MON"
-                    base.take(5)
-                }
-            }
-            return if (sh && !mapped.startsWith("S-")) {
-                "S${mapped.replace("-", "").take(4)}"
-            } else {
-                mapped.take(5)
-            }
-        }
-
-        fun abbrMoveCompactStatic(moveName: String): String {
-            if (moveName.isBlank()) return "Move"
-            val lower = moveName.trim().lowercase()
-            return when (lower) {
-                "spacial rend" -> "SpRend"
-                "aqua tail" -> "AqTail"
-                "roar of time" -> "RoTime"
-                "iron head" -> "IrHead"
-                "draco meteor" -> "DrMet"
-                "close combat" -> "ClsCmb"
-                "wild charge" -> "WldChg"
-                "play rough" -> "PlyRgh"
-                "behemoth blade" -> "BhBlde"
-                "behemoth bash" -> "BhBash"
-                "sacred fire" -> "SacFir"
-                "brave bird" -> "BrvBrd"
-                "sunsteel strike" -> "SunStk"
-                "moongeist beam" -> "MnBeam"
-                "dark pulse" -> "DrkPls"
-                "outrage" -> "Outrg"
-                "fusion bolt" -> "FsBolt"
-                "fusion flare" -> "FsFlar"
-                "glaciate" -> "Glciat"
-                "freeze shock" -> "FrzShk"
-                "ice burn" -> "IceBrn"
-                "secret sword" -> "SecSw"
-                "sacred sword" -> "SacSw"
-                "sandsear storm" -> "SndStm"
-                "stone edge" -> "StnEdg"
-                "superpower" -> "SprPwr"
-                "rock slide" -> "RckSld"
-                "mud bomb" -> "MdBomb"
-                "rock wrecker" -> "RckWrk"
-                "breaking swipe" -> "BrkSwp"
-                "surf" -> "Surf"
-                "crunch" -> "Crunch"
-                "earthquake" -> "Eq"
-                "moonblast" -> "Mnblst"
-                "geomancy" -> "Geomn"
-                "oblivion wing" -> "ObWing"
-                "focus blast" -> "FocBls"
-                "psystrike" -> "Psystk"
-                "shadow ball" -> "ShBall"
-                "origin pulse" -> "OrPuls"
-                "precipice blades" -> "PrBlde"
-                "fire punch" -> "FirPnc"
-                "ice punch" -> "IcePnc"
-                "thunder punch" -> "ThdPnc"
-                "dynamic punch" -> "DynPnc"
-                "hydro cannon" -> "HydCan"
-                "ice beam" -> "IceBm"
-                "foul play" -> "FlPlay"
-                "aerial ace" -> "AerAce"
-                "night slash" -> "NgtSlh"
-                "icy wind" -> "IcyWnd"
-                "swift" -> "Swift"
-                "body slam" -> "BdySlm"
-                "disarming voice" -> "DisVc"
-                "psyshock" -> "Psysck"
-                "meteor mash" -> "MetMsh"
-                "nature's madness" -> "NatMad"
-                "dazzling gleam" -> "DazGlm"
-                "sludge wave" -> "SlgWav"
-                "sludge bomb" -> "SlgBmb"
-                "overheat" -> "OvrHt"
-                "blast burn" -> "BlsBrn"
-                "frenzy plant" -> "FrzPlt"
-                "leaf blade" -> "LfBlde"
-                "drill run" -> "DrlRun"
-                "high horsepower" -> "HiHors"
-                "scald" -> "Scald"
-                "liquidation" -> "Liquid"
-                "rage fist" -> "RgFist"
-                "aura wheel" -> "AuWhl"
-                "brutal swing" -> "BrtSwg"
-                "trailblaze" -> "Trlblz"
-                "flame charge" -> "FlmChg"
-                else -> {
-                    val clean = moveName.replace(Regex("[()\\-]"), " ").trim()
-                    val words = clean.split(Regex("\\s+")).filter { it.isNotEmpty() }
-                    if (words.size >= 2) {
-                        (words[0].take(3) + words[1].take(3)).take(6)
-                    } else {
-                        clean.take(6)
-                    }
-                }
-            }
-        }
-
-        fun evaluateOrAutoOrderTeamStatic(
-            slots: List<TeamMember>,
-            league: String,
-            seasonLogs: List<Pair<Long, List<String>>>,
-            autoReorder: Boolean,
-            manualArchetypeOverride: String? = null
-        ): TeamArchetypeEvaluationResult {
-            val padded = if (slots.size >= 3) slots.take(3) else {
-                val top = getTopMetaPoolForLeagueStatic(league)
-                (slots + listOf(
-                    TeamMember(top.getOrElse(0) { "Clodsire" }, 1500, "Poison Sting", "Earthquake", "Stone Edge"),
-                    TeamMember(top.getOrElse(1) { "Feraligatr" }, 1500, "Shadow Claw", "Hydro Cannon", "Ice Beam"),
-                    TeamMember(top.getOrElse(2) { "Mandibuzz" }, 1500, "Snarl", "Dark Pulse", "Aerial Ace")
-                )).take(3)
-            }
-
-            val dist = computeBlendedSeasonMetaStatic(league, seasonLogs)
-
-            fun getTypesFor(slot: TeamMember): List<String> {
-                val meta = resolveRecommendedMovesForSpecies(slot.name, league)
-                return meta?.types?.map { it.lowercase() }?.ifEmpty { listOf("normal") } ?: listOf("normal")
-            }
-
-            fun getWeaknesses(types: List<String>): Set<String> {
-                return ALL_18_TYPES.filter { atkType ->
-                    getTypeEffectivenessStatic(atkType, types) > 1.05
-                }.toSet()
-            }
-
-            fun resistsAll(types: List<String>, sharedWeaknesses: Set<String>): Boolean {
-                if (sharedWeaknesses.isEmpty()) return false
-                val resistedCount = sharedWeaknesses.count { wType ->
-                    getTypeEffectivenessStatic(wType, types) < 0.95
-                }
-                val notWeakToAny = sharedWeaknesses.all { wType ->
-                    getTypeEffectivenessStatic(wType, types) <= 1.05
-                }
-                return resistedCount == sharedWeaknesses.size || (resistedCount >= 1 && notWeakToAny && sharedWeaknesses.size >= 2)
-            }
-
-            // Single-pass per-slot role BR precomputation against all opponents in dist
-            val allOpps = (dist.leadWeights.keys + dist.fieldWeights.keys).distinct()
-            val slotLeadBrMap = Array(3) { HashMap<String, Double>(allOpps.size) }
-            val slotSwapBrMap = Array(3) { HashMap<String, Double>(allOpps.size) }
-            val slotCloserBrMap = Array(3) { HashMap<String, Double>(allOpps.size) }
-
-            for (i in 0 until 3) {
-                val slot = padded[i]
-                for (opp in allOpps) {
-                    val b00 = calculateMatchupRatingStatic(slot.name, opp, 0, 0, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs).toDouble()
-                    val b01 = calculateMatchupRatingStatic(slot.name, opp, 0, 1, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs).toDouble()
-                    val b10 = calculateMatchupRatingStatic(slot.name, opp, 1, 0, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs).toDouble()
-                    val b11 = calculateMatchupRatingStatic(slot.name, opp, 1, 1, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs).toDouble()
-                    val b12 = calculateMatchupRatingStatic(slot.name, opp, 1, 2, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs).toDouble()
-                    val b21 = calculateMatchupRatingStatic(slot.name, opp, 2, 1, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs).toDouble()
-                    val b22 = calculateMatchupRatingStatic(slot.name, opp, 2, 2, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs).toDouble()
-
-                    slotLeadBrMap[i][opp] = 0.45 * b11 + 0.35 * b22 + 0.10 * b00 + 0.05 * b12 + 0.05 * b21
-                    slotSwapBrMap[i][opp] = 0.40 * b11 + 0.20 * b10 + 0.20 * b01 + 0.10 * b21 + 0.10 * b00
-                    slotCloserBrMap[i][opp] = 0.50 * b00 + 0.20 * b10 + 0.15 * b01 + 0.15 * b11
-                }
-            }
-
-            fun computeSwapStatsForIndex(idx: Int): Pair<Double, Double> {
-                var mu = 0.0
-                val map = slotSwapBrMap[idx]
-                for ((opp, prob) in dist.fieldWeights) {
-                    if (prob <= 0.0) continue
-                    mu += prob * (map[opp] ?: 500.0)
-                }
-                var variance = 0.0
-                for ((opp, prob) in dist.fieldWeights) {
-                    if (prob <= 0.0) continue
-                    val diff = (map[opp] ?: mu) - mu
-                    variance += prob * diff * diff
-                }
-                val sigma = kotlin.math.sqrt(max(0.0, variance))
-                return (mu - 0.5 * sigma) to mu
-            }
-
-            fun computeCloserStatsForIndex(idx: Int): Double {
-                var mu = 0.0
-                val map = slotCloserBrMap[idx]
-                for ((opp, prob) in dist.fieldWeights) {
-                    if (prob <= 0.0) continue
-                    mu += prob * (map[opp] ?: 500.0)
-                }
-                return mu
-            }
-
-            fun computeBaitVsSweeperScore(slot: TeamMember, swapSafeScore: Double, closerMean: Double): Pair<Double, Double> {
-                val c1Stats = resolveChargedMoveStatsStatic(slot.chargedMove1)
-                val c2Stats = resolveChargedMoveStatsStatic(slot.chargedMove2)
-                val minEnergy = min(c1Stats.energyCost, c2Stats.energyCost).toDouble()
-                val maxPower = max(c1Stats.power, c2Stats.power).toDouble()
-                val isShadow = slot.name.contains("Shadow", ignoreCase = true)
-                val baitScore = swapSafeScore + (55.0 - minEnergy) * 1.4 - (if (isShadow) 8.0 else 0.0)
-                val sweeperScore = closerMean + (maxPower - 80.0) * 0.45 + (if (isShadow) 14.0 else 0.0)
-                return baitScore to sweeperScore
-            }
-
-            val typesList = padded.map { getTypesFor(it) }
-            val weakList = padded.indices.map { getWeaknesses(typesList[it]) }
-
-            // Check candidate B-pairs: (1,2) with Lead 0, (0,2) with Lead 1, (0,1) with Lead 2
-            val candidatePairs = listOf(
-                Triple(0, 1, 2),
-                Triple(1, 0, 2),
-                Triple(2, 0, 1)
-            )
-
-            var detectedAbbTriplet: Triple<Int, Int, Int>? = null
-            var detectedSharedWeaknesses: List<String> = emptyList()
-            var bestSharedScore = -1
-
-            for ((aIdx, b1Idx, b2Idx) in candidatePairs) {
-                val shared = weakList[b1Idx].intersect(weakList[b2Idx])
-                val hasCritical = shared.any { it in CRITICAL_META_TYPES }
-                if ((shared.size >= 2 || (shared.size == 1 && hasCritical)) && resistsAll(typesList[aIdx], shared)) {
-                    val score = shared.size * 10 + (if (aIdx == 0) 3 else 0)
-                    if (score > bestSharedScore) {
-                        bestSharedScore = score
-                        detectedAbbTriplet = Triple(aIdx, b1Idx, b2Idx)
-                        detectedSharedWeaknesses = shared.map { it.replaceFirstChar { c -> c.uppercase() } }
-                    }
-                }
-            }
-
-            // Detect Symmetric Yin-Yang Duo-Core: Core 1 and Core 2 cover each other's weaknesses while Pivot acts as Safe Swap
-            fun countCoveredWeaknesses(defenderTypes: List<String>, partnerWeaknesses: Set<String>): Int {
-                return partnerWeaknesses.count { wType ->
-                    getTypeEffectivenessStatic(wType, defenderTypes) < 0.95
-                }
-            }
-
-            fun hasSharedUnresistedWeakness(typesA: List<String>, typesB: List<String>): Boolean {
-                val wA = getWeaknesses(typesA)
-                val wB = getWeaknesses(typesB)
-                return wA.intersect(wB).isNotEmpty()
-            }
-
-            val swapScores = (0 until 3).map { computeSwapStatsForIndex(it).first }
-            val closerMeans = (0 until 3).map { computeCloserStatsForIndex(it) }
-
-            var detectedDuoTriplet: Triple<Int, Int, Int>? = null // (core1Idx, pivotIdx, core2Idx)
-            var detectedDuoCoveredTypes: List<String> = emptyList()
-            var bestDuoScore = -1.0
-
-            val duoPairs = listOf(
-                Triple(0, 1, 2), // Core (0, 2) + Pivot 1
-                Triple(0, 2, 1), // Core (0, 1) + Pivot 2
-                Triple(1, 0, 2)  // Core (1, 2) + Pivot 0
-            )
-            for ((cA, piv, cB) in duoPairs) {
-                if (hasSharedUnresistedWeakness(typesList[cA], typesList[cB])) continue
-                val aCoversB = countCoveredWeaknesses(typesList[cA], weakList[cB])
-                val bCoversA = countCoveredWeaknesses(typesList[cB], weakList[cA])
-                if (aCoversB >= 1 && bCoversA >= 1 && (aCoversB + bCoversA) >= 3) {
-                    val symScore = (aCoversB + bCoversA) * 18.0 + swapScores[piv] * 0.12 + (if (piv == 1) 8.0 else 0.0)
-                    if (symScore > bestDuoScore) {
-                        bestDuoScore = symScore
-                        detectedDuoTriplet = Triple(cA, piv, cB)
-                        val mutCovered = (weakList[cB].filter { getTypeEffectivenessStatic(it, typesList[cA]) < 0.95 } +
-                            weakList[cA].filter { getTypeEffectivenessStatic(it, typesList[cB]) < 0.95 })
-                            .distinct()
-                            .map { it.replaceFirstChar { c -> c.uppercase() } }
-                        detectedDuoCoveredTypes = mutCovered
-                    }
-                }
-            }
-
-            val cleanOverride = manualArchetypeOverride?.trim()?.uppercase()?.takeIf { it == "ABB" || it == "ABC" || it == "DUO" }
-            val archetype: String = cleanOverride ?: when {
-                detectedAbbTriplet != null -> "ABB"
-                detectedDuoTriplet != null -> "DUO"
-                else -> "ABC"
-            }
-
-            if (archetype == "ABB" && detectedSharedWeaknesses.isEmpty()) {
-                val backShared = weakList[1].intersect(weakList[2])
-                detectedSharedWeaknesses = backShared.map { it.replaceFirstChar { c -> c.uppercase() } }
-            } else if (archetype == "DUO") {
-                if (detectedDuoCoveredTypes.isEmpty()) {
-                    val mutCovered = (weakList[2].filter { getTypeEffectivenessStatic(it, typesList[0]) < 0.95 } +
-                        weakList[0].filter { getTypeEffectivenessStatic(it, typesList[2]) < 0.95 })
-                        .distinct()
-                        .map { it.replaceFirstChar { c -> c.uppercase() } }
-                    detectedDuoCoveredTypes = mutCovered
-                }
-                detectedSharedWeaknesses = detectedDuoCoveredTypes
-            }
-
-            val finalOrderIndices: List<Int>
-            if (archetype == "ABB") {
-                if (autoReorder) {
-                    val (aIdx, bA, bB) = detectedAbbTriplet ?: Triple(0, 1, 2)
-                    val (baitA, sweepA) = computeBaitVsSweeperScore(padded[bA], swapScores[bA], closerMeans[bA])
-                    val (baitB, sweepB) = computeBaitVsSweeperScore(padded[bB], swapScores[bB], closerMeans[bB])
-                    val b1First = (baitA + sweepB) >= (baitB + sweepA)
-                    finalOrderIndices = if (b1First) listOf(aIdx, bA, bB) else listOf(aIdx, bB, bA)
-                } else {
-                    finalOrderIndices = listOf(0, 1, 2)
-                }
-            } else if (archetype == "DUO") {
-                if (autoReorder) {
-                    val (cA, piv, cB) = detectedDuoTriplet ?: run {
-                        // Pick highest Swap BR member as Pivot (Slot 2) and place the 2 core partners at Slots 1 & 3
-                        val bestPiv = (0..2).maxByOrNull { swapScores[it] } ?: 1
-                        val others = (0..2).filter { it != bestPiv }
-                        Triple(others[0], bestPiv, others[1])
-                    }
-                    var leadA = 0.0
-                    var leadB = 0.0
-                    for ((opp, prob) in dist.leadWeights) {
-                        if (prob <= 0.0) continue
-                        leadA += prob * (slotLeadBrMap[cA][opp] ?: 500.0)
-                        leadB += prob * (slotLeadBrMap[cB][opp] ?: 500.0)
-                    }
-                    finalOrderIndices = if (leadA >= leadB) listOf(cA, piv, cB) else listOf(cB, piv, cA)
-                } else {
-                    finalOrderIndices = listOf(0, 1, 2)
-                }
-            } else {
-                if (autoReorder) {
-                    // Keep Slot 1 (index 0) fixed; place higher Swap BR backline member in Slot 2
-                    finalOrderIndices = if (swapScores[1] >= swapScores[2]) listOf(0, 1, 2) else listOf(0, 2, 1)
-                } else {
-                    finalOrderIndices = listOf(0, 1, 2)
-                }
-            }
-
-            val i1 = finalOrderIndices[0]
-            val i2 = finalOrderIndices[1]
-            val i3 = finalOrderIndices[2]
-            val ordered = finalOrderIndices.map { padded[it] }
-            val slot1 = ordered[0]
-            val slot2 = ordered[1]
-            val slot3 = ordered[2]
-
-            var leadAgg = 0.0
-            for ((opp, prob) in dist.leadWeights) {
-                if (prob <= 0.0) continue
-                leadAgg += prob * (slotLeadBrMap[i1][opp] ?: 500.0)
-            }
-
-            var machAgg = 0.0
-            for ((opp, prob) in dist.fieldWeights) {
-                if (prob <= 0.0) continue
-                val r1 = slotLeadBrMap[i1][opp] ?: 500.0
-                val r2 = slotSwapBrMap[i2][opp] ?: 500.0
-                val r3 = slotCloserBrMap[i3][opp] ?: 500.0
-                machAgg += prob * max(r1, max(r2, r3))
-            }
-
-            val leadAggVal = leadAgg.roundToInt().coerceIn(150, 850)
-            val machAggVal = machAgg.roundToInt().coerceIn(150, 850)
-            val safeSwapBrVal = swapScores[i2].roundToInt().coerceIn(150, 850)
-            val closerSwapBrVal = swapScores[i3].roundToInt().coerceIn(150, 850)
-            val closerBrVal = closerMeans[i3].roundToInt().coerceIn(150, 850)
-
-            // Audit Top 50 Meta Targets for Key Wins, Key Threats (with BR1/BR2/BR3), and Core Breakers (with BR1/BR2/BR3)
-            val top50MetaThreats = dist.fieldWeights.entries
-                .sortedByDescending { it.value }
-                .map { it.key }
-                .take(50)
-                .ifEmpty { getTopMetaPoolForLeagueStatic(league).take(50) }
-            val targetAuditTotal = top50MetaThreats.size.takeIf { it > 0 } ?: 50
-
-            fun formatThreatWithMemberBrs(threatName: String): String {
-                val r0 = slotLeadBrMap[i1][threatName] ?: 500.0
-                val r1 = slotSwapBrMap[i2][threatName] ?: 500.0
-                val r2 = slotCloserBrMap[i3][threatName] ?: 500.0
-                val oppBr0 = (1000.0 - r0).roundToInt().coerceIn(100, 900)
-                val oppBr1 = (1000.0 - r1).roundToInt().coerceIn(100, 900)
-                val oppBr2 = (1000.0 - r2).roundToInt().coerceIn(100, 900)
-                return "$threatName($oppBr0/$oppBr1/$oppBr2)"
-            }
-
-            val beatenTargets = ArrayList<String>()
-            val coreBreakersRaw = ArrayList<String>()
-            val keyThreatsRaw = ArrayList<String>()
-
-            for (threat in top50MetaThreats) {
-                val r0 = slotLeadBrMap[i1][threat] ?: 500.0
-                val r1 = slotSwapBrMap[i2][threat] ?: 500.0
-                val r2 = slotCloserBrMap[i3][threat] ?: 500.0
-                val maxBr = max(r0, max(r1, r2))
-                val minBackBr = min(r1, r2)
-
-                if (maxBr >= 525.0) {
-                    beatenTargets.add(threat)
-                }
-
-                if (r0 < 495.0 && r1 < 495.0 && r2 < 495.0) {
-                    coreBreakersRaw.add(threat)
-                } else if ((r0 < 475.0 && minBackBr < 485.0) || maxBr < 512.0) {
-                    keyThreatsRaw.add(threat)
-                }
-            }
-
-            if (keyThreatsRaw.isEmpty()) {
-                val sortedTough = top50MetaThreats
-                    .filter { it !in coreBreakersRaw }
-                    .map { t ->
-                        val r0 = slotLeadBrMap[i1][t] ?: 500.0
-                        val r1 = slotSwapBrMap[i2][t] ?: 500.0
-                        val r2 = slotCloserBrMap[i3][t] ?: 500.0
-                        t to (min(r0, (r1 + r2) / 2.0) + max(r0, max(r1, r2)) * 0.35)
-                    }
-                    .sortedBy { it.second }
-                for ((tName, _) in sortedTough.take(3)) {
-                    keyThreatsRaw.add(tName)
-                }
-            }
-
-            val keyThreatsFormatted = keyThreatsRaw.take(6).map { formatThreatWithMemberBrs(it) }
-            val coreBreakersFormatted = coreBreakersRaw.take(6).map { formatThreatWithMemberBrs(it) }
-
-            val roleLabels = when (archetype) {
-                "ABB" -> listOf("Lead (A)", "Bait Swap (B1)", "Sweeper (B2)")
-                "DUO" -> listOf("Lead (Core 1)", "Pivot (Swap)", "Co-Core (Core 2)")
-                else -> listOf("Lead", "Safe Swap", "Closer")
-            }
-
-            val altMovesetSlots = ordered.mapIndexed { sIdx, m ->
-                val stdMeta = resolveRecommendedMovesForSpecies(m.name, league, m.cp, m.ivs)
-                val stdFast = stdMeta?.defaultFastMove ?: m.fastMove
-                val stdC1 = stdMeta?.chargedMove1 ?: m.chargedMove1
-                val stdC2 = stdMeta?.chargedMove2 ?: m.chargedMove2
-                val stdPair = listOf(stdC1.lowercase(), stdC2.lowercase()).sorted().joinToString("+")
-                val curPair = listOf(m.chargedMove1.lowercase(), m.chargedMove2.lowercase()).sorted().joinToString("+")
-                val isAlt = !stdFast.equals(m.fastMove, ignoreCase = true) || stdPair != curPair
-                AntiMetaAltMovesetInfo(
-                    slotIndex = sIdx,
-                    roleLabel = roleLabels[sIdx],
-                    pokemonName = m.name,
-                    isAltMoveset = isAlt,
-                    standardFastMove = stdFast,
-                    standardCharged1 = stdC1,
-                    standardCharged2 = stdC2,
-                    fastMove = m.fastMove,
-                    chargedMove1 = m.chargedMove1,
-                    chargedMove2 = m.chargedMove2,
-                    roleBrDelta = 0,
-                    coreBrDelta = 0
-                )
-            }
-
-            val winsPreview = beatenTargets.take(5).joinToString(", ").ifEmpty { "Broad neutral coverage" }
-            val threatsPreview = keyThreatsFormatted.take(4).joinToString(", ").ifEmpty { "None prominent" }
-            val breakersPreview = if (coreBreakersFormatted.isNotEmpty()) {
-                coreBreakersFormatted.take(4).joinToString(", ")
-            } else {
-                "None (0 hard core breakers in Top 50)"
-            }
-            val altNotes = altMovesetSlots
-                .filter { it.isAltMoveset }
-                .map { "${it.pokemonName} (${it.fastMove} + ${it.chargedMove1}/${it.chargedMove2})" }
-            val altSuffix = if (altNotes.isNotEmpty()) " • Alt Moveset Tech: ${altNotes.joinToString("; ")}." else ""
-
-            val synergySummary = when (archetype) {
-                "ABB" -> {
-                    val sharedStr = if (detectedSharedWeaknesses.isNotEmpty()) detectedSharedWeaknesses.joinToString("/").uppercase() else "BACKLINE"
-                    "ABB Lineup: ${slot1.name} (Lead A) covers backline $sharedStr weakness for ${slot2.name} (Bait B1) & ${slot3.name} (Sweeper B2). Beats ${beatenTargets.size}/$targetAuditTotal Top Meta. Key Wins: $winsPreview. Key Threats: $threatsPreview. Core Breakers: $breakersPreview.$altSuffix"
-                }
-                "DUO" -> {
-                    val covStr = if (detectedSharedWeaknesses.isNotEmpty()) " (${detectedSharedWeaknesses.joinToString("/")} covered)" else ""
-                    "Duo-Core (Yin-Yang 1⇄3): ${slot1.name} (Core 1 Lead, $leadAggVal BR) & ${slot3.name} (Core 2 Co-Core, $closerBrVal BR) mutually cover each other's weaknesses$covStr, with ${slot2.name} ($safeSwapBrVal BR) as the Safe Swap Pivot. Beats ${beatenTargets.size}/$targetAuditTotal Top Meta. Key Wins: $winsPreview. Key Threats: $threatsPreview. Core Breakers: $breakersPreview.$altSuffix"
-                }
-                else -> {
-                    "ABC Balanced Core: ${slot1.name} Lead ($leadAggVal BR) + ${slot2.name} Safe Swap ($safeSwapBrVal BR) + ${slot3.name} Closer ($closerBrVal BR). Beats ${beatenTargets.size}/$targetAuditTotal Top Meta. Key Wins: $winsPreview. Key Threats: $threatsPreview. Core Breakers: $breakersPreview.$altSuffix"
-                }
-            }
-
-            val reasonSummary = when (archetype) {
-                "ABB" -> {
-                    val sharedStr = if (detectedSharedWeaknesses.isNotEmpty()) detectedSharedWeaknesses.joinToString("/") else "Backline"
-                    "⚡ Auto-Detected ABB Lineup (Shared $sharedStr weakness covered by ${slot1.name}) → #1 Lead (A): ${slot1.name} (Lead BR $leadAggVal) • #2 Bait Swap (B1): ${slot2.name} (Swap BR $safeSwapBrVal) • #3 Sweeper (B2): ${slot3.name} (Closer BR $closerBrVal) • $synergySummary"
-                }
-                "DUO" -> {
-                    "☯️ Auto-Detected Duo-Core Lineup (Yin-Yang 1st & 3rd Core) → #1 Core 1 Lead: ${slot1.name} (Lead BR $leadAggVal) • #2 Safe Swap Pivot: ${slot2.name} (Swap BR $safeSwapBrVal) • #3 Core 2 Co-Core: ${slot3.name} (Closer BR $closerBrVal) • $synergySummary"
-                }
-                else -> {
-                    "⚡ Auto-Detected ABC Balanced Core → #1 Lead kept: ${slot1.name} (Lead BR $leadAggVal) • #2 Safe Swap moved to Slot 2: ${slot2.name} (Swap BR $safeSwapBrVal) • #3 Closer: ${slot3.name} (Closer BR $closerBrVal) • $synergySummary"
-                }
-            }
-
-            return TeamArchetypeEvaluationResult(
-                orderedSlots = ordered,
-                archetype = archetype,
-                leadAggBr = leadAggVal,
-                machineAggBr = machAggVal,
-                safeSwapBr = safeSwapBrVal,
-                closerSwapBr = closerSwapBrVal,
-                closerBr = closerBrVal,
-                sharedWeaknesses = detectedSharedWeaknesses,
-                histWeightPct = dist.histWeightPct,
-                seasonMatchCount = dist.seasonMatchCount,
-                reasonSummary = reasonSummary,
-                topMetaTargetsTotal = targetAuditTotal,
-                topMetaWinsCount = beatenTargets.size,
-                keyMetaTargetsBeaten = beatenTargets.take(6),
-                keyThreats = keyThreatsFormatted,
-                coreBreakers = coreBreakersFormatted,
-                altMovesetSlots = altMovesetSlots,
-                synergySummary = synergySummary
-            )
-        }
 
         data class RoleUpgradeSuggestion(
             val slotIndex: Int, // 0 = Lead, 1 = Safe Swap, 2 = Closer
@@ -9173,418 +1808,6 @@ class OverlayService : LifecycleService() {
             val closerUpgrades: List<RoleUpgradeSuggestion>
         )
 
-        fun getTop100MetaCandidatesForLeagueStatic(league: String, maxLimit: Int = 200): List<TeamMember> {
-            val normLeague = normalizeLeagueKeyStatic(league)
-            val isBfCup = isBattleFrontierLeagueStatic(normLeague)
-            val allowMega = isMegaAllowedInLeagueStatic(normLeague)
-            val cpCap = getLeagueCpCapStatic(normLeague)
-            val isGreat = cpCap <= 1500
-            val isUltra = cpCap == 2500
-
-            val allMeta = getAllPokemonMeta()
-            val bySpeciesId = allMeta.associateBy { it.speciesId.lowercase() }
-            val result = ArrayList<TeamMember>(maxLimit)
-            val seenNames = HashSet<String>()
-            val rankingsMap = LIVE_RANKINGS_MAP[normLeague]
-
-            fun isMegaOrPrimal(name: String, speciesId: String): Boolean {
-                return isMegaOrPrimalSpeciesStatic(name) || isMegaOrPrimalSpeciesStatic(speciesId)
-            }
-
-            fun addCandidateFromName(candidateName: String) {
-                if (result.size >= maxLimit) return
-                val cleanKey = candidateName.trim().lowercase()
-                if (cleanKey.isEmpty() || !seenNames.add(cleanKey)) return
-                val resolved = resolveRecommendedMovesForSpecies(candidateName, normLeague) ?: return
-                val baseId = resolved.speciesId.lowercase().removeSuffix("_shadow")
-                val inCupRankings = rankingsMap?.containsKey(baseId) == true || rankingsMap?.containsKey("${baseId}_shadow") == true
-                if (!allowMega && !inCupRankings && isMegaOrPrimal(resolved.name, resolved.speciesId)) {
-                    seenNames.remove(cleanKey)
-                    return
-                }
-                val scaled = computeEffectiveCombatStats(resolved, normLeague)
-                val finalDisplayName = if (candidateName.startsWith("Shadow ", ignoreCase = true) && !scaled.name.startsWith("Shadow ", ignoreCase = true)) {
-                    "Shadow ${scaled.name}"
-                } else {
-                    scaled.name
-                }
-                val ivDefault = when {
-                    isGreat -> scaled.defaultIvsGl
-                    isUltra -> scaled.defaultIvsUl
-                    else -> "15/15/15"
-                }
-                result.add(
-                    TeamMember(
-                        name = finalDisplayName,
-                        cp = scaled.defaultCp,
-                        fastMove = scaled.defaultFastMove,
-                        chargedMove1 = scaled.chargedMove1,
-                        chargedMove2 = scaled.chargedMove2,
-                        ivs = ivDefault
-                    )
-                )
-            }
-
-            if (rankingsMap != null && rankingsMap.isNotEmpty()) {
-                val sortedEntries = rankingsMap.values.sortedBy { it.rank }
-                for (entry in sortedEntries) {
-                    if (result.size >= maxLimit) break
-                    val rawId = entry.speciesId.lowercase()
-                    val isShad = rawId.endsWith("_shadow")
-                    val baseId = rawId.removeSuffix("_shadow")
-                    val meta = bySpeciesId[rawId] ?: bySpeciesId[baseId]
-                    if (meta != null) {
-                        if (isShad && !FormResolver.isShadowEligibleVariant(meta)) continue
-                        val displayName = if (isShad && !meta.name.startsWith("Shadow ", ignoreCase = true)) {
-                            "Shadow ${meta.name}"
-                        } else {
-                            meta.name
-                        }
-                        addCandidateFromName(displayName)
-                    }
-                }
-                if (isBfCup && result.size >= 15) {
-                    return result.take(maxLimit)
-                }
-            }
-
-            if (isBfCup && result.isEmpty()) {
-                val bfSeed = when (normLeague) {
-                    "BATTLE FRONTIER (SPECTRAL)" -> listOf(
-                        "Ninetales (Alolan)", "Weezing (Galarian)", "Dewgong", "Piloswine", "Shadow Piloswine",
-                        "Ledian", "Jellicent", "Arctibax", "Talonflame", "Shadow Scizor", "Scizor",
-                        "Shadowcharizard", "Swalot", "Golisopod", "Shadow Gligar", "Gligar", "Drifblim",
-                        "Shadow Drifblim", "Sandslash (Alolan)", "Shadow Sandslash (Alolan)"
-                    )
-                    "BATTLE FRONTIER (CAULDRON)" -> listOf(
-                        "Weezing (Galarian)", "Guzzlord", "Drapion", "Shadow Drapion", "Tentacruel",
-                        "Skuntank", "Shadow Skuntank", "Dragalge", "Overqwil", "Nidoqueen", "Shadow Nidoqueen",
-                        "Qwilfish (Hisuian)", "Venusaur", "Shadow Venusaur", "Muk (Alolan)", "Toxicroak",
-                        "Swalot", "Salazzle", "Golbat", "Crobat"
-                    )
-                    else -> listOf(
-                        "Rhyperior", "Shadow Rhyperior", "Florges", "Zacian", "Kyurem", "Gyarados",
-                        "Shadow Gyarados", "Dragonite", "Shadow Dragonite", "Landorus (Therian)", "Garchomp",
-                        "Shadow Garchomp", "Primarina", "Mamoswine", "Shadow Mamoswine", "Metagross",
-                        "Togekiss", "Excadrill", "Ursaluna", "Goodra"
-                    )
-                }
-                for (name in bfSeed) {
-                    if (result.size >= maxLimit) break
-                    addCandidateFromName(name)
-                }
-                return result.take(maxLimit)
-            }
-
-            if (result.size < maxLimit) {
-                val sortedFallback = allMeta
-                    .filter { !it.speciesId.endsWith("_shadow", ignoreCase = true) && !it.name.startsWith("Shadow ", ignoreCase = true) }
-                    .sortedBy {
-                        when {
-                            isGreat -> it.glRank
-                            isUltra -> it.ulRank
-                            else -> it.mlRank
-                        }
-                    }
-                for (meta in sortedFallback) {
-                    if (result.size >= maxLimit) break
-                    val (_, shadowPreferred) = FormResolver.getEffectiveRankAndShadowForVariant(meta, normLeague)
-                    if (shadowPreferred && FormResolver.isShadowEligibleVariant(meta)) {
-                        addCandidateFromName("Shadow ${meta.name}")
-                        if (result.size < maxLimit) addCandidateFromName(meta.name)
-                    } else {
-                        addCandidateFromName(meta.name)
-                        if (result.size < maxLimit && FormResolver.isShadowEligibleVariant(meta)) {
-                            addCandidateFromName("Shadow ${meta.name}")
-                        }
-                    }
-                }
-            }
-
-            if (result.size < maxLimit) {
-                for (meta in allMeta) {
-                    if (result.size >= maxLimit) break
-                    if (!allowMega && isMegaOrPrimal(meta.name, meta.speciesId)) continue
-                    addCandidateFromName(meta.name)
-                    if (result.size < maxLimit && !meta.name.startsWith("Shadow ", ignoreCase = true)) {
-                        addCandidateFromName("Shadow ${meta.name}")
-                    }
-                }
-            }
-
-            return result.take(maxLimit)
-        }
-
-        /**
-         * Simulates the Top 200 Meta Pokémon for the active league across all 3 team roles
-         * (#1 Lead, #2 Safe Swap, #3 Closer) against the Top 100 blended season meta and returns
-         * the top 5 upgrades per role ranked by full team synergy (ΔCore BR + defensive weakness coverage)
-         * and role rating delta (ΔRole BR), while enforcing the GBL Species Clause and including Shadow variants.
-         */
-        fun recommendTop3UpgradesPerRoleStatic(
-            slots: List<TeamMember>,
-            league: String,
-            seasonLogs: List<Pair<Long, List<String>>>,
-            manualArchetypeOverride: String? = null
-        ): TeamRoleRecommendationsResult {
-            val baselineEval = evaluateOrAutoOrderTeamStatic(
-                slots = slots,
-                league = league,
-                seasonLogs = seasonLogs,
-                autoReorder = false,
-                manualArchetypeOverride = manualArchetypeOverride
-            )
-            val currentSlots = baselineEval.orderedSlots
-            val dist = computeBlendedSeasonMetaStatic(league, seasonLogs)
-            val allOpps = (dist.leadWeights.keys + dist.fieldWeights.keys).distinct()
-
-            fun getTypesFor(name: String): List<String> {
-                val meta = resolveRecommendedMovesForSpecies(name, league)
-                return meta?.types?.map { it.lowercase() }?.ifEmpty { listOf("normal") } ?: listOf("normal")
-            }
-
-            fun getWeaknesses(types: List<String>): Set<String> {
-                return ALL_18_TYPES.filter { atkType ->
-                    getTypeEffectivenessStatic(atkType, types) > 1.05
-                }.toSet()
-            }
-
-            fun getResistances(types: List<String>): Set<String> {
-                return ALL_18_TYPES.filter { atkType ->
-                    getTypeEffectivenessStatic(atkType, types) < 0.95
-                }.toSet()
-            }
-
-            // Precompute current 3 slots' per-opponent BR maps and type profiles
-            val curLeadMap = Array(3) { HashMap<String, Double>(allOpps.size) }
-            val curSwapMap = Array(3) { HashMap<String, Double>(allOpps.size) }
-            val curCloserMap = Array(3) { HashMap<String, Double>(allOpps.size) }
-            val curTypes = currentSlots.map { getTypesFor(it.name) }
-            val curWeaks = curTypes.map { getWeaknesses(it) }
-            val curResists = curTypes.map { getResistances(it) }
-
-            for (i in 0 until 3) {
-                val s = currentSlots[i]
-                for (opp in allOpps) {
-                    val b00 = calculateMatchupRatingStatic(s.name, opp, 0, 0, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs).toDouble()
-                    val b01 = calculateMatchupRatingStatic(s.name, opp, 0, 1, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs).toDouble()
-                    val b10 = calculateMatchupRatingStatic(s.name, opp, 1, 0, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs).toDouble()
-                    val b11 = calculateMatchupRatingStatic(s.name, opp, 1, 1, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs).toDouble()
-                    val b12 = calculateMatchupRatingStatic(s.name, opp, 1, 2, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs).toDouble()
-                    val b21 = calculateMatchupRatingStatic(s.name, opp, 2, 1, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs).toDouble()
-                    val b22 = calculateMatchupRatingStatic(s.name, opp, 2, 2, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs).toDouble()
-
-                    curLeadMap[i][opp] = 0.45 * b11 + 0.35 * b22 + 0.10 * b00 + 0.05 * b12 + 0.05 * b21
-                    curSwapMap[i][opp] = 0.40 * b11 + 0.20 * b10 + 0.20 * b01 + 0.10 * b21 + 0.10 * b00
-                    curCloserMap[i][opp] = 0.50 * b00 + 0.20 * b10 + 0.15 * b01 + 0.15 * b11
-                }
-            }
-
-            val candidates = getTop100MetaCandidatesForLeagueStatic(league, 200)
-
-            data class PrecomputedCandidate(
-                val member: TeamMember,
-                val baseSpecies: String,
-                val isMega: Boolean,
-                val types: List<String>,
-                val weaknesses: Set<String>,
-                val resistances: Set<String>,
-                val leadMap: Map<String, Double>,
-                val swapMap: Map<String, Double>,
-                val closerMap: Map<String, Double>,
-                val leadAggBr: Int,
-                val safeSwapBr: Int,
-                val closerMeanBr: Int
-            )
-
-            val precomputedPool = candidates.map { cand ->
-                val lMap = HashMap<String, Double>(allOpps.size)
-                val sMap = HashMap<String, Double>(allOpps.size)
-                val cMap = HashMap<String, Double>(allOpps.size)
-
-                for (opp in allOpps) {
-                    val b00 = calculateMatchupRatingStatic(cand.name, opp, 0, 0, league, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-                    val b01 = calculateMatchupRatingStatic(cand.name, opp, 0, 1, league, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-                    val b10 = calculateMatchupRatingStatic(cand.name, opp, 1, 0, league, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-                    val b11 = calculateMatchupRatingStatic(cand.name, opp, 1, 1, league, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-                    val b12 = calculateMatchupRatingStatic(cand.name, opp, 1, 2, league, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-                    val b21 = calculateMatchupRatingStatic(cand.name, opp, 2, 1, league, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-                    val b22 = calculateMatchupRatingStatic(cand.name, opp, 2, 2, league, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-
-                    lMap[opp] = 0.45 * b11 + 0.35 * b22 + 0.10 * b00 + 0.05 * b12 + 0.05 * b21
-                    sMap[opp] = 0.40 * b11 + 0.20 * b10 + 0.20 * b01 + 0.10 * b21 + 0.10 * b00
-                    cMap[opp] = 0.50 * b00 + 0.20 * b10 + 0.15 * b01 + 0.15 * b11
-                }
-
-                var lMean = 0.0
-                for ((opp, prob) in dist.leadWeights) {
-                    if (prob > 0.0) lMean += prob * (lMap[opp] ?: 500.0)
-                }
-
-                var sMean = 0.0
-                var cMean = 0.0
-                for ((opp, prob) in dist.fieldWeights) {
-                    if (prob > 0.0) {
-                        sMean += prob * (sMap[opp] ?: 500.0)
-                        cMean += prob * (cMap[opp] ?: 500.0)
-                    }
-                }
-                var sVar = 0.0
-                for ((opp, prob) in dist.fieldWeights) {
-                    if (prob > 0.0) {
-                        val d = (sMap[opp] ?: sMean) - sMean
-                        sVar += prob * d * d
-                    }
-                }
-                val sSigma = kotlin.math.sqrt(max(0.0, sVar))
-                val safeSwapVal = (sMean - 0.5 * sSigma).roundToInt().coerceIn(150, 850)
-
-                val cTypes = getTypesFor(cand.name)
-                PrecomputedCandidate(
-                    member = cand,
-                    baseSpecies = FormResolver.extractBaseSpecies(cand.name),
-                    isMega = isMegaOrPrimalSpeciesStatic(cand.name),
-                    types = cTypes,
-                    weaknesses = getWeaknesses(cTypes),
-                    resistances = getResistances(cTypes),
-                    leadMap = lMap,
-                    swapMap = sMap,
-                    closerMap = cMap,
-                    leadAggBr = lMean.roundToInt().coerceIn(150, 850),
-                    safeSwapBr = safeSwapVal,
-                    closerMeanBr = cMean.roundToInt().coerceIn(150, 850)
-                )
-            }
-
-            fun rankUpgradesForSlot(slotIdx: Int): List<RoleUpgradeSuggestion> {
-                val otherIdx1 = (slotIdx + 1) % 3
-                val otherIdx2 = (slotIdx + 2) % 3
-                val otherBase1 = FormResolver.extractBaseSpecies(currentSlots[otherIdx1].name)
-                val otherBase2 = FormResolver.extractBaseSpecies(currentSlots[otherIdx2].name)
-                val otherHasMega = listOf(currentSlots[otherIdx1].name, currentSlots[otherIdx2].name).any {
-                    isMegaOrPrimalSpeciesStatic(it)
-                }
-                val currentSlotMember = currentSlots[slotIdx]
-                val isAbb = baselineEval.archetype == "ABB"
-                val roleTitle = when (slotIdx) {
-                    0 -> if (isAbb) "Lead (A)" else "Lead"
-                    1 -> if (isAbb) "Bait Swap (B1)" else "Safe Swap"
-                    else -> if (isAbb) "Sweeper (B2)" else "Closer"
-                }
-                val baselineRoleBr = when (slotIdx) {
-                    0 -> baselineEval.leadAggBr
-                    1 -> baselineEval.safeSwapBr
-                    else -> baselineEval.closerSwapBr
-                }
-
-                val scored = ArrayList<RoleUpgradeSuggestion>()
-
-                for (cand in precomputedPool) {
-                    // Enforce GBL Species Clause against the other 2 slots
-                    if (cand.baseSpecies.equals(otherBase1, ignoreCase = true) ||
-                        cand.baseSpecies.equals(otherBase2, ignoreCase = true)
-                    ) continue
-                    // Exclude identical Pokemon already in this slot
-                    if (cand.member.name.equals(currentSlotMember.name, ignoreCase = true)) continue
-                    // Enforce 1-Mega limit
-                    if (cand.isMega && otherHasMega) continue
-
-                    val newRoleBr = when (slotIdx) {
-                        0 -> cand.leadAggBr
-                        1 -> cand.safeSwapBr
-                        else -> ((cand.safeSwapBr * 0.55) + (cand.closerMeanBr * 0.45)).roundToInt()
-                    }
-                    val roleDelta = newRoleBr - baselineRoleBr
-
-                    var newMachSum = 0.0
-                    for ((opp, prob) in dist.fieldWeights) {
-                        if (prob <= 0.0) continue
-                        val r0 = if (slotIdx == 0) (cand.leadMap[opp] ?: 500.0) else (curLeadMap[0][opp] ?: 500.0)
-                        val r1 = if (slotIdx == 1) (cand.swapMap[opp] ?: 500.0) else (curSwapMap[1][opp] ?: 500.0)
-                        val r2 = if (slotIdx == 2) (cand.closerMap[opp] ?: 500.0) else (curCloserMap[2][opp] ?: 500.0)
-                        newMachSum += prob * max(r0, max(r1, r2))
-                    }
-                    val newMachBr = newMachSum.roundToInt().coerceIn(150, 850)
-                    val machDelta = newMachBr - baselineEval.machineAggBr
-                    val newLeadBr = if (slotIdx == 0) cand.leadAggBr else baselineEval.leadAggBr
-
-                    // Evaluate defensive coverage synergy with the other two teammates
-                    val otherWeaksUnion = curWeaks[otherIdx1].union(curWeaks[otherIdx2])
-                    val otherWeaksShared = curWeaks[otherIdx1].intersect(curWeaks[otherIdx2])
-                    val coveredSharedCount = otherWeaksShared.count { it in cand.resistances }
-                    val coveredUnionCount = otherWeaksUnion.count { it in cand.resistances }
-                    val tripleWeakCount = cand.weaknesses.intersect(otherWeaksShared).size
-
-                    val (synergyBonus, synergyTag) = when {
-                        slotIdx == 0 && otherWeaksShared.isNotEmpty() && coveredSharedCount == otherWeaksShared.size ->
-                            12.0 to "Covers ${otherWeaksShared.take(2).joinToString("/").uppercase()} Core"
-                        slotIdx != 0 && curWeaks[0].any { it in cand.resistances } && tripleWeakCount == 0 -> {
-                            val coveredLeadTypes = curWeaks[0].filter { it in cand.resistances }.take(2).joinToString("/").uppercase()
-                            9.0 to "Covers $coveredLeadTypes"
-                        }
-                        coveredUnionCount >= 2 && tripleWeakCount == 0 ->
-                            6.0 to "Strong Core Synergy"
-                        tripleWeakCount > 0 ->
-                            (-14.0 * tripleWeakCount) to "Shared Weakness Risk"
-                        else ->
-                            0.0 to "Meta Upgrade"
-                    }
-
-                    val composite = 0.55 * machDelta.toDouble() + 0.45 * roleDelta.toDouble() + synergyBonus
-                    val newArch = if (slotIdx == 0 && otherWeaksShared.isNotEmpty() && coveredSharedCount == otherWeaksShared.size) {
-                        "ABB"
-                    } else {
-                        baselineEval.archetype
-                    }
-
-                    scored.add(
-                        RoleUpgradeSuggestion(
-                            slotIndex = slotIdx,
-                            roleTitle = roleTitle,
-                            candidate = cand.member,
-                            newRoleBr = newRoleBr,
-                            roleBrDelta = roleDelta,
-                            newMachineAggBr = newMachBr,
-                            machineBrDelta = machDelta,
-                            newLeadAggBr = newLeadBr,
-                            newArchetype = newArch,
-                            compositeScore = composite,
-                            synergyTag = synergyTag
-                        )
-                    )
-                }
-
-                scored.sortByDescending { it.compositeScore }
-
-                // Pick top 5 distinct baseSpecies so the 5 chips give diverse species options
-                val picked = ArrayList<RoleUpgradeSuggestion>(5)
-                val usedBase = HashSet<String>()
-                for (item in scored) {
-                    val b = FormResolver.extractBaseSpecies(item.candidate.name)
-                    if (usedBase.add(b)) {
-                        picked.add(item)
-                        if (picked.size >= 5) break
-                    }
-                }
-                if (picked.size < 5) {
-                    for (item in scored) {
-                        if (picked.none { it.candidate.name.equals(item.candidate.name, ignoreCase = true) }) {
-                            picked.add(item)
-                            if (picked.size >= 5) break
-                        }
-                    }
-                }
-                return picked
-            }
-
-            return TeamRoleRecommendationsResult(
-                baselineEval = baselineEval,
-                candidatePoolSize = precomputedPool.size,
-                leadUpgrades = rankUpgradesForSlot(0),
-                safeSwapUpgrades = rankUpgradesForSlot(1),
-                closerUpgrades = rankUpgradesForSlot(2)
-            )
-        }
 
         data class MovesetUpgradeSuggestion(
             val slotIndex: Int,
@@ -9617,237 +1840,6 @@ class OverlayService : LifecycleService() {
             val top3OverallMovesets: List<MovesetUpgradeSuggestion>
         )
 
-        fun recommendTop3MovesetsForTeamStatic(
-            slots: List<TeamMember>,
-            league: String,
-            seasonLogs: List<Pair<Long, List<String>>>,
-            manualArchetypeOverride: String? = null
-        ): TeamMovesetRecommendationsResult {
-            val baselineEval = evaluateOrAutoOrderTeamStatic(
-                slots = slots,
-                league = league,
-                seasonLogs = seasonLogs,
-                autoReorder = false,
-                manualArchetypeOverride = manualArchetypeOverride
-            )
-            val curSlots = baselineEval.orderedSlots
-            val dist = computeBlendedSeasonMetaStatic(league, seasonLogs)
-            val allOpps = (dist.leadWeights.keys + dist.fieldWeights.keys).distinct()
-            val isAbb = baselineEval.archetype.equals("ABB", ignoreCase = true)
-
-            val curLeadMap = Array(3) { HashMap<String, Double>(allOpps.size) }
-            val curSwapMap = Array(3) { HashMap<String, Double>(allOpps.size) }
-            val curCloserMap = Array(3) { HashMap<String, Double>(allOpps.size) }
-
-            for (i in 0..2) {
-                val m = curSlots.getOrNull(i) ?: continue
-                for (opp in allOpps) {
-                    val b00 = calculateMatchupRatingStatic(m.name, opp, 0, 0, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs).toDouble()
-                    val b01 = calculateMatchupRatingStatic(m.name, opp, 0, 1, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs).toDouble()
-                    val b10 = calculateMatchupRatingStatic(m.name, opp, 1, 0, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs).toDouble()
-                    val b11 = calculateMatchupRatingStatic(m.name, opp, 1, 1, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs).toDouble()
-                    val b12 = calculateMatchupRatingStatic(m.name, opp, 1, 2, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs).toDouble()
-                    val b21 = calculateMatchupRatingStatic(m.name, opp, 2, 1, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs).toDouble()
-                    val b22 = calculateMatchupRatingStatic(m.name, opp, 2, 2, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs).toDouble()
-
-                    curLeadMap[i][opp] = 0.45 * b11 + 0.35 * b22 + 0.10 * b00 + 0.05 * b12 + 0.05 * b21
-                    curSwapMap[i][opp] = 0.40 * b11 + 0.20 * b10 + 0.20 * b01 + 0.10 * b21 + 0.10 * b00
-                    curCloserMap[i][opp] = 0.50 * b00 + 0.20 * b10 + 0.15 * b01 + 0.15 * b11
-                }
-            }
-
-            var totalCombosEvaluated = 0
-
-            fun evaluateSlotMovesets(slotIdx: Int): List<MovesetUpgradeSuggestion> {
-                val m = curSlots.getOrNull(slotIdx) ?: return emptyList()
-                val roleTitle = when (slotIdx) {
-                    0 -> if (isAbb) "Lead (A)" else "Lead"
-                    1 -> if (isAbb) "Bait Swap (B1)" else "Safe Swap"
-                    else -> if (isAbb) "Sweeper (B2)" else "Closer"
-                }
-                val baselineRoleBr = when (slotIdx) {
-                    0 -> baselineEval.leadAggBr
-                    1 -> baselineEval.safeSwapBr
-                    else -> baselineEval.closerSwapBr
-                }
-
-                val (rawFastPool, rawChargedPool) = getAvailableMovePoolForSpeciesStatic(m.name, league)
-                val fastPool = rawFastPool
-                    .filter { it.isNotBlank() && !it.equals("Struggle", ignoreCase = true) }
-                    .distinctBy { it.lowercase() }
-                    .take(4)
-                    .ifEmpty { listOf(m.fastMove) }
-                val chargedPool = rawChargedPool
-                    .filter {
-                        it.isNotBlank() &&
-                            !it.equals("Struggle", ignoreCase = true) &&
-                            !it.equals("Frustration", ignoreCase = true)
-                    }
-                    .distinctBy { it.lowercase() }
-                    .take(6)
-                    .ifEmpty {
-                        listOfNotNull(
-                            m.chargedMove1.takeIf { it.isNotBlank() },
-                            m.chargedMove2.takeIf { it.isNotBlank() }
-                        ).distinctBy { it.lowercase() }
-                    }
-
-                val slotMeta = resolveRecommendedMovesForSpecies(m.name, league, m.cp, m.ivs)
-                val slotTypes = slotMeta?.types ?: emptyList()
-                val rawPairs = mutableListOf<Pair<String, String>>()
-                if (chargedPool.size <= 1) {
-                    val only = chargedPool.firstOrNull() ?: m.chargedMove1
-                    rawPairs.add(only to only)
-                } else {
-                    for (i in 0 until chargedPool.size) {
-                        for (j in (i + 1) until chargedPool.size) {
-                            rawPairs.add(chargedPool[i] to chargedPool[j])
-                        }
-                    }
-                }
-                val nonDominatedPairs = rawPairs.filterNot { (c1, c2) ->
-                    isDominatedSameTypeChargedPairStatic(c1, c2, slotTypes)
-                }
-                val cPairs = if (nonDominatedPairs.isNotEmpty()) nonDominatedPairs else rawPairs
-                val hasDualTypeOption = cPairs.any { (c1, c2) ->
-                    val t1 = resolveChargedMoveStatsStatic(c1, slotTypes.firstOrNull() ?: "normal").type
-                    val t2 = resolveChargedMoveStatsStatic(c2, slotTypes.firstOrNull() ?: "normal").type
-                    !t1.equals(t2, ignoreCase = true)
-                }
-
-                val curFastNorm = m.fastMove.trim().lowercase()
-                val curChargedSet = setOf(m.chargedMove1.trim().lowercase(), m.chargedMove2.trim().lowercase())
-                val scored = mutableListOf<MovesetUpgradeSuggestion>()
-
-                for (fMove in fastPool) {
-                    for ((c1Move, c2Move) in cPairs) {
-                        val propFastNorm = fMove.trim().lowercase()
-                        val propChargedSet = setOf(c1Move.trim().lowercase(), c2Move.trim().lowercase())
-                        if (propFastNorm == curFastNorm && propChargedSet == curChargedSet) {
-                            continue
-                        }
-                        totalCombosEvaluated++
-
-                        val candLeadMap = HashMap<String, Double>(allOpps.size)
-                        val candSwapMap = HashMap<String, Double>(allOpps.size)
-                        val candCloserMap = HashMap<String, Double>(allOpps.size)
-
-                        for (opp in allOpps) {
-                            val b00 = calculateMatchupRatingStatic(m.name, opp, 0, 0, league, fMove, c1Move, c2Move, m.cp, m.ivs).toDouble()
-                            val b01 = calculateMatchupRatingStatic(m.name, opp, 0, 1, league, fMove, c1Move, c2Move, m.cp, m.ivs).toDouble()
-                            val b10 = calculateMatchupRatingStatic(m.name, opp, 1, 0, league, fMove, c1Move, c2Move, m.cp, m.ivs).toDouble()
-                            val b11 = calculateMatchupRatingStatic(m.name, opp, 1, 1, league, fMove, c1Move, c2Move, m.cp, m.ivs).toDouble()
-                            val b12 = calculateMatchupRatingStatic(m.name, opp, 1, 2, league, fMove, c1Move, c2Move, m.cp, m.ivs).toDouble()
-                            val b21 = calculateMatchupRatingStatic(m.name, opp, 2, 1, league, fMove, c1Move, c2Move, m.cp, m.ivs).toDouble()
-                            val b22 = calculateMatchupRatingStatic(m.name, opp, 2, 2, league, fMove, c1Move, c2Move, m.cp, m.ivs).toDouble()
-
-                            candLeadMap[opp] = 0.45 * b11 + 0.35 * b22 + 0.10 * b00 + 0.05 * b12 + 0.05 * b21
-                            candSwapMap[opp] = 0.40 * b11 + 0.20 * b10 + 0.20 * b01 + 0.10 * b21 + 0.10 * b00
-                            candCloserMap[opp] = 0.50 * b00 + 0.20 * b10 + 0.15 * b01 + 0.15 * b11
-                        }
-
-                        var leadSum = 0.0
-                        for ((opp, prob) in dist.leadWeights) {
-                            if (prob > 0.0) leadSum += prob * (candLeadMap[opp] ?: 500.0)
-                        }
-
-                        var swapSum = 0.0
-                        var closerSum = 0.0
-                        for ((opp, prob) in dist.fieldWeights) {
-                            if (prob > 0.0) {
-                                swapSum += prob * (candSwapMap[opp] ?: 500.0)
-                                closerSum += prob * (candCloserMap[opp] ?: 500.0)
-                            }
-                        }
-                        var swapVarianceSum = 0.0
-                        for ((opp, prob) in dist.fieldWeights) {
-                            if (prob > 0.0) {
-                                val diff = (candSwapMap[opp] ?: swapSum) - swapSum
-                                swapVarianceSum += prob * diff * diff
-                            }
-                        }
-                        val swapStdDev = kotlin.math.sqrt(max(0.0, swapVarianceSum))
-                        val candSafeSwapBr = (swapSum - 0.5 * swapStdDev).roundToInt().coerceIn(150, 850)
-                        val candLeadAggBr = leadSum.roundToInt().coerceIn(150, 850)
-                        val candCloserBr = closerSum.roundToInt().coerceIn(150, 850)
-                        val candCloserSwapBr = ((candSafeSwapBr * 0.55) + (candCloserBr * 0.45)).roundToInt().coerceIn(150, 850)
-
-                        val newRoleBr = when (slotIdx) {
-                            0 -> candLeadAggBr
-                            1 -> candSafeSwapBr
-                            else -> candCloserSwapBr
-                        }
-                        val roleDelta = newRoleBr - baselineRoleBr
-
-                        var newMachSum = 0.0
-                        for ((opp, prob) in dist.fieldWeights) {
-                            if (prob <= 0.0) continue
-                            val r0 = if (slotIdx == 0) (candLeadMap[opp] ?: 500.0) else (curLeadMap[0][opp] ?: 500.0)
-                            val r1 = if (slotIdx == 1) (candSwapMap[opp] ?: 500.0) else (curSwapMap[1][opp] ?: 500.0)
-                            val r2 = if (slotIdx == 2) (candCloserMap[opp] ?: 500.0) else (curCloserMap[2][opp] ?: 500.0)
-                            newMachSum += prob * max(r0, max(r1, r2))
-                        }
-                        val newMachBr = newMachSum.roundToInt().coerceIn(150, 850)
-                        val machDelta = newMachBr - baselineEval.machineAggBr
-                        val newLeadBr = if (slotIdx == 0) candLeadAggBr else baselineEval.leadAggBr
-                        val leadDelta = newLeadBr - baselineEval.leadAggBr
-
-                        val c1S = resolveChargedMoveStatsStatic(c1Move, slotTypes.firstOrNull() ?: "normal")
-                        val c2S = resolveChargedMoveStatsStatic(c2Move, slotTypes.firstOrNull() ?: "normal")
-                        val isSameTypePair = !c1Move.equals(c2Move, ignoreCase = true) && c1S.type.equals(c2S.type, ignoreCase = true)
-                        val roleCoverageAdj = when {
-                            !isSameTypePair -> 0.0
-                            slotIdx == 1 && hasDualTypeOption -> -2.2 // Safe Swap prefers dual-type coverage when available
-                            else -> 0.0
-                        }
-
-                        val composite = 0.55 * machDelta.toDouble() + 0.45 * roleDelta.toDouble() + roleCoverageAdj
-                        scored.add(
-                            MovesetUpgradeSuggestion(
-                                slotIndex = slotIdx,
-                                roleTitle = roleTitle,
-                                pokemonName = m.name,
-                                currentFastMove = m.fastMove,
-                                currentCharged1 = m.chargedMove1,
-                                currentCharged2 = m.chargedMove2,
-                                proposedFastMove = fMove,
-                                proposedCharged1 = c1Move,
-                                proposedCharged2 = c2Move,
-                                currentRoleBr = baselineRoleBr,
-                                newRoleBr = newRoleBr,
-                                roleBrDelta = roleDelta,
-                                currentMachineAggBr = baselineEval.machineAggBr,
-                                newMachineAggBr = newMachBr,
-                                machineBrDelta = machDelta,
-                                currentLeadAggBr = baselineEval.leadAggBr,
-                                newLeadAggBr = newLeadBr,
-                                leadBrDelta = leadDelta,
-                                compositeScore = composite
-                            )
-                        )
-                    }
-                }
-
-                scored.sortByDescending { it.compositeScore }
-                return scored.take(3)
-            }
-
-            val s1Moves = evaluateSlotMovesets(0)
-            val s2Moves = evaluateSlotMovesets(1)
-            val s3Moves = evaluateSlotMovesets(2)
-            val top3Overall = (s1Moves + s2Moves + s3Moves)
-                .sortedByDescending { it.compositeScore }
-                .take(3)
-
-            return TeamMovesetRecommendationsResult(
-                baselineEval = baselineEval,
-                combosEvaluated = totalCombosEvaluated,
-                slot1Movesets = s1Moves,
-                slot2Movesets = s2Moves,
-                slot3Movesets = s3Moves,
-                top3OverallMovesets = top3Overall
-            )
-        }
 
         data class FeaturedRankRangeSpec(
             val raw: String,
@@ -9856,50 +1848,6 @@ class OverlayService : LifecycleService() {
             val label: String
         )
 
-        fun parseFeaturedRankRangeQueryStatic(rawInput: String): FeaturedRankRangeSpec? {
-            val cleaned = rawInput.trim()
-                .replace(Regex("^(rank|ranked|#)\\s*", RegexOption.IGNORE_CASE), "")
-                .trim()
-            if (cleaned.isEmpty()) return null
-
-            // Pattern 1: "200-" or "200+" => #200 or lower
-            Regex("^(\\d{1,3})\\s*[-+]$").matchEntire(cleaned)?.let { m ->
-                val minR = (m.groupValues[1].toIntOrNull() ?: 1).coerceIn(1, 500)
-                return FeaturedRankRangeSpec(
-                    raw = rawInput.trim(),
-                    minRank = minR,
-                    maxRank = 999,
-                    label = "Rank #$minR+"
-                )
-            }
-
-            // Pattern 2: "-10" or "<=10" => Top N (#1 to #N)
-            Regex("^(?:[-]|<=?)\\s*(\\d{1,3})$").matchEntire(cleaned)?.let { m ->
-                val maxR = (m.groupValues[1].toIntOrNull() ?: 10).coerceIn(1, 500)
-                return FeaturedRankRangeSpec(
-                    raw = rawInput.trim(),
-                    minRank = 1,
-                    maxRank = maxR,
-                    label = "Top $maxR (#1–#$maxR)"
-                )
-            }
-
-            // Pattern 3: "100-200" => #100 to #200
-            Regex("^(\\d{1,3})\\s*-\\s*(\\d{1,3})$").matchEntire(cleaned)?.let { m ->
-                val a = (m.groupValues[1].toIntOrNull() ?: 1).coerceIn(1, 500)
-                val b = (m.groupValues[2].toIntOrNull() ?: 500).coerceIn(1, 500)
-                val minR = min(a, b)
-                val maxR = max(a, b)
-                return FeaturedRankRangeSpec(
-                    raw = rawInput.trim(),
-                    minRank = minR,
-                    maxRank = maxR,
-                    label = "Rank #$minR–#$maxR"
-                )
-            }
-
-            return null
-        }
 
         data class AntiMetaAltMovesetInfo(
             val slotIndex: Int, // 0 = Lead, 1 = Swap/B1, 2 = Closer/B2
@@ -9964,25 +1912,8 @@ class OverlayService : LifecycleService() {
             val elapsedMs: Long
         )
 
-        fun getLeagueAbbreviationStatic(league: String): String {
-            return when {
-                league.contains("SPECTRAL", ignoreCase = true) -> "BF-Spec"
-                league.contains("CAULDRON", ignoreCase = true) -> "BF-Caul"
-                league.contains("FRONTIER", ignoreCase = true) -> "BF-ML"
-                league.contains("MEGA", ignoreCase = true) -> "MML"
-                league.contains("GREAT", ignoreCase = true) -> "GL"
-                league.contains("ULTRA", ignoreCase = true) -> "UL"
-                else -> "ML"
-            }
-        }
 
-        fun formatAntiMetaDefaultTeamNameStatic(league: String, timestampMs: Long = System.currentTimeMillis()): String {
-            val abbr = getLeagueAbbreviationStatic(league)
-            val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(timestampMs))
-            return "$abbr Anti-Meta $dateStr"
-        }
-
-        private data class RoleWeightedTop100MetaDist(
+        internal data class RoleWeightedTop100MetaDist(
             val leadWeights: Map<String, Double>,
             val swapWeights: Map<String, Double>,
             val closerWeights: Map<String, Double>,
@@ -9997,1187 +1928,6 @@ class OverlayService : LifecycleService() {
             val seasonMatchCount: Int
         )
 
-        private fun computeRoleWeightedTop100MetaStatic(
-            normLeague: String,
-            seasonLogs: List<Pair<Long, List<String>>>
-        ): RoleWeightedTop100MetaDist {
-            val top100Candidates = getTop100MetaCandidatesForLeagueStatic(normLeague, 100)
-            val top100Species = ArrayList<String>(100)
-            val seenLower = HashSet<String>()
-            for (cand in top100Candidates) {
-                val n = cand.name.trim()
-                if (n.isNotEmpty() && seenLower.add(n.lowercase())) {
-                    top100Species.add(n)
-                }
-            }
-            if (top100Species.size < 50) {
-                for (fallbackName in getTopMetaPoolForLeagueStatic(normLeague)) {
-                    if (seenLower.add(fallbackName.lowercase())) {
-                        top100Species.add(fallbackName)
-                    }
-                }
-            }
-
-            val fastGeneralistMoves = setOf(
-                "shadow claw", "lick", "rollout", "psywave", "snarl",
-                "dragon breath", "counter", "karate chop", "poison sting",
-                "mud shot", "water shuriken", "sand attack", "lock-on",
-                "thunder shock", "fairy wind"
-            )
-
-            val synLead = LinkedHashMap<String, Double>()
-            val synSwap = LinkedHashMap<String, Double>()
-            val synCloser = LinkedHashMap<String, Double>()
-            val synField = LinkedHashMap<String, Double>()
-            var sumSynL = 0.0
-            var sumSynS = 0.0
-            var sumSynC = 0.0
-            var sumSynF = 0.0
-
-            val candidateByName = top100Candidates.associateBy { it.name.lowercase() }
-
-            top100Species.forEachIndexed { idx, monName ->
-                val rankTierBoost = when {
-                    idx < 15 -> 1.35
-                    idx < 35 -> 1.20
-                    idx < 55 -> 1.08
-                    else -> 0.85
-                }
-                val baseW = kotlin.math.exp(-0.022 * idx.toDouble()) * rankTierBoost
-                val candMember = candidateByName[monName.lowercase()]
-                val fastLower = candMember?.fastMove?.lowercase() ?: ""
-                val c1Stats = resolveChargedMoveStatsStatic(candMember?.chargedMove1 ?: "")
-                val c2Stats = resolveChargedMoveStatsStatic(candMember?.chargedMove2 ?: "")
-                val minEnergy = min(c1Stats.energyCost, c2Stats.energyCost)
-                val maxPower = max(c1Stats.power, c2Stats.power)
-                val isShadow = monName.startsWith("Shadow ", ignoreCase = true)
-
-                val leadMult = (if (minEnergy <= 45) 1.22 else 1.0) *
-                    (if (idx < 25) 1.18 else 1.0) *
-                    (if (!isShadow) 1.06 else 0.96)
-                val swapMult = (if (fastLower in fastGeneralistMoves) 1.28 else 1.0) *
-                    (if (minEnergy <= 45) 1.12 else 0.95) *
-                    (if (idx < 40) 1.12 else 1.0)
-                val closerMult = (if (maxPower >= 95) 1.26 else 1.0) *
-                    (if (isShadow) 1.16 else 1.0) *
-                    (if (idx < 35) 1.12 else 1.0)
-
-                val wL = baseW * leadMult
-                val wS = baseW * swapMult
-                val wC = baseW * closerMult
-                val wF = baseW * ((leadMult + swapMult + closerMult) / 3.0)
-
-                synLead[monName] = (synLead[monName] ?: 0.0) + wL
-                synSwap[monName] = (synSwap[monName] ?: 0.0) + wS
-                synCloser[monName] = (synCloser[monName] ?: 0.0) + wC
-                synField[monName] = (synField[monName] ?: 0.0) + wF
-
-                sumSynL += wL
-                sumSynS += wS
-                sumSynC += wC
-                sumSynF += wF
-            }
-
-            val pSynL = synLead.mapValues { (_, v) -> if (sumSynL > 0.0) v / sumSynL else 0.0 }
-            val pSynS = synSwap.mapValues { (_, v) -> if (sumSynS > 0.0) v / sumSynS else 0.0 }
-            val pSynC = synCloser.mapValues { (_, v) -> if (sumSynC > 0.0) v / sumSynC else 0.0 }
-            val pSynF = synField.mapValues { (_, v) -> if (sumSynF > 0.0) v / sumSynF else 0.0 }
-
-            val sortedLogs = seasonLogs
-                .filter { it.second.any { opp -> opp.isNotBlank() && !opp.equals("Waiting...", ignoreCase = true) } }
-                .sortedByDescending { it.first }
-
-            val nMatches = sortedLogs.size
-            val lambda = activeGblMetaDecayFactor.toDouble().coerceIn(0.0, 0.25)
-            val maxLogW = (activeGblMetaLogWeightPct.coerceIn(0, 100)) / 100.0
-            val isLimCup = isLimitedCupFormatStatic(normLeague)
-            val stdLogsForCup = if (isLimCup) resolveCachedSameCpStandardLogsForCupStatic(normLeague) else emptyList()
-
-            val histLead = LinkedHashMap<String, Double>()
-            val histSwap = LinkedHashMap<String, Double>()
-            val histCloser = LinkedHashMap<String, Double>()
-            val histField = LinkedHashMap<String, Double>()
-            var sumHL = 0.0
-            var sumHS = 0.0
-            var sumHC = 0.0
-            var sumHF = 0.0
-
-            sortedLogs.forEachIndexed { idx, (_, opps) ->
-                val recW = kotlin.math.exp(-lambda * idx.toDouble())
-                val cleaned = opps.take(3).map { it.trim() }.filter { it.isNotEmpty() && !it.equals("Waiting...", ignoreCase = true) }
-                cleaned.getOrNull(0)?.let { o0 ->
-                    histLead[o0] = (histLead[o0] ?: 0.0) + recW
-                    sumHL += recW
-                }
-                cleaned.getOrNull(1)?.let { o1 ->
-                    histSwap[o1] = (histSwap[o1] ?: 0.0) + recW
-                    sumHS += recW
-                }
-                cleaned.getOrNull(2)?.let { o2 ->
-                    histCloser[o2] = (histCloser[o2] ?: 0.0) + recW
-                    sumHC += recW
-                }
-                cleaned.forEach { op ->
-                    histField[op] = (histField[op] ?: 0.0) + recW
-                    sumHF += recW
-                }
-            }
-
-            val stdLead = LinkedHashMap<String, Double>()
-            val stdSwap = LinkedHashMap<String, Double>()
-            val stdCloser = LinkedHashMap<String, Double>()
-            val stdField = LinkedHashMap<String, Double>()
-            var sumSL = 0.0
-            var sumSS = 0.0
-            var sumSC = 0.0
-            var sumSF = 0.0
-
-            val eligibleByBase = top100Species.associateBy { FormResolver.extractBaseSpecies(it).lowercase() }
-            stdLogsForCup.sortedByDescending { it.first }.forEachIndexed { idx, (_, opps) ->
-                val recW = kotlin.math.exp(-lambda * idx.toDouble())
-                val cleaned = opps.take(3).mapNotNull { raw ->
-                    val tr = raw.trim()
-                    if (tr.isEmpty() || tr.equals("Waiting...", ignoreCase = true)) null
-                    else candidateByName[tr.lowercase()]?.name ?: eligibleByBase[FormResolver.extractBaseSpecies(tr).lowercase()]
-                }
-                cleaned.getOrNull(0)?.let { o0 ->
-                    stdLead[o0] = (stdLead[o0] ?: 0.0) + recW
-                    sumSL += recW
-                }
-                cleaned.getOrNull(1)?.let { o1 ->
-                    stdSwap[o1] = (stdSwap[o1] ?: 0.0) + recW
-                    sumSS += recW
-                }
-                cleaned.getOrNull(2)?.let { o2 ->
-                    stdCloser[o2] = (stdCloser[o2] ?: 0.0) + recW
-                    sumSC += recW
-                }
-                cleaned.forEach { op ->
-                    stdField[op] = (stdField[op] ?: 0.0) + recW
-                    sumSF += recW
-                }
-            }
-
-            val rawWHist = if (nMatches > 0) maxLogW * min(1.0, nMatches.toDouble() / 50.0) else 0.0
-            val remAfterHist = (1.0 - rawWHist).coerceAtLeast(0.0)
-            val stdBlendMaxW = (activeLimitedStdBlendPctGbl.coerceIn(0, 100)) / 100.0
-            val stdDecayBeta = activeLimitedStdDecayGbl.toDouble().coerceIn(0.01, 0.30)
-            val rawWStd = if (isLimCup && sumSF > 0.0) {
-                min(remAfterHist, stdBlendMaxW * kotlin.math.exp(-stdDecayBeta * nMatches.toDouble()))
-            } else 0.0
-            val rawWMeta = (remAfterHist - rawWStd).coerceAtLeast(0.0)
-            val sumWeights = (rawWHist + rawWStd + rawWMeta).takeIf { it > 0.0 } ?: 1.0
-            val wHist = rawWHist / sumWeights
-            val wStd = rawWStd / sumWeights
-            val wMeta = rawWMeta / sumWeights
-
-            val allSpecies = (top100Species + histField.keys + histLead.keys + stdField.keys).distinct()
-
-            fun blendRoleMap(
-                synMap: Map<String, Double>,
-                hMap: Map<String, Double>,
-                hSum: Double,
-                sMap: Map<String, Double>,
-                sSum: Double
-            ): Map<String, Double> {
-                val out = LinkedHashMap<String, Double>()
-                var total = 0.0
-                for (sp in allSpecies) {
-                    val mP = synMap[sp] ?: 0.0
-                    val hP = when {
-                        hSum > 0.0 -> (hMap[sp] ?: 0.0) / hSum
-                        sumHF > 0.0 -> (histField[sp] ?: 0.0) / sumHF
-                        else -> mP
-                    }
-                    val sP = when {
-                        sSum > 0.0 -> (sMap[sp] ?: 0.0) / sSum
-                        sumSF > 0.0 -> (stdField[sp] ?: 0.0) / sumSF
-                        else -> mP
-                    }
-                    val v = wHist * hP + wStd * sP + wMeta * mP
-                    if (v > 0.0) {
-                        out[sp] = v
-                        total += v
-                    }
-                }
-                val denom = if (total > 0.0) total else 1.0
-                return out.mapValues { it.value / denom }
-            }
-
-            val leadWeights = blendRoleMap(pSynL, histLead, sumHL, stdLead, sumSL)
-            val swapWeights = blendRoleMap(pSynS, histSwap, sumHS, stdSwap, sumSS)
-            val closerWeights = blendRoleMap(pSynC, histCloser, sumHC, stdCloser, sumSC)
-            val fieldWeights = blendRoleMap(pSynF, histField, sumHF, stdField, sumSF)
-
-            val sortedField = fieldWeights.entries.sortedByDescending { it.value }.map { it.key }
-            val top50Threats = sortedField.take(50).ifEmpty { top100Species.take(50) }
-            val top25Threats = top50Threats.take(25).ifEmpty { top100Species.take(25) }
-            val refOpps = top25Threats.take(12).ifEmpty { top100Species.take(12) }
-
-            val top50MetaList = top50Threats.mapIndexed { i, name ->
-                val pct = ((fieldWeights[name] ?: 0.0) * 1000.0).roundToInt() / 10.0
-                val cand = candidateByName[name.lowercase()]
-                var sumBr = 0.0
-                var wSum = 0.0
-                for (opp in refOpps) {
-                    if (opp.equals(name, ignoreCase = true)) continue
-                    val w = fieldWeights[opp] ?: 0.04
-                    val b11 = calculateMatchupRatingStatic(
-                        name, opp, 1, 1, normLeague,
-                        cand?.fastMove, cand?.chargedMove1, cand?.chargedMove2,
-                        cand?.cp, cand?.ivs
-                    ).toDouble()
-                    sumBr += w * b11
-                    wSum += w
-                }
-                val rawAvgBr = if (wSum > 0.0) sumBr / wSum else (542.0 - i * 1.1)
-                val rankPrior = 548.0 - i * 1.05
-                val metaBr = (0.60 * rawAvgBr + 0.40 * rankPrior).roundToInt().coerceIn(420, 650)
-                SilphScopeTopMetaEntry(rank = i + 1, name = name, weightPct = pct, metaBr = metaBr)
-            }
-            val top25MetaList = top50MetaList.take(25)
-
-            return RoleWeightedTop100MetaDist(
-                leadWeights = leadWeights,
-                swapWeights = swapWeights,
-                closerWeights = closerWeights,
-                fieldWeights = fieldWeights,
-                top25Threats = top25Threats,
-                top25MetaList = top25MetaList,
-                top50Threats = top50Threats,
-                top50MetaList = top50MetaList,
-                top100Species = top100Species,
-                wHistPct = (wHist * 100.0).roundToInt(),
-                wMetaPct = (wMeta * 100.0).roundToInt(),
-                seasonMatchCount = nMatches
-            )
-        }
-
-        /**
-         * Generates the Best 5 ABB and Best 5 ABC Anti-Meta team options for the selected league
-         * that MUST include the 0, 1, or 2 user-selected featured Pokémon (or rank-range queries
-         * such as `200-`, `-10`, `100-200`), building around performance against the Top-100
-         * role-weighted synthetic meta blended with season logs, auditing Beats X/25 Top Meta
-         * (plus Key Wins, Key Threats & Core Breakers with per-slot BRs in parentheses), and
-         * simulating alternate Fast + Charged movesets for all 3 team members on top candidate lineups.
-         */
-        fun generateAntiMetaTeamOptionsStatic(
-            league: String,
-            featuredPokemonNames: List<String>,
-            seasonLogs: List<Pair<Long, List<String>>> = emptyList()
-        ): AntiMetaTeamBuilderResult {
-            val t0 = System.currentTimeMillis()
-            val normLeague = normalizeLeagueKeyStatic(league)
-            val allowMega = isMegaAllowedInLeagueStatic(normLeague)
-            val cpCap = getLeagueCpCapStatic(normLeague)
-            val isGreat = cpCap <= 1500
-            val isUltra = cpCap == 2500
-
-            val roleMeta = computeRoleWeightedTop100MetaStatic(normLeague, seasonLogs)
-            val extendedRankedPool = getTop100MetaCandidatesForLeagueStatic(normLeague, 360)
-            val rankByNameLower = HashMap<String, Int>(extendedRankedPool.size)
-            extendedRankedPool.forEachIndexed { index, member ->
-                rankByNameLower.putIfAbsent(member.name.lowercase(), index + 1)
-            }
-            val topMetaPool = extendedRankedPool.take(60)
-            val top25MetaThreats = roleMeta.top25Threats
-            val top50MetaThreats = roleMeta.top50Threats
-            val targetAuditTotal = top50MetaThreats.size.takeIf { it > 0 } ?: 50
-
-            fun isMegaOrPrimal(name: String, speciesId: String = ""): Boolean {
-                return isMegaOrPrimalSpeciesStatic(name) || isMegaOrPrimalSpeciesStatic(speciesId)
-            }
-
-            fun buildMemberFromName(rawName: String): TeamMember? {
-                val trimmed = rawName.trim()
-                if (trimmed.isEmpty()) return null
-                val resolved = resolveRecommendedMovesForSpecies(trimmed, normLeague) ?: return null
-                if (!allowMega && isMegaOrPrimal(resolved.name, resolved.speciesId)) return null
-                val scaled = computeEffectiveCombatStats(resolved, normLeague)
-                val finalDisplayName = if (trimmed.startsWith("Shadow ", ignoreCase = true) && !scaled.name.startsWith("Shadow ", ignoreCase = true)) {
-                    "Shadow ${scaled.name}"
-                } else {
-                    scaled.name
-                }
-                val ivDefault = when {
-                    isGreat -> scaled.defaultIvsGl
-                    isUltra -> scaled.defaultIvsUl
-                    else -> "15/15/15"
-                }
-                return TeamMember(
-                    name = finalDisplayName,
-                    cp = scaled.defaultCp,
-                    fastMove = scaled.defaultFastMove,
-                    chargedMove1 = scaled.chargedMove1,
-                    chargedMove2 = scaled.chargedMove2,
-                    ivs = ivDefault
-                )
-            }
-
-            data class ResolvedFeaturedSlotConstraint(
-                val isRange: Boolean,
-                val displayLabel: String,
-                val fixedMember: TeamMember? = null,
-                val rangeSpec: FeaturedRankRangeSpec? = null,
-                val rangePool: List<TeamMember> = emptyList()
-            )
-
-            val slotConstraints = ArrayList<ResolvedFeaturedSlotConstraint>(2)
-            val featuredBaseSet = HashSet<String>()
-            var featuredHasMega = false
-
-            for (raw in featuredPokemonNames.take(2)) {
-                val trimmed = raw.trim()
-                if (trimmed.isEmpty()) continue
-                val parsedRange = parseFeaturedRankRangeQueryStatic(trimmed)
-                if (parsedRange != null) {
-                    val minIdx = (parsedRange.minRank - 1).coerceAtLeast(0)
-                    val maxIdx = min(extendedRankedPool.size - 1, parsedRange.maxRank - 1)
-                    val subList = if (minIdx <= maxIdx && extendedRankedPool.isNotEmpty()) {
-                        extendedRankedPool.subList(minIdx, maxIdx + 1)
-                    } else {
-                        extendedRankedPool.takeLast(min(20, extendedRankedPool.size))
-                    }
-                    val pickedRangeMembers = subList.take(18)
-                    if (pickedRangeMembers.isNotEmpty()) {
-                        slotConstraints.add(
-                            ResolvedFeaturedSlotConstraint(
-                                isRange = true,
-                                displayLabel = parsedRange.label,
-                                rangeSpec = parsedRange,
-                                rangePool = pickedRangeMembers
-                            )
-                        )
-                    }
-                    continue
-                }
-
-                val member = buildMemberFromName(trimmed) ?: continue
-                val baseSp = FormResolver.extractBaseSpecies(member.name).lowercase()
-                if (!featuredBaseSet.add(baseSp)) continue
-                val memberIsMega = isMegaOrPrimal(member.name)
-                if (memberIsMega && featuredHasMega) {
-                    featuredBaseSet.remove(baseSp)
-                    continue
-                }
-                if (memberIsMega) featuredHasMega = true
-                slotConstraints.add(
-                    ResolvedFeaturedSlotConstraint(
-                        isRange = false,
-                        displayLabel = member.name,
-                        fixedMember = member
-                    )
-                )
-            }
-
-            val resolvedFeatured = slotConstraints.mapNotNull { it.fixedMember }
-            val rangeCandidates = slotConstraints.flatMap { it.rangePool }
-
-            val candidatePool = ArrayList<TeamMember>(84)
-            val seenNames = HashSet<String>()
-            for (c in (resolvedFeatured + rangeCandidates + topMetaPool)) {
-                val k = c.name.lowercase()
-                if (seenNames.add(k)) {
-                    candidatePool.add(c)
-                }
-            }
-
-            val allOpps = (roleMeta.leadWeights.keys + roleMeta.fieldWeights.keys + top50MetaThreats).distinct()
-
-            data class CandidateSlotEval(
-                val member: TeamMember,
-                val baseSpecies: String,
-                val isMega: Boolean,
-                val weaknesses: List<String>,
-                val doubleWeaknesses: List<String>,
-                val resistances: List<String>,
-                val leadBr: Int,
-                val swapBr: Int,
-                val closerBr: Int,
-                val leadByOpp: Map<String, Double>,
-                val swapByOpp: Map<String, Double>,
-                val closerByOpp: Map<String, Double>
-            )
-
-            fun evaluateCandidateAgainstRoleMeta(
-                cand: TeamMember,
-                baseSpecies: String,
-                isMega: Boolean,
-                weaknesses: List<String>,
-                doubleWeaknesses: List<String>,
-                resistances: List<String>
-            ): CandidateSlotEval {
-                val leadByOpp = HashMap<String, Double>(allOpps.size)
-                val swapByOpp = HashMap<String, Double>(allOpps.size)
-                val closerByOpp = HashMap<String, Double>(allOpps.size)
-
-                for (opp in allOpps) {
-                    val b00 = calculateMatchupRatingStatic(cand.name, opp, 0, 0, normLeague, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-                    val b01 = calculateMatchupRatingStatic(cand.name, opp, 0, 1, normLeague, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-                    val b10 = calculateMatchupRatingStatic(cand.name, opp, 1, 0, normLeague, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-                    val b11 = calculateMatchupRatingStatic(cand.name, opp, 1, 1, normLeague, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-                    val b12 = calculateMatchupRatingStatic(cand.name, opp, 1, 2, normLeague, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-                    val b21 = calculateMatchupRatingStatic(cand.name, opp, 2, 1, normLeague, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-                    val b22 = calculateMatchupRatingStatic(cand.name, opp, 2, 2, normLeague, cand.fastMove, cand.chargedMove1, cand.chargedMove2, cand.cp, cand.ivs).toDouble()
-
-                    leadByOpp[opp] = 0.45 * b11 + 0.35 * b22 + 0.10 * b00 + 0.05 * b12 + 0.05 * b21
-                    swapByOpp[opp] = 0.40 * b11 + 0.20 * b10 + 0.20 * b01 + 0.10 * b21 + 0.10 * b00
-                    closerByOpp[opp] = 0.50 * b00 + 0.20 * b10 + 0.15 * b01 + 0.15 * b11
-                }
-
-                var leadSum = 0.0
-                for ((oppName, prob) in roleMeta.leadWeights) {
-                    if (prob > 0.0) leadSum += prob * (leadByOpp[oppName] ?: 500.0)
-                }
-                var swapMean = 0.0
-                for ((oppName, prob) in roleMeta.swapWeights) {
-                    if (prob > 0.0) swapMean += prob * (swapByOpp[oppName] ?: 500.0)
-                }
-                var swapVar = 0.0
-                for ((oppName, prob) in roleMeta.swapWeights) {
-                    if (prob > 0.0) {
-                        val d = (swapByOpp[oppName] ?: swapMean) - swapMean
-                        swapVar += prob * d * d
-                    }
-                }
-                val swapSigma = kotlin.math.sqrt(max(0.0, swapVar))
-                val safeSwapVal = (swapMean - 0.35 * swapSigma).roundToInt().coerceIn(150, 850)
-
-                var closerSum = 0.0
-                for ((oppName, prob) in roleMeta.closerWeights) {
-                    if (prob > 0.0) closerSum += prob * (closerByOpp[oppName] ?: 500.0)
-                }
-
-                return CandidateSlotEval(
-                    member = cand,
-                    baseSpecies = baseSpecies,
-                    isMega = isMega,
-                    weaknesses = weaknesses,
-                    doubleWeaknesses = doubleWeaknesses,
-                    resistances = resistances,
-                    leadBr = leadSum.roundToInt().coerceIn(150, 850),
-                    swapBr = safeSwapVal,
-                    closerBr = closerSum.roundToInt().coerceIn(150, 850),
-                    leadByOpp = leadByOpp,
-                    swapByOpp = swapByOpp,
-                    closerByOpp = closerByOpp
-                )
-            }
-
-            val slotEvalCache = HashMap<String, CandidateSlotEval>(candidatePool.size)
-
-            for (cand in candidatePool) {
-                val key = cand.name.lowercase()
-                val baseSpecies = FormResolver.extractBaseSpecies(cand.name).lowercase()
-                val meta = resolveRecommendedMovesForSpecies(cand.name, normLeague)
-                val types = meta?.types?.map { it.lowercase() }?.ifEmpty { listOf("normal") } ?: listOf("normal")
-
-                val weaknesses = ArrayList<String>()
-                val doubleWeaknesses = ArrayList<String>()
-                val resistances = ArrayList<String>()
-                for (atkType in ALL_18_TYPES) {
-                    val m = getTypeEffectivenessStatic(atkType, types)
-                    if (m > 1.9) {
-                        weaknesses.add(atkType)
-                        doubleWeaknesses.add(atkType)
-                    } else if (m > 1.05) {
-                        weaknesses.add(atkType)
-                    } else if (m < 0.95) {
-                        resistances.add(atkType)
-                    }
-                }
-
-                slotEvalCache[key] = evaluateCandidateAgainstRoleMeta(
-                    cand = cand,
-                    baseSpecies = baseSpecies,
-                    isMega = isMegaOrPrimal(cand.name),
-                    weaknesses = weaknesses,
-                    doubleWeaknesses = doubleWeaknesses,
-                    resistances = resistances
-                )
-            }
-
-            fun buildTeamOptionFromEvals(
-                m0: CandidateSlotEval,
-                m1: CandidateSlotEval,
-                m2: CandidateSlotEval,
-                archetype: String,
-                sharedWeaks: List<String>,
-                idPrefix: String,
-                sig: String,
-                altMovesetSlots: List<AntiMetaAltMovesetInfo> = emptyList()
-            ): AntiMetaTeamOption {
-                var coreSum = 0.0
-                for ((oppName, prob) in roleMeta.fieldWeights) {
-                    if (prob <= 0.0) continue
-                    val r0 = m0.leadByOpp[oppName] ?: 500.0
-                    val r1 = m1.swapByOpp[oppName] ?: 500.0
-                    val r2 = m2.closerByOpp[oppName] ?: 500.0
-                    coreSum += prob * max(r0, max(r1, r2))
-                }
-                val machineAggBr = coreSum.roundToInt().coerceIn(150, 850)
-
-                val beatenTargets = ArrayList<String>()
-                val coreBreakers = ArrayList<String>()
-                val coreBreakerSpecies = HashSet<String>()
-                val keyThreats = ArrayList<String>()
-
-                fun formatThreatWithSlotBrs(threatName: String, r0: Double, r1: Double, r2: Double): String {
-                    val oppBr0 = (1000.0 - r0).roundToInt().coerceIn(100, 900)
-                    val oppBr1 = (1000.0 - r1).roundToInt().coerceIn(100, 900)
-                    val oppBr2 = (1000.0 - r2).roundToInt().coerceIn(100, 900)
-                    return "$threatName($oppBr0/$oppBr1/$oppBr2)"
-                }
-
-                for (threat in top50MetaThreats) {
-                    val r0 = m0.leadByOpp[threat] ?: 500.0
-                    val r1 = m1.swapByOpp[threat] ?: 500.0
-                    val r2 = m2.closerByOpp[threat] ?: 500.0
-                    val maxBr = max(r0, max(r1, r2))
-                    val minBackBr = min(r1, r2)
-                    val formattedThreat = formatThreatWithSlotBrs(threat, r0, r1, r2)
-
-                    if (maxBr >= 525.0) {
-                        beatenTargets.add(threat)
-                    }
-
-                    if (r0 < 495.0 && r1 < 495.0 && r2 < 495.0) {
-                        coreBreakers.add(formattedThreat)
-                        coreBreakerSpecies.add(threat)
-                    } else if ((r0 < 475.0 && minBackBr < 485.0) || maxBr < 512.0) {
-                        keyThreats.add(formattedThreat)
-                    }
-                }
-
-                if (keyThreats.isEmpty()) {
-                    val sortedTough = top50MetaThreats
-                        .filter { it !in coreBreakerSpecies }
-                        .map { t ->
-                            val r0 = m0.leadByOpp[t] ?: 500.0
-                            val r1 = m1.swapByOpp[t] ?: 500.0
-                            val r2 = m2.closerByOpp[t] ?: 500.0
-                            formatThreatWithSlotBrs(t, r0, r1, r2) to (min(r0, (r1 + r2) / 2.0) + max(r0, max(r1, r2)) * 0.35)
-                        }
-                        .sortedBy { it.second }
-                    for ((formatted, _) in sortedTough.take(3)) {
-                        keyThreats.add(formatted)
-                    }
-                }
-
-                var unresistedTripleWeakPenalty = 0.0
-                for (atkType in ALL_18_TYPES) {
-                    val weakCount = listOf(m0, m1, m2).count { atkType in it.weaknesses }
-                    val resistCount = listOf(m0, m1, m2).count { atkType in it.resistances }
-                    if (weakCount >= 2 && resistCount == 0) {
-                        unresistedTripleWeakPenalty += if (weakCount == 3) 35.0 else 14.0
-                    }
-                }
-
-                val duoSymmetryBonus = if (archetype == "DUO") sharedWeaks.size * 4.5 else 0.0
-                val rawComposite = 0.48 * machineAggBr.toDouble() +
-                    0.20 * m0.leadBr.toDouble() +
-                    0.16 * m1.swapBr.toDouble() +
-                    0.16 * m2.closerBr.toDouble() +
-                    beatenTargets.size * 1.65 +
-                    duoSymmetryBonus -
-                    coreBreakers.size * 7.5 -
-                    keyThreats.size * 1.8 -
-                    (if (archetype == "ABC" || archetype == "DUO") unresistedTripleWeakPenalty else 0.0)
-                val compositeAntiMetaScore = (rawComposite * 10.0).roundToInt() / 10.0
-
-                val winsPreview = beatenTargets.take(5).joinToString(", ").ifEmpty { "Broad neutral coverage" }
-                val threatsPreview = keyThreats.take(4).joinToString(", ").ifEmpty { "None prominent" }
-                val breakersPreview = if (coreBreakers.isNotEmpty()) {
-                    coreBreakers.take(4).joinToString(", ")
-                } else {
-                    "None (0 hard core breakers in Top 50)"
-                }
-                val altNotes = altMovesetSlots
-                    .filter { it.isAltMoveset }
-                    .map { "${it.pokemonName} (${it.fastMove} + ${it.chargedMove1}/${it.chargedMove2})" }
-                val altSuffix = if (altNotes.isNotEmpty()) " • Alt Moveset Tech: ${altNotes.joinToString("; ")}." else ""
-
-                val teamMembers = listOf(m0.member, m1.member, m2.member)
-                val matchedFeaturedNames = ArrayList<String>()
-                val matchedFeaturedRanks = LinkedHashMap<String, Int>()
-                for (constraint in slotConstraints) {
-                    if (!constraint.isRange && constraint.fixedMember != null) {
-                        val fn = constraint.fixedMember.name
-                        if (teamMembers.any { it.name.equals(fn, ignoreCase = true) }) {
-                            matchedFeaturedNames.add(fn)
-                            rankByNameLower[fn.lowercase()]?.let { r -> matchedFeaturedRanks[fn] = r }
-                        }
-                    } else if (constraint.isRange && constraint.rangeSpec != null) {
-                        val rangeNamesLower = constraint.rangePool.map { it.name.lowercase() }.toSet()
-                        val matched = teamMembers.firstOrNull { it.name.lowercase() in rangeNamesLower }
-                        if (matched != null && matched.name !in matchedFeaturedNames) {
-                            matchedFeaturedNames.add(matched.name)
-                            rankByNameLower[matched.name.lowercase()]?.let { r -> matchedFeaturedRanks[matched.name] = r }
-                        }
-                    }
-                }
-
-                val synergySummary = when (archetype) {
-                    "ABB" -> "ABB Lineup: ${m0.member.name} (Lead A) covers backline ${sharedWeaks.joinToString("/") { it.uppercase() }} weakness for ${m1.member.name} (Bait B1) & ${m2.member.name} (Sweeper B2). Beats ${beatenTargets.size}/$targetAuditTotal Top Meta. Key Wins: $winsPreview. Key Threats: $threatsPreview. Core Breakers: $breakersPreview.$altSuffix"
-                    "DUO" -> {
-                        val covStr = if (sharedWeaks.isNotEmpty()) " (${sharedWeaks.joinToString("/") { it.uppercase() }} covered)" else ""
-                        "Duo-Core (Yin-Yang 1⇄3): ${m0.member.name} (Core 1 Lead, ${m0.leadBr} BR) & ${m2.member.name} (Core 2 Co-Core, ${m2.closerBr} BR) mutually cover each other's weaknesses$covStr, with ${m1.member.name} (${m1.swapBr} BR) as the Safe Swap Pivot. Beats ${beatenTargets.size}/$targetAuditTotal Top Meta. Key Wins: $winsPreview. Key Threats: $threatsPreview. Core Breakers: $breakersPreview.$altSuffix"
-                    }
-                    else -> "ABC Balanced Core: ${m0.member.name} Lead (${m0.leadBr} BR) + ${m1.member.name} Safe Swap (${m1.swapBr} BR) + ${m2.member.name} Closer (${m2.closerBr} BR). Beats ${beatenTargets.size}/$targetAuditTotal Top Meta. Key Wins: $winsPreview. Key Threats: $threatsPreview. Core Breakers: $breakersPreview.$altSuffix"
-                }
-
-                return AntiMetaTeamOption(
-                    id = "$idPrefix-$sig",
-                    archetype = archetype,
-                    rank = 0,
-                    league = normLeague,
-                    pokemon = teamMembers,
-                    featuredNamesIncluded = matchedFeaturedNames,
-                    featuredRankMap = matchedFeaturedRanks,
-                    leadAggBr = m0.leadBr,
-                    machineAggBr = machineAggBr,
-                    safeSwapBr = m1.swapBr,
-                    closerSwapBr = m2.swapBr,
-                    closerBr = m2.closerBr,
-                    sharedWeaknesses = sharedWeaks,
-                    compositeAntiMetaScore = compositeAntiMetaScore,
-                    topMetaTargetsTotal = targetAuditTotal,
-                    topMetaWinsCount = beatenTargets.size,
-                    keyMetaTargetsBeaten = beatenTargets.take(6),
-                    keyThreats = keyThreats.take(5),
-                    coreBreakers = coreBreakers.take(5),
-                    altMovesetSlots = altMovesetSlots,
-                    synergySummary = synergySummary
-                )
-            }
-
-            val abbCandidates = ArrayList<AntiMetaTeamOption>()
-            val abcCandidates = ArrayList<AntiMetaTeamOption>()
-            val duoCandidates = ArrayList<AntiMetaTeamOption>()
-            val seenTrios = HashSet<String>()
-            var candidatesEvaluated = 0
-
-            val triosToEvaluate = ArrayList<Triple<TeamMember, TeamMember, TeamMember>>()
-            val topStandardPool = topMetaPool.take(40)
-
-            fun addValidTrioIfLegal(c1: TeamMember, c2: TeamMember, c3: TeamMember) {
-                val e1 = slotEvalCache[c1.name.lowercase()] ?: return
-                val e2 = slotEvalCache[c2.name.lowercase()] ?: return
-                val e3 = slotEvalCache[c3.name.lowercase()] ?: return
-                if (e1.baseSpecies == e2.baseSpecies || e1.baseSpecies == e3.baseSpecies || e2.baseSpecies == e3.baseSpecies) return
-                val megaCount = (if (e1.isMega) 1 else 0) + (if (e2.isMega) 1 else 0) + (if (e3.isMega) 1 else 0)
-                if (megaCount > 1) return
-                triosToEvaluate.add(Triple(c1, c2, c3))
-            }
-
-            when (slotConstraints.size) {
-                2 -> {
-                    val poolA = if (slotConstraints[0].isRange) slotConstraints[0].rangePool.take(12) else listOfNotNull(slotConstraints[0].fixedMember)
-                    val poolB = if (slotConstraints[1].isRange) slotConstraints[1].rangePool.take(12) else listOfNotNull(slotConstraints[1].fixedMember)
-                    val thirdPool = if (slotConstraints[0].isRange && slotConstraints[1].isRange) topStandardPool.take(18) else candidatePool.take(45)
-                    for (f1 in poolA) {
-                        for (f2 in poolB) {
-                            for (c3 in thirdPool) {
-                                addValidTrioIfLegal(f1, f2, c3)
-                            }
-                        }
-                    }
-                }
-                1 -> {
-                    val c0 = slotConstraints[0]
-                    val poolA = if (c0.isRange) c0.rangePool.take(14) else listOfNotNull(c0.fixedMember)
-                    val partnerLimit = if (c0.isRange) min(22, topStandardPool.size) else min(48, candidatePool.size)
-                    val partnerPool = if (c0.isRange) topStandardPool else candidatePool
-                    for (f1 in poolA) {
-                        for (i in 0 until partnerLimit) {
-                            val c2 = partnerPool[i]
-                            for (j in (i + 1) until partnerLimit) {
-                                val c3 = partnerPool[j]
-                                addValidTrioIfLegal(f1, c2, c3)
-                            }
-                        }
-                    }
-                }
-                else -> {
-                    val poolLimit = min(32, candidatePool.size)
-                    for (i in 0 until poolLimit) {
-                        val c1 = candidatePool[i]
-                        for (j in (i + 1) until poolLimit) {
-                            val c2 = candidatePool[j]
-                            val maxK = if (i < 10) min(50, candidatePool.size) else poolLimit
-                            for (k in (j + 1) until maxK) {
-                                val c3 = candidatePool[k]
-                                addValidTrioIfLegal(c1, c2, c3)
-                            }
-                        }
-                    }
-                }
-            }
-
-            val indexPermutations = listOf(
-                Triple(0, 1, 2),
-                Triple(1, 0, 2),
-                Triple(2, 0, 1)
-            )
-            val all6Perms = listOf(
-                Triple(0, 1, 2),
-                Triple(0, 2, 1),
-                Triple(1, 0, 2),
-                Triple(1, 2, 0),
-                Triple(2, 0, 1),
-                Triple(2, 1, 0)
-            )
-
-            for (trio in triosToEvaluate) {
-                val list3 = listOf(trio.first, trio.second, trio.third)
-                val sig = list3.map { it.name.lowercase() }.sorted().joinToString("||")
-                if (!seenTrios.add(sig)) continue
-                candidatesEvaluated++
-
-                val e0 = slotEvalCache[list3[0].name.lowercase()] ?: continue
-                val e1 = slotEvalCache[list3[1].name.lowercase()] ?: continue
-                val e2 = slotEvalCache[list3[2].name.lowercase()] ?: continue
-                val evals = listOf(e0, e1, e2)
-
-                var bestAbbOrder: Triple<Int, Int, Int>? = null
-                var bestAbbShared: List<String> = emptyList()
-                var bestAbbStructureScore = Double.NEGATIVE_INFINITY
-
-                for ((leadIdx, bI, bJ) in indexPermutations) {
-                    val wI = evals[bI].weaknesses.toSet()
-                    val shared = evals[bJ].weaknesses.filter { it in wI }
-                    if (shared.isEmpty()) continue
-
-                    val hasSharedDouble = shared.any { w ->
-                        w in evals[bI].doubleWeaknesses || w in evals[bJ].doubleWeaknesses
-                    }
-                    val hasCritical = shared.any { it in CRITICAL_META_TYPES }
-                    val qualifiesOverlap = shared.size >= 2 || (shared.size >= 1 && (hasSharedDouble || hasCritical))
-                    if (!qualifiesOverlap) continue
-
-                    val leadResists = evals[leadIdx].resistances.toSet()
-                    val leadWeaks = evals[leadIdx].weaknesses.toSet()
-                    val resistedByLead = shared.filter { it in leadResists }
-                    val leadNotWeak = shared.all { it !in leadWeaks }
-
-                    if (resistedByLead.isNotEmpty() && leadNotWeak) {
-                        val b1First = evals[bI].swapBr >= evals[bJ].swapBr
-                        val ordered = if (b1First) Triple(leadIdx, bI, bJ) else Triple(leadIdx, bJ, bI)
-                        val sScore = resistedByLead.size * 40.0 +
-                            shared.size * 25.0 +
-                            evals[ordered.first].leadBr * 0.40 +
-                            evals[ordered.second].swapBr * 0.35 +
-                            evals[ordered.third].closerBr * 0.25
-                        if (sScore > bestAbbStructureScore) {
-                            bestAbbStructureScore = sScore
-                            bestAbbOrder = ordered
-                            bestAbbShared = shared
-                        }
-                    }
-                }
-
-                var bestAbcOrder = Triple(0, 1, 2)
-                var bestAbcRoleSum = Double.NEGATIVE_INFINITY
-                for ((lIdx, sIdx, cIdx) in all6Perms) {
-                    val roleSum = 0.40 * evals[lIdx].leadBr + 0.32 * evals[sIdx].swapBr + 0.28 * evals[cIdx].closerBr
-                    if (roleSum > bestAbcRoleSum) {
-                        bestAbcRoleSum = roleSum
-                        bestAbcOrder = Triple(lIdx, sIdx, cIdx)
-                    }
-                }
-
-                // Evaluate Symmetric Yin-Yang Duo-Core (1st & 3rd cover each other's weaknesses; 2nd is Safe Swap Pivot)
-                var bestDuoOrder: Triple<Int, Int, Int>? = null
-                var bestDuoCovered: List<String> = emptyList()
-                var bestDuoStructureScore = Double.NEGATIVE_INFINITY
-
-                for ((pivotIdx, cI, cJ) in indexPermutations) {
-                    val wI = evals[cI].weaknesses.toSet()
-                    val wJ = evals[cJ].weaknesses.toSet()
-                    if (wI.intersect(wJ).isNotEmpty()) continue // Core partners cannot share an unresisted weakness
-                    val rI = evals[cI].resistances.toSet()
-                    val rJ = evals[cJ].resistances.toSet()
-                    val coveredByI = wJ.filter { it in rI }
-                    val coveredByJ = wI.filter { it in rJ }
-                    if (coveredByI.isNotEmpty() && coveredByJ.isNotEmpty() && (coveredByI.size + coveredByJ.size) >= 3) {
-                        val c1First = (evals[cI].leadBr + evals[cJ].closerBr) >= (evals[cJ].leadBr + evals[cI].closerBr)
-                        val ordered = if (c1First) Triple(cI, pivotIdx, cJ) else Triple(cJ, pivotIdx, cI)
-                        val dScore = (coveredByI.size + coveredByJ.size) * 32.0 +
-                            evals[ordered.first].leadBr * 0.35 +
-                            evals[ordered.second].swapBr * 0.38 +
-                            evals[ordered.third].closerBr * 0.27
-                        if (dScore > bestDuoStructureScore) {
-                            bestDuoStructureScore = dScore
-                            bestDuoOrder = ordered
-                            bestDuoCovered = (coveredByI + coveredByJ).distinct()
-                        }
-                    }
-                }
-
-                if (bestDuoOrder != null) {
-                    duoCandidates.add(
-                        buildTeamOptionFromEvals(
-                            evals[bestDuoOrder.first],
-                            evals[bestDuoOrder.second],
-                            evals[bestDuoOrder.third],
-                            "DUO",
-                            bestDuoCovered,
-                            "anti-meta-duo",
-                            sig
-                        )
-                    )
-                }
-
-                if (bestAbbOrder != null) {
-                    abbCandidates.add(
-                        buildTeamOptionFromEvals(
-                            evals[bestAbbOrder.first],
-                            evals[bestAbbOrder.second],
-                            evals[bestAbbOrder.third],
-                            "ABB",
-                            bestAbbShared,
-                            "anti-meta-abb",
-                            sig
-                        )
-                    )
-                } else {
-                    abcCandidates.add(
-                        buildTeamOptionFromEvals(
-                            evals[bestAbcOrder.first],
-                            evals[bestAbcOrder.second],
-                            evals[bestAbcOrder.third],
-                            "ABC",
-                            emptyList(),
-                            "anti-meta-abc",
-                            sig
-                        )
-                    )
-                }
-            }
-
-            if (abbCandidates.size < 8 || abcCandidates.size < 8 || duoCandidates.size < 8) {
-                for (trio in triosToEvaluate.take(90)) {
-                    val list3 = listOf(trio.first, trio.second, trio.third)
-                    val e0 = slotEvalCache[list3[0].name.lowercase()] ?: continue
-                    val e1 = slotEvalCache[list3[1].name.lowercase()] ?: continue
-                    val e2 = slotEvalCache[list3[2].name.lowercase()] ?: continue
-                    val evals = listOf(e0, e1, e2)
-                    val sig = list3.map { it.name.lowercase() }.sorted().joinToString("||")
-
-                    if (abbCandidates.size < 8 && abbCandidates.none { it.id.endsWith(sig) }) {
-                        for ((leadIdx, bI, bJ) in indexPermutations) {
-                            val wI = evals[bI].weaknesses.toSet()
-                            val shared = evals[bJ].weaknesses.filter { it in wI }
-                            if (shared.isNotEmpty()) {
-                                val ordered = if (evals[bI].swapBr >= evals[bJ].swapBr) Triple(leadIdx, bI, bJ) else Triple(leadIdx, bJ, bI)
-                                abbCandidates.add(
-                                    buildTeamOptionFromEvals(
-                                        evals[ordered.first],
-                                        evals[ordered.second],
-                                        evals[ordered.third],
-                                        "ABB",
-                                        shared,
-                                        "anti-meta-abb-fallback",
-                                        sig
-                                    )
-                                )
-                                break
-                            }
-                        }
-                    }
-
-                    if (duoCandidates.size < 8 && duoCandidates.none { it.id.endsWith(sig) }) {
-                        for ((pivotIdx, cI, cJ) in indexPermutations) {
-                            val wI = evals[cI].weaknesses.toSet()
-                            val wJ = evals[cJ].weaknesses.toSet()
-                            val rI = evals[cI].resistances.toSet()
-                            val rJ = evals[cJ].resistances.toSet()
-                            val covered = (wJ.filter { it in rI } + wI.filter { it in rJ }).distinct()
-                            if (covered.size >= 2 && wI.intersect(wJ).size <= 1) {
-                                val ordered = if (evals[cI].leadBr >= evals[cJ].leadBr) Triple(cI, pivotIdx, cJ) else Triple(cJ, pivotIdx, cI)
-                                duoCandidates.add(
-                                    buildTeamOptionFromEvals(
-                                        evals[ordered.first],
-                                        evals[ordered.second],
-                                        evals[ordered.third],
-                                        "DUO",
-                                        covered,
-                                        "anti-meta-duo-fallback",
-                                        sig
-                                    )
-                                )
-                                break
-                            }
-                        }
-                    }
-
-                    if (abcCandidates.size < 8 && abcCandidates.none { it.id.endsWith(sig) }) {
-                        val m0 = e0
-                        val m1 = if (e1.swapBr >= e2.swapBr) e1 else e2
-                        val m2 = if (e1.swapBr >= e2.swapBr) e2 else e1
-                        abcCandidates.add(
-                            buildTeamOptionFromEvals(m0, m1, m2, "ABC", emptyList(), "anti-meta-abc-fallback", sig)
-                        )
-                    }
-                }
-            }
-
-            abbCandidates.sortByDescending { it.compositeAntiMetaScore }
-            abcCandidates.sortByDescending { it.compositeAntiMetaScore }
-            duoCandidates.sortByDescending { it.compositeAntiMetaScore }
-
-            fun pickTopDiverseFinalists(list: List<AntiMetaTeamOption>, maxCount: Int): List<AntiMetaTeamOption> {
-                val picked = ArrayList<AntiMetaTeamOption>(maxCount)
-                val memberUsage = HashMap<String, Int>()
-                val nonFeaturedLimit = if (slotConstraints.size == 2 && slotConstraints.none { it.isRange }) maxCount else 2
-
-                for (item in list) {
-                    if (picked.size >= maxCount) break
-                    val nonFeaturedNames = item.pokemon
-                        .map { it.name.lowercase() }
-                        .filter { n -> resolvedFeatured.none { f -> f.name.equals(n, ignoreCase = true) } }
-                    val overused = nonFeaturedNames.any { n -> (memberUsage[n] ?: 0) >= nonFeaturedLimit }
-                    if (overused && list.size - picked.size > maxCount) continue
-                    for (n in nonFeaturedNames) {
-                        memberUsage[n] = (memberUsage[n] ?: 0) + 1
-                    }
-                    picked.add(item)
-                }
-
-                if (picked.size < maxCount) {
-                    for (item in list) {
-                        if (picked.size >= maxCount) break
-                        if (picked.any { it.id == item.id }) continue
-                        picked.add(item)
-                    }
-                }
-                return picked
-            }
-
-            // Stage 2: 3-Slot Alternate Moveset Simulation & Optimizer on top finalists
-            var movesetCombosSimulated = 0
-            val movesetVariantCache = HashMap<String, CandidateSlotEval>()
-
-            fun getOrComputeMovesetVariantEval(
-                baseEval: CandidateSlotEval,
-                fMove: String,
-                c1Move: String,
-                c2Move: String
-            ): CandidateSlotEval {
-                val cPairKey = listOf(c1Move.lowercase(), c2Move.lowercase()).sorted().joinToString("+")
-                val stdPairKey = listOf(
-                    baseEval.member.chargedMove1.lowercase(),
-                    baseEval.member.chargedMove2.lowercase()
-                ).sorted().joinToString("+")
-                if (fMove.equals(baseEval.member.fastMove, ignoreCase = true) && cPairKey == stdPairKey) {
-                    return baseEval
-                }
-                val cacheKey = "${baseEval.member.name.lowercase()}|${fMove.lowercase()}|$cPairKey"
-                movesetVariantCache[cacheKey]?.let { return it }
-
-                movesetCombosSimulated++
-                val variantMember = baseEval.member.copy(
-                    fastMove = fMove,
-                    chargedMove1 = c1Move,
-                    chargedMove2 = c2Move
-                )
-                val computed = evaluateCandidateAgainstRoleMeta(
-                    cand = variantMember,
-                    baseSpecies = baseEval.baseSpecies,
-                    isMega = baseEval.isMega,
-                    weaknesses = baseEval.weaknesses,
-                    doubleWeaknesses = baseEval.doubleWeaknesses,
-                    resistances = baseEval.resistances
-                )
-                movesetVariantCache[cacheKey] = computed
-                return computed
-            }
-
-            fun optimizeTeamOptionMovesets(option: AntiMetaTeamOption): AntiMetaTeamOption {
-                val b0 = slotEvalCache[option.pokemon.getOrNull(0)?.name?.lowercase() ?: ""] ?: return option
-                val b1 = slotEvalCache[option.pokemon.getOrNull(1)?.name?.lowercase() ?: ""] ?: return option
-                val b2 = slotEvalCache[option.pokemon.getOrNull(2)?.name?.lowercase() ?: ""] ?: return option
-                val baseEvals = listOf(b0, b1, b2)
-                val curEvals = mutableListOf(b0, b1, b2)
-                val roleLabels = when (option.archetype) {
-                    "ABB" -> listOf("Lead (A)", "Bait Swap (B1)", "Sweeper (B2)")
-                    "DUO" -> listOf("Lead (Core 1)", "Pivot (Swap)", "Co-Core (Core 2)")
-                    else -> listOf("Lead", "Safe Swap", "Closer")
-                }
-
-                for (slotIdx in 0..2) {
-                    val stdEval = baseEvals[slotIdx]
-                    val (rawFast, rawCharged) = getAvailableMovePoolForSpeciesStatic(stdEval.member.name, normLeague)
-                    val fastPool = rawFast
-                        .filter { it.isNotBlank() && !it.equals("Struggle", ignoreCase = true) }
-                        .distinctBy { it.lowercase() }
-                        .take(3)
-                        .ifEmpty { listOf(stdEval.member.fastMove) }
-                    val chargedPool = rawCharged
-                        .filter {
-                            it.isNotBlank() &&
-                                !it.equals("Struggle", ignoreCase = true) &&
-                                !it.equals("Frustration", ignoreCase = true)
-                        }
-                        .distinctBy { it.lowercase() }
-                        .take(5)
-                        .ifEmpty { listOf(stdEval.member.chargedMove1, stdEval.member.chargedMove2).distinctBy { it.lowercase() } }
-
-                    val rawChargedPairs = ArrayList<Pair<String, String>>()
-                    if (chargedPool.size <= 1) {
-                        val only = chargedPool.firstOrNull() ?: stdEval.member.chargedMove1
-                        rawChargedPairs.add(only to only)
-                    } else {
-                        for (i in 0 until chargedPool.size) {
-                            for (j in (i + 1) until chargedPool.size) {
-                                rawChargedPairs.add(chargedPool[i] to chargedPool[j])
-                            }
-                        }
-                    }
-                    val stdTypes = resolveRecommendedMovesForSpecies(stdEval.member.name, normLeague)?.types ?: emptyList()
-                    val nonDomPairs = rawChargedPairs.filterNot { (c1, c2) ->
-                        isDominatedSameTypeChargedPairStatic(c1, c2, stdTypes)
-                    }
-                    val chargedPairs = if (nonDomPairs.isNotEmpty()) nonDomPairs else rawChargedPairs
-                    val hasDualTypeOption = chargedPairs.any { (c1, c2) ->
-                        val t1 = resolveChargedMoveStatsStatic(c1, stdTypes.firstOrNull() ?: "normal").type
-                        val t2 = resolveChargedMoveStatsStatic(c2, stdTypes.firstOrNull() ?: "normal").type
-                        !t1.equals(t2, ignoreCase = true)
-                    }
-
-                    var bestSlotEval = curEvals[slotIdx]
-                    val baselineTeam = buildTeamOptionFromEvals(
-                        curEvals[0],
-                        curEvals[1],
-                        curEvals[2],
-                        option.archetype,
-                        option.sharedWeaknesses,
-                        option.id,
-                        "opt"
-                    )
-                    var bestScore = baselineTeam.compositeAntiMetaScore
-
-                    for (fMove in fastPool) {
-                        for ((c1, c2) in chargedPairs) {
-                            val candEval = getOrComputeMovesetVariantEval(stdEval, fMove, c1, c2)
-                            if (candEval === stdEval) continue
-
-                            val t0Eval = if (slotIdx == 0) candEval else curEvals[0]
-                            val t1Eval = if (slotIdx == 1) candEval else curEvals[1]
-                            val t2Eval = if (slotIdx == 2) candEval else curEvals[2]
-                            val trialTeam = buildTeamOptionFromEvals(
-                                t0Eval,
-                                t1Eval,
-                                t2Eval,
-                                option.archetype,
-                                option.sharedWeaknesses,
-                                option.id,
-                                "opt"
-                            )
-                            val c1S = resolveChargedMoveStatsStatic(c1, stdTypes.firstOrNull() ?: "normal")
-                            val c2S = resolveChargedMoveStatsStatic(c2, stdTypes.firstOrNull() ?: "normal")
-                            val isSameTypePair = !c1.equals(c2, ignoreCase = true) && c1S.type.equals(c2S.type, ignoreCase = true)
-                            val roleAdj = if (isSameTypePair && slotIdx == 1 && hasDualTypeOption) -1.2 else 0.0
-                            val effectiveTrialScore = trialTeam.compositeAntiMetaScore + roleAdj
-                            if (effectiveTrialScore > bestScore + 0.4) {
-                                bestScore = effectiveTrialScore
-                                bestSlotEval = candEval
-                            }
-                        }
-                    }
-                    curEvals[slotIdx] = bestSlotEval
-                }
-
-                val baseTeam = buildTeamOptionFromEvals(
-                    baseEvals[0],
-                    baseEvals[1],
-                    baseEvals[2],
-                    option.archetype,
-                    option.sharedWeaknesses,
-                    option.id,
-                    "base"
-                )
-
-                val altSlots = (0..2).map { sIdx ->
-                    val stdM = baseEvals[sIdx].member
-                    val optM = curEvals[sIdx].member
-                    val stdPair = listOf(stdM.chargedMove1.lowercase(), stdM.chargedMove2.lowercase()).sorted().joinToString("+")
-                    val optPair = listOf(optM.chargedMove1.lowercase(), optM.chargedMove2.lowercase()).sorted().joinToString("+")
-                    val isAlt = !stdM.fastMove.equals(optM.fastMove, ignoreCase = true) || stdPair != optPair
-                    val stdRoleBr = when (sIdx) {
-                        0 -> baseEvals[0].leadBr
-                        1 -> baseEvals[1].swapBr
-                        else -> baseEvals[2].closerBr
-                    }
-                    val optRoleBr = when (sIdx) {
-                        0 -> curEvals[0].leadBr
-                        1 -> curEvals[1].swapBr
-                        else -> curEvals[2].closerBr
-                    }
-                    AntiMetaAltMovesetInfo(
-                        slotIndex = sIdx,
-                        roleLabel = roleLabels[sIdx],
-                        pokemonName = optM.name,
-                        isAltMoveset = isAlt,
-                        standardFastMove = stdM.fastMove,
-                        standardCharged1 = stdM.chargedMove1,
-                        standardCharged2 = stdM.chargedMove2,
-                        fastMove = optM.fastMove,
-                        chargedMove1 = optM.chargedMove1,
-                        chargedMove2 = optM.chargedMove2,
-                        roleBrDelta = optRoleBr - stdRoleBr,
-                        coreBrDelta = 0
-                    )
-                }
-
-                val finalTeam = buildTeamOptionFromEvals(
-                    curEvals[0],
-                    curEvals[1],
-                    curEvals[2],
-                    option.archetype,
-                    option.sharedWeaknesses,
-                    option.id,
-                    "final",
-                    altSlots
-                )
-                val coreDelta = finalTeam.machineAggBr - baseTeam.machineAggBr
-                return finalTeam.copy(
-                    id = option.id,
-                    altMovesetSlots = altSlots.map { a ->
-                        if (a.isAltMoveset) a.copy(coreBrDelta = coreDelta) else a
-                    }
-                )
-            }
-
-            val abbFinalists = pickTopDiverseFinalists(abbCandidates, 6).map { optimizeTeamOptionMovesets(it) }
-                .sortedByDescending { it.compositeAntiMetaScore }
-            val abcFinalists = pickTopDiverseFinalists(abcCandidates, 6).map { optimizeTeamOptionMovesets(it) }
-                .sortedByDescending { it.compositeAntiMetaScore }
-            val duoFinalists = pickTopDiverseFinalists(duoCandidates, 6).map { optimizeTeamOptionMovesets(it) }
-                .sortedByDescending { it.compositeAntiMetaScore }
-
-            val top5Abb = abbFinalists.take(5).mapIndexed { idx, item -> item.copy(rank = idx + 1) }
-            val top5Abc = abcFinalists.take(5).mapIndexed { idx, item -> item.copy(rank = idx + 1) }
-            val top5Duo = duoFinalists.take(5).mapIndexed { idx, item -> item.copy(rank = idx + 1) }
-            val elapsed = max(1L, System.currentTimeMillis() - t0)
-
-            return AntiMetaTeamBuilderResult(
-                league = normLeague,
-                leagueAbbr = getLeagueAbbreviationStatic(normLeague),
-                featuredPokemon = slotConstraints.map { it.displayLabel },
-                top5AbbTeams = top5Abb,
-                top5AbcTeams = top5Abc,
-                top5DuoTeams = top5Duo,
-                candidatesEvaluated = candidatesEvaluated,
-                movesetCombosSimulated = movesetCombosSimulated,
-                metaTargetCount = targetAuditTotal,
-                top25MetaNames = roleMeta.top25Threats,
-                top25MetaList = roleMeta.top25MetaList,
-                top50MetaList = roleMeta.top50MetaList,
-                metaSummaryLabel = "Top-100 Flattened Role-Weighted Synthetic Meta (${roleMeta.wMetaPct}% PvPoke Role Meta / ${roleMeta.wHistPct}% Season Logs • Auditing Top $targetAuditTotal Threats)",
-                elapsedMs = elapsed
-            )
-        }
 
         data class Show6RosterPreset(
             val id: String = java.util.UUID.randomUUID().toString(),
@@ -11297,1986 +2047,425 @@ class OverlayService : LifecycleService() {
             val isCurrent: Boolean
         )
 
-        fun isShow6EligibleLeagueStatic(league: String, prefs: SharedPreferences? = null): Boolean {
-            if (prefs != null && getEnabledShow6LeaguesStatic(prefs).any { it.equals(league, ignoreCase = true) }) {
-                return true
-            }
-            val norm = normalizeLeagueKeyStatic(league)
-            return isBattleFrontierLeagueStatic(norm) || getForcedShow6LeaguesStatic(prefs).any { it.equals(league, ignoreCase = true) }
-        }
 
-        fun syncPinnedLimitedMetaRankingsBlocking(
-            prefs: SharedPreferences,
-            filesDir: java.io.File,
-            forceRefresh: Boolean = false
-        ): Int {
-            val catalog = getLimitedMetaCatalogStatic(prefs)
-            val allActiveKeys = (
-                getForcedShow6LeaguesStatic(prefs) +
-                    getPinnedGblLimitedMetasStatic(prefs) +
-                    getPinnedShow6LimitedMetasStatic(prefs)
-                ).distinct()
-            var loadedCount = 0
-            for (key in allActiveKeys) {
-                val fmt = catalog.find { it.leagueKey.equals(key, ignoreCase = true) || it.title.equals(key, ignoreCase = true) } ?: continue
-                val normKey = fmt.leagueKey.uppercase()
-                val cacheFile = java.io.File(filesDir, "pvpoke_rankings_meta_${fmt.cup}_${fmt.cp}.json")
-                if (!forceRefresh) {
-                    if (!LIVE_RANKINGS_MAP[normKey].isNullOrEmpty()) {
-                        loadedCount++
-                        continue
-                    }
-                    if (cacheFile.exists() && cacheFile.length() > 200) {
-                        val count = parseRankingsJsonStatic(normKey, cacheFile.readText())
-                        if (count > 0) {
-                            loadedCount++
-                            continue
-                        }
-                    }
-                }
-                try {
-                    val conn = (java.net.URL(fmt.rankingsUrl).openConnection() as java.net.HttpURLConnection).apply {
-                        connectTimeout = 7000
-                        readTimeout = 7000
-                        setRequestProperty("User-Agent", "SilphScopePvP/6.04")
-                    }
-                    if (conn.responseCode in 200..299) {
-                        val body = conn.inputStream.bufferedReader().use { it.readText() }
-                        if (body.length > 200) {
-                            cacheFile.writeText(body)
-                            val count = parseRankingsJsonStatic(normKey, body)
-                            if (count > 0) loadedCount++
-                        }
-                    } else if (cacheFile.exists() && cacheFile.length() > 200) {
-                        val count = parseRankingsJsonStatic(normKey, cacheFile.readText())
-                        if (count > 0) loadedCount++
-                    }
-                } catch (_: Exception) {
-                    if (cacheFile.exists() && cacheFile.length() > 200) {
-                        val count = parseRankingsJsonStatic(normKey, cacheFile.readText())
-                        if (count > 0) loadedCount++
-                    }
-                }
-            }
-            return loadedCount
-        }
+        val BATTLE_FRONTIER_USAGE_MAP: MutableMap<String, MutableMap<String, Double>> get() = Show6StaticData.BATTLE_FRONTIER_USAGE_MAP
+        val BATTLE_FRONTIER_CORES_MAP: MutableMap<String, MutableList<BattleFrontierCoreEntry>> get() = Show6StaticData.BATTLE_FRONTIER_CORES_MAP
 
-        fun detectMegaOrPrimalInRankingsJsonStatic(jsonBody: String): Boolean {
-            return try {
-                val arr = JsonParser.parseString(jsonBody).asJsonArray
-                for (el in arr) {
-                    if (!el.isJsonObject) continue
-                    val obj = el.asJsonObject
-                    val spId = obj.optString("speciesId").orEmpty()
-                    val spName = obj.optString("speciesName").orEmpty()
-                    if (isMegaOrPrimalSpeciesStatic(spId) || isMegaOrPrimalSpeciesStatic(spName)) {
-                        return true
-                    }
-                }
-                false
-            } catch (_: Exception) {
-                val lower = jsonBody.lowercase()
-                lower.contains("_mega\"") || lower.contains("_primal\"") || lower.contains("(mega") || lower.contains("(primal")
-            }
-        }
-
-        fun fetchPvPokeLimitedMetasBlocking(prefs: SharedPreferences, filesDir: java.io.File): String {
-            val nowMs = System.currentTimeMillis()
-            val sevenDaysMs = 7L * 24L * 60L * 60L * 1000L
-            val skipBaseCups = setOf("all", "overall", "premierclassic", "classic", "custom")
-            val skipTitles = setOf("GREAT LEAGUE", "ULTRA LEAGUE", "MASTER LEAGUE")
-            val pinnedKeysLower = (getPinnedGblLimitedMetasStatic(prefs) + getPinnedShow6LimitedMetasStatic(prefs))
-                .map { it.lowercase() }
-                .toSet()
-
-            // Load previously persisted catalog so we preserve lastSeenAt when a format leaves gamemaster.json["formats"]
-            val previousByKey = LinkedHashMap<String, LimitedMetaFormat>()
-            for (item in DEFAULT_LIMITED_META_CATALOG) {
-                previousByKey[item.leagueKey.uppercase()] = item
-            }
-            val rawSaved = prefs.getString(PREFS_KEY_LIMITED_META_CATALOG_JSON, null)
-            if (!rawSaved.isNullOrBlank()) {
-                try {
-                    val type = object : TypeToken<List<LimitedMetaFormat>>() {}.type
-                    val parsed: List<LimitedMetaFormat>? = Gson().fromJson(rawSaved, type)
-                    parsed?.forEach { item ->
-                        if (item.leagueKey.isNotBlank()) {
-                            val normKey = formatCatalogLeagueKeyStatic(item.title.ifBlank { item.leagueKey }, item.cp, item.cup)
-                            previousByKey[normKey.uppercase()] = item.copy(leagueKey = normKey)
-                        }
-                    }
-                } catch (_: Exception) {}
-            }
-
-            // Start with previous entries demoted from CURRENT to RECENT (preserving their lastSeenAt) until re-confirmed live
-            val byKey = LinkedHashMap<String, LimitedMetaFormat>()
-            for ((k, prev) in previousByKey) {
-                val demotedStatus = if (prev.lifecycleStatus == "CURRENT" && prev.category != "standard_open") "RECENT" else prev.lifecycleStatus
-                byKey[k] = prev.copy(lifecycleStatus = demotedStatus)
-            }
-
-            val liveFormatCups = HashSet<String>()
-
-            fun verifyRankingsAndDetectMega(rankingsUrl: String, fallbackAllowMega: Boolean): Pair<Boolean, Boolean> {
-                return try {
-                    val conn = (java.net.URL(rankingsUrl).openConnection() as java.net.HttpURLConnection).apply {
-                        connectTimeout = 6500
-                        readTimeout = 6500
-                        setRequestProperty("User-Agent", "SilphScopePvP/5.10")
-                    }
-                    if (conn.responseCode in 200..299) {
-                        val body = conn.inputStream.bufferedReader().use { it.readText() }
-                        if (body.length > 200) {
-                            true to detectMegaOrPrimalInRankingsJsonStatic(body)
-                        } else false to fallbackAllowMega
-                    } else false to fallbackAllowMega
-                } catch (_: Exception) {
-                    false to fallbackAllowMega
-                }
-            }
-
-            fun fetchCupLastCommitMs(cupSlug: String): Long? {
-                return try {
-                    val apiUrl = "https://api.github.com/repos/pvpoke/pvpoke/commits?path=src/data/rankings/$cupSlug&per_page=1"
-                    val conn = (java.net.URL(apiUrl).openConnection() as java.net.HttpURLConnection).apply {
-                        connectTimeout = 5000
-                        readTimeout = 5000
-                        setRequestProperty("User-Agent", "SilphScopePvP/5.10")
-                    }
-                    if (conn.responseCode in 200..299) {
-                        val arr = JsonParser.parseString(conn.inputStream.bufferedReader().use { it.readText() }).asJsonArray
-                        if (arr.size() > 0) {
-                            val isoDate = arr[0].asJsonObject
-                                .getAsJsonObject("commit")
-                                ?.getAsJsonObject("committer")
-                                ?.optString("date")
-                            if (!isoDate.isNullOrBlank()) {
-                                java.time.Instant.parse(isoDate).toEpochMilli()
-                            } else null
-                        } else null
-                    } else null
-                } catch (_: Exception) {
-                    null
-                }
-            }
-
-            try {
-                // 1. Primary Source: Compiled PvPoke gamemaster.json (matches live pvpoke.com dropdown)
-                val gmUrl = "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/gamemaster.json"
-                val conn = (java.net.URL(gmUrl).openConnection() as java.net.HttpURLConnection).apply {
-                    connectTimeout = 9000
-                    readTimeout = 9000
-                    setRequestProperty("User-Agent", "SilphScopePvP/5.10")
-                }
-                if (conn.responseCode in 200..299) {
-                    val text = conn.inputStream.bufferedReader().use { it.readText() }
-                    val root = JsonParser.parseString(text).asJsonObject
-
-                    // 1A: Parse root["formats"]
-                    val formatsArr = root.getAsJsonArray("formats")
-                    if (formatsArr != null) {
-                        for (el in formatsArr) {
-                            if (!el.isJsonObject) continue
-                            val obj = el.asJsonObject
-                            val hideRankings = obj.get("hideRankings")?.takeIf { it.isJsonPrimitive }?.asBoolean ?: false
-                            if (hideRankings) continue
-                            val showFormat = obj.get("showFormat")?.takeIf { it.isJsonPrimitive }?.asBoolean ?: true
-                            val cup = obj.optString("cup")?.trim()?.lowercase().orEmpty()
-                            val rawTitle = obj.optString("title")?.trim().orEmpty()
-                            val cp = obj.optInt("cp") ?: 1500
-                            val meta = obj.optString("meta")?.trim()?.lowercase().orEmpty()
-                            if (cup.isEmpty() || rawTitle.isEmpty() || cup in skipBaseCups) continue
-                            if (rawTitle.uppercase() in skipTitles) continue
-
-                            liveFormatCups.add("${cup}_${cp}")
-                            val isBf = isBattleFrontierFormatTitleStatic(rawTitle, cup) ||
-                                meta.contains("frontier") ||
-                                cup == "laic2027" ||
-                                cup == "trail" ||
-                                cup == "fable" ||
-                                cup == "gymbreakers"
-                            val leagueKey = formatCatalogLeagueKeyStatic(rawTitle, cp, cup)
-                            val displayTitle = if (isBattleFrontierFormatTitleStatic(rawTitle, cup)) {
-                                leagueKey.uppercase()
-                            } else {
-                                toPvPokeTitleCaseStatic(rawTitle)
-                            }
-                            if (leagueKey.uppercase() in skipTitles) continue
-                            val rankingsUrl = "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/$cup/overall/rankings-$cp.json"
-                            val prev = previousByKey[leagueKey.uppercase()]
-                            val (ok, hasMegas) = verifyRankingsAndDetectMega(rankingsUrl, prev?.allowsMega ?: false)
-                            if (!ok && prev == null) continue
-                            val cat = when {
-                                isBf -> "battle_frontier"
-                                cup == "premier" || cup == "mega" -> "premier_mega"
-                                else -> "gbl"
-                            }
-                            val status = if (!showFormat) "UPCOMING" else "CURRENT"
-                            byKey[leagueKey.uppercase()] = LimitedMetaFormat(
-                                id = "${cup}_${cp}",
-                                title = displayTitle,
-                                cup = cup,
-                                cp = cp,
-                                leagueKey = leagueKey,
-                                category = cat,
-                                lifecycleStatus = status,
-                                rankingsUrl = rankingsUrl,
-                                sheetTabAlias = prev?.sheetTabAlias ?: meta.ifEmpty { cup },
-                                lastSeenAt = nowMs,
-                                allowsMega = hasMegas
-                            )
-                        }
-                    }
-
-                    // 1B: Parse root["cups"] for additional UPCOMING (newly staged <= 7d) or RECENT (<= 28d) cups not in live formats
-                    val cupsArr = root.getAsJsonArray("cups")
-                    if (cupsArr != null) {
-                        for (el in cupsArr) {
-                            if (!el.isJsonObject) continue
-                            val cupObj = el.asJsonObject
-                            val cup = cupObj.optString("name")?.trim()?.lowercase().orEmpty()
-                            val rawTitle = cupObj.optString("title")?.trim().orEmpty()
-                            val cp = cupObj.optInt("league") ?: 1500
-                            if (cup.isEmpty() || rawTitle.isEmpty() || cup in skipBaseCups) continue
-                            if (rawTitle.uppercase() in skipTitles || rawTitle.equals("All Pokemon", ignoreCase = true)) continue
-                            val cupCpId = "${cup}_${cp}"
-                            if (cupCpId in liveFormatCups) continue
-
-                            val leagueKey = formatCatalogLeagueKeyStatic(rawTitle, cp, cup)
-                            val displayTitle = if (isBattleFrontierFormatTitleStatic(rawTitle, cup)) {
-                                leagueKey.uppercase()
-                            } else {
-                                toPvPokeTitleCaseStatic(rawTitle)
-                            }
-                            if (leagueKey.uppercase() in skipTitles) continue
-
-                            val rankingsUrl = "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/$cup/overall/rankings-$cp.json"
-                            val prev = previousByKey[leagueKey.uppercase()]
-                            val commitMs = fetchCupLastCommitMs(cup) ?: prev?.lastSeenAt ?: (nowMs - 21L * 86400_000L)
-                            val ageMs = nowMs - commitMs
-                            val isPinned = leagueKey.lowercase() in pinnedKeysLower
-                            val isBfForced = isCurrentBattleFrontierCupStatic(rawTitle, cup)
-                            // Skip unpinned cups older than 4 weeks
-                            if (ageMs > FOUR_WEEKS_MS && !isPinned && !isBfForced) continue
-
-                            val (ok, hasMegas) = verifyRankingsAndDetectMega(rankingsUrl, prev?.allowsMega ?: false)
-                            if (!ok) continue
-
-                            val status = if (ageMs <= sevenDaysMs && prev == null) "UPCOMING" else "RECENT"
-                            byKey[leagueKey.uppercase()] = LimitedMetaFormat(
-                                id = cupCpId,
-                                title = displayTitle,
-                                cup = cup,
-                                cp = cp,
-                                leagueKey = leagueKey,
-                                category = if (isBattleFrontierFormatTitleStatic(rawTitle, cup)) "battle_frontier" else (prev?.category ?: "gbl"),
-                                lifecycleStatus = status,
-                                rankingsUrl = rankingsUrl,
-                                sheetTabAlias = prev?.sheetTabAlias ?: cup,
-                                lastSeenAt = commitMs,
-                                allowsMega = hasMegas
-                            )
-                        }
-                    }
-                }
-            } catch (_: Exception) {}
-
-            // 2. Check non-master branches on pvpoke/pvpoke updated within the last 14 days for staged UPCOMING metas
-            try {
-                val branchesUrl = "https://api.github.com/repos/pvpoke/pvpoke/branches?per_page=10"
-                val bConn = (java.net.URL(branchesUrl).openConnection() as java.net.HttpURLConnection).apply {
-                    connectTimeout = 5000
-                    readTimeout = 5000
-                    setRequestProperty("User-Agent", "SilphScopePvP/6.05")
-                }
-                if (bConn.responseCode in 200..299) {
-                    val bArr = JsonParser.parseString(bConn.inputStream.bufferedReader().use { it.readText() }).asJsonArray
-                    for (bEl in bArr) {
-                        val bObj = bEl.asJsonObject
-                        val bName = bObj.optString("name").orEmpty()
-                        if (bName.isEmpty() || bName == "master" || bName == "main") continue
-                        val branchFormatsUrl = "https://raw.githubusercontent.com/pvpoke/pvpoke/$bName/src/data/gamemaster/formats.json"
-                        val fConn = (java.net.URL(branchFormatsUrl).openConnection() as java.net.HttpURLConnection).apply {
-                            connectTimeout = 4500
-                            readTimeout = 4500
-                            setRequestProperty("User-Agent", "SilphScopePvP/6.05")
-                        }
-                        if (fConn.responseCode in 200..299) {
-                            val fArr = JsonParser.parseString(fConn.inputStream.bufferedReader().use { it.readText() }).asJsonArray
-                            for (fEl in fArr) {
-                                if (!fEl.isJsonObject) continue
-                                val fObj = fEl.asJsonObject
-                                val cup = fObj.optString("cup")?.trim()?.lowercase().orEmpty()
-                                val rawTitle = fObj.optString("title")?.trim().orEmpty()
-                                val cp = fObj.optInt("cp") ?: 1500
-                                if (cup.isEmpty() || rawTitle.isEmpty() || cup in skipBaseCups) continue
-                                val leagueKey = formatCatalogLeagueKeyStatic(rawTitle, cp, cup)
-                                val displayTitle = if (isBattleFrontierFormatTitleStatic(rawTitle, cup)) {
-                                    leagueKey.uppercase()
-                                } else {
-                                    toPvPokeTitleCaseStatic(rawTitle)
-                                }
-                                if (byKey.containsKey(leagueKey.uppercase())) continue
-                                val rUrl = "https://raw.githubusercontent.com/pvpoke/pvpoke/$bName/src/data/rankings/$cup/overall/rankings-$cp.json"
-                                val (ok, hasMegas) = verifyRankingsAndDetectMega(rUrl, false)
-                                if (ok) {
-                                    byKey[leagueKey.uppercase()] = LimitedMetaFormat(
-                                        id = "${cup}_${cp}",
-                                        title = displayTitle,
-                                        cup = cup,
-                                        cp = cp,
-                                        leagueKey = leagueKey,
-                                        category = if (isBattleFrontierFormatTitleStatic(rawTitle, cup)) "battle_frontier" else "gbl",
-                                        lifecycleStatus = "UPCOMING",
-                                        rankingsUrl = rUrl,
-                                        sheetTabAlias = cup,
-                                        lastSeenAt = nowMs,
-                                        allowsMega = hasMegas
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (_: Exception) {}
-
-            // 3. Enforce 4-week (28-day) expiration: keep expired RECENT metas ONLY if still checked/pinned or CURRENT Battle Frontier forced
-            val filtered = byKey.values.filter { item ->
-                val isPinned = item.leagueKey.lowercase() in pinnedKeysLower
-                val isBfForced = item.lifecycleStatus.equals("CURRENT", ignoreCase = true) &&
-                    isCurrentBattleFrontierCupStatic(item.title.ifBlank { item.leagueKey }, item.cup)
-                !isExpiredLimitedMetaStatic(item, nowMs) || isPinned || isBfForced
-            }
-
-            val sorted = sortLimitedMetasByLifecycleStatic(filtered)
-            LAST_LOADED_META_CATALOG = sorted
-            prefs.edit().putString(PREFS_KEY_LIMITED_META_CATALOG_JSON, Gson().toJson(sorted)).apply()
-            val synced = syncPinnedLimitedMetaRankingsBlocking(prefs, filesDir)
-            val curCount = sorted.count { it.lifecycleStatus == "CURRENT" }
-            val upCount = sorted.count { it.lifecycleStatus == "UPCOMING" }
-            val recCount = sorted.count { it.lifecycleStatus == "RECENT" }
-            return "✅ PvPoke GitHub Synced: ${sorted.size} Verified Metas (🟢 $curCount Current • 🔜 $upCount Upcoming • 🕒 $recCount Recent ≤4w • $synced Pinned Loaded)"
-        }
-
-        fun isMegaOrPrimalSpeciesStatic(name: String): Boolean {
-            val lower = name.trim().lowercase()
-            return lower.contains("(mega") ||
-                lower.startsWith("mega ") ||
-                lower.contains(" mega") ||
-                lower.contains("_mega") ||
-                lower.contains("(primal") ||
-                lower.startsWith("primal ") ||
-                lower.contains(" primal") ||
-                lower.contains("_primal")
-        }
-
-        fun countMegaOrPrimalInListStatic(names: List<String>): Int {
-            return names.count { isMegaOrPrimalSpeciesStatic(it) }
-        }
-
-        fun hasMultipleMegasStatic(names: List<String>): Boolean {
-            return countMegaOrPrimalInListStatic(names) > 1
-        }
-
-        val BATTLE_FRONTIER_USAGE_MAP: MutableMap<String, MutableMap<String, Double>> = java.util.concurrent.ConcurrentHashMap<String, MutableMap<String, Double>>().apply {
-            put("GREAT LEAGUE", java.util.concurrent.ConcurrentHashMap<String, Double>().apply {
-                put("Florges", 47.43); put("Sableye", 37.3); put("Melmetal", 37.14); put("Quagsire", 36.5)
-                put("Corsola (Galarian)", 31.51); put("Corviknight", 30.55); put("Clodsire", 29.58); put("Dunsparce", 28.46)
-                put("Altaria", 27.01); put("Stunfisk", 25.08); put("Ninetales", 23.95); put("Cramorant", 22.67)
-                put("Charjabug", 18.81); put("Araquanid", 17.36); put("Vigoroth", 15.59); put("Tinkaton", 14.31)
-                put("Electrode (Hisuian)", 11.9); put("Thievul", 11.74); put("Ninetales (Alolan)", 11.25); put("Hydreigon", 9.65)
-                put("Empoleon", 8.84); put("Jumpluff", 8.68); put("Ursaluna", 5.47); put("Fearow", 5.31)
-                put("Jellicent", 5.14); put("Forretress", 3.86); put("Azumarill", 3.7); put("Kingdra", 3.7)
-                put("Lanturn", 3.7); put("Cradily", 3.54); put("Rillaboom", 3.05); put("Annihilape", 2.73)
-                put("Feraligatr", 2.73); put("Marowak", 2.73); put("Hippowdon", 2.41); put("Politoed", 2.09)
-                put("Guzzlord", 1.77); put("Morpeko", 1.61); put("Pangoro", 1.61); put("Greninja", 1.45)
-                put("Medicham", 1.45); put("Diggersby", 1.29); put("Dondozo", 1.29); put("Furret", 1.29)
-                put("Houndoom", 1.29); put("Malamar", 1.29); put("Talonflame", 1.29); put("Dusclops", 1.13)
-                put("Togetic", 1.13); put("Drapion", 0.96); put("Snorlax", 0.96); put("Umbreon", 0.96)
-                put("Deoxys (Defense)", 0.8); put("Sandslash (Alolan)", 0.8); put("Toxapex", 0.8); put("Blastoise", 0.64)
-                put("Dusknoir", 0.64); put("Golisopod", 0.64); put("Mantine", 0.64); put("Marowak (Alolan)", 0.64)
-                put("Persian", 0.64); put("Piloswine", 0.64); put("Sealeo", 0.64); put("Blaziken", 0.48)
-                put("Clefable", 0.48); put("Dragonite", 0.48); put("Gastrodon", 0.48); put("Goodra", 0.48)
-                put("Gourgeist", 0.48); put("Lickilicky", 0.48); put("Lickitung", 0.48); put("Spidops", 0.48)
-                put("Swampert", 0.48); put("Teddiursa", 0.48); put("Weezing (Galarian)", 0.48); put("Zweilous", 0.48)
-                put("Aegislash (Shield)", 0.32); put("Carbink", 0.32); put("Dewgong", 0.32); put("Froslass", 0.32)
-                put("Golurk", 0.32); put("Regidrago", 0.32); put("Samurott", 0.32); put("Seaking", 0.32)
-                put("Stunfisk (Galarian)", 0.32); put("Tentacruel", 0.32); put("Toedscruel", 0.32); put("Toucannon", 0.32)
-                put("Turtonator", 0.32); put("Victreebel", 0.32); put("Articuno", 0.16); put("Articuno (Galarian)", 0.16)
-                put("Bastiodon", 0.16); put("Bulbasaur", 0.16); put("Camerupt", 0.16); put("Cetitan", 0.16)
-                put("Charmander", 0.16); put("Chesnaught", 0.16); put("Cresselia", 0.16); put("Dragonair", 0.16)
-                put("Drilbur", 0.16); put("Farfetch'd (Galarian)", 0.16); put("Hakamo-o", 0.16); put("Hariyama", 0.16)
-                put("Kommo-o", 0.16); put("Lapras", 0.16); put("Lopunny", 0.16); put("Mandibuzz", 0.16)
-                put("Mightyena", 0.16); put("Oinkologne (Female)", 0.16); put("Oranguru", 0.16); put("Pachirisu", 0.16)
-                put("Primarina", 0.16); put("Primeape", 0.16); put("Seismitoad", 0.16); put("Shelgon", 0.16)
-                put("Swalot", 0.16); put("Throh", 0.16); put("Togekiss", 0.16); put("Torkoal", 0.16)
-                put("Typhlosion", 0.16); put("Voltorb (Hisuian)", 0.16); put("Walrein", 0.16); put("Wigglytuff", 0.16)
-            })
-            put("BATTLE FRONTIER (SPECTRAL)", java.util.concurrent.ConcurrentHashMap<String, Double>().apply {
-                put("Golisopod", 80.6); put("Weezing (Galarian)", 77.7); put("Cofagrigus", 49.11); put("Arctibax", 46.22)
-                put("Charjabug", 44.61); put("Glalie", 40.82); put("Hypno", 35.99); put("Tentacruel", 29.79)
-                put("Skeledirge", 19.81); put("Dewgong", 18.04); put("Grumpig", 16.26); put("Ninetales (Alolan)", 15.86)
-                put("Starmie", 14.17); put("Runerigus", 13.04); put("Piloswine", 11.59); put("Slowbro", 11.51)
-                put("Qwilfish", 9.02); put("Slowking (Galarian)", 7.89); put("Arbok", 7.81); put("Ledian", 7.0)
-                put("Amoonguss", 5.31); put("Swalot", 5.31); put("Dragalge", 5.23); put("Centiskorch", 3.62)
-                put("Baxcalibur", 3.14); put("Weezing", 2.74); put("Avalugg", 2.01); put("Bruxish", 1.69)
-                put("Raichu (Alolan)", 1.29); put("Froslass", 1.21); put("Wormadam (Sandy)", 1.21); put("Claydol", 0.89)
-                put("Medicham", 0.81); put("Golbat", 0.72); put("Nidoqueen", 0.64); put("Vanillish", 0.64)
-                put("Ariados", 0.56); put("Slowbro (Galarian)", 0.56); put("Abomasnow", 0.48); put("Drifblim", 0.48)
-                put("Muk", 0.4); put("Cetitan", 0.32); put("Gourgeist", 0.32); put("Delphox", 0.24)
-                put("Mamoswine", 0.24); put("Nidorina", 0.24); put("Salazzle", 0.24); put("Toxicroak", 0.24)
-                put("Venomoth", 0.24); put("Castform (Snowy)", 0.16); put("Grimer", 0.16); put("Heracross", 0.16)
-                put("Lampent", 0.16); put("Smoochum", 0.16); put("Swoobat", 0.16); put("Trevenant", 0.16)
-                put("Venusaur", 0.16); put("Victreebel", 0.16); put("Ceruledge", 0.08); put("Chimecho", 0.08)
-                put("Frigibax", 0.08); put("Galvantula", 0.08); put("Houndstone", 0.08); put("Mismagius", 0.08)
-                put("Wobbuffet", 0.08); put("Xatu", 0.08)
-            })
-            put("BATTLE FRONTIER (CAULDRON)", java.util.concurrent.ConcurrentHashMap<String, Double>().apply {
-                put("Greedent", 52.58); put("Muk (Alolan)", 52.26); put("Ursaluna", 50.32); put("Weezing (Galarian)", 45.0)
-                put("Jellicent", 40.32); put("Talonflame", 34.52); put("Clefable", 31.77); put("Greninja", 31.77)
-                put("Giratina (Altered)", 24.52); put("Moltres (Galarian)", 21.29); put("Samurott", 21.29); put("Seaking", 20.32)
-                put("Drapion", 19.19); put("Crobat", 18.06); put("Dragalge", 17.74); put("Dusknoir", 12.74)
-                put("Togekiss", 9.68); put("Florges", 7.26); put("Rapidash", 6.94); put("Scizor", 5.81)
-                put("Aromatisse", 5.0); put("Doublade", 5.0); put("Genesect", 5.0); put("Nidoking", 4.68)
-                put("Audino (Mega)", 4.52); put("Primarina", 4.19); put("Sandslash", 4.19); put("Golisopod", 4.03)
-                put("Ninetales", 4.03); put("Malamar (Mega)", 3.71); put("Ninetales (Alolan)", 2.9); put("Turtonator", 2.58)
-                put("Clodsire", 2.26); put("Overqwil", 2.1); put("Malamar", 1.94); put("Runerigus", 1.94)
-                put("Galvantula", 1.77); put("Pangoro", 1.77); put("Annihilape", 1.45); put("Tapu Fini", 1.45)
-                put("Toxtricity", 1.45); put("Grafaiai", 1.13); put("Drifblim", 0.97); put("Typhlosion", 0.97)
-                put("Golurk", 0.65); put("Charizard", 0.48); put("Hydreigon", 0.48); put("Mandibuzz", 0.48)
-                put("Muk", 0.48); put("Samurott (Hisuian)", 0.48); put("Skeledirge", 0.48); put("Toxicroak", 0.48)
-                put("Umbreon", 0.48); put("Beedrill (Mega)", 0.32); put("Bombirdier", 0.32); put("Victreebel", 0.32)
-                put("Blaziken", 0.16); put("Camerupt", 0.16); put("Charizard (Mega X)", 0.16); put("Cofagrigus", 0.16)
-                put("Diancie", 0.16); put("Gourgeist", 0.16); put("Krookodile", 0.16); put("Morpeko", 0.16)
-                put("Qwilfish", 0.16); put("Scizor (Mega)", 0.16); put("Tyranitar", 0.16); put("Venusaur", 0.16)
-                put("Victreebel (Mega)", 0.16)
-            })
-            put("BATTLE FRONTIER (MASTER)", java.util.concurrent.ConcurrentHashMap<String, Double>().apply {
-                put("Zamazenta (Crowned)", 29.28); put("Ursaluna", 24.84); put("Dialga (Origin)", 24.01); put("Zacian (Crowned)", 23.85)
-                put("Reshiram", 23.68); put("Metagross", 22.37); put("Groudon", 20.56); put("Lugia", 20.07)
-                put("Lunala", 19.74); put("Florges", 19.41); put("Necrozma (Dawn Wings)", 19.08); put("Zygarde", 18.59)
-                put("Keldeo (Resolute)", 18.26); put("Eternatus", 16.78); put("Palkia", 16.45); put("Xerneas", 15.62)
-                put("Kyurem (White)", 14.47); put("Palkia (Origin)", 13.98); put("Zekrom", 13.98); put("Blastoise (Mega)", 12.83)
-                put("Kyurem (Black)", 12.5); put("Kyogre", 12.17); put("Necrozma (Dusk Mane)", 11.35); put("Melmetal", 11.18)
-                put("Meloetta (Aria)", 10.86); put("Yveltal", 9.87); put("Landorus (Therian)", 9.7); put("Aggron (Mega)", 9.54)
-                put("Scizor (Mega)", 9.21); put("Marshadow", 8.88); put("Ho-Oh", 8.72); put("Gyarados", 7.89)
-                put("Swampert (Mega)", 7.89); put("Latios (Mega)", 7.73); put("Gardevoir (Mega)", 7.07); put("Charizard (Mega X)", 6.74)
-                put("Gengar (Mega)", 5.92); put("Rhyperior", 5.26); put("Giratina (Altered)", 4.93); put("Gallade (Mega)", 4.77)
-                put("Garchomp", 3.95); put("Latias (Mega)", 3.95); put("Aerodactyl (Mega)", 3.29); put("Mewtwo", 2.8)
-                put("Blaziken (Mega)", 2.47); put("Houndoom (Mega)", 2.14); put("Togekiss", 1.97); put("Urshifu (Single Strike)", 1.48)
-                put("Primarina", 1.32); put("Tapu Lele", 1.32); put("Lucario (Mega)", 1.15); put("Staraptor (Mega)", 1.15)
-                put("Kingambit", 0.99); put("Mamoswine", 0.99); put("Zacian (Hero)", 0.99); put("Gholdengo", 0.66)
-                put("Hydreigon", 0.66); put("Solgaleo", 0.66); put("Tyranitar", 0.66); put("Alakazam (Mega)", 0.49)
-                put("Keldeo (Ordinary)", 0.49); put("Snorlax", 0.49); put("Abomasnow (Mega)", 0.33); put("Ampharos (Mega)", 0.33)
-                put("Annihilape", 0.33); put("Chandelure", 0.33); put("Dragonite", 0.33); put("Enamorus (Therian)", 0.33)
-                put("Giratina (Origin)", 0.33); put("Raichu (Mega Y)", 0.33); put("Slowbro (Mega)", 0.33); put("Starmie (Mega)", 0.33)
-                put("Tapu Bulu", 0.33); put("Baxcalibur", 0.16); put("Darkrai", 0.16); put("Dialga", 0.16)
-                put("Gardevoir", 0.16); put("Genesect", 0.16); put("Grimmsnarl", 0.16); put("Kangaskhan (Mega)", 0.16)
-                put("Kartana", 0.16); put("Kyurem", 0.16); put("Moltres (Galarian)", 0.16); put("Rillaboom", 0.16)
-                put("Steelix (Mega)", 0.16); put("Zamazenta (Hero)", 0.16); put("Zarude", 0.16)
-            })
-        }
-
-        val BATTLE_FRONTIER_CORES_MAP: MutableMap<String, MutableList<BattleFrontierCoreEntry>> = java.util.concurrent.ConcurrentHashMap<String, MutableList<BattleFrontierCoreEntry>>().apply {
-            put("GREAT LEAGUE", java.util.concurrent.CopyOnWriteArrayList(listOf(
-                BattleFrontierCoreEntry("Florges", "Melmetal", 21.32),
-                BattleFrontierCoreEntry("Melmetal", "Quagsire", 19.9),
-                BattleFrontierCoreEntry("Sableye", "Florges", 18.73),
-                BattleFrontierCoreEntry("Florges", "Quagsire", 18.6),
-                BattleFrontierCoreEntry("Melmetal", "Altaria", 16.93),
-                BattleFrontierCoreEntry("Florges", "Altaria", 16.28),
-                BattleFrontierCoreEntry("Florges", "Corviknight", 16.02),
-                BattleFrontierCoreEntry("Melmetal", "Corsola (Galarian)", 14.99),
-                BattleFrontierCoreEntry("Florges", "Corsola (Galarian)", 14.73),
-                BattleFrontierCoreEntry("Quagsire", "Corsola (Galarian)", 14.08),
-                BattleFrontierCoreEntry("Quagsire", "Altaria", 13.57),
-                BattleFrontierCoreEntry("Clodsire", "Florges", 13.18),
-                BattleFrontierCoreEntry("Florges", "Dunsparce", 13.18),
-                BattleFrontierCoreEntry("Sableye", "Corviknight", 12.53),
-                BattleFrontierCoreEntry("Sableye", "Clodsire", 12.4),
-                BattleFrontierCoreEntry("Melmetal", "Ninetales", 12.02),
-                BattleFrontierCoreEntry("Dunsparce", "Quagsire", 11.37),
-                BattleFrontierCoreEntry("Corviknight", "Quagsire", 11.24),
-                BattleFrontierCoreEntry("Corviknight", "Dunsparce", 10.59),
-                BattleFrontierCoreEntry("Sableye", "Melmetal", 10.59),
-                BattleFrontierCoreEntry("Florges", "Ninetales", 10.47),
-                BattleFrontierCoreEntry("Sableye", "Stunfisk", 10.47),
-                BattleFrontierCoreEntry("Dunsparce", "Altaria", 10.34),
-                BattleFrontierCoreEntry("Sableye", "Cramorant", 10.34),
-                BattleFrontierCoreEntry("Sableye", "Dunsparce", 10.34)
-            )))
-            put("BATTLE FRONTIER (SPECTRAL)", java.util.concurrent.CopyOnWriteArrayList(listOf(
-                BattleFrontierCoreEntry("Weezing (Galarian)", "Golisopod", 63.45),
-                BattleFrontierCoreEntry("Weezing (Galarian)", "Cofagrigus", 41.2),
-                BattleFrontierCoreEntry("Cofagrigus", "Golisopod", 37.9),
-                BattleFrontierCoreEntry("Weezing (Galarian)", "Arctibax", 35.96),
-                BattleFrontierCoreEntry("Weezing (Galarian)", "Charjabug", 35.9),
-                BattleFrontierCoreEntry("Golisopod", "Glalie", 35.45),
-                BattleFrontierCoreEntry("Golisopod", "Arctibax", 35.38),
-                BattleFrontierCoreEntry("Golisopod", "Charjabug", 32.47),
-                BattleFrontierCoreEntry("Weezing (Galarian)", "Glalie", 30.6),
-                BattleFrontierCoreEntry("Golisopod", "Hypno", 29.5),
-                BattleFrontierCoreEntry("Weezing (Galarian)", "Hypno", 29.5),
-                BattleFrontierCoreEntry("Golisopod", "Tentacruel", 25.23),
-                BattleFrontierCoreEntry("Weezing (Galarian)", "Tentacruel", 22.64),
-                BattleFrontierCoreEntry("Cofagrigus", "Arctibax", 21.73),
-                BattleFrontierCoreEntry("Cofagrigus", "Glalie", 21.15),
-                BattleFrontierCoreEntry("Cofagrigus", "Charjabug", 19.15),
-                BattleFrontierCoreEntry("Cofagrigus", "Hypno", 16.56),
-                BattleFrontierCoreEntry("Charjabug", "Glalie", 16.24),
-                BattleFrontierCoreEntry("Arctibax", "Charjabug", 15.98),
-                BattleFrontierCoreEntry("Arctibax", "Glalie", 15.72),
-                BattleFrontierCoreEntry("Golisopod", "Skeledirge", 15.52),
-                BattleFrontierCoreEntry("Arctibax", "Hypno", 15.33),
-                BattleFrontierCoreEntry("Cofagrigus", "Tentacruel", 14.81),
-                BattleFrontierCoreEntry("Hypno", "Glalie", 14.17),
-                BattleFrontierCoreEntry("Golisopod", "Grumpig", 13.97)
-            )))
-            put("BATTLE FRONTIER (CAULDRON)", java.util.concurrent.CopyOnWriteArrayList(listOf(
-                BattleFrontierCoreEntry("Muk (Alolan)", "Greedent", 27.2),
-                BattleFrontierCoreEntry("Muk (Alolan)", "Ursaluna", 25.91),
-                BattleFrontierCoreEntry("Weezing (Galarian)", "Greedent", 23.45),
-                BattleFrontierCoreEntry("Jellicent", "Muk (Alolan)", 22.02),
-                BattleFrontierCoreEntry("Greedent", "Ursaluna", 20.47),
-                BattleFrontierCoreEntry("Weezing (Galarian)", "Muk (Alolan)", 20.47),
-                BattleFrontierCoreEntry("Weezing (Galarian)", "Ursaluna", 20.08),
-                BattleFrontierCoreEntry("Greedent", "Talonflame", 19.82),
-                BattleFrontierCoreEntry("Weezing (Galarian)", "Jellicent", 19.43),
-                BattleFrontierCoreEntry("Jellicent", "Greedent", 18.91),
-                BattleFrontierCoreEntry("Muk (Alolan)", "Talonflame", 18.78),
-                BattleFrontierCoreEntry("Greedent", "Greninja", 18.13),
-                BattleFrontierCoreEntry("Jellicent", "Ursaluna", 18.01),
-                BattleFrontierCoreEntry("Greedent", "Clefable", 17.36),
-                BattleFrontierCoreEntry("Weezing (Galarian)", "Greninja", 15.8),
-                BattleFrontierCoreEntry("Muk (Alolan)", "Greninja", 15.28),
-                BattleFrontierCoreEntry("Muk (Alolan)", "Clefable", 15.16),
-                BattleFrontierCoreEntry("Talonflame", "Ursaluna", 15.04),
-                BattleFrontierCoreEntry("Weezing (Galarian)", "Talonflame", 14.9),
-                BattleFrontierCoreEntry("Muk (Alolan)", "Giratina (Altered)", 14.77),
-                BattleFrontierCoreEntry("Clefable", "Ursaluna", 14.64),
-                BattleFrontierCoreEntry("Jellicent", "Talonflame", 12.69),
-                BattleFrontierCoreEntry("Muk (Alolan)", "Samurott", 12.69),
-                BattleFrontierCoreEntry("Clefable", "Greninja", 12.56),
-                BattleFrontierCoreEntry("Ursaluna", "Greninja", 12.56)
-            )))
-            put("BATTLE FRONTIER (MASTER)", java.util.concurrent.CopyOnWriteArrayList(listOf(
-                BattleFrontierCoreEntry("Keldeo (Resolute)", "Dialga (Origin)", 10.95),
-                BattleFrontierCoreEntry("Florges", "Dialga (Origin)", 9.89),
-                BattleFrontierCoreEntry("Dialga (Origin)", "Landorus (Therian)", 8.84),
-                BattleFrontierCoreEntry("Lugia", "Ursaluna", 8.31),
-                BattleFrontierCoreEntry("Palkia (Origin)", "Xerneas", 7.52),
-                BattleFrontierCoreEntry("Necrozma (Dawn Wings)", "Zamazenta (Crowned)", 7.26),
-                BattleFrontierCoreEntry("Dialga (Origin)", "Zekrom", 6.99),
-                BattleFrontierCoreEntry("Keldeo (Resolute)", "Landorus (Therian)", 6.86),
-                BattleFrontierCoreEntry("Metagross", "Zamazenta (Crowned)", 6.86),
-                BattleFrontierCoreEntry("Keldeo (Resolute)", "Zekrom", 6.33),
-                BattleFrontierCoreEntry("Landorus (Therian)", "Melmetal", 6.33),
-                BattleFrontierCoreEntry("Landorus (Therian)", "Florges", 6.2),
-                BattleFrontierCoreEntry("Zygarde", "Zamazenta (Crowned)", 6.2),
-                BattleFrontierCoreEntry("Lunala", "Reshiram", 6.07),
-                BattleFrontierCoreEntry("Zamazenta (Crowned)", "Palkia", 6.07),
-                BattleFrontierCoreEntry("Ursaluna", "Kyurem (White)", 5.94),
-                BattleFrontierCoreEntry("Ursaluna", "Reshiram", 5.94),
-                BattleFrontierCoreEntry("Dialga (Origin)", "Blastoise (Mega)", 5.8),
-                BattleFrontierCoreEntry("Keldeo (Resolute)", "Florges", 5.8),
-                BattleFrontierCoreEntry("Keldeo (Resolute)", "Meloetta (Aria)", 5.67),
-                BattleFrontierCoreEntry("Dialga (Origin)", "Melmetal", 5.54),
-                BattleFrontierCoreEntry("Lunala", "Zacian (Crowned)", 5.54),
-                BattleFrontierCoreEntry("Reshiram", "Zacian (Crowned)", 5.54),
-                BattleFrontierCoreEntry("Dialga (Origin)", "Groudon", 5.41),
-                BattleFrontierCoreEntry("Melmetal", "Florges", 5.41)
-            )))
-        }
-
-        fun getBattleFrontierLeagueCountsSummaryStatic(prefix: String = "Battle Frontier Data"): String {
-            val glM = BATTLE_FRONTIER_USAGE_MAP["GREAT LEAGUE"]?.size ?: 0
-            val glC = BATTLE_FRONTIER_CORES_MAP["GREAT LEAGUE"]?.size ?: 0
-            val spM = BATTLE_FRONTIER_USAGE_MAP["BATTLE FRONTIER (SPECTRAL)"]?.size ?: 0
-            val spC = BATTLE_FRONTIER_CORES_MAP["BATTLE FRONTIER (SPECTRAL)"]?.size ?: 0
-            val caM = BATTLE_FRONTIER_USAGE_MAP["BATTLE FRONTIER (CAULDRON)"]?.size ?: 0
-            val caC = BATTLE_FRONTIER_CORES_MAP["BATTLE FRONTIER (CAULDRON)"]?.size ?: 0
-            val mlM = BATTLE_FRONTIER_USAGE_MAP["BATTLE FRONTIER (MASTER)"]?.size ?: 0
-            val mlC = BATTLE_FRONTIER_CORES_MAP["BATTLE FRONTIER (MASTER)"]?.size ?: 0
-            val totalM = glM + spM + caM + mlM
-            val totalC = glC + spC + caC + mlC
-            return "$prefix — GL: ${glM} Mons / ${glC} Cores • Spectral: ${spM} Mons / ${spC} Cores • Cauldron: ${caM} Mons / ${caC} Cores • Master: ${mlM} Mons / ${mlC} Cores (Total: ${totalM} Mons • ${totalC} Cores)"
-        }
-
-        private fun splitCsvRowStatic(line: String): List<String> {
-            val result = ArrayList<String>()
-            val current = StringBuilder()
-            var inQuotes = false
-            for (ch in line) {
-                if (ch == '"') {
-                    inQuotes = !inQuotes
-                } else if (ch == ',' && !inQuotes) {
-                    result.add(current.toString().trim())
-                    current.setLength(0)
-                } else {
-                    current.append(ch)
-                }
-            }
-            result.add(current.toString().trim())
-            return result
-        }
-
-        private fun mapBfHeaderCellToLeagueKeyStatic(cell: String): String? {
-            val lower = cell.trim().lowercase()
-            if (lower.isEmpty()) return null
-            if (lower.contains("great league")) return "GREAT LEAGUE"
-            if (lower.contains("spectral")) return "BATTLE FRONTIER (SPECTRAL)"
-            if (lower.contains("cauldron")) return "BATTLE FRONTIER (CAULDRON)"
-            if (lower.contains("master league") || lower == "battle frontier (master)") return "BATTLE FRONTIER (MASTER)"
-            return null
-        }
-
-        private fun normalizeBfSpeciesAliasStatic(rawName: String): String {
-            val clean = rawName.trim().replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "").trim()
-            return when (clean.lowercase()) {
-                "zamazenta (crowned shield)" -> "Zamazenta (Crowned)"
-                "zacian (crowned sword)" -> "Zacian (Crowned)"
-                "zygarde (complete forme)", "zygarde (complete)" -> "Zygarde"
-                else -> clean
-            }
-        }
-
-        fun loadCachedBattleFrontierUsageAndCores(prefs: android.content.SharedPreferences) {
-            try {
-                val usageJson = prefs.getString(PREFS_KEY_BF_USAGE_JSON, null)
-                if (!usageJson.isNullOrBlank()) {
-                    val parsed: Map<String, Map<String, Double>>? = Gson().fromJson(
-                        usageJson,
-                        object : TypeToken<Map<String, Map<String, Double>>>() {}.type
-                    )
-                    parsed?.forEach { (league, map) ->
-                        if (map.isNotEmpty()) {
-                            BATTLE_FRONTIER_USAGE_MAP[league] = java.util.concurrent.ConcurrentHashMap(map)
-                        }
-                    }
-                }
-                val coresJson = prefs.getString(PREFS_KEY_BF_CORES_JSON, null)
-                if (!coresJson.isNullOrBlank()) {
-                    val parsedCores: Map<String, List<BattleFrontierCoreEntry>>? = Gson().fromJson(
-                        coresJson,
-                        object : TypeToken<Map<String, List<BattleFrontierCoreEntry>>>() {}.type
-                    )
-                    parsedCores?.forEach { (league, list) ->
-                        if (list.isNotEmpty()) {
-                            BATTLE_FRONTIER_CORES_MAP[league] = java.util.concurrent.CopyOnWriteArrayList(list)
-                        }
-                    }
-                }
-            } catch (_: Exception) {}
-        }
-
-        fun toGoogleSheetCsvExportUrlStatic(rawUrl: String, fallbackGid: String): String {
-            val trimmed = rawUrl.trim()
-            if (trimmed.contains("/export?format=csv")) return trimmed
-            val idMatch = Regex("/spreadsheets/d/([a-zA-Z0-9-_]+)").find(trimmed) ?: return trimmed
-            val gidMatch = Regex("[?#&]gid=([0-9]+)").find(trimmed)
-            val gid = gidMatch?.groupValues?.getOrNull(1) ?: fallbackGid
-            return "https://docs.google.com/spreadsheets/d/${idMatch.groupValues[1]}/export?format=csv&gid=$gid"
-        }
-
-        fun syncBattleFrontierSheetsBlocking(
-            prefs: android.content.SharedPreferences,
-            usageUrlInput: String,
-            coresUrlInput: String
-        ): String {
-            val cleanUsageUrl = usageUrlInput.trim().ifEmpty { DEFAULT_BF_USAGE_SHEET_URL }
-            val cleanCoresUrl = coresUrlInput.trim().ifEmpty { DEFAULT_BF_CORES_SHEET_URL }
-            prefs.edit()
-                .putString(PREFS_KEY_BF_USAGE_SHEET_URL, cleanUsageUrl)
-                .putString(PREFS_KEY_BF_CORES_SHEET_URL, cleanCoresUrl)
-                .apply()
-
-            val targetLeagues = listOf(
-                "GREAT LEAGUE",
-                "BATTLE FRONTIER (SPECTRAL)",
-                "BATTLE FRONTIER (CAULDRON)",
-                "BATTLE FRONTIER (MASTER)"
-            )
-
-            // 1. Fetch & Parse Usage CSV (8-column horizontal blocks per league, skipping LAIC 2027)
-            try {
-                val csvUrl = toGoogleSheetCsvExportUrlStatic(cleanUsageUrl, "466174368")
-                val conn = (java.net.URL(csvUrl).openConnection() as java.net.HttpURLConnection).apply {
-                    connectTimeout = 8000
-                    readTimeout = 8000
-                    setRequestProperty("User-Agent", "SilphScopePvP/5.04")
-                }
-                if (conn.responseCode in 200..299) {
-                    val text = conn.inputStream.bufferedReader().use { it.readText() }
-                    val rows = text.lines().map { splitCsvRowStatic(it) }
-                    val colBlocks = ArrayList<Pair<String, Int>>()
-                    var dataStartRow = 5
-                    for (r in 0 until minOf(8, rows.size)) {
-                        val row = rows[r]
-                        val detected = ArrayList<Pair<String, Int>>()
-                        for (c in row.indices) {
-                            val lg = mapBfHeaderCellToLeagueKeyStatic(row[c])
-                            if (lg != null) {
-                                detected.add(lg to c)
-                            }
-                        }
-                        if (detected.size >= 2) {
-                            colBlocks.addAll(detected)
-                            dataStartRow = r + 2
-                            break
-                        }
-                    }
-                    if (colBlocks.isEmpty()) {
-                        colBlocks.add("GREAT LEAGUE" to 0)
-                        colBlocks.add("BATTLE FRONTIER (CAULDRON)" to 8)
-                        colBlocks.add("BATTLE FRONTIER (MASTER)" to 16)
-                        colBlocks.add("BATTLE FRONTIER (SPECTRAL)" to 32)
-                    }
-                    val parsedUsage = targetLeagues.associateWith { LinkedHashMap<String, Double>() }
-                    for (r in dataStartRow until rows.size) {
-                        val row = rows[r]
-                        for ((lgKey, baseCol) in colBlocks) {
-                            val rawName = row.getOrNull(baseCol)?.trim()?.trim('"') ?: ""
-                            val pctStr = row.getOrNull(baseCol + 1)?.trim()?.trim('"')?.replace("%", "") ?: ""
-                            val pct = pctStr.toDoubleOrNull()
-                            if (rawName.isNotEmpty() && !rawName.equals("Pokemon", ignoreCase = true) && pct != null && pct > 0.0) {
-                                val normSpecies = normalizeBfSpeciesAliasStatic(rawName)
-                                parsedUsage[lgKey]?.put(normSpecies, pct)
-                            }
-                        }
-                    }
-                    parsedUsage.forEach { (lgKey, map) ->
-                        if (map.isNotEmpty()) {
-                            BATTLE_FRONTIER_USAGE_MAP[lgKey] = java.util.concurrent.ConcurrentHashMap(map)
-                        }
-                    }
-                }
-            } catch (_: Exception) {}
-
-            // 2. Fetch & Parse Cores CSV (4-column horizontal blocks per league, skipping LAIC 2027)
-            try {
-                val csvUrl = toGoogleSheetCsvExportUrlStatic(cleanCoresUrl, "94099054")
-                val conn = (java.net.URL(csvUrl).openConnection() as java.net.HttpURLConnection).apply {
-                    connectTimeout = 8000
-                    readTimeout = 8000
-                    setRequestProperty("User-Agent", "SilphScopePvP/5.04")
-                }
-                if (conn.responseCode in 200..299) {
-                    val text = conn.inputStream.bufferedReader().use { it.readText() }
-                    val rows = text.lines().map { splitCsvRowStatic(it) }
-                    val colBlocks = ArrayList<Pair<String, Int>>()
-                    var dataStartRow = 5
-                    for (r in 0 until minOf(8, rows.size)) {
-                        val row = rows[r]
-                        val detected = ArrayList<Pair<String, Int>>()
-                        for (c in row.indices) {
-                            val lg = mapBfHeaderCellToLeagueKeyStatic(row[c])
-                            if (lg != null) {
-                                detected.add(lg to c)
-                            }
-                        }
-                        if (detected.size >= 2) {
-                            colBlocks.addAll(detected)
-                            dataStartRow = r + 2
-                            break
-                        }
-                    }
-                    if (colBlocks.isEmpty()) {
-                        colBlocks.add("GREAT LEAGUE" to 0)
-                        colBlocks.add("BATTLE FRONTIER (CAULDRON)" to 4)
-                        colBlocks.add("BATTLE FRONTIER (MASTER)" to 8)
-                        colBlocks.add("BATTLE FRONTIER (SPECTRAL)" to 16)
-                    }
-                    val parsedLists = targetLeagues.associateWith { ArrayList<BattleFrontierCoreEntry>() }
-                    for (r in dataStartRow until rows.size) {
-                        val row = rows[r]
-                        for ((lgKey, baseCol) in colBlocks) {
-                            val rawA = row.getOrNull(baseCol)?.trim()?.trim('"') ?: ""
-                            val rawB = row.getOrNull(baseCol + 1)?.trim()?.trim('"') ?: ""
-                            val pctStr = row.getOrNull(baseCol + 2)?.trim()?.trim('"')?.replace("%", "") ?: ""
-                            if (rawA.isNotEmpty() && rawB.isNotEmpty() && !rawA.equals("Pokemon", ignoreCase = true)) {
-                                val pct = pctStr.toDoubleOrNull()
-                                if (pct != null && pct > 0.0) {
-                                    val monA = normalizeBfSpeciesAliasStatic(rawA)
-                                    val monB = normalizeBfSpeciesAliasStatic(rawB)
-                                    val list = parsedLists[lgKey]!!
-                                    if (list.none { it.monA.equals(monA, true) && it.monB.equals(monB, true) }) {
-                                        list.add(BattleFrontierCoreEntry(monA, monB, pct))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    parsedLists.forEach { (lgKey, list) ->
-                        if (list.isNotEmpty()) {
-                            BATTLE_FRONTIER_CORES_MAP[lgKey] = java.util.concurrent.CopyOnWriteArrayList(list)
-                        }
-                    }
-                }
-            } catch (_: Exception) {}
-
-            prefs.edit()
-                .putString(PREFS_KEY_BF_USAGE_JSON, Gson().toJson(BATTLE_FRONTIER_USAGE_MAP))
-                .putString(PREFS_KEY_BF_CORES_JSON, Gson().toJson(BATTLE_FRONTIER_CORES_MAP))
-                .putLong(PREFS_KEY_BF_LAST_SYNC_MS, System.currentTimeMillis())
-                .apply()
-
-            return getBattleFrontierLeagueCountsSummaryStatic("✅ Synced Battle Frontier Sheets")
-        }
-
-        fun getShow6UsagePctStatic(league: String, speciesName: String): Double {
-            val normLeague = normalizeLeagueKeyStatic(league)
-            val usageMap = BATTLE_FRONTIER_USAGE_MAP[normLeague] ?: BATTLE_FRONTIER_USAGE_MAP["GREAT LEAGUE"] ?: return 0.0
-            val clean = speciesName.replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "").trim()
-            usageMap[clean]?.let { return it }
-            val lower = clean.lowercase()
-            usageMap.entries.firstOrNull { it.key.lowercase() == lower }?.let { return it.value }
-            val base = FormResolver.extractBaseSpecies(clean).lowercase()
-            usageMap.entries.firstOrNull { FormResolver.extractBaseSpecies(it.key).lowercase() == base }?.let { return it.value * 0.85 }
-            return 0.0
-        }
-
-        fun findShow6CommonCoreEntryStatic(league: String, mon1: String, mon2: String): BattleFrontierCoreEntry? {
-            val normLeague = normalizeLeagueKeyStatic(league)
-            val cores = BATTLE_FRONTIER_CORES_MAP[normLeague] ?: BATTLE_FRONTIER_CORES_MAP["GREAT LEAGUE"] ?: return null
-            val b1 = FormResolver.extractBaseSpecies(mon1).lowercase()
-            val b2 = FormResolver.extractBaseSpecies(mon2).lowercase()
-            if (b1.isEmpty() || b2.isEmpty() || b1 == b2) return null
-            return cores.firstOrNull { c ->
-                val ca = FormResolver.extractBaseSpecies(c.monA).lowercase()
-                val cb = FormResolver.extractBaseSpecies(c.monB).lowercase()
-                (ca == b1 && cb == b2) || (ca == b2 && cb == b1)
-            }
-        }
-
-        fun calculateShow6TrioCoreBonusPctStatic(league: String, trioNames: List<String>): Pair<Double, String> {
-            var totalCorePct = 0.0
-            var topLabel = ""
-            var bestPairPct = 0.0
-            for (i in trioNames.indices) {
-                for (j in (i + 1) until trioNames.size) {
-                    val match = findShow6CommonCoreEntryStatic(league, trioNames[i], trioNames[j])
-                    if (match != null) {
-                        totalCorePct += match.usagePct
-                        if (match.usagePct > bestPairPct) {
-                            bestPairPct = match.usagePct
-                            topLabel = "${match.monA} + ${match.monB} (${match.usagePct}%)"
-                        }
-                    }
-                }
-            }
-            return totalCorePct to topLabel
-        }
-
-        fun getMostLikelyMetaOpponent6Static(league: String): List<String> {
-            val normLeague = normalizeLeagueKeyStatic(league)
-            val picked = ArrayList<String>(6)
-            val usedBase = HashSet<String>()
-            var hasMega = false
-
-            fun tryAddMon(rawName: String): Boolean {
-                if (picked.size >= 6) return false
-                val clean = rawName.trim()
-                if (clean.isEmpty()) return false
-                val resolved = resolveRecommendedMovesForSpecies(clean, normLeague)?.name ?: clean
-                val base = FormResolver.extractBaseSpecies(resolved).lowercase()
-                if (base.isEmpty() || base in usedBase) return false
-                val isMega = isMegaOrPrimalSpeciesStatic(resolved)
-                if (isMega && hasMega) return false
-                usedBase.add(base)
-                if (isMega) hasMega = true
-                picked.add(resolved)
-                return true
-            }
-
-            val cores = BATTLE_FRONTIER_CORES_MAP[normLeague]?.sortedByDescending { it.usagePct }.orEmpty()
-            for (c in cores) {
-                if (picked.size >= 4) break
-                tryAddMon(c.monA)
-                tryAddMon(c.monB)
-            }
-
-            val usageEntries = BATTLE_FRONTIER_USAGE_MAP[normLeague]?.entries?.sortedByDescending { it.value }.orEmpty()
-            for (e in usageEntries) {
-                if (picked.size >= 6) break
-                tryAddMon(e.key)
-            }
-
-            if (picked.size < 6) {
-                for (cand in getTop100MetaCandidatesForLeagueStatic(normLeague, 30)) {
-                    if (picked.size >= 6) break
-                    tryAddMon(cand.name)
-                }
-            }
-            return picked.take(6)
-        }
-
-        @JvmName("evaluateShow6Pick3MatchupFromNamesStatic")
-        fun evaluateShow6Pick3MatchupStatic(
-            league: String,
-            my6RawNames: List<String>,
-            opp6RawNames: List<String>
-        ): Show6Pick3OptimizerResult {
-            val slots = my6RawNames.map { raw ->
-                TeamMember(
-                    name = raw.trim(),
-                    cp = 0,
-                    fastMove = "",
-                    chargedMove1 = "",
-                    chargedMove2 = "",
-                    ivs = null
-                )
-            }
-            return evaluateShow6Pick3MatchupStatic(league, slots, opp6RawNames)
-        }
-
-        /**
-         * Show 6 Mode 1: 6v6 Matchup Pick-3 Optimizer
-         * - Opponent movesets are unknown -> uses standard 75%/25% weighted moveset distribution in calculateMatchupRatingStatic.
-         * - Simulates best movesets for Your 6 Pokémon against Opponent's 6.
-         * - Weighs Opponent 3-Pokémon lineups of highest viability highest when evaluating all 120 x 120 = 14,400 ordered 3v3 lineups.
-         * - Returns 3 options for each team type: Top 3 ABB, Top 3 ABC, Top 3 Duo-Core.
-         */
-        fun evaluateShow6Pick3MatchupStatic(
-            league: String,
-            my6NamesOrSlots: List<TeamMember>,
-            opp6RawNames: List<String>
-        ): Show6Pick3OptimizerResult {
-            val t0 = System.currentTimeMillis()
-            val normLeague = normalizeLeagueKeyStatic(league)
-            val isGreat = normLeague == "GREAT LEAGUE" || normLeague == "BATTLE FRONTIER (SPECTRAL)"
-            val isUltra = normLeague == "ULTRA LEAGUE" || normLeague == "BATTLE FRONTIER (CAULDRON)"
-            val fallbackPool = getTop100MetaCandidatesForLeagueStatic(normLeague, 24)
-
-            val rawMy6 = ArrayList<TeamMember>(6)
-            for (i in 0 until 6) {
-                val input = my6NamesOrSlots.getOrNull(i)
-                val name = input?.name?.trim()?.takeIf { it.isNotEmpty() }
-                    ?: fallbackPool.getOrNull(i)?.name ?: "Clodsire"
-                val resolved = resolveRecommendedMovesForSpecies(name, normLeague)
-                val scaled = if (resolved != null) computeEffectiveCombatStats(resolved, normLeague) else null
-                val defIvs = when {
-                    isGreat -> scaled?.defaultIvsGl ?: "4/15/14"
-                    isUltra -> scaled?.defaultIvsUl ?: "4/15/14"
-                    else -> "15/15/15"
-                }
-                rawMy6.add(
-                    TeamMember(
-                        name = scaled?.name ?: name,
-                        cp = input?.cp?.takeIf { it > 0 } ?: scaled?.defaultCp ?: 1500,
-                        fastMove = input?.fastMove?.takeIf { it.isNotBlank() } ?: scaled?.defaultFastMove ?: "Mud Shot",
-                        chargedMove1 = input?.chargedMove1?.takeIf { it.isNotBlank() } ?: scaled?.chargedMove1 ?: "Earthquake",
-                        chargedMove2 = input?.chargedMove2?.takeIf { it.isNotBlank() } ?: scaled?.chargedMove2 ?: "Stone Edge",
-                        ivs = input?.ivs ?: defIvs
-                    )
-                )
-            }
-
-            val opp6Names = ArrayList<String>(6)
-            for (i in 0 until 6) {
-                val rawName = opp6RawNames.getOrNull(i)?.trim()?.takeIf { it.isNotEmpty() }
-                    ?: fallbackPool.getOrNull(i + 6)?.name ?: "Feraligatr"
-                val resolved = resolveRecommendedMovesForSpecies(rawName, normLeague)
-                val displayName = if (rawName.startsWith("Shadow ", ignoreCase = true) && resolved != null && !resolved.name.startsWith("Shadow ", ignoreCase = true)) {
-                    "Shadow ${resolved.name}"
-                } else {
-                    resolved?.name ?: rawName
-                }
-                opp6Names.add(displayName)
-            }
-
-            // Stage 1: Simulate best movesets for Your 6 Pokémon against the Opponent's 6
-            val myOptimized6 = rawMy6.map { slot ->
-                val (rawFast, rawCharged) = getAvailableMovePoolForSpeciesStatic(slot.name, normLeague)
-                val fastPool = rawFast.filter { it.isNotBlank() && !it.equals("Struggle", ignoreCase = true) }.distinctBy { it.lowercase() }.take(3).ifEmpty { listOf(slot.fastMove) }
-                val chargedPool = rawCharged.filter { it.isNotBlank() && !it.equals("Struggle", ignoreCase = true) && !it.equals("Frustration", ignoreCase = true) }.distinctBy { it.lowercase() }.take(4).ifEmpty { listOf(slot.chargedMove1, slot.chargedMove2).distinct() }
-                val pairs = ArrayList<Pair<String, String>>()
-                if (chargedPool.size <= 1) {
-                    val m = chargedPool.firstOrNull() ?: slot.chargedMove1
-                    pairs.add(m to m)
-                } else {
-                    for (a in 0 until chargedPool.size) {
-                        for (b in (a + 1) until chargedPool.size) {
-                            pairs.add(chargedPool[a] to chargedPool[b])
-                        }
-                    }
-                }
-                var bestMember = slot
-                var bestAvgBr = -1.0
-                for (fMove in fastPool) {
-                    for ((c1, c2) in pairs) {
-                        var sumBr = 0.0
-                        for (oppName in opp6Names) {
-                            val b11 = calculateMatchupRatingStatic(slot.name, oppName, 1, 1, normLeague, fMove, c1, c2, slot.cp, slot.ivs)
-                            val b00 = calculateMatchupRatingStatic(slot.name, oppName, 0, 0, normLeague, fMove, c1, c2, slot.cp, slot.ivs)
-                            sumBr += 0.65 * b11 + 0.35 * b00
-                        }
-                        val avg = sumBr / 6.0
-                        if (avg > bestAvgBr) {
-                            bestAvgBr = avg
-                            bestMember = slot.copy(fastMove = fMove, chargedMove1 = c1, chargedMove2 = c2)
-                        }
-                    }
-                }
-                bestMember
-            }
-
-            // Stage 2: Precompute 6x6 role-specific matchup matrices (Opponent movesets weighted 75%/25% inside calculateMatchupRatingStatic)
-            val leadBrMatrix = Array(6) { DoubleArray(6) }
-            val swapBrMatrix = Array(6) { DoubleArray(6) }
-            val closerBrMatrix = Array(6) { DoubleArray(6) }
-            for (u in 0 until 6) {
-                val uSlot = myOptimized6[u]
-                for (o in 0 until 6) {
-                    val oName = opp6Names[o]
-                    val b00 = calculateMatchupRatingStatic(uSlot.name, oName, 0, 0, normLeague, uSlot.fastMove, uSlot.chargedMove1, uSlot.chargedMove2, uSlot.cp, uSlot.ivs).toDouble()
-                    val b11 = calculateMatchupRatingStatic(uSlot.name, oName, 1, 1, normLeague, uSlot.fastMove, uSlot.chargedMove1, uSlot.chargedMove2, uSlot.cp, uSlot.ivs).toDouble()
-                    val b22 = calculateMatchupRatingStatic(uSlot.name, oName, 2, 2, normLeague, uSlot.fastMove, uSlot.chargedMove1, uSlot.chargedMove2, uSlot.cp, uSlot.ivs).toDouble()
-                    val b10 = calculateMatchupRatingStatic(uSlot.name, oName, 1, 0, normLeague, uSlot.fastMove, uSlot.chargedMove1, uSlot.chargedMove2, uSlot.cp, uSlot.ivs).toDouble()
-                    val b01 = calculateMatchupRatingStatic(uSlot.name, oName, 0, 1, normLeague, uSlot.fastMove, uSlot.chargedMove1, uSlot.chargedMove2, uSlot.cp, uSlot.ivs).toDouble()
-                    leadBrMatrix[u][o] = 0.50 * b11 + 0.35 * b22 + 0.15 * b00
-                    swapBrMatrix[u][o] = 0.45 * b11 + 0.25 * b10 + 0.20 * b01 + 0.10 * b00
-                    closerBrMatrix[u][o] = 0.55 * b00 + 0.25 * b10 + 0.20 * b11
-                }
-            }
-
-            fun getTypesAndProfile(name: String): Triple<List<String>, Set<String>, Set<String>> {
-                val meta = resolveRecommendedMovesForSpecies(name, normLeague)
-                val types = meta?.types?.map { it.lowercase() }?.ifEmpty { listOf("normal") } ?: listOf("normal")
-                val weaks = ALL_18_TYPES.filter { getTypeEffectivenessStatic(it, types) > 1.05 }.toSet()
-                val resists = ALL_18_TYPES.filter { getTypeEffectivenessStatic(it, types) < 0.95 }.toSet()
-                return Triple(types, weaks, resists)
-            }
-
-            val myProfiles = myOptimized6.map { getTypesAndProfile(it.name) }
-            val oppProfiles = opp6Names.map { getTypesAndProfile(it) }
-
-            fun classifyOrderedTrio(
-                i0: Int,
-                i1: Int,
-                i2: Int,
-                profiles: List<Triple<List<String>, Set<String>, Set<String>>>
-            ): Pair<String, List<String>> {
-                val w0 = profiles[i0].second
-                val r0 = profiles[i0].third
-                val w1 = profiles[i1].second
-                val r1 = profiles[i1].third
-                val w2 = profiles[i2].second
-                val r2 = profiles[i2].third
-
-                val backShared = w1.intersect(w2)
-                val coveredByLead = backShared.filter { it in r0 && it !in w0 }
-                if (coveredByLead.isNotEmpty() && (backShared.size >= 2 || coveredByLead.any { it in CRITICAL_META_TYPES })) {
-                    return "ABB" to coveredByLead.map { it.replaceFirstChar { c -> c.uppercase() } }
-                }
-
-                val c0Covers2 = w2.filter { it in r0 }
-                val c2Covers0 = w0.filter { it in r2 }
-                if (w0.intersect(w2).isEmpty() && c0Covers2.isNotEmpty() && c2Covers0.isNotEmpty() && (c0Covers2.size + c2Covers0.size) >= 2) {
-                    val mut = (c0Covers2 + c2Covers0).distinct().map { it.replaceFirstChar { c -> c.uppercase() } }
-                    return "DUO" to mut
-                }
-                return "ABC" to emptyList()
-            }
-
-            val allOrdered120 = ArrayList<Triple<Int, Int, Int>>(120)
-            for (a in 0 until 6) {
-                for (b in 0 until 6) {
-                    if (b == a) continue
-                    for (c in 0 until 6) {
-                        if (c == a || c == b) continue
-                        allOrdered120.add(Triple(a, b, c))
-                    }
-                }
-            }
-
-            val wUsageAndCores = (activeShow6UsageWeightPct.coerceIn(0, 100) / 100.0)
-            val maxLeagueUsage = (BATTLE_FRONTIER_USAGE_MAP[normLeague]?.values?.maxOrNull() ?: 50.0).coerceAtLeast(10.0)
-
-            // Stage 3: Score all 120 Opponent 3-Pokémon lineups by structural viability, Battle Frontier Usage %, Common Core multiplier & 1-Mega limit
-            data class OppTrioEval(
-                val indices: Triple<Int, Int, Int>,
-                val names: List<String>,
-                val archetype: String,
-                val viabilityBr: Int,
-                val rawExpWeight: Double
-            )
-
-            val oppTrios = allOrdered120.mapNotNull { (o0, o1, o2) ->
-                val trioNames = listOf(opp6Names[o0], opp6Names[o1], opp6Names[o2])
-                if (hasMultipleMegasStatic(trioNames)) return@mapNotNull null
-                val (arch, _) = classifyOrderedTrio(o0, o1, o2, oppProfiles)
-                var leadVsMy6 = 0.0
-                var swapVsMy6 = 0.0
-                var closerVsMy6 = 0.0
-                for (u in 0 until 6) {
-                    leadVsMy6 += (1000.0 - leadBrMatrix[u][o0])
-                    swapVsMy6 += (1000.0 - swapBrMatrix[u][o1])
-                    closerVsMy6 += (1000.0 - closerBrMatrix[u][o2])
-                }
-                leadVsMy6 /= 6.0
-                swapVsMy6 /= 6.0
-                closerVsMy6 /= 6.0
-                val structBonus = when (arch) {
-                    "ABB" -> 18.0
-                    "DUO" -> 14.0
-                    else -> 8.0
-                }
-                val avgUsagePct = trioNames.map { getShow6UsagePctStatic(normLeague, it) }.average()
-                val (coreSumPct, _) = calculateShow6TrioCoreBonusPctStatic(normLeague, trioNames)
-                val usageAndCoreBonusBr = wUsageAndCores * ((avgUsagePct / maxLeagueUsage) * 32.0 + min(42.0, coreSumPct * 0.85))
-                val viab = (0.40 * leadVsMy6 + 0.32 * swapVsMy6 + 0.28 * closerVsMy6 + structBonus + usageAndCoreBonusBr).roundToInt().coerceIn(250, 860)
-                val coreMultiplier = 1.0 + wUsageAndCores * min(0.75, coreSumPct / 40.0)
-                val expW = kotlin.math.exp((viab - 500.0) / 38.0) * coreMultiplier
-                OppTrioEval(Triple(o0, o1, o2), trioNames, arch, viab, expW)
-            }
-            val totalOppExpW = oppTrios.sumOf { it.rawExpWeight }.takeIf { it > 0.0 } ?: 1.0
-
-            val sortedOppTrios = oppTrios.sortedByDescending { it.viabilityBr }
-            val topViableOppLineups = sortedOppTrios.take(8).mapIndexed { idx, ot ->
-                Show6OpponentViableLineup(
-                    rank = idx + 1,
-                    pokemonNames = ot.names,
-                    archetype = ot.archetype,
-                    viabilityScore = ot.viabilityBr,
-                    normalizedWeightPct = ((ot.rawExpWeight / totalOppExpW) * 1000.0).roundToInt() / 10.0
-                )
-            }
-
-            fun pickTop3OppArchetype(targetArch: String): List<Show6OpponentViableLineup> {
-                val chosen = ArrayList<Show6OpponentViableLineup>(3)
-                val seenSigs = HashSet<String>()
-                val primary = sortedOppTrios.filter { it.archetype.equals(targetArch, ignoreCase = true) }
-                for (ot in (primary + sortedOppTrios)) {
-                    if (chosen.size >= 3) break
-                    val sig = ot.names.map { it.lowercase() }.sorted().joinToString("|")
-                    if (seenSigs.add(sig)) {
-                        chosen.add(
-                            Show6OpponentViableLineup(
-                                rank = chosen.size + 1,
-                                pokemonNames = ot.names,
-                                archetype = targetArch,
-                                viabilityScore = ot.viabilityBr,
-                                normalizedWeightPct = ((ot.rawExpWeight / totalOppExpW) * 1000.0).roundToInt() / 10.0
-                            )
-                        )
-                    }
-                }
-                return chosen
-            }
-
-            val oppTop3Abb = pickTop3OppArchetype("ABB")
-            val oppTop3Abc = pickTop3OppArchetype("ABC")
-            val oppTop3Duo = pickTop3OppArchetype("DUO")
-
-            // Stage 4: Evaluate all 120 Player 3-Pokémon lineups against all 120 viability-weighted Opponent lineups
-            val abbList = ArrayList<Show6Pick3LineupRec>()
-            val abcList = ArrayList<Show6Pick3LineupRec>()
-            val duoList = ArrayList<Show6Pick3LineupRec>()
-
-            for ((u0, u1, u2) in allOrdered120) {
-                val members = listOf(myOptimized6[u0], myOptimized6[u1], myOptimized6[u2])
-                if (hasMultipleMegasStatic(members.map { it.name })) continue
-                val (arch, sharedWeaks) = classifyOrderedTrio(u0, u1, u2, myProfiles)
-                var weightedBrSum = 0.0
-                var worstBr = 999.0
-                var worstOppLabel = ""
-                var beatenCount = 0
-
-                for (ot in oppTrios) {
-                    val (o0, o1, o2) = ot.indices
-                    val normW = ot.rawExpWeight / totalOppExpW
-                    val lBr = leadBrMatrix[u0][o0]
-                    val alignA = (swapBrMatrix[u1][o1] + closerBrMatrix[u2][o2]) * 0.5
-                    val alignB = (swapBrMatrix[u1][o2] + closerBrMatrix[u2][o1]) * 0.5
-                    val backBr = 0.68 * max(alignA, alignB) + 0.32 * min(alignA, alignB)
-                    val teamBr = 0.42 * lBr + 0.58 * backBr
-
-                    weightedBrSum += normW * teamBr
-                    if (teamBr >= 505.0) beatenCount++
-                    if (teamBr < worstBr) {
-                        worstBr = teamBr
-                        worstOppLabel = "${ot.names[0]} / ${ot.names[1]} / ${ot.names[2]} (${teamBr.roundToInt()} BR)"
-                    }
-                }
-
-                val lAgg = (0 until 6).map { leadBrMatrix[u0][it] }.average().roundToInt().coerceIn(200, 850)
-                val sAgg = (0 until 6).map { swapBrMatrix[u1][it] }.average().roundToInt().coerceIn(200, 850)
-                val cAgg = (0 until 6).map { closerBrMatrix[u2][it] }.average().roundToInt().coerceIn(200, 850)
-                val (myCoreSumPct, myTopCoreLabel) = calculateShow6TrioCoreBonusPctStatic(normLeague, members.map { it.name })
-                val myCoreBonusBr = wUsageAndCores * min(18.0, myCoreSumPct * 0.35)
-                val wExpBr = (weightedBrSum + myCoreBonusBr).roundToInt().coerceIn(200, 850)
-                val wMinBr = worstBr.roundToInt().coerceIn(150, 850)
-                val compScore = ((0.72 * (weightedBrSum + myCoreBonusBr) + 0.28 * worstBr) * 10.0).roundToInt() / 10.0
-                val coreSuffix = if (myTopCoreLabel.isNotEmpty()) " • 🔥 Core: $myTopCoreLabel" else ""
-
-                val summary = when (arch) {
-                    "ABB" -> "ABB Pick-3: ${members[0].name} (Lead A) covers ${sharedWeaks.joinToString("/").ifEmpty { "Backline" }} for ${members[1].name} (B1) & ${members[2].name} (B2)$coreSuffix • Beats $beatenCount/${oppTrios.size} Opp Trios • Worst vs: $worstOppLabel"
-                    "DUO" -> "Duo-Core Pick-3: ${members[0].name} (Core 1) & ${members[2].name} (Core 2) cover ${sharedWeaks.joinToString("/").ifEmpty { "Core" }} w/ ${members[1].name} Pivot$coreSuffix • Beats $beatenCount/${oppTrios.size} Opp Trios • Worst vs: $worstOppLabel"
-                    else -> "ABC Balanced Pick-3: ${members[0].name} Lead + ${members[1].name} Safe Swap + ${members[2].name} Closer$coreSuffix • Beats $beatenCount/${oppTrios.size} Opp Trios • Worst vs: $worstOppLabel"
-                }
-
-                val option = Show6Pick3LineupRec(
-                    id = "show6-${arch.lowercase()}-$u0-$u1-$u2",
-                    archetype = arch,
-                    rank = 0,
-                    league = normLeague,
-                    pokemon = members,
-                    weightedExpectedBr = wExpBr,
-                    worstCaseMinimaxBr = wMinBr,
-                    compositeScore = compScore,
-                    leadAggBr = lAgg,
-                    safeSwapBr = sAgg,
-                    closerBr = cAgg,
-                    machineAggBr = wExpBr,
-                    sharedWeaknesses = sharedWeaks,
-                    topOppLineupsBeatenCount = beatenCount,
-                    totalOppLineupsEvaluated = max(1, oppTrios.size),
-                    worstCounterLineupLabel = worstOppLabel,
-                    synergySummary = summary
-                )
-
-                when (arch) {
-                    "ABB" -> abbList.add(option)
-                    "DUO" -> duoList.add(option)
-                    else -> abcList.add(option)
-                }
-            }
-
-            // Ensure each of the 3 archetypes has at least 3 options even if the 6-mon pool is heavily skewed
-            val allSorted = (abbList + abcList + duoList).sortedByDescending { it.compositeScore }
-            fun fillTop3(primary: List<Show6Pick3LineupRec>, targetArch: String): List<Show6Pick3LineupRec> {
-                val sorted = primary.sortedByDescending { it.compositeScore }.toMutableList()
-                if (sorted.size < 3) {
-                    for (cand in allSorted) {
-                        if (sorted.size >= 3) break
-                        if (sorted.none { it.pokemon.map { m -> m.name } == cand.pokemon.map { m -> m.name } }) {
-                            sorted.add(cand.copy(archetype = targetArch))
-                        }
-                    }
-                }
-                return sorted.take(3).mapIndexed { idx, item -> item.copy(rank = idx + 1) }
-            }
-
-            return Show6Pick3OptimizerResult(
-                league = normLeague,
-                myOptimized6 = myOptimized6,
-                opp6Names = opp6Names,
-                top3AbbTeams = fillTop3(abbList, "ABB"),
-                top3AbcTeams = fillTop3(abcList, "ABC"),
-                top3DuoTeams = fillTop3(duoList, "DUO"),
-                topViableOpponentLineups = topViableOppLineups,
-                oppTop3AbbTeams = oppTop3Abb,
-                oppTop3AbcTeams = oppTop3Abc,
-                oppTop3DuoTeams = oppTop3Duo,
-                totalMatchupsSimulated = 14400,
-                elapsedMs = max(1L, System.currentTimeMillis() - t0)
-            )
-        }
-
-        /**
-         * Show 6 Mode 2: Blind Show 6 Meta Roster Builder
-         * - Builds an optimal 6-Pokémon tournament roster before knowing Opponent's 6.
-         * - Supports 0–5 locked core Pokémon, Banlist or Whitelist filter, Expected Historical Pokémon list,
-         *   and Historical vs. PvPoke Meta Weight Slider (0%–100%).
-         */
-        fun generateBlindShow6RosterStatic(
-            league: String,
-            lockedCoreNames: List<String> = emptyList(),
-            filterMode: String = "NONE", // "NONE" | "BANLIST" | "WHITELIST"
-            filterPokemonNames: List<String> = emptyList(),
-            expectedHistoricalNames: List<String> = emptyList(),
-            historicalWeightPct: Int = 35
-        ): BlindShow6RosterResult {
-            val filterPokemonList = filterPokemonNames
-            val expectedHistoricalPokemon = expectedHistoricalNames
-            val t0 = System.currentTimeMillis()
-            val normLeague = normalizeLeagueKeyStatic(league)
-            val baseCandidates = getTop100MetaCandidatesForLeagueStatic(normLeague, 120)
-            val filterBaseSet = filterPokemonList.map { FormResolver.extractBaseSpecies(it).lowercase() }.filter { it.isNotEmpty() }.toSet()
-            val filterExactSet = filterPokemonList.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
-
-            val eligiblePool = baseCandidates.filter { cand ->
-                val baseSp = FormResolver.extractBaseSpecies(cand.name).lowercase()
-                val nameLower = cand.name.lowercase()
-                when (filterMode.uppercase()) {
-                    "BANLIST", "BAN" -> baseSp !in filterBaseSet && nameLower !in filterExactSet
-                    "WHITELIST", "WHITE" -> if (filterBaseSet.isEmpty()) true else (baseSp in filterBaseSet || nameLower in filterExactSet)
-                    else -> true
-                }
-            }.ifEmpty { baseCandidates.take(30) }
-
-            // Build blended target threat distribution (Fused Battle Frontier Usage + Cores + PvPoke Meta + Expected Historical Pokémon)
-            val wHist = (historicalWeightPct.coerceIn(0, 100) / 100.0)
-            val wMeta = 1.0 - wHist
-            val wUsage = (activeShow6UsageWeightPct.coerceIn(0, 100) / 100.0)
-            val maxLeagueUsage = (BATTLE_FRONTIER_USAGE_MAP[normLeague]?.values?.maxOrNull() ?: 50.0).coerceAtLeast(10.0)
-            val metaTargets = eligiblePool.take(40).map { it.name }
-            val histClean = expectedHistoricalPokemon.map { it.trim() }.filter { it.isNotEmpty() }
-            val targetWeights = LinkedHashMap<String, Double>()
-
-            metaTargets.forEachIndexed { idx, name ->
-                val pvpokeRankW = kotlin.math.exp(-0.045 * idx.toDouble())
-                val usagePct = getShow6UsagePctStatic(normLeague, name)
-                val usageNormW = if (usagePct > 0.0) (usagePct / maxLeagueUsage).coerceIn(0.08, 1.35) else 0.12
-                val fusedW = (1.0 - wUsage) * pvpokeRankW + wUsage * usageNormW
-                targetWeights[name] = (targetWeights[name] ?: 0.0) + wMeta * fusedW
-            }
-            if (histClean.isNotEmpty() && wHist > 0.0) {
-                val perEntry = wHist / histClean.size.toDouble()
-                for (rawH in histClean) {
-                    val resolved = resolveRecommendedMovesForSpecies(rawH, normLeague)?.name ?: rawH
-                    targetWeights[resolved] = (targetWeights[resolved] ?: 0.0) + perEntry * 12.0
-                }
-            }
-            val topThreats = targetWeights.entries.sortedByDescending { it.value }.take(30).map { it.key }.ifEmpty { metaTargets.take(25) }
-
-            val roster = ArrayList<TeamMember>(6)
-            val usedBaseSpecies = HashSet<String>()
-            val lockedIncluded = ArrayList<String>()
-
-            for (rawLock in lockedCoreNames.take(5)) {
-                val clean = rawLock.trim()
-                if (clean.isEmpty()) continue
-                val match = eligiblePool.find { it.name.equals(clean, ignoreCase = true) }
-                    ?: baseCandidates.find { it.name.equals(clean, ignoreCase = true) }
-                    ?: eligiblePool.find { FormResolver.extractBaseSpecies(it.name).equals(FormResolver.extractBaseSpecies(clean), ignoreCase = true) }
-                if (match != null) {
-                    val bSp = FormResolver.extractBaseSpecies(match.name).lowercase()
-                    val wouldExceedMega = isMegaOrPrimalSpeciesStatic(match.name) && roster.any { isMegaOrPrimalSpeciesStatic(it.name) }
-                    if (!wouldExceedMega && usedBaseSpecies.add(bSp)) {
-                        roster.add(match)
-                        lockedIncluded.add(match.name)
-                    }
-                }
-            }
-
-            // Greedily add complementary Pokémon up to 6 that maximize threat coverage, Common Core synergy & enforce Max 1 Mega
-            val candidateSubPool = eligiblePool.take(48)
-            val brCache = HashMap<String, Int>()
-            fun getBr1s(c: TeamMember, opp: String): Int {
-                val k = "${c.name.lowercase()}|${opp.lowercase()}"
-                return brCache.getOrPut(k) {
-                    calculateMatchupRatingStatic(c.name, opp, 1, 1, normLeague, c.fastMove, c.chargedMove1, c.chargedMove2, c.cp, c.ivs)
-                }
-            }
-
-            while (roster.size < 6) {
-                var bestCand: TeamMember? = null
-                var bestScore = Double.NEGATIVE_INFINITY
-                val alreadyHasMega = roster.any { isMegaOrPrimalSpeciesStatic(it.name) }
-
-                for (cand in candidateSubPool) {
-                    val bSp = FormResolver.extractBaseSpecies(cand.name).lowercase()
-                    if (bSp in usedBaseSpecies) continue
-                    if (alreadyHasMega && isMegaOrPrimalSpeciesStatic(cand.name)) continue
-                    var covGain = 0.0
-                    for (t in topThreats) {
-                        val existingBest = if (roster.isEmpty()) 420 else roster.maxOf { getBr1s(it, t) }
-                        val candBr = getBr1s(cand, t)
-                        val w = targetWeights[t] ?: 0.1
-                        if (existingBest < 515 && candBr >= 525) {
-                            covGain += w * (candBr - existingBest) * 2.2
-                        } else {
-                            covGain += w * max(0, candBr - 480) * 0.45
-                        }
-                    }
-                    // Common Core synergy bonus with existing roster members + Usage % bonus
-                    val coreBonus = roster.sumOf { existing ->
-                        findShow6CommonCoreEntryStatic(normLeague, existing.name, cand.name)?.usagePct ?: 0.0
-                    } * wUsage * 1.4
-                    val usageBonus = getShow6UsagePctStatic(normLeague, cand.name) * wUsage * 0.65
-                    // Type diversity bonus
-                    val candTypes = resolveRecommendedMovesForSpecies(cand.name, normLeague)?.types?.map { it.lowercase() }.orEmpty()
-                    val existingTypes = roster.flatMap { resolveRecommendedMovesForSpecies(it.name, normLeague)?.types?.map { t -> t.lowercase() }.orEmpty() }.toSet()
-                    val newTypeBonus = candTypes.count { it !in existingTypes } * 18.0
-                    val total = covGain + newTypeBonus + coreBonus + usageBonus
-                    if (total > bestScore) {
-                        bestScore = total
-                        bestCand = cand
-                    }
-                }
-                val chosen = bestCand ?: eligiblePool.firstOrNull {
-                    FormResolver.extractBaseSpecies(it.name).lowercase() !in usedBaseSpecies &&
-                        !(alreadyHasMega && isMegaOrPrimalSpeciesStatic(it.name))
-                } ?: break
-                usedBaseSpecies.add(FormResolver.extractBaseSpecies(chosen.name).lowercase())
-                roster.add(chosen)
-            }
-
-            // Audit 6-Pokémon roster against topThreats
-            var coveredCount = 0
-            val coreBreakers = ArrayList<String>()
-            for (t in topThreats) {
-                val brs = roster.map { getBr1s(it, t) }
-                val wins = brs.count { it >= 515 }
-                if (wins >= 2) coveredCount++
-                if (brs.all { it < 490 }) coreBreakers.add(t)
-            }
-            val covPct = ((coveredCount * 100.0) / max(1, topThreats.size).toDouble()).roundToInt().coerceIn(10, 100)
-
-            val selfPick3 = evaluateShow6Pick3MatchupStatic(normLeague, roster, topThreats.take(6))
-            val roleLabels = listOf("Core Anchor", "Safe Pivot", "Core Breaker", "Anti-Flyer/Tank", "Closer Sweep", "Flex Counter")
-            val roster6Slots = selfPick3.myOptimized6.mapIndexed { idx, member ->
-                val beaten = topThreats.filter { getBr1s(member, it) >= 525 }.take(4).ifEmpty { topThreats.take(2) }
-                val avgScore = topThreats.map { getBr1s(member, it) }.average().roundToInt().coerceIn(350, 820)
-                val isLocked = lockedIncluded.any { it.equals(member.name, ignoreCase = true) }
-                BlindShow6RosterSlot(
-                    pokemon = member,
-                    roleLabel = if (isLocked) "Locked Core" else roleLabels.getOrElse(idx) { "Flex Slot" },
-                    metaScore = avgScore,
-                    coveredThreats = beaten
-                )
-            }
-
-            val filterLabel = when (filterMode.uppercase()) {
-                "BANLIST", "BAN" -> "Banlist (${filterPokemonList.size} banned)"
-                "WHITELIST", "WHITE" -> "Whitelist (${filterPokemonList.size} allowed)"
-                else -> "Open Meta (No Ban/Whitelist)"
-            }
-
-            return BlindShow6RosterResult(
-                league = normLeague,
-                roster = selfPick3.myOptimized6,
-                roster6 = roster6Slots,
-                lockedSlotsIncluded = lockedIncluded,
-                metaCoveragePct = covPct,
-                metaPoolSize = eligiblePool.size,
-                coreBreakerCount = coreBreakers.size,
-                coreBreakers = coreBreakers.take(6),
-                topAbbLineup = selfPick3.top3AbbTeams.firstOrNull()?.pokemon ?: roster.take(3),
-                topAbcLineup = selfPick3.top3AbcTeams.firstOrNull()?.pokemon ?: roster.take(3),
-                topDuoLineup = selfPick3.top3DuoTeams.firstOrNull()?.pokemon ?: roster.take(3),
-                filterSummary = "$filterLabel • ${activeShow6UsageWeightPct}% BF Usage & Cores / ${100 - activeShow6UsageWeightPct}% PvPoke",
-                elapsedMs = max(1L, System.currentTimeMillis() - t0)
-            )
-        }
-
-        /**
-         * Pick-6 Team Editor: Suggest Top 5 Alternate Pokémon Upgrades for a specific slot (0..5)
-         */
-        fun recommendShow6RosterSlotUpgradesStatic(
-            league: String,
-            currentRoster6: List<TeamMember>,
-            slotIndex: Int
-        ): List<Show6RosterSlotUpgradeRec> {
-            val normLeague = normalizeLeagueKeyStatic(league)
-            val candidates = getTop100MetaCandidatesForLeagueStatic(normLeague, 55)
-            val other5 = currentRoster6.filterIndexed { idx, _ -> idx != slotIndex }
-            val otherBaseSet = other5.map { FormResolver.extractBaseSpecies(it.name).lowercase() }.toSet()
-            val otherHasMega = other5.any { isMegaOrPrimalSpeciesStatic(it.name) }
-            val currentSlot = currentRoster6.getOrNull(slotIndex)
-            val metaThreats = candidates.take(20).map { it.name }
-            val wUsage = activeShow6UsageWeightPct.coerceIn(0, 100) / 100.0
-
-            fun evalMemberScore(member: TeamMember): Triple<Double, Int, String> {
-                var weightedBr = 0.0
-                var weightSum = 0.0
-                metaThreats.forEachIndexed { idx, tName ->
-                    val uPct = getShow6UsagePctStatic(normLeague, tName)
-                    val w = (1.0 - wUsage) * kotlin.math.exp(-0.05 * idx) + wUsage * ((uPct / 45.0).coerceIn(0.15, 1.3))
-                    val br = calculateMatchupRatingStatic(member.name, tName, 1, 1, normLeague, member.fastMove, member.chargedMove1, member.chargedMove2, member.cp, member.ivs)
-                    val teammateBest = other5.maxOfOrNull { tm ->
-                        calculateMatchupRatingStatic(tm.name, tName, 1, 1, normLeague, tm.fastMove, tm.chargedMove1, tm.chargedMove2, tm.cp, tm.ivs)
-                    } ?: 450
-                    val synergyLift = if (teammateBest < 495 && br >= 525) (br - teammateBest) * 0.45 else 0.0
-                    weightedBr += w * (br + synergyLift)
-                    weightSum += w
-                }
-                val baseBr = (weightedBr / max(0.01, weightSum)).roundToInt().coerceIn(320, 780)
-                var bestCoreLabel = ""
-                var coreSum = 0.0
-                for (tm in other5) {
-                    val c = findShow6CommonCoreEntryStatic(normLeague, member.name, tm.name)
-                    if (c != null) {
-                        coreSum += c.usagePct
-                        if (bestCoreLabel.isEmpty()) bestCoreLabel = "${c.monA} + ${c.monB} (${c.usagePct}%)"
-                    }
-                }
-                val uPct = getShow6UsagePctStatic(normLeague, member.name)
-                val totalComposite = baseBr + wUsage * (uPct * 0.45 + min(30.0, coreSum * 0.65))
-                return Triple(totalComposite, baseBr, bestCoreLabel)
-            }
-
-            val baselineScore = if (currentSlot != null && currentSlot.name.isNotBlank()) evalMemberScore(currentSlot).first else 480.0
-            val recs = ArrayList<Show6RosterSlotUpgradeRec>()
-            for (cand in candidates.take(40)) {
-                val bSp = FormResolver.extractBaseSpecies(cand.name).lowercase()
-                if (bSp in otherBaseSet) continue
-                if (currentSlot != null && bSp == FormResolver.extractBaseSpecies(currentSlot.name).lowercase()) continue
-                if (otherHasMega && isMegaOrPrimalSpeciesStatic(cand.name)) continue
-                val (comp, br, coreLbl) = evalMemberScore(cand)
-                val gain = ((comp - baselineScore) * 10.0).roundToInt() / 10.0
-                val uPct = getShow6UsagePctStatic(normLeague, cand.name)
-                val reason = buildString {
-                    append("${cand.fastMove} + ${cand.chargedMove1}/${cand.chargedMove2} • Meta BR $br")
-                    if (uPct > 0.0) append(" • Usage ${uPct}%")
-                    if (coreLbl.isNotEmpty()) append(" • 🔥 Core: $coreLbl")
-                }
-                recs.add(Show6RosterSlotUpgradeRec(cand, gain, br, uPct, coreLbl, reason))
-            }
-            return recs.sortedByDescending { it.weightedScoreGain }.take(5)
-        }
-
-        /**
-         * Pick-6 Team Editor: Suggest Top 4 Alternate Movesets for a specific Pokémon in the league
-         */
-        fun recommendShow6RosterSlotMovesetsStatic(
-            league: String,
-            member: TeamMember
-        ): List<Show6RosterSlotMovesetRec> {
-            val normLeague = normalizeLeagueKeyStatic(league)
-            val metaThreats = getTop100MetaCandidatesForLeagueStatic(normLeague, 16).map { it.name }
-            val (rawFast, rawCharged) = getAvailableMovePoolForSpeciesStatic(member.name, normLeague)
-            val fastPool = (listOf(member.fastMove) + rawFast).filter { it.isNotBlank() && !it.equals("Struggle", true) }.distinctBy { it.lowercase() }.take(4)
-            val chargedPool = (listOf(member.chargedMove1, member.chargedMove2) + rawCharged).filter { it.isNotBlank() && !it.equals("Struggle", true) && !it.equals("Frustration", true) }.distinctBy { it.lowercase() }.take(5)
-            val pairs = ArrayList<Pair<String, String>>()
-            if (chargedPool.size <= 1) {
-                val c = chargedPool.firstOrNull() ?: member.chargedMove1.ifBlank { "Body Slam" }
-                pairs.add(c to c)
-            } else {
-                for (i in 0 until chargedPool.size) {
-                    for (j in (i + 1) until chargedPool.size) {
-                        pairs.add(chargedPool[i] to chargedPool[j])
-                    }
-                }
-            }
-            fun evalMovesetBr(f: String, c1: String, c2: String): Int {
-                if (metaThreats.isEmpty()) return 500
-                val avg = metaThreats.map { opp ->
-                    val b11 = calculateMatchupRatingStatic(member.name, opp, 1, 1, normLeague, f, c1, c2, member.cp, member.ivs)
-                    val b00 = calculateMatchupRatingStatic(member.name, opp, 0, 0, normLeague, f, c1, c2, member.cp, member.ivs)
-                    0.68 * b11 + 0.32 * b00
-                }.average()
-                return avg.roundToInt().coerceIn(250, 820)
-            }
-            val curBr = evalMovesetBr(member.fastMove, member.chargedMove1, member.chargedMove2)
-            val results = ArrayList<Show6RosterSlotMovesetRec>()
-            for (f in fastPool) {
-                for ((c1, c2) in pairs) {
-                    val br = evalMovesetBr(f, c1, c2)
-                    val isCur = f.equals(member.fastMove, true) &&
-                        ((c1.equals(member.chargedMove1, true) && c2.equals(member.chargedMove2, true)) ||
-                            (c1.equals(member.chargedMove2, true) && c2.equals(member.chargedMove1, true)))
-                    results.add(Show6RosterSlotMovesetRec(f, c1, c2, br, br - curBr, isCur))
-                }
-            }
-            return results.sortedByDescending { it.avgBrVsMeta }.take(4)
-        }
     }
 
-    private lateinit var windowManager: WindowManager
-    private var overlayView: WebView? = null
-    private lateinit var layoutParams: WindowManager.LayoutParams
-    private var statusToastView: TextView? = null
-    private var statusToastParams: WindowManager.LayoutParams? = null
-    private var shieldDecisionOverlayView: LinearLayout? = null
-    private var shieldDecisionOverlayParams: WindowManager.LayoutParams? = null
-    private var shieldDecisionOverlayShownAtMs: Long = 0L
-    private var isShieldDecisionOverlayVisible: Boolean = false
-    private val mainToastHandler = Handler(Looper.getMainLooper())
-    private val hideStatusToastRunnable = Runnable {
+    internal lateinit var windowManager: WindowManager
+    internal var overlayView: WebView? = null
+    internal lateinit var layoutParams: WindowManager.LayoutParams
+    internal var statusToastView: TextView? = null
+    internal var statusToastParams: WindowManager.LayoutParams? = null
+    internal var shieldDecisionOverlayView: LinearLayout? = null
+    internal var shieldDecisionOverlayParams: WindowManager.LayoutParams? = null
+    internal var shieldDecisionOverlayShownAtMs: Long = 0L
+    internal var isShieldDecisionOverlayVisible: Boolean = false
+    internal val mainToastHandler = Handler(Looper.getMainLooper())
+    internal val hideStatusToastRunnable = Runnable {
         try {
             statusToastView?.visibility = View.GONE
         } catch (_: Exception) {}
     }
-    private val hideShieldDecisionOverlayRunnable = Runnable {
+    internal val hideShieldDecisionOverlayRunnable = Runnable {
         hideShieldDecisionOverlay()
     }
-    private lateinit var prefs: SharedPreferences
-    private val gson = Gson()
+    internal lateinit var prefs: SharedPreferences
+    internal val gson = Gson()
 
-    private var mediaProjectionManager: MediaProjectionManager? = null
-    private var mediaProjection: MediaProjection? = null
-    private var virtualDisplay: VirtualDisplay? = null
-    private var imageReader: ImageReader? = null
-    private var imageReaderThread: HandlerThread? = null
-    private var imageReaderHandler: Handler? = null
+    internal var mediaProjectionManager: MediaProjectionManager? = null
+    internal var mediaProjection: MediaProjection? = null
+    internal var virtualDisplay: VirtualDisplay? = null
+    internal var imageReader: ImageReader? = null
+    internal var imageReaderThread: HandlerThread? = null
+    internal var imageReaderHandler: Handler? = null
 
-    private var screenWidth = 1080
-    private var screenHeight = 2400
-    private var screenDensity = 2
+    internal var screenWidth = 1080
+    internal var screenHeight = 2400
+    internal var screenDensity = 2
 
-    private val textRecognizer by lazy { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
-    private var battleLoopJob: Job? = null
+    internal val textRecognizer by lazy { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
+    internal var battleLoopJob: Job? = null
 
-    private var currentPreset: TeamPreset? = null
-    private var activeOpponentName: String = "Waiting..."
-    private var activeOpponentSpecies: String = ""
-    private var isOpponentShadow: Boolean = false
-    private var availableOpponentForms: List<PokemonMeta> = emptyList()
-    private var currentFormIndex: Int = 0
+    internal var currentPreset: TeamPreset? = null
+    internal var activeOpponentName: String = "Waiting..."
+    internal var activeOpponentSpecies: String = ""
+    internal var isOpponentShadow: Boolean = false
+    internal var availableOpponentForms: List<PokemonMeta> = emptyList()
+    internal var currentFormIndex: Int = 0
 
-    private var activeUserPokemonName: String? = null
-    private val detectedOpponents = mutableListOf<String>()
-    private val manualFormOverrides = mutableMapOf<String, String>()
-    private val manualShadowOverrides = mutableMapOf<String, Boolean>()
-    private var isWaitingForOpponent = true
-    private var isBattleActive = false
-    private var manualLeadMatchupOverride: String? = null
-    private var currentLeadMatchup: String = "NEUTRAL"
-    private var lastClearedOpponentsSnapshot: List<String> = emptyList()
-    private var lastClearedLeadMatchupSnapshot: String = "NEUTRAL"
-    @Volatile private var battleResetEpoch: Long = 0L
-    @Volatile private var lastBattleResetTimeMs: Long = 0L
+    internal var activeUserPokemonName: String? = null
+    internal val detectedOpponents = mutableListOf<String>()
+    internal val manualFormOverrides = mutableMapOf<String, String>()
+    internal val manualShadowOverrides = mutableMapOf<String, Boolean>()
+    internal var isWaitingForOpponent = true
+    internal var isBattleActive = false
+    internal var manualLeadMatchupOverride: String? = null
+    internal var currentLeadMatchup: String = "NEUTRAL"
+    internal var lastClearedOpponentsSnapshot: List<String> = emptyList()
+    internal var lastClearedLeadMatchupSnapshot: String = "NEUTRAL"
+    @Volatile internal var battleResetEpoch: Long = 0L
+    @Volatile internal var lastBattleResetTimeMs: Long = 0L
 
-    private var currentLayoutMode = "option1"
-    private var oppCountMode = "my_fasts"
-    private var enable4ChargedMoves = false
-    private var disableBattleToasts = false
-    private var showTacticalRecommendations = true
-    private var showShieldDecisionOverlay = true
-    private var aiAdviceHudPosition = DEFAULT_AI_ADVICE_HUD_POSITION
-    private var overlayScalePct = 78
-    private var overlayTransparencyPct = 72
-    private var appThemeId = "dialga_shiny_midnight"
-    private var isOverlayMinimized = false
-    private var lastMinimizeTimestampMs: Long = 0L
-    private var cachedScreenBitmap: Bitmap? = null
-    private val captureLock = Any()
+    internal var currentLayoutMode = "option1"
+    internal var oppCountMode = "my_fasts"
+    internal var enable4ChargedMoves = false
+    internal var disableBattleToasts = false
+    internal var showTacticalRecommendations = true
+    internal var showShieldDecisionOverlay = true
+    internal var aiAdviceHudPosition = DEFAULT_AI_ADVICE_HUD_POSITION
+    internal var overlayScalePct = 78
+    internal var overlayTransparencyPct = 72
+    internal var appThemeId = "dialga_shiny_midnight"
+    internal var isOverlayMinimized = false
+    internal var lastMinimizeTimestampMs: Long = 0L
+    internal var cachedScreenBitmap: Bitmap? = null
+    internal val captureLock = Any()
 
     // v2.34: Independent 50s Swap Countdown Timers, Shield vs. Pokéball Isolation & Faint State Machine
-    private var playerSwapEndTimeMs: Long = 0L
-    private var oppSwapEndTimeMs: Long = 0L
-    private var playerPokeballCount: Int = 3
-    private var oppPokeballCount: Int = 3
-    private var playerShieldsRemaining: Int = 2
-    private var oppShieldsRemaining: Int = 2
-    private val playerFaintedSlots = BooleanArray(3) { false }
-    private val oppFaintedSlots = BooleanArray(3) { false }
-    private var prevFrameTimestampMs: Long = 0L
-    private var currentFrameTimestampMs: Long = 0L
-    private var isPlayerTurnOne: Boolean = true
-    private var isOppTurnOne: Boolean = true
-    private var sampledPlayerBalls: Int = 3
-    private var sampledOppBalls: Int = 3
-    private var prevValidPlayerBalls: Int = 3
-    private var prevValidOppBalls: Int = 3
-    private var sampledPlayerShields: Int = 2
-    private var sampledOppShields: Int = 2
+    internal var playerSwapEndTimeMs: Long = 0L
+    internal var oppSwapEndTimeMs: Long = 0L
+    internal var playerPokeballCount: Int = 3
+    internal var oppPokeballCount: Int = 3
+    internal var playerShieldsRemaining: Int = 2
+    internal var oppShieldsRemaining: Int = 2
+    internal val playerFaintedSlots = BooleanArray(3) { false }
+    internal val oppFaintedSlots = BooleanArray(3) { false }
+    internal var prevFrameTimestampMs: Long = 0L
+    internal var currentFrameTimestampMs: Long = 0L
+    internal var isPlayerTurnOne: Boolean = true
+    internal var isOppTurnOne: Boolean = true
+    internal var sampledPlayerBalls: Int = 3
+    internal var sampledOppBalls: Int = 3
+    internal var prevValidPlayerBalls: Int = 3
+    internal var prevValidOppBalls: Int = 3
+    internal var sampledPlayerShields: Int = 2
+    internal var sampledOppShields: Int = 2
 
     // Post-switch self-healing & multi-frame faint verification state
-    private var lastPlayerSwitchTimeMs: Long = 0L
-    private var lastOppSwitchTimeMs: Long = 0L
-    private var lastPlayerSwitchFrameMs: Long = 0L
-    private var lastOppSwitchFrameMs: Long = 0L
-    private var lastPlayerPrevSlotIdx: Int = -1
-    private var lastOppPrevSlotIdx: Int = -1
-    private var lastPlayerSwitchWasFaint: Boolean = false
-    private var lastOppSwitchWasFaint: Boolean = false
-    private var playerPreSwitchBallCount: Int = 3
-    private var oppPreSwitchBallCount: Int = 3
-    private var playerSwapEndTimeBeforeSwitch: Long = 0L
-    private var oppSwapEndTimeBeforeSwitch: Long = 0L
-    private var playerPostSwitchLowBallFrames: Int = 0
-    private var oppPostSwitchLowBallFrames: Int = 0
-    private var lastObservedLowPlayerBalls: Int = 3
-    private var lastObservedLowPlayerBallsTimeMs: Long = 0L
-    private var lastObservedLowOppBalls: Int = 3
-    private var lastObservedLowOppBallsTimeMs: Long = 0L
-    private var playerSwitchConfirmedAlive: Boolean = true
-    private var oppSwitchConfirmedAlive: Boolean = true
-    private var playerSwitchAliveFrames: Int = 0
-    private var oppSwitchAliveFrames: Int = 0
-    private var playerShieldDropFrames: Int = 0
-    private var oppShieldDropFrames: Int = 0
-    private var playerShieldRestoreFrames: Int = 0
-    private var oppShieldRestoreFrames: Int = 0
+    internal var lastPlayerSwitchTimeMs: Long = 0L
+    internal var lastOppSwitchTimeMs: Long = 0L
+    internal var lastPlayerSwitchFrameMs: Long = 0L
+    internal var lastOppSwitchFrameMs: Long = 0L
+    internal var lastPlayerPrevSlotIdx: Int = -1
+    internal var lastOppPrevSlotIdx: Int = -1
+    internal var lastPlayerSwitchWasFaint: Boolean = false
+    internal var lastOppSwitchWasFaint: Boolean = false
+    internal var playerPreSwitchBallCount: Int = 3
+    internal var oppPreSwitchBallCount: Int = 3
+    internal var playerSwapEndTimeBeforeSwitch: Long = 0L
+    internal var oppSwapEndTimeBeforeSwitch: Long = 0L
+    internal var playerPostSwitchLowBallFrames: Int = 0
+    internal var oppPostSwitchLowBallFrames: Int = 0
+    internal var lastObservedLowPlayerBalls: Int = 3
+    internal var lastObservedLowPlayerBallsTimeMs: Long = 0L
+    internal var lastObservedLowOppBalls: Int = 3
+    internal var lastObservedLowOppBallsTimeMs: Long = 0L
+    internal var playerSwitchConfirmedAlive: Boolean = true
+    internal var oppSwitchConfirmedAlive: Boolean = true
+    internal var playerSwitchAliveFrames: Int = 0
+    internal var oppSwitchAliveFrames: Int = 0
+    internal var playerShieldDropFrames: Int = 0
+    internal var oppShieldDropFrames: Int = 0
+    internal var playerShieldRestoreFrames: Int = 0
+    internal var oppShieldRestoreFrames: Int = 0
 
     // v3.94: Multi-frame debounced Pokéball counts, unified All-HUD-Gone lockout, & per-charge-move shield decrement lock
-    private var isAllCombatHudGone: Boolean = false
-    private var debouncedPlayerBalls: Int = 3
-    private var debouncedOppBalls: Int = 3
-    private var playerBallCandidate: Int = 3
-    private var playerBallConfirmFrames: Int = 0
-    private var oppBallCandidate: Int = 3
-    private var oppBallConfirmFrames: Int = 0
-    private var combatHudStableFrames: Int = 0
-    private var combatHudGoneFrames: Int = 0
-    private var lastPlayerShieldDecrementChargeStartMs: Long = 0L
-    private var lastOppShieldDecrementChargeStartMs: Long = 0L
+    internal var isAllCombatHudGone: Boolean = false
+    internal var debouncedPlayerBalls: Int = 3
+    internal var debouncedOppBalls: Int = 3
+    internal var playerBallCandidate: Int = 3
+    internal var playerBallConfirmFrames: Int = 0
+    internal var oppBallCandidate: Int = 3
+    internal var oppBallConfirmFrames: Int = 0
+    internal var combatHudStableFrames: Int = 0
+    internal var combatHudGoneFrames: Int = 0
+    internal var lastPlayerShieldDecrementChargeStartMs: Long = 0L
+    internal var lastOppShieldDecrementChargeStartMs: Long = 0L
 
     // v3.34: 1st-Frame Immediate Swap Detection, Midpoint Swap Clock, 2nd-Frame Validity Bit & Post-Faint Prompt
-    private var lastConfirmedPlayerFrameTimeMs: Long = 0L
-    private var lastConfirmedOppFrameTimeMs: Long = 0L
-    private var playerSwitchValidityLatched: Boolean = true
-    private var oppSwitchValidityLatched: Boolean = true
-    private var provisionalOppPrevName: String = ""
-    private var provisionalOppPrevSpecies: String = ""
-    private var provisionalOppPrevWasAddedToDetected: Boolean = false
-    private var provisionalPlayerPrevName: String = ""
-    private var isPostFaintSwitchPromptActive: Boolean = false
-    private var lastRecommendedAction: String = ""
-    private var lastRecommendedGoal: String = ""
-    private var lastRecommendedPhase: String = "LEAD"
-    private var lastRecommendedSwapSlotIdx: Int = -1
-    private var lastRecommendedCandidateScores: Map<String, Int> = emptyMap()
-    private var recommendationsIssuedInBattle: Int = 0
-    private var recommendationsFollowedInBattle: Int = 0
+    internal var lastConfirmedPlayerFrameTimeMs: Long = 0L
+    internal var lastConfirmedOppFrameTimeMs: Long = 0L
+    internal var playerSwitchValidityLatched: Boolean = true
+    internal var oppSwitchValidityLatched: Boolean = true
+    internal var provisionalOppPrevName: String = ""
+    internal var provisionalOppPrevSpecies: String = ""
+    internal var provisionalOppPrevWasAddedToDetected: Boolean = false
+    internal var provisionalPlayerPrevName: String = ""
+    internal var isPostFaintSwitchPromptActive: Boolean = false
+    internal var lastRecommendedAction: String = ""
+    internal var lastRecommendedGoal: String = ""
+    internal var lastRecommendedPhase: String = "LEAD"
+    internal var lastRecommendedSwapSlotIdx: Int = -1
+    internal var lastRecommendedCandidateScores: Map<String, Int> = emptyMap()
+    internal var recommendationsIssuedInBattle: Int = 0
+    internal var recommendationsFollowedInBattle: Int = 0
 
     // v3.44: Persistent Per-Slot HP Memory (0..100%), 2-Frame Confirmed HP for Shield Calls & Bidirectional Charged Attack State Machine
-    private val playerSlotHpPct = IntArray(3) { 100 }
-    private val oppSlotHpPct = IntArray(3) { 100 }
-    private val confirmedPlayerSlotHpPct = IntArray(3) { 100 }
-    private val confirmedOppSlotHpPct = IntArray(3) { 100 }
-    private val pendingConfirmPlayerSlotHpPct = IntArray(3) { 100 }
-    private val pendingConfirmOppSlotHpPct = IntArray(3) { 100 }
-    private val playerSlotHpConfirmFrames = IntArray(3) { 2 }
-    private val oppSlotHpConfirmFrames = IntArray(3) { 2 }
-    private val playerSlotPreFaintHpPct = IntArray(3) { 100 }
-    private val oppSlotPreFaintHpPct = IntArray(3) { 100 }
-    private val playerSlotPriorHpPct = IntArray(3) { 100 }
-    private val oppSlotPriorHpPct = IntArray(3) { 100 }
-    private val oppSlotLowestHpPct = IntArray(3) { 100 }
-    private val playerSlotLastBigJumpMs = LongArray(3) { 0L }
+    internal val playerSlotHpPct = IntArray(3) { 100 }
+    internal val oppSlotHpPct = IntArray(3) { 100 }
+    internal val confirmedPlayerSlotHpPct = IntArray(3) { 100 }
+    internal val confirmedOppSlotHpPct = IntArray(3) { 100 }
+    internal val pendingConfirmPlayerSlotHpPct = IntArray(3) { 100 }
+    internal val pendingConfirmOppSlotHpPct = IntArray(3) { 100 }
+    internal val playerSlotHpConfirmFrames = IntArray(3) { 2 }
+    internal val oppSlotHpConfirmFrames = IntArray(3) { 2 }
+    internal val playerSlotPreFaintHpPct = IntArray(3) { 100 }
+    internal val oppSlotPreFaintHpPct = IntArray(3) { 100 }
+    internal val playerSlotPriorHpPct = IntArray(3) { 100 }
+    internal val oppSlotPriorHpPct = IntArray(3) { 100 }
+    internal val oppSlotLowestHpPct = IntArray(3) { 100 }
+    internal val playerSlotLastBigJumpMs = LongArray(3) { 0L }
 
     // v6.07: 1-Battle Full-Screen Hardware DVR & Frame-Synced Deep Trace Logger + HP/Energy Diagnostic Fields
-    private var dvrThread: HandlerThread? = null
-    private var dvrHandler: Handler? = null
-    private var dvrMediaCodec: MediaCodec? = null
-    private var dvrMediaMuxer: MediaMuxer? = null
-    private var dvrInputSurface: Surface? = null
-    private var dvrVideoTrackIndex: Int = -1
-    private var dvrMuxerStarted: Boolean = false
-    private var dvrMp4File: File? = null
-    private var dvrTraceFile: File? = null
-    private var dvrTraceWriter: java.io.BufferedWriter? = null
-    private var dvrRecordingStartMs: Long = 0L
-    private var dvrFrameCount: Int = 0
-    private var dvrVideoWidth: Int = 544
-    private var dvrVideoHeight: Int = 1184
-    private var sampledPlayerHpRowY: Int = -1
-    private var sampledOppHpRowY: Int = -1
-    private var lastEnergyMutationSource: String = "NONE"
-    private val oppSlotLastBigJumpMs = LongArray(3) { 0L }
-    private var pendingPlayerLowHpSlot: Int = -1
-    private var pendingPlayerLowHpSample: Int = -1
-    private var pendingOppLowHpSlot: Int = -1
-    private var pendingOppLowHpSample: Int = -1
-    private var sampledPlayerHpPct: Int = -1
-    private var sampledOppHpPct: Int = -1
-    private var oppFinalMissingHpFrames: Int = 0
-    private var playerFinalMissingHpFrames: Int = 0
-    private var isAttackIncomingPromptActive: Boolean = false
-    private var attackIncomingDetectedAtMs: Long = 0L
-    private var pendingChargedAttackActor: String = "" // "opp" | "user" | ""
-    private var pendingChargedAttackStartMs: Long = 0L
-    private var pendingChargedAttackPreUserHp: Int = 100
-    private var pendingChargedAttackPreOppHp: Int = 100
-    private var pendingChargedAttackPreUserShields: Int = 2
-    private var pendingChargedAttackPreOppShields: Int = 2
-    private var pendingChargedAttackAttackerName: String = ""
-    private var pendingChargedAttackDefenderName: String = ""
-    private var pendingChargedAttackDeductedEnergy: Int = 0
-    private var pendingChargedAttackOppSlotIdx: Int = -1
-    private var pendingChargedAttackUserSlotIdx: Int = -1
-    private var pendingChargedAttackOppRawName: String = ""
-    private var pendingChargedAttackOppShadow: Boolean = false
-    private var lastOppChargedAttackerSlotIdx: Int = -1
-    private var lastOppChargedAttackerRawName: String = ""
-    private var lastOppChargedAttackerShadow: Boolean = false
-    private val pendingChargedAttackPreUserSlotHp = IntArray(3) { 100 }
-    private val pendingChargedAttackPreOppSlotHp = IntArray(3) { 100 }
-    private var pendingChargedAttackPreOppBalls: Int = 3
-    private var pendingChargedAttackPreUserBalls: Int = 3
-    private var pendingChargedAttackWasOppCatch: Boolean = false
-    private var lastNormalCombatOppSlotIdx: Int = 0
-    private var lastNormalCombatUserSlotIdx: Int = 0
-    private var lastNormalCombatOppRawName: String = ""
-    private var lastNormalCombatOppShadow: Boolean = false
-    private var lastDetectedBannerMoveOppSlotIdx: Int = -1
-    private var lastDetectedBannerMoveUserSlotIdx: Int = -1
-    private var preChargePlayerHpJumpHint: Boolean = false
-    private var preChargeOppHpJumpHint: Boolean = false
-    private var preChargePlayerHpJumpNewHp: Int = -1
-    private var preChargeOppHpJumpNewHp: Int = -1
-    private var preChargePlayerHpJumpMs: Long = 0L
-    private var preChargeOppHpJumpMs: Long = 0L
-    private var lastPostThrowSwapRollbackChargeMs: Long = 0L
-    private val currentBattleSensorTicks = mutableListOf<BattleSensorTick>()
-    private var lastClearedSensorTicksSnapshot: List<BattleSensorTick> = emptyList()
-    private var missingBothHpBarsFrames: Int = 0
-    private var missingTopBallsWithHpBarsFrames: Int = 0
-    private var postUserChargedMissingOppHpFrames: Int = 0
-    private var postOppChargedMissingPlayerHpFrames: Int = 0
-    private var lastSteadyMoveButtonsSeenMs: Long = 0L
-    private var lastChargedAttackLoggedMs: Long = 0L
-    private var lastChargedAttackLoggedActor: String = ""
-    private var lastUserChargedMoveBannerResolvedMs: Long = 0L
-    private var pendingUserChargeConfirmedByOcr: Boolean = false
+    internal var dvrThread: HandlerThread? = null
+    internal var dvrHandler: Handler? = null
+    internal var dvrMediaCodec: MediaCodec? = null
+    internal var dvrMediaMuxer: MediaMuxer? = null
+    internal var dvrInputSurface: Surface? = null
+    internal var dvrVideoTrackIndex: Int = -1
+    internal var dvrMuxerStarted: Boolean = false
+    internal var dvrMp4File: File? = null
+    internal var dvrTraceFile: File? = null
+    internal var dvrTraceWriter: java.io.BufferedWriter? = null
+    internal var dvrRecordingStartMs: Long = 0L
+    internal var dvrFrameCount: Int = 0
+    internal var dvrVideoWidth: Int = 544
+    internal var dvrVideoHeight: Int = 1184
+    internal var sampledPlayerHpRowY: Int = -1
+    internal var sampledOppHpRowY: Int = -1
+    internal var lastEnergyMutationSource: String = "NONE"
+    internal val oppSlotLastBigJumpMs = LongArray(3) { 0L }
+    internal var pendingPlayerLowHpSlot: Int = -1
+    internal var pendingPlayerLowHpSample: Int = -1
+    internal var pendingOppLowHpSlot: Int = -1
+    internal var pendingOppLowHpSample: Int = -1
+    internal var sampledPlayerHpPct: Int = -1
+    internal var sampledOppHpPct: Int = -1
+    internal var oppFinalMissingHpFrames: Int = 0
+    internal var playerFinalMissingHpFrames: Int = 0
+    internal var isAttackIncomingPromptActive: Boolean = false
+    internal var attackIncomingDetectedAtMs: Long = 0L
+    internal var pendingChargedAttackActor: String = "" // "opp" | "user" | ""
+    internal var pendingChargedAttackStartMs: Long = 0L
+    internal var pendingChargedAttackPreUserHp: Int = 100
+    internal var pendingChargedAttackPreOppHp: Int = 100
+    internal var pendingChargedAttackPreUserShields: Int = 2
+    internal var pendingChargedAttackPreOppShields: Int = 2
+    internal var pendingChargedAttackAttackerName: String = ""
+    internal var pendingChargedAttackDefenderName: String = ""
+    internal var pendingChargedAttackDeductedEnergy: Int = 0
+    internal var pendingChargedAttackOppSlotIdx: Int = -1
+    internal var pendingChargedAttackUserSlotIdx: Int = -1
+    internal var pendingChargedAttackOppRawName: String = ""
+    internal var pendingChargedAttackOppShadow: Boolean = false
+    internal var lastOppChargedAttackerSlotIdx: Int = -1
+    internal var lastOppChargedAttackerRawName: String = ""
+    internal var lastOppChargedAttackerShadow: Boolean = false
+    internal val pendingChargedAttackPreUserSlotHp = IntArray(3) { 100 }
+    internal val pendingChargedAttackPreOppSlotHp = IntArray(3) { 100 }
+    internal var pendingChargedAttackPreOppBalls: Int = 3
+    internal var pendingChargedAttackPreUserBalls: Int = 3
+    internal var pendingChargedAttackWasOppCatch: Boolean = false
+    internal var lastNormalCombatOppSlotIdx: Int = 0
+    internal var lastNormalCombatUserSlotIdx: Int = 0
+    internal var lastNormalCombatOppRawName: String = ""
+    internal var lastNormalCombatOppShadow: Boolean = false
+    internal var lastDetectedBannerMoveOppSlotIdx: Int = -1
+    internal var lastDetectedBannerMoveUserSlotIdx: Int = -1
+    internal var preChargePlayerHpJumpHint: Boolean = false
+    internal var preChargeOppHpJumpHint: Boolean = false
+    internal var preChargePlayerHpJumpNewHp: Int = -1
+    internal var preChargeOppHpJumpNewHp: Int = -1
+    internal var preChargePlayerHpJumpMs: Long = 0L
+    internal var preChargeOppHpJumpMs: Long = 0L
+    internal var lastPostThrowSwapRollbackChargeMs: Long = 0L
+    internal val currentBattleSensorTicks = mutableListOf<BattleSensorTick>()
+    internal var lastClearedSensorTicksSnapshot: List<BattleSensorTick> = emptyList()
+    internal var missingBothHpBarsFrames: Int = 0
+    internal var missingTopBallsWithHpBarsFrames: Int = 0
+    internal var postUserChargedMissingOppHpFrames: Int = 0
+    internal var postOppChargedMissingPlayerHpFrames: Int = 0
+    internal var lastSteadyMoveButtonsSeenMs: Long = 0L
+    internal var lastChargedAttackLoggedMs: Long = 0L
+    internal var lastChargedAttackLoggedActor: String = ""
+    internal var lastUserChargedMoveBannerResolvedMs: Long = 0L
+    internal var pendingUserChargeConfirmedByOcr: Boolean = false
 
     // v3.68: Turn-Phased OCR Capture, Charge-Bar 2nd Source of Truth & Monotonic Fast-Move Energy Engine
-    private var sampledOppHasPendingDmg: Boolean = false
-    private var sampledPlayerHasPendingDmg: Boolean = false
-    private var sampledOppPendingDmgPct: Int = 0
-    private var sampledPlayerPendingDmgPct: Int = 0
-    private var turnPhaseAnchorMs: Long = 0L
-    private var lastCaptureStartMs: Long = 0L
-    private val playerSlotEnergy = IntArray(3) { 0 }
-    private val oppSlotEnergy = IntArray(3) { 0 }
-    private val playerSlotTurnsOnField = IntArray(3) { 0 }
-    private val oppSlotTurnsOnField = IntArray(3) { 0 }
-    private val playerSlotCurrentMoveTurns = IntArray(3) { 0 }
-    private val oppSlotCurrentMoveTurns = IntArray(3) { 0 }
-    private val predictedPlayerSlotHpPct = IntArray(3) { 100 }
-    private val predictedOppSlotHpPct = IntArray(3) { 100 }
-    private val lastScannedPlayerSlotHpPct = IntArray(3) { 100 }
-    private val lastScannedOppSlotHpPct = IntArray(3) { 100 }
-    private val playerLastFastCreditedAtMs = LongArray(3) { 0L }
-    private val oppLastFastCreditedAtMs = LongArray(3) { 0L }
-    private val oppCreditedByOptimalTimerAtMs = LongArray(3) { 0L }
-    private var sampledLeftChargeBtnFillPct: Int = -1
-    private var sampledRightChargeBtnFillPct: Int = -1
-    private val lastScannedLeftChargeFillPct = IntArray(3) { 0 }
-    private val lastScannedRightChargeFillPct = IntArray(3) { 0 }
-    private val pendingConfirmLeftChargeFillPct = IntArray(3) { 0 }
-    private val pendingConfirmRightChargeFillPct = IntArray(3) { 0 }
-    private val leftChargeFillConfirmFrames = IntArray(3) { 1 }
-    private val rightChargeFillConfirmFrames = IntArray(3) { 1 }
-    private val leftChargeFillDebounceStartMs = LongArray(3) { 0L }
-    private val rightChargeFillDebounceStartMs = LongArray(3) { 0L }
-    private val playerAutoIncrementAnchorMs = LongArray(3) { 0L }
-    private val playerLastSelfCorrectionAtMs = LongArray(3) { 0L }
-    private var hasBattleStarted: Boolean = false
-    private var phasePlayerTurns: Int = 0
-    private var phaseOppTurns: Int = 0
-    private var battleTurnIndex: Int = 0
-    private var scanTurnOffsetMs: Long = 0L
-    private var lastTurnTickTimeMs: Long = 0L
-    private var turnResidualMs: Long = 0L
-    private var lastFrameWasNormalFastCombat: Boolean = false
-    private var currentScanHzMode: String = "10HZ_HP"
-    private var lastScanDurationMs: Long = 0L
-    private var lastBattleAvgScanMs: Long = 0L
-    private var currentBattleScanDurationSumMs: Long = 0L
-    private var currentBattleScanCount: Int = 0
-    private var lastHpScanDurationMs: Long = 0L
-    private var lastBattleAvgHpScanMs: Long = 0L
-    private var currentBattleHpScanDurationSumMs: Long = 0L
-    private var currentBattleHpScanCount: Int = 0
-    private var lastHpScanTickMs: Long = 0L
-    private var lastOcrStartMs: Long = 0L
-    @Volatile private var isOcrInFlight: Boolean = false
-    @Volatile private var cachedOcrOppLines: List<Text.Line> = emptyList()
-    @Volatile private var cachedOcrPlayerTopLines: List<Text.Line> = emptyList()
-    @Volatile private var cachedOcrPlayerMoveLines: List<Text.Line> = emptyList()
-    @Volatile private var cachedOcrMidBannerLines: List<Text.Line> = emptyList()
-    private var needsPostSwapOrMoveTurnReindex: Boolean = false
-    private var enableHpTracking: Boolean = DEFAULT_ENABLE_HP_TRACKING
-    private var enableEnergyTracking: Boolean = DEFAULT_ENABLE_ENERGY_TRACKING
-    private var chargeCirclePriorityMode: String = DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE
-    private var enableAltFastMoveDetect: Boolean = DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT
+    internal var sampledOppHasPendingDmg: Boolean = false
+    internal var sampledPlayerHasPendingDmg: Boolean = false
+    internal var sampledOppPendingDmgPct: Int = 0
+    internal var sampledPlayerPendingDmgPct: Int = 0
+    internal var turnPhaseAnchorMs: Long = 0L
+    internal var lastCaptureStartMs: Long = 0L
+    internal val playerSlotEnergy = IntArray(3) { 0 }
+    internal val oppSlotEnergy = IntArray(3) { 0 }
+    internal val playerSlotTurnsOnField = IntArray(3) { 0 }
+    internal val oppSlotTurnsOnField = IntArray(3) { 0 }
+    internal val playerSlotCurrentMoveTurns = IntArray(3) { 0 }
+    internal val oppSlotCurrentMoveTurns = IntArray(3) { 0 }
+    internal val predictedPlayerSlotHpPct = IntArray(3) { 100 }
+    internal val predictedOppSlotHpPct = IntArray(3) { 100 }
+    internal val lastScannedPlayerSlotHpPct = IntArray(3) { 100 }
+    internal val lastScannedOppSlotHpPct = IntArray(3) { 100 }
+    internal val playerLastFastCreditedAtMs = LongArray(3) { 0L }
+    internal val oppLastFastCreditedAtMs = LongArray(3) { 0L }
+    internal val oppCreditedByOptimalTimerAtMs = LongArray(3) { 0L }
+    internal var sampledLeftChargeBtnFillPct: Int = -1
+    internal var sampledRightChargeBtnFillPct: Int = -1
+    internal val lastScannedLeftChargeFillPct = IntArray(3) { 0 }
+    internal val lastScannedRightChargeFillPct = IntArray(3) { 0 }
+    internal val pendingConfirmLeftChargeFillPct = IntArray(3) { 0 }
+    internal val pendingConfirmRightChargeFillPct = IntArray(3) { 0 }
+    internal val leftChargeFillConfirmFrames = IntArray(3) { 1 }
+    internal val rightChargeFillConfirmFrames = IntArray(3) { 1 }
+    internal val leftChargeFillDebounceStartMs = LongArray(3) { 0L }
+    internal val rightChargeFillDebounceStartMs = LongArray(3) { 0L }
+    internal val playerAutoIncrementAnchorMs = LongArray(3) { 0L }
+    internal val playerLastSelfCorrectionAtMs = LongArray(3) { 0L }
+    internal var hasBattleStarted: Boolean = false
+    internal var phasePlayerTurns: Int = 0
+    internal var phaseOppTurns: Int = 0
+    internal var battleTurnIndex: Int = 0
+    internal var scanTurnOffsetMs: Long = 0L
+    internal var lastTurnTickTimeMs: Long = 0L
+    internal var turnResidualMs: Long = 0L
+    internal var lastFrameWasNormalFastCombat: Boolean = false
+    internal var currentScanHzMode: String = "10HZ_HP"
+    internal var lastScanDurationMs: Long = 0L
+    internal var lastBattleAvgScanMs: Long = 0L
+    internal var currentBattleScanDurationSumMs: Long = 0L
+    internal var currentBattleScanCount: Int = 0
+    internal var lastHpScanDurationMs: Long = 0L
+    internal var lastBattleAvgHpScanMs: Long = 0L
+    internal var currentBattleHpScanDurationSumMs: Long = 0L
+    internal var currentBattleHpScanCount: Int = 0
+    internal var lastHpScanTickMs: Long = 0L
+    internal var lastOcrStartMs: Long = 0L
+    @Volatile internal var isOcrInFlight: Boolean = false
+    @Volatile internal var cachedOcrOppLines: List<Text.Line> = emptyList()
+    @Volatile internal var cachedOcrPlayerTopLines: List<Text.Line> = emptyList()
+    @Volatile internal var cachedOcrPlayerMoveLines: List<Text.Line> = emptyList()
+    @Volatile internal var cachedOcrMidBannerLines: List<Text.Line> = emptyList()
+    internal var needsPostSwapOrMoveTurnReindex: Boolean = false
+    internal var enableHpTracking: Boolean = DEFAULT_ENABLE_HP_TRACKING
+    internal var enableEnergyTracking: Boolean = DEFAULT_ENABLE_ENERGY_TRACKING
+    internal var chargeCirclePriorityMode: String = DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE
+    internal var enableAltFastMoveDetect: Boolean = DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT
     // v3.85 / v6.02: Charge Move Meter Only Mode, Idle Back-Credit/Fallback, Banner Move OCR & Non-Standard Fast Move Detector (+1 Turn Default)
-    private var fastDetectTurnOffset: Int = DEFAULT_FAST_DETECT_TURN_OFFSET
-    private var isPlayerInIdleFallback: Boolean = false
-    private var lastIdleFallbackOppCreditMs: Long = 0L
-    private val confirmedOppChargedMoves = Array(3) { linkedSetOf<String>() }
-    private val detectedOppFastMoveOverride = arrayOfNulls<String>(3)
-    private val oppFastMoveStatus = Array(3) { "UNCONFIRMED" } // "UNCONFIRMED" | "CONFIRMED_STD" | "CONFIRMED_NONSTD"
-    private val oppFastMoveConfirmed = BooleanArray(3) { false }
-    private val oppCumulativeFastDmgPct = IntArray(3) { 0 }
-    private val oppFastTurnHpHistory = mutableMapOf<Int, Int>()
-    private var oppFastEvalAnchorPlayerHp: Int = 100
-    private var oppFastEvalAnchorOppTurns: Int = 0
-    private var oppFastEvalAnchorPlayerTurns: Int = 0
-    private var oppFastEvalActiveSlotKey: String = ""
-    private var lastDetectedBannerMoveName: String = ""
-    private var lastDetectedBannerMoveActor: String = "" // "opp" | "user" | ""
-    private var lastDetectedBannerMoveTimeMs: Long = 0L
-    private var preChargeLeftFillPct: Int = 0
-    private var preChargeRightFillPct: Int = 0
-    private var preChargeUserEnergy: Int = 0
-    private var lastStableNormalCombatEnergy: Int = 0
-    private var prevStableNormalCombatEnergy: Int = 0
-    private var lastStableLeftChargeFillPct: Int = 0
-    private var lastStableRightChargeFillPct: Int = 0
-    private var prevStableLeftChargeFillPct: Int = 0
-    private var prevStableRightChargeFillPct: Int = 0
-    private var lastStableNormalCombatMs: Long = 0L
-    private var hadShieldPromptBeforeCurrentCharge: Boolean = false
-    private var lastChargedPromptActor: String = "" // "opp" | "user" | ""
-    private var lastChargedPromptTimeMs: Long = 0L
-    private var awaitingPostUserChargeCircleSync: Boolean = false
-    private var lastUserChargeResolvedMoveName: String = ""
-    private var lastUserChargeWasBannerOcr: Boolean = false
-    private var lastUserChargePreEnergySnapshot: Int = 0
-    private var lastUserChargeDeductedEnergySnapshot: Int = 0
-    private var lastOppChargeDeductedEnergySnapshot: Int = 0
-    private var lastMicroCorrectionTimeMs: Long = 0L
-    private var missingBottomCirclesWithOppHpFrames: Int = 0
-    private val CALIBRATION_REQUIRED_CYCLES: Int = 6
-    private var prescanCircleCalibrated: Boolean = false
-    private var prescanCalibConfirmFrames: Int = 0
-    private var isCountdownDimmedState: Boolean = false
-    private var prescanAccumLeftCxSum: Double = 0.0
-    private var prescanAccumRightCxSum: Double = 0.0
-    private var prescanAccumSingleCxSum: Double = 0.0
-    private var prescanAccumLeftCount: Int = 0
-    private var prescanAccumRightCount: Int = 0
-    private var prescanAccumSingleCount: Int = 0
-    private var prescanAccumCySum: Double = 0.0
-    private var prescanAccumYTopSum: Double = 0.0
-    private var prescanAccumYBotSum: Double = 0.0
-    private var prescanAccumEmptyLumaLeftSum: Double = 0.0
-    private var prescanAccumEmptySatLeftSum: Double = 0.0
-    private var prescanAccumEmptyLumaRightSum: Double = 0.0
-    private var prescanAccumEmptySatRightSum: Double = 0.0
-    private var calibratedLeftCxFrac: Float = 0.3095f
-    private var calibratedRightCxFrac: Float = 0.6900f
-    private var calibratedSingleCxFrac: Float = 0.5000f
-    private var calibratedCyFrac: Float = 0.8930f
-    private var calibratedYTopFrac: Float = 0.8584f
-    private var calibratedYBotFrac: Float = 0.9276f
-    private var calibratedRadiusWFrac: Float = 0.0806f
-    private var prescanEmptyLumaLeft: Double = 52.0
-    private var prescanEmptySatLeft: Double = 22.0
-    private var prescanEmptyLumaRight: Double = 52.0
-    private var prescanEmptySatRight: Double = 22.0
-    private var lastClearedFinalUserHpPct: List<Int> = listOf(100, 100, 100)
-    private var lastClearedFinalOppHpPct: List<Int> = listOf(100, 100, 100)
+    internal var fastDetectTurnOffset: Int = DEFAULT_FAST_DETECT_TURN_OFFSET
+    internal var isPlayerInIdleFallback: Boolean = false
+    internal var lastIdleFallbackOppCreditMs: Long = 0L
+    internal val confirmedOppChargedMoves = Array(3) { linkedSetOf<String>() }
+    internal val detectedOppFastMoveOverride = arrayOfNulls<String>(3)
+    internal val oppFastMoveStatus = Array(3) { "UNCONFIRMED" } // "UNCONFIRMED" | "CONFIRMED_STD" | "CONFIRMED_NONSTD"
+    internal val oppFastMoveConfirmed = BooleanArray(3) { false }
+    internal val oppCumulativeFastDmgPct = IntArray(3) { 0 }
+    internal val oppFastTurnHpHistory = mutableMapOf<Int, Int>()
+    internal var oppFastEvalAnchorPlayerHp: Int = 100
+    internal var oppFastEvalAnchorOppTurns: Int = 0
+    internal var oppFastEvalAnchorPlayerTurns: Int = 0
+    internal var oppFastEvalActiveSlotKey: String = ""
+    internal var lastDetectedBannerMoveName: String = ""
+    internal var lastDetectedBannerMoveActor: String = "" // "opp" | "user" | ""
+    internal var lastDetectedBannerMoveTimeMs: Long = 0L
+    internal var preChargeLeftFillPct: Int = 0
+    internal var preChargeRightFillPct: Int = 0
+    internal var preChargeUserEnergy: Int = 0
+    internal var lastStableNormalCombatEnergy: Int = 0
+    internal var prevStableNormalCombatEnergy: Int = 0
+    internal var lastStableLeftChargeFillPct: Int = 0
+    internal var lastStableRightChargeFillPct: Int = 0
+    internal var prevStableLeftChargeFillPct: Int = 0
+    internal var prevStableRightChargeFillPct: Int = 0
+    internal var lastStableNormalCombatMs: Long = 0L
+    internal var hadShieldPromptBeforeCurrentCharge: Boolean = false
+    internal var lastChargedPromptActor: String = "" // "opp" | "user" | ""
+    internal var lastChargedPromptTimeMs: Long = 0L
+    internal var awaitingPostUserChargeCircleSync: Boolean = false
+    internal var lastUserChargeResolvedMoveName: String = ""
+    internal var lastUserChargeWasBannerOcr: Boolean = false
+    internal var lastUserChargePreEnergySnapshot: Int = 0
+    internal var lastUserChargeDeductedEnergySnapshot: Int = 0
+    internal var lastOppChargeDeductedEnergySnapshot: Int = 0
+    internal var lastMicroCorrectionTimeMs: Long = 0L
+    internal var missingBottomCirclesWithOppHpFrames: Int = 0
+    internal val CALIBRATION_REQUIRED_CYCLES: Int = 6
+    internal var prescanCircleCalibrated: Boolean = false
+    internal var prescanCalibConfirmFrames: Int = 0
+    internal var isCountdownDimmedState: Boolean = false
+    internal var prescanAccumLeftCxSum: Double = 0.0
+    internal var prescanAccumRightCxSum: Double = 0.0
+    internal var prescanAccumSingleCxSum: Double = 0.0
+    internal var prescanAccumLeftCount: Int = 0
+    internal var prescanAccumRightCount: Int = 0
+    internal var prescanAccumSingleCount: Int = 0
+    internal var prescanAccumCySum: Double = 0.0
+    internal var prescanAccumYTopSum: Double = 0.0
+    internal var prescanAccumYBotSum: Double = 0.0
+    internal var prescanAccumEmptyLumaLeftSum: Double = 0.0
+    internal var prescanAccumEmptySatLeftSum: Double = 0.0
+    internal var prescanAccumEmptyLumaRightSum: Double = 0.0
+    internal var prescanAccumEmptySatRightSum: Double = 0.0
+    internal var calibratedLeftCxFrac: Float = 0.3095f
+    internal var calibratedRightCxFrac: Float = 0.6900f
+    internal var calibratedSingleCxFrac: Float = 0.5000f
+    internal var calibratedCyFrac: Float = 0.8930f
+    internal var calibratedYTopFrac: Float = 0.8584f
+    internal var calibratedYBotFrac: Float = 0.9276f
+    internal var calibratedRadiusWFrac: Float = 0.0806f
+    internal var prescanEmptyLumaLeft: Double = 52.0
+    internal var prescanEmptySatLeft: Double = 22.0
+    internal var prescanEmptyLumaRight: Double = 52.0
+    internal var prescanEmptySatRight: Double = 22.0
+    internal var lastClearedFinalUserHpPct: List<Int> = listOf(100, 100, 100)
+    internal var lastClearedFinalOppHpPct: List<Int> = listOf(100, 100, 100)
 
     // v3.86 / v3.99: Low-Latency Debounced Energy Tracking on Slower Charge Move Circle (±2% Circle Fill Tolerance)
     // + 3-Ring Visual Multi-Fill Detection (0..99% 1st Fill, 100..199% White Border 2nd Fill, 200..300% Second Outer Circle 3rd Fill)
     //   with Zero Assumed / Timer-Based Energy Gains
-    private val candidateSlowestFillPct = IntArray(3) { -1 }
-    private val slowestFillDebounceCount = IntArray(3) { 0 }
-    private val confirmedSlowestFillPct = IntArray(3) { -1 }
-    private val candidateFastestFillPct = IntArray(3) { -1 }
-    private val fastestFillDebounceCount = IntArray(3) { 0 }
-    private val confirmedFastestFillPct = IntArray(3) { -1 }
-    private val lastToastedSlotEnergy = IntArray(3) { -1 }
-    private val leftMeterFilledTwiceLatched = BooleanArray(3) { false }
-    private val rightMeterFilledTwiceLatched = BooleanArray(3) { false }
-    private val slowestMeterInThirdFill = BooleanArray(3) { false }
-    private val fasterMeterInThirdFill = BooleanArray(3) { false }
-    private val peakSecondFillPct = IntArray(3) { 0 }
-    private val peakFastestSecondFillPct = IntArray(3) { 0 }
-    private val firstFillTopCapLuma = DoubleArray(6) { -1.0 }
-    private val secondFillBotCapLuma = DoubleArray(6) { -1.0 }
+    internal val candidateSlowestFillPct = IntArray(3) { -1 }
+    internal val slowestFillDebounceCount = IntArray(3) { 0 }
+    internal val confirmedSlowestFillPct = IntArray(3) { -1 }
+    internal val candidateFastestFillPct = IntArray(3) { -1 }
+    internal val fastestFillDebounceCount = IntArray(3) { 0 }
+    internal val confirmedFastestFillPct = IntArray(3) { -1 }
+    internal val lastToastedSlotEnergy = IntArray(3) { -1 }
+    internal val leftMeterFilledTwiceLatched = BooleanArray(3) { false }
+    internal val rightMeterFilledTwiceLatched = BooleanArray(3) { false }
+    internal val slowestMeterInThirdFill = BooleanArray(3) { false }
+    internal val fasterMeterInThirdFill = BooleanArray(3) { false }
+    internal val peakSecondFillPct = IntArray(3) { 0 }
+    internal val peakFastestSecondFillPct = IntArray(3) { 0 }
+    internal val firstFillTopCapLuma = DoubleArray(6) { -1.0 }
+    internal val secondFillBotCapLuma = DoubleArray(6) { -1.0 }
 
     // v3.88: Player Energy-to-Turns Conversion, 500ms Multi-Turn Interpolation, Post-Charge Recounting & Ever-On-Field Tracking
-    private val playerSlotEverOnField = BooleanArray(3) { it == 0 }
-    private var phaseStartPlayerEnergy: Int = 0
-    private var confirmedPhasePlayerTurns: Int = 0
-    private var lastConfirmedPlayerFastMoveMs: Long = 0L
+    internal val playerSlotEverOnField = BooleanArray(3) { it == 0 }
+    internal var phaseStartPlayerEnergy: Int = 0
+    internal var confirmedPhasePlayerTurns: Int = 0
+    internal var lastConfirmedPlayerFastMoveMs: Long = 0L
 
     // v4.12: Proactive ~300ms Early Fast-Move Energy & Turn Step (Both Player & Opponent) with >500ms 1-Turn Lag Rollback
-    private var proactiveStepPending: Boolean = false
-    private var proactiveStepSlotIdx: Int = -1
-    private var proactiveStepPreEnergy: Int = 0
-    private var proactiveStepAddedEnergy: Int = 0
-    private var proactiveStepAddedTurns: Int = 0
-    private var proactiveStepExpectedConfirmMs: Long = 0L
-    private var proactiveStepPreOppSlotIdx: Int = -1
-    private var proactiveStepPreOppEnergy: Int = 0
-    private var proactiveStepPreOppTurnsOnField: Int = 0
-    private var proactiveStepPrePhaseOppTurns: Int = 0
-    private var confirmedMoveOppSlotIdx: Int = -1
-    private var confirmedMoveOppEnergy: Int = 0
-    private var confirmedMoveOppTurnsOnField: Int = 0
-    private var confirmedMovePhaseOppTurns: Int = 0
-    private var proactiveRolledBackAnchorMs: Long = 0L
+    internal var proactiveStepPending: Boolean = false
+    internal var proactiveStepSlotIdx: Int = -1
+    internal var proactiveStepPreEnergy: Int = 0
+    internal var proactiveStepAddedEnergy: Int = 0
+    internal var proactiveStepAddedTurns: Int = 0
+    internal var proactiveStepExpectedConfirmMs: Long = 0L
+    internal var proactiveStepPreOppSlotIdx: Int = -1
+    internal var proactiveStepPreOppEnergy: Int = 0
+    internal var proactiveStepPreOppTurnsOnField: Int = 0
+    internal var proactiveStepPrePhaseOppTurns: Int = 0
+    internal var confirmedMoveOppSlotIdx: Int = -1
+    internal var confirmedMoveOppEnergy: Int = 0
+    internal var confirmedMoveOppTurnsOnField: Int = 0
+    internal var confirmedMovePhaseOppTurns: Int = 0
+    internal var proactiveRolledBackAnchorMs: Long = 0L
 
-    private fun clearPendingProactiveStep() {
+    internal fun clearPendingProactiveStep() {
         proactiveStepPending = false
         proactiveStepSlotIdx = -1
         proactiveStepPreEnergy = 0
@@ -13289,7 +2478,7 @@ class OverlayService : LifecycleService() {
         proactiveStepPrePhaseOppTurns = 0
     }
 
-    private fun rollbackPendingProactiveStep(
+    internal fun rollbackPendingProactiveStep(
         markAnchorRolledBack: Boolean = true,
         preserveOppSubTurnEnergy: Boolean = false
     ) {
@@ -13324,29 +2513,29 @@ class OverlayService : LifecycleService() {
     }
 
     // v4.00/v4.01: Fast-Move Turn Energy Increment Snapping with Post-Throw Discharge Anchor + 100E Ceiling Step Latch
-    private val playerSlotEnergyAnchor = IntArray(3) { 0 }
-    private val nearCeilingStepStartMs = LongArray(3) { 0L }
-    private val playerSlotCeilingLatched100 = BooleanArray(3) { false }
-    private var pendingChargedAttackPreOppEnergy: Int = 0
-    private var lastUserChargedAttackLoggedMs: Long = 0L
-    private var lastUserChargedPreOppHp: Int = 100
-    private var lastUserChargedDefenderOppSlotIdx: Int = -1
-    private var lastUserChargedWasProvisionalShield: Boolean = false
-    private var lastUserChargedAutoDecrementedShield: Boolean = false
-    private var lastOppChargedAttackLoggedMs: Long = 0L
-    private var lastOppChargedPreUserHp: Int = 100
-    private var lastOppChargedDefenderUserSlotIdx: Int = -1
-    private var lastOppChargedWasProvisionalShield: Boolean = false
-    private var lastOppChargedAutoDecrementedShield: Boolean = false
-    private var postChargeCirclesReturnedAtMs: Long = 0L
-    private var activeFrameScreenBitmap: Bitmap? = null
-    private var pendingChargedAttackHudThumbB64: String? = null
+    internal val playerSlotEnergyAnchor = IntArray(3) { 0 }
+    internal val nearCeilingStepStartMs = LongArray(3) { 0L }
+    internal val playerSlotCeilingLatched100 = BooleanArray(3) { false }
+    internal var pendingChargedAttackPreOppEnergy: Int = 0
+    internal var lastUserChargedAttackLoggedMs: Long = 0L
+    internal var lastUserChargedPreOppHp: Int = 100
+    internal var lastUserChargedDefenderOppSlotIdx: Int = -1
+    internal var lastUserChargedWasProvisionalShield: Boolean = false
+    internal var lastUserChargedAutoDecrementedShield: Boolean = false
+    internal var lastOppChargedAttackLoggedMs: Long = 0L
+    internal var lastOppChargedPreUserHp: Int = 100
+    internal var lastOppChargedDefenderUserSlotIdx: Int = -1
+    internal var lastOppChargedWasProvisionalShield: Boolean = false
+    internal var lastOppChargedAutoDecrementedShield: Boolean = false
+    internal var postChargeCirclesReturnedAtMs: Long = 0L
+    internal var activeFrameScreenBitmap: Bitmap? = null
+    internal var pendingChargedAttackHudThumbB64: String? = null
 
     /**
      * v5.13: Captures a compact 320x210 composite HUD strip (Top HP/Balls/Countdown + Mid Move Banner + Bottom Charge Circles)
      * encoded as WebP quality 55 (~6-9 KB Base64) so HIGH severity anomalies have visual proof without bloating logs.
      */
-    private fun captureCompactHudStripWebpBase64(screen: Bitmap? = activeFrameScreenBitmap): String? {
+    internal fun captureCompactHudStripWebpBase64(screen: Bitmap? = activeFrameScreenBitmap): String? {
         val src = screen ?: return null
         if (src.isRecycled || src.width < 100 || src.height < 200) return null
         return try {
@@ -13388,21 +2577,21 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private var shieldHexagonSeenDuringPrompt: Boolean = false
-    private var sampledShieldHexagonVisible: Boolean = false
-    private var shieldHexagonConfirmFrames: Int = 0
-    private var sampledTopCountdownCircleVisible: Boolean = false
-    private var topCountdownCircleConfirmFrames: Int = 0
-    private var topCountdownCircleMissingFrames: Int = 0
-    private var isTopCountdownCircleActive: Boolean = false
-    private var shieldOverlayShowConfirmFrames: Int = 0
-    private var lastShieldOverlayConfirmFrameMs: Long = 0L
-    private var sampledTopRightNameplateVisible: Boolean = false
-    private var lastAttackIncomingOcrDetectedMs: Long = 0L
-    private var lastOppChargeHpInferredMoveName: String = ""
+    internal var shieldHexagonSeenDuringPrompt: Boolean = false
+    internal var sampledShieldHexagonVisible: Boolean = false
+    internal var shieldHexagonConfirmFrames: Int = 0
+    internal var sampledTopCountdownCircleVisible: Boolean = false
+    internal var topCountdownCircleConfirmFrames: Int = 0
+    internal var topCountdownCircleMissingFrames: Int = 0
+    internal var isTopCountdownCircleActive: Boolean = false
+    internal var shieldOverlayShowConfirmFrames: Int = 0
+    internal var lastShieldOverlayConfirmFrameMs: Long = 0L
+    internal var sampledTopRightNameplateVisible: Boolean = false
+    internal var lastAttackIncomingOcrDetectedMs: Long = 0L
+    internal var lastOppChargeHpInferredMoveName: String = ""
 
-    private var pllValidatedThisShieldDelay = false
-    private var observedPlayerChargeBarStep = false
+    internal var pllValidatedThisShieldDelay = false
+    internal var observedPlayerChargeBarStep = false
 
     /**
      * v4.00/v4.01: Snaps raw pixel-measured player energy to the nearest valid fast-move turn increment
@@ -13412,7 +2601,7 @@ class OverlayService : LifecycleService() {
      * near-ceiling step (e.g. `99E` on `9E Ember`) first and only includes `100E` once the 1-fast-move-duration
      * ceiling latch (`playerSlotCeilingLatched100[slotIdx]`) has fired or `clampedRaw >= 100`.
      */
-    private fun snapPlayerEnergyToValidStep(
+    internal fun snapPlayerEnergyToValidStep(
         slotIdx: Int,
         rawEnergy: Int,
         fastMoveEnergy: Int,
@@ -13468,9 +2657,9 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private fun getMoveScannerContrastRank(moveName: String, fallbackSpeciesType: String = "normal"): Int {
+    internal fun getMoveScannerContrastRank(moveName: String, fallbackSpeciesType: String = "normal"): Int {
         if (moveName.isBlank()) return 17
-        val mStats = resolveChargedMoveStatsStatic(moveName, fallbackSpeciesType)
+        val mStats = OverlayService.resolveChargedMoveStatsStatic(moveName, fallbackSpeciesType)
         val moveTypeLower = mStats.type.trim().lowercase()
         return MOVE_TYPE_SCANNER_CONTRAST_RANK[moveTypeLower] ?: 17
     }
@@ -13484,7 +2673,7 @@ class OverlayService : LifecycleService() {
      *   and automatically promotes the higher-contrast move whenever the higher-energy move falls in Tier B or Tier C
      *   (Ranks 11-18, e.g. Xerneas's Moonblast Fairy #3 50E over Giga Impact Normal #17 80E).
      */
-    private fun shouldSelectRightCircleAsPrimary(
+    internal fun shouldSelectRightCircleAsPrimary(
         move1Name: String,
         move1Cost: Int,
         move2Name: String,
@@ -13529,7 +2718,7 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private fun resolvePlayerSlotMoveCosts(slotIdx: Int): Pair<Int, Int> {
+    internal fun resolvePlayerSlotMoveCosts(slotIdx: Int): Pair<Int, Int> {
         val slotCfg = currentPreset?.pokemon?.getOrNull(slotIdx)
         val monName = slotCfg?.name ?: activeUserPokemonName ?: "Dialga (Origin)"
         val isShad = monName.contains("Shadow", ignoreCase = true)
@@ -13538,16 +2727,16 @@ class OverlayService : LifecycleService() {
         val m1Name = slotCfg?.chargedMove1?.takeIf { it.isNotBlank() } ?: meta.chargedMove1
         val m2Name = slotCfg?.chargedMove2?.takeIf { it.isNotBlank() } ?: meta.chargedMove2
         val hasSecond = m2Name.isNotBlank() && !m2Name.equals(m1Name, ignoreCase = true)
-        val c1 = (resolveChargedMoveStatsStatic(m1Name, primaryType).energyCost.takeIf { it > 0 }
+        val c1 = (OverlayService.resolveChargedMoveStatsStatic(m1Name, primaryType).energyCost.takeIf { it > 0 }
             ?: MOVE_ENERGY_COST[m1Name] ?: 50).coerceIn(35, 100)
         val c2 = if (hasSecond) {
-            (resolveChargedMoveStatsStatic(m2Name, primaryType).energyCost.takeIf { it > 0 }
+            (OverlayService.resolveChargedMoveStatsStatic(m2Name, primaryType).energyCost.takeIf { it > 0 }
                 ?: MOVE_ENERGY_COST[m2Name] ?: 50).coerceIn(35, 100)
         } else c1
         return c1 to c2
     }
 
-    private fun resetSlotEnergyTracking(
+    internal fun resetSlotEnergyTracking(
         slotIdx: Int,
         initialEnergy: Int = 0,
         cost1: Int = -1,
@@ -13612,7 +2801,7 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private fun computeSingleCircleSnappedEnergy(
+    internal fun computeSingleCircleSnappedEnergy(
         slotIdx: Int,
         fillPct: Int,
         moveCost: Int,
@@ -13639,7 +2828,7 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private fun emitEnergyUpdateToastIfEnabled(
+    internal fun emitEnergyUpdateToastIfEnabled(
         slotIdx: Int,
         moveName: String,
         moveCost: Int,
@@ -13670,29 +2859,29 @@ class OverlayService : LifecycleService() {
     }
 
     // Phase 2: Battle Clock Synchronization (t0) & Live Timeline Event Logger
-    private var battleClockAnchorMs: Long = 0L
-    private val battleTimelineEvents = mutableListOf<BattleTimelineEvent>()
-    private var lastClearedTimelineEventsSnapshot: List<BattleTimelineEvent> = emptyList()
-    private var lastClearedBattleDurationSec: Double? = null
-    private var lastClearedUserFaints: Int = 0
-    private var lastClearedOppFaints: Int = 0
-    private var lastClearedUserShieldsRemaining: Int = 2
-    private var lastClearedOppShieldsRemaining: Int = 2
+    internal var battleClockAnchorMs: Long = 0L
+    internal val battleTimelineEvents = mutableListOf<BattleTimelineEvent>()
+    internal var lastClearedTimelineEventsSnapshot: List<BattleTimelineEvent> = emptyList()
+    internal var lastClearedBattleDurationSec: Double? = null
+    internal var lastClearedUserFaints: Int = 0
+    internal var lastClearedOppFaints: Int = 0
+    internal var lastClearedUserShieldsRemaining: Int = 2
+    internal var lastClearedOppShieldsRemaining: Int = 2
 
     // v6.03: Scanned CP per team slot + Auto End-of-Battle & Telemetry Ignore state
-    private val playerSlotCp = IntArray(3) { 0 }
-    private val oppSlotCp = IntArray(3) { 0 }
-    private var autoEndCandidateResult: String = ""
-    private var autoEndCandidateFrames: Int = 0
-    private var lastLoggedBattleId: String = ""
-    private var lastLoggedBattleResult: String = "WIN"
-    private var lastLoggedBattleLead: String = "NEUTRAL"
-    private var lastLoggedBattleOpponents: List<String> = emptyList()
-    private var lastLoggedBattleTelemetryIgnored: Boolean = false
-    private var lastLoggedBattleWasAuto: Boolean = false
-    private var lastLoggedBattleTimeMs: Long = 0L
+    internal val playerSlotCp = IntArray(3) { 0 }
+    internal val oppSlotCp = IntArray(3) { 0 }
+    internal var autoEndCandidateResult: String = ""
+    internal var autoEndCandidateFrames: Int = 0
+    internal var lastLoggedBattleId: String = ""
+    internal var lastLoggedBattleResult: String = "WIN"
+    internal var lastLoggedBattleLead: String = "NEUTRAL"
+    internal var lastLoggedBattleOpponents: List<String> = emptyList()
+    internal var lastLoggedBattleTelemetryIgnored: Boolean = false
+    internal var lastLoggedBattleWasAuto: Boolean = false
+    internal var lastLoggedBattleTimeMs: Long = 0L
 
-    private fun extractCpFromOcrLines(lines: List<Text.Line>): Int? {
+    internal fun extractCpFromOcrLines(lines: List<Text.Line>): Int? {
         for (line in lines) {
             val raw = line.text.trim()
             if (isOverlayHudSelfText(raw.lowercase())) continue
@@ -13710,13 +2899,13 @@ class OverlayService : LifecycleService() {
         return null
     }
 
-    private fun getElapsedBattleSeconds(eventTimeMs: Long = System.currentTimeMillis()): Double {
+    internal fun getElapsedBattleSeconds(eventTimeMs: Long = System.currentTimeMillis()): Double {
         if (battleClockAnchorMs <= 0L) return 0.0
         val diffMs = (eventTimeMs - battleClockAnchorMs).coerceAtLeast(0L)
         return ((diffMs / 1000.0) * 100.0).roundToInt() / 100.0
     }
 
-    private fun formatOpponentNameWithShadow(rawName: String): String {
+    internal fun formatOpponentNameWithShadow(rawName: String): String {
         val trimmed = rawName.trim()
         if (trimmed.isEmpty() || trimmed.equals("Waiting...", ignoreCase = true)) return trimmed
         val baseKey = FormResolver.extractBaseSpecies(trimmed).lowercase()
@@ -13947,7 +3136,7 @@ class OverlayService : LifecycleService() {
         startBattleOcrLoop()
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val (ok, _) = syncWithGitHubGistBlocking(prefs, gson)
+                val (ok, _) = OverlayService.syncWithGitHubGistBlocking(prefs, gson)
                 if (ok) {
                     withContext(Dispatchers.Main) {
                         setupDefaultPresetsIfNeeded()
@@ -13958,12 +3147,12 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private fun showBattleToast(message: String, duration: Int = Toast.LENGTH_SHORT) {
+    internal fun showBattleToast(message: String, duration: Int = Toast.LENGTH_SHORT) {
         if (disableBattleToasts) return
         showStatusBarToast(message, duration)
     }
 
-    private fun showStatusBarToast(message: String, duration: Int = Toast.LENGTH_SHORT) {
+    internal fun showStatusBarToast(message: String, duration: Int = Toast.LENGTH_SHORT) {
         mainToastHandler.post {
             try {
                 val density = resources.displayMetrics.density
@@ -14052,7 +3241,7 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private data class ShieldOverlayMoveRow(
+    internal data class ShieldOverlayMoveRow(
         val moveName: String,
         val energyCost: Int,
         val dmgPct: Int,
@@ -14065,7 +3254,7 @@ class OverlayService : LifecycleService() {
         val userTargetMoveShort: String = ""
     )
 
-    private fun hideShieldDecisionOverlay() {
+    internal fun hideShieldDecisionOverlay() {
         isShieldDecisionOverlayVisible = false
         shieldDecisionOverlayShownAtMs = 0L
         shieldHexagonSeenDuringPrompt = false
@@ -14092,7 +3281,7 @@ class OverlayService : LifecycleService() {
      *    2.2x higher than any bright pink sprite density in the wings (rejecting wide pink sprites like Tinkaton).
      * 3. Crisp white "NOT NOW" pill/text signature directly below the shield hexagon (`x = 0.40w..0.60w`, `y = 0.902h..0.958h`).
      */
-    private fun detectAttackIncomingShieldHexagonPixels(screen: Bitmap, w: Int, h: Int): Boolean {
+    internal fun detectAttackIncomingShieldHexagonPixels(screen: Bitmap, w: Int, h: Int): Boolean {
         if (screen.isRecycled || w < 100 || h < 100) return false
         val xStart = (w * 0.435f).toInt().coerceIn(0, w - 1)
         val xMid = (w * 0.50f).toInt().coerceIn(xStart + 1, w - 1)
@@ -14224,7 +3413,7 @@ class OverlayService : LifecycleService() {
      * - 2e: Anchored just above "Attack incoming! Use a Protect Shield?" (`Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL`, `y = 0.295 * screenHeight`)
      *       and auto-hides immediately when the text disappears or after 5.0s, whichever comes first.
      */
-    private fun showOrUpdateShieldDecisionOverlay(
+    internal fun showOrUpdateShieldDecisionOverlay(
         oppSlotIdx: Int,
         userSlotIdx: Int,
         preThrowOppEnergy: Int
@@ -14245,12 +3434,12 @@ class OverlayService : LifecycleService() {
         }
         val oppBaseKey = FormResolver.extractBaseSpecies(oppRawName).lowercase()
         val isOppShad = manualShadowOverrides[oppBaseKey] ?: (if (clampedOppIdx == oppSlotIdx) isOpponentShadow else oppRawName.contains("Shadow", ignoreCase = true))
-        val oppMeta = computeEffectiveCombatStats(getPokemonMeta(oppRawName, activeLeague, isOppShad), activeLeague)
+        val oppMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(oppRawName, activeLeague, isOppShad), activeLeague)
 
         val userSlotCfg = currentPreset?.pokemon?.getOrNull(clampedUserIdx)
         val userMonName = userSlotCfg?.name ?: activeUserPokemonName ?: "Dialga (Origin)"
         val isUserShad = userMonName.contains("Shadow", ignoreCase = true)
-        val userMeta = computeEffectiveCombatStats(
+        val userMeta = OverlayService.computeEffectiveCombatStats(
             getPokemonMeta(userMonName, activeLeague, isUserShad),
             activeLeague,
             userSlotCfg?.cp,
@@ -14294,14 +3483,14 @@ class OverlayService : LifecycleService() {
         // v6.00 Pillar 4: Tank Incoming Charged Move & Farm to Next Charged Move Before Fainting
         val userEnergyNow = playerSlotEnergy.getOrElse(clampedUserIdx) { 0 }.coerceIn(0, 100)
         val userFastMoveName = userSlotCfg?.fastMove?.takeIf { it.isNotBlank() } ?: userMeta.defaultFastMove
-        val userFastTurns = resolveFastTurnsStatic(userFastMoveName, userMeta.fastTurns).coerceAtLeast(1)
-        val userFastEnergy = resolveFastEnergyStatic(userFastMoveName, userFastTurns).coerceAtLeast(1)
+        val userFastTurns = OverlayService.resolveFastTurnsStatic(userFastMoveName, userMeta.fastTurns).coerceAtLeast(1)
+        val userFastEnergy = OverlayService.resolveFastEnergyStatic(userFastMoveName, userFastTurns).coerceAtLeast(1)
         val uMove1 = userSlotCfg?.chargedMove1?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove1
         val uMove2 = userSlotCfg?.chargedMove2?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove2
-        val uCost1 = (resolveChargedMoveStatsStatic(uMove1, userMeta.types.firstOrNull() ?: "normal").energyCost.takeIf { it > 0 } ?: 50).coerceIn(35, 100)
-        val uCost2 = (resolveChargedMoveStatsStatic(uMove2, userMeta.types.firstOrNull() ?: "normal").energyCost.takeIf { it > 0 } ?: 50).coerceIn(35, 100)
+        val uCost1 = (OverlayService.resolveChargedMoveStatsStatic(uMove1, userMeta.types.firstOrNull() ?: "normal").energyCost.takeIf { it > 0 } ?: 50).coerceIn(35, 100)
+        val uCost2 = (OverlayService.resolveChargedMoveStatsStatic(uMove2, userMeta.types.firstOrNull() ?: "normal").energyCost.takeIf { it > 0 } ?: 50).coerceIn(35, 100)
         val (targetUserMoveName, targetUserMoveCost) = if (uCost1 <= uCost2) uMove1 to uCost1 else uMove2 to uCost2
-        val targetUserMoveShort = abbrMoveCompactStatic(targetUserMoveName)
+        val targetUserMoveShort = OverlayService.abbrMoveCompactStatic(targetUserMoveName)
         val myFastsNeededForNextMove = if (userEnergyNow >= targetUserMoveCost) {
             0
         } else {
@@ -14309,7 +3498,7 @@ class OverlayService : LifecycleService() {
         }
         val oppFastOverride = detectedOppFastMoveOverride.getOrNull(clampedOppIdx)?.takeIf { it.isNotBlank() }
         val oppFastMoveName = oppFastOverride ?: oppMeta.defaultFastMove
-        val oppFastTurns = resolveFastTurnsStatic(oppFastMoveName, oppMeta.fastTurns).coerceAtLeast(1)
+        val oppFastTurns = OverlayService.resolveFastTurnsStatic(oppFastMoveName, oppMeta.fastTurns).coerceAtLeast(1)
         val oppFastExactDmgPct = calculateFastMoveExactDamagePercent(
             attacker = oppMeta,
             defender = userMeta,
@@ -14320,7 +3509,7 @@ class OverlayService : LifecycleService() {
         ).coerceAtLeast(0.5)
 
         val allMoveRows = candidateMoveNames.map { mName ->
-            val mStats = resolveChargedMoveStatsStatic(mName, oppMeta.types.firstOrNull() ?: "normal")
+            val mStats = OverlayService.resolveChargedMoveStatsStatic(mName, oppMeta.types.firstOrNull() ?: "normal")
             val cost = (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[mName] ?: 50).coerceIn(35, 100)
             val dmg = calculateChargedMoveDamagePercent(
                 attacker = oppMeta,
@@ -14406,8 +3595,8 @@ class OverlayService : LifecycleService() {
             )
         }
 
-        val oppShort = abbrPokeCompactStatic(oppMeta.name, isOppShad)
-        val userShort = abbrPokeCompactStatic(userMeta.name, isUserShad)
+        val oppShort = OverlayService.abbrPokeCompactStatic(oppMeta.name, isOppShad)
+        val userShort = OverlayService.abbrPokeCompactStatic(userMeta.name, isUserShad)
         val lockedTag = if (twoMovesLocked) " • 2M" else ""
         val headerLineText = "$headerVerdictText  •  $oppShort(${effectiveBankedE}e) vs $userShort(${userHpPct}%)$lockedTag"
 
@@ -14547,7 +3736,7 @@ class OverlayService : LifecycleService() {
                             setPadding(0, (1.5f * density).toInt(), 0, (1.5f * density).toInt())
                         }
                         val prefixTv = TextView(this).apply {
-                            text = "⚡ ${abbrMoveCompactStatic(m.moveName)} (${m.energyCost}e) → "
+                            text = "⚡ ${OverlayService.abbrMoveCompactStatic(m.moveName)} (${m.energyCost}e) → "
                             setTextColor(if (m.isKo) Color.parseColor("#FECDD3") else Color.parseColor("#BAE6FD"))
                             setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.0f)
                             typeface = Typeface.create("sans-serif", Typeface.BOLD)
@@ -14622,7 +3811,7 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private fun loadCachedRankingsSynchronously() {
+    internal fun loadCachedRankingsSynchronously() {
         try {
             val rankingTargets = listOf(
                 Pair("GREAT LEAGUE", "pvpoke_rankings_gl.json"),
@@ -14636,7 +3825,7 @@ class OverlayService : LifecycleService() {
                 if (LIVE_RANKINGS_MAP[leagueKey].isNullOrEmpty()) {
                     val rFile = File(filesDir, fileName)
                     if (rFile.exists() && rFile.length() > 200) {
-                        parseRankingsJsonStatic(leagueKey, rFile.readText())
+                        OverlayService.parseRankingsJsonStatic(leagueKey, rFile.readText())
                     }
                 }
             }
@@ -14644,13 +3833,13 @@ class OverlayService : LifecycleService() {
                 val mainCache = File(filesDir, "pvpoke_gamemaster.json")
                 val cacheFile = if (mainCache.exists() && mainCache.length() > 1000) mainCache else File(filesDir, "pvpoke_gamemaster_cache.json")
                 if (cacheFile.exists() && cacheFile.length() > 1000) {
-                    parseGamemasterJsonStatic(cacheFile.readText())
+                    OverlayService.parseGamemasterJsonStatic(cacheFile.readText())
                 }
             }
         } catch (_: Exception) {}
     }
 
-    private fun loadOrFetchGamemasterInBackground() {
+    internal fun loadOrFetchGamemasterInBackground() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val client = OkHttpClient()
@@ -14682,7 +3871,7 @@ class OverlayService : LifecycleService() {
                             }
                         }
                         if (!rJson.isNullOrBlank()) {
-                            parseRankingsJsonStatic(leagueKey, rJson)
+                            OverlayService.parseRankingsJsonStatic(leagueKey, rJson)
                         }
                     } catch (_: Exception) {}
                 }
@@ -14719,11 +3908,11 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private fun parseGamemasterJson(jsonStr: String) {
-        parseGamemasterJsonStatic(jsonStr)
+    internal fun parseGamemasterJson(jsonStr: String) {
+        OverlayService.parseGamemasterJsonStatic(jsonStr)
     }
 
-    private fun setupDefaultPresetsIfNeeded() {
+    internal fun setupDefaultPresetsIfNeeded() {
         val existing = loadPresets()
         if (existing.isEmpty()) {
             val defaults = listOf(
@@ -14765,7 +3954,7 @@ class OverlayService : LifecycleService() {
     }
 
     @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
-    private fun setupOverlayView() {
+    internal fun setupOverlayView() {
         overlayView = WebView(this).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
@@ -14861,7 +4050,7 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private fun applyOverlayScale(scalePct: Int) {
+    internal fun applyOverlayScale(scalePct: Int) {
         overlayScalePct = scalePct.coerceIn(50, 100)
         if (!::layoutParams.isInitialized) return
         if (!isOverlayMinimized) {
@@ -14881,7 +4070,7 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private fun applyOverlayTransparency(transparencyPct: Int) {
+    internal fun applyOverlayTransparency(transparencyPct: Int) {
         overlayTransparencyPct = transparencyPct.coerceIn(0, 100)
         Handler(Looper.getMainLooper()).post {
             try {
@@ -14893,7 +4082,7 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private fun applyOverlayTheme(themeId: String) {
+    internal fun applyOverlayTheme(themeId: String) {
         val cleaned = themeId.ifBlank { "dialga_shiny_midnight" }
         appThemeId = if (cleaned == "amoled_cyan" || cleaned == "amoled_matrix") "dialga_shiny_midnight" else cleaned
         Handler(Looper.getMainLooper()).post {
@@ -14906,12 +4095,12 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private fun stopBattleOcrLoop() {
+    internal fun stopBattleOcrLoop() {
         battleLoopJob?.cancel()
         battleLoopJob = null
     }
 
-    private fun minimizeOverlayToBubble() {
+    internal fun minimizeOverlayToBubble() {
         if (isOverlayMinimized) return
         isOverlayMinimized = true
         lastMinimizeTimestampMs = System.currentTimeMillis()
@@ -14934,7 +4123,7 @@ class OverlayService : LifecycleService() {
         showStatusBarToast("Overlay minimized (OCR paused). Tap bubble to resume.", Toast.LENGTH_SHORT)
     }
 
-    private fun restoreOverlayFromBubble() {
+    internal fun restoreOverlayFromBubble() {
         if (!isOverlayMinimized) return
         if (System.currentTimeMillis() - lastMinimizeTimestampMs < 400L) return
         isOverlayMinimized = false
@@ -15102,9 +4291,9 @@ class OverlayService : LifecycleService() {
                     } catch (_: Exception) {}
                 }
 
-                if (!areAllFourLeaguesLoaded() || DYNAMIC_POKEMON_DATABASE.isEmpty()) {
+                if (!OverlayService.areAllFourLeaguesLoaded() || DYNAMIC_POKEMON_DATABASE.isEmpty()) {
                     loadCachedRankingsSynchronously()
-                    if (!areAllFourLeaguesLoaded() || DYNAMIC_POKEMON_DATABASE.isEmpty()) {
+                    if (!OverlayService.areAllFourLeaguesLoaded() || DYNAMIC_POKEMON_DATABASE.isEmpty()) {
                         loadOrFetchGamemasterInBackground()
                     }
                 }
@@ -15228,7 +4417,7 @@ class OverlayService : LifecycleService() {
                     hasActiveMediaProjection = false
                     notifyRunningStateChanged()
                     if (::prefs.isInitialized) {
-                        triggerAutoUploadOnOverlayStopAsync(prefs, gson)
+                        OverlayService.triggerAutoUploadOnOverlayStopAsync(prefs, gson)
                     }
                     stopSelf()
                 }
@@ -15238,7 +4427,7 @@ class OverlayService : LifecycleService() {
                 hasActiveMediaProjection = false
                 notifyRunningStateChanged()
                 if (::prefs.isInitialized) {
-                    triggerAutoUploadOnOverlayStopAsync(prefs, gson)
+                    OverlayService.triggerAutoUploadOnOverlayStopAsync(prefs, gson)
                 }
                 stopSelf()
             }
@@ -15247,7 +4436,7 @@ class OverlayService : LifecycleService() {
         return START_STICKY
     }
 
-    private fun startForegroundNotification(hasMediaProjectionToken: Boolean = (mediaProjection != null)) {
+    internal fun startForegroundNotification(hasMediaProjectionToken: Boolean = (mediaProjection != null)) {
         val notificationIntent = Intent(this, OverlayService::class.java).apply {
             action = ACTION_STOP_OVERLAY
         }
@@ -15293,7 +4482,7 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private fun createNotificationChannel() {
+    internal fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
@@ -15307,7 +4496,7 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private fun applyLayoutMode(mode: String) {
+    internal fun applyLayoutMode(mode: String) {
         currentLayoutMode = mode
         val density = resources.displayMetrics.density
         if (mode == "option2") {
@@ -15332,13 +4521,13 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private fun toggleLayoutMode() {
+    internal fun toggleLayoutMode() {
         val nextMode = if (currentLayoutMode == "option1") "option2" else "option1"
         applyLayoutMode(nextMode)
     }
 
     @SuppressLint("WrongConstant")
-    private fun initMediaProjection(resultCode: Int, data: Intent) {
+    internal fun initMediaProjection(resultCode: Int, data: Intent) {
         try {
             virtualDisplay?.release()
             imageReader?.close()
@@ -15373,7 +4562,7 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private fun captureCleanScreenBitmap(): Bitmap? {
+    internal fun captureCleanScreenBitmap(): Bitmap? {
         val reader = imageReader ?: return null
         synchronized(captureLock) {
             return try {
@@ -15442,7 +4631,7 @@ class OverlayService : LifecycleService() {
      * 4. Charged-Move Reconcile Window:
      *    - Expanded catchup during the ~10s stable charged attack pause to reconcile up to +3 missed moves.
      */
-    private fun startBattleOcrLoop() {
+    internal fun startBattleOcrLoop() {
         if (battleLoopJob?.isActive == true) return
         battleLoopJob = lifecycleScope.launch(Dispatchers.Default) {
             while (isActive) {
@@ -15894,2581 +5083,12 @@ class OverlayService : LifecycleService() {
      * Isolates bright white nameplate text pixels (R>=185, G>=185, B>=185, low color saturation)
      * into crisp black text on a pure white background so ML Kit reads names over bright sky/ice wings (e.g. Kyurem).
      */
-    private fun createHighContrastWhiteTextBitmap(source: Bitmap, crop: Rect): Bitmap? {
-        return try {
-            val cw = crop.width().coerceAtLeast(1)
-            val ch = crop.height().coerceAtLeast(1)
-            val pixels = IntArray(cw * ch)
-            source.getPixels(pixels, 0, cw, crop.left, crop.top, cw, ch)
-            for (i in pixels.indices) {
-                val c = pixels[i]
-                val r = (c shr 16) and 0xFF
-                val g = (c shr 8) and 0xFF
-                val b = c and 0xFF
-                val maxCh = max(r, max(g, b))
-                val minCh = min(r, min(g, b))
-                // Pure white nameplate text has high luminance and low saturation
-                val isWhiteGlyph = r >= 188 && g >= 188 && b >= 188 && (maxCh - minCh) <= 42
-                pixels[i] = if (isWhiteGlyph) Color.BLACK else Color.WHITE
-            }
-            Bitmap.createBitmap(pixels, cw, ch, Bitmap.Config.ARGB_8888)
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    /**
-     * Interpolates T_swap midway between the last frame where the old Pokémon was seen
-     * and the first frame where the new Pokémon is seen (with fallback to prevFrameTimestampMs).
-     */
-    private fun getMidpointSwapStartTimeMs(lastOldPokemonFrameMs: Long, firstNewPokemonFrameMs: Long = currentFrameTimestampMs): Long {
-        if (lastOldPokemonFrameMs > 0L && firstNewPokemonFrameMs > lastOldPokemonFrameMs && (firstNewPokemonFrameMs - lastOldPokemonFrameMs) <= 8000L) {
-            return (lastOldPokemonFrameMs + firstNewPokemonFrameMs) / 2L
-        }
-        return getInterpolatedSwapStartTimeMs()
-    }
-
-    private fun getInterpolatedSwapStartTimeMs(): Long {
-        return if (prevFrameTimestampMs > 0L && currentFrameTimestampMs > prevFrameTimestampMs) {
-            (prevFrameTimestampMs + currentFrameTimestampMs) / 2L
-        } else {
-            currentFrameTimestampMs
-        }
-    }
-
-    /**
-     * Detects active (unfainted) Pokéball count (1..3, or -1 if HUD is hidden/occluded) from the Pokéball sub-ROI.
-     * Calibrated against real 1080x2342 GBL screenshots:
-     * - Each single Pokéball icon is ~35-37px wide (0.033w) with a ~23-24px white gap (0.021w) between balls.
-     * - Live Pokéballs have a scarlet-red upper half (R>=150, G<=108, B<=108).
-     * - Fainted Pokéballs are dark charcoal-grey circles (R in 50..140, G in 35..118, B in 40..118) on the white card.
-     * - Cross-verifies red live balls + grey fainted balls so 1 or 2 live balls are confirmed immediately on the first frame
-     *   while partial HUD occlusions (where greyBalls == 0) return -1 instead of false-fainting.
-     */
-    private fun detectActivePokeballCount(screen: Bitmap, searchRect: Rect): Int {
-        return try {
-            val left = searchRect.left.coerceIn(0, screen.width - 1)
-            val right = searchRect.right.coerceIn(0, screen.width)
-            val top = searchRect.top.coerceIn(0, screen.height - 1)
-            val bottom = searchRect.bottom.coerceIn(0, screen.height)
-            val cw = right - left
-            val ch = bottom - top
-            if (cw <= 4 || ch <= 4) return -1
-
-            val pixels = IntArray(cw * ch)
-            screen.getPixels(pixels, 0, cw, left, top, cw, ch)
-
-            val rowRedCount = IntArray(ch)
-            for (ry in 0 until ch) {
-                val rowOffset = ry * cw
-                var count = 0
-                for (rx in 0 until cw) {
-                    val pixel = pixels[rowOffset + rx]
-                    val r = (pixel shr 16) and 0xFF
-                    val g = (pixel shr 8) and 0xFF
-                    val b = pixel and 0xFF
-                    if (r >= 145 && g <= 112 && b <= 112 && (r - max(g, b)) >= 45 && (r - b) >= 50) {
-                        count++
-                    }
-                }
-                rowRedCount[ry] = count
-            }
-
-            // Lock onto the horizontal row-band containing the circular Pokéball icons
-            val bandRadiusY = (screen.height * 0.0045f).toInt().coerceIn(5, 11)
-            var bestRy = -1
-            var maxBandRed = 0
-            for (ry in 0 until ch) {
-                val y0 = (ry - bandRadiusY).coerceAtLeast(0)
-                val y1 = (ry + bandRadiusY).coerceAtMost(ch - 1)
-                var sum = 0
-                for (yy in y0..y1) sum += rowRedCount[yy]
-                if (sum > maxBandRed) {
-                    maxBandRed = sum
-                    bestRy = ry
-                }
-            }
-
-            // If HUD is hidden during Charged Move camera zoom or switch animation, return 0 (missing overlay)
-            if (bestRy < 0 || maxBandRed < 12) return 0
-
-            val yStart = (bestRy - bandRadiusY).coerceAtLeast(0)
-            val yEnd = (bestRy + bandRadiusY).coerceAtMost(ch - 1)
-            val colRed = IntArray(cw)
-            val colGrey = IntArray(cw)
-            var whiteCardCols = 0
-            for (rx in 0 until cw) {
-                var cr = 0
-                var cg = 0
-                var cwPx = 0
-                for (ry in yStart..yEnd) {
-                    val pixel = pixels[ry * cw + rx]
-                    val r = (pixel shr 16) and 0xFF
-                    val g = (pixel shr 8) and 0xFF
-                    val b = pixel and 0xFF
-                    val maxCh = max(r, max(g, b))
-                    val minCh = min(r, min(g, b))
-                    val luma = (r + g + b) / 3
-                    if (r >= 145 && g <= 112 && b <= 112 && (r - max(g, b)) >= 45 && (r - b) >= 50) {
-                        cr++
-                    } else if (luma in 42..168 && maxCh <= 176 && minCh >= 28 && (maxCh - minCh) <= 48) {
-                        // Fainted Pokéball grey circle (supports both dark stadium shadow and bright sky-blended opponent HUD)
-                        cg++
-                    } else if (r >= 190 && g >= 190 && b >= 190 && (maxCh - minCh) <= 38) {
-                        cwPx++
-                    }
-                }
-                colRed[rx] = cr
-                colGrey[rx] = cg
-                if (cwPx >= 2) whiteCardCols++
-            }
-
-            // Each Pokéball on 1080p is 35-37px wide (0.033w) with a 23-24px gap (0.021w) between balls.
-            val maxEdgeGap = (screen.width * 0.003f).toInt().coerceIn(2, 4)
-            val minLobeWidth = (screen.width * 0.012f).toInt().coerceAtLeast(8)
-            val maxLobeWidth = (screen.width * 0.160f).toInt().coerceAtLeast(50)
-            val twoBallLobeThreshold = (screen.width * 0.065f).toInt().coerceAtLeast(55)
-            val threeBallLobeThreshold = (screen.width * 0.115f).toInt().coerceAtLeast(105)
-
-            fun countBallLobes(colArr: IntArray, minColHeight: Int, minArea: Int): Int {
-                var count = 0
-                var inLobe = false
-                var lobeStart = 0
-                var lobeEnd = 0
-                var lobeArea = 0
-                var gapCols = 0
-                for (rx in 0 until cw) {
-                    if (colArr[rx] >= minColHeight) {
-                        if (!inLobe) {
-                            inLobe = true
-                            lobeStart = rx
-                            lobeEnd = rx
-                            lobeArea = colArr[rx]
-                        } else {
-                            lobeEnd = rx
-                            lobeArea += colArr[rx]
-                        }
-                        gapCols = 0
-                    } else if (inLobe) {
-                        gapCols++
-                        if (gapCols > maxEdgeGap) {
-                            val wLobe = lobeEnd - lobeStart + 1
-                            if (wLobe in minLobeWidth..maxLobeWidth && lobeArea >= minArea) {
-                                count += when {
-                                    wLobe >= threeBallLobeThreshold -> 3
-                                    wLobe >= twoBallLobeThreshold -> 2
-                                    else -> 1
-                                }
-                            }
-                            inLobe = false
-                            gapCols = 0
-                        }
-                    }
-                }
-                if (inLobe) {
-                    val wLobe = lobeEnd - lobeStart + 1
-                    if (wLobe in minLobeWidth..maxLobeWidth && lobeArea >= minArea) {
-                        count += when {
-                            wLobe >= threeBallLobeThreshold -> 3
-                            wLobe >= twoBallLobeThreshold -> 2
-                            else -> 1
-                        }
-                    }
-                }
-                return count
-            }
-
-            val redBalls = countBallLobes(colRed, minColHeight = 2, minArea = 12).coerceIn(0, 3)
-            val greyBalls = countBallLobes(colGrey, minColHeight = 2, minArea = 14).coerceIn(0, 2)
-
-            when {
-                redBalls == 3 -> 3
-                redBalls in 1..2 && (greyBalls >= 1 || (whiteCardCols >= minLobeWidth && maxBandRed >= 22)) -> redBalls
-                else -> 0
-            }
-        } catch (_: Exception) {
-            0
-        }
-    }
-
-    /**
-     * Detects active shield count (0, 1, 2, or -1 if occluded) from the hexagonal shield sub-ROI.
-     * Active shields have a distinctive lavender/pink/magenta hue profile (R>=160, B>=160, G<=210, B-G>=28, R-G>=18).
-     */
-    private fun detectActiveShieldCount(screen: Bitmap, searchRect: Rect): Int {
-        return try {
-            val left = searchRect.left.coerceIn(0, screen.width - 1)
-            val right = searchRect.right.coerceIn(0, screen.width)
-            val top = searchRect.top.coerceIn(0, screen.height - 1)
-            val bottom = searchRect.bottom.coerceIn(0, screen.height)
-            val cw = right - left
-            val ch = bottom - top
-            if (cw <= 4 || ch <= 4) return -1
-
-            val pixels = IntArray(cw * ch)
-            screen.getPixels(pixels, 0, cw, left, top, cw, ch)
-
-            val rowPinkCount = IntArray(ch)
-            for (ry in 0 until ch) {
-                val rowOffset = ry * cw
-                var count = 0
-                for (rx in 0 until cw) {
-                    val pixel = pixels[rowOffset + rx]
-                    val r = (pixel shr 16) and 0xFF
-                    val g = (pixel shr 8) and 0xFF
-                    val b = pixel and 0xFF
-                    if (r >= 160 && b >= 160 && g <= 210 && (b - g) >= 28 && (r - g) >= 18 && kotlin.math.abs(r - b) <= 65) {
-                        count++
-                    }
-                }
-                rowPinkCount[ry] = count
-            }
-
-            val bandRadiusY = (screen.height * 0.005f).toInt().coerceIn(5, 12)
-            var bestRy = -1
-            var maxBandPink = 0
-            for (ry in 0 until ch) {
-                val y0 = (ry - bandRadiusY).coerceAtLeast(0)
-                val y1 = (ry + bandRadiusY).coerceAtMost(ch - 1)
-                var sum = 0
-                for (yy in y0..y1) sum += rowPinkCount[yy]
-                if (sum > maxBandPink) {
-                    maxBandPink = sum
-                    bestRy = ry
-                }
-            }
-
-            if (bestRy < 0 || maxBandPink < 8) return 0
-
-            val yStart = (bestRy - bandRadiusY).coerceAtLeast(0)
-            val yEnd = (bestRy + bandRadiusY).coerceAtMost(ch - 1)
-            val colPink = IntArray(cw)
-            for (rx in 0 until cw) {
-                var c = 0
-                for (ry in yStart..yEnd) {
-                    val pixel = pixels[ry * cw + rx]
-                    val r = (pixel shr 16) and 0xFF
-                    val g = (pixel shr 8) and 0xFF
-                    val b = pixel and 0xFF
-                    if (r >= 160 && b >= 160 && g <= 210 && (b - g) >= 28 && (r - g) >= 18 && kotlin.math.abs(r - b) <= 65) {
-                        c++
-                    }
-                }
-                colPink[rx] = c
-            }
-
-            val maxEdgeGap = (screen.width * 0.003f).toInt().coerceIn(2, 4)
-            val minLobeWidth = (screen.width * 0.012f).toInt().coerceAtLeast(8)
-            val twoShieldWidth = (screen.width * 0.052f).toInt().coerceAtLeast(50)
-            var shieldCount = 0
-            var inLobe = false
-            var lobeStart = 0
-            var lobeEnd = 0
-            var lobeArea = 0
-            var gapCols = 0
-
-            for (rx in 0 until cw) {
-                if (colPink[rx] >= 2) {
-                    if (!inLobe) {
-                        inLobe = true
-                        lobeStart = rx
-                        lobeEnd = rx
-                        lobeArea = colPink[rx]
-                    } else {
-                        lobeEnd = rx
-                        lobeArea += colPink[rx]
-                    }
-                    gapCols = 0
-                } else if (inLobe) {
-                    gapCols++
-                    if (gapCols > maxEdgeGap) {
-                        val wLobe = lobeEnd - lobeStart + 1
-                        if (wLobe >= minLobeWidth && lobeArea >= 10) {
-                            shieldCount += if (wLobe >= twoShieldWidth) 2 else 1
-                        }
-                        inLobe = false
-                        gapCols = 0
-                    }
-                }
-            }
-            if (inLobe) {
-                val wLobe = lobeEnd - lobeStart + 1
-                if (wLobe >= minLobeWidth && lobeArea >= 10) {
-                    shieldCount += if (wLobe >= twoShieldWidth) 2 else 1
-                }
-            }
-
-            shieldCount.coerceIn(0, 2)
-        } catch (_: Exception) {
-            2
-        }
-    }
-
-    /**
-     * v3.42: Left-Edge-Anchored, Overlay-Alpha-Aware 2D Floating HP Bar Capsule Scanner.
-     * Calibrated frame-by-frame against 1080x2342 & 960x2142 Pokémon GO GBL combat footage:
-     * - Opponent HP Bar left edge anchors at [0.500 * screenW, 0.635 * screenW] and Y ∈ [0.18h, 0.48h]
-     *   (covering both standard right-anchored bars and wide/floating species like Magnezone at 0.514w).
-     * - Player HP Bar left edge anchors at [0.048 * screenW, 0.115 * screenW] and Y ∈ [0.46h, 0.69h].
-     * - Single-Pokémon charged-attack camera zooms move the bar to center (xStart ≈ 0.361w), so left-edge anchor
-     *   validation automatically rejects all charged-attack camera cuts with 0% false positives!
-     * - Full 100%-HP interior bar width is fixed at W_full = 0.278 * screenW (300px on 1080p, 267px on 960p) for all species.
-     * - Supports both unobstructed AND semi-transparent-overlay-occluded HP fill colors:
-     *   • Spring-Mint Green (>50% HP): bright RGB(28, 254, 187) & overlay-dimmed RGB(13..35, 95..194, 75..170)
-     *   • Golden Yellow (20..50% HP): bright RGB(251, 224, 45) & overlay-dimmed RGB(105..199, 92..185, 25..68)
-     *   • Coral Red (<20% HP): bright RGB(237, 101, 98) & overlay-dimmed RGB(165..199, 65..110, 50..95)
-     * - v3.43: Validates the full 4-sided outer border rectangle (left vertical border, right vertical border at
-     *   0.274w..0.296w, top horizontal border line, and bottom horizontal border line) and computes the 100%-HP
-     *   interior width directly from the detected outer border rectangle (outerWidth - padInset) for zero bias error.
-     * Returns 1..100 (or -1 if no valid floating HP bar capsule is visible in the anchor corridor).
-     */
-    /**
-     * v3.67: Type-Agnostic Bottom Charge Move Energy Button Fill Scanner (Left, Right & Single-Move Center).
-     * Calibrated frame-by-frame against 1080x2342 Pokémon GO GBL combat footage:
-     * - Left Button Center: (0.3083 * w, 0.8932 * h); Right Button Center: (0.6898 * w, 0.8932 * h);
-     *   Single-Move Center Fallback: (0.5000 * w, 0.8932 * h); Outer Radius R = 0.0806 * w (87px on 1080p).
-     * - Samples left and right outer flanks (avoiding the central white move-type icon of radius ~0.0389 * w)
-     *   to locate the horizontal energy fill meniscus across all 18 Pokémon move typings (Dragon blue, Electric yellow,
-     *   Steel silver/teal, Fire red/orange, Grass green, Dark, Ghost, Fairy pink, etc.).
-     * - Supports both the primary fill layer (1..100%) against the dark-gray unfilled top background AND the darker-shade
-     *   overcharge layer (101..200%) that starts over from the bottom once a charge move button reaches 100% full.
-     */
-    /**
-     * v3.81: Adaptive 3-2-1-GO Prescan Circle Calibrator + Multi-Device Charge Move Button Fill Scanner.
-     * - During the 3-2-1-GO prescan (when buttons are at 0% empty energy), dynamically locates each Charge Move Circle's
-     *   center `(cx, cy)`, interior vertical bounds `(yTop, yBot)`, and unfilled dark-circle flank color baseline
-     *   (`prescanEmptyLuma`, `prescanEmptySat`) so different devices/aspect ratios (e.g. 1080x2342 vs 960x2142) never
-     *   sample outside the circle interior.
-     * - Checks an 8-direction radial perimeter band (`rFrac ∈ [1.03, 1.24]`) for Pokémon GO's bright white 100% ready ring
-     *   (`luma >= 210, sat <= 42`), locking `fillPct >= 100` whenever >= 5 perimeter arcs glow white and the top interior cap is lit.
-     */
-    /**
-     * v3.87: Rejects pre-battle full-screen white transition flashes so circle calibration
-     * and energy scanning never trigger on an unstable white screen.
-     */
-    private fun isWhiteScreenFlash(screen: Bitmap, w: Int, h: Int): Boolean {
-        return try {
-            val samplePts = arrayOf(
-                Pair(0.55f, 0.25f), Pair(0.80f, 0.25f),
-                Pair(0.25f, 0.55f), Pair(0.50f, 0.55f), Pair(0.75f, 0.55f),
-                Pair(0.25f, 0.72f), Pair(0.50f, 0.72f), Pair(0.75f, 0.72f),
-                Pair(0.15f, 0.88f), Pair(0.50f, 0.88f), Pair(0.85f, 0.88f),
-                Pair(0.50f, 0.95f)
-            )
-            var whitePts = 0
-            for ((fx, fy) in samplePts) {
-                val px = (w * fx).toInt().coerceIn(0, w - 1)
-                val py = (h * fy).toInt().coerceIn(0, h - 1)
-                val c = screen.getPixel(px, py)
-                val r = Color.red(c)
-                val g = Color.green(c)
-                val b = Color.blue(c)
-                val luma = 0.299 * r + 0.587 * g + 0.114 * b
-                val sat = max(r, max(g, b)) - min(r, min(g, b))
-                if (luma >= 210.0 && sat <= 28) {
-                    whitePts++
-                }
-            }
-            whitePts >= 8
-        } catch (_: Exception) {
-            false
-        }
-    }
-
-    private fun detectChargedMoveButtonFillLevels(screen: Bitmap, w: Int, h: Int) {
-        // v4.06 / v4.09: Whenever the top 5-second countdown circle OR "Attack incoming!" prompt is active on screen,
-        // Pokémon GO hides the bottom combat charge circles completely.
-        // Force -1 immediately so neither "NOT NOW" text nor a Pokémon's legs at (0.3095w, 0.8930h) can false-trigger a circle
-        // and wipe out cachedOcrPlayerMoveLines during the 5s shield countdown!
-        val nowCheckMs = System.currentTimeMillis()
-        val isOpponentPromptSuppressingBottomCircles = (isAttackIncomingPromptActive ||
-            (lastAttackIncomingOcrDetectedMs > 0L && (nowCheckMs - lastAttackIncomingOcrDetectedMs) <= 2800L)) &&
-            !sampledTopRightNameplateVisible
-        if (w < 200 || h < 400 || sampledTopCountdownCircleVisible || isTopCountdownCircleActive || isOpponentPromptSuppressingBottomCircles || isWhiteScreenFlash(screen, w, h)) {
-            sampledLeftChargeBtnFillPct = -1
-            sampledRightChargeBtnFillPct = -1
-            isCountdownDimmedState = false
-            return
-        }
-
-        // v3.87: Run 6-cycle 3-2-1-GO dark-grey border circle calibration while waiting for battle start or at 0E
-        val activeUserIdx = (currentPreset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) } ?: 0).coerceIn(0, 2)
-        if (!prescanCircleCalibrated || isWaitingForOpponent || !hasBattleStarted || playerSlotEnergy[activeUserIdx] == 0) {
-            tryPrescanCalibrateChargeCircles(screen, w, h)
-        } else {
-            isCountdownDimmedState = false
-        }
-
-        if (isCountdownDimmedState) {
-            // Hold strictly at 0% / 0E while the 3-2-1 dimmed dark-grey countdown state is active on screen
-            sampledLeftChargeBtnFillPct = 0
-            sampledRightChargeBtnFillPct = 0
-            return
-        }
-
-        val userSlotCfg = currentPreset?.pokemon?.getOrNull(activeUserIdx)
-        val userMonName = activeUserPokemonName ?: userSlotCfg?.name ?: "Dialga (Origin)"
-        val userMeta = getPokemonMeta(userMonName, currentPreset?.league ?: "MASTER LEAGUE", userMonName.contains("Shadow", ignoreCase = true))
-        val fallbackType = userMeta.types.firstOrNull() ?: "normal"
-        val m1Name = userSlotCfg?.chargedMove1?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove1
-        val m2Name = userSlotCfg?.chargedMove2?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove2
-        val m1Type = resolveChargedMoveStatsStatic(m1Name, fallbackType).type.trim().lowercase()
-        val m2Type = resolveChargedMoveStatsStatic(m2Name, fallbackType).type.trim().lowercase()
-        val allowLeftSilver = m1Type == "normal" || m1Type == "steel" || m1Type == "rock"
-        val allowRightSilver = m2Type == "normal" || m2Type == "steel" || m2Type == "rock"
-
-        val cy = (h * calibratedCyFrac).toInt()
-        val leftCx = (w * calibratedLeftCxFrac).toInt()
-        val rightCx = (w * calibratedRightCxFrac).toInt()
-        var leftFill = detectSingleChargeButtonFillPct(
-            screen = screen,
-            cx = leftCx,
-            cy = cy,
-            w = w,
-            h = h,
-            emptyBaseLuma = prescanEmptyLumaLeft,
-            emptyBaseSat = prescanEmptySatLeft,
-            btnSlotKey = activeUserIdx * 2,
-            allowSilverLiquid = allowLeftSilver
-        )
-        val rightFill = detectSingleChargeButtonFillPct(
-            screen = screen,
-            cx = rightCx,
-            cy = cy,
-            w = w,
-            h = h,
-            emptyBaseLuma = prescanEmptyLumaRight,
-            emptyBaseSat = prescanEmptySatRight,
-            btnSlotKey = activeUserIdx * 2 + 1,
-            allowSilverLiquid = allowRightSilver
-        )
-        val hasSecondMoveConfigured = !userSlotCfg?.chargedMove2.isNullOrBlank() &&
-            !userSlotCfg?.chargedMove2.equals(userSlotCfg?.chargedMove1, ignoreCase = true)
-        if (!hasSecondMoveConfigured && leftFill == -1 && rightFill == -1) {
-            // Fallback ONLY for single-charged-move Pokémon where the button is centered at x ≈ 0.50w
-            leftFill = detectSingleChargeButtonFillPct(
-                screen = screen,
-                cx = (w * calibratedSingleCxFrac).toInt(),
-                cy = cy,
-                w = w,
-                h = h,
-                emptyBaseLuma = prescanEmptyLumaLeft,
-                emptyBaseSat = prescanEmptySatLeft,
-                btnSlotKey = activeUserIdx * 2,
-                allowSilverLiquid = allowLeftSilver
-            )
-        }
-        sampledLeftChargeBtnFillPct = leftFill
-        sampledRightChargeBtnFillPct = rightFill
-    }
-
-    /**
-     * v3.87: 6-Cycle Multi-Frame Dark-Grey Border Circle Calibrator during 3-2-1-GO.
-     * - Detects the dark grey perimeter ring (`rBorderIn = 0.0735w` vs `rBorderOut = 0.0850w`) around empty 0% circles
-     *   during both the dimmed 3-2-1 countdown (`peakIconLuma in 48..125`) and un-dimmed 0E state (`peakIconLuma >= 125`).
-     * - Averages circle center `(cx, cy)`, vertical bounds `(yTop, yBot)`, and empty interior baseline (`prescanEmptyLuma`, `prescanEmptySat`)
-     *   over 6 stable cycles (~600ms) for maximum countdown filtering.
-     */
-    private fun tryPrescanCalibrateChargeCircles(screen: Bitmap, w: Int, h: Int) {
-        try {
-            val step = (h / 1000).coerceAtLeast(2)
-            val nominalCy = (h * 0.8930f).toInt()
-            val flankDx = (w * 0.050f).toInt().coerceAtLeast(14)
-
-            data class CirclePrescanProbe(
-                val cx: Int,
-                val cy: Int,
-                val yTop: Int,
-                val yBot: Int,
-                val emptyLuma: Double,
-                val emptySat: Double,
-                val isDimmedCountdown: Boolean
-            )
-
-            fun probeEmptyCircleAt(nomCx: Int): CirclePrescanProbe? {
-                val rx = (w * 0.022f).toInt().coerceAtLeast(8)
-                val ry = (h * 0.015f).toInt().coerceAtLeast(10)
-                var peakIconLuma = 0.0
-                var py = (nominalCy - ry).coerceAtLeast(10)
-                val pyMax = (nominalCy + ry).coerceAtMost(h - 10)
-                while (py <= pyMax) {
-                    var px = (nomCx - rx).coerceAtLeast(10)
-                    val pxMax = (nomCx + rx).coerceAtMost(w - 10)
-                    while (px <= pxMax) {
-                        val c = screen.getPixel(px, py)
-                        val r = Color.red(c)
-                        val g = Color.green(c)
-                        val b = Color.blue(c)
-                        val luma = 0.299 * r + 0.587 * g + 0.114 * b
-                        val sat = (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
-                        if (sat <= 65.0 && luma > peakIconLuma) {
-                            peakIconLuma = luma
-                        }
-                        px += step
-                    }
-                    py += step
-                }
-                if (peakIconLuma < 48.0) return null
-
-                val iconThresh = max(44.0, peakIconLuma - max(8.0, peakIconLuma * 0.18))
-                var weightedX = 0.0
-                var weightedY = 0.0
-                var weightSum = 0.0
-                py = (nominalCy - ry).coerceAtLeast(10)
-                while (py <= pyMax) {
-                    var px = (nomCx - rx).coerceAtLeast(10)
-                    val pxMax = (nomCx + rx).coerceAtMost(w - 10)
-                    while (px <= pxMax) {
-                        val c = screen.getPixel(px, py)
-                        val r = Color.red(c)
-                        val g = Color.green(c)
-                        val b = Color.blue(c)
-                        val luma = 0.299 * r + 0.587 * g + 0.114 * b
-                        val sat = (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
-                        if (luma >= iconThresh && sat <= 65.0) {
-                            val wgt = luma - iconThresh + 2.0
-                            weightedX += px * wgt
-                            weightedY += py * wgt
-                            weightSum += wgt
-                        }
-                        px += step
-                    }
-                    py += step
-                }
-                if (weightSum <= 0.0) return null
-                val foundCx = (((weightedX / weightSum) * 0.55) + (nomCx * 0.45)).roundToInt()
-                val rawIconCy = (weightedY / weightSum).roundToInt()
-                val seedCy = ((rawIconCy * 0.45) + (nominalCy * 0.55)).roundToInt().coerceIn((h * 0.880f).toInt(), (h * 0.908f).toInt())
-
-                // 2. Sample upper & mid outer annulus flanks to verify uniform 0% dark-gray circle interior
-                val flankSamplesLuma = ArrayList<Double>(16)
-                val flankSamplesSat = ArrayList<Double>(16)
-                val dyCheck = (h * 0.012f).toInt().coerceAtLeast(6)
-                for (dy in intArrayOf(-dyCheck * 2, -dyCheck, 0, dyCheck)) {
-                    val sy = (seedCy + dy).coerceIn(10, h - 10)
-                    for (dx in intArrayOf(-(flankDx + step * 2), -flankDx, flankDx, flankDx + step * 2)) {
-                        val sx = (foundCx + dx).coerceIn(10, w - 10)
-                        val c = screen.getPixel(sx, sy)
-                        val r = Color.red(c)
-                        val g = Color.green(c)
-                        val b = Color.blue(c)
-                        val l = 0.299 * r + 0.587 * g + 0.114 * b
-                        val s = (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
-                        flankSamplesLuma.add(l)
-                        flankSamplesSat.add(s)
-                    }
-                }
-                flankSamplesLuma.sort()
-                flankSamplesSat.sort()
-                val medLuma = flankSamplesLuma[flankSamplesLuma.size / 2]
-                val medSat = flankSamplesSat[flankSamplesSat.size / 2]
-                val iqrLuma = flankSamplesLuma[(flankSamplesLuma.size * 0.80).toInt()] - flankSamplesLuma[(flankSamplesLuma.size * 0.20).toInt()]
-                if (medLuma !in 24.0..88.0 || medSat > 32.0 || iqrLuma > 22.0) return null
-                if (peakIconLuma < medLuma + 6.0) return null
-
-                // 3. Verify the Dark Grey Circular Border around the 7 upper/side perimeter arcs
-                val rBorderIn = w * 0.0735
-                val rBorderOut = w * 0.0850
-                val borderDirs = arrayOf(
-                    Pair(0.0, -1.0),
-                    Pair(-0.707, -0.707),
-                    Pair(0.707, -0.707),
-                    Pair(-1.0, 0.0),
-                    Pair(1.0, 0.0),
-                    Pair(-0.866, -0.50),
-                    Pair(0.866, -0.50)
-                )
-                var darkGreyBorderArcs = 0
-                for ((ux, uy) in borderDirs) {
-                    val xIn = (foundCx + ux * rBorderIn).roundToInt().coerceIn(0, w - 1)
-                    val yIn = (seedCy + uy * rBorderIn).roundToInt().coerceIn(0, h - 1)
-                    val xOut = (foundCx + ux * rBorderOut).roundToInt().coerceIn(0, w - 1)
-                    val yOut = (seedCy + uy * rBorderOut).roundToInt().coerceIn(0, h - 1)
-                    val cIn = screen.getPixel(xIn, yIn)
-                    val cOut = screen.getPixel(xOut, yOut)
-                    val rIn = Color.red(cIn); val gIn = Color.green(cIn); val bIn = Color.blue(cIn)
-                    val rOut = Color.red(cOut); val gOut = Color.green(cOut); val bOut = Color.blue(cOut)
-                    val lIn = 0.299 * rIn + 0.587 * gIn + 0.114 * bIn
-                    val sIn = (max(rIn, max(gIn, bIn)) - min(rIn, min(gIn, bIn))).toDouble()
-                    val lOut = 0.299 * rOut + 0.587 * gOut + 0.114 * bOut
-                    val rimContrast = kotlin.math.abs(lOut - lIn)
-                    if (lIn in 28.0..92.0 && sIn <= 32.0 && lOut < 185.0 && rimContrast >= 5.0) {
-                        darkGreyBorderArcs++
-                    }
-                }
-                if (darkGreyBorderArcs < 5) return null
-
-                val halfSpan = (w * 0.0750f).roundToInt().coerceIn((w * 0.070f).toInt(), (w * 0.082f).toInt())
-                return CirclePrescanProbe(
-                    cx = foundCx,
-                    cy = seedCy,
-                    yTop = seedCy - halfSpan,
-                    yBot = seedCy + halfSpan,
-                    emptyLuma = medLuma,
-                    emptySat = medSat,
-                    isDimmedCountdown = peakIconLuma < 125.0
-                )
-            }
-
-            val leftProbe = probeEmptyCircleAt((w * 0.3095f).toInt())
-            val rightProbe = probeEmptyCircleAt((w * 0.6900f).toInt())
-            val singleProbe = if (leftProbe == null && rightProbe == null) probeEmptyCircleAt((w * 0.5000f).toInt()) else null
-
-            val primaryProbe = leftProbe ?: rightProbe ?: singleProbe
-            if (primaryProbe == null) {
-                isCountdownDimmedState = false
-                return
-            }
-
-            isCountdownDimmedState = (leftProbe?.isDimmedCountdown == true) ||
-                (rightProbe?.isDimmedCountdown == true) ||
-                (singleProbe?.isDimmedCountdown == true)
-
-            if (prescanCalibConfirmFrames < CALIBRATION_REQUIRED_CYCLES) {
-                val combinedCy = if (leftProbe != null && rightProbe != null) {
-                    (leftProbe.cy + rightProbe.cy) / 2.0
-                } else primaryProbe.cy.toDouble()
-                val combinedYTop = if (leftProbe != null && rightProbe != null) {
-                    (leftProbe.yTop + rightProbe.yTop) / 2.0
-                } else primaryProbe.yTop.toDouble()
-                val combinedYBot = if (leftProbe != null && rightProbe != null) {
-                    (leftProbe.yBot + rightProbe.yBot) / 2.0
-                } else primaryProbe.yBot.toDouble()
-
-                prescanCalibConfirmFrames++
-                prescanAccumCySum += combinedCy
-                prescanAccumYTopSum += combinedYTop
-                prescanAccumYBotSum += combinedYBot
-
-                val avgCy = prescanAccumCySum / prescanCalibConfirmFrames
-                val avgYTop = prescanAccumYTopSum / prescanCalibConfirmFrames
-                val avgYBot = prescanAccumYBotSum / prescanCalibConfirmFrames
-
-                calibratedCyFrac = (avgCy.toFloat() / h.toFloat()).coerceIn(0.880f, 0.908f)
-                calibratedYTopFrac = (avgYTop.toFloat() / h.toFloat()).coerceIn(0.848f, 0.870f)
-                calibratedYBotFrac = (avgYBot.toFloat() / h.toFloat()).coerceIn(0.916f, 0.940f)
-
-                if (leftProbe != null) {
-                    prescanAccumLeftCount++
-                    prescanAccumLeftCxSum += leftProbe.cx
-                    prescanAccumEmptyLumaLeftSum += leftProbe.emptyLuma
-                    prescanAccumEmptySatLeftSum += leftProbe.emptySat
-                    calibratedLeftCxFrac = ((prescanAccumLeftCxSum / prescanAccumLeftCount).toFloat() / w.toFloat()).coerceIn(0.285f, 0.335f)
-                    prescanEmptyLumaLeft = prescanAccumEmptyLumaLeftSum / prescanAccumLeftCount
-                    prescanEmptySatLeft = prescanAccumEmptySatLeftSum / prescanAccumLeftCount
-                }
-                if (rightProbe != null) {
-                    prescanAccumRightCount++
-                    prescanAccumRightCxSum += rightProbe.cx
-                    prescanAccumEmptyLumaRightSum += rightProbe.emptyLuma
-                    prescanAccumEmptySatRightSum += rightProbe.emptySat
-                    calibratedRightCxFrac = ((prescanAccumRightCxSum / prescanAccumRightCount).toFloat() / w.toFloat()).coerceIn(0.665f, 0.715f)
-                    prescanEmptyLumaRight = prescanAccumEmptyLumaRightSum / prescanAccumRightCount
-                    prescanEmptySatRight = prescanAccumEmptySatRightSum / prescanAccumRightCount
-                }
-                if (singleProbe != null) {
-                    prescanAccumSingleCount++
-                    prescanAccumSingleCxSum += singleProbe.cx
-                    prescanAccumEmptyLumaLeftSum += singleProbe.emptyLuma
-                    prescanAccumEmptySatLeftSum += singleProbe.emptySat
-                    calibratedSingleCxFrac = ((prescanAccumSingleCxSum / prescanAccumSingleCount).toFloat() / w.toFloat()).coerceIn(0.475f, 0.525f)
-                    prescanEmptyLumaLeft = prescanAccumEmptyLumaLeftSum / prescanAccumSingleCount
-                    prescanEmptySatLeft = prescanAccumEmptySatLeftSum / prescanAccumSingleCount
-                }
-
-                if (prescanCalibConfirmFrames >= CALIBRATION_REQUIRED_CYCLES) {
-                    prescanCircleCalibrated = true
-                }
-            }
-        } catch (_: Exception) {}
-    }
-
-    /**
-     * v4.06: Detects the bright white top-right opponent nameplate box (`x ∈ [0.835w, 0.960w], y ∈ [0.058h, 0.092h]`).
-     * In Pokémon GO PvP:
-     * - During an opponent charged move 5-second countdown (both shielded and unshielded 0-shield), the top-right white
-     *   opponent nameplate box and Pokéballs are completely HIDDEN (`false`).
-     * - During the post-faint "Switch in a new Pokémon?" countdown, the top-right white opponent nameplate box and
-     *   Pokéballs remain VISIBLE (`true`).
-     */
-    private fun detectTopRightOpponentNameplate(screen: Bitmap, w: Int, h: Int): Boolean {
-        if (screen.isRecycled || w < 100 || h < 100) return false
-        return try {
-            val xFracs = floatArrayOf(0.840f, 0.870f, 0.900f, 0.930f, 0.955f)
-            val yFracs = floatArrayOf(0.060f, 0.070f, 0.080f, 0.090f)
-            var whitePlateHits = 0
-            var rowsWithPlate = 0
-            for (yf in yFracs) {
-                val py = (h * yf).roundToInt().coerceIn(0, h - 1)
-                var rowHits = 0
-                for (xf in xFracs) {
-                    val px = (w * xf).roundToInt().coerceIn(0, w - 1)
-                    val c = screen.getPixel(px, py)
-                    val r = Color.red(c)
-                    val g = Color.green(c)
-                    val b = Color.blue(c)
-                    val luma = 0.299 * r + 0.587 * g + 0.114 * b
-                    val sat = max(r, max(g, b)) - min(r, min(g, b))
-                    if (luma >= 204.0 && sat <= 26) {
-                        whitePlateHits++
-                        rowHits++
-                    }
-                }
-                if (rowHits >= 3) {
-                    rowsWithPlate++
-                }
-            }
-            if (sampledOppBalls <= 0 && sampledPlayerBalls <= 0) {
-                rowsWithPlate == 4 && whitePlateHits >= 17
-            } else {
-                rowsWithPlate >= 3 && whitePlateHits >= 12
-            }
-        } catch (_: Exception) {
-            false
-        }
-    }
-
-    /**
-     * v4.06 / v4.11: Multi-Device 100ms (10 Hz) Radial Pixel Detector for Pokémon GO's Top-Center 5-Second Countdown Circle
-     * (`cx = 0.500 * w`, `cyFrac ∈ [0.070..0.088] * h`, `R = 0.0833 * w` -> `cx = 540, cy = 192, R = 90px` on `1080x2342`
-     * and `cx = 480, cy = 170, R = 80px` on `960x2142`).
-     * Supports both nighttime stadiums (`innerL in 8..58`) and daytime blue-sky/cloud stadiums (`innerL in 58..128`),
-     * as well as partial background occlusion behind the translucent inner disk (e.g. Xerneas's glowing antlers crossing
-     * 3-5 radial spokes) whenever the bright white countdown digit (`5, 4, 3, 2, 1`) and outer ring ridge are present.
-     */
-    private fun detectTopCountdownCircle(screen: Bitmap, w: Int, h: Int): Boolean {
-        if (screen.isRecycled || w < 100 || h < 100) return false
-        return try {
-            val cx = w * 0.500
-            val radius = w * 0.0833
-            val candidateCyFracs = doubleArrayOf(0.070, 0.073, 0.076, 0.078, 0.080, 0.082, 0.085, 0.088)
-
-            for (cyFrac in candidateCyFracs) {
-                val cy = h * cyFrac
-                var validSpokes = 0
-                var antlerOccludedSpokes = 0
-                var upperSpokes = 0
-                var brightArcSpokes = 0
-                var pureWhiteArcSpokes = 0
-                var innerLumaSum = 0.0
-                var innerCount = 0
-
-                for (i in 0 until 16) {
-                    val theta = (i * 22.5) * Math.PI / 180.0
-                    val ux = kotlin.math.cos(theta)
-                    val uy = kotlin.math.sin(theta)
-
-                    var innerL = 0.0
-                    var innerS = 0.0
-                    for (rMult in doubleArrayOf(0.44, 0.52, 0.60)) {
-                        val px = (cx + ux * radius * rMult).roundToInt().coerceIn(0, w - 1)
-                        val py = (cy + uy * radius * rMult).roundToInt().coerceIn(0, h - 1)
-                        val c = screen.getPixel(px, py)
-                        val r = Color.red(c)
-                        val g = Color.green(c)
-                        val b = Color.blue(c)
-                        innerL += (0.299 * r + 0.587 * g + 0.114 * b) / 3.0
-                        innerS += (max(r, max(g, b)) - min(r, min(g, b))) / 3.0
-                    }
-                    innerLumaSum += innerL
-                    innerCount++
-
-                    var ringPeakL = 0.0
-                    var ringPeakS = 999.0
-                    for (rMult in doubleArrayOf(0.72, 0.77, 0.81, 0.85)) {
-                        val px = (cx + ux * radius * rMult).roundToInt().coerceIn(0, w - 1)
-                        val py = (cy + uy * radius * rMult).roundToInt().coerceIn(0, h - 1)
-                        val c = screen.getPixel(px, py)
-                        val r = Color.red(c)
-                        val g = Color.green(c)
-                        val b = Color.blue(c)
-                        val l = 0.299 * r + 0.587 * g + 0.114 * b
-                        val s = (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
-                        if (s <= 56.0 && l > ringPeakL) {
-                            ringPeakL = l
-                            ringPeakS = s
-                        }
-                    }
-
-                    var outerRimL = 0.0
-                    var outerRimS = 0.0
-                    for (rMult in doubleArrayOf(0.93, 0.98, 1.03)) {
-                        val px = (cx + ux * radius * rMult).roundToInt().coerceIn(0, w - 1)
-                        val py = (cy + uy * radius * rMult).roundToInt().coerceIn(0, h - 1)
-                        val c = screen.getPixel(px, py)
-                        val r = Color.red(c)
-                        val g = Color.green(c)
-                        val b = Color.blue(c)
-                        outerRimL += (0.299 * r + 0.587 * g + 0.114 * b) / 3.0
-                        outerRimS += (max(r, max(g, b)) - min(r, min(g, b))) / 3.0
-                    }
-
-                    // v4.11: Support both nighttime stadiums (`innerL in 8..58`) and daytime blue-sky/cloud stadiums (`innerL in 58..128`)
-                    val isNightSpoke = innerL in 8.0..58.0 && innerS <= 54.0 &&
-                        outerRimL in 8.0..96.0 && outerRimS <= 64.0 &&
-                        ringPeakL >= 34.0 && ringPeakS <= 46.0 &&
-                        ringPeakL >= innerL + 12.0 && ringPeakL >= outerRimL + 10.0
-
-                    val isDaytimeOrTranslucentSpoke = innerL in 8.0..128.0 && innerS <= 110.0 &&
-                        outerRimL in 8.0..165.0 && outerRimS <= 112.0 &&
-                        ringPeakL >= 34.0 && ringPeakS <= 52.0 && (
-                            (ringPeakL >= 205.0 && ringPeakS <= 22.0 && ringPeakL >= innerL + 45.0 && ringPeakL >= outerRimL + 35.0) ||
-                                (ringPeakL >= 125.0 && ringPeakS <= 34.0 && innerL <= 115.0 && ringPeakL >= innerL + 18.0 && ringPeakL >= outerRimL + 6.0)
-                            )
-
-                    if (isNightSpoke || isDaytimeOrTranslucentSpoke) {
-                        validSpokes++
-                        if (uy < -0.15) upperSpokes++
-                        if (ringPeakL >= 78.0) brightArcSpokes++
-                        if (ringPeakL >= 205.0 && ringPeakS <= 22.0) pureWhiteArcSpokes++
-                    } else if (innerL in 8.0..168.0 &&
-                        innerS <= 118.0 &&
-                        outerRimL in 8.0..168.0 &&
-                        ringPeakL >= 42.0 &&
-                        ringPeakS <= 52.0 &&
-                        ((ringPeakL >= innerL + 9.0 && ringPeakL >= outerRimL + 8.0) ||
-                            (ringPeakL >= 125.0 && ringPeakS <= 36.0))
-                    ) {
-                        antlerOccludedSpokes++
-                        if (ringPeakL >= 78.0) brightArcSpokes++
-                        if (ringPeakL >= 205.0 && ringPeakS <= 22.0) pureWhiteArcSpokes++
-                    }
-                }
-
-                // Full 16-spoke match, upper-semicircle match, OR antler/cloud-occluded match (8+ valid spokes & 12+ total valid/occluded spokes)
-                val passesSpokeGeometry = (validSpokes >= 11 && upperSpokes >= 5) ||
-                    (upperSpokes >= 6 && validSpokes >= 7) ||
-                    (validSpokes >= 8 && (validSpokes + antlerOccludedSpokes) >= 12 && brightArcSpokes >= 2)
-                if (!passesSpokeGeometry || brightArcSpokes < 1) continue
-
-                val avgInnerL = if (innerCount > 0) innerLumaSum / innerCount else 999.0
-                // On daytime skies (`avgInnerL > 62.0`), require at least 2 pure-white remaining countdown arc spokes (`ringPeakL >= 205.0`)
-                if (avgInnerL > 62.0 && pureWhiteArcSpokes < 2) continue
-
-                val digitRx = (radius * 0.25).roundToInt().coerceAtLeast(6)
-                val digitRy = (radius * 0.26).roundToInt().coerceAtLeast(6)
-                val stepD = max(2, (w / 360))
-                var centerBrightGlyphHits = 0
-                var centerDarkBgHits = 0
-                var centerTotal = 0
-                var dy = -digitRy
-                while (dy <= digitRy) {
-                    val py = (cy + dy).roundToInt().coerceIn(0, h - 1)
-                    var dx = -digitRx
-                    while (dx <= digitRx) {
-                        val px = (cx + dx).roundToInt().coerceIn(0, w - 1)
-                        val c = screen.getPixel(px, py)
-                        val r = Color.red(c)
-                        val g = Color.green(c)
-                        val b = Color.blue(c)
-                        val l = 0.299 * r + 0.587 * g + 0.114 * b
-                        val s = max(r, max(g, b)) - min(r, min(g, b))
-                        centerTotal++
-                        val glyphMinL = if (avgInnerL > 62.0) 175.0 else 115.0
-                        if (l >= glyphMinL && s <= 38 && l >= min(avgInnerL, 115.0) + 52.0) {
-                            centerBrightGlyphHits++
-                        } else if (l in 8.0..125.0 && s <= 110) {
-                            centerDarkBgHits++
-                        }
-                        dx += stepD
-                    }
-                    dy += stepD
-                }
-
-                val hasCentralDigit = centerBrightGlyphHits >= 3 &&
-                    centerTotal > 0 &&
-                    centerDarkBgHits >= (centerTotal * 22) / 100
-                val holdsActiveRingTransition = isTopCountdownCircleActive &&
-                    validSpokes >= 10 &&
-                    (validSpokes + antlerOccludedSpokes) >= 12 &&
-                    brightArcSpokes >= 1 &&
-                    centerDarkBgHits >= (centerTotal * 30) / 100
-
-                if (hasCentralDigit || holdsActiveRingTransition) {
-                    return true
-                }
-            }
-            false
-        } catch (_: Exception) {
-            false
-        }
-    }
-
-    private fun detectSingleChargeButtonFillPct(
-        screen: Bitmap,
-        cx: Int,
-        cy: Int,
-        w: Int,
-        h: Int,
-        emptyBaseLuma: Double = 52.0,
-        emptyBaseSat: Double = 22.0,
-        btnSlotKey: Int = -1,
-        allowSilverLiquid: Boolean = false
-    ): Int {
-        return try {
-            val stepY = (h / 1100).coerceAtLeast(2)
-            val flankDx1 = (w * 0.0485f).toInt().coerceAtLeast(14)
-            val flankDx2 = (w * 0.0565f).toInt().coerceAtLeast(18)
-            val capDx = (w * 0.0185f).toInt().coerceAtLeast(6)
-
-            var actualCx = cx
-            var actualCy = cy
-            var maxCenterIconLuma = 0.0
-            val searchRx = (w * 0.016f).toInt().coerceAtLeast(6)
-            val searchRy = (h * 0.012f).toInt().coerceAtLeast(8)
-            var iconWx = 0.0
-            var iconWy = 0.0
-            var iconWSum = 0.0
-            for (dy in -searchRy..searchRy step stepY) {
-                val py = (cy + dy).coerceIn(0, h - 1)
-                for (dx in -searchRx..searchRx step stepY) {
-                    val px = (cx + dx).coerceIn(0, w - 1)
-                    val c = screen.getPixel(px, py)
-                    val r = Color.red(c)
-                    val g = Color.green(c)
-                    val b = Color.blue(c)
-                    val l = 0.299 * r + 0.587 * g + 0.114 * b
-                    val s = (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
-                    if (l > maxCenterIconLuma) maxCenterIconLuma = l
-                    if (!prescanCircleCalibrated && l >= 155.0 && s <= 65.0) {
-                        val wgt = l - 140.0
-                        iconWx += px * wgt
-                        iconWy += py * wgt
-                        iconWSum += wgt
-                    }
-                }
-            }
-            if (maxCenterIconLuma < 48.0) {
-                return -1
-            }
-            // v3.87 / v4.11: If the 3-2-1 start-of-battle countdown dimming curtain is active (maxCenterIconLuma < 125.0),
-            // ONLY allow a 0% dark-grey circle match while waiting for battle start (`isWaitingForOpponent || !hasBattleStarted`).
-            // During active combat (`!isWaitingForOpponent && hasBattleStarted`), a genuine visible Charge Move Button ALWAYS
-            // has a bright white center type icon (`maxCenterIconLuma >= 125.0`). Returning 0 when `maxCenterIconLuma < 125.0`
-            // during active combat caused the dark translucent "Attack incoming! Use a Protect Shield?" card over Metagross's
-            // stadium line (`maxCenterIconLuma = 119.8`) or Xerneas's hind legs (`maxCenterIconLuma = 65.4..67.6`) to falsely
-            // report `0%` visible circles instead of `-1` (hidden), blocking both bottom OCR and the Shield Decision Overlay!
-            if (maxCenterIconLuma < 125.0) {
-                if (!isWaitingForOpponent && hasBattleStarted) {
-                    return -1
-                }
-                val cL = screen.getPixel((actualCx - flankDx1).coerceIn(0, w - 1), actualCy.coerceIn(0, h - 1))
-                val cR = screen.getPixel((actualCx + flankDx1).coerceIn(0, w - 1), actualCy.coerceIn(0, h - 1))
-                val lL = 0.299 * Color.red(cL) + 0.587 * Color.green(cL) + 0.114 * Color.blue(cL)
-                val sL = max(Color.red(cL), max(Color.green(cL), Color.blue(cL))) - min(Color.red(cL), min(Color.green(cL), Color.blue(cL)))
-                val lR = 0.299 * Color.red(cR) + 0.587 * Color.green(cR) + 0.114 * Color.blue(cR)
-                val sR = max(Color.red(cR), max(Color.green(cR), Color.blue(cR))) - min(Color.red(cR), min(Color.green(cR), Color.blue(cR)))
-                return if (lL in 24.0..88.0 && sL <= 32 && lR in 24.0..88.0 && sR <= 32) 0 else -1
-            }
-            if (!prescanCircleCalibrated && iconWSum > 0.0) {
-                actualCx = (((iconWx / iconWSum) * 0.50) + (cx * 0.50)).roundToInt()
-                actualCy = (((iconWy / iconWSum) * 0.50) + (cy * 0.50)).roundToInt().coerceIn((h * 0.882f).toInt(), (h * 0.908f).toInt())
-            }
-
-            // Standard <100% un-enlarged circle radius (~0.0750 * w = 81px on 1080p)
-            val defaultCircleRadPx = (w * 0.0750f).roundToInt().coerceIn((w * 0.070f).toInt(), (w * 0.082f).toInt())
-            val halfSpanPx = if (prescanCircleCalibrated) {
-                (((calibratedYBotFrac - calibratedYTopFrac) * 0.5f) * h).roundToInt().coerceIn((w * 0.070f).toInt(), (w * 0.082f).toInt())
-            } else {
-                defaultCircleRadPx
-            }
-            val yTop = (actualCy - halfSpanPx).coerceIn(8, h - 16)
-            val yBot = (actualCy + halfSpanPx).coerceIn(yTop + 20, h - 8)
-            val span = (yBot - yTop).coerceAtLeast(1)
-            val radiusY = (span * 0.50).coerceAtLeast(10.0)
-            val radiusPx = (w * calibratedRadiusWFrac).toDouble()
-            val iconHalfH = (radiusY * 0.58).toInt().coerceAtLeast(16)
-
-            // 1. v3.99 / v4.10 3-Ring Radial Perimeter Detector around `(actualCx, actualCy)`:
-            //    - 1st Fill (`0..99%`): Dark-grey perimeter border (no white border).
-            //    - 2nd Fill (`100..199%`): Main circle border filled in bright solid white (`rMult ∈ [0.98, 1.24]`), no second outer circle.
-            //    - 3rd Fill (`200..300%`): Second concentric white/translucent circle outside the main circle (`rMult2 ∈ [1.35, 1.46]`)
-            //      separated by a dark annular gap (`gMult ∈ [1.26, 1.32]`).
-            val ringDirs = arrayOf(
-                Pair(0.0, -1.0),       // Top
-                Pair(0.0, 1.0),        // Bottom
-                Pair(-1.0, 0.0),       // Left
-                Pair(1.0, 0.0),        // Right
-                Pair(-0.707, -0.707),  // Top-Left
-                Pair(0.707, -0.707),   // Top-Right
-                Pair(-0.707, 0.707),   // Bottom-Left
-                Pair(0.707, 0.707)     // Bottom-Right
-            )
-            var whiteRingArcs = 0
-            var upperWhiteRingArcs = 0
-            var horizontalSideWhiteArcs = 0
-            var outerSecondRingArcs = 0
-            var upperOrSideOuterRingArcs = 0
-            var exteriorWhiteArcs = 0
-            for ((ux, uy) in ringDirs) {
-                var arcHasWhite = false
-                var rMult = 0.98
-                while (rMult <= 1.24) {
-                    val rx = (actualCx + ux * radiusPx * rMult).roundToInt().coerceIn(0, w - 1)
-                    val ry = (actualCy + uy * radiusPx * rMult).roundToInt().coerceIn(0, h - 1)
-                    val c = screen.getPixel(rx, ry)
-                    val r = Color.red(c)
-                    val g = Color.green(c)
-                    val b = Color.blue(c)
-                    val l = 0.299 * r + 0.587 * g + 0.114 * b
-                    val s = (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
-                    if (l >= 208.0 && s <= 42.0) {
-                        arcHasWhite = true
-                        break
-                    }
-                    rMult += 0.035
-                }
-                // Guard against full-screen white flash: check exterior well outside the 2nd outer ring (rMult = 1.54)
-                val extX = (actualCx + ux * radiusPx * 1.54).roundToInt().coerceIn(0, w - 1)
-                val extY = (actualCy + uy * radiusPx * 1.54).roundToInt().coerceIn(0, h - 1)
-                val extC = screen.getPixel(extX, extY)
-                val extR = Color.red(extC); val extG = Color.green(extC); val extB = Color.blue(extC)
-                val extL = 0.299 * extR + 0.587 * extG + 0.114 * extB
-                val extS = max(extR, max(extG, extB)) - min(extR, min(extG, extB))
-                if (extL >= 210.0 && extS <= 28) {
-                    exteriorWhiteArcs++
-                }
-                if (arcHasWhite) {
-                    whiteRingArcs++
-                    if (uy < -0.5) {
-                        upperWhiteRingArcs++
-                    }
-                    if (kotlin.math.abs(uy) < 0.1) {
-                        horizontalSideWhiteArcs++
-                    }
-                    // Sample the dark annular gap between the main white circle border and the 2nd outer circle (rMult ∈ [1.26, 1.32])
-                    var gapL = 255.0
-                    for (gMult in doubleArrayOf(1.26, 1.29, 1.32)) {
-                        val gx = (actualCx + ux * radiusPx * gMult).roundToInt().coerceIn(0, w - 1)
-                        val gy = (actualCy + uy * radiusPx * gMult).roundToInt().coerceIn(0, h - 1)
-                        val gc = screen.getPixel(gx, gy)
-                        val gl = 0.299 * Color.red(gc) + 0.587 * Color.green(gc) + 0.114 * Color.blue(gc)
-                        if (gl < gapL) gapL = gl
-                    }
-                    // Sample background just outside the 2nd outer circle (rMult ∈ [1.50, 1.54])
-                    var outBgL = 255.0
-                    for (oMult in doubleArrayOf(1.50, 1.54)) {
-                        val ox = (actualCx + ux * radiusPx * oMult).roundToInt().coerceIn(0, w - 1)
-                        val oyBg = (actualCy + uy * radiusPx * oMult).roundToInt().coerceIn(0, h - 1)
-                        val oc = screen.getPixel(ox, oyBg)
-                        val ol = 0.299 * Color.red(oc) + 0.587 * Color.green(oc) + 0.114 * Color.blue(oc)
-                        if (ol < outBgL) outBgL = ol
-                    }
-                    // Check for the 2nd concentric outer circle at rMult2 ∈ [1.35, 1.46] (r ≈ 118..127px on 1080p)
-                    if (gapL <= 148.0) {
-                        var rMult2 = 1.35
-                        while (rMult2 <= 1.46) {
-                            val rx2 = (actualCx + ux * radiusPx * rMult2).roundToInt().coerceIn(0, w - 1)
-                            val ry2 = (actualCy + uy * radiusPx * rMult2).roundToInt().coerceIn(0, h - 1)
-                            val c2 = screen.getPixel(rx2, ry2)
-                            val r2 = Color.red(c2)
-                            val g2 = Color.green(c2)
-                            val b2 = Color.blue(c2)
-                            val l2 = 0.299 * r2 + 0.587 * g2 + 0.114 * b2
-                            val s2 = (max(r2, max(g2, b2)) - min(r2, min(g2, b2))).toDouble()
-                            if (l2 >= 135.0 && s2 <= 42.0 && l2 >= gapL + 22.0 && l2 >= outBgL + 16.0) {
-                                outerSecondRingArcs++
-                                if (uy <= 0.1) {
-                                    upperOrSideOuterRingArcs++
-                                }
-                                break
-                            }
-                            rMult2 += 0.025
-                        }
-                    }
-                }
-            }
-            // Measure top interior cap to verify it is genuinely filled with liquid
-            val topCheckYStart = (yTop + stepY * 2).coerceIn(4, h - 8)
-            val topCheckYEnd = (yTop + stepY * 5).coerceIn(topCheckYStart + 1, h - 6)
-            var topLumaSum = 0.0
-            var topSatSum = 0.0
-            var topCount = 0
-            val topCapHalfDx = (halfSpanPx * 0.36).roundToInt().coerceAtLeast(capDx)
-            var ty = topCheckYStart
-            while (ty <= topCheckYEnd) {
-                for (dx in intArrayOf(-topCapHalfDx, -capDx, 0, capDx, topCapHalfDx)) {
-                    val px = (actualCx + dx).coerceIn(0, w - 1)
-                    val c = screen.getPixel(px, ty)
-                    val r = Color.red(c)
-                    val g = Color.green(c)
-                    val b = Color.blue(c)
-                    topLumaSum += 0.299 * r + 0.587 * g + 0.114 * b
-                    topSatSum += (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
-                    topCount++
-                }
-                ty += stepY
-            }
-            val avgTopLuma = if (topCount > 0) topLumaSum / topCount else 0.0
-            val avgTopSat = if (topCount > 0) topSatSum / topCount else 0.0
-
-            // v4.06: Only treat exteriorWhiteArcs as a full-screen white flash when >= 7 of 8 exterior points are pure white
-            // AND the interior top cap is also washed out in pure white (prevents Xerneas Geomancy floor spotlights outside the
-            // circle perimeter from falsely aborting Giga Impact with -1!).
-            if (exteriorWhiteArcs >= 7 && avgTopLuma >= 205.0 && avgTopSat <= 28.0) {
-                return -1
-            }
-
-            // Enlarged Ready-Circle Interior Radius (`>= 100%` buttons expand to `readyHalfSpanPx ≈ 0.0835 * w = 90px` on 1080p)
-            val readyHalfSpanPx = (w * 0.0835f).roundToInt().coerceIn((w * 0.078f).toInt(), (w * 0.089f).toInt())
-
-            // v4.07: Interior Flank Spotlight-Wash Rejection & Normal-Type Opaque Silver-Grey Band Count:
-            // During Xerneas's Geomancy animation, blinding pure-white floor spotlights (`luma = 215..255, sat = 0..12`)
-            // expand directly underneath the semi-transparent Giga Impact / Moonblast circles.
-            // Sample left and right flanks (`±flankDx1`) across 7 vertical bands (`20%..80%`):
-            // - If >= 3 of the 14 flank points have spotlight-wash luma (`luma >= 204.0 && sat <= 26.0`), discard (`-1`)
-            //   immediately so spotlight bleed never creates a false 91..100% meniscus or white-ring trigger!
-            // - Count `cleanSilverBands` (`luma in 158.0..188.0 && sat <= 18.0`) to verify genuine 100% READY opaque
-            //   Normal-type silver-grey buttons (`Giga Impact` at `>=100%` has `luma = 169..178, sat = 2..14` uniformly).
-            var spotlightWashedBands = 0
-            var cleanSilverBands = 0
-            for (pctCheck in intArrayOf(20, 30, 40, 50, 60, 70, 80)) {
-                val pyCheck = (yBot - (pctCheck * span) / 100.0).roundToInt().coerceIn(yTop + 4, yBot - 4)
-                for (dxCheck in intArrayOf(-flankDx1, flankDx1)) {
-                    val pxCheck = (actualCx + dxCheck).coerceIn(0, w - 1)
-                    val cCheck = screen.getPixel(pxCheck, pyCheck)
-                    val rC = Color.red(cCheck); val gC = Color.green(cCheck); val bC = Color.blue(cCheck)
-                    val lC = 0.299 * rC + 0.587 * gC + 0.114 * bC
-                    val sC = (max(rC, max(gC, bC)) - min(rC, min(gC, bC))).toDouble()
-                    if (lC >= 204.0 && sC <= 26.0) {
-                        spotlightWashedBands++
-                    } else if (lC in 158.0..188.0 && sC <= 18.0) {
-                        cleanSilverBands++
-                    }
-                }
-            }
-            if (spotlightWashedBands >= 3) {
-                return -1
-            }
-
-            val lowerContinuityEarlyY = (yBot - (span * 0.24).toInt()).coerceIn(yTop + 4, yBot - 4)
-            var lowerFlankEarlyLuma = 0.0
-            var lowerFlankEarlySat = 0.0
-            for (dx in intArrayOf(-flankDx1, flankDx1)) {
-                val cLow = screen.getPixel((actualCx + dx).coerceIn(0, w - 1), lowerContinuityEarlyY)
-                val rl = Color.red(cLow); val gl = Color.green(cLow); val bl = Color.blue(cLow)
-                lowerFlankEarlyLuma += (0.299 * rl + 0.587 * gl + 0.114 * bl) * 0.5
-                lowerFlankEarlySat += (max(rl, max(gl, bl)) - min(rl, min(gl, bl))) * 0.5
-            }
-            val isLowerQuarterEarlyFilled = (lowerFlankEarlyLuma in (emptyBaseLuma + 12.0).coerceAtLeast(62.0)..192.0 &&
-                !(lowerFlankEarlyLuma >= 188.0 && lowerFlankEarlySat <= 28.0)) ||
-                lowerFlankEarlySat > (emptyBaseSat + 10.0).coerceAtLeast(22.0)
-
-            val hasAuthoritativeWhiteRing = whiteRingArcs >= 6 && upperWhiteRingArcs >= 2 && horizontalSideWhiteArcs >= 1
-            val hasSecondOuterCircle = hasAuthoritativeWhiteRing && outerSecondRingArcs >= 5 && upperOrSideOuterRingArcs >= 3
-            // v4.07 / v4.10: Require either a saturated colored top cap (`avgTopSat >= 42.0`) OR a uniform opaque Normal-type
-            // silver-grey interior (`allowSilverLiquid`, `whiteRingArcs >= 7`, `upperWhiteRingArcs >= 3`, `avgTopLuma in 155..185`, `cleanSilverBands >= 10`)
-            // so a white floor spotlight washing over an empty Moonblast or partial Giga Impact can never trigger 100%!
-            val isColoredTopCapFilled = avgTopLuma > (emptyBaseLuma + 16.0).coerceAtLeast(68.0) &&
-                avgTopSat >= max(42.0, emptyBaseSat + 16.0)
-            val isNormalSilverTopCapFilled = allowSilverLiquid &&
-                whiteRingArcs >= 7 &&
-                upperWhiteRingArcs >= 3 &&
-                avgTopLuma in 155.0..185.0 &&
-                avgTopSat <= 20.0 &&
-                cleanSilverBands >= 10 &&
-                isLowerQuarterEarlyFilled
-            val isTopCapFilled = isColoredTopCapFilled || isNormalSilverTopCapFilled
-
-            if (hasAuthoritativeWhiteRing && isTopCapFilled) {
-                val rOverInterior = readyHalfSpanPx * 0.94
-                val yTopOverScan = (actualCy - (readyHalfSpanPx * 0.90)).roundToInt().coerceIn(8, h - 16)
-                val yBotOverScan = (actualCy + (readyHalfSpanPx * 0.90)).roundToInt().coerceIn(yTopOverScan + 10, h - 8)
-                val yBotOverUv = actualCy + readyHalfSpanPx
-                val overUvSpan = (readyHalfSpanPx * 2).coerceAtLeast(1)
-                val vDelta = (h * 0.0038f).roundToInt().coerceIn(max(6, stepY * 3), 12)
-                val iconBandHalfH = (readyHalfSpanPx * 0.50).roundToInt().coerceAtLeast(iconHalfH)
-                val iconSafeFlankDx = max(flankDx1, (readyHalfSpanPx * 0.62).roundToInt())
-
-                var topRefR = 0.0; var topRefG = 0.0; var topRefB = 0.0; var topRefLuma = 0.0; var topRefSat = 0.0; var topRefN = 0
-                var botRefR = 0.0; var botRefG = 0.0; var botRefB = 0.0; var botRefLuma = 0.0; var botRefSat = 0.0; var botRefN = 0
-                val topRefDx = (readyHalfSpanPx * 0.28).roundToInt().coerceAtLeast(8)
-                val botRefDx = (readyHalfSpanPx * 0.36).roundToInt().coerceAtLeast(10)
-                for (pct in intArrayOf(86, 90, 93)) {
-                    val ry = (yBotOverUv - (pct * overUvSpan) / 100.0).roundToInt().coerceIn(8, h - 8)
-                    for (dx in intArrayOf(-topRefDx, topRefDx)) {
-                        val px = (actualCx + dx).coerceIn(0, w - 1)
-                        val c = screen.getPixel(px, ry)
-                        val r = Color.red(c); val g = Color.green(c); val b = Color.blue(c)
-                        val l = 0.299 * r + 0.587 * g + 0.114 * b
-                        val s = (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
-                        if (!(l >= 205.0 && s <= 35.0)) {
-                            topRefR += r; topRefG += g; topRefB += b; topRefLuma += l; topRefSat += s; topRefN++
-                        }
-                    }
-                }
-                for (pct in intArrayOf(10, 14, 18)) {
-                    val ry = (yBotOverUv - (pct * overUvSpan) / 100.0).roundToInt().coerceIn(8, h - 8)
-                    for (dx in intArrayOf(-botRefDx, botRefDx)) {
-                        val px = (actualCx + dx).coerceIn(0, w - 1)
-                        val c = screen.getPixel(px, ry)
-                        val r = Color.red(c); val g = Color.green(c); val b = Color.blue(c)
-                        val l = 0.299 * r + 0.587 * g + 0.114 * b
-                        val s = (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
-                        if (!(l >= 205.0 && s <= 35.0)) {
-                            botRefR += r; botRefG += g; botRefB += b; botRefLuma += l; botRefSat += s; botRefN++
-                        }
-                    }
-                }
-                if (topRefN > 0) {
-                    topRefR /= topRefN; topRefG /= topRefN; topRefB /= topRefN; topRefLuma /= topRefN; topRefSat /= topRefN
-                }
-                if (botRefN > 0) {
-                    botRefR /= botRefN; botRefG /= botRefN; botRefB /= botRefN; botRefLuma /= botRefN; botRefSat /= botRefN
-                }
-                val topBotLumaDiff = topRefLuma - botRefLuma
-                val topBotSatDiff = botRefSat - topRefSat
-                val topBotRgbDiff = kotlin.math.abs(topRefR - botRefR) + kotlin.math.abs(topRefG - botRefG) + kotlin.math.abs(topRefB - botRefB)
-                val hasTwoLayerCapSeparation = topRefN > 0 && botRefN > 0 && (topBotLumaDiff >= 5.5 || topBotSatDiff >= 12.0 || topBotRgbDiff >= 16.0)
-
-                var bestOverY = -1
-                var bestOverScore = 0.0
-                var oy = yTopOverScan
-                while (oy <= yBotOverScan) {
-                    val inIconBand = kotlin.math.abs(oy - actualCy) <= iconBandHalfH
-                    if (!inIconBand || hasTwoLayerCapSeparation) {
-                        val maxAbsDy = max(kotlin.math.abs((oy - vDelta) - actualCy), kotlin.math.abs((oy + vDelta) - actualCy)).toDouble()
-                        val chordHalfW = kotlin.math.sqrt((rOverInterior * rOverInterior - maxAbsDy * maxAbsDy).coerceAtLeast(1.0))
-                        val rimMarginPx = if (inIconBand) max(8, (w * 0.0080f).roundToInt()) else max(5, (w * 0.0050f).roundToInt())
-                        val safeOuterDx = (chordHalfW - rimMarginPx).toInt()
-                        val minSafeDx = if (inIconBand) iconSafeFlankDx else max(4, (w * 0.0045f).roundToInt())
-                        if (safeOuterDx >= minSafeDx + 2) {
-                            val safeInnerDx = if (inIconBand) {
-                                max(minSafeDx, safeOuterDx - max(5, (w * 0.0050f).roundToInt()))
-                            } else {
-                                max(minSafeDx, safeOuterDx / 2)
-                            }
-                            val xOffs = intArrayOf(-safeOuterDx, -safeInnerDx, safeInnerDx, safeOuterDx)
-                            val yU = (oy - vDelta).coerceIn(0, h - 1)
-                            val yM = oy.coerceIn(0, h - 1)
-                            val yD = (oy + vDelta).coerceIn(0, h - 1)
-
-                            var rUp = 0.0; var gUp = 0.0; var bUp = 0.0; var lUpL = 0.0; var lUpR = 0.0
-                            var rMid = 0.0; var gMid = 0.0; var bMid = 0.0; var sMid = 0.0
-                            var rDn = 0.0; var gDn = 0.0; var bDn = 0.0; var lDnL = 0.0; var lDnR = 0.0
-                            var hasWhiteIconBleed = false
-                            for (dx in xOffs) {
-                                val px = (actualCx + dx).coerceIn(0, w - 1)
-                                val cU = screen.getPixel(px, yU)
-                                val cM = screen.getPixel(px, yM)
-                                val cD = screen.getPixel(px, yD)
-                                val ru = Color.red(cU); val gu = Color.green(cU); val bu = Color.blue(cU)
-                                val rm = Color.red(cM); val gm = Color.green(cM); val bm = Color.blue(cM)
-                                val rd = Color.red(cD); val gd = Color.green(cD); val bd = Color.blue(cD)
-                                val lu = 0.299 * ru + 0.587 * gu + 0.114 * bu
-                                val ld = 0.299 * rd + 0.587 * gd + 0.114 * bd
-                                val su = (max(ru, max(gu, bu)) - min(ru, min(gu, bu))).toDouble()
-                                val sd = (max(rd, max(gd, bd)) - min(rd, min(gd, bd))).toDouble()
-                                val sm = (max(rm, max(gm, bm)) - min(rm, min(gm, bm))).toDouble()
-                                // Only reject pure-white icon bleed inside the center icon band
-                                if (inIconBand && ((lu >= 210.0 && su <= 28.0) || (ld >= 210.0 && sd <= 28.0))) {
-                                    hasWhiteIconBleed = true
-                                }
-                                rUp += ru; gUp += gu; bUp += bu
-                                rMid += rm; gMid += gm; bMid += bm; sMid += sm
-                                rDn += rd; gDn += gd; bDn += bd
-                                if (dx < 0) {
-                                    lUpL += lu
-                                    lDnL += ld
-                                } else {
-                                    lUpR += lu
-                                    lDnR += ld
-                                }
-                            }
-                            if (!hasWhiteIconBleed) {
-                                val n = xOffs.size.toDouble()
-                                rUp /= n; gUp /= n; bUp /= n
-                                rMid /= n; gMid /= n; bMid /= n; sMid /= n
-                                rDn /= n; gDn /= n; bDn /= n
-                                lUpL *= 0.5; lUpR *= 0.5; lDnL *= 0.5; lDnR *= 0.5
-
-                                val lumaUp = 0.299 * rUp + 0.587 * gUp + 0.114 * bUp
-                                val lumaMid = 0.299 * rMid + 0.587 * gMid + 0.114 * bMid
-                                val lumaDn = 0.299 * rDn + 0.587 * gDn + 0.114 * bDn
-                                val satUp = max(rUp, max(gUp, bUp)) - min(rUp, min(gUp, bUp))
-                                val satDn = max(rDn, max(gDn, bDn)) - min(rDn, min(gDn, bDn))
-
-                                val matchesRefBands = if (inIconBand && topRefN > 0 && botRefN > 0) {
-                                    kotlin.math.abs(lumaUp - topRefLuma) <= 22.0 &&
-                                        kotlin.math.abs(lumaDn - botRefLuma) <= 22.0
-                                } else {
-                                    true
-                                }
-
-                                val bothAreColoredLiquid = lumaUp in 68.0..215.0 &&
-                                    lumaDn in 60.0..205.0 &&
-                                    ((satUp >= 16.0 && satDn >= 20.0) ||
-                                        (lumaUp >= 115.0 && lumaDn >= 95.0 && isLowerQuarterEarlyFilled))
-                                val isSymmetric = kotlin.math.abs(lUpL - lUpR) <= 24.0 && kotlin.math.abs(lDnL - lDnR) <= 24.0
-                                val lumaDrop = lumaUp - lumaDn
-                                val satGain = satDn - satUp
-                                val rgbDiff = kotlin.math.abs(rUp - rDn) + kotlin.math.abs(gUp - gDn) + kotlin.math.abs(bUp - bDn)
-                                val meniscusRidge = max(0.0, lumaMid - max(lumaUp, lumaDn))
-                                val hasWhiteMeniscus = lumaMid >= 152.0 && sMid <= 95.0 && meniscusRidge >= 8.0
-                                val minFlankDrop = if (inIconBand) 9.0 else 6.0
-                                val minLumaDrop = if (inIconBand) 11.0 else 7.5
-                                val minRgbDiff = if (inIconBand) 24.0 else 17.0
-                                val bothFlanksDrop = (lUpL - lDnL >= minFlankDrop) && (lUpR - lDnR >= minFlankDrop)
-                                val passesStep = (bothFlanksDrop && lumaDrop >= minLumaDrop && rgbDiff >= minRgbDiff) ||
-                                    (hasWhiteMeniscus && (lumaDrop >= 4.0 || satGain >= 12.0) && rgbDiff >= 14.0 && (lUpL - lDnL >= 3.0) && (lUpR - lDnR >= 3.0))
-
-                                if (matchesRefBands && bothAreColoredLiquid && isSymmetric && passesStep) {
-                                    val midTarget = 0.5 * (lumaUp + lumaDn)
-                                    val midCenterBonus = max(0.0, 12.0 - kotlin.math.abs(lumaMid - midTarget) * 0.5)
-                                    val iconBandPenalty = if (inIconBand) 0.82 else 1.0
-                                    val score = (max(0.0, lumaDrop) * 2.0 + max(0.0, satGain) * 0.5 + rgbDiff * 0.8 + midCenterBonus + (if (hasWhiteMeniscus) meniscusRidge * 1.8 else 0.0)) * iconBandPenalty
-                                    if (score > bestOverScore) {
-                                        bestOverScore = score
-                                        bestOverY = oy
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    oy += stepY
-                }
-                if (bestOverY != -1) {
-                    val overPct = (((yBotOverUv - bestOverY) * 100.0) / overUvSpan).roundToInt().coerceIn(1, 99)
-                    if (btnSlotKey in 0..5 && overPct in 12..68 && topRefN > 0 && botRefN > 0 && topBotLumaDiff >= 7.0) {
-                        val prev1 = firstFillTopCapLuma[btnSlotKey]
-                        val prev2 = secondFillBotCapLuma[btnSlotKey]
-                        firstFillTopCapLuma[btnSlotKey] = if (prev1 < 0.0) topRefLuma else (prev1 * 0.65 + topRefLuma * 0.35)
-                        secondFillBotCapLuma[btnSlotKey] = if (prev2 < 0.0) botRefLuma else (prev2 * 0.65 + botRefLuma * 0.35)
-                    }
-                    return if (hasSecondOuterCircle) {
-                        200 + overPct
-                    } else {
-                        100 + overPct
-                    }
-                }
-                if (hasSecondOuterCircle) {
-                    return 200
-                }
-                return 100
-            }
-
-            // 2. Primary Fill Layer (1..97%): Scan vertically from yTop to yBot using prescan empty-circle baseline
-            //    v3.97: Widen icon exclusion height (`radiusY * 0.68`) so yD never grazes the top tip of the white center icon at 77..79%,
-            //    require colored saturation below the meniscus, and verify lower-flank continuity below any candidate > 42% fill.
-            val maxAllowedUnfilledLuma = if (prescanCircleCalibrated) {
-                (emptyBaseLuma + 34.0).coerceIn(72.0, 98.0)
-            } else {
-                95.0
-            }
-            val maxAllowedUnfilledSat = if (prescanCircleCalibrated) {
-                (emptyBaseSat + 45.0).coerceIn(48.0, 82.0)
-            } else {
-                80.0
-            }
-            val r1IconHalfH = (radiusY * 0.68).toInt().coerceAtLeast(20)
-            val lowerContinuityY = (yBot - (span * 0.24).toInt()).coerceIn(yTop + 4, yBot - 4)
-            var lowerFlankLuma = 0.0
-            var lowerFlankSat = 0.0
-            for (dx in intArrayOf(-flankDx1, flankDx1)) {
-                val cLow = screen.getPixel((actualCx + dx).coerceIn(0, w - 1), lowerContinuityY)
-                val rl = Color.red(cLow); val gl = Color.green(cLow); val bl = Color.blue(cLow)
-                lowerFlankLuma += (0.299 * rl + 0.587 * gl + 0.114 * bl) * 0.5
-                lowerFlankSat += (max(rl, max(gl, bl)) - min(rl, min(gl, bl))) * 0.5
-            }
-            val isLowerQuarterFilled = (lowerFlankLuma in (emptyBaseLuma + 12.0).coerceAtLeast(62.0)..192.0 &&
-                !(lowerFlankLuma >= 188.0 && lowerFlankSat <= 28.0)) ||
-                lowerFlankSat > (emptyBaseSat + 10.0).coerceAtLeast(22.0)
-
-            var bestY = -1
-            var bestScore = 0.0
-            var y = yTop + stepY * 2
-            while (y <= yBot - stepY * 2) {
-                val dyNorm = ((y - actualCy).toDouble() / radiusY).coerceIn(-0.96, 0.96)
-                val chordHalfW = (halfSpanPx * kotlin.math.sqrt((1.0 - dyNorm * dyNorm).coerceAtLeast(0.06))).toInt()
-                val maxInsideDx = (chordHalfW - (w * 0.0085f).toInt()).coerceAtLeast(6)
-                val xOffsets = if (kotlin.math.abs(y - actualCy) <= r1IconHalfH) {
-                    val innerFlank = min(flankDx1, (maxInsideDx - 4).coerceAtLeast(10))
-                    val outerFlank = min(flankDx2, maxInsideDx.coerceAtLeast(innerFlank + 2))
-                    intArrayOf(-outerFlank, -innerFlank, innerFlank, outerFlank)
-                } else {
-                    val d1 = min(capDx, max(3, maxInsideDx / 2))
-                    val d2 = min((w * 0.032f).toInt(), maxInsideDx)
-                    intArrayOf(-d2, -d1, d1, d2)
-                }
-                val yU1 = (y - stepY * 2).coerceIn(yTop + 2, yBot - 1)
-                val yU2 = (y - stepY).coerceIn(yTop + 2, yBot - 1)
-                val yM = y.coerceIn(yTop + 2, yBot - 2)
-                val yD1 = (y + stepY).coerceIn(yTop + 2, yBot - 1)
-                val yD2 = (y + stepY * 2).coerceIn(yTop + 2, yBot - 1)
-                var rUp = 0.0; var gUp = 0.0; var bUp = 0.0
-                var rMid = 0.0; var gMid = 0.0; var bMid = 0.0
-                var rDn = 0.0; var gDn = 0.0; var bDn = 0.0
-                var leftFlankDnLuma = 0.0; var rightFlankDnLuma = 0.0
-                var leftFlankUpLuma = 0.0; var rightFlankUpLuma = 0.0
-                var leftFlankMidLuma = 0.0; var rightFlankMidLuma = 0.0
-                var leftCnt = 0; var rightCnt = 0
-                for (dx in xOffsets) {
-                    val px = (actualCx + dx).coerceIn(0, w - 1)
-                    val cu1 = screen.getPixel(px, yU1)
-                    val cu2 = screen.getPixel(px, yU2)
-                    val cm = screen.getPixel(px, yM)
-                    val cd1 = screen.getPixel(px, yD1)
-                    val cd2 = screen.getPixel(px, yD2)
-                    val ru = Color.red(cu1) + Color.red(cu2)
-                    val gu = Color.green(cu1) + Color.green(cu2)
-                    val bu = Color.blue(cu1) + Color.blue(cu2)
-                    val rm = Color.red(cm).toDouble()
-                    val gm = Color.green(cm).toDouble()
-                    val bm = Color.blue(cm).toDouble()
-                    val rd = Color.red(cd1) + Color.red(cd2)
-                    val gd = Color.green(cd1) + Color.green(cd2)
-                    val bd = Color.blue(cd1) + Color.blue(cd2)
-                    rUp += ru; gUp += gu; bUp += bu
-                    rMid += rm; gMid += gm; bMid += bm
-                    rDn += rd; gDn += gd; bDn += bd
-                    val lu = (0.299 * ru + 0.587 * gu + 0.114 * bu) * 0.5
-                    val lm = 0.299 * rm + 0.587 * gm + 0.114 * bm
-                    val ld = (0.299 * rd + 0.587 * gd + 0.114 * bd) * 0.5
-                    if (dx < 0) {
-                        leftFlankUpLuma += lu
-                        leftFlankMidLuma += lm
-                        leftFlankDnLuma += ld
-                        leftCnt++
-                    } else if (dx > 0) {
-                        rightFlankUpLuma += lu
-                        rightFlankMidLuma += lm
-                        rightFlankDnLuma += ld
-                        rightCnt++
-                    }
-                }
-                val denom = (xOffsets.size * 2).toDouble()
-                val midDenom = xOffsets.size.toDouble().coerceAtLeast(1.0)
-                rUp /= denom; gUp /= denom; bUp /= denom
-                rMid /= midDenom; gMid /= midDenom; bMid /= midDenom
-                rDn /= denom; gDn /= denom; bDn /= denom
-
-                val lUp = if (leftCnt > 0) leftFlankUpLuma / leftCnt else 0.0
-                val rUpFlank = if (rightCnt > 0) rightFlankUpLuma / rightCnt else 0.0
-                val lMid = if (leftCnt > 0) leftFlankMidLuma / leftCnt else 0.0
-                val rMidFlank = if (rightCnt > 0) rightFlankMidLuma / rightCnt else 0.0
-                val lDn = if (leftCnt > 0) leftFlankDnLuma / leftCnt else 0.0
-                val rDnFlank = if (rightCnt > 0) rightFlankDnLuma / rightCnt else 0.0
-
-                // v4.06 / v4.10: Unilateral White Floor Spotlight Rejection & Normal-Type Silver-Grey Liquid Support:
-                val leftSpotlightWashed = leftCnt > 0 && rightCnt > 0 &&
-                    (lUp >= 188.0 || lDn >= 195.0) &&
-                    rUpFlank <= maxAllowedUnfilledLuma + 10.0 &&
-                    rDnFlank in 52.0..186.0
-                val rightSpotlightWashed = leftCnt > 0 && rightCnt > 0 &&
-                    (rUpFlank >= 188.0 || rDnFlank >= 195.0) &&
-                    lUp <= maxAllowedUnfilledLuma + 10.0 &&
-                    lDn in 52.0..186.0
-
-                val lumaUp = when {
-                    leftSpotlightWashed -> rUpFlank
-                    rightSpotlightWashed -> lUp
-                    else -> 0.299 * rUp + 0.587 * gUp + 0.114 * bUp
-                }
-                val lumaMid = when {
-                    leftSpotlightWashed -> rMidFlank
-                    rightSpotlightWashed -> lMid
-                    else -> 0.299 * rMid + 0.587 * gMid + 0.114 * bMid
-                }
-                val lumaDn = when {
-                    leftSpotlightWashed -> rDnFlank
-                    rightSpotlightWashed -> lDn
-                    else -> 0.299 * rDn + 0.587 * gDn + 0.114 * bDn
-                }
-                val satUp = max(rUp, max(gUp, bUp)) - min(rUp, min(gUp, bUp))
-                val satMid = max(rMid, max(gMid, bMid)) - min(rMid, min(gMid, bMid))
-                val satDn = max(rDn, max(gDn, bDn)) - min(rDn, min(gDn, bDn))
-                val rawGrad = kotlin.math.abs(rDn - rUp) + kotlin.math.abs(gDn - gUp) + kotlin.math.abs(bDn - bUp)
-                val grad = when {
-                    leftSpotlightWashed || rightSpotlightWashed -> max(rawGrad, kotlin.math.abs(lumaDn - lumaUp) * 3.0)
-                    else -> rawGrad
-                }
-                // v4.10: Restore v4.07 horizontal flank symmetry tolerance (<= 44.0) so tall Pokémon legs/auras
-                // behind one side of the semi-transparent button (e.g. Xerneas left leg behind Moonblast) never cause --% dropouts!
-                val isHorizontallySymmetric = if (leftCnt > 0 && rightCnt > 0 && !leftSpotlightWashed && !rightSpotlightWashed) {
-                    kotlin.math.abs(lUp - rUpFlank) <= 44.0 && kotlin.math.abs(lDn - rDnFlank) <= 44.0
-                } else true
-
-                val candFillPct = (((yBot - y) * 100.0) / span).roundToInt()
-                val passesContinuity = candFillPct <= 42 || isLowerQuarterFilled
-
-                // Horizontal White/Light-Tinted Meniscus Bar Detector at yM:
-                val hasHorizontalMeniscusBar = lumaMid >= lumaUp + 6.0 &&
-                    lumaMid >= lumaDn - 4.0 &&
-                    (leftSpotlightWashed || rightSpotlightWashed || kotlin.math.abs(lMid - rMidFlank) <= 22.0) &&
-                    !(lumaMid >= 205.0 && satMid <= 20.0 && kotlin.math.abs(lDn - rDnFlank) > 20.0)
-                val meniscusBarBonus = if (hasHorizontalMeniscusBar) {
-                    val ridgeBoost = max(0.0, lumaMid - max(lumaUp, lumaDn)).coerceAtMost(14.0)
-                    14.0 + ridgeBoost * 0.7
-                } else 0.0
-
-                val isNotWhiteIconTip = !(lumaDn >= 195.0 && satDn <= 32.0)
-                val isNotSpotlightBleedBelow = !(lumaDn >= 152.0 && satDn <= 40.0)
-                val isUnfilledAbove = lumaUp in 16.0..(maxAllowedUnfilledLuma + 6.0) &&
-                    satUp < maxAllowedUnfilledSat &&
-                    (avgTopLuma <= maxAllowedUnfilledLuma + 14.0 || lumaUp <= maxAllowedUnfilledLuma)
-                val isBottomCrescent = y >= yBot - (span * 0.18).toInt()
-                val minGrad = if (isBottomCrescent) 18.0 else 24.0
-                val isColoredLiquidBelow = ((lumaDn > lumaUp + 3.5 && satDn >= 18.0) ||
-                    (satDn > satUp + 6.0 && satDn >= 22.0) ||
-                    (grad >= 32.0 && lumaDn >= 34.0 && satDn >= 20.0)) &&
-                    isNotSpotlightBleedBelow
-                // v4.10: Gate silver-grey liquid strictly on `allowSilverLiquid` (Normal/Steel/Rock moves only)
-                // and require tight horizontal uniformity (<= 18.0) so angled arena floor spotlight beams on Xerneas
-                // never fake a 59%..79% fill on Giga Impact!
-                val isNormalSilverLiquidBelow = allowSilverLiquid &&
-                    lumaDn in max(106.0, emptyBaseLuma + 32.0)..148.0 &&
-                    satDn <= 28.0 &&
-                    lumaDn > lumaUp + 14.0 &&
-                    grad >= 28.0 &&
-                    kotlin.math.abs(lDn - rDnFlank) <= 18.0 &&
-                    kotlin.math.abs(lUp - rUpFlank) <= 18.0 &&
-                    (isLowerQuarterFilled || isBottomCrescent)
-                val isFilledBelow = isNotWhiteIconTip && (isColoredLiquidBelow || isNormalSilverLiquidBelow)
-                val totalCandidateScore = grad + meniscusBarBonus
-                if (passesContinuity && isHorizontallySymmetric && isUnfilledAbove && isFilledBelow && grad >= minGrad && totalCandidateScore > bestScore) {
-                    bestScore = totalCandidateScore
-                    bestY = y
-                }
-                y += stepY
-            }
-
-            if (bestY != -1) {
-                return (((yBot - bestY) * 100.0) / span).roundToInt().coerceIn(1, 97)
-            }
-
-            // 3. Explicit 0% Empty Baseline Check (v4.06: Requires dark-grey circular perimeter border verification
-            //    so rectangular white text like "NOT NOW" at (0.50w, 0.8932h) or overlay labels never return 0%!)
-            var emptyLumaSum = 0.0
-            var emptySatSum = 0.0
-            var emptySamples = 0
-            for (dy in intArrayOf(-span / 4, 0, span / 4)) {
-                val py = (actualCy + dy).coerceIn(yTop + 4, yBot - 4)
-                for (dx in intArrayOf(-flankDx1, flankDx1)) {
-                    val px = (actualCx + dx).coerceIn(0, w - 1)
-                    val c = screen.getPixel(px, py)
-                    val r = Color.red(c)
-                    val g = Color.green(c)
-                    val b = Color.blue(c)
-                    emptyLumaSum += 0.299 * r + 0.587 * g + 0.114 * b
-                    emptySatSum += (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
-                    emptySamples++
-                }
-            }
-            if (emptySamples > 0) {
-                val avgEmptyLuma = emptyLumaSum / emptySamples
-                val avgEmptySat = emptySatSum / emptySamples
-                if (avgEmptyLuma in 16.0..(maxAllowedUnfilledLuma + 10.0) &&
-                    avgEmptySat < (maxAllowedUnfilledSat + 8.0) &&
-                    maxCenterIconLuma >= 150.0 &&
-                    whiteRingArcs < 5
-                ) {
-                    val rBorderIn = w * 0.0735
-                    val rBorderOut = w * 0.0850
-                    val borderDirs = arrayOf(
-                        Pair(0.0, -1.0),
-                        Pair(-0.707, -0.707),
-                        Pair(0.707, -0.707),
-                        Pair(-1.0, 0.0),
-                        Pair(1.0, 0.0),
-                        Pair(-0.866, -0.50),
-                        Pair(0.866, -0.50)
-                    )
-                    var darkGreyBorderArcs = 0
-                    for ((ux, uy) in borderDirs) {
-                        val xIn = (actualCx + ux * rBorderIn).roundToInt().coerceIn(0, w - 1)
-                        val yIn = (actualCy + uy * rBorderIn).roundToInt().coerceIn(0, h - 1)
-                        val xOut = (actualCx + ux * rBorderOut).roundToInt().coerceIn(0, w - 1)
-                        val yOut = (actualCy + uy * rBorderOut).roundToInt().coerceIn(0, h - 1)
-                        val cIn = screen.getPixel(xIn, yIn)
-                        val cOut = screen.getPixel(xOut, yOut)
-                        val rIn = Color.red(cIn); val gIn = Color.green(cIn); val bIn = Color.blue(cIn)
-                        val rOut = Color.red(cOut); val gOut = Color.green(cOut); val bOut = Color.blue(cOut)
-                        val lIn = 0.299 * rIn + 0.587 * gIn + 0.114 * bIn
-                        val sIn = (max(rIn, max(gIn, bIn)) - min(rIn, min(gIn, bIn))).toDouble()
-                        val lOut = 0.299 * rOut + 0.587 * gOut + 0.114 * bOut
-                        val rimContrast = kotlin.math.abs(lOut - lIn)
-                        if (lIn in 28.0..92.0 && sIn <= 32.0 && lOut < 185.0 && rimContrast >= 5.0) {
-                            darkGreyBorderArcs++
-                        }
-                    }
-                    if (darkGreyBorderArcs >= 5) {
-                        return 0
-                    }
-                }
-            }
-            -1
-        } catch (_: Exception) {
-            -1
-        }
-    }
-
-    private fun computeExpectedCirclePctForEnergy(energy: Int, moveCost: Int): Pair<Int, Boolean> {
-        val c = moveCost.coerceIn(35, 100)
-        val e = energy.coerceIn(0, 100)
-        return when {
-            e <= 0 -> 0 to false
-            e < c -> ((e * 100.0) / c.toDouble()).roundToInt().coerceIn(1, 99) to false
-            e <= 2 * c -> (100 + (((e - c) * 100.0) / c.toDouble()).roundToInt().coerceIn(0, 99)) to false
-            else -> (200 + (((e - 2 * c) * 100.0) / c.toDouble()).roundToInt().coerceIn(0, 100)) to true
-        }
-    }
-
-    private fun scorePostThrowCircleFit(
-        leftFillPct: Int,
-        rightFillPct: Int,
-        cost1: Int,
-        cost2: Int,
-        hasSecondMove: Boolean,
-        candidateEnergy: Int
-    ): Double {
-        val c1 = cost1.coerceIn(35, 100)
-        val c2 = if (hasSecondMove && cost2 > 0) cost2.coerceIn(35, 100) else c1
-        var errSum = 0.0
-        var count = 0
-        if (leftFillPct in 0..300) {
-            val (expLeftPct, _) = computeExpectedCirclePctForEnergy(candidateEnergy, c1)
-            val errDirect = kotlin.math.abs(leftFillPct - expLeftPct) * (c1 / 100.0)
-            errSum += errDirect
-            count++
-        }
-        if (hasSecondMove && rightFillPct in 0..300 && cost2 > 0) {
-            val (expRightPct, _) = computeExpectedCirclePctForEnergy(candidateEnergy, c2)
-            val errDirect = kotlin.math.abs(rightFillPct - expRightPct) * (c2 / 100.0)
-            errSum += errDirect
-            count++
-        }
-        return if (count > 0) errSum / count.toDouble() else 999.0
-    }
-
-    /**
-     * v3.99: Pure Visual 3-Ring Single-Bar Energy Solver (`0..100E`, Zero Assumed Energy Gains):
-     * - Keys STRICTLY off the single slower (higher-cost) charge move bar (`debouncedSlowestPct` in `0..300%`, `slowestMoveCost`).
-     * - Removes all assumed / timer-based / fast-move cadence energy stepping.
-     * - Maps the three visual fill tiers directly:
-     *   1. 1st Fill (`0..99%`, dark-grey circle border): `round((pct * slowCost) / 100.0)` (`0 .. slowCost - 1`)
-     *   2. 2nd Fill (`100..199%`, circle border filled in white): `slowCost + round(((pct - 100) * slowCost) / 100.0)` (`slowCost .. min(100, 2 * slowCost)`)
-     *   3. 3rd Fill (`200..300%`, second outer circle outside the circle border): `2 * slowCost + round(((pct - 200) * slowCost) / 100.0)` (`2 * slowCost .. 100`)
-     */
-    private fun resolveSub50AndMultiRoundEnergy(
-        slotIdx: Int,
-        slowestIsRight: Boolean,
-        slowestMoveCost: Int,
-        fasterMoveCost: Int,
-        hasSecondUserMove: Boolean,
-        debouncedSlowestPct: Int,
-        debouncedFasterPct: Int,
-        curE: Int,
-        userFastEnergy: Int,
-        userMoveDurationMs: Long,
-        nowMs: Long,
-        canAdvanceMonotonically: Boolean,
-        primaryContrastRank: Int = 9,
-        secondaryContrastRank: Int = 9
-    ): Int {
-        val slowCost = slowestMoveCost.coerceIn(35, 100)
-        val fastCost = fasterMoveCost.coerceIn(35, 100)
-        val clampedCurE = curE.coerceIn(0, 100)
-        val maxFastStep = max(14, userFastEnergy * 2)
-        val maxAllowedSingleJumpE = if (clampedCurE > 0) {
-            (clampedCurE + maxFastStep + 4).coerceAtMost(100)
-        } else if (playerSlotTurnsOnField[slotIdx] <= 4) {
-            max(22, userFastEnergy * 3 + 4).coerceAtMost(100)
-        } else {
-            100
-        }
-
-        // v4.06 / v4.08: Compute dual-circle cross-check energy from the secondary charge move circle (`fastCost`)
-        val fasterResolvedE: Int = if (hasSecondUserMove && debouncedFasterPct in 0..300) {
-            when (debouncedFasterPct) {
-                in 0..99 -> {
-                    val f1Raw = (((debouncedFasterPct * fastCost) / 100.0).roundToInt()).coerceIn(0, fastCost - 1)
-                    snapPlayerEnergyToValidStep(
-                        slotIdx = slotIdx,
-                        rawEnergy = f1Raw,
-                        fastMoveEnergy = userFastEnergy,
-                        minBound = 0,
-                        maxBound = fastCost - 1
-                    )
-                }
-                in 100..199 -> {
-                    if (debouncedFasterPct > peakFastestSecondFillPct[slotIdx]) {
-                        peakFastestSecondFillPct[slotIdx] = debouncedFasterPct
-                    }
-                    val f2Max = min(100, 2 * fastCost)
-                    val f2Raw = (fastCost + (((debouncedFasterPct - 100) * fastCost) / 100.0).roundToInt()).coerceIn(fastCost, f2Max)
-                    snapPlayerEnergyToValidStep(
-                        slotIdx = slotIdx,
-                        rawEnergy = f2Raw,
-                        fastMoveEnergy = userFastEnergy,
-                        minBound = fastCost,
-                        maxBound = f2Max
-                    )
-                }
-                else -> {
-                    val f3Floor = min(100, 2 * fastCost)
-                    fasterMeterInThirdFill[slotIdx] = fastCost < 50
-                    val f3Raw = (2 * fastCost + (((debouncedFasterPct - 200) * fastCost) / 100.0).roundToInt()).coerceIn(f3Floor, 100)
-                    snapPlayerEnergyToValidStep(
-                        slotIdx = slotIdx,
-                        rawEnergy = f3Raw,
-                        fastMoveEnergy = userFastEnergy,
-                        minBound = f3Floor,
-                        maxBound = 100
-                    )
-                }
-            }
-        } else -1
-
-        // v4.09 / v4.10: Dual-Circle Physical White-Ring Bounds & Contrast-Gated Cross-Check:
-        // A circle's <100% dark-grey border (`debouncedFasterPct in 0..94`) is an upper bound (`energy <= fastCost - 1`),
-        // and a >=100% white border (`debouncedFasterPct >= 100`) is a lower bound (`energy >= fastCost`).
-        // However, a lower-contrast secondary circle (`secondaryContrastRank > primaryContrastRank`, e.g. Normal Giga Impact #17
-        // vs Fairy Moonblast #3) can NEVER drive energy upward when the primary circle is temporarily -1!
-        val secondaryCanOverridePrimary = secondaryContrastRank <= primaryContrastRank
-        val physicalMaxFromSecondary = if (hasSecondUserMove && debouncedFasterPct in 0..94) {
-            (fastCost - 1).coerceAtLeast(0)
-        } else {
-            100
-        }
-        val physicalMinFromSecondary = if (hasSecondUserMove && debouncedFasterPct >= 100) {
-            fastCost.coerceAtMost(100)
-        } else {
-            0
-        }
-
-        if (hasSecondUserMove && fastCost < slowCost && fasterResolvedE >= 0 && debouncedFasterPct in 1..94) {
-            val expectedSlowPct = ((debouncedFasterPct * fastCost).toDouble() / slowCost.toDouble()).roundToInt()
-            val primaryRawClaimE = if (debouncedSlowestPct in 0..300) ((debouncedSlowestPct * slowCost) / 100.0).roundToInt() else -1
-            val primaryViolatesSecondaryDarkBorder = primaryRawClaimE >= fastCost || debouncedSlowestPct >= 100
-            if (primaryViolatesSecondaryDarkBorder ||
-                (secondaryCanOverridePrimary && (debouncedSlowestPct !in 0..300 || debouncedSlowestPct > expectedSlowPct + 14))
-            ) {
-                val clampedFast = min(fasterResolvedE, maxAllowedSingleJumpE).coerceIn(0, physicalMaxFromSecondary)
-                return if (secondaryCanOverridePrimary) clampedFast else min(clampedCurE, physicalMaxFromSecondary)
-            }
-        }
-
-        if (debouncedSlowestPct !in 0..300) {
-            if (secondaryCanOverridePrimary && fasterResolvedE >= 0) {
-                val clampedFast = min(fasterResolvedE, maxAllowedSingleJumpE).coerceIn(physicalMinFromSecondary, physicalMaxFromSecondary)
-                if (clampedFast >= 100) playerSlotEnergyAnchor[slotIdx] = 100
-                return clampedFast
-            }
-            return clampedCurE
-        }
-
-        if (debouncedSlowestPct in 0..99) {
-            slowestMeterInThirdFill[slotIdx] = false
-            fasterMeterInThirdFill[slotIdx] = false
-            peakSecondFillPct[slotIdx] = 0
-            peakFastestSecondFillPct[slotIdx] = 0
-            leftMeterFilledTwiceLatched[slotIdx] = false
-            rightMeterFilledTwiceLatched[slotIdx] = false
-            val r1MaxAllowed = min(slowCost - 1, physicalMaxFromSecondary).coerceAtLeast(0)
-            val r1MinAllowed = physicalMinFromSecondary.coerceAtMost(r1MaxAllowed)
-            val r1RawE = (((debouncedSlowestPct * slowCost) / 100.0).roundToInt()).coerceIn(r1MinAllowed, r1MaxAllowed)
-            val r1SnappedE = snapPlayerEnergyToValidStep(
-                slotIdx = slotIdx,
-                rawEnergy = r1RawE,
-                fastMoveEnergy = userFastEnergy,
-                minBound = r1MinAllowed,
-                maxBound = r1MaxAllowed
-            )
-            val resolvedE = if (secondaryCanOverridePrimary && fasterResolvedE > r1SnappedE && (r1SnappedE + userFastEnergy) <= fasterResolvedE) {
-                fasterResolvedE
-            } else {
-                r1SnappedE
-            }
-            val maxR1Bound = if (secondaryCanOverridePrimary) {
-                min(physicalMaxFromSecondary, max(slowCost - 1, fasterResolvedE.coerceAtMost(100)))
-            } else {
-                r1MaxAllowed
-            }
-            return min(resolvedE, maxAllowedSingleJumpE).coerceIn(r1MinAllowed, maxR1Bound.coerceAtLeast(r1MinAllowed))
-        }
-
-        if (debouncedSlowestPct in 100..199) {
-            slowestMeterInThirdFill[slotIdx] = false
-            if (debouncedSlowestPct > peakSecondFillPct[slotIdx]) {
-                peakSecondFillPct[slotIdx] = debouncedSlowestPct
-            }
-            // Enforce physicalMaxFromSecondary (e.g. Xerneas Moonblast 50E in 2nd Fill capped at <= 79E when Giga Impact 80E has no white ring!)
-            val r2Max = min(min(100, 2 * slowCost), physicalMaxFromSecondary).coerceAtLeast(slowCost)
-            val r2Min = max(slowCost, physicalMinFromSecondary).coerceAtMost(r2Max)
-            val r2RawE = (slowCost + (((debouncedSlowestPct - 100) * slowCost) / 100.0).roundToInt()).coerceIn(r2Min, r2Max)
-            val r2SnappedE = snapPlayerEnergyToValidStep(
-                slotIdx = slotIdx,
-                rawEnergy = r2RawE,
-                fastMoveEnergy = userFastEnergy,
-                minBound = r2Min,
-                maxBound = r2Max
-            )
-            val resolvedR2 = if (secondaryCanOverridePrimary && fasterResolvedE > r2SnappedE && (r2SnappedE + userFastEnergy) <= fasterResolvedE) {
-                fasterResolvedE.coerceAtMost(r2Max)
-            } else {
-                r2SnappedE
-            }
-            val clampedR2 = min(resolvedR2, maxAllowedSingleJumpE).coerceIn(r2Min, r2Max)
-            if (clampedR2 >= 100) playerSlotEnergyAnchor[slotIdx] = 100
-            return clampedR2
-        }
-
-        // debouncedSlowestPct in 200..300 (3rd Fill: second concentric outer circle detected outside main white circle)
-        val r3Max = physicalMaxFromSecondary.coerceIn(slowCost, 100)
-        val r3Floor = min(min(100, 2 * slowCost), r3Max)
-        slowestMeterInThirdFill[slotIdx] = slowCost < 50
-        if (slowestIsRight) rightMeterFilledTwiceLatched[slotIdx] = true else leftMeterFilledTwiceLatched[slotIdx] = true
-        if (debouncedSlowestPct > peakSecondFillPct[slotIdx]) {
-            peakSecondFillPct[slotIdx] = debouncedSlowestPct
-        }
-        val r3RawE = (2 * slowCost + (((debouncedSlowestPct - 200) * slowCost) / 100.0).roundToInt()).coerceIn(r3Floor, r3Max)
-        val r3SnappedE = snapPlayerEnergyToValidStep(
-            slotIdx = slotIdx,
-            rawEnergy = r3RawE,
-            fastMoveEnergy = userFastEnergy,
-            minBound = r3Floor,
-            maxBound = r3Max
-        )
-        val clampedR3 = min(r3SnappedE, maxAllowedSingleJumpE).coerceIn(r3Floor, r3Max)
-        if (clampedR3 >= 100) playerSlotEnergyAnchor[slotIdx] = 100
-        return clampedR3
-    }
-
-    /**
-     * v3.99 / v4.00: Pure Visual 3-Ring Single-Bar Post-Throw Energy & Round Resync Solver + Post-Throw Discharge Anchor Snap:
-     * Reads post-throw energy directly from the slower charge move bar (`0..99%`, `100..199%`, `200..300%`)
-     * and snaps to the nearest valid fast-move increment (`expectedPostEnergy + k * userFastEnergy`).
-     */
-    private fun resolvePostThrowCircleEnergyAndResyncRound(
-        slotIdx: Int,
-        slowestIsRight: Boolean,
-        slowestMoveCost: Int,
-        fasterMoveCost: Int,
-        hasSecondUserMove: Boolean,
-        debouncedSlowestPct: Int,
-        debouncedFasterPct: Int,
-        expectedPostEnergy: Int,
-        userFastEnergy: Int,
-        nowMs: Long
-    ): Int {
-        val slowCost = slowestMoveCost.coerceIn(35, 100)
-        val fastCost = fasterMoveCost.coerceIn(35, 100)
-        val dischargeAnchor = expectedPostEnergy.coerceIn(0, 100)
-        playerSlotEnergyAnchor[slotIdx] = dischargeAnchor
-
-        val rawCirclePostE = when {
-            debouncedSlowestPct in 0..99 -> {
-                val rawE = (((debouncedSlowestPct * slowCost) / 100.0).roundToInt()).coerceIn(0, slowCost - 1)
-                snapPlayerEnergyToValidStep(slotIdx, rawE, userFastEnergy, 0, slowCost - 1)
-            }
-            debouncedSlowestPct in 100..199 -> {
-                val r2Max = min(100, 2 * slowCost)
-                val rawE = (slowCost + (((debouncedSlowestPct - 100) * slowCost) / 100.0).roundToInt()).coerceIn(slowCost, r2Max)
-                snapPlayerEnergyToValidStep(slotIdx, rawE, userFastEnergy, slowCost, r2Max)
-            }
-            debouncedSlowestPct in 200..300 -> {
-                val r3Floor = min(100, 2 * slowCost)
-                val rawE = (2 * slowCost + (((debouncedSlowestPct - 200) * slowCost) / 100.0).roundToInt()).coerceIn(r3Floor, 100)
-                snapPlayerEnergyToValidStep(slotIdx, rawE, userFastEnergy, r3Floor, 100)
-            }
-            else -> dischargeAnchor
-        }
-
-        // v5.12: Lock post-throw residual energy to `dischargeAnchor` so circle transition over-reads coming out of
-        // a charged move cutscene can never inflate residual energy or synthesize phantom post-cutscene fast moves.
-        val finalPostE = if (rawCirclePostE <= dischargeAnchor) {
-            dischargeAnchor
-        } else {
-            dischargeAnchor
-        }.coerceIn(0, 100)
-        playerSlotEnergyAnchor[slotIdx] = finalPostE
-        resetSlotEnergyTracking(
-            slotIdx = slotIdx,
-            initialEnergy = finalPostE,
-            cost1 = if (slowestIsRight) fastCost else slowCost,
-            cost2 = if (slowestIsRight) slowCost else fastCost,
-            clearThirdFillLatches = finalPostE < 2 * slowCost
-        )
-        if (debouncedSlowestPct in 101..300) {
-            peakSecondFillPct[slotIdx] = max(peakSecondFillPct[slotIdx], debouncedSlowestPct)
-        }
-        confirmedSlowestFillPct[slotIdx] = debouncedSlowestPct
-        if (debouncedFasterPct in 0..300) confirmedFastestFillPct[slotIdx] = debouncedFasterPct
-        return finalPostE
-    }
-
-    /**
-     * v5.12 / v5.13: Retroactively syncs the most recent unshielded `CHARGED_ATTACK` event when a `FAINT` occurs
-     * within 16.0 seconds of the charged attack (eliminating `UNEXPECTED_HP_DELTA` & `SHIELD_DESYNC` when
-     * the defender faints and their HP bar disappears before settling at 0%, including match-ending KOs).
-     */
-    private fun syncRecentUnshieldedChargedAttackOnFaint(faintedActor: String, eventElapsedSec: Double) {
-        syncRecentUnshieldedChargedAttackOnFaintInList(
-            events = battleTimelineEvents,
-            faintedActor = faintedActor,
-            eventElapsedSec = eventElapsedSec,
-            userHpList = playerSlotHpPct.toList(),
-            oppHpList = oppSlotHpPct.toList()
-        )
-    }
-
-    private fun syncRecentUnshieldedChargedAttackOnFaintInList(
-        events: MutableList<BattleTimelineEvent>,
-        faintedActor: String,
-        eventElapsedSec: Double,
-        userHpList: List<Int>? = null,
-        oppHpList: List<Int>? = null
-    ) {
-        val expectedAttacker = if (faintedActor == "opp") "user" else "opp"
-        val lastChargeIdx = events.indexOfLast {
-            it.type == "CHARGED_ATTACK" && it.actor == expectedAttacker
-        }
-        if (lastChargeIdx < 0) return
-        val ev = events[lastChargeIdx]
-        val dt = (eventElapsedSec - ev.t).coerceAtLeast(0.0)
-        // v6.02: Extended from 16.0s to 25.0s so slow post-faint switch prompts still sync 0% HP after an unshielded KO charged move
-        if (dt > 25.0) return
-        val wasExplicitlyShielded = if (faintedActor == "opp") {
-            events.drop(lastChargeIdx + 1).any { it.type == "SHIELD" && it.actor == "opp" }
-        } else {
-            events.drop(lastChargeIdx + 1).any { it.type == "SHIELD" && it.actor == "user" }
-        }
-        if (wasExplicitlyShielded) return
-        val hpBefore = (ev.hpBeforePct ?: 100).coerceIn(1, 100)
-        if ((ev.hpAfterPct ?: 0) > 0 || ev.shielded == true) {
-            events[lastChargeIdx] = ev.copy(
-                shielded = false,
-                pokemonShielded = null,
-                hpAfterPct = 0,
-                hpDeltaPct = hpBefore,
-                userSlotHpPct = userHpList ?: ev.userSlotHpPct,
-                oppSlotHpPct = oppHpList ?: ev.oppSlotHpPct
-            )
-        }
-    }
-
-    private fun computeAuthoritativeCircleEnergy(
-        leftFillPct: Int,
-        rightFillPct: Int,
-        cost1: Int,
-        cost2: Int,
-        hasSecondMove: Boolean,
-        leftInThirdFill: Boolean = false,
-        rightInThirdFill: Boolean = false,
-        move1Name: String = "",
-        move2Name: String = "",
-        fallbackSpeciesType: String = "normal"
-    ): Int {
-        val validLeft = leftFillPct in 0..300
-        val validRight = hasSecondMove && rightFillPct in 0..300 && cost2 > 0
-        if (!validLeft && !validRight) return -1
-
-        val c1 = cost1.coerceIn(35, 100)
-        val c2 = if (validRight) cost2.coerceIn(35, 100) else c1
-        val rightIsPrimaryMove = validRight && shouldSelectRightCircleAsPrimary(
-            move1Name = move1Name,
-            move1Cost = c1,
-            move2Name = move2Name,
-            move2Cost = c2,
-            hasSecondMove = validRight,
-            fallbackSpeciesType = fallbackSpeciesType
-        )
-
-        val chosenPct = if (rightIsPrimaryMove) rightFillPct else if (validLeft) leftFillPct else rightFillPct
-        val chosenCost = if (rightIsPrimaryMove) c2 else if (validLeft) c1 else c2
-
-        return when {
-            chosenPct <= 0 -> 0
-            chosenPct in 1..99 -> (((chosenPct * chosenCost) / 100.0).roundToInt()).coerceIn(0, chosenCost - 1)
-            chosenPct in 100..199 -> (chosenCost + (((chosenPct - 100) * chosenCost) / 100.0).roundToInt()).coerceIn(chosenCost, min(100, 2 * chosenCost))
-            else -> (2 * chosenCost + (((chosenPct - 200) * chosenCost) / 100.0).roundToInt()).coerceIn(min(100, 2 * chosenCost), 100)
-        }
-    }
-
-        private fun detectFloatingHpBarPct(
-        screen: Bitmap,
-        searchRect: Rect,
-        fullScreenWidth: Int,
-        isOpponent: Boolean = true
-    ): Int {
-        if (isOpponent) {
-            sampledOppHasPendingDmg = false
-            sampledOppPendingDmgPct = 0
-        } else {
-            sampledPlayerHasPendingDmg = false
-            sampledPlayerPendingDmgPct = 0
-        }
-        return try {
-            val left = searchRect.left.coerceIn(0, screen.width - 1)
-            val right = searchRect.right.coerceIn(0, screen.width)
-            val top = searchRect.top.coerceIn(0, screen.height - 1)
-            val bottom = searchRect.bottom.coerceIn(0, screen.height)
-            val cw = right - left
-            val ch = bottom - top
-            if (cw <= 24 || ch <= 14) return -1
-
-            val minOuterW = (fullScreenWidth * 0.258f).toInt().coerceAtLeast(52)
-            val maxOuterW = (fullScreenWidth * 0.312f).toInt().coerceAtLeast(minOuterW + 8)
-            val padInset = max(4, (fullScreenWidth * 0.0085f).roundToInt())
-            val padSide = max(3, padInset / 2)
-            val minOuterH = max(14, (fullScreenWidth * 0.015f).toInt())
-            val maxOuterH = max(minOuterH + 14, (fullScreenWidth * 0.044f).toInt())
-            val minFillH = max(3, (fullScreenWidth * 0.003f).toInt())
-            val maxFillH = max(26, (fullScreenWidth * 0.028f).toInt())
-
-            // Expected left-edge X anchor in full-screen coordinates (relX = absX - left)
-            val absAnchorMinX = if (isOpponent) {
-                (fullScreenWidth * 0.400f).toInt()
-            } else {
-                (fullScreenWidth * 0.018f).toInt()
-            }
-            val absAnchorMaxX = if (isOpponent) {
-                (fullScreenWidth * 0.700f).toInt()
-            } else {
-                (fullScreenWidth * 0.220f).toInt()
-            }
-            val relAnchorMinX = (absAnchorMinX - left).coerceIn(0, cw - 1)
-            val relAnchorMaxX = (absAnchorMaxX - left).coerceIn(relAnchorMinX, cw - 1)
-            val minAllowedAbsFillY = (screen.height * 0.065f).toInt()
-
-            val pixels = IntArray(cw * ch)
-            screen.getPixels(pixels, 0, cw, left, top, cw, ch)
-
-            fun pixelLuma(pixel: Int): Int {
-                val r = (pixel shr 16) and 0xFF
-                val g = (pixel shr 8) and 0xFF
-                val b = pixel and 0xFF
-                return (r + g + b) / 3
-            }
-
-            // v3.83: Neutral White/Grey Capsule Border Classifier (including #0B111E overlay-dimmed borders and pink/bright Tinkaton anti-aliasing).
-            // Explicitly rejects yellow/cream fur & feathers (e.g., Ninetales tails, Pidgeot wings)
-            // where G >= R - 25 and (G - B) >= 55 so moving Pokémon never hallucinate capsule borders.
-            fun isBorderPixel(pixel: Int, refDarkLuma: Int = 40): Boolean {
-                val r = (pixel shr 16) and 0xFF
-                val g = (pixel shr 8) and 0xFF
-                val b = pixel and 0xFF
-                val maxCh = max(r, max(g, b))
-                val minCh = min(r, min(g, b))
-                val luma = (r + g + b) / 3
-                if (luma >= 175) {
-                    if (g >= r - 25 && (g - b) >= 55) return false
-                    return (maxCh - minCh) <= 115 && (g - b) <= 64 && b >= 125
-                }
-                if (luma >= 38) {
-                    return (luma - refDarkLuma) >= 12 &&
-                        (maxCh - minCh) <= 56 &&
-                        (g - b) <= 32 &&
-                        (r - b) <= 44 &&
-                        r >= 34 && g >= 34 && b >= 34
-                }
-                return false
-            }
-
-            // v3.55: Border-Luma-Scaled Multi-Band HP Pixel Classifier:
-            // - Bright active HP fill (Green=1, Yellow=2, Coral Red=3) is always valid.
-            // - Overlay-dimmed HP fill (under #0B111E at 80..90% opacity) is ONLY enabled when the capsule border
-            //   itself is dimmed by an overlay (borderLuma < 185).
-            fun classifyHpPixel(pixel: Int, borderLuma: Int = 255): Int {
-                val r = (pixel shr 16) and 0xFF
-                val g = (pixel shr 8) and 0xFF
-                val b = pixel and 0xFF
-                // 1. Bright unobstructed HP fill across all 3 zones:
-                if (g >= 175 && r <= 120 && b in 105..242 && (g - r) >= 70 && g >= b - 20) return 1
-                if (r >= 205 && g in 160..255 && b <= 130 && r >= g - 15 && (r - g) <= 75 && (r - b) >= 82 && (g - b) >= 62) return 2
-                if (r >= 185 && g in 40..138 && b in 40..142 && (r - g) >= 68 && (r - b) >= 58 && kotlin.math.abs(g - b) <= 40) return 3
-                // 2. Overlay-dimmed HP fill (only when capsule border is dimmed: borderLuma < 185):
-                if (borderLuma < 185) {
-                    if (g in 38..210 && r <= 95 && b in 30..205 && (g - r) >= 15 && (b - r) >= 8 && kotlin.math.abs(g - b) <= 72) return 1
-                    if (r in 58..215 && g in 48..200 && b <= 88 && r >= g - 14 && (r - g) <= 55 && (r - b) >= 24 && (g - b) >= 18) return 2
-                    if (r in 45..210 && g in 14..125 && b in 14..130 && (r - g) >= 18 && (r - b) >= 14 && kotlin.math.abs(g - b) <= 42) return 3
-                }
-                // 3. Orange Pending-Damage Sliver (r >> g >> b) & Depleted Dark Translucent Track:
-                if (r >= 130 && g in 60..172 && b <= 68 && (r - g) >= 55 && (g - b) >= 38) return 4
-                val maxCh = max(r, max(g, b))
-                val minCh = min(r, min(g, b))
-                val luma = (r + g + b) / 3
-                if (luma in 8..172 && maxCh <= 205 && (maxCh - minCh) <= 118) return 4
-                return 0
-            }
-
-            data class ScanlineBarCandidate(
-                val ry: Int,
-                val leftBorderX: Int,
-                val rightBorderX: Int,
-                val xStart: Int,
-                val xEnd: Int,
-                val wFill: Int,
-                val fullInteriorW: Int,
-                val leftBand: Int,
-                val borderLuma: Int,
-                val pendingW: Int
-            )
-            val candidates = mutableListOf<ScanlineBarCandidate>()
-
-            var ry = max(0, minAllowedAbsFillY - top)
-            while (ry < ch) {
-                val rowOffset = ry * cw
-                var rx = relAnchorMinX
-                while (rx <= relAnchorMaxX) {
-                    val looseBand = classifyHpPixel(pixels[rowOffset + rx], 100)
-                    if (looseBand in 1..3) {
-                        // 1. Verify Left Outer Border (1..10px left of rx) and peak-align to brightest stroke pixel
-                        var leftBorderX = -1
-                        var innerPadLuma = 90
-                        var px = max(0, rx - 5)
-                        while (px <= max(0, rx - 1)) {
-                            innerPadLuma = min(innerPadLuma, pixelLuma(pixels[rowOffset + px]))
-                            px++
-                        }
-                        var bx = rx - 1
-                        val minBx = max(0, rx - 10)
-                        while (bx >= minBx) {
-                            if (isBorderPixel(pixels[rowOffset + bx], innerPadLuma)) {
-                                leftBorderX = bx
-                                if (bx - 1 >= 0 &&
-                                    isBorderPixel(pixels[rowOffset + bx - 1], innerPadLuma) &&
-                                    pixelLuma(pixels[rowOffset + bx - 1]) > pixelLuma(pixels[rowOffset + bx])
-                                ) {
-                                    leftBorderX = bx - 1
-                                }
-                                break
-                            }
-                            bx--
-                        }
-
-                        if (leftBorderX != -1) {
-                            // 2. Verify Right Outer Border at leftBorderX + minOuterW .. maxOuterW and peak-align
-                            var rightBorderX = -1
-                            var rbx = min(cw - 1, leftBorderX + minOuterW)
-                            val maxRbx = min(cw - 1, leftBorderX + maxOuterW)
-                            while (rbx <= maxRbx) {
-                                var insideLuma = 90
-                                var ipx = max(0, rbx - 6)
-                                while (ipx <= max(0, rbx - 2)) {
-                                    insideLuma = min(insideLuma, pixelLuma(pixels[rowOffset + ipx]))
-                                    ipx++
-                                }
-                                if (isBorderPixel(pixels[rowOffset + rbx], insideLuma)) {
-                                    rightBorderX = rbx
-                                    if (rbx + 1 < cw &&
-                                        isBorderPixel(pixels[rowOffset + rbx + 1], insideLuma) &&
-                                        pixelLuma(pixels[rowOffset + rbx + 1]) > pixelLuma(pixels[rowOffset + rbx])
-                                    ) {
-                                        rightBorderX = rbx + 1
-                                    }
-                                    break
-                                }
-                                rbx++
-                            }
-
-                            if (rightBorderX != -1) {
-                                val borderLuma = min(
-                                    pixelLuma(pixels[rowOffset + leftBorderX]),
-                                    pixelLuma(pixels[rowOffset + rightBorderX])
-                                )
-                                // 3. Skip the 3..4px dark translucent inner left padding gap (leftBorderX + padSide)
-                                //    so a yellow tail behind the left inner gap is never mistaken for a 3% Yellow bar
-                                var xStart = -1
-                                var initBand = 0
-                                val searchStart = min(cw - 1, leftBorderX + padSide)
-                                val searchEnd = min(cw - 1, leftBorderX + padSide + 6)
-                                var sx = searchStart
-                                while (sx <= searchEnd) {
-                                    val b = classifyHpPixel(pixels[rowOffset + sx], borderLuma)
-                                    if (b in 1..3) {
-                                        xStart = sx
-                                        initBand = b
-                                        break
-                                    }
-                                    sx++
-                                }
-
-                                if (xStart != -1) {
-                                    val outerW = rightBorderX - leftBorderX
-                                    val fullInteriorW = max(1, outerW - padInset)
-                                    val trackEndX = rightBorderX - max(2, padInset / 2)
-                                    val maxScanX = min(cw - 1, trackEndX)
-
-                                    // 4. Lock onto the authoritative color band & reference RGB of the leftmost HP bar portion
-                                    val secondBand = if (xStart + 1 <= maxScanX) classifyHpPixel(pixels[rowOffset + xStart + 1], borderLuma) else initBand
-                                    val leftBand = if (secondBand in 1..3) secondBand else initBand
-                                    var refRSum = 0
-                                    var refGSum = 0
-                                    var refBSum = 0
-                                    var refCount = 0
-                                    var sxRef = xStart
-                                    val maxRefX = min(maxScanX, xStart + 3)
-                                    while (sxRef <= maxRefX) {
-                                        val pRef = pixels[rowOffset + sxRef]
-                                        if (classifyHpPixel(pRef, borderLuma) == leftBand || sxRef == xStart) {
-                                            refRSum += (pRef shr 16) and 0xFF
-                                            refGSum += (pRef shr 8) and 0xFF
-                                            refBSum += pRef and 0xFF
-                                            refCount++
-                                        }
-                                        sxRef++
-                                    }
-                                    var refR = refRSum / max(1, refCount)
-                                    var refG = refGSum / max(1, refCount)
-                                    var refB = refBSum / max(1, refCount)
-
-                                    // 5. Scan rightward across ONLY the leftmost colored HP bar portion;
-                                    //    stop immediately if the color steps into an Orange pending-damage sliver or depleted track.
-                                    //    If the bar emerges from underneath the #0B111E overlay into unobstructed screen, update refRGB.
-                                    var xEnd = xStart
-                                    var gap = 0
-                                    var scanX = xStart + 1
-                                    while (scanX <= maxScanX) {
-                                        val p = pixels[rowOffset + scanX]
-                                        val cls = classifyHpPixel(p, borderLuma)
-                                        val r = (p shr 16) and 0xFF
-                                        val g = (p shr 8) and 0xFF
-                                        val b = p and 0xFF
-                                        val curLuma = (r + g + b) / 3
-                                        val refLuma = (refR + refG + refB) / 3
-                                        if (cls == leftBand && curLuma > refLuma + 42) {
-                                            refR = r
-                                            refG = g
-                                            refB = b
-                                        }
-                                        val isPendingDamageStep = when (leftBand) {
-                                            2 -> ((r - g) - (refR - refG)) > 28 || (refG - g) > 36
-                                            3 -> ((g - b) - (refG - refB)) > 28
-                                            else -> false
-                                        }
-                                        if (cls == leftBand && !isPendingDamageStep) {
-                                            xEnd = scanX
-                                            gap = 0
-                                            scanX++
-                                        } else if (isPendingDamageStep) {
-                                            break
-                                        } else if (gap < 7) {
-                                            gap++
-                                            scanX++
-                                        } else {
-                                            break
-                                        }
-                                    }
-
-                                    // v3.54: Measure contiguous Orange Pending-Damage Sliver immediately right of xEnd
-                                    var pendingW = 0
-                                    var pendingGap = 0
-                                    var pxScan = xEnd + 1
-                                    val maxPendingScanX = min(maxScanX, xEnd + max(65, fullInteriorW / 3))
-                                    while (pxScan <= maxPendingScanX) {
-                                        val p = pixels[rowOffset + pxScan]
-                                        val r = (p shr 16) and 0xFF
-                                        val g = (p shr 8) and 0xFF
-                                        val b = p and 0xFF
-                                        val isOrangePending = (r >= 130 && g in 42..182 && b <= 88 && (r - b) >= 52 && (r - g) >= 18 && (g - b) >= 16) ||
-                                            (borderLuma < 185 && r in 65..205 && g in 28..145 && b <= 72 && (r - b) >= 28 && (r - g) >= 12) ||
-                                            (leftBand == 2 && r >= 145 && b <= 92 && (r - b) >= 55 && (((r - g) - (refR - refG)) > 26 || (refG - g) > 34)) ||
-                                            (leftBand == 3 && r >= 150 && g >= 62 && b <= 88 && ((g - b) - (refG - refB)) > 26)
-                                        if (isOrangePending) {
-                                            pendingW = (pxScan - (xEnd + 1)) + 1
-                                            pendingGap = 0
-                                            pxScan++
-                                        } else if (pendingGap < 2) {
-                                            pendingGap++
-                                            pxScan++
-                                        } else {
-                                            break
-                                        }
-                                    }
-
-                                    val wFill = xEnd - xStart + 1
-                                    val minRequiredInteriorW = (fullScreenWidth * 0.245f).toInt()
-                                    if (wFill >= 2 && fullInteriorW >= minRequiredInteriorW) {
-                                        val candHpFraction = (wFill.toFloat() / fullInteriorW.toFloat()).coerceIn(0.01f, 1.0f)
-                                        val expectedDarkFraction = (1.0f - candHpFraction).coerceIn(0.0f, 1.0f)
-
-                                        val darkTrackStartX = xEnd + pendingW + 1
-                                        val darkTrackSpan = max(0, trackEndX - darkTrackStartX + 1)
-                                        var darkPx = 0
-                                        var brightWhitePx = 0
-                                        var dx = darkTrackStartX
-                                        while (dx <= trackEndX) {
-                                            val p = pixels[rowOffset + dx]
-                                            val r = (p shr 16) and 0xFF
-                                            val g = (p shr 8) and 0xFF
-                                            val b = p and 0xFF
-                                            val pLuma = (r + g + b) / 3
-                                            val maxCh = max(r, max(g, b))
-                                            val minCh = min(r, min(g, b))
-                                            val chroma = maxCh - minCh
-                                            // Genuine depleted dark track pixel in Pokémon GO (neutral dark grey/black):
-                                            val isDarkTrack = (pLuma <= 85 && chroma <= 45) ||
-                                                (borderLuma < 185 && pLuma <= 65) ||
-                                                (classifyHpPixel(p, borderLuma) == 4 && pLuma <= 95)
-                                            if (isDarkTrack) darkPx++
-                                            // Bright Pokémon body pixel (e.g. Solgaleo white mane/chest/legs):
-                                            if (pLuma >= 145 || (pLuma >= 130 && (chroma > 45 || r > 150))) brightWhitePx++
-                                            dx++
-                                        }
-
-                                        // v3.90: Solgaleo Body Rejection & Dark Track Interior Verification:
-                                        // 1. Minimum interior width floor enforced (fullInteriorW >= 0.245 * fullScreenWidth).
-                                        // 2. Bright Pokémon body pixels (pLuma >= 145) must not bleed into the depleted track.
-                                        // 3. Dark track interior must match (100% - HP%) ± 10%.
-                                        val maxAllowedBright = max(3, (darkTrackSpan * 0.10f).toInt())
-                                        val darkFraction = (darkPx + pendingW).toFloat() / fullInteriorW.toFloat()
-                                        val darkDiff = kotlin.math.abs(darkFraction - expectedDarkFraction)
-
-                                        val isValidDarkTrack = if (darkTrackSpan > 10) {
-                                            brightWhitePx <= maxAllowedBright &&
-                                                (darkPx.toFloat() / max(1, darkTrackSpan).toFloat()) >= 0.75f &&
-                                                darkDiff <= 0.10f
-                                        } else {
-                                            // Nearly full bar (HP >= ~95%): remainder span is <= 10px
-                                            brightWhitePx <= 3 && (darkDiff <= 0.10f || (expectedDarkFraction <= 0.08f && darkFraction <= 0.08f))
-                                        }
-
-                                        if (isValidDarkTrack) {
-                                            candidates.add(
-                                                ScanlineBarCandidate(
-                                                    ry = ry,
-                                                    leftBorderX = leftBorderX,
-                                                    rightBorderX = rightBorderX,
-                                                    xStart = xStart,
-                                                    xEnd = xEnd,
-                                                    wFill = wFill,
-                                                    fullInteriorW = fullInteriorW,
-                                                    leftBand = leftBand,
-                                                    borderLuma = borderLuma,
-                                                    pendingW = pendingW
-                                                )
-                                            )
-                                            break
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        rx++
-                    } else {
-                        rx++
-                    }
-                }
-                ry += 2
-            }
-
-            if (candidates.size < 2) return -1
-
-            // v3.90: Previous stable HP% lookup for multi-candidate proximity prioritization
-            val prevStableHp = if (isOpponent) {
-                val activeOppBase = FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
-                val oppIdx = if (detectedOpponents.isNotEmpty()) {
-                    detectedOpponents.indexOfFirst {
-                        FormResolver.extractBaseSpecies(it).equals(activeOppBase, ignoreCase = true)
-                    }.let { if (it in 0..2) it else 0 }
-                } else 0
-                confirmedOppSlotHpPct.getOrElse(oppIdx) { 100 }.coerceIn(1, 100)
-            } else {
-                val userIdx = (currentPreset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) } ?: 0).coerceIn(0, 2)
-                confirmedPlayerSlotHpPct.getOrElse(userIdx) { 100 }.coerceIn(1, 100)
-            }
-
-            // v3.83/v3.90: Fixed-Height Enclosed Rectangle Verification, Exterior Color-Bleed Rejection & Candidate Proximity Prioritization:
-            var bestCluster: List<ScanlineBarCandidate>? = null
-            var bestDeltaHp = Int.MAX_VALUE
-            var bestClusterSize = 0
-            for (i in candidates.indices) {
-                val anchor = candidates[i]
-                val cluster = candidates.filter { c ->
-                    kotlin.math.abs(c.ry - anchor.ry) <= 34 &&
-                        kotlin.math.abs(c.leftBorderX - anchor.leftBorderX) <= 5 &&
-                        kotlin.math.abs(c.rightBorderX - anchor.rightBorderX) <= 5 &&
-                        kotlin.math.abs(c.wFill - anchor.wFill) <= 8 &&
-                        c.leftBand == anchor.leftBand
-                }
-                if (cluster.size in 2..18) {
-                    val yMinC = cluster.minOf { it.ry }
-                    val yMaxC = cluster.maxOf { it.ry }
-                    val fillH = yMaxC - yMinC
-                    if (fillH in minFillH..maxFillH) {
-                        val sortedLb = cluster.map { it.leftBorderX }.sorted()
-                        val sortedRb = cluster.map { it.rightBorderX }.sorted()
-                        val sortedXs = cluster.map { it.xStart }.sorted()
-                        val sortedXe = cluster.map { it.xEnd }.sorted()
-                        val sortedBl = cluster.map { it.borderLuma }.sorted()
-                        val lb = sortedLb[sortedLb.size / 2]
-                        val rb = sortedRb[sortedRb.size / 2]
-                        val xs = sortedXs[sortedXs.size / 2]
-                        val xe = sortedXe[sortedXe.size / 2]
-                        val medBorderLuma = sortedBl[sortedBl.size / 2]
-                        val spanSamples = max(1, (rb - lb - 12) / 3)
-                        val midY = (yMinC + yMaxC) / 2
-
-                        val topBorders = mutableListOf<Int>()
-                        var by = max(0, yMinC - 22)
-                        while (by < yMinC) {
-                            val bRowOffset = by * cw
-                            val innerPadY1 = min(ch - 1, max(by + 1, yMinC - 1))
-                            val innerPadY2 = min(ch - 1, max(by + 2, yMinC - 2))
-                            var bCnt = 0
-                            var sbx = lb + 6
-                            while (sbx <= rb - 6) {
-                                var refDark = min(
-                                    pixelLuma(pixels[innerPadY1 * cw + sbx]),
-                                    pixelLuma(pixels[innerPadY2 * cw + sbx])
-                                )
-                                if (sbx > xe + 2) {
-                                    refDark = min(refDark, pixelLuma(pixels[midY * cw + sbx]))
-                                }
-                                if (isBorderPixel(pixels[bRowOffset + sbx], refDark)) bCnt++
-                                sbx += 3
-                            }
-                            if (bCnt >= (spanSamples * 0.40f).toInt()) {
-                                topBorders.add(by)
-                            }
-                            by++
-                        }
-
-                        val botBorders = mutableListOf<Int>()
-                        by = yMaxC + 1
-                        val maxBy = min(ch - 1, yMaxC + 22)
-                        while (by <= maxBy) {
-                            val bRowOffset = by * cw
-                            val innerPadY1 = max(0, min(by - 1, yMaxC + 1))
-                            val innerPadY2 = max(0, min(by - 2, yMaxC + 2))
-                            var bCnt = 0
-                            var sbx = lb + 6
-                            while (sbx <= rb - 6) {
-                                var refDark = min(
-                                    pixelLuma(pixels[innerPadY1 * cw + sbx]),
-                                    pixelLuma(pixels[innerPadY2 * cw + sbx])
-                                )
-                                if (sbx > xe + 2) {
-                                    refDark = min(refDark, pixelLuma(pixels[midY * cw + sbx]))
-                                }
-                                if (isBorderPixel(pixels[bRowOffset + sbx], refDark)) bCnt++
-                                sbx += 3
-                            }
-                            if (bCnt >= (spanSamples * 0.40f).toInt()) {
-                                botBorders.add(by)
-                            }
-                            by++
-                        }
-
-                        var matchedTopY = -1
-                        var matchedBotY = -1
-                        for (ty in topBorders) {
-                            for (botY in botBorders) {
-                                val outerH = botY - ty
-                                if (outerH in minOuterH..maxOuterH) {
-                                    matchedTopY = ty
-                                    matchedBotY = botY
-                                    break
-                                }
-                            }
-                            if (matchedTopY != -1) break
-                        }
-
-                        if (matchedTopY != -1 && matchedBotY != -1) {
-                            val fillSpan = max(1, xe - xs + 1)
-                            val stepX = max(1, fillSpan / 8)
-                            var aboveSamples = 0
-                            var aboveSameColor = 0
-                            var belowSamples = 0
-                            var belowSameColor = 0
-                            val aboveY = max(0, matchedTopY - 4)
-                            val belowY = min(ch - 1, matchedBotY + 4)
-                            var sx = xs
-                            while (sx <= xe) {
-                                if (matchedTopY >= 4) {
-                                    aboveSamples++
-                                    if (classifyHpPixel(pixels[aboveY * cw + sx], medBorderLuma) == anchor.leftBand) {
-                                        aboveSameColor++
-                                    }
-                                }
-                                if (matchedBotY + 4 < ch) {
-                                    belowSamples++
-                                    if (classifyHpPixel(pixels[belowY * cw + sx], medBorderLuma) == anchor.leftBand) {
-                                        belowSameColor++
-                                    }
-                                }
-                                sx += stepX
-                            }
-
-                            var leftSamples = 0
-                            var leftSameColor = 0
-                            val leftOutX = max(0, lb - 5)
-                            if (lb >= 5) {
-                                var sy = yMinC
-                                while (sy <= yMaxC) {
-                                    leftSamples++
-                                    if (classifyHpPixel(pixels[sy * cw + leftOutX], medBorderLuma) == anchor.leftBand) {
-                                        leftSameColor++
-                                    }
-                                    sy += 2
-                                }
-                            }
-
-                            val bleedsVertically = (aboveSamples > 0 && (aboveSameColor.toFloat() / aboveSamples.toFloat()) > 0.45f) &&
-                                (belowSamples > 0 && (belowSameColor.toFloat() / belowSamples.toFloat()) > 0.45f)
-                            val bleedsLeft = leftSamples > 0 && (leftSameColor.toFloat() / leftSamples.toFloat()) > 0.45f
-
-                            if (!bleedsVertically && !bleedsLeft) {
-                                val clusterSortedWidths = cluster.map { it.wFill }.sorted()
-                                val clusterSortedFullWidths = cluster.map { it.fullInteriorW }.sorted()
-                                val clusterMedWFill = clusterSortedWidths[clusterSortedWidths.size / 2]
-                                val clusterMedFullW = clusterSortedFullWidths[clusterSortedFullWidths.size / 2].coerceAtLeast(1)
-                                val candClusterHp = ((clusterMedWFill.toFloat() / clusterMedFullW.toFloat()) * 100f).roundToInt().coerceIn(1, 100)
-                                val deltaHp = kotlin.math.abs(candClusterHp - prevStableHp)
-
-                                val isBetter = when {
-                                    bestCluster == null -> true
-                                    deltaHp < bestDeltaHp -> true
-                                    deltaHp == bestDeltaHp && cluster.size > bestClusterSize -> true
-                                    else -> false
-                                }
-
-                                if (isBetter) {
-                                    bestCluster = cluster
-                                    bestDeltaHp = deltaHp
-                                    bestClusterSize = cluster.size
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            val validCluster = bestCluster ?: return -1
-            val sortedWidths = validCluster.map { it.wFill }.sorted()
-            val sortedFullWidths = validCluster.map { it.fullInteriorW }.sorted()
-            val sortedPendingWidths = validCluster.map { it.pendingW }.sorted()
-            val medianWFill = sortedWidths[sortedWidths.size / 2]
-            val medianFullInteriorW = sortedFullWidths[sortedFullWidths.size / 2].coerceAtLeast(1)
-            val medianPendingW = sortedPendingWidths[sortedPendingWidths.size / 2]
-            val minValidPendingPx = max(2, (medianFullInteriorW * 0.008f).roundToInt())
-            val hasPendingDmg = medianPendingW >= minValidPendingPx
-            val pendingPct = if (hasPendingDmg) {
-                ((medianPendingW.toFloat() / medianFullInteriorW.toFloat()) * 100f).roundToInt().coerceIn(1, 35)
-            } else 0
-            val medianRowY = top + validCluster[validCluster.size / 2].ry
-            if (isOpponent) {
-                sampledOppHasPendingDmg = hasPendingDmg
-                sampledOppPendingDmgPct = pendingPct
-                sampledOppHpRowY = medianRowY
-            } else {
-                sampledPlayerHasPendingDmg = hasPendingDmg
-                sampledPlayerPendingDmgPct = pendingPct
-                sampledPlayerHpRowY = medianRowY
-            }
-            ((medianWFill.toFloat() / medianFullInteriorW.toFloat()) * 100f).roundToInt().coerceIn(1, 100)
-        } catch (_: Exception) {
-            if (isOpponent) sampledOppHpRowY = -1 else sampledPlayerHpRowY = -1
-            -1
-        }
-    }
 
     /**
      * v3.41: Scales a 100%-HP baseline Battle Rating (150..850) by the live or persisted
      * HP% ratio between the user's slot and the opponent's slot.
      */
-    private fun scaleBrByHpRatio(baseBr: Int, userHpPct: Int, oppHpPct: Int): Int {
+    internal fun scaleBrByHpRatio(baseBr: Int, userHpPct: Int, oppHpPct: Int): Int {
         if (userHpPct <= 0) return 150
         if (oppHpPct <= 0) return 850
         val u = max(6.0, min(100.0, userHpPct.toDouble()))
@@ -18483,7 +5103,7 @@ class OverlayService : LifecycleService() {
      * Returns a specific move name ONLY when the attack was unshielded AND the observed HP% drop
      * is within ±8% of exactly one candidate move with >=12% separation from any other move.
      */
-    private fun inferUnshieldedChargedMoveName(
+    internal fun inferUnshieldedChargedMoveName(
         hpDeltaPct: Int,
         candidateMoves: List<Pair<String, Int>>
     ): String? {
@@ -18507,7 +5127,7 @@ class OverlayService : LifecycleService() {
      * v3.80: Best-guess unshielded Charged Move attribution when Banner OCR fails to read "<Pokemon> used <Move>!".
      * Picks the closest expected-damage move within ±16% so energy depletion matches the most likely thrown move.
      */
-    private fun inferBestGuessChargedMoveByHp(
+    internal fun inferBestGuessChargedMoveByHp(
         hpDeltaPct: Int,
         candidateMoves: List<Pair<String, Int>>
     ): String? {
@@ -18526,7 +5146,7 @@ class OverlayService : LifecycleService() {
      * against the lowest recorded HP history (including pre-big-jump HP before incoming Pokémon 100% bars)
      * so post-KO replacements or manual swaps/catches are never misclassified as fainted.
      */
-    private fun resolveFaintedOpponentSlotIdx(
+    internal fun resolveFaintedOpponentSlotIdx(
         excludeActiveSlot: Int,
         preferredPreKoSlot: Int,
         nowMs: Long = System.currentTimeMillis(),
@@ -18576,7 +5196,7 @@ class OverlayService : LifecycleService() {
      * and the pre-charge attacker slot (`pendingChargedAttackOppSlotIdx` / `lastOppChargedAttackerSlotIdx`), and falls back
      * to the pre-charge active opponent slot when <Pokemon> is garbled or clipped by OCR.
      */
-    private fun handleMidBannerUsedMoveLines(midBannerLines: List<Text.Line>) {
+    internal fun handleMidBannerUsedMoveLines(midBannerLines: List<Text.Line>) {
         if (midBannerLines.isEmpty()) return
         val nowMs = System.currentTimeMillis()
         val preset = currentPreset
@@ -18601,7 +5221,7 @@ class OverlayService : LifecycleService() {
         fun buildOppPoolForName(rawName: String, isShad: Boolean): Pair<PokemonMeta, List<String>>? {
             if (rawName.isBlank() || rawName.equals("Waiting...", ignoreCase = true)) return null
             val meta = getPokemonMeta(rawName, activeLeague, isShad)
-            val pool = getAvailableMovePoolForSpeciesStatic(meta.name, activeLeague).second
+            val pool = OverlayService.getAvailableMovePoolForSpeciesStatic(meta.name, activeLeague).second
             val third = meta.chargedMove3.takeIf { it.isNotBlank() }
                 ?: COMMON_THIRD_CHARGED_MOVE[meta.name]
                 ?: ""
@@ -18913,7 +5533,7 @@ class OverlayService : LifecycleService() {
                         if (pendingChargedAttackDeductedEnergy > 0) {
                             oppSlotEnergy[oldSlot] = (oppSlotEnergy[oldSlot] + pendingChargedAttackDeductedEnergy).coerceIn(0, 100)
                         }
-                        val mStatsSwap = resolveChargedMoveStatsStatic(moveName, oppMeta?.types?.firstOrNull() ?: "normal")
+                        val mStatsSwap = OverlayService.resolveChargedMoveStatsStatic(moveName, oppMeta?.types?.firstOrNull() ?: "normal")
                         val swapMoveCost = (mStatsSwap.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[moveName] ?: 45).coerceIn(35, 100)
                         val newPreE = max(oppSlotEnergy[resolvedOppSlotIdx], swapMoveCost).coerceIn(swapMoveCost, 100)
                         pendingChargedAttackPreOppEnergy = newPreE
@@ -18945,18 +5565,18 @@ class OverlayService : LifecycleService() {
                     }
                     val added = confirmedOppChargedMoves[resolvedOppSlotIdx].add(moveName)
                     if (pendingChargedAttackActor.isEmpty() && (nowMs - lastChargedAttackLoggedMs) <= 4500L && lastChargedPromptActor == "opp") {
-                        val mStats = resolveChargedMoveStatsStatic(moveName, oppMeta?.types?.firstOrNull() ?: "normal")
+                        val mStats = OverlayService.resolveChargedMoveStatsStatic(moveName, oppMeta?.types?.firstOrNull() ?: "normal")
                         val trueCost = (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[moveName] ?: 50).coerceIn(35, 100)
                         val oppFastNameRetro = detectedOppFastMoveOverride[resolvedOppSlotIdx]?.takeIf { it.isNotBlank() }
                             ?: oppMeta?.defaultFastMove ?: "Tackle"
-                        val oppFastTurnsRetro = resolveFastTurnsStatic(oppFastNameRetro, oppMeta?.fastTurns ?: 2).coerceIn(1, 5)
-                        val oppFastERetro = resolveFastEnergyStatic(oppFastNameRetro, oppFastTurnsRetro).coerceIn(2, 20)
+                        val oppFastTurnsRetro = OverlayService.resolveFastTurnsStatic(oppFastNameRetro, oppMeta?.fastTurns ?: 2).coerceIn(1, 5)
+                        val oppFastERetro = OverlayService.resolveFastEnergyStatic(oppFastNameRetro, oppFastTurnsRetro).coerceIn(2, 20)
                         val lastOppEvIdx = battleTimelineEvents.indexOfLast { it.type == "CHARGED_ATTACK" && it.actor == "opp" }
                         // v6.06: Recompute expectedMoveDmgPct when BANNER_OCR retroactively confirms moveName
                         val retroAttackerRaw = detectedOpponents.getOrNull(resolvedOppSlotIdx) ?: oppMeta?.name ?: activeOpponentName
                         val retroAttackerBase = FormResolver.extractBaseSpecies(retroAttackerRaw).lowercase()
                         val retroAttackerShad = manualShadowOverrides[retroAttackerBase] ?: isOpponentShadow
-                        val retroAttackerMeta = computeEffectiveCombatStats(
+                        val retroAttackerMeta = OverlayService.computeEffectiveCombatStats(
                             oppMeta ?: getPokemonMeta(retroAttackerRaw, activeLeague, retroAttackerShad),
                             activeLeague,
                             oppSlotCp.getOrNull(resolvedOppSlotIdx)?.takeIf { it > 0 }
@@ -18965,7 +5585,7 @@ class OverlayService : LifecycleService() {
                         val retroDefCfg = preset?.pokemon?.getOrNull(retroDefUserIdx)
                         val retroDefName = retroDefCfg?.name ?: resolvedUserMonName
                         val retroDefShad = retroDefName.contains("Shadow", ignoreCase = true)
-                        val retroDefMeta = computeEffectiveCombatStats(
+                        val retroDefMeta = OverlayService.computeEffectiveCombatStats(
                             getPokemonMeta(retroDefName, activeLeague, retroDefShad),
                             activeLeague,
                             retroDefCfg?.cp,
@@ -19042,7 +5662,7 @@ class OverlayService : LifecycleService() {
                     val targetUserIdx = resolvedUserSlotIdx.coerceIn(0, 2)
                     val targetUserMonName = preset?.pokemon?.getOrNull(targetUserIdx)?.name ?: userMonName
                     val targetUserMeta = getPokemonMeta(targetUserMonName, activeLeague, targetUserMonName.contains("Shadow", ignoreCase = true))
-                    val mStats = resolveChargedMoveStatsStatic(moveName, targetUserMeta.types.firstOrNull() ?: "normal")
+                    val mStats = OverlayService.resolveChargedMoveStatsStatic(moveName, targetUserMeta.types.firstOrNull() ?: "normal")
                     val trueCost = (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[moveName] ?: 50).coerceIn(35, 100)
                     if (pendingChargedAttackActor == "user") {
                         // v6.02: If banner OCR shows a different user slot threw the move (player swap-and-throw),
@@ -19087,7 +5707,7 @@ class OverlayService : LifecycleService() {
      * and cross-line fuzzy OCR matching for common ML Kit typos (e.g., "attack incomming", "incomming!",
      * "protect shield", "use a protect", "not now").
      */
-    private fun matchesAttackIncomingOcrText(lines: List<Text.Line>): Boolean {
+    internal fun matchesAttackIncomingOcrText(lines: List<Text.Line>): Boolean {
         if (lines.isEmpty()) return false
         val filteredLines = lines.map { it.text.trim() }.filter { it.isNotEmpty() && !isOverlayHudSelfText(it.lowercase()) }
         if (filteredLines.isEmpty()) return false
@@ -19157,7 +5777,7 @@ class OverlayService : LifecycleService() {
      * Player-Idle (>2 fast moves) back-credit & fallback, Banner Charged Move OCR ("<Pokemon> used <Move>!") 3-tier energy depletion,
      * Confirmed Opponent Moveset locking, and Non-Standard Opponent Fast Move detection (>=10% damage threshold + 0/1/2 turn offset).
      */
-    private fun updateLiveHpAndChargedAttackState(
+    internal fun updateLiveHpAndChargedAttackState(
         oppLines: List<Text.Line>,
         playerTopLines: List<Text.Line>,
         playerMoveLines: List<Text.Line>,
@@ -19170,25 +5790,25 @@ class OverlayService : LifecycleService() {
         val userSlotCfg = preset?.pokemon?.getOrNull(activeUserIdx)
         val userMonNameForStats = activeUserPokemonName ?: userSlotCfg?.name ?: "Dialga (Origin)"
         val isUserShadForStats = userMonNameForStats.contains("Shadow", ignoreCase = true)
-        val userMetaForStats = computeEffectiveCombatStats(
+        val userMetaForStats = OverlayService.computeEffectiveCombatStats(
             getPokemonMeta(userMonNameForStats, activeLeague, isUserShadForStats),
             activeLeague,
             userSlotCfg?.cp,
             userSlotCfg?.ivs
         )
         val userFastNameForStats = userSlotCfg?.fastMove?.takeIf { it.isNotBlank() } ?: userMetaForStats.defaultFastMove
-        val userFastTurnsForStats = resolveFastTurnsStatic(userFastNameForStats, userMetaForStats.fastTurns).coerceIn(1, 5)
-        val userFastEnergyForStats = resolveFastEnergyStatic(userFastNameForStats, userFastTurnsForStats).coerceIn(2, 20)
+        val userFastTurnsForStats = OverlayService.resolveFastTurnsStatic(userFastNameForStats, userMetaForStats.fastTurns).coerceIn(1, 5)
+        val userFastEnergyForStats = OverlayService.resolveFastEnergyStatic(userFastNameForStats, userFastTurnsForStats).coerceIn(2, 20)
         val minUserMoveCooldownMs = (userFastTurnsForStats * 500L - 100L).coerceAtLeast(390L)
 
         // Explicit rule: Left Circle is ALWAYS Move 1 (chargedMove1), Right Circle is ALWAYS Move 2 (chargedMove2)
         val userMove1NameEarly = userSlotCfg?.chargedMove1?.takeIf { it.isNotBlank() } ?: userMetaForStats.chargedMove1
         val userMove2NameEarly = userSlotCfg?.chargedMove2?.takeIf { it.isNotBlank() } ?: userMetaForStats.chargedMove2
         val hasSecondUserMove = userMove2NameEarly.isNotBlank() && !userMove2NameEarly.equals(userMove1NameEarly, ignoreCase = true)
-        val userMove1Energy = (resolveChargedMoveStatsStatic(userMove1NameEarly, userMetaForStats.types.firstOrNull() ?: "normal").energyCost
+        val userMove1Energy = (OverlayService.resolveChargedMoveStatsStatic(userMove1NameEarly, userMetaForStats.types.firstOrNull() ?: "normal").energyCost
             .takeIf { it > 0 } ?: MOVE_ENERGY_COST[userMove1NameEarly] ?: 50).coerceIn(35, 100)
         val userMove2Energy = if (hasSecondUserMove) {
-            (resolveChargedMoveStatsStatic(userMove2NameEarly, userMetaForStats.types.firstOrNull() ?: "normal").energyCost
+            (OverlayService.resolveChargedMoveStatsStatic(userMove2NameEarly, userMetaForStats.types.firstOrNull() ?: "normal").energyCost
                 .takeIf { it > 0 } ?: MOVE_ENERGY_COST[userMove2NameEarly] ?: 50).coerceIn(35, 100)
         } else userMove1Energy
         val maxUserMoveEnergyEarly = max(userMove1Energy, userMove2Energy).coerceIn(35, 100)
@@ -19442,14 +6062,14 @@ class OverlayService : LifecycleService() {
         }
 
         // 1. v3.80: Bi-Directional Live HP Gauge Update + Charge Move Circle Only Mode + Non-Standard Fast Move Override
-        val oppMetaForStats = computeEffectiveCombatStats(
+        val oppMetaForStats = OverlayService.computeEffectiveCombatStats(
             getPokemonMeta(activeOpponentName, activeLeague, isOpponentShadow),
             activeLeague
         )
         val oppFastNameForStats = detectedOppFastMoveOverride[activeOppIdx]?.takeIf { it.isNotBlank() }
             ?: oppMetaForStats.defaultFastMove
-        val oppFastTurnsForStats = resolveFastTurnsStatic(oppFastNameForStats, oppMetaForStats.fastTurns).coerceIn(1, 5)
-        val oppFastEnergyForStats = resolveFastEnergyStatic(oppFastNameForStats, oppFastTurnsForStats).coerceIn(2, 20)
+        val oppFastTurnsForStats = OverlayService.resolveFastTurnsStatic(oppFastNameForStats, oppMetaForStats.fastTurns).coerceIn(1, 5)
+        val oppFastEnergyForStats = OverlayService.resolveFastEnergyStatic(oppFastNameForStats, oppFastTurnsForStats).coerceIn(2, 20)
         val userExactDmgPct = calculateFastMoveExactDamagePercent(
             attacker = userMetaForStats,
             defender = oppMetaForStats,
@@ -19766,7 +6386,7 @@ class OverlayService : LifecycleService() {
                         val retroOppRawName = detectedOpponents.getOrNull(retroOppIdx) ?: lastOppChargedAttackerRawName.ifBlank { activeOpponentName }
                         val retroOppBase = FormResolver.extractBaseSpecies(retroOppRawName).lowercase()
                         val retroOppShad = manualShadowOverrides[retroOppBase] ?: lastOppChargedAttackerShadow
-                        val retroOppMeta = computeEffectiveCombatStats(getPokemonMeta(retroOppRawName, activeLeague, retroOppShad), activeLeague)
+                        val retroOppMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(retroOppRawName, activeLeague, retroOppShad), activeLeague)
                         val retroThird = retroOppMeta.chargedMove3.takeIf { it.isNotBlank() }
                             ?: COMMON_THIRD_CHARGED_MOVE[retroOppMeta.name]
                             ?: "Outrage"
@@ -19790,7 +6410,7 @@ class OverlayService : LifecycleService() {
                             }
                             confirmedOppChargedMoves[retroOppIdx].add(retroInferred)
                             lastOppChargeHpInferredMoveName = retroInferred
-                            val mStats = resolveChargedMoveStatsStatic(retroInferred, retroOppMeta.types.firstOrNull() ?: "normal")
+                            val mStats = OverlayService.resolveChargedMoveStatsStatic(retroInferred, retroOppMeta.types.firstOrNull() ?: "normal")
                             val trueCost = (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[retroInferred] ?: 50).coerceIn(35, 100)
                             val diff = trueCost - lastOppChargeDeductedEnergySnapshot
                             if (diff != 0 && lastOppChargeDeductedEnergySnapshot > 0) {
@@ -20004,14 +6624,14 @@ class OverlayService : LifecycleService() {
             .filter { it.isNotBlank() }
             .distinct()
         val oppMoveEnergyMap = oppMoveNames.associateWith { mName ->
-            val mStats = resolveChargedMoveStatsStatic(mName, oppMetaForStats.types.firstOrNull() ?: "normal")
+            val mStats = OverlayService.resolveChargedMoveStatsStatic(mName, oppMetaForStats.types.firstOrNull() ?: "normal")
             (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[mName] ?: 50).coerceIn(35, 100)
         }
         val cheapestOppEnergy = oppMoveEnergyMap.values.minOrNull() ?: 45
 
         val userMoveNames = listOf(userMove1NameEarly, userMove2NameEarly).filter { it.isNotBlank() }.distinct()
         val userMoveEnergyMap = userMoveNames.associateWith { mName ->
-            val mStats = resolveChargedMoveStatsStatic(mName, userMetaForStats.types.firstOrNull() ?: "normal")
+            val mStats = OverlayService.resolveChargedMoveStatsStatic(mName, userMetaForStats.types.firstOrNull() ?: "normal")
             (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[mName] ?: 50).coerceIn(35, 100)
         }
         val cheapestUserEnergy = min(userMove1Energy, userMove2Energy).coerceIn(35, 100)
@@ -20792,7 +7412,7 @@ class OverlayService : LifecycleService() {
             !playerFaintedSlots[activeUserIdx]
         ) {
             val stdFastName = oppMetaForStats.defaultFastMove
-            val stdFastTurns = resolveFastTurnsStatic(stdFastName, oppMetaForStats.fastTurns).coerceIn(1, 5)
+            val stdFastTurns = OverlayService.resolveFastTurnsStatic(stdFastName, oppMetaForStats.fastTurns).coerceIn(1, 5)
             val stdExactDmg = calculateFastMoveExactDamagePercent(
                 attacker = oppMetaForStats,
                 defender = userMetaForStats,
@@ -20837,7 +7457,7 @@ class OverlayService : LifecycleService() {
                 else -> 0.68
             }
 
-            val rawPoolFast = getAvailableMovePoolForSpeciesStatic(oppMetaForStats.name, activeLeague).first
+            val rawPoolFast = OverlayService.getAvailableMovePoolForSpeciesStatic(oppMetaForStats.name, activeLeague).first
             // v6.02: Never auto-override a standard fast move to Hidden Power (*) from HP drops alone
             val candidateFastMoves = (listOf(stdFastName) + rawPoolFast)
                 .map { it.trim() }
@@ -20849,7 +7469,7 @@ class OverlayService : LifecycleService() {
             // For each valid move M_i (duration N_i), sample at first multiple of N_i >= turnsFor10Pct + offsetTurns
             var maxRequiredSampleTurn = max(turnsFor10Pct + offsetTurns, minRequiredElapsedTurns)
             for (cand in candidateFastMoves) {
-                val cTurns = resolveFastTurnsStatic(cand, stdFastTurns).coerceIn(1, 5)
+                val cTurns = OverlayService.resolveFastTurnsStatic(cand, stdFastTurns).coerceIn(1, 5)
                 val minTurnsForCycles = cTurns * minRequiredCompletedCycles + offsetTurns
                 val firstRegTurn = max(
                     ceil(turnsFor10Pct.toDouble() / cTurns.toDouble()).toInt().coerceAtLeast(1) * cTurns + offsetTurns,
@@ -20880,8 +7500,8 @@ class OverlayService : LifecycleService() {
                 )
 
                 val evals = candidateFastMoves.map { cand ->
-                    val cTurns = resolveFastTurnsStatic(cand, stdFastTurns).coerceIn(1, 5)
-                    val cEnergy = resolveFastEnergyStatic(cand, cTurns).coerceIn(2, 20)
+                    val cTurns = OverlayService.resolveFastTurnsStatic(cand, stdFastTurns).coerceIn(1, 5)
+                    val cEnergy = OverlayService.resolveFastEnergyStatic(cand, cTurns).coerceIn(2, 20)
                     val cDmg = calculateFastMoveExactDamagePercent(
                         attacker = oppMetaForStats,
                         defender = userMetaForStats,
@@ -21595,7 +8215,7 @@ class OverlayService : LifecycleService() {
                     ?: pendingChargedAttackOppRawName.ifBlank { lastOppChargedAttackerRawName.ifBlank { activeOpponentName } }
                 val attackerOppBase = FormResolver.extractBaseSpecies(attackerOppRawName).lowercase()
                 val attackerOppShadow = manualShadowOverrides[attackerOppBase] ?: pendingChargedAttackOppShadow
-                val attackerOppMeta = computeEffectiveCombatStats(
+                val attackerOppMeta = OverlayService.computeEffectiveCombatStats(
                     getPokemonMeta(attackerOppRawName, activeLeague, attackerOppShadow),
                     activeLeague
                 )
@@ -21609,7 +8229,7 @@ class OverlayService : LifecycleService() {
                     attackerOppMeta.chargedMove4
                 ).filter { it.isNotBlank() }.distinct()
                 val attackerOppMoveEnergyMap = attackerOppMoveNames.associateWith { mName ->
-                    val mStats = resolveChargedMoveStatsStatic(mName, attackerOppMeta.types.firstOrNull() ?: "normal")
+                    val mStats = OverlayService.resolveChargedMoveStatsStatic(mName, attackerOppMeta.types.firstOrNull() ?: "normal")
                     (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[mName] ?: 50).coerceIn(35, 100)
                 }
                 val attackerCheapestOppEnergy = attackerOppMoveEnergyMap.values.minOrNull() ?: 45
@@ -21663,7 +8283,7 @@ class OverlayService : LifecycleService() {
                 val defenderUserName = defenderUserCfg?.name ?: activeUserPokemonName ?: "Dialga (Origin)"
                 val defenderUserShadow = defenderUserName.contains("Shadow", ignoreCase = true)
                 val defenderUserMeta = if (defenderUserIdx != activeUserIdx || playerCaughtMove) {
-                    computeEffectiveCombatStats(
+                    OverlayService.computeEffectiveCombatStats(
                         getPokemonMeta(defenderUserName, activeLeague, defenderUserShadow),
                         activeLeague,
                         defenderUserCfg?.cp,
@@ -21787,7 +8407,7 @@ class OverlayService : LifecycleService() {
                 }
 
                 val totalTargetEnergy = if (resolvedOppMove != null) {
-                    val mStats = resolveChargedMoveStatsStatic(resolvedOppMove, attackerOppMeta.types.firstOrNull() ?: "normal")
+                    val mStats = OverlayService.resolveChargedMoveStatsStatic(resolvedOppMove, attackerOppMeta.types.firstOrNull() ?: "normal")
                     attackerOppMoveEnergyMap[resolvedOppMove] ?: (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[resolvedOppMove] ?: attackerCheapestOppEnergy).coerceIn(35, 100)
                 } else {
                     // Tier 3 Fallback: Lowest energy viable opponent move on the thrower to err on the side of opponent having more energy
@@ -21796,17 +8416,17 @@ class OverlayService : LifecycleService() {
                 // v5.13 Fix 3 & v6.06 Equal/Higher-EPT Fast Move Promotion on Deficit Throw:
                 var attackerFastName = detectedOppFastMoveOverride[attackerOppSlotIdx]?.takeIf { it.isNotBlank() }
                     ?: attackerOppMeta.defaultFastMove
-                var attackerFastTurns = resolveFastTurnsStatic(attackerFastName, attackerOppMeta.fastTurns).coerceIn(1, 5)
-                var attackerFastEnergy = resolveFastEnergyStatic(attackerFastName, attackerFastTurns).coerceIn(2, 20)
+                var attackerFastTurns = OverlayService.resolveFastTurnsStatic(attackerFastName, attackerOppMeta.fastTurns).coerceIn(1, 5)
+                var attackerFastEnergy = OverlayService.resolveFastEnergyStatic(attackerFastName, attackerFastTurns).coerceIn(2, 20)
                 if (resolvedOppMove != null && (totalTargetEnergy - pendingChargedAttackPreOppEnergy) > attackerFastEnergy && attackerOppSlotIdx in 0..2) {
                     val curEpt = attackerFastEnergy.toDouble() / attackerFastTurns.toDouble()
-                    val legalFastPool = getAvailableMovePoolForSpeciesStatic(attackerOppMeta.name, activeLeague).first
+                    val legalFastPool = OverlayService.getAvailableMovePoolForSpeciesStatic(attackerOppMeta.name, activeLeague).first
                     val slotTurns = oppSlotTurnsOnField[attackerOppSlotIdx].coerceAtLeast(attackerFastTurns)
                     val bestHigherEptFast = legalFastPool.filter { candFast ->
                         !candFast.equals(attackerFastName, ignoreCase = true)
                     }.mapNotNull { candFast ->
-                        val cTurns = resolveFastTurnsStatic(candFast, attackerFastTurns).coerceIn(1, 5)
-                        val cEnergy = resolveFastEnergyStatic(candFast, cTurns).coerceIn(2, 20)
+                        val cTurns = OverlayService.resolveFastTurnsStatic(candFast, attackerFastTurns).coerceIn(1, 5)
+                        val cEnergy = OverlayService.resolveFastEnergyStatic(candFast, cTurns).coerceIn(2, 20)
                         val cEpt = cEnergy.toDouble() / cTurns.toDouble()
                         val estGenerated = ((slotTurns + cTurns - 1) / cTurns) * cEnergy
                         if (cEpt > curEpt + 0.05 && estGenerated >= totalTargetEnergy - cEnergy) {
@@ -22047,7 +8667,7 @@ class OverlayService : LifecycleService() {
                 val defenderOppShadow = manualShadowOverrides[defenderOppBase]
                     ?: if (isOppCatchDuringThrow) isOpponentShadow else pendingChargedAttackOppShadow
                 val defenderOppMeta = if (defenderOppIdx != activeOppIdx || isOppCatchDuringThrow) {
-                    computeEffectiveCombatStats(
+                    OverlayService.computeEffectiveCombatStats(
                         getPokemonMeta(defenderOppRawName, activeLeague, defenderOppShadow),
                         activeLeague
                     )
@@ -22068,7 +8688,7 @@ class OverlayService : LifecycleService() {
                 val attackerUserMonName = attackerUserCfg?.name ?: activeUserPokemonName ?: "Dialga (Origin)"
                 val attackerUserShad = attackerUserMonName.contains("Shadow", ignoreCase = true)
                 val attackerUserMeta = if (attackerUserIdx != activeUserIdx) {
-                    computeEffectiveCombatStats(
+                    OverlayService.computeEffectiveCombatStats(
                         getPokemonMeta(attackerUserMonName, activeLeague, attackerUserShad),
                         activeLeague,
                         attackerUserCfg?.cp,
@@ -22078,15 +8698,15 @@ class OverlayService : LifecycleService() {
                     userMetaForStats
                 }
                 val attackerUserFastName = attackerUserCfg?.fastMove?.takeIf { it.isNotBlank() } ?: attackerUserMeta.defaultFastMove
-                val attackerUserFastTurns = resolveFastTurnsStatic(attackerUserFastName, attackerUserMeta.fastTurns).coerceIn(1, 5)
-                val attackerUserFastEnergy = resolveFastEnergyStatic(attackerUserFastName, attackerUserFastTurns).coerceIn(2, 20)
+                val attackerUserFastTurns = OverlayService.resolveFastTurnsStatic(attackerUserFastName, attackerUserMeta.fastTurns).coerceIn(1, 5)
+                val attackerUserFastEnergy = OverlayService.resolveFastEnergyStatic(attackerUserFastName, attackerUserFastTurns).coerceIn(2, 20)
                 val attackerMove1Name = attackerUserCfg?.chargedMove1?.takeIf { it.isNotBlank() } ?: attackerUserMeta.chargedMove1
                 val attackerMove2Name = attackerUserCfg?.chargedMove2?.takeIf { it.isNotBlank() } ?: attackerUserMeta.chargedMove2
                 val attackerHasSecondMove = attackerMove2Name.isNotBlank() && !attackerMove2Name.equals(attackerMove1Name, ignoreCase = true)
-                val attackerMove1Cost = (resolveChargedMoveStatsStatic(attackerMove1Name, attackerUserMeta.types.firstOrNull() ?: "normal").energyCost
+                val attackerMove1Cost = (OverlayService.resolveChargedMoveStatsStatic(attackerMove1Name, attackerUserMeta.types.firstOrNull() ?: "normal").energyCost
                     .takeIf { it > 0 } ?: MOVE_ENERGY_COST[attackerMove1Name] ?: 50).coerceIn(35, 100)
                 val attackerMove2Cost = if (attackerHasSecondMove) {
-                    (resolveChargedMoveStatsStatic(attackerMove2Name, attackerUserMeta.types.firstOrNull() ?: "normal").energyCost
+                    (OverlayService.resolveChargedMoveStatsStatic(attackerMove2Name, attackerUserMeta.types.firstOrNull() ?: "normal").energyCost
                         .takeIf { it > 0 } ?: MOVE_ENERGY_COST[attackerMove2Name] ?: 50).coerceIn(35, 100)
                 } else attackerMove1Cost
                 val attackerMoveNames = listOfNotNull(attackerMove1Name, attackerMove2Name.takeIf { attackerHasSecondMove }).filter { it.isNotBlank() }.distinct()
@@ -22496,7 +9116,7 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private val OCR_MENU_IGNORED_WORDS = setOf(
+    internal val OCR_MENU_IGNORED_WORDS = setOf(
         "party", "parties", "battle", "battles", "league", "schedule",
         "rank", "rating", "rewards", "reward", "train", "training",
         "season", "current", "great", "ultra", "master", "premier",
@@ -22508,7 +9128,7 @@ class OverlayService : LifecycleService() {
      * Returns true if a token or word is a GBL menu label ("party", "battle", etc.) or a 1-character
      * OCR confusable of "party" (which otherwise has edit distance 2 to "paras") or "battle".
      */
-    private fun isIgnoredMenuToken(rawToken: String): Boolean {
+    internal fun isIgnoredMenuToken(rawToken: String): Boolean {
         val cleanLower = rawToken.lowercase().replace(Regex("[^a-z]"), "")
         if (cleanLower.isEmpty()) return true
         if (cleanLower in OCR_MENU_IGNORED_WORDS) return true
@@ -22531,7 +9151,7 @@ class OverlayService : LifecycleService() {
      * Detects when the user is on the Pokémon GO Battle Menu screen (upper-left "BATTLE" + upper-right "PARTY",
      * or GBL lobby headers without any active combat CP indicators) and pauses OCR matching on that frame.
      */
-    private fun isBattleMenuScreen(
+    internal fun isBattleMenuScreen(
         oppLines: List<Text.Line>,
         playerTopLines: List<Text.Line>,
         playerMoveLines: List<Text.Line>
@@ -22583,7 +9203,7 @@ class OverlayService : LifecycleService() {
         return false
     }
 
-    private fun isOverlayHudSelfText(lower: String): Boolean {
+    internal fun isOverlayHudSelfText(lower: String): Boolean {
         return lower.contains("waiting") ||
                 lower.contains("scanning") ||
                 lower.contains("zero-sneak") ||
@@ -22630,7 +9250,7 @@ class OverlayService : LifecycleService() {
      * Strictly maintains fixed opponent discovery order: [1st seen, 2nd seen, 3rd seen].
      * Never reorders slots when an already-seen opponent switches back in!
      */
-    private fun upsertDetectedOpponentBySpecies(fullName: String, baseSpecies: String) {
+    internal fun upsertDetectedOpponentBySpecies(fullName: String, baseSpecies: String) {
         val existingIdx = detectedOpponents.indexOfFirst {
             FormResolver.extractBaseSpecies(it).equals(baseSpecies, ignoreCase = true)
         }
@@ -22648,7 +9268,7 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private fun handleOpponentLines(oppLines: List<Text.Line>) {
+    internal fun handleOpponentLines(oppLines: List<Text.Line>) {
         if (oppLines.isEmpty()) return
         val activeLeague = currentPreset?.league ?: "MASTER LEAGUE"
 
@@ -22672,7 +9292,7 @@ class OverlayService : LifecycleService() {
                 val resolved = if (manualFormName != null) {
                     getPokemonMeta(manualFormName, activeLeague, isLineShadow)
                 } else {
-                    applyRankingMovesForLeague(applyRecommendedMoves(bestVar), activeLeague, isLineShadow)
+                    OverlayService.applyRankingMovesForLeague(OverlayService.applyRecommendedMoves(bestVar), activeLeague, isLineShadow)
                 }
                 matchedCandidates.add(Triple(resolved, text, isLineShadow))
             }
@@ -22822,8 +9442,8 @@ class OverlayService : LifecycleService() {
                         phasePlayerTurns = 0
                         phaseOppTurns = 0
                     } else if (phasePlayerTurns > 0) {
-                        val leadOppFastTurns = resolveFastTurnsStatic(matched.defaultFastMove, matched.fastTurns).coerceIn(1, 5)
-                        val leadOppFastEnergy = resolveFastEnergyStatic(matched.defaultFastMove, leadOppFastTurns).coerceIn(2, 20)
+                        val leadOppFastTurns = OverlayService.resolveFastTurnsStatic(matched.defaultFastMove, matched.fastTurns).coerceIn(1, 5)
+                        val leadOppFastEnergy = OverlayService.resolveFastEnergyStatic(matched.defaultFastMove, leadOppFastTurns).coerceIn(2, 20)
                         val completedLeadOppMoves = phasePlayerTurns / leadOppFastTurns
                         if (completedLeadOppMoves > 0) {
                             oppSlotEnergy[0] = (completedLeadOppMoves * leadOppFastEnergy).coerceIn(0, 100)
@@ -23163,7 +9783,7 @@ class OverlayService : LifecycleService() {
      * Executes a player switch, applying Faint vs. True Swap classification,
      * resurrection guard, midpoint timestamp interpolation, 2nd-frame validity bit, and recommendation adherence tracking (v3.34).
      */
-    private fun executePlayerSwitch(newSlotName: String, fromOcrFrame: Boolean = false) {
+    internal fun executePlayerSwitch(newSlotName: String, fromOcrFrame: Boolean = false) {
         val preset = currentPreset ?: return
         val newSlotIdx = preset.pokemon.indexOfFirst { it.name.equals(newSlotName, ignoreCase = true) }
 
@@ -23425,8 +10045,8 @@ class OverlayService : LifecycleService() {
                 val switchType = switchMeta.types.firstOrNull() ?: "normal"
                 val swC1Name = switchSlotMember?.chargedMove1?.takeIf { it.isNotBlank() } ?: switchMeta.chargedMove1
                 val swC2Name = switchSlotMember?.chargedMove2?.takeIf { it.isNotBlank() } ?: switchMeta.chargedMove2
-                val swC1Cost = (resolveChargedMoveStatsStatic(swC1Name, switchType).energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[swC1Name] ?: 45).coerceIn(35, 100)
-                val swC2Cost = (resolveChargedMoveStatsStatic(swC2Name, switchType).energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[swC2Name] ?: 55).coerceIn(35, 100)
+                val swC1Cost = (OverlayService.resolveChargedMoveStatsStatic(swC1Name, switchType).energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[swC1Name] ?: 45).coerceIn(35, 100)
+                val swC2Cost = (OverlayService.resolveChargedMoveStatsStatic(swC2Name, switchType).energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[swC2Name] ?: 55).coerceIn(35, 100)
                 val bankedSwE = playerSlotEnergy[newSlotIdx].coerceIn(0, 100)
                 resetSlotEnergyTracking(
                     newSlotIdx,
@@ -23509,7 +10129,7 @@ class OverlayService : LifecycleService() {
      * after the charged move completed, this helper evaluates whether `pokemonIn` is a better fit for the move/HP delta/energy
      * and rolls back the provisional energy deduction and move lock on `pokemonOut`, applying it cleanly to `pokemonIn`!
      */
-    private fun tryRollbackRecentSwapAndImmediateThrow(
+    internal fun tryRollbackRecentSwapAndImmediateThrow(
         actor: String,
         prevSlotIdx: Int,
         newSlotIdx: Int,
@@ -23535,7 +10155,7 @@ class OverlayService : LifecycleService() {
                 return // Already attributed to newSlotIdx
             }
             val newOppShad = manualShadowOverrides[newOppBase] ?: newFormattedName.contains("Shadow", ignoreCase = true)
-            val newOppMeta = computeEffectiveCombatStats(getPokemonMeta(newOppRaw, activeLeague, newOppShad), activeLeague)
+            val newOppMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(newOppRaw, activeLeague, newOppShad), activeLeague)
             val newOppThird = newOppMeta.chargedMove3.takeIf { it.isNotBlank() }
                 ?: COMMON_THIRD_CHARGED_MOVE[newOppMeta.name]
                 ?: "Outrage"
@@ -23545,7 +10165,7 @@ class OverlayService : LifecycleService() {
             val uCfg = preset?.pokemon?.getOrNull(activeUIdx)
             val uName = uCfg?.name ?: activeUserPokemonName ?: "Dialga (Origin)"
             val uShad = uName.contains("Shadow", ignoreCase = true)
-            val uMeta = computeEffectiveCombatStats(getPokemonMeta(uName, activeLeague, uShad), activeLeague, uCfg?.cp, uCfg?.ivs)
+            val uMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(uName, activeLeague, uShad), activeLeague, uCfg?.cp, uCfg?.ivs)
 
             val newCandPairs = newOppMoves.map { mName ->
                 mName to calculateChargedMoveDamagePercent(
@@ -23580,7 +10200,7 @@ class OverlayService : LifecycleService() {
                 if (existingMove != null && ev.moveResolutionSource != "BANNER_OCR") {
                     confirmedOppChargedMoves[prevSlotIdx].remove(existingMove)
                 }
-                val mStats = resolveChargedMoveStatsStatic(candidateNewMove, newOppMeta.types.firstOrNull() ?: "normal")
+                val mStats = OverlayService.resolveChargedMoveStatsStatic(candidateNewMove, newOppMeta.types.firstOrNull() ?: "normal")
                 val trueCost = (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[candidateNewMove] ?: 45).coerceIn(35, 100)
                 val newPreE = max(oppSlotEnergy[newSlotIdx], trueCost).coerceIn(trueCost, 100)
                 oppSlotEnergy[newSlotIdx] = (newPreE - trueCost).coerceIn(0, 100)
@@ -23606,12 +10226,12 @@ class OverlayService : LifecycleService() {
             val newMonName = newSlotCfg.name
             if (ev.activePokemon?.equals(newMonName, ignoreCase = true) == true) return
             val newShad = newMonName.contains("Shadow", ignoreCase = true)
-            val newMeta = computeEffectiveCombatStats(getPokemonMeta(newMonName, activeLeague, newShad), activeLeague, newSlotCfg.cp, newSlotCfg.ivs)
+            val newMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(newMonName, activeLeague, newShad), activeLeague, newSlotCfg.cp, newSlotCfg.ivs)
             val c1 = newSlotCfg.chargedMove1.takeIf { it.isNotBlank() } ?: newMeta.chargedMove1
             val c2 = newSlotCfg.chargedMove2.takeIf { it.isNotBlank() } ?: newMeta.chargedMove2
             val newMoves = listOfNotNull(c1, c2).filter { it.isNotBlank() }.distinct()
             val activeOppBase = FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
-            val defOppMeta = computeEffectiveCombatStats(getPokemonMeta(activeOpponentName, activeLeague, isOpponentShadow), activeLeague)
+            val defOppMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(activeOpponentName, activeLeague, isOpponentShadow), activeLeague)
             val newCandPairs = newMoves.map { mName ->
                 mName to calculateChargedMoveDamagePercent(
                     attacker = newMeta,
@@ -23638,7 +10258,7 @@ class OverlayService : LifecycleService() {
                     playerSlotEnergy[prevSlotIdx] = (playerSlotEnergy[prevSlotIdx] + refundedE).coerceIn(0, 100)
                     playerSlotEnergyAnchor[prevSlotIdx] = playerSlotEnergy[prevSlotIdx]
                 }
-                val mStats = resolveChargedMoveStatsStatic(candNewUserMove, newMeta.types.firstOrNull() ?: "normal")
+                val mStats = OverlayService.resolveChargedMoveStatsStatic(candNewUserMove, newMeta.types.firstOrNull() ?: "normal")
                 val trueCost = (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[candNewUserMove] ?: 45).coerceIn(35, 100)
                 val newPreE = max(playerSlotEnergy[newSlotIdx], trueCost).coerceIn(trueCost, 100)
                 val residualE = (newPreE - trueCost).coerceIn(0, 100)
@@ -23669,7 +10289,7 @@ class OverlayService : LifecycleService() {
      * 3. If the Pokéball HUD finishes sliding in after the replacement Pokémon's name appears (before the switch is confirmed alive), immediately catches the faint, dims the prior slot, restores the prior Swap Clock, and shows a Faint Swap toast.
      * 4. Updates shield counts independently (verified while HUD Pokéballs are visible) and shows a Shield Used toast.
      */
-    private fun updateSteadyFrameBallAndShieldState() {
+    internal fun updateSteadyFrameBallAndShieldState() {
         if (isWaitingForOpponent) return
         var changed = false
 
@@ -24135,7 +10755,7 @@ class OverlayService : LifecycleService() {
      *   2 = 2-character Levenshtein edit distance (for species length >= 6 and token length >= 5)
      *   null = No match
      */
-    private fun scoreTeamMemberOnLine(lineText: String, slot: TeamMember): Int? {
+    internal fun scoreTeamMemberOnLine(lineText: String, slot: TeamMember): Int? {
         val cleaned = lineText
             .replace(Regex("(?i)cp\\s*\\d+"), " ")
             .replace(Regex("(?i)\\b(?:shadow|purified|forme|form|cp|iv|lv|level|vs|party|parties|battle|battles|league|schedule|rank|rating|rewards|reward|train|training|season|current)\\b"), " ")
@@ -24250,7 +10870,7 @@ class OverlayService : LifecycleService() {
      * Evaluates ALL 3 team Pokémon simultaneously across all lines to find the strictly best match
      * (rather than checking one Pokémon at a time starting from the Lead, or matching shared CPs like 2499).
      */
-    private fun handlePlayerSwitchLines(playerTopLines: List<Text.Line>, playerMoveLines: List<Text.Line>) {
+    internal fun handlePlayerSwitchLines(playerTopLines: List<Text.Line>, playerMoveLines: List<Text.Line>) {
         val preset = currentPreset ?: return
         if (preset.pokemon.isEmpty()) return
 
@@ -24472,8 +11092,8 @@ class OverlayService : LifecycleService() {
      * ACTION: RESET OPPONENT (Start New Battle)
      * Clears opponent team & manual form/shadow overrides while keeping 1 Hz OCR continuously active
      */
-    @Volatile private var lastSwapHapticAlertEpochMs: Long = 0L
-    @Volatile private var lastChargeWarnHapticKey: String = ""
+    @Volatile internal var lastSwapHapticAlertEpochMs: Long = 0L
+    @Volatile internal var lastChargeWarnHapticKey: String = ""
 
     fun startNewBattle() {
         // Snapshot opponents and lead matchup before clearing, so if the user taps
@@ -24994,7 +11614,7 @@ class OverlayService : LifecycleService() {
             finalOppFaints = resolvedOppFaints
         }
 
-        val quality = calculateBattleQuality(
+        val quality = OverlayService.calculateBattleQuality(
             myTeam = userMons,
             oppTeam = formattedOpponents,
             league = league,
@@ -25025,7 +11645,7 @@ class OverlayService : LifecycleService() {
         } else {
             lastClearedFinalOppHpPct
         }
-        val (firstSwapActor, switchAdvantage) = deriveFirstSwapAndSwitchAdvantageStatic(finalTimelineEvents, normalizedResult)
+        val (firstSwapActor, switchAdvantage) = OverlayService.deriveFirstSwapAndSwitchAdvantageStatic(finalTimelineEvents, normalizedResult)
 
         // v3.50: Main Battle Logs store compact permanent summary fields (timelineEvents = emptyList());
         // detailed timestamped timeline events are written to the separate 7-day AI Training Log store.
@@ -25075,19 +11695,19 @@ class OverlayService : LifecycleService() {
         existingLogs.add(0, newEntry)
 
         // v5.10: Build rich AI Training & Anomaly Telemetry record and queue for GitHub `ai-telemetry-logs` upload
-        runV510AiTelemetryMigrationAndWipeStatic(prefs)
+        OverlayService.runV510AiTelemetryMigrationAndWipeStatic(prefs)
         val userTeamSpecs = (0..2).mapNotNull { idx ->
             val slotMember = preset?.pokemon?.getOrNull(idx)
             val sName = slotMember?.name ?: userMons.getOrNull(idx) ?: return@mapNotNull null
             val sShadow = sName.contains("Shadow", ignoreCase = true)
-            val sMeta = computeEffectiveCombatStats(getPokemonMeta(sName, league, sShadow), league, slotMember?.cp, slotMember?.ivs)
+            val sMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(sName, league, sShadow), league, slotMember?.cp, slotMember?.ivs)
             val fMove = slotMember?.fastMove?.takeIf { it.isNotBlank() } ?: sMeta.defaultFastMove
-            val fTurns = resolveFastTurnsStatic(fMove, sMeta.fastTurns)
-            val fEnergy = resolveFastEnergyStatic(fMove, fTurns)
+            val fTurns = OverlayService.resolveFastTurnsStatic(fMove, sMeta.fastTurns)
+            val fEnergy = OverlayService.resolveFastEnergyStatic(fMove, fTurns)
             val c1Move = slotMember?.chargedMove1?.takeIf { it.isNotBlank() } ?: sMeta.chargedMove1
             val c2Move = slotMember?.chargedMove2?.takeIf { it.isNotBlank() } ?: sMeta.chargedMove2
-            val c1Stats = resolveChargedMoveStatsStatic(c1Move, sMeta.types.firstOrNull() ?: "normal")
-            val c2Stats = resolveChargedMoveStatsStatic(c2Move, sMeta.types.firstOrNull() ?: "normal")
+            val c1Stats = OverlayService.resolveChargedMoveStatsStatic(c1Move, sMeta.types.firstOrNull() ?: "normal")
+            val c2Stats = OverlayService.resolveChargedMoveStatsStatic(c2Move, sMeta.types.firstOrNull() ?: "normal")
             val c1Cost = (c1Stats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[c1Move] ?: 45).coerceIn(35, 100)
             val c2Cost = (c2Stats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[c2Move] ?: 55).coerceIn(35, 100)
             AiTelemetrySlotSpec(
@@ -25109,11 +11729,11 @@ class OverlayService : LifecycleService() {
         }
         val oppTeamSpecs = formattedOpponents.mapIndexed { idx, oppName ->
             val oppShad = oppName.contains("Shadow", ignoreCase = true)
-            val oppMeta = computeEffectiveCombatStats(getPokemonMeta(oppName, league, oppShad), league)
+            val oppMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(oppName, league, oppShad), league)
             val fOverride = detectedOppFastMoveOverride.getOrNull(idx)?.takeIf { it.isNotBlank() }
             val fMove = fOverride ?: oppMeta.defaultFastMove
-            val fTurns = resolveFastTurnsStatic(fMove, oppMeta.fastTurns)
-            val fEnergy = resolveFastEnergyStatic(fMove, fTurns)
+            val fTurns = OverlayService.resolveFastTurnsStatic(fMove, oppMeta.fastTurns)
+            val fEnergy = OverlayService.resolveFastEnergyStatic(fMove, fTurns)
             AiTelemetryOppSlotSpec(
                 slotIndex = idx,
                 species = oppName,
@@ -25129,28 +11749,28 @@ class OverlayService : LifecycleService() {
                 fainted = (endOppHpList.getOrElse(idx) { 0 } <= 0)
             )
         }
-        val detectedAnomalies = detectBattleAnomaliesStatic(
+        val detectedAnomalies = OverlayService.detectBattleAnomaliesStatic(
             league = league,
             userTeamSpecs = userTeamSpecs,
             oppTeamSpecs = oppTeamSpecs,
             timelineEvents = finalTimelineEvents
         )
-        recordDebounceSettingsChangeIfNeededStatic(prefs, gson, "battle_logged", triggerImmediateUpload = false)
-        val scannerConfigMap = buildDebounceAndSettlingSettingsMapStatic(
+        OverlayService.recordDebounceSettingsChangeIfNeededStatic(prefs, gson, "battle_logged", triggerImmediateUpload = false)
+        val scannerConfigMap = OverlayService.buildDebounceAndSettlingSettingsMapStatic(
             prefs = prefs,
             scanHzMode = currentScanHzMode,
             scanTurnOffsetMs = scanTurnOffsetMs
         )
-        val profileSig = computeDebounceSettingsProfileSignatureStatic(prefs)
-        val recentSettingsChanges = loadPendingSettingsChangesStatic(prefs, gson).ifEmpty {
-            loadSettingsChangeHistoryStatic(prefs, gson).takeLast(10)
+        val profileSig = OverlayService.computeDebounceSettingsProfileSignatureStatic(prefs)
+        val recentSettingsChanges = OverlayService.loadPendingSettingsChangesStatic(prefs, gson).ifEmpty {
+            OverlayService.loadSettingsChangeHistoryStatic(prefs, gson).takeLast(10)
         }
         val sensorTicksForShadow = if (currentBattleSensorTicks.isNotEmpty()) {
             currentBattleSensorTicks.toList()
         } else {
             lastClearedSensorTicksSnapshot
         }
-        val shadowBenchmarkMap = evaluateShadowSettingsProfilesStatic(
+        val shadowBenchmarkMap = OverlayService.evaluateShadowSettingsProfilesStatic(
             prefs = prefs,
             league = league,
             userTeamSpecs = userTeamSpecs,
@@ -25158,7 +11778,7 @@ class OverlayService : LifecycleService() {
             timelineEvents = finalTimelineEvents,
             sensorTicks = sensorTicksForShadow
         )
-        val (postCutsceneAudits, energyLedger, hpEnergyDiagSummary) = buildEnhancedHpAndEnergyDiagnosticsStatic(
+        val (postCutsceneAudits, energyLedger, hpEnergyDiagSummary) = OverlayService.buildEnhancedHpAndEnergyDiagnosticsStatic(
             userTeamSpecs = userTeamSpecs,
             oppTeamSpecs = oppTeamSpecs,
             timelineEvents = finalTimelineEvents,
@@ -25166,17 +11786,17 @@ class OverlayService : LifecycleService() {
         )
         val wasDvrRecordedThisBattle = !ignoreAiTelemetry && (activeOneBattleDvrRecording || (activeOneBattleDvrArmed && activeOneBattleDvrFrames > 0))
         val githubUser = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty().ifEmpty { "anonymous" }
-        val devHashForDvr = getDeviceTelemetryHashStatic(prefs)
+        val devHashForDvr = OverlayService.getDeviceTelemetryHashStatic(prefs)
         val safeUserForDvr = (githubUser.takeIf { it != "anonymous" } ?: "trainer_$devHashForDvr").replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
         val cleanBattleIdForDvr = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
         val expectedDvrVideoPath = if (wasDvrRecordedThisBattle) "recordings/$safeUserForDvr/${cleanBattleIdForDvr}_video.mp4" else null
         val expectedDvrTracePath = if (wasDvrRecordedThisBattle) "recordings/$safeUserForDvr/${cleanBattleIdForDvr}_deep_trace.jsonl" else null
 
         val v510Record = AiTelemetryBattleRecordV510(
-            schemaVersion = "6.10",
+            schemaVersion = APP_VERSION,
             battleId = battleId,
             timestampMs = nowMs,
-            appVersion = "6.10",
+            appVersion = APP_VERSION,
             uploaderHandle = githubUser,
             deviceHash = devHashForDvr,
             deviceModel = Build.MODEL ?: "Android",
@@ -25214,7 +11834,7 @@ class OverlayService : LifecycleService() {
             dvrVideoPath = expectedDvrVideoPath,
             dvrDeepTracePath = expectedDvrTracePath
         )
-        val pendingQueue = loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
+        val pendingQueue = OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
         pendingQueue.removeAll { it.battleId == battleId }
         if (!ignoreAiTelemetry) {
             pendingQueue.add(v510Record)
@@ -25296,7 +11916,7 @@ class OverlayService : LifecycleService() {
         // Always trigger background 2-device delta sync after logging a battle
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                syncWithGitHubGistBlocking(prefs, gson)
+                OverlayService.syncWithGitHubGistBlocking(prefs, gson)
             } catch (_: Exception) {}
         }
     }
@@ -25305,7 +11925,7 @@ class OverlayService : LifecycleService() {
      * v6.03: Automatically detects end-of-battle ("YOU WIN!", "GOOD EFFORT", "TIME'S UP!", or 3rd Pokémon KO + HUD exit)
      * and auto-logs the match result with a post-battle bar for Undo / Flip W-L / Ignore AI Telemetry.
      */
-    private fun checkAndHandleAutoEndOfBattle(
+    internal fun checkAndHandleAutoEndOfBattle(
         oppLines: List<Text.Line>,
         playerTopLines: List<Text.Line>,
         playerMoveLines: List<Text.Line>,
@@ -25397,7 +12017,7 @@ class OverlayService : LifecycleService() {
     fun ignoreTelemetryForBattle(battleId: String) {
         val targetId = battleId.ifBlank { lastLoggedBattleId }
         if (targetId.isBlank()) return
-        val pendingQueue = loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
+        val pendingQueue = OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
         val removed = pendingQueue.removeAll { it.battleId == targetId }
         if (removed) {
             prefs.edit().putString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(pendingQueue)).apply()
@@ -25430,7 +12050,7 @@ class OverlayService : LifecycleService() {
             if (targetId == lastLoggedBattleId) {
                 lastLoggedBattleResult = flipped
             }
-            val pendingQueue = loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
+            val pendingQueue = OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
             val pIdx = pendingQueue.indexOfFirst { it.battleId == targetId }
             if (pIdx >= 0) {
                 pendingQueue[pIdx] = pendingQueue[pIdx].copy(result = flipped)
@@ -25454,7 +12074,7 @@ class OverlayService : LifecycleService() {
             mutableListOf()
         }
         existingLogs.removeAll { it.id == targetId }
-        val pendingQueue = loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
+        val pendingQueue = OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
         pendingQueue.removeAll { it.battleId == targetId }
         prefs.edit()
             .putString(targetBattleLogsPrefKey, gson.toJson(existingLogs))
@@ -25651,8 +12271,12 @@ class OverlayService : LifecycleService() {
         activeOppIdx: Int,
         activeUserIdx: Int,
         oppCountModeVal: String = "my_fasts",
-        enable4ChargedVal: Boolean = false
+        enable4ChargedVal: Boolean = false,
+        sharedPrefs: SharedPreferences? = null
     ) {
+        if (sharedPrefs != null) {
+            prefs = sharedPrefs
+        }
         currentPreset = preset
         oppCountMode = oppCountModeVal
         enable4ChargedMoves = enable4ChargedVal
@@ -25690,7 +12314,7 @@ class OverlayService : LifecycleService() {
         activeUserPokemonName = preset.pokemon.getOrNull(validUserIdx)?.name ?: preset.pokemon.firstOrNull()?.name
     }
 
-    private fun normalizeOcrToken(input: String, oneAsL: Boolean = false, rnAsM: Boolean = false, vAsY: Boolean = false): String {
+    internal fun normalizeOcrToken(input: String, oneAsL: Boolean = false, rnAsM: Boolean = false, vAsY: Boolean = false): String {
         var s = input.lowercase()
             .replace("0", "o")
             .replace("1", if (oneAsL) "l" else "i")
@@ -25705,7 +12329,7 @@ class OverlayService : LifecycleService() {
         return s.replace(Regex("[^a-z]"), "")
     }
 
-    private fun findPokemonInText(rawText: String): PokemonMeta? {
+    internal fun findPokemonInText(rawText: String): PokemonMeta? {
         // Strip CP labels, menu labels ("party", "battle", etc.) and 2+ digit numbers EVEN when concatenated without a space (e.g. "KyuremCP4605" or "Kyurem4605"),
         // while preserving single digits inside words (e.g. "Cl0dsire", "D1alga") for normalizeOcrToken!
         val cleaned = rawText
@@ -25723,7 +12347,7 @@ class OverlayService : LifecycleService() {
         if (tokens.isEmpty()) return null
         val filteredCleaned = tokens.joinToString(" ")
 
-        val allMeta = getAllPokemonMeta()
+        val allMeta = OverlayService.getAllPokemonMeta()
         val sortedByLenDesc = allMeta.sortedByDescending { it.baseSpecies.length }
         val lowerCleaned = filteredCleaned.lowercase()
         val normCleanedVariants = listOf(
@@ -25851,7 +12475,7 @@ class OverlayService : LifecycleService() {
         return bestMatch
     }
 
-    private fun getPokemonMeta(
+    internal fun getPokemonMeta(
         name: String,
         leagueOverride: String? = null,
         isShadowOverride: Boolean? = null
@@ -25871,7 +12495,7 @@ class OverlayService : LifecycleService() {
             cleanNoShadow
         }
 
-        val allMeta = getAllPokemonMeta()
+        val allMeta = OverlayService.getAllPokemonMeta()
         val variants = FormResolver.getVariantsForSpecies(base, activeLeague)
         val isBareSpeciesQuery = cleanNoShadow.equals(base, ignoreCase = true) &&
             !cleanNoShadow.contains("(") &&
@@ -25917,10 +12541,10 @@ class OverlayService : LifecycleService() {
                     )
             }
         }
-        return applyRankingMovesForLeague(applyRecommendedMoves(found), activeLeague, isShadow)
+        return OverlayService.applyRankingMovesForLeague(OverlayService.applyRecommendedMoves(found), activeLeague, isShadow)
     }
 
-    private fun levenshteinDistance(s1: String, s2: String): Int {
+    internal fun levenshteinDistance(s1: String, s2: String): Int {
         val dp = Array(s1.length + 1) { IntArray(s2.length + 1) }
         for (i in 0..s1.length) dp[i][0] = i
         for (j in 0..s2.length) dp[0][j] = j
@@ -25936,7 +12560,7 @@ class OverlayService : LifecycleService() {
     /**
      * PvPoke Type Effectiveness Multiplier (Pokémon GO combat chart: 1.6x SE, 0.625x NVE, 0.390625x Immune)
      */
-    private fun getTypeEffectiveness(moveType: String, defenderTypes: List<String>): Double {
+    internal fun getTypeEffectiveness(moveType: String, defenderTypes: List<String>): Double {
         var multiplier = 1.0
         val atk = moveType.lowercase().trim()
         for (def in defenderTypes.map { it.lowercase().trim() }.filter { it.isNotEmpty() && it != "none" }.distinct()) {
@@ -25969,7 +12593,7 @@ class OverlayService : LifecycleService() {
     /**
      * Standardized <= 5 character PvPoke Move Abbreviations (Fast & Charged Moves)
      */
-    private val moveAbbr5Map = mapOf(
+    internal val moveAbbr5Map = mapOf(
         // Fast Moves
         "Dragon Breath" to "DB",
         "Sand Attack" to "SndAt",
@@ -26157,11 +12781,11 @@ class OverlayService : LifecycleService() {
         "Chilling Water" to "ChW"
     )
 
-    private val fastMovePowerMap get() = fastMovePowerMapStatic
+    internal val fastMovePowerMap get() = fastMovePowerMapStatic
 
-    private val fastMoveTypeMap get() = fastMoveTypeMapStatic
+    internal val fastMoveTypeMap get() = fastMoveTypeMapStatic
 
-    private fun abbrMove5(moveName: String): String {
+    internal fun abbrMove5(moveName: String): String {
         if (moveName.isBlank()) return "Move"
         moveAbbr5Map[moveName]?.let { return it }
         moveAbbr5Map.entries.firstOrNull { it.key.equals(moveName, ignoreCase = true) }?.let { return it.value }
@@ -26174,7 +12798,7 @@ class OverlayService : LifecycleService() {
         return clean.take(5)
     }
 
-    private fun abbrPokemon3(name: String, isShadow: Boolean = false): String {
+    internal fun abbrPokemon3(name: String, isShadow: Boolean = false): String {
         if (name.isBlank() || name == "Waiting...") return "OPP"
         val clean = name
             .replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "")
@@ -26190,7 +12814,7 @@ class OverlayService : LifecycleService() {
         return if (isShadow) "S$clean".take(4) else clean
     }
 
-    private fun calculateFastMoveExactDamagePercent(
+    internal fun calculateFastMoveExactDamagePercent(
         attacker: PokemonMeta,
         defender: PokemonMeta,
         fastMoveName: String,
@@ -26199,8 +12823,8 @@ class OverlayService : LifecycleService() {
         isDefenderShadow: Boolean
     ): Double {
         val key = fastMoveName.lowercase().trim()
-        val power = resolveFastPowerStatic(key, fastTurns)
-        val moveType = resolveFastTypeStatic(key, attacker.types.firstOrNull() ?: "normal")
+        val power = OverlayService.resolveFastPowerStatic(key, fastTurns)
+        val moveType = OverlayService.resolveFastTypeStatic(key, attacker.types.firstOrNull() ?: "normal")
         val stab = if (attacker.types.any { it.equals(moveType, ignoreCase = true) }) 1.2 else 1.0
         val typeEff = getTypeEffectiveness(moveType, defender.types)
 
@@ -26211,7 +12835,7 @@ class OverlayService : LifecycleService() {
         return ((rawDamage / defender.hp.toDouble().coerceAtLeast(1.0)) * 100.0).coerceIn(0.35, 100.0)
     }
 
-    private fun calculateFastMoveDamagePercent(
+    internal fun calculateFastMoveDamagePercent(
         attacker: PokemonMeta,
         defender: PokemonMeta,
         fastMoveName: String,
@@ -26234,14 +12858,14 @@ class OverlayService : LifecycleService() {
      * Damage = floor(0.5 * Power * (EffectiveAtk / EffectiveDef) * STAB * TypeEffectiveness * 1.3) + 1
      * Accounts for STAB (1.2x), Type Effectiveness, and Shadow modifiers (1.2x Atk / 0.8333333x Def).
      */
-    private fun calculateChargedMoveDamagePercent(
+    internal fun calculateChargedMoveDamagePercent(
         attacker: PokemonMeta,
         defender: PokemonMeta,
         moveName: String,
         isAttackerShadow: Boolean,
         isDefenderShadow: Boolean
     ): Int {
-        val moveStats = resolveChargedMoveStatsStatic(moveName, attacker.types.firstOrNull() ?: "normal")
+        val moveStats = OverlayService.resolveChargedMoveStatsStatic(moveName, attacker.types.firstOrNull() ?: "normal")
         val stab = if (attacker.types.any { it.equals(moveStats.type, ignoreCase = true) }) 1.2 else 1.0
         val typeEff = getTypeEffectiveness(moveStats.type, defender.types)
 
@@ -26257,7 +12881,7 @@ class OverlayService : LifecycleService() {
      * BATTLE CALCULATIONS:
      * Calculates turn alignment, opponent incoming damage, and player outgoing damage ("My Dmg to [Opponent]")
      */
-    private fun recalculateAndPushBattleData() {
+    internal fun recalculateAndPushBattleData() {
         val jsonStr = buildBattlePayloadJson(isReplayMode = false)
         Handler(Looper.getMainLooper()).post {
             overlayView?.evaluateJavascript("updateBattleData($jsonStr)", null)
@@ -26453,8 +13077,8 @@ class OverlayService : LifecycleService() {
         val activeBaseKey = FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
         val isActiveOppShadow = manualShadowOverrides[activeBaseKey] ?: (isOpponentShadow || activeOpponentName.contains("Shadow", ignoreCase = true))
         isOpponentShadow = isActiveOppShadow
-        val oppMeta = computeEffectiveCombatStats(getPokemonMeta(activeOpponentName, activeLeague, isActiveOppShadow), activeLeague)
-        val userMeta = computeEffectiveCombatStats(
+        val oppMeta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(activeOpponentName, activeLeague, isActiveOppShadow), activeLeague)
+        val userMeta = OverlayService.computeEffectiveCombatStats(
             getPokemonMeta(activePlayerName, activeLeague, isUserShadow),
             activeLeague,
             activeSlot?.cp,
@@ -26502,15 +13126,15 @@ class OverlayService : LifecycleService() {
         val myMove2Summary = "${abbrMove5(userMove2Name)} ($myMove2Pct%)"
 
         val userFastMoveName = activeSlot?.fastMove?.takeIf { it.isNotBlank() } ?: userMeta.defaultFastMove
-        val userFastTurns = resolveFastTurnsStatic(userFastMoveName, userMeta.fastTurns)
+        val userFastTurns = OverlayService.resolveFastTurnsStatic(userFastMoveName, userMeta.fastTurns)
         val activeOppSlotClamped = activeOpponentSlotIndex.coerceIn(0, 2)
         val activeOppFastOverride = detectedOppFastMoveOverride.getOrNull(activeOppSlotClamped)?.takeIf { it.isNotBlank() }
         val oppFastMoveName = activeOppFastOverride ?: oppMeta.defaultFastMove
-        val oppFastTurns = resolveFastTurnsStatic(oppFastMoveName, oppMeta.fastTurns)
+        val oppFastTurns = OverlayService.resolveFastTurnsStatic(oppFastMoveName, oppMeta.fastTurns)
         val activeOppFastStatus = oppFastMoveStatus.getOrElse(activeOppSlotClamped) { "unconfirmed" }
 
-        val oppFastEnergy = resolveFastEnergyStatic(oppFastMoveName, oppFastTurns)
-        val userFastEnergy = resolveFastEnergyStatic(userFastMoveName, userFastTurns)
+        val oppFastEnergy = OverlayService.resolveFastEnergyStatic(oppFastMoveName, oppFastTurns)
+        val userFastEnergy = OverlayService.resolveFastEnergyStatic(userFastMoveName, userFastTurns)
 
         val oppFastDmgPct = calculateFastMoveDamagePercent(
             attacker = oppMeta,
@@ -26547,7 +13171,7 @@ class OverlayService : LifecycleService() {
         val scannedOpponentsData = displayList.mapIndexed { idx, opp ->
             val rawBaseKey = FormResolver.extractBaseSpecies(opp).lowercase()
             val isThisOppShadow = manualShadowOverrides[rawBaseKey] ?: (if (idx == activeOpponentSlotIndex) isOpponentShadow else opp.contains("Shadow", ignoreCase = true))
-            val meta = computeEffectiveCombatStats(getPokemonMeta(opp, activeLeague, isThisOppShadow), activeLeague)
+            val meta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(opp, activeLeague, isThisOppShadow), activeLeague)
             val oppC1Pct = calculateChargedMoveDamagePercent(
                 attacker = meta,
                 defender = userMeta,
@@ -26619,14 +13243,14 @@ class OverlayService : LifecycleService() {
                 rawThisOppMoveNames
             }
             val cheapestOppMoveEnergy = thisOppMoveNames.map { mName ->
-                val mStats = resolveChargedMoveStatsStatic(mName, meta.types.firstOrNull() ?: "normal")
+                val mStats = OverlayService.resolveChargedMoveStatsStatic(mName, meta.types.firstOrNull() ?: "normal")
                 (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[mName] ?: 50).coerceIn(35, 100)
             }.minOrNull() ?: 45
             val isThisOppMoveReady = thisOppHpPct > 0 && thisOppEnergy >= cheapestOppMoveEnergy
             val thisOppEnergyLabel = if (isThisOppMoveReady) "${thisOppEnergy}E READY" else "${thisOppEnergy}E"
             val slotFastOverride = detectedOppFastMoveOverride.getOrNull(idx)?.takeIf { it.isNotBlank() }
             val slotFastMove = slotFastOverride ?: meta.defaultFastMove
-            val slotFastTurns = resolveFastTurnsStatic(slotFastMove, meta.fastTurns)
+            val slotFastTurns = OverlayService.resolveFastTurnsStatic(slotFastMove, meta.fastTurns)
             val slotFastStatus = oppFastMoveStatus.getOrElse(idx) { "unconfirmed" }
             mapOf(
                 "name" to meta.name,
@@ -26700,13 +13324,13 @@ class OverlayService : LifecycleService() {
 
         // Compute shared 1st-throw maximum turn horizon across all 5 moves (Opponent's 3 + Player's 2)
         val oppFirstTurns = oppChargedMoveNames.map { moveName ->
-            val mStats = resolveChargedMoveStatsStatic(moveName, oppMeta.types.firstOrNull() ?: "normal")
+            val mStats = OverlayService.resolveChargedMoveStatsStatic(moveName, oppMeta.types.firstOrNull() ?: "normal")
             val mEnergy = mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[moveName] ?: 50
             val fasts = kotlin.math.ceil(mEnergy.toDouble() / oppFastEnergy.toDouble()).toInt().coerceAtLeast(1)
             fasts * oppFastTurns
         }
         val myFirstTurns = myChargedMoveNames.map { mName ->
-            val mStats = resolveChargedMoveStatsStatic(mName, userMeta.types.firstOrNull() ?: "normal")
+            val mStats = OverlayService.resolveChargedMoveStatsStatic(mName, userMeta.types.firstOrNull() ?: "normal")
             val mEnergy = mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[mName] ?: 50
             val fasts = kotlin.math.ceil(mEnergy.toDouble() / userFastEnergy.toDouble()).toInt().coerceAtLeast(1)
             fasts * userFastTurns
@@ -26716,7 +13340,7 @@ class OverlayService : LifecycleService() {
         // Precompute opponent ready turns across up to 3 cycles for CMP tie evaluation
         val oppReadyTurnsSet = mutableSetOf<Int>()
         for (moveName in oppChargedMoveNames) {
-            val mStats = resolveChargedMoveStatsStatic(moveName, oppMeta.types.firstOrNull() ?: "normal")
+            val mStats = OverlayService.resolveChargedMoveStatsStatic(moveName, oppMeta.types.firstOrNull() ?: "normal")
             val mEnergy = mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[moveName] ?: 50
             var leftE = 0
             var cumF = 0
@@ -26731,7 +13355,7 @@ class OverlayService : LifecycleService() {
 
         // Build per-move timing, catch/CMP, multi-cycle turn-aligned segments & 3-column team threat rows
         val oppMoveTimingRows = oppChargedMoveNames.map { moveName ->
-            val mStats = resolveChargedMoveStatsStatic(moveName, oppMeta.types.firstOrNull() ?: "normal")
+            val mStats = OverlayService.resolveChargedMoveStatsStatic(moveName, oppMeta.types.firstOrNull() ?: "normal")
             val mEnergy = mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[moveName] ?: 50
             val oppFasts = kotlin.math.ceil(mEnergy.toDouble() / oppFastEnergy.toDouble()).toInt().coerceAtLeast(1)
             val oppReadyTurn = oppFasts * oppFastTurns
@@ -26809,7 +13433,7 @@ class OverlayService : LifecycleService() {
             val teamDamages = teamNames.mapIndexed { tIdx, tName ->
                 val tSlot = teamSlots.getOrNull(tIdx)
                 val isTeamShad = tName.contains("Shadow", ignoreCase = true)
-                val tMeta = computeEffectiveCombatStats(
+                val tMeta = OverlayService.computeEffectiveCombatStats(
                     getPokemonMeta(tName, activeLeague, isTeamShad),
                     activeLeague,
                     tSlot?.cp,
@@ -26868,7 +13492,7 @@ class OverlayService : LifecycleService() {
         val oppFirstReadyTaps = oppMoveTimingRows.mapNotNull { it["myTapAtReady"] as? Int }.toSet()
 
         val myMoveTimingRows = myChargedMoveNames.map { mName ->
-            val mStats = resolveChargedMoveStatsStatic(mName, userMeta.types.firstOrNull() ?: "normal")
+            val mStats = OverlayService.resolveChargedMoveStatsStatic(mName, userMeta.types.firstOrNull() ?: "normal")
             val mEnergy = mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[mName] ?: 50
             val myTapsNeeded = kotlin.math.ceil(mEnergy.toDouble() / userFastEnergy.toDouble()).toInt().coerceAtLeast(1)
             val myReadyTurn = myTapsNeeded * userFastTurns
@@ -26958,7 +13582,7 @@ class OverlayService : LifecycleService() {
                     val oppNameSlot = displayList[slotIdx]
                     val rawBaseKeySlot = FormResolver.extractBaseSpecies(oppNameSlot).lowercase()
                     val isSlotShadow = manualShadowOverrides[rawBaseKeySlot] ?: (if (slotIdx == activeOpponentSlotIndex) isOpponentShadow else oppNameSlot.contains("Shadow", ignoreCase = true))
-                    val oppMetaSlot = computeEffectiveCombatStats(getPokemonMeta(oppNameSlot, activeLeague, isSlotShadow), activeLeague)
+                    val oppMetaSlot = OverlayService.computeEffectiveCombatStats(getPokemonMeta(oppNameSlot, activeLeague, isSlotShadow), activeLeague)
                     val oDmgPct = calculateChargedMoveDamagePercent(
                         attacker = userMeta,
                         defender = oppMetaSlot,
@@ -27025,7 +13649,7 @@ class OverlayService : LifecycleService() {
         fun slotBrAgainst(slotIdx: Int, targetOppName: String, uS: Int, oS: Int): Int {
             val s = teamSlotsList.getOrNull(slotIdx)
             val sName = s?.name ?: teamNames.getOrElse(slotIdx) { "Dialga (Origin)" }
-            val baseBr = getOverlayRealtimeMatchupRatingStatic(
+            val baseBr = OverlayService.getOverlayRealtimeMatchupRatingStatic(
                 myName = sName,
                 oppName = targetOppName,
                 userShields = uS.coerceIn(0, 2),
@@ -27170,9 +13794,9 @@ class OverlayService : LifecycleService() {
             val wUsage = activeShow6UsageWeightPct.coerceIn(0, 100) / 100.0
             knownShow6UnrevealedPool.associateWith { uOpp ->
                 val coreSum = revealedOppAll.sumOf { rev ->
-                    findShow6CommonCoreEntryStatic(activeLeague, rev, uOpp)?.usagePct ?: 0.0
+                    OverlayService.findShow6CommonCoreEntryStatic(activeLeague, rev, uOpp)?.usagePct ?: 0.0
                 }
-                val indivUsage = getShow6UsagePctStatic(activeLeague, uOpp)
+                val indivUsage = OverlayService.getShow6UsagePctStatic(activeLeague, uOpp)
                 1.0 + wUsage * (coreSum * 0.055 + indivUsage * 0.015)
             }
         } else {
@@ -27184,7 +13808,7 @@ class OverlayService : LifecycleService() {
             var bestPct = 0.0
             for (uOpp in knownShow6UnrevealedPool) {
                 for (rev in revealedOppAll) {
-                    val c = findShow6CommonCoreEntryStatic(activeLeague, rev, uOpp)
+                    val c = OverlayService.findShow6CommonCoreEntryStatic(activeLeague, rev, uOpp)
                     if (c != null && c.usagePct > bestPct) {
                         bestPct = c.usagePct
                         bestPartner = uOpp
@@ -27248,12 +13872,12 @@ class OverlayService : LifecycleService() {
 
         // v6.00 Pillar 1: Personalized Blended Backline Prediction (Meta Cores + Learned Season Logs + Same-CP Std League Blend)
         val currentSeasonLogsForAi = if (::prefs.isInitialized) {
-            loadSeasonLogsForLeagueStatic(prefs, gson, activeLeague, isShow6 = isShow6ModeActive)
+            OverlayService.loadSeasonLogsForLeagueStatic(prefs, gson, activeLeague, isShow6 = isShow6ModeActive)
         } else emptyList()
         val sameCpStdLogsForAi = if (::prefs.isInitialized) {
-            loadSameCpStandardSeasonLogsForLimitedCupStatic(prefs, gson, activeLeague, isShow6 = isShow6ModeActive)
+            OverlayService.loadSameCpStandardSeasonLogsForLimitedCupStatic(prefs, gson, activeLeague, isShow6 = isShow6ModeActive)
         } else emptyList()
-        val backlinePred = predictOpponentBacklineStatic(
+        val backlinePred = OverlayService.predictOpponentBacklineStatic(
             league = activeLeague,
             revealedOpponents = displayList,
             myTeamSlots = teamSlotsList.filterNotNull(),
@@ -27299,15 +13923,15 @@ class OverlayService : LifecycleService() {
         val oppFastsToKoMe = if (activeUserHp <= 0) 0 else kotlin.math.ceil(activeUserHp.toDouble() / oppFastExactDmgPct).toInt().coerceAtLeast(1)
 
         // Player's cheapest / highest-priority next charged move
-        val uMove1Cost = (resolveChargedMoveStatsStatic(userMove1Name, userMeta.types.firstOrNull() ?: "normal").energyCost.takeIf { it > 0 } ?: 50).coerceIn(35, 100)
-        val uMove2Cost = (resolveChargedMoveStatsStatic(userMove2Name, userMeta.types.firstOrNull() ?: "normal").energyCost.takeIf { it > 0 } ?: 50).coerceIn(35, 100)
+        val uMove1Cost = (OverlayService.resolveChargedMoveStatsStatic(userMove1Name, userMeta.types.firstOrNull() ?: "normal").energyCost.takeIf { it > 0 } ?: 50).coerceIn(35, 100)
+        val uMove2Cost = (OverlayService.resolveChargedMoveStatsStatic(userMove2Name, userMeta.types.firstOrNull() ?: "normal").energyCost.takeIf { it > 0 } ?: 50).coerceIn(35, 100)
         val (myBestMoveName, myBestMoveCost) = when {
             myMove1Pct >= activeOppHp && activeUserEnergyNow >= uMove1Cost -> userMove1Name to uMove1Cost
             myMove2Pct >= activeOppHp && activeUserEnergyNow >= uMove2Cost -> userMove2Name to uMove2Cost
             uMove1Cost <= uMove2Cost -> userMove1Name to uMove1Cost
             else -> userMove2Name to uMove2Cost
         }
-        val myBestMoveShort = abbrMoveCompactStatic(myBestMoveName)
+        val myBestMoveShort = OverlayService.abbrMoveCompactStatic(myBestMoveName)
         val myFastsNeededForNextMove = if (activeUserEnergyNow >= myBestMoveCost) {
             0
         } else {
@@ -27317,7 +13941,7 @@ class OverlayService : LifecycleService() {
         // Opponent's next threatening charged move & turns until ready
         val oppCheapestMoveRow = oppMoveTimingRows.minByOrNull { (it["energy"] as? Int) ?: 50 }
         val oppNextMoveName = (oppCheapestMoveRow?.get("name") as? String) ?: oppMeta.chargedMove1
-        val oppNextMoveShort = abbrMoveCompactStatic(oppNextMoveName)
+        val oppNextMoveShort = OverlayService.abbrMoveCompactStatic(oppNextMoveName)
         val oppNextMoveCost = ((oppCheapestMoveRow?.get("energy") as? Int) ?: 45).coerceIn(35, 100)
         val oppFastsToNextMove = if (activeOppEnergyNow >= oppNextMoveCost) {
             0
@@ -27354,7 +13978,7 @@ class OverlayService : LifecycleService() {
                     if (catchScore > bestCatchScore) {
                         bestCatchScore = catchScore
                         bestCatchBenchIdx = bIdx
-                        bestCatchBenchCode = abbrPokeCompactStatic(bName)
+                        bestCatchBenchCode = OverlayService.abbrPokeCompactStatic(bName)
                     }
                 }
             }
@@ -27408,10 +14032,10 @@ class OverlayService : LifecycleService() {
             }
             val bestIdx = sortedBench.first()
             val secondIdx = sortedBench.getOrNull(1)
-            val bestCode = abbrPokeCompactStatic(teamNames[bestIdx])
+            val bestCode = OverlayService.abbrPokeCompactStatic(teamNames[bestIdx])
             val bestBr = slotBr(bestIdx, playerShieldsRemaining, oppShieldsRemaining)
             val bestHp = playerSlotHpPct[bestIdx].coerceIn(1, 100)
-            val holdText = if (secondIdx != null) " (HOLD ${abbrPokeCompactStatic(teamNames[secondIdx])})" else ""
+            val holdText = if (secondIdx != null) " (HOLD ${OverlayService.abbrPokeCompactStatic(teamNames[secondIdx])})" else ""
             recAction = "SEND -> $bestCode$holdText"
             recSwapIdx = bestIdx
             recTone = if (bestBr >= activeTierWMin) "stay" else "counter"
@@ -27515,7 +14139,7 @@ class OverlayService : LifecycleService() {
             recPhase = "ENDGAME"
             val bestBenchIdx = aliveBenchIndices.maxByOrNull { slotBr(it, playerShieldsRemaining, oppShieldsRemaining) }
             val bestBenchBr = if (bestBenchIdx != null) slotBr(bestBenchIdx, playerShieldsRemaining, oppShieldsRemaining) else curBr
-            val bestBenchCode = if (bestBenchIdx != null) abbrPokeCompactStatic(teamNames[bestBenchIdx]) else "BACK"
+            val bestBenchCode = if (bestBenchIdx != null) OverlayService.abbrPokeCompactStatic(teamNames[bestBenchIdx]) else "BACK"
             if (canPlayerSwap && bestBenchIdx != null && bestBenchBr >= curBr + 75 && curBr < 475) {
                 recAction = "SWAP -> $bestBenchCode TO CLOSE"
                 recSwapIdx = bestBenchIdx
@@ -27529,7 +14153,7 @@ class OverlayService : LifecycleService() {
         } else if (playerAliveCount == 1 && oppAliveCount >= 2) {
             // 2C. 1v2 ENDGAME AWARENESS
             recPhase = "ENDGAME"
-            val backOppCode = revealedBenchOpponents.firstOrNull()?.let { abbrPokeCompactStatic(it) }
+            val backOppCode = revealedBenchOpponents.firstOrNull()?.let { OverlayService.abbrPokeCompactStatic(it) }
                 ?: backlinePred.candidates.firstOrNull()?.code
                 ?: "BACK"
             recAction = if (playerShieldsRemaining > 0) "1v2 FARM FOR $backOppCode" else "1v2 OVERFARM & NUKE"
@@ -27539,7 +14163,7 @@ class OverlayService : LifecycleService() {
         } else if (isLeadPhase) {
             // Pillar 2: Lead Swap / Stay Advice Conditioned on Backline Hard-Counter Risk
             val pivotIdx = if (1 in aliveBenchIndices) 1 else aliveBenchIndices.firstOrNull()
-            val pivotCode = if (pivotIdx != null) abbrPokeCompactStatic(teamNames[pivotIdx]) else "SWAP"
+            val pivotCode = if (pivotIdx != null) OverlayService.abbrPokeCompactStatic(teamNames[pivotIdx]) else "SWAP"
             val backlineWeakToLead = (1..2).any { bIdx -> slotBr(bIdx, curEqS, curEqS) <= activeTierLMax }
             val highBacklinePunishRisk = backlinePred.swapPunishRiskPct >= 45
 
@@ -27597,7 +14221,7 @@ class OverlayService : LifecycleService() {
             } ?: aliveBenchIndices.first()
             val bestCounterBr = slotBr(bestCounterIdx, playerShieldsRemaining, oppShieldsRemaining)
             val bestCounterHp = playerSlotHpPct[bestCounterIdx].coerceIn(1, 100)
-            val bestCounterCode = abbrPokeCompactStatic(teamNames[bestCounterIdx])
+            val bestCounterCode = OverlayService.abbrPokeCompactStatic(teamNames[bestCounterIdx])
 
             if (!canPlayerSwap && playerSwapRemainingSec > 0) {
                 recAction = "LOCKED (${playerSwapRemainingSec}s) · CHIP"
@@ -27661,7 +14285,7 @@ class OverlayService : LifecycleService() {
                     else {
                         val bHp = if (idx in 0..2 && oppFaintedSlots[idx]) 0 else oppSlotHpPct.getOrElse(idx) { 100 }
                         val bE = if (idx in 0..2 && oppFaintedSlots[idx]) 0 else oppSlotEnergy.getOrElse(idx) { 0 }
-                        val code = abbrPokeCompactStatic(oName)
+                        val code = OverlayService.abbrPokeCompactStatic(oName)
                         if (bHp <= 0) "$code:KO" else "$code:${bHp}%/${bE}E"
                     }
                 }
@@ -27842,7 +14466,7 @@ class OverlayService : LifecycleService() {
         return gson.toJson(battlePayload)
     }
 
-    private fun calculateZeroSneakThrows(userTurns: Int, oppTurns: Int): List<Int> {
+    internal fun calculateZeroSneakThrows(userTurns: Int, oppTurns: Int): List<Int> {
         val list = mutableListOf<Int>()
         for (attack in 1..10) {
             val totalUserTurns = attack * userTurns
@@ -27862,7 +14486,7 @@ class OverlayService : LifecycleService() {
      * - L  = Loss (activeTierSlMax < rating <= activeTierLMax, default 380 < rating <= 470)
      * - SL = Strong Loss (rating <= activeTierSlMax, default <= 380)
      */
-    private fun calculate3v3Matrix(
+    internal fun calculate3v3Matrix(
         oppMeta: PokemonMeta,
         isOppShad: Boolean,
         p1: TeamMember?,
@@ -27889,7 +14513,7 @@ class OverlayService : LifecycleService() {
 
             // v3.42: Do NOT scale visual 3v3 shield matrix dots by remaining HP% (since the static matrix does not know live energy).
             // Remaining HP% continues to guide Pokémon swap/post-faint selections, shield callouts, and KO badges.
-            val rating0s = getOverlayRealtimeMatchupRatingStatic(
+            val rating0s = OverlayService.getOverlayRealtimeMatchupRatingStatic(
                 myName = userName,
                 oppName = oppFullName,
                 userShields = 0,
@@ -27901,7 +14525,7 @@ class OverlayService : LifecycleService() {
                 myCp = slot?.cp,
                 myIvs = slot?.ivs
             )
-            val rating1s = getOverlayRealtimeMatchupRatingStatic(
+            val rating1s = OverlayService.getOverlayRealtimeMatchupRatingStatic(
                 myName = userName,
                 oppName = oppFullName,
                 userShields = 1,
@@ -27913,7 +14537,7 @@ class OverlayService : LifecycleService() {
                 myCp = slot?.cp,
                 myIvs = slot?.ivs
             )
-            val rating2s = getOverlayRealtimeMatchupRatingStatic(
+            val rating2s = OverlayService.getOverlayRealtimeMatchupRatingStatic(
                 myName = userName,
                 oppName = oppFullName,
                 userShields = 2,
@@ -27944,7 +14568,7 @@ class OverlayService : LifecycleService() {
         )
     }
 
-    private fun loadInitialDataIntoOverlay() {
+    internal fun loadInitialDataIntoOverlay() {
         val presets = loadPresets()
         val jsonPresets = gson.toJson(presets)
         Handler(Looper.getMainLooper()).post {
@@ -27954,7 +14578,7 @@ class OverlayService : LifecycleService() {
         if (presetToPrecompute != null) {
             lifecycleScope.launch(Dispatchers.Default) {
                 try {
-                    precomputeActiveTeamTop200MatrixStatic(presetToPrecompute)
+                    OverlayService.precomputeActiveTeamTop200MatrixStatic(presetToPrecompute)
                     Handler(Looper.getMainLooper()).post {
                         recalculateAndPushBattleData()
                     }
@@ -27964,7 +14588,7 @@ class OverlayService : LifecycleService() {
         recalculateAndPushBattleData()
     }
 
-    private fun loadPresets(): List<TeamPreset> {
+    internal fun loadPresets(): List<TeamPreset> {
         if (!::prefs.isInitialized) return emptyList()
         val isShow6 = prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
         if (isShow6) {
@@ -28006,7 +14630,7 @@ class OverlayService : LifecycleService() {
         hasActiveMediaProjection = false
         notifyRunningStateChanged()
         if (::prefs.isInitialized) {
-            triggerAutoUploadOnOverlayStopAsync(prefs, gson)
+            OverlayService.triggerAutoUploadOnOverlayStopAsync(prefs, gson)
         }
         battleLoopJob?.cancel()
 
@@ -28051,354 +14675,7 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    // =========================================================================
-    // v6.07: 1-BATTLE HARDWARE H.264 DVR & FRAME-SYNCED DEEP TRACE ENGINE
-    // =========================================================================
-
-    private fun toggleArmOneBattleDvrFromOverlay() {
-        if (!activeShowOneBattleDvrBtn) {
-            showBattleToast("Enable '1-Battle DVR Button' in App Settings first.")
-            return
-        }
-        val nextArmed = !activeOneBattleDvrArmed
-        activeOneBattleDvrArmed = nextArmed
-        prefs.edit().putBoolean(PREFS_KEY_ARM_ONE_BATTLE_DVR, nextArmed).apply()
-        if (!nextArmed && activeOneBattleDvrRecording) {
-            abortOneBattleDvrAsync(disarm = true)
-            showBattleToast("⏹️ 1-Battle DVR Disarmed & Stopped")
-        } else if (nextArmed) {
-            showBattleToast("🔴 Armed 1-Battle Full-Screen DVR + Deep Trace (Auto-uploads after match)")
-        } else {
-            showBattleToast("⚪ 1-Battle DVR Disarmed")
-        }
-        recalculateAndPushBattleData()
-    }
-
-    private fun recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap, nowMs: Long) {
-        val handler = dvrHandler ?: return
-        if (screen.isRecycled) return
-        val targetW = 544
-        val targetH = (((screen.height.toFloat() / screen.width.toFloat()) * targetW.toFloat()).toInt() / 16 * 16).coerceIn(640, 1440)
-        val scaledBmp = try {
-            Bitmap.createScaledBitmap(screen, targetW, targetH, true)
-        } catch (_: Exception) {
-            null
-        } ?: return
-
-        val uIdx = (currentPreset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) } ?: 0).coerceIn(0, 2)
-        val activeOppBase = FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
-        val oIdx = if (detectedOpponents.isNotEmpty()) {
-            detectedOpponents.indexOfFirst {
-                FormResolver.extractBaseSpecies(it).equals(activeOppBase, ignoreCase = true)
-            }.let { if (it in 0..2) it else 0 }
-        } else 0
-
-        val battleElapsed = if (battleClockAnchorMs > 0L) (nowMs - battleClockAnchorMs).coerceAtLeast(0L) else 0L
-        val pSwapRem = if (playerSwapEndTimeMs > nowMs) ceil((playerSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
-        val oSwapRem = if (oppSwapEndTimeMs > nowMs) ceil((oppSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
-
-        val draftTrace = BattleDeepTraceFrame(
-            frameIdx = 0,
-            timestampMs = nowMs,
-            videoElapsedMs = 0L,
-            battleElapsedMs = battleElapsed,
-            rawUserHpPct = sampledPlayerHpPct,
-            committedUserHpPct = playerSlotHpPct.getOrElse(uIdx) { 100 },
-            userHpRowY = sampledPlayerHpRowY,
-            rawOppHpPct = sampledOppHpPct,
-            committedOppHpPct = oppSlotHpPct.getOrElse(oIdx) { 100 },
-            oppHpRowY = sampledOppHpRowY,
-            leftCircleFillPct = sampledLeftChargeBtnFillPct,
-            rightCircleFillPct = sampledRightChargeBtnFillPct,
-            userEnergy = playerSlotEnergy.getOrElse(uIdx) { 0 },
-            oppEnergy = oppSlotEnergy.getOrElse(oIdx) { 0 },
-            energySource = lastEnergyMutationSource,
-            userShields = playerShieldsRemaining,
-            oppShields = oppShieldsRemaining,
-            userBalls = playerPokeballCount,
-            oppBalls = oppPokeballCount,
-            activeUserIdx = uIdx,
-            activeOppIdx = oIdx,
-            activeUserSpecies = activeUserPokemonName.orEmpty(),
-            activeOppSpecies = activeOpponentName,
-            isCutsceneActive = pendingChargedAttackActor.isNotEmpty() || (sampledLeftChargeBtnFillPct == -1 && sampledRightChargeBtnFillPct == -1),
-            pendingChargeActor = pendingChargedAttackActor,
-            isTopCountdownActive = isTopCountdownCircleActive,
-            playerSwapRemainingSec = pSwapRem,
-            oppSwapRemainingSec = oSwapRem,
-            ocrOppTopText = cachedOcrOppLines.joinToString(" | ") { it.text },
-            ocrUserTopText = cachedOcrPlayerTopLines.joinToString(" | ") { it.text },
-            ocrMidBannerText = cachedOcrMidBannerLines.joinToString(" | ") { it.text },
-            ocrBottomMovesText = cachedOcrPlayerMoveLines.joinToString(" | ") { it.text },
-            recommendedPhase = lastRecommendedPhase,
-            recommendedAction = lastRecommendedAction,
-            recommendedGoal = lastRecommendedGoal
-        )
-
-        handler.post {
-            try {
-                if (!activeOneBattleDvrArmed) {
-                    scaledBmp.recycle()
-                    return@post
-                }
-                if (!activeOneBattleDvrRecording) {
-                    startDvrEncoderLocked(targetW, targetH, nowMs)
-                }
-                if (!activeOneBattleDvrRecording) {
-                    scaledBmp.recycle()
-                    return@post
-                }
-                dvrFrameCount++
-                activeOneBattleDvrFrames = dvrFrameCount
-                val vidElapsed = (nowMs - dvrRecordingStartMs).coerceAtLeast(0L)
-                val finalTrace = draftTrace.copy(
-                    frameIdx = dvrFrameCount,
-                    videoElapsedMs = vidElapsed
-                )
-
-                val surf = dvrInputSurface
-                if (surf != null) {
-                    val canvas = surf.lockCanvas(null)
-                    try {
-                        canvas.drawBitmap(scaledBmp, 0f, 0f, null)
-                        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                            color = Color.argb(210, 9, 13, 22)
-                            style = Paint.Style.FILL
-                        }
-                        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                            color = Color.argb(220, 56, 189, 248)
-                            style = Paint.Style.STROKE
-                            strokeWidth = 1.5f
-                        }
-                        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                            color = Color.WHITE
-                            textSize = 13.5f
-                            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-                        }
-                        val stamp = String.format(
-                            java.util.Locale.US,
-                            "F#%04d T+%05.2fs U:%d%%(%d%%)/%dE O:%d%%(%d%%)/%dE",
-                            finalTrace.frameIdx,
-                            finalTrace.battleElapsedMs / 1000.0,
-                            finalTrace.committedUserHpPct,
-                            finalTrace.rawUserHpPct,
-                            finalTrace.userEnergy,
-                            finalTrace.committedOppHpPct,
-                            finalTrace.rawOppHpPct,
-                            finalTrace.oppEnergy
-                        )
-                        val bannerRect = RectF(6f, 4f, targetW - 6f, 26f)
-                        canvas.drawRoundRect(bannerRect, 5f, 5f, bgPaint)
-                        canvas.drawRoundRect(bannerRect, 5f, 5f, borderPaint)
-                        canvas.drawText(stamp, 12f, 19.5f, textPaint)
-                    } finally {
-                        surf.unlockCanvasAndPost(canvas)
-                    }
-                    drainDvrEncoderLocked(endOfStream = false)
-                }
-                dvrTraceWriter?.write(gson.toJson(finalTrace) + "\n")
-                if (dvrFrameCount % 10 == 0) {
-                    dvrTraceWriter?.flush()
-                }
-            } catch (_: Exception) {
-            } finally {
-                if (!scaledBmp.isRecycled) {
-                    scaledBmp.recycle()
-                }
-            }
-        }
-    }
-
-    private fun startDvrEncoderLocked(width: Int, height: Int, startMs: Long) {
-        releaseDvrResourcesLocked(deleteFiles = true)
-        try {
-            dvrVideoWidth = width
-            dvrVideoHeight = height
-            val mp4 = File(cacheDir, "dvr_live_battle.mp4")
-            val trace = File(cacheDir, "dvr_live_deep_trace.jsonl")
-            if (mp4.exists()) mp4.delete()
-            if (trace.exists()) trace.delete()
-            dvrMp4File = mp4
-            dvrTraceFile = trace
-            dvrTraceWriter = trace.bufferedWriter(Charsets.UTF_8)
-
-            val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
-                setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                setInteger(MediaFormat.KEY_BIT_RATE, 700_000)
-                setInteger(MediaFormat.KEY_FRAME_RATE, 10)
-                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
-            }
-            val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-            codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-            val surface = codec.createInputSurface()
-            codec.start()
-
-            val muxer = MediaMuxer(mp4.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-            dvrMediaCodec = codec
-            dvrInputSurface = surface
-            dvrMediaMuxer = muxer
-            dvrVideoTrackIndex = -1
-            dvrMuxerStarted = false
-            dvrRecordingStartMs = startMs
-            dvrFrameCount = 0
-            activeOneBattleDvrFrames = 0
-            activeOneBattleDvrRecording = true
-        } catch (_: Exception) {
-            releaseDvrResourcesLocked(deleteFiles = true)
-        }
-    }
-
-    private fun drainDvrEncoderLocked(endOfStream: Boolean) {
-        val codec = dvrMediaCodec ?: return
-        val muxer = dvrMediaMuxer ?: return
-        try {
-            if (endOfStream) {
-                try {
-                    codec.signalEndOfInputStream()
-                } catch (_: Exception) {}
-            }
-            val bufferInfo = MediaCodec.BufferInfo()
-            var loops = 0
-            while (loops < 60) {
-                loops++
-                val outIndex = codec.dequeueOutputBuffer(bufferInfo, if (endOfStream) 10_000L else 0L)
-                if (outIndex == MediaCodec.INFO_TRY_AGAIN_LATER) {
-                    if (!endOfStream) break
-                } else if (outIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                    if (!dvrMuxerStarted) {
-                        dvrVideoTrackIndex = muxer.addTrack(codec.outputFormat)
-                        muxer.start()
-                        dvrMuxerStarted = true
-                    }
-                } else if (outIndex >= 0) {
-                    val encodedData = codec.getOutputBuffer(outIndex)
-                    if (encodedData != null) {
-                        if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
-                            bufferInfo.size = 0
-                        }
-                        if (bufferInfo.size != 0 && dvrMuxerStarted && dvrVideoTrackIndex >= 0) {
-                            encodedData.position(bufferInfo.offset)
-                            encodedData.limit(bufferInfo.offset + bufferInfo.size)
-                            muxer.writeSampleData(dvrVideoTrackIndex, encodedData, bufferInfo)
-                        }
-                    }
-                    codec.releaseOutputBuffer(outIndex, false)
-                    if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                        break
-                    }
-                }
-            }
-        } catch (_: Exception) {}
-    }
-
-    private fun releaseDvrResourcesLocked(deleteFiles: Boolean) {
-        activeOneBattleDvrRecording = false
-        activeOneBattleDvrFrames = 0
-        try {
-            dvrTraceWriter?.flush()
-            dvrTraceWriter?.close()
-        } catch (_: Exception) {}
-        dvrTraceWriter = null
-
-        try {
-            dvrInputSurface?.release()
-        } catch (_: Exception) {}
-        dvrInputSurface = null
-
-        try {
-            dvrMediaCodec?.stop()
-        } catch (_: Exception) {}
-        try {
-            dvrMediaCodec?.release()
-        } catch (_: Exception) {}
-        dvrMediaCodec = null
-
-        try {
-            if (dvrMuxerStarted) {
-                dvrMediaMuxer?.stop()
-            }
-        } catch (_: Exception) {}
-        try {
-            dvrMediaMuxer?.release()
-        } catch (_: Exception) {}
-        dvrMediaMuxer = null
-        dvrVideoTrackIndex = -1
-        dvrMuxerStarted = false
-
-        if (deleteFiles) {
-            try { dvrMp4File?.delete() } catch (_: Exception) {}
-            try { dvrTraceFile?.delete() } catch (_: Exception) {}
-            dvrMp4File = null
-            dvrTraceFile = null
-        }
-    }
-
-    private fun abortOneBattleDvrAsync(disarm: Boolean) {
-        if (disarm) {
-            activeOneBattleDvrArmed = false
-            if (::prefs.isInitialized) {
-                prefs.edit().putBoolean(PREFS_KEY_ARM_ONE_BATTLE_DVR, false).apply()
-            }
-        }
-        dvrHandler?.post {
-            releaseDvrResourcesLocked(deleteFiles = true)
-        }
-    }
-
-    private fun finalizeAndUploadOneBattleDvrAsync(
-        battleId: String,
-        summaryRecord: AiTelemetryBattleRecordV510
-    ) {
-        activeOneBattleDvrArmed = false
-        if (::prefs.isInitialized) {
-            prefs.edit().putBoolean(PREFS_KEY_ARM_ONE_BATTLE_DVR, false).apply()
-        }
-        val handler = dvrHandler ?: return
-        handler.post {
-            try {
-                drainDvrEncoderLocked(endOfStream = true)
-            } catch (_: Exception) {}
-            val rawMp4 = dvrMp4File
-            val rawTrace = dvrTraceFile
-            releaseDvrResourcesLocked(deleteFiles = false)
-            if (rawMp4 == null && rawTrace == null) return@post
-
-            val cleanId = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
-            val finalMp4 = File(cacheDir, "${cleanId}_video.mp4")
-            val finalTrace = File(cacheDir, "${cleanId}_deep_trace.jsonl")
-            try {
-                if (rawMp4 != null && rawMp4.exists()) rawMp4.renameTo(finalMp4)
-                if (rawTrace != null && rawTrace.exists()) rawTrace.renameTo(finalTrace)
-            } catch (_: Exception) {}
-
-            Handler(Looper.getMainLooper()).post {
-                recalculateAndPushBattleData()
-                showBattleToast("🎥 Uploading 1-Battle Video & Deep Log to GitHub...")
-            }
-
-            lifecycleScope.launch(Dispatchers.IO) {
-                val (dvrOk, dvrMsg) = uploadBattleDvrBundleToGitHubBlocking(
-                    prefs = prefs,
-                    gson = gson,
-                    battleId = battleId,
-                    summaryRecord = summaryRecord,
-                    mp4File = finalMp4,
-                    traceFile = finalTrace
-                )
-                try {
-                    uploadPendingAiTelemetryBatchBlocking(
-                        prefs = prefs,
-                        gson = gson,
-                        forceUpload = true,
-                        minBattlesRequired = 1
-                    )
-                } catch (_: Exception) {}
-                withContext(Dispatchers.Main) {
-                    showBattleToast(dvrMsg, if (dvrOk) Toast.LENGTH_LONG else Toast.LENGTH_SHORT)
-                }
-            }
-        }
-    }
+    internal val isPrefsInitialized: Boolean get() = ::prefs.isInitialized
 
     override fun onBind(intent: Intent): IBinder? {
         super.onBind(intent)
@@ -28433,7 +14710,7 @@ class OverlayService : LifecycleService() {
                 prefs.edit().putString(selKey, presetId).apply()
                 lifecycleScope.launch(Dispatchers.Default) {
                     try {
-                        precomputeActiveTeamTop200MatrixStatic(chosen)
+                        OverlayService.precomputeActiveTeamTop200MatrixStatic(chosen)
                         Handler(Looper.getMainLooper()).post {
                             recalculateAndPushBattleData()
                         }
@@ -28566,7 +14843,7 @@ class OverlayService : LifecycleService() {
         fun stopOverlayAndOpenBattleLog() {
             Handler(Looper.getMainLooper()).post {
                 if (::prefs.isInitialized) {
-                    triggerAutoUploadOnOverlayStopAsync(prefs, gson)
+                    OverlayService.triggerAutoUploadOnOverlayStopAsync(prefs, gson)
                 }
                 try {
                     val launchIntent = Intent(this@OverlayService, MainActivity::class.java).apply {

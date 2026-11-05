@@ -23,7 +23,7 @@ on:
           - both
 
       workflow_version:
-        description: 'Optional release version override (e.g. v1.01)'
+        description: 'Optional release version override (e.g. v6.10)'
         required: false
         default: ''
         type: string
@@ -53,13 +53,33 @@ jobs:
           elif [ -f VERSION ]; then
             RAW_VER=$(cat VERSION | tr -d '[:space:]')
           else
-            RAW_VER="v1.00"
+            RAW_VER="v6.10"
           fi
           CLEAN_NUM="${RAW_VER#v}"
           TAG_NAME="v${CLEAN_NUM}"
           echo "tag=${TAG_NAME}" >> $GITHUB_OUTPUT
           echo "version_num=${CLEAN_NUM}" >> $GITHUB_OUTPUT
           echo "Resolved release version: ${TAG_NAME}"
+
+      - name: Extract Release Notes from CHANGELOG.md
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          NOTES=$(awk "/^## ${TAG} /{flag=1} flag{if(/^---$/){exit} print}" CHANGELOG.md)
+          if [ -z "$NOTES" ]; then
+            NOTES=$(awk '/^## v[0-9]/{if(found) exit; found=1} found{if(/^---$/){exit} print}' CHANGELOG.md)
+          fi
+          {
+            if [ -n "$NOTES" ]; then
+              echo "$NOTES"
+            else
+              echo "## SilphScope PvP ${TAG} — Official Release"
+            fi
+            echo ""
+            echo "### Live Web Simulator & Download"
+            echo "- **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)"
+            echo "- **Full Release History**: [CHANGELOG.md](https://github.com/sportsfan986/silphscope-pvp/blob/main/CHANGELOG.md)"
+            echo "- **Android APK**: Download **\`silphscope-pvp-${TAG}.apk\`** from the **Assets** section below and install on your Android device."
+          } > release_notes.md
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -129,27 +149,7 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "SilphScope PvP ${{ steps.version.outputs.tag }}"
-          body: |
-            ## SilphScope PvP ${{ steps.version.outputs.tag }} — Official Release (Cutscene & Stall Energy Fixes, Post-Cutscene HP Drain & KO Sync, Multi-User Telemetry Relay)
-
-            ### Key Features & Fixes in `${{ steps.version.outputs.tag }}`
-            - **Zero Free Opponent Energy Going Into & Out of Charged Move Cutscenes**:
-              - Strictly gates fast-move energy accumulation on visible Charge Move Circles once combat has started and immediately rolls back unconfirmed proactive steps or sub-turn interpolations when circles disappear into a cutscene.
-              - Removes pre-cutscene turn padding (`userFastTurns - 1`) before opponent and user charged moves and locks post-cutscene residual energy after circle resync (`1200ms` post-throw lockout).
-            - **500ms Sub-Turn Interpolation Below 100E with Strict Stall Rollback & `>= 100E` Stall Clock**:
-              - Allows responsive `500ms` sub-turn opponent energy interpolation below `100E` during active fast moves while immediately rolling back `phasePlayerTurns`, `phaseOppTurns`, and `oppSlotEnergy` on any stall (`> userMoveDurationMs + 250ms`) or HUD disappearance.
-              - Restricts continuous stall clock advancement strictly to when your active Pokémon is at or above `100` energy with combat circles visible.
-            - **Telemetry Anomaly Fixes (from First 18 Cached Battles)**:
-              - **BANNER_OCR Move Lock**: Prevents post-throw circle residual scoring from overwriting a charged move already identified by `BANNER_OCR` and validates OCR move names against the active species' legal moveset.
-              - **Post-Cutscene HP Drain Settle & KO Faint Sync**: Resets HP debounce counters during cutscenes so post-move HP is only sampled after the health bar drain animation settles, and retroactively syncs `hpAfterPct = 0` when a `FAINT` occurs immediately after an unshielded charged attack.
-              - **Pre-Throw Circle Snapshot Freeze**: Uses a 2-frame stable circle fill peak (`max(lastStable, prevStable)`) so tap zoom-in drain frames cannot corrupt `100E` pre-throw snapshots.
-            - **Multi-User Telemetry Relay to `ai-telemetry-logs`**:
-              - Automatically routes telemetry batches from all users directly to the `ai-telemetry-logs` branch (`batches/<YYYY-MM-DD>/<batchId>.jsonl` and `users/<username>/<batchId>.jsonl`).
-
-            ### Live Web Simulator & Download
-            - **Live Web Simulator**: [https://sportsfan986.github.io/silphscope-pvp/](https://sportsfan986.github.io/silphscope-pvp/)
-            - **Full Release History**: [CHANGELOG.md](https://github.com/sportsfan986/silphscope-pvp/blob/main/CHANGELOG.md)
-            - **Android APK**: Download **`silphscope-pvp-${{ steps.version.outputs.tag }}.apk`** from the **Assets** section below and install on your Android device.
+          body_path: release_notes.md
           files: |
             app/build/outputs/apk/release/named/silphscope-pvp-${{ steps.version.outputs.tag }}.apk
           draft: false
@@ -170,5 +170,3 @@ jobs:
             echo "Ensuring release asset is attached to $TAG via gh CLI..."
             gh release upload "$TAG" "$APK_FILE" --clobber || echo "Asset already up to date"
           fi
-
-

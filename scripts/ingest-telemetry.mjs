@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * SilphScope PvP v5.12 — Incremental Multi-User AI Telemetry & Anomaly Ingestion Script
+ * SilphScope PvP v6.11 — Incremental Multi-User AI Telemetry & Anomaly Ingestion Script
  *
  * Fetches new telemetry batches across ALL users from:
  * 1) Dedicated `ai-telemetry-logs` branch on `sportsfan986/silphscope-pvp` (`manifest.json`, `batches/...`, and `users/...`)
@@ -8,8 +8,8 @@
  * 3) `sync-vault` branch fallback (`ai_telemetry/manifest.json`)
  * 4) Public Gist Telemetry Vaults (`silphscope_pvp_ai_telemetry_manifest.json`)
  *
- * Caches all downloaded batches in `.aistudio/telemetry_cache/ingested_batches.json`
- * so repeated invocations never re-download or re-parse already-cached battles.
+ * Caches all downloaded batches locally so repeated invocations never re-download
+ * or re-parse already-cached battles.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -37,7 +37,7 @@ function saveCacheState(state) {
 async function fetchJson(url) {
   try {
     const res = await fetch(url, {
-      headers: { "Accept": "application/vnd.github+json", "User-Agent": "SilphScopePvP-AIStudio-Ingest/5.12" }
+      headers: { "Accept": "application/vnd.github+json", "User-Agent": "SilphScopePvP-Ingest/6.11" }
     });
     if (!res.ok) return null;
     return await res.json();
@@ -49,7 +49,7 @@ async function fetchJson(url) {
 async function fetchText(url) {
   try {
     const res = await fetch(url, {
-      headers: { "User-Agent": "SilphScopePvP-AIStudio-Ingest/5.12" }
+      headers: { "User-Agent": "SilphScopePvP-Ingest/6.11" }
     });
     if (!res.ok) return null;
     return await res.text();
@@ -85,7 +85,7 @@ async function main() {
         }
         state.ingestedBatchIds[b.batchId] = {
           source: "ai-telemetry-logs",
-          uploadedBy: b.uploadedBy || "unknown",
+          uploadedBy: b.uploader || b.uploadedBy || "unknown",
           ingestedAt: new Date().toISOString(),
           battleCount: lines.length
         };
@@ -192,8 +192,12 @@ async function main() {
     (r.anomalies || []).map((a) => ({
       battleId: r.battleId,
       league: r.league,
+      teamName: r.teamName,
+      result: r.result,
       userPokemon: r.userPokemon,
       opponentsSeenOrder: r.opponentsSeenOrder,
+      userTeamSpecs: r.userTeamSpecs,
+      oppTeamSpecs: r.oppTeamSpecs,
       ...a
     }))
   );

@@ -2,7 +2,7 @@
 
 > **Target Audience**: Antigravity agents, Claude/Gemini coding assistants, and core developers maintaining or extending **SilphScope PvP**.  
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v6.10` (`versionCode = 1610`)  
+> **Current Version**: `v6.11` (`versionCode = 1611`)  
 > **Primary Branches**: `main` (source code & releases), `ai-telemetry-logs` (isolated telemetry, DVR recordings & anomaly traces).
 
 ---
@@ -172,86 +172,63 @@ The HUD displays a compact, high-contrast 2-line tactical recommendation banner 
   4. Allow option to enable/disable each vibration and tune thresholds.
   5. Lead-Loss Recovery Rate (Safe-Swap Efficiency) display.
   6. Review telemetry logs for critical issues.
-- **Clarification Round 1**:
-  - *Q1 (Vibration Pattern)*: Distinct short pulses (80ms single, 80ms double) vs continuous? $\to$ **User selected: Distinct short pulses (80ms single, 80ms double)**.
-  - *Q2 (Configuration Location)*: Dedicated Haptics section in Settings with sliders vs in-overlay menu? $\to$ **User selected: Dedicated Haptics section in Settings with threshold sliders**.
-  - *Q3 (Display Placement)*: Summary banner in Battle Log vs separate tab? $\to$ **User selected: Summary banner showing Lead Won, Lead Lost, and Safe-Swap MVP**.
 - **Implementation (v6.06)**: Shipped synchronized vibration triggers, threshold sliders in `activity_main.xml` and `MainActivity.kt`, and the Lead-Loss summary banner in `MainActivity.kt` and `src/App.tsx`.
 
-### Turn 4 — Deep Diagnostics & 1-Battle Video Recording Request
-- **User Request**:
-  1. Is there additional logging to better analyze energy and HP for future updates?
-  2. Would an option to record video of the battle used for OCR and pixel analysis (1 battle at a time, with detailed overlay logs) be too CPU-intensive, or can it be done with zero impact?
-- **Analysis & Feasibility**:
-  - Confirmed hardware H.264 encoding (`MediaCodec` `video/avc`) offloads compression to the hardware video encoder DSP.
-  - By reusing the in-memory bitmap from `captureCleanScreenBitmap()` on a background thread (`GBLBattleDvrThread`), there are **zero additional screen captures**, no extra virtual displays (abiding by Android 14+ rules), and $< 0.5\%$ CPU overhead.
-  - Proposed full-screen clean video with burned-in frame/timestamp header and companion `_deep_trace.jsonl`.
-- **Clarification Round 2**:
-  - *Q1 (Video Format)*: Clean video with burned-in timestamp header or raw video? $\to$ **User selected: Clean video + burned-in timestamp to correlate with logs**.
-  - *Q2 (Arming UX)*: Automatic on all battles vs armed only when setting is enabled in app? $\to$ **User selected: Only when setting is enabled in app, arming 1 battle at a time**.
-  - *Q3 (Upload Pipeline)*: Save to gallery vs auto-upload to GitHub? $\to$ **User selected: Auto-upload directly to GitHub telemetry repo immediately after battle**.
-
-### Turn 5 — Implementation Plan & Delivery (v6.07)
-- **Implementation Plan Approved**: Created and executed implementation plan for `v6.07`.
-- **Delivered Changes**:
+### Turn 4 & 5 — Deep Diagnostics & 1-Battle Video Recording (v6.07)
+- **User Request**: Add enhanced energy/HP logging and zero-impact 1-battle full-screen DVR with burned-in timestamps auto-uploaded to GitHub.
+- **Delivered Changes (v6.07)**:
   - `OverlayService.kt`: Added `PostCutsceneHpAuditRecord`, `EnergyLedgerEntry`, `BattleDeepTraceFrame`, `startDvrEncoderLocked`, `recordOneBattleDvrFrameAndTraceAsync`, `finalizeAndUploadOneBattleDvrAsync`, and `uploadBattleDvrBundleToGitHubBlocking`.
-  - `overlay.html`: Added `.hud-btn.btn-dvr` styles, `#btn-dvr-rec-one` toolbar button, `toggleArmOneBattleDvr()` bridge function, and live frame count status badge (`REC F#...`).
-  - `activity_main.xml` & `MainActivity.kt`: Added `btn_toggle_show_one_battle_dvr`, `btn_arm_one_battle_dvr_now`, and `text_one_battle_dvr_status` with live status updates.
-  - `app/build.gradle.kts` & `app_build.gradle.kts`: Bumped `versionCode = 1607`, `versionName = "6.07"`.
-  - `src/App.tsx`: Added Card 3B for 1-Battle DVR and Energy/HP diagnostic telemetry preview in Settings.
-  - **CI Verification**: GitHub Actions run `41898378954` succeeded cleanly, publishing `silphscope-pvp-v6.07.apk`.
-
----
+  - `overlay.html`, `activity_main.xml`, `MainActivity.kt`, `src/App.tsx`: Added 1-Battle DVR controls and status indicators.
 
 ### Turn 6 — Platform Migration to Antigravity & Parity Release (v6.10)
-- **User Request**:
-  1. Rev version numbers to `6.10`.
-  2. Add release notes/changelog communicating moving project development environment from Google AI Studio to Google Antigravity.
-  3. Maintain zero intentional changes from `v6.07`.
-  4. Perform release build locally first, resolve any build issues, and push to GitHub to trigger CI after verification.
-  5. Ensure version string is properly updated everywhere it appears.
 - **Toolchain Setup & Verification**:
   - Configured local Eclipse Temurin JDK 17 (`17.0.21+9`) and Android SDK 35 (`build-tools;35.0.0`, `platforms;android-35`, `platform-tools`).
-  - Set persistent user environment variables `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, and updated user `Path`.
-  - Generated `local.properties` and protected `.gradle/` and `local.properties` in `.gitignore`.
-  - Verified with `apksigner` that the local keystore (`app/release.keystore`) signing certificate SHA-256 (`42:A3:7F:A2:...`) and SHA-1 (`59:5E:4E:A3:...`) match the official GitHub release build 100% bit-for-bit.
-- **Delivered Changes (v6.10)**:
-  - `VERSION`: Updated to `v6.10`.
-  - `app/build.gradle.kts` & `app_build.gradle.kts`: Bumped `versionCode = 1610`, `versionName = "6.10"`.
-  - `MainActivity.kt` & `app/.../MainActivity.kt`: Updated version fallback to `"6.10"`.
-  - `OverlayService.kt` & `app/.../OverlayService.kt`: Updated telemetry record `schemaVersion = "6.10"`, `appVersion = "6.10"`, and DVR telemetry commit headers.
-  - `package.json`: Updated `"version": "6.10.0"`.
-  - `src/App.tsx`: Updated footer version string to `v6.10`.
-  - `README.md`: Updated title tag to `(v6.10)`.
-  - `CHANGELOG.md`: Added `v6.10` release notes detailing the AI Studio to Antigravity migration.
-  - `ANTIGRAVITY.md`: Logged Turn 6 decisions and bumped current version to `v6.10` (`1610`).
+  - Verified with `apksigner` that the local keystore (`app/release.keystore`) signing certificate matches the official GitHub release build 100% bit-for-bit.
+  - Bumped version to `v6.10` (`versionCode = 1610`).
+
+### Turn 7 — Full Codebase Audit & Phases 1–4 De-Fragmentation & Modularization (v6.11)
+- **User Request**: Audit entire codebase for fragmentation or major issues due to being created in AI Studio, present an action plan, and execute all 4 phases.
+- **Delivered Changes**:
+  - **Phase 1 (Retired Root Mirror Duplicates & Web Bundle Bloat)**: Removed 14 duplicate/stale/orphan items (root-level `MainActivity.kt`, `OverlayService.kt`, `activity_main.xml`, `MainActivity.xml`, `AndroidManifest.xml`, `app_build.gradle.kts`, `overlay.html`, `res/`, `public/overlay.html`, `public/GBL_Overlay_Source.zip`, `src/data/androidFiles.ts`, `metadata.json`, `.env.example`, `bun.lock`). Removed the legacy AI Studio `Kotlin & Android Code` tab (`android_code`) and dead `turn_matrix` tab from `src/App.tsx`, reducing the client-side JS bundle from ~4 MB down to 1.15 MB (281 kB gzip).
+  - **Phase 2 (Single Source of Truth, Telemetry Bug Fix & CI Tooling)**: Added `OverlayService.APP_VERSION = "6.10"` as the single source of truth (fixing `uploadPendingAiTelemetryBatchBlocking` overwriting records with `"5.13"`/`"6.06"`), passed `SharedPreferences` into `configureReplayState` for Replay Mode parity, added `app/proguard-rules.pro`, fixed `scripts/bump_version.sh` (`versionCode = 1000 + MAJOR * 100 + MINOR`), consolidated `scripts/ingest-telemetry.mjs`, and updated `.github/workflows/android.yml` to dynamically extract release notes from `CHANGELOG.md`.
+  - **Phase 3 (Android Kotlin Modularization inside `com.gbl.overlay`)**: Reduced `OverlayService.kt` by 47.9% (`28,677` → `14,948` lines) and `MainActivity.kt` (`12,487` → `12,085` lines) by extracting 8 cohesive domain files in `app/src/main/java/com/gbl/overlay/`:
+    - `AppModels.kt` (`PokemonSlot`, `TeamPreset`, `BattleLogEntry`, `GblSeasonInfo`, `AppThemePalette`)
+    - `TaskerIntegration.kt` (`TaskerOverlayActivity`, `TaskerBroadcastReceiver`)
+    - `PokemonDatabase.kt` (`PokemonStaticData`, static/dynamic species & move databases, Gamemaster & rankings JSON parsers, and 1v1/2v2 turn-by-turn combat simulator)
+    - `GitHubCloudSync.kt` (GitHub OAuth Device Flow, Gist/Repo Cloud Delta Sync, and AI Telemetry & 1-Battle DVR Auto-Upload Engine)
+    - `TeamAndMetaEngine.kt` (Precomputed Top-200 9x9 matrix, BMF/WAE Battle Quality engine, Blended Season Meta, Backline Predictor, Role/Moveset upgraders & Anti-Meta Team Builder)
+    - `Show6Engine.kt` (`Show6StaticData`, Show 6 Pick 3 120x120 minimax optimizer, PvPoke Limited Meta sync, Google Sheets sync & roster upgraders)
+    - `PixelScannerEngine.kt` (10Hz real-time pixel/CV scanners for Pokéballs, Shields, Charge Circles, Prescan Calibration & Floating HP Bars)
+    - `BattleDvrEngine.kt` (1-Battle hardware H.264 `MediaCodec` + `MediaMuxer` DVR & frame-synced `_deep_trace.jsonl` engine)
+  - **Phase 4 (Web React/TypeScript Modularization)**:
+    - Split `src/data/gblData.ts` (`16,285` lines) into 4 domain modules (`src/data/pokemonDb.ts`, `src/data/combatSimulator.ts`, `src/data/teamAndMetaEngine.ts`, `src/data/show6Engine.ts`) with `src/data/gblData.ts` preserved as a barrel re-export.
+    - Extracted 6 UI/model modules from `src/App.tsx` (`18,428` → `15,807` lines) into `src/components/`: `AppThemeAndModels.tsx`, `MetaTab.tsx`, `HelpTab.tsx`, `MathValidatorTab.tsx`, `TrashBinModals.tsx`, and `DocumentationModals.tsx`.
+
+---
 
 ## 5. Antigravity Agent Operational Runbook
 
 When working on this repository inside Antigravity:
 
-### 5.1. Always Enforce the Mirror File Invariant
-Whenever modifying core Android logic, layout, or HUD assets, you **must synchronize both root and submodule copies**:
-```bash
-cp OverlayService.kt app/src/main/java/com/gbl/overlay/OverlayService.kt && \
-cp MainActivity.kt app/src/main/java/com/gbl/overlay/MainActivity.kt && \
-cp activity_main.xml app/src/main/res/layout/activity_main.xml && \
-cp overlay.html app/src/main/assets/overlay.html && \
-cp overlay.html public/overlay.html && \
-cp app_build.gradle.kts app/build.gradle.kts
-```
+### 5.1. Single Source of Truth Paths
+- **Android Application (`app/src/main/java/com/gbl/overlay/`)**:
+  - `MainActivity.kt`, `OverlayService.kt`, `AppModels.kt`, `TaskerIntegration.kt`, `PokemonDatabase.kt`, `GitHubCloudSync.kt`, `TeamAndMetaEngine.kt`, `Show6Engine.kt`, `PixelScannerEngine.kt`, `BattleDvrEngine.kt`.
+  - Resources & HUD: `app/src/main/res/`, `app/src/main/assets/overlay.html`, and `app/build.gradle.kts`. Do **not** create duplicate mirror copies in the repository root.
+- **Web Simulator (`src/`)**:
+  - Entry & Core UI: `src/App.tsx`, `src/components/AppThemeAndModels.tsx`, `src/components/MetaTab.tsx`, `src/components/HelpTab.tsx`, `src/components/MathValidatorTab.tsx`, `src/components/TrashBinModals.tsx`, `src/components/DocumentationModals.tsx`.
+  - Data & Math Engine: `src/data/gblData.ts` (barrel), `src/data/pokemonDb.ts`, `src/data/combatSimulator.ts`, `src/data/teamAndMetaEngine.ts`, `src/data/show6Engine.ts`, `src/data/battleQuality.ts`.
 
 ### 5.2. Local Verification Commands
-1. **Web Build Verification**:
+1. **Web TypeScript & Bundle Verification**:
    ```bash
+   npm run lint
    npm run build
    ```
-2. **Android APK Compilation (if Android SDK installed)**:
+2. **Android APK Compilation**:
    ```bash
    ./gradlew assembleRelease
    ```
 3. **Checking Telemetry Branch**:
-   To inspect live telemetry batches or DVR uploads from actual user battles:
    ```bash
    git fetch origin ai-telemetry-logs:ai-telemetry-logs
    git log origin/ai-telemetry-logs -n 10
@@ -259,13 +236,12 @@ cp app_build.gradle.kts app/build.gradle.kts
 
 ### 5.3. Version Bumping Checklist
 When publishing a new release:
-1. `app/build.gradle.kts` and `app_build.gradle.kts`: Increment `versionCode` (e.g., `1607` $\to$ `1608`) and update `versionName` (e.g., `"6.07"` $\to$ `"6.08"`).
-2. `VERSION`: Update version string.
-3. `README.md`, `CHANGELOG.md`, and `src/App.tsx`: Update version references.
-4. Push to `main` branch to trigger `.github/workflows/android.yml`.
+1. Run `./scripts/bump_version.sh vX.XX` to update `VERSION`, `app/build.gradle.kts`, `OverlayService.APP_VERSION`, `package.json`, `src/App.tsx`, `README.md`, and `ANTIGRAVITY.md`.
+2. Add the new version entry at the top of `CHANGELOG.md`.
+3. Push to `main` branch to trigger `.github/workflows/android.yml` and `.github/workflows/deploy-pages.yml`.
 
 ### 5.4. Common Pitfalls & Guardrails
 - **DO NOT** attempt to create a second `VirtualDisplay` from `MediaProjection`.
 - **DO NOT** commit GitHub Personal Access Tokens or API keys into any file.
 - **DO NOT** block the main UI thread in `OverlayService.kt`. All image compression, OCR, and disk/network operations must run on `dvrThread`, `ocrExecutor`, or coroutine scopes.
-- **DO NOT** remove or alter the `#btn-minimize-sword` hold-to-exit handler in `overlay.html`, as players rely on it to safely exit the overlay without switching apps.
+- **DO NOT** remove or alter the `#btn-minimize-sword` hold-to-exit handler in `app/src/main/assets/overlay.html`, as players rely on it to safely exit the overlay without switching apps.

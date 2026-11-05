@@ -1,4 +1,4 @@
-# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v6.10)
+# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v6.11)
 
 [![Live Web Simulator](https://img.shields.io/badge/🌐%20Live%20Web%20Simulator-Try%20in%20Browser-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white)](https://sportsfan986.github.io/silphscope-pvp/)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support%20the%20Project-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/sportsfan986)
@@ -131,25 +131,32 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## 📥 Download & Install Native Android APK (v3.96)
+## 📥 Download & Install Native Android APK (v6.11)
 
-> **⚠️ Note on Live HP & Energy Counting (Disabled by Default — Opt-In via Settings)**:
-> By default, **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting** are **DISABLED (OFF)** for all new installs and any user upgrading from a version prior to `v3.40`. To enable live HP% and/or live fast-move energy counting on the floating overlay, open **⚙️ Settings** in the app and toggle **Live HP Bar Tracking** and/or **Live Energy & Fast-Move Counting** to **ON**.
+> **✅ Note on Live HP & Energy Counting (Enabled by Default since v6.02)**:
+> **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting** are **ENABLED (ON)** by default with optimal scanner tuning (`2 samples`, `±2%` tolerance, `200ms` proactive energy lead, `+1t` fast offset, and `4.0s` swap-throw rollback). You can customize all scanner, haptics, and 1-Battle DVR controls in **⚙️ Settings**.
 
 1. Visit the **[Official GitHub Releases Page](https://github.com/sportsfan986/silphscope-pvp/releases)**.
-2. Download **`silphscope-pvp-v3.96.apk`** directly to your Android device.
+2. Download **`silphscope-pvp-v6.11.apk`** directly to your Android device.
 3. Tap the downloaded APK file to install (grant *"Install unknown apps"* permission if prompted).
 4. Launch **SilphScope PvP**:
-   - Select, reorder, or customize your **GBL Team Presets**, set **Opponent Move Count Basis** (`My Fasts` vs. `Their Fasts`), adjust **Overlay Size** (`50%–100%` screen width slider) and **Background Transparency**, and optionally opt in to **Live HP Bar Tracking** and **Live Energy & Fast-Move Counting** in **⚙️ Settings**.
-   - Grant **"Display over other apps"** (Floating Window permission) and **Screen Capture** permission (used strictly in-memory for ML Kit OCR).
+   - Select, reorder, or customize your **GBL or Show 6 Team Presets**, set **Opponent Move Count Basis** (`My Fasts` vs. `Their Fasts`), adjust **Overlay Size** (`50%–100%` screen width slider) and **Background Transparency**, and configure **Synchronized Haptics** or **1-Battle DVR** in **⚙️ Settings**.
+   - Grant **"Display over other apps"** (Floating Window permission) and **Screen Capture** permission (used strictly in-memory for ML Kit OCR and optional 1-Battle hardware DVR).
    - Tap **"Start Battle Overlay"** (or trigger via Tasker intent hooks) and launch Pokémon GO!
    - **Tip**: Tap the top-left overlay icon to minimize/pause OCR, or **press and hold the top-left icon for 2 seconds** when expanded to immediately stop the overlay and open the **📜 Battle Log** in the main app.
 
 ---
 
-## ✨ Changelog — Complete Release History (`v1.00` – `v3.97`)
+## ✨ Changelog — Complete Release History (`v1.00` – `v6.11`)
 
 *(See [CHANGELOG.md](./CHANGELOG.md) for full technical notes on every release.)*
+
+- **v6.00 – v6.11 — Codebase Modularization, Antigravity Platform Migration, 1-Battle Hardware H.264 DVR + Deep Frame Trace, Synchronized Tactical Haptics, Lead-Loss Recovery Rate & 4-Pillar AI Tactical Coach**:
+  - **v6.11**: De-duplicated repository (removed 14 legacy AI Studio root/mirror artifacts), reduced Web Simulator JS bundle by 71% (`~4.0 MB` → `1.15 MB`), fixed telemetry batch `APP_VERSION` overwrite bug, and modularized Android Kotlin (`10` domain modules in `com.gbl.overlay`) and Web React/TypeScript (`src/data/*` & `src/components/*`).
+  - **v6.10**: Migrated project development environment from Google AI Studio to Google Antigravity, removed legacy flat-file mirror duplicates, unified version & telemetry schemas, and established local JDK 17 + Android SDK 35 release build parity.
+  - **v6.07**: Added zero-impact **1-Battle Full-Screen H.264 DVR** (`MediaCodec` `video/avc` at `544×1184`) reusing the single in-memory `MediaProjection` frame with burned-in frame/timestamp watermarks, companion `_deep_trace.jsonl`, post-cutscene dual-HP audits (`+220ms`/`+650ms`/`+1200ms`), and turn-by-turn energy mutation ledger auto-uploaded to `ai-telemetry-logs`.
+  - **v6.06**: Added **Synchronized Haptics & Tactical Vibration Alerts** (single 80ms pulse when opponent swap clock `< 5s`, double 80ms pulse when opponent is 1 fast move from charged attack) with Settings sliders, plus the **Lead-Loss Recovery Rate & Safe-Swap MVP** analytics banner in Battle Log.
+  - **v6.00 – v6.05**: Introduced the condensed 2-line **4-Pillar AI Tactical Coach** (Bottom default or Top HUD), personalized **📊 Meta** tab, Swap-and-Immediate-Throw 3-layer attribution & rollback, 5-profile post-battle shadow telemetry, and cutscene/stall energy lockouts.
 
 - **v3.95 – v3.97 — Sub-50E Multi-Round Energy Tracking up to 100E, Joint Dual-Bar Sensor Fusion & 2-Layer Overcharge Meniscus Verification**:
   - **v3.97**: Added **Unmatched `<50E` Joint Dual-Bar Sensor Fusion** across all `0–100E` rounds (so whichever bar is outside the central icon zone drives energy up to `100E`), **Matched `<50E` Dual-Bar Consensus & Turn-0 Step Clamping** (preventing `0E -> 40E` single-frame spikes and `76%` icon-tip latches on moves like Fearow `40E + 40E`), **2-Layer Reference Band Overcharge Verification & Colored Top-Cap Gating**, and a **Post-Opponent-Charged-Move Player Energy Floor Lock** so player banked energy never drops after shielding an opponent's charged move.
@@ -230,8 +237,8 @@ Every push to `main` triggers `.github/workflows/android.yml` (builds signed rel
 
 To increment the version for future releases:
 ```bash
-./scripts/bump_version.sh        # increments sub-version by +0.01 (e.g. v3.00 -> v3.01)
-./scripts/bump_version.sh v3.00  # sets an explicit version
+./scripts/bump_version.sh        # increments sub-version by +0.01 (e.g. v6.10 -> v6.11)
+./scripts/bump_version.sh v6.11  # sets an explicit version
 ```
 
 ---

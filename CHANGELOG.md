@@ -1,4 +1,36 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.10`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.11`)
+
+---
+
+## v6.11 (2026-11-04) — Full Codebase De-Fragmentation, AI Studio Artifact Cleanup, Single-Source-of-Truth Telemetry Fix & Android/Web Modularization
+*Architecture, maintainability, bundle size optimization, and telemetry integrity release (`v6.11`, `versionCode = 1611`) eliminating legacy Google AI Studio structural duplication, fixing a telemetry batch version-stamp overwrite bug, reducing the client-side Web Simulator JavaScript bundle by **71%** (`~4.0 MB` → `1.15 MB` / `281 kB` gzipped), and modularizing both the Android Kotlin (`app/src/main/java/com/gbl/overlay/`) and Web React/TypeScript (`src/data/`, `src/components/`) codebases into clean domain modules while preserving 100% functional, mathematical, and SharedPreferences/Gson serialization compatibility.*
+
+- **v6.11 — Phase 1: Repository De-Duplication & AI Studio Artifact Cleanup**:
+  - **Retired Root-Level & Mirror Duplicates**: Removed 14 duplicate, stale, or orphaned files left over from Google AI Studio's flat-directory export workflow (`MainActivity.kt`, `OverlayService.kt`, `activity_main.xml`, `MainActivity.xml`, `AndroidManifest.xml`, `app_build.gradle.kts`, `overlay.html`, `res/layout/*`, `public/overlay.html`, `public/GBL_Overlay_Source.zip`, `src/data/androidFiles.ts`, `metadata.json`, `.env.example`, and `bun.lock`). Established `app/src/main/` and `app/build.gradle.kts` as the single canonical source of truth.
+  - **71% Web Bundle Reduction**: Removed `src/data/androidFiles.ts` (`2.8 MB` of embedded raw Kotlin/XML source strings), the legacy `Kotlin & Android Code` tab (`android_code`), and the unreachable `turn_matrix` dead code block from `src/App.tsx`, cutting the production Vite JS bundle from `~4.0 MB` down to `1.15 MB` (`281.60 kB` gzipped).
+  - **Cleaned `package.json` & Added ProGuard Rules**: Renamed package from `"react-example"` to `"silphscope-pvp"`, pruned unused AI Studio template dependencies (`@google/genai`, `better-sqlite3`, `express`, `motion`, `dotenv`), and added `app/proguard-rules.pro` with `@JavascriptInterface`, Gson, and ML Kit keep rules.
+
+- **v6.11 — Phase 2: Version Single-Source-of-Truth, Telemetry Bug Fix & CI/CD**:
+  - **Fixed Telemetry Version Overwrite Bug**: Added `OverlayService.APP_VERSION = "6.11"` as the single canonical version constant across Android telemetry, manifest entries, and commit messages. Fixed `uploadPendingAiTelemetryBatchBlocking` in `GitHubCloudSync.kt`, which previously overwrote queued `AiTelemetryBattleRecordV510` records with hardcoded `appVersion = "5.13"` and `schemaVersion = "6.06"`.
+  - **Replay Mode Custom Cup CP Cap Parity**: Updated `OverlayService.configureReplayState` and `MainActivity.showInteractiveBattleReplayDialog` to pass `sharedPrefs = prefs` so custom limited-cup CP caps resolve identically during battle replays.
+  - **CI/CD & Script Unification**: Fixed `VERSION_CODE` arithmetic in `scripts/bump_version.sh` (`1000 + MAJOR * 100 + MINOR`), updated `.github/workflows/android.yml` to dynamically extract release notes from `CHANGELOG.md`, and consolidated telemetry ingestion into `scripts/ingest-telemetry.mjs`.
+
+- **v6.11 — Phase 3: Android Kotlin Modularization (`app/src/main/java/com/gbl/overlay/`)**:
+  - Split the monolithic `OverlayService.kt` (`28,677` → `14,943` lines, **-47.9%**) and `MainActivity.kt` (`12,487` → `12,085` lines) into **10 focused Kotlin files** inside package `com.gbl.overlay` with zero changes to Gson schemas, SharedPreferences keys, or Android Intent actions:
+    - `OverlayService.kt` (`14,943` lines): Core foreground lifecycle service, MediaProjection pipeline, OCR/combat state machine, and `AndroidBridge` WebView IPC.
+    - `MainActivity.kt` (`12,085` lines): Native Android dashboard, Team Presets manager, Battle Log analytics UI, Interactive Battle Replay dialog, and Settings controller.
+    - `TeamAndMetaEngine.kt` (`4,124` lines): Precomputed Top-200 9×9 matchup matrix, BMF/WAE Battle Quality engine, Blended Season Meta, Backline Predictor, Role/Moveset upgraders, and 3-Slot Anti-Meta Team Builder.
+    - `PokemonDatabase.kt` (`3,329` lines): `PokemonStaticData`, Gamemaster & PvPoke rankings JSON parsers, and Turn-by-Turn 1v1/2v2 PvPoke Combat Math Simulator.
+    - `PixelScannerEngine.kt` (`2,689` lines): 10 Hz real-time pixel & computer vision scanners (Pokéballs, Shields, Charge Circles, Prescan Calibration, and Floating HP Bars).
+    - `GitHubCloudSync.kt` (`2,277` lines): GitHub OAuth Device Flow, Gist/Repo Cloud Delta Sync, and AI Telemetry & 1-Battle DVR Auto-Upload Engine.
+    - `Show6Engine.kt` (`1,703` lines): `Show6StaticData`, Show 6 Pick 3 Battle Frontier 120×120 minimax optimizer, PvPoke Limited Meta sync, Google Sheets sync, and roster upgraders.
+    - `BattleDvrEngine.kt` (`445` lines): 1-Battle Hardware H.264 DVR (`MediaCodec` `video/avc`) & frame-synced `_deep_trace.jsonl` recorder.
+    - `TaskerIntegration.kt` (`314` lines): `TaskerActionActivity` & `TaskerCommandReceiver` automation intent hooks.
+    - `AppModels.kt` (`101` lines): Shared activity/UI data models (`BattleHistoryEntry`, `DeletedTeamTrashEntry`, `DeletedRosterTrashEntry`, `DeletedBattleTrashEntry`, `GblSeasonInfo`, `AppThemePalette`).
+
+- **v6.11 — Phase 4: Web React / TypeScript Modularization (`src/`)**:
+  - **Domain Engine Split (`src/data/`)**: Split `src/data/gblData.ts` (`16,285` lines) into `pokemonDb.ts` (`6,331` lines), `teamAndMetaEngine.ts` (`5,704` lines), `show6Engine.ts` (`2,760` lines), and `combatSimulator.ts` (`1,509` lines), with `gblData.ts` preserved as a clean barrel re-export.
+  - **Component & Modal Extraction (`src/components/`)**: Extracted `AppThemeAndModels.tsx` (`509` lines), `MetaTab.tsx` (`477` lines), `HelpTab.tsx` (`252` lines), `MathValidatorTab.tsx` (`840` lines), `TrashBinModals.tsx` (`314` lines), and `DocumentationModals.tsx` (`421` lines) from `src/App.tsx`.
 
 ---
 
