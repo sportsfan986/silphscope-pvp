@@ -18681,7 +18681,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v6.07 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
+        SilphScope PvP v6.10 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
       </footer>
     </div>
   );

@@ -1,4 +1,14 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.07`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.10`)
+
+---
+
+## v6.10 (2026-11-04) — Platform Migration: Google AI Studio to Google Antigravity
+*Platform lifecycle and developer tooling release (`v6.10`, `versionCode = 1610`) commemorating the official transition of the SilphScope PvP project development environment from Google AI Studio to Google Antigravity. Preserves strict 1:1 functional, mathematical, and algorithmic parity with v6.07—retaining all real-time 3x3 matchup calculations, hardware H.264 1-Battle DVR with burned-in frame watermarks, ML Kit OCR, synchronized tactical haptics, and telemetry synchronization pipelines without alterations.*
+
+- **v6.10 — Development Environment & Maintenance**:
+  - **Toolchain Migration**: Development workflow, repository management, and agent-assisted coding migrated from Google AI Studio to Google Antigravity.
+  - **Zero Functional Delta**: No behavioral, visual, or algorithmic changes from v6.07. Full operational parity maintained for Android overlay services, Web simulator HUD, and diagnostic telemetry.
+  - **Local Build Toolchain Establishment**: Standardized local JDK 17 (Temurin 17.0.21+9) and Android SDK Platform 35 build configurations with verified release keystore signing parity against official GitHub release builds.
 
 ---
 

@@ -9,3 +9,6 @@ coverage/
 .aistudio/
 public/assets/aistudio/
 *.mp4
+.gradle/
+local.properties
+
