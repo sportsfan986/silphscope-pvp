@@ -12871,7 +12871,7 @@ class OverlayService : LifecycleService() {
     /**
      * Standardized <= 5 character PvPoke Move Abbreviations (Fast & Charged Moves)
      */
-    internal val moveAbbr5Map = mapOf(
+    internal val moveAbbr5Map: Map<String, String> = mapOf<String, String>(
         // Fast Moves
         "Dragon Breath" to "DB",
         "Sand Attack" to "SndAt",

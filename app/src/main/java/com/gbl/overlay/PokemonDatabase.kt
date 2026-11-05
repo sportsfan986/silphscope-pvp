@@ -885,7 +885,7 @@ internal object PokemonStaticData {
         "incinerate" to 5
     )
 
-    val POKEMON_META_DATABASE = listOf(
+    val POKEMON_META_DATABASE: List<PokemonMeta> = listOf<PokemonMeta>(
         // --- Multi-Form & Regional Variants ---
         PokemonMeta("Zacian (Crowned)", "zacian_crowned", "zacian", "Crowned", listOf("fairy", "steel"), 4620, "Metal Claw", 2, "Behemoth Blade", "Close Combat", 52, 48, atk = 332.0, def = 240.0, hp = 192, glRank = 400, ulRank = 300, mlRank = 2, chargedMove3 = "Play Rough", isRawBaseStats = true, defaultIvsGl = "7/9/12", defaultIvsUl = "6/13/15"),
         PokemonMeta("Zacian (Hero)", "zacian_hero", "zacian", "Hero", listOf("fairy"), 4329, "Quick Attack", 2, "Close Combat", "Play Rough", 44, 42, atk = 254.0, def = 236.0, hp = 192, glRank = 420, ulRank = 310, mlRank = 18, chargedMove3 = "Wild Charge", isRawBaseStats = true, defaultIvsGl = "5/7/14", defaultIvsUl = "5/10/13"),
@@ -1588,7 +1588,7 @@ internal object PokemonStaticData {
         49.0 to 0.83529999, 49.5 to 0.83779999, 50.0 to 0.84029999
     )
 
-    internal val fastMovePowerMapStatic = mapOf(
+    internal val fastMovePowerMapStatic: Map<String, Int> = mapOf<String, Int>(
         "dragon breath" to 3, "sand attack" to 2, "quick attack" to 5, "lock-on" to 1, "lock on" to 1,
         "water gun" to 3, "lick" to 3, "bite" to 2, "tackle" to 3, "fury cutter" to 3, "bug bite" to 4,
         "scratch" to 3, "cut" to 3, "psywave" to 3, "psycho cut" to 4, "mud shot" to 3, "shadow claw" to 6,
@@ -1607,7 +1607,7 @@ internal object PokemonStaticData {
         "gust" to 16, "confusion" to 16, "volt switch" to 14, "splash" to 0, "yawn" to 0, "incinerate" to 20
     )
 
-    internal val fastMoveTypeMapStatic = mapOf(
+    internal val fastMoveTypeMapStatic: Map<String, String> = mapOf<String, String>(
         "dragon breath" to "dragon", "sand attack" to "ground", "quick attack" to "normal",
         "lock-on" to "normal", "lock on" to "normal", "water gun" to "water", "lick" to "ghost", "bite" to "dark",
         "tackle" to "normal", "fury cutter" to "bug", "bug bite" to "bug", "scratch" to "normal", "cut" to "normal",

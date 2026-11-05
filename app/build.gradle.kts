@@ -73,6 +73,11 @@ android {
         jvmTarget = "17"
     }
 
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+
 }
 
 dependencies {

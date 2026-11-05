@@ -126,7 +126,7 @@ jobs:
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
           REQUIRE_RELEASE_SIGNING: ${{ github.event_name != 'pull_request' }}
-        run: ./gradlew assembleRelease --no-daemon --stacktrace -Dorg.gradle.internal.http.retry.max.attempts=5
+        run: ./gradlew assembleRelease --build-cache --no-daemon --stacktrace -Dorg.gradle.internal.http.retry.max.attempts=5
 
       - name: Re-sign Release APK with v3 Key Rotation Lineage & Prepare Named APK
         if: github.event.inputs.build_target == 'release' || github.event.inputs.build_target == 'both' || github.event.inputs.build_target == '' || github.event_name == 'push'
