@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * SilphScope PvP v6.11 — Incremental Multi-User AI Telemetry & Anomaly Ingestion Script
+ * SilphScope PvP v6.12 — Incremental Multi-User AI Telemetry & Anomaly Ingestion Script
  *
  * Fetches new telemetry batches across ALL users from:
  * 1) Dedicated `ai-telemetry-logs` branch on `sportsfan986/silphscope-pvp` (`manifest.json`, `batches/...`, and `users/...`)
@@ -37,7 +37,7 @@ function saveCacheState(state) {
 async function fetchJson(url) {
   try {
     const res = await fetch(url, {
-      headers: { "Accept": "application/vnd.github+json", "User-Agent": "SilphScopePvP-Ingest/6.11" }
+      headers: { "Accept": "application/vnd.github+json", "User-Agent": "SilphScopePvP-Ingest/6.12" }
     });
     if (!res.ok) return null;
     return await res.json();
@@ -49,7 +49,7 @@ async function fetchJson(url) {
 async function fetchText(url) {
   try {
     const res = await fetch(url, {
-      headers: { "User-Agent": "SilphScopePvP-Ingest/6.11" }
+      headers: { "User-Agent": "SilphScopePvP-Ingest/6.12" }
     });
     if (!res.ok) return null;
     return await res.text();
@@ -188,9 +188,11 @@ async function main() {
 
   saveCacheState(state);
 
-  const allAnomalies = state.records.flatMap((r) =>
-    (r.anomalies || []).map((a) => ({
+  const allAnomalies = state.records.flatMap((r) => {
+    const appVer = r.appVersion || r.scannerSettings?.appVersion || r.schemaVersion || "unknown";
+    return (r.anomalies || []).map((a) => ({
       battleId: r.battleId,
+      appVersion: appVer,
       league: r.league,
       teamName: r.teamName,
       result: r.result,
@@ -199,8 +201,17 @@ async function main() {
       userTeamSpecs: r.userTeamSpecs,
       oppTeamSpecs: r.oppTeamSpecs,
       ...a
-    }))
-  );
+    }));
+  });
+
+  const battlesByAppVersion = {};
+  const anomaliesByAppVersion = {};
+  for (const r of state.records) {
+    const ver = r.appVersion || r.scannerSettings?.appVersion || r.schemaVersion || "unknown";
+    battlesByAppVersion[ver] = (battlesByAppVersion[ver] || 0) + 1;
+    const aCount = Array.isArray(r.anomalies) ? r.anomalies.length : 0;
+    anomaliesByAppVersion[ver] = (anomaliesByAppVersion[ver] || 0) + aCount;
+  }
 
   const summary = {
     updatedAt: new Date().toISOString(),
@@ -209,6 +220,8 @@ async function main() {
     totalCachedBatches: Object.keys(state.ingestedBatchIds).length,
     totalCachedBattles: state.records.length,
     totalAnomalies: allAnomalies.length,
+    battlesByAppVersion,
+    anomaliesByAppVersion,
     recentAnomalies: allAnomalies.slice(-25)
   };
   fs.writeFileSync(SUMMARY_FILE, JSON.stringify(summary, null, 2), "utf8");

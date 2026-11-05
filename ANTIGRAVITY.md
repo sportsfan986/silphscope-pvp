@@ -2,7 +2,7 @@
 
 > **Target Audience**: Antigravity agents, Claude/Gemini coding assistants, and core developers maintaining or extending **SilphScope PvP**.  
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v6.11` (`versionCode = 1611`)  
+> **Current Version**: `v6.12` (`versionCode = 1612`)  
 > **Primary Branches**: `main` (source code & releases), `ai-telemetry-logs` (isolated telemetry, DVR recordings & anomaly traces).
 
 ---
@@ -203,6 +203,14 @@ The HUD displays a compact, high-contrast 2-line tactical recommendation banner 
   - **Phase 4 (Web React/TypeScript Modularization)**:
     - Split `src/data/gblData.ts` (`16,285` lines) into 4 domain modules (`src/data/pokemonDb.ts`, `src/data/combatSimulator.ts`, `src/data/teamAndMetaEngine.ts`, `src/data/show6Engine.ts`) with `src/data/gblData.ts` preserved as a barrel re-export.
     - Extracted 6 UI/model modules from `src/App.tsx` (`18,428` → `15,807` lines) into `src/components/`: `AppThemeAndModels.tsx`, `MetaTab.tsx`, `HelpTab.tsx`, `MathValidatorTab.tsx`, `TrashBinModals.tsx`, and `DocumentationModals.tsx`.
+
+### Turn 8 — 1-Battle DVR Video Telemetry Root-Cause Analysis & v6.12 Fixes
+- **User Request**: Pull in telemetry logs, prioritize issues found in the two 1-Battle DVR video logs (`log-1793840570834-275` and `log-1793854631467-245`), increment build number to `v6.12`, log `appVersion` across all telemetry going forward, build locally first, and push to GitHub.
+- **Delivered Changes (v6.12)**:
+  - `PixelScannerEngine.kt` & `OverlayService.kt`: Enforced Pokémon GO's HP shader color-to-percentage law (`leftBand` 1/2/3 vs `%`), tightened `oppHpCorridorRect` (`<= 0.50h`) and `playerHpCorridorRect` (`<= 0.65h`), disabled `canSampleOppHpBars` during opponent charged-move zoom, and blocked post-KO active-slot resurrection during faint animations.
+  - `OverlayService.kt` & `PokemonDatabase.kt`: Protected `BANNER_OCR` move names from being overwritten by post-cutscene Section 1A HP-delta inference, added `resolveRankingsMapForLeagueStatic` fallback to same-CP standard league rankings for custom/Mega cups, fixed `"MEGA ULTRA LEAGUE"` routing, and added `Dusknoir`/`Dusclops`/`Zygarde` to static fallback move tables.
+  - `OverlayService.kt`: Prevented pre-minigame circle-shrink energy loss via 5-frame downward border confirmation + `recentStableReadyEnergy` high-water retention, added `"BLOCKED!"` & `"disguise is busted!"` mid-banner OCR, and gated HUD shield drops on active/recent charged attacks.
+  - `GitHubCloudSync.kt`, `BattleDvrEngine.kt`, `scripts/ingest-telemetry.mjs`: Anchored `postCutsceneHpAudits` to post-cutscene exit and added `appVersion` (`"6.12"`) + `versionCode` (`1612`) tracking across all telemetry headers, DVR watermarks, and ingestion reports.
 
 ---
 

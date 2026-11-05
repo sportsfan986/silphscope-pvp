@@ -661,6 +661,8 @@ internal fun OverlayService.Companion.buildDebounceAndSettlingSettingsMapStatic(
         if (it in listOf(6, 10, 14)) it else DEFAULT_SHIELD_CHIP_TOLERANCE_PCT
     }
     return mapOf(
+        "appVersion" to APP_VERSION,
+        "versionCode" to 1612,
         "scanHzMode" to scanHzMode,
         "turnOffsetMs" to scanTurnOffsetMs,
         "hpTrackingEnabled" to hpTracking,
@@ -796,7 +798,7 @@ internal fun OverlayService.Companion.recordDebounceSettingsChangeIfNeededStatic
         val event = AiTelemetrySettingsChangeEvent(
             id = "cfg_${nowMs}_${(100..999).random()}",
             timestampMs = nowMs,
-            appVersion = "6.02",
+            appVersion = APP_VERSION,
             uploaderHandle = username,
             deviceHash = devHash,
             triggerSource = triggerSource,
@@ -847,9 +849,12 @@ internal fun OverlayService.Companion.uploadSettingsChangeHistoryBlocking(prefs:
     val safeUser = (username.ifBlank { "trainer_$devHash" }).replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
     val settingsPath = "users/$safeUser/settings_changes.jsonl"
     val jsonlContent = historyChanges.joinToString("\n") { ev ->
+        val savedVer = ev.appVersion.takeIf { it.isNotBlank() && it != "5.13" && it != "6.02" } ?: APP_VERSION
         val enriched = if (ev.uploaderHandle.isBlank() || ev.uploaderHandle.startsWith("trainer_")) {
-            ev.copy(uploaderHandle = safeUser, deviceHash = devHash, appVersion = "5.13")
-        } else ev
+            ev.copy(uploaderHandle = safeUser, deviceHash = devHash, appVersion = savedVer)
+        } else {
+            ev.copy(appVersion = savedVer)
+        }
         gson.toJson(enriched)
     } + "\n"
     val b64Content = android.util.Base64.encodeToString(jsonlContent.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
@@ -1483,12 +1488,26 @@ internal fun OverlayService.Companion.buildEnhancedHpAndEnergyDiagnosticsStatic(
         if (!ev.type.equals("CHARGED_ATTACK", ignoreCase = true)) continue
         val evRelMs = (ev.t * 1000.0).toLong()
         val evAbsMs = t0Ms + evRelMs
-        val preTick = sensorTicks.lastOrNull { it.tMs <= evAbsMs - 400L && !it.isCutsceneActive }
+        val cutsceneTickAfterInit = sensorTicks.firstOrNull { it.tMs in (evAbsMs - 500L)..(evAbsMs + 6000L) && it.isCutsceneActive }
+        val postCutsceneAnchorMs = if (cutsceneTickAfterInit != null) {
+            sensorTicks.firstOrNull { it.tMs > cutsceneTickAfterInit.tMs && !it.isCutsceneActive && it.tMs <= evAbsMs + 14000L }?.tMs
+                ?: evAbsMs
+        } else {
+            sensorTicks.firstOrNull { it.tMs >= evAbsMs && !it.isCutsceneActive && it.tMs <= evAbsMs + 4000L }?.tMs
+                ?: evAbsMs
+        }
+        val preCutsceneEndMs = cutsceneTickAfterInit?.tMs ?: evAbsMs
+        val preTick = sensorTicks.lastOrNull { it.tMs <= preCutsceneEndMs - 400L && !it.isCutsceneActive }
+            ?: sensorTicks.lastOrNull { it.tMs <= preCutsceneEndMs && !it.isCutsceneActive }
             ?: sensorTicks.lastOrNull { it.tMs <= evAbsMs }
-        val tick220 = sensorTicks.firstOrNull { it.tMs >= evAbsMs + 150L && it.tMs <= evAbsMs + 420L }
-        val tick650 = sensorTicks.firstOrNull { it.tMs >= evAbsMs + 450L && it.tMs <= evAbsMs + 900L }
-        val tick1200 = sensorTicks.firstOrNull { it.tMs >= evAbsMs + 950L && it.tMs <= evAbsMs + 1650L }
-        val postCommittedTick = tick1200 ?: tick650 ?: tick220 ?: sensorTicks.firstOrNull { it.tMs >= evAbsMs }
+        val tick220 = sensorTicks.firstOrNull { it.tMs in (postCutsceneAnchorMs + 100L)..(postCutsceneAnchorMs + 420L) && !it.isCutsceneActive }
+            ?: sensorTicks.firstOrNull { it.tMs in (postCutsceneAnchorMs + 100L)..(postCutsceneAnchorMs + 420L) }
+        val tick650 = sensorTicks.firstOrNull { it.tMs in (postCutsceneAnchorMs + 430L)..(postCutsceneAnchorMs + 920L) && !it.isCutsceneActive }
+            ?: sensorTicks.firstOrNull { it.tMs in (postCutsceneAnchorMs + 430L)..(postCutsceneAnchorMs + 920L) }
+        val tick1200 = sensorTicks.firstOrNull { it.tMs in (postCutsceneAnchorMs + 930L)..(postCutsceneAnchorMs + 1750L) && !it.isCutsceneActive }
+            ?: sensorTicks.firstOrNull { it.tMs in (postCutsceneAnchorMs + 930L)..(postCutsceneAnchorMs + 1750L) }
+        val postCommittedTick = tick1200 ?: tick650 ?: tick220 ?: sensorTicks.firstOrNull { it.tMs >= postCutsceneAnchorMs && !it.isCutsceneActive }
+            ?: sensorTicks.firstOrNull { it.tMs >= postCutsceneAnchorMs }
 
         val isUserAtk = ev.actor.equals("user", ignoreCase = true)
         val atkSpecies = ev.activePokemon.orEmpty()
@@ -1710,13 +1729,16 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
         }
 
         // Prepend Battle Summary Header Line 0 to deep_trace.jsonl
+        val resolvedDvrVer = summaryRecord.appVersion.takeIf { it.isNotBlank() && it != "5.10" } ?: APP_VERSION
         val headerJson = gson.toJson(
             mapOf(
                 "recordType" to "BATTLE_DVR_SUMMARY_HEADER",
+                "appVersion" to resolvedDvrVer,
+                "versionCode" to 1612,
                 "battleId" to battleId,
                 "videoRepoPath" to videoRepoPath,
                 "traceRepoPath" to traceRepoPath,
-                "battleSummary" to summaryRecord
+                "battleSummary" to summaryRecord.copy(appVersion = resolvedDvrVer, schemaVersion = resolvedDvrVer)
             )
         ) + "\n"
         val traceBodyBytes = if (traceFile.exists()) traceFile.readBytes() else ByteArray(0)
@@ -1839,10 +1861,11 @@ internal fun OverlayService.Companion.uploadPendingAiTelemetryBatchBlocking(
         val currentProfileSig = computeDebounceSettingsProfileSignatureStatic(prefs)
         val allRecentChanges = loadSettingsChangeHistoryStatic(prefs, gson).takeLast(20)
         val enrichedPending = pending.mapIndexed { idx, rec ->
+            val recordedVer = rec.appVersion.takeIf { it.isNotBlank() && it != "5.10" } ?: APP_VERSION
             val baseRec = if ((rec.uploaderHandle == "anonymous" || rec.uploaderHandle.isBlank()) && safeUser.isNotBlank()) {
-                rec.copy(uploaderHandle = safeUser, deviceHash = devHash, appVersion = APP_VERSION, schemaVersion = APP_VERSION)
+                rec.copy(uploaderHandle = safeUser, deviceHash = devHash, appVersion = recordedVer, schemaVersion = recordedVer)
             } else {
-                rec.copy(appVersion = APP_VERSION, schemaVersion = APP_VERSION)
+                rec.copy(appVersion = recordedVer, schemaVersion = recordedVer)
             }
             val withSig = if (baseRec.settingsProfileSignature.isBlank()) {
                 baseRec.copy(settingsProfileSignature = currentProfileSig)

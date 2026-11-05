@@ -79,6 +79,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 import com.gbl.overlay.OverlayService.*
+import com.gbl.overlay.OverlayService.Companion.APP_VERSION
 import com.gbl.overlay.OverlayService.Companion.activeOneBattleDvrArmed
 import com.gbl.overlay.OverlayService.Companion.activeOneBattleDvrFrames
 import com.gbl.overlay.OverlayService.Companion.activeOneBattleDvrRecording
@@ -219,7 +220,8 @@ internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap,
                     }
                     val stamp = String.format(
                         java.util.Locale.US,
-                        "F#%04d T+%05.2fs U:%d%%(%d%%)/%dE O:%d%%(%d%%)/%dE",
+                        "v%s F#%04d T+%05.2fs U:%d%%(%d%%)/%dE O:%d%%(%d%%)/%dE",
+                        APP_VERSION,
                         finalTrace.frameIdx,
                         finalTrace.battleElapsedMs / 1000.0,
                         finalTrace.committedUserHpPct,

@@ -2371,8 +2371,20 @@ internal fun OverlayService.detectFloatingHpBarPct(
 
                                 val wFill = xEnd - xStart + 1
                                 val minRequiredInteriorW = (fullScreenWidth * 0.245f).toInt()
-                                if (wFill >= 2 && fullInteriorW >= minRequiredInteriorW) {
-                                    val candHpFraction = (wFill.toFloat() / fullInteriorW.toFloat()).coerceIn(0.01f, 1.0f)
+                                val candHpFraction = if (fullInteriorW > 0) (wFill.toFloat() / fullInteriorW.toFloat()).coerceIn(0.01f, 1.0f) else 0f
+                                val candHpPctApprox = (candHpFraction * 100f).roundToInt().coerceIn(1, 100)
+                                // v6.12: Enforce Pokémon GO HP bar shader color-to-percentage physical law:
+                                // Green (band 1) is strictly >50% HP (46..100% with anti-aliasing tolerance),
+                                // Yellow (band 2) is strictly 20..50% HP (16..56%),
+                                // Coral Red (band 3) is strictly <=20% HP (1..25%).
+                                // Rejects Tinkaton pink hammer/body (>25% width in band 3) and Zygarde green scales (<46% width in band 1).
+                                val isBandConsistentWithPct = when (leftBand) {
+                                    1 -> candHpPctApprox in 46..100
+                                    2 -> candHpPctApprox in 16..56
+                                    3 -> candHpPctApprox in 1..25
+                                    else -> false
+                                }
+                                if (wFill >= 2 && fullInteriorW >= minRequiredInteriorW && isBandConsistentWithPct) {
                                     val expectedDarkFraction = (1.0f - candHpFraction).coerceIn(0.0f, 1.0f)
 
                                     val darkTrackStartX = xEnd + pendingW + 1

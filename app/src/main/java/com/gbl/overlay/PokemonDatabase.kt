@@ -223,6 +223,12 @@ internal object PokemonStaticData {
         "ninetales_alolan_shadow" to Triple("Weather Ball (Ice)", "Chilling Water", "Psyshock"),
         "Corviknight" to Triple("Air Cutter", "Iron Head", "Sky Attack"),
         "corviknight" to Triple("Air Cutter", "Iron Head", "Sky Attack"),
+        "Dusknoir" to Triple("Shadow Punch", "Dynamic Punch", "Shadow Ball"),
+        "dusknoir" to Triple("Shadow Punch", "Dynamic Punch", "Shadow Ball"),
+        "dusknoir_shadow" to Triple("Shadow Punch", "Dynamic Punch", "Shadow Ball"),
+        "Dusclops" to Triple("Ice Punch", "Shadow Punch", "Poltergeist"),
+        "dusclops" to Triple("Ice Punch", "Shadow Punch", "Poltergeist"),
+        "dusclops_shadow" to Triple("Ice Punch", "Shadow Punch", "Poltergeist"),
         "Lugia" to Triple("Aeroblast", "Earth Power", "Hydro Pump"),
         "lugia" to Triple("Aeroblast", "Earth Power", "Hydro Pump"),
         "Kyogre" to Triple("Origin Pulse", "Avalanche", "Surf"),
@@ -1075,6 +1081,9 @@ internal object PokemonStaticData {
         "lickilicky" to listOf("Body Slam", "Shadow Ball", "Earthquake", "Solar Beam"),
         "serperior" to listOf("Frenzy Plant", "Aerial Ace", "Leaf Tornado"),
         "corviknight" to listOf("Air Cutter", "Iron Head", "Sky Attack", "Payback"),
+        "dusknoir" to listOf("Shadow Punch", "Dynamic Punch", "Shadow Ball", "Dark Pulse", "Poltergeist", "Ominous Wind", "Psychic"),
+        "dusclops" to listOf("Ice Punch", "Shadow Punch", "Poltergeist", "Fire Punch", "Return"),
+        "zygarde" to listOf("Crunch", "Earthquake", "Bulldoze", "Outrage"),
         "aegislash" to listOf("Shadow Ball", "Flash Cannon", "Gyro Ball"),
         "cramorant" to listOf("Surf", "Fly", "Dive", "Hydro Pump"),
         "morpeko" to listOf("Aura Wheel", "Psychic Fangs", "Outrage", "Seed Bomb"),
@@ -2036,12 +2045,23 @@ internal fun OverlayService.Companion.parseRankingsJsonStatic(leagueKey: String,
     }
 }
 
-internal fun OverlayService.Companion.applyRankingMovesForLeague(meta: PokemonMeta, league: String, isShadow: Boolean = false): PokemonMeta {
+internal fun OverlayService.Companion.resolveRankingsMapForLeagueStatic(league: String): Map<String, PokemonRankingEntry>? {
     val normLeague = normalizeLeagueKeyStatic(league)
+    LIVE_RANKINGS_MAP[normLeague]?.takeIf { it.isNotEmpty() }?.let { return it }
+    val upperRaw = league.trim().uppercase()
+    LIVE_RANKINGS_MAP[upperRaw]?.takeIf { it.isNotEmpty() }?.let { return it }
+    val withoutCp = normLeague.replace(Regex("\\s*\\(\\d+\\)\\s*$"), "").trim().uppercase()
+    LIVE_RANKINGS_MAP[withoutCp]?.takeIf { it.isNotEmpty() }?.let { return it }
+    val stdLeague = getSameCpStandardLeagueKeyStatic(league)
+    return LIVE_RANKINGS_MAP[stdLeague]?.takeIf { it.isNotEmpty() }
+        ?: LIVE_RANKINGS_MAP[normalizeLeagueKeyStatic(stdLeague)]?.takeIf { it.isNotEmpty() }
+}
+
+internal fun OverlayService.Companion.applyRankingMovesForLeague(meta: PokemonMeta, league: String, isShadow: Boolean = false): PokemonMeta {
     val isSkeledirge = meta.baseSpecies.equals("skeledirge", ignoreCase = true) ||
         meta.speciesId.startsWith("skeledirge", ignoreCase = true)
 
-    val map = LIVE_RANKINGS_MAP[normLeague]
+    val map = resolveRankingsMapForLeagueStatic(league)
     val baseKey = meta.speciesId.lowercase().removeSuffix("_shadow")
     val effectiveShadow = isShadow || meta.name.startsWith("Shadow ", ignoreCase = true) || meta.speciesId.endsWith("_shadow", ignoreCase = true)
     val entry = if (map != null) {
@@ -2062,7 +2082,7 @@ internal fun OverlayService.Companion.applyRankingMovesForLeague(meta: PokemonMe
                 chargedMove3 = "Disarming Voice"
             )
         }
-        return meta
+        return applyRecommendedMoves(meta)
     }
 
     val cleanSpeciesId = meta.speciesId.lowercase().removeSuffix("_shadow").removeSuffix("_alolan").removeSuffix("_galarian").removeSuffix("_hisuian").removeSuffix("_paldean")
@@ -2279,9 +2299,9 @@ internal fun OverlayService.Companion.resolveRecommendedMovesForSpecies(
     val trimmed = rawName.trim()
     if (trimmed.isEmpty()) return null
     val normLeague = when {
+        league.contains("GREAT", ignoreCase = true) || league.contains("(1500)") || league.contains("(500)") -> "GREAT LEAGUE"
+        league.contains("ULTRA", ignoreCase = true) || league.contains("(2500)") -> "ULTRA LEAGUE"
         league.contains("MEGA", ignoreCase = true) -> "MEGA MASTER LEAGUE"
-        league.contains("GREAT", ignoreCase = true) -> "GREAT LEAGUE"
-        league.contains("ULTRA", ignoreCase = true) -> "ULTRA LEAGUE"
         else -> "MASTER LEAGUE"
     }
     val cacheKey = "${trimmed.lowercase()}|$normLeague|${customCp ?: -1}|${customIvs?.trim()?.lowercase().orEmpty()}"
@@ -2837,8 +2857,7 @@ internal fun OverlayService.Companion.getAvailableMovePoolForSpeciesStatic(
         ?: POKEMON_META_DATABASE.first()
     val cleanSpeciesId = meta.speciesId.lowercase().removeSuffix("_shadow")
     val baseKey = meta.baseSpecies.lowercase()
-    val normLeague = normalizeLeagueKeyStatic(league)
-    val rankEntry = LIVE_RANKINGS_MAP[normLeague]?.let { map ->
+    val rankEntry = resolveRankingsMapForLeagueStatic(league)?.let { map ->
         map[meta.speciesId.lowercase()] ?: map[cleanSpeciesId] ?: map["${cleanSpeciesId}_shadow"]
     }
 

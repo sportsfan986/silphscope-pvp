@@ -1,4 +1,30 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.11`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.12`)
+
+---
+
+## v6.12 (2026-11-05) — 1-Battle DVR Video Telemetry Fixes: Shader-Band HP Validation, `BANNER_OCR` Move Preservation, Limited/Mega Cup Move Fallbacks, Pre-Minigame Energy Retention & `"BLOCKED!"` Banner OCR
+*Precision computer-vision, combat state machine, and telemetry tracking release (`v6.12`, `versionCode = 1612`) driven by frame-by-frame analysis of the first two 1-Battle H.264 DVR + Deep Trace recordings (`log-1793840570834-275` and `log-1793854631467-245`) and 71 multi-user telemetry battles.*
+
+- **v6.12 — Fix 1: Floating HP Bar Shader-Band Color Law & Corridor Tightening (`PixelScannerEngine.kt`, `OverlayService.kt`)**:
+  - **Enforced Pokémon GO HP Shader Color-to-Percentage Law**: In `detectFloatingHpBarPct`, enforced strict consistency between the detected left-side fill color band and the resulting fill percentage (`leftBand == 1` Green requires `46%–100%`, `leftBand == 2` Yellow requires `16%–56%`, `leftBand == 3` Coral Red requires `1%–25%`). Eliminates false HP locks on pink/red sprites (Tinkaton's hammer at `59%–88%`), Shield Decision Overlay red `KO` badges (`43%–44%`), and green sprite scales (Zygarde Complete at `11%–27%`).
+  - **Tightened Vertical HP Scan Corridors & Attack-Incoming Lockout**: Clamped `oppHpCorridorRect` bottom from `0.84h` to `0.50h` (preventing `O_HP` from scanning lower-screen sprites) and `playerHpCorridorRect` bottom from `0.88h` to `0.65h` (excluding Shield Decision Overlay remaining-HP badges at `>= 0.67h`). Disabled opponent HP rescanning (`canSampleOppHpBars = false`) while the camera zooms in on an attacking opponent during `"Attack incoming!"`.
+  - **Eliminated Post-KO Active-Slot Resurrection**: Recorded `lastSlotKoTimeMs` / `lastUserSlotKoTimeMs` on lethal charged-attack KOs and gated `updateSteadyFrameBallAndShieldState` active-slot un-fainting so a fainting Pokémon is never resurrected to its pre-faint HP (`48%`) during its 1.5–2.5s fainting animation before the replacement Pokémon's nameplate appears.
+
+- **v6.12 — Fix 2: Preserve `BANNER_OCR` Charged Moves & Limited/Mega Cup Move Pool Fallbacks (`OverlayService.kt`, `PokemonDatabase.kt`)**:
+  - **Protected `BANNER_OCR` Move Identity Across Post-Cutscene HP Settling**: Fixed Section 1A (`canUpgradeHpGuess`) in `OverlayService.kt` so that when `canOverrideProvisionalUserShield` flips a provisionally-shielded opponent move to unshielded after the post-hit HP drop finishes debouncing, it never overwrites a move name already confirmed by `"<Opponent> used <Move>!"` (`moveResolutionSource == "BANNER_OCR"`).
+  - **Added Same-CP Standard League Ranking Fallback (`resolveRankingsMapForLeagueStatic`)**: When the active league is a limited/custom cup or Mega Ultra/Great cup not present in `LIVE_RANKINGS_MAP`, `applyRankingMovesForLeague` and `getAvailableMovePoolForSpeciesStatic` now automatically fall back to the same-CP standard league rankings (`GREAT LEAGUE` for 1500 CP, `ULTRA LEAGUE` for 2500 CP, `MASTER LEAGUE` for 10000 CP) and `applyRecommendedMoves`, eliminating fallback `Crunch` / `Shadow Ball` assignments in limited cups.
+  - **Fixed Mega Ultra/Great Routing & Expanded Dusknoir/Dusclops/Zygarde Pools**: Checked `"GREAT"` and `"ULTRA"` before `"MEGA"` in `resolveRecommendedMovesForSpecies` and added `Dusknoir` (`Shadow Punch`, `Dynamic Punch`, `Shadow Ball`), `Dusclops`, and `Zygarde` to `RECOMMENDED_CHARGED_MOVES` and `FALLBACK_SPECIES_CHARGED_POOL`.
+
+- **v6.12 — Fix 3: Pre-Minigame Circle Shrink Energy Retention (`OverlayService.kt`)**:
+  - **Prevented False Downward Energy Snap Before Minigame**: Gated downward circle-border self-correction (`primaryProvesBelowCost` / `secondaryProvesBelowCost`) on both charge circles remaining visible, no rapid pre-minigame shrink/fade drop (`>18%` drop from `lastStableChargeFillPct`), and `>= 5` consecutive stable normal-combat frames. Added a 2.5s `recentStableReadyEnergy` high-water mark so pre-throw energy is preserved when charge circles shrink into the charged-attack minigame.
+
+- **v6.12 — Fix 4: `"BLOCKED!"` & `"disguise is busted!"` Mid-Banner OCR + Shield Reconciliation (`OverlayService.kt`)**:
+  - **Mid-Banner `"BLOCKED!"` OCR**: Added detection for `"BLOCKED!"` and Mimikyu's `"disguise is busted!"` in `handleMidBannerUsedMoveLines` and Section 4 charged-attack reconciliation, ensuring shielded attacks are marked `shielded = true` and decrement the defender's shield count (unless blocked by Mimikyu's Disguise) even when top-HUD purple shield icons are covered by camera zoom or banners.
+  - **Charged-Attack Gate on HUD Shield Decrements**: Gated `updateSteadyFrameBallAndShieldState` shield drops on an active or recent charged attack (`<= 8.0s–12.0s`) and widened the retroactive `CHARGED_ATTACK` shield-sync window from `4.0s` to `10.0s`.
+
+- **v6.12 — Fix 5: Post-Cutscene HP Settling Audit Anchor & Comprehensive `appVersion` Telemetry Tagging (`GitHubCloudSync.kt`, `BattleDvrEngine.kt`, `scripts/ingest-telemetry.mjs`)**:
+  - **Fixed `postCutsceneHpAudits` Timestamp Anchor**: Anchored `+220ms`, `+650ms`, and `+1200ms` post-cutscene settling ticks to the first frame after `isCutsceneActive` exits rather than cutscene initiation.
+  - **End-to-End `appVersion` Logging**: Included `appVersion = "6.12"` and `versionCode = 1612` in `scannerSettings`, `settings_changes.jsonl`, `BATTLE_DVR_SUMMARY_HEADER`, the burned-in DVR video watermark (`v6.12 F#...`), and `scripts/ingest-telemetry.mjs` (`battlesByAppVersion` and `anomaliesByAppVersion`), while preserving the recorded `appVersion` of any pre-upgrade queued battles.
 
 ---
 

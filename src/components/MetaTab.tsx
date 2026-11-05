@@ -156,7 +156,7 @@ export function MetaTab(props: MetaTabProps) {
                         📊 Personalized Meta &amp; Top Cores ({appCombatMode === 'show6' ? 'Show 6 Mode' : 'GBL Blind 3 Mode'})
                       </span>
                       <span className="px-2 py-0.5 rounded bg-sky-500/20 border border-sky-400/50 text-sky-300 text-[10px] font-mono">
-                        v6.11
+                        v6.12
                       </span>
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
