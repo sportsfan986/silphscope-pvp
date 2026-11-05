@@ -91,7 +91,7 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "6.12"
+        const val APP_VERSION = "6.20"
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -924,11 +924,41 @@ class OverlayService : LifecycleService() {
         fun isMegaAllowedInLeagueStatic(league: String, prefs: SharedPreferences? = null): Boolean {
             val trimmed = league.trim()
             if (hasMegaInRankingsMapStatic(trimmed)) return true
-            val cat = (if (prefs != null) getLimitedMetaCatalogStatic(prefs) else LAST_LOADED_META_CATALOG)
+            val cat = (if (prefs != null) getLimitedMetaCatalogStatic(prefs) else LAST_LOADED_META_CATALOG.ifEmpty { DEFAULT_LIMITED_META_CATALOG })
                 .find { it.leagueKey.equals(trimmed, ignoreCase = true) || it.title.equals(trimmed, ignoreCase = true) }
             if (cat != null) return cat.allowsMega
             val u = trimmed.uppercase()
-            return u.contains("MEGA") || u.contains("CAULDRON") || u == "BATTLE FRONTIER (MASTER)"
+            return u.contains("MEGA") || u.contains("CAULDRON") || u.contains("LAIC") || u == "BATTLE FRONTIER (MASTER)"
+        }
+
+        val SUPER_MEGA_PLUS_MOVES: Map<String, String> get() = PokemonStaticData.SUPER_MEGA_PLUS_MOVES
+        val DYNAMIC_SUPER_MEGA_PLUS_MOVES = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+        fun resolveMegaPlusMoveStatic(rawName: String, league: String, prefs: SharedPreferences? = null): String? {
+            val trimmed = rawName.trim()
+            if (trimmed.isEmpty()) return null
+            if (!isMegaAllowedInLeagueStatic(league, prefs)) return null
+            val lower = trimmed.lowercase()
+                .replace(Regex("^shadow\\s+"), "")
+                .replace(Regex("\\s*\\(shadow\\)"), "")
+                .trim()
+            DYNAMIC_SUPER_MEGA_PLUS_MOVES[lower]?.let { return it }
+            SUPER_MEGA_PLUS_MOVES[lower]?.let { return it }
+            val underKey = lower.replace(Regex("[()\\s-]+"), "_").trim('_')
+            DYNAMIC_SUPER_MEGA_PLUS_MOVES[underKey]?.let { return it }
+            SUPER_MEGA_PLUS_MOVES[underKey]?.let { return it }
+            if (isMegaOrPrimalSpeciesStatic(lower)) {
+                val base = FormResolver.extractBaseSpecies(lower)
+                val suffix = when {
+                    Regex("\\bx\\b").containsMatchIn(lower) || lower.endsWith("_x") -> "_mega_x"
+                    Regex("\\by\\b").containsMatchIn(lower) || lower.endsWith("_y") -> "_mega_y"
+                    else -> "_mega"
+                }
+                val candId = "${base}${suffix}"
+                DYNAMIC_SUPER_MEGA_PLUS_MOVES[candId]?.let { return it }
+                SUPER_MEGA_PLUS_MOVES[candId]?.let { return it }
+            }
+            return null
         }
 
         data class SyncBattleLogRecord(
@@ -1539,11 +1569,22 @@ class OverlayService : LifecycleService() {
 
                 // Check if OCR or input text explicitly specifies a form keyword (ignoring "base", "kanto", and "shadow")
                 var explicitVariant: PokemonMeta? = null
-                for (variant in variants) {
-                    val labelLower = variant.formLabel.lowercase()
-                    if (labelLower != "base" && labelLower != "kanto" && labelLower != "shadow" && lowerRaw.contains(labelLower)) {
-                        explicitVariant = variant
-                        break
+                if (lowerRaw.contains("mega")) {
+                    val wantMegaX = Regex("\\bx\\b").containsMatchIn(lowerRaw) || lowerRaw.contains("mega_x")
+                    val wantMegaY = Regex("\\by\\b").containsMatchIn(lowerRaw) || lowerRaw.contains("mega_y")
+                    explicitVariant = when {
+                        wantMegaX -> variants.find { it.speciesId.endsWith("_mega_x", ignoreCase = true) || it.formLabel.equals("Mega X", ignoreCase = true) }
+                        wantMegaY -> variants.find { it.speciesId.endsWith("_mega_y", ignoreCase = true) || it.formLabel.equals("Mega Y", ignoreCase = true) }
+                        else -> variants.find { it.speciesId.endsWith("_mega", ignoreCase = true) || it.formLabel.equals("Mega", ignoreCase = true) }
+                    }
+                }
+                if (explicitVariant == null) {
+                    for (variant in variants) {
+                        val labelLower = variant.formLabel.lowercase()
+                        if (labelLower != "base" && labelLower != "kanto" && labelLower != "shadow" && lowerRaw.contains(labelLower)) {
+                            explicitVariant = variant
+                            break
+                        }
                     }
                 }
                 if (explicitVariant == null && (lowerRaw.contains("kanto") || lowerRaw.contains("kantonian"))) {
@@ -1677,7 +1718,30 @@ class OverlayService : LifecycleService() {
             "ROCK_TOMB" to "Rock Tomb",
             "SAND_TOMB" to "Sand Tomb",
             "MIRROR_SHOT" to "Mirror Shot",
-            "VOLT_SWITCH" to "Volt Switch"
+            "VOLT_SWITCH" to "Volt Switch",
+            "FELL_STINGER" to "Fell Stinger",
+            "VOLT_TACKLE" to "Volt Tackle",
+            "PSYBEAM" to "Psybeam",
+            "HEAT_WAVE" to "Heat Wave",
+            "DRAIN_PUNCH" to "Drain Punch",
+            "FELL_STINGER_PLUS" to "Fell Stinger+",
+            "VOLT_TACKLE_PLUS" to "Volt Tackle+",
+            "ZAP_CANNON_PLUS" to "Zap Cannon+",
+            "ACID_SPRAY_PLUS" to "Acid Spray+",
+            "LIQUIDATION_PLUS" to "Liquidation+",
+            "OUTRAGE_PLUS" to "Outrage+",
+            "DYNAMIC_PUNCH_PLUS" to "Dynamic Punch+",
+            "FUTURE_SIGHT_PLUS" to "Future Sight+",
+            "DRILL_PECK_PLUS" to "Drill Peck+",
+            "DARK_PULSE_PLUS" to "Dark Pulse+",
+            "NIGHT_SHADE_PLUS" to "Night Shade+",
+            "BRAVE_BIRD_PLUS" to "Brave Bird+",
+            "OMINOUS_WIND_PLUS" to "Ominous Wind+",
+            "SEED_BOMB_PLUS" to "Seed Bomb+",
+            "MYSTICAL_FIRE_PLUS" to "Mystical Fire+",
+            "SURF_PLUS" to "Surf+",
+            "PSYBEAM_PLUS" to "Psybeam+",
+            "BRICK_BREAK_PLUS" to "Brick Break+"
         )
 
         val REQUIRED_LEAGUE_KEYS = listOf(
@@ -2315,6 +2379,7 @@ class OverlayService : LifecycleService() {
     internal val oppCreditedByOptimalTimerAtMs = LongArray(3) { 0L }
     internal var sampledLeftChargeBtnFillPct: Int = -1
     internal var sampledRightChargeBtnFillPct: Int = -1
+    internal var sampledCenterChargeBtnFillPct: Int = -1
     internal val lastScannedLeftChargeFillPct = IntArray(3) { 0 }
     internal val lastScannedRightChargeFillPct = IntArray(3) { 0 }
     internal val pendingConfirmLeftChargeFillPct = IntArray(3) { 0 }
@@ -2446,8 +2511,8 @@ class OverlayService : LifecycleService() {
     internal val fasterMeterInThirdFill = BooleanArray(3) { false }
     internal val peakSecondFillPct = IntArray(3) { 0 }
     internal val peakFastestSecondFillPct = IntArray(3) { 0 }
-    internal val firstFillTopCapLuma = DoubleArray(6) { -1.0 }
-    internal val secondFillBotCapLuma = DoubleArray(6) { -1.0 }
+    internal val firstFillTopCapLuma = DoubleArray(9) { -1.0 }
+    internal val secondFillBotCapLuma = DoubleArray(9) { -1.0 }
 
     // v3.88: Player Energy-to-Turns Conversion, 500ms Multi-Turn Interpolation, Post-Charge Recounting & Ever-On-Field Tracking
     internal val playerSlotEverOnField = BooleanArray(3) { it == 0 }
@@ -3454,11 +3519,14 @@ class OverlayService : LifecycleService() {
         )
         val userHpPct = playerSlotHpPct[clampedUserIdx].coerceIn(1, 100)
 
-        val thirdMoveName = oppMeta.chargedMove3.takeIf { it.isNotBlank() }
+        val oppPlusMove = OverlayService.resolveMegaPlusMoveStatic(oppMeta.name, activeLeague)
+            ?: OverlayService.resolveMegaPlusMoveStatic(oppRawName, activeLeague)
+        val thirdMoveName = oppPlusMove
+            ?: oppMeta.chargedMove3.takeIf { it.isNotBlank() }
             ?: COMMON_THIRD_CHARGED_MOVE[oppMeta.name]
             ?: COMMON_THIRD_CHARGED_MOVE.entries.firstOrNull { it.key.equals(oppMeta.name, ignoreCase = true) }?.value
             ?: "Outrage"
-        val fourthMoveName = oppMeta.chargedMove4.takeIf {
+        val fourthMoveName = (if (oppPlusMove != null) oppMeta.chargedMove3 else oppMeta.chargedMove4).takeIf {
             it.isNotBlank() &&
                 !it.equals(oppMeta.chargedMove1, ignoreCase = true) &&
                 !it.equals(oppMeta.chargedMove2, ignoreCase = true) &&
@@ -3466,18 +3534,23 @@ class OverlayService : LifecycleService() {
         } ?: ""
 
         val confirmedSet = confirmedOppChargedMoves.getOrNull(clampedOppIdx) ?: emptySet()
-        val twoMovesLocked = confirmedSet.size >= 2
+        val confirmedRegularMoves = if (oppPlusMove != null) {
+            confirmedSet.filter { it.isNotBlank() && !it.equals(oppPlusMove, ignoreCase = true) }.distinctBy { it.lowercase() }
+        } else {
+            confirmedSet.filter { it.isNotBlank() }.distinctBy { it.lowercase() }
+        }
+        val twoRegularMovesLocked = confirmedRegularMoves.size >= 2
 
-        // Requirement 2d: If Charged Moves 1 & 2 are already determined and locked for opponent, exclude Moves 3 & 4
-        val candidateMoveNames: List<String> = if (twoMovesLocked) {
-            confirmedSet.filter { it.isNotBlank() }.distinctBy { it.lowercase() }.take(2)
+        // Requirement 2d: If Charged Moves 1 & 2 are already determined and locked for opponent, exclude Moves 3 & 4 (while preserving fixed Super Mega + move)
+        val candidateMoveNames: List<String> = if (twoRegularMovesLocked) {
+            (confirmedRegularMoves.take(2) + listOfNotNull(oppPlusMove)).distinctBy { it.lowercase() }
         } else {
             val baseList = if (enable4ChargedMoves && fourthMoveName.isNotBlank()) {
                 listOf(oppMeta.chargedMove1, oppMeta.chargedMove2, thirdMoveName, fourthMoveName)
             } else {
                 listOf(oppMeta.chargedMove1, oppMeta.chargedMove2, thirdMoveName)
             }
-            (baseList + confirmedSet.toList())
+            (baseList + confirmedSet.toList() + listOfNotNull(oppPlusMove))
                 .filter { it.isNotBlank() }
                 .distinctBy { it.lowercase() }
         }
@@ -3494,9 +3567,18 @@ class OverlayService : LifecycleService() {
         val userFastEnergy = OverlayService.resolveFastEnergyStatic(userFastMoveName, userFastTurns).coerceAtLeast(1)
         val uMove1 = userSlotCfg?.chargedMove1?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove1
         val uMove2 = userSlotCfg?.chargedMove2?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove2
+        val uMovePlus = OverlayService.resolveMegaPlusMoveStatic(userMeta.name, activeLeague)
+            ?: OverlayService.resolveMegaPlusMoveStatic(userMonName, activeLeague)
         val uCost1 = (OverlayService.resolveChargedMoveStatsStatic(uMove1, userMeta.types.firstOrNull() ?: "normal").energyCost.takeIf { it > 0 } ?: 50).coerceIn(35, 100)
         val uCost2 = (OverlayService.resolveChargedMoveStatsStatic(uMove2, userMeta.types.firstOrNull() ?: "normal").energyCost.takeIf { it > 0 } ?: 50).coerceIn(35, 100)
-        val (targetUserMoveName, targetUserMoveCost) = if (uCost1 <= uCost2) uMove1 to uCost1 else uMove2 to uCost2
+        var (targetUserMoveName, targetUserMoveCost) = if (uCost1 <= uCost2) uMove1 to uCost1 else uMove2 to uCost2
+        if (!uMovePlus.isNullOrBlank()) {
+            val uCostPlus = (OverlayService.resolveChargedMoveStatsStatic(uMovePlus, userMeta.types.firstOrNull() ?: "normal").energyCost.takeIf { it > 0 } ?: 50).coerceIn(35, 100)
+            if (uCostPlus < targetUserMoveCost) {
+                targetUserMoveName = uMovePlus
+                targetUserMoveCost = uCostPlus
+            }
+        }
         val targetUserMoveShort = OverlayService.abbrMoveCompactStatic(targetUserMoveName)
         val myFastsNeededForNextMove = if (userEnergyNow >= targetUserMoveCost) {
             0
@@ -3604,7 +3686,7 @@ class OverlayService : LifecycleService() {
 
         val oppShort = OverlayService.abbrPokeCompactStatic(oppMeta.name, isOppShad)
         val userShort = OverlayService.abbrPokeCompactStatic(userMeta.name, isUserShad)
-        val lockedTag = if (twoMovesLocked) " • 2M" else ""
+        val lockedTag = if (movesetLocked) { if (oppPlusMove != null) " • 3M+" else " • 2M" } else ""
         val headerLineText = "$headerVerdictText  •  $oppShort(${effectiveBankedE}e) vs $userShort(${userHpPct}%)$lockedTag"
 
         val nowMs = System.currentTimeMillis()
@@ -5224,16 +5306,20 @@ class OverlayService : LifecycleService() {
 
         val userMove1Name = userSlotCfg?.chargedMove1?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove1
         val userMove2Name = userSlotCfg?.chargedMove2?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove2
-        val userCandidateMoves = listOfNotNull(userMove1Name, userMove2Name).filter { it.isNotBlank() }.distinct()
+        val userPlusMoveName = OverlayService.resolveMegaPlusMoveStatic(userMeta.name, activeLeague)
+            ?: OverlayService.resolveMegaPlusMoveStatic(userMonName, activeLeague)
+        val userCandidateMoves = listOfNotNull(userMove1Name, userMove2Name, userPlusMoveName).filter { it.isNotBlank() }.distinct()
 
         fun buildOppPoolForName(rawName: String, isShad: Boolean): Pair<PokemonMeta, List<String>>? {
             if (rawName.isBlank() || rawName.equals("Waiting...", ignoreCase = true)) return null
             val meta = getPokemonMeta(rawName, activeLeague, isShad)
             val pool = OverlayService.getAvailableMovePoolForSpeciesStatic(meta.name, activeLeague).second
+            val oppPlus = OverlayService.resolveMegaPlusMoveStatic(meta.name, activeLeague)
+                ?: OverlayService.resolveMegaPlusMoveStatic(rawName, activeLeague)
             val third = meta.chargedMove3.takeIf { it.isNotBlank() }
                 ?: COMMON_THIRD_CHARGED_MOVE[meta.name]
                 ?: ""
-            val moves = (listOf(meta.chargedMove1, meta.chargedMove2, third, meta.chargedMove4) + pool)
+            val moves = (listOfNotNull(oppPlus, meta.chargedMove1, meta.chargedMove2, third, meta.chargedMove4) + pool)
                 .filter { it.isNotBlank() }
                 .distinct()
             return meta to moves
@@ -5263,7 +5349,7 @@ class OverlayService : LifecycleService() {
         val fallbackPreChargeOppShadow = manualShadowOverrides[fallbackPreChargeOppBase]
             ?: if (pendingChargedAttackActor == "opp") pendingChargedAttackOppShadow else lastOppChargedAttackerShadow
 
-        val usedRegex = Regex("(?i)(?:(.+?)\\s+)?used\\s+([a-zA-Z0-9'\\s-]+?)[!.?]*$")
+        val usedRegex = Regex("(?i)(?:(.+?)\\s+)?used\\s+([a-zA-Z0-9'\\s-+]+?)[!.?]*$")
         for (line in midBannerLines) {
             val raw = line.text.trim()
             if (raw.length < 6) continue
@@ -6721,10 +6807,13 @@ class OverlayService : LifecycleService() {
         }
 
         // Helper for opponent & player move energy lookup (used by Section 1C Dual-Meter Cross-Validation and Sections 2/3/4)
-        val oppThirdMove = oppMetaForStats.chargedMove3.takeIf { it.isNotBlank() }
+        val oppPlusMoveForStats = OverlayService.resolveMegaPlusMoveStatic(oppMetaForStats.name, activeLeague)
+            ?: OverlayService.resolveMegaPlusMoveStatic(activeOpponentName, activeLeague)
+        val oppThirdMove = oppPlusMoveForStats
+            ?: oppMetaForStats.chargedMove3.takeIf { it.isNotBlank() }
             ?: COMMON_THIRD_CHARGED_MOVE[oppMetaForStats.name]
             ?: "Outrage"
-        val oppMoveNames = listOf(oppMetaForStats.chargedMove1, oppMetaForStats.chargedMove2, oppThirdMove, oppMetaForStats.chargedMove4)
+        val oppMoveNames = listOfNotNull(oppPlusMoveForStats, oppMetaForStats.chargedMove1, oppMetaForStats.chargedMove2, oppThirdMove, oppMetaForStats.chargedMove4)
             .filter { it.isNotBlank() }
             .distinct()
         val oppMoveEnergyMap = oppMoveNames.associateWith { mName ->
@@ -6733,13 +6822,18 @@ class OverlayService : LifecycleService() {
         }
         val cheapestOppEnergy = oppMoveEnergyMap.values.minOrNull() ?: 45
 
-        val userMoveNames = listOf(userMove1NameEarly, userMove2NameEarly).filter { it.isNotBlank() }.distinct()
+        val userPlusMoveEarly = OverlayService.resolveMegaPlusMoveStatic(userMetaForStats.name, activeLeague)
+            ?: OverlayService.resolveMegaPlusMoveStatic(userMonNameForStats, activeLeague)
+        val userMoveNames = listOfNotNull(userMove1NameEarly, userMove2NameEarly, userPlusMoveEarly).filter { it.isNotBlank() }.distinct()
         val userMoveEnergyMap = userMoveNames.associateWith { mName ->
             val mStats = OverlayService.resolveChargedMoveStatsStatic(mName, userMetaForStats.types.firstOrNull() ?: "normal")
             (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[mName] ?: 50).coerceIn(35, 100)
         }
-        val cheapestUserEnergy = min(userMove1Energy, userMove2Energy).coerceIn(35, 100)
-        val maxUserMoveEnergy = max(userMove1Energy, userMove2Energy).coerceIn(35, 100)
+        val userPlusMoveEnergy = if (!userPlusMoveEarly.isNullOrBlank()) {
+            (OverlayService.resolveChargedMoveStatsStatic(userPlusMoveEarly, userMetaForStats.types.firstOrNull() ?: "normal").energyCost.takeIf { it > 0 } ?: 50).coerceIn(35, 100)
+        } else 0
+        val cheapestUserEnergy = (if (userPlusMoveEnergy > 0) min(min(userMove1Energy, userMove2Energy), userPlusMoveEnergy) else min(userMove1Energy, userMove2Energy)).coerceIn(35, 100)
+        val maxUserMoveEnergy = (if (userPlusMoveEnergy > 0) max(max(userMove1Energy, userMove2Energy), userPlusMoveEnergy) else max(userMove1Energy, userMove2Energy)).coerceIn(35, 100)
 
         // 1C. v3.88: Player Energy-to-Turns Conversion & Post-Charge Turn Recounting (Decoupled from Micro-Adjustments)
         //     - Converts confirmed player energy gain into player fast-move turns (`confirmedPhasePlayerTurns`).
@@ -6895,26 +6989,45 @@ class OverlayService : LifecycleService() {
                         val debouncedLeftForFit = if (slowestIsRight) debouncedFasterPct else debouncedFillPct
                         val debouncedRightForFit = if (slowestIsRight) debouncedFillPct else debouncedFasterPct
 
-                        // v5.12: Never allow post-throw circle fill heuristics to overwrite a move confirmed by BANNER_OCR!
+                        // v5.12 / v6.20: Never allow post-throw circle fill heuristics to overwrite a move confirmed by BANNER_OCR!
+                        // Evaluate Move 1, Move 2, and (when active in Mega League) the 3rd Super Mega Plus Move.
                         if (!lastUserChargeWasBannerOcr &&
-                            hasSecondUserMove &&
-                            userMove1Energy != userMove2Energy &&
-                            lastUserChargePreEnergySnapshot >= max(userMove1Energy, userMove2Energy)
+                            (hasSecondUserMove || userPlusMoveEnergy > 0) &&
+                            lastUserChargePreEnergySnapshot >= cheapestUserEnergy
                         ) {
-                            val remIfMove1 = (lastUserChargePreEnergySnapshot - userMove1Energy).coerceIn(0, 100)
-                            val remIfMove2 = (lastUserChargePreEnergySnapshot - userMove2Energy).coerceIn(0, 100)
-                            val fitErr1 = min(
-                                scorePostThrowCircleFit(debouncedLeftForFit, debouncedRightForFit, userMove1Energy, userMove2Energy, hasSecondUserMove, remIfMove1),
-                                scorePostThrowCircleFit(debouncedLeftForFit, debouncedRightForFit, userMove1Energy, userMove2Energy, hasSecondUserMove, (remIfMove1 + userFastEnergyForStats).coerceAtMost(100))
-                            )
-                            val fitErr2 = min(
-                                scorePostThrowCircleFit(debouncedLeftForFit, debouncedRightForFit, userMove1Energy, userMove2Energy, hasSecondUserMove, remIfMove2),
-                                scorePostThrowCircleFit(debouncedLeftForFit, debouncedRightForFit, userMove1Energy, userMove2Energy, hasSecondUserMove, (remIfMove2 + userFastEnergyForStats).coerceAtMost(100))
-                            )
-                            val verifiedMove = if (fitErr2 + 2.0 < fitErr1) {
-                                userMove2NameEarly to userMove2Energy
-                            } else if (fitErr1 + 2.0 < fitErr2) {
-                                userMove1NameEarly to userMove1Energy
+                            val candidateFits = mutableListOf<Triple<String, Int, Double>>()
+                            if (lastUserChargePreEnergySnapshot >= userMove1Energy) {
+                                val rem1 = (lastUserChargePreEnergySnapshot - userMove1Energy).coerceIn(0, 100)
+                                val err1 = min(
+                                    scorePostThrowCircleFit(debouncedLeftForFit, debouncedRightForFit, userMove1Energy, userMove2Energy, hasSecondUserMove, rem1),
+                                    scorePostThrowCircleFit(debouncedLeftForFit, debouncedRightForFit, userMove1Energy, userMove2Energy, hasSecondUserMove, (rem1 + userFastEnergyForStats).coerceAtMost(100))
+                                )
+                                candidateFits.add(Triple(userMove1NameEarly, userMove1Energy, err1))
+                            }
+                            if (hasSecondUserMove && userMove2Energy != userMove1Energy && lastUserChargePreEnergySnapshot >= userMove2Energy) {
+                                val rem2 = (lastUserChargePreEnergySnapshot - userMove2Energy).coerceIn(0, 100)
+                                val err2 = min(
+                                    scorePostThrowCircleFit(debouncedLeftForFit, debouncedRightForFit, userMove1Energy, userMove2Energy, hasSecondUserMove, rem2),
+                                    scorePostThrowCircleFit(debouncedLeftForFit, debouncedRightForFit, userMove1Energy, userMove2Energy, hasSecondUserMove, (rem2 + userFastEnergyForStats).coerceAtMost(100))
+                                )
+                                candidateFits.add(Triple(userMove2NameEarly, userMove2Energy, err2))
+                            }
+                            if (!userPlusMoveEarly.isNullOrBlank() &&
+                                userPlusMoveEnergy > 0 &&
+                                userPlusMoveEnergy != userMove1Energy &&
+                                userPlusMoveEnergy != userMove2Energy &&
+                                lastUserChargePreEnergySnapshot >= userPlusMoveEnergy
+                            ) {
+                                val rem3 = (lastUserChargePreEnergySnapshot - userPlusMoveEnergy).coerceIn(0, 100)
+                                val err3 = min(
+                                    scorePostThrowCircleFit(debouncedLeftForFit, debouncedRightForFit, userMove1Energy, userMove2Energy, hasSecondUserMove, rem3),
+                                    scorePostThrowCircleFit(debouncedLeftForFit, debouncedRightForFit, userMove1Energy, userMove2Energy, hasSecondUserMove, (rem3 + userFastEnergyForStats).coerceAtMost(100))
+                                )
+                                candidateFits.add(Triple(userPlusMoveEarly, userPlusMoveEnergy, err3))
+                            }
+                            val sortedFits = candidateFits.sortedBy { it.third }
+                            val verifiedMove = if (sortedFits.size >= 2 && sortedFits[0].third + 2.0 < sortedFits[1].third) {
+                                sortedFits[0].first to sortedFits[0].second
                             } else null
 
                             if (verifiedMove != null && verifiedMove.second != lastUserChargeDeductedEnergySnapshot) {
@@ -12939,7 +13052,25 @@ class OverlayService : LifecycleService() {
         "Aura Wheel" to "AuW",
         "Torch Song" to "TrS",
         "Super Power" to "SpP",
-        "Chilling Water" to "ChW"
+        "Chilling Water" to "ChW",
+        "Fell Stinger+" to "FlS+",
+        "Volt Tackle+" to "VlT+",
+        "Zap Cannon+" to "ZC+",
+        "Acid Spray+" to "ASp+",
+        "Liquidation+" to "Liq+",
+        "Outrage+" to "OR+",
+        "Dynamic Punch+" to "DyP+",
+        "Future Sight+" to "FS+",
+        "Drill Peck+" to "DPk+",
+        "Dark Pulse+" to "DP+",
+        "Night Shade+" to "NSh+",
+        "Brave Bird+" to "BB+",
+        "Ominous Wind+" to "OW+",
+        "Seed Bomb+" to "SB+",
+        "Mystical Fire+" to "MyF+",
+        "Surf+" to "Surf+",
+        "Psybeam+" to "Psb+",
+        "Brick Break+" to "BrB+"
     )
 
     internal val fastMovePowerMap get() = fastMovePowerMapStatic
@@ -12950,13 +13081,21 @@ class OverlayService : LifecycleService() {
         if (moveName.isBlank()) return "Move"
         moveAbbr5Map[moveName]?.let { return it }
         moveAbbr5Map.entries.firstOrNull { it.key.equals(moveName, ignoreCase = true) }?.let { return it.value }
-        val clean = moveName.replace(Regex("[()\\-]"), " ").trim()
+        val isPlusMove = moveName.trim().endsWith("+")
+        val baseInput = if (isPlusMove) moveName.trim().removeSuffix("+").trim() else moveName
+        if (isPlusMove) {
+            moveAbbr5Map.entries.firstOrNull { it.key.equals(baseInput, ignoreCase = true) }?.let {
+                return "${it.value.take(4)}+"
+            }
+        }
+        val clean = baseInput.replace(Regex("[()\\-]"), " ").trim()
         val words = clean.split(Regex("\\s+")).filter { it.isNotEmpty() }
         if (words.size >= 2) {
-            val combo = (words[0].take(3) + words[1].take(2)).take(5)
-            return combo
+            val combo = (words[0].take(3) + words[1].take(2)).take(if (isPlusMove) 4 else 5)
+            return if (isPlusMove) "$combo+" else combo
         }
-        return clean.take(5)
+        val truncated = clean.take(if (isPlusMove) 4 else 5)
+        return if (isPlusMove) "$truncated+" else truncated
     }
 
     internal fun abbrPokemon3(name: String, isShadow: Boolean = false): String {
@@ -13347,7 +13486,10 @@ class OverlayService : LifecycleService() {
                 isAttackerShadow = isThisOppShadow,
                 isDefenderShadow = isUserShadow
             )
-            val thirdMoveName = meta.chargedMove3.takeIf { it.isNotBlank() }
+            val thisOppPlusMove = OverlayService.resolveMegaPlusMoveStatic(meta.name, activeLeague)
+                ?: OverlayService.resolveMegaPlusMoveStatic(opp, activeLeague)
+            val thirdMoveName = thisOppPlusMove
+                ?: meta.chargedMove3.takeIf { it.isNotBlank() }
                 ?: COMMON_THIRD_CHARGED_MOVE[meta.name]
                 ?: COMMON_THIRD_CHARGED_MOVE.entries.firstOrNull { it.key.equals(meta.name, ignoreCase = true) }?.value
                 ?: when (meta.types.lastOrNull()?.lowercase()) {
@@ -13376,7 +13518,7 @@ class OverlayService : LifecycleService() {
                 isAttackerShadow = isThisOppShadow,
                 isDefenderShadow = isUserShadow
             )
-            val fourthMoveName = meta.chargedMove4.takeIf {
+            val fourthMoveName = (if (thisOppPlusMove != null) meta.chargedMove3 else meta.chargedMove4).takeIf {
                 it.isNotBlank() &&
                     !it.equals(meta.chargedMove1, ignoreCase = true) &&
                     !it.equals(meta.chargedMove2, ignoreCase = true) &&
@@ -13395,11 +13537,16 @@ class OverlayService : LifecycleService() {
             val thisOppHpPct = if (idx in 0..2 && oppFaintedSlots[idx]) 0 else oppSlotHpPct.getOrElse(idx) { 100 }.coerceIn(0, 100)
             val thisOppEnergy = if (idx in 0..2 && oppFaintedSlots[idx]) 0 else oppSlotEnergy.getOrElse(idx) { 0 }.coerceIn(0, 100)
             val slotConfirmedSet = confirmedOppChargedMoves.getOrNull(idx) ?: emptySet()
-            val rawThisOppMoveNames = (listOf(meta.chargedMove1, meta.chargedMove2, thirdMoveName, fourthMoveName) + slotConfirmedSet)
+            val slotConfirmedRegular = if (thisOppPlusMove != null) {
+                slotConfirmedSet.filter { it.isNotBlank() && !it.equals(thisOppPlusMove, ignoreCase = true) }
+            } else {
+                slotConfirmedSet.filter { it.isNotBlank() }
+            }
+            val rawThisOppMoveNames = (listOf(meta.chargedMove1, meta.chargedMove2, thirdMoveName, fourthMoveName) + slotConfirmedSet + listOfNotNull(thisOppPlusMove))
                 .filter { it.isNotBlank() }
                 .distinctBy { it.lowercase() }
-            val thisOppMoveNames = if (slotConfirmedSet.size >= 2) {
-                rawThisOppMoveNames.filter { m -> slotConfirmedSet.any { c -> c.equals(m, ignoreCase = true) } }.ifEmpty { rawThisOppMoveNames }
+            val thisOppMoveNames = if (slotConfirmedRegular.size >= 2) {
+                (slotConfirmedRegular.take(2) + listOfNotNull(thisOppPlusMove)).distinctBy { it.lowercase() }.ifEmpty { rawThisOppMoveNames }
             } else {
                 rawThisOppMoveNames
             }
@@ -13453,35 +13600,42 @@ class OverlayService : LifecycleService() {
         // CMP Tie Evaluation: True if player's active Pokémon wins CMP (higher or equal Attack)
         val winsCmp = userMeta.atk >= oppMeta.atk
 
-        // Active opponent's 3 (or 4) charged moves — v3.80: filter to confirmed moves once 2 distinct charged moves are known
-        val activeOppThirdMove = oppMeta.chargedMove3.takeIf { it.isNotBlank() }
+        // Active opponent's 3 (or 4) charged moves — v3.80 / v6.20: filter to confirmed regular moves once 2 distinct regular moves are known, while keeping Super Mega + move
+        val activeOppPlusMove = OverlayService.resolveMegaPlusMoveStatic(oppMeta.name, activeLeague)
+            ?: OverlayService.resolveMegaPlusMoveStatic(activeOpponentName, activeLeague)
+        val activeOppThirdMove = activeOppPlusMove
+            ?: oppMeta.chargedMove3.takeIf { it.isNotBlank() }
             ?: COMMON_THIRD_CHARGED_MOVE[oppMeta.name]
             ?: COMMON_THIRD_CHARGED_MOVE.entries.firstOrNull { it.key.equals(oppMeta.name, ignoreCase = true) }?.value
             ?: "Outrage"
-        val activeOppFourthMove = oppMeta.chargedMove4.takeIf {
+        val activeOppFourthMove = (if (activeOppPlusMove != null) oppMeta.chargedMove3 else oppMeta.chargedMove4).takeIf {
             it.isNotBlank() &&
                 !it.equals(oppMeta.chargedMove1, ignoreCase = true) &&
                 !it.equals(oppMeta.chargedMove2, ignoreCase = true) &&
                 !it.equals(activeOppThirdMove, ignoreCase = true)
         } ?: ""
         val activeOppConfirmedSet = confirmedOppChargedMoves.getOrNull(activeOppSlotClamped) ?: emptySet()
+        val activeOppConfirmedRegular = if (activeOppPlusMove != null) {
+            activeOppConfirmedSet.filter { it.isNotBlank() && !it.equals(activeOppPlusMove, ignoreCase = true) }.distinctBy { it.lowercase() }
+        } else {
+            activeOppConfirmedSet.filter { it.isNotBlank() }.distinctBy { it.lowercase() }
+        }
         val rawOppChargedMoveNames = (if (enable4ChargedMoves && activeOppFourthMove.isNotBlank()) {
             listOf(oppMeta.chargedMove1, oppMeta.chargedMove2, activeOppThirdMove, activeOppFourthMove)
         } else {
             listOf(oppMeta.chargedMove1, oppMeta.chargedMove2, activeOppThirdMove)
-        } + activeOppConfirmedSet.toList())
+        } + activeOppConfirmedSet.toList() + listOfNotNull(activeOppPlusMove))
             .filter { it.isNotBlank() }
             .distinctBy { it.lowercase() }
-        val oppChargedMoveNames = if (activeOppConfirmedSet.size >= 2) {
-            val knownTwo = rawOppChargedMoveNames.filter { m ->
-                activeOppConfirmedSet.any { c -> c.equals(m, ignoreCase = true) }
-            }
-            if (knownTwo.size >= 2) knownTwo.take(2) else rawOppChargedMoveNames
+        val oppChargedMoveNames = if (activeOppConfirmedRegular.size >= 2) {
+            (activeOppConfirmedRegular.take(2) + listOfNotNull(activeOppPlusMove)).distinctBy { it.lowercase() }.ifEmpty { rawOppChargedMoveNames }
         } else {
             rawOppChargedMoveNames
         }
 
-        val myChargedMoveNames = listOf(userMove1Name, userMove2Name).filter { it.isNotBlank() }.distinct()
+        val activeUserPlusMove = OverlayService.resolveMegaPlusMoveStatic(userMeta.name, activeLeague)
+            ?: OverlayService.resolveMegaPlusMoveStatic(activePlayerName, activeLeague)
+        val myChargedMoveNames = listOfNotNull(userMove1Name, userMove2Name, activeUserPlusMove).filter { it.isNotBlank() }.distinct()
 
         // Compute shared 1st-throw maximum turn horizon across all 5 moves (Opponent's 3 + Player's 2)
         val oppFirstTurns = oppChargedMoveNames.map { moveName ->

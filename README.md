@@ -1,4 +1,4 @@
-# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v6.12)
+# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v6.20)
 
 [![Live Web Simulator](https://img.shields.io/badge/🌐%20Live%20Web%20Simulator-Try%20in%20Browser-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white)](https://sportsfan986.github.io/silphscope-pvp/)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support%20the%20Project-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/sportsfan986)
@@ -131,13 +131,13 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## 📥 Download & Install Native Android APK (v6.11)
+## 📥 Download & Install Native Android APK (v6.20)
 
 > **✅ Note on Live HP & Energy Counting (Enabled by Default since v6.02)**:
 > **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting** are **ENABLED (ON)** by default with optimal scanner tuning (`2 samples`, `±2%` tolerance, `200ms` proactive energy lead, `+1t` fast offset, and `4.0s` swap-throw rollback). You can customize all scanner, haptics, and 1-Battle DVR controls in **⚙️ Settings**.
 
 1. Visit the **[Official GitHub Releases Page](https://github.com/sportsfan986/silphscope-pvp/releases)**.
-2. Download **`silphscope-pvp-v6.11.apk`** directly to your Android device.
+2. Download **`silphscope-pvp-v6.20.apk`** directly to your Android device.
 3. Tap the downloaded APK file to install (grant *"Install unknown apps"* permission if prompted).
 4. Launch **SilphScope PvP**:
    - Select, reorder, or customize your **GBL or Show 6 Team Presets**, set **Opponent Move Count Basis** (`My Fasts` vs. `Their Fasts`), adjust **Overlay Size** (`50%–100%` screen width slider) and **Background Transparency**, and configure **Synchronized Haptics** or **1-Battle DVR** in **⚙️ Settings**.
@@ -147,11 +147,13 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## ✨ Changelog — Complete Release History (`v1.00` – `v6.11`)
+## ✨ Changelog — Complete Release History (`v1.00` – `v6.20`)
 
 *(See [CHANGELOG.md](./CHANGELOG.md) for full technical notes on every release.)*
 
-- **v6.00 – v6.11 — Codebase Modularization, Antigravity Platform Migration, 1-Battle Hardware H.264 DVR + Deep Frame Trace, Synchronized Tactical Haptics, Lead-Loss Recovery Rate & 4-Pillar AI Tactical Coach**:
+- **v6.00 – v6.20 — Super Mega 3rd Fixed `+` Charged Moves, 3-Button Energy Scanner, Role-Agnostic Multi-Throw Combat Simulator, 1-Battle H.264 DVR & Codebase Modularization**:
+  - **v6.20**: Added full **Mega Level 4 (`Super Mega`) 3rd Fixed Special `+` Charged Move** support across all 18 Super Mega species and `*_PLUS` moves in Mega-eligible leagues (`Mega Master League`, `Mega Great League`, `Mega Ultra League`, `Battle Frontier (Cauldron)`, `Battle Frontier (Master)`), calibrated the **3-Button Pixel Energy Scanner** (`0.215w`/`0.500w` raised/`0.782w`), and upgraded the turn-by-turn combat simulator to a **flexible, role-agnostic multi-throw sequence engine** (evaluating back-to-back `35E -> 35E` spam vs. single nukes and 3-move kits).
+  - **v6.12**: Added Pokémon GO HP shader color-to-percentage validation, `BANNER_OCR` move preservation, limited/Mega cup move pool fallbacks, pre-minigame circle shrink energy retention, and `"BLOCKED!"` mid-banner OCR.
   - **v6.11**: De-duplicated repository (removed 14 legacy AI Studio root/mirror artifacts), reduced Web Simulator JS bundle by 71% (`~4.0 MB` → `1.15 MB`), fixed telemetry batch `APP_VERSION` overwrite bug, and modularized Android Kotlin (`10` domain modules in `com.gbl.overlay`) and Web React/TypeScript (`src/data/*` & `src/components/*`).
   - **v6.10**: Migrated project development environment from Google AI Studio to Google Antigravity, removed legacy flat-file mirror duplicates, unified version & telemetry schemas, and established local JDK 17 + Android SDK 35 release build parity.
   - **v6.07**: Added zero-impact **1-Battle Full-Screen H.264 DVR** (`MediaCodec` `video/avc` at `544×1184`) reusing the single in-memory `MediaProjection` frame with burned-in frame/timestamp watermarks, companion `_deep_trace.jsonl`, post-cutscene dual-HP audits (`+220ms`/`+650ms`/`+1200ms`), and turn-by-turn energy mutation ledger auto-uploaded to `ai-telemetry-logs`.

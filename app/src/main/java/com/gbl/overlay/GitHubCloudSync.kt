@@ -662,7 +662,7 @@ internal fun OverlayService.Companion.buildDebounceAndSettlingSettingsMapStatic(
     }
     return mapOf(
         "appVersion" to APP_VERSION,
-        "versionCode" to 1612,
+        "versionCode" to 1620,
         "scanHzMode" to scanHzMode,
         "turnOffsetMs" to scanTurnOffsetMs,
         "hpTrackingEnabled" to hpTracking,
@@ -833,10 +833,11 @@ internal fun OverlayService.Companion.uploadSettingsChangeHistoryBlocking(prefs:
     val pendingChanges = loadPendingSettingsChangesStatic(prefs, gson)
     if (pendingChanges.isEmpty()) return true
     val historyChanges = loadSettingsChangeHistoryStatic(prefs, gson).ifEmpty { pendingChanges }
+    // Uploads require the signed-in user's own GitHub token. Non-collaborator accounts cannot write
+    // to the repo directly; their settings changes still reach the maintainers embedded in the
+    // telemetry batch records, which travel through the validated Issue relay.
     val userToken = getEffectiveSyncToken(prefs).trim()
-    val relayToken = getBuiltInTelemetryRelayTokenStatic()
-    val primaryToken = userToken.ifEmpty { relayToken }
-    if (primaryToken.isEmpty()) return false
+    if (userToken.isEmpty()) return false
 
     var username = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty()
     if (username.isEmpty() && userToken.isNotEmpty()) {
@@ -893,10 +894,7 @@ internal fun OverlayService.Companion.uploadSettingsChangeHistoryBlocking(prefs:
         }
     }
 
-    var ok = try { tryPutSettingsFile(primaryToken) } catch (_: Exception) { false }
-    if (!ok && primaryToken != relayToken && relayToken.isNotEmpty()) {
-        ok = try { tryPutSettingsFile(relayToken) } catch (_: Exception) { false }
-    }
+    val ok = try { tryPutSettingsFile(userToken) } catch (_: Exception) { false }
     if (ok) {
         val uploadedIds = pendingChanges.map { it.id }.toSet()
         val remaining = loadPendingSettingsChangesStatic(prefs, gson).filter { it.id !in uploadedIds }
@@ -1673,10 +1671,8 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
 ): Pair<Boolean, String> {
     return try {
         val userToken = getEffectiveSyncToken(prefs).trim()
-        val relayToken = getBuiltInTelemetryRelayTokenStatic()
-        val primaryToken = userToken.ifEmpty { relayToken }
-        if (primaryToken.isEmpty()) {
-            return false to "No GitHub token available for DVR upload."
+        if (userToken.isEmpty()) {
+            return false to "Sign in with GitHub in Settings to upload DVR recordings."
         }
         val devHash = getDeviceTelemetryHashStatic(prefs)
         val username = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty()
@@ -1734,7 +1730,7 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
             mapOf(
                 "recordType" to "BATTLE_DVR_SUMMARY_HEADER",
                 "appVersion" to resolvedDvrVer,
-                "versionCode" to 1612,
+                "versionCode" to 1620,
                 "battleId" to battleId,
                 "videoRepoPath" to videoRepoPath,
                 "traceRepoPath" to traceRepoPath,
@@ -1744,31 +1740,23 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
         val traceBodyBytes = if (traceFile.exists()) traceFile.readBytes() else ByteArray(0)
         val combinedTraceBytes = headerJson.toByteArray(Charsets.UTF_8) + traceBodyBytes
 
-        var effectiveToken = primaryToken
-        var traceOk = putFileToTelemetryBranch(
+        // DVR bundles (multi-MB video) are too large for the Issue relay, so they are only accepted
+        // via a direct commit from accounts with push access to the repo.
+        val traceOk = putFileToTelemetryBranch(
             traceRepoPath,
             combinedTraceBytes,
             "dvr(v$APP_VERSION): deep frame trace for $cleanBattleId by @$safeUser",
-            effectiveToken
+            userToken
         )
-        if (!traceOk && effectiveToken != relayToken && relayToken.isNotEmpty()) {
-            effectiveToken = relayToken
-            traceOk = putFileToTelemetryBranch(
-                traceRepoPath,
-                combinedTraceBytes,
-                "dvr(v$APP_VERSION): deep frame trace for $cleanBattleId by @$safeUser",
-                effectiveToken
-            )
-        }
 
         var videoOk = false
-        if (mp4File.exists() && mp4File.length() > 0L) {
+        if (traceOk && mp4File.exists() && mp4File.length() > 0L) {
             val mp4Bytes = mp4File.readBytes()
             videoOk = putFileToTelemetryBranch(
                 videoRepoPath,
                 mp4Bytes,
                 "dvr(v$APP_VERSION): full-screen battle video (${mp4Bytes.size / 1024} KB) for $cleanBattleId by @$safeUser",
-                effectiveToken
+                userToken
             )
         }
 
@@ -1789,28 +1777,137 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
         } else if (traceOk) {
             true to "📋 Uploaded 1-Battle Deep Trace ($cleanBattleId) to @$AI_TELEMETRY_BRANCH"
         } else {
-            false to "⚠️ 1-Battle DVR upload failed"
+            false to "⚠️ 1-Battle DVR upload failed (DVR uploads require collaborator access to the SilphScope repo)"
         }
     } catch (e: Exception) {
         false to "⚠️ DVR upload error: ${e.localizedMessage ?: "Network error"}"
     }
 }
 
-/**
- * Uploads pending v5.10 AI training & anomaly battle records to the dedicated `ai-telemetry-logs`
- * branch in `sportsfan986/silphscope-pvp` (with automatic community Issue relay + Gist backup fallback
- * for non-collaborator GitHub accounts).
- */
-internal fun OverlayService.Companion.getBuiltInTelemetryRelayTokenStatic(): String {
-    val codes = intArrayOf(
-        103, 104, 112, 95, 97, 72, 97, 104, 101, 83,
-        102, 108, 66, 52, 54, 104, 76, 52, 65, 56,
-        98, 86, 115, 86, 70, 114, 50, 102, 113, 65,
-        102, 56, 88, 78, 52, 73, 105, 120, 82, 69
-    )
-    return codes.map { it.toChar() }.joinToString("")
+// ── Community Issue relay (any signed-in GitHub account) ───────────────────────────────────────
+// GitHub caps issue bodies at 65,536 chars, so batches are split across several issues and heavy
+// optional fields are dropped from oversize records. Must stay in sync with the limits enforced by
+// `.github/scripts/relay-telemetry.mjs`.
+private const val ISSUE_RELAY_MAX_PAYLOAD_CHARS = 58_000
+private const val ISSUE_RELAY_MAX_RECORDS_PER_ISSUE = 25
+private const val ISSUE_RELAY_MAX_ISSUES_PER_UPLOAD = 5
+private val ISSUE_RELAY_DROPPABLE_KEYS = listOf("timelineEvents", "energyLedger", "postCutsceneHpAudits")
+
+private data class IssueRelayResult(
+    val issuesOpened: Int,
+    val deliveredBattleIds: Set<String>,
+    /** Records that cannot fit in an issue even after compaction; dropped so they don't block the queue. */
+    val skippedBattleIds: Set<String>,
+    val lastHttpCode: Int
+)
+
+private fun stripBase64FieldsForRelay(el: com.google.gson.JsonElement) {
+    when {
+        el.isJsonObject -> {
+            val obj = el.asJsonObject
+            obj.keySet().filter { it.endsWith("Base64") }.forEach { obj.remove(it) }
+            obj.entrySet().forEach { stripBase64FieldsForRelay(it.value) }
+        }
+        el.isJsonArray -> el.asJsonArray.forEach { stripBase64FieldsForRelay(it) }
+    }
 }
 
+/** Serializes [rec] as one JSONL line no longer than [maxChars], compacting it if needed; null if impossible. */
+private fun compactRecordForIssueRelay(gson: Gson, rec: AiTelemetryBattleRecordV510, maxChars: Int): String? {
+    val full = gson.toJson(rec)
+    if (full.length <= maxChars) return full
+    val obj = gson.toJsonTree(rec).asJsonObject
+    obj.addProperty("relayCompacted", true)
+    stripBase64FieldsForRelay(obj)
+    gson.toJson(obj).let { if (it.length <= maxChars) return it }
+    for (key in ISSUE_RELAY_DROPPABLE_KEYS) {
+        obj.remove(key)
+        gson.toJson(obj).let { if (it.length <= maxChars) return it }
+    }
+    return null
+}
+
+private fun postTelemetryViaIssueRelayBlocking(
+    httpClient: OkHttpClient,
+    gson: Gson,
+    userToken: String,
+    repoBaseUrl: String,
+    clientBatchId: String,
+    records: List<AiTelemetryBattleRecordV510>
+): IssueRelayResult {
+    val skipped = mutableSetOf<String>()
+    val lines = mutableListOf<Pair<AiTelemetryBattleRecordV510, String>>()
+    for (rec in records) {
+        val line = compactRecordForIssueRelay(gson, rec, ISSUE_RELAY_MAX_PAYLOAD_CHARS)
+        if (line == null) skipped += rec.battleId else lines += rec to line
+    }
+
+    // Greedily pack records into issue-sized chunks.
+    val chunks = mutableListOf<List<Pair<AiTelemetryBattleRecordV510, String>>>()
+    var current = mutableListOf<Pair<AiTelemetryBattleRecordV510, String>>()
+    var currentChars = 0
+    for (entry in lines) {
+        val len = entry.second.length + 1
+        if (current.isNotEmpty() &&
+            (currentChars + len > ISSUE_RELAY_MAX_PAYLOAD_CHARS || current.size >= ISSUE_RELAY_MAX_RECORDS_PER_ISSUE)
+        ) {
+            chunks += current
+            current = mutableListOf()
+            currentChars = 0
+        }
+        current += entry
+        currentChars += len
+    }
+    if (current.isNotEmpty()) chunks += current
+
+    val delivered = mutableSetOf<String>()
+    var opened = 0
+    var lastCode = 0
+    for ((idx, chunk) in chunks.take(ISSUE_RELAY_MAX_ISSUES_PER_UPLOAD).withIndex()) {
+        val partLabel = if (chunks.size > 1) " part ${idx + 1}/${chunks.size}" else ""
+        val anomalies = chunk.sumOf { it.first.anomalyCount }
+        val highSev = chunk.count { it.first.hasHighSeverityAnomaly }
+        val body = buildString {
+            appendLine("### SilphScope PvP v$APP_VERSION Community AI Telemetry Batch")
+            appendLine("- **Client Batch ID**: `$clientBatchId`$partLabel")
+            appendLine("- **Battles**: ${chunk.size} (Anomalies detected: $anomalies, High-Severity: $highSev)")
+            appendLine("- Archived automatically by the `telemetry-relay` workflow, which validates the payload and attributes it to this issue's author.")
+            appendLine()
+            appendLine("```jsonl")
+            chunk.forEach { appendLine(it.second) }
+            appendLine("```")
+        }
+        val payload = gson.toJson(
+            mapOf(
+                "title" to "[AI-TELEMETRY-BATCH] $clientBatchId$partLabel (${chunk.size} battles)",
+                "body" to body
+            )
+        ).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+        val req = Request.Builder()
+            .url("$repoBaseUrl/issues")
+            .post(payload)
+            .header("Authorization", "Bearer $userToken")
+            .header("Accept", "application/vnd.github+json")
+            .build()
+        val ok = httpClient.newCall(req).execute().use { resp ->
+            lastCode = resp.code
+            resp.isSuccessful
+        }
+        if (!ok) break
+        opened++
+        chunk.forEach { delivered += it.first.battleId }
+    }
+    return IssueRelayResult(opened, delivered, skipped, lastCode)
+}
+
+/**
+ * Uploads pending v5.10 AI training & anomaly battle records using ONLY the signed-in user's own
+ * GitHub token (no shared/built-in credentials ship in the APK):
+ *  - Collaborators: direct commit to the `ai-telemetry-logs` branch (or `sync-vault` fallback).
+ *  - Any other GitHub account: opens `[AI-TELEMETRY-BATCH]` issue(s) which the
+ *    `telemetry-relay.yml` workflow validates, attributes to the verified issue author, and archives.
+ *  - Last resort: a secret Gist in the user's own account.
+ */
 internal fun OverlayService.Companion.uploadPendingAiTelemetryBatchBlocking(
     prefs: SharedPreferences,
     gson: Gson,
@@ -1836,9 +1933,7 @@ internal fun OverlayService.Companion.uploadPendingAiTelemetryBatchBlocking(
         return false to "Waiting for $minBattlesRequired battles (${pending.size}/$minBattlesRequired queued)."
     }
     val userToken = getEffectiveSyncToken(prefs).trim()
-    val relayToken = getBuiltInTelemetryRelayTokenStatic()
-    val primaryToken = userToken.ifEmpty { relayToken }
-    if (primaryToken.isEmpty()) {
+    if (userToken.isEmpty()) {
         return false to "Sign in with GitHub in Settings to auto-upload AI training & anomaly logs."
     }
 
@@ -2016,22 +2111,19 @@ internal fun OverlayService.Companion.uploadPendingAiTelemetryBatchBlocking(
         }
 
         var uploadedDestinationLabel = "@$AI_TELEMETRY_BRANCH"
-        var effectiveBranchToken = primaryToken
-        var (uploadedOk, directBranchErrorCode) = tryPutBatchToBranch(AI_TELEMETRY_BRANCH, batchPath, effectiveBranchToken)
+        // Battle IDs confirmed delivered by a partial (chunked) Issue relay upload. Empty means
+        // "the whole batch was delivered" for the direct-commit / Gist tiers.
+        var relayDeliveredBattleIds: Set<String> = emptySet()
 
-        // If user's personal token lacked collaborator push access to `sportsfan986/silphscope-pvp` (401/403/404),
-        // automatically route their telemetry batch to `ai-telemetry-logs` via the repository telemetry relay token!
-        if (!uploadedOk && effectiveBranchToken != relayToken && relayToken.isNotEmpty()) {
-            effectiveBranchToken = relayToken
-            val relayTry = tryPutBatchToBranch(AI_TELEMETRY_BRANCH, batchPath, effectiveBranchToken)
-            uploadedOk = relayTry.first
-            directBranchErrorCode = relayTry.second
-        }
+        // Tier 1: Direct commit with the user's own token (succeeds only for repo collaborators).
+        var (uploadedOk, directBranchErrorCode) = tryPutBatchToBranch(AI_TELEMETRY_BRANCH, batchPath, userToken)
+        // 401/403 = token is valid but has no push access → skip straight to the Issue relay.
+        val lacksPushAccess = directBranchErrorCode == 401 || directBranchErrorCode == 403
 
         // If `ai-telemetry-logs` branch did not exist yet (404/422), try auto-creating the branch and retrying
-        if (!uploadedOk && (directBranchErrorCode == 404 || directBranchErrorCode == 422)) {
-            if (tryEnsureBranchExists(AI_TELEMETRY_BRANCH, effectiveBranchToken)) {
-                val retryRes = tryPutBatchToBranch(AI_TELEMETRY_BRANCH, batchPath, effectiveBranchToken)
+        if (!uploadedOk && !lacksPushAccess && (directBranchErrorCode == 404 || directBranchErrorCode == 422)) {
+            if (tryEnsureBranchExists(AI_TELEMETRY_BRANCH, userToken)) {
+                val retryRes = tryPutBatchToBranch(AI_TELEMETRY_BRANCH, batchPath, userToken)
                 uploadedOk = retryRes.first
                 directBranchErrorCode = retryRes.second
             }
@@ -2040,66 +2132,35 @@ internal fun OverlayService.Companion.uploadPendingAiTelemetryBatchBlocking(
         if (uploadedOk) {
             // Also mirror batch under `users/<safeUser>/<batchId>.jsonl` on `ai-telemetry-logs` so all users' logs are viewable by user folder
             try {
-                tryPutBatchToBranch(AI_TELEMETRY_BRANCH, userBatchPath, effectiveBranchToken)
+                tryPutBatchToBranch(AI_TELEMETRY_BRANCH, userBatchPath, userToken)
             } catch (_: Exception) {}
-            updateBranchManifest(AI_TELEMETRY_BRANCH, "manifest.json", batchPath, effectiveBranchToken)
+            updateBranchManifest(AI_TELEMETRY_BRANCH, "manifest.json", batchPath, userToken)
             try {
                 uploadSettingsChangeHistoryBlocking(prefs, gson)
             } catch (_: Exception) {}
-        } else {
+        } else if (!lacksPushAccess) {
             // Tier 2: Fallback to `sync-vault` branch (`ai_telemetry/$batchPath`)
             val syncVaultPath = "ai_telemetry/$batchPath"
-            val (syncVaultOk, _) = tryPutBatchToBranch("sync-vault", syncVaultPath, effectiveBranchToken)
+            val (syncVaultOk, _) = tryPutBatchToBranch("sync-vault", syncVaultPath, userToken)
             if (syncVaultOk) {
                 uploadedOk = true
                 uploadedDestinationLabel = "@sync-vault"
-                updateBranchManifest("sync-vault", "ai_telemetry/manifest.json", syncVaultPath, effectiveBranchToken)
+                updateBranchManifest("sync-vault", "ai_telemetry/manifest.json", syncVaultPath, userToken)
             }
         }
 
         if (!uploadedOk) {
-            // Tier 3: Community Issue Relay (`POST /repos/sportsfan986/silphscope-pvp/issues`)
+            // Tier 3: Community Issue Relay for any signed-in GitHub account. The issue is authored by
+            // the user's own account; `telemetry-relay.yml` re-validates every record, attributes it to
+            // the verified issue author, and assigns the archive path server-side.
             try {
-                val metaHeader = gson.toJson(
-                    AiTelemetryManifestEntry(
-                        batchId = batchId,
-                        path = batchPath,
-                        uploadedAtMs = nowMs,
-                        uploader = safeUser,
-                        deviceHash = devHash,
-                        appVersion = APP_VERSION,
-                        battleCount = enrichedPending.size,
-                        anomalyCount = totalAnomalies,
-                        highSeverityCount = highSevCount
-                    )
-                )
-                val issueBodyText = buildString {
-                    appendLine("### SilphScope PvP v$APP_VERSION Community AI Telemetry Batch")
-                    appendLine("- **Batch ID**: `$batchId`")
-                    appendLine("- **Target Path**: `$batchPath` (`$AI_TELEMETRY_BRANCH`)")
-                    appendLine("- **Battles**: ${enrichedPending.size} (Anomalies detected: $totalAnomalies, High-Severity: $highSevCount)")
-                    appendLine("<!-- AI_TELEMETRY_BATCH_META: $metaHeader -->")
-                    appendLine("```jsonl")
-                    append(jsonlContent)
-                    appendLine("```")
-                }
-                val issuePayload = gson.toJson(
-                    mapOf(
-                        "title" to "[AI-TELEMETRY-BATCH] $batchId (${enrichedPending.size} battles)",
-                        "body" to issueBodyText
-                    )
-                ).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-                val issueReq = Request.Builder()
-                    .url("$repoBaseUrl/issues")
-                    .post(issuePayload)
-                    .header("Authorization", "Bearer $primaryToken")
-                    .header("Accept", "application/vnd.github+json")
-                    .build()
-                httpClient.newCall(issueReq).execute().use { iResp ->
-                    if (iResp.isSuccessful) {
-                        uploadedOk = true
-                        uploadedDestinationLabel = "Community Relay"
-                    }
+                val relay = postTelemetryViaIssueRelayBlocking(httpClient, gson, userToken, repoBaseUrl, batchId, enrichedPending)
+                if (relay.issuesOpened > 0) {
+                    uploadedOk = true
+                    relayDeliveredBattleIds = relay.deliveredBattleIds + relay.skippedBattleIds
+                    uploadedDestinationLabel = "Community Relay (${relay.issuesOpened} issue${if (relay.issuesOpened == 1) "" else "s"})"
+                } else if (relay.lastHttpCode != 0) {
+                    directBranchErrorCode = relay.lastHttpCode
                 }
             } catch (_: Exception) {}
         }
@@ -2175,7 +2236,8 @@ internal fun OverlayService.Companion.uploadPendingAiTelemetryBatchBlocking(
 
                 val gistBodyMap = mapOf(
                     "description" to "SilphScope PvP v$APP_VERSION AI Training & Anomaly Telemetry Vault (@$safeUser)",
-                    "public" to true,
+                    // Secret gist: telemetry stays in the user's own account and is not publicly listed.
+                    "public" to false,
                     "files" to mapOf(
                         telemetryManifestFile to mapOf("content" to gson.toJson(updatedManifest)),
                         "$batchId.jsonl" to mapOf("content" to jsonlContent)
@@ -2211,11 +2273,15 @@ internal fun OverlayService.Companion.uploadPendingAiTelemetryBatchBlocking(
             return false to "Telemetry upload failed (HTTP $directBranchErrorCode). Check internet connection and retry."
         }
 
-        // Clear uploaded records from pending queue
-        val uploadedIds = enrichedPending.map { it.battleId }.toSet()
+        // Clear uploaded records from pending queue (a chunked Issue relay upload may only deliver part
+        // of the batch; undelivered records stay queued for the next attempt).
+        val uploadedIds = relayDeliveredBattleIds.ifEmpty { enrichedPending.map { it.battleId }.toSet() }
+        val uploadedCount = enrichedPending.count { it.battleId in uploadedIds }
+        val uploadedAnomalies = enrichedPending.filter { it.battleId in uploadedIds }.sumOf { it.anomalyCount }
         val remaining = loadPendingAiTelemetryLogsStatic(prefs, gson).filter { it.battleId !in uploadedIds }
-        val totalUploadedSoFar = prefs.getInt(PREFS_KEY_TOTAL_AI_TELEMETRY_UPLOADED_COUNT, 0) + enrichedPending.size
-        val statusMsg = "Uploaded ${enrichedPending.size} battle${if (enrichedPending.size == 1) "" else "s"} ($totalAnomalies anomal${if (totalAnomalies == 1) "y" else "ies"}) to GitHub $uploadedDestinationLabel"
+        val totalUploadedSoFar = prefs.getInt(PREFS_KEY_TOTAL_AI_TELEMETRY_UPLOADED_COUNT, 0) + uploadedCount
+        val statusMsg = "Uploaded $uploadedCount battle${if (uploadedCount == 1) "" else "s"} ($uploadedAnomalies anomal${if (uploadedAnomalies == 1) "y" else "ies"}) to GitHub $uploadedDestinationLabel" +
+            if (remaining.isNotEmpty()) " — ${remaining.size} still queued" else ""
         prefs.edit()
             .putString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(remaining))
             .remove(PREFS_KEY_PENDING_SETTINGS_CHANGES_V513)

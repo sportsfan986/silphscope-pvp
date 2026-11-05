@@ -830,6 +830,86 @@ export function isMegaAllowedInLeague(league: string | undefined): boolean {
   );
 }
 
+export const SUPER_MEGA_PLUS_MOVES: Record<string, string> = {
+  "beedrill_mega": "Fell Stinger+",
+  "beedrill (mega)": "Fell Stinger+",
+  "mega beedrill": "Fell Stinger+",
+  "raichu_mega_x": "Volt Tackle+",
+  "raichu (mega x)": "Volt Tackle+",
+  "mega raichu x": "Volt Tackle+",
+  "raichu_mega_y": "Zap Cannon+",
+  "raichu (mega y)": "Zap Cannon+",
+  "mega raichu y": "Zap Cannon+",
+  "victreebel_mega": "Acid Spray+",
+  "victreebel (mega)": "Acid Spray+",
+  "mega victreebel": "Acid Spray+",
+  "starmie_mega": "Liquidation+",
+  "starmie (mega)": "Liquidation+",
+  "mega starmie": "Liquidation+",
+  "dragonite_mega": "Outrage+",
+  "dragonite (mega)": "Outrage+",
+  "mega dragonite": "Outrage+",
+  "mewtwo_mega_x": "Dynamic Punch+",
+  "mewtwo (mega x)": "Dynamic Punch+",
+  "mega mewtwo x": "Dynamic Punch+",
+  "mewtwo_mega_y": "Future Sight+",
+  "mewtwo (mega y)": "Future Sight+",
+  "mega mewtwo y": "Future Sight+",
+  "skarmory_mega": "Drill Peck+",
+  "skarmory (mega)": "Drill Peck+",
+  "mega skarmory": "Drill Peck+",
+  "houndoom_mega": "Dark Pulse+",
+  "houndoom (mega)": "Dark Pulse+",
+  "mega houndoom": "Dark Pulse+",
+  "sableye_mega": "Night Shade+",
+  "sableye (mega)": "Night Shade+",
+  "mega sableye": "Night Shade+",
+  "staraptor_mega": "Brave Bird+",
+  "staraptor (mega)": "Brave Bird+",
+  "mega staraptor": "Brave Bird+",
+  "chandelure_mega": "Ominous Wind+",
+  "chandelure (mega)": "Ominous Wind+",
+  "mega chandelure": "Ominous Wind+",
+  "chesnaught_mega": "Seed Bomb+",
+  "chesnaught (mega)": "Seed Bomb+",
+  "mega chesnaught": "Seed Bomb+",
+  "delphox_mega": "Mystical Fire+",
+  "delphox (mega)": "Mystical Fire+",
+  "mega delphox": "Mystical Fire+",
+  "greninja_mega": "Surf+",
+  "greninja (mega)": "Surf+",
+  "mega greninja": "Surf+",
+  "malamar_mega": "Psybeam+",
+  "malamar (mega)": "Psybeam+",
+  "mega malamar": "Psybeam+",
+  "falinks_mega": "Brick Break+",
+  "falinks (mega)": "Brick Break+",
+  "mega falinks": "Brick Break+"
+};
+
+export const DYNAMIC_SUPER_MEGA_PLUS_MOVES: Record<string, string> = {};
+
+export function resolveMegaPlusMove(name: string | undefined, league: string | undefined): string | null {
+  if (!name || !isMegaAllowedInLeague(league)) return null;
+  if (!isMegaOrPrimalSpecies(name)) return null;
+  const clean = name.trim().toLowerCase();
+  const idClean = clean
+    .replace(/\s*\(mega\s*x\)/g, "_mega_x")
+    .replace(/\s*\(mega\s*y\)/g, "_mega_y")
+    .replace(/\s*\(mega\)/g, "_mega")
+    .replace(/^mega\s+([a-z0-9_-]+)\s+x$/g, "$1_mega_x")
+    .replace(/^mega\s+([a-z0-9_-]+)\s+y$/g, "$1_mega_y")
+    .replace(/^mega\s+([a-z0-9_-]+)$/g, "$1_mega")
+    .replace(/[\s-]+/g, "_");
+  return (
+    DYNAMIC_SUPER_MEGA_PLUS_MOVES[clean] ||
+    DYNAMIC_SUPER_MEGA_PLUS_MOVES[idClean] ||
+    SUPER_MEGA_PLUS_MOVES[clean] ||
+    SUPER_MEGA_PLUS_MOVES[idClean] ||
+    null
+  );
+}
+
 export function isBattleFrontierLeague(league: string | undefined): boolean {
   const raw = (league || "").trim();
   const u = raw.toUpperCase();
@@ -3738,7 +3818,25 @@ export const MOVE_ABBR_5: Record<string, string> = {
   "Torch Song": "TrS",
   "Super Power": "Suprp",
   "Rock Tomb": "RckTm",
-  "Mirror Shot": "MrrSh"
+  "Mirror Shot": "MrrSh",
+  "Fell Stinger+": "FlSt+",
+  "Volt Tackle+": "VltT+",
+  "Zap Cannon+": "ZpCn+",
+  "Acid Spray+": "AcdS+",
+  "Liquidation+": "Liqd+",
+  "Outrage+": "Outr+",
+  "Dynamic Punch+": "DynP+",
+  "Future Sight+": "FtrS+",
+  "Drill Peck+": "DrlP+",
+  "Dark Pulse+": "DrkP+",
+  "Night Shade+": "NgtS+",
+  "Brave Bird+": "BrvB+",
+  "Ominous Wind+": "OmnW+",
+  "Seed Bomb+": "SdBm+",
+  "Mystical Fire+": "MstF+",
+  "Surf+": "Surf+",
+  "Psybeam+": "Psyb+",
+  "Brick Break+": "BrkB+"
 };
 
 export function abbrMove5(name: string): string {
@@ -3746,6 +3844,10 @@ export function abbrMove5(name: string): string {
   if (MOVE_ABBR_5[name]) return MOVE_ABBR_5[name];
   const foundKey = Object.keys(MOVE_ABBR_5).find(k => k.toLowerCase() === name.toLowerCase().trim());
   if (foundKey) return MOVE_ABBR_5[foundKey];
+  if (name.trim().endsWith("+")) {
+    const base = abbrMove5(name.trim().slice(0, -1).trim());
+    return base.slice(0, 4) + "+";
+  }
   const words = name.trim().split(/\s+/);
   if (words.length >= 2) {
     const combined = (words[0].slice(0, 3) + words[1].slice(0, 2));
@@ -4367,7 +4469,30 @@ export const CANONICAL_MOVE_ID_MAP: Record<string, string> = {
   ROCK_TOMB: "Rock Tomb",
   SAND_TOMB: "Sand Tomb",
   MIRROR_SHOT: "Mirror Shot",
-  VOLT_SWITCH: "Volt Switch"
+  VOLT_SWITCH: "Volt Switch",
+  FELL_STINGER: "Fell Stinger",
+  FELL_STINGER_PLUS: "Fell Stinger+",
+  VOLT_TACKLE: "Volt Tackle",
+  VOLT_TACKLE_PLUS: "Volt Tackle+",
+  ZAP_CANNON_PLUS: "Zap Cannon+",
+  ACID_SPRAY_PLUS: "Acid Spray+",
+  LIQUIDATION_PLUS: "Liquidation+",
+  OUTRAGE_PLUS: "Outrage+",
+  DYNAMIC_PUNCH_PLUS: "Dynamic Punch+",
+  FUTURE_SIGHT_PLUS: "Future Sight+",
+  DRILL_PECK_PLUS: "Drill Peck+",
+  DARK_PULSE_PLUS: "Dark Pulse+",
+  NIGHT_SHADE_PLUS: "Night Shade+",
+  BRAVE_BIRD_PLUS: "Brave Bird+",
+  OMINOUS_WIND_PLUS: "Ominous Wind+",
+  SEED_BOMB_PLUS: "Seed Bomb+",
+  MYSTICAL_FIRE_PLUS: "Mystical Fire+",
+  SURF_PLUS: "Surf+",
+  PSYBEAM: "Psybeam",
+  PSYBEAM_PLUS: "Psybeam+",
+  BRICK_BREAK_PLUS: "Brick Break+",
+  HEAT_WAVE: "Heat Wave",
+  DRAIN_PUNCH: "Drain Punch"
 };
 
 export const CHARGED_MOVE_FALLBACK_STATS: Record<string, { type: string; power: number; energyCost: number; code: string }> = {
@@ -4482,7 +4607,33 @@ export const CHARGED_MOVE_FALLBACK_STATS: Record<string, { type: string; power: 
   "liquidation": { type: "water", power: 70, energyCost: 45, code: "Liq" },
   "dive": { type: "water", power: 50, energyCost: 40, code: "Dv" },
   "gyro ball": { type: "steel", power: 80, energyCost: 50, code: "GB" },
-  "gigaton hammer": { type: "steel", power: 130, energyCost: 60, code: "GH" }
+  "gigaton hammer": { type: "steel", power: 130, energyCost: 60, code: "GH" },
+  "fell stinger": { type: "bug", power: 20, energyCost: 35, code: "FS" },
+  "fell stinger+": { type: "bug", power: 40, energyCost: 35, code: "FS+" },
+  "volt tackle": { type: "electric", power: 90, energyCost: 45, code: "VT" },
+  "volt tackle+": { type: "electric", power: 65, energyCost: 35, code: "VT+" },
+  "zap cannon+": { type: "electric", power: 70, energyCost: 45, code: "ZC+" },
+  "acid spray+": { type: "poison", power: 20, energyCost: 40, code: "AS+" },
+  "liquidation+": { type: "water", power: 55, energyCost: 40, code: "Liq+" },
+  "outrage+": { type: "dragon", power: 80, energyCost: 50, code: "OR+" },
+  "dynamic punch+": { type: "fighting", power: 130, energyCost: 80, code: "DP+" },
+  "future sight+": { type: "psychic", power: 130, energyCost: 80, code: "FS+" },
+  "drill peck+": { type: "flying", power: 60, energyCost: 35, code: "DP+" },
+  "dark pulse+": { type: "dark", power: 60, energyCost: 40, code: "DP+" },
+  "night shade": { type: "ghost", power: 80, energyCost: 55, code: "NS" },
+  "night shade+": { type: "ghost", power: 55, energyCost: 45, code: "NS+" },
+  "brave bird+": { type: "flying", power: 70, energyCost: 40, code: "BB+" },
+  "ominous wind+": { type: "ghost", power: 50, energyCost: 40, code: "OW+" },
+  "seed bomb+": { type: "grass", power: 60, energyCost: 40, code: "SB+" },
+  "mystical fire": { type: "fire", power: 60, energyCost: 45, code: "MF" },
+  "mystical fire+": { type: "fire", power: 50, energyCost: 40, code: "MF+" },
+  "surf+": { type: "water", power: 55, energyCost: 35, code: "Srf+" },
+  "psybeam": { type: "psychic", power: 70, energyCost: 60, code: "Psb" },
+  "psybeam+": { type: "psychic", power: 60, energyCost: 45, code: "Psb+" },
+  "brick break": { type: "fighting", power: 40, energyCost: 40, code: "BBk" },
+  "brick break+": { type: "fighting", power: 40, energyCost: 35, code: "BBk+" },
+  "heat wave": { type: "fire", power: 95, energyCost: 75, code: "HW" },
+  "drain punch": { type: "fighting", power: 20, energyCost: 40, code: "DrP" }
 };
 
 export const DYNAMIC_CHARGED_MOVE_MAP: Record<string, ChargedMove> = {};
@@ -4546,7 +4697,21 @@ export const BASELINE_MOVE_BUFF_EFFECTS: Record<string, MoveBuffEffect> = {
   "draco meteor": { selfAtkDelta: -2, selfDefDelta: 0, oppAtkDelta: 0, oppDefDelta: 0, chance: 1.0 },
   "psycho boost": { selfAtkDelta: -2, selfDefDelta: 0, oppAtkDelta: 0, oppDefDelta: 0, chance: 1.0 },
   "leaf storm": { selfAtkDelta: -2, selfDefDelta: 0, oppAtkDelta: 0, oppDefDelta: 0, chance: 1.0 },
-  "v-create": { selfAtkDelta: 0, selfDefDelta: -3, oppAtkDelta: 0, oppDefDelta: 0, chance: 1.0 }
+  "v-create": { selfAtkDelta: 0, selfDefDelta: -3, oppAtkDelta: 0, oppDefDelta: 0, chance: 1.0 },
+  "fell stinger": { selfAtkDelta: 1, selfDefDelta: 0, oppAtkDelta: 0, oppDefDelta: 0, chance: 1.0 },
+  "fell stinger+": { selfAtkDelta: 1, selfDefDelta: 0, oppAtkDelta: 0, oppDefDelta: 0, chance: 1.0 },
+  "volt tackle": { selfAtkDelta: 0, selfDefDelta: -1, oppAtkDelta: 0, oppDefDelta: 0, chance: 1.0 },
+  "volt tackle+": { selfAtkDelta: 0, selfDefDelta: -1, oppAtkDelta: 0, oppDefDelta: 0, chance: 1.0 },
+  "zap cannon+": { selfAtkDelta: 0, selfDefDelta: 0, oppAtkDelta: -1, oppDefDelta: 0, chance: 1.0 },
+  "acid spray+": { selfAtkDelta: 0, selfDefDelta: 0, oppAtkDelta: 0, oppDefDelta: -2, chance: 1.0 },
+  "liquidation+": { selfAtkDelta: 0, selfDefDelta: 0, oppAtkDelta: 0, oppDefDelta: -1, chance: 0.3 },
+  "brave bird+": { selfAtkDelta: 0, selfDefDelta: -3, oppAtkDelta: 0, oppDefDelta: 0, chance: 1.0 },
+  "ominous wind+": { selfAtkDelta: 1, selfDefDelta: 1, oppAtkDelta: 0, oppDefDelta: 0, chance: 0.1 },
+  "mystical fire": { selfAtkDelta: 0, selfDefDelta: 0, oppAtkDelta: -1, oppDefDelta: 0, chance: 1.0 },
+  "mystical fire+": { selfAtkDelta: 0, selfDefDelta: 0, oppAtkDelta: -1, oppDefDelta: 0, chance: 1.0 },
+  "brick break": { selfAtkDelta: 0, selfDefDelta: 0, oppAtkDelta: 0, oppDefDelta: -1, chance: 1.0 },
+  "brick break+": { selfAtkDelta: 0, selfDefDelta: 0, oppAtkDelta: 0, oppDefDelta: -1, chance: 1.0 },
+  "drain punch": { selfAtkDelta: 0, selfDefDelta: 1, oppAtkDelta: 0, oppDefDelta: 0, chance: 1.0 }
 };
 
 export const DYNAMIC_MOVE_BUFF_TABLE: Record<string, MoveBuffEffect> = (() => {
@@ -4639,7 +4804,9 @@ export function simulateTurnByTurnChargedCycle(
   c2RawPct: number,
   fastEpt: number,
   defShields: number,
-  attackerTypes: string[]
+  attackerTypes: string[],
+  c3?: ChargedMove | null,
+  c3RawPct: number = 0
 ): ChargedCycleSimResult {
   const e1 = Math.max(35, Math.min(80, c1.energyCost || 50));
   const e2 = Math.max(35, Math.min(80, c2.energyCost || 50));
@@ -4752,18 +4919,147 @@ export function simulateTurnByTurnChargedCycle(
     activeCycleEnergy = burnEnergy * 0.72 + bestEnergy * 0.28;
   }
 
-  const dominatedPenalty = isDominatedSameTypeChargedPair(c1.name, c2.name, attackerTypes) ? 6.5 : 0;
+  const candidates: Array<{
+    name: string;
+    pct: number;
+    e: number;
+    atkStg: number;
+    defStg: number;
+    pace: number;
+  }> = [
+    { name: c1.name, pct: c1RawPct, e: e1, atkStg: atkStage1, defStg: defStage1, pace: effPace1 },
+    { name: c2.name, pct: c2RawPct, e: e2, atkStg: atkStage2, defStg: defStage2, pace: effPace2 }
+  ];
+
+  if (c3 && c3.name && c3RawPct > 0) {
+    const e3 = Math.max(35, Math.min(80, c3.energyCost || 50));
+    const b3 = resolveMoveBuffEffect(c3.name);
+    const atkStage3 = (b3.selfAtkDelta - b3.oppDefDelta) * b3.chance;
+    const defStage3 = (b3.selfDefDelta - b3.oppAtkDelta) * b3.chance;
+    const effPace3 = Math.max(0.84, Math.min(1.22, Math.pow(50.0 / e3, 0.28)));
+    if (!candidates.some((m) => m.name.toLowerCase() === c3.name.toLowerCase())) {
+      candidates.push({
+        name: c3.name,
+        pct: c3RawPct,
+        e: e3,
+        atkStg: atkStage3,
+        defStg: defStage3,
+        pace: effPace3
+      });
+    }
+  }
+
+  // Flexible, role-agnostic multi-throw sequence evaluation:
+  // Evaluates single throws, back-to-back spam (e.g. 35E -> 35E vs 75E nuke), and mixed sequences across 0S, 1S, 2S
+  for (const mA of candidates) {
+    if (defShields <= 0) {
+      const singleVal =
+        mA.pct * mA.pace * 1.70 +
+        Math.max(0, mA.atkStg) * 8.0 +
+        Math.max(0, mA.defStg) * 7.5 -
+        Math.max(0, -mA.defStg) * 4.5 -
+        Math.max(0, -mA.atkStg) * 4.0;
+      if (singleVal > cyclePressure) {
+        cyclePressure = singleVal;
+        activeCycleEnergy = mA.e;
+      }
+      for (const mB of candidates) {
+        const totalE = mA.e + mB.e;
+        if (totalE > 110) continue;
+        const postMult = Math.max(0.75, Math.min(1.50, 1.0 + 0.18 * mA.atkStg));
+        const combinedPct = Math.min(135.0, mA.pct + mB.pct * postMult);
+        const seqPace = Math.max(0.76, Math.min(1.26, Math.pow(65.0 / totalE, 0.34)));
+        const spamTempoBonus = totalE <= 75 ? (80.0 - totalE) * 0.42 : 0.0;
+        const netAtk = mA.atkStg + mB.atkStg * 0.6;
+        const netDef = mA.defStg + mB.defStg * 0.6;
+        const seqBuffVal =
+          Math.max(0, netAtk) * 7.0 +
+          Math.max(0, netDef) * 6.5 -
+          Math.max(0, -netDef) * 4.5 -
+          Math.max(0, -netAtk) * 3.5;
+        const pairVal = combinedPct * seqPace * 1.44 + spamTempoBonus + seqBuffVal;
+        if (pairVal > cyclePressure) {
+          cyclePressure = pairVal;
+          activeCycleEnergy = totalE * 0.52;
+        }
+      }
+    } else if (defShields === 1) {
+      for (const mB of candidates) {
+        const postAtkMult = Math.max(0.76, Math.min(1.45, 1.0 + 0.18 * mA.atkStg));
+        const eSaved = Math.max(0, mB.e - mA.e);
+        const tempoBonus = eSaved * 0.46 + (55.0 - mA.e) * 0.24;
+        const statVal =
+          mA.defStg * 9.5 +
+          Math.max(0, mA.atkStg) * 6.5 +
+          Math.max(0, mB.atkStg) * 4.0 +
+          Math.max(0, mB.defStg) * 3.5 -
+          Math.max(0, -mB.defStg) * 3.5;
+        const val1S = mB.pct * mB.pace * postAtkMult * 1.24 + tempoBonus + statVal;
+        if (val1S > cyclePressure) {
+          cyclePressure = val1S;
+          activeCycleEnergy = mA.e * 0.55 + mB.e * 0.45;
+        }
+        // 3-throw spam sequence through 1 shield (e.g., 35E [shielded] -> 35E -> 35E)
+        if (mA.e <= 40 && mB.e <= 40) {
+          const postAtk2 = Math.max(0.76, Math.min(1.55, 1.0 + 0.18 * (mA.atkStg + mB.atkStg)));
+          const landPct2 = Math.min(130.0, mB.pct * postAtkMult + mB.pct * postAtk2 * 0.72);
+          const spamPace = Math.max(0.84, Math.min(1.22, Math.pow(45.0 / mB.e, 0.28)));
+          const tripleSpamVal = landPct2 * spamPace * 1.12 + (55.0 - mA.e) * 0.30 + statVal;
+          if (tripleSpamVal > cyclePressure) {
+            cyclePressure = tripleSpamVal;
+            activeCycleEnergy = (mA.e + mB.e) * 0.50;
+          }
+        }
+      }
+    } else {
+      for (const mB of candidates) {
+        const avgShieldE = (mA.e + mB.e) * 0.5;
+        const combAtkStg = mA.atkStg + mB.atkStg * 0.85;
+        const combDefStg = mA.defStg + mB.defStg * 0.85;
+        const twoShieldAtkMult = Math.max(0.70, Math.min(1.62, 1.0 + 0.22 * combAtkStg));
+        const cycle3Reach = Math.max(0.68, Math.min(1.36, (fastEpt / 3.5) * (50.0 / avgShieldE)));
+        for (const mC of candidates) {
+          const eSaved = Math.max(0, mC.e - avgShieldE);
+          const tempoBonus = eSaved * 0.60 + (55.0 - avgShieldE) * 0.34;
+          const statVal = combDefStg * 11.5 + combAtkStg * 8.5;
+          const val2S = mC.pct * mC.pace * twoShieldAtkMult * 0.82 * cycle3Reach + tempoBonus + statVal;
+          if (val2S > cyclePressure) {
+            cyclePressure = val2S;
+            activeCycleEnergy = avgShieldE * 0.72 + mC.e * 0.28;
+          }
+        }
+      }
+    }
+  }
+
+  if (candidates.length >= 3) {
+    const distinctTypes = new Set(
+      [c1.type, c2.type, c3?.type || ""].map((t) => t.toLowerCase()).filter(Boolean)
+    ).size;
+    cyclePressure += distinctTypes >= 3 ? 2.5 : 1.2;
+  }
+
+  const dominatedPenalty =
+    candidates.length >= 3
+      ? 0
+      : isDominatedSameTypeChargedPair(c1.name, c2.name, attackerTypes)
+      ? 6.5
+      : 0;
   const clampedActiveEnergy = Math.max(35, Math.min(80, activeCycleEnergy));
   const pacingFactor = Math.max(0.78, Math.min(1.26, (fastEpt / 3.5) * (50.0 / clampedActiveEnergy)));
   const freqMult = 0.82 + 0.18 * pacingFactor;
-  const fastestPct = e1 < e2 ? c1RawPct : e2 < e1 ? c2RawPct : Math.min(c1RawPct, c2RawPct);
-  const fastestEnergy = Math.min(e1, e2);
+
+  const fastestCand = candidates.reduce((best, cur) =>
+    cur.e < best.e || (cur.e === best.e && cur.pct > best.pct) ? cur : best
+  );
+  const fastestEnergy = fastestCand.e;
 
   return {
     effectivePressure: Math.max(10, cyclePressure - dominatedPenalty),
     effectiveFreqMult: freqMult,
-    bestMovePct: Math.max(c1RawPct, c2RawPct),
-    fastestMovePct: fastestPct,
+    bestMovePct: Math.max(...candidates.map((c) => c.pct)),
+    fastestMovePct: fastestCand.pct,
+
     fastestMoveEnergy: fastestEnergy
   };
 }
@@ -4930,6 +5226,9 @@ export function formatMoveIdToDisplayName(moveId: string): string {
   if (CANONICAL_MOVE_ID_MAP[upper]) return CANONICAL_MOVE_ID_MAP[upper];
   if (MOVE_ID_TO_NAME[moveId]) return MOVE_ID_TO_NAME[moveId];
   if (MOVE_ID_TO_NAME[upper]) return MOVE_ID_TO_NAME[upper];
+  if (upper.endsWith("_PLUS")) {
+    return `${formatMoveIdToDisplayName(upper.slice(0, -5))}+`;
+  }
   return moveId
     .toLowerCase()
     .split("_")
@@ -5060,8 +5359,11 @@ export function applyRankingMovesToPokemonStats(
   const orderedChargedNames: string[] = [];
   const addCandidate = (raw?: string) => {
     if (!raw) return;
+
+    if (!raw || raw.trim().toUpperCase().endsWith("_PLUS") || raw.trim().endsWith("+")) return;
     const formatted = formatMoveIdToDisplayName(raw).trim();
-    if (!formatted || formatted.toLowerCase() === "struggle" || formatted.toLowerCase() === "frustration") return;
+
+    if (!formatted || formatted.endsWith("+") || formatted.toLowerCase() === "struggle" || formatted.toLowerCase() === "frustration") return;
     if (poolCharged.length > 0 && !poolCharged.some((p) => p.toLowerCase() === formatted.toLowerCase())) return;
     if (!orderedChargedNames.some((n) => n.toLowerCase() === formatted.toLowerCase())) {
       orderedChargedNames.push(formatted);
@@ -5445,6 +5747,18 @@ export async function syncPvPokeDataAndRankings(): Promise<{
       const rawChargedIds: string[] = Array.isArray(p.chargedMoves) ? p.chargedMoves : [];
       const rawEliteIds: string[] = Array.isArray(p.eliteMoves) ? p.eliteMoves : [];
       const baseSpeciesKey = speciesId.toLowerCase().replace(/_shadow$/i, "");
+      if (Array.isArray(p.extraChargedMoves)) {
+        for (const extraId of p.extraChargedMoves) {
+          if (typeof extraId === "string" && extraId.trim().toUpperCase().endsWith("_PLUS")) {
+            const plusMoveName =
+              gmMoveDetails[extraId]?.name || formatMoveIdToDisplayName(extraId);
+            if (plusMoveName) {
+              DYNAMIC_SUPER_MEGA_PLUS_MOVES[speciesId.toLowerCase()] = plusMoveName;
+              DYNAMIC_SUPER_MEGA_PLUS_MOVES[displayName.toLowerCase()] = plusMoveName;
+            }
+          }
+        }
+      }
 
       const gmFastNames: string[] = [];
       for (const fId of [...rawFastIds, ...rawEliteIds]) {
@@ -5467,6 +5781,7 @@ export async function syncPvPokeDataAndRankings(): Promise<{
 
       const gmChargedNames: string[] = [];
       for (const cId of [...rawChargedIds, ...rawEliteIds]) {
+        if (typeof cId === "string" && cId.trim().toUpperCase().endsWith("_PLUS")) continue;
         const cDetail = gmMoveDetails[cId];
         if (cDetail && cDetail.energy > 0) {
           if (!gmChargedNames.some((x) => x.toLowerCase() === cDetail.name.toLowerCase())) {
@@ -5538,10 +5853,10 @@ export async function syncPvPokeDataAndRankings(): Promise<{
       const orderedChargedIds: string[] = [];
       if (rankEntry) {
         rankEntry.moveset?.slice(1).forEach((mId) => {
-          if (mId && !orderedChargedIds.includes(mId)) orderedChargedIds.push(mId);
+          if (mId && !mId.toUpperCase().endsWith("_PLUS") && !orderedChargedIds.includes(mId)) orderedChargedIds.push(mId);
         });
         rankEntry.moves.chargedMoves.forEach((cm) => {
-          if (cm.moveId && !orderedChargedIds.includes(cm.moveId)) orderedChargedIds.push(cm.moveId);
+          if (cm.moveId && !cm.moveId.toUpperCase().endsWith("_PLUS") && !orderedChargedIds.includes(cm.moveId)) orderedChargedIds.push(cm.moveId);
         });
       }
       rawChargedIds.forEach((mId) => {

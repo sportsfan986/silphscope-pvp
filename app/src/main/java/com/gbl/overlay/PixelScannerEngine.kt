@@ -479,6 +479,7 @@ internal fun OverlayService.detectChargedMoveButtonFillLevels(screen: Bitmap, w:
     if (w < 200 || h < 400 || sampledTopCountdownCircleVisible || isTopCountdownCircleActive || isOpponentPromptSuppressingBottomCircles || isWhiteScreenFlash(screen, w, h)) {
         sampledLeftChargeBtnFillPct = -1
         sampledRightChargeBtnFillPct = -1
+        sampledCenterChargeBtnFillPct = -1
         isCountdownDimmedState = false
         return
     }
@@ -495,21 +496,97 @@ internal fun OverlayService.detectChargedMoveButtonFillLevels(screen: Bitmap, w:
         // Hold strictly at 0% / 0E while the 3-2-1 dimmed dark-grey countdown state is active on screen
         sampledLeftChargeBtnFillPct = 0
         sampledRightChargeBtnFillPct = 0
+        sampledCenterChargeBtnFillPct = 0
         return
     }
 
+    val activeLeague = currentPreset?.league ?: "MASTER LEAGUE"
     val userSlotCfg = currentPreset?.pokemon?.getOrNull(activeUserIdx)
     val userMonName = activeUserPokemonName ?: userSlotCfg?.name ?: "Dialga (Origin)"
-    val userMeta = getPokemonMeta(userMonName, currentPreset?.league ?: "MASTER LEAGUE", userMonName.contains("Shadow", ignoreCase = true))
+    val userMeta = getPokemonMeta(userMonName, activeLeague, userMonName.contains("Shadow", ignoreCase = true))
     val fallbackType = userMeta.types.firstOrNull() ?: "normal"
     val m1Name = userSlotCfg?.chargedMove1?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove1
     val m2Name = userSlotCfg?.chargedMove2?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove2
+    val userPlusMove = OverlayService.resolveMegaPlusMoveStatic(userMeta.name, activeLeague)
+        ?: OverlayService.resolveMegaPlusMoveStatic(userMonName, activeLeague)
     val m1Type = OverlayService.resolveChargedMoveStatsStatic(m1Name, fallbackType).type.trim().lowercase()
     val m2Type = OverlayService.resolveChargedMoveStatsStatic(m2Name, fallbackType).type.trim().lowercase()
     val allowLeftSilver = m1Type == "normal" || m1Type == "steel" || m1Type == "rock"
     val allowRightSilver = m2Type == "normal" || m2Type == "steel" || m2Type == "rock"
 
     val cy = (h * calibratedCyFrac).toInt()
+    if (userPlusMove != null) {
+        // v6.20 Super Mega 3-button layout:
+        // Left Move 1 at (0.2150w, 0.8930h), Center-Raised Plus Move at (0.5000w, 0.8375h), Right Move 2 at (0.7820w, 0.8930h)
+        val plusType = OverlayService.resolveChargedMoveStatsStatic(userPlusMove, fallbackType).type.trim().lowercase()
+        val allowPlusSilver = plusType == "normal" || plusType == "steel" || plusType == "rock"
+        val threeBtnCy = (h * 0.8930f).toInt()
+        val plusCy = (h * 0.8375f).toInt()
+        var leftFill = detectSingleChargeButtonFillPct(
+            screen = screen,
+            cx = (w * 0.2150f).toInt(),
+            cy = threeBtnCy,
+            w = w,
+            h = h,
+            emptyBaseLuma = prescanEmptyLumaLeft,
+            emptyBaseSat = prescanEmptySatLeft,
+            btnSlotKey = activeUserIdx * 2,
+            allowSilverLiquid = allowLeftSilver
+        )
+        var rightFill = detectSingleChargeButtonFillPct(
+            screen = screen,
+            cx = (w * 0.7820f).toInt(),
+            cy = threeBtnCy,
+            w = w,
+            h = h,
+            emptyBaseLuma = prescanEmptyLumaRight,
+            emptyBaseSat = prescanEmptySatRight,
+            btnSlotKey = activeUserIdx * 2 + 1,
+            allowSilverLiquid = allowRightSilver
+        )
+        val centerPlusFill = detectSingleChargeButtonFillPct(
+            screen = screen,
+            cx = (w * 0.5000f).toInt(),
+            cy = plusCy,
+            w = w,
+            h = h,
+            emptyBaseLuma = (prescanEmptyLumaLeft + prescanEmptyLumaRight) * 0.5,
+            emptyBaseSat = (prescanEmptySatLeft + prescanEmptySatRight) * 0.5,
+            btnSlotKey = 6 + activeUserIdx,
+            allowSilverLiquid = allowPlusSilver
+        )
+        if (leftFill == -1 && rightFill == -1 && centerPlusFill == -1) {
+            // Fallback to 2-button coordinates if the player's Mega is below Mega Level 4 in-game
+            leftFill = detectSingleChargeButtonFillPct(
+                screen = screen,
+                cx = (w * calibratedLeftCxFrac).toInt(),
+                cy = cy,
+                w = w,
+                h = h,
+                emptyBaseLuma = prescanEmptyLumaLeft,
+                emptyBaseSat = prescanEmptySatLeft,
+                btnSlotKey = activeUserIdx * 2,
+                allowSilverLiquid = allowLeftSilver
+            )
+            rightFill = detectSingleChargeButtonFillPct(
+                screen = screen,
+                cx = (w * calibratedRightCxFrac).toInt(),
+                cy = cy,
+                w = w,
+                h = h,
+                emptyBaseLuma = prescanEmptyLumaRight,
+                emptyBaseSat = prescanEmptySatRight,
+                btnSlotKey = activeUserIdx * 2 + 1,
+                allowSilverLiquid = allowRightSilver
+            )
+        }
+        sampledLeftChargeBtnFillPct = leftFill
+        sampledRightChargeBtnFillPct = rightFill
+        sampledCenterChargeBtnFillPct = centerPlusFill
+        return
+    }
+
+    sampledCenterChargeBtnFillPct = -1
     val leftCx = (w * calibratedLeftCxFrac).toInt()
     val rightCx = (w * calibratedRightCxFrac).toInt()
     var leftFill = detectSingleChargeButtonFillPct(

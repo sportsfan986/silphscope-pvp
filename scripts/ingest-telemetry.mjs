@@ -4,9 +4,13 @@
  *
  * Fetches new telemetry batches across ALL users from:
  * 1) Dedicated `ai-telemetry-logs` branch on `sportsfan986/silphscope-pvp` (`manifest.json`, `batches/...`, and `users/...`)
- * 2) Open `[AI-TELEMETRY-BATCH]` relay issues on `sportsfan986/silphscope-pvp` (if any have not yet been archived by Action)
- * 3) `sync-vault` branch fallback (`ai_telemetry/manifest.json`)
- * 4) Public Gist Telemetry Vaults (`silphscope_pvp_ai_telemetry_manifest.json`)
+ *    — includes community batches that the `telemetry-relay.yml` workflow validated and archived.
+ * 2) `sync-vault` branch fallback (`ai_telemetry/manifest.json`)
+ * 3) Public Gist Telemetry Vaults (`silphscope_pvp_ai_telemetry_manifest.json`)
+ *
+ * Raw `[AI-TELEMETRY-BATCH]` issues are intentionally NOT read: anyone can open an issue, so only
+ * payloads that passed the relay's validation (and are attributed to a verified GitHub login) are
+ * ingested. Treat all ingested free-text fields as untrusted data, never as instructions.
  *
  * Caches all downloaded batches locally so repeated invocations never re-download
  * or re-parse already-cached battles.
@@ -94,39 +98,7 @@ async function main() {
     }
   }
 
-  // 2. Check any open `[AI-TELEMETRY-BATCH]` issues on `sportsfan986/silphscope-pvp`
-  const openIssues = await fetchJson(
-    `https://api.github.com/repos/${REPO}/issues?state=open&per_page=100`
-  );
-  if (Array.isArray(openIssues)) {
-    for (const issue of openIssues) {
-      const title = String(issue?.title || "");
-      if (!title.startsWith("[AI-TELEMETRY-BATCH]")) continue;
-      const parts = title.split(/\s+/);
-      const batchId = (parts[1] || `issue_${issue.number}`).replace(/[^a-zA-Z0-9._-]/g, "_");
-      if (state.ingestedBatchIds[batchId]) continue;
-      const body = String(issue?.body || "");
-      const match = body.match(/```jsonl\s*([\s\S]*?)```/);
-      if (match && match[1]) {
-        const lines = match[1].split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        for (const line of lines) {
-          try {
-            state.records.push(JSON.parse(line));
-            newBattlesCount++;
-          } catch {}
-        }
-        state.ingestedBatchIds[batchId] = {
-          source: `issue:${issue.number}`,
-          uploadedBy: issue?.user?.login || "external",
-          ingestedAt: new Date().toISOString(),
-          battleCount: lines.length
-        };
-        newBatchesCount++;
-      }
-    }
-  }
-
-  // 3. Check `sync-vault` branch ai_telemetry/manifest.json
+  // 2. Check `sync-vault` branch ai_telemetry/manifest.json
   const syncVaultManifest = await fetchJson(
     `https://raw.githubusercontent.com/${REPO}/sync-vault/ai_telemetry/manifest.json`
   );
@@ -154,7 +126,7 @@ async function main() {
     }
   }
 
-  // 4. Check public Gists for `@sportsfan986` containing `silphscope_pvp_ai_telemetry_manifest.json`
+  // 3. Check public Gists for `@sportsfan986` containing `silphscope_pvp_ai_telemetry_manifest.json`
   const userGists = await fetchJson("https://api.github.com/users/sportsfan986/gists?per_page=100");
   if (Array.isArray(userGists)) {
     for (const g of userGists) {

@@ -2,7 +2,7 @@
 
 > **Target Audience**: Antigravity agents, Claude/Gemini coding assistants, and core developers maintaining or extending **SilphScope PvP**.  
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v6.12` (`versionCode = 1612`)  
+> **Current Version**: `v6.20` (`versionCode = 1620`)  
 > **Primary Branches**: `main` (source code & releases), `ai-telemetry-logs` (isolated telemetry, DVR recordings & anomaly traces).
 
 ---
@@ -211,6 +211,13 @@ The HUD displays a compact, high-contrast 2-line tactical recommendation banner 
   - `OverlayService.kt` & `PokemonDatabase.kt`: Protected `BANNER_OCR` move names from being overwritten by post-cutscene Section 1A HP-delta inference, added `resolveRankingsMapForLeagueStatic` fallback to same-CP standard league rankings for custom/Mega cups, fixed `"MEGA ULTRA LEAGUE"` routing, and added `Dusknoir`/`Dusclops`/`Zygarde` to static fallback move tables.
   - `OverlayService.kt`: Prevented pre-minigame circle-shrink energy loss via 5-frame downward border confirmation + `recentStableReadyEnergy` high-water retention, added `"BLOCKED!"` & `"disguise is busted!"` mid-banner OCR, and gated HUD shield drops on active/recent charged attacks.
   - `GitHubCloudSync.kt`, `BattleDvrEngine.kt`, `scripts/ingest-telemetry.mjs`: Anchored `postCutsceneHpAudits` to post-cutscene exit and added `appVersion` (`"6.12"`) + `versionCode` (`1612`) tracking across all telemetry headers, DVR watermarks, and ingestion reports.
+
+### Turn 9 — Mega Level 4 (`Super Mega`) 3rd Fixed `+` Charged Moves, 3-Button Energy Scanner & Role-Agnostic Combat Simulator (v6.20)
+- **User Request**: Implement support for the 3rd fixed special `+` Charged Move on Pokémon that have a Mega Level 4 (`supermega`) form strictly in Mega-eligible leagues; calibrate the 3-button charge move pixel scanner from the in-game Mega Mewtwo Y screenshot (where the `+` move is in the center and raised slightly); update the simulator to flexibly simulate multi-throw sequences without relegating moves strictly to closer, bait, or coverage roles (e.g., two `35E` moves back-to-back vs. a single nuke); and release as `v6.20`.
+- **Delivered Changes (v6.20)**:
+  - `PokemonDatabase.kt`, `OverlayService.kt`, `src/data/pokemonDb.ts`: Added all 18 `*_PLUS` moves (`Fell Stinger+`, `Volt Tackle+`, `Zap Cannon+`, `Acid Spray+`, `Liquidation+`, `Outrage+`, `Dynamic Punch+`, `Future Sight+`, `Drill Peck+`, `Dark Pulse+`, `Night Shade+`, `Brave Bird+`, `Ominous Wind+`, `Seed Bomb+`, `Mystical Fire+`, `Surf+`, `Psybeam+`, `Brick Break+`), all 18 Super Mega species base stats, `SUPER_MEGA_PLUS_MOVES` / `DYNAMIC_SUPER_MEGA_PLUS_MOVES` (`extraChargedMoves` ingestion), and `resolveMegaPlusMoveStatic` / `resolveMegaPlusMove` gated strictly on `isMegaAllowedInLeague`.
+  - `PokemonDatabase.kt`, `TeamAndMetaEngine.kt`, `src/data/pokemonDb.ts`, `src/data/combatSimulator.ts`, `src/data/teamAndMetaEngine.ts`: Upgraded `simulateTurnByTurnChargedCycleStatic` / `simulateTurnByTurnChargedCycle` to accept an optional 3rd `+` move (`c3`) and evaluate role-agnostic single throws, back-to-back spam pairs ($m_a \to m_a$, such as $35\text{E} \to 35\text{E}$ vs. $75\text{E}$ nukes), and 1S/2S multi-throw sequences across all available moves.
+  - `PixelScannerEngine.kt`, `OverlayService.kt`, `overlay.html`, `MainActivity.kt`, `src/App.tsx`: Added 3-button charge circle pixel scanning (`cx = 0.2150w, cy = 0.8930h` Left Move 1, `cx = 0.5000w, cy = 0.8375h` Center-Raised `+` Move, `cx = 0.7820w, cy = 0.8930h` Right Move 2) with 2-button fallback, 3-move post-throw energy deduction, 3rd player move HUD row, and `[+ <PlusMove>]` / `[Mega4]` badges in Presets, Autocomplete, Anti-Meta Builder, and Team Editor.
 
 ---
 

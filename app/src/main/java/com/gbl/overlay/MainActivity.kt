@@ -501,7 +501,7 @@ class MainActivity : AppCompatActivity() {
         val appVer = try {
             packageManager.getPackageInfo(packageName, 0).versionName ?: OverlayService.APP_VERSION
         } catch (_: Exception) {
-            "6.12"
+            "6.20"
         }
         findViewById<TextView>(R.id.tv_app_main_subtitle)?.text = "Real-Time PvP Floating Overlay • v$appVer"
         ensureDefaultPresets()
@@ -7416,7 +7416,9 @@ class MainActivity : AppCompatActivity() {
                 val ivText = if (!slot.ivs.isNullOrBlank()) "IV ${slot.ivs}" else "PvPoke IVs"
                 val rTag = roleLabels.getOrElse(sIdx) { "Slot ${sIdx + 1}" }
                 val brTag = slotBrHtmlLabels.getOrElse(sIdx) { "" }
-                "• <b>[$rTag · $brTag]</b> ${slot.name} <font color='#94a3b8'>($ivText · CP ${slot.cp})</font>"
+                val plusMove = OverlayService.resolveMegaPlusMoveStatic(slot.name, resolvedLeague, prefs)
+                val plusBadge = if (plusMove != null) " <font color='#f472b6'><b>[+ $plusMove]</b></font>" else ""
+                "• <b>[$rTag · $brTag]</b> ${slot.name}$plusBadge <font color='#94a3b8'>($ivText · CP ${slot.cp})</font>"
             }.joinToString("<br>")
 
             val winsList = if (preset.keyMetaTargetsBeaten.isNotEmpty()) preset.keyMetaTargetsBeaten.take(5).joinToString(", ") else "Balanced neutral coverage"
@@ -7767,8 +7769,10 @@ class MainActivity : AppCompatActivity() {
             topRow.addView(nameTv)
             topRow.addView(badgeTv)
 
+            val plusMove = OverlayService.resolveMegaPlusMoveStatic(item.name, leagueProvider(), prefs)
+            val plusSuffix = if (plusMove != null) " + $plusMove [Mega4]" else ""
             val movesTv = TextView(this@MainActivity).apply {
-                text = "${item.fastMove}  •  ${item.chargedMove1} / ${item.chargedMove2}"
+                text = "${item.fastMove}  •  ${item.chargedMove1} / ${item.chargedMove2}$plusSuffix"
                 textSize = 11f
                 setTextColor(0xFF94A3B8.toInt())
             }
@@ -10232,7 +10236,9 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     ""
                 }
-                "• <b>[$rLabel · $brStr]</b> ${m.name}$featBadge$altBadge (CP ${m.cp}) — <font color='$movesColor'><b>${m.fastMove} + ${m.chargedMove1} / ${m.chargedMove2}</b></font>$stdNote"
+                val plusMove = OverlayService.resolveMegaPlusMoveStatic(m.name, result.league, prefs)
+                val plusMoveStr = if (plusMove != null) " / <font color='#f472b6'>$plusMove [Mega4]</font>" else ""
+                "• <b>[$rLabel · $brStr]</b> ${m.name}$featBadge$altBadge (CP ${m.cp}) — <font color='$movesColor'><b>${m.fastMove} + ${m.chargedMove1} / ${m.chargedMove2}$plusMoveStr</b></font>$stdNote"
             }.joinToString("<br>")
 
             val slotsTv = TextView(this).apply {
@@ -10715,21 +10721,24 @@ class MainActivity : AppCompatActivity() {
             val alt1Tag = if (eval.altMovesetSlots.getOrNull(0)?.isAltMoveset == true) " ⚡Alt" else ""
             val alt2Tag = if (eval.altMovesetSlots.getOrNull(1)?.isAltMoveset == true) " ⚡Alt" else ""
             val alt3Tag = if (eval.altMovesetSlots.getOrNull(2)?.isAltMoveset == true) " ⚡Alt" else ""
+            val plus1Tag = OverlayService.resolveMegaPlusMoveStatic(s1.name, lg, prefs)?.let { " [+$it]" } ?: ""
+            val plus2Tag = OverlayService.resolveMegaPlusMoveStatic(s2.name, lg, prefs)?.let { " [+$it]" } ?: ""
+            val plus3Tag = OverlayService.resolveMegaPlusMoveStatic(s3.name, lg, prefs)?.let { " [+$it]" } ?: ""
             textP1RoleTitle?.text = when {
                 isAbb -> "⚔️ Slot 1 (Lead A) & Moveset"
                 isDuo -> "☯️ Slot 1 (Core 1 Lead) & Moveset"
                 else -> "⚔️ Slot 1 (Lead) & Moveset"
-            } + alt1Tag
+            } + alt1Tag + plus1Tag
             textP2RoleTitle?.text = when {
                 isAbb -> "🔄 Slot 2 (Bait Swap B1) & Moveset"
                 isDuo -> "🔄 Slot 2 (Safe Swap Pivot) & Moveset"
                 else -> "🔄 Slot 2 (Safe Swap) & Moveset"
-            } + alt2Tag
+            } + alt2Tag + plus2Tag
             textP3RoleTitle?.text = when {
                 isAbb -> "🛡️ Slot 3 (Sweeper B2) & Moveset"
                 isDuo -> "☯️ Slot 3 (Core 2 Co-Core) & Moveset"
                 else -> "🛡️ Slot 3 (Closer) & Moveset"
-            } + alt3Tag
+            } + alt3Tag + plus3Tag
 
             textP1LeadBr?.text = "Lead BR: ${eval.leadAggBr} ($leadTier)"
             textP1LeadBr?.setTextColor(android.graphics.Color.parseColor(leadHex))

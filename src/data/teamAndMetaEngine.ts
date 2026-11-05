@@ -1,4 +1,4 @@
-import { type FastMove, type TeamMember, type LeagueType, getPinnedShow6LimitedMetas, getEnabledShow6Leagues, getLimitedMetaSheetAliases, getLeagueCpCap, isMegaOrPrimalSpecies, hasMultipleMegas, isMegaAllowedInLeague, isBattleFrontierLeague, normalizeLeagueName, type TeamPreset, getTypeMultiplier, POKEMON_DATABASE, findPokemonByName, calculateChargedDamage, computeEffectiveStatsForLeague, LIVE_RANKINGS_MAP, isDominatedSameTypeChargedPair, simulateTurnByTurnChargedCycle, buildChargedMoveFromName, extractBaseSpeciesKey, getRecommendedMovesForPokemon, getLeagueTop3Template } from "./pokemonDb";
+import { type FastMove, type TeamMember, type LeagueType, getPinnedShow6LimitedMetas, getEnabledShow6Leagues, getLimitedMetaSheetAliases, getLeagueCpCap, isMegaOrPrimalSpecies, hasMultipleMegas, isMegaAllowedInLeague, isBattleFrontierLeague, normalizeLeagueName, type TeamPreset, getTypeMultiplier, POKEMON_DATABASE, findPokemonByName, calculateChargedDamage, computeEffectiveStatsForLeague, LIVE_RANKINGS_MAP, isDominatedSameTypeChargedPair, simulateTurnByTurnChargedCycle, buildChargedMoveFromName, extractBaseSpeciesKey, getRecommendedMovesForPokemon, getLeagueTop3Template, resolveMegaPlusMove } from "./pokemonDb";
 import { type MatchupTierThresholds, getStoredMatchupTierThresholds, ALL_18_TYPES, resolveCombatPokemonForEngine, buildCombatantCacheKey, getAvailableMovePoolForPokemon, evaluateDiscreteShieldBattleRating, type PositionWeightedMatchupRatings, evaluatePositionWeightedBr } from "./combatSimulator";
 
 export interface BlendedSeasonMetaDistribution {
@@ -3162,8 +3162,20 @@ export function evaluateFastRoughShieldBattleRating(
     userResolved.isShadow
   ).percentage;
 
-  const uBest = Math.max(uC1, uC2);
-  const oBest = Math.max(oC1, oC2);
+  const uPlusName = resolveMegaPlusMove(myStats.name, league) || resolveMegaPlusMove(myStats.speciesId, league);
+  const uC3Move = uPlusName ? buildChargedMoveFromName(uPlusName, myStats.types[0], myStats.chargedMoves) : null;
+  const uC3 = uC3Move
+    ? calculateChargedDamage(myStats, oppStats, uC3Move, userResolved.isShadow, oppResolved.isShadow).percentage
+    : 0;
+
+  const oPlusName = resolveMegaPlusMove(oppStats.name, league) || resolveMegaPlusMove(oppStats.speciesId, league);
+  const oC3Move = oPlusName ? buildChargedMoveFromName(oPlusName, oppStats.types[0], oppStats.chargedMoves) : null;
+  const oC3 = oC3Move
+    ? calculateChargedDamage(oppStats, myStats, oC3Move, oppResolved.isShadow, userResolved.isShadow).percentage
+    : 0;
+
+  const uBest = Math.max(uC1, uC2, uC3);
+  const oBest = Math.max(oC1, oC2, oC3);
 
   const uFastTurns = Math.max(1, userResolved.fastMove.turns || 2);
   const uFastEnergy = userResolved.fastMove.energyGain || uFastTurns * 3.5;
@@ -3180,7 +3192,9 @@ export function evaluateFastRoughShieldBattleRating(
     uC2,
     uFastEpt,
     sOpp,
-    myStats.types
+    myStats.types,
+    uC3Move,
+    uC3
   );
   const oSim = simulateTurnByTurnChargedCycle(
     oC1Move,
@@ -3189,7 +3203,9 @@ export function evaluateFastRoughShieldBattleRating(
     oC2,
     oFastEpt,
     sUser,
-    oppStats.types
+    oppStats.types,
+    oC3Move,
+    oC3
   );
 
   const uImpact = uSim.effectivePressure * uSim.effectiveFreqMult;

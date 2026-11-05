@@ -1,4 +1,4 @@
-import { type FastMove, type ChargedMove, type PokemonStats, type TeamMember, normalizeLeagueName, getTypeMultiplier, POKEMON_DATABASE, abbrMove5, resolveFastMove, calculateChargedDamage, computeEffectiveStatsForLeague, LIVE_RANKINGS_MAP, simulateTurnByTurnChargedCycle, SPECIES_FAST_MOVES_POOL, SPECIES_CHARGED_MOVES_POOL, formatMoveIdToDisplayName, buildChargedMoveFromName, applyRankingMovesToPokemonStats } from "./pokemonDb";
+import { type FastMove, type ChargedMove, type PokemonStats, type TeamMember, normalizeLeagueName, getTypeMultiplier, POKEMON_DATABASE, abbrMove5, resolveFastMove, calculateChargedDamage, computeEffectiveStatsForLeague, LIVE_RANKINGS_MAP, simulateTurnByTurnChargedCycle, SPECIES_FAST_MOVES_POOL, SPECIES_CHARGED_MOVES_POOL, formatMoveIdToDisplayName, buildChargedMoveFromName, applyRankingMovesToPokemonStats, resolveMegaPlusMove } from "./pokemonDb";
 import { canonicalizeMetaPokemonName, ACTIVE_PRECOMPUTED_TEAM_9X9_STATE, buildPrecomputedTeamSignature, evaluateFastRoughShieldBattleRating } from "./teamAndMetaEngine";
 
 export type OppCountMode = "my_fasts" | "opp_fasts";
@@ -182,7 +182,13 @@ export function calculateOpponentMoveTimingRows(
 
   const benchNames = teamNames.filter((n) => n.toLowerCase() !== userLeadName.toLowerCase()).slice(0, 2);
 
-  const rows: OpponentMoveTimingRow[] = oppStats.chargedMoves.slice(0, enable4ChargedMoves ? 4 : 3).map((cm) => {
+  const oppPlusMoveName = resolveMegaPlusMove(oppStats.name, league) || resolveMegaPlusMove(oppStats.speciesId, league);
+  const baseOppCharged = oppStats.chargedMoves.slice(0, enable4ChargedMoves ? 4 : 3);
+  const oppChargedList =
+    oppPlusMoveName && !baseOppCharged.some((m) => m.name.toLowerCase() === oppPlusMoveName.toLowerCase())
+      ? [...baseOppCharged, buildChargedMoveFromName(oppPlusMoveName, oppStats.types[0], oppStats.chargedMoves)]
+      : baseOppCharged;
+  const rows: OpponentMoveTimingRow[] = oppChargedList.map((cm) => {
     const mEnergy = cm.energyCost || 50;
     const oppFasts = Math.max(1, Math.ceil(mEnergy / oppFastEnergy));
     const oppReadyTurn = oppFasts * oppFastTurns;
@@ -426,7 +432,16 @@ export function calculateMyMoveTimingRows(
 
   const oppSlots = scannedOpponentNames.length > 0 ? scannedOpponentNames : [oppStats.name];
 
-  return customMoves.map((mName) => {
+  const userPlusMoveName =
+    resolveMegaPlusMove(userLeadName, league) ||
+    resolveMegaPlusMove(userStats.name, league) ||
+    resolveMegaPlusMove(userStats.speciesId, league);
+  const effectiveCustomMoves =
+    userPlusMoveName && !customMoves.some((m) => m.toLowerCase() === userPlusMoveName.toLowerCase())
+      ? [...customMoves, userPlusMoveName]
+      : customMoves;
+
+  return effectiveCustomMoves.map((mName) => {
     const existing = buildChargedMoveFromName(mName, userStats.types[0], userStats.chargedMoves);
 
     const mEnergy = existing.energyCost || 50;
@@ -1062,6 +1077,8 @@ export function getAvailableMovePoolForPokemon(
     const trimmed = raw.trim();
     if (
       !trimmed ||
+      trimmed.endsWith("+") ||
+      trimmed.toUpperCase().endsWith("_PLUS") ||
       trimmed.toLowerCase() === "struggle" ||
       trimmed.toLowerCase() === "frustration"
     ) {
@@ -1220,6 +1237,36 @@ export function evaluateDiscreteShieldBattleRating(
   const userFastTurns = Math.max(1, userResolved.fastMove.turns || 2);
   const userFastEnergy = userResolved.fastMove.energyGain || userFastTurns * 3.5;
   const userFastEpt = userFastEnergy / userFastTurns;
+  const userPlusMoveName =
+    resolveMegaPlusMove(myStats.name, league) ||
+    resolveMegaPlusMove(myStats.speciesId, league);
+  const userC3Move = userPlusMoveName
+    ? buildChargedMoveFromName(userPlusMoveName, myStats.types[0], myStats.chargedMoves)
+    : null;
+  const userC3RawPct = userC3Move
+    ? calculateChargedDamage(
+        myStats,
+        oppStats,
+        userC3Move,
+        userResolved.isShadow,
+        oppResolved.isShadow
+      ).percentage
+    : 0;
+  const oppPlusMoveName =
+    resolveMegaPlusMove(oppStats.name, league) ||
+    resolveMegaPlusMove(oppStats.speciesId, league);
+  const oppC3Move = oppPlusMoveName
+    ? buildChargedMoveFromName(oppPlusMoveName, oppStats.types[0], oppStats.chargedMoves)
+    : null;
+  const oppC3RawPct = oppC3Move
+    ? calculateChargedDamage(
+        oppStats,
+        myStats,
+        oppC3Move,
+        oppResolved.isShadow,
+        userResolved.isShadow
+      ).percentage
+    : 0;
 
   const userCycleSim = simulateTurnByTurnChargedCycle(
     userC1Move,
@@ -1228,10 +1275,15 @@ export function evaluateDiscreteShieldBattleRating(
     userC2RawPct,
     userFastEpt,
     sOpp,
-    myStats.types
+    myStats.types,
+    userC3Move,
+    userC3RawPct
   );
 
-  const userChargedEval = userResolved.chargedMoves.slice(0, 2).map((cm) =>
+  const userChargedForEval = userC3Move
+    ? [...userResolved.chargedMoves.slice(0, 2), userC3Move]
+    : userResolved.chargedMoves.slice(0, 2);
+  const userChargedEval = userChargedForEval.map((cm) =>
     evalChargedMoveAgainst(myStats, oppStats, cm, userResolved.isShadow, oppResolved.isShadow)
   );
   const bestUserCharged = userChargedEval.length ? Math.max(...userChargedEval.map((c) => c.pct)) : 45;
@@ -1336,7 +1388,9 @@ export function evaluateDiscreteShieldBattleRating(
       oppC2RawPct,
       oppFastEpt,
       sUser,
-      oppStats.types
+      oppStats.types,
+      oppC3Move,
+      oppC3RawPct
     );
 
     const c1Eval = evalChargedMoveAgainst(oppStats, myStats, oppC1, oppResolved.isShadow, userResolved.isShadow);

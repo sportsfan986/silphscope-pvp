@@ -127,6 +127,9 @@ import com.gbl.overlay.OverlayService.Companion.SPECIES_CHARGED_MOVES_POOL
 import com.gbl.overlay.OverlayService.Companion.SPECIES_FAST_MOVES_POOL
 import com.gbl.overlay.OverlayService.Companion.STATIC_MOVE_DATABASE_LOOKUP
 import com.gbl.overlay.OverlayService.Companion.STATIC_MOVE_ENERGY_LOOKUP
+import com.gbl.overlay.OverlayService.Companion.SUPER_MEGA_PLUS_MOVES
+import com.gbl.overlay.OverlayService.Companion.DYNAMIC_SUPER_MEGA_PLUS_MOVES
+import com.gbl.overlay.OverlayService.Companion.resolveMegaPlusMoveStatic
 import com.gbl.overlay.OverlayService.Companion.TOP_30_RANKED_POOL_CACHE
 import com.gbl.overlay.OverlayService.Companion.TOP_META_POOL_CACHE
 
@@ -207,7 +210,82 @@ internal object PokemonStaticData {
         "draco meteor" to MoveBuffEffect(-2, 0, 0, 0, 1.0),
         "psycho boost" to MoveBuffEffect(-2, 0, 0, 0, 1.0),
         "leaf storm" to MoveBuffEffect(-2, 0, 0, 0, 1.0),
-        "v-create" to MoveBuffEffect(0, -3, 0, 0, 1.0)
+        "v-create" to MoveBuffEffect(0, -3, 0, 0, 1.0),
+        "fell stinger" to MoveBuffEffect(1, 0, 0, 0, 1.0),
+        "volt tackle" to MoveBuffEffect(0, -1, 0, 0, 1.0),
+        "drain punch" to MoveBuffEffect(0, 1, 0, 0, 1.0),
+        "brick break" to MoveBuffEffect(0, 0, 0, -1, 1.0),
+        "mystical fire" to MoveBuffEffect(0, 0, -1, 0, 1.0),
+        "fell stinger+" to MoveBuffEffect(1, 0, 0, 0, 1.0),
+        "volt tackle+" to MoveBuffEffect(0, -1, 0, 0, 1.0),
+        "zap cannon+" to MoveBuffEffect(0, 0, -1, 0, 1.0),
+        "acid spray+" to MoveBuffEffect(0, 0, 0, -2, 1.0),
+        "liquidation+" to MoveBuffEffect(0, 0, 0, -1, 0.3),
+        "brave bird+" to MoveBuffEffect(0, -3, 0, 0, 1.0),
+        "ominous wind+" to MoveBuffEffect(1, 1, 0, 0, 0.1),
+        "mystical fire+" to MoveBuffEffect(0, 0, -1, 0, 1.0),
+        "brick break+" to MoveBuffEffect(0, 0, 0, -1, 1.0)
+    )
+
+    val SUPER_MEGA_PLUS_MOVES: Map<String, String> = mapOf(
+        "beedrill_mega" to "Fell Stinger+",
+        "beedrill (mega)" to "Fell Stinger+",
+        "mega beedrill" to "Fell Stinger+",
+        "raichu_mega_x" to "Volt Tackle+",
+        "raichu (mega x)" to "Volt Tackle+",
+        "mega raichu x" to "Volt Tackle+",
+        "mega raichu (x)" to "Volt Tackle+",
+        "raichu_mega_y" to "Zap Cannon+",
+        "raichu (mega y)" to "Zap Cannon+",
+        "mega raichu y" to "Zap Cannon+",
+        "mega raichu (y)" to "Zap Cannon+",
+        "victreebel_mega" to "Acid Spray+",
+        "victreebel (mega)" to "Acid Spray+",
+        "mega victreebel" to "Acid Spray+",
+        "starmie_mega" to "Liquidation+",
+        "starmie (mega)" to "Liquidation+",
+        "mega starmie" to "Liquidation+",
+        "dragonite_mega" to "Outrage+",
+        "dragonite (mega)" to "Outrage+",
+        "mega dragonite" to "Outrage+",
+        "mewtwo_mega_x" to "Dynamic Punch+",
+        "mewtwo (mega x)" to "Dynamic Punch+",
+        "mega mewtwo x" to "Dynamic Punch+",
+        "mega mewtwo (x)" to "Dynamic Punch+",
+        "mewtwo_mega_y" to "Future Sight+",
+        "mewtwo (mega y)" to "Future Sight+",
+        "mega mewtwo y" to "Future Sight+",
+        "mega mewtwo (y)" to "Future Sight+",
+        "skarmory_mega" to "Drill Peck+",
+        "skarmory (mega)" to "Drill Peck+",
+        "mega skarmory" to "Drill Peck+",
+        "houndoom_mega" to "Dark Pulse+",
+        "houndoom (mega)" to "Dark Pulse+",
+        "mega houndoom" to "Dark Pulse+",
+        "sableye_mega" to "Night Shade+",
+        "sableye (mega)" to "Night Shade+",
+        "mega sableye" to "Night Shade+",
+        "staraptor_mega" to "Brave Bird+",
+        "staraptor (mega)" to "Brave Bird+",
+        "mega staraptor" to "Brave Bird+",
+        "chandelure_mega" to "Ominous Wind+",
+        "chandelure (mega)" to "Ominous Wind+",
+        "mega chandelure" to "Ominous Wind+",
+        "chesnaught_mega" to "Seed Bomb+",
+        "chesnaught (mega)" to "Seed Bomb+",
+        "mega chesnaught" to "Seed Bomb+",
+        "delphox_mega" to "Mystical Fire+",
+        "delphox (mega)" to "Mystical Fire+",
+        "mega delphox" to "Mystical Fire+",
+        "greninja_mega" to "Surf+",
+        "greninja (mega)" to "Surf+",
+        "mega greninja" to "Surf+",
+        "malamar_mega" to "Psybeam+",
+        "malamar (mega)" to "Psybeam+",
+        "mega malamar" to "Psybeam+",
+        "falinks_mega" to "Brick Break+",
+        "falinks (mega)" to "Brick Break+",
+        "mega falinks" to "Brick Break+"
     )
 
     val RECOMMENDED_CHARGED_MOVES: Map<String, Triple<String, String, String>> = mapOf(
@@ -697,7 +775,30 @@ internal object PokemonStaticData {
         "Rock Blast" to MoveStats("Rock Blast", "rock", 50, 40),
         "Brick Break" to MoveStats("Brick Break", "fighting", 40, 35),
         "Poltergeist" to MoveStats("Poltergeist", "ghost", 140, 75),
-        "Boomburst" to MoveStats("Boomburst", "normal", 150, 70)
+        "Boomburst" to MoveStats("Boomburst", "normal", 150, 70),
+        "Fell Stinger" to MoveStats("Fell Stinger", "bug", 20, 35),
+        "Volt Tackle" to MoveStats("Volt Tackle", "electric", 90, 40),
+        "Psybeam" to MoveStats("Psybeam", "psychic", 70, 60),
+        "Heat Wave" to MoveStats("Heat Wave", "fire", 75, 45),
+        "Drain Punch" to MoveStats("Drain Punch", "fighting", 40, 40),
+        "Fell Stinger+" to MoveStats("Fell Stinger+", "bug", 40, 35),
+        "Volt Tackle+" to MoveStats("Volt Tackle+", "electric", 65, 35),
+        "Zap Cannon+" to MoveStats("Zap Cannon+", "electric", 70, 45),
+        "Acid Spray+" to MoveStats("Acid Spray+", "poison", 20, 40),
+        "Liquidation+" to MoveStats("Liquidation+", "water", 55, 40),
+        "Outrage+" to MoveStats("Outrage+", "dragon", 80, 50),
+        "Dynamic Punch+" to MoveStats("Dynamic Punch+", "fighting", 130, 80),
+        "Future Sight+" to MoveStats("Future Sight+", "psychic", 130, 80),
+        "Drill Peck+" to MoveStats("Drill Peck+", "flying", 60, 35),
+        "Dark Pulse+" to MoveStats("Dark Pulse+", "dark", 60, 40),
+        "Night Shade+" to MoveStats("Night Shade+", "ghost", 55, 45),
+        "Brave Bird+" to MoveStats("Brave Bird+", "flying", 70, 40),
+        "Ominous Wind+" to MoveStats("Ominous Wind+", "ghost", 50, 40),
+        "Seed Bomb+" to MoveStats("Seed Bomb+", "grass", 60, 40),
+        "Mystical Fire+" to MoveStats("Mystical Fire+", "fire", 50, 40),
+        "Surf+" to MoveStats("Surf+", "water", 55, 35),
+        "Psybeam+" to MoveStats("Psybeam+", "psychic", 60, 45),
+        "Brick Break+" to MoveStats("Brick Break+", "fighting", 40, 35)
     )
 
     val FAST_MOVE_TURNS: Map<String, Int> = mapOf(
@@ -961,7 +1062,26 @@ internal object PokemonStaticData {
         PokemonMeta("Dondozo", "dondozo", "dondozo", "Base", listOf("water"), 2488, "Waterfall", 3, "Surf", "Liquidation", 34, 38, atk = 178.0, def = 178.0, hp = 312, glRank = 55, ulRank = 35, mlRank = 180, chargedMove3 = "Body Slam", isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "4/15/15"),
         PokemonMeta("Volcanion", "volcanion", "volcanion", "Base", listOf("fire", "water"), 3985, "Incinerate", 5, "Overheat", "Earth Power", 64, 46, atk = 252.0, def = 216.0, hp = 190, glRank = 140, ulRank = 65, mlRank = 28, chargedMove3 = "Sludge Bomb", chargedMove4 = "Hydro Pump", isRawBaseStats = true, defaultIvsGl = "10/14/14", defaultIvsUl = "10/15/15"),
         PokemonMeta("Kommo-o", "kommo_o", "kommo-o", "Base", listOf("dragon", "fighting"), 2488, "Dragon Tail", 3, "Clanging Scales", "Close Combat", 48, 46, atk = 222.0, def = 240.0, hp = 181, glRank = 48, ulRank = 30, mlRank = 95, chargedMove3 = "Brick Break", chargedMove4 = "Boomburst", isRawBaseStats = true, defaultIvsGl = "4/14/15", defaultIvsUl = "4/15/14"),
-        PokemonMeta("Regidrago", "regidrago", "regidrago", "Base", listOf("dragon"), 2488, "Dragon Breath", 1, "Breaking Swipe", "Outrage", 26, 48, atk = 202.0, def = 101.0, hp = 400, glRank = 62, ulRank = 36, mlRank = 110, chargedMove3 = "Dragon Pulse", isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "4/15/15")
+        PokemonMeta("Regidrago", "regidrago", "regidrago", "Base", listOf("dragon"), 2488, "Dragon Breath", 1, "Breaking Swipe", "Outrage", 26, 48, atk = 202.0, def = 101.0, hp = 400, glRank = 62, ulRank = 36, mlRank = 110, chargedMove3 = "Dragon Pulse", isRawBaseStats = true, defaultIvsGl = "4/15/14", defaultIvsUl = "4/15/15"),
+        // --- Super Mega (Mega Level 4 Fixed 3rd '+' Charged Move) Species ---
+        PokemonMeta("Beedrill (Mega)", "beedrill_mega", "beedrill", "Mega", listOf("bug", "poison"), 3824, "Poison Jab", 2, "Drill Run", "X-Scissor", 38, 32, atk = 303.0, def = 148.0, hp = 163, glRank = 60, ulRank = 45, mlRank = 80, chargedMove3 = "Sludge Bomb", isRawBaseStats = true),
+        PokemonMeta("Raichu (Mega X)", "raichu_mega_x", "raichu", "Mega X", listOf("electric"), 3768, "Volt Switch", 4, "Wild Charge", "Surf", 48, 34, atk = 277.0, def = 203.0, hp = 155, glRank = 40, ulRank = 30, mlRank = 50, chargedMove3 = "Brick Break", isRawBaseStats = true),
+        PokemonMeta("Raichu (Mega Y)", "raichu_mega_y", "raichu", "Mega Y", listOf("electric"), 4020, "Volt Switch", 4, "Wild Charge", "Surf", 48, 34, atk = 339.0, def = 157.0, hp = 155, glRank = 42, ulRank = 32, mlRank = 48, chargedMove3 = "Trailblaze", isRawBaseStats = true),
+        PokemonMeta("Victreebel (Mega)", "victreebel_mega", "victreebel", "Mega", listOf("grass", "poison"), 3762, "Magical Leaf", 3, "Leaf Blade", "Sludge Bomb", 38, 42, atk = 265.0, def = 181.0, hp = 190, glRank = 55, ulRank = 40, mlRank = 70, chargedMove3 = "Leaf Tornado", isRawBaseStats = true),
+        PokemonMeta("Starmie (Mega)", "starmie_mega", "starmie", "Mega", listOf("water", "psychic"), 4125, "Psywave", 1, "Surf", "Power Gem", 34, 42, atk = 276.0, def = 229.0, hp = 155, glRank = 20, ulRank = 18, mlRank = 35, chargedMove3 = "Ice Beam", isRawBaseStats = true),
+        PokemonMeta("Dragonite (Mega)", "dragonite_mega", "dragonite", "Mega", listOf("dragon", "flying"), 5280, "Dragon Breath", 1, "Dragon Claw", "Superpower", 34, 42, atk = 299.0, def = 255.0, hp = 209, glRank = 35, ulRank = 20, mlRank = 3, chargedMove3 = "Thunder Punch", isRawBaseStats = true),
+        PokemonMeta("Mewtwo (Mega X)", "mewtwo_mega_x", "mewtwo", "Mega X", listOf("psychic", "fighting"), 6450, "Psycho Cut", 2, "Psystrike", "Shadow Ball", 50, 44, atk = 399.0, def = 215.0, hp = 228, glRank = 30, ulRank = 15, mlRank = 2, chargedMove3 = "Ice Beam", isRawBaseStats = true),
+        PokemonMeta("Mewtwo (Mega Y)", "mewtwo_mega_y", "mewtwo", "Mega Y", listOf("psychic"), 6806, "Psycho Cut", 2, "Psystrike", "Shadow Ball", 52, 46, atk = 413.0, def = 223.0, hp = 228, glRank = 28, ulRank = 12, mlRank = 1, chargedMove3 = "Focus Blast", isRawBaseStats = true),
+        PokemonMeta("Skarmory (Mega)", "skarmory_mega", "skarmory", "Mega", listOf("steel", "flying"), 3960, "Steel Wing", 2, "Sky Attack", "Drill Run", 36, 38, atk = 273.0, def = 228.0, hp = 163, glRank = 15, ulRank = 14, mlRank = 40, chargedMove3 = "Brave Bird", isRawBaseStats = true),
+        PokemonMeta("Houndoom (Mega)", "houndoom_mega", "houndoom", "Mega", listOf("dark", "fire"), 4344, "Snarl", 3, "Foul Play", "Flamethrower", 36, 44, atk = 289.0, def = 194.0, hp = 181, glRank = 50, ulRank = 35, mlRank = 55, chargedMove3 = "Crunch", isRawBaseStats = true),
+        PokemonMeta("Sableye (Mega)", "sableye_mega", "sableye", "Mega", listOf("dark", "ghost"), 2198, "Shadow Claw", 2, "Foul Play", "Power Gem", 36, 42, atk = 151.0, def = 216.0, hp = 137, glRank = 1, ulRank = 60, mlRank = 200, chargedMove3 = "Dazzling Gleam", isRawBaseStats = true),
+        PokemonMeta("Staraptor (Mega)", "staraptor_mega", "staraptor", "Mega", listOf("fighting", "flying"), 4326, "Sand Attack", 1, "Close Combat", "Fly", 48, 42, atk = 278.0, def = 207.0, hp = 198, glRank = 25, ulRank = 22, mlRank = 38, chargedMove3 = "Brave Bird", isRawBaseStats = true),
+        PokemonMeta("Chandelure (Mega)", "chandelure_mega", "chandelure", "Mega", listOf("ghost", "fire"), 4668, "Incinerate", 5, "Shadow Ball", "Flame Charge", 48, 36, atk = 335.0, def = 227.0, hp = 155, glRank = 45, ulRank = 28, mlRank = 25, chargedMove3 = "Overheat", isRawBaseStats = true),
+        PokemonMeta("Chesnaught (Mega)", "chesnaught_mega", "chesnaught", "Mega", listOf("grass", "fighting"), 4656, "Vine Whip", 2, "Frenzy Plant", "Superpower", 46, 42, atk = 242.0, def = 282.0, hp = 204, glRank = 12, ulRank = 8, mlRank = 12, chargedMove3 = "Thunder Punch", isRawBaseStats = true),
+        PokemonMeta("Delphox (Mega)", "delphox_mega", "delphox", "Mega", listOf("fire", "psychic"), 4915, "Fire Spin", 3, "Blast Burn", "Psyshock", 50, 38, atk = 331.0, def = 235.0, hp = 181, glRank = 38, ulRank = 24, mlRank = 18, chargedMove3 = "Flame Charge", isRawBaseStats = true),
+        PokemonMeta("Greninja (Mega)", "greninja_mega", "greninja", "Mega", listOf("water", "dark"), 3964, "Water Shuriken", 3, "Hydro Cannon", "Night Slash", 44, 34, atk = 299.0, def = 180.0, hp = 176, glRank = 8, ulRank = 6, mlRank = 16, chargedMove3 = "Brutal Swing", isRawBaseStats = true),
+        PokemonMeta("Malamar (Mega)", "malamar_mega", "malamar", "Mega", listOf("dark", "psychic"), 3540, "Psywave", 1, "Foul Play", "Superpower", 36, 42, atk = 208.0, def = 222.0, hp = 200, glRank = 4, ulRank = 5, mlRank = 32, chargedMove3 = "Hyper Beam", isRawBaseStats = true),
+        PokemonMeta("Falinks (Mega)", "falinks_mega", "falinks", "Mega", listOf("fighting"), 3920, "Counter", 2, "Superpower", "Megahorn", 42, 48, atk = 267.0, def = 229.0, hp = 163, glRank = 18, ulRank = 15, mlRank = 42, chargedMove3 = "Brick Break", isRawBaseStats = true)
     )
 
     val FALLBACK_SPECIES_FAST_POOL: Map<String, List<String>> = mapOf(
@@ -1414,7 +1534,30 @@ internal object PokemonStaticData {
         "Rock Blast" to 40,
         "Brick Break" to 35,
         "Poltergeist" to 75,
-        "Boomburst" to 70
+        "Boomburst" to 70,
+        "Fell Stinger" to 35,
+        "Volt Tackle" to 40,
+        "Psybeam" to 60,
+        "Heat Wave" to 45,
+        "Drain Punch" to 40,
+        "Fell Stinger+" to 35,
+        "Volt Tackle+" to 35,
+        "Zap Cannon+" to 45,
+        "Acid Spray+" to 40,
+        "Liquidation+" to 40,
+        "Outrage+" to 50,
+        "Dynamic Punch+" to 80,
+        "Future Sight+" to 80,
+        "Drill Peck+" to 35,
+        "Dark Pulse+" to 40,
+        "Night Shade+" to 45,
+        "Brave Bird+" to 40,
+        "Ominous Wind+" to 40,
+        "Seed Bomb+" to 40,
+        "Mystical Fire+" to 40,
+        "Surf+" to 35,
+        "Psybeam+" to 45,
+        "Brick Break+" to 35
     )
 
     internal val CPM_TABLE: List<Pair<Double, Double>> = listOf(
@@ -1564,126 +1707,226 @@ internal fun OverlayService.Companion.simulateTurnByTurnChargedCycleStatic(
     c2Stats: MoveStats,
     fastEpt: Double,
     defShields: Int,
-    attackerTypes: List<String>
+    attackerTypes: List<String>,
+    c3Name: String? = null,
+    c3Pct: Int = 0,
+    c3Stats: MoveStats? = null
 ): ChargedCycleSimResult {
-    val e1 = c1Stats.energyCost.coerceIn(35, 80)
-    val e2 = c2Stats.energyCost.coerceIn(35, 80)
-    val b1 = resolveMoveBuffEffectStatic(c1Name)
-    val b2 = resolveMoveBuffEffectStatic(c2Name)
+    data class SimMoveCandidate(
+        val name: String,
+        val pct: Int,
+        val energy: Int,
+        val type: String,
+        val atkStage: Double,
+        val defStage: Double,
+        val effPace: Double
+    )
 
-    val atkStage1 = (b1.selfAtkDelta - b1.oppDefDelta).toDouble() * b1.chance
-    val defStage1 = (b1.selfDefDelta - b1.oppAtkDelta).toDouble() * b1.chance
-    val atkStage2 = (b2.selfAtkDelta - b2.oppDefDelta).toDouble() * b2.chance
-    val defStage2 = (b2.selfDefDelta - b2.oppAtkDelta).toDouble() * b2.chance
-
-    val effPace1 = Math.pow(50.0 / e1.toDouble(), 0.28).coerceIn(0.84, 1.22)
-    val effPace2 = Math.pow(50.0 / e2.toDouble(), 0.28).coerceIn(0.84, 1.22)
-
-    val unshieldedCycleVal1 = c1Pct.toDouble() * effPace1 +
-        max(0.0, atkStage1) * 5.5 + max(0.0, defStage1) * 5.0 -
-        max(0.0, -defStage1) * 3.5 - max(0.0, -atkStage1) * 3.5
-    val unshieldedCycleVal2 = c2Pct.toDouble() * effPace2 +
-        max(0.0, atkStage2) * 5.5 + max(0.0, defStage2) * 5.0 -
-        max(0.0, -defStage2) * 3.5 - max(0.0, -atkStage2) * 3.5
-
-    val use1AsPrimary = unshieldedCycleVal1 >= unshieldedCycleVal2
-    val bestPct = if (use1AsPrimary) c1Pct else c2Pct
-    val bestEnergy = if (use1AsPrimary) e1 else e2
-    val bestPace = if (use1AsPrimary) effPace1 else effPace2
-    val bestAtkStage = if (use1AsPrimary) atkStage1 else atkStage2
-    val bestDefStage = if (use1AsPrimary) defStage1 else defStage2
-
-    val altPct = if (use1AsPrimary) c2Pct else c1Pct
-    val altEnergy = if (use1AsPrimary) e2 else e1
-    val altAtkStage = if (use1AsPrimary) atkStage2 else atkStage1
-    val altDefStage = if (use1AsPrimary) defStage2 else defStage1
-
-    // Determine optimal shield-burn / setup move without forcing a worse/expensive move
-    fun shieldSetupScore(pct: Int, energy: Int, atkStg: Double, defStg: Double): Double {
-        val energySavedBonus = (60.0 - energy.toDouble()) * 0.58
-        val buffBonus = max(0.0, atkStg) * 11.5 + max(0.0, defStg) * 10.5 -
-            max(0.0, -defStg) * 12.0 - max(0.0, -atkStg) * 10.0
-        val credibilityMult = if (pct < 18 && atkStg <= 0.0 && defStg <= 0.0) 0.55 else 1.0
-        return energySavedBonus * credibilityMult + buffBonus + pct.toDouble() * 0.30
+    fun buildCandidate(name: String, pct: Int, stats: MoveStats): SimMoveCandidate {
+        val e = stats.energyCost.coerceIn(35, 80)
+        val b = resolveMoveBuffEffectStatic(name)
+        val atkStg = (b.selfAtkDelta - b.oppDefDelta).toDouble() * b.chance
+        val defStg = (b.selfDefDelta - b.oppAtkDelta).toDouble() * b.chance
+        val pace = Math.pow(50.0 / e.toDouble(), 0.28).coerceIn(0.84, 1.22)
+        return SimMoveCandidate(
+            name = name.trim(),
+            pct = pct.coerceIn(5, 100),
+            energy = e,
+            type = stats.type.lowercase().trim(),
+            atkStage = atkStg,
+            defStage = defStg,
+            effPace = pace
+        )
     }
 
-    val primaryShieldScore = shieldSetupScore(bestPct, bestEnergy, bestAtkStage, bestDefStage)
-    val altIsValidShieldSetup = (altEnergy <= bestEnergy - 10 && altDefStage >= 0.0 && altAtkStage >= 0.0) ||
-        (altEnergy <= bestEnergy + 5 && (altAtkStage > 0.20 || altDefStage > 0.20)) ||
-        (bestDefStage < -0.5 && altDefStage >= 0.0 && altEnergy <= bestEnergy)
-    val altShieldScore = if (altIsValidShieldSetup) {
-        shieldSetupScore(altPct, altEnergy, altAtkStage, altDefStage)
-    } else {
-        -999.0
+    val moves = mutableListOf<SimMoveCandidate>()
+    val m1 = buildCandidate(c1Name, c1Pct, c1Stats)
+    moves.add(m1)
+    if (c2Name.isNotBlank() && !c2Name.trim().equals(c1Name.trim(), ignoreCase = true)) {
+        moves.add(buildCandidate(c2Name, c2Pct, c2Stats))
+    } else if (moves.size == 1) {
+        moves.add(buildCandidate(c2Name, c2Pct, c2Stats))
+    }
+    val hasDistinctThirdMove = !c3Name.isNullOrBlank() && c3Pct > 0 && c3Stats != null &&
+        moves.none { it.name.equals(c3Name.trim(), ignoreCase = true) }
+    if (hasDistinctThirdMove) {
+        moves.add(buildCandidate(c3Name!!, c3Pct, c3Stats!!))
     }
 
-    val useAltForShieldBurn = altShieldScore > primaryShieldScore
-    val burnPct = if (useAltForShieldBurn) altPct else bestPct
-    val burnEnergy = if (useAltForShieldBurn) altEnergy else bestEnergy
-    val burnAtkStage = if (useAltForShieldBurn) altAtkStage else bestAtkStage
-    val burnDefStage = if (useAltForShieldBurn) altDefStage else bestDefStage
+    data class SequenceEval(
+        val label: String,
+        val pressure: Double,
+        val activeEnergy: Double
+    )
 
-    val unshieldedBase = bestPct.toDouble() * bestPace
-    val energySavingsFromBait = if (useAltForShieldBurn) max(0, bestEnergy - burnEnergy).toDouble() else 0.0
+    val sequenceEvals = mutableListOf<SequenceEval>()
 
-    val cyclePressure: Double
-    val activeCycleEnergy: Double
+    // Helper: evaluate unshielded single throw OR rapid back-to-back 2-throw sequence (mA -> mB, including mA == mB spam!)
+    fun evalUnshieldedPayload(
+        mA: SimMoveCandidate,
+        mB: SimMoveCandidate? = null,
+        priorAtkStage: Double = 0.0
+    ): Triple<Double, Double, Double> {
+        val firstMult = (1.0 + 0.16 * priorAtkStage).coerceIn(0.74, 1.45)
+        if (mB == null) {
+            val base = (mA.pct.toDouble() * firstMult) * mA.effPace
+            val buffVal = max(0.0, mA.atkStage) * 8.0 + max(0.0, mA.defStage) * 7.5 -
+                max(0.0, -mA.defStage) * 4.5 - max(0.0, -mA.atkStage) * 4.0
+            return Triple(base, buffVal, mA.energy.toDouble())
+        }
+        val totalE = (mA.energy + mB.energy).toDouble()
+        val d1 = mA.pct.toDouble() * firstMult
+        val secondMult = (1.0 + 0.18 * (priorAtkStage + mA.atkStage)).coerceIn(0.72, 1.48)
+        val d2 = mB.pct.toDouble() * secondMult
+        val totalDmg = d1 + d2
+        // Normalize 2-throw cumulative damage to a 50E cycle while rewarding low total energy (e.g. 35E+35E=70E vs 75E-80E nuke)
+        val seqPace = (50.0 / totalE) * Math.pow(76.0 / totalE, 0.22).coerceIn(0.82, 1.18)
+        val koReachBonus = if (totalDmg >= 96.0 && totalE <= 80.0) {
+            (85.0 - totalE).coerceAtLeast(3.0) * 0.24
+        } else 0.0
+        val earlyReleaseBonus = if (mA.energy <= 40 && totalE <= 80.0) {
+            (45 - mA.energy).toDouble() * 0.18
+        } else 0.0
+        val base = totalDmg * seqPace + koReachBonus + earlyReleaseBonus
+        val buffVal = mA.atkStage * 8.5 + mA.defStage * 7.5 +
+            max(0.0, mB.atkStage) * 4.0 + max(0.0, mB.defStage) * 3.5 -
+            max(0.0, -mB.defStage) * 3.2 - max(0.0, -mB.atkStage) * 2.8
+        val effEnergy = mA.energy * 0.55 + mB.energy * 0.45
+        return Triple(base, buffVal, effEnergy)
+    }
+
     when {
         defShields <= 0 -> {
-            val setupFirstIn0S = useAltForShieldBurn &&
-                (burnAtkStage >= 0.5 || burnDefStage >= 0.5) &&
-                burnEnergy <= bestEnergy - 10 &&
-                burnPct >= (bestPct * 0.52).toInt()
-            val buffFollowup = if (setupFirstIn0S) {
-                (burnAtkStage * 8.5 + burnDefStage * 7.5)
-            } else {
-                max(0.0, bestAtkStage) * 8.0 + max(0.0, bestDefStage) * 7.5 -
-                    max(0.0, -bestDefStage) * 4.5 - max(0.0, -bestAtkStage) * 4.0
+            // 0 Shields: flexibly compare single throws AND all ordered 2-throw sequences (including 35E -> 35E back-to-back)
+            for (i in moves.indices) {
+                val mA = moves[i]
+                val (singleBase, singleBuff, singleE) = evalUnshieldedPayload(mA, null, 0.0)
+                sequenceEvals.add(
+                    SequenceEval(
+                        label = "1x:${mA.name}",
+                        pressure = singleBase * 1.70 + singleBuff,
+                        activeEnergy = singleE
+                    )
+                )
+                for (j in moves.indices) {
+                    val mB = moves[j]
+                    if (mA.energy + mB.energy <= 95) {
+                        val (pairBase, pairBuff, pairE) = evalUnshieldedPayload(mA, mB, 0.0)
+                        sequenceEvals.add(
+                            SequenceEval(
+                                label = "2x:${mA.name}->${mB.name}",
+                                pressure = pairBase * 1.70 + pairBuff,
+                                activeEnergy = pairE
+                            )
+                        )
+                    }
+                }
             }
-            val finisherFlexBonus = if (altEnergy <= bestEnergy - 10 && altPct >= 26) {
-                (bestEnergy - altEnergy).toDouble() * 0.20
-            } else {
-                0.0
-            }
-            cyclePressure = unshieldedBase * 1.70 + buffFollowup + finisherFlexBonus
-            activeCycleEnergy = if (setupFirstIn0S) (burnEnergy + bestEnergy) * 0.5 else bestEnergy.toDouble()
         }
         defShields == 1 -> {
-            // Cycle 1: Shielded throw (applies burnAtkStage / burnDefStage through shield)
-            // Cycle 2: Unshielded closer amplified by Cycle 1 stat changes + residual energy advantage
-            val postShieldAtkMult = (1.0 + 0.16 * burnAtkStage).coerceIn(0.76, 1.42)
-            val shieldTempoBonus = energySavingsFromBait * 0.45 + (55.0 - burnEnergy.toDouble()) * 0.22
-            val postShieldStatValue = burnDefStage * 9.5 + max(0.0, burnAtkStage) * 6.5 +
-                max(0.0, bestAtkStage) * 4.0 + max(0.0, bestDefStage) * 3.5 -
-                max(0.0, -bestDefStage) * 3.5
-            cyclePressure = (unshieldedBase * postShieldAtkMult * 1.24) + shieldTempoBonus + postShieldStatValue
-            activeCycleEnergy = (burnEnergy.toDouble() * 0.55) + (bestEnergy.toDouble() * 0.45)
+            // 1 Shield: evaluate all ordered (mA [shielded] -> mB) AND rapid 3-throw (mA [shielded] -> mB -> mC) sequences
+            for (i in moves.indices) {
+                val mA = moves[i]
+                val credibilityMult = if (mA.pct < 18 && mA.atkStage <= 0.0 && mA.defStage <= 0.0) 0.55 else 1.0
+                val shieldThrowStatVal = mA.defStage * 9.5 + max(0.0, mA.atkStage) * 6.5 -
+                    max(0.0, -mA.defStage) * 11.0 - max(0.0, -mA.atkStage) * 8.5
+                for (j in moves.indices) {
+                    val mB = moves[j]
+                    val (followBase, followBuff, followE) = evalUnshieldedPayload(mB, null, mA.atkStage)
+                    val energySavings = max(0.0, followE - mA.energy.toDouble())
+                    val tempoBonus = (energySavings * 0.45 + (55.0 - mA.energy.toDouble()) * 0.22) * credibilityMult
+                    val totalPressure = (followBase * 1.24) + tempoBonus + shieldThrowStatVal + followBuff * 0.50
+                    sequenceEvals.add(
+                        SequenceEval(
+                            label = "1S:${mA.name}->${mB.name}",
+                            pressure = totalPressure,
+                            activeEnergy = mA.energy * 0.55 + followE * 0.45
+                        )
+                    )
+                    // Also check rapid post-shield double-tap (mA [shielded] -> mB -> mC) when mB + mC <= 80E
+                    for (k in moves.indices) {
+                        val mC = moves[k]
+                        if (mB.energy + mC.energy <= 80) {
+                            val (dblBase, dblBuff, dblE) = evalUnshieldedPayload(mB, mC, mA.atkStage)
+                            val dblSavings = max(0.0, (mB.energy + mC.energy) * 0.55 - mA.energy.toDouble())
+                            val dblTempo = (dblSavings * 0.45 + (55.0 - mA.energy.toDouble()) * 0.22) * credibilityMult
+                            sequenceEvals.add(
+                                SequenceEval(
+                                    label = "1S-3x:${mA.name}->${mB.name}->${mC.name}",
+                                    pressure = (dblBase * 1.24) + dblTempo + shieldThrowStatVal + dblBuff * 0.45,
+                                    activeEnergy = mA.energy * 0.52 + dblE * 0.48
+                                )
+                            )
+                        }
+                    }
+                }
+            }
         }
         else -> {
-            // Cycle 1 & Cycle 2: Shielded throws (2x compounded stat stages through shields)
-            // Cycle 3: Unshielded closer scaled by fast move EPT / burnEnergy reachability
-            val twoShieldAtkMult = (1.0 + 0.26 * burnAtkStage).coerceIn(0.70, 1.58)
-            val cycle3Reach = ((fastEpt / 3.5) * (50.0 / burnEnergy.toDouble())).coerceIn(0.68, 1.34)
-            val twoShieldTempoBonus = energySavingsFromBait * 0.60 + (55.0 - burnEnergy.toDouble()) * 0.34
-            val compoundedStatValue = burnDefStage * 13.5 + burnAtkStage * 9.5
-            cyclePressure = (unshieldedBase * twoShieldAtkMult * 0.82 * cycle3Reach) + twoShieldTempoBonus + compoundedStatValue
-            activeCycleEnergy = (burnEnergy.toDouble() * 0.72) + (bestEnergy.toDouble() * 0.28)
+            // 2 Shields: evaluate all ordered (mA [shielded] -> mB [shielded] -> mC [or mC->mC spam]) sequences
+            for (i in moves.indices) {
+                val mA = moves[i]
+                for (j in moves.indices) {
+                    val mB = moves[j]
+                    val burnEnergy = (mA.energy + mB.energy) * 0.5
+                    val avgBurnAtk = (mA.atkStage + mB.atkStage) * 0.5
+                    val avgBurnDef = (mA.defStage + mB.defStage) * 0.5
+                    val cycle3Reach = ((fastEpt / 3.5) * (50.0 / burnEnergy)).coerceIn(0.68, 1.34)
+                    val compoundedStatValue = avgBurnDef * 13.5 + avgBurnAtk * 9.5 -
+                        max(0.0, -avgBurnDef) * 9.0 - max(0.0, -avgBurnAtk) * 7.0
+                    for (k in moves.indices) {
+                        val mC = moves[k]
+                        val (followBase, _, followE) = if (mC.energy <= 38) {
+                            val (sBase, sBuff, sE) = evalUnshieldedPayload(mC, null, avgBurnAtk * 1.55)
+                            val (dBase, dBuff, dE) = evalUnshieldedPayload(mC, mC, avgBurnAtk * 1.55)
+                            if (dBase >= sBase) Triple(dBase, dBuff, dE) else Triple(sBase, sBuff, sE)
+                        } else {
+                            evalUnshieldedPayload(mC, null, avgBurnAtk * 1.55)
+                        }
+                        val energySavings = max(0.0, followE - burnEnergy)
+                        val twoShieldTempoBonus = energySavings * 0.60 + (55.0 - burnEnergy) * 0.34
+                        val totalPressure = (followBase * 0.82 * cycle3Reach) + twoShieldTempoBonus + compoundedStatValue
+                        sequenceEvals.add(
+                            SequenceEval(
+                                label = "2S:${mA.name}->${mB.name}->${mC.name}",
+                                pressure = totalPressure,
+                                activeEnergy = burnEnergy * 0.72 + followE * 0.28
+                            )
+                        )
+                    }
+                }
+            }
         }
     }
 
-    val dominatedPenalty = if (isDominatedSameTypeChargedPairStatic(c1Name, c2Name, attackerTypes)) 6.5 else 0.0
+    val sortedSeqs = sequenceEvals.sortedByDescending { it.pressure }
+    val topSeq = sortedSeqs.firstOrNull() ?: SequenceEval("default", 35.0, 50.0)
+    val secondSeq = sortedSeqs.firstOrNull { it.label != topSeq.label } ?: topSeq
+    val blendedPressure = topSeq.pressure * 0.85 + secondSeq.pressure * 0.15
+    val activeCycleEnergy = topSeq.activeEnergy * 0.85 + secondSeq.activeEnergy * 0.15
+
+    // 3-Move coverage & pacing versatility bonus when Super Mega has 3 active moves
+    val threeMoveVersatilityBonus = if (hasDistinctThirdMove) {
+        val distinctTypesCount = moves.map { it.type }.distinct().size
+        val energySpread = (moves.maxOf { it.energy } - moves.minOf { it.energy }).coerceAtLeast(0)
+        (distinctTypesCount - 1).coerceAtLeast(0) * 2.2 + (energySpread.coerceAtMost(35) * 0.06)
+    } else 0.0
+
+    val dominatedPenalty = if (!hasDistinctThirdMove && isDominatedSameTypeChargedPairStatic(c1Name, c2Name, attackerTypes)) {
+        6.5
+    } else {
+        0.0
+    }
     val pacingFactor = ((fastEpt / 3.5) * (50.0 / activeCycleEnergy.coerceIn(35.0, 80.0))).coerceIn(0.78, 1.26)
     val freqMult = 0.82 + 0.18 * pacingFactor
-    val fastestPct = when {
-        e1 < e2 -> c1Pct
-        e2 < e1 -> c2Pct
-        else -> min(c1Pct, c2Pct)
-    }
+    val bestMovePct = moves.maxOf { it.pct }
+    val minEnergy = moves.minOf { it.energy }
+    val fastestPct = moves.filter { it.energy == minEnergy }.minOf { it.pct }
 
     return ChargedCycleSimResult(
-        effectivePressure = (cyclePressure - dominatedPenalty).coerceAtLeast(10.0),
+        effectivePressure = (blendedPressure + threeMoveVersatilityBonus - dominatedPenalty).coerceAtLeast(10.0),
         effectiveFreqMult = freqMult,
-        bestMovePct = max(c1Pct, c2Pct),
+        bestMovePct = bestMovePct,
         fastestMovePct = fastestPct
     )
 }
@@ -1918,6 +2161,13 @@ internal fun OverlayService.Companion.formatMoveIdDisplay(moveId: String): Strin
     CANONICAL_MOVE_ID_MAP[upper]?.let { return it }
     DYNAMIC_MOVE_ID_TO_NAME[moveId]?.let { return it }
     DYNAMIC_MOVE_ID_TO_NAME[upper]?.let { return it }
+    if (upper.endsWith("_PLUS")) {
+        val baseId = upper.removeSuffix("_PLUS")
+        val baseDisplay = CANONICAL_MOVE_ID_MAP[baseId]
+            ?: DYNAMIC_MOVE_ID_TO_NAME[baseId]
+            ?: baseId.lowercase().split("_").joinToString(" ") { w -> w.replaceFirstChar { c -> c.uppercase() } }
+        return if (baseDisplay.endsWith("+")) baseDisplay else "$baseDisplay+"
+    }
     return moveId.lowercase().split("_").joinToString(" ") { w ->
         w.replaceFirstChar { c -> c.uppercase() }
     }
@@ -2140,8 +2390,9 @@ internal fun OverlayService.Companion.applyRankingMovesForLeague(meta: PokemonMe
 
     val orderedChargedNames = mutableListOf<String>()
     fun addCandidate(raw: String?) {
+        if (raw != null && raw.trim().uppercase().endsWith("_PLUS")) return
         val formatted = raw?.let { formatMoveIdDisplay(it) }?.trim().orEmpty()
-        if (formatted.isBlank() || formatted.equals("Struggle", ignoreCase = true) || formatted.equals("Frustration", ignoreCase = true)) return
+        if (formatted.isBlank() || formatted.endsWith("+") || formatted.equals("Struggle", ignoreCase = true) || formatted.equals("Frustration", ignoreCase = true)) return
         if (!effectiveChargedPool.isNullOrEmpty() && effectiveChargedPool.none { it.equals(formatted, ignoreCase = true) }) return
         if (orderedChargedNames.none { it.equals(formatted, ignoreCase = true) }) {
             orderedChargedNames.add(formatted)
@@ -2691,14 +2942,28 @@ internal fun OverlayService.Companion.parseGamemasterJsonStatic(jsonStr: String)
                     val fastTurns = resolveFastTurnsStatic(fastMoveName, 2)
 
                     val chargedArr = obj.optJsonArray("chargedMoves")
+                    val extraChargedArr = obj.optJsonArray("extraChargedMoves")
+                    if (extraChargedArr != null) {
+                        for (ecm in extraChargedArr) {
+                            if (ecm != null && !ecm.isJsonNull && ecm.isJsonPrimitive) {
+                                val ecmId = ecm.asString.trim()
+                                if (ecmId.uppercase().endsWith("_PLUS")) {
+                                    val plusDisplay = formatMoveIdDisplay(ecmId)
+                                    DYNAMIC_SUPER_MEGA_PLUS_MOVES[speciesId.lowercase()] = plusDisplay
+                                    DYNAMIC_SUPER_MEGA_PLUS_MOVES[speciesName.lowercase()] = plusDisplay
+                                    existingStatic?.name?.lowercase()?.let { DYNAMIC_SUPER_MEGA_PLUS_MOVES[it] = plusDisplay }
+                                }
+                            }
+                        }
+                    }
                     val orderedChargedIds = mutableListOf<String>()
                     rankEntry?.moveset?.drop(1)?.forEach { msId ->
-                        if (msId.isNotBlank() && !orderedChargedIds.contains(msId)) {
+                        if (msId.isNotBlank() && !msId.uppercase().endsWith("_PLUS") && !orderedChargedIds.contains(msId)) {
                             orderedChargedIds.add(msId)
                         }
                     }
                     rankEntry?.moves?.chargedMoves?.forEach { cm ->
-                        if (cm.moveId.isNotBlank() && !orderedChargedIds.contains(cm.moveId)) {
+                        if (cm.moveId.isNotBlank() && !cm.moveId.uppercase().endsWith("_PLUS") && !orderedChargedIds.contains(cm.moveId)) {
                             orderedChargedIds.add(cm.moveId)
                         }
                     }
@@ -2706,7 +2971,7 @@ internal fun OverlayService.Companion.parseGamemasterJsonStatic(jsonStr: String)
                         for (em in eliteArr) {
                             if (em != null && !em.isJsonNull && em.isJsonPrimitive) {
                                 val emId = em.asString
-                                if (!fastMoveNames.containsKey(emId) && !orderedChargedIds.contains(emId)) {
+                                if (!fastMoveNames.containsKey(emId) && !emId.uppercase().endsWith("_PLUS") && !orderedChargedIds.contains(emId)) {
                                     orderedChargedIds.add(emId)
                                 }
                             }
@@ -2716,7 +2981,7 @@ internal fun OverlayService.Companion.parseGamemasterJsonStatic(jsonStr: String)
                         for (cm in chargedArr) {
                             if (cm != null && !cm.isJsonNull && cm.isJsonPrimitive) {
                                 val cmId = cm.asString
-                                if (!orderedChargedIds.contains(cmId)) {
+                                if (!cmId.uppercase().endsWith("_PLUS") && !orderedChargedIds.contains(cmId)) {
                                     orderedChargedIds.add(cmId)
                                 }
                             }
@@ -2724,7 +2989,7 @@ internal fun OverlayService.Companion.parseGamemasterJsonStatic(jsonStr: String)
                     }
 
                     val formattedFastPool = orderedFastIds.map { fastMoveNames[it] ?: formatMoveIdDisplay(it) }.filter { it.isNotBlank() }.distinct()
-                    val formattedChargedPool = orderedChargedIds.map { formatMoveIdDisplay(it) }.filter { it.isNotBlank() }.distinct()
+                    val formattedChargedPool = orderedChargedIds.map { formatMoveIdDisplay(it) }.filter { it.isNotBlank() && !it.endsWith("+") }.distinct()
                     if (formattedFastPool.isNotEmpty()) {
                         SPECIES_FAST_MOVES_POOL[speciesId.lowercase()] = formattedFastPool
                         SPECIES_FAST_MOVES_POOL[speciesName.lowercase()] = formattedFastPool
@@ -2914,7 +3179,7 @@ internal fun OverlayService.Companion.getAvailableMovePoolForSpeciesStatic(
     val chargedList = mutableListOf<String>()
     fun addCharged(name: String?) {
         val trimmed = name?.trim().orEmpty()
-        if (trimmed.isEmpty() || trimmed.equals("Struggle", ignoreCase = true) || trimmed.equals("Frustration", ignoreCase = true)) return
+        if (trimmed.isEmpty() || trimmed.equals("Struggle", ignoreCase = true) || trimmed.equals("Frustration", ignoreCase = true) || trimmed.endsWith("+")) return
         if (!effectiveChargedPool.isNullOrEmpty() && effectiveChargedPool.none { it.equals(trimmed, ignoreCase = true) }) {
             return
         }
@@ -2980,18 +3245,22 @@ internal fun OverlayService.Companion.calculateMatchupRatingStatic(
     val uFast = myFastMove?.takeIf { it.isNotBlank() } ?: myMeta.defaultFastMove
     val uC1 = myCharged1?.takeIf { it.isNotBlank() } ?: myMeta.chargedMove1
     val uC2 = myCharged2?.takeIf { it.isNotBlank() } ?: myMeta.chargedMove2
+    val userPlusMove = resolveMegaPlusMoveStatic(myMeta.name, league) ?: resolveMegaPlusMoveStatic(myName, league)
+    val oppPlusMove = resolveMegaPlusMoveStatic(oppMeta.name, league) ?: resolveMegaPlusMoveStatic(oppName, league)
 
     val userC1Stats = resolveChargedMoveStatsStatic(uC1, myMeta.types.firstOrNull() ?: "normal")
     val userC2Stats = resolveChargedMoveStatsStatic(uC2, myMeta.types.firstOrNull() ?: "normal")
+    val userC3Stats = userPlusMove?.let { resolveChargedMoveStatsStatic(it, myMeta.types.firstOrNull() ?: "normal") }
     val userC1Pct = calculateChargedMoveDamagePctStatic(myMeta, oppMeta, uC1, myShadow, oppShadow)
     val userC2Pct = calculateChargedMoveDamagePctStatic(myMeta, oppMeta, uC2, myShadow, oppShadow)
-    val bestUserCharged = max(userC1Pct, userC2Pct)
-    val minUserCharged = min(userC1Pct, userC2Pct)
-    val fastestUserChargedPct = when {
-        userC1Stats.energyCost < userC2Stats.energyCost -> userC1Pct
-        userC2Stats.energyCost < userC1Stats.energyCost -> userC2Pct
-        else -> minUserCharged
-    }
+    val userC3Pct = userPlusMove?.let { calculateChargedMoveDamagePctStatic(myMeta, oppMeta, it, myShadow, oppShadow) } ?: 0
+    val bestUserCharged = max(max(userC1Pct, userC2Pct), userC3Pct)
+    val minUserCharged = if (userC3Pct > 0) min(min(userC1Pct, userC2Pct), userC3Pct) else min(userC1Pct, userC2Pct)
+    val fastestUserChargedPct = listOfNotNull(
+        userC1Stats.energyCost to userC1Pct,
+        userC2Stats.energyCost to userC2Pct,
+        if (userC3Stats != null && userC3Pct > 0) userC3Stats.energyCost to userC3Pct else null
+    ).minByOrNull { it.first }?.second ?: minUserCharged
 
     val uFastKey = uFast.lowercase().trim()
     val userFastType = resolveFastTypeStatic(uFastKey, myMeta.types.firstOrNull() ?: "normal")
@@ -3059,7 +3328,10 @@ internal fun OverlayService.Companion.calculateMatchupRatingStatic(
         c2Stats = userC2Stats,
         fastEpt = userFastEpt,
         defShields = sOpp,
-        attackerTypes = myMeta.types
+        attackerTypes = myMeta.types,
+        c3Name = userPlusMove,
+        c3Pct = userC3Pct,
+        c3Stats = userC3Stats
     )
     val userChargedFreqMult = userSim.effectiveFreqMult
 
@@ -3084,18 +3356,21 @@ internal fun OverlayService.Companion.calculateMatchupRatingStatic(
     val effectiveShadowDelta = shadowBulkDelta * shadowMultiplier
     val shieldDiff = (sUser - sOpp).toDouble()
 
+    val oppC3Stats = oppPlusMove?.let { resolveChargedMoveStatsStatic(it, oppMeta.types.firstOrNull() ?: "normal") }
+    val oppC3Pct = oppPlusMove?.let { calculateChargedMoveDamagePctStatic(oppMeta, myMeta, it, oppShadow, myShadow) } ?: 0
+
     fun evaluateAgainstOppMoveset(oFastName: String, oC1Name: String, oC2Name: String): Double {
         val oppC1Stats = resolveChargedMoveStatsStatic(oC1Name, oppMeta.types.firstOrNull() ?: "normal")
         val oppC2Stats = resolveChargedMoveStatsStatic(oC2Name, oppMeta.types.firstOrNull() ?: "normal")
         val oppC1Pct = calculateChargedMoveDamagePctStatic(oppMeta, myMeta, oC1Name, oppShadow, myShadow)
         val oppC2Pct = calculateChargedMoveDamagePctStatic(oppMeta, myMeta, oC2Name, oppShadow, myShadow)
-        val bestOppCharged = max(oppC1Pct, oppC2Pct)
-        val minOppCharged = min(oppC1Pct, oppC2Pct)
-        val fastestOppChargedPct = when {
-            oppC1Stats.energyCost < oppC2Stats.energyCost -> oppC1Pct
-            oppC2Stats.energyCost < oppC1Stats.energyCost -> oppC2Pct
-            else -> minOppCharged
-        }
+        val bestOppCharged = max(max(oppC1Pct, oppC2Pct), oppC3Pct)
+        val minOppCharged = if (oppC3Pct > 0) min(min(oppC1Pct, oppC2Pct), oppC3Pct) else min(oppC1Pct, oppC2Pct)
+        val fastestOppChargedPct = listOfNotNull(
+            oppC1Stats.energyCost to oppC1Pct,
+            oppC2Stats.energyCost to oppC2Pct,
+            if (oppC3Stats != null && oppC3Pct > 0) oppC3Stats.energyCost to oppC3Pct else null
+        ).minByOrNull { it.first }?.second ?: minOppCharged
 
         val oFastKey = oFastName.lowercase().trim()
         val oppFastType = resolveFastTypeStatic(oFastKey, oppMeta.types.firstOrNull() ?: "normal")
@@ -3114,7 +3389,10 @@ internal fun OverlayService.Companion.calculateMatchupRatingStatic(
             c2Stats = oppC2Stats,
             fastEpt = oppFastEpt,
             defShields = sUser,
-            attackerTypes = oppMeta.types
+            attackerTypes = oppMeta.types,
+            c3Name = oppPlusMove,
+            c3Pct = oppC3Pct,
+            c3Stats = oppC3Stats
         )
         val oppChargedFreqMult = oppSim.effectiveFreqMult
 

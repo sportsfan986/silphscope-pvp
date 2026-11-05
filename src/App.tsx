@@ -120,6 +120,7 @@ import {
   isShow6EligibleLeague,
   isMegaOrPrimalSpecies,
   hasMultipleMegas,
+  resolveMegaPlusMove,
   getSavedBfUsageSheetUrl,
   setSavedBfUsageSheetUrl,
   getSavedBfCoresSheetUrl,
@@ -5322,7 +5323,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v6.12 • Android Native Overlay
+                  v6.20 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -9257,6 +9258,7 @@ export default function App() {
                                 </div>
                                 <div className="text-[10px] font-mono text-slate-300 truncate">
                                   {slot.member.fastMove} + {slot.member.chargedMove1}/{slot.member.chargedMove2}
+                                  {resolveMegaPlusMove(slot.member.name, blindShow6Result.league) ? ` [+ ${resolveMegaPlusMove(slot.member.name, blindShow6Result.league)}]` : ''}
                                 </div>
                                 <div className="text-[9.5px] font-mono text-slate-400 flex items-center justify-between pt-1 border-t border-slate-800">
                                   <span>Meta BR: {slot.metaBr}</span>
@@ -9775,6 +9777,7 @@ export default function App() {
                                     }`}
                                   >
                                     {mon.fastMove} • {mon.chargedMove1}/{mon.chargedMove2}
+                                    {resolveMegaPlusMove(mon.name, opt.league) ? ` [+ ${resolveMegaPlusMove(mon.name, opt.league)}]` : ''}
                                   </div>
                                 </div>
                               );
@@ -10331,6 +10334,11 @@ export default function App() {
                               </div>
                               <div className="font-bold text-xs text-white mt-1 truncate">
                                 {member.name}
+                                {resolveMegaPlusMove(member.name, preset.league) && (
+                                  <span className="ml-1 text-[9px] font-mono text-amber-300 font-bold">
+                                    [+ {resolveMegaPlusMove(member.name, preset.league)}]
+                                  </span>
+                                )}
                               </div>
                               <div className="flex items-center justify-between gap-1 mt-1 pt-1 border-t border-slate-800/60 text-[9.5px] font-mono">
                                 {member.ivs ? (
@@ -10990,6 +10998,11 @@ export default function App() {
                           className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-white"
                         />
                       </div>
+                      {resolveMegaPlusMove(p1Name, newPresetLeague) && (
+                        <div className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-400/50 text-[10.5px] font-mono text-amber-300 font-bold">
+                          ⚡ Super Mega 3rd Move (Mega League Only): + {resolveMegaPlusMove(p1Name, newPresetLeague)} [Mega4]
+                        </div>
+                      )}
                       {modalRoleRecommendations && (
                         <div className="pt-1.5 border-t border-slate-800/80 space-y-1.5">
                           <div className="flex items-center justify-between text-[10px] font-bold text-emerald-300">
@@ -11231,6 +11244,11 @@ export default function App() {
                           className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-white"
                         />
                       </div>
+                      {resolveMegaPlusMove(p2Name, newPresetLeague) && (
+                        <div className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-400/50 text-[10.5px] font-mono text-amber-300 font-bold">
+                          ⚡ Super Mega 3rd Move (Mega League Only): + {resolveMegaPlusMove(p2Name, newPresetLeague)} [Mega4]
+                        </div>
+                      )}
                       {modalRoleRecommendations && (
                         <div className="pt-1.5 border-t border-slate-800/80 space-y-1.5">
                           <div className="flex items-center justify-between text-[10px] font-bold text-emerald-300">
@@ -11472,6 +11490,11 @@ export default function App() {
                           className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-white"
                         />
                       </div>
+                      {resolveMegaPlusMove(p3Name, newPresetLeague) && (
+                        <div className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-400/50 text-[10.5px] font-mono text-amber-300 font-bold">
+                          ⚡ Super Mega 3rd Move (Mega League Only): + {resolveMegaPlusMove(p3Name, newPresetLeague)} [Mega4]
+                        </div>
+                      )}
                       {modalRoleRecommendations && (
                         <div className="pt-1.5 border-t border-slate-800/80 space-y-1.5">
                           <div className="flex items-center justify-between text-[10px] font-bold text-emerald-300">
@@ -11627,7 +11650,7 @@ export default function App() {
                   <span className="text-sm font-extrabold text-amber-300 flex items-center gap-2">
                     <span>{appCombatMode === 'show6' ? '🏛️' : '🛡️'} App Combat Mode (Standard GBL vs. Show 6 Battle Frontier)</span>
                     <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 text-[10px] font-mono">
-                      v6.12
+                      v6.20
                     </span>
                   </span>
                   <span className="text-xs text-slate-400 block mt-0.5">
@@ -15889,7 +15912,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v6.12 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
+        SilphScope PvP v6.20 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
       </footer>
     </div>
   );

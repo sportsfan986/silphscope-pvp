@@ -1,84 +1,95 @@
-name: Relay External User Telemetry to ai-telemetry-logs Branch
+name: Relay Signed-In User Telemetry to ai-telemetry-logs Branch
+
+# Any signed-in GitHub user can contribute telemetry by opening an `[AI-TELEMETRY-BATCH]` issue
+# (the Android app does this with the user's own OAuth token). The issue author is the only trusted
+# identity: the relay script re-attributes every record to that login, validates/sanitizes the
+# payload, rate-limits per account, and generates the archive path server-side.
+#
+# NOTE: no workflow-level `concurrency:` on purpose — GitHub cancels queued runs in a group, which
+# would silently drop bursts of issues. Concurrent pushes are handled by the rebase/retry loop.
 
 on:
   issues:
     types: [opened]
 
-permissions:
-  contents: write
-  issues: write
+permissions: {}
 
 jobs:
   relay-telemetry:
-    if: startsWith(github.event.issue.title, '[AI-TELEMETRY-BATCH]')
+    if: startsWith(github.event.issue.title, '[AI-TELEMETRY-BATCH]') && github.event.issue.user.type == 'User'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: write
     steps:
+      # The validator always runs from the default branch, never from issue- or branch-controlled content.
+      - name: Checkout trusted relay script
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: relay-src
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
       - name: Checkout ai-telemetry-logs branch
         uses: actions/checkout@v4
         with:
           ref: ai-telemetry-logs
+          path: logs
           fetch-depth: 1
 
-      - name: Extract and commit telemetry batch
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate and archive telemetry batch
+        working-directory: logs
         env:
-          ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           ISSUE_USER: ${{ github.event.issue.user.login }}
+          ISSUE_USER_ID: ${{ github.event.issue.user.id }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_CREATED_AT: ${{ github.event.issue.created_at }}
         run: |
-          node - << 'EOF'
-          const fs = require('fs');
-          const path = require('path');
-
-          const body = process.env.ISSUE_BODY || '';
-          const user = (process.env.ISSUE_USER || 'external').replace(/[^a-zA-Z0-9_-]/g, '_');
-          const match = body.match(/```jsonl\s*([\s\S]*?)```/);
-          if (!match || !match[1].trim()) {
-            console.log('No jsonl payload found in issue body.');
-            process.exit(0);
-          }
-          const jsonl = match[1].trim() + '\n';
-          const lines = jsonl.trim().split(/\r?\n/).filter(Boolean);
-
-          const titleParts = (process.env.ISSUE_TITLE || '').split(/\s+/);
-          const rawBatchId = titleParts[1] || `batch_${Date.now()}_${user}`;
-          const batchId = rawBatchId.replace(/[^a-zA-Z0-9._-]/g, '_');
-          const dayFolder = new Date().toISOString().slice(0, 10);
-
-          const batchPath = path.join('batches', dayFolder, `${batchId}.jsonl`);
-          const userBatchPath = path.join('users', user, `${batchId}.jsonl`);
-
-          fs.mkdirSync(path.dirname(batchPath), { recursive: true });
-          fs.mkdirSync(path.dirname(userBatchPath), { recursive: true });
-          fs.writeFileSync(batchPath, jsonl, 'utf8');
-          fs.writeFileSync(userBatchPath, jsonl, 'utf8');
-
-          let manifest = { schemaVersion: 1, updatedAt: Date.now(), totalBatches: 0, batches: [] };
-          if (fs.existsSync('manifest.json')) {
-            try {
-              manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
-            } catch {}
-          }
-          if (!Array.isArray(manifest.batches)) manifest.batches = [];
-          manifest.batches.push({
-            batchId,
-            path: batchPath,
-            userPath: userBatchPath,
-            uploadedAt: Date.now(),
-            uploadedBy: user,
-            battleCount: lines.length
-          });
-          manifest.updatedAt = Date.now();
-          manifest.totalBatches = manifest.batches.length;
-          fs.writeFileSync('manifest.json', JSON.stringify(manifest, null, 2), 'utf8');
-          EOF
-
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add batches/ users/ manifest.json
-          if ! git diff --cached --quiet; then
-            git commit -m "chore(telemetry): relay issue #${ISSUE_NUMBER} from @${ISSUE_USER}"
-            git push origin ai-telemetry-logs
-          fi
-          gh issue close "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --comment "✅ Telemetry batch automatically archived to \`ai-telemetry-logs\` branch."
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3 4 5; do
+            node "$GITHUB_WORKSPACE/relay-src/.github/scripts/relay-telemetry.mjs"
+            if [ "$(cat "$RUNNER_TEMP/relay_status")" != "accepted" ]; then
+              exit 0
+            fi
+            git add batches users manifest.json
+            if git diff --cached --quiet; then
+              exit 0
+            fi
+            git commit -q -m "chore(telemetry): relay issue #${ISSUE_NUMBER} from @${ISSUE_USER}"
+            if git push -q origin HEAD:ai-telemetry-logs; then
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt); re-applying on top of the latest branch tip..."
+            sleep $((attempt * 3))
+            git fetch -q --depth=1 origin ai-telemetry-logs
+            git reset -q --hard FETCH_HEAD
+          done
+          echo "failed" > "$RUNNER_TEMP/relay_status"
+          echo "Could not push after 5 attempts; a maintainer can re-run this workflow." > "$RUNNER_TEMP/relay_message"
+          exit 1
+
+      - name: Report result on issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          STATUS="$(cat "$RUNNER_TEMP/relay_status" 2>/dev/null || echo failed)"
+          MESSAGE="$(cat "$RUNNER_TEMP/relay_message" 2>/dev/null || echo "Relay failed unexpectedly; a maintainer will review.")"
+          case "$STATUS" in
+            accepted)
+              gh issue close "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --reason completed --comment "✅ $MESSAGE" ;;
+            rejected)
+              gh issue close "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --reason "not planned" --comment "❌ Telemetry was not archived: $MESSAGE" ;;
+            *)
+              gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "⚠️ $MESSAGE" ;;
+          esac

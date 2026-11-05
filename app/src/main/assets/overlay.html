@@ -1788,12 +1788,39 @@
             "Trailblaze": "Trlb",
             "Nature's Madness": "NM",
             "Rage Fist": "RgF",
-            "Aura Wheel": "AuW"
+            "Aura Wheel": "AuW",
+            "Fell Stinger": "FlSt",
+            "Fell Stinger+": "FlSt+",
+            "Volt Tackle": "VT",
+            "Volt Tackle+": "VT+",
+            "Zap Cannon+": "ZC+",
+            "Acid Spray+": "ASp+",
+            "Liquidation+": "Liq+",
+            "Outrage+": "OR+",
+            "Dynamic Punch+": "DyP+",
+            "Future Sight+": "FS+",
+            "Drill Peck+": "DPk+",
+            "Dark Pulse+": "DP+",
+            "Night Shade+": "NSh+",
+            "Brave Bird+": "BB+",
+            "Ominous Wind+": "OW+",
+            "Seed Bomb+": "SdB+",
+            "Mystical Fire+": "MyF+",
+            "Surf+": "Surf+",
+            "Psybeam": "PsyB",
+            "Psybeam+": "PsyB+",
+            "Brick Break+": "BBk+"
         };
 
         function abbrMove5(moveName) {
             if (!moveName) return "Move";
             if (MOVE_ABBR_5[moveName]) return MOVE_ABBR_5[moveName];
+            const trimmedMove = String(moveName).trim();
+            if (trimmedMove.endsWith("+")) {
+                const base = trimmedMove.slice(0, -1).trim();
+                const baseAbbr = MOVE_ABBR_5[base] || abbrMove5(base);
+                return baseAbbr.substring(0, 4) + "+";
+            }
             const clean = String(moveName).replace(/[()\-]/g, " ").trim();
             const words = clean.split(/\s+/).filter(Boolean);
             if (words.length >= 2) {

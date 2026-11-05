@@ -186,13 +186,19 @@ internal fun OverlayService.Companion.calculateFastRoughMatchupRatingStatic(
     val userC2Stats = resolveChargedMoveStatsStatic(uC2, myMeta.types.firstOrNull() ?: "normal")
     val userC1Pct = calculateChargedMoveDamagePctStatic(myMeta, oppMeta, uC1, myShadow, oppShadow)
     val userC2Pct = calculateChargedMoveDamagePctStatic(myMeta, oppMeta, uC2, myShadow, oppShadow)
-    val bestUserCharged = max(userC1Pct, userC2Pct)
+    val userPlusMove = resolveMegaPlusMoveStatic(myMeta.name, league) ?: resolveMegaPlusMoveStatic(myName, league)
+    val oppPlusMove = resolveMegaPlusMoveStatic(oppMeta.name, league) ?: resolveMegaPlusMoveStatic(oppName, league)
+    val userC3Stats = userPlusMove?.let { resolveChargedMoveStatsStatic(it, myMeta.types.firstOrNull() ?: "normal") }
+    val userC3Pct = userPlusMove?.let { calculateChargedMoveDamagePctStatic(myMeta, oppMeta, it, myShadow, oppShadow) } ?: 0
+    val bestUserCharged = max(max(userC1Pct, userC2Pct), userC3Pct)
 
     val oppC1Stats = resolveChargedMoveStatsStatic(oppMeta.chargedMove1, oppMeta.types.firstOrNull() ?: "normal")
     val oppC2Stats = resolveChargedMoveStatsStatic(oppMeta.chargedMove2, oppMeta.types.firstOrNull() ?: "normal")
     val oppC1Pct = calculateChargedMoveDamagePctStatic(oppMeta, myMeta, oppMeta.chargedMove1, oppShadow, myShadow)
     val oppC2Pct = calculateChargedMoveDamagePctStatic(oppMeta, myMeta, oppMeta.chargedMove2, oppShadow, myShadow)
-    val bestOppCharged = max(oppC1Pct, oppC2Pct)
+    val oppC3Stats = oppPlusMove?.let { resolveChargedMoveStatsStatic(it, oppMeta.types.firstOrNull() ?: "normal") }
+    val oppC3Pct = oppPlusMove?.let { calculateChargedMoveDamagePctStatic(oppMeta, myMeta, it, oppShadow, myShadow) } ?: 0
+    val bestOppCharged = max(max(oppC1Pct, oppC2Pct), oppC3Pct)
 
     val uFastKey = uFast.lowercase().trim()
     val userFastType = resolveFastTypeStatic(uFastKey, myMeta.types.firstOrNull() ?: "normal")
@@ -218,7 +224,10 @@ internal fun OverlayService.Companion.calculateFastRoughMatchupRatingStatic(
         c2Stats = userC2Stats,
         fastEpt = userFastEpt,
         defShields = sOpp,
-        attackerTypes = myMeta.types
+        attackerTypes = myMeta.types,
+        c3Name = userPlusMove,
+        c3Pct = userC3Pct,
+        c3Stats = userC3Stats
     )
     val oppSim = simulateTurnByTurnChargedCycleStatic(
         c1Name = oppMeta.chargedMove1,
@@ -229,7 +238,10 @@ internal fun OverlayService.Companion.calculateFastRoughMatchupRatingStatic(
         c2Stats = oppC2Stats,
         fastEpt = oppFastEpt,
         defShields = sUser,
-        attackerTypes = oppMeta.types
+        attackerTypes = oppMeta.types,
+        c3Name = oppPlusMove,
+        c3Pct = oppC3Pct,
+        c3Stats = oppC3Stats
     )
     val userRawPressure = userSim.effectivePressure * userSim.effectiveFreqMult
     val oppRawPressure = oppSim.effectivePressure * oppSim.effectiveFreqMult

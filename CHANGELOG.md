@@ -1,4 +1,21 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.12`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.20`)
+
+---
+
+## v6.20 (2026-11-05) — Mega Level 4 (`Super Mega`) 3rd Fixed `+` Charged Moves, 3-Button Energy Scanner & Role-Agnostic Multi-Throw Combat Simulator
+*Semi-major feature release (`v6.20`, `versionCode = 1620`) introducing full support for Pokémon GO's Mega Level 4 (`Super Mega`) 3rd Fixed Special `+` Charged Moves in Mega-eligible leagues, 3-button raised-center charge circle pixel scanning, and a flexible, role-agnostic multi-throw sequence combat simulator across both the native Android Overlay and the Web Simulator.*
+
+- **v6.20 — Feature 1: All 18 `*_PLUS` Moves & `"supermega"` Species Database (`PokemonDatabase.kt`, `OverlayService.kt`, `src/data/pokemonDb.ts`)**:
+  - **Static & Dynamic `*_PLUS` Move Support**: Added all 18 official PvPoke `*_PLUS` Charged Moves (`Fell Stinger+` 40p/35e +1 ATK, `Volt Tackle+` 65p/35e -1 Self DEF, `Zap Cannon+` 70p/45e -1 Opp ATK, `Acid Spray+` 20p/40e -2 Opp DEF, `Liquidation+` 55p/40e 30% -1 Opp DEF, `Outrage+` 80p/50e, `Dynamic Punch+` 130p/80e, `Future Sight+` 130p/80e, `Drill Peck+` 60p/35e, `Dark Pulse+` 60p/40e, `Night Shade+` 55p/45e, `Brave Bird+` 70p/40e -3 Self DEF, `Ominous Wind+` 50p/40e 10% +1 ATK/DEF, `Seed Bomb+` 60p/40e, `Mystical Fire+` 50p/40e -1 Opp ATK, `Surf+` 55p/35e, `Psybeam+` 60p/45e, `Brick Break+` 40p/35e -1 Opp DEF) along with all 18 Super Mega species base stats and dynamic `extraChargedMoves` ingestion from `gamemaster.json`.
+  - **Strict Eligibility Gating (`resolveMegaPlusMoveStatic` / `resolveMegaPlusMove`)**: Enforced the two-gate rule so a Pokémon receives its 3rd `+` move **only** if (1) it is a Mega species that possesses a `+` move (`SUPER_MEGA_PLUS_MOVES` / `DYNAMIC_SUPER_MEGA_PLUS_MOVES`) **and** (2) the active league allows Mega Pokémon (`isMegaAllowedInLeagueStatic` / `isMegaAllowedInLeague` — e.g., *Mega Master League*, *Mega Great League*, *Mega Ultra League*, *Battle Frontier (Cauldron)*, *Battle Frontier (Master)*). Filtered `_PLUS` / `+` moves out of regular 2-move dropdowns so slots 1 and 2 remain standard selectable Charged Moves.
+
+- **v6.20 — Feature 2: Flexible, Role-Agnostic Multi-Throw Combat Simulator (`PokemonDatabase.kt`, `TeamAndMetaEngine.kt`, `src/data/pokemonDb.ts`, `src/data/combatSimulator.ts`, `src/data/teamAndMetaEngine.ts`)**:
+  - **Role-Agnostic Sequence Evaluation**: Upgraded `simulateTurnByTurnChargedCycleStatic` (Kotlin) and `simulateTurnByTurnChargedCycle` (TypeScript) to accept an optional 3rd `+` move (`c3`) and evaluate single throws, back-to-back spam pairs ($m_a \to m_a$, such as two $35\text{E}$ moves back-to-back for $70\text{E}$ vs. a single $75\text{E}\text{–}80\text{E}$ nuke), and mixed $1\text{S}$ / $2\text{S}$ sequences across all available moves $\mathcal{M} = \{m_1, m_2, [m_3]\}$ without pigeonholing moves into fixed bait, closer, or coverage roles.
+  - **End-to-End Matchup & Team Builder Integration**: Wired 3-move Super Mega simulation into `calculateMatchupRatingStatic`, `calculateFastRoughMatchupRatingStatic`, `evaluateDiscreteShieldBattleRating`, and `evaluateFastRoughShieldBattleRating`, automatically propagating 3-move Super Mega coverage into the 9x9 Shield Matrix, Anti-Meta Team Builder (`ABB` / `ABC` / `DUO`), Role Upgraders, and Show 6 Optimizer in Mega leagues.
+
+- **v6.20 — Feature 3: 3-Button Charge Circle Pixel Scanner & Live Overlay HUD (`PixelScannerEngine.kt`, `OverlayService.kt`, `overlay.html`, `MainActivity.kt`, `src/App.tsx`)**:
+  - **Calibrated 3-Button Pixel Scanner**: Calibrated `detectChargedMoveButtonFillLevels` from 472×1024 in-game telemetry where the `+` move sits in the center and raised (`cx = 0.5000w, cy = 0.8375h`, `r = 0.068w`) while Move 1 (`cx = 0.2150w, cy = 0.8930h`) and Move 2 (`cx = 0.7820w, cy = 0.8930h`) shift outward, with automatic fallback to standard 2-button coordinates if all 3 circles return `-1` (e.g., if a player brings a Mega Level 1–3 Pokémon).
+  - **3-Move Post-Throw Energy Deduction, Banner OCR & HUD**: Added `sampledCenterChargeBtnFillPct` (`btnSlotKey = 6 + activeUserIdx`), 3-circle `POST_THROW_CIRCLE_FIT` energy deduction (`userPlusMoveEarly`), `"<Pokemon> used <Move>+!"` mid-banner OCR, 3rd player move row in `pushHudStateToWebView`, and `[+ <PlusMove>]` / `[Mega4]` badges across Presets, Autocomplete, Anti-Meta Builder, and Team Editor.
 
 ---
 
