@@ -233,27 +233,27 @@ When working on this repository inside Antigravity:
   - Entry & Core UI: `src/App.tsx`, `src/components/AppThemeAndModels.tsx`, `src/components/MetaTab.tsx`, `src/components/HelpTab.tsx`, `src/components/MathValidatorTab.tsx`, `src/components/TrashBinModals.tsx`, `src/components/DocumentationModals.tsx`.
   - Data & Math Engine: `src/data/gblData.ts` (barrel), `src/data/pokemonDb.ts`, `src/data/combatSimulator.ts`, `src/data/teamAndMetaEngine.ts`, `src/data/show6Engine.ts`, `src/data/battleQuality.ts`.
 
-### 5.2. Local Verification Commands
-1. **Web TypeScript & Bundle Verification**:
+### 5.2. Default Release Workflow (GitHub Actions CI/CD First)
+> **Default Policy**: Do **not** run full local Android APK builds (`./gradlew assembleRelease`) on Windows unless explicitly requested. Instead, validate TypeScript/Web locally (`npm run lint && npm run build`), commit and push to `main`, and monitor the GitHub Actions workflows (`Build Android APK` and `Deploy Web Simulator to GitHub Pages`) until completion, addressing any failures immediately.
+
+1. **Web TypeScript & Bundle Verification (Fast Local Gate)**:
    ```bash
    npm run lint
    npm run build
    ```
-2. **Android APK Compilation**:
-   ```bash
-   ./gradlew assembleRelease
-   ```
-3. **Checking Telemetry Branch**:
+2. **Checking Telemetry Branch**:
    ```bash
    git fetch origin ai-telemetry-logs:ai-telemetry-logs
    git log origin/ai-telemetry-logs -n 10
    ```
 
-### 5.3. Version Bumping Checklist
+### 5.3. Version Bumping & Default Release Checklist
 When publishing a new release:
-1. Run `./scripts/bump_version.sh vX.XX` to update `VERSION`, `app/build.gradle.kts`, `OverlayService.APP_VERSION`, `package.json`, `src/App.tsx`, `README.md`, and `ANTIGRAVITY.md`.
+1. Run `./scripts/bump_version.sh vX.XX` (or update `VERSION`, `app/build.gradle.kts`, `OverlayService.APP_VERSION`, `package.json`, `src/App.tsx`, `README.md`, and `ANTIGRAVITY.md`).
 2. Add the new version entry at the top of `CHANGELOG.md`.
-3. Push to `main` branch to trigger `.github/workflows/android.yml` and `.github/workflows/deploy-pages.yml`.
+3. Run fast local Web verification (`npm run lint && npm run build`).
+4. Commit and push to `origin main` to trigger `.github/workflows/android.yml` (`Build Android APK`) and `.github/workflows/deploy-pages.yml` (`Deploy Web Simulator to GitHub Pages`).
+5. **Monitor GitHub Actions Run Until Completion**: Poll/check the workflow run status via the GitHub Actions API (`https://api.github.com/repos/sportsfan986/silphscope-pvp/actions/runs`), verify that `silphscope-pvp-vX.XX.apk` is published to GitHub Releases, and automatically diagnose, fix, and re-push if any step fails.
 
 ### 5.4. Common Pitfalls & Guardrails
 - **DO NOT** attempt to create a second `VirtualDisplay` from `MediaProjection`.

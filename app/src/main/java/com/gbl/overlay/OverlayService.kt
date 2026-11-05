@@ -3686,7 +3686,7 @@ class OverlayService : LifecycleService() {
 
         val oppShort = OverlayService.abbrPokeCompactStatic(oppMeta.name, isOppShad)
         val userShort = OverlayService.abbrPokeCompactStatic(userMeta.name, isUserShad)
-        val lockedTag = if (movesetLocked) { if (oppPlusMove != null) " • 3M+" else " • 2M" } else ""
+        val lockedTag = if (twoRegularMovesLocked) { if (oppPlusMove != null) " • 3M+" else " • 2M" } else ""
         val headerLineText = "$headerVerdictText  •  $oppShort(${effectiveBankedE}e) vs $userShort(${userHpPct}%)$lockedTag"
 
         val nowMs = System.currentTimeMillis()
@@ -4048,7 +4048,7 @@ class OverlayService : LifecycleService() {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.allowFileAccess = true
-            settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            settings.allowContentAccess = false
             setBackgroundColor(0x00000000)
             setLayerType(WebView.LAYER_TYPE_HARDWARE, null)
             webViewClient = object : WebViewClient() {
@@ -4724,6 +4724,10 @@ class OverlayService : LifecycleService() {
         if (battleLoopJob?.isActive == true) return
         battleLoopJob = lifecycleScope.launch(Dispatchers.Default) {
             while (isActive) {
+                if (mediaProjection == null || isOverlayMinimized) {
+                    delay(250L)
+                    continue
+                }
                 val cycleStartMs = System.currentTimeMillis()
                 val actualCadenceMs = if (lastHpScanTickMs > 0L) {
                     (cycleStartMs - lastHpScanTickMs).coerceIn(1L, 2000L)
@@ -14948,12 +14952,25 @@ class OverlayService : LifecycleService() {
             OverlayService.triggerAutoUploadOnOverlayStopAsync(prefs, gson)
         }
         battleLoopJob?.cancel()
+        try {
+            textRecognizer.close()
+        } catch (_: Exception) {}
 
         try {
-            releaseDvrResourcesLocked(deleteFiles = true)
-            dvrThread?.quitSafely()
-            dvrThread = null
+            val dvrH = dvrHandler
+            val dvrT = dvrThread
             dvrHandler = null
+            dvrThread = null
+            if (dvrH != null) {
+                dvrH.post {
+                    try {
+                        releaseDvrResourcesLocked(deleteFiles = true)
+                    } catch (_: Exception) {}
+                }
+            } else {
+                releaseDvrResourcesLocked(deleteFiles = true)
+            }
+            dvrT?.quitSafely()
             virtualDisplay?.release()
             virtualDisplay = null
             mediaProjection?.stop()
@@ -14986,6 +15003,9 @@ class OverlayService : LifecycleService() {
             try {
                 windowManager.removeView(overlayView)
             } catch (_: Exception) {}
+            try {
+                overlayView?.destroy()
+            } catch (_: Exception) {}
             overlayView = null
         }
     }
@@ -15015,24 +15035,26 @@ class OverlayService : LifecycleService() {
 
         @JavascriptInterface
         fun onSelectPreset(presetId: String) {
-            val presets = loadPresets()
-            val chosen = presets.find { it.id == presetId }
-            if (chosen != null) {
-                currentPreset = chosen
-                activeUserPokemonName = chosen.pokemon.firstOrNull()?.name
-                val isShow6 = prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
-                val selKey = if (isShow6) PREFS_KEY_SHOW6_SELECTED_PRESET_ID else "gbl_selected_preset_id"
-                prefs.edit().putString(selKey, presetId).apply()
-                lifecycleScope.launch(Dispatchers.Default) {
-                    try {
-                        OverlayService.precomputeActiveTeamTop200MatrixStatic(chosen)
-                        Handler(Looper.getMainLooper()).post {
-                            recalculateAndPushBattleData()
-                        }
-                    } catch (_: Exception) {}
+            Handler(Looper.getMainLooper()).post {
+                val presets = loadPresets()
+                val chosen = presets.find { it.id == presetId }
+                if (chosen != null) {
+                    currentPreset = chosen
+                    activeUserPokemonName = chosen.pokemon.firstOrNull()?.name
+                    val isShow6 = prefs.getString(PREFS_KEY_APP_COMBAT_MODE, "gbl") == "show6"
+                    val selKey = if (isShow6) PREFS_KEY_SHOW6_SELECTED_PRESET_ID else "gbl_selected_preset_id"
+                    prefs.edit().putString(selKey, presetId).apply()
+                    lifecycleScope.launch(Dispatchers.Default) {
+                        try {
+                            OverlayService.precomputeActiveTeamTop200MatrixStatic(chosen)
+                            Handler(Looper.getMainLooper()).post {
+                                recalculateAndPushBattleData()
+                            }
+                        } catch (_: Exception) {}
+                    }
+                    recalculateAndPushBattleData()
+                    showBattleToast("Loaded Team: ${chosen.name}")
                 }
-                recalculateAndPushBattleData()
-                showBattleToast("Loaded Team: ${chosen.name}")
             }
         }
 
@@ -15117,11 +15139,13 @@ class OverlayService : LifecycleService() {
 
         @JavascriptInterface
         fun triggerSwapClockHapticIfNeeded(swapEndTimeMs: Long) {
-            if (!isBattleActive || isWaitingForOpponent || swapEndTimeMs <= 0L) return
-            if (lastSwapHapticAlertEpochMs != swapEndTimeMs) {
-                lastSwapHapticAlertEpochMs = swapEndTimeMs
-                if (activeHapticMasterEnabled && activeHapticOppSwapEnabled) {
-                    triggerSingleHapticPulseStatic(this@OverlayService)
+            Handler(Looper.getMainLooper()).post {
+                if (!isBattleActive || isWaitingForOpponent || swapEndTimeMs <= 0L) return@post
+                if (lastSwapHapticAlertEpochMs != swapEndTimeMs) {
+                    lastSwapHapticAlertEpochMs = swapEndTimeMs
+                    if (activeHapticMasterEnabled && activeHapticOppSwapEnabled) {
+                        triggerSingleHapticPulseStatic(this@OverlayService)
+                    }
                 }
             }
         }
@@ -15239,12 +15263,12 @@ class OverlayService : LifecycleService() {
 
         @JavascriptInterface
         fun updateContentHeight(heightDp: Int) {
-            if (isOverlayMinimized || currentLayoutMode != "option1") return
-            val density = resources.displayMetrics.density
-            val targetHeight = (heightDp * density).toInt()
-            if (layoutParams.height < 0 || Math.abs(layoutParams.height - targetHeight) > 1) {
-                layoutParams.height = targetHeight
-                Handler(Looper.getMainLooper()).post {
+            Handler(Looper.getMainLooper()).post {
+                if (isOverlayMinimized || currentLayoutMode != "option1") return@post
+                val density = resources.displayMetrics.density
+                val targetHeight = (heightDp * density).toInt()
+                if (layoutParams.height < 0 || Math.abs(layoutParams.height - targetHeight) > 1) {
+                    layoutParams.height = targetHeight
                     try {
                         windowManager.updateViewLayout(overlayView, layoutParams)
                     } catch (_: Exception) {}
