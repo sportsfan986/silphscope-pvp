@@ -2026,10 +2026,10 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
             it.isNotBlank() && !it.startsWith("{\"recordType\":\"BATTLE_DVR_SUMMARY_HEADER\"")
         }
 
-        val userLead = summaryRecord.userTeamSpecs.firstOrNull()?.species.orEmpty()
+        val userList = summaryRecord.userTeamSpecs.map { it.species }.filter { it.isNotBlank() }.joinToString(", ")
         val oppList = summaryRecord.oppTeamSpecs.map { it.species }.filter { it.isNotBlank() }.joinToString(", ")
         val matchupSummary = buildString {
-            if (userLead.isNotBlank()) append("$userLead vs ")
+            if (userList.isNotBlank()) append("$userList vs ")
             append(oppList.ifBlank { "Opponent" })
             if (summaryRecord.anomalyCount > 0) {
                 append(" • ${summaryRecord.anomalyCount} anomalies")

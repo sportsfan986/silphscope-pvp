@@ -1,11 +1,20 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Tunable rules for local CPU/ffmpeg preprocessing of 1-Battle DVR recordings and deep traces. Edit any threshold or window here to adjust what screenshots and contact sheets are saved locally.",
   "storage": {
     "maxLocalStorageMb": 1024,
     "pruneTargetStorageMb": 950,
     "keepRawMp4Videos": true,
     "evictOldestRawMp4FirstWhenOverQuota": true
+  },
+  "hudBurnIn": {
+    "enabled": true,
+    "fontName": "Consolas",
+    "fontSize": 13,
+    "bannerHeightPx": 26,
+    "bannerBgColor": "0x090d16@0.94",
+    "burnOntoContactSheets": true,
+    "burnOntoKeyframes": true
   },
   "contactSheet": {
     "enabled": true,

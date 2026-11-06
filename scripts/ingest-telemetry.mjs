@@ -790,14 +790,87 @@ function analyzeDeepTraceEvents(frames, config) {
   return events;
 }
 
+function formatAssTimeFromIndex(idx) {
+  const totalCs = Math.max(0, Math.round(idx * 10)); // 0.10s per frame slot (paired with setpts=N/(10*TB))
+  const cs = totalCs % 100;
+  const totalSec = Math.floor(totalCs / 100);
+  const sec = totalSec % 60;
+  const totalMin = Math.floor(totalSec / 60);
+  const min = totalMin % 60;
+  const hr = Math.floor(totalMin / 60);
+  return `${hr}:${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
+}
+
+function formatStageTag(atkStage, defStage, disguiseBusted) {
+  const parts = [];
+  const a = Number(atkStage) || 0;
+  const d = Number(defStage) || 0;
+  if (a !== 0) parts.push(a > 0 ? `A+${a}` : `A${a}`);
+  if (d !== 0) parts.push(d > 0 ? `D+${d}` : `D${d}`);
+  if (disguiseBusted) parts.push("BUST");
+  return parts.length > 0 ? `[${parts.join(",")}]` : "";
+}
+
+/**
+ * Generates an Advanced SubStation Alpha (`telemetry_hud.ass`) subtitle file where each frame `N`
+ * spans `[N * 0.10s, (N + 1) * 0.10s)`. When paired with FFmpeg `-vf "setpts=N/(10*TB),drawbox=...,ass=..."`,
+ * every video frame `N` receives its exact frame-synced telemetry HUD banner burned back in locally.
+ */
+function generateTelemetryHudAssFile(frames, appVersion, outDir, config) {
+  const hudCfg = config.hudBurnIn || {};
+  if (hudCfg.enabled === false) return null;
+  const assPath = path.join(outDir, "telemetry_hud.ass");
+  const fontName = hudCfg.fontName || "Consolas";
+  const fontSize = hudCfg.fontSize || 13;
+  const verStr = String(appVersion || "6.41").replace(/^v/i, "");
+
+  const lines = [
+    "[Script Info]",
+    "ScriptType: v4.00+",
+    "PlayResX: 544",
+    "PlayResY: 1168",
+    "",
+    "[V4+ Styles]",
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+    `Style: HudTop,${fontName},${fontSize},&H00FFFFFF,&H0000FFFF,&H00090D16,&H00090D16,-1,0,0,0,100,100,0,0,1,1.2,0,8,6,6,6,1`,
+    "",
+    "[Events]",
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+  ];
+
+  for (let i = 0; i < frames.length; i++) {
+    const f = frames[i] || {};
+    const fNum = Number(f.frameIdx) || i + 1;
+    const tSec = ((Number(f.battleElapsedMs) || 0) / 1000).toFixed(2).padStart(5, "0");
+    const uHp = f.committedUserHpPct ?? 100;
+    const uRaw = f.rawUserHpPct ?? -1;
+    const uE = f.userEnergy ?? 0;
+    const uStage = formatStageTag(f.userAtkStage, f.userDefStage, f.userDisguiseBusted);
+    const oHp = f.committedOppHpPct ?? 100;
+    const oRaw = f.rawOppHpPct ?? -1;
+    const oE = f.oppEnergy ?? 0;
+    const oStage = formatStageTag(f.oppAtkStage, f.oppDefStage, f.oppDisguiseBusted);
+
+    const stamp = `v${verStr} F#${String(fNum).padStart(4, "0")} T+${tSec}s U:${uHp}%(${uRaw}%)/${uE}E${uStage} O:${oHp}%(${oRaw}%)/${oE}E${oStage}`;
+    const startStr = formatAssTimeFromIndex(i);
+    const endStr = formatAssTimeFromIndex(i + 1);
+    lines.push(`Dialogue: 0,${startStr},${endStr},HudTop,,0,0,0,,${stamp}`);
+  }
+
+  fs.writeFileSync(assPath, lines.join("\n") + "\n", "utf8");
+  return assPath;
+}
+
 /**
  * Uses local `ffmpeg` to extract:
- *   1. A tiled contact sheet (`contact_sheet_<event.id>.jpg`) covering the full 24-frame window.
- *   2. Individual full-resolution screenshots around the trigger frame (`keyframes/<event.id>_F####.jpg`).
+ *   1. A tiled contact sheet (`contact_sheets/<event.id>.jpg`) covering the full 24-frame window.
+ *   2. Individual full-resolution screenshots around the trigger frame (`keyframes/<event.id>_n####.jpg`).
+ * Automatically burns the full telemetry HUD banner back onto extracted frames via FFmpeg (`drawbox` + `ass`).
  */
-function extractEventScreenshotsWithFfmpeg(videoPath, outDir, events, config) {
+function extractEventScreenshotsWithFfmpeg(videoPath, outDir, events, frames, appVersion, config) {
   if (!FFMPEG_BIN || !fs.existsSync(videoPath)) return { extractedSheets: 0, extractedKeyframes: 0 };
 
+  const hudCfg = config.hudBurnIn || {};
   const sheetCfg = config.contactSheet || {};
   const kfCfg = config.individualKeyframes || {};
   const sheetsDir = path.join(outDir, "contact_sheets");
@@ -805,11 +878,20 @@ function extractEventScreenshotsWithFfmpeg(videoPath, outDir, events, config) {
   fs.mkdirSync(sheetsDir, { recursive: true });
   fs.mkdirSync(keyframesDir, { recursive: true });
 
+  const assPath = generateTelemetryHudAssFile(frames, appVersion, outDir, config);
+  const escapedAss = assPath ? assPath.replace(/\\/g, "/").replace(/:/g, "\\:") : null;
+  const bannerH = hudCfg.bannerHeightPx || 26;
+  const bannerBg = hudCfg.bannerBgColor || "0x090d16@0.94";
+  const hudPrefixFilter =
+    escapedAss && hudCfg.enabled !== false
+      ? `setpts=N/(10*TB),drawbox=x=0:y=0:w=iw:h=${bannerH}:color=${bannerBg}:t=fill,ass='${escapedAss}',`
+      : "";
+
   let extractedSheets = 0;
   let extractedKeyframes = 0;
 
+  // 1. Tiled Contact Sheets
   for (const ev of events) {
-    // 1. Tiled Contact Sheet covering [startArrayIdx .. endArrayIdx]
     if (sheetCfg.enabled !== false) {
       const cols = sheetCfg.gridCols || 6;
       const rows = sheetCfg.gridRows || 4;
@@ -822,8 +904,9 @@ function extractEventScreenshotsWithFfmpeg(videoPath, outDir, events, config) {
       if (!fs.existsSync(sheetPath)) {
         const tileW = sheetCfg.tileWidthPx || 272;
         const tileH = sheetCfg.tileHeightPx || 592;
+        const sheetHudPrefix = hudCfg.burnOntoContactSheets !== false ? hudPrefixFilter : "";
         const vf =
-          `select='between(n\\,${startFrame}\\,${endFrame})*not(mod(n-${startFrame}\\,${step}))',` +
+          `${sheetHudPrefix}select='between(n\\,${startFrame}\\,${endFrame})*not(mod(n-${startFrame}\\,${step}))',` +
           `scale=${tileW}:${tileH},` +
           `tile=${cols}x${rows}:padding=4:margin=2:color=0x0f172a`;
         const res = spawnSync(
@@ -853,9 +936,12 @@ function extractEventScreenshotsWithFfmpeg(videoPath, outDir, events, config) {
         ev.contactSheetPath = sheetPath;
       }
     }
+  }
 
-    // 2. Full-Resolution Individual Screenshots across the animation/transition window
-    if (kfCfg.enabled !== false) {
+  // 2. Full-Resolution Individual Screenshots (Batched FFmpeg extraction for ~30x speedup)
+  if (kfCfg.enabled !== false) {
+    const neededFramesMap = new Map(); // fIdx -> Array<{ ev, outImg }>
+    for (const ev of events) {
       const before = ev.saveBeforeTriggerFramesOverride ?? kfCfg.saveBeforeTriggerFrames ?? 4;
       const after = ev.saveAfterTriggerFramesOverride ?? kfCfg.saveAfterTriggerFrames ?? 6;
       const step = Math.max(1, ev.sampleStepFramesOverride ?? kfCfg.sampleStepFrames ?? 2);
@@ -868,33 +954,66 @@ function extractEventScreenshotsWithFfmpeg(videoPath, outDir, events, config) {
           keyframesDir,
           `${ev.id}_n${String(fIdx).padStart(4, "0")}.jpg`
         );
-        if (!fs.existsSync(outImg)) {
-          const vf = `select='eq(n\\,${fIdx})'`;
-          const res = spawnSync(
-            FFMPEG_BIN,
-            [
-              "-hide_banner",
-              "-loglevel",
-              "error",
-              "-y",
-              "-i",
-              videoPath,
-              "-vf",
-              vf,
-              "-frames:v",
-              "1",
-              "-q:v",
-              String(kfCfg.jpegQuality || 3),
-              outImg,
-            ],
-            { windowsHide: true }
-          );
-          if (res.status === 0 && fs.existsSync(outImg)) {
-            ev.keyframePaths.push(outImg);
-            extractedKeyframes++;
-          }
-        } else {
+        if (fs.existsSync(outImg)) {
           ev.keyframePaths.push(outImg);
+        } else {
+          if (!neededFramesMap.has(fIdx)) neededFramesMap.set(fIdx, []);
+          neededFramesMap.get(fIdx).push({ ev, outImg });
+        }
+      }
+    }
+
+    const sortedUniqueIndices = [...neededFramesMap.keys()].sort((a, b) => a - b);
+    const BATCH_SIZE = 60;
+    const kfHudPrefix = hudCfg.burnOntoKeyframes !== false ? hudPrefixFilter : "";
+
+    for (let bStart = 0; bStart < sortedUniqueIndices.length; bStart += BATCH_SIZE) {
+      const chunk = sortedUniqueIndices.slice(bStart, bStart + BATCH_SIZE);
+      const selectExpr = chunk.map((idx) => `eq(n\\,${idx})`).join("+");
+      const tmpPrefix = path.join(keyframesDir, `__batch_${bStart}_`);
+      const vf = `${kfHudPrefix}select='${selectExpr}'`;
+
+      const res = spawnSync(
+        FFMPEG_BIN,
+        [
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-y",
+          "-i",
+          videoPath,
+          "-vf",
+          vf,
+          "-fps_mode",
+          "passthrough",
+          "-q:v",
+          String(kfCfg.jpegQuality || 3),
+          `${tmpPrefix}%04d.jpg`,
+        ],
+        { windowsHide: true }
+      );
+
+      if (res.status === 0) {
+        for (let i = 0; i < chunk.length; i++) {
+          const fIdx = chunk[i];
+          const tmpFile = `${tmpPrefix}${String(i + 1).padStart(4, "0")}.jpg`;
+          if (!fs.existsSync(tmpFile)) continue;
+          const targets = neededFramesMap.get(fIdx) || [];
+          for (let t = 0; t < targets.length; t++) {
+            const { ev, outImg } = targets[t];
+            try {
+              if (t === targets.length - 1) {
+                fs.renameSync(tmpFile, outImg);
+              } else {
+                fs.copyFileSync(tmpFile, outImg);
+              }
+              ev.keyframePaths.push(outImg);
+              extractedKeyframes++;
+            } catch {}
+          }
+          try {
+            if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+          } catch {}
         }
       }
     }
@@ -932,7 +1051,9 @@ function preprocessDvrBundle(bundle, config, forceReprocess = false) {
   const frames = [];
   for (const line of rawLines) {
     try {
-      frames.push(JSON.parse(line));
+      const parsed = JSON.parse(line);
+      if (parsed && parsed.recordType === "BATTLE_DVR_SUMMARY_HEADER") continue;
+      frames.push(parsed);
     } catch {}
   }
   if (frames.length === 0) return false;
@@ -941,7 +1062,14 @@ function preprocessDvrBundle(bundle, config, forceReprocess = false) {
   let screenshotStats = { extractedSheets: 0, extractedKeyframes: 0 };
   const hasVideo = Boolean(bundle.videoPath && fs.existsSync(bundle.videoPath));
   if (hasVideo) {
-    screenshotStats = extractEventScreenshotsWithFfmpeg(bundle.videoPath, outDir, events, config);
+    screenshotStats = extractEventScreenshotsWithFfmpeg(
+      bundle.videoPath,
+      outDir,
+      events,
+      frames,
+      bundle.appVersion || "6.41",
+      config
+    );
   }
 
   const firstFrame = frames[0];
