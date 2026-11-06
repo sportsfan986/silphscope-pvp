@@ -1,4 +1,18 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.24`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.25`)
+
+---
+
+## v6.25 (2026-11-06) — Super Mega 3rd `+` Charged Move Display & Simulation Across All Team Builders, Role Upgraders & Moveset Optimizers
+*Precision Team Builder, Role Upgrader, and Super Mega simulation release (`v6.25`, `versionCode = 1625`) ensuring that Super Mega 3rd `+` charged moves (such as `Mega Raichu X`'s `Volt Tackle+`, `Mega Mewtwo Y`'s `Psystrike+`, `Mega Dragonite`'s `Draco Meteor+`, etc.) are unconditionally simulated across all combat/role evaluators and explicitly displayed on every Team Builder, Role Upgrade chip, Alternate Moveset chip, Autocomplete row, and Show 6 card across Android and Web.*
+
+- **v6.25 — Enhancement 1: Unconditional Super Mega `+` Move Resolution & Role-Weighting Integration (`OverlayService.kt`, `PokemonDatabase.kt`, `TeamAndMetaEngine.kt`, `src/data/pokemonDb.ts`)**:
+  - **League-String-Independent `+` Move Lookup**: Updated `resolveMegaPlusMoveStatic()` (`OverlayService.kt`) and `resolveMegaPlusMove()` (`src/data/pokemonDb.ts`) to resolve the 3rd fixed `+` move whenever the species is a Mega/Primal entry in `SUPER_MEGA_PLUS_MOVES` / `DYNAMIC_SUPER_MEGA_PLUS_MOVES` (`isMegaOrPrimalSpeciesStatic(trimmed)`), eliminating edge cases where `prefs == null` or custom cup strings prevented `calculateMatchupRatingStatic` or UI formatters from resolving `Volt Tackle+` on `Mega Raichu X`.
+  - **Role-Weighting & Bait/Sweeper Credit for 3rd `+` Move**: Updated `computeBaitVsSweeperScore()` and `computeRoleWeightedTop100MetaStatic()` (`TeamAndMetaEngine.kt`) to include the 3rd `+` move's energy cost and power when computing `minEnergy` and `maxPower`, ensuring low-energy `+` moves (`Volt Tackle+` at 35E) and high-power `+` nukes (`Psystrike+`, `Draco Meteor+`) receive full Lead, Safe Swap, and Closer role weighting.
+  - **Mega League Rankings & Non-Plus Regular Slot Filtering**: Updated `resolveRecommendedMovesForSpecies()` (`PokemonDatabase.kt`) to use `normalizeLeagueKeyStatic(league)` so Mega Great/Ultra/Master rankings are preserved, and filtered `_PLUS` / `+` moves out of `orderedChargedNames` in `getRecommendedMovesForPokemon()` (`src/data/pokemonDb.ts`) so `chargedMove1` and `chargedMove2` always hold the 2 regular charged moves while the `+` move occupies slot 3.
+
+- **v6.25 — Enhancement 2: Explicit 3rd `+` Move Display Across All Team Builder & Recommendation Surfaces (`MainActivity.kt`, `TeamAndMetaEngine.kt`, `Show6Engine.kt`, `PokemonDatabase.kt`, `src/App.tsx`, `src/data/teamAndMetaEngine.ts`)**:
+  - **Top 5 Role Upgrade Chips & Best 3 Alternate Moveset Chips**: Added `+ <PlusMove> [Mega4]` (e.g., `+ Volt Tackle+ [Mega4]`) to all Top-200 Role Upgrade recommendation chips and Best 3 Alternate Moveset chips in the Edit Team dialog on both Android (`MainActivity.kt`) and Web (`src/App.tsx`).
+  - **My Teams Cards, Anti-Meta Synergy Summaries, Autocomplete & Show 6 Builders**: Added explicit `+ <PlusMove> [Mega4]` display to My Teams preset rows, Anti-Meta `altNotes` / `synergySummary` strings, Pokémon Autocomplete badges (`Mega • +Volt Tackle+`), Show 6 6v6 Pick-3 Optimizer lineups, Blind Show 6 Roster Builder cards, and Show 6 Roster Editor upgrade/moveset rows.
 
 ---
 

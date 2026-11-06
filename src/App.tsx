@@ -5336,7 +5336,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v6.24 • Android Native Overlay
+                  v6.25 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -8448,6 +8448,7 @@ export default function App() {
                                   {simMember && (
                                     <div className="text-[9.5px] font-mono text-emerald-300 truncate">
                                       ✨ {simMember.fastMove} + {simMember.chargedMove1}/{simMember.chargedMove2}
+                                      {resolveMegaPlusMove(simMember.name, show6Pick3League) ? ` [+ ${resolveMegaPlusMove(simMember.name, show6Pick3League)}]` : ''}
                                     </div>
                                   )}
                                   {isFocused && sugs.length > 0 && (
@@ -8801,6 +8802,7 @@ export default function App() {
                                             </span>
                                             <span className="text-[9.5px] font-mono text-sky-300 truncate shrink-0">
                                               {m.fastMove} + {m.chargedMove1}/{m.chargedMove2}
+                                              {resolveMegaPlusMove(m.name, show6Pick3League) ? ` [+ ${resolveMegaPlusMove(m.name, show6Pick3League)}]` : ''}
                                             </span>
                                           </div>
                                         ))}
@@ -10962,6 +10964,7 @@ export default function App() {
                                     </div>
                                     <div className="text-[10px] text-slate-400 truncate">
                                       {opt.fastMove} • {opt.chargedMove1} / {opt.chargedMove2}
+                                      {resolveMegaPlusMove(opt.name, newPresetLeague) ? ` [+ ${resolveMegaPlusMove(opt.name, newPresetLeague)}]` : ''}
                                     </div>
                                   </div>
                                   <span className="text-[10px] font-mono font-bold text-sky-400 shrink-0">
@@ -11034,7 +11037,7 @@ export default function App() {
                                   type="button"
                                   onClick={() => handleApplyRoleUpgradeChip(1, sug)}
                                   className="px-2 py-1.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900/80 border border-emerald-500/50 text-left transition flex flex-col justify-between gap-0.5"
-                                  title={`${sug.summaryBadge} • Moves: ${sug.candidate.fastMove} + ${sug.candidate.chargedMove1}/${sug.candidate.chargedMove2}`}
+                                  title={`${sug.summaryBadge} • Moves: ${sug.candidate.fastMove} + ${sug.candidate.chargedMove1}/${sug.candidate.chargedMove2}${resolveMegaPlusMove(sug.candidate.name, newPresetLeague) ? ` + ${resolveMegaPlusMove(sug.candidate.name, newPresetLeague)} [Mega4]` : ''}`}
                                 >
                                   <div className="flex items-center justify-between gap-1">
                                     <span className="text-[11px] font-extrabold text-emerald-200 truncate">
@@ -11043,6 +11046,10 @@ export default function App() {
                                     <span className="text-[9.5px] font-mono font-bold text-emerald-300 shrink-0">
                                       {sug.deltaMachBr >= 0 ? `+${sug.deltaMachBr}` : sug.deltaMachBr} Core BR
                                     </span>
+                                  </div>
+                                  <div className="text-[9.5px] font-mono text-emerald-300/90 truncate">
+                                    {sug.candidate.fastMove} + {sug.candidate.chargedMove1}/{sug.candidate.chargedMove2}
+                                    {resolveMegaPlusMove(sug.candidate.name, newPresetLeague) ? ` + ${resolveMegaPlusMove(sug.candidate.name, newPresetLeague)} [Mega4]` : ''}
                                   </div>
                                   <div className="text-[9.5px] font-mono text-slate-300 truncate">
                                     Lead BR {sug.newRoleBr} ({sug.deltaRoleBr >= 0 ? `+${sug.deltaRoleBr}` : sug.deltaRoleBr}) • Core {sug.newMachineAggBr} [{sug.newArchetype}]
@@ -11076,6 +11083,7 @@ export default function App() {
                                   <div className="flex items-center justify-between gap-1">
                                     <span className="text-[11px] font-extrabold text-indigo-200 truncate">
                                       #{idx + 1} {sug.proposedFastMove} + {sug.proposedChargedMove1} / {sug.proposedChargedMove2}
+                                      {resolveMegaPlusMove(sug.pokemonName, newPresetLeague) ? ` + ${resolveMegaPlusMove(sug.pokemonName, newPresetLeague)} [Mega4]` : ''}
                                     </span>
                                     <span className="text-[9.5px] font-mono font-bold text-emerald-300 shrink-0">
                                       Team Core {sug.newMachineBr} ({sug.deltaMachineBr >= 0 ? `+${sug.deltaMachineBr}` : sug.deltaMachineBr})
@@ -11208,6 +11216,7 @@ export default function App() {
                                     </div>
                                     <div className="text-[10px] text-slate-400 truncate">
                                       {opt.fastMove} • {opt.chargedMove1} / {opt.chargedMove2}
+                                      {resolveMegaPlusMove(opt.name, newPresetLeague) ? ` [+ ${resolveMegaPlusMove(opt.name, newPresetLeague)}]` : ''}
                                     </div>
                                   </div>
                                   <span className="text-[10px] font-mono font-bold text-purple-300 shrink-0">
@@ -11280,7 +11289,7 @@ export default function App() {
                                   type="button"
                                   onClick={() => handleApplyRoleUpgradeChip(2, sug)}
                                   className="px-2 py-1.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900/80 border border-emerald-500/50 text-left transition flex flex-col justify-between gap-0.5"
-                                  title={`${sug.summaryBadge} • Moves: ${sug.candidate.fastMove} + ${sug.candidate.chargedMove1}/${sug.candidate.chargedMove2}`}
+                                  title={`${sug.summaryBadge} • Moves: ${sug.candidate.fastMove} + ${sug.candidate.chargedMove1}/${sug.candidate.chargedMove2}${resolveMegaPlusMove(sug.candidate.name, newPresetLeague) ? ` + ${resolveMegaPlusMove(sug.candidate.name, newPresetLeague)} [Mega4]` : ''}`}
                                 >
                                   <div className="flex items-center justify-between gap-1">
                                     <span className="text-[11px] font-extrabold text-emerald-200 truncate">
@@ -11289,6 +11298,10 @@ export default function App() {
                                     <span className="text-[9.5px] font-mono font-bold text-emerald-300 shrink-0">
                                       {sug.deltaMachBr >= 0 ? `+${sug.deltaMachBr}` : sug.deltaMachBr} Core BR
                                     </span>
+                                  </div>
+                                  <div className="text-[9.5px] font-mono text-emerald-300/90 truncate">
+                                    {sug.candidate.fastMove} + {sug.candidate.chargedMove1}/{sug.candidate.chargedMove2}
+                                    {resolveMegaPlusMove(sug.candidate.name, newPresetLeague) ? ` + ${resolveMegaPlusMove(sug.candidate.name, newPresetLeague)} [Mega4]` : ''}
                                   </div>
                                   <div className="text-[9.5px] font-mono text-slate-300 truncate">
                                     Swap BR {sug.newRoleBr} ({sug.deltaRoleBr >= 0 ? `+${sug.deltaRoleBr}` : sug.deltaRoleBr}) • Core {sug.newMachineAggBr} [{sug.newArchetype}]
@@ -11322,6 +11335,7 @@ export default function App() {
                                   <div className="flex items-center justify-between gap-1">
                                     <span className="text-[11px] font-extrabold text-indigo-200 truncate">
                                       #{idx + 1} {sug.proposedFastMove} + {sug.proposedChargedMove1} / {sug.proposedChargedMove2}
+                                      {resolveMegaPlusMove(sug.pokemonName, newPresetLeague) ? ` + ${resolveMegaPlusMove(sug.pokemonName, newPresetLeague)} [Mega4]` : ''}
                                     </span>
                                     <span className="text-[9.5px] font-mono font-bold text-emerald-300 shrink-0">
                                       Team Core {sug.newMachineBr} ({sug.deltaMachineBr >= 0 ? `+${sug.deltaMachineBr}` : sug.deltaMachineBr})
@@ -11454,6 +11468,7 @@ export default function App() {
                                     </div>
                                     <div className="text-[10px] text-slate-400 truncate">
                                       {opt.fastMove} • {opt.chargedMove1} / {opt.chargedMove2}
+                                      {resolveMegaPlusMove(opt.name, newPresetLeague) ? ` [+ ${resolveMegaPlusMove(opt.name, newPresetLeague)}]` : ''}
                                     </div>
                                   </div>
                                   <span className="text-[10px] font-mono font-bold text-amber-300 shrink-0">
@@ -11526,7 +11541,7 @@ export default function App() {
                                   type="button"
                                   onClick={() => handleApplyRoleUpgradeChip(3, sug)}
                                   className="px-2 py-1.5 rounded-lg bg-emerald-950/70 hover:bg-emerald-900/80 border border-emerald-500/50 text-left transition flex flex-col justify-between gap-0.5"
-                                  title={`${sug.summaryBadge} • Moves: ${sug.candidate.fastMove} + ${sug.candidate.chargedMove1}/${sug.candidate.chargedMove2}`}
+                                  title={`${sug.summaryBadge} • Moves: ${sug.candidate.fastMove} + ${sug.candidate.chargedMove1}/${sug.candidate.chargedMove2}${resolveMegaPlusMove(sug.candidate.name, newPresetLeague) ? ` + ${resolveMegaPlusMove(sug.candidate.name, newPresetLeague)} [Mega4]` : ''}`}
                                 >
                                   <div className="flex items-center justify-between gap-1">
                                     <span className="text-[11px] font-extrabold text-emerald-200 truncate">
@@ -11535,6 +11550,10 @@ export default function App() {
                                     <span className="text-[9.5px] font-mono font-bold text-emerald-300 shrink-0">
                                       {sug.deltaMachBr >= 0 ? `+${sug.deltaMachBr}` : sug.deltaMachBr} Core BR
                                     </span>
+                                  </div>
+                                  <div className="text-[9.5px] font-mono text-emerald-300/90 truncate">
+                                    {sug.candidate.fastMove} + {sug.candidate.chargedMove1}/{sug.candidate.chargedMove2}
+                                    {resolveMegaPlusMove(sug.candidate.name, newPresetLeague) ? ` + ${resolveMegaPlusMove(sug.candidate.name, newPresetLeague)} [Mega4]` : ''}
                                   </div>
                                   <div className="text-[9.5px] font-mono text-slate-300 truncate">
                                     Swap BR {sug.newRoleBr} ({sug.deltaRoleBr >= 0 ? `+${sug.deltaRoleBr}` : sug.deltaRoleBr}) • Core {sug.newMachineAggBr} [{sug.newArchetype}]
@@ -11568,6 +11587,7 @@ export default function App() {
                                   <div className="flex items-center justify-between gap-1">
                                     <span className="text-[11px] font-extrabold text-indigo-200 truncate">
                                       #{idx + 1} {sug.proposedFastMove} + {sug.proposedChargedMove1} / {sug.proposedChargedMove2}
+                                      {resolveMegaPlusMove(sug.pokemonName, newPresetLeague) ? ` + ${resolveMegaPlusMove(sug.pokemonName, newPresetLeague)} [Mega4]` : ''}
                                     </span>
                                     <span className="text-[9.5px] font-mono font-bold text-emerald-300 shrink-0">
                                       Team Core {sug.newMachineBr} ({sug.deltaMachineBr >= 0 ? `+${sug.deltaMachineBr}` : sug.deltaMachineBr})
@@ -15774,6 +15794,7 @@ export default function App() {
                             </div>
                             <div className="text-[10px] text-slate-400 font-mono truncate">
                               {sug.replacement.fastMove} + {sug.replacement.chargedMove1}/{sug.replacement.chargedMove2}
+                              {resolveMegaPlusMove(sug.replacement.name, editingShow6RosterModal.roster.league) ? ` [+ ${resolveMegaPlusMove(sug.replacement.name, editingShow6RosterModal.roster.league)}]` : ''}
                             </div>
                             <div className="text-[10px] text-sky-300">{sug.synergyReason}</div>
                           </div>
@@ -15821,6 +15842,7 @@ export default function App() {
                           <div className="min-w-0">
                             <div className="font-bold text-white font-mono truncate">
                               {ms.fastMove} + {ms.chargedMove1} / {ms.chargedMove2}
+                              {resolveMegaPlusMove(editingShow6RosterModal.roster.pokemon[activeShow6EditorSlotIdx]?.name, editingShow6RosterModal.roster.league) ? ` [+ ${resolveMegaPlusMove(editingShow6RosterModal.roster.pokemon[activeShow6EditorSlotIdx]?.name, editingShow6RosterModal.roster.league)}]` : ''}
                             </div>
                             <div className="text-[10px] text-slate-400 flex items-center gap-2">
                               <span className="text-sky-300 font-mono">

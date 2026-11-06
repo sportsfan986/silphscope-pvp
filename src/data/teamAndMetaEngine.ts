@@ -2020,7 +2020,10 @@ export function evaluateOrAutoOrderTeam(
       : "None (0 hard core breakers in Top 50)";
   const altNotes = altMovesetSlots
     .filter((a) => a.isAltMoveset)
-    .map((a) => `${a.pokemonName} (${a.fastMove} + ${a.chargedMove1}/${a.chargedMove2})`);
+    .map((a) => {
+      const plusMove = resolveMegaPlusMove(a.pokemonName, league);
+      return `${a.pokemonName} (${a.fastMove} + ${a.chargedMove1}/${a.chargedMove2}${plusMove ? ` + ${plusMove} [Mega4]` : ""})`;
+    });
   const altSuffix = altNotes.length > 0 ? ` • Alt Moveset Tech: ${altNotes.join("; ")}.` : "";
 
   const synergySummary =
@@ -4168,7 +4171,10 @@ export function generateAntiMetaTeamOptions(
         : "None (0 hard core breakers in Top 50)";
     const altNotes = altMovesetSlots
       .filter((a) => a.isAltMoveset)
-      .map((a) => `${a.pokemonName} (${a.fastMove} + ${a.chargedMove1}/${a.chargedMove2})`);
+      .map((a) => {
+      const plusMove = resolveMegaPlusMove(a.pokemonName, league);
+      return `${a.pokemonName} (${a.fastMove} + ${a.chargedMove1}/${a.chargedMove2}${plusMove ? ` + ${plusMove} [Mega4]` : ""})`;
+    });
     const altSuffix = altNotes.length > 0 ? ` • Alt Moveset Tech: ${altNotes.join("; ")}.` : "";
 
     const synergySummary =

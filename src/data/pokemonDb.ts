@@ -890,7 +890,7 @@ export const SUPER_MEGA_PLUS_MOVES: Record<string, string> = {
 export const DYNAMIC_SUPER_MEGA_PLUS_MOVES: Record<string, string> = {};
 
 export function resolveMegaPlusMove(name: string | undefined, league: string | undefined): string | null {
-  if (!name || !isMegaAllowedInLeague(league)) return null;
+  if (!name) return null;
   if (!isMegaOrPrimalSpecies(name)) return null;
   const clean = name.trim().toLowerCase();
   const idClean = clean
@@ -6365,7 +6365,7 @@ export function getRecommendedMovesForPokemon(
   if (rankingEntry?.moveset && rankingEntry.moveset.length > 1) {
     for (const mId of rankingEntry.moveset.slice(1)) {
       const formatted = formatMoveIdToDisplayName(mId);
-      if (formatted && !orderedChargedNames.some((n) => n.toLowerCase() === formatted.toLowerCase())) {
+      if (formatted && !formatted.endsWith("+") && !orderedChargedNames.some((n) => n.toLowerCase() === formatted.toLowerCase())) {
         orderedChargedNames.push(formatted);
       }
     }
@@ -6373,7 +6373,7 @@ export function getRecommendedMovesForPokemon(
   if (rankingEntry?.moves.chargedMoves) {
     for (const cm of rankingEntry.moves.chargedMoves) {
       const formatted = formatMoveIdToDisplayName(cm.moveId);
-      if (formatted && !orderedChargedNames.some((n) => n.toLowerCase() === formatted.toLowerCase())) {
+      if (formatted && !formatted.endsWith("+") && !orderedChargedNames.some((n) => n.toLowerCase() === formatted.toLowerCase())) {
         orderedChargedNames.push(formatted);
       }
     }

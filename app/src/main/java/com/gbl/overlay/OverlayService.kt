@@ -91,7 +91,7 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "6.24"
+        const val APP_VERSION = "6.25"
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -937,7 +937,7 @@ class OverlayService : LifecycleService() {
         fun resolveMegaPlusMoveStatic(rawName: String, league: String, prefs: SharedPreferences? = null): String? {
             val trimmed = rawName.trim()
             if (trimmed.isEmpty()) return null
-            if (!isMegaAllowedInLeagueStatic(league, prefs)) return null
+            if (!isMegaOrPrimalSpeciesStatic(trimmed)) return null
             val lower = trimmed.lowercase()
                 .replace(Regex("^shadow\\s+"), "")
                 .replace(Regex("\\s*\\(shadow\\)"), "")
@@ -947,17 +947,15 @@ class OverlayService : LifecycleService() {
             val underKey = lower.replace(Regex("[()\\s-]+"), "_").trim('_')
             DYNAMIC_SUPER_MEGA_PLUS_MOVES[underKey]?.let { return it }
             SUPER_MEGA_PLUS_MOVES[underKey]?.let { return it }
-            if (isMegaOrPrimalSpeciesStatic(lower)) {
-                val base = FormResolver.extractBaseSpecies(lower)
-                val suffix = when {
-                    Regex("\\bx\\b").containsMatchIn(lower) || lower.endsWith("_x") -> "_mega_x"
-                    Regex("\\by\\b").containsMatchIn(lower) || lower.endsWith("_y") -> "_mega_y"
-                    else -> "_mega"
-                }
-                val candId = "${base}${suffix}"
-                DYNAMIC_SUPER_MEGA_PLUS_MOVES[candId]?.let { return it }
-                SUPER_MEGA_PLUS_MOVES[candId]?.let { return it }
+            val base = FormResolver.extractBaseSpecies(lower)
+            val suffix = when {
+                Regex("\\bx\\b").containsMatchIn(lower) || lower.endsWith("_x") -> "_mega_x"
+                Regex("\\by\\b").containsMatchIn(lower) || lower.endsWith("_y") -> "_mega_y"
+                else -> "_mega"
             }
+            val candId = "${base}${suffix}"
+            DYNAMIC_SUPER_MEGA_PLUS_MOVES[candId]?.let { return it }
+            SUPER_MEGA_PLUS_MOVES[candId]?.let { return it }
             return null
         }
 
@@ -1612,7 +1610,7 @@ class OverlayService : LifecycleService() {
 
             private val PARENS_REGEX = Regex("\\(.*?\\)")
             private val FORM_MODIFIERS_REGEX = Regex(
-                "\\b(?:shadow|purified|kanto|kantonian|alolan|alola|galarian|galar|hisuian|hisui|paldean|paldea|unovan|unova|mega|primal|armored|origin|origine|altered|therian|incarnate|crowned|hero|resolute|ordinary|defense|attack|speed|normal|black|white|complete|unbound|confined|sky|land|bloodmoon|apex|dusk|mane|dawn|wings|single|rapid|strike|ice|rider|baile|pau|sensu|zen|standard|combat|blaze|aqua|wash|heat|frost|mow|fan|sunny|rainy|snowy|plant|trash|sandy|burn|chill|douse|shock)\\b"
+                "\\b(?:shadow|purified|kanto|kantonian|alolan|alola|galarian|galar|hisuian|hisui|paldean|paldea|unovan|unova|mega|primal|armored|origin|origine|altered|therian|incarnate|crowned|hero|resolute|ordinary|defense|attack|speed|normal|black|white|complete|unbound|confined|sky|land|bloodmoon|apex|dusk|mane|dawn|wings|single|rapid|strike|ice|rider|baile|pau|sensu|zen|standard|combat|blaze|aqua|wash|heat|frost|mow|fan|sunny|rainy|snowy|plant|trash|sandy|burn|chill|douse|shock|x|y)\\b"
             )
             private val MULTI_SPACE_REGEX = Regex("\\s+")
             private val BASE_SPECIES_CACHE = java.util.concurrent.ConcurrentHashMap<String, String>()

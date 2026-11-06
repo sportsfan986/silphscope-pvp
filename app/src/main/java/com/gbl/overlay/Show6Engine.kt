@@ -1638,7 +1638,9 @@ internal fun OverlayService.Companion.recommendShow6RosterSlotUpgradesStatic(
         val gain = ((comp - baselineScore) * 10.0).roundToInt() / 10.0
         val uPct = getShow6UsagePctStatic(normLeague, cand.name)
         val reason = buildString {
-            append("${cand.fastMove} + ${cand.chargedMove1}/${cand.chargedMove2} • Meta BR $br")
+            val plusMove = resolveMegaPlusMoveStatic(cand.name, normLeague)
+            val plusTag = if (plusMove != null) " + $plusMove [Mega4]" else ""
+            append("${cand.fastMove} + ${cand.chargedMove1}/${cand.chargedMove2}$plusTag • Meta BR $br")
             if (uPct > 0.0) append(" • Usage ${uPct}%")
             if (coreLbl.isNotEmpty()) append(" • 🔥 Core: $coreLbl")
         }

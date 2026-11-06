@@ -7425,8 +7425,9 @@ class MainActivity : AppCompatActivity() {
                 val rTag = roleLabels.getOrElse(sIdx) { "Slot ${sIdx + 1}" }
                 val brTag = slotBrHtmlLabels.getOrElse(sIdx) { "" }
                 val plusMove = OverlayService.resolveMegaPlusMoveStatic(slot.name, resolvedLeague, prefs)
-                val plusBadge = if (plusMove != null) " <font color='#f472b6'><b>[+ $plusMove]</b></font>" else ""
-                "• <b>[$rTag · $brTag]</b> ${slot.name}$plusBadge <font color='#94a3b8'>($ivText · CP ${slot.cp})</font>"
+                val plusBadge = if (plusMove != null) " <font color='#f472b6'><b>[+ $plusMove [Mega4]]</b></font>" else ""
+                val movesSummary = "${slot.fastMove} + ${slot.chargedMove1}/${slot.chargedMove2}"
+                "• <b>[$rTag · $brTag]</b> ${slot.name}$plusBadge <font color='#cbd5e1'>($movesSummary)</font> <font color='#94a3b8'>($ivText · CP ${slot.cp})</font>"
             }.joinToString("<br>")
 
             val winsList = if (preset.keyMetaTargetsBeaten.isNotEmpty()) preset.keyMetaTargetsBeaten.take(5).joinToString(", ") else "Balanced neutral coverage"
@@ -8403,8 +8404,10 @@ class MainActivity : AppCompatActivity() {
                                 }
                             }
                             val deltaStr = if (m.deltaBr >= 0) "+${m.deltaBr}" else "${m.deltaBr}"
+                            val plusMove = OverlayService.resolveMegaPlusMoveStatic(member.name, lg, prefs)
+                            val plusTag = if (plusMove != null) " + $plusMove [Mega4]" else ""
                             val infoTv = TextView(this@MainActivity).apply {
-                                text = "🎯 ${m.fastMove} + ${m.chargedMove1} / ${m.chargedMove2} (Meta BR ${m.avgBrVsMeta} • $deltaStr BR)"
+                                text = "🎯 ${m.fastMove} + ${m.chargedMove1} / ${m.chargedMove2}$plusTag (Meta BR ${m.avgBrVsMeta} • $deltaStr BR)"
                                 setTextColor(if (m.isCurrent) 0xFF34D399.toInt() else 0xFFE2E8F0.toInt())
                                 textSize = 9.5f
                                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -9622,10 +9625,13 @@ class MainActivity : AppCompatActivity() {
                             topRow.addView(equipBtn)
                             card.addView(topRow)
 
+                            val leadPlus = OverlayService.resolveMegaPlusMoveStatic(rec.lead.name, lg, prefs)?.let { " + $it [Mega4]" } ?: ""
+                            val swapPlus = OverlayService.resolveMegaPlusMoveStatic(rec.safeSwap.name, lg, prefs)?.let { " + $it [Mega4]" } ?: ""
+                            val closerPlus = OverlayService.resolveMegaPlusMoveStatic(rec.closer.name, lg, prefs)?.let { " + $it [Mega4]" } ?: ""
                             val slotsTv = TextView(this@MainActivity).apply {
-                                text = "• Lead: ${rec.lead.name} (${rec.lead.fastMove} + ${rec.lead.chargedMove1}/${rec.lead.chargedMove2}) [BR ${rec.leadBr}]\n" +
-                                    "• Swap: ${rec.safeSwap.name} (${rec.safeSwap.fastMove} + ${rec.safeSwap.chargedMove1}/${rec.safeSwap.chargedMove2}) [BR ${rec.swapBr}]\n" +
-                                    "• Closer: ${rec.closer.name} (${rec.closer.fastMove} + ${rec.closer.chargedMove1}/${rec.closer.chargedMove2}) [BR ${rec.closerBr}]\n" +
+                                text = "• Lead: ${rec.lead.name} (${rec.lead.fastMove} + ${rec.lead.chargedMove1}/${rec.lead.chargedMove2}$leadPlus) [BR ${rec.leadBr}]\n" +
+                                    "• Swap: ${rec.safeSwap.name} (${rec.safeSwap.fastMove} + ${rec.safeSwap.chargedMove1}/${rec.safeSwap.chargedMove2}$swapPlus) [BR ${rec.swapBr}]\n" +
+                                    "• Closer: ${rec.closer.name} (${rec.closer.fastMove} + ${rec.closer.chargedMove1}/${rec.closer.chargedMove2}$closerPlus) [BR ${rec.closerBr}]\n" +
                                     "• ${rec.synergyNote}"
                                 textSize = 10f
                                 setTextColor(0xFFCBD5E1.toInt())
@@ -9731,10 +9737,13 @@ class MainActivity : AppCompatActivity() {
                             val lead = resolvedTrioSlots.getOrNull(0)
                             val swap = resolvedTrioSlots.getOrNull(1)
                             val closer = resolvedTrioSlots.getOrNull(2)
+                            val leadPlus = lead?.name?.let { OverlayService.resolveMegaPlusMoveStatic(it, lg, prefs) }?.let { " + $it [Mega4]" } ?: ""
+                            val swapPlus = swap?.name?.let { OverlayService.resolveMegaPlusMoveStatic(it, lg, prefs) }?.let { " + $it [Mega4]" } ?: ""
+                            val closerPlus = closer?.name?.let { OverlayService.resolveMegaPlusMoveStatic(it, lg, prefs) }?.let { " + $it [Mega4]" } ?: ""
                             val slotsTv = TextView(this@MainActivity).apply {
-                                text = "• Lead: ${lead?.name ?: "-"} (${lead?.fastMove ?: ""} + ${lead?.chargedMove1 ?: ""}/${lead?.chargedMove2 ?: ""})\n" +
-                                    "• Swap: ${swap?.name ?: "-"} (${swap?.fastMove ?: ""} + ${swap?.chargedMove1 ?: ""}/${swap?.chargedMove2 ?: ""})\n" +
-                                    "• Closer: ${closer?.name ?: "-"} (${closer?.fastMove ?: ""} + ${closer?.chargedMove1 ?: ""}/${closer?.chargedMove2 ?: ""})"
+                                text = "• Lead: ${lead?.name ?: "-"} (${lead?.fastMove ?: ""} + ${lead?.chargedMove1 ?: ""}/${lead?.chargedMove2 ?: ""}$leadPlus)\n" +
+                                    "• Swap: ${swap?.name ?: "-"} (${swap?.fastMove ?: ""} + ${swap?.chargedMove1 ?: ""}/${swap?.chargedMove2 ?: ""}$swapPlus)\n" +
+                                    "• Closer: ${closer?.name ?: "-"} (${closer?.fastMove ?: ""} + ${closer?.chargedMove1 ?: ""}/${closer?.chargedMove2 ?: ""}$closerPlus)"
                                 textSize = 9.5f
                                 setTextColor(0xFFFDA4AF.toInt())
                             }
@@ -10006,7 +10015,9 @@ class MainActivity : AppCompatActivity() {
                     card.addView(headerTv)
 
                     val rosterStr = res.roster6.mapIndexed { idx, slot ->
-                        "${idx + 1}. ${slot.pokemon.name} [${slot.roleLabel} • Score ${slot.metaScore}] (${slot.pokemon.fastMove} + ${slot.pokemon.chargedMove1}/${slot.pokemon.chargedMove2}) — Covers: ${slot.coveredThreats.joinToString(", ")}"
+                        val plusMove = OverlayService.resolveMegaPlusMoveStatic(slot.pokemon.name, lg, prefs)
+                        val plusTag = if (plusMove != null) " + $plusMove [Mega4]" else ""
+                        "${idx + 1}. ${slot.pokemon.name} [${slot.roleLabel} • Score ${slot.metaScore}] (${slot.pokemon.fastMove} + ${slot.pokemon.chargedMove1}/${slot.pokemon.chargedMove2}$plusTag) — Covers: ${slot.coveredThreats.joinToString(", ")}"
                     }.joinToString("\n")
 
                     val rosterTv = TextView(this@MainActivity).apply {
@@ -11062,7 +11073,9 @@ class MainActivity : AppCompatActivity() {
                                 val cand = upg.candidate
                                 val machDeltaStr = formatSignedDelta(upg.machineBrDelta)
                                 val roleDeltaStr = formatSignedDelta(upg.roleBrDelta)
-                                btn?.text = "${idx + 1}. ${cand.name} (${cand.fastMove} / ${cand.chargedMove1} + ${cand.chargedMove2})  •  Core ${upg.newMachineAggBr} ($machDeltaStr) • $roleMetricName ${upg.newRoleBr} ($roleDeltaStr)"
+                                val plusMove = OverlayService.resolveMegaPlusMoveStatic(cand.name, lg, prefs)
+                                val plusTag = if (plusMove != null) " + $plusMove [Mega4]" else ""
+                                btn?.text = "${idx + 1}. ${cand.name} (${cand.fastMove} / ${cand.chargedMove1} + ${cand.chargedMove2}$plusTag)  •  Core ${upg.newMachineAggBr} ($machDeltaStr) • $roleMetricName ${upg.newRoleBr} ($roleDeltaStr)"
                                 btn?.setOnClickListener {
                                     val newSlot = PokemonSlot(
                                         name = cand.name,
@@ -11198,7 +11211,9 @@ class MainActivity : AppCompatActivity() {
                                 val machDeltaStr = formatSignedDelta(sug.machineBrDelta)
                                 val roleDeltaStr = formatSignedDelta(sug.roleBrDelta)
                                 val leadDeltaStr = formatSignedDelta(sug.leadBrDelta)
-                                btn?.text = "${idx + 1}. ${sug.proposedFastMove} / ${sug.proposedCharged1} + ${sug.proposedCharged2}  •  Team Core ${sug.newMachineAggBr} ($machDeltaStr) • Pos $roleMetricName ${sug.newRoleBr} ($roleDeltaStr)"
+                                val plusMove = OverlayService.resolveMegaPlusMoveStatic(sug.pokemonName, lg, prefs)
+                                val plusTag = if (plusMove != null) " + $plusMove [Mega4]" else ""
+                                btn?.text = "${idx + 1}. ${sug.proposedFastMove} / ${sug.proposedCharged1} + ${sug.proposedCharged2}$plusTag  •  Team Core ${sug.newMachineAggBr} ($machDeltaStr) • Pos $roleMetricName ${sug.newRoleBr} ($roleDeltaStr)"
                                 btn?.setOnClickListener {
                                     when (slotIndex) {
                                         0 -> {
@@ -11219,7 +11234,7 @@ class MainActivity : AppCompatActivity() {
                                     }
                                     val evalAfter = refreshDialogTeamEvaluation(autoReorder = false)
                                     textDialogAutoDetectBanner?.text =
-                                        "Applied Moveset to Slot ${slotIndex + 1} (${sug.pokemonName} → ${sug.proposedFastMove} + ${sug.proposedCharged1}/${sug.proposedCharged2}): Team Core BR ${evalAfter.machineAggBr} ($machDeltaStr) • Pos $roleMetricName ${sug.newRoleBr} ($roleDeltaStr) • Team Lead BR ${sug.newLeadAggBr} ($leadDeltaStr)"
+                                        "Applied Moveset to Slot ${slotIndex + 1} (${sug.pokemonName} → ${sug.proposedFastMove} + ${sug.proposedCharged1}/${sug.proposedCharged2}$plusTag): Team Core BR ${evalAfter.machineAggBr} ($machDeltaStr) • Pos $roleMetricName ${sug.newRoleBr} ($roleDeltaStr) • Team Lead BR ${sug.newLeadAggBr} ($leadDeltaStr)"
                                     textDialogAutoDetectBanner?.visibility = android.view.View.VISIBLE
                                     runTeamMovesetOptimizationSimulation(showBannerOnComplete = false)
                                 }

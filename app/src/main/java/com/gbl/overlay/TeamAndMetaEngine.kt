@@ -1931,8 +1931,10 @@ internal fun OverlayService.Companion.evaluateOrAutoOrderTeamStatic(
     fun computeBaitVsSweeperScore(slot: TeamMember, swapSafeScore: Double, closerMean: Double): Pair<Double, Double> {
         val c1Stats = resolveChargedMoveStatsStatic(slot.chargedMove1)
         val c2Stats = resolveChargedMoveStatsStatic(slot.chargedMove2)
-        val minEnergy = min(c1Stats.energyCost, c2Stats.energyCost).toDouble()
-        val maxPower = max(c1Stats.power, c2Stats.power).toDouble()
+        val plusMove = resolveMegaPlusMoveStatic(slot.name, league)
+        val c3Stats = plusMove?.let { resolveChargedMoveStatsStatic(it) }
+        val minEnergy = min(min(c1Stats.energyCost, c2Stats.energyCost), c3Stats?.energyCost ?: Int.MAX_VALUE).toDouble()
+        val maxPower = max(max(c1Stats.power, c2Stats.power), c3Stats?.power ?: 0).toDouble()
         val isShadow = slot.name.contains("Shadow", ignoreCase = true)
         val baitScore = swapSafeScore + (55.0 - minEnergy) * 1.4 - (if (isShadow) 8.0 else 0.0)
         val sweeperScore = closerMean + (maxPower - 80.0) * 0.45 + (if (isShadow) 14.0 else 0.0)
@@ -2195,7 +2197,11 @@ internal fun OverlayService.Companion.evaluateOrAutoOrderTeamStatic(
     }
     val altNotes = altMovesetSlots
         .filter { it.isAltMoveset }
-        .map { "${it.pokemonName} (${it.fastMove} + ${it.chargedMove1}/${it.chargedMove2})" }
+        .map {
+            val plusMove = resolveMegaPlusMoveStatic(it.pokemonName, league)
+            val plusTag = if (plusMove != null) " + $plusMove [Mega4]" else ""
+            "${it.pokemonName} (${it.fastMove} + ${it.chargedMove1}/${it.chargedMove2}$plusTag)"
+        }
     val altSuffix = if (altNotes.isNotEmpty()) " • Alt Moveset Tech: ${altNotes.joinToString("; ")}." else ""
 
     val synergySummary = when (archetype) {
@@ -3006,8 +3012,10 @@ internal fun OverlayService.Companion.computeRoleWeightedTop100MetaStatic(
         val fastLower = candMember?.fastMove?.lowercase() ?: ""
         val c1Stats = resolveChargedMoveStatsStatic(candMember?.chargedMove1 ?: "")
         val c2Stats = resolveChargedMoveStatsStatic(candMember?.chargedMove2 ?: "")
-        val minEnergy = min(c1Stats.energyCost, c2Stats.energyCost)
-        val maxPower = max(c1Stats.power, c2Stats.power)
+        val plusMove = resolveMegaPlusMoveStatic(monName, normLeague)
+        val c3Stats = plusMove?.let { resolveChargedMoveStatsStatic(it) }
+        val minEnergy = min(min(c1Stats.energyCost, c2Stats.energyCost), c3Stats?.energyCost ?: Int.MAX_VALUE)
+        val maxPower = max(max(c1Stats.power, c2Stats.power), c3Stats?.power ?: 0)
         val isShadow = monName.startsWith("Shadow ", ignoreCase = true)
 
         val leadMult = (if (minEnergy <= 45) 1.22 else 1.0) *
@@ -3552,7 +3560,11 @@ internal fun OverlayService.Companion.generateAntiMetaTeamOptionsStatic(
         }
         val altNotes = altMovesetSlots
             .filter { it.isAltMoveset }
-            .map { "${it.pokemonName} (${it.fastMove} + ${it.chargedMove1}/${it.chargedMove2})" }
+            .map {
+            val plusMove = resolveMegaPlusMoveStatic(it.pokemonName, league)
+            val plusTag = if (plusMove != null) " + $plusMove [Mega4]" else ""
+            "${it.pokemonName} (${it.fastMove} + ${it.chargedMove1}/${it.chargedMove2}$plusTag)"
+        }
         val altSuffix = if (altNotes.isNotEmpty()) " • Alt Moveset Tech: ${altNotes.joinToString("; ")}." else ""
 
         val teamMembers = listOf(m0.member, m1.member, m2.member)

@@ -2447,10 +2447,14 @@ internal fun OverlayService.Companion.getAutocompletePokemonSuggestions(
         val isMegaOrPrimal = meta.name.startsWith("Mega ", ignoreCase = true) || meta.name.startsWith("Primal ", ignoreCase = true) || meta.speciesId.contains("_mega") || meta.speciesId.contains("_primal")
         val baseKey = FormResolver.extractBaseSpecies(meta.name)
         val rankedMeta = computeEffectiveCombatStats(applyRankingMovesForLeague(applyRecommendedMoves(meta), league, isShadow), league)
+        val plusMove = resolveMegaPlusMoveStatic(meta.name, league)
         val badge = when {
             isShadow && meta.formLabel != "Base" && meta.formLabel != "Shadow" -> "Shadow • ${meta.formLabel}"
             isShadow -> "Shadow"
-            isMegaOrPrimal -> if (meta.name.startsWith("Primal", ignoreCase = true)) "Primal" else "Mega"
+            isMegaOrPrimal -> {
+                val baseMegaBadge = if (meta.name.startsWith("Primal", ignoreCase = true)) "Primal" else "Mega"
+                if (plusMove != null) "$baseMegaBadge • +$plusMove" else baseMegaBadge
+            }
             else -> meta.formLabel
         }
         val isAlt = badge != "Base" && badge != "Shadow"
@@ -2549,12 +2553,7 @@ internal fun OverlayService.Companion.resolveRecommendedMovesForSpecies(
 ): PokemonMeta? {
     val trimmed = rawName.trim()
     if (trimmed.isEmpty()) return null
-    val normLeague = when {
-        league.contains("GREAT", ignoreCase = true) || league.contains("(1500)") || league.contains("(500)") -> "GREAT LEAGUE"
-        league.contains("ULTRA", ignoreCase = true) || league.contains("(2500)") -> "ULTRA LEAGUE"
-        league.contains("MEGA", ignoreCase = true) -> "MEGA MASTER LEAGUE"
-        else -> "MASTER LEAGUE"
-    }
+    val normLeague = normalizeLeagueKeyStatic(league)
     val cacheKey = "${trimmed.lowercase()}|$normLeague|${customCp ?: -1}|${customIvs?.trim()?.lowercase().orEmpty()}"
     RESOLVED_SPECIES_CACHE[cacheKey]?.let { return it }
 
