@@ -345,6 +345,47 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;');
 }
 
+/**
+ * Builds a full 3v3 team matchup string (`User1, User2, User3 vs Opp1, Opp2, Opp3 • N anomalies`)
+ * by inspecting the BATTLE_DVR_SUMMARY_HEADER line (and frame trace fallback) in `deepTraceText`
+ * so the full user team is always printed, not just the lead Pokémon.
+ */
+function resolveFullTeamMatchupSummary(metadata, deepTraceText) {
+  let rawSummary = String((metadata && metadata.matchupSummary) || '').trim();
+  if (!deepTraceText || typeof deepTraceText !== 'string') {
+    return rawSummary;
+  }
+  try {
+    const firstNewline = deepTraceText.indexOf('\n');
+    const firstLine = (firstNewline >= 0 ? deepTraceText.slice(0, firstNewline) : deepTraceText).trim();
+    if (firstLine.startsWith('{"recordType":"BATTLE_DVR_SUMMARY_HEADER"')) {
+      const headerObj = JSON.parse(firstLine);
+      const summary = headerObj && headerObj.battleSummary;
+      if (summary && typeof summary === 'object') {
+        const userList = Array.isArray(summary.userTeamSpecs)
+          ? summary.userTeamSpecs.map((s) => (s && s.species ? String(s.species).trim() : '')).filter(Boolean)
+          : [];
+        const oppList = Array.isArray(summary.oppTeamSpecs)
+          ? summary.oppTeamSpecs.map((s) => (s && s.species ? String(s.species).trim() : '')).filter(Boolean)
+          : [];
+        const anomalyCount = Number(summary.anomalyCount) || 0;
+        if (userList.length > 0 || oppList.length > 0) {
+          const userPart = userList.length > 0 ? userList.join(', ') : 'Player';
+          const oppPart = oppList.length > 0 ? oppList.join(', ') : 'Opponent';
+          const anomSuffix =
+            anomalyCount > 0
+              ? ` • ${anomalyCount} ${anomalyCount === 1 ? 'anomaly' : 'anomalies'}`
+              : '';
+          return `${userPart} vs ${oppPart}${anomSuffix}`;
+        }
+      }
+    }
+  } catch (_) {
+    // Fallback to rawSummary on parse error
+  }
+  return rawSummary;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -464,16 +505,7 @@ export default {
             });
             if (m.recentBatches.length > 250) m.recentBatches.length = 250;
           });
-
-          if (env.TELEGRAM_NOTIFY_TELEMETRY_BATCHES === 'true' && anomalySummary) {
-            const msg =
-              `📊 <b>SilphScope Telemetry Batch</b>\n` +
-              `👤 <b>Trainer:</b> <code>${escapeHtml(screenName)}</code>\n` +
-              `📱 <b>Version:</b> <code>v${escapeHtml(appVersion)} (${versionCode})</code>\n` +
-              `📦 <b>Battles:</b> ${recordCount}\n` +
-              `⚠️ <b>Summary:</b> ${escapeHtml(anomalySummary)}`;
-            await sendTelegramMessage(env, msg);
-          }
+          // Generic battle telemetry batches do not send Telegram notifications (only 1-Battle DVR videos post to Telegram).
         })()
       );
 
@@ -585,7 +617,7 @@ export default {
         const versionCode = Number(metadata.versionCode) || 0;
         const league = String(metadata.league || 'Unknown League');
         const result = String(metadata.result || 'UNKNOWN');
-        const matchupSummary = String(metadata.matchupSummary || '');
+        const matchupSummary = resolveFullTeamMatchupSummary(metadata, deepTraceText);
         const frameCount = Number(metadata.frameCount) || 0;
 
         const videoKey = `recordings/${screenName}/${battleId}_video.mp4`;
