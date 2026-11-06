@@ -962,6 +962,7 @@ function renderWatchSharePage(origin, shareInfo) {
       <span class="badge" style="background:rgba(6,182,212,0.15);color:#38bdf8;border-color:rgba(6,182,212,0.35)">${league} • ${result}</span>
     </div>
     <div class="header-actions">
+      <a class="btn-link" href="/vault">☁️ My Replay Vault</a>
       <button id="btn-privacy" onclick="togglePrivacy()">🕵️ ${hideNamesDefault ? 'Names Hidden' : 'Hide Names'}</button>
       <button id="btn-layout" onclick="toggleLayout()">📐 Side-by-Side: OFF</button>
       <button id="btn-export" onclick="exportWithHud()">💾 Export Video + HUD</button>
@@ -998,6 +999,10 @@ function renderWatchSharePage(origin, shareInfo) {
     </div>
 
     <div class="controls-bar">
+      <div style="display:flex;align-items:center;gap:8px;width:100%">
+        <input type="range" id="video-scrubber" min="0" max="1000" value="0" style="flex:1;accent-color:#10b981;cursor:pointer" oninput="scrubVideo(this.value)" />
+        <span id="time-readout" style="font-size:11px;font-family:monospace;color:#94a3b8;min-width:82px;text-align:right">0.0s / 0.0s</span>
+      </div>
       <div class="control-row">
         <div style="display:flex;gap:4px;flex-wrap:wrap">
           <button onclick="stepFrame(-1)">⏮ -1F</button>
@@ -1166,21 +1171,42 @@ function renderWatchSharePage(origin, shareInfo) {
 
       if (hudMode === 'diag') {
         document.getElementById('hud-diag').textContent =
-          'RAW HP: U=' + (f.rawUserHpPct ?? -1) + '% (commit ' + (f.userHpPct ?? -1) + '%) | O=' + (f.rawOppHpPct ?? -1) + '% (commit ' + (f.oppHpPct ?? -1) + '%)\n' +
-          'CIRCLE: ' + (f.circleFillPct ?? -1) + '% | ZOOM: ' + (f.zoomPhase || 'NONE') + ' | SampledHP=' + Boolean(f.hpSampledThisTick) + '\n' +
-          'OCR TL: ' + JSON.stringify((f.ocrTopLeftText || '').replace(/\n/g, ' ')) + ' | TR: ' + JSON.stringify((f.ocrTopRightText || '').replace(/\n/g, ' '));
+          'RAW HP: U=' + (f.rawUserHpPct ?? -1) + '% (commit ' + (f.userHpPct ?? -1) + '%) | O=' + (f.rawOppHpPct ?? -1) + '% (commit ' + (f.oppHpPct ?? -1) + '%)\\n' +
+          'CIRCLE: ' + (f.circleFillPct ?? -1) + '% | SRC: ' + (f.energySource || 'FAST_CADENCE') + '\\n' +
+          'OCR TL: ' + JSON.stringify((f.ocrTopLeftText || '').replace(/\\n/g, ' ')) + ' | TR: ' + JSON.stringify((f.ocrTopRightText || '').replace(/\\n/g, ' '));
       }
     }
 
-    video.addEventListener('timeupdate', syncHudFrame);
+    function scrubVideo(val) {
+      const dur = video.duration || ((frames[frames.length - 1] && frames[frames.length - 1].relTimeMs) ? frames[frames.length - 1].relTimeMs / 1000 : 180);
+      video.currentTime = (Number(val) / 1000) * dur;
+      syncHudFrame();
+    }
+
+    video.addEventListener('timeupdate', () => {
+      const dur = video.duration || ((frames[frames.length - 1] && frames[frames.length - 1].relTimeMs) ? frames[frames.length - 1].relTimeMs / 1000 : 0);
+      const cur = video.currentTime || 0;
+      if (dur > 0) {
+        document.getElementById('video-scrubber').value = String(Math.round((cur / dur) * 1000));
+      }
+      document.getElementById('time-readout').textContent = cur.toFixed(1) + 's / ' + dur.toFixed(1) + 's';
+      syncHudFrame();
+    });
+    video.addEventListener('loadedmetadata', () => {
+      const dur = video.duration || 0;
+      document.getElementById('time-readout').textContent = '0.0s / ' + dur.toFixed(1) + 's';
+    });
     video.addEventListener('seeked', syncHudFrame);
 
     async function loadTrace() {
       try {
         const res = await fetch(TRACE_URL);
-        if (!res.ok) return;
+        if (!res.ok) {
+          document.getElementById('hud-coach').textContent = '⚠️ Trace HTTP ' + res.status;
+          return;
+        }
         const text = await res.text();
-        const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+        const lines = text.split(/\\r?\\n/).map(l => l.trim()).filter(Boolean);
         const parsed = [];
         for (const line of lines) {
           try {
@@ -1216,6 +1242,7 @@ function renderWatchSharePage(origin, shareInfo) {
         syncHudFrame();
       } catch (e) {
         console.error('Trace load error:', e);
+        document.getElementById('hud-coach').textContent = '⚠️ Trace error: ' + e.message;
       }
     }
 
@@ -1330,6 +1357,254 @@ function renderWatchSharePage(origin, shareInfo) {
 </html>`;
 }
 
+function renderVaultDashboardPage(origin, clientIngestKey) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SilphScope PvP • Cloud DVR Replay Vault</title>
+  <style>
+    :root {
+      --bg: #070b14;
+      --card: #0f172a;
+      --border: #1e293b;
+      --accent: #10b981;
+      --cyan: #06b6d4;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      padding: 14px 20px;
+      background: rgba(15, 23, 42, 0.95);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      font-size: 16px;
+    }
+    .container {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .login-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+    input {
+      background: #020617;
+      color: var(--text);
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 13px;
+      flex: 1;
+      min-width: 180px;
+    }
+    button, .btn-link {
+      background: #1e293b;
+      color: var(--text);
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 8px 13px;
+      font-size: 12.5px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    button.primary {
+      background: #059669;
+      border-color: #10b981;
+    }
+    button:hover, .btn-link:hover {
+      filter: brightness(1.12);
+    }
+    .stats-bar {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+      gap: 14px;
+    }
+    .replay-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .replay-card.pinned {
+      border-color: rgba(245, 158, 11, 0.55);
+    }
+    .pill {
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .pill-win { background: rgba(16, 185, 129, 0.18); color: #34d399; }
+    .pill-loss { background: rgba(244, 63, 94, 0.18); color: #fb7185; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span>🛡️ SilphScope PvP • Cloud DVR Replay Vault</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a class="btn-link" href="https://sportsfan986.github.io/silphscope-pvp/" target="_blank" rel="noopener">🌐 Web Battle Simulator</a>
+      <a class="btn-link" href="https://github.com/sportsfan986/silphscope-pvp/releases" target="_blank" rel="noopener">📱 Download Android APK</a>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="login-card">
+      <input id="inp-user" type="text" placeholder="Trainer / Debug ID (e.g. sportsfan986)" />
+      <input id="inp-key" type="password" placeholder="Optional Unlock Key (auto-bound if already verified)" />
+      <button class="primary" onclick="loadVault()">🔓 Load My Cloud Replays</button>
+    </div>
+
+    <div class="stats-bar" id="stats-bar" style="display:none"></div>
+    <div class="grid" id="replays-grid"></div>
+  </div>
+
+  <script>
+    const CLIENT_KEY = ${JSON.stringify(clientIngestKey || '')};
+    const params = new URLSearchParams(window.location.search);
+    const savedUser = params.get('user') || localStorage.getItem('sspvp_vault_user') || 'sportsfan986';
+    const savedKey = params.get('key') || localStorage.getItem('sspvp_vault_key') || '';
+    document.getElementById('inp-user').value = savedUser;
+    document.getElementById('inp-key').value = savedKey;
+
+    async function loadVault() {
+      const user = document.getElementById('inp-user').value.trim();
+      const key = document.getElementById('inp-key').value.trim();
+      if (!user) return alert('Enter your Trainer / Debug ID first.');
+      localStorage.setItem('sspvp_vault_user', user);
+      if (key) localStorage.setItem('sspvp_vault_key', key);
+
+      const grid = document.getElementById('replays-grid');
+      grid.innerHTML = '<div style="color:#94a3b8;padding:20px">Loading Cloud Replay Vault...</div>';
+
+      try {
+        const res = await fetch('/v1/replays/list', {
+          headers: {
+            'X-SilphScope-Client-Key': CLIENT_KEY,
+            'X-Trainer-Screen-Name': user,
+            'X-SilphScope-Unlock-Key': key
+          }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          grid.innerHTML = '<div style="color:#fb7185;padding:20px">' + (data.error || 'Failed to load vault') + '</div>';
+          return;
+        }
+        const sb = document.getElementById('stats-bar');
+        sb.style.display = 'flex';
+        const lim = data.limits || {};
+        const usg = data.usage || {};
+        sb.innerHTML =
+          '<div><strong>👤 @' + data.screenName + '</strong> • <span style="color:#38bdf8;font-weight:700">' + (lim.label || data.tier.toUpperCase()) + '</span></div>' +
+          '<div style="color:#cbd5e1">☁️ Storage: <strong>' + (usg.usedMb || 0) + ' MB</strong> / ' + (lim.maxStorageMb || 0) + ' MB • Rolling: <strong>' + (usg.rollingCount || 0) + '/' + (lim.maxRollingBattles || 0) + '</strong> • ⭐ Pinned: <strong>' + (usg.pinnedCount || 0) + '/' + (lim.maxPinnedBattles || 0) + '</strong></div>';
+
+        const items = data.items || [];
+        if (!items.length) {
+          grid.innerHTML = '<div style="color:#94a3b8;padding:20px">No replays stored in your Cloud Vault yet. Record a battle in SilphScope PvP v6.42+ with Auto-DVR enabled!</div>';
+          return;
+        }
+        grid.innerHTML = items.map(item => {
+          const isWin = String(item.result || '').toUpperCase().includes('WIN');
+          const mb = ((item.totalBytes || item.videoBytes || 0) / (1024 * 1024)).toFixed(1);
+          const dateStr = item.createdAt ? new Date(item.createdAt).toLocaleString() : '';
+          return '<div class="replay-card ' + (item.isPinned ? 'pinned' : '') + '">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center">' +
+              '<span class="pill ' + (isWin ? 'pill-win' : 'pill-loss') + '">' + (item.result || 'BATTLE') + ' • ' + (item.league || 'GBL') + '</span>' +
+              '<span style="font-size:11px;color:#94a3b8">' + mb + ' MB • ' + (item.durationSec || 0) + 's</span>' +
+            '</div>' +
+            '<div style="font-weight:800;font-size:13.5px;color:#f1f5f9">' + (item.matchupSummary || item.battleId) + '</div>' +
+            '<div style="font-size:11px;color:#64748b">' + dateStr + ' • ID: ' + item.battleId + '</div>' +
+            '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">' +
+              '<a class="btn-link" style="background:#059669;border-color:#10b981;flex:1;justify-content:center" href="' + item.shareUrl + '">▶️ Watch + HUD</a>' +
+              '<button onclick="togglePin(\\'' + item.battleId + '\\', ' + (!item.isPinned) + ')">' + (item.isPinned ? '⭐ Pinned' : '☆ Pin') + '</button>' +
+              '<button onclick="copyLink(\\'' + item.shareUrl + '\\')">🔗 Copy Link</button>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+      } catch (e) {
+        grid.innerHTML = '<div style="color:#fb7185;padding:20px">Error: ' + e.message + '</div>';
+      }
+    }
+
+    async function togglePin(battleId, nextPinned) {
+      const user = document.getElementById('inp-user').value.trim();
+      const key = document.getElementById('inp-key').value.trim();
+      await fetch('/v1/replays/pin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-SilphScope-Client-Key': CLIENT_KEY,
+          'X-Trainer-Screen-Name': user,
+          'X-SilphScope-Unlock-Key': key
+        },
+        body: JSON.stringify({ battleId, isPinned: nextPinned, unlockKey: key })
+      });
+      loadVault();
+    }
+
+    function copyLink(url) {
+      navigator.clipboard.writeText(url);
+      alert('Copied Share URL: ' + url);
+    }
+
+    if (savedUser) loadVault();
+  </script>
+</body>
+</html>`;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -1349,6 +1624,20 @@ export default {
     }
 
     const store = getStorageAdapter(env);
+
+    // 0. Public Cloud DVR Replay Vault Web Portal (`GET /` or `GET /vault`)
+    if (request.method === 'GET' && (path === '/' || path === '/vault' || path === '/replays')) {
+      return new Response(
+        renderVaultDashboardPage(url.origin, (env.CLIENT_INGEST_KEY || '').trim()),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-cache',
+          },
+        }
+      );
+    }
 
     // 1. Public Health Check
     if (request.method === 'GET' && path === '/v1/health') {
