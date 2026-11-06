@@ -1526,44 +1526,70 @@
         </div>
 
         <!-- In-Overlay Post-Stop Log Result Action Bar -->
-        <div id="start-battle-menu" class="start-battle-menu hidden">
-            <div style="display:flex; gap:2.5px; align-items:center;">
-                <button id="btn-lead-matchup" class="menu-btn menu-btn-lead-neu" onclick="cycleLeadMatchup()" title="Tap to cycle Lead Matchup: Favorable / Neutral / Negative">
-                    Lead: Neu
-                </button>
-                <button id="btn-ignore-telemetry-toggle" class="menu-btn menu-btn-ignore-ai" onclick="toggleIgnoreTelemetryNextLog()" title="Skip AI anomaly telemetry for this battle (e.g. PoGO Auto-Catcher text in OCR region) while keeping Win/Loss record">
-                    🚫 No AI Log
-                </button>
+        <div id="start-battle-menu" class="start-battle-menu hidden" style="flex-direction:column; align-items:stretch; gap:3px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:3px;">
+                <div style="display:flex; gap:2.5px; align-items:center;">
+                    <button id="btn-lead-matchup" class="menu-btn menu-btn-lead-neu" onclick="cycleLeadMatchup()" title="Tap to cycle Lead Matchup: Favorable / Neutral / Negative">
+                        Lead: Neu
+                    </button>
+                    <button id="btn-ignore-telemetry-toggle" class="menu-btn menu-btn-ignore-ai" onclick="toggleIgnoreTelemetryNextLog()" title="Skip AI anomaly telemetry for this battle (e.g. PoGO Auto-Catcher text in OCR region) while keeping Win/Loss record">
+                        🚫 No AI Log
+                    </button>
+                </div>
+                <div style="display:flex; gap:2.5px; align-items:center;">
+                    <button class="menu-btn menu-btn-win" onclick="logBattleFromOverlay('WIN')" title="Log Win for the stopped battle">
+                        🏆 Win
+                    </button>
+                    <button class="menu-btn menu-btn-loss" onclick="logBattleFromOverlay('LOSS')" title="Log Loss for the stopped battle">
+                        💀 Loss
+                    </button>
+                    <button class="menu-btn menu-btn-close" onclick="skipLoggingStoppedBattle()" title="Dismiss without logging">
+                        ✕ Skip
+                    </button>
+                </div>
             </div>
-            <div style="display:flex; gap:2.5px; align-items:center;">
-                <button class="menu-btn menu-btn-win" onclick="logBattleFromOverlay('WIN')" title="Log Win for the stopped battle">
-                    🏆 Win
-                </button>
-                <button class="menu-btn menu-btn-loss" onclick="logBattleFromOverlay('LOSS')" title="Log Loss for the stopped battle">
-                    💀 Loss
-                </button>
-                <button class="menu-btn menu-btn-close" onclick="skipLoggingStoppedBattle()" title="Dismiss without logging">
-                    ✕ Skip
-                </button>
+            <div id="stopped-dvr-prompt-row" style="display:flex; justify-content:space-between; align-items:center; gap:3px; padding-top:2px; border-top:1px solid rgba(148,163,184,0.2);">
+                <span id="stopped-dvr-status-text" style="font-size:7.6px; font-weight:800; color:#93c5fd;">🎬 DVR Clip Ready — Delete before upload?</span>
+                <div style="display:flex; gap:2.5px; align-items:center;">
+                    <button id="btn-stopped-flag-bug" class="menu-btn menu-btn-restart" onclick="flagLastBattleBugReport('')" title="Flag this battle & issue a DVR Bug Report when logging Win/Loss">
+                        🚩 Bug Report
+                    </button>
+                    <button id="btn-stopped-delete-dvr" class="menu-btn menu-btn-loss" onclick="deleteLastBattleDvrPrompt('')" title="Delete this battle's recording before saving or uploading">
+                        🗑️ Delete Video
+                    </button>
+                </div>
             </div>
         </div>
 
-        <!-- v6.03: Post-Battle Auto-Logged / Quick Edit & Ignore AI Telemetry Bar -->
-        <div id="auto-logged-banner" class="start-battle-menu hidden">
-            <span id="auto-logged-status-text" style="font-size:8px; font-weight:800; color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">⚡ Logged WIN</span>
-            <div style="display:flex; gap:2.5px; align-items:center; flex-shrink:0;">
-                <button class="menu-btn menu-btn-lead-neu" onclick="flipAutoLoggedResult()" title="Flip logged result between WIN and LOSS">
-                    🔄 Flip W/L
-                </button>
-                <button id="btn-auto-ignore-ai" class="menu-btn menu-btn-ignore-ai" onclick="ignoreAutoLoggedTelemetry()" title="Delete AI anomaly telemetry for this battle (e.g. Auto-Catcher interference) while keeping Win/Loss record">
-                    🚫 Drop AI Log
-                </button>
-                <button class="menu-btn menu-btn-loss" onclick="undoAutoLoggedResult()" title="Undo and delete this logged battle">
-                    ↩️ Undo
-                </button>
-                <button class="menu-btn menu-btn-close" onclick="dismissAutoLoggedBar()" title="Dismiss banner">
-                    ✕
-                </button>
+        <!-- v6.03 / v6.43: Post-Battle Auto-Logged / Quick Edit, DVR Delete Prompt & Bug Report Bar -->
+        <div id="auto-logged-banner" class="start-battle-menu hidden" style="flex-direction:column; align-items:stretch; gap:3px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:3px;">
+                <span id="auto-logged-status-text" style="font-size:8px; font-weight:800; color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">⚡ Logged WIN</span>
+                <div style="display:flex; gap:2.5px; align-items:center; flex-shrink:0;">
+                    <button class="menu-btn menu-btn-lead-neu" onclick="flipAutoLoggedResult()" title="Flip logged result between WIN and LOSS">
+                        🔄 Flip W/L
+                    </button>
+                    <button id="btn-auto-ignore-ai" class="menu-btn menu-btn-ignore-ai" onclick="ignoreAutoLoggedTelemetry()" title="Delete AI anomaly telemetry for this battle (e.g. Auto-Catcher interference) while keeping Win/Loss record">
+                        🚫 Drop AI Log
+                    </button>
+                    <button class="menu-btn menu-btn-loss" onclick="undoAutoLoggedResult()" title="Undo and delete this logged battle">
+                        ↩️ Undo
+                    </button>
+                    <button class="menu-btn menu-btn-close" onclick="dismissAutoLoggedBar()" title="Dismiss banner">
+                        ✕
+                    </button>
+                </div>
+            </div>
+            <div id="auto-logged-dvr-prompt-row" style="display:flex; justify-content:space-between; align-items:center; gap:3px; padding-top:2px; border-top:1px solid rgba(148,163,184,0.2);">
+                <span id="auto-logged-dvr-status-text" style="font-size:7.6px; font-weight:800; color:#93c5fd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">🎬 DVR Saved — Delete before upload?</span>
+                <div style="display:flex; gap:2.5px; align-items:center; flex-shrink:0;">
+                    <button id="btn-auto-flag-bug" class="menu-btn menu-btn-restart" onclick="flagLastBattleBugReport()" title="Flag this battle & issue a DVR Bug Report to SilphScope Diagnostics">
+                        🚩 Bug Report
+                    </button>
+                    <button id="btn-auto-delete-dvr" class="menu-btn menu-btn-loss" onclick="deleteLastBattleDvrPrompt()" title="Delete this battle's recording before upload">
+                        🗑️ Delete Video
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -2689,8 +2715,47 @@
         function skipLoggingStoppedBattle() {
             isBattleActive = false;
             closeStartBattleMenu();
+            if (window.AndroidOverlay && window.AndroidOverlay.discardStoppedBattleDvr) {
+                window.AndroidOverlay.discardStoppedBattleDvr();
+            }
             clearOverlayMatrixImmediate("NEUTRAL");
             updateBattleButtonUi();
+        }
+
+        function deleteLastBattleDvrPrompt(explicitBattleId) {
+            const bId = explicitBattleId !== undefined
+                ? explicitBattleId
+                : ((battleData.autoLoggedBanner && battleData.autoLoggedBanner.battleId) ? battleData.autoLoggedBanner.battleId : "");
+            if (battleData.autoLoggedBanner && bId) {
+                battleData.autoLoggedBanner.dvrDeleted = true;
+                battleData.autoLoggedBanner.hasDvr = false;
+                battleData.autoLoggedBanner.dvrUploadStatus = "DELETED";
+            } else {
+                battleData.stoppedBattleDiscardDvr = true;
+                battleData.stoppedBattleHasDvr = false;
+            }
+            render();
+            if (window.AndroidOverlay && window.AndroidOverlay.deleteLastBattleDvr) {
+                window.AndroidOverlay.deleteLastBattleDvr(bId);
+            }
+            setTimeout(notifyHeight, 25);
+        }
+
+        function flagLastBattleBugReport(explicitBattleId) {
+            const bId = explicitBattleId !== undefined
+                ? explicitBattleId
+                : ((battleData.autoLoggedBanner && battleData.autoLoggedBanner.battleId) ? battleData.autoLoggedBanner.battleId : "");
+            if (battleData.autoLoggedBanner && bId) {
+                battleData.autoLoggedBanner.dvrBugReported = true;
+                battleData.autoLoggedBanner.dvrUploadStatus = "UPLOADING";
+            } else {
+                battleData.stoppedBattleFlagBugReport = !battleData.stoppedBattleFlagBugReport;
+            }
+            render();
+            if (window.AndroidOverlay && window.AndroidOverlay.flagLastBattleBugReport) {
+                window.AndroidOverlay.flagLastBattleBugReport(bId);
+            }
+            setTimeout(notifyHeight, 25);
         }
 
         function updateLeadMatchupButtonUi() {
@@ -3086,7 +3151,35 @@
                 }
             }
 
-            // v6.03: Render Auto-Logged / Recent Battle Bar when battle is stopped
+            // v6.43: Update Stopped-Battle DVR Prompt Row in #start-battle-menu
+            const stoppedDvrRowEl = document.getElementById("stopped-dvr-prompt-row");
+            if (stoppedDvrRowEl) {
+                const stTextEl = document.getElementById("stopped-dvr-status-text");
+                const bugBtnEl = document.getElementById("btn-stopped-flag-bug");
+                const delBtnEl = document.getElementById("btn-stopped-delete-dvr");
+                if (battleData.stoppedBattleDiscardDvr) {
+                    if (stTextEl) {
+                        stTextEl.textContent = "🗑️ Video Deleted (Will Not Save)";
+                        stTextEl.style.color = "#fca5a5";
+                    }
+                    if (delBtnEl) delBtnEl.classList.add("hidden");
+                    if (bugBtnEl) bugBtnEl.classList.add("hidden");
+                } else {
+                    if (delBtnEl) delBtnEl.classList.remove("hidden");
+                    if (bugBtnEl) {
+                        bugBtnEl.classList.remove("hidden");
+                        bugBtnEl.textContent = battleData.stoppedBattleFlagBugReport ? "🚩 Bug Flagged ✓" : "🚩 Bug Report";
+                    }
+                    if (stTextEl) {
+                        stTextEl.textContent = battleData.stoppedBattleFlagBugReport
+                            ? "🚩 Bug Report Armed — Log Win/Loss to Upload"
+                            : "🎬 DVR Clip Ready — Delete before upload?";
+                        stTextEl.style.color = battleData.stoppedBattleFlagBugReport ? "#fde047" : "#93c5fd";
+                    }
+                }
+            }
+
+            // v6.03 / v6.43: Render Auto-Logged / Recent Battle Bar + DVR Delete Prompt & Bug Report when battle is stopped
             const autoBannerEl = document.getElementById("auto-logged-banner");
             if (autoBannerEl) {
                 const ab = (!isBattleActive && !startBattleMenuOpen && battleData.autoLoggedBanner) ? battleData.autoLoggedBanner : null;
@@ -3107,6 +3200,54 @@
                         } else {
                             ignBtn.classList.remove("active");
                             ignBtn.textContent = "🚫 Drop AI Log";
+                        }
+                    }
+                    const dvrRowEl = document.getElementById("auto-logged-dvr-prompt-row");
+                    const dvrStEl = document.getElementById("auto-logged-dvr-status-text");
+                    const dvrBugBtn = document.getElementById("btn-auto-flag-bug");
+                    const dvrDelBtn = document.getElementById("btn-auto-delete-dvr");
+                    if (dvrRowEl) {
+                        if (ab.dvrUploadStatus === "DISCARDED_SHORT" && !ab.hasDvr && !ab.dvrDeleted) {
+                            dvrRowEl.classList.add("hidden");
+                        } else {
+                            dvrRowEl.classList.remove("hidden");
+                            if (ab.dvrDeleted || ab.dvrUploadStatus === "DELETED") {
+                                if (dvrStEl) {
+                                    dvrStEl.textContent = "🗑️ Recording Deleted (Upload Cancelled)";
+                                    dvrStEl.style.color = "#fca5a5";
+                                }
+                                if (dvrDelBtn) dvrDelBtn.classList.add("hidden");
+                                if (dvrBugBtn) dvrBugBtn.classList.add("hidden");
+                            } else if (ab.dvrBugReported) {
+                                if (dvrStEl) {
+                                    dvrStEl.textContent = ab.dvrUploadStatus === "UPLOADED"
+                                        ? "✅ Bug Report & DVR Video Uploaded!"
+                                        : (ab.dvrUploadStatus === "WIFI_WAIT" ? "📶 Bug Report Queued for Wi-Fi" : "🚩 Uploading Bug Report & DVR...");
+                                    dvrStEl.style.color = "#fde047";
+                                }
+                                if (dvrBugBtn) {
+                                    dvrBugBtn.textContent = "🚩 Sent ✓";
+                                    dvrBugBtn.disabled = true;
+                                }
+                                if (dvrDelBtn) dvrDelBtn.classList.add("hidden");
+                            } else {
+                                if (dvrDelBtn) dvrDelBtn.classList.remove("hidden");
+                                if (dvrBugBtn) {
+                                    dvrBugBtn.classList.remove("hidden");
+                                    dvrBugBtn.textContent = "🚩 Bug Report";
+                                    dvrBugBtn.disabled = false;
+                                }
+                                if (dvrStEl) {
+                                    if (ab.dvrUploadStatus === "WIFI_WAIT") {
+                                        dvrStEl.textContent = "📶 DVR Saved (Wi-Fi Only) — Delete or Report Bug?";
+                                    } else if (ab.dvrUploadStatus === "UPLOADED") {
+                                        dvrStEl.textContent = "☁️ DVR Uploaded — Issue Bug Report?";
+                                    } else {
+                                        dvrStEl.textContent = "🎬 DVR Saved — Delete recording before upload?";
+                                    }
+                                    dvrStEl.style.color = "#93c5fd";
+                                }
+                            }
                         }
                     }
                 } else {

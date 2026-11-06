@@ -3661,7 +3661,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="🤖 Always-On Diagnostic Telemetry &amp; 1-Battle DVR (v6.40)"
+                    android:text="🤖 Always-On Battle DVR &amp; Diagnostic Telemetry (v6.42)"
                     android:textColor="#38bdf8"
                     android:textSize="11sp"
                     android:textStyle="bold" />
@@ -3669,7 +3669,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Automatically uploads lower-resolution battle telemetry &amp; detected energy/HP/shield anomalies using your Unique Debug ID (no GitHub login needed). 1-Battle DVR video recordings require a custom (non-random) ID and auto-upload after the match."
+                    android:text="Automatically records battles (≥10s with real combat) in the background for Replay &amp; diagnostics with no start/stop button needed. After each battle, you can flag a bug report or delete the video before upload. Video uploads use Wi-Fi by default unless Mobile Data Upload is opted in."
                     android:textColor="#94a3b8"
                     android:textSize="10sp"
                     android:layout_marginTop="2dp" />
@@ -3723,29 +3723,29 @@
                         android:layout_width="0dp"
                         android:layout_height="36dp"
                         android:layout_weight="1"
-                        android:text="🎥 Overlay 1-Battle DVR Btn: OFF"
+                        android:text="🎥 Always-On Battle DVR: ON"
                         android:textSize="9.5sp"
                         android:textStyle="bold"
-                        android:backgroundTint="#334155"
-                        android:textColor="#f8fafc"
+                        android:backgroundTint="#059669"
+                        android:textColor="#ffffff"
                         android:layout_marginEnd="6dp" />
 
                     <Button
                         android:id="@+id/btn_arm_one_battle_dvr_now"
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
-                        android:text="🔴 Arm 1-Battle DVR"
+                        android:text="📶 Mobile Data Upload: OFF (Wi-Fi)"
                         android:textSize="9.5sp"
                         android:textStyle="bold"
-                        android:backgroundTint="#d97706"
-                        android:textColor="#ffffff" />
+                        android:backgroundTint="#334155"
+                        android:textColor="#f8fafc" />
                 </LinearLayout>
 
                 <TextView
                     android:id="@+id/text_one_battle_dvr_status"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="1-Battle DVR: Disarmed • Hardware H.264 544×1184 + Timestamp Banner + Deep Frame JSONL (Auto-uploads &amp; purges)"
+                    android:text="Always-On DVR: ON (Auto-discards &lt;10s / non-battles) • Post-Battle Delete &amp; Bug Report Prompt • Upload: Wi-Fi Only"
                     android:textColor="#94a3b8"
                     android:textSize="9.5sp"
                     android:layout_marginTop="4dp" />

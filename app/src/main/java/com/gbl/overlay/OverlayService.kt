@@ -374,7 +374,11 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS = "gbl_haptic_charge_timing_fasts"
         const val DEFAULT_HAPTIC_CHARGE_TIMING_FASTS = 1 // 1 or 2 fast moves
 
-        // v6.07 / v6.42: 1-Battle Full-Screen DVR, Replay Vault & Frame-Synced Deep Logger Constants
+        // v6.07 / v6.42 / v6.43: Always-On Battle DVR, Mobile Data Upload Opt-In, Replay Vault & Deep Logger Constants
+        const val PREFS_KEY_ALWAYS_ON_DVR_ENABLED = "gbl_always_on_dvr_enabled_v643"
+        const val DEFAULT_ALWAYS_ON_DVR_ENABLED = true
+        const val PREFS_KEY_ALLOW_MOBILE_DATA_DVR_UPLOAD = "gbl_allow_mobile_data_dvr_upload"
+        const val DEFAULT_ALLOW_MOBILE_DATA_DVR_UPLOAD = false
         const val PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN = "gbl_show_one_battle_dvr_btn"
         const val DEFAULT_SHOW_ONE_BATTLE_DVR_BTN = false
         const val PREFS_KEY_ARM_ONE_BATTLE_DVR = "gbl_arm_one_battle_dvr"
@@ -386,6 +390,7 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_REPLAY_LICENSE_JSON = "gbl_replay_license_json"
         const val PREFS_KEY_REPLAY_VAULT_MAP_JSON = "gbl_replay_vault_map_json"
 
+        @Volatile var appContext: Context? = null
         @Volatile var activeEnergyDebounceSamples: Int = DEFAULT_ENERGY_DEBOUNCE_SAMPLES
         @Volatile var activeEnergyUpdateToasts: Boolean = DEFAULT_ENERGY_UPDATE_TOASTS
         @Volatile var activeHpDebounceSamples: Int = DEFAULT_HP_DEBOUNCE_SAMPLES
@@ -399,7 +404,9 @@ class OverlayService : LifecycleService() {
         @Volatile var activeHapticOppSwapWarnSec: Int = DEFAULT_HAPTIC_OPP_SWAP_WARN_SEC
         @Volatile var activeHapticOppChargeWarnEnabled: Boolean = DEFAULT_HAPTIC_OPP_CHARGE_WARN_ENABLED
         @Volatile var activeHapticChargeTimingFasts: Int = DEFAULT_HAPTIC_CHARGE_TIMING_FASTS
-        @Volatile var activeShowOneBattleDvrBtn: Boolean = DEFAULT_SHOW_ONE_BATTLE_DVR_BTN
+        @Volatile var activeAlwaysOnDvrEnabled: Boolean = DEFAULT_ALWAYS_ON_DVR_ENABLED
+        @Volatile var activeAllowMobileDataDvrUpload: Boolean = DEFAULT_ALLOW_MOBILE_DATA_DVR_UPLOAD
+        @Volatile var activeShowOneBattleDvrBtn: Boolean = false
         @Volatile var activeOneBattleDvrArmed: Boolean = false
         @Volatile var activeOneBattleDvrRecording: Boolean = false
         @Volatile var activeOneBattleDvrFrames: Int = 0
@@ -555,13 +562,10 @@ class OverlayService : LifecycleService() {
             activeHapticOppSwapWarnSec = prefs.getInt(PREFS_KEY_HAPTIC_OPP_SWAP_WARN_SEC, DEFAULT_HAPTIC_OPP_SWAP_WARN_SEC).coerceIn(2, 10)
             activeHapticOppChargeWarnEnabled = prefs.getBoolean(PREFS_KEY_HAPTIC_OPP_CHARGE_WARN_ENABLED, DEFAULT_HAPTIC_OPP_CHARGE_WARN_ENABLED)
             activeHapticChargeTimingFasts = prefs.getInt(PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS, DEFAULT_HAPTIC_CHARGE_TIMING_FASTS).coerceIn(1, 2)
-            val canUseVideoLogging = hasCustomScreenNameForVideoLoggingStatic(prefs)
-            activeShowOneBattleDvrBtn = canUseVideoLogging && prefs.getBoolean(PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, DEFAULT_SHOW_ONE_BATTLE_DVR_BTN)
-            if (!activeShowOneBattleDvrBtn || !canUseVideoLogging) {
-                activeOneBattleDvrArmed = false
-            } else {
-                activeOneBattleDvrArmed = prefs.getBoolean(PREFS_KEY_ARM_ONE_BATTLE_DVR, false)
-            }
+            activeAlwaysOnDvrEnabled = prefs.getBoolean(PREFS_KEY_ALWAYS_ON_DVR_ENABLED, DEFAULT_ALWAYS_ON_DVR_ENABLED)
+            activeAllowMobileDataDvrUpload = prefs.getBoolean(PREFS_KEY_ALLOW_MOBILE_DATA_DVR_UPLOAD, DEFAULT_ALLOW_MOBILE_DATA_DVR_UPLOAD)
+            activeShowOneBattleDvrBtn = false
+            activeOneBattleDvrArmed = prefs.getBoolean(PREFS_KEY_ARM_ONE_BATTLE_DVR, false)
             loadCachedBattleFrontierUsageAndCores(prefs)
             refreshCachedGblStandardLeagueLogsStatic(prefs)
             recordDebounceSettingsChangeIfNeededStatic(prefs, Gson(), "settings_sync", triggerImmediateUpload = false)
@@ -3075,7 +3079,7 @@ class OverlayService : LifecycleService() {
     internal val lastOcrStatCalloutWallMs = LongArray(4) { 0L } // 0:userAtk, 1:userDef, 2:oppAtk, 3:oppDef
     internal val lastOcrStatCalloutSign = IntArray(4) { 0 }
 
-    // v6.03: Auto End-of-Battle & Telemetry Ignore state
+    // v6.03 / v6.43: Auto End-of-Battle, Telemetry Ignore, Post-Battle DVR Delete Prompt & Bug Report state
     internal var autoEndCandidateResult: String = ""
     internal var autoEndCandidateFrames: Int = 0
     internal var lastLoggedBattleId: String = ""
@@ -3085,6 +3089,14 @@ class OverlayService : LifecycleService() {
     internal var lastLoggedBattleTelemetryIgnored: Boolean = false
     internal var lastLoggedBattleWasAuto: Boolean = false
     internal var lastLoggedBattleTimeMs: Long = 0L
+    internal var lastLoggedBattleHasDvr: Boolean = false
+    internal var lastLoggedBattleDvrDeleted: Boolean = false
+    internal var lastLoggedBattleDvrBugReported: Boolean = false
+    internal var lastLoggedBattleDvrUploadStatus: String = "" // "PENDING" | "UPLOADING" | "UPLOADED" | "DELETED" | "DISCARDED_SHORT" | "WIFI_WAIT"
+    internal var lastLoggedBattleSummaryRecord: AiTelemetryBattleRecordV510? = null
+    internal var pendingPostBattleDvrUploadJob: Job? = null
+    internal var stoppedBattleDiscardDvr: Boolean = false
+    internal var stoppedBattleFlagBugReport: Boolean = false
 
     /**
      * v6.40: Clears a Pokémon slot's Attack and Defense stat stages when it switches out or faints,
@@ -3627,6 +3639,7 @@ class OverlayService : LifecycleService() {
 
     override fun onCreate() {
         super.onCreate()
+        OverlayService.appContext = applicationContext
         isInstanceRunning = true
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -12738,6 +12751,16 @@ class OverlayService : LifecycleService() {
         }
         isBattleActive = false
         hasBattleStarted = false
+        stoppedBattleDiscardDvr = false
+        stoppedBattleFlagBugReport = false
+        val stopDvrElapsedSec = if (dvrRecordingStartMs > 0L) (System.currentTimeMillis() - dvrRecordingStartMs).coerceAtLeast(0L) / 1000.0 else 0.0
+        val stopBattleDurSec = max(lastClearedBattleDurationSec ?: 0.0, stopDvrElapsedSec)
+        if (detectedOpponents.isEmpty() || stopBattleDurSec < 10.0 || activeOneBattleDvrFrames < 15) {
+            stoppedBattleDiscardDvr = true
+            if (activeOneBattleDvrRecording || activeOneBattleDvrFrames > 0) {
+                abortOneBattleDvrAsync(disarm = true)
+            }
+        }
         phasePlayerTurns = 0
         phaseOppTurns = 0
         isAttackIncomingPromptActive = false
@@ -13045,8 +13068,18 @@ class OverlayService : LifecycleService() {
             timelineEvents = finalTimelineEvents,
             sensorTicks = sensorTicksForShadow
         )
-        val wasExplicitlyFlaggedForDiag = activeOneBattleDvrArmed
-        val wasDvrRecordedThisBattle = !ignoreAiTelemetry && (activeOneBattleDvrRecording || activeOneBattleDvrFrames > 0)
+        val dvrElapsedSec = if (dvrRecordingStartMs > 0L) (nowMs - dvrRecordingStartMs).coerceAtLeast(0L) / 1000.0 else 0.0
+        val effectiveBattleSec = max(durationSec ?: 0.0, dvrElapsedSec)
+        val hasActualBattleContent = formattedOpponents.isNotEmpty() &&
+            effectiveBattleSec >= 10.0 &&
+            (finalTimelineEvents.isNotEmpty() || energyLedger.isNotEmpty() ||
+                endUserHpList.any { it in 1..99 } || endOppHpList.any { it in 1..99 } ||
+                finalUserFaints > 0 || finalOppFaints > 0)
+        val wasExplicitlyFlaggedForDiag = activeOneBattleDvrArmed || stoppedBattleFlagBugReport
+        val wasDvrRecordedThisBattle = !stoppedBattleDiscardDvr &&
+            !ignoreAiTelemetry &&
+            hasActualBattleContent &&
+            (activeOneBattleDvrRecording || activeOneBattleDvrFrames >= 15)
         val devHashForDvr = OverlayService.getDeviceTelemetryHashStatic(prefs)
         val trainerScreenName = OverlayService.getRequiredScreenNameStatic(prefs).ifEmpty { "trainer_$devHashForDvr" }
         val safeUserForDvr = trainerScreenName.replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
@@ -13113,12 +13146,6 @@ class OverlayService : LifecycleService() {
             .remove(PREFS_KEY_AI_TRAINING_LOGS)
             .apply()
 
-        if (wasDvrRecordedThisBattle) {
-            finalizeAndUploadOneBattleDvrAsync(battleId, v510Record, wasExplicitlyFlaggedForDiag)
-        } else if (activeOneBattleDvrRecording) {
-            abortOneBattleDvrAsync(disarm = true)
-        }
-
         lastLoggedBattleId = battleId
         lastLoggedBattleResult = normalizedResult
         lastLoggedBattleLead = resolvedLead
@@ -13126,8 +13153,25 @@ class OverlayService : LifecycleService() {
         lastLoggedBattleTelemetryIgnored = ignoreAiTelemetry
         lastLoggedBattleWasAuto = isAutoDetected
         lastLoggedBattleTimeMs = nowMs
+        lastLoggedBattleHasDvr = wasDvrRecordedThisBattle
+        lastLoggedBattleDvrDeleted = stoppedBattleDiscardDvr
+        lastLoggedBattleDvrBugReported = wasExplicitlyFlaggedForDiag
+        lastLoggedBattleDvrUploadStatus = when {
+            wasDvrRecordedThisBattle -> if (wasExplicitlyFlaggedForDiag) "UPLOADING" else "PENDING"
+            stoppedBattleDiscardDvr -> "DELETED"
+            else -> "DISCARDED_SHORT"
+        }
+        lastLoggedBattleSummaryRecord = v510Record
+        stoppedBattleDiscardDvr = false
+        stoppedBattleFlagBugReport = false
         autoEndCandidateResult = ""
         autoEndCandidateFrames = 0
+
+        if (wasDvrRecordedThisBattle) {
+            finalizeAndUploadOneBattleDvrAsync(battleId, v510Record, wasExplicitlyFlaggedForDiag)
+        } else if (activeOneBattleDvrRecording || activeOneBattleDvrFrames > 0) {
+            abortOneBattleDvrAsync(disarm = true)
+        }
 
         // Ensure opponent list and timeline state are cleared for the next battle after logging
         lastClearedOpponentsSnapshot = emptyList()
@@ -13371,12 +13415,113 @@ class OverlayService : LifecycleService() {
             .putString(targetBattleLogsPrefKey, gson.toJson(existingLogs))
             .putString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(pendingQueue))
             .apply()
+        deleteSavedBattleDvrFilesForId(targetId)
         if (targetId == lastLoggedBattleId) {
+            pendingPostBattleDvrUploadJob?.cancel()
+            pendingPostBattleDvrUploadJob = null
             lastLoggedBattleId = ""
             lastLoggedBattleWasAuto = false
+            lastLoggedBattleHasDvr = false
+            lastLoggedBattleDvrDeleted = true
+            lastLoggedBattleDvrUploadStatus = "DELETED"
         }
         recalculateAndPushBattleData()
-        showBattleToast("↩️ Undid Auto-Logged Battle")
+        showBattleToast("↩️ Undid Auto-Logged Battle & Deleted DVR Clip")
+    }
+
+    internal fun deleteSavedBattleDvrFilesForId(battleId: String) {
+        val cleanId = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
+        if (cleanId.isBlank()) return
+        try {
+            val replaysDir = java.io.File(filesDir, "dvr_replays")
+            java.io.File(replaysDir, "${cleanId}_video.mp4").delete()
+            java.io.File(replaysDir, "${cleanId}_deep_trace.jsonl").delete()
+            java.io.File(cacheDir, "${cleanId}_video.mp4").delete()
+            java.io.File(cacheDir, "${cleanId}_deep_trace.jsonl").delete()
+        } catch (_: Exception) {}
+    }
+
+    fun deleteLastBattleDvrFromOverlay(battleId: String) {
+        val targetId = battleId.ifBlank { lastLoggedBattleId }
+        if (targetId.isBlank()) {
+            // Stopped battle before logging Win/Loss
+            stoppedBattleDiscardDvr = true
+            abortOneBattleDvrAsync(disarm = true)
+            recalculateAndPushBattleData()
+            showBattleToast("🗑️ Battle Recording Deleted (Will Not Save or Upload)")
+            return
+        }
+        pendingPostBattleDvrUploadJob?.cancel()
+        pendingPostBattleDvrUploadJob = null
+        deleteSavedBattleDvrFilesForId(targetId)
+        val pendingQueue = OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
+        val pIdx = pendingQueue.indexOfFirst { it.battleId == targetId }
+        if (pIdx >= 0) {
+            pendingQueue[pIdx] = pendingQueue[pIdx].copy(dvrVideoPath = null, dvrDeepTracePath = null)
+            prefs.edit().putString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(pendingQueue)).apply()
+        }
+        if (targetId == lastLoggedBattleId) {
+            lastLoggedBattleDvrDeleted = true
+            lastLoggedBattleHasDvr = false
+            lastLoggedBattleDvrUploadStatus = "DELETED"
+        }
+        recalculateAndPushBattleData()
+        showBattleToast("🗑️ Battle Recording Deleted Before Upload")
+    }
+
+    fun flagLastBattleDvrBugReportFromOverlay(battleId: String) {
+        val targetId = battleId.ifBlank { lastLoggedBattleId }
+        if (targetId.isBlank()) {
+            // Stopped battle before logging Win/Loss: toggle flag so logging Win/Loss sends bug report
+            stoppedBattleFlagBugReport = !stoppedBattleFlagBugReport
+            if (stoppedBattleFlagBugReport) {
+                stoppedBattleDiscardDvr = false
+                showBattleToast("🚩 Bug Report Flagged — Log WIN or LOSS to Upload DVR")
+            } else {
+                showBattleToast("⚪ Cleared Post-Battle Bug Report Flag")
+            }
+            recalculateAndPushBattleData()
+            return
+        }
+        if (lastLoggedBattleDvrDeleted) {
+            showBattleToast("⚠️ Recording was already deleted.")
+            return
+        }
+        pendingPostBattleDvrUploadJob?.cancel()
+        pendingPostBattleDvrUploadJob = null
+        lastLoggedBattleDvrBugReported = true
+        lastLoggedBattleDvrUploadStatus = "UPLOADING"
+        recalculateAndPushBattleData()
+        showBattleToast("🚩 Flagged Bug Report — Uploading Battle Video & Deep Trace...")
+        lifecycleScope.launch(Dispatchers.IO) {
+            val sumRec = lastLoggedBattleSummaryRecord
+            val (ok, msg) = OverlayService.submitManualDvrIssueReportBlocking(
+                filesDir = filesDir,
+                cacheDir = cacheDir,
+                prefs = prefs,
+                gson = gson,
+                battleId = targetId,
+                league = sumRec?.league ?: (currentPreset?.league ?: "Great League"),
+                result = sumRec?.result ?: lastLoggedBattleResult.ifBlank { "UNKNOWN" },
+                userTeamNames = sumRec?.userTeamSpecs?.map { it.species } ?: (currentPreset?.pokemon?.map { it.name } ?: emptyList()),
+                oppTeamNames = sumRec?.oppTeamSpecs?.map { it.species } ?: emptyList(),
+                userIssueNote = "Post-Battle HUD Flagged Bug Report"
+            )
+            withContext(Dispatchers.Main) {
+                if (targetId == lastLoggedBattleId) {
+                    lastLoggedBattleDvrUploadStatus = if (ok) "UPLOADED" else "WIFI_WAIT"
+                    recalculateAndPushBattleData()
+                }
+                showBattleToast(msg, if (ok) Toast.LENGTH_LONG else Toast.LENGTH_SHORT)
+            }
+        }
+    }
+
+    fun discardStoppedBattleDvrFromOverlay() {
+        stoppedBattleDiscardDvr = true
+        stoppedBattleFlagBugReport = false
+        abortOneBattleDvrAsync(disarm = true)
+        recalculateAndPushBattleData()
     }
 
     fun dismissAutoLoggedBanner() {
@@ -16027,10 +16172,14 @@ class OverlayService : LifecycleService() {
             "oppSwapEndTimeMs" to oppSwapEndTimeMs,
             "hapticOppSwapWarnSec" to activeHapticOppSwapWarnSec,
             "hapticChargeTimingFasts" to activeHapticChargeTimingFasts,
-            "showOneBattleDvrBtn" to activeShowOneBattleDvrBtn,
+            "showOneBattleDvrBtn" to false,
+            "isAlwaysOnDvrEnabled" to activeAlwaysOnDvrEnabled,
             "isOneBattleDvrArmed" to activeOneBattleDvrArmed,
             "isOneBattleDvrRecording" to activeOneBattleDvrRecording,
             "oneBattleDvrFrames" to activeOneBattleDvrFrames,
+            "stoppedBattleDiscardDvr" to stoppedBattleDiscardDvr,
+            "stoppedBattleFlagBugReport" to stoppedBattleFlagBugReport,
+            "stoppedBattleHasDvr" to (!stoppedBattleDiscardDvr && (activeOneBattleDvrRecording || activeOneBattleDvrFrames >= 15)),
             "playerSwitchValidityLatched" to playerSwitchValidityLatched,
             "oppSwitchValidityLatched" to oppSwitchValidityLatched,
             "isPostFaintSwitchPromptActive" to isPostFaintSwitchPromptActive,
@@ -16068,7 +16217,11 @@ class OverlayService : LifecycleService() {
                 "leadMatchup" to lastLoggedBattleLead,
                 "opponents" to lastLoggedBattleOpponents,
                 "telemetryIgnored" to lastLoggedBattleTelemetryIgnored,
-                "isAutoDetected" to lastLoggedBattleWasAuto
+                "isAutoDetected" to lastLoggedBattleWasAuto,
+                "hasDvr" to lastLoggedBattleHasDvr,
+                "dvrDeleted" to lastLoggedBattleDvrDeleted,
+                "dvrBugReported" to lastLoggedBattleDvrBugReported,
+                "dvrUploadStatus" to lastLoggedBattleDvrUploadStatus
             ) else null,
             "activeUserEnergy" to playerSlotEnergy.getOrElse(activeSlotIdxSafe) { 0 }.coerceIn(0, 100),
             "activeOppEnergy" to oppSlotEnergy.getOrElse(activeOppSlotSafe) { 0 }.coerceIn(0, 100),
@@ -16430,6 +16583,27 @@ class OverlayService : LifecycleService() {
         fun dismissAutoLoggedBanner() {
             Handler(Looper.getMainLooper()).post {
                 this@OverlayService.dismissAutoLoggedBanner()
+            }
+        }
+
+        @JavascriptInterface
+        fun deleteLastBattleDvr(battleId: String) {
+            Handler(Looper.getMainLooper()).post {
+                this@OverlayService.deleteLastBattleDvrFromOverlay(battleId)
+            }
+        }
+
+        @JavascriptInterface
+        fun flagLastBattleBugReport(battleId: String) {
+            Handler(Looper.getMainLooper()).post {
+                this@OverlayService.flagLastBattleDvrBugReportFromOverlay(battleId)
+            }
+        }
+
+        @JavascriptInterface
+        fun discardStoppedBattleDvr() {
+            Handler(Looper.getMainLooper()).post {
+                this@OverlayService.discardStoppedBattleDvrFromOverlay()
             }
         }
 

@@ -81,6 +81,7 @@ import kotlin.math.roundToInt
 
 import com.gbl.overlay.OverlayService.*
 import com.gbl.overlay.OverlayService.Companion.APP_VERSION
+import com.gbl.overlay.OverlayService.Companion.activeAlwaysOnDvrEnabled
 import com.gbl.overlay.OverlayService.Companion.activeOneBattleDvrArmed
 import com.gbl.overlay.OverlayService.Companion.activeOneBattleDvrFrames
 import com.gbl.overlay.OverlayService.Companion.activeOneBattleDvrRecording
@@ -224,8 +225,7 @@ internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap,
         oppSlotDefStage = oppSlotDefStage.toList()
     )
 
-    val canRecordNow = activeOneBattleDvrArmed ||
-        (activeShowOneBattleDvrBtn && OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs))
+    val canRecordNow = activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed
 
     handler.post {
         try {
@@ -434,6 +434,25 @@ internal fun OverlayService.finalizeAndUploadOneBattleDvrAsync(
     }
     val handler = dvrHandler ?: return
     handler.post {
+        val capturedFrames = dvrFrameCount
+        val videoSpanMs = if (dvrRecordingStartMs > 0L) (System.currentTimeMillis() - dvrRecordingStartMs).coerceAtLeast(0L) else 0L
+        val battleDurSec = summaryRecord.battleDurationSec ?: 0.0
+        val isValidBattleClip = summaryRecord.oppTeamSpecs.isNotEmpty() &&
+            (videoSpanMs >= 10_000L || battleDurSec >= 10.0) &&
+            capturedFrames >= 15
+
+        if (!isValidBattleClip) {
+            releaseDvrResourcesLocked(deleteFiles = true)
+            Handler(Looper.getMainLooper()).post {
+                if (lastLoggedBattleId == battleId) {
+                    lastLoggedBattleHasDvr = false
+                    lastLoggedBattleDvrUploadStatus = "DISCARDED_SHORT"
+                }
+                recalculateAndPushBattleData()
+            }
+            return@post
+        }
+
         try {
             drainDvrEncoderLocked(endOfStream = true)
         } catch (_: Exception) {}
@@ -464,21 +483,57 @@ internal fun OverlayService.finalizeAndUploadOneBattleDvrAsync(
         val shouldUploadDiag = wasExplicitlyFlaggedForDiag || summaryRecord.hasHighSeverityAnomaly
         val diagReason = when {
             wasExplicitlyFlaggedForDiag && summaryRecord.hasHighSeverityAnomaly -> "Manual Flag + HIGH Anomaly (${summaryRecord.anomalyCount})"
-            wasExplicitlyFlaggedForDiag -> "Manual In-Battle Flag"
+            wasExplicitlyFlaggedForDiag -> "Post-Battle User Flag"
             summaryRecord.hasHighSeverityAnomaly -> "Auto HIGH-Severity Anomaly (${summaryRecord.anomalyCount})"
             else -> ""
         }
 
         Handler(Looper.getMainLooper()).post {
             recalculateAndPushBattleData()
-            if (shouldUploadDiag) {
-                showBattleToast("🎥 Saved Replay & Uploading Diagnostic DVR ($diagReason)...")
+            if (wasExplicitlyFlaggedForDiag) {
+                showBattleToast("🚩 Uploading Flagged Battle Video & Bug Report...")
             } else {
-                showBattleToast("🎬 Battle Replay Saved to DVR History")
+                showBattleToast("🎬 DVR Saved — Tap 🗑️ Delete Video or 🚩 Bug Report in HUD")
             }
         }
 
-        lifecycleScope.launch(Dispatchers.IO) {
+        pendingPostBattleDvrUploadJob?.cancel()
+        pendingPostBattleDvrUploadJob = lifecycleScope.launch(Dispatchers.IO) {
+            if (!wasExplicitlyFlaggedForDiag) {
+                // Hold automatic upload for 12s so the user can review and tap 🗑️ Delete Video or 🚩 Bug Report in the HUD
+                delay(12_000L)
+            }
+            if ((lastLoggedBattleId == battleId && lastLoggedBattleDvrDeleted) || (!localMp4.exists() && !localTrace.exists())) {
+                return@launch
+            }
+
+            val networkAllowed = OverlayService.isDvrUploadAllowedOnCurrentNetworkStatic(prefs)
+            if (!networkAllowed) {
+                if (shouldUploadDiag) {
+                    try {
+                        if (localMp4.exists()) localMp4.copyTo(File(cacheDir, "${cleanId}_video.mp4"), overwrite = true)
+                        if (localTrace.exists()) localTrace.copyTo(File(cacheDir, "${cleanId}_deep_trace.jsonl"), overwrite = true)
+                    } catch (_: Exception) {}
+                }
+                withContext(Dispatchers.Main) {
+                    if (lastLoggedBattleId == battleId) {
+                        lastLoggedBattleDvrUploadStatus = "WIFI_WAIT"
+                        recalculateAndPushBattleData()
+                    }
+                    if (shouldUploadDiag) {
+                        showBattleToast("📶 DVR queued for Wi-Fi (Mobile Data upload is OFF in Settings)")
+                    }
+                }
+                return@launch
+            }
+
+            withContext(Dispatchers.Main) {
+                if (lastLoggedBattleId == battleId && !lastLoggedBattleDvrDeleted) {
+                    lastLoggedBattleDvrUploadStatus = "UPLOADING"
+                    recalculateAndPushBattleData()
+                }
+            }
+
             var toastMsg: String? = null
             var toastLong = false
 
@@ -532,8 +587,12 @@ internal fun OverlayService.finalizeAndUploadOneBattleDvrAsync(
                 )
             } catch (_: Exception) {}
 
-            if (!toastMsg.isNullOrBlank()) {
-                withContext(Dispatchers.Main) {
+            withContext(Dispatchers.Main) {
+                if (lastLoggedBattleId == battleId && !lastLoggedBattleDvrDeleted) {
+                    lastLoggedBattleDvrUploadStatus = "UPLOADED"
+                    recalculateAndPushBattleData()
+                }
+                if (!toastMsg.isNullOrBlank()) {
                     showBattleToast(toastMsg, if (toastLong) Toast.LENGTH_LONG else Toast.LENGTH_SHORT)
                 }
             }

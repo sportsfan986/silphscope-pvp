@@ -1876,6 +1876,23 @@ internal fun OverlayService.Companion.buildTelemetryHttpClientStatic(
         .build()
 }
 
+internal fun OverlayService.Companion.isDvrUploadAllowedOnCurrentNetworkStatic(prefs: SharedPreferences): Boolean {
+    val allowMobile = prefs.getBoolean(OverlayService.PREFS_KEY_ALLOW_MOBILE_DATA_DVR_UPLOAD, OverlayService.DEFAULT_ALLOW_MOBILE_DATA_DVR_UPLOAD)
+    if (allowMobile) return true
+    val ctx = OverlayService.appContext ?: return true
+    return try {
+        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return true
+        val activeNet = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(activeNet) ?: return false
+        val isWifiOrEthernet = caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ||
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)
+        val isUnmetered = caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+        isWifiOrEthernet || isUnmetered
+    } catch (_: Exception) {
+        true
+    }
+}
+
 internal fun OverlayService.Companion.countPendingCachedDvrBundlesStatic(cacheDir: File): Int {
     val files = cacheDir.listFiles() ?: return 0
     return files.count { f ->
@@ -1888,8 +1905,8 @@ internal fun OverlayService.Companion.retryPendingCachedDvrBundlesBlocking(
     prefs: SharedPreferences,
     gson: Gson
 ): Pair<Int, String> {
-    if (!hasCustomScreenNameForVideoLoggingStatic(prefs)) {
-        return 0 to ""
+    if (!isDvrUploadAllowedOnCurrentNetworkStatic(prefs)) {
+        return 0 to "📶 Waiting for Wi-Fi to upload cached DVR videos"
     }
     if (OverlayService.isDvrUploadInFlight) {
         return 0 to ""
@@ -1989,12 +2006,8 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
 ): Pair<Boolean, String> {
     OverlayService.isDvrUploadInFlight = true
     return try {
-        if (!hasCustomScreenNameForVideoLoggingStatic(prefs)) {
-            if (deleteFilesOnSuccess) {
-                try { mp4File.delete() } catch (_: Exception) {}
-                try { traceFile.delete() } catch (_: Exception) {}
-            }
-            return false to "⚠️ Video logging requires a custom ID (not a random ID)."
+        if (!isDvrUploadAllowedOnCurrentNetworkStatic(prefs)) {
+            return false to "📶 DVR queued for Wi-Fi (enable 'Upload Over Mobile Data' in Settings to upload on cellular)"
         }
         val devHash = getDeviceTelemetryHashStatic(prefs)
         val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
@@ -2377,6 +2390,9 @@ internal fun OverlayService.Companion.uploadBattleReplayToR2VaultIfUnlockedBlock
         if (tier == "free") {
             return Triple(false, "Free tier (local replay only)", null)
         }
+        if (!isDvrUploadAllowedOnCurrentNetworkStatic(prefs)) {
+            return Triple(false, "📶 DVR saved locally (Wi-Fi Only mode — enable Mobile Data Upload in Settings to upload on cellular)", null)
+        }
         if (!mp4File.exists() || mp4File.length() <= 0L) {
             return Triple(false, "Local MP4 file not found", null)
         }
@@ -2526,17 +2542,43 @@ internal fun OverlayService.Companion.togglePinOrPrivacyReplayBlocking(
     }
 }
 
+internal fun OverlayService.Companion.deleteBattleDvrRecordingStatic(
+    filesDir: File,
+    cacheDir: File,
+    prefs: SharedPreferences,
+    gson: Gson,
+    battleId: String
+) {
+    val cleanId = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
+    if (cleanId.isBlank()) return
+    try {
+        val replaysDir = File(filesDir, "dvr_replays")
+        File(replaysDir, "${cleanId}_video.mp4").delete()
+        File(replaysDir, "${cleanId}_deep_trace.jsonl").delete()
+        File(cacheDir, "${cleanId}_video.mp4").delete()
+        File(cacheDir, "${cleanId}_deep_trace.jsonl").delete()
+    } catch (_: Exception) {}
+    try {
+        val pendingQueue = loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
+        val pIdx = pendingQueue.indexOfFirst { it.battleId == cleanId }
+        if (pIdx >= 0) {
+            pendingQueue[pIdx] = pendingQueue[pIdx].copy(dvrVideoPath = null, dvrDeepTracePath = null)
+            prefs.edit().putString(OverlayService.PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(pendingQueue)).apply()
+        }
+    } catch (_: Exception) {}
+}
+
 internal fun OverlayService.Companion.submitManualDvrIssueReportBlocking(
     filesDir: File,
     cacheDir: File,
     prefs: SharedPreferences,
     gson: Gson,
     battleId: String,
-    league: String,
-    result: String,
-    userTeamNames: List<String>,
-    oppTeamNames: List<String>,
-    userIssueNote: String
+    league: String = "Great League",
+    result: String = "UNKNOWN",
+    userTeamNames: List<String> = emptyList(),
+    oppTeamNames: List<String> = emptyList(),
+    userIssueNote: String = ""
 ): Pair<Boolean, String> {
     val cleanId = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
     val replaysDir = File(filesDir, "dvr_replays")

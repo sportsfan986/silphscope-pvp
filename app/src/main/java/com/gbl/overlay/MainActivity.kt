@@ -491,6 +491,7 @@ class MainActivity : AppCompatActivity() {
             WindowInsetsCompat.CONSUMED
         }
 
+        OverlayService.appContext = applicationContext
         prefs = getSharedPreferences("gbl_overlay_prefs", Context.MODE_PRIVATE)
         // v6.02: Run one-time optimal scanner defaults migration (HP=ON, Energy=ON, 2 samples, ±2% tol, 200ms lead, +1t offset, strict alt fast, 8% chip tol, 4.0s swap rollback)
         OverlayService.runV602ScannerDefaultsMigrationStatic(prefs)
@@ -1566,46 +1567,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnToggleShowOneBattleDvr.setOnClickListener {
-            if (!OverlayService.hasValidScreenNameStatic(prefs)) {
-                ensureRequiredScreenNameOrPrompt()
-                return@setOnClickListener
-            }
-            if (!OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs)) {
-                promptCustomIdForVideoLogging()
-                return@setOnClickListener
-            }
-            val current = prefs.getBoolean(OverlayService.PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, false)
+            val current = prefs.getBoolean(OverlayService.PREFS_KEY_ALWAYS_ON_DVR_ENABLED, OverlayService.DEFAULT_ALWAYS_ON_DVR_ENABLED)
             val next = !current
-            prefs.edit().putBoolean(OverlayService.PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, next).apply()
-            OverlayService.syncTierThresholdsFromPrefs(prefs)
-            updateAiTelemetryStatusUi()
-            if (isOverlayRunning) {
-                val updateIntent = Intent(this, OverlayService::class.java).apply {
-                    action = OverlayService.ACTION_UPDATE_SETTINGS
-                }
-                startService(updateIntent)
-            }
-            val msg = if (next) {
-                "🎥 Overlay 'DVR' button enabled! It appears as soon as the overlay or battle starts."
-            } else {
-                "⚪ Overlay 'DVR' button hidden."
-            }
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-        }
-
-        btnArmOneBattleDvrNow.setOnClickListener {
-            if (!OverlayService.hasValidScreenNameStatic(prefs)) {
-                ensureRequiredScreenNameOrPrompt()
-                return@setOnClickListener
-            }
-            if (!OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs)) {
-                promptCustomIdForVideoLogging()
-                return@setOnClickListener
-            }
-            val currentArmed = prefs.getBoolean(OverlayService.PREFS_KEY_ARM_ONE_BATTLE_DVR, false)
-            val nextArmed = !currentArmed
             prefs.edit()
-                .putBoolean(OverlayService.PREFS_KEY_ARM_ONE_BATTLE_DVR, nextArmed)
+                .putBoolean(OverlayService.PREFS_KEY_ALWAYS_ON_DVR_ENABLED, next)
+                .putBoolean(OverlayService.PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, false)
                 .apply()
             OverlayService.syncTierThresholdsFromPrefs(prefs)
             updateAiTelemetryStatusUi()
@@ -1615,10 +1581,35 @@ class MainActivity : AppCompatActivity() {
                 }
                 startService(updateIntent)
             }
-            val msg = if (nextArmed) {
-                "🔴 1-Battle DVR ARMED! Next battle will record full-screen MP4 + deep trace JSONL and auto-upload after the match."
+            val msg = if (next) {
+                "🎥 Always-On Battle DVR enabled! Actual battles (≥10s) are automatically recorded for Replay & Post-Battle Bug Reports."
             } else {
-                "⚪ 1-Battle DVR disarmed."
+                "⚪ Always-On Battle DVR disabled in Settings."
+            }
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+
+        btnArmOneBattleDvrNow.setOnClickListener {
+            val currentAllowMobile = prefs.getBoolean(
+                OverlayService.PREFS_KEY_ALLOW_MOBILE_DATA_DVR_UPLOAD,
+                OverlayService.DEFAULT_ALLOW_MOBILE_DATA_DVR_UPLOAD
+            )
+            val nextAllowMobile = !currentAllowMobile
+            prefs.edit()
+                .putBoolean(OverlayService.PREFS_KEY_ALLOW_MOBILE_DATA_DVR_UPLOAD, nextAllowMobile)
+                .apply()
+            OverlayService.syncTierThresholdsFromPrefs(prefs)
+            updateAiTelemetryStatusUi()
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                }
+                startService(updateIntent)
+            }
+            val msg = if (nextAllowMobile) {
+                "📶 Mobile Data DVR Upload enabled (Opted-In). Videos can upload over cellular or Wi-Fi."
+            } else {
+                "📡 Mobile Data DVR Upload OFF (Wi-Fi Only). Videos will wait for Wi-Fi before uploading."
             }
             Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
         }
@@ -2555,45 +2546,47 @@ class MainActivity : AppCompatActivity() {
             "$statePrefix • Debounce Profile: $profileSig ($pendingSettingsChanges pending changes) • Pending queue: $pendingBattles battles ($pendingAnomalies anomalies) • Total uploaded & purged: $totalUploaded • Last upload: $lastStr"
 
         if (::btnToggleShowOneBattleDvr.isInitialized && ::btnArmOneBattleDvrNow.isInitialized && ::textOneBattleDvrStatus.isInitialized) {
-            val canVideo = OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs)
-            val showBtn = canVideo && prefs.getBoolean(OverlayService.PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, false)
-            val isArmed = canVideo && prefs.getBoolean(OverlayService.PREFS_KEY_ARM_ONE_BATTLE_DVR, false)
+            val alwaysOnDvr = prefs.getBoolean(OverlayService.PREFS_KEY_ALWAYS_ON_DVR_ENABLED, OverlayService.DEFAULT_ALWAYS_ON_DVR_ENABLED)
+            val allowMobileUpload = prefs.getBoolean(
+                OverlayService.PREFS_KEY_ALLOW_MOBILE_DATA_DVR_UPLOAD,
+                OverlayService.DEFAULT_ALLOW_MOBILE_DATA_DVR_UPLOAD
+            )
             val dvrUploadedCount = prefs.getInt(OverlayService.PREFS_KEY_TOTAL_DVR_UPLOADED_COUNT, 0)
             val lastDvrAt = prefs.getLong(OverlayService.PREFS_KEY_LAST_DVR_UPLOAD_MS, 0L)
             val lastDvrPath = prefs.getString(OverlayService.PREFS_KEY_LAST_DVR_UPLOAD_PATH, "") ?: ""
             val lastDvrStr = if (lastDvrAt > 0L) timeFmt.format(java.util.Date(lastDvrAt)) else "Never"
 
-            if (showBtn) {
-                btnToggleShowOneBattleDvr.text = "🎥 Auto-DVR & Overlay Btn: ON"
-                btnToggleShowOneBattleDvr.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            if (alwaysOnDvr) {
+                btnToggleShowOneBattleDvr.text = "🎥 Always-On Battle DVR: ON"
+                btnToggleShowOneBattleDvr.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF059669.toInt())
                 btnToggleShowOneBattleDvr.setTextColor(0xFFFFFFFF.toInt())
             } else {
-                btnToggleShowOneBattleDvr.text = if (canVideo) "🎥 Auto-DVR & Overlay Btn: OFF" else "🔒 Auto-DVR (Requires Custom ID)"
+                btnToggleShowOneBattleDvr.text = "⚪ Always-On Battle DVR: OFF"
                 btnToggleShowOneBattleDvr.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF334155.toInt())
                 btnToggleShowOneBattleDvr.setTextColor(0xFFF8FAFC.toInt())
             }
 
-            if (isArmed) {
-                btnArmOneBattleDvrNow.text = "🚩 Flagged for Diag Upload (Tap to Clear)"
-                btnArmOneBattleDvrNow.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFDC2626.toInt())
+            if (allowMobileUpload) {
+                btnArmOneBattleDvrNow.text = "📶 Mobile Data Upload: ON"
+                btnArmOneBattleDvrNow.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
                 btnArmOneBattleDvrNow.setTextColor(0xFFFFFFFF.toInt())
             } else {
-                btnArmOneBattleDvrNow.text = if (canVideo) "🚩 Flag Next Battle for Diag Upload" else "🔒 Flag DVR (Custom ID)"
-                btnArmOneBattleDvrNow.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
-                btnArmOneBattleDvrNow.setTextColor(0xFFFFFFFF.toInt())
+                btnArmOneBattleDvrNow.text = "📡 Mobile Data Upload: OFF (Wi-Fi)"
+                btnArmOneBattleDvrNow.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF334155.toInt())
+                btnArmOneBattleDvrNow.setTextColor(0xFFF8FAFC.toInt())
             }
 
-            val armStateLabel = when {
-                !canVideo -> "🔒 Custom ID required for video logging (Currently using Random ID)"
-                isArmed -> "🚩 FLAGGED FOR DIAGNOSTIC UPLOAD"
-                showBtn -> "🟢 Auto-Recording Battles to Replay History"
-                else -> "⚪ Disarmed"
+            val dvrStateLabel = if (alwaysOnDvr) {
+                "🟢 Always-On DVR Active (Discards <10s & non-battles • Post-Battle Delete/Bug Prompt)"
+            } else {
+                "⚪ Always-On DVR Disabled"
             }
+            val netLabel = if (allowMobileUpload) "Wi-Fi + Mobile Data (Opted-In)" else "Wi-Fi Only (Default)"
             val pendingDvrCount = OverlayService.countPendingCachedDvrBundlesStatic(cacheDir)
             val pendingDvrPart = if (pendingDvrCount > 0) " • Queued Diag Videos: $pendingDvrCount" else ""
             val pathTail = if (lastDvrPath.isNotEmpty()) " ($lastDvrPath)" else ""
             textOneBattleDvrStatus.text =
-                "$armStateLabel • Overlay Button: ${if (showBtn) "ON" else "OFF"}$pendingDvrPart • Diag DVR Uploaded: $dvrUploadedCount • Last Upload: $lastDvrStr$pathTail"
+                "$dvrStateLabel • Network: $netLabel$pendingDvrPart • Uploaded: $dvrUploadedCount • Last Upload: $lastDvrStr$pathTail"
 
             setupOrUpdateReplayVaultSettingsUi()
         }
@@ -6912,7 +6905,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             var vaultMeta = OverlayService.loadReplayVaultMapStatic(prefs, gson)[cleanBattleId]
-            val hasDvrVideoInitial = (localMp4File != null) || (vaultMeta?.videoStreamUrl?.isNotBlank() == true)
+            var hasDvrVideoInitial = (localMp4File != null) || (vaultMeta?.videoStreamUrl?.isNotBlank() == true)
 
             val traceFrames = mutableListOf<OverlayService.Companion.BattleDeepTraceFrame>()
             fun parseTraceLines(text: String) {
@@ -6997,12 +6990,18 @@ class MainActivity : AppCompatActivity() {
                 text = "🚩 Report Issue"
                 styleMiniBtn(this, 0xFFBE123C.toInt())
             }
+            val btnDeleteDvr = TextView(this).apply {
+                text = "🗑️ Delete"
+                styleMiniBtn(this, 0xFF475569.toInt())
+                visibility = if (hasDvrVideoInitial) android.view.View.VISIBLE else android.view.View.GONE
+            }
 
             val spacer = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             topToolbar.addView(btnModeToggle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
             topToolbar.addView(btnPinToggle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
             topToolbar.addView(btnShareLink, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
             topToolbar.addView(android.view.View(this), spacer)
+            topToolbar.addView(btnDeleteDvr, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
             topToolbar.addView(btnReportIssue)
 
             val videoStageWrap = LinearLayout(this).apply {
@@ -7425,6 +7424,33 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
+            }
+
+            btnDeleteDvr.setOnClickListener {
+                val delDialog = AlertDialog.Builder(this)
+                    .setTitle("🗑️ Delete DVR Recording?")
+                    .setMessage("Delete the recorded DVR video and deep trace for this battle? Any pending upload for this clip will also be cancelled.")
+                    .setPositiveButton("🗑️ Delete Video") { _, _ ->
+                        try {
+                            if (videoView.isPlaying) videoView.stopPlayback()
+                        } catch (_: Exception) {}
+                        try { localMp4File?.delete() } catch (_: Exception) {}
+                        try { localTraceFile?.delete() } catch (_: Exception) {}
+                        OverlayService.deleteBattleDvrRecordingStatic(filesDir, cacheDir, prefs, gson, cleanBattleId)
+                        hasDvrVideoInitial = false
+                        isVideoMode = false
+                        videoStageWrap.visibility = android.view.View.GONE
+                        matrixStageWrap.visibility = android.view.View.VISIBLE
+                        btnDeleteDvr.visibility = android.view.View.GONE
+                        btnModeToggle.text = "📊 Matrix View"
+                        styleMiniBtn(btnModeToggle, 0xFF334155.toInt())
+                        attachWebViewToActiveStage()
+                        renderBattleLogPage()
+                        Toast.makeText(this, "🗑️ DVR video deleted.", Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+                styleThemedAlertDialog(delDialog)
             }
 
             btnReportIssue.setOnClickListener {
