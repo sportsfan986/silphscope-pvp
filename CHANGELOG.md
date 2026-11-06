@@ -1,4 +1,17 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.23`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.24`)
+
+---
+
+## v6.24 (2026-11-05) — Critical Hotfix: Opening Pokémon Lock-In, Dark-Nameplate Switch Detection & Premature Auto-End Prevention
+*Hotfix release (`v6.24`, `versionCode = 1624`) resolving the `v6.23` regression where battles failed to lock onto the opening Pokémon and auto-ended prematurely.*
+
+- **v6.24 — Fix 1: Removed `!sampledTopRightNameplateVisible` Lockout & Added Pre-Battle Combat Evidence + Opening Lead Self-Correction (`OverlayService.kt`)**:
+  - **Root Cause**: `detectTopRightOpponentNameplate()` (`sampledTopRightNameplateVisible`) checks for a solid white rectangle (`luma >= 204, sat <= 26`), which evaluates to `false` during normal combat on Pokémon GO's dark translucent nameplate. Gating `handleOpponentLines()` on `!sampledTopRightNameplateVisible` in `v6.23` caused `handleOpponentLines()` to return early on 100% of frames after `isWaitingForOpponent` flipped to `false` on the first OCR frame.
+  - **Fix**: Replaced `!sampledTopRightNameplateVisible` in `handleOpponentLines()` with `isChargedPromptOrCutsceneActive || isAllCombatHudGone`, required combat HUD evidence (`CP` indicator, live HP bar, or Pokéballs) while `isWaitingForOpponent == true` (preventing pre-battle VS screen trainer names from locking in as the opening Pokémon), added `<= 3.5s` opening-lead self-correction on slot 0, and moved the clipped-suffix guard (`"katon"` $\to$ `Tinkaton`) after Step 3 prefix matching in `findPokemonInText()`.
+
+- **v6.24 — Fix 2: Pre-OCR `isWaitingForOpponent` Live-HP Gate & Premature Auto-End Prevention (`OverlayService.kt`)**:
+  - **Live-HP Gate on Pre-OCR Energy**: Gated the `isWaitingForOpponent` pre-OCR circle energy scanner on `sampledPlayerHpPct in 1..100 && sampledOppHpPct in 1..100 && sampledPlayerBalls in 1..3 && sampledOppBalls in 1..3` and anchored `battleClockAnchorMs = System.currentTimeMillis() - (phasePlayerTurns * 500L)` when the lead is locked in, preventing lobby/matchmaking frames from prematurely latching `hasBattleStarted = true` with a stale `battleClockAnchorMs`.
+  - **Hardened `checkAndHandleAutoEndOfBattle()`**: Stripped `"battle till you win"` / `"till you win"` before checking `"you win"`, required 2 consecutive OCR frames (`requiredFrames = 2`), and gated `structuralResult` on `pendingChargedAttackActor.isEmpty() && !isAttackIncomingPromptActive && !isTopCountdownCircleActive && missingBothHpBarsFrames >= 8` with `0%` HP KO (`<= 0` instead of `<= 18%`), preventing mid-battle charged-move cutscenes from ever auto-ending a match early.
 
 ---
 
