@@ -6872,7 +6872,7 @@ class MainActivity : AppCompatActivity() {
                     val lp = replayWebView.layoutParams
                     val isVideoFrameParent = lp is android.widget.FrameLayout.LayoutParams
                     val targetHeightPx = if (isVideoFrameParent) {
-                        (heightDp.coerceIn(44, 460) * density).toInt()
+                        (heightDp.coerceIn(44, 580) * density).toInt()
                     } else {
                         (kotlin.math.max(480, heightDp + 20) * density).toInt()
                     }
@@ -6957,7 +6957,8 @@ class MainActivity : AppCompatActivity() {
 
             var isVideoMode = hasDvrVideoInitial
             var currentHudMode = "live" // "live" | "compact" | "diagnostic" | "off"
-            var isHudTop = false
+            var isHudTop = true
+            var isShieldHudEnabled = true
             var hudAlphaPct = 88
 
             val topToolbar = LinearLayout(this).apply {
@@ -7067,9 +7068,11 @@ class MainActivity : AppCompatActivity() {
                 setPadding(0, (5 * density).toInt(), 0, (4 * density).toInt())
             }
             val btnHudMode = TextView(this).apply { text = "👁️ HUD: LIVE"; styleMiniBtn(this, 0xFF0F766E.toInt()) }
-            val btnHudPos = TextView(this).apply { text = "⬇️ Pos: Bottom"; styleMiniBtn(this, 0xFF1E293B.toInt()) }
-            val btnHudAlpha = TextView(this).apply { text = "🔆 Opacity: 88%"; styleMiniBtn(this, 0xFF1E293B.toInt()) }
+            val btnShieldHud = TextView(this).apply { text = "🛡️ Shield: ON"; styleMiniBtn(this, 0xFF059669.toInt()) }
+            val btnHudPos = TextView(this).apply { text = "⬆️ Pos: Top"; styleMiniBtn(this, 0xFF1E293B.toInt()) }
+            val btnHudAlpha = TextView(this).apply { text = "🔆 88%"; styleMiniBtn(this, 0xFF1E293B.toInt()) }
             hudControlsRow.addView(btnHudMode, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (4 * density).toInt() })
+            hudControlsRow.addView(btnShieldHud, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (4 * density).toInt() })
             hudControlsRow.addView(btnHudPos, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (4 * density).toInt() })
             hudControlsRow.addView(btnHudAlpha)
 
@@ -7106,7 +7109,40 @@ class MainActivity : AppCompatActivity() {
                 }
                 val f = traceFrames[lo]
                 tvFrameClock.text = String.format(java.util.Locale.US, "F#%04d %.1fs", f.frameIdx, posMs / 1000.0)
-                replayEngine.applyDeepTraceFrameForReplay(f)
+
+                // Reconstruct opponent pre-throw energy & continuous 5s shield-decision window
+                var chargeStartIdx = lo
+                while (chargeStartIdx > 0 && (
+                    traceFrames[chargeStartIdx - 1].pendingChargeActor.equals("opp", ignoreCase = true) ||
+                        traceFrames[chargeStartIdx - 1].isTopCountdownActive
+                    )) {
+                    chargeStartIdx--
+                }
+                val isOppChargeWindow = f.pendingChargeActor.equals("opp", ignoreCase = true) || f.isTopCountdownActive
+                var hasUsedBannerSoFar = false
+                if (isOppChargeWindow) {
+                    for (k in chargeStartIdx..lo) {
+                        if (traceFrames[k].ocrMidBannerText.contains(" used ", ignoreCase = true)) {
+                            hasUsedBannerSoFar = true
+                            break
+                        }
+                    }
+                }
+                val elapsedInChargeMs = (f.videoElapsedMs - traceFrames[chargeStartIdx].videoElapsedMs).coerceAtLeast(0L)
+                val forceShieldWindow = isOppChargeWindow && !hasUsedBannerSoFar && elapsedInChargeMs <= 5500L
+                val oIdx = f.activeOppIdx.coerceIn(0, 2)
+                val preThrowEnergyHint = if (chargeStartIdx > 0) {
+                    val prevF = traceFrames[chargeStartIdx - 1]
+                    prevF.oppSlotEnergy.getOrElse(oIdx) { prevF.oppEnergy }
+                } else {
+                    f.oppSlotEnergy.getOrElse(oIdx) { f.oppEnergy }
+                }
+
+                replayEngine.applyDeepTraceFrameForReplay(
+                    frame = f,
+                    preThrowOppEnergyHint = preThrowEnergyHint,
+                    forceShieldDecisionActive = forceShieldWindow
+                )
                 pushReplayStateToWeb()
                 if (currentHudMode == "diagnostic") {
                     val diagStr = "RAW HP: U=${f.rawUserHpPct}% (commit ${f.committedUserHpPct}%) | O=${f.rawOppHpPct}% (commit ${f.committedOppHpPct}%)\n" +
@@ -7138,6 +7174,7 @@ class MainActivity : AppCompatActivity() {
                     replayWebView.post {
                         try {
                             replayWebView.evaluateJavascript("if (window.setReplayHudMode) setReplayHudMode('$currentHudMode');", null)
+                            replayWebView.evaluateJavascript("if (window.setReplayShieldOverlayEnabled) setReplayShieldOverlayEnabled($isShieldHudEnabled);", null)
                         } catch (_: Exception) {}
                     }
                 } else {
@@ -7150,6 +7187,7 @@ class MainActivity : AppCompatActivity() {
                     replayWebView.post {
                         try {
                             replayWebView.evaluateJavascript("if (window.setReplayHudMode) setReplayHudMode('live');", null)
+                            replayWebView.evaluateJavascript("if (window.setReplayShieldOverlayEnabled) setReplayShieldOverlayEnabled($isShieldHudEnabled);", null)
                         } catch (_: Exception) {}
                     }
                 }
@@ -7275,6 +7313,12 @@ class MainActivity : AppCompatActivity() {
                 replayWebView.evaluateJavascript("if (window.setReplayHudMode) setReplayHudMode('$currentHudMode');", null)
                 syncFrameAtMs(videoView.currentPosition.toLong())
             }
+            btnShieldHud.setOnClickListener {
+                isShieldHudEnabled = !isShieldHudEnabled
+                btnShieldHud.text = if (isShieldHudEnabled) "🛡️ Shield: ON" else "🛡️ Shield: OFF"
+                styleMiniBtn(btnShieldHud, if (isShieldHudEnabled) 0xFF059669.toInt() else 0xFF334155.toInt())
+                replayWebView.evaluateJavascript("if (window.setReplayShieldOverlayEnabled) setReplayShieldOverlayEnabled($isShieldHudEnabled);", null)
+            }
             btnHudPos.setOnClickListener {
                 isHudTop = !isHudTop
                 btnHudPos.text = if (isHudTop) "⬆️ Pos: Top" else "⬇️ Pos: Bottom"
@@ -7284,7 +7328,7 @@ class MainActivity : AppCompatActivity() {
             btnHudAlpha.setOnClickListener {
                 val curIdx = alphaSteps.indexOf(hudAlphaPct).let { if (it < 0) 0 else it }
                 hudAlphaPct = alphaSteps[(curIdx + 1) % alphaSteps.size]
-                btnHudAlpha.text = "🔆 Opacity: $hudAlphaPct%"
+                btnHudAlpha.text = "🔆 $hudAlphaPct%"
                 replayWebView.alpha = hudAlphaPct / 100f
             }
 

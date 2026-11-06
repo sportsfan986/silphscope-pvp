@@ -15827,8 +15827,169 @@ class OverlayService : LifecycleService() {
             }
         }
 
+        // v6.42: Build Shield Decision Overlay payload for in-app DVR replay & web replay player parity
+        val shieldDecisionOverlayPayload: Map<String, Any?> = run {
+            val isVisible = (isBattleActive || isReplayMode) &&
+                showShieldDecisionOverlay &&
+                isAttackIncomingPromptActive &&
+                !isWaitingForOpponent
+            val oppPlusMove = OverlayService.resolveMegaPlusMoveStatic(oppMeta.name, activeLeague)
+                ?: OverlayService.resolveMegaPlusMoveStatic(activeOpponentName, activeLeague)
+            val confirmedRegMoves = if (oppPlusMove != null) {
+                activeOppConfirmedSet.filter { it.isNotBlank() && !it.equals(oppPlusMove, ignoreCase = true) }.distinctBy { it.lowercase() }
+            } else {
+                activeOppConfirmedSet.filter { it.isNotBlank() }.distinctBy { it.lowercase() }
+            }
+            val twoRegLocked = confirmedRegMoves.size >= 2
+            val candMoves: List<String> = if (twoRegLocked) {
+                (confirmedRegMoves.take(2) + listOfNotNull(oppPlusMove)).distinctBy { it.lowercase() }
+            } else {
+                val baseList = if (enable4ChargedMoves && activeOppFourthMove.isNotBlank()) {
+                    listOf(oppMeta.chargedMove1, oppMeta.chargedMove2, activeOppThirdMove, activeOppFourthMove)
+                } else {
+                    listOf(oppMeta.chargedMove1, oppMeta.chargedMove2, activeOppThirdMove)
+                }
+                (baseList + activeOppConfirmedSet.toList() + listOfNotNull(oppPlusMove))
+                    .filter { it.isNotBlank() }
+                    .distinctBy { it.lowercase() }
+            }
+            val uHp = activeUserHp.coerceIn(1, 100)
+            val rawRows = candMoves.map { mName ->
+                val mStats = OverlayService.resolveChargedMoveStatsStatic(mName, oppMeta.types.firstOrNull() ?: "normal")
+                val cost = (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[mName] ?: 50).coerceIn(35, 100)
+                val dmg = calculateChargedMoveDamagePercent(
+                    attacker = oppMeta,
+                    defender = userMeta,
+                    moveName = mName,
+                    isAttackerShadow = isOpponentShadow,
+                    isDefenderShadow = isUserShadow,
+                    attackerAtkStage = activeOppAtkStg,
+                    defenderDefStage = activeUserDefStg
+                )
+                val remHp = (uHp - dmg).coerceAtLeast(0)
+                val isKo = dmg >= uHp
+                val oppFastsSurv = if (isKo || remHp <= 1) {
+                    0
+                } else {
+                    kotlin.math.floor((remHp - 1).toDouble() / oppFastExactDmgPct).toInt().coerceAtLeast(0)
+                }
+                val turnsSurv = oppFastsSurv * oppFastTurns
+                val myTurnsNeed = myFastsNeededForNextMove * userFastTurns
+                val canReach = !isKo && (myFastsNeededForNextMove == 0 || turnsSurv >= myTurnsNeed)
+                val fastsShort = if (canReach || isKo) {
+                    0
+                } else {
+                    kotlin.math.ceil((myTurnsNeed - turnsSurv).toDouble() / userFastTurns.toDouble()).toInt().coerceAtLeast(1)
+                }
+                ShieldOverlayMoveRow(
+                    moveName = mName,
+                    energyCost = cost,
+                    dmgPct = dmg,
+                    remHpPct = remHp,
+                    isKo = isKo,
+                    isFunded = false,
+                    canReachNextMoveIfTanked = canReach,
+                    fastsToNextMoveIfTanked = myFastsNeededForNextMove,
+                    fastsShortIfTanked = fastsShort,
+                    userTargetMoveShort = myBestMoveShort
+                )
+            }
+            val minCost = rawRows.minOfOrNull { it.energyCost } ?: 35
+            val rawPreE = when {
+                pendingChargedAttackPreOppEnergy > 0 -> max(
+                    pendingChargedAttackPreOppEnergy,
+                    if (pendingChargedAttackActor == "opp") activeOppEnergyNow + minCost else activeOppEnergyNow
+                )
+                pendingChargedAttackActor == "opp" -> activeOppEnergyNow + minCost
+                else -> activeOppEnergyNow
+            }
+            val effBankedE = max(rawPreE, minCost).coerceIn(0, 100)
+            val normRows = rawRows.map { it.copy(isFunded = effBankedE >= it.energyCost) }
+            val funded = normRows.filter { it.isFunded }.sortedByDescending { it.dmgPct }
+            val unfunded = normRows.filter { !it.isFunded }.sortedBy { it.energyCost }
+
+            val allFundedKo = funded.isNotEmpty() && funded.all { it.isKo }
+            val someFundedKo = funded.any { it.isKo } && funded.any { !it.isKo }
+            val anyFundedFarmed = funded.any { !it.isKo && !it.canReachNextMoveIfTanked }
+            val unfundedKo = funded.none { it.isKo } && unfunded.any { it.isKo }
+            val worstFarmed = funded.firstOrNull { !it.isKo && !it.canReachNextMoveIfTanked }
+
+            val (bgHex, strokeHex, verdictText) = when {
+                allFundedKo -> Triple(
+                    "rgba(127, 29, 29, 0.95)",
+                    "#EF4444",
+                    "🛡️ SHIELD (1S): ALL FUNDED KO!"
+                )
+                someFundedKo -> Triple(
+                    "rgba(124, 45, 18, 0.95)",
+                    "#F97316",
+                    "🛡️ SHIELD / BAIT MIX: NUKE KOs!"
+                )
+                anyFundedFarmed -> Triple(
+                    "rgba(124, 45, 18, 0.95)",
+                    "#FB923C",
+                    "🛡️ SHIELD (1S): TANK DIES ${worstFarmed?.fastsShortIfTanked ?: 1}F SHORT OF $myBestMoveShort!"
+                )
+                unfundedKo -> Triple(
+                    "rgba(113, 63, 18, 0.95)",
+                    "#EAB308",
+                    "🛡️ TANK (0S) -> $myBestMoveShort IN ${myFastsNeededForNextMove}F (Unfunded KO)"
+                )
+                else -> Triple(
+                    "rgba(6, 78, 59, 0.95)",
+                    "#10B981",
+                    if (myFastsNeededForNextMove == 0) {
+                        "🛡️ TANK (0S): $myBestMoveShort READY!"
+                    } else {
+                        "🛡️ TANK (0S) -> REACH $myBestMoveShort IN ${myFastsNeededForNextMove}F!"
+                    }
+                )
+            }
+            val oppShort = OverlayService.abbrPokeCompactStatic(oppMeta.name, isOpponentShadow)
+            val userShort = OverlayService.abbrPokeCompactStatic(userMeta.name, isUserShadow)
+            val lockedTag = if (twoRegLocked) { if (oppPlusMove != null) " • 3M+" else " • 2M" } else ""
+            val headerLineText = "$verdictText  •  $oppShort(${effBankedE}e) vs $userShort(${uHp}%)$lockedTag"
+
+            mapOf(
+                "visible" to isVisible,
+                "bgColorHex" to bgHex,
+                "strokeColorHex" to strokeHex,
+                "headerLineText" to headerLineText,
+                "verdictText" to verdictText,
+                "effectiveBankedEnergy" to effBankedE,
+                "userHpPct" to uHp,
+                "fundedMoves" to funded.map { m ->
+                    mapOf(
+                        "moveName" to m.moveName,
+                        "shortName" to OverlayService.abbrMoveCompactStatic(m.moveName),
+                        "energyCost" to m.energyCost,
+                        "dmgPct" to m.dmgPct,
+                        "remHpPct" to m.remHpPct,
+                        "isKo" to m.isKo,
+                        "isFunded" to true,
+                        "canReachNextMoveIfTanked" to m.canReachNextMoveIfTanked,
+                        "fastsToNextMoveIfTanked" to m.fastsToNextMoveIfTanked,
+                        "fastsShortIfTanked" to m.fastsShortIfTanked,
+                        "userTargetMoveShort" to m.userTargetMoveShort
+                    )
+                },
+                "unfundedMoves" to unfunded.map { m ->
+                    mapOf(
+                        "moveName" to m.moveName,
+                        "shortName" to OverlayService.abbrMoveCompactStatic(m.moveName),
+                        "energyCost" to m.energyCost,
+                        "dmgPct" to m.dmgPct,
+                        "remHpPct" to m.remHpPct,
+                        "isKo" to m.isKo,
+                        "isFunded" to false
+                    )
+                }
+            )
+        }
+
         val battlePayload = mapOf(
             "activeOpponent" to oppMeta.name,
+            "shieldDecisionOverlay" to shieldDecisionOverlayPayload,
             "activeOpponentFastMove" to oppFastMoveName,
             "activeOpponentTurns" to oppFastTurns,
             "oppFastTelemetry" to oppFastTelemetry,

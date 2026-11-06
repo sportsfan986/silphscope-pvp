@@ -546,7 +546,11 @@ internal fun OverlayService.finalizeAndUploadOneBattleDvrAsync(
  * so `buildBattlePayloadJson(isReplayMode = true)` reconstructs the full 3x3 Matchup Matrix,
  * 9-Shield badge, Fast-Move Pacing, and 2-Line Tactical Coach at any video timestamp!
  */
-internal fun OverlayService.applyDeepTraceFrameForReplay(frame: BattleDeepTraceFrame) {
+internal fun OverlayService.applyDeepTraceFrameForReplay(
+    frame: BattleDeepTraceFrame,
+    preThrowOppEnergyHint: Int = 0,
+    forceShieldDecisionActive: Boolean = false
+) {
     val now = System.currentTimeMillis()
     val uIdx = frame.activeUserIdx.coerceIn(0, 2)
     val oIdx = frame.activeOppIdx.coerceIn(0, 2)
@@ -608,6 +612,25 @@ internal fun OverlayService.applyDeepTraceFrameForReplay(frame: BattleDeepTraceF
     isTopCountdownCircleActive = frame.isTopCountdownActive
     playerSwapEndTimeMs = if (frame.playerSwapRemainingSec > 0) now + frame.playerSwapRemainingSec * 1000L else 0L
     oppSwapEndTimeMs = if (frame.oppSwapRemainingSec > 0) now + frame.oppSwapRemainingSec * 1000L else 0L
+
+    val combinedBanner = "${frame.ocrMidBannerText} ${frame.ocrBottomMovesText}".lowercase()
+    val hasUsedBanner = combinedBanner.contains(" used ")
+    val hasIncomingBanner = combinedBanner.contains("attack incoming") ||
+        combinedBanner.contains("protect shield") ||
+        combinedBanner.contains("shields remaining")
+    isAttackIncomingPromptActive = forceShieldDecisionActive || (!hasUsedBanner && (
+        frame.isTopCountdownActive ||
+            hasIncomingBanner ||
+            frame.recommendedPhase.equals("SHIELD_CALL", ignoreCase = true) ||
+            (frame.pendingChargeActor.equals("opp", ignoreCase = true) && frame.leftCircleFillPct == -1 && frame.rightCircleFillPct == -1)
+        ))
+    if (isAttackIncomingPromptActive) {
+        pendingChargedAttackOppSlotIdx = oIdx
+        pendingChargedAttackUserSlotIdx = uIdx
+        pendingChargedAttackPreOppEnergy = preThrowOppEnergyHint.coerceIn(0, 100)
+    } else {
+        pendingChargedAttackPreOppEnergy = 0
+    }
 
     if (frame.recommendedPhase.isNotBlank()) lastRecommendedPhase = frame.recommendedPhase
     if (frame.recommendedAction.isNotBlank()) lastRecommendedAction = frame.recommendedAction

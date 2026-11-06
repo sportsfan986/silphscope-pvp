@@ -12,6 +12,8 @@
  * 4. Serves Admin Ingestion Endpoints (`GET/DELETE /v1/admin/*`) for `scripts/ingest-telemetry.mjs`
  */
 
+import { OVERLAY_HTML, COMPACT_PVP_DB } from './overlay-asset.mjs';
+
 const RESERVED_SCREEN_NAMES = new Set([
   'anonymous',
   'anon',
@@ -833,87 +835,35 @@ function renderWatchSharePage(origin, shareInfo) {
     }
     .hud-layer {
       position: absolute;
-      left: 6px;
-      right: 6px;
-      bottom: 44px;
-      background: rgba(8, 12, 22, 0.88);
-      border: 1px solid rgba(56, 189, 248, 0.35);
-      border-radius: 10px;
-      padding: 6px;
+      left: 3px;
+      right: 3px;
+      bottom: 14px;
+      background: transparent;
+      border: none;
+      padding: 0;
       pointer-events: auto;
-      backdrop-filter: blur(4px);
       transition: top 0.2s, bottom 0.2s, opacity 0.15s;
-      font-size: 11px;
+      z-index: 10;
     }
     .hud-layer.pos-top {
-      top: 26px;
+      top: 18px;
       bottom: auto;
+    }
+    .hud-layer iframe {
+      width: 100%;
+      height: 360px;
+      border: none;
+      background: transparent;
+      display: block;
+      overflow: hidden;
     }
     .stage-wrap.side-by-side .hud-layer {
       position: static;
       width: min(100%, 420px);
-      background: var(--card);
-      border-color: var(--border);
-      padding: 12px;
-      align-self: stretch;
-    }
-    .hud-header {
-      display: grid;
-      grid-template-columns: 1fr auto 1fr;
-      align-items: center;
-      gap: 6px;
-      padding-bottom: 5px;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-    }
-    .side-stat {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 4px;
-      font-weight: 700;
-    }
-    .hp-pill {
-      padding: 1px 5px;
-      border-radius: 4px;
-      font-weight: 800;
-      font-size: 11px;
-    }
-    .coach-box {
-      margin-top: 5px;
-      padding: 5px 7px;
-      border-radius: 6px;
-      background: rgba(15, 23, 42, 0.9);
-      border-left: 3px solid var(--accent);
-      font-weight: 700;
-      line-height: 1.35;
-    }
-    .matrix-grid {
-      margin-top: 6px;
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 4px;
-    }
-    .matrix-cell {
-      background: rgba(30, 41, 59, 0.75);
-      border: 1px solid rgba(71, 85, 105, 0.5);
-      border-radius: 5px;
-      padding: 4px;
-      text-align: center;
-    }
-    .matrix-cell.active-pair {
-      border-color: var(--cyan);
-      background: rgba(6, 182, 212, 0.16);
-    }
-    .diag-box {
-      margin-top: 5px;
-      padding: 5px;
-      border-radius: 5px;
-      background: rgba(2, 6, 23, 0.92);
-      border: 1px dashed #64748b;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 10px;
-      color: #cbd5e1;
-      white-space: pre-wrap;
+      background: transparent;
+      border: none;
+      padding: 0;
+      align-self: flex-start;
     }
     .controls-bar {
       width: 100%;
@@ -975,25 +925,8 @@ function renderWatchSharePage(origin, shareInfo) {
     <div class="stage-wrap" id="stage-wrap">
       <div class="video-box" id="video-box">
         <video id="replay-video" src="${videoUrl}" playsinline preload="metadata" crossorigin="anonymous"></video>
-        <div class="hud-layer" id="hud-layer">
-          <div class="hud-header" id="hud-header">
-            <div class="side-stat">
-              <span id="u-name">User</span>
-              <span class="hp-pill" id="u-hp" style="background:#065f46;color:#6ee7b7">100%</span>
-              <span id="u-e" style="color:#38bdf8">0E</span>
-              <span id="u-sh">🛡️2</span>
-            </div>
-            <div style="font-size:10px;color:#94a3b8;font-weight:800" id="f-clock">F#0000 0.0s</div>
-            <div class="side-stat" style="justify-content:flex-end">
-              <span id="o-sh">2🛡️</span>
-              <span id="o-e" style="color:#f59e0b">0E</span>
-              <span class="hp-pill" id="o-hp" style="background:#065f46;color:#6ee7b7">100%</span>
-              <span id="o-name">Opponent</span>
-            </div>
-          </div>
-          <div class="coach-box" id="hud-coach">Loading frame-synced battle telemetry...</div>
-          <div class="matrix-grid" id="hud-matrix"></div>
-          <div class="diag-box" id="hud-diag" style="display:none"></div>
+        <div class="hud-layer pos-top" id="hud-layer">
+          <iframe id="hud-iframe" src="/overlay.html?replay=1" scrolling="no" title="SilphScope PvP HUD"></iframe>
         </div>
       </div>
     </div>
@@ -1018,8 +951,9 @@ function renderWatchSharePage(origin, shareInfo) {
           <button onclick="setHudMode('compact')" id="mode-compact">COMPACT</button>
           <button onclick="setHudMode('diag')" id="mode-diag">DIAG</button>
           <button onclick="setHudMode('off')" id="mode-off">OFF</button>
-          <button onclick="toggleHudPos()" id="btn-pos">⬇️ Bottom</button>
-          <input type="range" id="hud-opacity" min="30" max="100" value="90" style="width:65px" title="HUD Opacity" oninput="updateOpacity(this.value)" />
+          <button onclick="toggleShieldHud()" id="btn-shield-hud" class="active">🛡️ Shield: ON</button>
+          <button onclick="toggleHudPos()" id="btn-pos">⬆️ Pos: Top</button>
+          <input type="range" id="hud-opacity" min="30" max="100" value="95" style="width:65px" title="HUD Opacity" oninput="updateOpacity(this.value)" />
         </div>
       </div>
       <div class="chips-row" id="event-chips"></div>
@@ -1028,19 +962,88 @@ function renderWatchSharePage(origin, shareInfo) {
 
   <script>
     const TRACE_URL = ${JSON.stringify(traceUrl)};
+    const PVP_DB = ${JSON.stringify(COMPACT_PVP_DB)};
+    const SHARE_LEAGUE = ${JSON.stringify(shareInfo.league || 'GREAT LEAGUE')};
+    const SHARE_MATCHUP = ${JSON.stringify(shareInfo.matchup || '')};
     let hideNames = ${JSON.stringify(hideNamesDefault)};
     const rawTrainerName = ${JSON.stringify(shareInfo.screenName || 'Trainer')};
     let frames = [];
     let summaryHeader = null;
     let hudMode = 'live';
-    let hudTop = false;
+    let hudTop = true;
+    let showShieldHud = true;
     let sideBySide = false;
+
+    // Interactive HUD manual overrides (matching Android ReplayJavascriptBridge)
+    let manualUserSlotOverride = null;
+    let manualOppSlotOverride = null;
+    let manualOppShadowOverride = null;
+    let manualUserShieldsOverride = null;
+    let manualOppShieldsOverride = null;
 
     const video = document.getElementById('replay-video');
     const hudLayer = document.getElementById('hud-layer');
+    const hudIframe = document.getElementById('hud-iframe');
     const stageWrap = document.getElementById('stage-wrap');
 
-    video.addEventListener('play', () => { document.getElementById('btn-play').textContent = '⏸ Pause'; });
+    function attachOverlayBridge() {
+      try {
+        const win = hudIframe.contentWindow;
+        if (!win) return;
+        win.AndroidOverlay = {
+          updateContentHeight(h) {
+            const px = Math.max(48, Math.ceil(Number(h) || 340));
+            hudIframe.style.height = px + 'px';
+          },
+          selectActiveUserPokemon(name) {
+            const uSpecs = getResolvedUserSpecs();
+            const idx = uSpecs.findIndex(s => s.name.toLowerCase() === String(name || '').toLowerCase());
+            if (idx >= 0) {
+              manualUserSlotOverride = idx;
+              syncHudFrame();
+            }
+          },
+          swapActiveOpponent(name) {
+            const oSpecs = getResolvedOppSpecs();
+            const idx = oSpecs.findIndex(s => s.name.toLowerCase() === String(name || '').toLowerCase());
+            if (idx >= 0) {
+              manualOppSlotOverride = idx;
+              syncHudFrame();
+            }
+          },
+          toggleOpponentShadow() {
+            manualOppShadowOverride = manualOppShadowOverride === null ? true : !manualOppShadowOverride;
+            syncHudFrame();
+          },
+          setPlayerShields(n) {
+            manualUserShieldsOverride = Number(n);
+            syncHudFrame();
+          },
+          setOpponentShields(n) {
+            manualOppShieldsOverride = Number(n);
+            syncHudFrame();
+          },
+          onOverlayReady() {
+            syncHudFrame();
+          }
+        };
+      } catch (err) {
+        console.warn('Bridge attach warning:', err);
+      }
+    }
+
+    hudIframe.addEventListener('load', () => {
+      attachOverlayBridge();
+      syncHudFrame();
+    });
+
+    video.addEventListener('play', () => {
+      manualUserSlotOverride = null;
+      manualOppSlotOverride = null;
+      manualUserShieldsOverride = null;
+      manualOppShieldsOverride = null;
+      document.getElementById('btn-play').textContent = '⏸ Pause';
+    });
     video.addEventListener('pause', () => { document.getElementById('btn-play').textContent = '▶️ Play'; });
 
     function togglePlay() {
@@ -1062,14 +1065,26 @@ function renderWatchSharePage(origin, shareInfo) {
       hudMode = m;
       ['live','compact','diag','off'].forEach(k => document.getElementById('mode-' + k).classList.toggle('active', k === m));
       hudLayer.style.display = m === 'off' ? 'none' : 'block';
-      document.getElementById('hud-matrix').style.display = m === 'live' ? 'grid' : 'none';
-      document.getElementById('hud-diag').style.display = m === 'diag' ? 'block' : 'none';
+      syncHudFrame();
+    }
+    function toggleShieldHud() {
+      showShieldHud = !showShieldHud;
+      const btn = document.getElementById('btn-shield-hud');
+      if (btn) {
+        btn.classList.toggle('active', showShieldHud);
+        btn.textContent = showShieldHud ? '🛡️ Shield: ON' : '🛡️ Shield: OFF';
+      }
+      try {
+        if (hudIframe.contentWindow && hudIframe.contentWindow.setReplayShieldOverlayEnabled) {
+          hudIframe.contentWindow.setReplayShieldOverlayEnabled(showShieldHud);
+        }
+      } catch (_) {}
       syncHudFrame();
     }
     function toggleHudPos() {
       hudTop = !hudTop;
       hudLayer.classList.toggle('pos-top', hudTop);
-      document.getElementById('btn-pos').textContent = hudTop ? '⬆️ Top' : '⬇️ Bottom';
+      document.getElementById('btn-pos').textContent = hudTop ? '⬆️ Pos: Top' : '⬇️ Pos: Bottom';
     }
     function updateOpacity(val) {
       hudLayer.style.opacity = (Number(val) / 100).toFixed(2);
@@ -1089,13 +1104,850 @@ function renderWatchSharePage(origin, shareInfo) {
         document.getElementById('video-box').appendChild(hudLayer);
       }
       document.getElementById('btn-layout').textContent = sideBySide ? '📐 Side-by-Side: ON' : '📐 Side-by-Side: OFF';
+      setTimeout(syncHudFrame, 60);
     }
 
-    function hpStyle(pct) {
-      if (pct < 0) return { bg: '#334155', fg: '#94a3b8', txt: '--%' };
-      if (pct > 50) return { bg: '#065f46', fg: '#6ee7b7', txt: pct + '%' };
-      if (pct >= 20) return { bg: '#78350f', fg: '#fde68a', txt: pct + '%' };
-      return { bg: '#7f1d1d', fg: '#fecaca', txt: pct + '%' };
+    function abbrPoke3(name, isShadow) {
+      if (!name || name === 'Waiting...') return 'OPP';
+      const clean = String(name)
+        .replace(/^Shadow\\s+/i, '')
+        .replace(/^Mega\\s+/i, '')
+        .replace(/^(Kanto|Alolan|Galarian|Hisuian|Paldean)\\s+/i, '')
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .trim()
+        .substring(0, 3)
+        .toUpperCase() || 'POK';
+      const pref = (isShadow || /^Shadow\\s+/i.test(name)) ? 'S' : '';
+      return (pref + clean).substring(0, 4);
+    }
+
+    function abbrMove5(move) {
+      if (!move || move === '—') return '—';
+      const s = String(move).replace(/\\*/g, '').trim();
+      const words = s.split(/[\\s-]+/).filter(Boolean);
+      if (words.length >= 2 && s.length > 5) {
+        return words.map(w => w[0].toUpperCase()).join('').substring(0, 4);
+      }
+      return s.substring(0, 5);
+    }
+
+    function lookupSpeciesMeta(rawName, leagueStr) {
+      const s = String(rawName || '').trim();
+      const isShad = /^Shadow\\s+/i.test(s) || /\\(Shadow\\)/i.test(s);
+      const clean = s.replace(/^Shadow\\s+/i, '').replace(/\\s*\\(Shadow\\)/i, '').trim();
+      const lower = clean.toLowerCase();
+      const base = lower.replace(/\\s*\\([^)]*\\)/g, '').trim().replace(/\\s+/g, '_');
+      const dbEntry =
+        PVP_DB.species[lower] ||
+        PVP_DB.species[lower.replace(/\\s+/g, '_')] ||
+        PVP_DB.species[base] ||
+        {
+          name: clean || 'Pokemon',
+          speciesId: base || 'pokemon',
+          baseSpecies: base || 'pokemon',
+          formLabel: 'Base',
+          types: ['normal'],
+          defaultCp: 1500,
+          fastMove: 'Tackle',
+          fastTurns: 1,
+          c1: 'Body Slam',
+          c2: 'Surf',
+          c3: 'Earthquake',
+          atk: 175,
+          def: 175,
+          hp: 180
+        };
+      const uLg = String(leagueStr || SHARE_LEAGUE || 'GREAT LEAGUE').toUpperCase();
+      const cpCap = (uLg.includes('MASTER') || uLg.includes('10000')) ? 4500 : (uLg.includes('ULTRA') || uLg.includes('2500') || uLg.includes('CAULDRON')) ? 2500 : 1500;
+      const uAtk = (dbEntry.atk || 175) + 7;
+      const uDef = (dbEntry.def || 175) + 14;
+      const uHp = (dbEntry.hp || 180) + 14;
+      const cpm = Math.min(0.8403, Math.max(0.45, Math.sqrt((cpCap * 10.0) / (uAtk * Math.sqrt(uDef * uHp)))));
+      const effCp = Math.min(cpCap, Math.max(100, Math.floor(uAtk * Math.sqrt(uDef * uHp) * cpm * cpm / 10.0)));
+      return {
+        ...dbEntry,
+        name: clean || dbEntry.name,
+        isShadow: isShad,
+        effCp,
+        effAtk: uAtk * cpm,
+        effDef: uDef * cpm,
+        effHp: Math.max(20, Math.floor(uHp * cpm))
+      };
+    }
+
+    function lookupFastStats(moveName, fallbackTurns) {
+      const k = String(moveName || '').replace(/\\*/g, '').trim().toLowerCase();
+      const spaceK = k.replace(/-/g, ' ');
+      const found = PVP_DB.fastMoves[k] || PVP_DB.fastMoves[spaceK];
+      const turns = (found && found.turns) || fallbackTurns || 2;
+      return {
+        name: String(moveName || 'Fast'),
+        turns,
+        energy: (found && found.energy) || Math.max(3, turns * 4),
+        power: (found && found.power !== undefined) ? found.power : Math.max(3, turns * 3),
+        type: (found && found.type) || 'normal'
+      };
+    }
+
+    function lookupChargedStats(moveName, fallbackType, fallbackEnergy) {
+      const k = String(moveName || '').replace(/\\*/g, '').trim().toLowerCase();
+      const spaceK = k.replace(/-/g, ' ');
+      const found = PVP_DB.chargedMoves[k] || PVP_DB.chargedMoves[spaceK];
+      return {
+        name: String(moveName || 'Charged').replace(/\\*/g, '').trim(),
+        type: (found && found.type) || fallbackType || 'normal',
+        power: (found && found.power) || 80,
+        energy: (found && found.energy) || fallbackEnergy || 50
+      };
+    }
+
+    function getTypeEff(moveType, defTypes) {
+      const atk = String(moveType || 'normal').toLowerCase().trim();
+      const chart = {
+        normal: { rock: 0.625, steel: 0.625, ghost: 0.390625 },
+        fire: { grass: 1.6, ice: 1.6, bug: 1.6, steel: 1.6, fire: 0.625, water: 0.625, rock: 0.625, dragon: 0.625 },
+        water: { fire: 1.6, ground: 1.6, rock: 1.6, water: 0.625, grass: 0.625, dragon: 0.625 },
+        electric: { water: 1.6, flying: 1.6, electric: 0.625, grass: 0.625, dragon: 0.625, ground: 0.390625 },
+        grass: { water: 1.6, ground: 1.6, rock: 1.6, fire: 0.625, grass: 0.625, poison: 0.625, flying: 0.625, bug: 0.625, dragon: 0.625, steel: 0.625 },
+        ice: { grass: 1.6, ground: 1.6, flying: 1.6, dragon: 1.6, fire: 0.625, water: 0.625, ice: 0.625, steel: 0.625 },
+        fighting: { normal: 1.6, ice: 1.6, rock: 1.6, dark: 1.6, steel: 1.6, poison: 0.625, flying: 0.625, psychic: 0.625, bug: 0.625, fairy: 0.625, ghost: 0.390625 },
+        poison: { grass: 1.6, fairy: 1.6, poison: 0.625, ground: 0.625, rock: 0.625, ghost: 0.625, steel: 0.390625 },
+        ground: { fire: 1.6, electric: 1.6, poison: 1.6, rock: 1.6, steel: 1.6, grass: 0.625, bug: 0.625, flying: 0.390625 },
+        flying: { grass: 1.6, fighting: 1.6, bug: 1.6, electric: 0.625, rock: 0.625, steel: 0.625 },
+        psychic: { fighting: 1.6, poison: 1.6, psychic: 0.625, steel: 0.625, dark: 0.390625 },
+        bug: { grass: 1.6, psychic: 1.6, dark: 1.6, fire: 0.625, fighting: 0.625, poison: 0.625, flying: 0.625, ghost: 0.625, steel: 0.625, fairy: 0.625 },
+        rock: { fire: 1.6, ice: 1.6, flying: 1.6, bug: 1.6, fighting: 0.625, ground: 0.625, steel: 0.625 },
+        ghost: { psychic: 1.6, ghost: 1.6, dark: 0.625, normal: 0.390625 },
+        dragon: { dragon: 1.6, steel: 0.625, fairy: 0.390625 },
+        dark: { psychic: 1.6, ghost: 1.6, fighting: 0.625, dark: 0.625, fairy: 0.625 },
+        steel: { ice: 1.6, rock: 1.6, fairy: 1.6, fire: 0.625, water: 0.625, electric: 0.625, steel: 0.625 },
+        fairy: { fighting: 1.6, dragon: 1.6, dark: 1.6, fire: 0.625, poison: 0.625, steel: 0.625 }
+      };
+      let mult = 1.0;
+      const row = chart[atk] || {};
+      for (const dt of (defTypes || ['normal'])) {
+        const d = String(dt || 'normal').toLowerCase().trim();
+        if (row[d] !== undefined) mult *= row[d];
+      }
+      return mult;
+    }
+
+    function stageMult(stg) {
+      const s = Math.max(-4, Math.min(4, Number(stg) || 0));
+      return s >= 0 ? (4 + s) / 4 : 4 / (4 - s);
+    }
+
+    function calcChargedDmgPct(atkMeta, defMeta, moveName, isAtkShadow, isDefShadow, atkStg, defStg) {
+      const mStats = lookupChargedStats(moveName, atkMeta.types[0]);
+      const stab = atkMeta.types.includes(mStats.type) ? 1.2 : 1.0;
+      const eff = getTypeEff(mStats.type, defMeta.types);
+      const eAtk = atkMeta.effAtk * (isAtkShadow ? 1.2 : 1.0) * stageMult(atkStg || 0);
+      const eDef = defMeta.effDef * (isDefShadow ? 0.8333333 : 1.0) * stageMult(defStg || 0);
+      const raw = Math.floor(0.5 * mStats.power * (eAtk / Math.max(10, eDef)) * stab * eff * 1.3) + 1;
+      const pct = Math.round((raw / Math.max(20, defMeta.effHp)) * 100);
+      return { pct: Math.max(5, Math.min(100, pct)), eff, mStats };
+    }
+
+    function calc3DotMatrixString(uSpec, oSpec) {
+      const uFast = lookupFastStats(uSpec.fastMove, uSpec.fastTurns);
+      const oFast = lookupFastStats(oSpec.fastMove, oSpec.fastTurns);
+      const uFastEff = getTypeEff(uFast.type, oSpec.meta.types);
+      const oFastEff = getTypeEff(oFast.type, uSpec.meta.types);
+      const uC1 = calcChargedDmgPct(uSpec.meta, oSpec.meta, uSpec.c1, uSpec.isShadow, oSpec.isShadow, 0, 0).pct;
+      const uC2 = calcChargedDmgPct(uSpec.meta, oSpec.meta, uSpec.c2, uSpec.isShadow, oSpec.isShadow, 0, 0).pct;
+      const oC1 = calcChargedDmgPct(oSpec.meta, uSpec.meta, oSpec.c1, oSpec.isShadow, uSpec.isShadow, 0, 0).pct;
+      const oC2 = calcChargedDmgPct(oSpec.meta, uSpec.meta, oSpec.c2, oSpec.isShadow, uSpec.isShadow, 0, 0).pct;
+      const uBest = Math.max(uC1, uC2);
+      const oBest = Math.max(oC1, oC2);
+      const uEpt = uFast.energy / Math.max(1, uFast.turns);
+      const oEpt = oFast.energy / Math.max(1, oFast.turns);
+
+      const codes = [0, 1, 2].map(sh => {
+        const cWeight = sh === 0 ? 1.8 : sh === 1 ? 1.3 : 0.85;
+        const fWeight = sh === 0 ? 95 : sh === 1 ? 120 : 155;
+        const delta = (uBest * (uEpt / 3.5) - oBest * (oEpt / 3.5)) * cWeight + (uFastEff - oFastEff) * fWeight;
+        const r = Math.max(150, Math.min(850, Math.round(500 + delta)));
+        if (r >= 620) return 'SW';
+        if (r >= 530) return 'W';
+        if (r > 470) return 'N';
+        if (r > 380) return 'L';
+        return 'SL';
+      });
+      return { str: codes.join(','), r1s: codes[1] };
+    }
+
+    function getResolvedUserSpecs() {
+      const lg = (summaryHeader && summaryHeader.league) || SHARE_LEAGUE;
+      const rawSpecs = (summaryHeader && Array.isArray(summaryHeader.userTeamSpecs) && summaryHeader.userTeamSpecs.length > 0)
+        ? summaryHeader.userTeamSpecs
+        : [];
+      const out = [];
+      for (let i = 0; i < 3; i++) {
+        const s = rawSpecs[i] || {};
+        const spName = s.species || (i === 0 && frames[0] && frames[0].userActiveSpecies) || ['Feraligatr', 'Clodsire', 'Mandibuzz'][i];
+        const meta = lookupSpeciesMeta(spName, lg);
+        const fastMove = s.fastMove || meta.fastMove;
+        const fStats = lookupFastStats(fastMove, s.fastTurns || meta.fastTurns);
+        const c1 = s.chargedMove1 || meta.c1;
+        const c2 = s.chargedMove2 || meta.c2;
+        const c1Stats = lookupChargedStats(c1, meta.types[0], s.chargedMove1Energy);
+        const c2Stats = lookupChargedStats(c2, meta.types[0], s.chargedMove2Energy);
+        out.push({
+          slotIndex: i,
+          name: spName,
+          code: abbrPoke3(spName, meta.isShadow),
+          isShadow: meta.isShadow,
+          cp: s.cp || meta.effCp,
+          fastMove,
+          fastTurns: fStats.turns,
+          fastEnergy: s.fastEnergy || fStats.energy,
+          c1,
+          c1Energy: c1Stats.energy,
+          c2,
+          c2Energy: c2Stats.energy,
+          meta
+        });
+      }
+      return out;
+    }
+
+    function getResolvedOppSpecs() {
+      const lg = (summaryHeader && summaryHeader.league) || SHARE_LEAGUE;
+      const rawSpecs = (summaryHeader && Array.isArray(summaryHeader.oppTeamSpecs) && summaryHeader.oppTeamSpecs.length > 0)
+        ? summaryHeader.oppTeamSpecs
+        : [];
+      const seenNames = [];
+      for (const rs of rawSpecs) {
+        if (rs && rs.species) seenNames.push(rs);
+      }
+      if (seenNames.length === 0) {
+        const distinct = [];
+        for (const f of frames) {
+          if (f.oppActiveSpecies && !distinct.includes(f.oppActiveSpecies)) {
+            distinct.push(f.oppActiveSpecies);
+          }
+        }
+        distinct.slice(0, 3).forEach((nm, idx) => seenNames.push({ slotIndex: idx, species: nm }));
+      }
+      return seenNames.slice(0, 3).map((s, i) => {
+        const spName = s.species || 'Opponent';
+        const meta = lookupSpeciesMeta(spName, lg);
+        const isShad = manualOppShadowOverride !== null && i === 0
+          ? manualOppShadowOverride
+          : (s.isShadow !== undefined ? Boolean(s.isShadow) : meta.isShadow);
+        const fastMove = s.inferredFastMove || meta.fastMove;
+        const fStats = lookupFastStats(fastMove, s.fastTurns || meta.fastTurns);
+        const confirmed = Array.isArray(s.confirmedChargedMoves) ? s.confirmedChargedMoves.map(m => String(m).replace(/\\*/g, '').trim()).filter(Boolean) : [];
+        const c1 = confirmed[0] || meta.c1 || 'Body Slam';
+        const c2 = (confirmed[1] && confirmed[1].toLowerCase() !== c1.toLowerCase()) ? confirmed[1] : (meta.c2 && meta.c2.toLowerCase() !== c1.toLowerCase() ? meta.c2 : 'Surf');
+        const c3 = meta.c3 || 'Outrage';
+        return {
+          slotIndex: i,
+          name: spName,
+          code: abbrPoke3(spName, isShad),
+          isShadow: isShad,
+          cp: meta.effCp,
+          fastMove,
+          fastTurns: fStats.turns,
+          fastEnergy: s.fastEnergy || fStats.energy,
+          fastStatus: s.fastMoveStatus || (s.fastMoveConfirmed ? 'confirmed' : 'default'),
+          fastConfirmed: Boolean(s.fastMoveConfirmed),
+          confirmedMoves: confirmed,
+          c1,
+          c2,
+          c3,
+          meta
+        };
+      });
+    }
+
+    function buildReplayOverlayPayload(f) {
+      const lg = (summaryHeader && summaryHeader.league) || SHARE_LEAGUE;
+      const uSpecs = getResolvedUserSpecs();
+      const oSpecs = getResolvedOppSpecs();
+
+      const uIdx = manualUserSlotOverride !== null
+        ? manualUserSlotOverride
+        : Math.max(0, Math.min(2, Number(f.userActiveIndex ?? 0)));
+      let oIdx = manualOppSlotOverride !== null
+        ? manualOppSlotOverride
+        : Math.max(0, Math.min(Math.max(0, oSpecs.length - 1), Number(f.oppActiveIndex ?? 0)));
+      if (f.oppActiveSpecies && manualOppSlotOverride === null) {
+        const matchIdx = oSpecs.findIndex(o => o.name.toLowerCase().includes(f.oppActiveSpecies.toLowerCase()) || f.oppActiveSpecies.toLowerCase().includes(o.name.toLowerCase()));
+        if (matchIdx >= 0) oIdx = matchIdx;
+      }
+
+      const actUser = uSpecs[uIdx] || uSpecs[0];
+      const actOpp = oSpecs[oIdx] || oSpecs[0] || {
+        slotIndex: 0,
+        name: f.oppActiveSpecies || 'Opponent',
+        code: abbrPoke3(f.oppActiveSpecies || 'OPP', false),
+        isShadow: false,
+        cp: 1500,
+        fastMove: 'Tackle',
+        fastTurns: 2,
+        fastEnergy: 8,
+        fastStatus: 'default',
+        fastConfirmed: false,
+        confirmedMoves: [],
+        c1: 'Body Slam',
+        c2: 'Surf',
+        c3: 'Earthquake',
+        meta: lookupSpeciesMeta(f.oppActiveSpecies || 'Opponent', lg)
+      };
+
+      const pSlotHp = [0, 1, 2].map(i => {
+        const raw = (f.userSlotHpPct && f.userSlotHpPct[i] !== undefined) ? f.userSlotHpPct[i] : (i === uIdx ? f.userHpPct : 100);
+        return raw >= 0 ? raw : 100;
+      });
+      const oSlotHp = [0, 1, 2].map(i => {
+        const raw = (f.oppSlotHpPct && f.oppSlotHpPct[i] !== undefined) ? f.oppSlotHpPct[i] : (i === oIdx ? f.oppHpPct : 100);
+        return raw >= 0 ? raw : 100;
+      });
+      const pSlotE = [0, 1, 2].map(i => (f.userSlotEnergy && f.userSlotEnergy[i] !== undefined) ? f.userSlotEnergy[i] : (i === uIdx ? (f.userEnergy || 0) : 0));
+      const oSlotE = [0, 1, 2].map(i => (f.oppSlotEnergy && f.oppSlotEnergy[i] !== undefined) ? f.oppSlotEnergy[i] : (i === oIdx ? (f.oppEnergy || 0) : 0));
+
+      const pFainted = pSlotHp.map((hp, i) => hp <= 0 && i !== uIdx);
+      const oFainted = oSlotHp.map((hp, i) => hp <= 0 && i !== oIdx);
+
+      const uShields = manualUserShieldsOverride !== null ? manualUserShieldsOverride : (f.userShields ?? 2);
+      const oShields = manualOppShieldsOverride !== null ? manualOppShieldsOverride : (f.oppShields ?? 2);
+
+      const pAtkStg = f.userSlotAtkStage || [0, 0, 0];
+      const pDefStg = f.userSlotDefStage || [0, 0, 0];
+      const oAtkStg = f.oppSlotAtkStage || [0, 0, 0];
+      const oDefStg = f.oppSlotDefStage || [0, 0, 0];
+
+      const winsCmp = actUser.meta.effAtk >= actOpp.meta.effAtk;
+
+      // Build scannedOpponents array for 3v3 Matrix
+      const scannedOpponents = oSpecs.map((o, idx) => {
+        const d1 = calcChargedDmgPct(o.meta, actUser.meta, o.c1, o.isShadow, actUser.isShadow, oAtkStg[idx] || 0, pDefStg[uIdx] || 0).pct;
+        const d2 = calcChargedDmgPct(o.meta, actUser.meta, o.c2, o.isShadow, actUser.isShadow, oAtkStg[idx] || 0, pDefStg[uIdx] || 0).pct;
+        const d3 = calcChargedDmgPct(o.meta, actUser.meta, o.c3, o.isShadow, actUser.isShadow, oAtkStg[idx] || 0, pDefStg[uIdx] || 0).pct;
+        const m1 = lookupChargedStats(o.c1, o.meta.types[0]);
+        const m2 = lookupChargedStats(o.c2, o.meta.types[0]);
+        const m3 = lookupChargedStats(o.c3, o.meta.types[0]);
+        const cheapestE = Math.min(m1.energy, m2.energy, m3.energy);
+        const curHp = oSlotHp[idx];
+        const curE = oSlotE[idx];
+        const isReady = curHp > 0 && curE >= cheapestE;
+        return {
+          name: o.name,
+          code: o.code,
+          slotOrder: idx + 1,
+          isActive: idx === oIdx,
+          isShadow: o.isShadow,
+          hpPct: curHp,
+          energy: curE,
+          cheapestMoveEnergy: cheapestE,
+          isMoveReady: isReady,
+          energyLabel: isReady ? (curE + 'E READY') : (curE + 'E'),
+          turns: o.fastTurns,
+          fastMove: o.fastMove,
+          oppFastMoveStatus: o.fastStatus,
+          confirmedChargedMoves: o.confirmedMoves,
+          c1: abbrMove5(o.c1) + ' (' + d1 + '%)',
+          c2: abbrMove5(o.c2) + ' (' + d2 + '%)',
+          c3: abbrMove5(o.c3) + ' (' + d3 + '%)',
+          c4: '',
+          atkStage: oAtkStg[idx] || 0,
+          defStage: oDefStg[idx] || 0,
+          disguiseBusted: Boolean(idx === oIdx && f.oppDisguiseBusted),
+          matrix: {
+            p1: calc3DotMatrixString(uSpecs[0], o).str,
+            p2: calc3DotMatrixString(uSpecs[1], o).str,
+            p3: calc3DotMatrixString(uSpecs[2], o).str
+          }
+        };
+      });
+
+      // Compute shared horizon turns
+      const oppMoveNames = [actOpp.c1, actOpp.c2, actOpp.c3].filter((v, i, a) => v && a.findIndex(x => x.toLowerCase() === v.toLowerCase()) === i);
+      const myMoveNames = [actUser.c1, actUser.c2].filter((v, i, a) => v && a.findIndex(x => x.toLowerCase() === v.toLowerCase()) === i);
+
+      let maxHorizonTurns = 12;
+      const oppReadyTurnsSet = new Set();
+      for (const mName of oppMoveNames) {
+        const mStats = lookupChargedStats(mName, actOpp.meta.types[0]);
+        const t1 = Math.max(1, Math.ceil(mStats.energy / actOpp.fastEnergy)) * actOpp.fastTurns;
+        if (t1 > maxHorizonTurns) maxHorizonTurns = t1;
+        let leftE = 0, cumF = 0;
+        for (let c = 1; c <= 3; c++) {
+          const needE = Math.max(1, mStats.energy - leftE);
+          const fCnt = Math.max(1, Math.ceil(needE / actOpp.fastEnergy));
+          leftE = leftE + fCnt * actOpp.fastEnergy - mStats.energy;
+          cumF += fCnt;
+          oppReadyTurnsSet.add(cumF * actOpp.fastTurns);
+        }
+      }
+      for (const mName of myMoveNames) {
+        const mStats = lookupChargedStats(mName, actUser.meta.types[0]);
+        const t1 = Math.max(1, Math.ceil(mStats.energy / actUser.fastEnergy)) * actUser.fastTurns;
+        if (t1 > maxHorizonTurns) maxHorizonTurns = t1;
+      }
+
+      // Build oppMoveTimingRows
+      const oppMoveTimingRows = oppMoveNames.map(mName => {
+        const { pct: activeDmgPct, eff: activeEff, mStats } = calcChargedDmgPct(
+          actOpp.meta, actUser.meta, mName, actOpp.isShadow, actUser.isShadow, oAtkStg[oIdx] || 0, pDefStg[uIdx] || 0
+        );
+        const mEnergy = mStats.energy;
+        const oppFasts = Math.max(1, Math.ceil(mEnergy / actOpp.fastEnergy));
+        const oppReadyTurn = oppFasts * actOpp.fastTurns;
+        const myTapAtReady = Math.max(1, Math.ceil(oppReadyTurn / actUser.fastTurns));
+        const displayReadyCount = myTapAtReady;
+
+        const cycles = [];
+        let leftE = 0, cumOppFasts = 0, prevTurn = 0, prevTap = 0;
+        for (let cIdx = 1; cIdx <= 3; cIdx++) {
+          const needE = Math.max(1, mEnergy - leftE);
+          const fInCycle = Math.max(1, Math.ceil(needE / actOpp.fastEnergy));
+          leftE = leftE + fInCycle * actOpp.fastEnergy - mEnergy;
+          cumOppFasts += fInCycle;
+          const rTurn = cumOppFasts * actOpp.fastTurns;
+          if (cIdx > 1 && rTurn > maxHorizonTurns) break;
+          const tSpan = Math.max(1, rTurn - prevTurn);
+          const wPct = Math.max(8, Math.min(100, (tSpan / maxHorizonTurns) * 100));
+          const rTap = Math.max(prevTap + 1, Math.ceil(rTurn / actUser.fastTurns));
+          const sTap = prevTap + 1;
+          const rEnd = rTap - 1;
+          const rangeLabel = rTap <= sTap ? '' : (rEnd === sTap ? String(sTap) : (sTap + '–' + rEnd));
+          cycles.push({
+            cycleIndex: cIdx,
+            startTurn: prevTurn,
+            readyTurn: rTurn,
+            turnSpan: tSpan,
+            widthPct: wPct,
+            startTap: sTap,
+            readyTap: rTap,
+            rangeLabel,
+            readyLabel: '#' + rTap,
+            hasZeroSneak: false,
+            readyState: winsCmp ? 'cmp' : 'catch'
+          });
+          prevTurn = rTurn;
+          prevTap = rTap;
+        }
+
+        const teamDamages = uSpecs.map((u, tIdx) => {
+          const { pct: tDmg, eff: tEff } = calcChargedDmgPct(
+            actOpp.meta, u.meta, mName, actOpp.isShadow, u.isShadow, oAtkStg[oIdx] || 0, pDefStg[tIdx] || 0
+          );
+          const tier = tDmg <= 35 ? 'resist' : (tDmg >= 65 || tEff >= 1.5 ? 'weak' : 'neutral');
+          return {
+            name: u.name,
+            code: u.code,
+            dmgPct: tDmg,
+            eff: tEff,
+            tier,
+            isActive: tIdx === uIdx
+          };
+        });
+
+        const isConfirmed = actOpp.confirmedMoves.some(cm => cm.toLowerCase() === mName.toLowerCase());
+        return {
+          name: mName,
+          shortName: abbrMove5(mName),
+          energy: mEnergy,
+          oppFasts,
+          oppReadyTurn,
+          myTapAtReady,
+          displayReadyCount,
+          winsCmp,
+          isConfirmedMove: isConfirmed,
+          activeName: actUser.name,
+          activeDmgPct,
+          activeEff,
+          safeRangeLabel: displayReadyCount <= 1 ? '1' : ('1–' + (displayReadyCount - 1)),
+          maxHorizonTurns,
+          cycles,
+          teamDamages
+        };
+      });
+
+      const oppFirstReadyTaps = new Set(oppMoveTimingRows.map(r => r.myTapAtReady));
+
+      // Build myMoveTimingRows
+      const myMoveTimingRows = myMoveNames.map(mName => {
+        const { pct: dmgPct, eff, mStats } = calcChargedDmgPct(
+          actUser.meta, actOpp.meta, mName, actUser.isShadow, actOpp.isShadow, pAtkStg[uIdx] || 0, oDefStg[oIdx] || 0
+        );
+        const mEnergy = mStats.energy;
+        const myTapsNeeded = Math.max(1, Math.ceil(mEnergy / actUser.fastEnergy));
+        const myReadyTurn = myTapsNeeded * actUser.fastTurns;
+
+        const cycles = [];
+        let leftE = 0, cumMyFasts = 0, prevTurn = 0, prevTap = 0;
+        for (let cIdx = 1; cIdx <= 3; cIdx++) {
+          const needE = Math.max(1, mEnergy - leftE);
+          const fInCycle = Math.max(1, Math.ceil(needE / actUser.fastEnergy));
+          leftE = leftE + fInCycle * actUser.fastEnergy - mEnergy;
+          cumMyFasts += fInCycle;
+          const rTurn = cumMyFasts * actUser.fastTurns;
+          if (cIdx > 1 && rTurn > maxHorizonTurns) break;
+          const tSpan = Math.max(1, rTurn - prevTurn);
+          const wPct = Math.max(8, Math.min(100, (tSpan / maxHorizonTurns) * 100));
+          const rTap = cumMyFasts;
+          const sTap = prevTap + 1;
+          const rEnd = rTap - 1;
+          const safeTaps = [];
+          for (let k = sTap; k <= rEnd; k++) {
+            if ((k * actUser.fastTurns) % actOpp.fastTurns !== 0) safeTaps.push(k);
+          }
+          const hasZeroSneak = safeTaps.length > 0;
+          const rangeLabel = rTap <= sTap ? '' : (hasZeroSneak ? ('Safe ' + safeTaps.slice(0, 3).join(',')) : (rEnd === sTap ? String(sTap) : (sTap + '–' + rEnd)));
+          const isCmp = oppReadyTurnsSet.has(rTurn) || oppFirstReadyTaps.has(rTap);
+          const readyState = isCmp ? (winsCmp ? 'cmp' : 'cmp-loss') : 'safe';
+          cycles.push({
+            cycleIndex: cIdx,
+            startTurn: prevTurn,
+            readyTurn: rTurn,
+            turnSpan: tSpan,
+            widthPct: wPct,
+            startTap: sTap,
+            readyTap: rTap,
+            rangeLabel,
+            readyLabel: '#' + rTap,
+            hasZeroSneak,
+            readyState
+          });
+          prevTurn = rTurn;
+          prevTap = rTap;
+        }
+
+        const oppDamages = [0, 1, 2].map(sIdx => {
+          const o = oSpecs[sIdx];
+          if (!o) return { name: '—', code: '—', dmgPct: null, eff: 1.0, tier: 'empty', isActive: false };
+          const { pct: oDmg, eff: oEff } = calcChargedDmgPct(
+            actUser.meta, o.meta, mName, actUser.isShadow, o.isShadow, pAtkStg[uIdx] || 0, oDefStg[sIdx] || 0
+          );
+          const tier = (oDmg >= 65 || oEff >= 1.5) ? 'high' : (oDmg <= 35 || oEff <= 0.65 ? 'low' : 'neutral');
+          return {
+            name: o.name,
+            code: o.code,
+            dmgPct: oDmg,
+            eff: oEff,
+            tier,
+            isActive: sIdx === oIdx
+          };
+        });
+
+        const firstCycle = cycles[0] || {};
+        return {
+          name: mName,
+          shortName: abbrMove5(mName),
+          energy: mEnergy,
+          myTapsNeeded,
+          myReadyTurn,
+          dmgPct,
+          eff,
+          state: firstCycle.readyState || 'safe',
+          safeThrowLabel: firstCycle.rangeLabel || (myTapsNeeded <= 1 ? '1' : ('1–' + (myTapsNeeded - 1))),
+          hasZeroSneak: Boolean(firstCycle.hasZeroSneak),
+          maxHorizonTurns,
+          cycles,
+          oppDamages
+        };
+      });
+
+      // Build 2-Line 4-Pillar AI Tactical Coach
+      const cheapestOppRow = oppMoveTimingRows.reduce((best, r) => (!best || r.energy < best.energy ? r : best), null);
+      const nextOppCost = cheapestOppRow ? cheapestOppRow.energy : 45;
+      const curOppE = oSlotE[oIdx] || 0;
+      const oppFastsToMove = curOppE >= nextOppCost ? 0 : Math.ceil((nextOppCost - curOppE) / Math.max(1, actOpp.fastEnergy));
+      const timingAlertLevel = oppFastsToMove === 0 ? 'IMMEDIATE_0_FAST' : oppFastsToMove === 1 ? 'BLINK_1_FAST' : oppFastsToMove === 2 ? 'WARN_2_FASTS' : 'NORMAL';
+
+      const recAction = f.recommendedAction || (f.moveBannerText ? ('⚡ ' + f.moveBannerText) : 'STAY IN · PACE');
+      const recGoal = f.recommendedGoal || ('Opp ' + (cheapestOppRow ? cheapestOppRow.shortName : 'Move') + ' in ' + oppFastsToMove + 'F (' + curOppE + 'E/' + nextOppCost + 'E)');
+      const shieldPlan = uShields > 0 && cheapestOppRow && cheapestOppRow.activeDmgPct >= pSlotHp[uIdx] ? '1S (KO Risk)' : (uShields + 'S');
+
+      const oppFastTelemetry = abbrMove5(actOpp.fastMove) + ' ' + actOpp.fastTurns + 't(' + (actOpp.fastTurns * 0.5).toFixed(1) + 's)/+' + actOpp.fastEnergy + 'e';
+      const userFastTelemetry = abbrMove5(actUser.fastMove) + ' ' + actUser.fastTurns + 't(' + (actUser.fastTurns * 0.5).toFixed(1) + 's)/+' + actUser.fastEnergy + 'e';
+
+      // v6.42: Reconstruct Shield Decision Overlay (Red/Orange/Yellow/Green KO & HP summary above Attack incoming!)
+      const frameArrayIdx = Math.max(0, frames.indexOf(f));
+      let chargeStartIdx = frameArrayIdx;
+      while (chargeStartIdx > 0 && (
+        String(frames[chargeStartIdx - 1].pendingChargeActor || '').toLowerCase() === 'opp' ||
+        Boolean(frames[chargeStartIdx - 1].isTopCountdownActive)
+      )) {
+        chargeStartIdx--;
+      }
+      const combinedBannerStr = String((f.ocrMidBannerText || f.moveBannerText || '') + ' ' + (f.ocrBottomMovesText || '')).toLowerCase();
+      const isOppChargeWin = String(f.pendingChargeActor || '').toLowerCase() === 'opp' ||
+        Boolean(f.isTopCountdownActive) ||
+        /attack incoming|protect shield|shields remaining/i.test(combinedBannerStr) ||
+        String(f.recommendedPhase || '').toUpperCase() === 'SHIELD_CALL';
+      let hasUsedBannerSoFar = /\\bused\\b/i.test(combinedBannerStr);
+      if (isOppChargeWin && !hasUsedBannerSoFar) {
+        for (let k = chargeStartIdx; k <= frameArrayIdx; k++) {
+          const bTxt = String((frames[k] && (frames[k].ocrMidBannerText || frames[k].moveBannerText)) || '');
+          if (/\\bused\\b/i.test(bTxt)) {
+            hasUsedBannerSoFar = true;
+            break;
+          }
+        }
+      }
+      const elapsedInChargeMs = frames[chargeStartIdx] ? Math.max(0, (f.relTimeMs || 0) - (frames[chargeStartIdx].relTimeMs || 0)) : 0;
+      const isShieldDecisionVisible = Boolean(showShieldHud && isOppChargeWin && !hasUsedBannerSoFar && elapsedInChargeMs <= 5500);
+
+      // Compute Pillar 4 & candidate moves for Shield Decision Overlay
+      const uHpNow = Math.max(1, Math.min(100, Number(pSlotHp[uIdx] ?? 100)));
+      const uEnergyNow = Math.max(0, Math.min(100, Number(pSlotE[uIdx] ?? 0)));
+      const bestUserRow = myMoveTimingRows[0] || { name: actUser.c1, shortName: abbrMove5(actUser.c1), energy: actUser.c1Energy || 45 };
+      const myTargetMoveShort = bestUserRow.shortName || abbrMove5(bestUserRow.name);
+      const myTargetMoveCost = bestUserRow.energy || 45;
+      const myFastsNeededForNext = uEnergyNow >= myTargetMoveCost ? 0 : Math.max(1, Math.ceil((myTargetMoveCost - uEnergyNow) / Math.max(1, actUser.fastEnergy)));
+
+      const oFastStats = lookupFastStats(actOpp.fastMove, actOpp.fastTurns);
+      const oFastStab = actOpp.meta.types.includes(oFastStats.type) ? 1.2 : 1.0;
+      const oFastEff = getTypeEff(oFastStats.type, actUser.meta.types);
+      const oFastRaw = Math.floor(0.5 * oFastStats.power * ((actOpp.meta.effAtk * (actOpp.isShadow ? 1.2 : 1.0) * stageMult(oAtkStg[oIdx] || 0)) / Math.max(10, actUser.meta.effDef * (actUser.isShadow ? 0.8333333 : 1.0) * stageMult(pDefStg[uIdx] || 0))) * oFastStab * oFastEff * 1.3) + 1;
+      const oppFastExactDmgPct = Math.max(0.5, (oFastRaw / Math.max(20, actUser.meta.effHp)) * 100);
+
+      const twoMovesLocked = Array.isArray(actOpp.confirmedMoves) && actOpp.confirmedMoves.length >= 2;
+      const rawCandNames = twoMovesLocked
+        ? actOpp.confirmedMoves.slice(0, 2)
+        : [actOpp.c1, actOpp.c2, actOpp.c3].filter(Boolean);
+      const seenMoveLower = new Set();
+      const candMoveNames = rawCandNames.filter(m => {
+        const kl = String(m).toLowerCase();
+        if (seenMoveLower.has(kl)) return false;
+        seenMoveLower.add(kl);
+        return true;
+      });
+
+      const rawShieldRows = candMoveNames.map(mName => {
+        const res = calcChargedDmgPct(actOpp.meta, actUser.meta, mName, actOpp.isShadow, actUser.isShadow, oAtkStg[oIdx] || 0, pDefStg[uIdx] || 0);
+        const cost = Math.max(35, Math.min(100, res.mStats.energy || 50));
+        const dmg = res.pct;
+        const remHp = Math.max(0, uHpNow - dmg);
+        const isKo = dmg >= uHpNow;
+        const oppFastsSurv = (isKo || remHp <= 1) ? 0 : Math.max(0, Math.floor((remHp - 1) / oppFastExactDmgPct));
+        const turnsSurv = oppFastsSurv * Math.max(1, actOpp.fastTurns);
+        const myTurnsNeed = myFastsNeededForNext * Math.max(1, actUser.fastTurns);
+        const canReach = !isKo && (myFastsNeededForNext === 0 || turnsSurv >= myTurnsNeed);
+        const fastsShort = (canReach || isKo) ? 0 : Math.max(1, Math.ceil((myTurnsNeed - turnsSurv) / Math.max(1, actUser.fastTurns)));
+        return {
+          moveName: mName,
+          shortName: abbrMove5(mName),
+          energyCost: cost,
+          dmgPct: dmg,
+          remHpPct: remHp,
+          isKo,
+          isFunded: false,
+          canReachNextMoveIfTanked: canReach,
+          fastsToNextMoveIfTanked: myFastsNeededForNext,
+          fastsShortIfTanked: fastsShort,
+          userTargetMoveShort: myTargetMoveShort
+        };
+      });
+
+      const minCandCost = rawShieldRows.reduce((minC, r) => Math.min(minC, r.energyCost), 35);
+      let preWindowOppE = curOppE;
+      if (chargeStartIdx > 0 && frames[chargeStartIdx - 1]) {
+        const pf = frames[chargeStartIdx - 1];
+        preWindowOppE = (Array.isArray(pf.oppSlotEnergy) && pf.oppSlotEnergy[oIdx] !== undefined)
+          ? Number(pf.oppSlotEnergy[oIdx])
+          : Number(pf.oppEnergy ?? curOppE);
+      }
+      const postDeductPlusMin = String(f.pendingChargeActor || '').toLowerCase() === 'opp' ? (curOppE + minCandCost) : curOppE;
+      const effectiveBankedE = Math.max(minCandCost, Math.min(100, Math.max(preWindowOppE, postDeductPlusMin)));
+
+      const normShieldRows = rawShieldRows.map(r => ({ ...r, isFunded: effectiveBankedE >= r.energyCost }));
+      const fundedMoves = normShieldRows.filter(r => r.isFunded).sort((a, b) => b.dmgPct - a.dmgPct);
+      const unfundedMoves = normShieldRows.filter(r => !r.isFunded).sort((a, b) => a.energyCost - b.energyCost);
+
+      const allFundedKo = fundedMoves.length > 0 && fundedMoves.every(r => r.isKo);
+      const someFundedKo = fundedMoves.some(r => r.isKo) && fundedMoves.some(r => !r.isKo);
+      const anyFundedFarmed = fundedMoves.some(r => !r.isKo && !r.canReachNextMoveIfTanked);
+      const unfundedKo = fundedMoves.every(r => !r.isKo) && unfundedMoves.some(r => r.isKo);
+      const worstFarmed = fundedMoves.find(r => !r.isKo && !r.canReachNextMoveIfTanked);
+
+      let sdBgHex = 'rgba(6, 78, 59, 0.95)';
+      let sdStrokeHex = '#10B981';
+      let sdVerdict = myFastsNeededForNext === 0
+        ? ('🛡️ TANK (0S): ' + myTargetMoveShort + ' READY!')
+        : ('🛡️ TANK (0S) -> REACH ' + myTargetMoveShort + ' IN ' + myFastsNeededForNext + 'F!');
+      if (allFundedKo) {
+        sdBgHex = 'rgba(127, 29, 29, 0.95)';
+        sdStrokeHex = '#EF4444';
+        sdVerdict = '🛡️ SHIELD (1S): ALL FUNDED KO!';
+      } else if (someFundedKo) {
+        sdBgHex = 'rgba(124, 45, 18, 0.95)';
+        sdStrokeHex = '#F97316';
+        sdVerdict = '🛡️ SHIELD / BAIT MIX: NUKE KOs!';
+      } else if (anyFundedFarmed) {
+        sdBgHex = 'rgba(124, 45, 18, 0.95)';
+        sdStrokeHex = '#FB923C';
+        sdVerdict = '🛡️ SHIELD (1S): TANK DIES ' + (worstFarmed ? worstFarmed.fastsShortIfTanked : 1) + 'F SHORT OF ' + myTargetMoveShort + '!';
+      } else if (unfundedKo) {
+        sdBgHex = 'rgba(113, 63, 18, 0.95)';
+        sdStrokeHex = '#EAB308';
+        sdVerdict = '🛡️ TANK (0S) -> ' + myTargetMoveShort + ' IN ' + myFastsNeededForNext + 'F (Unfunded KO)';
+      }
+      const lockedTag = twoMovesLocked ? ' • 2M' : '';
+      const sdHeaderLine = sdVerdict + '  •  ' + actOpp.code + '(' + effectiveBankedE + 'e) vs ' + actUser.code + '(' + uHpNow + '%)' + lockedTag;
+
+      return {
+        activeOpponent: actOpp.name,
+        shieldDecisionOverlay: {
+          visible: isShieldDecisionVisible,
+          bgColorHex: sdBgHex,
+          strokeColorHex: sdStrokeHex,
+          headerLineText: sdHeaderLine,
+          verdictText: sdVerdict,
+          effectiveBankedEnergy: effectiveBankedE,
+          userHpPct: uHpNow,
+          fundedMoves,
+          unfundedMoves
+        },
+        activeOpponentFastMove: actOpp.fastMove,
+        activeOpponentTurns: actOpp.fastTurns,
+        oppFastTelemetry,
+        oppFastMoveStatus: actOpp.fastStatus,
+        oppFastMoveConfirmed: actOpp.fastConfirmed,
+        confirmedOppChargedMoves: actOpp.confirmedMoves,
+        userFastTelemetry,
+        oppCountMode: 'my_fasts',
+        enable4ChargedMoves: false,
+        fastDetectTurnOffset: 0,
+        overlayTransparencyPct: 12,
+        appThemeId: 'dialga_shiny_midnight',
+        aiAdviceHudPosition: hudTop ? 'top' : 'bottom',
+        isOverlayMinimized: false,
+        maxHorizonTurns,
+        isOpponentShadow: actOpp.isShadow,
+        currentFormLabel: actOpp.meta.formLabel || 'Base',
+        availableForms: [actOpp.meta.formLabel || 'Base'],
+        userActivePokemon: actUser.name,
+        activeUserSlotIndex: uIdx,
+        activeOpponentSlotIndex: oIdx,
+        leadMatchup: (summaryHeader && summaryHeader.leadMatchup) || 'NEUTRAL',
+        isBattleActive: true,
+        isReplayMode: true,
+        userFastMoveName: actUser.fastMove,
+        userFastMoveTurns: actUser.fastTurns,
+        winsCmp,
+        myMove1Summary: myMoveTimingRows[0] ? (myMoveTimingRows[0].shortName + ' (' + myMoveTimingRows[0].dmgPct + '%)') : '—',
+        myMove2Summary: myMoveTimingRows[1] ? (myMoveTimingRows[1].shortName + ' (' + myMoveTimingRows[1].dmgPct + '%)') : '—',
+        throwAlignmentText: '1st, 3rd, 5th',
+        throwHorizonText: '1st, 3rd, 5th',
+        playerSwapRemainingSec: Math.max(0, Number(f.playerSwapRemainingSec ?? Math.ceil((f.userSwitchClockMs || 0) / 1000))),
+        playerSwapEndTimeMs: 0,
+        oppSwapRemainingSec: Math.max(0, Number(f.oppSwapRemainingSec ?? Math.ceil((f.oppSwitchClockMs || 0) / 1000))),
+        oppSwapEndTimeMs: 0,
+        hapticOppSwapWarnSec: 5,
+        hapticChargeTimingFasts: 1,
+        showOneBattleDvrBtn: false,
+        isOneBattleDvrArmed: false,
+        isOneBattleDvrRecording: false,
+        oneBattleDvrFrames: f.frameIdx || 0,
+        playerSwitchValidityLatched: true,
+        oppSwitchValidityLatched: true,
+        isPostFaintSwitchPromptActive: false,
+        isAttackIncomingPromptActive: Boolean(f.isCutsceneActive),
+        playerPokeballs: f.userBalls ?? 3,
+        oppPokeballs: f.oppBalls ?? 3,
+        playerShields: uShields,
+        oppShields: oShields,
+        player_shields_remaining: uShields,
+        opponent_shields_remaining: oShields,
+        playerFaintedSlots: pFainted,
+        oppFaintedSlots: oFainted,
+        playerSlotHpPct: pSlotHp,
+        oppSlotHpPct: oSlotHp,
+        playerSlotEnergy: pSlotE,
+        oppSlotEnergy: oSlotE,
+        playerSlotEverOnField: [true, true, true],
+        activeUserHpPct: pSlotHp[uIdx],
+        activeOppHpPct: oSlotHp[oIdx],
+        activeUserAtkStage: pAtkStg[uIdx] || 0,
+        activeUserDefStage: pDefStg[uIdx] || 0,
+        activeUserDisguiseBusted: Boolean(f.userDisguiseBusted),
+        activeOppAtkStage: oAtkStg[oIdx] || 0,
+        activeOppDefStage: oDefStg[oIdx] || 0,
+        activeOppDisguiseBusted: Boolean(f.oppDisguiseBusted),
+        playerSlotAtkStage: pAtkStg,
+        playerSlotDefStage: pDefStg,
+        playerSlotDisguiseBusted: [false, false, false],
+        oppSlotAtkStage: oAtkStg,
+        oppSlotDefStage: oDefStg,
+        oppSlotDisguiseBusted: [false, false, false],
+        activeUserEnergy: pSlotE[uIdx] || 0,
+        activeOppEnergy: oSlotE[oIdx] || 0,
+        activeOppMoveReady: Boolean(scannedOpponents[oIdx] && scannedOpponents[oIdx].isMoveReady),
+        activeOppEnergyLabel: (scannedOpponents[oIdx] && scannedOpponents[oIdx].energyLabel) || '0E',
+        scanHzMode: 10,
+        lastScanDurationMs: 12,
+        lastBattleAvgScanMs: 12,
+        lastHpScanDurationMs: 2,
+        lastBattleAvgHpScanMs: 2,
+        scanTurnOffsetMs: 0,
+        battleTurnIndex: Math.floor((f.relTimeMs || 0) / 500),
+        teamArchetype: 'ABC',
+        showTacticalRec: true,
+        showTacticalRecommendations: true,
+        enableHpTracking: true,
+        enableEnergyTracking: true,
+        tacticalRec: {
+          phase: f.recommendedPhase || 'MIDGAME',
+          archetype: 'ABC',
+          action: recAction,
+          actionLabel: recAction,
+          shieldPlan,
+          goal: recGoal,
+          goalText: recGoal,
+          tacticalSubGoal: recGoal,
+          line1Text: recAction,
+          line2Text: '🎯 ' + recGoal,
+          backlineText: '🎯 ' + recGoal,
+          timingAlertLevel,
+          swapPunishRiskPct: 25,
+          tone: timingAlertLevel === 'BLINK_1_FAST' || timingAlertLevel === 'IMMEDIATE_0_FAST' ? 'shield' : 'stay',
+          recommendedSwapSlotIndex: -1,
+          activeBr: 500,
+          activeUserHpPct: pSlotHp[uIdx],
+          confirmedUserHpPct: pSlotHp[uIdx],
+          isHpExtraFrameConfirmed: true,
+          altMoveKoWarning: '',
+          activeOppHpPct: oSlotHp[oIdx]
+        },
+        tacticalRecommendation: {
+          phase: f.recommendedPhase || 'MIDGAME',
+          archetype: 'ABC',
+          action: recAction,
+          actionLabel: recAction,
+          shieldPlan,
+          goal: recGoal,
+          goalText: recGoal,
+          tacticalSubGoal: recGoal,
+          line1Text: recAction,
+          line2Text: '🎯 ' + recGoal,
+          backlineText: '🎯 ' + recGoal,
+          timingAlertLevel,
+          swapPunishRiskPct: 25,
+          tone: timingAlertLevel === 'BLINK_1_FAST' || timingAlertLevel === 'IMMEDIATE_0_FAST' ? 'shield' : 'stay',
+          recommendedSwapSlotIndex: -1,
+          activeBr: 500,
+          activeUserHpPct: pSlotHp[uIdx],
+          confirmedUserHpPct: pSlotHp[uIdx],
+          isHpExtraFrameConfirmed: true,
+          altMoveKoWarning: '',
+          activeOppHpPct: oSlotHp[oIdx]
+        },
+        team: uSpecs.map((u, idx) => ({
+          initial: u.name.charAt(0).toUpperCase(),
+          code: u.code,
+          name: u.name,
+          hpPct: pSlotHp[idx],
+          energy: pSlotE[idx]
+        })),
+        scannedOpponents,
+        oppMoveTimingRows,
+        myMoveTimingRows
+      };
     }
 
     function findFrameAtSec(sec) {
@@ -1113,67 +1965,28 @@ function renderWatchSharePage(origin, shareInfo) {
     function syncHudFrame() {
       const f = findFrameAtSec(video.currentTime || 0);
       if (!f) return;
-      document.getElementById('f-clock').textContent = 'F#' + String(f.frameIdx || 0).padStart(4, '0') + ' ' + ((f.relTimeMs || 0) / 1000).toFixed(1) + 's';
-      document.getElementById('u-name').textContent = (f.userActiveSpecies || 'User').slice(0, 14);
-      document.getElementById('o-name').textContent = (f.oppActiveSpecies || 'Opponent').slice(0, 14);
-      const uHp = hpStyle(f.userHpPct ?? -1);
-      const oHp = hpStyle(f.oppHpPct ?? -1);
-      const uEl = document.getElementById('u-hp');
-      uEl.style.background = uEl.style.backgroundColor = uHp.bg;
-      uEl.style.color = uHp.fg;
-      uEl.textContent = uHp.txt;
-      const oEl = document.getElementById('o-hp');
-      oEl.style.background = oEl.style.backgroundColor = oHp.bg;
-      oEl.style.color = oHp.fg;
-      oEl.textContent = oHp.txt;
-      document.getElementById('u-e').textContent = (f.userEnergy ?? 0) + 'E';
-      document.getElementById('o-e').textContent = (f.oppEnergy ?? 0) + 'E';
-      document.getElementById('u-sh').textContent = '🛡️' + (f.userShields ?? 2);
-      document.getElementById('o-sh').textContent = (f.oppShields ?? 2) + '🛡️';
-
-      const coach = document.getElementById('hud-coach');
-      if (f.moveBannerText) {
-        coach.style.borderLeftColor = '#f59e0b';
-        coach.textContent = '⚡ ' + f.moveBannerText;
-      } else if (f.zoomPhase && f.zoomPhase !== 'NONE') {
-        coach.style.borderLeftColor = '#f43f5e';
-        coach.textContent = '🎬 Cutscene / Zoom Phase: ' + f.zoomPhase;
-      } else {
-        coach.style.borderLeftColor = '#10b981';
-        coach.textContent = '⚔️ ' + (f.userActiveSpecies || 'User') + ' (' + (f.userEnergy || 0) + 'E) vs ' + (f.oppActiveSpecies || 'Opponent') + ' (' + (f.oppEnergy || 0) + 'E) • Swap: U ' + Math.ceil((f.userSwitchClockMs || 0)/1000) + 's / O ' + Math.ceil((f.oppSwitchClockMs || 0)/1000) + 's';
-      }
-
-      if (hudMode === 'live') {
-        const uSpecs = (summaryHeader && summaryHeader.userTeamSpecs) || [];
-        const oSpecs = (summaryHeader && summaryHeader.oppTeamSpecs) || [];
-        const uSlotHp = f.userSlotHpPct || [];
-        const oSlotHp = f.oppSlotHpPct || [];
-        const uSlotE = f.userSlotEnergy || [];
-        const oSlotE = f.oppSlotEnergy || [];
-        let html = '';
-        for (let i = 0; i < 3; i++) {
-          const uSp = (uSpecs[i] && uSpecs[i].species) || (i === f.userActiveIndex ? f.userActiveSpecies : 'Slot ' + (i+1));
-          const oSp = (oSpecs[i] && oSpecs[i].species) || (i === f.oppActiveIndex ? f.oppActiveSpecies : 'Opp ' + (i+1));
-          const uH = uSlotHp[i] !== undefined ? uSlotHp[i] : (i === f.userActiveIndex ? f.userHpPct : -1);
-          const oH = oSlotHp[i] !== undefined ? oSlotHp[i] : (i === f.oppActiveIndex ? f.oppHpPct : -1);
-          const uEn = uSlotE[i] !== undefined ? uSlotE[i] : (i === f.userActiveIndex ? f.userEnergy : 0);
-          const oEn = oSlotE[i] !== undefined ? oSlotE[i] : (i === f.oppActiveIndex ? f.oppEnergy : 0);
-          const isAct = i === f.userActiveIndex;
-          html += '<div class="matrix-cell ' + (isAct ? 'active-pair' : '') + '">' +
-            '<div style="font-weight:800;color:#38bdf8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + uSp + '</div>' +
-            '<div style="font-size:10px;color:#94a3b8">HP: ' + (uH >= 0 ? uH + '%' : '--') + ' • ' + uEn + 'E</div>' +
-            '<div style="margin-top:3px;border-top:1px solid #334155;padding-top:2px;font-weight:700;color:#fca5a5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">vs ' + oSp + '</div>' +
-            '<div style="font-size:10px;color:#94a3b8">HP: ' + (oH >= 0 ? oH + '%' : '--') + ' • ' + oEn + 'E</div>' +
-            '</div>';
+      try {
+        attachOverlayBridge();
+        const win = hudIframe.contentWindow;
+        if (!win || typeof win.updateBattleData !== 'function') return;
+        const payload = buildReplayOverlayPayload(f);
+        if (typeof win.setReplayShieldOverlayEnabled === 'function') {
+          win.setReplayShieldOverlayEnabled(showShieldHud);
         }
-        document.getElementById('hud-matrix').innerHTML = html;
-      }
-
-      if (hudMode === 'diag') {
-        document.getElementById('hud-diag').textContent =
-          'RAW HP: U=' + (f.rawUserHpPct ?? -1) + '% (commit ' + (f.userHpPct ?? -1) + '%) | O=' + (f.rawOppHpPct ?? -1) + '% (commit ' + (f.oppHpPct ?? -1) + '%)\\n' +
-          'CIRCLE: ' + (f.circleFillPct ?? -1) + '% | SRC: ' + (f.energySource || 'FAST_CADENCE') + '\\n' +
-          'OCR TL: ' + JSON.stringify((f.ocrTopLeftText || '').replace(/\\n/g, ' ')) + ' | TR: ' + JSON.stringify((f.ocrTopRightText || '').replace(/\\n/g, ' '));
+        win.updateBattleData(payload);
+        if (typeof win.setReplayHudMode === 'function') {
+          win.setReplayHudMode(hudMode === 'diag' ? 'diagnostic' : hudMode);
+        }
+        if (hudMode === 'diag' && typeof win.setReplayDiagnosticText === 'function') {
+          const diagStr =
+            'F#' + String(f.frameIdx || 0).padStart(4, '0') + ' (' + ((f.relTimeMs || 0) / 1000).toFixed(2) + 's) | Cutscene=' + Boolean(f.isCutsceneActive) + '\\n' +
+            'RAW HP: U=' + (f.rawUserHpPct ?? -1) + '% (commit ' + (f.userHpPct ?? -1) + '%) | O=' + (f.rawOppHpPct ?? -1) + '% (commit ' + (f.oppHpPct ?? -1) + '%)\\n' +
+            'CIRCLE: L=' + (f.leftCircleFillPct ?? -1) + '% R=' + (f.rightCircleFillPct ?? -1) + '% | SRC=' + (f.energySource || 'FAST_CADENCE') + '\\n' +
+            'OCR: ' + JSON.stringify((f.ocrTopRightText || '').replace(/\\n/g, ' ')) + ' | Banner: ' + JSON.stringify((f.ocrMidBannerText || '').replace(/\\n/g, ' '));
+          win.setReplayDiagnosticText(diagStr);
+        }
+      } catch (e) {
+        console.error('syncHudFrame error:', e);
       }
     }
 
@@ -1202,7 +2015,7 @@ function renderWatchSharePage(origin, shareInfo) {
       try {
         const res = await fetch(TRACE_URL);
         if (!res.ok) {
-          document.getElementById('hud-coach').textContent = '⚠️ Trace HTTP ' + res.status;
+          console.error('Trace HTTP ' + res.status);
           return;
         }
         const text = await res.text();
@@ -1242,7 +2055,6 @@ function renderWatchSharePage(origin, shareInfo) {
         syncHudFrame();
       } catch (e) {
         console.error('Trace load error:', e);
-        document.getElementById('hud-coach').textContent = '⚠️ Trace error: ' + e.message;
       }
     }
 
@@ -1335,10 +2147,10 @@ function renderWatchSharePage(origin, shareInfo) {
               ctx.fillText((f.userActiveSpecies || 'User') + ' ' + (f.userHpPct ?? '--') + '% (' + (f.userEnergy ?? 0) + 'E)  vs  ' + (f.oppActiveSpecies || 'Opp') + ' ' + (f.oppHpPct ?? '--') + '% (' + (f.oppEnergy ?? 0) + 'E)', 24, y + 32);
               ctx.fillStyle = '#34d399';
               ctx.font = 'bold 14px sans-serif';
-              ctx.fillText(document.getElementById('hud-coach').textContent.slice(0, 62), 24, y + 66);
+              ctx.fillText(String(f.recommendedAction || f.moveBannerText || 'SilphScope PvP').slice(0, 62), 24, y + 66);
               ctx.fillStyle = '#94a3b8';
               ctx.font = '12px monospace';
-              ctx.fillText(document.getElementById('f-clock').textContent + ' • SilphScope PvP', 24, y + 94);
+              ctx.fillText('F#' + String(f.frameIdx || 0).padStart(4, '0') + ' ' + ((f.relTimeMs || 0) / 1000).toFixed(1) + 's • SilphScope PvP', 24, y + 94);
             }
           }
           requestAnimationFrame(drawTick);
@@ -1637,6 +2449,17 @@ export default {
           },
         }
       );
+    }
+
+    // 0b. Exact In-App HUD WebView Asset (`GET /overlay.html`)
+    if (request.method === 'GET' && path === '/overlay.html') {
+      return new Response(OVERLAY_HTML, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-cache',
+        },
+      });
     }
 
     // 1. Public Health Check
