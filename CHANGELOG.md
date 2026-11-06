@@ -1,4 +1,25 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.21`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.22`)
+
+---
+
+## v6.22 (2026-11-05) — 1-Battle DVR Video Telemetry Fixes: Shielded Move False-KO Guard, Resurrection Deadlock Fix, Switch-In Unconfirmed Charge Rollback, Short-Sprite HP Corridor & Shield Cooldown
+*Precision combat-vision and state-machine release (`v6.22`, `versionCode = 1622`) resolving 7 root causes identified in the `v6.21` 1-Battle DVR video recordings (`log-1793927871187-318` and `log-1793918420904-448`) and companion telemetry batches.*
+
+- **v6.22 — Fix 1: Shielded Move False-KO Guard, Pre-Faint Energy Preservation & Resurrection Deadlock Fix (`OverlayService.kt`)**:
+  - **Pre-KO `BLOCKED!` / Disguise Evaluation & `sampledHpPct == -1` Requirement**: Evaluated `blockedByBanner` / `disguiseBustedEarly` (`"BLOCKED!"` and `"disguise is busted!"` OCR banners) *before* `isLethalDisappearingPlayerHpBar` and `isLethalDisappearingOppHpBar`, and strictly required `sampledPlayerHpPct == -1` / `sampledOppHpPct == -1` across all sub-conditions (including the `sampledBalls in 1 until pendingChargedAttackPreBalls` sub-branch). Prevents shielded attacks (such as `Togekiss` shielding `Play Rough` at `68% HP, 85E` or `Tinkaton` shielding `Hydro Cannon` at `34% HP, 35E`) from falsely marking the defender fainted (`0% HP, 0E`).
+  - **Broke the Catch-22 Resurrection Deadlock**: Previously, `canResurrectActiveOpp` / `canResurrectActiveUser` required `slotHpConfirmFrames >= 2` when `< 3` Pokéballs remained, which was only incremented inside Sections 1A/1B when `!faintedSlots[activeIdx]` — locking any falsely fainted active slot at `0% HP, 0E` and disabling fast-move and circle energy scanning (`canAccumulateFastEnergy` / Section 1C). Added `faintedUserLiveHpFrames` and `faintedOppLiveHpFrames` tracking directly in `updateSteadyFrameBallAndShieldState()` along with `playerSlotPreFaintEnergy` / `oppSlotPreFaintEnergy` restoration so any active slot with `>= 2` frames of visible HP bar is immediately resurrected with its pre-faint HP and energy intact.
+
+- **v6.22 — Fix 2: Switch-In Camera Pan Guard & Provisional Unconfirmed Player Charge Rollback (`OverlayService.kt`)**:
+  - **Switch-In Camera Pan Guard**: Prevented `missingBothHpBarsFrames` and `isPlayerChargedScreen` from latching an unconfirmed HUD-missing player charged move during or within `2500ms` of any player/opponent switch (`"Go, <Pokemon>!"` / `"Come back!"` or `sampledTopRightNameplateVisible`).
+  - **Unconfirmed Player Charge Rollback**: When `pendingChargedAttackActor == "user"` was latched solely by `missingBothHpBarsFrames >= 14` without minigame or move-banner OCR and normal combat circles return without having drained (`sampledFill >= preChargeFill - 8`), the service now aborts the false alarm and restores `preChargeUserEnergy` instead of logging a phantom charged attack.
+
+- **v6.22 — Fix 3: Dynamic Short-Sprite Player HP Corridor & 0-Shield Pre-Charge HP Lock (`OverlayService.kt`)**:
+  - **Short-Sprite (`Mimikyu`) HP Corridor Clearance**: Expanded `playerHpCorridorRect.bottom` to `0.78h` during normal combat and only tightened to `0.665h` while `isShieldDecisionOverlayVisible` is actually `true`, preventing `0.65h` (`y = 1522`) from slicing through `Mimikyu`'s bottom white capsule border (`y = 1524..1548`).
+  - **0-Shield Post-Hit `pendingChargedAttackPreUserHp` Lock**: Capped `isShieldCallWindowEarly`'s 0-shield branch and `isOpponentThrowingHpRescanWindow` at `(nowMs - pendingChargedAttackStartMs) <= 3500L && lastDetectedBannerMoveActor != "opp"`, preventing post-hit HP bars at the end of an opponent cutscene from overwriting `pendingChargedAttackPreUserHp` (fixing `Swampert` `95% -> 75%` pre-charge overwrite on `Brick Break`).
+
+- **v6.22 — Fix 4: Wall-Clock Shield Cooldown, Monotonic Mid-Combat HP Guard & Sub-Turn Flicker Debounce (`OverlayService.kt`, `PixelScannerEngine.kt`)**:
+  - **6.5s Wall-Clock Shield Decrement Cooldown**: Added `lastPlayerShieldDecrementWallMs` and `lastOppShieldDecrementWallMs` across all shield decrement sites (`handleMidBannerUsedMoveLines`, Section 4, and `updateSteadyFrameBallAndShieldState`) to prevent double shield decrements (`2 -> 1 -> 0` 500ms apart) when `"BLOCKED!"` OCR and HUD shield pixel scanning fire on the same attack.
+  - **Dark-Track Tip Glare & Mid-Combat Upward HP Guard**: Lowered the `>= 75%` dark-track density check threshold in `PixelScannerEngine.kt` from `darkTrackSpan > 10` to `darkTrackSpan >= 4`, required `>= 6` consecutive stable frames before allowing upward HP changes after `3.0s` (`>= 4` turns) on field, and debounced `rollbackPendingProactiveStep()` across `>= 3` consecutive missing-circle frames.
 
 ---
 

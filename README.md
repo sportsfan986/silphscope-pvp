@@ -1,4 +1,4 @@
-# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v6.21)
+# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v6.22)
 
 [![Live Web Simulator](https://img.shields.io/badge/🌐%20Live%20Web%20Simulator-Try%20in%20Browser-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white)](https://sportsfan986.github.io/silphscope-pvp/)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support%20the%20Project-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/sportsfan986)
@@ -41,7 +41,7 @@ Experience **SilphScope PvP** instantly in your web browser — completely free,
 
 ---
 
-## Advanced Analytics & Quality Metrics (v3.00)
+## Advanced Analytics & Quality Metrics (v6.22)
 
 Raw win rate in GO Battle League is heavily influenced by matchmaking alignment and blind 3v3 team-composition luck (RPS). **SilphScope PvP v3.00** separates **Matchup Luck (Blind Matchup Favorability — BMF)** from **Dynamic Execution WAE (Wins Above Expected)** so you can track both matchmaking favorability and your in-battle micro-execution skill (energy farming, fast move denial, sacrificial catches, shield discipline, and CMP timing).
 
@@ -131,13 +131,13 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## 📥 Download & Install Native Android APK (v6.21)
+## 📥 Download & Install Native Android APK (v6.22)
 
 > **✅ Note on Live HP & Energy Counting (Enabled by Default since v6.02)**:
 > **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting** are **ENABLED (ON)** by default with optimal scanner tuning (`2 samples`, `±2%` tolerance, `200ms` proactive energy lead, `+1t` fast offset, and `4.0s` swap-throw rollback). You can customize all scanner, haptics, and 1-Battle DVR controls in **⚙️ Settings**.
 
 1. Visit the **[Official GitHub Releases Page](https://github.com/sportsfan986/silphscope-pvp/releases)**.
-2. Download **`silphscope-pvp-v6.21.apk`** directly to your Android device.
+2. Download **`silphscope-pvp-v6.22.apk`** directly to your Android device.
 3. Tap the downloaded APK file to install (grant *"Install unknown apps"* permission if prompted).
 4. Launch **SilphScope PvP**:
    - Select, reorder, or customize your **GBL or Show 6 Team Presets**, set **Opponent Move Count Basis** (`My Fasts` vs. `Their Fasts`), adjust **Overlay Size** (`50%–100%` screen width slider) and **Background Transparency**, and configure **Synchronized Haptics** or **1-Battle DVR** in **⚙️ Settings**.
@@ -147,11 +147,12 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## ✨ Changelog — Complete Release History (`v1.00` – `v6.21`)
+## ✨ Changelog — Complete Release History (`v1.00` – `v6.22`)
 
 *(See [CHANGELOG.md](./CHANGELOG.md) for full technical notes on every release.)*
 
-- **v6.00 – v6.21 — APK Signature Scheme v3 Key Rotation, Security & Toolchain Hardening, Super Mega 3rd Fixed `+` Charged Moves, 3-Button Energy Scanner & 1-Battle H.264 DVR**:
+- **v6.00 – v6.22 — 1-Battle DVR Telemetry Fixes, APK Signature Scheme v3 Key Rotation, Security & Toolchain Hardening, Super Mega 3rd Fixed `+` Charged Moves & 1-Battle H.264 DVR**:
+  - **v6.22**: Resolved 7 combat-vision and state-machine bugs identified in the `v6.21` 1-Battle DVR videos: evaluated `"BLOCKED!"` / `"disguise is busted!"` banners before KO classification and required `sampledHpPct == -1` across all `isLethalDisappearing*HpBar` sub-conditions (preventing shielded moves from falsely marking `Togekiss`/`Tinkaton` fainted), broke the Catch-22 resurrection deadlock (`faintedUserLiveHpFrames` / `faintedOppLiveHpFrames` + pre-faint energy restoration), added a switch-in camera pan guard and unconfirmed player charge rollback when undrained circles return, expanded `playerHpCorridorRect.bottom` (`0.78h`) for short sprites (`Mimikyu`), locked 0-shield `pendingChargedAttackPreUserHp` after `3500ms`, enforced a `6.5s` wall-clock shield decrement cooldown, and tightened dark-track tip glare (`darkTrackSpan >= 4`) and mid-combat upward HP guards.
   - **v6.21**: Migrated release signing to encrypted GitHub Actions secrets with **APK Signature Scheme v3 Key Rotation Lineage** (`minSdk = 31` Android 12+, 4096-bit RSA key, capabilities revoked on prior key for seamless in-place updates), hardened Android WebView (`escapeHtml` XSS protection, main-thread `@JavascriptInterface` dispatch, `allowBackup="false"`, `textRecognizer.close()` & WebView lifecycle cleanup), upgraded DVR surface rendering to `lockHardwareCanvas()` with frame-drop backpressure, fixed Web Show 6 vs. GBL storage key separation and idle 5Hz re-render overhead, enabled strict TypeScript (`"strict": true`), and added a `Content-Security-Policy` header.
   - **v6.20**: Added full **Mega Level 4 (`Super Mega`) 3rd Fixed Special `+` Charged Move** support across all 18 Super Mega species and `*_PLUS` moves in Mega-eligible leagues (`Mega Master League`, `Mega Great League`, `Mega Ultra League`, `Battle Frontier (Cauldron)`, `Battle Frontier (Master)`), calibrated the **3-Button Pixel Energy Scanner** (`0.215w`/`0.500w` raised/`0.782w`), and upgraded the turn-by-turn combat simulator to a **flexible, role-agnostic multi-throw sequence engine** (evaluating back-to-back `35E -> 35E` spam vs. single nukes and 3-move kits).
   - **v6.12**: Added Pokémon GO HP shader color-to-percentage validation, `BANNER_OCR` move preservation, limited/Mega cup move pool fallbacks, pre-minigame circle shrink energy retention, and `"BLOCKED!"` mid-banner OCR.

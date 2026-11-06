@@ -2496,13 +2496,13 @@ internal fun OverlayService.detectFloatingHpBarPct(
                                     val darkFraction = (darkPx + pendingW).toFloat() / fullInteriorW.toFloat()
                                     val darkDiff = kotlin.math.abs(darkFraction - expectedDarkFraction)
 
-                                    val isValidDarkTrack = if (darkTrackSpan > 10) {
+                                    val isValidDarkTrack = if (darkTrackSpan >= 4) {
                                         brightWhitePx <= maxAllowedBright &&
                                             (darkPx.toFloat() / max(1, darkTrackSpan).toFloat()) >= 0.75f &&
                                             darkDiff <= 0.10f
                                     } else {
-                                        // Nearly full bar (HP >= ~95%): remainder span is <= 10px
-                                        brightWhitePx <= 3 && (darkDiff <= 0.10f || (expectedDarkFraction <= 0.08f && darkFraction <= 0.08f))
+                                        // Full bar (HP >= ~99%): remainder span is 0..3px
+                                        brightWhitePx <= 2 && (darkDiff <= 0.08f || (expectedDarkFraction <= 0.05f && darkFraction <= 0.05f))
                                     }
 
                                     if (isValidDarkTrack) {

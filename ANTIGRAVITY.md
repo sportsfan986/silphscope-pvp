@@ -2,7 +2,7 @@
 
 > **Target Audience**: Antigravity agents, Claude/Gemini coding assistants, and core developers maintaining or extending **SilphScope PvP**.  
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v6.21` (`versionCode = 1621`)  
+> **Current Version**: `v6.22` (`versionCode = 1622`)  
 > **Primary Branches**: `main` (source code & releases), `ai-telemetry-logs` (isolated telemetry, DVR recordings & anomaly traces).
 
 ---
@@ -264,11 +264,11 @@ When working on this repository inside Antigravity:
 
 ### 5.3. Version Bumping & Default Release Checklist
 When publishing a new release:
-1. Run `./scripts/bump_version.sh vX.XX` (or update `VERSION`, `app/build.gradle.kts`, `OverlayService.APP_VERSION`, `package.json`, `src/App.tsx`, `README.md`, and `ANTIGRAVITY.md`).
+1. **Auto-Increment by `+0.01` (Default)**: Unless the user specifies an explicit target version, increment the current version in `VERSION` by `+0.01` (e.g., `v6.21` -> `v6.22`, `versionCode = 1000 + MAJOR * 100 + MINOR`) by running `./scripts/bump_version.sh` (with no arguments, or `./scripts/bump_version.sh vX.XX` if specified) and syncing `VERSION`, `app/build.gradle.kts`, `OverlayService.APP_VERSION`, `MainActivity.kt`, `GitHubCloudSync.kt`, `activity_main.xml`, `overlay.html`, `package.json`, `src/App.tsx`, `README.md`, and `ANTIGRAVITY.md`.
 2. Add the new version entry at the top of `CHANGELOG.md`.
 3. Run fast local Web verification (`npm run lint && npm run build`).
-4. Commit and push to `origin main` to trigger `.github/workflows/android.yml` (`Build Android APK`) and `.github/workflows/deploy-pages.yml` (`Deploy Web Simulator to GitHub Pages`).
-5. **Monitor GitHub Actions Run Until Completion**: Poll/check the workflow run status via the GitHub Actions API (`https://api.github.com/repos/sportsfan986/silphscope-pvp/actions/runs`), verify that `silphscope-pvp-vX.XX.apk` is published to GitHub Releases, and automatically diagnose, fix, and re-push if any step fails.
+4. Commit and push to `origin main` to trigger `.github/workflows/android.yml` (`Build Android APK`, ~2–3 min) and `.github/workflows/deploy-pages.yml` (`Deploy Web Simulator to GitHub Pages`, ~45s).
+5. **Monitor GitHub Actions Run Until Completion**: Use the `schedule` tool (~2 min timer) to check the workflow run status via the GitHub Actions API (`https://api.github.com/repos/sportsfan986/silphscope-pvp/actions/runs`), verify that `silphscope-pvp-vX.XX.apk` is published to GitHub Releases and notify the user when complete, or automatically fetch job logs, fix, and re-push if any step fails.
 
 ### 5.4. Common Pitfalls & Guardrails
 - **DO NOT** attempt to create a second `VirtualDisplay` from `MediaProjection`.
