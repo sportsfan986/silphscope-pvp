@@ -372,6 +372,8 @@ internal fun OverlayService.drainDvrEncoderLocked(endOfStream: Boolean) {
 internal fun OverlayService.releaseDvrResourcesLocked(deleteFiles: Boolean) {
     activeOneBattleDvrRecording = false
     activeOneBattleDvrFrames = 0
+    dvrFrameCount = 0
+    dvrRecordingStartMs = 0L
     try {
         dvrTraceWriter?.flush()
         dvrTraceWriter?.close()
@@ -480,12 +482,12 @@ internal fun OverlayService.finalizeAndUploadOneBattleDvrAsync(
         OverlayService.prependDvrSummaryHeaderIfNeededStatic(prefs, gson, battleId, summaryRecord, localTrace)
         OverlayService.enforceLocalDvrReplaysQuotaStatic(filesDir, prefs, gson)
 
-        val shouldUploadDiag = wasExplicitlyFlaggedForDiag || summaryRecord.hasHighSeverityAnomaly
+        val shouldUploadDiag = activeAlwaysOnDvrEnabled || wasExplicitlyFlaggedForDiag || summaryRecord.hasHighSeverityAnomaly
         val diagReason = when {
             wasExplicitlyFlaggedForDiag && summaryRecord.hasHighSeverityAnomaly -> "Manual Flag + HIGH Anomaly (${summaryRecord.anomalyCount})"
-            wasExplicitlyFlaggedForDiag -> "Post-Battle User Flag"
+            wasExplicitlyFlaggedForDiag -> "Post-Battle User Bug Report Flag"
             summaryRecord.hasHighSeverityAnomaly -> "Auto HIGH-Severity Anomaly (${summaryRecord.anomalyCount})"
-            else -> ""
+            else -> "Always-On Auto DVR"
         }
 
         Handler(Looper.getMainLooper()).post {
@@ -493,12 +495,12 @@ internal fun OverlayService.finalizeAndUploadOneBattleDvrAsync(
             if (wasExplicitlyFlaggedForDiag) {
                 showBattleToast("🚩 Uploading Flagged Battle Video & Bug Report...")
             } else {
-                showBattleToast("🎬 DVR Saved — Tap 🗑️ Delete Video or 🚩 Bug Report in HUD")
+                showBattleToast("🎬 DVR Saved — Uploading in 12s (Tap 🗑️ Delete in HUD to cancel)")
             }
         }
 
         pendingPostBattleDvrUploadJob?.cancel()
-        pendingPostBattleDvrUploadJob = lifecycleScope.launch(Dispatchers.IO) {
+        pendingPostBattleDvrUploadJob = OverlayService.dvrUploadScope.launch {
             if (!wasExplicitlyFlaggedForDiag) {
                 // Hold automatic upload for 12s so the user can review and tap 🗑️ Delete Video or 🚩 Bug Report in the HUD
                 delay(12_000L)

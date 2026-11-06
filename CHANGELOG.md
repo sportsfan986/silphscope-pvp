@@ -1,4 +1,19 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.43`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.44`)
+
+---
+
+## v6.44 (2026-11-06) — Always-On DVR Frame Recording Gate Fix, Persistent Upload Coroutine Scope, Post-Battle Delete Banner & Wi-Fi/VPN Network Detection Fix
+*Critical hotfix release (`v6.44`, `versionCode = 1644`) resolving why `v6.43` did not record or upload battle DVR videos.*
+
+- **v6.44 — Fix 1: Always-On DVR Frame Recording Gate (`OverlayService.kt`)**:
+  - **Root Cause**: The 10Hz frame capture loop (`OverlayService.kt:5445`) checked `(activeOneBattleDvrArmed || (activeShowOneBattleDvrBtn && hasCustomScreenNameForVideoLoggingStatic(prefs)))`. Because `v6.43` retired the manual start/stop DVR button (`activeShowOneBattleDvrBtn = false`) in favor of `activeAlwaysOnDvrEnabled = true`, that condition evaluated to `false` on every frame and no video frames were encoded.
+  - **Fix**: Updated the frame capture condition to `(activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed) && !isWaitingForOpponent && activeOpponentName != "Waiting..."` and ensured `startNewBattle()` cleanly resets any stale unlogged DVR state before a new match begins.
+
+- **v6.44 — Fix 2: Always-On DVR Auto-Upload & Persistent Upload Coroutine Scope (`BattleDvrEngine.kt`, `OverlayService.kt`, `GitHubCloudSync.kt`)**:
+  - **Always-On DVR Auto-Upload**: Updated `finalizeAndUploadOneBattleDvrAsync()` so `shouldUploadDiag` triggers automatically on all valid `>= 10s` battles when `activeAlwaysOnDvrEnabled` is enabled (`diagReason = "Always-On Auto DVR"`), as well as on manual `🚩 Bug Report` flags and R2 Replay Vault uploads.
+  - **Persistent `dvrUploadScope` Across Service Lifecycle**: Moved the 12-second pre-upload delete-window coroutine and manual `flagLastBattleDvrBugReportFromOverlay` job from `lifecycleScope` to a persistent `OverlayService.dvrUploadScope` (`SupervisorJob() + Dispatchers.IO`), and deferred `dvrThread.quitSafely()` in `onDestroy()` until queued `dvrHandler` finalization tasks finish—ensuring uploads are never cancelled if the player stops the overlay or switches to the Battle Log within 12 seconds of battle end.
+  - **Post-Battle Delete / Bug Report HUD Banner (`waitingPayload`)**: Added `"hasDvr"`, `"dvrDeleted"`, `"dvrBugReported"`, `"dvrUploadStatus"`, and `"stoppedBattleHasDvr"` to `waitingPayload` in `buildBattlePayloadJson()` so the post-battle `🗑️ Delete Video` / `🚩 Bug Report` prompt renders immediately when a battle is logged and the HUD returns to `"Waiting..."`.
+  - **Wi-Fi + VPN Network Detection (`isDvrUploadAllowedOnCurrentNetworkStatic`)**: Prioritized `TRANSPORT_WIFI` / `TRANSPORT_ETHERNET` ahead of `TRANSPORT_CELLULAR` so active VPN tunnels over Wi-Fi are never falsely treated as metered cellular connections.
 
 ---
 

@@ -2195,8 +2195,11 @@ internal fun OverlayService.Companion.isDvrUploadAllowedOnCurrentNetworkStatic(p
         val caps = cm.getNetworkCapabilities(activeNet) ?: return false
         val isWifiOrEthernet = caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ||
             caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)
+        if (isWifiOrEthernet) return true
+        val isCellular = caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)
+        if (isCellular) return false
         val isUnmetered = caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
-        isWifiOrEthernet || isUnmetered
+        isUnmetered || !cm.isActiveNetworkMetered
     } catch (_: Exception) {
         true
     }

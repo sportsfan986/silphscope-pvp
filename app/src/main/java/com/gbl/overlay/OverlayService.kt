@@ -91,8 +91,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "6.43"
-        const val APP_VERSION_CODE = 1643
+        const val APP_VERSION = "6.44"
+        const val APP_VERSION_CODE = 1644
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -272,6 +272,7 @@ class OverlayService : LifecycleService() {
         const val AI_TELEMETRY_DAILY_INTERVAL_MS = 24L * 60L * 60L * 1000L
         @Volatile var isAiTelemetryUploadInFlight: Boolean = false
         @Volatile var isDvrUploadInFlight: Boolean = false
+        internal val dvrUploadScope = kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
 
         /**
          * v4.08: Scanner-Calibrated 18-Type Charged Move Contrast Ranking (1 = Highest Contrast, 18 = Lowest Contrast).
@@ -5442,7 +5443,7 @@ class OverlayService : LifecycleService() {
                     cachedOcrMidBannerLines
                 )
             }
-            if ((activeOneBattleDvrArmed || (activeShowOneBattleDvrBtn && hasCustomScreenNameForVideoLoggingStatic(prefs))) &&
+            if ((activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed) &&
                 (isBattleActive || hasBattleStarted) && !isWaitingForOpponent
             ) {
                 recordOneBattleDvrFrameAndTraceAsync(screen, currentFrameTimestampMs)
@@ -12351,6 +12352,11 @@ class OverlayService : LifecycleService() {
             lastClearedUserShieldsRemaining = playerShieldsRemaining
             lastClearedOppShieldsRemaining = oppShieldsRemaining
         }
+        if (activeOneBattleDvrRecording || activeOneBattleDvrFrames > 0) {
+            abortOneBattleDvrAsync(disarm = false)
+        }
+        stoppedBattleDiscardDvr = false
+        stoppedBattleFlagBugReport = false
 
         battleResetEpoch++
         lastBattleResetTimeMs = System.currentTimeMillis()
@@ -13073,10 +13079,7 @@ class OverlayService : LifecycleService() {
         val dvrElapsedSec = if (dvrRecordingStartMs > 0L) (nowMs - dvrRecordingStartMs).coerceAtLeast(0L) / 1000.0 else 0.0
         val effectiveBattleSec = max(durationSec ?: 0.0, dvrElapsedSec)
         val hasActualBattleContent = formattedOpponents.isNotEmpty() &&
-            effectiveBattleSec >= 10.0 &&
-            (finalTimelineEvents.isNotEmpty() || energyLedger.isNotEmpty() ||
-                endUserHpList.any { it in 1..99 } || endOppHpList.any { it in 1..99 } ||
-                finalUserFaints > 0 || finalOppFaints > 0)
+            effectiveBattleSec >= 10.0
         val wasExplicitlyFlaggedForDiag = activeOneBattleDvrArmed || stoppedBattleFlagBugReport
         val wasDvrRecordedThisBattle = !stoppedBattleDiscardDvr &&
             !ignoreAiTelemetry &&
@@ -13495,7 +13498,7 @@ class OverlayService : LifecycleService() {
         lastLoggedBattleDvrUploadStatus = "UPLOADING"
         recalculateAndPushBattleData()
         showBattleToast("🚩 Flagged Bug Report — Uploading Battle Video & Deep Trace...")
-        lifecycleScope.launch(Dispatchers.IO) {
+        dvrUploadScope.launch {
             val sumRec = lastLoggedBattleSummaryRecord
             val (ok, msg) = OverlayService.submitManualDvrIssueReportBlocking(
                 filesDir = filesDir,
@@ -13509,6 +13512,30 @@ class OverlayService : LifecycleService() {
                 oppTeamNames = sumRec?.oppTeamSpecs?.map { it.species } ?: emptyList(),
                 userIssueNote = "Post-Battle HUD Flagged Bug Report"
             )
+            try {
+                val cleanId = targetId.replace(Regex("[^a-zA-Z0-9_-]"), "")
+                val replaysDir = File(filesDir, "dvr_replays")
+                val localMp4 = File(replaysDir, "${cleanId}_video.mp4")
+                val localTrace = File(replaysDir, "${cleanId}_deep_trace.jsonl")
+                if (localMp4.exists()) {
+                    OverlayService.uploadBattleReplayToR2VaultIfUnlockedBlocking(
+                        prefs = prefs,
+                        gson = gson,
+                        battleId = targetId,
+                        summaryRecord = sumRec,
+                        mp4File = localMp4,
+                        traceFile = localTrace
+                    )
+                }
+            } catch (_: Exception) {}
+            try {
+                OverlayService.uploadPendingAiTelemetryBatchBlocking(
+                    prefs = prefs,
+                    gson = gson,
+                    forceUpload = true,
+                    minBattlesRequired = 1
+                )
+            } catch (_: Exception) {}
             withContext(Dispatchers.Main) {
                 if (targetId == lastLoggedBattleId) {
                     lastLoggedBattleDvrUploadStatus = if (ok) "UPLOADED" else "WIFI_WAIT"
@@ -14532,9 +14559,13 @@ class OverlayService : LifecycleService() {
                 "hapticOppSwapWarnSec" to activeHapticOppSwapWarnSec,
                 "hapticChargeTimingFasts" to activeHapticChargeTimingFasts,
                 "showOneBattleDvrBtn" to activeShowOneBattleDvrBtn,
+                "alwaysOnDvrEnabled" to activeAlwaysOnDvrEnabled,
                 "isOneBattleDvrArmed" to activeOneBattleDvrArmed,
                 "isOneBattleDvrRecording" to activeOneBattleDvrRecording,
                 "oneBattleDvrFrames" to activeOneBattleDvrFrames,
+                "stoppedBattleDiscardDvr" to stoppedBattleDiscardDvr,
+                "stoppedBattleFlagBugReport" to stoppedBattleFlagBugReport,
+                "stoppedBattleHasDvr" to (!stoppedBattleDiscardDvr && (activeOneBattleDvrRecording || activeOneBattleDvrFrames >= 15)),
                 "playerPokeballs" to playerPokeballCount,
                 "oppPokeballs" to oppPokeballCount,
                 "playerShields" to playerShieldsRemaining,
@@ -14568,7 +14599,11 @@ class OverlayService : LifecycleService() {
                     "leadMatchup" to lastLoggedBattleLead,
                     "opponents" to lastLoggedBattleOpponents,
                     "telemetryIgnored" to lastLoggedBattleTelemetryIgnored,
-                    "isAutoDetected" to lastLoggedBattleWasAuto
+                    "isAutoDetected" to lastLoggedBattleWasAuto,
+                    "hasDvr" to lastLoggedBattleHasDvr,
+                    "dvrDeleted" to lastLoggedBattleDvrDeleted,
+                    "dvrBugReported" to lastLoggedBattleDvrBugReported,
+                    "dvrUploadStatus" to lastLoggedBattleDvrUploadStatus
                 ) else null,
                 "teamArchetype" to (currentPreset?.archetype ?: "ABC"),
                 "aiAdviceHudPosition" to aiAdviceHudPosition,
@@ -16433,11 +16468,14 @@ class OverlayService : LifecycleService() {
                     try {
                         releaseDvrResourcesLocked(deleteFiles = true)
                     } catch (_: Exception) {}
+                    try {
+                        dvrT?.quitSafely()
+                    } catch (_: Exception) {}
                 }
             } else {
                 releaseDvrResourcesLocked(deleteFiles = true)
+                dvrT?.quitSafely()
             }
-            dvrT?.quitSafely()
             virtualDisplay?.release()
             virtualDisplay = null
             mediaProjection?.stop()
