@@ -443,7 +443,7 @@ internal fun OverlayService.finalizeAndUploadOneBattleDvrAsync(
 
         Handler(Looper.getMainLooper()).post {
             recalculateAndPushBattleData()
-            showBattleToast("🎥 Uploading 1-Battle Video & Deep Log to Cloudflare...")
+            showBattleToast("🎥 Uploading 1-Battle Video & Deep Log...")
         }
 
         lifecycleScope.launch(Dispatchers.IO) {
@@ -455,6 +455,11 @@ internal fun OverlayService.finalizeAndUploadOneBattleDvrAsync(
                 mp4File = finalMp4,
                 traceFile = finalTrace
             )
+            if (dvrOk) {
+                try {
+                    OverlayService.retryPendingCachedDvrBundlesBlocking(cacheDir, prefs, gson)
+                } catch (_: Exception) {}
+            }
             try {
                 OverlayService.uploadPendingAiTelemetryBatchBlocking(
                     prefs = prefs,

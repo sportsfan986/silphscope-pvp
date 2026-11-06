@@ -520,6 +520,7 @@ class MainActivity : AppCompatActivity() {
         handleIncomingNavigationAndTaskerIntent(intent)
         OverlayService.runV510AiTelemetryMigrationAndWipeStatic(prefs)
         ensureRequiredScreenNameOrPrompt()
+        retryPendingDvrBundlesInBackground()
         OverlayService.triggerAutoUploadOnAppLaunchAsync(prefs, gson) { _, _ ->
             runOnUiThread {
                 if (!isFinishing && ::prefs.isInitialized) {
@@ -551,6 +552,7 @@ class MainActivity : AppCompatActivity() {
             checkPendingGitHubDeviceLoginOnResume()
             // Automatically pull & reconcile deltas from the other device on every app open / resume
             triggerTwoDeviceCloudSync(silent = true)
+            retryPendingDvrBundlesInBackground()
             // v5.10: Once-daily AI & Anomaly telemetry upload check on app launch/resume
             OverlayService.triggerAutoUploadOnAppLaunchAsync(prefs, gson) { _, _ ->
                 runOnUiThread {
@@ -2586,21 +2588,45 @@ class MainActivity : AppCompatActivity() {
                 isArmed -> "🔴 ARMED FOR NEXT BATTLE"
                 else -> "⚪ Disarmed"
             }
+            val pendingDvrCount = OverlayService.countPendingCachedDvrBundlesStatic(cacheDir)
+            val pendingDvrPart = if (pendingDvrCount > 0) " • Queued DVR Videos: $pendingDvrCount" else ""
             val pathTail = if (lastDvrPath.isNotEmpty()) " ($lastDvrPath)" else ""
             textOneBattleDvrStatus.text =
-                "$armStateLabel • Overlay Button: ${if (showBtn) "ON" else "OFF"} • DVR Bundles Uploaded: $dvrUploadedCount • Last DVR Upload: $lastDvrStr$pathTail"
+                "$armStateLabel • Overlay Button: ${if (showBtn) "ON" else "OFF"}$pendingDvrPart • DVR Bundles Uploaded: $dvrUploadedCount • Last DVR Upload: $lastDvrStr$pathTail"
+        }
+    }
+
+    private fun retryPendingDvrBundlesInBackground() {
+        val pendingDvrCount = OverlayService.countPendingCachedDvrBundlesStatic(cacheDir)
+        if (pendingDvrCount <= 0) return
+        if (!OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs)) return
+        lifecycleScope.launch(Dispatchers.IO) {
+            val (uploadedDvrCount, _) = OverlayService.retryPendingCachedDvrBundlesBlocking(cacheDir, prefs, gson)
+            if (uploadedDvrCount > 0) {
+                withContext(Dispatchers.Main) {
+                    if (!isFinishing && ::prefs.isInitialized) {
+                        updateAiTelemetryStatusUi()
+                        Toast.makeText(
+                            this@MainActivity,
+                            "🎥 Recovered & uploaded $uploadedDvrCount queued 1-Battle DVR video(s)!",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            }
         }
     }
 
     private fun triggerManualAiTelemetryUpload(silentIfEmpty: Boolean) {
         val pendingLogs = OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson)
         val pendingSettings = OverlayService.loadPendingSettingsChangesStatic(prefs, gson)
-        if (pendingLogs.isEmpty() && pendingSettings.isEmpty()) {
+        val pendingDvrCount = OverlayService.countPendingCachedDvrBundlesStatic(cacheDir)
+        if (pendingLogs.isEmpty() && pendingSettings.isEmpty() && pendingDvrCount <= 0) {
             updateAiTelemetryStatusUi()
             if (!silentIfEmpty) {
                 Toast.makeText(
                     this,
-                    "✅ Queue is already empty (0 pending AI/anomaly logs or settings changes — all uploaded & purged).",
+                    "✅ Queue is already empty (0 pending AI/anomaly logs, DVR videos, or settings changes — all uploaded & purged).",
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -2608,8 +2634,13 @@ class MainActivity : AppCompatActivity() {
         }
         val queuedCount = pendingLogs.size
         val queuedSettingsCount = pendingSettings.size
-        textAiTelemetryStatus.text = "⏳ Uploading $queuedCount battle logs & $queuedSettingsCount settings changes to Cloudflare..."
+        textAiTelemetryStatus.text = "⏳ Uploading $queuedCount battle logs, $pendingDvrCount DVR video(s) & $queuedSettingsCount settings changes..."
         lifecycleScope.launch(Dispatchers.IO) {
+            var uploadedDvrCount = 0
+            if (pendingDvrCount > 0 && OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs)) {
+                val (dCount, _) = OverlayService.retryPendingCachedDvrBundlesBlocking(cacheDir, prefs, gson)
+                uploadedDvrCount = dCount
+            }
             if (queuedSettingsCount > 0) {
                 OverlayService.uploadSettingsChangeHistoryBlocking(
                     prefs = prefs,
@@ -2624,21 +2655,22 @@ class MainActivity : AppCompatActivity() {
                     minBattlesRequired = 1
                 )
             } else {
-                true to "Uploaded $queuedSettingsCount settings change(s)"
+                (uploadedDvrCount > 0 || queuedSettingsCount > 0) to "Uploaded $uploadedDvrCount DVR video(s) & $queuedSettingsCount settings change(s)"
             }
             withContext(Dispatchers.Main) {
                 updateAiTelemetryStatusUi()
                 renderBattleLogPage()
-                if (ok) {
+                if (ok || uploadedDvrCount > 0) {
+                    val dvrSuffix = if (uploadedDvrCount > 0) ", $uploadedDvrCount DVR video(s)" else ""
                     Toast.makeText(
                         this@MainActivity,
-                        "✅ Uploaded $queuedCount AI/anomaly battle logs & $queuedSettingsCount settings changes to Cloudflare!",
+                        "✅ Uploaded $queuedCount AI/anomaly battle logs$dvrSuffix & $queuedSettingsCount settings changes!",
                         Toast.LENGTH_LONG
                     ).show()
                 } else if (!silentIfEmpty) {
                     Toast.makeText(
                         this@MainActivity,
-                        "⚠️ AI log upload failed: $msg",
+                        "⚠️ Upload failed: $msg",
                         Toast.LENGTH_LONG
                     ).show()
                 }

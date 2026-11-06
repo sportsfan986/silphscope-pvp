@@ -987,7 +987,7 @@ internal fun OverlayService.Companion.uploadSettingsChangeHistoryBlocking(prefs:
         gson.toJson(enriched)
     } + "\n"
 
-    val httpClient = OkHttpClient()
+    val httpClient = buildTelemetryHttpClientStatic(20L, 45L, 30L)
     val payloadJson = gson.toJson(
         mapOf(
             "appVersion" to APP_VERSION,
@@ -1775,7 +1775,200 @@ internal fun OverlayService.Companion.buildEnhancedHpAndEnergyDiagnosticsStatic(
 }
 
 /**
- * v6.28: Auto-uploads the 1-Battle Full-Screen DVR `.mp4` video and its frame-synced `_deep_trace.jsonl`
+ * v6.29: Resilient DNS resolver for `silphscope-telemetry.silphscope-pvp.workers.dev`.
+ * - Filters out unspecified/sinkholed IPv6/IPv4 records (`::`, `0:0:0:0:0:0:0:0`, `0.0.0.0`, `127.0.0.1`)
+ *   that cause Android's `Dns.SYSTEM` to attempt connecting to `[::]:443` (localhost) and fail with
+ *   `ConnectException: Failed to connect to silphscope-telemetry.silphscope-pvp.workers.dev/0:0:0:0:0:0:0:0:443`.
+ * - Prioritizes IPv4 (`Inet4Address`) over IPv6 (`Inet6Address`).
+ * - Falls back to Cloudflare DoH (`1.1.1.1`) and verified Cloudflare anycast IPv4 edge routes
+ *   (`104.21.76.162`, `172.67.197.119`) if router/ISP/Private DNS blocks `*.workers.dev`.
+ */
+private val TELEMETRY_RESILIENT_DNS = object : okhttp3.Dns {
+    override fun lookup(hostname: String): List<java.net.InetAddress> {
+        val result = ArrayList<java.net.InetAddress>()
+        try {
+            val sysAddrs = okhttp3.Dns.SYSTEM.lookup(hostname)
+            for (addr in sysAddrs) {
+                val hostAddr = addr.hostAddress.orEmpty()
+                val isBogus = addr.isAnyLocalAddress ||
+                    addr.isLoopbackAddress ||
+                    addr.isLinkLocalAddress ||
+                    addr.isMulticastAddress ||
+                    hostAddr == "::" ||
+                    hostAddr == "0:0:0:0:0:0:0:0" ||
+                    hostAddr == "0.0.0.0" ||
+                    hostAddr.startsWith("127.") ||
+                    hostAddr == "::1"
+                if (!isBogus) {
+                    result.add(addr)
+                }
+            }
+        } catch (_: Exception) {
+        }
+
+        // Prioritize IPv4 (Inet4Address) before IPv6 (Inet6Address) to avoid broken IPv6 tunnels / :: sinkholes
+        result.sortWith(compareBy { if (it is java.net.Inet4Address) 0 else 1 })
+
+        if (hostname.equals("silphscope-telemetry.silphscope-pvp.workers.dev", ignoreCase = true)) {
+            if (result.none { it is java.net.Inet4Address }) {
+                try {
+                    val dohUrl = java.net.URL("https://1.1.1.1/dns-query?name=$hostname&type=A")
+                    val conn = (dohUrl.openConnection() as java.net.HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        connectTimeout = 4000
+                        readTimeout = 4000
+                        setRequestProperty("Accept", "application/dns-json")
+                    }
+                    if (conn.responseCode in 200..299) {
+                        val body = conn.inputStream.bufferedReader().use { it.readText() }
+                        val ipRegex = Regex(""""data"\s*:\s*"(\d{1,3}(?:\.\d{1,3}){3})"""")
+                        for (m in ipRegex.findAll(body)) {
+                            val ipStr = m.groupValues[1]
+                            val parts = ipStr.split(".").mapNotNull { it.toIntOrNull() }
+                            if (parts.size == 4 && parts.all { it in 0..255 } && parts[0] != 0 && parts[0] != 127) {
+                                val bytes = ByteArray(4) { idx -> parts[idx].toByte() }
+                                result.add(0, java.net.InetAddress.getByAddress(hostname, bytes))
+                            }
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+            }
+            // Append verified Cloudflare anycast IPv4 edge addresses as guaranteed fallback routes
+            try {
+                val cf1 = java.net.InetAddress.getByAddress(
+                    hostname,
+                    byteArrayOf(104.toByte(), 21.toByte(), 76.toByte(), 162.toByte())
+                )
+                val cf2 = java.net.InetAddress.getByAddress(
+                    hostname,
+                    byteArrayOf(172.toByte(), 67.toByte(), 197.toByte(), 119.toByte())
+                )
+                if (result.none { it.hostAddress == cf1.hostAddress }) result.add(cf1)
+                if (result.none { it.hostAddress == cf2.hostAddress }) result.add(cf2)
+            } catch (_: Exception) {
+            }
+        }
+
+        if (result.isEmpty()) {
+            return okhttp3.Dns.SYSTEM.lookup(hostname)
+        }
+        return result
+    }
+}
+
+internal fun OverlayService.Companion.buildTelemetryHttpClientStatic(
+    connectTimeoutSec: Long = 30L,
+    writeTimeoutSec: Long = 180L,
+    readTimeoutSec: Long = 90L
+): OkHttpClient {
+    return OkHttpClient.Builder()
+        .dns(TELEMETRY_RESILIENT_DNS)
+        .retryOnConnectionFailure(true)
+        .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
+        .connectTimeout(connectTimeoutSec, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(writeTimeoutSec, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(readTimeoutSec, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+}
+
+internal fun OverlayService.Companion.countPendingCachedDvrBundlesStatic(cacheDir: File): Int {
+    val files = cacheDir.listFiles() ?: return 0
+    return files.count { f ->
+        f.isFile && f.name.endsWith("_video.mp4") && f.name != "dvr_live_battle.mp4" && f.length() > 0L
+    }
+}
+
+internal fun OverlayService.Companion.retryPendingCachedDvrBundlesBlocking(
+    cacheDir: File,
+    prefs: SharedPreferences,
+    gson: Gson
+): Pair<Int, String> {
+    if (!hasCustomScreenNameForVideoLoggingStatic(prefs)) {
+        return 0 to ""
+    }
+    if (OverlayService.isDvrUploadInFlight) {
+        return 0 to ""
+    }
+    val mp4Files = (cacheDir.listFiles() ?: emptyArray())
+        .filter { f -> f.isFile && f.name.endsWith("_video.mp4") && f.name != "dvr_live_battle.mp4" && f.length() > 0L }
+        .sortedBy { it.lastModified() }
+    if (mp4Files.isEmpty()) {
+        return 0 to ""
+    }
+
+    val pendingLogs = loadPendingAiTelemetryLogsStatic(prefs, gson)
+    val devHash = getDeviceTelemetryHashStatic(prefs)
+    val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
+        .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
+
+    var uploadedCount = 0
+    var lastMsg = ""
+    for (mp4File in mp4Files) {
+        val cleanId = mp4File.name.removeSuffix("_video.mp4")
+        val traceFile = File(cacheDir, "${cleanId}_deep_trace.jsonl")
+        var summaryRecord = pendingLogs.firstOrNull {
+            it.battleId.replace(Regex("[^a-zA-Z0-9_-]"), "") == cleanId
+        }
+        if (summaryRecord == null && traceFile.exists()) {
+            try {
+                val firstLine = traceFile.bufferedReader(Charsets.UTF_8).use { it.readLine() }.orEmpty()
+                if (firstLine.startsWith("{\"recordType\":\"BATTLE_DVR_SUMMARY_HEADER\"")) {
+                    val obj = JsonParser.parseString(firstLine).asJsonObject
+                    if (obj.has("battleSummary") && obj.get("battleSummary").isJsonObject) {
+                        summaryRecord = gson.fromJson(obj.get("battleSummary"), AiTelemetryBattleRecordV510::class.java)
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        if (summaryRecord == null) {
+            var inferredUserLead = ""
+            var inferredOppLead = ""
+            if (traceFile.exists()) {
+                try {
+                    val lines = traceFile.readLines(Charsets.UTF_8).filter { it.isNotBlank() && !it.startsWith("{\"recordType\":") }
+                    val lastFrameJson = lines.lastOrNull()
+                    if (!lastFrameJson.isNullOrBlank()) {
+                        val fObj = JsonParser.parseString(lastFrameJson).asJsonObject
+                        inferredUserLead = fObj.get("userSpecies")?.asString.orEmpty()
+                        inferredOppLead = fObj.get("oppSpecies")?.asString.orEmpty()
+                    }
+                } catch (_: Exception) {}
+            }
+            summaryRecord = AiTelemetryBattleRecordV510(
+                schemaVersion = APP_VERSION,
+                battleId = cleanId,
+                timestampMs = mp4File.lastModified().takeIf { it > 0L } ?: System.currentTimeMillis(),
+                appVersion = APP_VERSION,
+                uploaderHandle = safeUser,
+                deviceHash = devHash,
+                teamName = "Recovered DVR Battle",
+                result = "UNKNOWN",
+                settingsProfileSignature = computeDebounceSettingsProfileSignatureStatic(prefs),
+                userTeamSpecs = if (inferredUserLead.isNotBlank()) listOf(AiTelemetrySlotSpec(slotIndex = 0, species = inferredUserLead)) else emptyList(),
+                oppTeamSpecs = if (inferredOppLead.isNotBlank()) listOf(AiTelemetryOppSlotSpec(slotIndex = 0, species = inferredOppLead)) else emptyList(),
+                dvrVideoPath = "recordings/$safeUser/${cleanId}_video.mp4",
+                dvrDeepTracePath = "recordings/$safeUser/${cleanId}_deep_trace.jsonl"
+            )
+        }
+        val (ok, msg) = uploadBattleDvrBundleToGitHubBlocking(
+            prefs = prefs,
+            gson = gson,
+            battleId = summaryRecord.battleId,
+            summaryRecord = summaryRecord,
+            mp4File = mp4File,
+            traceFile = traceFile
+        )
+        lastMsg = msg
+        if (ok) {
+            uploadedCount++
+        }
+    }
+    return uploadedCount to lastMsg
+}
+
+/**
+ * v6.29: Auto-uploads the 1-Battle Full-Screen DVR `.mp4` video and its frame-synced `_deep_trace.jsonl`
  * in a single multipart request to the SilphScope Cloudflare Worker (`POST /v1/dvr`), which stores both
  * in Cloudflare Storage (`recordings/<screenName>/<battleId>_video.mp4` & `_deep_trace.jsonl`).
  */
@@ -1787,6 +1980,7 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
     mp4File: File,
     traceFile: File
 ): Pair<Boolean, String> {
+    OverlayService.isDvrUploadInFlight = true
     return try {
         if (!hasCustomScreenNameForVideoLoggingStatic(prefs)) {
             try { mp4File.delete() } catch (_: Exception) {}
@@ -1800,11 +1994,7 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
         val videoRepoPath = "recordings/$safeUser/${cleanBattleId}_video.mp4"
         val traceRepoPath = "recordings/$safeUser/${cleanBattleId}_deep_trace.jsonl"
 
-        val httpClient = OkHttpClient.Builder()
-            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-            .writeTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(90, java.util.concurrent.TimeUnit.SECONDS)
-            .build()
+        val httpClient = buildTelemetryHttpClientStatic(30L, 180L, 90L)
 
         // Prepend Battle Summary Header Line 0 to deep_trace.jsonl
         val resolvedDvrVer = summaryRecord.appVersion.takeIf { it.isNotBlank() && it != "5.10" } ?: APP_VERSION
@@ -1825,8 +2015,16 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
             )
         ) + "\n"
         val traceBodyText = if (traceFile.exists()) traceFile.readText(Charsets.UTF_8) else ""
-        val combinedTraceText = headerJson + traceBodyText
-        val frameCount = traceBodyText.lineSequence().count { it.isNotBlank() }
+        val alreadyHasHeader = traceBodyText.startsWith("{\"recordType\":\"BATTLE_DVR_SUMMARY_HEADER\"")
+        val combinedTraceText = if (alreadyHasHeader) traceBodyText else (headerJson + traceBodyText)
+        if (!alreadyHasHeader && traceFile.exists()) {
+            try {
+                traceFile.writeText(combinedTraceText, Charsets.UTF_8)
+            } catch (_: Exception) {}
+        }
+        val frameCount = combinedTraceText.lineSequence().count {
+            it.isNotBlank() && !it.startsWith("{\"recordType\":\"BATTLE_DVR_SUMMARY_HEADER\"")
+        }
 
         val userLead = summaryRecord.userTeamSpecs.firstOrNull()?.species.orEmpty()
         val oppList = summaryRecord.oppTeamSpecs.map { it.species }.filter { it.isNotBlank() }.joinToString(", ")
@@ -1852,36 +2050,48 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
             )
         )
 
-        val multipartBuilder = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart("metadata", metadataJson)
-            .addFormDataPart(
-                "deep_trace",
-                "${cleanBattleId}_deep_trace.jsonl",
-                combinedTraceText.toRequestBody("application/x-ndjson; charset=utf-8".toMediaTypeOrNull())
-            )
-
         val hasVideo = mp4File.exists() && mp4File.length() > 0L
-        if (hasVideo) {
-            multipartBuilder.addFormDataPart(
-                "video",
-                "${cleanBattleId}_video.mp4",
-                mp4File.asRequestBody("video/mp4".toMediaTypeOrNull())
-            )
-        }
-
-        val req = Request.Builder()
-            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/dvr")
-            .post(multipartBuilder.build())
-            .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
-            .header("X-Trainer-Screen-Name", safeUser)
-            .build()
-
         var uploadOk = false
         var httpCode = 0
-        httpClient.newCall(req).execute().use { resp ->
-            httpCode = resp.code
-            uploadOk = resp.isSuccessful
+        var lastErrorMsg = ""
+
+        for (attempt in 1..3) {
+            try {
+                val multipartBuilder = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("metadata", metadataJson)
+                    .addFormDataPart(
+                        "deep_trace",
+                        "${cleanBattleId}_deep_trace.jsonl",
+                        combinedTraceText.toRequestBody("application/x-ndjson; charset=utf-8".toMediaTypeOrNull())
+                    )
+                if (hasVideo) {
+                    multipartBuilder.addFormDataPart(
+                        "video",
+                        "${cleanBattleId}_video.mp4",
+                        mp4File.asRequestBody("video/mp4".toMediaTypeOrNull())
+                    )
+                }
+                val req = Request.Builder()
+                    .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/dvr")
+                    .post(multipartBuilder.build())
+                    .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
+                    .header("X-Trainer-Screen-Name", safeUser)
+                    .build()
+
+                httpClient.newCall(req).execute().use { resp ->
+                    httpCode = resp.code
+                    uploadOk = resp.isSuccessful
+                }
+                if (uploadOk || (httpCode in 400..499 && httpCode != 429)) {
+                    break
+                }
+            } catch (e: Exception) {
+                lastErrorMsg = e.localizedMessage ?: e.javaClass.simpleName
+            }
+            if (attempt < 3) {
+                try { Thread.sleep(1500L * attempt) } catch (_: Exception) {}
+            }
         }
 
         val nowMs = System.currentTimeMillis()
@@ -1895,18 +2105,22 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
             try { mp4File.delete() } catch (_: Exception) {}
             try { traceFile.delete() } catch (_: Exception) {}
             true to "🎥 Uploaded 1-Battle Video & Deep Trace ($cleanBattleId) as @$safeUser!"
+        } else if (httpCode > 0) {
+            false to "⚠️ 1-Battle DVR upload queued for retry (HTTP $httpCode)"
         } else {
-            false to "⚠️ 1-Battle DVR upload failed (HTTP $httpCode)"
+            false to "⚠️ DVR upload queued for retry (${lastErrorMsg.ifBlank { "Network error" }})"
         }
     } catch (e: Exception) {
-        false to "⚠️ DVR upload error: ${e.localizedMessage ?: "Network error"}"
+        false to "⚠️ DVR upload queued for retry: ${e.localizedMessage ?: "Network error"}"
+    } finally {
+        OverlayService.isDvrUploadInFlight = false
     }
 }
 
 /**
- * v6.27: Uploads pending Always-On lower-resolution AI training & anomaly battle records
+ * v6.29: Uploads pending Always-On lower-resolution AI training & anomaly battle records
  * directly to the SilphScope Cloudflare Worker (`POST /v1/telemetry`) attributed to the user's
- * mandatory Trainer Screen Name (zero GitHub login required).
+ * mandatory Unique Debug ID (zero GitHub login required).
  */
 internal fun OverlayService.Companion.uploadPendingAiTelemetryBatchBlocking(
     prefs: SharedPreferences,
@@ -1978,28 +2192,38 @@ internal fun OverlayService.Companion.uploadPendingAiTelemetryBatchBlocking(
             )
         )
 
-        val httpClient = OkHttpClient.Builder()
-            .connectTimeout(25, java.util.concurrent.TimeUnit.SECONDS)
-            .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(45, java.util.concurrent.TimeUnit.SECONDS)
-            .build()
-
-        val req = Request.Builder()
-            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/telemetry")
-            .post(payloadJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
-            .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
-            .header("X-Trainer-Screen-Name", safeUser)
-            .build()
+        val httpClient = buildTelemetryHttpClientStatic(25L, 60L, 45L)
 
         var uploadedOk = false
         var httpCode = 0
-        httpClient.newCall(req).execute().use { resp ->
-            httpCode = resp.code
-            uploadedOk = resp.isSuccessful
+        var lastErr = ""
+        for (attempt in 1..3) {
+            try {
+                val req = Request.Builder()
+                    .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/telemetry")
+                    .post(payloadJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
+                    .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
+                    .header("X-Trainer-Screen-Name", safeUser)
+                    .build()
+
+                httpClient.newCall(req).execute().use { resp ->
+                    httpCode = resp.code
+                    uploadedOk = resp.isSuccessful
+                }
+                if (uploadedOk || (httpCode in 400..499 && httpCode != 429)) {
+                    break
+                }
+            } catch (e: Exception) {
+                lastErr = e.localizedMessage ?: e.javaClass.simpleName
+            }
+            if (attempt < 3) {
+                try { Thread.sleep(1500L * attempt) } catch (_: Exception) {}
+            }
         }
 
         if (!uploadedOk) {
-            return false to "Cloudflare telemetry upload failed (HTTP $httpCode). Check internet connection and retry."
+            val detail = if (httpCode > 0) "HTTP $httpCode" else lastErr.ifBlank { "Network error" }
+            return false to "Telemetry upload failed ($detail). Queued for automatic retry."
         }
 
         try {
