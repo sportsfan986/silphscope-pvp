@@ -1,4 +1,22 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.42`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.43`)
+
+---
+
+## v6.43 (2026-11-06) — Always-On DVR by Default, `<10s` / Non-Battle Clip Filter, Post-Battle Delete & Bug Report Prompt, Wi-Fi Default Upload & Private AES-256-GCM Encrypted Unlock Key Sync
+*DVR workflow, Replay parity, and multi-device security release (`v6.43`, `versionCode = 1643`) enabling Always-On DVR by default (with no start/stop HUD button required), automatically discarding short (`<10s`) or non-battle clips, adding a post-battle prompt to delete recordings before upload or flag a bug report, defaulting DVR uploads to Wi-Fi with an opt-in Mobile Data toggle, aligning the Web Share viewer HUD (`overlay.html?replay=1`) 1:1 with the in-app HUD (with Top default position and Shield Decision Overlay enabled by default), and securing multi-device Unlock Key sync inside a private per-user GitHub vault (`silphscope-private-vault`, `"private": true`) encrypted with AES-256-GCM bound to the logged-in GitHub account.*
+
+- **v6.43 — Enhancement 1: Always-On Battle DVR by Default & Automatic `<10s` / Non-Battle Discard (`OverlayService.kt`, `BattleDvrEngine.kt`, `MainActivity.kt`, `activity_main.xml`)**:
+  - **Always-On DVR by Default (`PREFS_KEY_ALWAYS_ON_DVR_ENABLED = true`)**: Automatically records battles in the background unless disabled in Settings (`🎥 Always-On Battle DVR: ON/OFF`), removing the manual in-overlay start/stop/arm DVR button.
+  - **Automatic `<10s` & Non-Battle Clip Filter**: Immediately aborts and deletes any recording shorter than `10 seconds`, with fewer than `15` frames, or without actual combat activity (`oppTeamSpecs.isEmpty()` and no HP/move/turn changes) so non-battle clips are never saved or uploaded.
+
+- **v6.43 — Enhancement 2: Post-Battle Delete Prompt, `🚩 Bug Report` Flag & Wi-Fi Default Upload (`OverlayService.kt`, `BattleDvrEngine.kt`, `GitHubCloudSync.kt`, `overlay.html`, `MainActivity.kt`)**:
+  - **Post-Battle HUD Prompt (`🗑️ Delete Video` & `🚩 Bug Report`)**: Displays a post-battle DVR bar with a 12-second pre-upload window allowing the player to delete a recording before upload (`deleteLastBattleDvrFromOverlay`) or immediately flag and submit a diagnostic bug report (`flagLastBattleDvrBugReportFromOverlay`), plus a `🗑️ Delete` button in the Replay viewer toolbar.
+  - **Wi-Fi Default Upload + Opt-In Mobile Data Toggle (`PREFS_KEY_ALLOW_MOBILE_DATA_DVR_UPLOAD = false`)**: Enforces unmetered/Wi-Fi connectivity (`ConnectivityManager`) for DVR video uploads by default, with an opt-in `📡 Mobile Data Upload: OFF (Wi-Fi)` / `📶 Mobile Data Upload: ON` toggle in Settings.
+
+- **v6.43 — Enhancement 3: Private GitHub Vault & AES-256-GCM Encrypted Multi-Device Unlock Key Sync (`GitHubCloudSync.kt`, `MainActivity.kt`, `cloudflare/telemetry-worker/worker.mjs`)**:
+  - **Strictly Private Per-User GitHub Vault (`<username>/silphscope-private-vault`, `"private": true`)**: Stores multi-device sync vaults in a private GitHub repository (with verified `"private": true` enforcement and automatic migration/cleanup of legacy `sync-vault` branches) or a verified private Gist (`"public": false`).
+  - **Authenticated AES-256-GCM Unlock Key Encryption (Logged-In Users Only)**: Encrypts `PREFS_KEY_REPLAY_UNLOCK_KEY`, license tier, and R2 Replay Vault metadata using `PBKDF2WithHmacSHA256` + `AES/GCM/NoPadding` (`ENC_GCM_V1:...`) bound to the logged-in user's immutable GitHub User ID and username as AAD, and binds the Unlock Key to the owner's GitHub identity on the Cloudflare Worker (`/v1/license/verify`) so no other user can decrypt or use a synced key.
+  - **1:1 Web Share Viewer & In-App Replay HUD Parity (`overlay.html`, `cloudflare/telemetry-worker/worker.mjs`, `scripts/generate-worker-overlay.mjs`)**: Replaced the custom web canvas HUD with the exact `overlay.html?replay=1` HUD in `/watch/<shareId>`, added a 3.5s safety fallback for trace loading, and enabled the Shield Decision Overlay and Top HUD position by default across both in-app Replay and Web Share Player.
 
 ---
 

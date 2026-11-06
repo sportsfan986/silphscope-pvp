@@ -1,4 +1,4 @@
-# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v6.42)
+# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v6.43)
 
 [![Live Web Simulator](https://img.shields.io/badge/🌐%20Live%20Web%20Simulator-Try%20in%20Browser-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white)](https://sportsfan986.github.io/silphscope-pvp/)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support%20the%20Project-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/sportsfan986)
@@ -131,13 +131,13 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## 📥 Download & Install Native Android APK (v6.41)
+## 📥 Download & Install Native Android APK (v6.43)
 
 > **✅ Note on Live HP & Energy Counting (Enabled by Default since v6.02)**:
-> **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting** are **ENABLED (ON)** by default with optimal scanner tuning (`2 samples`, `±2%` tolerance, `200ms` proactive energy lead, `+1t` fast offset, and `4.0s` swap-throw rollback). You can customize all scanner, haptics, and 1-Battle DVR controls in **⚙️ Settings**.
+> **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting** are **ENABLED (ON)** by default with optimal scanner tuning (`2 samples`, `±2%` tolerance, `200ms` proactive energy lead, `+1t` fast offset, and `4.0s` swap-throw rollback). You can customize all scanner, haptics, and Always-On DVR controls in **⚙️ Settings**.
 
 1. Visit the **[Official GitHub Releases Page](https://github.com/sportsfan986/silphscope-pvp/releases)**.
-2. Download **`silphscope-pvp-v6.41.apk`** directly to your Android device.
+2. Download **`silphscope-pvp-v6.43.apk`** directly to your Android device.
 3. Tap the downloaded APK file to install (grant *"Install unknown apps"* permission if prompted).
 4. Launch **SilphScope PvP**:
    - Select, reorder, or customize your **GBL or Show 6 Team Presets**, set **Opponent Move Count Basis** (`My Fasts` vs. `Their Fasts`), adjust **Overlay Size** (`50%–100%` screen width slider) and **Background Transparency**, and configure **Synchronized Haptics** or **1-Battle DVR** in **⚙️ Settings**.

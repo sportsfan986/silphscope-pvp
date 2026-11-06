@@ -3661,7 +3661,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="🤖 Always-On Battle DVR &amp; Diagnostic Telemetry (v6.42)"
+                    android:text="🤖 Always-On Battle DVR &amp; Diagnostic Telemetry (v6.43)"
                     android:textColor="#38bdf8"
                     android:textSize="11sp"
                     android:textStyle="bold" />

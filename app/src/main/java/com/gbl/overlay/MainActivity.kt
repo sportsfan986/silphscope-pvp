@@ -2620,13 +2620,13 @@ class MainActivity : AppCompatActivity() {
             }
 
             val titleTv = TextView(this).apply {
-                text = "🔑 In-App DVR Replay Vault & Cloud Share Tier (v6.42)"
+                text = "🔑 In-App DVR Replay Vault & Cloud Share Tier (v6.43)"
                 setTextColor(0xFF38BDF8.toInt())
                 textSize = 12f
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
             }
             val subTv = TextView(this).apply {
-                text = "Free Tier stores your last 1 battle video locally on-device (+ Manual Issue Reports). Enter a Trainer/Pro/VIP Unlock Key (or bind to your Debug ID) to unlock 10–50 Cloud R2 Replays, ⭐ Pinned Battles & Web Share Links."
+                text = "Free Tier stores your last 1 battle video locally on-device (+ Manual Issue Reports). Enter a Trainer/Pro/VIP Unlock Key to unlock 10–50 Cloud R2 Replays, ⭐ Pinned Battles & Web Share Links. When signed in with GitHub, your Unlock Key is AES-256-GCM encrypted & synced across your devices via your private vault."
                 setTextColor(0xFF94A3B8.toInt())
                 textSize = 10.5f
                 setPadding(0, (2 * density).toInt(), 0, (6 * density).toInt())
@@ -2637,7 +2637,7 @@ class MainActivity : AppCompatActivity() {
                 gravity = android.view.Gravity.CENTER_VERTICAL
             }
             val keyInput = EditText(this).apply {
-                hint = "Unlock Key (e.g. SSPVP-PRO-... or auto-bound by ID)"
+                hint = "Unlock Key (e.g. SSPVP-PRO-... or synced via GitHub)"
                 setHintTextColor(0xFF64748B.toInt())
                 setTextColor(0xFFF8FAFC.toInt())
                 textSize = 11.5f
@@ -2653,13 +2653,23 @@ class MainActivity : AppCompatActivity() {
                 setTextColor(0xFFFFFFFF.toInt())
                 setOnClickListener {
                     val entered = keyInput.text?.toString()?.trim().orEmpty()
-                    prefs.edit().putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, entered).apply()
-                    Toast.makeText(this@MainActivity, "🔄 Verifying Replay Unlock Key & syncing Cloud Vault...", Toast.LENGTH_SHORT).show()
+                    prefs.edit()
+                        .putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, entered)
+                        .putLong(OverlayService.PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
+                        .apply()
+                    Toast.makeText(this@MainActivity, "🔄 Verifying Replay Unlock Key & syncing Private Vault...", Toast.LENGTH_SHORT).show()
                     lifecycleScope.launch(Dispatchers.IO) {
                         val (ok, msg) = OverlayService.verifyReplayUnlockKeyBlocking(prefs, gson, entered)
+                        if (OverlayService.getEffectiveSyncToken(prefs).isNotEmpty()) {
+                            try {
+                                OverlayService.syncWithGitHubGistBlocking(prefs, gson)
+                            } catch (_: Exception) {}
+                        }
                         withContext(Dispatchers.Main) {
                             if (!isFinishing) {
                                 setupOrUpdateReplayVaultSettingsUi()
+                                updateSyncStatusUi()
+                                renderBattleLogPage()
                                 Toast.makeText(this@MainActivity, msg, if (ok) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
                             }
                         }
@@ -2705,17 +2715,25 @@ class MainActivity : AppCompatActivity() {
         val cloudCount = vaultMap.values.count { it.shareId.isNotBlank() }
         val pinnedCount = vaultMap.values.count { it.isPinned }
         val savedKey = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
-        if (editReplayUnlockKey?.hasFocus() == false && savedKey.isNotEmpty() && editReplayUnlockKey?.text?.toString().isNullOrBlank()) {
+        if (editReplayUnlockKey?.hasFocus() == false && savedKey.isNotEmpty() && editReplayUnlockKey?.text?.toString() != savedKey) {
             editReplayUnlockKey?.setText(savedKey)
+        }
+        val ghToken = OverlayService.getEffectiveSyncToken(prefs)
+        val ghUsername = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty()
+        val syncSecurityLine = if (ghToken.isNotEmpty() && ghUsername.isNotEmpty()) {
+            "🔒 Multi-Device Key Sync: AES-256-GCM Encrypted in @$ghUsername's Private GitHub Vault"
+        } else {
+            "🔓 Multi-Device Key Sync: Sign in with GitHub above to securely sync your Unlock Key across devices"
         }
         textReplayVaultStatus?.text = String.format(
             java.util.Locale.US,
-            "%s\n📱 On-Device Replays: %d video(s) (%.1f MB) • ☁️ Cloud R2 Replays: %d • ⭐ Pinned: %d",
+            "%s\n📱 On-Device Replays: %d video(s) (%.1f MB) • ☁️ Cloud R2 Replays: %d • ⭐ Pinned: %d\n%s",
             tierBadge,
             localCount,
             localMb,
             cloudCount,
-            pinnedCount
+            pinnedCount,
+            syncSecurityLine
         )
     }
 
@@ -2841,11 +2859,13 @@ class MainActivity : AppCompatActivity() {
                     prefs.edit()
                         .remove(PREFS_KEY_SYNC_GITHUB_TOKEN)
                         .remove(PREFS_KEY_SYNC_GITHUB_USERNAME)
+                        .remove(OverlayService.PREFS_KEY_SYNC_GITHUB_USER_ID)
                         .remove(PREFS_KEY_SYNC_GIST_ID)
                         .apply()
                     editSyncGithubToken.setText("")
                     editSyncGistId.setText("")
                     updateSyncStatusUi()
+                    setupOrUpdateReplayVaultSettingsUi()
                     Toast.makeText(this, "Signed out of GitHub Cloud Sync", Toast.LENGTH_SHORT).show()
                 }
                 .show()
@@ -3031,6 +3051,7 @@ class MainActivity : AppCompatActivity() {
                 updateTrainerScreenNameUi()
                 ensureRequiredScreenNameOrPrompt()
                 updateSyncStatusUi()
+                setupOrUpdateReplayVaultSettingsUi()
                 applyCurrentAppTheme(notifyOverlay = true)
                 refreshPresetsUi()
                 setupBattleLogFilters()

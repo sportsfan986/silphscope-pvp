@@ -91,8 +91,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "6.42"
-        const val APP_VERSION_CODE = 1642
+        const val APP_VERSION = "6.43"
+        const val APP_VERSION_CODE = 1643
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -389,6 +389,8 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_REPLAY_LICENSE_TIER = "gbl_replay_license_tier"
         const val PREFS_KEY_REPLAY_LICENSE_JSON = "gbl_replay_license_json"
         const val PREFS_KEY_REPLAY_VAULT_MAP_JSON = "gbl_replay_vault_map_json"
+        const val PREFS_KEY_SYNC_GITHUB_USER_ID = "gbl_sync_github_user_id"
+        const val PREFS_KEY_SYNC_PRIVATE_REPO_MIGRATED_V643 = "gbl_sync_private_repo_migrated_v643"
 
         @Volatile var appContext: Context? = null
         @Volatile var activeEnergyDebounceSamples: Int = DEFAULT_ENERGY_DEBOUNCE_SAMPLES

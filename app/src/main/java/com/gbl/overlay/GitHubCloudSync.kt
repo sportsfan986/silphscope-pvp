@@ -271,13 +271,32 @@ internal fun OverlayService.Companion.reconcileSyncVaultPayloads(
     }
 
     val mergedSettingsUpdatedAt: Long
-    val mergedSettings: Map<String, String>
+    val mergedSettings = LinkedHashMap<String, String>()
     if (remote.settingsUpdatedAt > local.settingsUpdatedAt && remote.userSettings.isNotEmpty()) {
         mergedSettingsUpdatedAt = remote.settingsUpdatedAt
-        mergedSettings = local.userSettings + remote.userSettings
+        mergedSettings.putAll(local.userSettings)
+        mergedSettings.putAll(remote.userSettings)
     } else {
         mergedSettingsUpdatedAt = max(local.settingsUpdatedAt, remote.settingsUpdatedAt)
-        mergedSettings = remote.userSettings + local.userSettings
+        mergedSettings.putAll(remote.userSettings)
+        mergedSettings.putAll(local.userSettings)
+    }
+    // Always preserve a non-blank synced Unlock Key / License if one side is empty (e.g. fresh 2nd device)
+    for (sensitiveKey in listOf(
+        "S:${OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY}",
+        "S:${OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER}",
+        "S:${OverlayService.PREFS_KEY_REPLAY_LICENSE_JSON}",
+        "S:${OverlayService.PREFS_KEY_REPLAY_VAULT_MAP_JSON}"
+    )) {
+        val curVal = mergedSettings[sensitiveKey]?.trim().orEmpty()
+        if (curVal.isEmpty()) {
+            val remoteVal = remote.userSettings[sensitiveKey]?.trim().orEmpty()
+            val localVal = local.userSettings[sensitiveKey]?.trim().orEmpty()
+            val nonBlank = remoteVal.ifEmpty { localVal }
+            if (nonBlank.isNotEmpty()) {
+                mergedSettings[sensitiveKey] = nonBlank
+            }
+        }
     }
 
     val mergedPayload = SyncVaultPayload(
@@ -291,6 +310,92 @@ internal fun OverlayService.Companion.reconcileSyncVaultPayloads(
         settingsUpdatedAt = mergedSettingsUpdatedAt
     )
     return Triple(mergedPayload, newOrUpdatedLogsFromRemote, newOrUpdatedTeamsFromRemote)
+}
+
+private val SENSITIVE_VAULT_STRING_PREF_KEYS = setOf(
+    OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY,
+    OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER,
+    OverlayService.PREFS_KEY_REPLAY_LICENSE_JSON,
+    OverlayService.PREFS_KEY_REPLAY_VAULT_MAP_JSON
+)
+
+private const val VAULT_SECRET_ENC_PREFIX = "ENC_GCM_V1:"
+private const val VAULT_PBKDF2_SALT_PREFIX = "SilphScopePvP_VaultSalt_v643_"
+
+internal fun OverlayService.Companion.deriveGitHubAccountVaultAesKeyStatic(
+    githubUserId: String,
+    githubUsername: String
+): javax.crypto.SecretKey {
+    val cleanUser = githubUsername.trim().lowercase()
+    val cleanId = githubUserId.trim().ifEmpty { cleanUser }
+    val passChars = "sspvp_gh_vault|$cleanId|$cleanUser|9f8e7d6c5b4a".toCharArray()
+    val saltBytes = "$VAULT_PBKDF2_SALT_PREFIX$cleanId:$cleanUser".toByteArray(Charsets.UTF_8)
+    val factory = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+    val spec = javax.crypto.spec.PBEKeySpec(passChars, saltBytes, 12000, 256)
+    val secret = factory.generateSecret(spec)
+    return javax.crypto.spec.SecretKeySpec(secret.encoded, "AES")
+}
+
+internal fun OverlayService.Companion.encryptVaultSecretForGitHubUserStatic(
+    plaintext: String,
+    githubUserId: String,
+    githubUsername: String
+): String {
+    if (plaintext.isBlank() || githubUsername.isBlank()) return ""
+    if (plaintext.startsWith(VAULT_SECRET_ENC_PREFIX)) return plaintext
+    return try {
+        val key = deriveGitHubAccountVaultAesKeyStatic(githubUserId, githubUsername)
+        val iv = ByteArray(12)
+        java.security.SecureRandom().nextBytes(iv)
+        val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, key, javax.crypto.spec.GCMParameterSpec(128, iv))
+        val aad = "SilphScopePvP-UnlockVault-v1|${githubUserId.trim().ifEmpty { githubUsername.trim().lowercase() }}|${githubUsername.trim().lowercase()}"
+        cipher.updateAAD(aad.toByteArray(Charsets.UTF_8))
+        val cipherBytes = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
+        val combined = ByteArray(iv.size + cipherBytes.size)
+        System.arraycopy(iv, 0, combined, 0, iv.size)
+        System.arraycopy(cipherBytes, 0, combined, iv.size, cipherBytes.size)
+        VAULT_SECRET_ENC_PREFIX + android.util.Base64.encodeToString(combined, android.util.Base64.NO_WRAP)
+    } catch (_: Exception) {
+        ""
+    }
+}
+
+internal fun OverlayService.Companion.decryptVaultSecretForGitHubUserStatic(
+    encoded: String,
+    githubUserId: String,
+    githubUsername: String
+): String? {
+    val trimmed = encoded.trim()
+    if (trimmed.isEmpty()) return null
+    if (!trimmed.startsWith(VAULT_SECRET_ENC_PREFIX)) {
+        // Legacy plaintext fallback only if user is authenticated on GitHub
+        return if (githubUsername.isNotBlank()) trimmed else null
+    }
+    if (githubUsername.isBlank()) return null
+    val b64 = trimmed.removePrefix(VAULT_SECRET_ENC_PREFIX)
+    val rawBytes = try {
+        android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+    } catch (_: Exception) {
+        return null
+    }
+    if (rawBytes.size <= 12) return null
+    val iv = rawBytes.copyOfRange(0, 12)
+    val cipherBytes = rawBytes.copyOfRange(12, rawBytes.size)
+    // Try with exact (githubUserId, githubUsername) first, then fallback to (username, username) if ID was not yet cached when encrypted
+    val candidateIds = listOf(githubUserId.trim(), githubUsername.trim().lowercase()).filter { it.isNotEmpty() }.distinct()
+    for (candId in candidateIds) {
+        try {
+            val key = deriveGitHubAccountVaultAesKeyStatic(candId, githubUsername)
+            val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(javax.crypto.Cipher.DECRYPT_MODE, key, javax.crypto.spec.GCMParameterSpec(128, iv))
+            val aad = "SilphScopePvP-UnlockVault-v1|$candId|${githubUsername.trim().lowercase()}"
+            cipher.updateAAD(aad.toByteArray(Charsets.UTF_8))
+            val plainBytes = cipher.doFinal(cipherBytes)
+            return String(plainBytes, Charsets.UTF_8)
+        } catch (_: Exception) {}
+    }
+    return null
 }
 
 private val SYNCABLE_STRING_PREF_KEYS = listOf(
@@ -321,6 +426,8 @@ private val SYNCABLE_BOOLEAN_PREF_KEYS = listOf(
     OverlayService.PREFS_KEY_HAPTIC_OPP_SWAP_ENABLED,
     OverlayService.PREFS_KEY_HAPTIC_OPP_CHARGE_WARN_ENABLED,
     OverlayService.PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN,
+    OverlayService.PREFS_KEY_ALWAYS_ON_DVR_ENABLED,
+    OverlayService.PREFS_KEY_ALLOW_MOBILE_DATA_DVR_UPLOAD,
     OverlayService.PREFS_KEY_IS_RANDOM_SCREEN_NAME,
     PREFS_KEY_AUTO_UPLOAD_AI_LOGS
 )
@@ -350,9 +457,28 @@ private val SYNCABLE_FLOAT_PREF_KEYS = listOf(
     OverlayService.PREFS_KEY_LIMITED_STD_DECAY_SHOW6
 )
 
-internal fun OverlayService.Companion.exportSyncableSettingsMapStatic(prefs: SharedPreferences): Map<String, String> {
+internal fun OverlayService.Companion.exportSyncableSettingsMapStatic(
+    prefs: SharedPreferences,
+    isGitHubAuthenticatedSync: Boolean = false,
+    githubUserId: String = "",
+    githubUsername: String = ""
+): Map<String, String> {
     val out = LinkedHashMap<String, String>()
+    val canSyncSecrets = isGitHubAuthenticatedSync &&
+        getEffectiveSyncToken(prefs).isNotEmpty() &&
+        githubUsername.isNotBlank()
     for (k in SYNCABLE_STRING_PREF_KEYS) {
+        if (k in SENSITIVE_VAULT_STRING_PREF_KEYS) {
+            if (!canSyncSecrets) continue
+            val rawSecret = prefs.getString(k, null)?.trim().orEmpty()
+            if (rawSecret.isNotEmpty()) {
+                val enc = encryptVaultSecretForGitHubUserStatic(rawSecret, githubUserId, githubUsername)
+                if (enc.isNotEmpty()) {
+                    out["S:$k"] = enc
+                }
+            }
+            continue
+        }
         if (prefs.contains(k)) {
             prefs.getString(k, null)?.let { out["S:$k"] = it }
         }
@@ -378,9 +504,12 @@ internal fun OverlayService.Companion.exportSyncableSettingsMapStatic(prefs: Sha
 internal fun OverlayService.Companion.applySyncedSettingsMapStatic(
     prefs: SharedPreferences,
     settingsMap: Map<String, String>,
-    settingsUpdatedAt: Long
+    settingsUpdatedAt: Long,
+    githubUserId: String = "",
+    githubUsername: String = ""
 ) {
     if (settingsMap.isEmpty()) return
+    val isGitHubLoggedIn = getEffectiveSyncToken(prefs).isNotEmpty() && githubUsername.isNotBlank()
     val editor = prefs.edit()
     for ((typedKey, rawVal) in settingsMap) {
         val sepIdx = typedKey.indexOf(':')
@@ -389,7 +518,13 @@ internal fun OverlayService.Companion.applySyncedSettingsMapStatic(
         val key = typedKey.substring(sepIdx + 1)
         when (prefix) {
             "S" -> {
-                if (key == PREFS_KEY_USER_SCREEN_NAME) {
+                if (key in SENSITIVE_VAULT_STRING_PREF_KEYS) {
+                    if (!isGitHubLoggedIn) continue
+                    val decrypted = decryptVaultSecretForGitHubUserStatic(rawVal, githubUserId, githubUsername)
+                    if (!decrypted.isNullOrBlank()) {
+                        editor.putString(key, decrypted)
+                    }
+                } else if (key == PREFS_KEY_USER_SCREEN_NAME) {
                     val clean = OverlayService.sanitizeScreenNameStatic(rawVal)
                     if (clean.isNotEmpty()) editor.putString(key, clean)
                 } else {
@@ -408,7 +543,13 @@ internal fun OverlayService.Companion.applySyncedSettingsMapStatic(
     OverlayService.syncTierThresholdsFromPrefs(prefs)
 }
 
-internal fun OverlayService.Companion.buildLocalSyncVaultPayload(prefs: SharedPreferences, gson: Gson): SyncVaultPayload {
+internal fun OverlayService.Companion.buildLocalSyncVaultPayload(
+    prefs: SharedPreferences,
+    gson: Gson,
+    isGitHubAuthenticatedSync: Boolean = false,
+    githubUserId: String = "",
+    githubUsername: String = ""
+): SyncVaultPayload {
     val logsType = object : TypeToken<List<SyncBattleLogRecord>>() {}.type
     val teamsType = object : TypeToken<List<SyncTeamPresetRecord>>() {}.type
     val strListType = object : TypeToken<List<String>>() {}.type
@@ -429,7 +570,12 @@ internal fun OverlayService.Companion.buildLocalSyncVaultPayload(prefs: SharedPr
         gson.fromJson(prefs.getString(PREFS_KEY_DELETED_TEAM_IDS, "[]"), strListType) ?: emptyList()
     } catch (_: Exception) { emptyList() }
 
-    val settingsMap = exportSyncableSettingsMapStatic(prefs)
+    val settingsMap = exportSyncableSettingsMapStatic(
+        prefs = prefs,
+        isGitHubAuthenticatedSync = isGitHubAuthenticatedSync,
+        githubUserId = githubUserId,
+        githubUsername = githubUsername
+    )
     val settingsUpdAt = prefs.getLong(PREFS_KEY_USER_SETTINGS_UPDATED_AT, 0L)
 
     return SyncVaultPayload(
@@ -444,7 +590,13 @@ internal fun OverlayService.Companion.buildLocalSyncVaultPayload(prefs: SharedPr
     )
 }
 
-internal fun OverlayService.Companion.saveReconciledSyncVaultLocally(prefs: SharedPreferences, gson: Gson, payload: SyncVaultPayload) {
+internal fun OverlayService.Companion.saveReconciledSyncVaultLocally(
+    prefs: SharedPreferences,
+    gson: Gson,
+    payload: SyncVaultPayload,
+    githubUserId: String = "",
+    githubUsername: String = ""
+) {
     val editor = prefs.edit()
         .putString(PREFS_KEY_BATTLE_LOGS, gson.toJson(payload.battleLogs))
         .putString(PREFS_KEY_DELETED_LOG_IDS, gson.toJson(payload.deletedLogIds))
@@ -455,7 +607,7 @@ internal fun OverlayService.Companion.saveReconciledSyncVaultLocally(prefs: Shar
     }
     editor.apply()
     if (payload.userSettings.isNotEmpty()) {
-        applySyncedSettingsMapStatic(prefs, payload.userSettings, payload.settingsUpdatedAt)
+        applySyncedSettingsMapStatic(prefs, payload.userSettings, payload.settingsUpdatedAt, githubUserId, githubUsername)
     }
 }
 
@@ -463,8 +615,8 @@ internal fun OverlayService.Companion.getEffectiveSyncToken(prefs: SharedPrefere
     return prefs.getString(PREFS_KEY_SYNC_GITHUB_TOKEN, "")?.trim().orEmpty()
 }
 
-internal fun OverlayService.Companion.fetchGitHubUsernameBlocking(token: String): String {
-    if (token.isBlank()) return ""
+internal fun OverlayService.Companion.fetchGitHubUserProfileBlocking(token: String): Pair<String, String> {
+    if (token.isBlank()) return "" to ""
     return try {
         val client = OkHttpClient()
         val req = Request.Builder()
@@ -473,14 +625,20 @@ internal fun OverlayService.Companion.fetchGitHubUsernameBlocking(token: String)
             .header("Accept", "application/vnd.github+json")
             .build()
         client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) return ""
+            if (!resp.isSuccessful) return "" to ""
             val body = resp.body?.string().orEmpty()
             val json = JsonParser.parseString(body).asJsonObject
-            json.get("login")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+            val login = json.get("login")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+            val id = json.get("id")?.takeIf { !it.isJsonNull }?.asLong?.toString().orEmpty()
+            login to id
         }
     } catch (_: Exception) {
-        ""
+        "" to ""
     }
+}
+
+internal fun OverlayService.Companion.fetchGitHubUsernameBlocking(token: String): String {
+    return fetchGitHubUserProfileBlocking(token).first
 }
 
 internal fun OverlayService.Companion.requestGitHubDeviceCodeBlocking(): Result<GitHubDeviceCodeResponse> {
@@ -564,35 +722,162 @@ internal fun OverlayService.Companion.syncWithGitHubGistBlocking(prefs: SharedPr
     }
     val httpClient = OkHttpClient()
     val fileName = "battlematrix_gbl_sync_vault.json"
+    val privateRepoName = "silphscope-private-vault"
 
     try {
         var username = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty()
-        if (username.isEmpty()) {
-            username = fetchGitHubUsernameBlocking(token)
-            if (username.isNotEmpty()) {
+        var githubUserId = prefs.getString(OverlayService.PREFS_KEY_SYNC_GITHUB_USER_ID, "")?.trim().orEmpty()
+        if (username.isEmpty() || githubUserId.isEmpty()) {
+            val (fetchedLogin, fetchedId) = fetchGitHubUserProfileBlocking(token)
+            if (fetchedLogin.isNotEmpty()) {
+                username = fetchedLogin
                 prefs.edit().putString(PREFS_KEY_SYNC_GITHUB_USERNAME, username).apply()
             }
+            if (fetchedId.isNotEmpty()) {
+                githubUserId = fetchedId
+                prefs.edit().putString(OverlayService.PREFS_KEY_SYNC_GITHUB_USER_ID, githubUserId).apply()
+            }
+        }
+        if (username.isEmpty()) {
+            return false to "GitHub authentication expired or invalid. Please tap '🔑 Login with GitHub' to sign in again."
         }
 
-        val localPayload = buildLocalSyncVaultPayload(prefs, gson)
+        // One-time migration from legacy public 'sync-vault' branch (if any) + immediate cleanup so no vault data lives on a public repo
+        val migratedV643 = prefs.getBoolean(OverlayService.PREFS_KEY_SYNC_PRIVATE_REPO_MIGRATED_V643, false)
+        if (!migratedV643 && username.equals("sportsfan986", ignoreCase = true)) {
+            try {
+                val legacyPublicVaultUrl = "https://api.github.com/repos/sportsfan986/silphscope-pvp/contents/$fileName"
+                var legacySha = ""
+                var legacyPayload: SyncVaultPayload? = null
+                val getLegacyReq = Request.Builder()
+                    .url("$legacyPublicVaultUrl?ref=sync-vault")
+                    .header("Authorization", "Bearer $token")
+                    .header("Accept", "application/vnd.github+json")
+                    .build()
+                httpClient.newCall(getLegacyReq).execute().use { resp ->
+                    if (resp.isSuccessful) {
+                        val root = JsonParser.parseString(resp.body?.string().orEmpty()).asJsonObject
+                        legacySha = root.get("sha")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                        val contentB64 = root.get("content")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                        if (contentB64.isNotBlank()) {
+                            val decodedBytes = android.util.Base64.decode(contentB64.replace("\n", "").replace("\r", ""), android.util.Base64.DEFAULT)
+                            legacyPayload = try {
+                                gson.fromJson(String(decodedBytes, Charsets.UTF_8), SyncVaultPayload::class.java)
+                            } catch (_: Exception) { null }
+                        }
+                    }
+                }
+                if (legacyPayload != null) {
+                    val curLocal = buildLocalSyncVaultPayload(prefs, gson, true, githubUserId, username)
+                    val (reconciled, _, _) = reconcileSyncVaultPayloads(curLocal, legacyPayload!!)
+                    saveReconciledSyncVaultLocally(prefs, gson, reconciled, githubUserId, username)
+                }
+                // Delete file & branch from public repo so it can never be read publicly
+                if (legacySha.isNotEmpty()) {
+                    val delBody = gson.toJson(mapOf("message" to "Migrate sync vault to private repo", "sha" to legacySha, "branch" to "sync-vault"))
+                        .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+                    val delReq = Request.Builder()
+                        .url(legacyPublicVaultUrl)
+                        .delete(delBody)
+                        .header("Authorization", "Bearer $token")
+                        .header("Accept", "application/vnd.github+json")
+                        .build()
+                    httpClient.newCall(delReq).execute().close()
+                }
+                val delRefReq = Request.Builder()
+                    .url("https://api.github.com/repos/sportsfan986/silphscope-pvp/git/refs/heads/sync-vault")
+                    .delete()
+                    .header("Authorization", "Bearer $token")
+                    .header("Accept", "application/vnd.github+json")
+                    .build()
+                httpClient.newCall(delRefReq).execute().close()
+            } catch (_: Exception) {}
+            prefs.edit().putBoolean(OverlayService.PREFS_KEY_SYNC_PRIVATE_REPO_MIGRATED_V643, true).apply()
+        }
+
+        val localPayload = buildLocalSyncVaultPayload(
+            prefs = prefs,
+            gson = gson,
+            isGitHubAuthenticatedSync = true,
+            githubUserId = githubUserId,
+            githubUsername = username
+        )
         var remotePayload = SyncVaultPayload()
         var remoteFileSha = ""
 
-        // If signed-in user is sportsfan986 (repo owner) and no custom Gist override is set, use dedicated 'sync-vault' branch
-        val useRepoSyncVault = (customGistId.isEmpty() || customGistId.equals("sync-vault", ignoreCase = true)) &&
-            username.equals("sportsfan986", ignoreCase = true)
+        // Primary Vault: Strictly Private GitHub Repository (`<username>/silphscope-private-vault`, `"private": true`)
+        // Ensures GitHub enforces strict authentication (404 to everyone except the signed-in owner), PLUS AES-256-GCM encrypted Unlock Key.
+        var privateRepoAvailable = false
+        val repoMetaUrl = "https://api.github.com/repos/$username/$privateRepoName"
+        val checkRepoReq = Request.Builder()
+            .url(repoMetaUrl)
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/vnd.github+json")
+            .build()
+        httpClient.newCall(checkRepoReq).execute().use { resp ->
+            if (resp.isSuccessful) {
+                val repoObj = JsonParser.parseString(resp.body?.string().orEmpty()).asJsonObject
+                val isPrivate = repoObj.get("private")?.takeIf { !it.isJsonNull }?.asBoolean ?: false
+                if (!isPrivate) {
+                    // Enforce private=true immediately if user ever toggled visibility
+                    val patchBody = gson.toJson(mapOf("private" to true))
+                        .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+                    val patchReq = Request.Builder()
+                        .url(repoMetaUrl)
+                        .patch(patchBody)
+                        .header("Authorization", "Bearer $token")
+                        .header("Accept", "application/vnd.github+json")
+                        .build()
+                    httpClient.newCall(patchReq).execute().use { patchResp ->
+                        privateRepoAvailable = patchResp.isSuccessful
+                    }
+                } else {
+                    privateRepoAvailable = true
+                }
+            } else if (resp.code == 404) {
+                val createBody = gson.toJson(
+                    mapOf(
+                        "name" to privateRepoName,
+                        "description" to "SilphScope PvP Private Multi-Device Sync Vault (Encrypted Unlock Key & Battle Logs — Keep Private)",
+                        "private" to true,
+                        "auto_init" to true
+                    )
+                ).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+                val createReq = Request.Builder()
+                    .url("https://api.github.com/user/repos")
+                    .post(createBody)
+                    .header("Authorization", "Bearer $token")
+                    .header("Accept", "application/vnd.github+json")
+                    .build()
+                httpClient.newCall(createReq).execute().use { createResp ->
+                    if (createResp.isSuccessful || createResp.code == 422) {
+                        privateRepoAvailable = true
+                    }
+                }
+            }
+        }
 
-        if (useRepoSyncVault) {
-            val repoVaultUrl = "https://api.github.com/repos/sportsfan986/silphscope-pvp/contents/$fileName"
+        if (privateRepoAvailable) {
+            val privateRepoVaultUrl = "https://api.github.com/repos/$username/$privateRepoName/contents/$fileName"
             var totalNewLogs = 0
             var totalNewTeams = 0
             var finalMergedPayload = localPayload
             for (attempt in 1..3) {
-                val currentLocal = if (attempt == 1) localPayload else buildLocalSyncVaultPayload(prefs, gson)
+                val currentLocal = if (attempt == 1) {
+                    localPayload
+                } else {
+                    buildLocalSyncVaultPayload(
+                        prefs = prefs,
+                        gson = gson,
+                        isGitHubAuthenticatedSync = true,
+                        githubUserId = githubUserId,
+                        githubUsername = username
+                    )
+                }
                 remotePayload = SyncVaultPayload()
                 remoteFileSha = ""
                 val getReq = Request.Builder()
-                    .url("$repoVaultUrl?ref=sync-vault")
+                    .url(privateRepoVaultUrl)
                     .header("Authorization", "Bearer $token")
                     .header("Accept", "application/vnd.github+json")
                     .build()
@@ -612,14 +897,13 @@ internal fun OverlayService.Companion.syncWithGitHubGistBlocking(prefs: SharedPr
                     }
                 }
 
-                // Reconcile deltas across N devices (Pull -> Union/LWW/Tombstone Reconcile -> Save Local)
+                // Reconcile deltas across N devices (Pull -> Union/LWW/Tombstone Reconcile -> Decrypt & Save Local)
                 val (mergedPayload, newLogsCount, newTeamsCount) = reconcileSyncVaultPayloads(currentLocal, remotePayload)
-                saveReconciledSyncVaultLocally(prefs, gson, mergedPayload)
+                saveReconciledSyncVaultLocally(prefs, gson, mergedPayload, githubUserId, username)
                 finalMergedPayload = mergedPayload
                 totalNewLogs += newLogsCount
                 totalNewTeams += newTeamsCount
 
-                // Determine if local state has deltas that need to be pushed back to the shared multi-device vault
                 val remoteLogIds = remotePayload.battleLogs.associateBy { it.id }
                 val hasLogDiff = mergedPayload.battleLogs.size != remotePayload.battleLogs.size ||
                     mergedPayload.battleLogs.any { m -> remoteLogIds[m.id]?.updatedAt != m.updatedAt }
@@ -637,9 +921,8 @@ internal fun OverlayService.Companion.syncWithGitHubGistBlocking(prefs: SharedPr
                         android.util.Base64.NO_WRAP
                     )
                     val putBodyMap = mutableMapOf<String, Any>(
-                        "message" to "Auto-sync multi-device delta vault",
-                        "content" to encodedB64,
-                        "branch" to "sync-vault"
+                        "message" to "Auto-sync private multi-device delta vault (AES-256-GCM protected)",
+                        "content" to encodedB64
                     )
                     if (remoteFileSha.isNotEmpty()) {
                         putBodyMap["sha"] = remoteFileSha
@@ -647,7 +930,7 @@ internal fun OverlayService.Companion.syncWithGitHubGistBlocking(prefs: SharedPr
                     val reqBody = gson.toJson(putBodyMap)
                         .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
                     val putReq = Request.Builder()
-                        .url(repoVaultUrl)
+                        .url(privateRepoVaultUrl)
                         .put(reqBody)
                         .header("Authorization", "Bearer $token")
                         .header("Accept", "application/vnd.github+json")
@@ -666,11 +949,17 @@ internal fun OverlayService.Companion.syncWithGitHubGistBlocking(prefs: SharedPr
                 }
             }
 
-            val userTag = if (username.isNotEmpty()) "@$username" else "Cloud Vault"
-            return true to "Synced ($userTag)! (${finalMergedPayload.battleLogs.size} battles, +$totalNewLogs from other devices · ${finalMergedPayload.teamPresets.size} teams, +$totalNewTeams updated)"
+            // Re-verify synced Replay Unlock Key & refresh Cloud R2 Replays on this device
+            try {
+                verifyReplayUnlockKeyBlocking(prefs, gson)
+            } catch (_: Exception) {}
+
+            val hasSyncedKey = !prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "").isNullOrBlank()
+            val keyBadge = if (hasSyncedKey) " · 🔒 Unlock Key Encrypted & Synced" else ""
+            return true to "Synced (@$username Private Vault)! (${finalMergedPayload.battleLogs.size} battles, +$totalNewLogs from other devices · ${finalMergedPayload.teamPresets.size} teams, +$totalNewTeams updated$keyBadge)"
         }
 
-        // Standard Per-User Isolated Vault: Auto-discover or create a private Gist in the signed-in user's own GitHub account
+        // Fallback Per-User Secret Gist Vault (strictly enforced `"public": false` + AES-256-GCM encrypted Unlock Key)
         var gistId = if (customGistId.equals("sync-vault", ignoreCase = true)) "" else customGistId
         if (gistId.isEmpty()) {
             val listReq = Request.Builder()
@@ -683,8 +972,9 @@ internal fun OverlayService.Companion.syncWithGitHubGistBlocking(prefs: SharedPr
                     val arr = JsonParser.parseString(resp.body?.string().orEmpty()).asJsonArray
                     for (el in arr) {
                         val obj = el.asJsonObject
+                        val isPublicGist = obj.get("public")?.takeIf { !it.isJsonNull }?.asBoolean ?: false
                         val filesObj = obj.getAsJsonObject("files")
-                        if (filesObj != null && filesObj.has(fileName)) {
+                        if (!isPublicGist && filesObj != null && filesObj.has(fileName)) {
                             gistId = obj.get("id")?.asString.orEmpty()
                             break
                         }
@@ -703,6 +993,7 @@ internal fun OverlayService.Companion.syncWithGitHubGistBlocking(prefs: SharedPr
                 if (resp.isSuccessful) {
                     val bodyStr = resp.body?.string().orEmpty()
                     val root = JsonParser.parseString(bodyStr).asJsonObject
+                    val isPublicGist = root.get("public")?.takeIf { !it.isJsonNull }?.asBoolean ?: false
                     val filesObj = root.getAsJsonObject("files")
                     val vaultFile = filesObj?.getAsJsonObject(fileName)
                     val contentStr = vaultFile?.get("content")?.asString
@@ -711,6 +1002,19 @@ internal fun OverlayService.Companion.syncWithGitHubGistBlocking(prefs: SharedPr
                             gson.fromJson(contentStr, SyncVaultPayload::class.java) ?: SyncVaultPayload()
                         } catch (_: Exception) { SyncVaultPayload() }
                     }
+                    // Never write to a public Gist: if existing Gist was public, delete it and rotate to a new private Gist
+                    if (isPublicGist) {
+                        try {
+                            val delGistReq = Request.Builder()
+                                .url("https://api.github.com/gists/$gistId")
+                                .delete()
+                                .header("Authorization", "Bearer $token")
+                                .header("Accept", "application/vnd.github+json")
+                                .build()
+                            httpClient.newCall(delGistReq).execute().close()
+                        } catch (_: Exception) {}
+                        gistId = ""
+                    }
                 } else if (resp.code == 404) {
                     gistId = ""
                 }
@@ -718,11 +1022,11 @@ internal fun OverlayService.Companion.syncWithGitHubGistBlocking(prefs: SharedPr
         }
 
         val (mergedPayload, newLogsCount, newTeamsCount) = reconcileSyncVaultPayloads(localPayload, remotePayload)
-        saveReconciledSyncVaultLocally(prefs, gson, mergedPayload)
+        saveReconciledSyncVaultLocally(prefs, gson, mergedPayload, githubUserId, username)
 
         val mergedJsonStr = gson.toJson(mergedPayload)
         val bodyMap = mapOf(
-            "description" to "SilphScope PvP Multi-Device Sync Vault (Teams & Battle Logs)",
+            "description" to "SilphScope PvP Private Multi-Device Sync Vault (AES-256-GCM Protected)",
             "public" to false,
             "files" to mapOf(
                 fileName to mapOf("content" to mergedJsonStr)
@@ -759,8 +1063,13 @@ internal fun OverlayService.Companion.syncWithGitHubGistBlocking(prefs: SharedPr
             }
         }
 
-        val userTag = if (username.isNotEmpty()) "@$username" else "Private Gist"
-        return true to "Synced ($userTag)! (${mergedPayload.battleLogs.size} battles, +$newLogsCount from other devices · ${mergedPayload.teamPresets.size} teams, +$newTeamsCount updated)"
+        try {
+            verifyReplayUnlockKeyBlocking(prefs, gson)
+        } catch (_: Exception) {}
+
+        val hasSyncedKey = !prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "").isNullOrBlank()
+        val keyBadge = if (hasSyncedKey) " · 🔒 Unlock Key Encrypted & Synced" else ""
+        return true to "Synced (@$username Private Gist)! (${mergedPayload.battleLogs.size} battles, +$newLogsCount from other devices · ${mergedPayload.teamPresets.size} teams, +$newTeamsCount updated$keyBadge)"
     } catch (e: Exception) {
         return false to "Sync failed: ${e.localizedMessage ?: "Network error"}"
     }
@@ -2273,16 +2582,24 @@ internal fun OverlayService.Companion.verifyReplayUnlockKeyBlocking(
         val keyToUse = inputKey.trim().ifEmpty {
             prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
         }
+        val ghToken = getEffectiveSyncToken(prefs)
+        val ghUser = if (ghToken.isNotEmpty()) prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty() else ""
+        val ghId = if (ghToken.isNotEmpty()) prefs.getString(OverlayService.PREFS_KEY_SYNC_GITHUB_USER_ID, "")?.trim().orEmpty() else ""
         val httpClient = buildTelemetryHttpClientStatic(15L, 25L, 20L)
-        val reqBody = gson.toJson(mapOf("unlockKey" to keyToUse))
+        val reqMap = mutableMapOf<String, Any>("unlockKey" to keyToUse)
+        if (ghUser.isNotEmpty()) reqMap["githubUsername"] = ghUser
+        if (ghId.isNotEmpty()) reqMap["githubUserId"] = ghId
+        val reqBody = gson.toJson(reqMap)
             .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-        val req = Request.Builder()
+        val reqBuilder = Request.Builder()
             .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/license/verify")
             .post(reqBody)
             .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
             .header("X-Trainer-Screen-Name", safeUser)
             .header("X-SilphScope-Unlock-Key", keyToUse)
-            .build()
+        if (ghUser.isNotEmpty()) reqBuilder.header("X-GitHub-Username", ghUser)
+        if (ghId.isNotEmpty()) reqBuilder.header("X-GitHub-User-Id", ghId)
+        val req = reqBuilder.build()
 
         httpClient.newCall(req).execute().use { resp ->
             val bodyStr = resp.body?.string().orEmpty()
@@ -2297,15 +2614,21 @@ internal fun OverlayService.Companion.verifyReplayUnlockKeyBlocking(
             val resolvedKey = licObj?.get("key")?.takeIf { !it.isJsonNull }?.asString?.ifBlank { keyToUse } ?: keyToUse
             val label = licObj?.get("label")?.takeIf { !it.isJsonNull }?.asString ?: tier.uppercase()
 
-            prefs.edit()
-                .putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, if (active) resolvedKey else keyToUse)
+            val prevKey = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
+            val newKeyVal = if (active) resolvedKey else keyToUse
+            val editor = prefs.edit()
+                .putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, newKeyVal)
                 .putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, if (active) tier else "free")
                 .putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_JSON, bodyStr)
-                .apply()
+            if (newKeyVal.isNotEmpty() && newKeyVal != prevKey) {
+                editor.putLong(PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
+            }
+            editor.apply()
 
             if (active && tier != "free") {
                 syncCloudReplayListBlocking(prefs, gson)
-                true to "✅ Active Tier: $label (@$safeUser)"
+                val syncNote = if (ghUser.isNotEmpty()) " • 🔒 Synced via @$ghUser" else ""
+                true to "✅ Active Tier: $label (@$safeUser$syncNote)"
             } else if (err.isNotBlank()) {
                 false to "⚠️ $err"
             } else {
@@ -2326,14 +2649,19 @@ internal fun OverlayService.Companion.syncCloudReplayListBlocking(
         val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
             .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
         val unlockKey = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
+        val ghToken = getEffectiveSyncToken(prefs)
+        val ghUser = if (ghToken.isNotEmpty()) prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty() else ""
+        val ghId = if (ghToken.isNotEmpty()) prefs.getString(OverlayService.PREFS_KEY_SYNC_GITHUB_USER_ID, "")?.trim().orEmpty() else ""
         val httpClient = buildTelemetryHttpClientStatic(15L, 25L, 20L)
-        val req = Request.Builder()
+        val reqBuilder = Request.Builder()
             .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/list")
             .get()
             .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
             .header("X-Trainer-Screen-Name", safeUser)
             .header("X-SilphScope-Unlock-Key", unlockKey)
-            .build()
+        if (ghUser.isNotEmpty()) reqBuilder.header("X-GitHub-Username", ghUser)
+        if (ghId.isNotEmpty()) reqBuilder.header("X-GitHub-User-Id", ghId)
+        val req = reqBuilder.build()
 
         httpClient.newCall(req).execute().use { resp ->
             val bodyStr = resp.body?.string().orEmpty()

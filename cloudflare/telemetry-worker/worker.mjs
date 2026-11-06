@@ -452,12 +452,17 @@ async function saveLicenseRecord(kv, lic) {
   if (lic.boundScreenName) {
     await kv.put(`user_license/${lic.boundScreenName}`, cleanKey);
   }
+  if (lic.boundGitHubUsername) {
+    await kv.put(`gh_license/${String(lic.boundGitHubUsername).toLowerCase()}`, cleanKey);
+  }
 }
 
-async function resolveUserLicense(kv, screenName, providedKey = '') {
+async function resolveUserLicense(kv, screenName, providedKey = '', githubUsername = '', githubUserId = '') {
   if (!kv) return { ...TIER_PRESETS.free, active: false, key: '' };
   let lic = null;
   const cleanProvided = String(providedKey || '').trim().toUpperCase();
+  const cleanGhUser = String(githubUsername || '').trim().toLowerCase();
+  const cleanGhId = String(githubUserId || '').trim();
   if (cleanProvided) {
     lic = await loadLicenseByKey(kv, cleanProvided);
     if (!lic) {
@@ -486,7 +491,24 @@ async function resolveUserLicense(kv, screenName, providedKey = '') {
         error: `This Unlock Key expired on ${lic.expiresAt.slice(0, 10)}.`,
       };
     }
+    const isSameGhOwner =
+      (cleanGhId && lic.boundGitHubUserId && String(lic.boundGitHubUserId) === cleanGhId) ||
+      (cleanGhUser && lic.boundGitHubUsername && String(lic.boundGitHubUsername).toLowerCase() === cleanGhUser);
     if (
+      lic.boundGitHubUsername &&
+      cleanGhUser &&
+      String(lic.boundGitHubUsername).toLowerCase() !== cleanGhUser &&
+      (!cleanGhId || !lic.boundGitHubUserId || String(lic.boundGitHubUserId) !== cleanGhId)
+    ) {
+      return {
+        ...TIER_PRESETS.free,
+        active: false,
+        key: '',
+        error: `This Unlock Key is bound to another GitHub account (@${lic.boundGitHubUsername}).`,
+      };
+    }
+    if (
+      !isSameGhOwner &&
       lic.boundScreenName &&
       screenName &&
       lic.boundScreenName.toLowerCase() !== screenName.toLowerCase()
@@ -498,17 +520,38 @@ async function resolveUserLicense(kv, screenName, providedKey = '') {
         error: `This Unlock Key is already bound to another Debug ID (@${lic.boundScreenName}).`,
       };
     }
+    let updatedBinding = false;
     if (screenName && !lic.boundScreenName) {
       lic.boundScreenName = screenName;
-      lic.activatedAt = new Date().toISOString();
-      await saveLicenseRecord(kv, lic);
-    } else if (screenName) {
-      await kv.put(`user_license/${screenName}`, lic.key);
+      lic.activatedAt = lic.activatedAt || new Date().toISOString();
+      updatedBinding = true;
     }
-  } else if (screenName) {
-    const mappedKey = await kv.get(`user_license/${screenName}`, { type: 'text' });
-    if (mappedKey) {
-      lic = await loadLicenseByKey(kv, mappedKey);
+    if (cleanGhUser && !lic.boundGitHubUsername) {
+      lic.boundGitHubUsername = cleanGhUser;
+      updatedBinding = true;
+    }
+    if (cleanGhId && !lic.boundGitHubUserId) {
+      lic.boundGitHubUserId = cleanGhId;
+      updatedBinding = true;
+    }
+    if (updatedBinding) {
+      await saveLicenseRecord(kv, lic);
+    } else {
+      if (screenName) await kv.put(`user_license/${screenName}`, lic.key);
+      if (cleanGhUser) await kv.put(`gh_license/${cleanGhUser}`, lic.key);
+    }
+  } else {
+    if (screenName) {
+      const mappedKey = await kv.get(`user_license/${screenName}`, { type: 'text' });
+      if (mappedKey) {
+        lic = await loadLicenseByKey(kv, mappedKey);
+      }
+    }
+    if (!lic && cleanGhUser) {
+      const ghMappedKey = await kv.get(`gh_license/${cleanGhUser}`, { type: 'text' });
+      if (ghMappedKey) {
+        lic = await loadLicenseByKey(kv, ghMappedKey);
+      }
     }
   }
 
@@ -2809,8 +2852,14 @@ export default {
       const inputKey = String(
         body.unlockKey || body.key || request.headers.get('X-SilphScope-Unlock-Key') || ''
       ).trim();
+      const ghUser = String(
+        body.githubUsername || request.headers.get('X-GitHub-Username') || ''
+      ).trim();
+      const ghId = String(
+        body.githubUserId || request.headers.get('X-GitHub-User-Id') || ''
+      ).trim();
 
-      const licenseInfo = await resolveUserLicense(env.TELEMETRY_KV, screenName, inputKey);
+      const licenseInfo = await resolveUserLicense(env.TELEMETRY_KV, screenName, inputKey, ghUser, ghId);
       const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, screenName);
       const usage = await enforceUserReplayQuota(
         env,
