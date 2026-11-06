@@ -244,11 +244,19 @@ When working on this repository inside Antigravity:
 > **Default Policy**: Do **not** run full local Android APK builds (`./gradlew assembleRelease`) on Windows unless explicitly requested. Instead, validate TypeScript/Web locally (`npm run lint && npm run build`), commit and push to `main`, and monitor the GitHub Actions workflows (`Build Android APK` and `Deploy Web Simulator to GitHub Pages`) until completion, addressing any failures immediately.
 
 1. **Web TypeScript & Bundle Verification (Fast Local Gate)**:
+   - On Windows, always prepend Node 22 (`C:\Users\Chris\.nodejs\node-v22.14.0-win-x64`) and JDK 17 (`C:\Users\Chris\.jdks\jdk-17.0.21+9\bin`) to `PATH` before invoking `node`/`npm`/`keytool`:
    ```bash
    npm run lint
    npm run build
    ```
-2. **Checking Telemetry Branch**:
+2. **Optimized GitHub Actions Android Build Configuration (~2.5 min CI Build)**:
+   - **7 GB Runner JVM Sizing (`gradle.properties`)**: Keep `org.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=768m -XX:+UseParallelGC` and `kotlin.daemon.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=768m -XX:+UseParallelGC` (`kotlin.incremental=true`) so combined Gradle + Kotlin compiler memory never exceeds the 7 GB physical RAM on `ubuntu-latest` (preventing 22-minute swap thrashing).
+   - **Kotlin K2 Compiler & Explicit Collection Types**: Use Kotlin `2.0.21+` in `build.gradle.kts` and **always annotate explicit return types** (`: List<T>`, `: Map<K, V>`) on large static `listOf(...)` / `mapOf(...)` properties in `PokemonDatabase.kt`, `OverlayService.kt`, and `MainActivity.kt` so K2 skips global return-type inference.
+   - **Gradle Build Cache & Lint Vital (`app/build.gradle.kts` & `.github/workflows/android.yml`)**: Keep `lint { checkReleaseBuilds = false; abortOnError = false }` and invoke `./gradlew assembleRelease --build-cache --no-daemon --stacktrace` in CI.
+3. **APK Signature Scheme v3 Key Rotation & In-Place Upgrade Invariants**:
+   - Release signing uses the 4096-bit RSA key (`alias = silphscope`) and rotation lineage stored in GitHub Actions secrets (`RELEASE_KEYSTORE_B64`, `RELEASE_LINEAGE_B64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_PASSWORD`, `RELEASE_KEY_ALIAS`) with `minSdk = 31` (`--v1-signing-enabled false --v2-signing-enabled false --v3-signing-enabled true --rotation-min-sdk-version 31`).
+   - **CRITICAL**: In `RELEASE_LINEAGE_B64`, the prior signer (`gblkey`) **must** retain `--set-installed-data true` and `--set-rollback false`. Setting `--set-installed-data false` causes Android `PackageManager` to reject in-place upgrades (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) and triggers Google Play Protect developer blocks.
+4. **Checking Telemetry Branch**:
    ```bash
    git fetch origin ai-telemetry-logs:ai-telemetry-logs
    git log origin/ai-telemetry-logs -n 10
