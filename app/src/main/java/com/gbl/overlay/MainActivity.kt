@@ -201,6 +201,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textSafeSwapMvp: TextView
     private lateinit var editTrainerScreenName: EditText
     private lateinit var btnSaveTrainerScreenName: Button
+    private lateinit var btnRandomTrainerScreenName: Button
     private lateinit var textTrainerScreenNameStatus: TextView
     private var activeScreenNamePromptDialog: AlertDialog? = null
     private var currentActivePage: String = "teams"
@@ -1285,6 +1286,7 @@ class MainActivity : AppCompatActivity() {
         textOneBattleDvrStatus = findViewById(R.id.text_one_battle_dvr_status)
         editTrainerScreenName = findViewById(R.id.edit_trainer_screen_name)
         btnSaveTrainerScreenName = findViewById(R.id.btn_save_trainer_screen_name)
+        btnRandomTrainerScreenName = findViewById(R.id.btn_random_trainer_screen_name)
         textTrainerScreenNameStatus = findViewById(R.id.text_trainer_screen_name_status)
         textTierDefinitionsSummary = findViewById(R.id.text_tier_definitions_summary)
         editTierSwMin = findViewById(R.id.edit_tier_sw_min)
@@ -1505,6 +1507,9 @@ class MainActivity : AppCompatActivity() {
         btnSaveTrainerScreenName.setOnClickListener {
             saveTrainerScreenNameFromInput()
         }
+        btnRandomTrainerScreenName.setOnClickListener {
+            assignRandomTrainerDebugId()
+        }
 
         editSyncGithubToken.setText(prefs.getString(PREFS_KEY_SYNC_GITHUB_TOKEN, "") ?: "")
         editSyncGistId.setText(prefs.getString(PREFS_KEY_SYNC_GIST_ID, "") ?: "")
@@ -1541,7 +1546,7 @@ class MainActivity : AppCompatActivity() {
             if (next) {
                 Toast.makeText(
                     this,
-                    "🤖 Auto-Upload Enabled! Uploading any queued AI & anomaly logs to Cloudflare...",
+                    "🤖 Auto-Upload Enabled! Uploading any queued AI & anomaly logs...",
                     Toast.LENGTH_SHORT
                 ).show()
                 triggerManualAiTelemetryUpload(silentIfEmpty = true)
@@ -1559,13 +1564,27 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnToggleShowOneBattleDvr.setOnClickListener {
+            if (!OverlayService.hasValidScreenNameStatic(prefs)) {
+                ensureRequiredScreenNameOrPrompt()
+                return@setOnClickListener
+            }
+            if (!OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs)) {
+                promptCustomIdForVideoLogging()
+                return@setOnClickListener
+            }
             val current = prefs.getBoolean(OverlayService.PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, false)
             val next = !current
             prefs.edit().putBoolean(OverlayService.PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, next).apply()
             OverlayService.syncTierThresholdsFromPrefs(prefs)
             updateAiTelemetryStatusUi()
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                }
+                startService(updateIntent)
+            }
             val msg = if (next) {
-                "🎥 Overlay 'DVR' button enabled! Tap it in the overlay (or 'Arm 1-Battle DVR' here) before a match."
+                "🎥 Overlay 'DVR' button enabled! It appears as soon as the overlay or battle starts."
             } else {
                 "⚪ Overlay 'DVR' button hidden."
             }
@@ -1577,6 +1596,10 @@ class MainActivity : AppCompatActivity() {
                 ensureRequiredScreenNameOrPrompt()
                 return@setOnClickListener
             }
+            if (!OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs)) {
+                promptCustomIdForVideoLogging()
+                return@setOnClickListener
+            }
             val currentArmed = prefs.getBoolean(OverlayService.PREFS_KEY_ARM_ONE_BATTLE_DVR, false)
             val nextArmed = !currentArmed
             prefs.edit()
@@ -1584,8 +1607,14 @@ class MainActivity : AppCompatActivity() {
                 .apply()
             OverlayService.syncTierThresholdsFromPrefs(prefs)
             updateAiTelemetryStatusUi()
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                }
+                startService(updateIntent)
+            }
             val msg = if (nextArmed) {
-                "🔴 1-Battle DVR ARMED! Next battle will record full-screen MP4 + deep trace JSONL and auto-upload to Cloudflare & Telegram."
+                "🔴 1-Battle DVR ARMED! Next battle will record full-screen MP4 + deep trace JSONL and auto-upload after the match."
             } else {
                 "⚪ 1-Battle DVR disarmed."
             }
@@ -2248,10 +2277,18 @@ class MainActivity : AppCompatActivity() {
             editTrainerScreenName.setText(screenName)
         }
         if (OverlayService.isValidScreenNameStatic(screenName)) {
-            textTrainerScreenNameStatus.text = "✅ Active Trainer Screen Name: $screenName (Used for Cloudflare Telemetry, 1-Battle DVR & Device Sync)"
-            textTrainerScreenNameStatus.setTextColor(0xFF34D399.toInt())
+            if (OverlayService.isRandomDebugIdStatic(prefs)) {
+                textTrainerScreenNameStatus.text =
+                    "🎲 Active Random Debug ID: $screenName (Standard debug logs enabled • Enter a custom ID above to unlock 1-Battle DVR video logging)"
+                textTrainerScreenNameStatus.setTextColor(0xFF38BDF8.toInt())
+            } else {
+                textTrainerScreenNameStatus.text =
+                    "✅ Active Custom Debug ID: $screenName (Debug logs & 1-Battle DVR video logging enabled)"
+                textTrainerScreenNameStatus.setTextColor(0xFF34D399.toInt())
+            }
         } else {
-            textTrainerScreenNameStatus.text = "⚠️ Screen Name Required (3–24 letters, numbers, _ or -) before launching the overlay."
+            textTrainerScreenNameStatus.text =
+                "⚠️ Unique Debug ID Required (3–24 chars or tap '🎲 Random ID') before launching the overlay."
             textTrainerScreenNameStatus.setTextColor(0xFFFBBF24.toInt())
         }
     }
@@ -2262,18 +2299,124 @@ class MainActivity : AppCompatActivity() {
         if (!OverlayService.isValidScreenNameStatic(sanitized)) {
             Toast.makeText(
                 this,
-                "⚠️ Please enter a valid Trainer Screen Name (3–24 characters: letters, numbers, _ or -).",
+                "⚠️ Please enter a valid custom ID (3–24 characters: letters, numbers, _ or -).",
                 Toast.LENGTH_LONG
             ).show()
             return
         }
-        prefs.edit()
+        val isRandomFmt = OverlayService.isRandomScreenNameFormatStatic(sanitized)
+        val editor = prefs.edit()
             .putString(OverlayService.PREFS_KEY_USER_SCREEN_NAME, sanitized)
+            .putBoolean(OverlayService.PREFS_KEY_IS_RANDOM_SCREEN_NAME, isRandomFmt)
             .putLong(OverlayService.PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
-            .apply()
+        if (isRandomFmt) {
+            editor.putBoolean(OverlayService.PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, false)
+            editor.putBoolean(OverlayService.PREFS_KEY_ARM_ONE_BATTLE_DVR, false)
+        }
+        editor.apply()
+        OverlayService.syncTierThresholdsFromPrefs(prefs)
         updateTrainerScreenNameUi()
         updateSyncStatusUi()
-        Toast.makeText(this, "✅ Trainer Screen Name saved: $sanitized", Toast.LENGTH_SHORT).show()
+        if (isOverlayRunning) {
+            val updateIntent = Intent(this, OverlayService::class.java).apply {
+                action = OverlayService.ACTION_UPDATE_SETTINGS
+            }
+            startService(updateIntent)
+        }
+        val msg = if (isRandomFmt) {
+            "🎲 Saved random ID: $sanitized (Enter a non-random custom ID to allow video logging)"
+        } else {
+            "✅ Custom Debug ID saved: $sanitized (Video logging unlocked)"
+        }
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun assignRandomTrainerDebugId() {
+        val randomId = OverlayService.generateRandomDebugIdStatic()
+        prefs.edit()
+            .putString(OverlayService.PREFS_KEY_USER_SCREEN_NAME, randomId)
+            .putBoolean(OverlayService.PREFS_KEY_IS_RANDOM_SCREEN_NAME, true)
+            .putBoolean(OverlayService.PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, false)
+            .putBoolean(OverlayService.PREFS_KEY_ARM_ONE_BATTLE_DVR, false)
+            .putLong(OverlayService.PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
+            .apply()
+        OverlayService.syncTierThresholdsFromPrefs(prefs)
+        updateTrainerScreenNameUi()
+        updateSyncStatusUi()
+        if (isOverlayRunning) {
+            val updateIntent = Intent(this, OverlayService::class.java).apply {
+                action = OverlayService.ACTION_UPDATE_SETTINGS
+            }
+            startService(updateIntent)
+        }
+        Toast.makeText(
+            this,
+            "🎲 Assigned random debug ID: $randomId (Custom ID required for video logging)",
+            Toast.LENGTH_LONG
+        ).show()
+    }
+
+    private fun promptCustomIdForVideoLogging() {
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+        }
+        val currentId = OverlayService.getRequiredScreenNameStatic(prefs)
+        val input = EditText(this).apply {
+            hint = "Enter Custom ID (3–24 chars)"
+            if (!OverlayService.isRandomDebugIdStatic(prefs)) {
+                setText(currentId)
+            }
+            setSingleLine(true)
+            setTextColor(0xFFF8FAFC.toInt())
+            setHintTextColor(0xFF94A3B8.toInt())
+            setBackgroundColor(0xFF0F172A.toInt())
+            val innerPad = (12 * resources.displayMetrics.density).toInt()
+            setPadding(innerPad, innerPad, innerPad, innerPad)
+        }
+        val helper = TextView(this).apply {
+            text = "Does NOT need to be your actual Pokémon GO screen name — any unique custom handle (3–24 letters/numbers, not starting with ID_) unlocks 1-Battle DVR video logging."
+            textSize = 11f
+            setTextColor(0xFF94A3B8.toInt())
+            setPadding(0, pad / 2, 0, 0)
+        }
+        container.addView(input)
+        container.addView(helper)
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("🎥 Custom ID Required for Video Logging")
+            .setMessage("You are currently using a random debug ID ($currentId). To enable or arm 1-Battle DVR video logging, please enter a custom unique ID below:")
+            .setView(container)
+            .setPositiveButton("Save Custom ID", null)
+            .setNegativeButton("Cancel", null)
+            .create()
+
+        dialog.setOnShowListener {
+            val btn = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            btn.setOnClickListener {
+                val candidate = OverlayService.sanitizeScreenNameStatic(input.text?.toString().orEmpty())
+                if (!OverlayService.isValidScreenNameStatic(candidate) || OverlayService.isRandomScreenNameFormatStatic(candidate)) {
+                    input.error = "Enter a non-random custom ID (3–24 chars)"
+                    return@setOnClickListener
+                }
+                prefs.edit()
+                    .putString(OverlayService.PREFS_KEY_USER_SCREEN_NAME, candidate)
+                    .putBoolean(OverlayService.PREFS_KEY_IS_RANDOM_SCREEN_NAME, false)
+                    .putLong(OverlayService.PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
+                    .apply()
+                OverlayService.syncTierThresholdsFromPrefs(prefs)
+                updateTrainerScreenNameUi()
+                updateSyncStatusUi()
+                dialog.dismiss()
+                Toast.makeText(
+                    this,
+                    "✅ Custom ID saved ($candidate)! You can now enable or arm 1-Battle DVR video logging.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+        dialog.show()
     }
 
     private fun ensureRequiredScreenNameOrPrompt() {
@@ -2290,7 +2433,7 @@ class MainActivity : AppCompatActivity() {
             setPadding(pad, pad / 2, pad, 0)
         }
         val input = EditText(this).apply {
-            hint = "e.g. TrainerAsh99"
+            hint = "Custom ID (3–24 chars)"
             setText(OverlayService.getRequiredScreenNameStatic(prefs))
             setSingleLine(true)
             setTextColor(0xFFF8FAFC.toInt())
@@ -2300,7 +2443,7 @@ class MainActivity : AppCompatActivity() {
             setPadding(innerPad, innerPad, innerPad, innerPad)
         }
         val helper = TextView(this).apply {
-            text = "3–24 characters (letters, numbers, _ or -). Used to tag diagnostic telemetry & DVR recordings so no GitHub login is required."
+            text = "Unique ID for debug logs (3–24 letters, numbers, _ or -). Does NOT need to be your actual Pokémon GO screen name. You can also tap '🎲 Assign Random ID' below (note: a custom non-random ID is required for 1-Battle DVR video logging)."
             textSize = 11f
             setTextColor(0xFF94A3B8.toInt())
             setPadding(0, pad / 2, 0, 0)
@@ -2309,11 +2452,12 @@ class MainActivity : AppCompatActivity() {
         container.addView(helper)
 
         val dialog = AlertDialog.Builder(this)
-            .setTitle("👤 Trainer Screen Name Required")
-            .setMessage("Welcome to SilphScope PvP! Please choose a Trainer Screen Name before using the app or starting the overlay:")
+            .setTitle("👤 Unique Debug ID Required")
+            .setMessage("Welcome to SilphScope PvP! Choose a unique ID for diagnostic debug logs before using the app or starting the overlay:")
             .setView(container)
             .setCancelable(false)
-            .setPositiveButton("Save & Continue", null)
+            .setPositiveButton("Save Custom ID", null)
+            .setNeutralButton("🎲 Assign Random ID", null)
             .create()
 
         dialog.setOnShowListener {
@@ -2324,15 +2468,24 @@ class MainActivity : AppCompatActivity() {
                     input.error = "Enter 3–24 characters (A-Z, 0-9, _ or -)"
                     return@setOnClickListener
                 }
+                val isRandomFmt = OverlayService.isRandomScreenNameFormatStatic(candidate)
                 prefs.edit()
                     .putString(OverlayService.PREFS_KEY_USER_SCREEN_NAME, candidate)
+                    .putBoolean(OverlayService.PREFS_KEY_IS_RANDOM_SCREEN_NAME, isRandomFmt)
                     .putLong(OverlayService.PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
                     .apply()
+                OverlayService.syncTierThresholdsFromPrefs(prefs)
                 updateTrainerScreenNameUi()
                 updateSyncStatusUi()
                 dialog.dismiss()
                 activeScreenNamePromptDialog = null
                 Toast.makeText(this, "✅ Welcome, $candidate!", Toast.LENGTH_SHORT).show()
+            }
+            val neutralBtn = dialog.getButton(AlertDialog.BUTTON_NEUTRAL)
+            neutralBtn.setOnClickListener {
+                assignRandomTrainerDebugId()
+                dialog.dismiss()
+                activeScreenNamePromptDialog = null
             }
         }
         activeScreenNamePromptDialog = dialog
@@ -2393,15 +2546,16 @@ class MainActivity : AppCompatActivity() {
         }
 
         val statePrefix = when {
-            enabled -> "🟢 Cloudflare Auto-Upload ON (Trainer: $screenName)"
-            else -> "⚪ Cloudflare Auto-Upload OFF"
+            enabled -> "🟢 Auto-Upload ON (Debug ID: $screenName)"
+            else -> "⚪ Auto-Upload OFF"
         }
         textAiTelemetryStatus.text =
             "$statePrefix • Debounce Profile: $profileSig ($pendingSettingsChanges pending changes) • Pending queue: $pendingBattles battles ($pendingAnomalies anomalies) • Total uploaded & purged: $totalUploaded • Last upload: $lastStr"
 
         if (::btnToggleShowOneBattleDvr.isInitialized && ::btnArmOneBattleDvrNow.isInitialized && ::textOneBattleDvrStatus.isInitialized) {
-            val showBtn = prefs.getBoolean(OverlayService.PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, false)
-            val isArmed = prefs.getBoolean(OverlayService.PREFS_KEY_ARM_ONE_BATTLE_DVR, false)
+            val canVideo = OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs)
+            val showBtn = canVideo && prefs.getBoolean(OverlayService.PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, false)
+            val isArmed = canVideo && prefs.getBoolean(OverlayService.PREFS_KEY_ARM_ONE_BATTLE_DVR, false)
             val dvrUploadedCount = prefs.getInt(OverlayService.PREFS_KEY_TOTAL_DVR_UPLOADED_COUNT, 0)
             val lastDvrAt = prefs.getLong(OverlayService.PREFS_KEY_LAST_DVR_UPLOAD_MS, 0L)
             val lastDvrPath = prefs.getString(OverlayService.PREFS_KEY_LAST_DVR_UPLOAD_PATH, "") ?: ""
@@ -2412,7 +2566,7 @@ class MainActivity : AppCompatActivity() {
                 btnToggleShowOneBattleDvr.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
                 btnToggleShowOneBattleDvr.setTextColor(0xFFFFFFFF.toInt())
             } else {
-                btnToggleShowOneBattleDvr.text = "🎥 Overlay 1-Battle DVR Btn: OFF"
+                btnToggleShowOneBattleDvr.text = if (canVideo) "🎥 Overlay 1-Battle DVR Btn: OFF" else "🔒 Overlay DVR (Requires Custom ID)"
                 btnToggleShowOneBattleDvr.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF334155.toInt())
                 btnToggleShowOneBattleDvr.setTextColor(0xFFF8FAFC.toInt())
             }
@@ -2422,12 +2576,16 @@ class MainActivity : AppCompatActivity() {
                 btnArmOneBattleDvrNow.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFDC2626.toInt())
                 btnArmOneBattleDvrNow.setTextColor(0xFFFFFFFF.toInt())
             } else {
-                btnArmOneBattleDvrNow.text = "🔴 Arm 1-Battle DVR"
+                btnArmOneBattleDvrNow.text = if (canVideo) "🔴 Arm 1-Battle DVR" else "🔒 Arm DVR (Custom ID)"
                 btnArmOneBattleDvrNow.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
                 btnArmOneBattleDvrNow.setTextColor(0xFFFFFFFF.toInt())
             }
 
-            val armStateLabel = if (isArmed) "🔴 ARMED FOR NEXT BATTLE (Cloudflare + Telegram)" else "⚪ Disarmed"
+            val armStateLabel = when {
+                !canVideo -> "🔒 Custom ID required for video logging (Currently using Random ID)"
+                isArmed -> "🔴 ARMED FOR NEXT BATTLE"
+                else -> "⚪ Disarmed"
+            }
             val pathTail = if (lastDvrPath.isNotEmpty()) " ($lastDvrPath)" else ""
             textOneBattleDvrStatus.text =
                 "$armStateLabel • Overlay Button: ${if (showBtn) "ON" else "OFF"} • DVR Bundles Uploaded: $dvrUploadedCount • Last DVR Upload: $lastDvrStr$pathTail"
@@ -6897,7 +7055,7 @@ class MainActivity : AppCompatActivity() {
         if (!OverlayService.hasValidScreenNameStatic(prefs)) {
             Toast.makeText(
                 this,
-                "⚠️ Please set your Trainer Screen Name before starting the overlay.",
+                "⚠️ Please set a Unique Debug ID (or tap Random ID) before starting the overlay.",
                 Toast.LENGTH_LONG
             ).show()
             ensureRequiredScreenNameOrPrompt()

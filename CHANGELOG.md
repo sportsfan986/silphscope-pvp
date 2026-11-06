@@ -1,4 +1,22 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.27`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.28`)
+
+---
+
+## v6.28 (2026-11-06) — Pre-Battle Overlay DVR Button Visibility, Unique Debug ID (Random vs. Custom ID for Video Logging) & 5-Minute Local FFmpeg Telemetry Preprocessor
+*UX, privacy, and local telemetry preprocessing upgrade (`v6.28`, `versionCode = 1628`) ensuring the 1-Battle DVR button is visible immediately upon overlay startup and `Start Battle` press (before the opponent Pokémon spawns), updating the Trainer / Debug ID flow with a 1-tap Random Unique ID generator while requiring a custom (non-random) ID for 1-Battle DVR video logging, removing all UI mentions of Telegram, and adding a 5-minute zero-token local Windows background sync + FFmpeg keyframe/contact-sheet preprocessor.*
+
+- **v6.28 — Fix 1: Overlay 1-Battle DVR Button Visible Immediately on Startup & `Start Battle` Press (`OverlayService.kt`, `overlay.html`)**:
+  - **Root Cause**: When `isWaitingForOpponent || activeOpponentName == "Waiting..."` was true (both when the overlay first launched and after pressing `⚔️ Start Battle` during matchmaking/countdown before the opponent Pokémon spawned), `buildBattlePayloadJson()` returned `waitingPayload` without `"showOneBattleDvrBtn"`, `"isOneBattleDvrArmed"`, `"isOneBattleDvrRecording"`, or `"oneBattleDvrFrames"`, causing `#btn-dvr-rec-one` to remain hidden until the opponent Pokémon was detected mid-battle.
+  - **Fix**: Added `"showOneBattleDvrBtn"`, `"isOneBattleDvrArmed"`, `"isOneBattleDvrRecording"`, and `"oneBattleDvrFrames"` to `waitingPayload`, synced preferences on `startNewBattle()`, and preserved DVR state in `overlay.html` so players can arm 1-Battle DVR before combat begins without interfering with fast-move taps.
+
+- **v6.28 — Enhancement 2: Unique Debug ID Subtext, 1-Tap Random ID Generator & Custom ID Requirement for Video Logging (`OverlayService.kt`, `MainActivity.kt`, `BattleDvrEngine.kt`, `GitHubCloudSync.kt`, `activity_main.xml`, `src/App.tsx`)**:
+  - **Clarified Unique Debug ID & Removed Telegram References**: Updated all UI cards, prompts, and status labels to clarify that the ID is a unique identifier for diagnostic debug logs (not required to be the user's actual Pokémon GO screen name) and removed all mentions of Telegram from the app UI.
+  - **1-Tap Random Unique ID Generator (`🎲 Random ID`)**: Added a `🎲 Random ID` button in both the first-run setup dialog and the Settings `Trainer / Debug ID` card (`generateRandomDebugIdStatic()`, e.g., `ID_7K4M9P`), allowing instant anonymous setup for standard app/overlay usage and debug log uploads.
+  - **Custom (Non-Random) ID Required for 1-Battle DVR Video Logging**: Gated `Show 1-Battle DVR Button in Overlay`, `Arm 1-Battle DVR`, and `toggleArmOneBattleDvrFromOverlay()` on `hasCustomScreenNameForVideoLoggingStatic(prefs)`, prompting users on a random ID to enter a custom handle if they wish to enable 1-Battle DVR video recording.
+
+- **v6.28 — Enhancement 3: 5-Minute Zero-Token Local Background Telemetry & FFmpeg Video Preprocessor (`scripts/ingest-telemetry.mjs`, `scripts/telemetry-preprocess-config.json`, `scripts/install-local-telemetry-task.ps1`)**:
+  - **5-Minute Scheduled Sync (`SilphScope-Telemetry-Sync`)**: Added a hidden Windows Scheduled Task running `node scripts/ingest-telemetry.mjs --sync-only --prune-remote` every 5 minutes using 100% local PC resources (`0` AI tokens) with a `1.0 GB` local cache auto-pruner.
+  - **Configurable FFmpeg Event Keyframes & Contact Sheets (`scripts/telemetry-preprocess-config.json`)**: Automatically generates `6x4` (`24`-frame) tiled contact sheets plus individual annotated JPEG keyframes for Battle Start, Charged Move In/Out transitions, Large HP Changes & Animations, Swaps, Energy Shifts, and Battle End while preserving full `.mp4` videos locally for deep analysis.
 
 ---
 

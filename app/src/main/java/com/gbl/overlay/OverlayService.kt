@@ -91,7 +91,7 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "6.27"
+        const val APP_VERSION = "6.28"
         const val APP_VERSION_CODE = 1627
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -188,8 +188,9 @@ class OverlayService : LifecycleService() {
         const val DEFAULT_LIMITED_STD_DECAY_GBL = 0.10f // Fast (0.10) default for GBL Limited Cups
         const val PREFS_KEY_LIMITED_STD_DECAY_SHOW6 = "gbl_limited_std_decay_show6_v600"
         const val DEFAULT_LIMITED_STD_DECAY_SHOW6 = 0.06f
-        // v5.10 / v6.27: Always-On Cloudflare AI Training & Anomaly Telemetry Auto-Upload Constants
+        // v5.10 / v6.28: Always-On Diagnostic Telemetry Auto-Upload & Unique Debug ID Constants
         const val PREFS_KEY_USER_SCREEN_NAME = "gbl_user_screen_name"
+        const val PREFS_KEY_IS_RANDOM_SCREEN_NAME = "gbl_is_random_screen_name"
         const val PREFS_KEY_USER_SETTINGS_UPDATED_AT = "gbl_user_settings_updated_at"
         const val DEFAULT_AUTO_UPLOAD_AI_LOGS = true
         const val CLOUDFLARE_TELEMETRY_WORKER_URL = "https://silphscope-telemetry.silphscope-pvp.workers.dev"
@@ -213,12 +214,27 @@ class OverlayService : LifecycleService() {
             return sanitizeScreenNameStatic(raw).isNotEmpty()
         }
 
+        fun generateRandomDebugIdStatic(): String {
+            val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+            val suffix = (1..6).map { chars.random() }.joinToString("")
+            return "ID_$suffix"
+        }
+
+        fun isRandomScreenNameFormatStatic(raw: String?): Boolean {
+            val cleaned = sanitizeScreenNameStatic(raw)
+            if (cleaned.isEmpty()) return false
+            return Regex("^(ID|ANON|RND)_[A-Z0-9]{5,10}$", RegexOption.IGNORE_CASE).matches(cleaned)
+        }
+
         fun getRequiredScreenNameStatic(prefs: SharedPreferences): String {
             val saved = sanitizeScreenNameStatic(prefs.getString(PREFS_KEY_USER_SCREEN_NAME, null))
             if (saved.isNotEmpty()) return saved
             val legacyGh = sanitizeScreenNameStatic(prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, null))
             if (legacyGh.isNotEmpty()) {
-                prefs.edit().putString(PREFS_KEY_USER_SCREEN_NAME, legacyGh).apply()
+                prefs.edit()
+                    .putString(PREFS_KEY_USER_SCREEN_NAME, legacyGh)
+                    .putBoolean(PREFS_KEY_IS_RANDOM_SCREEN_NAME, false)
+                    .apply()
                 return legacyGh
             }
             return ""
@@ -226,6 +242,16 @@ class OverlayService : LifecycleService() {
 
         fun hasValidScreenNameStatic(prefs: SharedPreferences): Boolean {
             return getRequiredScreenNameStatic(prefs).isNotEmpty()
+        }
+
+        fun isRandomDebugIdStatic(prefs: SharedPreferences): Boolean {
+            val current = getRequiredScreenNameStatic(prefs)
+            if (current.isEmpty()) return false
+            return prefs.getBoolean(PREFS_KEY_IS_RANDOM_SCREEN_NAME, false) || isRandomScreenNameFormatStatic(current)
+        }
+
+        fun hasCustomScreenNameForVideoLoggingStatic(prefs: SharedPreferences): Boolean {
+            return hasValidScreenNameStatic(prefs) && !isRandomDebugIdStatic(prefs)
         }
 
         const val PREFS_KEY_AI_TELEMETRY_V510_MIGRATED = "gbl_ai_telemetry_v510_migrated"
@@ -524,8 +550,9 @@ class OverlayService : LifecycleService() {
             activeHapticOppSwapWarnSec = prefs.getInt(PREFS_KEY_HAPTIC_OPP_SWAP_WARN_SEC, DEFAULT_HAPTIC_OPP_SWAP_WARN_SEC).coerceIn(2, 10)
             activeHapticOppChargeWarnEnabled = prefs.getBoolean(PREFS_KEY_HAPTIC_OPP_CHARGE_WARN_ENABLED, DEFAULT_HAPTIC_OPP_CHARGE_WARN_ENABLED)
             activeHapticChargeTimingFasts = prefs.getInt(PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS, DEFAULT_HAPTIC_CHARGE_TIMING_FASTS).coerceIn(1, 2)
-            activeShowOneBattleDvrBtn = prefs.getBoolean(PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, DEFAULT_SHOW_ONE_BATTLE_DVR_BTN)
-            if (!activeShowOneBattleDvrBtn) {
+            val canUseVideoLogging = hasCustomScreenNameForVideoLoggingStatic(prefs)
+            activeShowOneBattleDvrBtn = canUseVideoLogging && prefs.getBoolean(PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, DEFAULT_SHOW_ONE_BATTLE_DVR_BTN)
+            if (!activeShowOneBattleDvrBtn || !canUseVideoLogging) {
                 activeOneBattleDvrArmed = false
             } else {
                 activeOneBattleDvrArmed = prefs.getBoolean(PREFS_KEY_ARM_ONE_BATTLE_DVR, false)
@@ -12133,6 +12160,7 @@ class OverlayService : LifecycleService() {
         recommendationsIssuedInBattle = 0
         recommendationsFollowedInBattle = 0
 
+        syncTierThresholdsFromPrefs(prefs)
         stopBattleOcrLoop()
         startBattleOcrLoop()
         recalculateAndPushBattleData()
@@ -13777,6 +13805,10 @@ class OverlayService : LifecycleService() {
                 "oppSwapEndTimeMs" to oppSwapEndTimeMs,
                 "hapticOppSwapWarnSec" to activeHapticOppSwapWarnSec,
                 "hapticChargeTimingFasts" to activeHapticChargeTimingFasts,
+                "showOneBattleDvrBtn" to activeShowOneBattleDvrBtn,
+                "isOneBattleDvrArmed" to activeOneBattleDvrArmed,
+                "isOneBattleDvrRecording" to activeOneBattleDvrRecording,
+                "oneBattleDvrFrames" to activeOneBattleDvrFrames,
                 "playerPokeballs" to playerPokeballCount,
                 "oppPokeballs" to oppPokeballCount,
                 "playerShields" to playerShieldsRemaining,

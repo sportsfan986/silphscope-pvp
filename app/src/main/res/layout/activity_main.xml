@@ -1462,7 +1462,7 @@
                 android:layout_marginBottom="8dp" />
 
             <!-- ===================================================================
-                 TRAINER SCREEN NAME CARD (v6.27: REQUIRED TO USE APP & OVERLAY)
+                 TRAINER / DEBUG ID CARD (v6.28: UNIQUE ID FOR DEBUG LOGS & DVR)
                  =================================================================== -->
             <LinearLayout
                 android:id="@+id/card_settings_trainer_profile"
@@ -1476,7 +1476,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="👤 Trainer Screen Name (Required • Attribution &amp; Sync)"
+                    android:text="👤 Trainer / Debug ID (Required • Unique ID for Debug Logs)"
                     android:textColor="#38bdf8"
                     android:textSize="12.5sp"
                     android:textStyle="bold" />
@@ -1484,7 +1484,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Required to use SilphScope PvP and launch the Battle Overlay. Used to attribute your Always-On Telemetry and 1-Battle DVR recordings on Cloudflare &amp; Telegram."
+                    android:text="Unique ID used to tag diagnostic debug logs. Does NOT need to be your actual Pokémon GO screen name. You can enter a custom ID or assign a random unique ID below (a custom non-random ID is required to enable 1-Battle DVR video logging)."
                     android:textColor="#94a3b8"
                     android:textSize="10sp"
                     android:lineSpacingExtra="1.5dp"
@@ -1503,7 +1503,7 @@
                         android:layout_weight="1"
                         android:background="#1e293b"
                         android:paddingHorizontal="10dp"
-                        android:hint="Enter Trainer Screen Name (3–24 chars)"
+                        android:hint="Custom ID (3–24 chars)"
                         android:textColor="#f8fafc"
                         android:textColorHint="#64748b"
                         android:textSize="11.5sp"
@@ -1515,18 +1515,29 @@
                         android:id="@+id/btn_save_trainer_screen_name"
                         android:layout_width="wrap_content"
                         android:layout_height="38dp"
-                        android:text="💾 Save Name"
+                        android:text="💾 Save ID"
                         android:textSize="10.5sp"
                         android:textStyle="bold"
                         android:backgroundTint="#0284c7"
                         android:textColor="#ffffff" />
+
+                    <Button
+                        android:id="@+id/btn_random_trainer_screen_name"
+                        android:layout_width="wrap_content"
+                        android:layout_height="38dp"
+                        android:text="🎲 Random ID"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#475569"
+                        android:textColor="#ffffff"
+                        android:layout_marginStart="6dp" />
                 </LinearLayout>
 
                 <TextView
                     android:id="@+id/text_trainer_screen_name_status"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Trainer Screen Name: Not set (Required)"
+                    android:text="Unique Debug ID: Not set (Required)"
                     android:textColor="#fbbf24"
                     android:textSize="10sp"
                     android:layout_marginTop="4dp" />
@@ -3650,7 +3661,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="🤖 Always-On Cloudflare Telemetry &amp; 1-Battle Telegram DVR (v6.27)"
+                    android:text="🤖 Always-On Diagnostic Telemetry &amp; 1-Battle DVR (v6.28)"
                     android:textColor="#38bdf8"
                     android:textSize="11sp"
                     android:textStyle="bold" />
@@ -3658,7 +3669,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Automatically uploads lower-resolution battle telemetry &amp; detected energy/HP/shield anomalies to Cloudflare using your Trainer Screen Name (no GitHub login needed). 1-Battle DVR recordings upload to Cloudflare and forward to the SilphScope DVR Telegram channel for viewing."
+                    android:text="Automatically uploads lower-resolution battle telemetry &amp; detected energy/HP/shield anomalies using your Unique Debug ID (no GitHub login needed). 1-Battle DVR video recordings require a custom (non-random) ID and auto-upload after the match."
                     android:textColor="#94a3b8"
                     android:textSize="10sp"
                     android:layout_marginTop="2dp" />

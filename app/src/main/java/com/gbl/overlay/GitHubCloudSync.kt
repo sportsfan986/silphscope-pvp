@@ -317,6 +317,7 @@ private val SYNCABLE_BOOLEAN_PREF_KEYS = listOf(
     OverlayService.PREFS_KEY_HAPTIC_OPP_SWAP_ENABLED,
     OverlayService.PREFS_KEY_HAPTIC_OPP_CHARGE_WARN_ENABLED,
     OverlayService.PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN,
+    OverlayService.PREFS_KEY_IS_RANDOM_SCREEN_NAME,
     PREFS_KEY_AUTO_UPLOAD_AI_LOGS
 )
 
@@ -1774,10 +1775,9 @@ internal fun OverlayService.Companion.buildEnhancedHpAndEnergyDiagnosticsStatic(
 }
 
 /**
- * v6.27: Auto-uploads the 1-Battle Full-Screen DVR `.mp4` video and its frame-synced `_deep_trace.jsonl`
+ * v6.28: Auto-uploads the 1-Battle Full-Screen DVR `.mp4` video and its frame-synced `_deep_trace.jsonl`
  * in a single multipart request to the SilphScope Cloudflare Worker (`POST /v1/dvr`), which stores both
- * in Cloudflare Storage (`recordings/<screenName>/<battleId>_video.mp4` & `_deep_trace.jsonl`) and
- * forwards the playable MP4 video + battle summary to the SilphScope DVR Telegram Channel.
+ * in Cloudflare Storage (`recordings/<screenName>/<battleId>_video.mp4` & `_deep_trace.jsonl`).
  */
 internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
     prefs: SharedPreferences,
@@ -1788,6 +1788,11 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
     traceFile: File
 ): Pair<Boolean, String> {
     return try {
+        if (!hasCustomScreenNameForVideoLoggingStatic(prefs)) {
+            try { mp4File.delete() } catch (_: Exception) {}
+            try { traceFile.delete() } catch (_: Exception) {}
+            return false to "⚠️ Video logging requires a custom ID (not a random ID)."
+        }
         val devHash = getDeviceTelemetryHashStatic(prefs)
         val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
             .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
@@ -1889,7 +1894,7 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
                 .apply()
             try { mp4File.delete() } catch (_: Exception) {}
             try { traceFile.delete() } catch (_: Exception) {}
-            true to "🎥 Uploaded 1-Battle Video & Deep Trace ($cleanBattleId) as @$safeUser to Cloudflare + Telegram!"
+            true to "🎥 Uploaded 1-Battle Video & Deep Trace ($cleanBattleId) as @$safeUser!"
         } else {
             false to "⚠️ 1-Battle DVR upload failed (HTTP $httpCode)"
         }

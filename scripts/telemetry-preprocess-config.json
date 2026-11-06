@@ -1,0 +1,82 @@
+{
+  "version": "1.0.0",
+  "description": "Tunable rules for local CPU/ffmpeg preprocessing of 1-Battle DVR recordings and deep traces. Edit any threshold or window here to adjust what screenshots and contact sheets are saved locally.",
+  "storage": {
+    "maxLocalStorageMb": 1024,
+    "pruneTargetStorageMb": 950,
+    "keepRawMp4Videos": true,
+    "evictOldestRawMp4FirstWhenOverQuota": true
+  },
+  "contactSheet": {
+    "enabled": true,
+    "gridCols": 6,
+    "gridRows": 4,
+    "tileWidthPx": 272,
+    "tileHeightPx": 592,
+    "jpegQuality": 4
+  },
+  "individualKeyframes": {
+    "enabled": true,
+    "jpegQuality": 3,
+    "saveBeforeTriggerFrames": 4,
+    "saveAfterTriggerFrames": 6,
+    "sampleStepFrames": 2
+  },
+  "captureRules": {
+    "battleStart": {
+      "enabled": true,
+      "description": "Start of battle: countdown, opening lead nameplate lock-in, and initial HP/energy bar appearance.",
+      "startFrameIdx": 0,
+      "frameCount": 24,
+      "sampleEveryNFrames": 2,
+      "alsoCaptureAroundFirstSpeciesLock": true,
+      "preLockFrames": 8,
+      "postLockFrames": 16
+    },
+    "chargedMoveTransitions": {
+      "enabled": true,
+      "description": "All transitions IN to charged moves (camera zoom, circle shrink, shield prompt, banner) and OUT of charged moves (camera unzoom, post-cutscene HP settling, energy deduction).",
+      "entryPreFrames": 12,
+      "entryPostFrames": 12,
+      "entrySampleEveryNFrames": 1,
+      "exitPreFrames": 8,
+      "exitPostFrames": 16,
+      "exitSampleEveryNFrames": 1,
+      "mergeWindowFrames": 10
+    },
+    "largeHpChangesAndAnimations": {
+      "enabled": true,
+      "description": "All large HP changes (drops, KOs, or upward resets) including the full pre-drop animation, drain interpolation, and post-drop settling period.",
+      "minCommittedHpDeltaPct": 12,
+      "minRawVsCommittedDiscrepancyPct": 10,
+      "preAnimationFrames": 10,
+      "postSettlingFrames": 14,
+      "sampleEveryNFrames": 1,
+      "cooldownFrames": 12
+    },
+    "speciesSwapsAndFaints": {
+      "enabled": true,
+      "description": "All player or opponent switch-ins, faints, and Pokéball count changes.",
+      "preSwapFrames": 10,
+      "postSwapFrames": 14,
+      "sampleEveryNFrames": 1,
+      "cooldownFrames": 12
+    },
+    "energyAnomaliesAndJumps": {
+      "enabled": true,
+      "description": "Sudden charge circle fill drops without a move throw, or large single-step energy jumps.",
+      "minSingleStepEnergyJump": 20,
+      "minUnexplainedCircleDropPct": 18,
+      "preFrames": 8,
+      "postFrames": 16,
+      "sampleEveryNFrames": 1,
+      "cooldownFrames": 15
+    },
+    "battleEnd": {
+      "enabled": true,
+      "description": "End of battle: final KO, YOU WIN! / GOOD EFFORT! banner, and auto-end detection window.",
+      "tailFrameCount": 24,
+      "sampleEveryNFrames": 2
+    }
+  }
+}

@@ -100,6 +100,13 @@ import com.gbl.overlay.OverlayService.Companion.PREFS_KEY_ARM_ONE_BATTLE_DVR
 // =========================================================================
 
 internal fun OverlayService.toggleArmOneBattleDvrFromOverlay() {
+    if (!OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs)) {
+        activeOneBattleDvrArmed = false
+        prefs.edit().putBoolean(PREFS_KEY_ARM_ONE_BATTLE_DVR, false).apply()
+        showBattleToast("⚠️ Video logging requires a custom ID (not a random ID). Set a custom ID in App Settings first.")
+        recalculateAndPushBattleData()
+        return
+    }
     if (!activeShowOneBattleDvrBtn) {
         showBattleToast("Enable '1-Battle DVR Button' in App Settings first.")
         return

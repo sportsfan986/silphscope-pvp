@@ -1456,7 +1456,7 @@
                 <button id="btn-cycle-form" class="hud-btn btn-form disabled" onclick="cycleForm()" disabled title="Cycle regional or alternate form">
                     <span class="btn-row-top">Form:</span><span class="btn-row-sub">Base</span>
                 </button>
-                <button id="btn-dvr-rec-one" class="hud-btn btn-dvr hidden" onclick="toggleArmOneBattleDvr()" title="Arm 1-Battle Full-Screen MP4 Video + Deep Frame Log (Auto-uploads to GitHub & disarms after 1 battle)">
+                <button id="btn-dvr-rec-one" class="hud-btn btn-dvr hidden" onclick="toggleArmOneBattleDvr()" title="Arm 1-Battle Full-Screen MP4 Video + Deep Frame Log (Auto-uploads & disarms after 1 battle)">
                     <span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">OFF</span>
                 </button>
             </div>
@@ -2825,6 +2825,7 @@
                 } else if (cachedLastBattleAvgHpScanMs > 0 && !data.lastBattleAvgHpScanMs) {
                     data.lastBattleAvgHpScanMs = cachedLastBattleAvgHpScanMs;
                 }
+                if (data.showOneBattleDvrBtn === undefined && battleData && battleData.showOneBattleDvrBtn !== undefined) { data.showOneBattleDvrBtn = battleData.showOneBattleDvrBtn; data.isOneBattleDvrArmed = battleData.isOneBattleDvrArmed; data.isOneBattleDvrRecording = battleData.isOneBattleDvrRecording; data.oneBattleDvrFrames = battleData.oneBattleDvrFrames; }
                 battleData = data;
                 if (data.isBattleActive !== undefined) {
                     isBattleActive = !!data.isBattleActive;
