@@ -21,7 +21,45 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import dns from "node:dns";
 import { spawnSync } from "node:child_process";
+
+// Resilient DNS lookup override for `silphscope-telemetry.silphscope-pvp.workers.dev`
+// Bypasses Windows/router DNS `ENOENT` or `AAAA ::` sinkholes by falling back to Cloudflare IPv4 edge IPs.
+const origDnsLookup = dns.lookup.bind(dns);
+dns.lookup = function patchedDnsLookup(hostname, options, callback) {
+  const cb = typeof options === "function" ? options : callback;
+  const opts = typeof options === "function" ? {} : options || {};
+  const isWorkerHost =
+    typeof hostname === "string" &&
+    hostname.toLowerCase() === "silphscope-telemetry.silphscope-pvp.workers.dev";
+
+  origDnsLookup(hostname, opts, (err, address, family) => {
+    if (!isWorkerHost) {
+      return cb(err, address, family);
+    }
+    const isBogusAddr = (a) =>
+      !a || a === "::" || a === "0:0:0:0:0:0:0:0" || a === "0.0.0.0" || a.startsWith("127.");
+    if (!err && address) {
+      if (Array.isArray(address)) {
+        const valid = address.filter((entry) => !isBogusAddr(entry && entry.address));
+        valid.sort((a, b) => (a.family === 4 ? -1 : 1) - (b.family === 4 ? -1 : 1));
+        if (valid.length > 0 && valid.some((e) => e.family === 4)) {
+          return cb(null, valid);
+        }
+      } else if (!isBogusAddr(address) && family === 4) {
+        return cb(null, address, family);
+      }
+    }
+    if (opts && opts.all) {
+      return cb(null, [
+        { address: "104.21.76.162", family: 4 },
+        { address: "172.67.197.119", family: 4 },
+      ]);
+    }
+    return cb(null, "104.21.76.162", 4);
+  });
+};
 
 const DEFAULT_WORKER_URL =
   process.env.SILPHSCOPE_TELEMETRY_WORKER_URL ||

@@ -105,46 +105,126 @@ function getStorageAdapter(env) {
 
   if (env.TELEMETRY_KV) {
     const kv = env.TELEMETRY_KV;
+    // Cloudflare Workers KV has a hard 25 MiB (26,214,400 bytes) per-key limit.
+    // Long 1-Battle DVR MP4 videos (e.g. 200s+ Mega Ultra League battles) can reach 26–35 MB.
+    // We transparently split binary values > 24 MiB across `<key>` (chunk 0) and `<key>.__part1..N`.
+    const KV_MAX_CHUNK_BYTES = 24 * 1024 * 1024; // 24 MiB (25,165,824 bytes)
+    const MAX_PARTS_TO_CLEAN = 6;
     return {
       backend: 'kv',
       async put(key, value, { contentType = 'application/octet-stream', metadata = {} } = {}) {
-        const size =
-          typeof value === 'string'
-            ? new TextEncoder().encode(value).byteLength
-            : value.byteLength || 0;
         const uploadedAt = metadata.uploadedAt || new Date().toISOString();
-        await kv.put(key, value, {
-          metadata: { ...metadata, contentType, size, uploadedAt },
-        });
+        if (typeof value === 'string') {
+          const size = new TextEncoder().encode(value).byteLength;
+          await kv.put(key, value, {
+            metadata: { ...metadata, contentType, size, chunkCount: 1, uploadedAt },
+          });
+          return;
+        }
+        const bytes =
+          value instanceof Uint8Array
+            ? value
+            : value instanceof ArrayBuffer
+            ? new Uint8Array(value)
+            : new Uint8Array(value.buffer || value);
+        const totalSize = bytes.byteLength || 0;
+        if (totalSize <= KV_MAX_CHUNK_BYTES) {
+          await kv.put(key, bytes, {
+            metadata: { ...metadata, contentType, size: totalSize, chunkCount: 1, uploadedAt },
+          });
+          return;
+        }
+        const chunkCount = Math.ceil(totalSize / KV_MAX_CHUNK_BYTES);
+        const puts = [];
+        for (let i = 0; i < chunkCount; i++) {
+          const start = i * KV_MAX_CHUNK_BYTES;
+          const end = Math.min((i + 1) * KV_MAX_CHUNK_BYTES, totalSize);
+          const slice = bytes.subarray(start, end);
+          if (i === 0) {
+            puts.push(
+              kv.put(key, slice, {
+                metadata: {
+                  ...metadata,
+                  contentType,
+                  size: totalSize,
+                  chunkCount,
+                  uploadedAt,
+                },
+              })
+            );
+          } else {
+            puts.push(
+              kv.put(`${key}.__part${i}`, slice, {
+                metadata: {
+                  parentKey: key,
+                  partIndex: i,
+                  chunkCount,
+                  size: slice.byteLength,
+                  uploadedAt,
+                },
+              })
+            );
+          }
+        }
+        await Promise.all(puts);
       },
       async getText(key) {
         return await kv.get(key, { type: 'text' });
       },
       async getResponse(key) {
-        const { value, metadata } = await kv.getWithMetadata(key, { type: 'stream' });
+        const { value, metadata } = await kv.getWithMetadata(key, { type: 'arrayBuffer' });
         if (!value) return null;
+        const chunkCount = Number((metadata && metadata.chunkCount) || 1);
         const headers = new Headers();
         headers.set(
           'Content-Type',
           (metadata && metadata.contentType) || 'application/octet-stream'
         );
-        return new Response(value, { status: 200, headers });
+        if (metadata && metadata.size) {
+          headers.set('Content-Length', String(metadata.size));
+        }
+        if (chunkCount <= 1) {
+          return new Response(value, { status: 200, headers });
+        }
+        const stream = new ReadableStream({
+          async start(controller) {
+            try {
+              controller.enqueue(new Uint8Array(value));
+              for (let i = 1; i < chunkCount; i++) {
+                const partBuf = await kv.get(`${key}.__part${i}`, { type: 'arrayBuffer' });
+                if (partBuf) {
+                  controller.enqueue(new Uint8Array(partBuf));
+                }
+              }
+              controller.close();
+            } catch (err) {
+              controller.error(err);
+            }
+          },
+        });
+        return new Response(stream, { status: 200, headers });
       },
       async list({ prefix = '', cursor = undefined, limit = 500 } = {}) {
         const listed = await kv.list({ prefix, cursor, limit });
         return {
-          objects: listed.keys.map((k) => ({
-            key: k.name,
-            size: Number((k.metadata && k.metadata.size) || 0),
-            uploaded: (k.metadata && k.metadata.uploadedAt) || null,
-            customMetadata: k.metadata || {},
-          })),
+          objects: listed.keys
+            .filter((k) => !k.name.includes('.__part'))
+            .map((k) => ({
+              key: k.name,
+              size: Number((k.metadata && k.metadata.size) || 0),
+              uploaded: (k.metadata && k.metadata.uploadedAt) || null,
+              customMetadata: k.metadata || {},
+            })),
           truncated: !listed.list_complete,
           cursor: !listed.list_complete ? listed.cursor : null,
         };
       },
       async delete(key) {
-        await kv.delete(key);
+        const deletes = [kv.delete(key)];
+        for (let i = 1; i < MAX_PARTS_TO_CLEAN; i++) {
+          deletes.push(kv.delete(`${key}.__part${i}`));
+        }
+        await Promise.all(deletes);
       },
     };
   }
@@ -440,160 +520,180 @@ export default {
 
     // 4. 1-Battle DVR Bundle Ingest (`POST /v1/dvr`)
     if (request.method === 'POST' && path === '/v1/dvr') {
-      const auth = verifyClientAuth(request, env);
-      if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
-      const { screenName } = auth;
+      try {
+        const auth = verifyClientAuth(request, env);
+        if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
+        const { screenName } = auth;
 
-      const contentType = request.headers.get('Content-Type') || '';
-      let videoBytes = null;
-      let deepTraceText = '';
-      let metadata = {};
+        const contentType = request.headers.get('Content-Type') || '';
+        let videoBytes = null;
+        let deepTraceText = '';
+        let metadata = {};
 
-      if (contentType.includes('multipart/form-data')) {
-        const form = await request.formData();
-        const videoFile = form.get('video');
-        const tracePart = form.get('deep_trace');
-        const metaPart = form.get('metadata');
+        if (contentType.includes('multipart/form-data')) {
+          const form = await request.formData();
+          const videoFile = form.get('video');
+          const tracePart = form.get('deep_trace');
+          const metaPart = form.get('metadata');
 
-        if (videoFile && typeof videoFile.arrayBuffer === 'function') {
-          videoBytes = new Uint8Array(await videoFile.arrayBuffer());
-        }
-        if (tracePart) {
-          deepTraceText =
-            typeof tracePart === 'string' ? tracePart : await tracePart.text();
-        }
-        if (metaPart) {
-          const metaStr = typeof metaPart === 'string' ? metaPart : await metaPart.text();
+          if (videoFile && typeof videoFile.arrayBuffer === 'function') {
+            videoBytes = new Uint8Array(await videoFile.arrayBuffer());
+          }
+          if (tracePart) {
+            deepTraceText =
+              typeof tracePart === 'string' ? tracePart : await tracePart.text();
+          }
+          if (metaPart) {
+            const metaStr = typeof metaPart === 'string' ? metaPart : await metaPart.text();
+            try {
+              metadata = JSON.parse(metaStr);
+            } catch (_) {
+              metadata = {};
+            }
+          }
+        } else {
+          let body;
           try {
-            metadata = JSON.parse(metaStr);
+            body = await request.json();
           } catch (_) {
-            metadata = {};
+            return jsonResponse({ ok: false, error: 'Invalid DVR request payload.' }, 400);
+          }
+          metadata = body.metadata || {};
+          deepTraceText = String(body.deepTraceJsonl || '');
+          if (typeof body.videoBase64 === 'string' && body.videoBase64.length > 0) {
+            const binaryStr = atob(body.videoBase64);
+            const bytes = new Uint8Array(binaryStr.length);
+            for (let i = 0; i < binaryStr.length; i++) {
+              bytes[i] = binaryStr.charCodeAt(i);
+            }
+            videoBytes = bytes;
           }
         }
-      } else {
-        let body;
-        try {
-          body = await request.json();
-        } catch (_) {
-          return jsonResponse({ ok: false, error: 'Invalid DVR request payload.' }, 400);
+
+        const hasVideo = Boolean(videoBytes && videoBytes.byteLength > 0);
+        const hasTrace = Boolean(deepTraceText && deepTraceText.trim().length > 0);
+        if (!hasVideo && !hasTrace) {
+          return jsonResponse({ ok: false, error: 'Missing DVR video and trace payload.' }, 400);
         }
-        metadata = body.metadata || {};
-        deepTraceText = String(body.deepTraceJsonl || '');
-        if (typeof body.videoBase64 === 'string' && body.videoBase64.length > 0) {
-          const binaryStr = atob(body.videoBase64);
-          const bytes = new Uint8Array(binaryStr.length);
-          for (let i = 0; i < binaryStr.length; i++) {
-            bytes[i] = binaryStr.charCodeAt(i);
-          }
-          videoBytes = bytes;
-        }
-      }
 
-      if (!videoBytes || videoBytes.byteLength === 0) {
-        return jsonResponse({ ok: false, error: 'Missing DVR video payload.' }, 400);
-      }
+        const now = new Date();
+        const battleId = sanitizeId(
+          metadata.battleId || `dvr_${now.getTime()}`,
+          `dvr_${now.getTime()}`
+        );
+        const appVersion = String(metadata.appVersion || 'unknown');
+        const versionCode = Number(metadata.versionCode) || 0;
+        const league = String(metadata.league || 'Unknown League');
+        const result = String(metadata.result || 'UNKNOWN');
+        const matchupSummary = String(metadata.matchupSummary || '');
+        const frameCount = Number(metadata.frameCount) || 0;
 
-      const now = new Date();
-      const battleId = sanitizeId(
-        metadata.battleId || `dvr_${now.getTime()}`,
-        `dvr_${now.getTime()}`
-      );
-      const appVersion = String(metadata.appVersion || 'unknown');
-      const versionCode = Number(metadata.versionCode) || 0;
-      const league = String(metadata.league || 'Unknown League');
-      const result = String(metadata.result || 'UNKNOWN');
-      const matchupSummary = String(metadata.matchupSummary || '');
-      const frameCount = Number(metadata.frameCount) || 0;
+        const videoKey = `recordings/${screenName}/${battleId}_video.mp4`;
+        const traceKey = `recordings/${screenName}/${battleId}_deep_trace.jsonl`;
+        const videoByteLen = hasVideo ? videoBytes.byteLength : 0;
 
-      const videoKey = `recordings/${screenName}/${battleId}_video.mp4`;
-      const traceKey = `recordings/${screenName}/${battleId}_deep_trace.jsonl`;
+        const storeMeta = {
+          screenName,
+          battleId,
+          appVersion,
+          versionCode: String(versionCode),
+          league,
+          result,
+          frameCount: String(frameCount),
+          uploadedAt: now.toISOString(),
+        };
 
-      const storeMeta = {
-        screenName,
-        battleId,
-        appVersion,
-        versionCode: String(versionCode),
-        league,
-        result,
-        frameCount: String(frameCount),
-        uploadedAt: now.toISOString(),
-      };
-
-      const writes = [
-        store.put(videoKey, videoBytes, {
-          contentType: 'video/mp4',
-          metadata: storeMeta,
-        }),
-      ];
-
-      if (deepTraceText && deepTraceText.trim().length > 0) {
-        writes.push(
-          store.put(traceKey, deepTraceText.trim() + '\n', {
+        if (hasTrace) {
+          await store.put(traceKey, deepTraceText.trim() + '\n', {
             contentType: 'application/x-ndjson',
             metadata: storeMeta,
-          })
+          });
+        }
+
+        if (hasVideo) {
+          await store.put(videoKey, videoBytes, {
+            contentType: 'video/mp4',
+            metadata: storeMeta,
+          });
+        }
+
+        ctx.waitUntil(
+          (async () => {
+            try {
+              await updateManifest(store, (m) => {
+                m.totalDvrRecordings = (m.totalDvrRecordings || 0) + 1;
+                if (!m.users) m.users = {};
+                const u = m.users[screenName] || {
+                  screenName,
+                  batches: 0,
+                  records: 0,
+                  dvrCount: 0,
+                  lastAppVersion: appVersion,
+                  lastSeenAt: now.toISOString(),
+                };
+                u.dvrCount = (u.dvrCount || 0) + 1;
+                u.lastAppVersion = appVersion;
+                u.lastSeenAt = now.toISOString();
+                m.users[screenName] = u;
+
+                if (!Array.isArray(m.recentDvr)) m.recentDvr = [];
+                m.recentDvr.unshift({
+                  battleId,
+                  screenName,
+                  videoKey: hasVideo ? videoKey : null,
+                  traceKey: hasTrace ? traceKey : null,
+                  videoBytes: videoByteLen,
+                  frameCount,
+                  appVersion,
+                  versionCode,
+                  league,
+                  result,
+                  matchupSummary,
+                  uploadedAt: now.toISOString(),
+                });
+                if (m.recentDvr.length > 250) m.recentDvr.length = 250;
+              });
+            } catch (e) {
+              console.error('Manifest update error:', e);
+            }
+
+            if (hasVideo && videoByteLen <= 48 * 1024 * 1024) {
+              try {
+                const caption =
+                  `🎬 <b>SilphScope 1-Battle DVR</b>\n` +
+                  `👤 <b>Trainer:</b> <code>${escapeHtml(screenName)}</code>\n` +
+                  `🏆 <b>League:</b> ${escapeHtml(league)} (${escapeHtml(result)})\n` +
+                  (matchupSummary ? `⚔️ <b>Matchup:</b> ${escapeHtml(matchupSummary)}\n` : '') +
+                  `🎞️ <b>Frames:</b> ${frameCount} | <b>Size:</b> ${(videoByteLen / (1024 * 1024)).toFixed(2)} MB\n` +
+                  `📱 <b>App:</b> <code>v${escapeHtml(appVersion)} (${versionCode})</code>\n` +
+                  `🆔 <code>${escapeHtml(battleId)}</code>`;
+
+                await sendTelegramVideo(env, videoBytes, `${screenName}_${battleId}.mp4`, caption);
+              } catch (e) {
+                console.error('Telegram video send error:', e);
+              }
+            }
+          })()
+        );
+
+        return jsonResponse({
+          ok: true,
+          screenName,
+          battleId,
+          videoKey: hasVideo ? videoKey : null,
+          traceKey: hasTrace ? traceKey : null,
+          videoBytes: videoByteLen,
+        });
+      } catch (err) {
+        console.error('POST /v1/dvr error:', err);
+        return jsonResponse(
+          {
+            ok: false,
+            error: String((err && err.message) || err || 'Internal Worker Error'),
+          },
+          500
         );
       }
-
-      await Promise.all(writes);
-
-      ctx.waitUntil(
-        (async () => {
-          await updateManifest(store, (m) => {
-            m.totalDvrRecordings = (m.totalDvrRecordings || 0) + 1;
-            if (!m.users) m.users = {};
-            const u = m.users[screenName] || {
-              screenName,
-              batches: 0,
-              records: 0,
-              dvrCount: 0,
-              lastAppVersion: appVersion,
-              lastSeenAt: now.toISOString(),
-            };
-            u.dvrCount = (u.dvrCount || 0) + 1;
-            u.lastAppVersion = appVersion;
-            u.lastSeenAt = now.toISOString();
-            m.users[screenName] = u;
-
-            if (!Array.isArray(m.recentDvr)) m.recentDvr = [];
-            m.recentDvr.unshift({
-              battleId,
-              screenName,
-              videoKey,
-              traceKey: deepTraceText ? traceKey : null,
-              videoBytes: videoBytes.byteLength,
-              frameCount,
-              appVersion,
-              versionCode,
-              league,
-              result,
-              matchupSummary,
-              uploadedAt: now.toISOString(),
-            });
-            if (m.recentDvr.length > 250) m.recentDvr.length = 250;
-          });
-
-          const caption =
-            `🎬 <b>SilphScope 1-Battle DVR</b>\n` +
-            `👤 <b>Trainer:</b> <code>${escapeHtml(screenName)}</code>\n` +
-            `🏆 <b>League:</b> ${escapeHtml(league)} (${escapeHtml(result)})\n` +
-            (matchupSummary ? `⚔️ <b>Matchup:</b> ${escapeHtml(matchupSummary)}\n` : '') +
-            `🎞️ <b>Frames:</b> ${frameCount} | <b>Size:</b> ${(videoBytes.byteLength / (1024 * 1024)).toFixed(2)} MB\n` +
-            `📱 <b>App:</b> <code>v${escapeHtml(appVersion)} (${versionCode})</code>\n` +
-            `🆔 <code>${escapeHtml(battleId)}</code>`;
-
-          await sendTelegramVideo(env, videoBytes, `${screenName}_${battleId}.mp4`, caption);
-        })()
-      );
-
-      return jsonResponse({
-        ok: true,
-        screenName,
-        battleId,
-        videoKey,
-        traceKey: deepTraceText ? traceKey : null,
-        videoBytes: videoBytes.byteLength,
-      });
     }
 
     // 5. Admin Endpoints for PC Ingestion Script (`scripts/ingest-telemetry.mjs`)

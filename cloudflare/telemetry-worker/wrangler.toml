@@ -13,7 +13,7 @@ id = "e50fe893fefe428b871c9b667ac3edc2"
 # bucket_name = "silphscope-telemetry"
 
 [vars]
-WORKER_VERSION = "1.0.0"
+WORKER_VERSION = "1.1.0"
 TELEGRAM_NOTIFY_TELEMETRY_BATCHES = "true"
 
 # Secrets configured via `npx wrangler secret put <NAME>`:
