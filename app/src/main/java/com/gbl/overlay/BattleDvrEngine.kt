@@ -436,7 +436,7 @@ internal fun OverlayService.finalizeAndUploadOneBattleDvrAsync(
 
         Handler(Looper.getMainLooper()).post {
             recalculateAndPushBattleData()
-            showBattleToast("🎥 Uploading 1-Battle Video & Deep Log to GitHub...")
+            showBattleToast("🎥 Uploading 1-Battle Video & Deep Log to Cloudflare...")
         }
 
         lifecycleScope.launch(Dispatchers.IO) {

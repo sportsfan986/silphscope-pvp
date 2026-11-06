@@ -1,4 +1,18 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.26`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.27`)
+
+---
+
+## v6.27 (2026-11-06) — Cloudflare Worker + Telegram Telemetry & 1-Battle DVR Architecture, Required Trainer Screen Name & Full Settings Cloud Sync
+*Architecture and multi-user telemetry upgrade (`v6.27`, `versionCode = 1627`) replacing GitHub for all telemetry and 1-Battle DVR video uploads with a dedicated Cloudflare Worker + Cloudflare Storage + Telegram Channel (`SilphScope DVR`) pipeline, requiring a Trainer Screen Name before overlay startup, and expanding GitHub Cloud Sync to include App Settings alongside Battle Logs and Teams.*
+
+- **v6.27 — Enhancement 1: Cloudflare Worker + Cloudflare Storage + Telegram Channel (`SilphScope DVR`) Pipeline (`cloudflare/telemetry-worker/worker.mjs`, `GitHubCloudSync.kt`, `BattleDvrEngine.kt`, `scripts/ingest-telemetry.mjs`)**:
+  - **Single-Upload Multi-User Telemetry & DVR Ingestion**: Deployed `https://silphscope-telemetry.silphscope-pvp.workers.dev` backed by Cloudflare storage (`TELEMETRY_KV` / R2 adapter). The Android app uploads Always-On AI Telemetry batches (`POST /v1/telemetry`), Settings Change History (`POST /v1/settings-changes`), and 1-Battle DVR bundles (`POST /v1/dvr`: `_video.mp4` + `_deep_trace.jsonl`) directly to Cloudflare in a single request with zero GitHub authentication required.
+  - **Asynchronous Telegram DVR & Anomaly Mirroring**: On every 1-Battle DVR upload and high-anomaly batch, the Cloudflare Worker asynchronously forwards the playable H.264 MP4 video, formatted match summary caption, and `_deep_trace.jsonl` document directly to the private `SilphScope DVR` Telegram channel (`@silphscope_pvp_bot`) for instant mobile/desktop viewing.
+  - **Cloudflare-Native PC Ingestion Script**: Updated `scripts/ingest-telemetry.mjs` to pull all telemetry batches, settings change logs, and 1-Battle DVR recordings exclusively from the Cloudflare Worker Admin API (`/v1/admin/*`) with `--prune-remote` support.
+
+- **v6.27 — Enhancement 2: Required Trainer Screen Name & Full Settings Multi-Device Sync (`OverlayService.kt`, `MainActivity.kt`, `TaskerIntegration.kt`, `GitHubCloudSync.kt`, `activity_main.xml`)**:
+  - **Mandatory Trainer Screen Name (`PREFS_KEY_USER_SCREEN_NAME`)**: Added a required Trainer Screen Name profile (`3–24` characters: letters, numbers, `_`, or `-`) enforced via a first-run setup prompt and Settings card before starting the overlay (`MainActivity` and `TaskerIntegration`), tagging all telemetry and DVR uploads by trainer without requiring GitHub sign-in.
+  - **GitHub Cloud Sync Scoped to Battle Logs, Teams & App Settings**: Removed all GitHub telemetry/DVR/Issue-relay code from `GitHubCloudSync.kt` and upgraded `SyncVaultPayload` (`schemaVersion = 3`) with `exportSyncableSettingsMapStatic()` and `applySyncedSettingsMapStatic()` so optional GitHub Cloud Sync reconciles Battle Logs, Teams, and App Settings across a user's devices.
 
 ---
 

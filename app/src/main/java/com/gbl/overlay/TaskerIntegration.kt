@@ -101,6 +101,17 @@ class TaskerOverlayActivity : Activity() {
             }
             else -> {
                 // Default / ACTION_START_OVERLAY
+                val prefs = getSharedPreferences("gbl_overlay_prefs", Context.MODE_PRIVATE)
+                if (!OverlayService.hasValidScreenNameStatic(prefs)) {
+                    Toast.makeText(this, "Please enter your Trainer Screen Name in SilphScope PvP first", Toast.LENGTH_LONG).show()
+                    val mainIntent = Intent(this, MainActivity::class.java).apply {
+                        putExtra("page", "settings")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    }
+                    startActivity(mainIntent)
+                    finishQuietly()
+                    return
+                }
                 if (!Settings.canDrawOverlays(this)) {
                     val permIntent = Intent(
                         Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -272,9 +283,18 @@ class TaskerBroadcastReceiver : BroadcastReceiver() {
                 }
             }
             else -> {
+                val prefs = context.getSharedPreferences("gbl_overlay_prefs", Context.MODE_PRIVATE)
+                if (!OverlayService.hasValidScreenNameStatic(prefs)) {
+                    Toast.makeText(context, "Please enter your Trainer Screen Name in SilphScope PvP first", Toast.LENGTH_LONG).show()
+                    val mainIntent = Intent(context, MainActivity::class.java).apply {
+                        putExtra("page", "settings")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    }
+                    context.startActivity(mainIntent)
+                    return
+                }
                 val manualMode = intent?.getBooleanExtra("manual_mode", false) == true
                 if ((OverlayService.isInstanceRunning && OverlayService.hasActiveMediaProjection) || manualMode) {
-                    val prefs = context.getSharedPreferences("gbl_overlay_prefs", Context.MODE_PRIVATE)
                     val srvIntent = Intent(context, OverlayService::class.java).apply {
                         action = OverlayService.ACTION_START_OVERLAY
                         intent?.getStringExtra(OverlayService.EXTRA_TEAM_NAME)?.let { putExtra(OverlayService.EXTRA_TEAM_NAME, it) }

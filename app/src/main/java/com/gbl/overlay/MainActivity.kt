@@ -199,6 +199,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textLeadWonWinrate: TextView
     private lateinit var textLeadLostRecovery: TextView
     private lateinit var textSafeSwapMvp: TextView
+    private lateinit var editTrainerScreenName: EditText
+    private lateinit var btnSaveTrainerScreenName: Button
+    private lateinit var textTrainerScreenNameStatus: TextView
+    private var activeScreenNamePromptDialog: AlertDialog? = null
     private var currentActivePage: String = "teams"
     private var isUpdatingThemeSpinner = false
     private var selectedMetaTabScope: String = "SEASON"
@@ -514,7 +518,7 @@ class MainActivity : AppCompatActivity() {
         syncOverlayRunningUiState()
         handleIncomingNavigationAndTaskerIntent(intent)
         OverlayService.runV510AiTelemetryMigrationAndWipeStatic(prefs)
-        maybeShowFirstRunAiTelemetryOptInPrompt()
+        ensureRequiredScreenNameOrPrompt()
         OverlayService.triggerAutoUploadOnAppLaunchAsync(prefs, gson) { _, _ ->
             runOnUiThread {
                 if (!isFinishing && ::prefs.isInitialized) {
@@ -537,9 +541,11 @@ class MainActivity : AppCompatActivity() {
             syncOverlayRunningUiState()
         }
         if (::prefs.isInitialized) {
+            ensureRequiredScreenNameOrPrompt()
             syncOverlayRunningUiState()
             setupBattleLogFilters()
             renderBattleLogPage()
+            updateTrainerScreenNameUi()
             updateSyncStatusUi()
             checkPendingGitHubDeviceLoginOnResume()
             // Automatically pull & reconcile deltas from the other device on every app open / resume
@@ -1277,6 +1283,9 @@ class MainActivity : AppCompatActivity() {
         btnToggleShowOneBattleDvr = findViewById(R.id.btn_toggle_show_one_battle_dvr)
         btnArmOneBattleDvrNow = findViewById(R.id.btn_arm_one_battle_dvr_now)
         textOneBattleDvrStatus = findViewById(R.id.text_one_battle_dvr_status)
+        editTrainerScreenName = findViewById(R.id.edit_trainer_screen_name)
+        btnSaveTrainerScreenName = findViewById(R.id.btn_save_trainer_screen_name)
+        textTrainerScreenNameStatus = findViewById(R.id.text_trainer_screen_name_status)
         textTierDefinitionsSummary = findViewById(R.id.text_tier_definitions_summary)
         editTierSwMin = findViewById(R.id.edit_tier_sw_min)
         editTierWMin = findViewById(R.id.edit_tier_w_min)
@@ -1492,6 +1501,11 @@ class MainActivity : AppCompatActivity() {
         updateShieldChipTolUi()
         updateSwapRollbackWindowUi()
 
+        updateTrainerScreenNameUi()
+        btnSaveTrainerScreenName.setOnClickListener {
+            saveTrainerScreenNameFromInput()
+        }
+
         editSyncGithubToken.setText(prefs.getString(PREFS_KEY_SYNC_GITHUB_TOKEN, "") ?: "")
         editSyncGistId.setText(prefs.getString(PREFS_KEY_SYNC_GIST_ID, "") ?: "")
         updateSyncStatusUi()
@@ -1514,7 +1528,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnToggleAutoUploadAiLogs.setOnClickListener {
-            val current = prefs.getBoolean(OverlayService.PREFS_KEY_AUTO_UPLOAD_AI_LOGS, false)
+            val current = prefs.getBoolean(
+                OverlayService.PREFS_KEY_AUTO_UPLOAD_AI_LOGS,
+                OverlayService.DEFAULT_AUTO_UPLOAD_AI_LOGS
+            )
             val next = !current
             prefs.edit()
                 .putBoolean(OverlayService.PREFS_KEY_AUTO_UPLOAD_AI_LOGS, next)
@@ -1522,34 +1539,23 @@ class MainActivity : AppCompatActivity() {
                 .apply()
             updateAiTelemetryStatusUi()
             if (next) {
-                if (OverlayService.getEffectiveSyncToken(prefs).isEmpty()) {
-                    Toast.makeText(
-                        this,
-                        "🤖 Auto-Upload Enabled! Sign in with GitHub so logs can upload to branch '${OverlayService.AI_TELEMETRY_BRANCH}'.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    startGitHubOAuthDeviceFlow()
-                } else {
-                    Toast.makeText(
-                        this,
-                        "🤖 Auto-Upload Enabled! Uploading any queued AI & anomaly logs...",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    triggerManualAiTelemetryUpload(silentIfEmpty = true)
-                }
+                Toast.makeText(
+                    this,
+                    "🤖 Auto-Upload Enabled! Uploading any queued AI & anomaly logs to Cloudflare...",
+                    Toast.LENGTH_SHORT
+                ).show()
+                triggerManualAiTelemetryUpload(silentIfEmpty = true)
             } else {
                 Toast.makeText(this, "⚪ AI & Anomaly Log Auto-Upload turned OFF.", Toast.LENGTH_SHORT).show()
             }
         }
 
         btnUploadAiLogsNow.setOnClickListener {
-            saveSyncCredentialsFromInputs()
-            if (OverlayService.getEffectiveSyncToken(prefs).isEmpty()) {
-                Toast.makeText(this, "Sign in with GitHub first to upload AI & Anomaly logs.", Toast.LENGTH_LONG).show()
-                startGitHubOAuthDeviceFlow()
-            } else {
-                triggerManualAiTelemetryUpload(silentIfEmpty = false)
+            if (!OverlayService.hasValidScreenNameStatic(prefs)) {
+                ensureRequiredScreenNameOrPrompt()
+                return@setOnClickListener
             }
+            triggerManualAiTelemetryUpload(silentIfEmpty = false)
         }
 
         btnToggleShowOneBattleDvr.setOnClickListener {
@@ -1567,6 +1573,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnArmOneBattleDvrNow.setOnClickListener {
+            if (!OverlayService.hasValidScreenNameStatic(prefs)) {
+                ensureRequiredScreenNameOrPrompt()
+                return@setOnClickListener
+            }
             val currentArmed = prefs.getBoolean(OverlayService.PREFS_KEY_ARM_ONE_BATTLE_DVR, false)
             val nextArmed = !currentArmed
             prefs.edit()
@@ -1575,7 +1585,7 @@ class MainActivity : AppCompatActivity() {
             OverlayService.syncTierThresholdsFromPrefs(prefs)
             updateAiTelemetryStatusUi()
             val msg = if (nextArmed) {
-                "🔴 1-Battle DVR ARMED! Next battle will record full-screen MP4 + timestamp header + deep trace JSONL and auto-upload to GitHub."
+                "🔴 1-Battle DVR ARMED! Next battle will record full-screen MP4 + deep trace JSONL and auto-upload to Cloudflare & Telegram."
             } else {
                 "⚪ 1-Battle DVR disarmed."
             }
@@ -2231,6 +2241,104 @@ class MainActivity : AppCompatActivity() {
         updateSyncStatusUi()
     }
 
+    private fun updateTrainerScreenNameUi() {
+        if (!::editTrainerScreenName.isInitialized || !::textTrainerScreenNameStatus.isInitialized) return
+        val screenName = OverlayService.getRequiredScreenNameStatic(prefs)
+        if (editTrainerScreenName.text?.toString()?.trim() != screenName) {
+            editTrainerScreenName.setText(screenName)
+        }
+        if (OverlayService.isValidScreenNameStatic(screenName)) {
+            textTrainerScreenNameStatus.text = "✅ Active Trainer Screen Name: $screenName (Used for Cloudflare Telemetry, 1-Battle DVR & Device Sync)"
+            textTrainerScreenNameStatus.setTextColor(0xFF34D399.toInt())
+        } else {
+            textTrainerScreenNameStatus.text = "⚠️ Screen Name Required (3–24 letters, numbers, _ or -) before launching the overlay."
+            textTrainerScreenNameStatus.setTextColor(0xFFFBBF24.toInt())
+        }
+    }
+
+    private fun saveTrainerScreenNameFromInput() {
+        val raw = editTrainerScreenName.text?.toString().orEmpty()
+        val sanitized = OverlayService.sanitizeScreenNameStatic(raw)
+        if (!OverlayService.isValidScreenNameStatic(sanitized)) {
+            Toast.makeText(
+                this,
+                "⚠️ Please enter a valid Trainer Screen Name (3–24 characters: letters, numbers, _ or -).",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+        prefs.edit()
+            .putString(OverlayService.PREFS_KEY_USER_SCREEN_NAME, sanitized)
+            .putLong(OverlayService.PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
+            .apply()
+        updateTrainerScreenNameUi()
+        updateSyncStatusUi()
+        Toast.makeText(this, "✅ Trainer Screen Name saved: $sanitized", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun ensureRequiredScreenNameOrPrompt() {
+        if (OverlayService.hasValidScreenNameStatic(prefs)) {
+            activeScreenNamePromptDialog?.dismiss()
+            activeScreenNamePromptDialog = null
+            return
+        }
+        if (activeScreenNamePromptDialog?.isShowing == true) return
+
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+        }
+        val input = EditText(this).apply {
+            hint = "e.g. TrainerAsh99"
+            setText(OverlayService.getRequiredScreenNameStatic(prefs))
+            setSingleLine(true)
+            setTextColor(0xFFF8FAFC.toInt())
+            setHintTextColor(0xFF94A3B8.toInt())
+            setBackgroundColor(0xFF0F172A.toInt())
+            val innerPad = (12 * resources.displayMetrics.density).toInt()
+            setPadding(innerPad, innerPad, innerPad, innerPad)
+        }
+        val helper = TextView(this).apply {
+            text = "3–24 characters (letters, numbers, _ or -). Used to tag diagnostic telemetry & DVR recordings so no GitHub login is required."
+            textSize = 11f
+            setTextColor(0xFF94A3B8.toInt())
+            setPadding(0, pad / 2, 0, 0)
+        }
+        container.addView(input)
+        container.addView(helper)
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("👤 Trainer Screen Name Required")
+            .setMessage("Welcome to SilphScope PvP! Please choose a Trainer Screen Name before using the app or starting the overlay:")
+            .setView(container)
+            .setCancelable(false)
+            .setPositiveButton("Save & Continue", null)
+            .create()
+
+        dialog.setOnShowListener {
+            val btn = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            btn.setOnClickListener {
+                val candidate = OverlayService.sanitizeScreenNameStatic(input.text?.toString().orEmpty())
+                if (!OverlayService.isValidScreenNameStatic(candidate)) {
+                    input.error = "Enter 3–24 characters (A-Z, 0-9, _ or -)"
+                    return@setOnClickListener
+                }
+                prefs.edit()
+                    .putString(OverlayService.PREFS_KEY_USER_SCREEN_NAME, candidate)
+                    .putLong(OverlayService.PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
+                    .apply()
+                updateTrainerScreenNameUi()
+                updateSyncStatusUi()
+                dialog.dismiss()
+                activeScreenNamePromptDialog = null
+                Toast.makeText(this, "✅ Welcome, $candidate!", Toast.LENGTH_SHORT).show()
+            }
+        }
+        activeScreenNamePromptDialog = dialog
+        dialog.show()
+    }
+
     private fun updateSyncStatusUi() {
         val token = OverlayService.getEffectiveSyncToken(prefs)
         val username = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty()
@@ -2246,19 +2354,23 @@ class MainActivity : AppCompatActivity() {
             btnGithubLoginSettings.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
             btnGithubLoginSettings.setTextColor(0xFFFFFFFF.toInt())
             val vaultShort = if (gistId.isNotEmpty()) "Gist: ${gistId.take(8)}…" else "Account Vault ($userLabel)"
-            textSyncStatus.text = "🟢 Auto-Sync Active ($userLabel) • Last: $lastStr • $vaultShort • Logs: ${loadBattleLogs().size} • Teams: ${loadPresets().size}"
+            textSyncStatus.text = "🟢 Auto-Sync Active ($userLabel) • Last: $lastStr • $vaultShort • Logs: ${loadBattleLogs().size} • Teams: ${loadPresets().size} • Settings Synced"
         } else {
-            btnGithubLoginSettings.text = "🔑 Login with GitHub (Generate Sync Token)"
+            btnGithubLoginSettings.text = "🔑 Login with GitHub (Optional Multi-Device Sync)"
             btnGithubLoginSettings.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
             btnGithubLoginSettings.setTextColor(0xFFFFFFFF.toInt())
-            textSyncStatus.text = "⚪ Not signed in (Local-only) • Tap 'Login with GitHub' to enable multi-device auto-sync"
+            textSyncStatus.text = "⚪ Not signed in (Local-only) • Optional: Sign in with GitHub to sync Battle Logs, Teams & Settings across your devices"
         }
         updateAiTelemetryStatusUi()
     }
 
     private fun updateAiTelemetryStatusUi() {
         if (!::btnToggleAutoUploadAiLogs.isInitialized || !::textAiTelemetryStatus.isInitialized) return
-        val enabled = prefs.getBoolean(OverlayService.PREFS_KEY_AUTO_UPLOAD_AI_LOGS, false)
+        val enabled = prefs.getBoolean(
+            OverlayService.PREFS_KEY_AUTO_UPLOAD_AI_LOGS,
+            OverlayService.DEFAULT_AUTO_UPLOAD_AI_LOGS
+        )
+        val screenName = OverlayService.getRequiredScreenNameStatic(prefs).ifEmpty { "Unset" }
         val pendingLogs = OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson)
         val pendingBattles = pendingLogs.size
         val pendingAnomalies = pendingLogs.sumOf { it.anomalies.size }
@@ -2266,7 +2378,6 @@ class MainActivity : AppCompatActivity() {
         val profileSig = OverlayService.computeDebounceSettingsProfileSignatureStatic(prefs)
         val lastAt = prefs.getLong(OverlayService.PREFS_KEY_LAST_AI_TELEMETRY_UPLOAD_MS, 0L)
         val totalUploaded = prefs.getInt(OverlayService.PREFS_KEY_TOTAL_AI_TELEMETRY_UPLOADED_COUNT, 0)
-        val lastBranch = OverlayService.AI_TELEMETRY_BRANCH
         val timeFmt = java.text.SimpleDateFormat("MMM d, h:mm a", java.util.Locale.US)
         val lastStr = if (lastAt > 0L) timeFmt.format(java.util.Date(lastAt)) else "Never"
 
@@ -2282,8 +2393,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         val statePrefix = when {
-            enabled -> "🟢 Auto-Upload ON (Branch: $lastBranch)"
-            else -> "⚪ Auto-Upload OFF"
+            enabled -> "🟢 Cloudflare Auto-Upload ON (Trainer: $screenName)"
+            else -> "⚪ Cloudflare Auto-Upload OFF"
         }
         textAiTelemetryStatus.text =
             "$statePrefix • Debounce Profile: $profileSig ($pendingSettingsChanges pending changes) • Pending queue: $pendingBattles battles ($pendingAnomalies anomalies) • Total uploaded & purged: $totalUploaded • Last upload: $lastStr"
@@ -2316,7 +2427,7 @@ class MainActivity : AppCompatActivity() {
                 btnArmOneBattleDvrNow.setTextColor(0xFFFFFFFF.toInt())
             }
 
-            val armStateLabel = if (isArmed) "🔴 ARMED FOR NEXT BATTLE (Auto-disarms after 1 match)" else "⚪ Disarmed"
+            val armStateLabel = if (isArmed) "🔴 ARMED FOR NEXT BATTLE (Cloudflare + Telegram)" else "⚪ Disarmed"
             val pathTail = if (lastDvrPath.isNotEmpty()) " ($lastDvrPath)" else ""
             textOneBattleDvrStatus.text =
                 "$armStateLabel • Overlay Button: ${if (showBtn) "ON" else "OFF"} • DVR Bundles Uploaded: $dvrUploadedCount • Last DVR Upload: $lastDvrStr$pathTail"
@@ -2339,7 +2450,7 @@ class MainActivity : AppCompatActivity() {
         }
         val queuedCount = pendingLogs.size
         val queuedSettingsCount = pendingSettings.size
-        textAiTelemetryStatus.text = "⏳ Uploading $queuedCount battle logs & $queuedSettingsCount settings changes to '${OverlayService.AI_TELEMETRY_BRANCH}'..."
+        textAiTelemetryStatus.text = "⏳ Uploading $queuedCount battle logs & $queuedSettingsCount settings changes to Cloudflare..."
         lifecycleScope.launch(Dispatchers.IO) {
             if (queuedSettingsCount > 0) {
                 OverlayService.uploadSettingsChangeHistoryBlocking(
@@ -2363,7 +2474,7 @@ class MainActivity : AppCompatActivity() {
                 if (ok) {
                     Toast.makeText(
                         this@MainActivity,
-                        "✅ Uploaded $queuedCount AI/anomaly battle logs & $queuedSettingsCount settings changes!",
+                        "✅ Uploaded $queuedCount AI/anomaly battle logs & $queuedSettingsCount settings changes to Cloudflare!",
                         Toast.LENGTH_LONG
                     ).show()
                 } else if (!silentIfEmpty) {
@@ -2380,35 +2491,14 @@ class MainActivity : AppCompatActivity() {
     private fun maybeShowFirstRunAiTelemetryOptInPrompt() {
         val alreadyShown = prefs.getBoolean(OverlayService.PREFS_KEY_AI_TELEMETRY_ONBOARDING_SHOWN, false)
         if (alreadyShown) return
-        prefs.edit().putBoolean(OverlayService.PREFS_KEY_AI_TELEMETRY_ONBOARDING_SHOWN, true).apply()
-
-        val hasToken = OverlayService.getEffectiveSyncToken(prefs).isNotEmpty()
-        val msg = "Help improve SilphScope PvP's AI decision engine and automatic energy/move anomaly detection!\n\n" +
-            "• Automatically detects corner cases (e.g., when an opponent throws a charged move with fewer detected fast moves than required, missed fast moves, or move OCR fallbacks).\n" +
-            "• Uploads compact JSONL batches (with cropped WebP HUD thumbnails on HIGH anomalies and debounce/settling settings profiles) to the isolated '${OverlayService.AI_TELEMETRY_BRANCH}' branch (never clutters main branch history).\n" +
-            "• Runs automatically once per day on app launch and on overlay stop when ≥${OverlayService.AI_TELEMETRY_MIN_BATTLES_ON_STOP} battles are queued.\n" +
-            "• Automatically purges uploaded AI logs from your phone right after upload to keep local storage tiny.\n\n" +
-            if (hasToken) {
-                "Your GitHub account is already connected — tap Enable to turn on automatic AI & Anomaly Log uploads!"
-            } else {
-                "Tap 'Login & Enable' to connect GitHub and enable automatic AI & Anomaly Log uploads (you can toggle this anytime in Settings)."
-            }
-
-        AlertDialog.Builder(this)
-            .setTitle("🤖 Enable AI & Anomaly Log Auto-Upload? (v6.02)")
-            .setMessage(msg)
-            .setPositiveButton("✅ Enable Auto-Upload") { _, _ ->
-                prefs.edit()
-                    .putBoolean(OverlayService.PREFS_KEY_AUTO_UPLOAD_AI_LOGS, true)
-                    .putBoolean(OverlayService.PREFS_KEY_AI_TELEMETRY_ONBOARDING_SHOWN, true)
-                    .apply()
-                updateAiTelemetryStatusUi()
-                triggerManualAiTelemetryUpload(silentIfEmpty = true)
-            }
-            .setNegativeButton("Not Now") { _, _ ->
-                updateAiTelemetryStatusUi()
-            }
-            .show()
+        prefs.edit()
+            .putBoolean(OverlayService.PREFS_KEY_AI_TELEMETRY_ONBOARDING_SHOWN, true)
+            .putBoolean(
+                OverlayService.PREFS_KEY_AUTO_UPLOAD_AI_LOGS,
+                prefs.getBoolean(OverlayService.PREFS_KEY_AUTO_UPLOAD_AI_LOGS, OverlayService.DEFAULT_AUTO_UPLOAD_AI_LOGS)
+            )
+            .apply()
+        updateAiTelemetryStatusUi()
     }
 
     private fun handleGitHubLoginButtonTap() {
@@ -2418,7 +2508,7 @@ class MainActivity : AppCompatActivity() {
             val userDisplay = if (username.isNotEmpty()) "@$username" else "your GitHub account"
             AlertDialog.Builder(this)
                 .setTitle("☁️ GitHub Cloud Sync ($userDisplay)")
-                .setMessage("Your device is signed in to $userDisplay and automatically syncs Battle Logs & Teams on app open and after every battle.")
+                .setMessage("Your device is signed in to $userDisplay and automatically syncs Battle Logs, Teams & App Settings across your devices.")
                 .setPositiveButton("☁️ Sync Now") { _, _ ->
                     triggerTwoDeviceCloudSync(silent = false)
                 }
@@ -2616,7 +2706,10 @@ class MainActivity : AppCompatActivity() {
                 btnSyncDevicesSettings.isEnabled = true
                 btnSyncBattleLog.isEnabled = true
                 editSyncGistId.setText(prefs.getString(PREFS_KEY_SYNC_GIST_ID, "") ?: "")
+                updateTrainerScreenNameUi()
+                ensureRequiredScreenNameOrPrompt()
                 updateSyncStatusUi()
+                applyCurrentAppTheme(notifyOverlay = true)
                 refreshPresetsUi()
                 setupBattleLogFilters()
                 renderBattleLogPage()
@@ -6798,9 +6891,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Checks notifications (Android 13+), SYSTEM_ALERT_WINDOW, and initiates overlay launch
+     * Checks Trainer Screen Name, notifications (Android 13+), SYSTEM_ALERT_WINDOW, and initiates overlay launch
      */
     private fun checkOverlayPermissionAndStart() {
+        if (!OverlayService.hasValidScreenNameStatic(prefs)) {
+            Toast.makeText(
+                this,
+                "⚠️ Please set your Trainer Screen Name before starting the overlay.",
+                Toast.LENGTH_LONG
+            ).show()
+            ensureRequiredScreenNameOrPrompt()
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)

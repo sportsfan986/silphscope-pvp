@@ -2,8 +2,8 @@
 
 > **Target Audience**: Antigravity agents, Claude/Gemini coding assistants, and core developers maintaining or extending **SilphScope PvP**.  
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v6.26` (`versionCode = 1626`)  
-> **Primary Branches**: `main` (source code & releases), `ai-telemetry-logs` (isolated telemetry, DVR recordings & anomaly traces).
+> **Current Version**: `v6.27` (`versionCode = 1627`)  
+> **Primary Branches**: `main` (source code & releases) | **Telemetry & DVR Endpoint**: `https://silphscope-telemetry.silphscope-pvp.workers.dev` (Cloudflare Worker + KV/R2 + Telegram Channel `SilphScope DVR`).
 
 ---
 
@@ -256,10 +256,12 @@ When working on this repository inside Antigravity:
 3. **APK Signature Scheme v3 Key Rotation & In-Place Upgrade Invariants**:
    - Release signing uses the 4096-bit RSA key (`alias = silphscope`) and rotation lineage stored in GitHub Actions secrets (`RELEASE_KEYSTORE_B64`, `RELEASE_LINEAGE_B64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_PASSWORD`, `RELEASE_KEY_ALIAS`) with `minSdk = 31` (`--v1-signing-enabled false --v2-signing-enabled false --v3-signing-enabled true --rotation-min-sdk-version 31`).
    - **CRITICAL**: In `RELEASE_LINEAGE_B64`, the prior signer (`gblkey`) **must** retain `--set-installed-data true` and `--set-rollback false`. Setting `--set-installed-data false` causes Android `PackageManager` to reject in-place upgrades (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) and triggers Google Play Protect developer blocks.
-4. **Checking Telemetry Branch**:
+4. **Checking & Ingesting Cloudflare Telemetry & 1-Battle DVR Videos**:
+   - All telemetry batches (`POST /v1/telemetry`), settings change audits (`POST /v1/settings-changes`), and 1-Battle DVR recordings (`POST /v1/dvr`) upload directly to the Cloudflare Worker (`https://silphscope-telemetry.silphscope-pvp.workers.dev`) and mirror DVR videos to the `SilphScope DVR` Telegram channel.
+   - To pull all new telemetry batches and DVR videos locally into `.aistudio/telemetry_cache/` (and prune remote storage once cached locally):
    ```bash
-   git fetch origin ai-telemetry-logs:ai-telemetry-logs
-   git log origin/ai-telemetry-logs -n 10
+   npm run ingest
+   # or: node scripts/ingest-telemetry.mjs --prune-remote
    ```
 
 ### 5.3. Version Bumping & Default Release Checklist

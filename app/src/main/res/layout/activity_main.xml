@@ -1462,6 +1462,77 @@
                 android:layout_marginBottom="8dp" />
 
             <!-- ===================================================================
+                 TRAINER SCREEN NAME CARD (v6.27: REQUIRED TO USE APP & OVERLAY)
+                 =================================================================== -->
+            <LinearLayout
+                android:id="@+id/card_settings_trainer_profile"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#0f172a"
+                android:padding="10dp"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="👤 Trainer Screen Name (Required • Attribution &amp; Sync)"
+                    android:textColor="#38bdf8"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Required to use SilphScope PvP and launch the Battle Overlay. Used to attribute your Always-On Telemetry and 1-Battle DVR recordings on Cloudflare &amp; Telegram."
+                    android:textColor="#94a3b8"
+                    android:textSize="10sp"
+                    android:lineSpacingExtra="1.5dp"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="6dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <EditText
+                        android:id="@+id/edit_trainer_screen_name"
+                        android:layout_width="0dp"
+                        android:layout_height="38dp"
+                        android:layout_weight="1"
+                        android:background="#1e293b"
+                        android:paddingHorizontal="10dp"
+                        android:hint="Enter Trainer Screen Name (3–24 chars)"
+                        android:textColor="#f8fafc"
+                        android:textColorHint="#64748b"
+                        android:textSize="11.5sp"
+                        android:inputType="textPersonName|textNoSuggestions"
+                        android:singleLine="true"
+                        android:layout_marginEnd="6dp" />
+
+                    <Button
+                        android:id="@+id/btn_save_trainer_screen_name"
+                        android:layout_width="wrap_content"
+                        android:layout_height="38dp"
+                        android:text="💾 Save Name"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#0284c7"
+                        android:textColor="#ffffff" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/text_trainer_screen_name_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Trainer Screen Name: Not set (Required)"
+                    android:textColor="#fbbf24"
+                    android:textSize="10sp"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
+            <!-- ===================================================================
                  0. APP COMBAT MODE TOGGLE (v5.00: STANDARD GBL vs SHOW 6 MODE)
                  =================================================================== -->
             <LinearLayout
@@ -3481,7 +3552,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="☁️ Multi-Device Auto Delta Sync (Teams &amp; Battle Logs)"
+                    android:text="☁️ Multi-Device Auto Delta Sync (Battle Logs, Teams &amp; Settings)"
                     android:textColor="#38bdf8"
                     android:textSize="12sp"
                     android:textStyle="bold" />
@@ -3489,7 +3560,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Sign in with your GitHub account once on each of your phones. Each user's logs sync privately to their own GitHub account automatically on app open &amp; after every battle."
+                    android:text="Optional: Sign in with GitHub strictly to sync your Battle Logs, Teams, and App Settings between your own devices. (Telemetry &amp; DVR uploads use Cloudflare automatically and do NOT use GitHub.)"
                     android:textColor="#94a3b8"
                     android:textSize="10sp"
                     android:layout_marginTop="2dp" />
@@ -3579,7 +3650,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="🤖 AI Training, Anomaly &amp; 5-Profile Shadow Telemetry (v6.02)"
+                    android:text="🤖 Always-On Cloudflare Telemetry &amp; 1-Battle Telegram DVR (v6.27)"
                     android:textColor="#38bdf8"
                     android:textSize="11sp"
                     android:textStyle="bold" />
@@ -3587,7 +3658,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Automatically uploads detailed battle timelines &amp; detected energy/HP/shield anomalies (e.g. fast-move energy deficits) to the isolated ai-telemetry-logs branch once daily on app launch &amp; on overlay stop when ≥5 battles are ready."
+                    android:text="Automatically uploads lower-resolution battle telemetry &amp; detected energy/HP/shield anomalies to Cloudflare using your Trainer Screen Name (no GitHub login needed). 1-Battle DVR recordings upload to Cloudflare and forward to the SilphScope DVR Telegram channel for viewing."
                     android:textColor="#94a3b8"
                     android:textSize="10sp"
                     android:layout_marginTop="2dp" />

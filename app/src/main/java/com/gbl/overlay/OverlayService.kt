@@ -91,8 +91,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "6.26"
-        const val APP_VERSION_CODE = 1626
+        const val APP_VERSION = "6.27"
+        const val APP_VERSION_CODE = 1627
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -188,7 +188,46 @@ class OverlayService : LifecycleService() {
         const val DEFAULT_LIMITED_STD_DECAY_GBL = 0.10f // Fast (0.10) default for GBL Limited Cups
         const val PREFS_KEY_LIMITED_STD_DECAY_SHOW6 = "gbl_limited_std_decay_show6_v600"
         const val DEFAULT_LIMITED_STD_DECAY_SHOW6 = 0.06f
-        // v5.10: AI Training & Anomaly Telemetry Auto-Upload Constants
+        // v5.10 / v6.27: Always-On Cloudflare AI Training & Anomaly Telemetry Auto-Upload Constants
+        const val PREFS_KEY_USER_SCREEN_NAME = "gbl_user_screen_name"
+        const val PREFS_KEY_USER_SETTINGS_UPDATED_AT = "gbl_user_settings_updated_at"
+        const val DEFAULT_AUTO_UPLOAD_AI_LOGS = true
+        const val CLOUDFLARE_TELEMETRY_WORKER_URL = "https://silphscope-telemetry.silphscope-pvp.workers.dev"
+        const val CLOUDFLARE_CLIENT_INGEST_KEY = "sspvp_client_9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c"
+        private val RESERVED_SCREEN_NAMES = setOf(
+            "anonymous", "anon", "user", "player", "trainer", "test", "null", "undefined", "none", "unknown", "admin"
+        )
+
+        fun sanitizeScreenNameStatic(raw: String?): String {
+            if (raw.isNullOrBlank()) return ""
+            val cleaned = raw.trim()
+                .replace(Regex("[^A-Za-z0-9_-]"), "_")
+                .replace(Regex("_+"), "_")
+                .trim('_')
+            if (cleaned.length !in 3..24) return ""
+            if (cleaned.lowercase() in RESERVED_SCREEN_NAMES) return ""
+            return cleaned
+        }
+
+        fun isValidScreenNameStatic(raw: String?): Boolean {
+            return sanitizeScreenNameStatic(raw).isNotEmpty()
+        }
+
+        fun getRequiredScreenNameStatic(prefs: SharedPreferences): String {
+            val saved = sanitizeScreenNameStatic(prefs.getString(PREFS_KEY_USER_SCREEN_NAME, null))
+            if (saved.isNotEmpty()) return saved
+            val legacyGh = sanitizeScreenNameStatic(prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, null))
+            if (legacyGh.isNotEmpty()) {
+                prefs.edit().putString(PREFS_KEY_USER_SCREEN_NAME, legacyGh).apply()
+                return legacyGh
+            }
+            return ""
+        }
+
+        fun hasValidScreenNameStatic(prefs: SharedPreferences): Boolean {
+            return getRequiredScreenNameStatic(prefs).isNotEmpty()
+        }
+
         const val PREFS_KEY_AI_TELEMETRY_V510_MIGRATED = "gbl_ai_telemetry_v510_migrated"
         const val PREFS_KEY_AI_TELEMETRY_ONBOARDING_SHOWN = "gbl_ai_telemetry_v510_onboarding_shown"
         const val PREFS_KEY_AUTO_UPLOAD_AI_LOGS = "gbl_auto_upload_ai_logs_v510"
@@ -1022,12 +1061,14 @@ class OverlayService : LifecycleService() {
         )
 
         data class SyncVaultPayload(
-            val schemaVersion: Int = 2,
+            val schemaVersion: Int = 3,
             val updatedAt: Long = System.currentTimeMillis(),
             val battleLogs: List<SyncBattleLogRecord> = emptyList(),
             val teamPresets: List<SyncTeamPresetRecord> = emptyList(),
             val deletedLogIds: List<String> = emptyList(),
-            val deletedTeamIds: List<String> = emptyList()
+            val deletedTeamIds: List<String> = emptyList(),
+            val userSettings: Map<String, String> = emptyMap(),
+            val settingsUpdatedAt: Long = 0L
         )
 
 
@@ -12441,9 +12482,9 @@ class OverlayService : LifecycleService() {
             sensorTicks = sensorTicksForShadow
         )
         val wasDvrRecordedThisBattle = !ignoreAiTelemetry && (activeOneBattleDvrRecording || (activeOneBattleDvrArmed && activeOneBattleDvrFrames > 0))
-        val githubUser = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty().ifEmpty { "anonymous" }
         val devHashForDvr = OverlayService.getDeviceTelemetryHashStatic(prefs)
-        val safeUserForDvr = (githubUser.takeIf { it != "anonymous" } ?: "trainer_$devHashForDvr").replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
+        val trainerScreenName = OverlayService.getRequiredScreenNameStatic(prefs).ifEmpty { "trainer_$devHashForDvr" }
+        val safeUserForDvr = trainerScreenName.replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
         val cleanBattleIdForDvr = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
         val expectedDvrVideoPath = if (wasDvrRecordedThisBattle) "recordings/$safeUserForDvr/${cleanBattleIdForDvr}_video.mp4" else null
         val expectedDvrTracePath = if (wasDvrRecordedThisBattle) "recordings/$safeUserForDvr/${cleanBattleIdForDvr}_deep_trace.jsonl" else null
@@ -12453,7 +12494,7 @@ class OverlayService : LifecycleService() {
             battleId = battleId,
             timestampMs = nowMs,
             appVersion = APP_VERSION,
-            uploaderHandle = githubUser,
+            uploaderHandle = safeUserForDvr,
             deviceHash = devHashForDvr,
             deviceModel = Build.MODEL ?: "Android",
             combatMode = if (isShow6CombatMode) "show6" else "gbl",

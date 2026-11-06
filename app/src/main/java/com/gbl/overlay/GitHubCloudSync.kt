@@ -66,8 +66,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
@@ -90,6 +92,12 @@ import com.gbl.overlay.OverlayService.Companion.AiTelemetrySettingsChangeEvent
 import com.gbl.overlay.OverlayService.Companion.AiTelemetrySlotSpec
 import com.gbl.overlay.OverlayService.Companion.APP_VERSION
 import com.gbl.overlay.OverlayService.Companion.APP_VERSION_CODE
+import com.gbl.overlay.OverlayService.Companion.CLOUDFLARE_CLIENT_INGEST_KEY
+import com.gbl.overlay.OverlayService.Companion.CLOUDFLARE_TELEMETRY_WORKER_URL
+import com.gbl.overlay.OverlayService.Companion.DEFAULT_AUTO_UPLOAD_AI_LOGS
+import com.gbl.overlay.OverlayService.Companion.PREFS_KEY_USER_SCREEN_NAME
+import com.gbl.overlay.OverlayService.Companion.PREFS_KEY_USER_SETTINGS_UPDATED_AT
+import com.gbl.overlay.OverlayService.Companion.getRequiredScreenNameStatic
 import com.gbl.overlay.OverlayService.Companion.BattleAnomalyRecord
 import com.gbl.overlay.OverlayService.Companion.BattleSensorTick
 import com.gbl.overlay.OverlayService.Companion.DEFAULT_ALT_FAST_DETECT_STRICTNESS
@@ -262,15 +270,137 @@ internal fun OverlayService.Companion.reconcileSyncVaultPayloads(
         }
     }
 
+    val mergedSettingsUpdatedAt: Long
+    val mergedSettings: Map<String, String>
+    if (remote.settingsUpdatedAt > local.settingsUpdatedAt && remote.userSettings.isNotEmpty()) {
+        mergedSettingsUpdatedAt = remote.settingsUpdatedAt
+        mergedSettings = local.userSettings + remote.userSettings
+    } else {
+        mergedSettingsUpdatedAt = max(local.settingsUpdatedAt, remote.settingsUpdatedAt)
+        mergedSettings = remote.userSettings + local.userSettings
+    }
+
     val mergedPayload = SyncVaultPayload(
-        schemaVersion = 2,
+        schemaVersion = 3,
         updatedAt = System.currentTimeMillis(),
         battleLogs = mergedLogs,
         teamPresets = mergedTeams,
         deletedLogIds = allDeletedLogs.toList(),
-        deletedTeamIds = allDeletedTeams.toList()
+        deletedTeamIds = allDeletedTeams.toList(),
+        userSettings = mergedSettings,
+        settingsUpdatedAt = mergedSettingsUpdatedAt
     )
     return Triple(mergedPayload, newOrUpdatedLogsFromRemote, newOrUpdatedTeamsFromRemote)
+}
+
+private val SYNCABLE_STRING_PREF_KEYS = listOf(
+    PREFS_KEY_USER_SCREEN_NAME,
+    OverlayService.PREFS_KEY_APP_THEME_ID,
+    OverlayService.PREFS_KEY_AI_ADVICE_HUD_POSITION,
+    OverlayService.PREFS_KEY_CHARGE_CIRCLE_PRIORITY_MODE,
+    OverlayService.PREFS_KEY_ALT_FAST_DETECT_STRICTNESS,
+    "opp_count_mode",
+    "app_combat_mode"
+)
+
+private val SYNCABLE_BOOLEAN_PREF_KEYS = listOf(
+    OverlayService.PREFS_KEY_ENABLE_4_CHARGED_MOVES,
+    OverlayService.PREFS_KEY_DISABLE_BATTLE_TOASTS,
+    OverlayService.PREFS_KEY_SHOW_TACTICAL_RECOMMENDATIONS,
+    OverlayService.PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY,
+    OverlayService.PREFS_KEY_ENABLE_HP_TRACKING,
+    OverlayService.PREFS_KEY_ENABLE_ENERGY_TRACKING,
+    OverlayService.PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT,
+    OverlayService.PREFS_KEY_SHOW_THEME_WATERMARK,
+    OverlayService.PREFS_KEY_ENERGY_UPDATE_TOASTS,
+    OverlayService.PREFS_KEY_HAPTIC_MASTER_ENABLED,
+    OverlayService.PREFS_KEY_HAPTIC_OPP_SWAP_ENABLED,
+    OverlayService.PREFS_KEY_HAPTIC_OPP_CHARGE_WARN_ENABLED,
+    OverlayService.PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN,
+    PREFS_KEY_AUTO_UPLOAD_AI_LOGS
+)
+
+private val SYNCABLE_INT_PREF_KEYS = listOf(
+    "overlay_scale_pct",
+    OverlayService.PREFS_KEY_OVERLAY_TRANSPARENCY_PCT,
+    OverlayService.PREFS_KEY_FAST_DETECT_TURN_OFFSET,
+    OverlayService.PREFS_KEY_ENERGY_DEBOUNCE_SAMPLES,
+    OverlayService.PREFS_KEY_HP_DEBOUNCE_SAMPLES,
+    OverlayService.PREFS_KEY_DEBOUNCE_TOLERANCE_PCT,
+    OverlayService.PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS,
+    OverlayService.PREFS_KEY_SWAP_THROW_ROLLBACK_WINDOW_MS,
+    OverlayService.PREFS_KEY_SHIELD_CHIP_TOLERANCE_PCT,
+    OverlayService.PREFS_KEY_HAPTIC_OPP_SWAP_WARN_SEC,
+    OverlayService.PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS,
+    OverlayService.PREFS_KEY_GBL_META_LOG_WEIGHT_PCT,
+    OverlayService.PREFS_KEY_SHOW6_META_LOG_WEIGHT_PCT,
+    OverlayService.PREFS_KEY_LIMITED_STD_BLEND_PCT_GBL,
+    OverlayService.PREFS_KEY_LIMITED_STD_BLEND_PCT_SHOW6
+)
+
+private val SYNCABLE_FLOAT_PREF_KEYS = listOf(
+    OverlayService.PREFS_KEY_GBL_META_DECAY_FACTOR,
+    OverlayService.PREFS_KEY_SHOW6_META_DECAY_FACTOR,
+    OverlayService.PREFS_KEY_LIMITED_STD_DECAY_GBL,
+    OverlayService.PREFS_KEY_LIMITED_STD_DECAY_SHOW6
+)
+
+internal fun OverlayService.Companion.exportSyncableSettingsMapStatic(prefs: SharedPreferences): Map<String, String> {
+    val out = LinkedHashMap<String, String>()
+    for (k in SYNCABLE_STRING_PREF_KEYS) {
+        if (prefs.contains(k)) {
+            prefs.getString(k, null)?.let { out["S:$k"] = it }
+        }
+    }
+    for (k in SYNCABLE_BOOLEAN_PREF_KEYS) {
+        if (prefs.contains(k)) {
+            out["B:$k"] = prefs.getBoolean(k, false).toString()
+        }
+    }
+    for (k in SYNCABLE_INT_PREF_KEYS) {
+        if (prefs.contains(k)) {
+            out["I:$k"] = prefs.getInt(k, 0).toString()
+        }
+    }
+    for (k in SYNCABLE_FLOAT_PREF_KEYS) {
+        if (prefs.contains(k)) {
+            out["F:$k"] = prefs.getFloat(k, 0f).toString()
+        }
+    }
+    return out
+}
+
+internal fun OverlayService.Companion.applySyncedSettingsMapStatic(
+    prefs: SharedPreferences,
+    settingsMap: Map<String, String>,
+    settingsUpdatedAt: Long
+) {
+    if (settingsMap.isEmpty()) return
+    val editor = prefs.edit()
+    for ((typedKey, rawVal) in settingsMap) {
+        val sepIdx = typedKey.indexOf(':')
+        if (sepIdx <= 0) continue
+        val prefix = typedKey.substring(0, sepIdx)
+        val key = typedKey.substring(sepIdx + 1)
+        when (prefix) {
+            "S" -> {
+                if (key == PREFS_KEY_USER_SCREEN_NAME) {
+                    val clean = OverlayService.sanitizeScreenNameStatic(rawVal)
+                    if (clean.isNotEmpty()) editor.putString(key, clean)
+                } else {
+                    editor.putString(key, rawVal)
+                }
+            }
+            "B" -> rawVal.toBooleanStrictOrNull()?.let { editor.putBoolean(key, it) }
+            "I" -> rawVal.toIntOrNull()?.let { editor.putInt(key, it) }
+            "F" -> rawVal.toFloatOrNull()?.let { editor.putFloat(key, it) }
+        }
+    }
+    if (settingsUpdatedAt > 0L) {
+        editor.putLong(PREFS_KEY_USER_SETTINGS_UPDATED_AT, settingsUpdatedAt)
+    }
+    editor.apply()
+    OverlayService.syncTierThresholdsFromPrefs(prefs)
 }
 
 internal fun OverlayService.Companion.buildLocalSyncVaultPayload(prefs: SharedPreferences, gson: Gson): SyncVaultPayload {
@@ -294,13 +424,18 @@ internal fun OverlayService.Companion.buildLocalSyncVaultPayload(prefs: SharedPr
         gson.fromJson(prefs.getString(PREFS_KEY_DELETED_TEAM_IDS, "[]"), strListType) ?: emptyList()
     } catch (_: Exception) { emptyList() }
 
+    val settingsMap = exportSyncableSettingsMapStatic(prefs)
+    val settingsUpdAt = prefs.getLong(PREFS_KEY_USER_SETTINGS_UPDATED_AT, 0L)
+
     return SyncVaultPayload(
-        schemaVersion = 2,
+        schemaVersion = 3,
         updatedAt = System.currentTimeMillis(),
         battleLogs = logs,
         teamPresets = teams,
         deletedLogIds = delLogs,
-        deletedTeamIds = delTeams
+        deletedTeamIds = delTeams,
+        userSettings = settingsMap,
+        settingsUpdatedAt = settingsUpdAt
     )
 }
 
@@ -314,6 +449,9 @@ internal fun OverlayService.Companion.saveReconciledSyncVaultLocally(prefs: Shar
         editor.putString(PREFS_KEY_PERSISTENT_TEAMS, gson.toJson(payload.teamPresets))
     }
     editor.apply()
+    if (payload.userSettings.isNotEmpty()) {
+        applySyncedSettingsMapStatic(prefs, payload.userSettings, payload.settingsUpdatedAt)
+    }
 }
 
 internal fun OverlayService.Companion.getEffectiveSyncToken(prefs: SharedPreferences): String {
@@ -485,8 +623,9 @@ internal fun OverlayService.Companion.syncWithGitHubGistBlocking(prefs: SharedPr
                     mergedPayload.teamPresets.any { t -> remoteTeamMap[t.id]?.updatedAt != t.updatedAt }
                 val hasTombstoneDiff = mergedPayload.deletedLogIds.toSet() != remotePayload.deletedLogIds.toSet() ||
                     mergedPayload.deletedTeamIds.toSet() != remotePayload.deletedTeamIds.toSet()
+                val hasSettingsDiff = mergedPayload.userSettings != remotePayload.userSettings
 
-                if (remoteFileSha.isEmpty() || hasLogDiff || hasTeamDiff || hasTombstoneDiff) {
+                if (remoteFileSha.isEmpty() || hasLogDiff || hasTeamDiff || hasTombstoneDiff || hasSettingsDiff) {
                     val mergedJsonStr = gson.toJson(mergedPayload)
                     val encodedB64 = android.util.Base64.encodeToString(
                         mergedJsonStr.toByteArray(Charsets.UTF_8),
@@ -794,13 +933,13 @@ internal fun OverlayService.Companion.recordDebounceSettingsChangeIfNeededStatic
 
         val nowMs = System.currentTimeMillis()
         val devHash = getDeviceTelemetryHashStatic(prefs)
-        val username = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty().ifEmpty { "trainer_$devHash" }
+        val screenName = getRequiredScreenNameStatic(prefs).ifEmpty { "trainer_$devHash" }
         val sig = computeDebounceSettingsProfileSignatureStatic(prefs)
         val event = AiTelemetrySettingsChangeEvent(
             id = "cfg_${nowMs}_${(100..999).random()}",
             timestampMs = nowMs,
             appVersion = APP_VERSION,
-            uploaderHandle = username,
+            uploaderHandle = screenName,
             deviceHash = devHash,
             triggerSource = triggerSource,
             changedKeys = changedKeys,
@@ -815,9 +954,10 @@ internal fun OverlayService.Companion.recordDebounceSettingsChangeIfNeededStatic
             .putString(PREFS_KEY_LAST_DEBOUNCE_SETTINGS_SNAPSHOT_V513, gson.toJson(currentTracked))
             .putString(PREFS_KEY_PENDING_SETTINGS_CHANGES_V513, gson.toJson(pendingList))
             .putString(PREFS_KEY_SETTINGS_CHANGE_HISTORY_V513, gson.toJson(historyList))
+            .putLong(PREFS_KEY_USER_SETTINGS_UPDATED_AT, nowMs)
             .apply()
 
-        if (triggerImmediateUpload && prefs.getBoolean(PREFS_KEY_AUTO_UPLOAD_AI_LOGS, false)) {
+        if (triggerImmediateUpload && prefs.getBoolean(PREFS_KEY_AUTO_UPLOAD_AI_LOGS, DEFAULT_AUTO_UPLOAD_AI_LOGS)) {
             kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
                 try {
                     uploadSettingsChangeHistoryBlocking(prefs, gson)
@@ -834,68 +974,39 @@ internal fun OverlayService.Companion.uploadSettingsChangeHistoryBlocking(prefs:
     val pendingChanges = loadPendingSettingsChangesStatic(prefs, gson)
     if (pendingChanges.isEmpty()) return true
     val historyChanges = loadSettingsChangeHistoryStatic(prefs, gson).ifEmpty { pendingChanges }
-    // Uploads require the signed-in user's own GitHub token. Non-collaborator accounts cannot write
-    // to the repo directly; their settings changes still reach the maintainers embedded in the
-    // telemetry batch records, which travel through the validated Issue relay.
-    val userToken = getEffectiveSyncToken(prefs).trim()
-    if (userToken.isEmpty()) return false
-
-    var username = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty()
-    if (username.isEmpty() && userToken.isNotEmpty()) {
-        username = fetchGitHubUsernameBlocking(userToken)
-        if (username.isNotEmpty()) {
-            prefs.edit().putString(PREFS_KEY_SYNC_GITHUB_USERNAME, username).apply()
-        }
-    }
     val devHash = getDeviceTelemetryHashStatic(prefs)
-    val safeUser = (username.ifBlank { "trainer_$devHash" }).replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
-    val settingsPath = "users/$safeUser/settings_changes.jsonl"
+    val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
     val jsonlContent = historyChanges.joinToString("\n") { ev ->
         val savedVer = ev.appVersion.takeIf { it.isNotBlank() && it != "5.13" && it != "6.02" } ?: APP_VERSION
-        val enriched = if (ev.uploaderHandle.isBlank() || ev.uploaderHandle.startsWith("trainer_")) {
+        val enriched = if (ev.uploaderHandle.isBlank() || ev.uploaderHandle == "anonymous" || ev.uploaderHandle.startsWith("trainer_")) {
             ev.copy(uploaderHandle = safeUser, deviceHash = devHash, appVersion = savedVer)
         } else {
             ev.copy(appVersion = savedVer)
         }
         gson.toJson(enriched)
     } + "\n"
-    val b64Content = android.util.Base64.encodeToString(jsonlContent.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
+
     val httpClient = OkHttpClient()
-    val repoBaseUrl = "https://api.github.com/repos/sportsfan986/silphscope-pvp"
-
-    fun tryPutSettingsFile(authToken: String): Boolean {
-        var existingSha = ""
-        val getReq = Request.Builder()
-            .url("$repoBaseUrl/contents/$settingsPath?ref=$AI_TELEMETRY_BRANCH")
-            .header("Authorization", "Bearer $authToken")
-            .header("Accept", "application/vnd.github+json")
-            .build()
-        httpClient.newCall(getReq).execute().use { gResp ->
-            if (gResp.isSuccessful) {
-                val obj = JsonParser.parseString(gResp.body?.string().orEmpty()).asJsonObject
-                existingSha = obj.get("sha")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-            }
-        }
-        val putMap = mutableMapOf<String, Any>(
-            "message" to "telemetry(v$APP_VERSION): settings_changes (${pendingChanges.size} new, ${historyChanges.size} total) by @$safeUser",
-            "content" to b64Content,
-            "branch" to AI_TELEMETRY_BRANCH
+    val payloadJson = gson.toJson(
+        mapOf(
+            "appVersion" to APP_VERSION,
+            "versionCode" to APP_VERSION_CODE,
+            "deviceId" to devHash,
+            "jsonl" to jsonlContent
         )
-        if (existingSha.isNotEmpty()) {
-            putMap["sha"] = existingSha
-        }
-        val putReq = Request.Builder()
-            .url("$repoBaseUrl/contents/$settingsPath")
-            .put(gson.toJson(putMap).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
-            .header("Authorization", "Bearer $authToken")
-            .header("Accept", "application/vnd.github+json")
-            .build()
-        httpClient.newCall(putReq).execute().use { pResp ->
-            return pResp.isSuccessful
-        }
-    }
+    )
+    val req = Request.Builder()
+        .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/settings-changes")
+        .post(payloadJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
+        .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
+        .header("X-Trainer-Screen-Name", safeUser)
+        .build()
 
-    val ok = try { tryPutSettingsFile(userToken) } catch (_: Exception) { false }
+    val ok = try {
+        httpClient.newCall(req).execute().use { resp -> resp.isSuccessful }
+    } catch (_: Exception) {
+        false
+    }
     if (ok) {
         val uploadedIds = pendingChanges.map { it.id }.toSet()
         val remaining = loadPendingSettingsChangesStatic(prefs, gson).filter { it.id !in uploadedIds }
@@ -905,18 +1016,23 @@ internal fun OverlayService.Companion.uploadSettingsChangeHistoryBlocking(prefs:
 }
 
 /**
- * v5.10 One-Time Migration: Wipes legacy pre-5.10 AI training logs (`gbl_ai_training_logs_v1`)
- * and strips any residual embedded timeline events from main battle logs so all future AI training
- * & anomaly telemetry starts clean on the v5.10 schema.
+ * v5.10 / v6.27 One-Time Migration: Wipes legacy pre-5.10 AI training logs (`gbl_ai_training_logs_v1`)
+ * and enables Always-On Cloudflare Telemetry (`PREFS_KEY_AUTO_UPLOAD_AI_LOGS = true`) by default.
  */
 internal fun OverlayService.Companion.runV510AiTelemetryMigrationAndWipeStatic(prefs: SharedPreferences) {
-    if (prefs.getBoolean(PREFS_KEY_AI_TELEMETRY_V510_MIGRATED, false)) return
-    val hasToken = getEffectiveSyncToken(prefs).isNotEmpty()
+    val v627Migrated = prefs.getBoolean("gbl_cloudflare_telemetry_v627_migrated", false)
+    if (prefs.getBoolean(PREFS_KEY_AI_TELEMETRY_V510_MIGRATED, false) && v627Migrated) return
     val editor = prefs.edit()
         .remove(PREFS_KEY_AI_TRAINING_LOGS)
         .putBoolean(PREFS_KEY_AI_TELEMETRY_V510_MIGRATED, true)
-    if (!prefs.contains(PREFS_KEY_AUTO_UPLOAD_AI_LOGS)) {
-        editor.putBoolean(PREFS_KEY_AUTO_UPLOAD_AI_LOGS, hasToken)
+        .putBoolean("gbl_cloudflare_telemetry_v627_migrated", true)
+        .putBoolean(PREFS_KEY_AUTO_UPLOAD_AI_LOGS, true)
+    // Auto-seed Screen Name from existing GitHub username if valid and not yet set
+    if (prefs.getString(PREFS_KEY_USER_SCREEN_NAME, "").isNullOrBlank()) {
+        val ghUser = OverlayService.sanitizeScreenNameStatic(prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, null))
+        if (ghUser.isNotEmpty()) {
+            editor.putString(PREFS_KEY_USER_SCREEN_NAME, ghUser)
+        }
     }
     editor.apply()
 }
@@ -1658,9 +1774,10 @@ internal fun OverlayService.Companion.buildEnhancedHpAndEnergyDiagnosticsStatic(
 }
 
 /**
- * v6.07: Auto-uploads the 1-Battle Full-Screen DVR `.mp4` video and its frame-synced `_deep_trace.jsonl`
- * directly to `recordings/<safeUser>/<battleId>_video.mp4` and `recordings/<safeUser>/<battleId>_deep_trace.jsonl`
- * on the `ai-telemetry-logs` branch in `sportsfan986/silphscope-pvp`.
+ * v6.27: Auto-uploads the 1-Battle Full-Screen DVR `.mp4` video and its frame-synced `_deep_trace.jsonl`
+ * in a single multipart request to the SilphScope Cloudflare Worker (`POST /v1/dvr`), which stores both
+ * in Cloudflare Storage (`recordings/<screenName>/<battleId>_video.mp4` & `_deep_trace.jsonl`) and
+ * forwards the playable MP4 video + battle summary to the SilphScope DVR Telegram Channel.
  */
 internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
     prefs: SharedPreferences,
@@ -1671,59 +1788,18 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
     traceFile: File
 ): Pair<Boolean, String> {
     return try {
-        val userToken = getEffectiveSyncToken(prefs).trim()
-        if (userToken.isEmpty()) {
-            return false to "Sign in with GitHub in Settings to upload DVR recordings."
-        }
         val devHash = getDeviceTelemetryHashStatic(prefs)
-        val username = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty()
-        val safeUser = (username.ifBlank { "trainer_$devHash" }).replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
+        val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
+            .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
         val cleanBattleId = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
         val videoRepoPath = "recordings/$safeUser/${cleanBattleId}_video.mp4"
         val traceRepoPath = "recordings/$safeUser/${cleanBattleId}_deep_trace.jsonl"
-        val repoBaseUrl = "https://api.github.com/repos/sportsfan986/silphscope-pvp"
 
         val httpClient = OkHttpClient.Builder()
             .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-            .writeTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(90, java.util.concurrent.TimeUnit.SECONDS)
             .build()
-
-        fun putFileToTelemetryBranch(repoPath: String, rawBytes: ByteArray, commitMsg: String, token: String): Boolean {
-            val b64 = android.util.Base64.encodeToString(rawBytes, android.util.Base64.NO_WRAP)
-            var existingSha = ""
-            val getReq = Request.Builder()
-                .url("$repoBaseUrl/contents/$repoPath?ref=$AI_TELEMETRY_BRANCH")
-                .header("Authorization", "Bearer $token")
-                .header("Accept", "application/vnd.github+json")
-                .build()
-            try {
-                httpClient.newCall(getReq).execute().use { gResp ->
-                    if (gResp.isSuccessful) {
-                        val obj = JsonParser.parseString(gResp.body?.string().orEmpty()).asJsonObject
-                        existingSha = obj.get("sha")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-                    }
-                }
-            } catch (_: Exception) {}
-
-            val putMap = mutableMapOf<String, Any>(
-                "message" to commitMsg,
-                "content" to b64,
-                "branch" to AI_TELEMETRY_BRANCH
-            )
-            if (existingSha.isNotEmpty()) {
-                putMap["sha"] = existingSha
-            }
-            val putReq = Request.Builder()
-                .url("$repoBaseUrl/contents/$repoPath")
-                .put(gson.toJson(putMap).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
-                .header("Authorization", "Bearer $token")
-                .header("Accept", "application/vnd.github+json")
-                .build()
-            httpClient.newCall(putReq).execute().use { pResp ->
-                return pResp.isSuccessful
-            }
-        }
 
         // Prepend Battle Summary Header Line 0 to deep_trace.jsonl
         val resolvedDvrVer = summaryRecord.appVersion.takeIf { it.isNotBlank() && it != "5.10" } ?: APP_VERSION
@@ -1731,183 +1807,101 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
             mapOf(
                 "recordType" to "BATTLE_DVR_SUMMARY_HEADER",
                 "appVersion" to resolvedDvrVer,
-                "versionCode" to 1621,
+                "versionCode" to APP_VERSION_CODE,
                 "battleId" to battleId,
+                "screenName" to safeUser,
                 "videoRepoPath" to videoRepoPath,
                 "traceRepoPath" to traceRepoPath,
-                "battleSummary" to summaryRecord.copy(appVersion = resolvedDvrVer, schemaVersion = resolvedDvrVer)
+                "battleSummary" to summaryRecord.copy(
+                    appVersion = resolvedDvrVer,
+                    schemaVersion = resolvedDvrVer,
+                    uploaderHandle = safeUser
+                )
             )
         ) + "\n"
-        val traceBodyBytes = if (traceFile.exists()) traceFile.readBytes() else ByteArray(0)
-        val combinedTraceBytes = headerJson.toByteArray(Charsets.UTF_8) + traceBodyBytes
+        val traceBodyText = if (traceFile.exists()) traceFile.readText(Charsets.UTF_8) else ""
+        val combinedTraceText = headerJson + traceBodyText
+        val frameCount = traceBodyText.lineSequence().count { it.isNotBlank() }
 
-        // DVR bundles (multi-MB video) are too large for the Issue relay, so they are only accepted
-        // via a direct commit from accounts with push access to the repo.
-        val traceOk = putFileToTelemetryBranch(
-            traceRepoPath,
-            combinedTraceBytes,
-            "dvr(v$APP_VERSION): deep frame trace for $cleanBattleId by @$safeUser",
-            userToken
+        val userLead = summaryRecord.userTeamSpecs.firstOrNull()?.species.orEmpty()
+        val oppList = summaryRecord.oppTeamSpecs.map { it.species }.filter { it.isNotBlank() }.joinToString(", ")
+        val matchupSummary = buildString {
+            if (userLead.isNotBlank()) append("$userLead vs ")
+            append(oppList.ifBlank { "Opponent" })
+            if (summaryRecord.anomalyCount > 0) {
+                append(" • ${summaryRecord.anomalyCount} anomalies")
+            }
+        }
+
+        val metadataJson = gson.toJson(
+            mapOf(
+                "battleId" to cleanBattleId,
+                "screenName" to safeUser,
+                "deviceId" to devHash,
+                "appVersion" to resolvedDvrVer,
+                "versionCode" to APP_VERSION_CODE,
+                "league" to summaryRecord.league,
+                "result" to summaryRecord.result,
+                "matchupSummary" to matchupSummary,
+                "frameCount" to frameCount
+            )
         )
 
-        var videoOk = false
-        if (traceOk && mp4File.exists() && mp4File.length() > 0L) {
-            val mp4Bytes = mp4File.readBytes()
-            videoOk = putFileToTelemetryBranch(
-                videoRepoPath,
-                mp4Bytes,
-                "dvr(v$APP_VERSION): full-screen battle video (${mp4Bytes.size / 1024} KB) for $cleanBattleId by @$safeUser",
-                userToken
+        val multipartBuilder = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("metadata", metadataJson)
+            .addFormDataPart(
+                "deep_trace",
+                "${cleanBattleId}_deep_trace.jsonl",
+                combinedTraceText.toRequestBody("application/x-ndjson; charset=utf-8".toMediaTypeOrNull())
+            )
+
+        val hasVideo = mp4File.exists() && mp4File.length() > 0L
+        if (hasVideo) {
+            multipartBuilder.addFormDataPart(
+                "video",
+                "${cleanBattleId}_video.mp4",
+                mp4File.asRequestBody("video/mp4".toMediaTypeOrNull())
             )
         }
 
+        val req = Request.Builder()
+            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/dvr")
+            .post(multipartBuilder.build())
+            .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
+            .header("X-Trainer-Screen-Name", safeUser)
+            .build()
+
+        var uploadOk = false
+        var httpCode = 0
+        httpClient.newCall(req).execute().use { resp ->
+            httpCode = resp.code
+            uploadOk = resp.isSuccessful
+        }
+
         val nowMs = System.currentTimeMillis()
-        if (traceOk || videoOk) {
+        if (uploadOk) {
             val prevCount = prefs.getInt(PREFS_KEY_TOTAL_DVR_UPLOADED_COUNT, 0)
             prefs.edit()
                 .putLong(PREFS_KEY_LAST_DVR_UPLOAD_MS, nowMs)
                 .putString(PREFS_KEY_LAST_DVR_UPLOAD_PATH, videoRepoPath)
                 .putInt(PREFS_KEY_TOTAL_DVR_UPLOADED_COUNT, prevCount + 1)
                 .apply()
-        }
-        try { mp4File.delete() } catch (_: Exception) {}
-        try { traceFile.delete() } catch (_: Exception) {}
-
-        if (videoOk && traceOk) {
-            true to "🎥 Uploaded 1-Battle Video & Deep Trace ($cleanBattleId) to @$AI_TELEMETRY_BRANCH"
-        } else if (traceOk) {
-            true to "📋 Uploaded 1-Battle Deep Trace ($cleanBattleId) to @$AI_TELEMETRY_BRANCH"
+            try { mp4File.delete() } catch (_: Exception) {}
+            try { traceFile.delete() } catch (_: Exception) {}
+            true to "🎥 Uploaded 1-Battle Video & Deep Trace ($cleanBattleId) as @$safeUser to Cloudflare + Telegram!"
         } else {
-            false to "⚠️ 1-Battle DVR upload failed (DVR uploads require collaborator access to the SilphScope repo)"
+            false to "⚠️ 1-Battle DVR upload failed (HTTP $httpCode)"
         }
     } catch (e: Exception) {
         false to "⚠️ DVR upload error: ${e.localizedMessage ?: "Network error"}"
     }
 }
 
-// ── Community Issue relay (any signed-in GitHub account) ───────────────────────────────────────
-// GitHub caps issue bodies at 65,536 chars, so batches are split across several issues and heavy
-// optional fields are dropped from oversize records. Must stay in sync with the limits enforced by
-// `.github/scripts/relay-telemetry.mjs`.
-private const val ISSUE_RELAY_MAX_PAYLOAD_CHARS = 58_000
-private const val ISSUE_RELAY_MAX_RECORDS_PER_ISSUE = 25
-private const val ISSUE_RELAY_MAX_ISSUES_PER_UPLOAD = 5
-private val ISSUE_RELAY_DROPPABLE_KEYS = listOf("timelineEvents", "energyLedger", "postCutsceneHpAudits")
-
-private data class IssueRelayResult(
-    val issuesOpened: Int,
-    val deliveredBattleIds: Set<String>,
-    /** Records that cannot fit in an issue even after compaction; dropped so they don't block the queue. */
-    val skippedBattleIds: Set<String>,
-    val lastHttpCode: Int
-)
-
-private fun stripBase64FieldsForRelay(el: com.google.gson.JsonElement) {
-    when {
-        el.isJsonObject -> {
-            val obj = el.asJsonObject
-            obj.keySet().filter { it.endsWith("Base64") }.forEach { obj.remove(it) }
-            obj.entrySet().forEach { stripBase64FieldsForRelay(it.value) }
-        }
-        el.isJsonArray -> el.asJsonArray.forEach { stripBase64FieldsForRelay(it) }
-    }
-}
-
-/** Serializes [rec] as one JSONL line no longer than [maxChars], compacting it if needed; null if impossible. */
-private fun compactRecordForIssueRelay(gson: Gson, rec: AiTelemetryBattleRecordV510, maxChars: Int): String? {
-    val full = gson.toJson(rec)
-    if (full.length <= maxChars) return full
-    val obj = gson.toJsonTree(rec).asJsonObject
-    obj.addProperty("relayCompacted", true)
-    stripBase64FieldsForRelay(obj)
-    gson.toJson(obj).let { if (it.length <= maxChars) return it }
-    for (key in ISSUE_RELAY_DROPPABLE_KEYS) {
-        obj.remove(key)
-        gson.toJson(obj).let { if (it.length <= maxChars) return it }
-    }
-    return null
-}
-
-private fun postTelemetryViaIssueRelayBlocking(
-    httpClient: OkHttpClient,
-    gson: Gson,
-    userToken: String,
-    repoBaseUrl: String,
-    clientBatchId: String,
-    records: List<AiTelemetryBattleRecordV510>
-): IssueRelayResult {
-    val skipped = mutableSetOf<String>()
-    val lines = mutableListOf<Pair<AiTelemetryBattleRecordV510, String>>()
-    for (rec in records) {
-        val line = compactRecordForIssueRelay(gson, rec, ISSUE_RELAY_MAX_PAYLOAD_CHARS)
-        if (line == null) skipped += rec.battleId else lines += rec to line
-    }
-
-    // Greedily pack records into issue-sized chunks.
-    val chunks = mutableListOf<List<Pair<AiTelemetryBattleRecordV510, String>>>()
-    var current = mutableListOf<Pair<AiTelemetryBattleRecordV510, String>>()
-    var currentChars = 0
-    for (entry in lines) {
-        val len = entry.second.length + 1
-        if (current.isNotEmpty() &&
-            (currentChars + len > ISSUE_RELAY_MAX_PAYLOAD_CHARS || current.size >= ISSUE_RELAY_MAX_RECORDS_PER_ISSUE)
-        ) {
-            chunks += current
-            current = mutableListOf()
-            currentChars = 0
-        }
-        current += entry
-        currentChars += len
-    }
-    if (current.isNotEmpty()) chunks += current
-
-    val delivered = mutableSetOf<String>()
-    var opened = 0
-    var lastCode = 0
-    for ((idx, chunk) in chunks.take(ISSUE_RELAY_MAX_ISSUES_PER_UPLOAD).withIndex()) {
-        val partLabel = if (chunks.size > 1) " part ${idx + 1}/${chunks.size}" else ""
-        val anomalies = chunk.sumOf { it.first.anomalyCount }
-        val highSev = chunk.count { it.first.hasHighSeverityAnomaly }
-        val body = buildString {
-            appendLine("### SilphScope PvP v$APP_VERSION Community AI Telemetry Batch")
-            appendLine("- **Client Batch ID**: `$clientBatchId`$partLabel")
-            appendLine("- **Battles**: ${chunk.size} (Anomalies detected: $anomalies, High-Severity: $highSev)")
-            appendLine("- Archived automatically by the `telemetry-relay` workflow, which validates the payload and attributes it to this issue's author.")
-            appendLine()
-            appendLine("```jsonl")
-            chunk.forEach { appendLine(it.second) }
-            appendLine("```")
-        }
-        val payload = gson.toJson(
-            mapOf(
-                "title" to "[AI-TELEMETRY-BATCH] $clientBatchId$partLabel (${chunk.size} battles)",
-                "body" to body
-            )
-        ).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-        val req = Request.Builder()
-            .url("$repoBaseUrl/issues")
-            .post(payload)
-            .header("Authorization", "Bearer $userToken")
-            .header("Accept", "application/vnd.github+json")
-            .build()
-        val ok = httpClient.newCall(req).execute().use { resp ->
-            lastCode = resp.code
-            resp.isSuccessful
-        }
-        if (!ok) break
-        opened++
-        chunk.forEach { delivered += it.first.battleId }
-    }
-    return IssueRelayResult(opened, delivered, skipped, lastCode)
-}
-
 /**
- * Uploads pending v5.10 AI training & anomaly battle records using ONLY the signed-in user's own
- * GitHub token (no shared/built-in credentials ship in the APK):
- *  - Collaborators: direct commit to the `ai-telemetry-logs` branch (or `sync-vault` fallback).
- *  - Any other GitHub account: opens `[AI-TELEMETRY-BATCH]` issue(s) which the
- *    `telemetry-relay.yml` workflow validates, attributes to the verified issue author, and archives.
- *  - Last resort: a secret Gist in the user's own account.
+ * v6.27: Uploads pending Always-On lower-resolution AI training & anomaly battle records
+ * directly to the SilphScope Cloudflare Worker (`POST /v1/telemetry`) attributed to the user's
+ * mandatory Trainer Screen Name (zero GitHub login required).
  */
 internal fun OverlayService.Companion.uploadPendingAiTelemetryBatchBlocking(
     prefs: SharedPreferences,
@@ -1925,7 +1919,7 @@ internal fun OverlayService.Companion.uploadPendingAiTelemetryBatchBlocking(
         if (pendingSettingsChanges.isNotEmpty()) {
             val cfgOk = try { uploadSettingsChangeHistoryBlocking(prefs, gson) } catch (_: Exception) { false }
             if (cfgOk) {
-                return true to "Uploaded ${pendingSettingsChanges.size} debounce/settling settings change${if (pendingSettingsChanges.size == 1) "" else "s"} to GitHub @$AI_TELEMETRY_BRANCH"
+                return true to "Uploaded ${pendingSettingsChanges.size} debounce/settling settings change${if (pendingSettingsChanges.size == 1) "" else "s"} to Cloudflare"
             }
         }
         return true to "No pending AI telemetry battles to upload (0 queued)."
@@ -1933,36 +1927,24 @@ internal fun OverlayService.Companion.uploadPendingAiTelemetryBatchBlocking(
     if (!forceUpload && pending.size < minBattlesRequired) {
         return false to "Waiting for $minBattlesRequired battles (${pending.size}/$minBattlesRequired queued)."
     }
-    val userToken = getEffectiveSyncToken(prefs).trim()
-    if (userToken.isEmpty()) {
-        return false to "Sign in with GitHub in Settings to auto-upload AI training & anomaly logs."
-    }
 
     isAiTelemetryUploadInFlight = true
     try {
-        var username = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty()
-        if (username.isEmpty() && userToken.isNotEmpty()) {
-            username = fetchGitHubUsernameBlocking(userToken)
-            if (username.isNotEmpty()) {
-                prefs.edit().putString(PREFS_KEY_SYNC_GITHUB_USERNAME, username).apply()
-            }
-        }
         val devHash = getDeviceTelemetryHashStatic(prefs)
-        val safeUser = (username.ifBlank { "trainer_$devHash" }).replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
+        val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
+            .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
         val nowMs = System.currentTimeMillis()
-        val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply {
-            timeZone = java.util.TimeZone.getTimeZone("UTC")
-        }.format(java.util.Date(nowMs))
 
         val currentProfileSig = computeDebounceSettingsProfileSignatureStatic(prefs)
         val allRecentChanges = loadSettingsChangeHistoryStatic(prefs, gson).takeLast(20)
         val enrichedPending = pending.mapIndexed { idx, rec ->
             val recordedVer = rec.appVersion.takeIf { it.isNotBlank() && it != "5.10" } ?: APP_VERSION
-            val baseRec = if ((rec.uploaderHandle == "anonymous" || rec.uploaderHandle.isBlank()) && safeUser.isNotBlank()) {
-                rec.copy(uploaderHandle = safeUser, deviceHash = devHash, appVersion = recordedVer, schemaVersion = recordedVer)
-            } else {
-                rec.copy(appVersion = recordedVer, schemaVersion = recordedVer)
-            }
+            val baseRec = rec.copy(
+                uploaderHandle = safeUser,
+                deviceHash = devHash,
+                appVersion = recordedVer,
+                schemaVersion = recordedVer
+            )
             val withSig = if (baseRec.settingsProfileSignature.isBlank()) {
                 baseRec.copy(settingsProfileSignature = currentProfileSig)
             } else baseRec
@@ -1972,316 +1954,58 @@ internal fun OverlayService.Companion.uploadPendingAiTelemetryBatchBlocking(
         }
 
         val batchId = "batch_${nowMs}_${safeUser}_${devHash}"
-        val batchPath = "batches/$dateStr/$batchId.jsonl"
-        val userBatchPath = "users/$safeUser/$batchId.jsonl"
         val jsonlContent = enrichedPending.joinToString("\n") { gson.toJson(it) } + "\n"
         val totalAnomalies = enrichedPending.sumOf { it.anomalyCount }
         val highSevCount = enrichedPending.count { it.hasHighSeverityAnomaly }
+        val anomalySummary = if (totalAnomalies > 0) {
+            "$totalAnomalies anomalies ($highSevCount HIGH) across ${enrichedPending.size} battles"
+        } else ""
 
-        val httpClient = OkHttpClient()
-        val repoBaseUrl = "https://api.github.com/repos/sportsfan986/silphscope-pvp"
-
-        // Tier 1: Direct commit to dedicated `ai-telemetry-logs` branch (isolated from main & CI builds)
-        val encodedBatchB64 = android.util.Base64.encodeToString(
-            jsonlContent.toByteArray(Charsets.UTF_8),
-            android.util.Base64.NO_WRAP
+        val payloadJson = gson.toJson(
+            mapOf(
+                "batchId" to batchId,
+                "recordCount" to enrichedPending.size,
+                "appVersion" to APP_VERSION,
+                "versionCode" to APP_VERSION_CODE,
+                "deviceId" to devHash,
+                "anomalySummary" to anomalySummary,
+                "jsonl" to jsonlContent
+            )
         )
 
-        fun tryPutBatchToBranch(targetBranch: String, targetPath: String, authToken: String): Pair<Boolean, Int> {
-            val bodyStr = gson.toJson(
-                mapOf(
-                    "message" to "telemetry(v$APP_VERSION): $batchId (${enrichedPending.size} battles, $totalAnomalies anomalies) by @$safeUser",
-                    "content" to encodedBatchB64,
-                    "branch" to targetBranch
-                )
-            )
-            val req = Request.Builder()
-                .url("$repoBaseUrl/contents/$targetPath")
-                .put(bodyStr.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
-                .header("Authorization", "Bearer $authToken")
-                .header("Accept", "application/vnd.github+json")
-                .build()
-            httpClient.newCall(req).execute().use { resp ->
-                return resp.isSuccessful to resp.code
-            }
-        }
+        val httpClient = OkHttpClient.Builder()
+            .connectTimeout(25, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(45, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
 
-        fun tryEnsureBranchExists(branchName: String, authToken: String): Boolean {
-            for (sourceRef in listOf("heads/sync-vault", "heads/main")) {
-                try {
-                    val getRefReq = Request.Builder()
-                        .url("$repoBaseUrl/git/ref/$sourceRef")
-                        .header("Authorization", "Bearer $authToken")
-                        .header("Accept", "application/vnd.github+json")
-                        .build()
-                    var baseSha = ""
-                    httpClient.newCall(getRefReq).execute().use { rResp ->
-                        if (rResp.isSuccessful) {
-                            val obj = JsonParser.parseString(rResp.body?.string().orEmpty()).asJsonObject
-                            baseSha = obj.getAsJsonObject("object")?.get("sha")?.asString.orEmpty()
-                        }
-                    }
-                    if (baseSha.isNotEmpty()) {
-                        val createRefBody = gson.toJson(
-                            mapOf(
-                                "ref" to "refs/heads/$branchName",
-                                "sha" to baseSha
-                            )
-                        ).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-                        val createRefReq = Request.Builder()
-                            .url("$repoBaseUrl/git/refs")
-                            .post(createRefBody)
-                            .header("Authorization", "Bearer $authToken")
-                            .header("Accept", "application/vnd.github+json")
-                            .build()
-                        httpClient.newCall(createRefReq).execute().use { cResp ->
-                            if (cResp.isSuccessful || cResp.code == 422) return true
-                        }
-                    }
-                } catch (_: Exception) {}
-            }
-            return false
-        }
+        val req = Request.Builder()
+            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/telemetry")
+            .post(payloadJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
+            .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
+            .header("X-Trainer-Screen-Name", safeUser)
+            .build()
 
-        fun updateBranchManifest(targetBranch: String, manifestPath: String, storedBatchPath: String, authToken: String) {
-            try {
-                val manifestUrl = "$repoBaseUrl/contents/$manifestPath"
-                var existingManifest = AiTelemetryManifest(schemaVersion = APP_VERSION, updatedAtMs = nowMs)
-                var manifestSha = ""
-                val getManifestReq = Request.Builder()
-                    .url("$manifestUrl?ref=$targetBranch")
-                    .header("Authorization", "Bearer $authToken")
-                    .header("Accept", "application/vnd.github+json")
-                    .build()
-                httpClient.newCall(getManifestReq).execute().use { mResp ->
-                    if (mResp.isSuccessful) {
-                        val root = JsonParser.parseString(mResp.body?.string().orEmpty()).asJsonObject
-                        manifestSha = root.get("sha")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-                        val b64 = root.get("content")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-                        if (b64.isNotBlank()) {
-                            val dec = String(
-                                android.util.Base64.decode(b64.replace("\n", "").replace("\r", ""), android.util.Base64.DEFAULT),
-                                Charsets.UTF_8
-                            )
-                            existingManifest = try {
-                                gson.fromJson(dec, AiTelemetryManifest::class.java) ?: existingManifest
-                            } catch (_: Exception) { existingManifest }
-                        }
-                    }
-                }
-                val newEntry = AiTelemetryManifestEntry(
-                    batchId = batchId,
-                    path = storedBatchPath,
-                    uploadedAtMs = nowMs,
-                    uploader = safeUser,
-                    deviceHash = devHash,
-                    appVersion = APP_VERSION,
-                    battleCount = enrichedPending.size,
-                    anomalyCount = totalAnomalies,
-                    highSeverityCount = highSevCount
-                )
-                val updatedBatches = (existingManifest.batches.filter { it.batchId != batchId } + newEntry).takeLast(1500)
-                val updatedManifest = AiTelemetryManifest(
-                    schemaVersion = APP_VERSION,
-                    updatedAtMs = nowMs,
-                    totalBatches = updatedBatches.size,
-                    totalBattles = updatedBatches.sumOf { it.battleCount },
-                    totalAnomalies = updatedBatches.sumOf { it.anomalyCount },
-                    batches = updatedBatches
-                )
-                val manifestB64 = android.util.Base64.encodeToString(
-                    gson.toJson(updatedManifest).toByteArray(Charsets.UTF_8),
-                    android.util.Base64.NO_WRAP
-                )
-                val putManifestMap = mutableMapOf<String, Any>(
-                    "message" to "telemetry(v$APP_VERSION): update $manifestPath for $batchId",
-                    "content" to manifestB64,
-                    "branch" to targetBranch
-                )
-                if (manifestSha.isNotEmpty()) {
-                    putManifestMap["sha"] = manifestSha
-                }
-                val putManifestReq = Request.Builder()
-                    .url(manifestUrl)
-                    .put(gson.toJson(putManifestMap).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
-                    .header("Authorization", "Bearer $authToken")
-                    .header("Accept", "application/vnd.github+json")
-                    .build()
-                httpClient.newCall(putManifestReq).execute().close()
-            } catch (_: Exception) {}
-        }
-
-        var uploadedDestinationLabel = "@$AI_TELEMETRY_BRANCH"
-        // Battle IDs confirmed delivered by a partial (chunked) Issue relay upload. Empty means
-        // "the whole batch was delivered" for the direct-commit / Gist tiers.
-        var relayDeliveredBattleIds: Set<String> = emptySet()
-
-        // Tier 1: Direct commit with the user's own token (succeeds only for repo collaborators).
-        var (uploadedOk, directBranchErrorCode) = tryPutBatchToBranch(AI_TELEMETRY_BRANCH, batchPath, userToken)
-        // 401/403 = token is valid but has no push access → skip straight to the Issue relay.
-        val lacksPushAccess = directBranchErrorCode == 401 || directBranchErrorCode == 403
-
-        // If `ai-telemetry-logs` branch did not exist yet (404/422), try auto-creating the branch and retrying
-        if (!uploadedOk && !lacksPushAccess && (directBranchErrorCode == 404 || directBranchErrorCode == 422)) {
-            if (tryEnsureBranchExists(AI_TELEMETRY_BRANCH, userToken)) {
-                val retryRes = tryPutBatchToBranch(AI_TELEMETRY_BRANCH, batchPath, userToken)
-                uploadedOk = retryRes.first
-                directBranchErrorCode = retryRes.second
-            }
-        }
-
-        if (uploadedOk) {
-            // Also mirror batch under `users/<safeUser>/<batchId>.jsonl` on `ai-telemetry-logs` so all users' logs are viewable by user folder
-            try {
-                tryPutBatchToBranch(AI_TELEMETRY_BRANCH, userBatchPath, userToken)
-            } catch (_: Exception) {}
-            updateBranchManifest(AI_TELEMETRY_BRANCH, "manifest.json", batchPath, userToken)
-            try {
-                uploadSettingsChangeHistoryBlocking(prefs, gson)
-            } catch (_: Exception) {}
-        } else if (!lacksPushAccess) {
-            // Tier 2: Fallback to `sync-vault` branch (`ai_telemetry/$batchPath`)
-            val syncVaultPath = "ai_telemetry/$batchPath"
-            val (syncVaultOk, _) = tryPutBatchToBranch("sync-vault", syncVaultPath, userToken)
-            if (syncVaultOk) {
-                uploadedOk = true
-                uploadedDestinationLabel = "@sync-vault"
-                updateBranchManifest("sync-vault", "ai_telemetry/manifest.json", syncVaultPath, userToken)
-            }
+        var uploadedOk = false
+        var httpCode = 0
+        httpClient.newCall(req).execute().use { resp ->
+            httpCode = resp.code
+            uploadedOk = resp.isSuccessful
         }
 
         if (!uploadedOk) {
-            // Tier 3: Community Issue Relay for any signed-in GitHub account. The issue is authored by
-            // the user's own account; `telemetry-relay.yml` re-validates every record, attributes it to
-            // the verified issue author, and assigns the archive path server-side.
-            try {
-                val relay = postTelemetryViaIssueRelayBlocking(httpClient, gson, userToken, repoBaseUrl, batchId, enrichedPending)
-                if (relay.issuesOpened > 0) {
-                    uploadedOk = true
-                    relayDeliveredBattleIds = relay.deliveredBattleIds + relay.skippedBattleIds
-                    uploadedDestinationLabel = "Community Relay (${relay.issuesOpened} issue${if (relay.issuesOpened == 1) "" else "s"})"
-                } else if (relay.lastHttpCode != 0) {
-                    directBranchErrorCode = relay.lastHttpCode
-                }
-            } catch (_: Exception) {}
+            return false to "Cloudflare telemetry upload failed (HTTP $httpCode). Check internet connection and retry."
         }
 
-        if (!uploadedOk && userToken.isNotEmpty()) {
-            // Tier 4: GitHub Gist Telemetry Vault Fallback (works with 100% of legacy `gist`-only OAuth tokens!)
-            try {
-                val telemetryManifestFile = "silphscope_pvp_ai_telemetry_manifest.json"
-                var telemetryGistId = ""
-                var existingManifest = AiTelemetryManifest(schemaVersion = APP_VERSION, updatedAtMs = nowMs)
+        try {
+            uploadSettingsChangeHistoryBlocking(prefs, gson)
+        } catch (_: Exception) {}
 
-                val listGistsReq = Request.Builder()
-                    .url("https://api.github.com/gists?per_page=100")
-                    .header("Authorization", "Bearer $userToken")
-                    .header("Accept", "application/vnd.github+json")
-                    .build()
-                httpClient.newCall(listGistsReq).execute().use { gResp ->
-                    if (gResp.isSuccessful) {
-                        val arr = JsonParser.parseString(gResp.body?.string().orEmpty()).asJsonArray
-                        for (el in arr) {
-                            val obj = el.asJsonObject
-                            val filesObj = obj.getAsJsonObject("files")
-                            if (filesObj != null && filesObj.has(telemetryManifestFile)) {
-                                telemetryGistId = obj.get("id")?.asString.orEmpty()
-                                break
-                            }
-                        }
-                    }
-                }
-
-                if (telemetryGistId.isNotEmpty()) {
-                    val getGistReq = Request.Builder()
-                        .url("https://api.github.com/gists/$telemetryGistId")
-                        .header("Authorization", "Bearer $userToken")
-                        .header("Accept", "application/vnd.github+json")
-                        .build()
-                    httpClient.newCall(getGistReq).execute().use { gResp ->
-                        if (gResp.isSuccessful) {
-                            val root = JsonParser.parseString(gResp.body?.string().orEmpty()).asJsonObject
-                            val filesObj = root.getAsJsonObject("files")
-                            val mContent = filesObj?.getAsJsonObject(telemetryManifestFile)?.get("content")?.asString
-                            if (!mContent.isNullOrBlank()) {
-                                existingManifest = try {
-                                    gson.fromJson(mContent, AiTelemetryManifest::class.java) ?: existingManifest
-                                } catch (_: Exception) { existingManifest }
-                            }
-                        } else if (gResp.code == 404) {
-                            telemetryGistId = ""
-                        }
-                    }
-                }
-
-                val newEntry = AiTelemetryManifestEntry(
-                    batchId = batchId,
-                    path = "$batchId.jsonl",
-                    uploadedAtMs = nowMs,
-                    uploader = safeUser,
-                    deviceHash = devHash,
-                    appVersion = APP_VERSION,
-                    battleCount = enrichedPending.size,
-                    anomalyCount = totalAnomalies,
-                    highSeverityCount = highSevCount
-                )
-                val updatedBatches = (existingManifest.batches.filter { it.batchId != batchId } + newEntry).takeLast(1500)
-                val updatedManifest = AiTelemetryManifest(
-                    schemaVersion = APP_VERSION,
-                    updatedAtMs = nowMs,
-                    totalBatches = updatedBatches.size,
-                    totalBattles = updatedBatches.sumOf { it.battleCount },
-                    totalAnomalies = updatedBatches.sumOf { it.anomalyCount },
-                    batches = updatedBatches
-                )
-
-                val gistBodyMap = mapOf(
-                    "description" to "SilphScope PvP v$APP_VERSION AI Training & Anomaly Telemetry Vault (@$safeUser)",
-                    // Secret gist: telemetry stays in the user's own account and is not publicly listed.
-                    "public" to false,
-                    "files" to mapOf(
-                        telemetryManifestFile to mapOf("content" to gson.toJson(updatedManifest)),
-                        "$batchId.jsonl" to mapOf("content" to jsonlContent)
-                    )
-                )
-                val gistReqBody = gson.toJson(gistBodyMap)
-                    .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-                val gistWriteReq = if (telemetryGistId.isEmpty()) {
-                    Request.Builder()
-                        .url("https://api.github.com/gists")
-                        .post(gistReqBody)
-                        .header("Authorization", "Bearer $userToken")
-                        .header("Accept", "application/vnd.github+json")
-                        .build()
-                } else {
-                    Request.Builder()
-                        .url("https://api.github.com/gists/$telemetryGistId")
-                        .patch(gistReqBody)
-                        .header("Authorization", "Bearer $userToken")
-                        .header("Accept", "application/vnd.github+json")
-                        .build()
-                }
-                httpClient.newCall(gistWriteReq).execute().use { gwResp ->
-                    if (gwResp.isSuccessful) {
-                        uploadedOk = true
-                        uploadedDestinationLabel = "Telemetry Vault (@$safeUser)"
-                    }
-                }
-            } catch (_: Exception) {}
-        }
-
-        if (!uploadedOk) {
-            return false to "Telemetry upload failed (HTTP $directBranchErrorCode). Check internet connection and retry."
-        }
-
-        // Clear uploaded records from pending queue (a chunked Issue relay upload may only deliver part
-        // of the batch; undelivered records stay queued for the next attempt).
-        val uploadedIds = relayDeliveredBattleIds.ifEmpty { enrichedPending.map { it.battleId }.toSet() }
-        val uploadedCount = enrichedPending.count { it.battleId in uploadedIds }
-        val uploadedAnomalies = enrichedPending.filter { it.battleId in uploadedIds }.sumOf { it.anomalyCount }
+        val uploadedIds = enrichedPending.map { it.battleId }.toSet()
+        val uploadedCount = enrichedPending.size
         val remaining = loadPendingAiTelemetryLogsStatic(prefs, gson).filter { it.battleId !in uploadedIds }
         val totalUploadedSoFar = prefs.getInt(PREFS_KEY_TOTAL_AI_TELEMETRY_UPLOADED_COUNT, 0) + uploadedCount
-        val statusMsg = "Uploaded $uploadedCount battle${if (uploadedCount == 1) "" else "s"} ($uploadedAnomalies anomal${if (uploadedAnomalies == 1) "y" else "ies"}) to GitHub $uploadedDestinationLabel" +
+        val statusMsg = "Uploaded $uploadedCount battle${if (uploadedCount == 1) "" else "s"} ($totalAnomalies anomal${if (totalAnomalies == 1) "y" else "ies"}) as @$safeUser to Cloudflare" +
             if (remaining.isNotEmpty()) " — ${remaining.size} still queued" else ""
         prefs.edit()
             .putString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(remaining))
@@ -2309,7 +2033,7 @@ internal fun OverlayService.Companion.triggerAutoUploadOnAppLaunchAsync(
     gson: Gson,
     onComplete: ((Boolean, String) -> Unit)? = null
 ) {
-    val autoEnabled = prefs.getBoolean(PREFS_KEY_AUTO_UPLOAD_AI_LOGS, false)
+    val autoEnabled = prefs.getBoolean(PREFS_KEY_AUTO_UPLOAD_AI_LOGS, DEFAULT_AUTO_UPLOAD_AI_LOGS)
     if (!autoEnabled) return
     val pending = loadPendingAiTelemetryLogsStatic(prefs, gson)
     if (pending.isEmpty()) return
@@ -2345,7 +2069,7 @@ internal fun OverlayService.Companion.triggerAutoUploadOnOverlayStopAsync(
     gson: Gson,
     onComplete: ((Boolean, String) -> Unit)? = null
 ) {
-    val autoEnabled = prefs.getBoolean(PREFS_KEY_AUTO_UPLOAD_AI_LOGS, false)
+    val autoEnabled = prefs.getBoolean(PREFS_KEY_AUTO_UPLOAD_AI_LOGS, DEFAULT_AUTO_UPLOAD_AI_LOGS)
     if (!autoEnabled) return
     val pending = loadPendingAiTelemetryLogsStatic(prefs, gson)
     if (pending.size < AI_TELEMETRY_MIN_BATTLES_ON_STOP) return
