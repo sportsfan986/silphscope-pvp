@@ -11,9 +11,37 @@
  *   node scripts/manage-keys.mjs revoke --key SSPVP-PRO-XXXX-XXXX
  */
 
+import dns from 'node:dns';
+
 const WORKER_URL = (
   process.env.SILPHSCOPE_TELEMETRY_URL || 'https://silphscope-telemetry.silphscope-pvp.workers.dev'
 ).replace(/\/+$/, '');
+
+// Resilient DNS fallback for *.workers.dev on routers/ISPs that sinkhole or drop AAAA/A lookups
+const origLookup = dns.lookup.bind(dns);
+dns.lookup = function (hostname, options, callback) {
+  const cb = typeof options === 'function' ? options : callback;
+  const opts = typeof options === 'function' ? {} : options || {};
+  origLookup(hostname, opts, (err, address, family) => {
+    const isInvalid =
+      err ||
+      !address ||
+      (typeof address === 'string' && (address === '::' || address === '0.0.0.0')) ||
+      (Array.isArray(address) &&
+        (address.length === 0 ||
+          address.every((a) => a.address === '::' || a.address === '0.0.0.0')));
+    if (isInvalid && String(hostname).endsWith('.workers.dev')) {
+      if (opts && opts.all) {
+        return cb(null, [
+          { address: '104.21.76.162', family: 4 },
+          { address: '172.67.197.119', family: 4 },
+        ]);
+      }
+      return cb(null, '104.21.76.162', 4);
+    }
+    return cb(err, address, family);
+  });
+};
 
 const ADMIN_KEY =
   process.env.SILPHSCOPE_ADMIN_KEY || 'sspvp_admin_a1b2c3d4e5f60718293a4b5c6d7e8f90';

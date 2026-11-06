@@ -1188,6 +1188,19 @@ function renderWatchSharePage(origin, shareInfo) {
             if (obj.recordType === 'BATTLE_DVR_SUMMARY_HEADER') {
               summaryHeader = obj.battleSummary || null;
             } else if (typeof obj.frameIdx === 'number') {
+              obj.relTimeMs = obj.videoElapsedMs ?? obj.relTimeMs ?? 0;
+              obj.userActiveSpecies = obj.activeUserSpecies || obj.userActiveSpecies || '';
+              obj.oppActiveSpecies = obj.activeOppSpecies || obj.oppActiveSpecies || '';
+              obj.userHpPct = obj.committedUserHpPct ?? obj.userHpPct ?? -1;
+              obj.oppHpPct = obj.committedOppHpPct ?? obj.oppHpPct ?? -1;
+              obj.userActiveIndex = obj.activeUserIdx ?? obj.userActiveIndex ?? 0;
+              obj.oppActiveIndex = obj.activeOppIdx ?? obj.oppActiveIndex ?? 0;
+              obj.moveBannerText = obj.ocrMidBannerText || obj.moveBannerText || '';
+              obj.circleFillPct = obj.leftCircleFillPct ?? obj.circleFillPct ?? -1;
+              obj.ocrTopLeftText = obj.ocrUserTopText || obj.ocrTopLeftText || '';
+              obj.ocrTopRightText = obj.ocrOppTopText || obj.ocrTopRightText || '';
+              obj.userSwitchClockMs = (obj.playerSwapRemainingSec || 0) * 1000;
+              obj.oppSwitchClockMs = (obj.oppSwapRemainingSec || 0) * 1000;
               parsed.push(obj);
             }
           } catch (_) {}
@@ -1209,6 +1222,18 @@ function renderWatchSharePage(origin, shareInfo) {
     function buildEventChips() {
       const container = document.getElementById('event-chips');
       container.innerHTML = '';
+      if (summaryHeader && Array.isArray(summaryHeader.timelineEvents) && summaryHeader.timelineEvents.length > 0) {
+        for (const ev of summaryHeader.timelineEvents) {
+          const sec = Number(ev.t) || 0;
+          const jumpSec = Math.max(0, sec - 2.0);
+          const typeStr = String(ev.type || '');
+          const icon = typeStr.includes('CHARGE') ? '⚡' : typeStr.includes('SWAP') ? '🔄' : (typeStr.includes('FAINT') || typeStr.includes('KO')) ? '💀' : '📌';
+          const detail = ev.inferredMoveName || ev.pokemonIn || ev.pokemonFainted || ev.activePokemon || ev.move || ev.species || typeStr;
+          const label = icon + ' ' + sec.toFixed(1) + 's ' + String(ev.actor || '').toUpperCase() + ': ' + detail;
+          addChip(container, label, jumpSec);
+        }
+        return;
+      }
       let prevU = '', prevO = '', prevBanner = '';
       for (const f of frames) {
         const sec = (f.relTimeMs || 0) / 1000;

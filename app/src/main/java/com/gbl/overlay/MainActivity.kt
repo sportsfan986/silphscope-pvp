@@ -7179,7 +7179,9 @@ class MainActivity : AppCompatActivity() {
                     ev.type.contains("FAINT", ignoreCase = true) || ev.type.contains("KO", ignoreCase = true) -> "💀"
                     else -> "📌"
                 }
-                chipEvents.add("$icon ${ev.t.toInt()}s ${ev.actor.uppercase()}: ${ev.move.ifBlank { ev.species.ifBlank { ev.type } }}" to tMs)
+                val detail = listOfNotNull(ev.inferredMoveName, ev.pokemonIn, ev.pokemonFainted, ev.activePokemon)
+                    .firstOrNull { it.isNotBlank() } ?: ev.type
+                chipEvents.add("$icon ${ev.t.toInt()}s ${ev.actor.uppercase()}: $detail" to tMs)
             }
             for ((label, tMs) in chipEvents.take(24)) {
                 val chip = TextView(this).apply {
