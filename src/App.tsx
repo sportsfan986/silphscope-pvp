@@ -5336,7 +5336,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v6.25 • Android Native Overlay
+                  v6.26 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -11683,7 +11683,7 @@ export default function App() {
                   <span className="text-sm font-extrabold text-amber-300 flex items-center gap-2">
                     <span>{appCombatMode === 'show6' ? '🏛️' : '🛡️'} App Combat Mode (Standard GBL vs. Show 6 Battle Frontier)</span>
                     <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 text-[10px] font-mono">
-                      v6.24
+                      v6.26
                     </span>
                   </span>
                   <span className="text-xs text-slate-400 block mt-0.5">
@@ -15947,7 +15947,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v6.24 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
+        SilphScope PvP v6.26 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
       </footer>
     </div>
   );

@@ -91,7 +91,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "6.25"
+        const val APP_VERSION = "6.26"
+        const val APP_VERSION_CODE = 1626
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -2304,6 +2305,9 @@ class OverlayService : LifecycleService() {
     internal var dvrVideoHeight: Int = 1184
     internal var sampledPlayerHpRowY: Int = -1
     internal var sampledOppHpRowY: Int = -1
+    internal var lastHpEnergyProcessedFrameTimestampMs: Long = 0L
+    internal val playerSlotBaselineHpRowY = IntArray(3) { -1 }
+    internal val oppSlotBaselineHpRowY = IntArray(3) { -1 }
     internal var lastEnergyMutationSource: String = "NONE"
     internal val oppSlotLastBigJumpMs = LongArray(3) { 0L }
     internal var pendingPlayerLowHpSlot: Int = -1
@@ -4815,10 +4819,10 @@ class OverlayService : LifecycleService() {
             (w * 0.980f).toInt().coerceIn(1, w),
             (h * 0.50f).toInt().coerceIn(1, h)
         )
-        val playerHpBottomFrac = if (isShieldDecisionOverlayVisible) 0.665f else 0.78f
+        val playerHpBottomFrac = if (isShieldDecisionOverlayVisible) 0.72f else 0.78f
         val playerHpCorridorRect = Rect(
             (w * 0.010f).toInt().coerceIn(0, w - 1),
-            (h * 0.055f).toInt().coerceIn(0, h - 1),
+            (h * 0.45f).toInt().coerceIn(0, h - 1),
             (w * 0.520f).toInt().coerceIn(1, w),
             (h * playerHpBottomFrac).toInt().coerceIn(1, h)
         )
@@ -6005,6 +6009,10 @@ class OverlayService : LifecycleService() {
         midBannerLines: List<Text.Line> = emptyList()
     ) {
         val nowMs = currentFrameTimestampMs.takeIf { it > 0L } ?: System.currentTimeMillis()
+        val isNewPixelFrame = currentFrameTimestampMs <= 0L || currentFrameTimestampMs != lastHpEnergyProcessedFrameTimestampMs
+        if (currentFrameTimestampMs > 0L) {
+            lastHpEnergyProcessedFrameTimestampMs = currentFrameTimestampMs
+        }
         val preset = currentPreset
         val activeLeague = preset?.league ?: "MASTER LEAGUE"
         val activeUserIdx = (preset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) } ?: 0).coerceIn(0, 2)
@@ -6050,7 +6058,8 @@ class OverlayService : LifecycleService() {
                 peakFastestSecondFillPct[activeUserIdx] = 0
                 return
             }
-            if (enableEnergyTracking &&
+            if (isNewPixelFrame &&
+                enableEnergyTracking &&
                 sampledPlayerHpPct in 1..100 &&
                 sampledOppHpPct in 1..100 &&
                 sampledPlayerBalls in 1..3 &&
@@ -6327,10 +6336,12 @@ class OverlayService : LifecycleService() {
         // indicators are visible on screen. The instant circles disappear going into a charged move zoom-in,
         // fast-move energy accumulation freezes and any unconfirmed proactive/sub-turn step is rolled back.
         val areChargeCirclesVisibleNow = sampledLeftChargeBtnFillPct in 0..300 || sampledRightChargeBtnFillPct in 0..300
-        if (areChargeCirclesVisibleNow) {
-            consecutiveMissingCirclesFrames = 0
-        } else {
-            consecutiveMissingCirclesFrames = (consecutiveMissingCirclesFrames + 1).coerceAtMost(30)
+        if (isNewPixelFrame) {
+            if (areChargeCirclesVisibleNow) {
+                consecutiveMissingCirclesFrames = 0
+            } else {
+                consecutiveMissingCirclesFrames = (consecutiveMissingCirclesFrames + 1).coerceAtMost(30)
+            }
         }
         val hasVisibleCombatHud = !hasBattleStarted ||
             ((sampledPlayerHpPct in 1..100 || sampledOppHpPct in 1..100 || areChargeCirclesVisibleNow) &&
@@ -6437,8 +6448,8 @@ class OverlayService : LifecycleService() {
 
         lastEnergyMutationSource = "NONE"
 
-        // v6.02 / v6.07: Record lightweight 10Hz scalar sensor tick for post-battle multi-profile shadow telemetry & HP/Energy root-cause diagnostics (0% combat CPU lag)
-        if (hasBattleStarted && currentBattleSensorTicks.size < 4000) {
+        // v6.02 / v6.07 / v6.26: Record lightweight 10Hz scalar sensor tick once per unique pixel frame (0% combat CPU lag)
+        if (isNewPixelFrame && hasBattleStarted && currentBattleSensorTicks.size < 4000) {
             currentBattleSensorTicks.add(
                 BattleSensorTick(
                     tMs = nowMs,
@@ -6464,16 +6475,34 @@ class OverlayService : LifecycleService() {
             )
         }
 
-        // 1A. v3.89 / v6.05: Player HP Bar Scan (N-Sample ±2% Debounce + Upward Self-Correction + Always Rescan When Opponent Throws Charged Move):
+        // 1A. v3.89 / v6.05 / v6.26: Player HP Bar Scan (N-Sample ±2% Debounce + Upward Self-Correction + Pre-Charge Zoom Sag Guard):
         //     Tracks player HP% and cumulative opponent fast-move damage (solely for Non-Standard Opponent Fast Move Detector 1E).
-        if (!isPostFaintSwitchPromptActive && sampledPlayerHpPct in 1..100 && !playerFaintedSlots[activeUserIdx] && canSampleStableHpBars) {
+        if (isNewPixelFrame && !isPostFaintSwitchPromptActive && sampledPlayerHpPct in 1..100 && !playerFaintedSlots[activeUserIdx] && canSampleStableHpBars) {
             playerFinalMissingHpFrames = 0
             val lastScannedUserHp = lastScannedPlayerSlotHpPct[activeUserIdx].coerceIn(1, 100)
             val currentPlayerHp = playerSlotHpPct[activeUserIdx].coerceIn(1, 100)
 
+            if (areChargeCirclesVisibleNow && pendingChargedAttackActor.isEmpty() && sampledPlayerHpRowY > 0) {
+                val prevBaseY = playerSlotBaselineHpRowY[activeUserIdx]
+                if (prevBaseY <= 0) {
+                    playerSlotBaselineHpRowY[activeUserIdx] = sampledPlayerHpRowY
+                } else if (kotlin.math.abs(sampledPlayerHpRowY - prevBaseY) <= (screenHeight * 0.025f).toInt()) {
+                    playerSlotBaselineHpRowY[activeUserIdx] = ((prevBaseY * 3 + sampledPlayerHpRowY) / 4.0).roundToInt()
+                }
+            }
+            val baselineUserY = playerSlotBaselineHpRowY[activeUserIdx]
+            val isCameraZoomUpwardYShift = baselineUserY > 0 &&
+                sampledPlayerHpRowY > 0 &&
+                (baselineUserY - sampledPlayerHpRowY) >= (screenHeight * 0.035f).toInt()
+
             val prevPendingPlayerHp = pendingConfirmPlayerSlotHpPct[activeUserIdx]
             val tol = activeDebounceTolerancePct.coerceIn(0, 3)
-            if (prevPendingPlayerHp in 1..100 && kotlin.math.abs(sampledPlayerHpPct - prevPendingPlayerHp) <= tol) {
+            val effectiveUserTol = if (sampledPlayerHpPct > currentPlayerHp + 15 && prevPendingPlayerHp > currentPlayerHp + 15) {
+                max(tol, 4)
+            } else {
+                tol
+            }
+            if (prevPendingPlayerHp in 1..100 && kotlin.math.abs(sampledPlayerHpPct - prevPendingPlayerHp) <= effectiveUserTol) {
                 playerSlotHpConfirmFrames[activeUserIdx] = (playerSlotHpConfirmFrames[activeUserIdx] + 1).coerceAtMost(10)
                 pendingConfirmPlayerSlotHpPct[activeUserIdx] = ((prevPendingPlayerHp + sampledPlayerHpPct) / 2.0).roundToInt().coerceIn(1, 100)
             } else {
@@ -6500,23 +6529,25 @@ class OverlayService : LifecycleService() {
                 }
 
                 // Accumulate fast-move damage dealt by this opponent for the Non-Standard Opponent Fast Move Detector (1E)
-                if (realUserDrop in 1..25 && (hasBattleStarted || realUserDrop >= 2) && canAccumulateFastEnergy) {
+                if (realUserDrop in 1..25 && (hasBattleStarted || realUserDrop >= 2) && canAccumulateFastEnergy && !isCameraZoomUpwardYShift) {
                     oppCumulativeFastDmgPct[activeOppIdx] = (oppCumulativeFastDmgPct[activeOppIdx] + realUserDrop).coerceIn(0, 300)
                 }
 
-                // v6.04 / v6.05 / v6.22: Block upward HP self-correction during mid-combat after >=4 turns on field (unless >=6 consecutive frames confirm),
+                // v6.04 / v6.05 / v6.22 / v6.26: Block upward HP self-correction during mid-combat after >=4 turns on field (unless >=6 consecutive frames confirm, or >=4 when recovering from <=12% false lock),
                 // or while a PLAYER charged attack is active or within 2500ms of defending an opp charged attack unless a switch occurred
                 val isRecentPlayerSwitch = (nowMs - lastPlayerSwitchTimeMs) in 0L..2500L
+                val reqUserUpwardFrames = if (currentPlayerHp <= 12 && confirmedPlayerHp >= 25) 4 else 6
                 val isMidCombatUnlikelyUserUpwardJump = !isRecentPlayerSwitch &&
                     hasBattleStarted &&
                     pendingChargedAttackActor.isEmpty() &&
                     (playerSlotTurnsOnField[activeUserIdx] >= 4 || (lastPlayerSwitchTimeMs == 0L && getElapsedBattleSeconds() >= 3.0) || (lastPlayerSwitchTimeMs > 0L && (nowMs - lastPlayerSwitchTimeMs) > 3000L)) &&
                     (confirmedPlayerHp > currentPlayerHp) &&
-                    playerSlotHpConfirmFrames[activeUserIdx] < 6
-                val isPreCutsceneZoomUserDip = pendingChargedAttackActor.isEmpty() &&
+                    playerSlotHpConfirmFrames[activeUserIdx] < reqUserUpwardFrames
+                val isPreCutsceneZoomUserDip = (pendingChargedAttackActor.isEmpty() &&
                     !areChargeCirclesVisibleNow &&
-                    realUserDrop >= 18 &&
-                    playerSlotHpConfirmFrames[activeUserIdx] < 4
+                    realUserDrop in 2..22 &&
+                    playerSlotHpConfirmFrames[activeUserIdx] < 5) ||
+                    (isCameraZoomUpwardYShift && realUserDrop in 2..20 && playerSlotHpConfirmFrames[activeUserIdx] < 5)
                 val isBlockingPostChargeUserUpwardJump = isMidCombatUnlikelyUserUpwardJump || (!isRecentPlayerSwitch &&
                     !isOpponentThrowingHpRescanWindow &&
                     (confirmedPlayerHp - currentPlayerHp) > 4 &&
@@ -6709,21 +6740,31 @@ class OverlayService : LifecycleService() {
                     }
                 }
             }
-        } else if (sampledPlayerHpPct == -1 || !canSampleStableHpBars) {
-            pendingConfirmPlayerSlotHpPct[activeUserIdx] = -1
-            playerSlotHpConfirmFrames[activeUserIdx] = 0
+        } else if (isNewPixelFrame && (sampledPlayerHpPct == -1 || !canSampleStableHpBars)) {
+            val isRecoveringUserUpward = pendingConfirmPlayerSlotHpPct[activeUserIdx] > playerSlotHpPct[activeUserIdx] + 15 &&
+                !canSampleStableHpBars &&
+                sampledPlayerHpPct in 1..100
+            if (!isRecoveringUserUpward) {
+                pendingConfirmPlayerSlotHpPct[activeUserIdx] = -1
+                playerSlotHpConfirmFrames[activeUserIdx] = 0
+            }
         }
 
-        // 1B. v3.89 / v6.05 / v6.12: Opponent HP Bar Scan (N-Sample ±2% Debounce + Upward Self-Correction):
+        // 1B. v3.89 / v6.05 / v6.12 / v6.26: Opponent HP Bar Scan (N-Sample ±2% Debounce + Upward Self-Correction):
         //     Tracks opponent HP% only; never rescans opponent HP while opponent is zooming in to throw a charged move.
-        if (sampledOppHpPct in 1..100 && !oppFaintedSlots[activeOppIdx] && canSampleOppHpBars) {
+        if (isNewPixelFrame && sampledOppHpPct in 1..100 && !oppFaintedSlots[activeOppIdx] && canSampleOppHpBars) {
             oppFinalMissingHpFrames = 0
             val lastScannedOppHp = lastScannedOppSlotHpPct[activeOppIdx].coerceIn(1, 100)
             val currentOppHp = oppSlotHpPct[activeOppIdx].coerceIn(1, 100)
 
             val prevPendingOppHp = pendingConfirmOppSlotHpPct[activeOppIdx]
             val tol = activeDebounceTolerancePct.coerceIn(0, 3)
-            if (prevPendingOppHp in 1..100 && kotlin.math.abs(sampledOppHpPct - prevPendingOppHp) <= tol) {
+            val effectiveOppTol = if (sampledOppHpPct > currentOppHp + 15 && prevPendingOppHp > currentOppHp + 15) {
+                max(tol, 4)
+            } else {
+                tol
+            }
+            if (prevPendingOppHp in 1..100 && kotlin.math.abs(sampledOppHpPct - prevPendingOppHp) <= effectiveOppTol) {
                 oppSlotHpConfirmFrames[activeOppIdx] = (oppSlotHpConfirmFrames[activeOppIdx] + 1).coerceAtMost(10)
                 pendingConfirmOppSlotHpPct[activeOppIdx] = ((prevPendingOppHp + sampledOppHpPct) / 2.0).roundToInt().coerceIn(1, 100)
             } else {
@@ -6745,19 +6786,20 @@ class OverlayService : LifecycleService() {
                 val halfUserDmg = max(1, (userExactDmgPct * 0.50).roundToInt())
                 val minUserFastDmgThreshold = halfUserDmg
 
-                // v6.04 / v6.05 / v6.12 / v6.22: Block upward opponent HP jumps while a PLAYER charged attack is active or within 2500ms of defending a player charged attack,
-                // or any mid-combat upward jumps after >=4 turns (>3s on field) unless a switch occurred or >=6 consecutive frames confirm the new HP
+                // v6.04 / v6.05 / v6.12 / v6.22 / v6.26: Block upward opponent HP jumps while a PLAYER charged attack is active or within 2500ms of defending a player charged attack,
+                // or any mid-combat upward jumps after >=4 turns (>3s on field) unless a switch occurred or >=6 consecutive frames confirm (or >=4 when recovering from <=12% false lock)
                 val isRecentOppSwitch = (nowMs - lastOppSwitchTimeMs) in 0L..2500L
+                val reqOppUpwardFrames = if (currentOppHp <= 12 && confirmedOppHp >= 25) 4 else 6
                 val isMidCombatUnlikelyOppUpwardJump = !isRecentOppSwitch &&
                     hasBattleStarted &&
                     pendingChargedAttackActor.isEmpty() &&
                     (oppSlotTurnsOnField[activeOppIdx] >= 4 || (lastOppSwitchTimeMs == 0L && getElapsedBattleSeconds() >= 3.0) || (lastOppSwitchTimeMs > 0L && (nowMs - lastOppSwitchTimeMs) > 3000L)) &&
                     (confirmedOppHp > currentOppHp) &&
-                    oppSlotHpConfirmFrames[activeOppIdx] < 6
+                    oppSlotHpConfirmFrames[activeOppIdx] < reqOppUpwardFrames
                 val isPreCutsceneZoomOppDip = pendingChargedAttackActor.isEmpty() &&
                     !areChargeCirclesVisibleNow &&
-                    realOppDrop >= 18 &&
-                    oppSlotHpConfirmFrames[activeOppIdx] < 4
+                    realOppDrop in 2..22 &&
+                    oppSlotHpConfirmFrames[activeOppIdx] < 5
                 val isBlockingPostChargeOppUpwardJump = isMidCombatUnlikelyOppUpwardJump || (!isRecentOppSwitch &&
                     !isOpponentThrowingHpRescanWindow &&
                     (confirmedOppHp - currentOppHp) > 4 &&
@@ -6898,9 +6940,14 @@ class OverlayService : LifecycleService() {
                     }
                 }
             }
-        } else if (sampledOppHpPct == -1 || !canSampleOppHpBars) {
-            pendingConfirmOppSlotHpPct[activeOppIdx] = -1
-            oppSlotHpConfirmFrames[activeOppIdx] = 0
+        } else if (isNewPixelFrame && (sampledOppHpPct == -1 || !canSampleOppHpBars)) {
+            val isRecoveringOppUpward = pendingConfirmOppSlotHpPct[activeOppIdx] > oppSlotHpPct[activeOppIdx] + 15 &&
+                !canSampleOppHpBars &&
+                sampledOppHpPct in 1..100
+            if (!isRecoveringOppUpward) {
+                pendingConfirmOppSlotHpPct[activeOppIdx] = -1
+                oppSlotHpConfirmFrames[activeOppIdx] = 0
+            }
         }
 
         // Helper for opponent & player move energy lookup (used by Section 1C Dual-Meter Cross-Validation and Sections 2/3/4)
@@ -6932,7 +6979,7 @@ class OverlayService : LifecycleService() {
         val cheapestUserEnergy = (if (userPlusMoveEnergy > 0) min(min(userMove1Energy, userMove2Energy), userPlusMoveEnergy) else min(userMove1Energy, userMove2Energy)).coerceIn(35, 100)
         val maxUserMoveEnergy = (if (userPlusMoveEnergy > 0) max(max(userMove1Energy, userMove2Energy), userPlusMoveEnergy) else max(userMove1Energy, userMove2Energy)).coerceIn(35, 100)
 
-        // 1C. v3.88: Player Energy-to-Turns Conversion & Post-Charge Turn Recounting (Decoupled from Micro-Adjustments)
+        // 1C. v3.88 / v6.26: Player Energy-to-Turns Conversion & Post-Charge Turn Recounting (Decoupled from Micro-Adjustments, Pixel-Frame Deduplicated)
         //     - Converts confirmed player energy gain into player fast-move turns (`confirmedPhasePlayerTurns`).
         //     - Approximates single-turn timing in 500ms intervals between confirmed fast moves when `userFastTurns > 1`.
         //     - Decouples post-charge circle micro-adjustments from energy gain and recounts turns from `newEnergy - (oldEnergy - chargeMoveEnergy)`.
@@ -6958,7 +7005,8 @@ class OverlayService : LifecycleService() {
             fasterMeterInThirdFill[activeUserIdx] = false
             peakSecondFillPct[activeUserIdx] = 0
             peakFastestSecondFillPct[activeUserIdx] = 0
-        } else if (canAccumulateFastEnergy &&
+        } else if (isNewPixelFrame &&
+            canAccumulateFastEnergy &&
             !playerFaintedSlots[activeUserIdx] &&
             !oppFaintedSlots[activeOppIdx] &&
             (sampledLeftChargeBtnFillPct in 0..300 || sampledRightChargeBtnFillPct in 0..300)
@@ -11814,6 +11862,9 @@ class OverlayService : LifecycleService() {
         pendingConfirmOppSlotHpPct.fill(100)
         playerSlotHpConfirmFrames.fill(2)
         oppSlotHpConfirmFrames.fill(2)
+        lastHpEnergyProcessedFrameTimestampMs = 0L
+        playerSlotBaselineHpRowY.fill(-1)
+        oppSlotBaselineHpRowY.fill(-1)
         playerSlotPreFaintHpPct.fill(100)
         oppSlotPreFaintHpPct.fill(100)
         playerSlotPreFaintEnergy.fill(0)
@@ -12544,17 +12595,29 @@ class OverlayService : LifecycleService() {
         val elapsedSec = getElapsedBattleSeconds()
         if (elapsedSec < 12.0) return
 
-        val allLines = oppLines + playerTopLines + playerMoveLines + midBannerLines
+        // v6.26: Concatenate midBannerLines (0.15h..0.53h) BEFORE playerMoveLines (0.53h..0.96h) so top-to-bottom
+        // end-of-battle banners spanning 0.53h ("GOOD" in MID + "EFFORT!" in BOT) preserve natural reading order!
+        val allLines = oppLines + playerTopLines + midBannerLines + playerMoveLines
         val combinedNorm = allLines.joinToString(" ") { it.text.lowercase().replace(Regex("[^a-z0-9\\s']"), " ") }
             .replace("battle till you win", " ")
             .replace("till you win", " ")
             .replace(Regex("\\s+"), " ")
             .trim()
 
+        val areChargeCirclesVisibleNow = sampledLeftChargeBtnFillPct in 0..300 || sampledRightChargeBtnFillPct in 0..300
+        val isCombatHudClearlyVisible = areChargeCirclesVisibleNow && (sampledPlayerHpPct in 1..100 || sampledOppHpPct in 1..100)
+        val hasGoodEffortSplit = !isCombatHudClearlyVisible &&
+            combinedNorm.contains("good") &&
+            (combinedNorm.contains("effort") ||
+                combinedNorm.contains("effokt") ||
+                combinedNorm.contains("efort") ||
+                combinedNorm.contains("next battle"))
+
         val hasWinBanner = combinedNorm.contains("you win") ||
             combinedNorm.contains("victory") ||
             combinedNorm.contains("won the battle")
         val hasLossBanner = combinedNorm.contains("good effort") ||
+            hasGoodEffortSplit ||
             combinedNorm.contains("you lose") ||
             combinedNorm.contains("defeat")
         val hasTimeUpBanner = combinedNorm.contains("time's up") ||
@@ -12578,12 +12641,19 @@ class OverlayService : LifecycleService() {
             else -> null
         }
 
-        // Structural 3rd-Pokémon KO + HUD exit fallback when elapsedSec >= 25s (strictly outside charged-move cutscenes/prompts!)
+        // Structural 3rd-Pokémon KO + HUD exit fallback when elapsedSec >= 25s (strictly outside active charged-move cutscenes/prompts!)
+        // v6.26: Expire stale `pendingChargedAttackActor` after 8.5s when a match ends directly on a final charged attack!
+        val nowMs = System.currentTimeMillis()
+        val isPendingChargeStaleAtEnd = pendingChargedAttackActor.isNotEmpty() &&
+            pendingChargedAttackStartMs > 0L &&
+            (nowMs - pendingChargedAttackStartMs) >= 8500L &&
+            !areChargeCirclesVisibleNow &&
+            !isCombatHudClearlyVisible
         val structuralResult: String? = if (textDetectedResult == null &&
             elapsedSec >= 25.0 &&
             missingBothHpBarsFrames >= 8 &&
             isAllCombatHudGone &&
-            pendingChargedAttackActor.isEmpty() &&
+            (pendingChargedAttackActor.isEmpty() || isPendingChargeStaleAtEnd) &&
             !isAttackIncomingPromptActive &&
             !isTopCountdownCircleActive &&
             !sampledTopCountdownCircleVisible

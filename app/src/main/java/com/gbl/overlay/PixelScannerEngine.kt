@@ -2204,7 +2204,7 @@ internal fun OverlayService.detectFloatingHpBarPct(
             (fullScreenWidth * 0.018f).toInt()
         }
         val absAnchorMaxX = if (isOpponent) {
-            (fullScreenWidth * 0.700f).toInt()
+            (fullScreenWidth * 0.585f).toInt()
         } else {
             (fullScreenWidth * 0.220f).toInt()
         }
@@ -2222,9 +2222,9 @@ internal fun OverlayService.detectFloatingHpBarPct(
             return (r + g + b) / 3
         }
 
-        // v3.83: Neutral White/Grey Capsule Border Classifier (including #0B111E overlay-dimmed borders and pink/bright Tinkaton anti-aliasing).
+        // v3.83/v6.26: Neutral White/Grey Capsule Border Classifier (including #0B111E overlay-dimmed borders and pink/bright Tinkaton anti-aliasing).
         // Explicitly rejects yellow/cream fur & feathers (e.g., Ninetales tails, Pidgeot wings)
-        // where G >= R - 25 and (G - B) >= 55 so moving Pokémon never hallucinate capsule borders.
+        // where G >= R - 25 and (G - B) >= 55, as well as dark background trees/hills (luma < 95).
         fun isBorderPixel(pixel: Int, refDarkLuma: Int = 40): Boolean {
             val r = (pixel shr 16) and 0xFF
             val g = (pixel shr 8) and 0xFF
@@ -2236,33 +2236,34 @@ internal fun OverlayService.detectFloatingHpBarPct(
                 if (g >= r - 25 && (g - b) >= 55) return false
                 return (maxCh - minCh) <= 115 && (g - b) <= 64 && b >= 125
             }
-            if (luma >= 38) {
-                return (luma - refDarkLuma) >= 12 &&
-                    (maxCh - minCh) <= 56 &&
+            if (luma >= 95) {
+                return (luma - refDarkLuma) >= 16 &&
+                    (maxCh - minCh) <= 52 &&
                     (g - b) <= 32 &&
                     (r - b) <= 44 &&
-                    r >= 34 && g >= 34 && b >= 34
+                    r >= 82 && g >= 82 && b >= 82
             }
             return false
         }
 
-        // v3.55: Border-Luma-Scaled Multi-Band HP Pixel Classifier:
+        // v3.55/v6.26: Border-Luma-Scaled Multi-Band HP Pixel Classifier:
         // - Bright active HP fill (Green=1, Yellow=2, Coral Red=3) is always valid.
-        // - Overlay-dimmed HP fill (under #0B111E at 80..90% opacity) is ONLY enabled when the capsule border
-        //   itself is dimmed by an overlay (borderLuma < 185).
+        //   v6.26: Yellow (band 2) allows b <= 148 when (r - b) >= 82 && (g - b) >= 62 so Tinkaton's
+        //   pink hair bow behind her semi-transparent Yellow HP bar (B = 131..144) is never rejected.
+        // - Overlay-dimmed HP fill (under #0B111E) is ONLY enabled when borderLuma in 125..184.
         fun classifyHpPixel(pixel: Int, borderLuma: Int = 255): Int {
             val r = (pixel shr 16) and 0xFF
             val g = (pixel shr 8) and 0xFF
             val b = pixel and 0xFF
             // 1. Bright unobstructed HP fill across all 3 zones:
             if (g >= 175 && r <= 120 && b in 105..242 && (g - r) >= 70 && g >= b - 20) return 1
-            if (r >= 205 && g in 160..255 && b <= 130 && r >= g - 15 && (r - g) <= 75 && (r - b) >= 82 && (g - b) >= 62) return 2
+            if (r >= 205 && g in 160..255 && b <= 148 && r >= g - 15 && (r - g) <= 75 && (r - b) >= 82 && (g - b) >= 62) return 2
             if (r >= 185 && g in 40..138 && b in 40..142 && (r - g) >= 68 && (r - b) >= 58 && kotlin.math.abs(g - b) <= 40) return 3
-            // 2. Overlay-dimmed HP fill (only when capsule border is dimmed: borderLuma < 185):
-            if (borderLuma < 185) {
-                if (g in 38..210 && r <= 95 && b in 30..205 && (g - r) >= 15 && (b - r) >= 8 && kotlin.math.abs(g - b) <= 72) return 1
-                if (r in 58..215 && g in 48..200 && b <= 88 && r >= g - 14 && (r - g) <= 55 && (r - b) >= 24 && (g - b) >= 18) return 2
-                if (r in 45..210 && g in 14..125 && b in 14..130 && (r - g) >= 18 && (r - b) >= 14 && kotlin.math.abs(g - b) <= 42) return 3
+            // 2. Overlay-dimmed HP fill (only when capsule border is dimmed: borderLuma in 125..184):
+            if (borderLuma in 125..184) {
+                if (g in 52..210 && r <= 95 && b in 42..205 && (g - r) >= 18 && (b - r) >= 10 && kotlin.math.abs(g - b) <= 72) return 1
+                if (r in 75..215 && g in 62..200 && b <= 88 && r >= g - 14 && (r - g) <= 55 && (r - b) >= 28 && (g - b) >= 22) return 2
+                if (r in 78..210 && g in 20..125 && b in 20..130 && (r - g) >= 28 && (r - b) >= 24 && kotlin.math.abs(g - b) <= 38) return 3
             }
             // 3. Orange Pending-Damage Sliver (r >> g >> b) & Depleted Dark Translucent Track:
             if (r >= 130 && g in 60..172 && b <= 68 && (r - g) >= 55 && (g - b) >= 38) return 4
@@ -2292,7 +2293,7 @@ internal fun OverlayService.detectFloatingHpBarPct(
             val rowOffset = ry * cw
             var rx = relAnchorMinX
             while (rx <= relAnchorMaxX) {
-                val looseBand = classifyHpPixel(pixels[rowOffset + rx], 100)
+                val looseBand = classifyHpPixel(pixels[rowOffset + rx], 140)
                 if (looseBand in 1..3) {
                     // 1. Verify Left Outer Border (1..10px left of rx) and peak-align to brightest stroke pixel
                     var leftBorderX = -1
@@ -2490,8 +2491,9 @@ internal fun OverlayService.detectFloatingHpBarPct(
                                         val maxCh = max(r, max(g, b))
                                         val minCh = min(r, min(g, b))
                                         val chroma = maxCh - minCh
-                                        // Genuine depleted dark track pixel in Pokémon GO (neutral dark grey/black):
+                                        // Genuine depleted dark track pixel in Pokémon GO (neutral dark grey/black or translucent-dimmed Tinkaton pink bow):
                                         val isDarkTrack = (pLuma <= 85 && chroma <= 45) ||
+                                            (borderLuma >= 175 && pLuma <= 112 && chroma <= 36) ||
                                             (borderLuma < 185 && pLuma <= 65) ||
                                             (classifyHpPixel(p, borderLuma) == 4 && pLuma <= 95)
                                         if (isDarkTrack) darkPx++
@@ -2562,10 +2564,11 @@ internal fun OverlayService.detectFloatingHpBarPct(
             confirmedPlayerSlotHpPct.getOrElse(userIdx) { 100 }.coerceIn(1, 100)
         }
 
-        // v3.83/v3.90: Fixed-Height Enclosed Rectangle Verification, Exterior Color-Bleed Rejection & Candidate Proximity Prioritization:
+        // v3.83/v3.90/v6.26: Fixed-Height Enclosed Rectangle Verification, Exterior Color-Bleed Rejection & Bright-Border Prioritization:
         var bestCluster: List<ScanlineBarCandidate>? = null
         var bestDeltaHp = Int.MAX_VALUE
         var bestClusterSize = 0
+        var bestIsBrightCluster = false
         for (i in candidates.indices) {
             val anchor = candidates[i]
             val cluster = candidates.filter { c ->
@@ -2591,6 +2594,7 @@ internal fun OverlayService.detectFloatingHpBarPct(
                     val xe = sortedXe[sortedXe.size / 2]
                     val medBorderLuma = sortedBl[sortedBl.size / 2]
                     val spanSamples = max(1, (rb - lb - 12) / 3)
+                    val midSpanX = (lb + rb) / 2
                     val midY = (yMinC + yMaxC) / 2
 
                     val topBorders = mutableListOf<Int>()
@@ -2600,6 +2604,10 @@ internal fun OverlayService.detectFloatingHpBarPct(
                         val innerPadY1 = min(ch - 1, max(by + 1, yMinC - 1))
                         val innerPadY2 = min(ch - 1, max(by + 2, yMinC - 2))
                         var bCnt = 0
+                        var leftHalfBCnt = 0
+                        var rightHalfBCnt = 0
+                        var leftHalfSamples = 0
+                        var rightHalfSamples = 0
                         var sbx = lb + 6
                         while (sbx <= rb - 6) {
                             var refDark = min(
@@ -2609,10 +2617,17 @@ internal fun OverlayService.detectFloatingHpBarPct(
                             if (sbx > xe + 2) {
                                 refDark = min(refDark, pixelLuma(pixels[midY * cw + sbx]))
                             }
-                            if (isBorderPixel(pixels[bRowOffset + sbx], refDark)) bCnt++
+                            if (sbx <= midSpanX) leftHalfSamples++ else rightHalfSamples++
+                            if (isBorderPixel(pixels[bRowOffset + sbx], refDark)) {
+                                bCnt++
+                                if (sbx <= midSpanX) leftHalfBCnt++ else rightHalfBCnt++
+                            }
                             sbx += 3
                         }
-                        if (bCnt >= (spanSamples * 0.40f).toInt()) {
+                        if (bCnt >= (spanSamples * 0.55f).toInt() &&
+                            leftHalfBCnt >= max(1, (leftHalfSamples * 0.40f).toInt()) &&
+                            rightHalfBCnt >= max(1, (rightHalfSamples * 0.40f).toInt())
+                        ) {
                             topBorders.add(by)
                         }
                         by++
@@ -2626,6 +2641,10 @@ internal fun OverlayService.detectFloatingHpBarPct(
                         val innerPadY1 = max(0, min(by - 1, yMaxC + 1))
                         val innerPadY2 = max(0, min(by - 2, yMaxC + 2))
                         var bCnt = 0
+                        var leftHalfBCnt = 0
+                        var rightHalfBCnt = 0
+                        var leftHalfSamples = 0
+                        var rightHalfSamples = 0
                         var sbx = lb + 6
                         while (sbx <= rb - 6) {
                             var refDark = min(
@@ -2635,10 +2654,17 @@ internal fun OverlayService.detectFloatingHpBarPct(
                             if (sbx > xe + 2) {
                                 refDark = min(refDark, pixelLuma(pixels[midY * cw + sbx]))
                             }
-                            if (isBorderPixel(pixels[bRowOffset + sbx], refDark)) bCnt++
+                            if (sbx <= midSpanX) leftHalfSamples++ else rightHalfSamples++
+                            if (isBorderPixel(pixels[bRowOffset + sbx], refDark)) {
+                                bCnt++
+                                if (sbx <= midSpanX) leftHalfBCnt++ else rightHalfBCnt++
+                            }
                             sbx += 3
                         }
-                        if (bCnt >= (spanSamples * 0.40f).toInt()) {
+                        if (bCnt >= (spanSamples * 0.55f).toInt() &&
+                            leftHalfBCnt >= max(1, (leftHalfSamples * 0.40f).toInt()) &&
+                            rightHalfBCnt >= max(1, (rightHalfSamples * 0.40f).toInt())
+                        ) {
                             botBorders.add(by)
                         }
                         by++
@@ -2709,9 +2735,12 @@ internal fun OverlayService.detectFloatingHpBarPct(
                             val clusterMedFullW = clusterSortedFullWidths[clusterSortedFullWidths.size / 2].coerceAtLeast(1)
                             val candClusterHp = ((clusterMedWFill.toFloat() / clusterMedFullW.toFloat()) * 100f).roundToInt().coerceIn(1, 100)
                             val deltaHp = kotlin.math.abs(candClusterHp - prevStableHp)
+                            val isBrightCluster = medBorderLuma >= 180 && cluster.size >= 3
 
                             val isBetter = when {
                                 bestCluster == null -> true
+                                isBrightCluster && !bestIsBrightCluster -> true
+                                !isBrightCluster && bestIsBrightCluster -> false
                                 deltaHp < bestDeltaHp -> true
                                 deltaHp == bestDeltaHp && cluster.size > bestClusterSize -> true
                                 else -> false
@@ -2721,6 +2750,7 @@ internal fun OverlayService.detectFloatingHpBarPct(
                                 bestCluster = cluster
                                 bestDeltaHp = deltaHp
                                 bestClusterSize = cluster.size
+                                bestIsBrightCluster = isBrightCluster
                             }
                         }
                     }

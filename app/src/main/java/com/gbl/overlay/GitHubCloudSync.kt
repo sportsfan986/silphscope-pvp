@@ -89,6 +89,7 @@ import com.gbl.overlay.OverlayService.Companion.AiTelemetryOppSlotSpec
 import com.gbl.overlay.OverlayService.Companion.AiTelemetrySettingsChangeEvent
 import com.gbl.overlay.OverlayService.Companion.AiTelemetrySlotSpec
 import com.gbl.overlay.OverlayService.Companion.APP_VERSION
+import com.gbl.overlay.OverlayService.Companion.APP_VERSION_CODE
 import com.gbl.overlay.OverlayService.Companion.BattleAnomalyRecord
 import com.gbl.overlay.OverlayService.Companion.BattleSensorTick
 import com.gbl.overlay.OverlayService.Companion.DEFAULT_ALT_FAST_DETECT_STRICTNESS
@@ -662,7 +663,7 @@ internal fun OverlayService.Companion.buildDebounceAndSettlingSettingsMapStatic(
     }
     return mapOf(
         "appVersion" to APP_VERSION,
-        "versionCode" to 1621,
+        "versionCode" to APP_VERSION_CODE,
         "scanHzMode" to scanHzMode,
         "turnOffsetMs" to scanTurnOffsetMs,
         "hpTrackingEnabled" to hpTracking,

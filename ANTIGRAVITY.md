@@ -2,7 +2,7 @@
 
 > **Target Audience**: Antigravity agents, Claude/Gemini coding assistants, and core developers maintaining or extending **SilphScope PvP**.  
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v6.25` (`versionCode = 1625`)  
+> **Current Version**: `v6.26` (`versionCode = 1626`)  
 > **Primary Branches**: `main` (source code & releases), `ai-telemetry-logs` (isolated telemetry, DVR recordings & anomaly traces).
 
 ---

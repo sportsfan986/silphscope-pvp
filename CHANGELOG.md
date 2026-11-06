@@ -1,4 +1,23 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.25`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.26`)
+
+---
+
+## v6.26 (2026-11-06) — 1-Battle DVR Video Telemetry Fixes: `GOOD EFFORT!` Auto-Loss Line Order, Async OCR Pixel-Frame Deduplication, `Tinkaton` Yellow HP & Depleted-Track Pink-Bow Classification, `0.45h` Player HP Corridor & Pre-Charge Zoom Sag Guard
+*Precision combat-vision and state-machine release (`v6.26`, `versionCode = 1626`) resolving all root causes identified in the `v6.24` 1-Battle DVR video recordings (`log-1793968715431-556`, `log-1793968208598-642`, and `log-1793939224890-209`) and companion telemetry batches.*
+
+- **v6.26 — Fix 1: Auto-End-of-Battle (`GOOD EFFORT!` / `YOU WIN!`) Vertical OCR Line Ordering & Stale `pendingChargedAttackActor` Expiry (`OverlayService.kt`)**:
+  - **Root Cause**: On the `GOOD EFFORT!` screen (`F#1874..1929`), `"GOOD"` sits in `midBannerLines` (`< 0.53h`) while `"EFFORT!"` and `"NEXT BATTLE"` sit in `playerMoveLines` (`> 0.53h`). Because `checkAndHandleAutoEndOfBattle()` concatenated `playerMoveLines` before `midBannerLines`, `combinedNorm` became `"effokt next battle effort next battle good good"`, causing `combinedNorm.contains("good effort")` to evaluate to `false` on all 55 frames. Simultaneously, `pendingChargedAttackActor` remained `"opp"` after the match-ending charged attack (`Swampert used Hydro Cannon!`), blocking the structural 3-KO fallback.
+  - **Fix**: Ordered `allLines = oppLines + playerTopLines + midBannerLines + playerMoveLines` top-to-bottom, added split-banner token & OCR typo matching (`"good"` + `"effort"` / `"effokt"` / `"efort"` / `"next battle"` when combat HUD is hidden), and expired stale `pendingChargedAttackActor` after `8500ms` when combat circles do not return.
+
+- **v6.26 — Fix 2: Deduplicated Pixel-Frame Debounce Processing Across Async ML Kit OCR Callbacks (`OverlayService.kt`)**:
+  - **Root Cause**: `updateLiveHpAndChargedAttackState()` ran once per 10Hz pixel scan (`line 4965`) and a second time on `Dispatchers.Main` whenever async ML Kit OCR completed (`line 5153`) using the same `currentFrameTimestampMs` pixel sample, allowing a 1-frame pixel glitch (`F#0814`) to increment `oppSlotHpConfirmFrames` from `0 -> 1 -> 2` on a single frame.
+  - **Fix**: Added `lastHpEnergyProcessedFrameTimestampMs` (`isNewPixelFrame`) so `currentBattleSensorTicks`, `Section 1A`, `Section 1B`, and `Section 1C` pixel debounce counters advance strictly once per unique pixel scan while OCR-completion callbacks still immediately evaluate banner/prompt OCR (`hasAttackIncomingText`, `hasUserChargedBannerText`, `handleMidBannerUsedMoveLines`).
+
+- **v6.26 — Fix 3: `Tinkaton` Yellow HP & Depleted-Track Pink-Bow Classification, `0.45h` Player Corridor, Half-Bar Hit-Spark Rejection & Pre-Charge Camera-Zoom Sag Guard (`PixelScannerEngine.kt`, `OverlayService.kt`, `GitHubCloudSync.kt`)**:
+  - **`Tinkaton` Pink Hair Bow Behind Yellow HP Bar & Depleted Track**: Relaxed Yellow (`band 2`) blue ceiling in `classifyHpPixel()` from `b <= 130` to `b <= 148` while keeping `(r - b) >= 82 && (g - b) >= 62` (accommodating `Tinkaton`'s pink hair bow blending through the semi-transparent Yellow fill at `B = 131..144`), and allowed low-chroma translucent-dimmed sprite pixels (`pLuma <= 112 && chroma <= 36` when `borderLuma >= 175`) in `isDarkTrack`.
+  - **Eliminated `6%–9%` Sky/Tree False Locks (`y = 758..762`)**: Raised `playerHpCorridorRect.top` from `0.055h` to `0.45h` (and `playerHpBottomFrac` during shield prompts from `0.665h` to `0.72h`), raised the dim border floor in `isBorderPixel()` to `luma >= 95` (`borderLuma in 125..184` in `classifyHpPixel()`), and prioritized bright white-bordered clusters (`medBorderLuma >= 180 && cluster.size >= 3`) over dim candidates in `detectFloatingHpBarPct()` so `prevStableHp` never latches onto background artifacts.
+  - **Half-Bar Hit-Spark Rejection (`F#0814`) & Resilient Upward Glitch Recovery (`6% -> 48%`)**: Tightened opponent `absAnchorMaxX` from `0.700w` to `0.585w`, required `>= 55%` overall top/bottom border coverage plus `>= 40%` in both the left half and right half of `[lb + 6 .. rb - 6]`, expanded upward glitch recovery tolerance (`max(tol, 4)`) with `4` confirmation frames when recovering from `<= 12%` to `>= 25%`, and preserved upward recovery counters across 1-frame `!canSample` pauses.
+  - **Pre-Charge Camera-Zoom Vertical Y-Shift Sag Guard & `APP_VERSION_CODE` Telemetry Fix**: Tracked per-slot baseline combat `hpRowY` (`playerSlotBaselineHpRowY`) to reject perspective HP sag (`realUserDrop in 2..20`) when the camera zooms in and shifts `playerHpRowY` upward by `>= 0.035h` (`Swampert` `70% -> 59%` at `F#0921..0930`), and wired `OverlayService.APP_VERSION_CODE` (`1626`) into `buildDebounceAndSettlingSettingsMapStatic()`.
 
 ---
 
