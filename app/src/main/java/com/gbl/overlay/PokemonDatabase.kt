@@ -179,6 +179,24 @@ internal object PokemonStaticData {
         "poison fang" to MoveBuffEffect(0, 0, 0, -1, 1.0),
         "psychic fangs" to MoveBuffEffect(0, 0, 0, -1, 1.0),
         "acid spray" to MoveBuffEffect(0, 0, 0, -2, 1.0),
+        "obstruct" to MoveBuffEffect(0, 1, 0, -1, 1.0),
+        "parabolic charge" to MoveBuffEffect(0, 1, 0, 0, 1.0),
+        "skull bash" to MoveBuffEffect(0, 1, 0, 0, 1.0),
+        "defense curl" to MoveBuffEffect(0, 1, 0, 0, 1.0),
+        "iron defense" to MoveBuffEffect(0, 2, 0, 0, 1.0),
+        "acid armor" to MoveBuffEffect(0, 2, 0, 0, 1.0),
+        "bubble beam" to MoveBuffEffect(0, 0, -1, 0, 1.0),
+        "glaciate" to MoveBuffEffect(0, 0, -1, 0, 1.0),
+        "bleakwind storm" to MoveBuffEffect(0, 0, -1, 0, 1.0),
+        "sandsear storm" to MoveBuffEffect(0, 0, -1, 0, 1.0),
+        "wildbolt storm" to MoveBuffEffect(0, 0, -1, 0, 1.0),
+        "springtide storm" to MoveBuffEffect(0, 0, -1, 0, 1.0),
+        "mystical power" to MoveBuffEffect(1, 1, 0, 0, 1.0),
+        "fleur cannon" to MoveBuffEffect(-2, 0, 0, 0, 1.0),
+        "clanging scales" to MoveBuffEffect(0, -1, 0, 0, 1.0),
+        "make it rain" to MoveBuffEffect(-1, 0, 0, 0, 1.0),
+        "headlong rush" to MoveBuffEffect(0, -1, 0, 0, 1.0),
+        "armor cannon" to MoveBuffEffect(0, -1, 0, 0, 1.0),
         "crunch" to MoveBuffEffect(0, 0, 0, -1, 0.3),
         "liquidation" to MoveBuffEffect(0, 0, 0, -1, 0.3),
         "shadow ball" to MoveBuffEffect(0, 0, 0, -1, 0.1),
@@ -186,10 +204,24 @@ internal object PokemonStaticData {
         "earth power" to MoveBuffEffect(0, 0, 0, -1, 0.1),
         "bug buzz" to MoveBuffEffect(0, 0, 0, -1, 0.3),
         "psychic" to MoveBuffEffect(0, 0, 0, -1, 0.1),
+        "flash cannon" to MoveBuffEffect(0, 0, 0, -1, 0.1),
+        "focus blast" to MoveBuffEffect(0, 0, 0, -1, 0.1),
+        "energy ball" to MoveBuffEffect(0, 0, 0, -1, 0.1),
+        "luster purge" to MoveBuffEffect(0, 0, 0, -1, 0.5),
+        "seed flare" to MoveBuffEffect(0, 0, 0, -2, 0.4),
+        "razor shell" to MoveBuffEffect(0, 0, 0, -1, 0.5),
+        "crush claw" to MoveBuffEffect(0, 0, 0, -1, 0.5),
         "scald" to MoveBuffEffect(0, 0, -1, 0, 0.5),
         "scorching sands" to MoveBuffEffect(0, 0, -1, 0, 0.3),
         "moonblast" to MoveBuffEffect(0, 0, -1, 0, 0.1),
+        "play rough" to MoveBuffEffect(0, 0, -1, 0, 0.1),
+        "mist ball" to MoveBuffEffect(0, 0, -1, 0, 0.5),
         "mirror shot" to MoveBuffEffect(0, 0, -1, 0, 0.3),
+        "muddy water" to MoveBuffEffect(0, 0, -1, 0, 0.3),
+        "octazooka" to MoveBuffEffect(0, 0, -2, 0, 0.5),
+        "leaf tornado" to MoveBuffEffect(0, 0, -2, 0, 0.5),
+        "aurora beam" to MoveBuffEffect(0, 0, -1, 0, 0.1),
+        "signal beam" to MoveBuffEffect(0, 0, -1, -1, 0.2),
         "zap cannon" to MoveBuffEffect(0, 0, -1, 0, 0.66),
         "rage fist" to MoveBuffEffect(1, 0, 0, 0, 1.0),
         "power-up punch" to MoveBuffEffect(1, 0, 0, 0, 1.0),
@@ -199,9 +231,19 @@ internal object PokemonStaticData {
         "torch song" to MoveBuffEffect(1, 0, 0, 0, 1.0),
         "aura wheel" to MoveBuffEffect(1, 0, 0, 0, 1.0),
         "night slash" to MoveBuffEffect(2, 0, 0, 0, 0.125),
+        "cross poison" to MoveBuffEffect(2, 0, 0, 0, 0.125),
+        "blaze kick" to MoveBuffEffect(1, 0, 0, 0, 0.125),
+        "crabhammer" to MoveBuffEffect(2, 0, 0, 0, 0.125),
+        "aeroblast" to MoveBuffEffect(2, 0, 0, 0, 0.125),
+        "sacred fire" to MoveBuffEffect(0, 0, -1, 0, 0.5),
+        "magma storm" to MoveBuffEffect(0, 0, 0, -1, 0.3),
         "air cutter" to MoveBuffEffect(1, 0, 0, 0, 0.3),
+        "meteor mash" to MoveBuffEffect(1, 0, 0, 0, 0.1),
         "ancient power" to MoveBuffEffect(1, 1, 0, 0, 0.1),
         "ominous wind" to MoveBuffEffect(1, 1, 0, 0, 0.1),
+        "silver wind" to MoveBuffEffect(1, 1, 0, 0, 0.1),
+        "steel wing" to MoveBuffEffect(0, 1, 0, 0, 0.1),
+        "meteor beam" to MoveBuffEffect(1, 0, 0, 0, 1.0),
         "close combat" to MoveBuffEffect(0, -2, 0, 0, 1.0),
         "wild charge" to MoveBuffEffect(0, -2, 0, 0, 1.0),
         "brave bird" to MoveBuffEffect(0, -3, 0, 0, 1.0),
@@ -1643,6 +1685,20 @@ internal object PokemonStaticData {
         Triple(2, 1, "2v1"),
         Triple(2, 2, "2v2")
     )
+}
+
+internal fun OverlayService.Companion.getPvpStageMultiplierStatic(stage: Int): Double {
+    val s = stage.coerceIn(-4, 4)
+    return if (s >= 0) {
+        (4.0 + s.toDouble()) / 4.0
+    } else {
+        4.0 / (4.0 - s.toDouble())
+    }
+}
+
+internal fun OverlayService.Companion.isMimikyuSpeciesStatic(name: String?): Boolean {
+    if (name.isNullOrBlank()) return false
+    return name.lowercase().contains("mimikyu")
 }
 
 internal fun OverlayService.Companion.resolveMoveBuffEffectStatic(moveName: String): MoveBuffEffect {
@@ -3303,7 +3359,7 @@ internal fun OverlayService.Companion.calculateMatchupRatingStatic(
             else -> 22.0 + oppBestPct * 0.15 - 3.0
         }
 
-        val bustedMult = 1.20
+        val bustedMult = 1.25 // Exact -1 Defense stage multiplier (1.0 / 0.80 = 1.25x incoming damage)
         val pressureDisguiseFirst = when (mimiShields) {
             0 -> ((oppFastestPct * 0.30 + oppBestPct * 0.70 * bustedMult) * 1.28) - baitTempoTax * 0.85
             1 -> ((oppFastestPct * 0.45 + ((oppBestPct + oppMinPct) * 0.5 * bustedMult) * 0.55) * 1.04) - baitTempoTax * 0.90

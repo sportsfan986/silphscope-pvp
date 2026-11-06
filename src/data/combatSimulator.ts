@@ -1323,10 +1323,10 @@ export function evaluateDiscreteShieldBattleRating(
 
     const postDisguisePressureB =
       mimikyuShields === 0
-        ? attackerBestPct * 1.22
+        ? attackerBestPct * 1.25
         : mimikyuShields === 1
-        ? ((attackerBestPct + attackerMinPct) * 0.5) * 1.02 * 1.15
-        : attackerMinPct * 0.72 * 1.15;
+        ? ((attackerBestPct + attackerMinPct) * 0.5) * 1.02 * 1.25
+        : attackerMinPct * 0.72 * 1.25;
     const earlyBustedDefPenaltyB =
       (mimikyuShields === 0 ? 14 : mimikyuShields === 1 ? 19 : 23) * (0.85 + 0.35 * attackerFastEff);
     const disguiseSavedValueB = attackerFastestPct * 0.38 + (mimikyuShields === 0 ? 24 : 14);

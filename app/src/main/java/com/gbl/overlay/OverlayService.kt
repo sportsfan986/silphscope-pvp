@@ -91,8 +91,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "6.28"
-        const val APP_VERSION_CODE = 1627
+        const val APP_VERSION = "6.40"
+        const val APP_VERSION_CODE = 1640
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -1272,7 +1272,13 @@ class OverlayService : LifecycleService() {
             val ocrBottomMovesText: String = "",
             val recommendedPhase: String = "",
             val recommendedAction: String = "",
-            val recommendedGoal: String = ""
+            val recommendedGoal: String = "",
+            val userAtkStage: Int = 0,
+            val userDefStage: Int = 0,
+            val userDisguiseBusted: Boolean = false,
+            val oppAtkStage: Int = 0,
+            val oppDefStage: Int = 0,
+            val oppDisguiseBusted: Boolean = false
         )
 
         data class AiTelemetryBattleRecordV510(
@@ -3018,9 +3024,34 @@ class OverlayService : LifecycleService() {
     internal var lastClearedUserShieldsRemaining: Int = 2
     internal var lastClearedOppShieldsRemaining: Int = 2
 
-    // v6.03: Scanned CP per team slot + Auto End-of-Battle & Telemetry Ignore state
-    internal val playerSlotCp = IntArray(3) { 0 }
-    internal val oppSlotCp = IntArray(3) { 0 }
+    // v6.40: Live Attack & Defense Stat Stage Tracking [-4..+4] + Mimikyu Busted-Form Persistence
+    internal val playerSlotAtkStage = IntArray(3) { 0 }
+    internal val playerSlotDefStage = IntArray(3) { 0 }
+    internal val playerSlotDisguiseBusted = BooleanArray(3) { false }
+    internal val oppSlotAtkStage = IntArray(3) { 0 }
+    internal val oppSlotDefStage = IntArray(3) { 0 }
+    internal val oppSlotDisguiseBusted = BooleanArray(3) { false }
+    internal var lastUserSwitchInWallMs: Long = 0L
+    internal var lastOppSwitchInWallMs: Long = 0L
+    internal var provisionalUserPrevSlotIdx: Int = -1
+    internal var provisionalUserPrevAtkStage: Int = 0
+    internal var provisionalUserPrevDefStage: Int = 0
+    internal var provisionalOppPrevSlotIdx: Int = -1
+    internal var provisionalOppPrevAtkStage: Int = 0
+    internal var provisionalOppPrevDefStage: Int = 0
+    internal var lastAppliedChargeBuffEpochMs: Long = 0L
+    internal var lastAppliedChargeBuffActor: String = ""
+    internal var lastAppliedChargeBuffAttackerSlot: Int = -1
+    internal var lastAppliedChargeBuffDefenderSlot: Int = -1
+    internal var lastAppliedChargeBuffSelfAtk: Int = 0
+    internal var lastAppliedChargeBuffSelfDef: Int = 0
+    internal var lastAppliedChargeBuffOppAtk: Int = 0
+    internal var lastAppliedChargeBuffOppDef: Int = 0
+    internal var lastAppliedDisguiseBustEpochMs: Long = 0L
+    internal val lastOcrStatCalloutWallMs = LongArray(4) { 0L } // 0:userAtk, 1:userDef, 2:oppAtk, 3:oppDef
+    internal val lastOcrStatCalloutSign = IntArray(4) { 0 }
+
+    // v6.03: Auto End-of-Battle & Telemetry Ignore state
     internal var autoEndCandidateResult: String = ""
     internal var autoEndCandidateFrames: Int = 0
     internal var lastLoggedBattleId: String = ""
@@ -3031,22 +3062,349 @@ class OverlayService : LifecycleService() {
     internal var lastLoggedBattleWasAuto: Boolean = false
     internal var lastLoggedBattleTimeMs: Long = 0L
 
-    internal fun extractCpFromOcrLines(lines: List<Text.Line>): Int? {
-        for (line in lines) {
-            val raw = line.text.trim()
-            if (isOverlayHudSelfText(raw.lowercase())) continue
-            val m1 = Regex("(?i)\\bcp\\s*(\\d{2,4})\\b").find(raw)
-            if (m1 != null) {
-                val v = m1.groupValues.getOrNull(1)?.toIntOrNull()
-                if (v != null && v in 10..6000) return v
+    /**
+     * v6.40: Clears a Pokémon slot's Attack and Defense stat stages when it switches out or faints,
+     * preserving Mimikyu's permanent -1 Defense stage across switches once its Disguise is busted.
+     */
+    internal fun clearSlotStagesOnSwitchOut(
+        isUser: Boolean,
+        slotIdx: Int,
+        isFainted: Boolean = false,
+        speciesNameHint: String? = null
+    ) {
+        if (slotIdx !in 0..2) return
+        if (isUser) {
+            val speciesName = speciesNameHint
+                ?: currentPreset?.pokemon?.getOrNull(slotIdx)?.name
+                ?: activeUserPokemonName
+                ?: ""
+            playerSlotAtkStage[slotIdx] = 0
+            playerSlotDefStage[slotIdx] = if (!isFainted &&
+                OverlayService.isMimikyuSpeciesStatic(speciesName) &&
+                playerSlotDisguiseBusted[slotIdx]
+            ) {
+                -1
+            } else {
+                0
             }
-            val m2 = Regex("(?i)\\bcp(\\d{2,4})\\b").find(raw.replace(" ", ""))
-            if (m2 != null) {
-                val v = m2.groupValues.getOrNull(1)?.toIntOrNull()
-                if (v != null && v in 10..6000) return v
+        } else {
+            val speciesName = speciesNameHint
+                ?: detectedOpponents.getOrNull(slotIdx)
+                ?: activeOpponentName
+            oppSlotAtkStage[slotIdx] = 0
+            oppSlotDefStage[slotIdx] = if (!isFainted &&
+                OverlayService.isMimikyuSpeciesStatic(speciesName) &&
+                oppSlotDisguiseBusted[slotIdx]
+            ) {
+                -1
+            } else {
+                0
             }
         }
-        return null
+    }
+
+    /**
+     * v6.40: Layer 1 Deterministic Stat Stage Engine.
+     * Applies 100%-chance charged move buffs/debuffs (which take effect even through Protect Shields)
+     * and Mimikyu Disguise bust (-1 Defense when hit by an unshielded charged move or when "disguise is busted!" appears).
+     * Supports retroactive Banner OCR move resolution on the same `chargeEpochMs` without double-applying.
+     */
+    internal fun applyDeterministicMoveBuffsAndDisguise(
+        actor: String,
+        moveName: String?,
+        attackerSlotIdx: Int,
+        defenderSlotIdx: Int,
+        attackerSpecies: String,
+        defenderSpecies: String,
+        wasShielded: Boolean,
+        wasDisguiseBusted: Boolean,
+        chargeEpochMs: Long
+    ) {
+        val nowMs = System.currentTimeMillis()
+        val aIdx = attackerSlotIdx.coerceIn(0, 2)
+        val dIdx = defenderSlotIdx.coerceIn(0, 2)
+
+        // 1. Mimikyu Disguise Bust (-1 Defense, persists across switches)
+        if (OverlayService.isMimikyuSpeciesStatic(defenderSpecies) && (wasDisguiseBusted || !wasShielded)) {
+            if (actor == "user" && !oppSlotDisguiseBusted[dIdx]) {
+                oppSlotDisguiseBusted[dIdx] = true
+                oppSlotDefStage[dIdx] = (oppSlotDefStage[dIdx] - 1).coerceIn(-4, 4)
+                lastAppliedDisguiseBustEpochMs = chargeEpochMs
+                lastOcrStatCalloutWallMs[3] = nowMs
+                lastOcrStatCalloutSign[3] = -1
+            } else if (actor == "opp" && !playerSlotDisguiseBusted[dIdx]) {
+                playerSlotDisguiseBusted[dIdx] = true
+                playerSlotDefStage[dIdx] = (playerSlotDefStage[dIdx] - 1).coerceIn(-4, 4)
+                lastAppliedDisguiseBustEpochMs = chargeEpochMs
+                lastOcrStatCalloutWallMs[1] = nowMs
+                lastOcrStatCalloutSign[1] = -1
+            }
+        }
+
+        // 2. If called retroactively for the exact same charged move epoch (e.g., BANNER_OCR overrides HP_DELTA),
+        // undo the previously applied deterministic move deltas before applying the newly resolved move's deltas.
+        if (chargeEpochMs > 0L && chargeEpochMs == lastAppliedChargeBuffEpochMs && lastAppliedChargeBuffActor == actor) {
+            val prevA = lastAppliedChargeBuffAttackerSlot.coerceIn(0, 2)
+            val prevD = lastAppliedChargeBuffDefenderSlot.coerceIn(0, 2)
+            if (actor == "user") {
+                playerSlotAtkStage[prevA] = (playerSlotAtkStage[prevA] - lastAppliedChargeBuffSelfAtk).coerceIn(-4, 4)
+                playerSlotDefStage[prevA] = (playerSlotDefStage[prevA] - lastAppliedChargeBuffSelfDef).coerceIn(-4, 4)
+                oppSlotAtkStage[prevD] = (oppSlotAtkStage[prevD] - lastAppliedChargeBuffOppAtk).coerceIn(-4, 4)
+                oppSlotDefStage[prevD] = (oppSlotDefStage[prevD] - lastAppliedChargeBuffOppDef).coerceIn(-4, 4)
+            } else {
+                oppSlotAtkStage[prevA] = (oppSlotAtkStage[prevA] - lastAppliedChargeBuffSelfAtk).coerceIn(-4, 4)
+                oppSlotDefStage[prevA] = (oppSlotDefStage[prevA] - lastAppliedChargeBuffSelfDef).coerceIn(-4, 4)
+                playerSlotAtkStage[prevD] = (playerSlotAtkStage[prevD] - lastAppliedChargeBuffOppAtk).coerceIn(-4, 4)
+                playerSlotDefStage[prevD] = (playerSlotDefStage[prevD] - lastAppliedChargeBuffOppDef).coerceIn(-4, 4)
+            }
+            lastAppliedChargeBuffSelfAtk = 0
+            lastAppliedChargeBuffSelfDef = 0
+            lastAppliedChargeBuffOppAtk = 0
+            lastAppliedChargeBuffOppDef = 0
+        }
+
+        val eff = if (!moveName.isNullOrBlank()) OverlayService.resolveMoveBuffEffectStatic(moveName) else null
+        if (eff != null && eff.chance >= 0.99) {
+            if (actor == "user") {
+                if (eff.selfAtkDelta != 0) {
+                    playerSlotAtkStage[aIdx] = (playerSlotAtkStage[aIdx] + eff.selfAtkDelta).coerceIn(-4, 4)
+                    lastOcrStatCalloutWallMs[0] = nowMs
+                    lastOcrStatCalloutSign[0] = if (eff.selfAtkDelta > 0) 1 else -1
+                }
+                if (eff.selfDefDelta != 0) {
+                    playerSlotDefStage[aIdx] = (playerSlotDefStage[aIdx] + eff.selfDefDelta).coerceIn(-4, 4)
+                    lastOcrStatCalloutWallMs[1] = nowMs
+                    lastOcrStatCalloutSign[1] = if (eff.selfDefDelta > 0) 1 else -1
+                }
+                if (eff.oppAtkDelta != 0) {
+                    oppSlotAtkStage[dIdx] = (oppSlotAtkStage[dIdx] + eff.oppAtkDelta).coerceIn(-4, 4)
+                    lastOcrStatCalloutWallMs[2] = nowMs
+                    lastOcrStatCalloutSign[2] = if (eff.oppAtkDelta > 0) 1 else -1
+                }
+                if (eff.oppDefDelta != 0) {
+                    oppSlotDefStage[dIdx] = (oppSlotDefStage[dIdx] + eff.oppDefDelta).coerceIn(-4, 4)
+                    lastOcrStatCalloutWallMs[3] = nowMs
+                    lastOcrStatCalloutSign[3] = if (eff.oppDefDelta > 0) 1 else -1
+                }
+            } else {
+                if (eff.selfAtkDelta != 0) {
+                    oppSlotAtkStage[aIdx] = (oppSlotAtkStage[aIdx] + eff.selfAtkDelta).coerceIn(-4, 4)
+                    lastOcrStatCalloutWallMs[2] = nowMs
+                    lastOcrStatCalloutSign[2] = if (eff.selfAtkDelta > 0) 1 else -1
+                }
+                if (eff.selfDefDelta != 0) {
+                    oppSlotDefStage[aIdx] = (oppSlotDefStage[aIdx] + eff.selfDefDelta).coerceIn(-4, 4)
+                    lastOcrStatCalloutWallMs[3] = nowMs
+                    lastOcrStatCalloutSign[3] = if (eff.selfDefDelta > 0) 1 else -1
+                }
+                if (eff.oppAtkDelta != 0) {
+                    playerSlotAtkStage[dIdx] = (playerSlotAtkStage[dIdx] + eff.oppAtkDelta).coerceIn(-4, 4)
+                    lastOcrStatCalloutWallMs[0] = nowMs
+                    lastOcrStatCalloutSign[0] = if (eff.oppAtkDelta > 0) 1 else -1
+                }
+                if (eff.oppDefDelta != 0) {
+                    playerSlotDefStage[dIdx] = (playerSlotDefStage[dIdx] + eff.oppDefDelta).coerceIn(-4, 4)
+                    lastOcrStatCalloutWallMs[1] = nowMs
+                    lastOcrStatCalloutSign[1] = if (eff.oppDefDelta > 0) 1 else -1
+                }
+            }
+            lastAppliedChargeBuffEpochMs = chargeEpochMs
+            lastAppliedChargeBuffActor = actor
+            lastAppliedChargeBuffAttackerSlot = aIdx
+            lastAppliedChargeBuffDefenderSlot = dIdx
+            lastAppliedChargeBuffSelfAtk = eff.selfAtkDelta
+            lastAppliedChargeBuffSelfDef = eff.selfDefDelta
+            lastAppliedChargeBuffOppAtk = eff.oppAtkDelta
+            lastAppliedChargeBuffOppDef = eff.oppDefDelta
+        } else {
+            lastAppliedChargeBuffEpochMs = chargeEpochMs
+            lastAppliedChargeBuffActor = actor
+            lastAppliedChargeBuffAttackerSlot = aIdx
+            lastAppliedChargeBuffDefenderSlot = dIdx
+            lastAppliedChargeBuffSelfAtk = 0
+            lastAppliedChargeBuffSelfDef = 0
+            lastAppliedChargeBuffOppAtk = 0
+            lastAppliedChargeBuffOppDef = 0
+        }
+    }
+
+    /**
+     * v6.40: Layer 2 Spatial ML Kit OCR Buff/Debuff Callout Parser & Mimikyu Swap-In GUI Reminder Guard.
+     * Scans `midBannerLines` (0.15h..0.66h) and `playerMoveLines` (0.53h..0.96h) for floating HP-bar stat callouts
+     * ("ATTACK ROSE!", "DEFENSE FELL!", "ATTACK HARSHLY FELL!", "DEFENSE SHARPLY ROSE!", etc.),
+     * maps each callout's normalized vertical screen position (`screenYNorm < 0.46f` = Opponent, `>= 0.47f` = Player),
+     * suppresses Mimikyu's swap-in "DEFENSE FELL!" GUI reminder from double-decrementing -1 to -2,
+     * and deduplicates against Layer 1 receipts and multi-frame OCR persistence.
+     */
+    internal fun handleOcrStatStageCalloutLines(
+        midBannerLines: List<Text.Line>,
+        playerMoveLines: List<Text.Line>,
+        midRawTopY: Int,
+        midBwTopY: Int,
+        midDstH: Int,
+        midDstW: Int,
+        movesRawTopY: Int,
+        movesBwTopY: Int,
+        movesDstH: Int,
+        movesTopNorm: Float,
+        gap: Int
+    ) {
+        if (!isBattleActive || isWaitingForOpponent) return
+        val nowMs = System.currentTimeMillis()
+        val preset = currentPreset
+        val activeUserIdx = preset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) }?.takeIf { it in 0..2 } ?: 0
+        val activeUserName = preset?.pokemon?.getOrNull(activeUserIdx)?.name ?: activeUserPokemonName ?: ""
+        val activeOppBase = FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
+        val activeOppIdx = detectedOpponents.indexOfFirst {
+            FormResolver.extractBaseSpecies(it).equals(activeOppBase, ignoreCase = true)
+        }.takeIf { it in 0..2 } ?: 0
+
+        var stageChanged = false
+
+        fun processLineWithNormCoords(rawText: String, screenYNorm: Float, screenXNorm: Float) {
+            val trimmed = rawText.trim()
+            if (trimmed.length < 5) return
+            val lower = trimmed.lowercase()
+            if (isOverlayHudSelfText(lower)) return
+            if (lower.contains("used ") || lower.contains("incoming") || lower.contains("protect shield")) return
+
+            val norm = normalizeOcrToken(trimmed)
+            if (norm.contains("disguise") && norm.contains("busted")) {
+                // Direct "The disguise is busted!" banner detection
+                if (OverlayService.isMimikyuSpeciesStatic(activeOpponentName) && !oppSlotDisguiseBusted[activeOppIdx]) {
+                    oppSlotDisguiseBusted[activeOppIdx] = true
+                    oppSlotDefStage[activeOppIdx] = (oppSlotDefStage[activeOppIdx] - 1).coerceIn(-4, 4)
+                    lastOcrStatCalloutWallMs[3] = nowMs
+                    lastOcrStatCalloutSign[3] = -1
+                    stageChanged = true
+                } else if (OverlayService.isMimikyuSpeciesStatic(activeUserName) && !playerSlotDisguiseBusted[activeUserIdx]) {
+                    playerSlotDisguiseBusted[activeUserIdx] = true
+                    playerSlotDefStage[activeUserIdx] = (playerSlotDefStage[activeUserIdx] - 1).coerceIn(-4, 4)
+                    lastOcrStatCalloutWallMs[1] = nowMs
+                    lastOcrStatCalloutSign[1] = -1
+                    stageChanged = true
+                }
+                return
+            }
+
+            val hasAttack = norm.contains("attack") || norm.contains("atlack")
+            val hasDefense = norm.contains("defense") || norm.contains("defence") || norm.contains("defensc")
+            if (!hasAttack && !hasDefense) return
+
+            val hasRose = norm.contains("rose") || norm.contains("r0se")
+            val hasFell = norm.contains("fell") || norm.contains("feil") || norm.contains("feli")
+            if (!hasRose && !hasFell) return
+
+            val delta = when {
+                hasFell && norm.contains("severely") -> -3
+                hasFell && (norm.contains("harshly") || norm.contains("sharply")) -> -2
+                hasFell -> -1
+                hasRose && norm.contains("greatly") -> 3
+                hasRose && norm.contains("sharply") -> 2
+                hasRose -> 1
+                else -> 0
+            }
+            if (delta == 0) return
+
+            val isUserTarget = when {
+                screenYNorm < 0.46f -> false
+                screenYNorm >= 0.47f -> true
+                else -> screenXNorm < 0.48f
+            }
+            val isAtkStat = hasAttack && !hasDefense
+            val deltaSign = if (delta > 0) 1 else -1
+            val channelIdx = (if (isUserTarget) 0 else 2) + (if (isAtkStat) 0 else 1)
+
+            // Mimikyu Swap-In GUI Reminder Guard:
+            // When a Busted-Form Mimikyu swaps back in, Pokémon GO flashes "DEFENSE FELL!" above its HP bar as a reminder
+            // that its busted disguise keeps it at -1 Defense. Never double-decrement -1 to -2 on this swap-in reminder!
+            if (!isAtkStat && delta == -1) {
+                if (isUserTarget && OverlayService.isMimikyuSpeciesStatic(activeUserName)) {
+                    val isRecentUserSwitch = lastUserSwitchInWallMs > 0L &&
+                        (nowMs - lastUserSwitchInWallMs) <= 6000L &&
+                        lastChargedAttackLoggedMs < lastUserSwitchInWallMs
+                    val isNoRecentChargeMove = (nowMs - lastChargedAttackLoggedMs) > 5500L && pendingChargedAttackActor.isEmpty()
+                    if (isRecentUserSwitch || (playerSlotDisguiseBusted[activeUserIdx] && isNoRecentChargeMove)) {
+                        playerSlotDisguiseBusted[activeUserIdx] = true
+                        if (playerSlotDefStage[activeUserIdx] > -1) {
+                            playerSlotDefStage[activeUserIdx] = -1
+                            stageChanged = true
+                        }
+                        lastOcrStatCalloutWallMs[channelIdx] = nowMs
+                        lastOcrStatCalloutSign[channelIdx] = -1
+                        return
+                    }
+                } else if (!isUserTarget && OverlayService.isMimikyuSpeciesStatic(activeOpponentName)) {
+                    val isRecentOppSwitch = lastOppSwitchInWallMs > 0L &&
+                        (nowMs - lastOppSwitchInWallMs) <= 6000L &&
+                        lastChargedAttackLoggedMs < lastOppSwitchInWallMs
+                    val isNoRecentChargeMove = (nowMs - lastChargedAttackLoggedMs) > 5500L && pendingChargedAttackActor.isEmpty()
+                    if (isRecentOppSwitch || (oppSlotDisguiseBusted[activeOppIdx] && isNoRecentChargeMove)) {
+                        oppSlotDisguiseBusted[activeOppIdx] = true
+                        if (oppSlotDefStage[activeOppIdx] > -1) {
+                            oppSlotDefStage[activeOppIdx] = -1
+                            stageChanged = true
+                        }
+                        lastOcrStatCalloutWallMs[channelIdx] = nowMs
+                        lastOcrStatCalloutSign[channelIdx] = -1
+                        return
+                    }
+                }
+            }
+
+            // Deduplicate against Layer 1 deterministic receipts and multi-frame OCR persistence (4.8s window)
+            if ((nowMs - lastOcrStatCalloutWallMs[channelIdx]) <= 4800L && lastOcrStatCalloutSign[channelIdx] == deltaSign) {
+                return
+            }
+
+            if (isUserTarget) {
+                if (isAtkStat) {
+                    playerSlotAtkStage[activeUserIdx] = (playerSlotAtkStage[activeUserIdx] + delta).coerceIn(-4, 4)
+                } else {
+                    playerSlotDefStage[activeUserIdx] = (playerSlotDefStage[activeUserIdx] + delta).coerceIn(-4, 4)
+                }
+            } else {
+                if (isAtkStat) {
+                    oppSlotAtkStage[activeOppIdx] = (oppSlotAtkStage[activeOppIdx] + delta).coerceIn(-4, 4)
+                } else {
+                    oppSlotDefStage[activeOppIdx] = (oppSlotDefStage[activeOppIdx] + delta).coerceIn(-4, 4)
+                }
+            }
+            lastOcrStatCalloutWallMs[channelIdx] = nowMs
+            lastOcrStatCalloutSign[channelIdx] = deltaSign
+            stageChanged = true
+        }
+
+        if (midDstH > 0 && midDstW > 0) {
+            for (line in midBannerLines) {
+                val box = line.boundingBox ?: continue
+                val cy = box.centerY()
+                val cx = box.centerX()
+                val localY = if (cy >= midBwTopY - gap / 2) (cy - midBwTopY) else (cy - midRawTopY)
+                val relY = (localY.toFloat() / midDstH.toFloat()).coerceIn(0f, 1f)
+                val screenYNorm = 0.15f + relY * (0.66f - 0.15f)
+                val screenXNorm = 0.08f + (cx.toFloat() / midDstW.toFloat()).coerceIn(0f, 1f) * (0.92f - 0.08f)
+                processLineWithNormCoords(line.text, screenYNorm, screenXNorm)
+            }
+        }
+
+        if (movesDstH > 0 && playerMoveLines.isNotEmpty()) {
+            for (line in playerMoveLines) {
+                val box = line.boundingBox ?: continue
+                val cy = box.centerY()
+                val localY = if (cy >= movesBwTopY - gap / 2) (cy - movesBwTopY) else (cy - movesRawTopY)
+                val relY = (localY.toFloat() / movesDstH.toFloat()).coerceIn(0f, 1f)
+                val screenYNorm = movesTopNorm + relY * (0.96f - movesTopNorm)
+                // Only inspect the upper portion of srcMoves (0.53h..0.68h) where the player's floating HP bar callout appears
+                if (screenYNorm <= 0.68f) {
+                    processLineWithNormCoords(line.text, screenYNorm, 0.25f)
+                }
+            }
+        }
+
+        if (stageChanged) {
+            recalculateAndPushBattleData()
+        }
     }
 
     internal fun getElapsedBattleSeconds(eventTimeMs: Long = System.currentTimeMillis()): Double {
@@ -3672,7 +4030,9 @@ class OverlayService : LifecycleService() {
             fastMoveName = oppFastMoveName,
             fastTurns = oppFastTurns,
             isAttackerShadow = isOppShad,
-            isDefenderShadow = isUserShad
+            isDefenderShadow = isUserShad,
+            attackerAtkStage = oppSlotAtkStage[clampedOppIdx],
+            defenderDefStage = playerSlotDefStage[clampedUserIdx]
         ).coerceAtLeast(0.5)
 
         val allMoveRows = candidateMoveNames.map { mName ->
@@ -3683,7 +4043,9 @@ class OverlayService : LifecycleService() {
                 defender = userMeta,
                 moveName = mName,
                 isAttackerShadow = isOppShad,
-                isDefenderShadow = isUserShad
+                isDefenderShadow = isUserShad,
+                attackerAtkStage = oppSlotAtkStage[clampedOppIdx],
+                defenderDefStage = playerSlotDefStage[clampedUserIdx]
             )
             val remHp = (userHpPct - dmg).coerceAtLeast(0)
             val isKo = dmg >= userHpPct
@@ -5074,18 +5436,20 @@ class OverlayService : LifecycleService() {
                     )
                     // v4.05: Expanded top of srcMoves from 0.70h to 0.53h during cutscenes so "Attack incoming!"
                     // and "Use a Protect Shield?" (0.58h..0.78h) are 100% captured with zero blind spot!
+                    val movesTopNorm = if (isCutscenePromptWindowForOcr) 0.53f else 0.68f
                     val srcMoves = Rect(
                         (w * 0.08f).toInt().coerceIn(0, w - 1),
-                        (h * (if (isCutscenePromptWindowForOcr) 0.53f else 0.68f)).toInt().coerceIn(0, h - 1),
+                        (h * movesTopNorm).toInt().coerceIn(0, h - 1),
                         (w * 0.92f).toInt().coerceIn(1, w),
                         (h * 0.96f).toInt().coerceIn(1, h)
                     )
-                    // v4.05: Contiguous mid-banner crop (0.08w..0.92w, 0.15h..0.53h) meeting srcMoves at 0.53h
+                    // v6.40: Expanded mid-banner crop (0.08w..0.92w, 0.15h..0.66h) so both Opponent (y ~ 0.20h..0.42h)
+                    // and Player (y ~ 0.54h..0.65h) floating HP-bar buff/debuff callouts ("ATTACK ROSE!", "DEFENSE FELL!") are captured!
                     val srcMidBanner = Rect(
                         (w * 0.08f).toInt().coerceIn(0, w - 1),
                         (h * 0.15f).toInt().coerceIn(0, h - 1),
                         (w * 0.92f).toInt().coerceIn(1, w),
-                        (h * 0.53f).toInt().coerceIn(1, h)
+                        (h * 0.66f).toInt().coerceIn(1, h)
                     )
 
                     val bwOppBitmap = createHighContrastWhiteTextBitmap(screenForOcr, srcOpp)
@@ -5227,6 +5591,21 @@ class OverlayService : LifecycleService() {
                                         playerTopLines,
                                         playerMoveLines,
                                         midBannerLines
+                                    )
+                                    // v6.40: Spatial ML Kit OCR Buff/Debuff Callout Parser & Mimikyu Swap-In Reminder Guard
+                                    val movesTopYForCallout = ocrOppZoneH + gap + ocrPlayerZoneH + gap
+                                    handleOcrStatStageCalloutLines(
+                                        midBannerLines = midBannerLines,
+                                        playerMoveLines = playerMoveLines,
+                                        midRawTopY = ocrMovesBottomY + gap,
+                                        midBwTopY = ocrMovesBottomY + gap + dstMidH + gap,
+                                        midDstH = dstMidH,
+                                        midDstW = dstMidW,
+                                        movesRawTopY = movesTopYForCallout,
+                                        movesBwTopY = movesTopYForCallout + movesH + gap,
+                                        movesDstH = movesH,
+                                        movesTopNorm = movesTopNorm,
+                                        gap = gap
                                     )
                                     // v6.03: Auto-detect End of Battle (Win / Loss / Tie) & auto-log
                                     checkAndHandleAutoEndOfBattle(
@@ -5463,6 +5842,19 @@ class OverlayService : LifecycleService() {
                         (prevEv.actor == "user" && activeOpponentName.contains("Mimikyu", ignoreCase = true)) ||
                         (prevEv.actor == "opp" && (activeUserPokemonName ?: "").contains("Mimikyu", ignoreCase = true))
                     val activeChargeRef = lastChargedAttackLoggedMs
+                    if (wasDisguise) {
+                        if (prevEv.actor == "user" && lastUserChargedDefenderOppSlotIdx in 0..2 && !oppSlotDisguiseBusted[lastUserChargedDefenderOppSlotIdx]) {
+                            oppSlotDisguiseBusted[lastUserChargedDefenderOppSlotIdx] = true
+                            oppSlotDefStage[lastUserChargedDefenderOppSlotIdx] = (oppSlotDefStage[lastUserChargedDefenderOppSlotIdx] - 1).coerceIn(-4, 4)
+                            lastOcrStatCalloutWallMs[3] = nowMs
+                            lastOcrStatCalloutSign[3] = -1
+                        } else if (prevEv.actor == "opp" && lastOppChargedDefenderUserSlotIdx in 0..2 && !playerSlotDisguiseBusted[lastOppChargedDefenderUserSlotIdx]) {
+                            playerSlotDisguiseBusted[lastOppChargedDefenderUserSlotIdx] = true
+                            playerSlotDefStage[lastOppChargedDefenderUserSlotIdx] = (playerSlotDefStage[lastOppChargedDefenderUserSlotIdx] - 1).coerceIn(-4, 4)
+                            lastOcrStatCalloutWallMs[1] = nowMs
+                            lastOcrStatCalloutSign[1] = -1
+                        }
+                    }
                     var updatedUserShields = playerShieldsRemaining
                     var updatedOppShields = oppShieldsRemaining
                     if (!wasDisguise) {
@@ -5871,8 +6263,7 @@ class OverlayService : LifecycleService() {
                         val retroAttackerShad = manualShadowOverrides[retroAttackerBase] ?: isOpponentShadow
                         val retroAttackerMeta = OverlayService.computeEffectiveCombatStats(
                             oppMeta ?: getPokemonMeta(retroAttackerRaw, activeLeague, retroAttackerShad),
-                            activeLeague,
-                            oppSlotCp.getOrNull(resolvedOppSlotIdx)?.takeIf { it > 0 }
+                            activeLeague
                         )
                         val retroDefUserIdx = resolvedUserSlotIdx.coerceIn(0, 2)
                         val retroDefCfg = preset?.pokemon?.getOrNull(retroDefUserIdx)
@@ -5884,12 +6275,25 @@ class OverlayService : LifecycleService() {
                             retroDefCfg?.cp,
                             retroDefCfg?.ivs
                         )
+                        applyDeterministicMoveBuffsAndDisguise(
+                            actor = "opp",
+                            moveName = moveName,
+                            attackerSlotIdx = resolvedOppSlotIdx,
+                            defenderSlotIdx = retroDefUserIdx,
+                            attackerSpecies = retroAttackerRaw,
+                            defenderSpecies = retroDefName,
+                            wasShielded = if (lastOppEvIdx >= 0) battleTimelineEvents[lastOppEvIdx].shielded == true else false,
+                            wasDisguiseBusted = (nowMs - lastDetectedDisguiseBustedBannerMs) <= 6500L,
+                            chargeEpochMs = lastChargedAttackLoggedMs
+                        )
                         val retroExpectedDmgPct = calculateChargedMoveDamagePercent(
                             attacker = retroAttackerMeta,
                             defender = retroDefMeta,
                             moveName = moveName,
                             isAttackerShadow = retroAttackerShad,
-                            isDefenderShadow = retroDefShad
+                            isDefenderShadow = retroDefShad,
+                            attackerAtkStage = oppSlotAtkStage[resolvedOppSlotIdx],
+                            defenderDefStage = playerSlotDefStage[retroDefUserIdx]
                         )
                         // v6.02: If late banner OCR also reveals a different opponent slot threw the move than lastOppChargedAttackerSlotIdx,
                         // refund the old slot and deduct from resolvedOppSlotIdx!
@@ -5978,6 +6382,20 @@ class OverlayService : LifecycleService() {
                         lastUserChargeResolvedMoveName = moveName
                         recalculateAndPushBattleData()
                     } else if (pendingChargedAttackActor.isEmpty() && (nowMs - lastChargedAttackLoggedMs) <= 3500L && lastChargedPromptActor == "user") {
+                        val retroDefOppIdx = lastUserChargedDefenderOppSlotIdx.takeIf { it in 0..2 } ?: resolvedOppSlotIdx.coerceIn(0, 2)
+                        val retroDefOppName = detectedOpponents.getOrNull(retroDefOppIdx) ?: activeOpponentName
+                        val lastUserEvIdx = battleTimelineEvents.indexOfLast { it.type == "CHARGED_ATTACK" && it.actor == "user" }
+                        applyDeterministicMoveBuffsAndDisguise(
+                            actor = "user",
+                            moveName = moveName,
+                            attackerSlotIdx = targetUserIdx,
+                            defenderSlotIdx = retroDefOppIdx,
+                            attackerSpecies = targetUserMonName,
+                            defenderSpecies = retroDefOppName,
+                            wasShielded = if (lastUserEvIdx >= 0) battleTimelineEvents[lastUserEvIdx].shielded == true else false,
+                            wasDisguiseBusted = (nowMs - lastDetectedDisguiseBustedBannerMs) <= 6500L,
+                            chargeEpochMs = lastChargedAttackLoggedMs
+                        )
                         if (trueCost != lastUserChargeDeductedEnergySnapshot && lastUserChargeDeductedEnergySnapshot > 0) {
                             val diff = trueCost - lastUserChargeDeductedEnergySnapshot
                             playerSlotEnergy[targetUserIdx] = (playerSlotEnergy[targetUserIdx] - diff).coerceIn(0, 100)
@@ -5986,6 +6404,8 @@ class OverlayService : LifecycleService() {
                             lastUserChargeResolvedMoveName = moveName
                             recalculateAndPushBattleData()
                             showBattleToast("⚡ Used $moveName (-${trueCost}E)")
+                        } else {
+                            recalculateAndPushBattleData()
                         }
                     }
                 }
@@ -6385,7 +6805,9 @@ class OverlayService : LifecycleService() {
             fastMoveName = userFastNameForStats,
             fastTurns = userFastTurnsForStats,
             isAttackerShadow = isUserShadForStats,
-            isDefenderShadow = isOpponentShadow
+            isDefenderShadow = isOpponentShadow,
+            attackerAtkStage = playerSlotAtkStage[activeUserIdx],
+            defenderDefStage = oppSlotDefStage[activeOppIdx]
         )
         val oppExactDmgPct = calculateFastMoveExactDamagePercent(
             attacker = oppMetaForStats,
@@ -6393,7 +6815,9 @@ class OverlayService : LifecycleService() {
             fastMoveName = oppFastNameForStats,
             fastTurns = oppFastTurnsForStats,
             isAttackerShadow = isOpponentShadow,
-            isDefenderShadow = isUserShadForStats
+            isDefenderShadow = isUserShadForStats,
+            attackerAtkStage = oppSlotAtkStage[activeOppIdx],
+            defenderDefStage = playerSlotDefStage[activeUserIdx]
         )
 
         var userFastMovesCreditedThisFrame = 0
@@ -8789,12 +9213,19 @@ class OverlayService : LifecycleService() {
                 }
 
                 if (playerCaughtMove) {
-                    // Preserve the swapped-out player Pokémon's pre-swap HP
+                    // Preserve the swapped-out player Pokémon's pre-swap HP and clear its stat stages on switch-out
                     playerFaintedSlots[preChargeUserSlot] = false
                     playerSlotHpPct[preChargeUserSlot] = pendingChargedAttackPreUserSlotHp[preChargeUserSlot].coerceIn(1, 100)
                     confirmedPlayerSlotHpPct[preChargeUserSlot] = playerSlotHpPct[preChargeUserSlot]
                     playerSlotPreFaintHpPct[preChargeUserSlot] = playerSlotHpPct[preChargeUserSlot]
                     lastScannedPlayerSlotHpPct[preChargeUserSlot] = playerSlotHpPct[preChargeUserSlot]
+                    clearSlotStagesOnSwitchOut(
+                        isUser = true,
+                        slotIdx = preChargeUserSlot,
+                        isFainted = false,
+                        speciesNameHint = preset?.pokemon?.getOrNull(preChargeUserSlot)?.name
+                    )
+                    lastUserSwitchInWallMs = nowMs
                     if (playerSwapEndTimeMs <= pendingChargedAttackStartMs) {
                         playerSwapEndTimeMs = pendingChargedAttackStartMs + 50000L
                     }
@@ -8820,7 +9251,9 @@ class OverlayService : LifecycleService() {
                         defender = defenderUserMeta,
                         moveName = mName,
                         isAttackerShadow = attackerOppShadow,
-                        isDefenderShadow = defenderUserShadow
+                        isDefenderShadow = defenderUserShadow,
+                        attackerAtkStage = oppSlotAtkStage[attackerOppSlotIdx.coerceIn(0, 2)],
+                        defenderDefStage = playerSlotDefStage[defenderUserIdx.coerceIn(0, 2)]
                     )
                 }
                 val maxCandidateExpectedDmgPct = candPairs.maxOfOrNull { it.second } ?: 0
@@ -8859,6 +9292,12 @@ class OverlayService : LifecycleService() {
                     confirmedPlayerSlotHpPct[defenderUserIdx] = 0
                     pendingConfirmPlayerSlotHpPct[defenderUserIdx] = 0
                     playerSlotEnergy[defenderUserIdx] = 0
+                    clearSlotStagesOnSwitchOut(
+                        isUser = true,
+                        slotIdx = defenderUserIdx,
+                        isFainted = true,
+                        speciesNameHint = defenderUserName
+                    )
                     playerPokeballCount = (3 - playerFaintedSlots.count { it }).coerceIn(1, 3)
                 }
 
@@ -9056,9 +9495,23 @@ class OverlayService : LifecycleService() {
                             defender = defenderUserMeta,
                             moveName = rMove,
                             isAttackerShadow = attackerOppShadow,
-                            isDefenderShadow = defenderUserShadow
+                            isDefenderShadow = defenderUserShadow,
+                            attackerAtkStage = oppSlotAtkStage[attackerOppSlotIdx.coerceIn(0, 2)],
+                            defenderDefStage = playerSlotDefStage[defenderUserIdx.coerceIn(0, 2)]
                         )
                 }
+                // v6.40: Apply Layer 1 Deterministic 100%-chance move buffs/debuffs & Mimikyu Disguise bust
+                applyDeterministicMoveBuffsAndDisguise(
+                    actor = "opp",
+                    moveName = resolvedOppMove,
+                    attackerSlotIdx = attackerOppSlotIdx,
+                    defenderSlotIdx = defenderUserIdx,
+                    attackerSpecies = attackerOppRawName,
+                    defenderSpecies = defenderUserName,
+                    wasShielded = shielded && !disguiseBusted,
+                    wasDisguiseBusted = disguiseBusted,
+                    chargeEpochMs = nowMs
+                )
                 val oppMoveSource = when {
                     bannerOppMove != null -> "BANNER_OCR"
                     strictHpMove != null || bestGuessHpMove != null -> "HP_DELTA"
@@ -9173,6 +9626,12 @@ class OverlayService : LifecycleService() {
                     confirmedOppSlotHpPct[faintedOppIdx] = 0
                     pendingConfirmOppSlotHpPct[faintedOppIdx] = 0
                     oppSlotEnergy[faintedOppIdx] = 0
+                    clearSlotStagesOnSwitchOut(
+                        isUser = false,
+                        slotIdx = faintedOppIdx,
+                        isFainted = true,
+                        speciesNameHint = detectedOpponents.getOrNull(faintedOppIdx)
+                    )
                     oppPokeballCount = (3 - oppFaintedSlots.count { it }).coerceIn(1, 3)
                     // If the opponent manually swapped right before the throw to catch and got one-shot KO'd, preserve their 50s swap timer!
                     if (pendingChargedAttackWasOppCatch) {
@@ -9191,6 +9650,13 @@ class OverlayService : LifecycleService() {
                     confirmedOppSlotHpPct[preChargeOppSlot] = oppSlotHpPct[preChargeOppSlot]
                     oppSlotPreFaintHpPct[preChargeOppSlot] = oppSlotHpPct[preChargeOppSlot]
                     lastScannedOppSlotHpPct[preChargeOppSlot] = oppSlotHpPct[preChargeOppSlot]
+                    clearSlotStagesOnSwitchOut(
+                        isUser = false,
+                        slotIdx = preChargeOppSlot,
+                        isFainted = false,
+                        speciesNameHint = detectedOpponents.getOrNull(preChargeOppSlot)
+                    )
+                    lastOppSwitchInWallMs = nowMs
                     if (oppSwapEndTimeMs <= pendingChargedAttackStartMs) {
                         oppSwapEndTimeMs = pendingChargedAttackStartMs + 50000L
                     }
@@ -9262,7 +9728,9 @@ class OverlayService : LifecycleService() {
                         defender = defenderOppMeta,
                         moveName = mName,
                         isAttackerShadow = attackerUserShad,
-                        isDefenderShadow = defenderOppShadow
+                        isDefenderShadow = defenderOppShadow,
+                        attackerAtkStage = playerSlotAtkStage[attackerUserIdx.coerceIn(0, 2)],
+                        defenderDefStage = oppSlotDefStage[defenderOppIdx.coerceIn(0, 2)]
                     )
                 }
                 val maxUserCandExpectedDmgPct = candPairs.maxOfOrNull { it.second } ?: 0
@@ -9291,6 +9759,12 @@ class OverlayService : LifecycleService() {
                     confirmedOppSlotHpPct[defenderOppIdx] = 0
                     pendingConfirmOppSlotHpPct[defenderOppIdx] = 0
                     oppSlotEnergy[defenderOppIdx] = 0
+                    clearSlotStagesOnSwitchOut(
+                        isUser = false,
+                        slotIdx = defenderOppIdx,
+                        isFainted = true,
+                        speciesNameHint = defenderOppRawName
+                    )
                     oppPokeballCount = (3 - oppFaintedSlots.count { it }).coerceIn(1, 3)
                 }
                 val rawPostOppHp = if (oppFaintedSlots[defenderOppIdx] || isLethalDisappearingOppHpBar) {
@@ -9534,6 +10008,18 @@ class OverlayService : LifecycleService() {
                 val userRawPreEnergy = preChargeUserEnergy.coerceIn(0, 100)
                 val userEnergyDeficit = max(0, totalUserEnergy - userRawPreEnergy)
                 val userExpectedDmgPct = candPairs.find { it.first.equals(resolvedUserMove, ignoreCase = true) }?.second
+                // v6.40: Apply Layer 1 Deterministic 100%-chance move buffs/debuffs & Mimikyu Disguise bust
+                applyDeterministicMoveBuffsAndDisguise(
+                    actor = "user",
+                    moveName = resolvedUserMove,
+                    attackerSlotIdx = attackerUserIdx,
+                    defenderSlotIdx = defenderOppIdx,
+                    attackerSpecies = attackerUserMonName,
+                    defenderSpecies = defenderOppRawName,
+                    wasShielded = shielded && !oppDisguiseBusted,
+                    wasDisguiseBusted = oppDisguiseBusted,
+                    chargeEpochMs = nowMs
+                )
                 val userMoveSource = when {
                     bannerUserMove != null -> "BANNER_OCR"
                     postCircleInferredMove != null -> "POST_CIRCLE_FIT"
@@ -9914,6 +10400,10 @@ class OverlayService : LifecycleService() {
                     val badBase = activeOpponentSpecies
                     detectedOpponents.removeAll { FormResolver.extractBaseSpecies(it).equals(badBase, ignoreCase = true) }
                 }
+                if (provisionalOppPrevSlotIdx in 0..2) {
+                    oppSlotAtkStage[provisionalOppPrevSlotIdx] = provisionalOppPrevAtkStage
+                    oppSlotDefStage[provisionalOppPrevSlotIdx] = provisionalOppPrevDefStage
+                }
                 activeOpponentName = provisionalOppPrevName
                 activeOpponentSpecies = provisionalOppPrevSpecies
                 availableOpponentForms = FormResolver.getVariantsForSpecies(provisionalOppPrevSpecies, activeLeague)
@@ -9923,6 +10413,7 @@ class OverlayService : LifecycleService() {
                 provisionalOppPrevName = ""
                 provisionalOppPrevSpecies = ""
                 provisionalOppPrevWasAddedToDetected = false
+                provisionalOppPrevSlotIdx = -1
                 lastConfirmedOppFrameTimeMs = currentFrameTimestampMs
                 if (battleTimelineEvents.isNotEmpty() && battleTimelineEvents.last().actor == "opp" && battleTimelineEvents.last().validityLatched == false) {
                     battleTimelineEvents.removeAt(battleTimelineEvents.lastIndex)
@@ -9932,13 +10423,11 @@ class OverlayService : LifecycleService() {
             }
 
             if (speciesChanged) {
-                val scannedOppCpCandidate = extractCpFromOcrLines(sortedLines)
-                val hasCombatEvidenceForLead = scannedOppCpCandidate != null ||
-                    sampledPlayerHpPct in 1..100 ||
+                val hasCombatEvidenceForLead = sampledPlayerHpPct in 1..100 ||
                     sampledOppHpPct in 1..100 ||
                     sampledOppBalls in 1..3 ||
-                    cachedOcrPlayerTopLines.any { Regex("(?i)\\bcp\\s*\\d{2,4}\\b").containsMatchIn(it.text) }
-                // v6.24: When waiting for the opening Pokémon, require combat HUD evidence (CP indicator, HP bar, or Pokéballs)
+                    sampledPlayerBalls in 1..3
+                // v6.24: When waiting for the opening Pokémon, require combat HUD evidence (HP bar or Pokéballs)
                 // so trainer usernames on the pre-battle VS screen never lock in as the opening Pokémon!
                 if (isWaitingForOpponent && !hasCombatEvidenceForLead) {
                     return
@@ -9958,26 +10447,15 @@ class OverlayService : LifecycleService() {
                     val base = FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
                     detectedOpponents.indexOfFirst { FormResolver.extractBaseSpecies(it).equals(base, ignoreCase = true) }.coerceAtLeast(0)
                 } else -1
-                if (!isWaitingForOpponent && prevOppSlotIdx in 0..2 && oppSlotCp[prevOppSlotIdx] >= 100) {
-                    val prevCpStr = oppSlotCp[prevOppSlotIdx].toString()
-                    val candidateCpStr = scannedOppCpCandidate?.toString()
-                    if (candidateCpStr != null &&
-                        candidateCpStr.length < prevCpStr.length &&
-                        (prevCpStr.startsWith(candidateCpStr) || prevCpStr.endsWith(candidateCpStr))
-                    ) {
-                        return
-                    }
-                }
 
                 // v6.24: Opening Lead Self-Correction — If Frame 1 during the opening throw-out (<= 3.5s, 0 timeline events,
-                // 100% HP, no prior CP or unlatched) misread a sliding nameplate and Frame 2 immediately reads the true lead
-                // with a valid CP indicator, replace lead slot 0 in-place rather than logging a false SWAP!
+                // 100% HP) misread a sliding nameplate and Frame 2 immediately reads the true lead,
+                // replace lead slot 0 in-place rather than logging a false SWAP!
                 val isOpeningLeadSelfCorrection = !isWaitingForOpponent &&
                     detectedOpponents.size == 1 &&
                     getElapsedBattleSeconds() <= 3.5 &&
                     battleTimelineEvents.isEmpty() &&
-                    oppSlotHpPct[0] >= 95 &&
-                    (scannedOppCpCandidate != null || oppSlotCp[0] <= 0)
+                    oppSlotHpPct[0] >= 95
                 if (isOpeningLeadSelfCorrection) {
                     detectedOpponents.clear()
                 }
@@ -10013,10 +10491,6 @@ class OverlayService : LifecycleService() {
 
                 val newOppSlotIdx = detectedOpponents.indexOfFirst {
                     FormResolver.extractBaseSpecies(it).equals(newBaseSpecies, ignoreCase = true)
-                }
-                val scannedOppCp = scannedOppCpCandidate
-                if (newOppSlotIdx in 0..2 && scannedOppCp != null) {
-                    oppSlotCp[newOppSlotIdx] = scannedOppCp
                 }
                 // Resurrection Guard: Any Pokémon entering the field is 100% alive (restore its last known pre-faint HP%)
                 if (newOppSlotIdx in 0..2 && oppFaintedSlots[newOppSlotIdx]) {
@@ -10060,6 +10534,13 @@ class OverlayService : LifecycleService() {
                     oppFaintedSlots.fill(false)
                     oppSlotHpPct.fill(100)
                     playerSlotHpPct.fill(100)
+                    oppSlotAtkStage.fill(0)
+                    oppSlotDefStage.fill(0)
+                    oppSlotDisguiseBusted.fill(false)
+                    playerSlotAtkStage.fill(0)
+                    playerSlotDefStage.fill(0)
+                    playerSlotDisguiseBusted.fill(false)
+                    lastOppSwitchInWallMs = System.currentTimeMillis()
                     confirmedOppSlotHpPct.fill(100)
                     confirmedPlayerSlotHpPct.fill(100)
                     pendingConfirmOppSlotHpPct.fill(100)
@@ -10140,7 +10621,11 @@ class OverlayService : LifecycleService() {
                     provisionalOppPrevName = prevOppRawName
                     provisionalOppPrevSpecies = prevOppRawSpecies
                     provisionalOppPrevWasAddedToDetected = wasAddedNewToDetected
+                    provisionalOppPrevSlotIdx = prevOppSlotIdx
+                    provisionalOppPrevAtkStage = if (prevOppSlotIdx in 0..2) oppSlotAtkStage[prevOppSlotIdx] else 0
+                    provisionalOppPrevDefStage = if (prevOppSlotIdx in 0..2) oppSlotDefStage[prevOppSlotIdx] else 0
                     oppSwitchValidityLatched = false
+                    lastOppSwitchInWallMs = System.currentTimeMillis()
 
                     val nowRemPlayerSec = if (playerSwapEndTimeMs > currentFrameTimestampMs) ceil((playerSwapEndTimeMs - currentFrameTimestampMs) / 1000.0).toInt() else 0
                     val userAliveNow = (3 - playerFaintedSlots.count { it }).coerceIn(1, 3)
@@ -10166,6 +10651,12 @@ class OverlayService : LifecycleService() {
                             oppSlotHpPct[faintedSlotIdx] = 0
                             lastScannedOppSlotHpPct[faintedSlotIdx] = 0
                             oppSlotEnergy[faintedSlotIdx] = 0
+                            clearSlotStagesOnSwitchOut(
+                                isUser = false,
+                                slotIdx = faintedSlotIdx,
+                                isFainted = true,
+                                speciesNameHint = prevOppRawName
+                            )
                         }
                         if (effectiveOppBalls == 2 && faintedSlotIdx in 0..2) {
                             for (idx in 0..2) {
@@ -10272,6 +10763,12 @@ class OverlayService : LifecycleService() {
                         oppPostSwitchLowBallFrames = 0
                         if (prevOppSlotIdx in 0..2) {
                             oppFaintedSlots[prevOppSlotIdx] = false
+                            clearSlotStagesOnSwitchOut(
+                                isUser = false,
+                                slotIdx = prevOppSlotIdx,
+                                isFainted = false,
+                                speciesNameHint = prevOppRawName
+                            )
                             if (prevOppSlotIdx != newOppSlotIdx && (currentFrameTimestampMs - oppSlotLastBigJumpMs[prevOppSlotIdx]) <= 2500L) {
                                 oppSlotHpPct[prevOppSlotIdx] = oppSlotPriorHpPct[prevOppSlotIdx].coerceIn(1, 100)
                                 oppSlotPreFaintHpPct[prevOppSlotIdx] = oppSlotHpPct[prevOppSlotIdx]
@@ -10364,14 +10861,6 @@ class OverlayService : LifecycleService() {
                     manualShadowOverrides[newBaseSpecies] = true
                     recalculateAndPushBattleData()
                 }
-                val curOppIdx = detectedOpponents.indexOfFirst {
-                    FormResolver.extractBaseSpecies(it).equals(newBaseSpecies, ignoreCase = true)
-                }
-                val scannedOppCp = extractCpFromOcrLines(sortedLines)
-                if (curOppIdx in 0..2 && scannedOppCp != null && oppSlotCp[curOppIdx] != scannedOppCp) {
-                    oppSlotCp[curOppIdx] = scannedOppCp
-                    recalculateAndPushBattleData()
-                }
             }
         } else if (!oppSwitchValidityLatched &&
             !isAllCombatHudGone &&
@@ -10425,10 +10914,15 @@ class OverlayService : LifecycleService() {
             newSlotName.equals(provisionalPlayerPrevName, ignoreCase = true) &&
             (currentFrameTimestampMs - lastPlayerSwitchFrameMs) <= 2600L
         ) {
+            if (provisionalUserPrevSlotIdx in 0..2) {
+                playerSlotAtkStage[provisionalUserPrevSlotIdx] = provisionalUserPrevAtkStage
+                playerSlotDefStage[provisionalUserPrevSlotIdx] = provisionalUserPrevDefStage
+            }
             activeUserPokemonName = provisionalPlayerPrevName
             playerSwapEndTimeMs = playerSwapEndTimeBeforeSwitch
             playerSwitchValidityLatched = true
             provisionalPlayerPrevName = ""
+            provisionalUserPrevSlotIdx = -1
             lastConfirmedPlayerFrameTimeMs = currentFrameTimestampMs
             if (battleTimelineEvents.isNotEmpty() && battleTimelineEvents.last().actor == "user" && battleTimelineEvents.last().validityLatched == false) {
                 battleTimelineEvents.removeAt(battleTimelineEvents.lastIndex)
@@ -10505,9 +10999,13 @@ class OverlayService : LifecycleService() {
         val oppAliveNow = (3 - oppFaintedSlots.count { it }).coerceIn(1, 3)
 
         provisionalPlayerPrevName = prevPlayerPokemon
+        provisionalUserPrevSlotIdx = prevSlotIdx
+        provisionalUserPrevAtkStage = if (prevSlotIdx in 0..2) playerSlotAtkStage[prevSlotIdx] else 0
+        provisionalUserPrevDefStage = if (prevSlotIdx in 0..2) playerSlotDefStage[prevSlotIdx] else 0
         playerSwitchValidityLatched = !fromOcrFrame
         isPostFaintSwitchPromptActive = false
         activeUserPokemonName = newSlotName
+        lastUserSwitchInWallMs = System.currentTimeMillis()
         if (newSlotIdx in 0..2) {
             playerSlotEverOnField[newSlotIdx] = true
         }
@@ -10530,6 +11028,12 @@ class OverlayService : LifecycleService() {
                 lastScannedPlayerSlotHpPct[prevSlotIdx] = 0
                 playerSlotEnergy[prevSlotIdx] = 0
                 resetSlotEnergyTracking(prevSlotIdx, 0)
+                clearSlotStagesOnSwitchOut(
+                    isUser = true,
+                    slotIdx = prevSlotIdx,
+                    isFainted = true,
+                    speciesNameHint = prevPlayerPokemon
+                )
             }
             if (newSlotIdx in 0..2) {
                 playerSlotCurrentMoveTurns[newSlotIdx] = 0
@@ -10622,6 +11126,12 @@ class OverlayService : LifecycleService() {
             playerPostSwitchLowBallFrames = 0
             if (prevSlotIdx in 0..2) {
                 playerFaintedSlots[prevSlotIdx] = false
+                clearSlotStagesOnSwitchOut(
+                    isUser = true,
+                    slotIdx = prevSlotIdx,
+                    isFainted = false,
+                    speciesNameHint = prevPlayerPokemon
+                )
                 if (prevSlotIdx != newSlotIdx && (nowMs - playerSlotLastBigJumpMs[prevSlotIdx]) <= 1800L) {
                     playerSlotHpPct[prevSlotIdx] = playerSlotPriorHpPct[prevSlotIdx].coerceIn(1, 100)
                     playerSlotPreFaintHpPct[prevSlotIdx] = playerSlotHpPct[prevSlotIdx]
@@ -11660,14 +12170,6 @@ class OverlayService : LifecycleService() {
             }
             .sortedBy { it.boundingBox?.top ?: 0 }
 
-        val scannedPlayerCpNow = extractCpFromOcrLines(playerTopLines)
-        if (scannedPlayerCpNow != null) {
-            val curActiveIdxForCp = preset.pokemon.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) }.coerceAtLeast(0)
-            if (curActiveIdxForCp in 0..2 && playerSlotCp[curActiveIdxForCp] != scannedPlayerCpNow) {
-                playerSlotCp[curActiveIdxForCp] = scannedPlayerCpNow
-            }
-        }
-
         // Score every team slot across all valid top lines and find each slot's best (lowest) score
         val slotBestScores = mutableMapOf<Int, Int>()
         for (line in candidateTopLines) {
@@ -11708,17 +12210,6 @@ class OverlayService : LifecycleService() {
             if (winningSlots.size == 1) {
                 val winningSlot = preset.pokemon[winningSlots[0]]
                 executePlayerSwitch(winningSlot.name, fromOcrFrame = true)
-                return
-            }
-        }
-
-        // Unique-CP fallback ONLY if no species name matched above AND the detected CP belongs to exactly 1 slot on the team
-        for (line in candidateTopLines) {
-            val cpMatch = Regex("(?i)\\bcp\\s*(\\d{3,4})\\b").find(line.text)
-            val detectedCp = cpMatch?.groupValues?.getOrNull(1)?.toIntOrNull() ?: continue
-            val matchingSlots = preset.pokemon.filter { it.cp == detectedCp }
-            if (matchingSlots.size == 1) {
-                executePlayerSwitch(matchingSlots[0].name, fromOcrFrame = true)
                 return
             }
         }
@@ -11962,8 +12453,27 @@ class OverlayService : LifecycleService() {
         lastNormalCombatOppShadow = false
         playerSlotEnergy.fill(0)
         oppSlotEnergy.fill(0)
-        playerSlotCp.fill(0)
-        oppSlotCp.fill(0)
+        playerSlotAtkStage.fill(0)
+        playerSlotDefStage.fill(0)
+        playerSlotDisguiseBusted.fill(false)
+        oppSlotAtkStage.fill(0)
+        oppSlotDefStage.fill(0)
+        oppSlotDisguiseBusted.fill(false)
+        lastUserSwitchInWallMs = 0L
+        lastOppSwitchInWallMs = 0L
+        provisionalUserPrevSlotIdx = -1
+        provisionalOppPrevSlotIdx = -1
+        lastAppliedChargeBuffEpochMs = 0L
+        lastAppliedChargeBuffActor = ""
+        lastAppliedChargeBuffAttackerSlot = -1
+        lastAppliedChargeBuffDefenderSlot = -1
+        lastAppliedChargeBuffSelfAtk = 0
+        lastAppliedChargeBuffSelfDef = 0
+        lastAppliedChargeBuffOppAtk = 0
+        lastAppliedChargeBuffOppDef = 0
+        lastAppliedDisguiseBustEpochMs = 0L
+        lastOcrStatCalloutWallMs.fill(0L)
+        lastOcrStatCalloutSign.fill(0)
         autoEndCandidateResult = ""
         autoEndCandidateFrames = 0
         lastLoggedBattleId = ""
@@ -12932,10 +13442,21 @@ class OverlayService : LifecycleService() {
         if (wasWaiting) {
             battleClockAnchorMs = System.currentTimeMillis()
             battleTimelineEvents.clear()
+            oppSlotAtkStage.fill(0)
+            oppSlotDefStage.fill(0)
+            oppSlotDisguiseBusted.fill(false)
+            lastOppSwitchInWallMs = System.currentTimeMillis()
         } else if (!newBaseSpecies.equals(prevBase, ignoreCase = true)) {
             val nowMs = System.currentTimeMillis()
             val elapsedSec = getElapsedBattleSeconds(nowMs)
+            lastOppSwitchInWallMs = nowMs
             if (prevOppSlotIdx !in 0..2 || !oppFaintedSlots[prevOppSlotIdx]) {
+                clearSlotStagesOnSwitchOut(
+                    isUser = false,
+                    slotIdx = prevOppSlotIdx,
+                    isFainted = false,
+                    speciesNameHint = prevOppFormatted
+                )
                 oppSwapEndTimeMs = nowMs + 50000L
                 battleTimelineEvents.add(
                     BattleTimelineEvent(
@@ -12949,6 +13470,12 @@ class OverlayService : LifecycleService() {
                     )
                 )
             } else {
+                clearSlotStagesOnSwitchOut(
+                    isUser = false,
+                    slotIdx = prevOppSlotIdx,
+                    isFainted = true,
+                    speciesNameHint = prevOppFormatted
+                )
                 battleTimelineEvents.add(
                     BattleTimelineEvent(
                         type = "FAINT",
@@ -12983,7 +13510,14 @@ class OverlayService : LifecycleService() {
         if (!isWaitingForOpponent && !pokemonName.equals(prevName, ignoreCase = true)) {
             val nowMs = System.currentTimeMillis()
             val elapsedSec = getElapsedBattleSeconds(nowMs)
+            lastUserSwitchInWallMs = nowMs
             if (prevIdx !in 0..2 || !playerFaintedSlots[prevIdx]) {
+                clearSlotStagesOnSwitchOut(
+                    isUser = true,
+                    slotIdx = prevIdx,
+                    isFainted = false,
+                    speciesNameHint = prevName
+                )
                 playerSwapEndTimeMs = nowMs + 50000L
                 battleTimelineEvents.add(
                     BattleTimelineEvent(
@@ -12997,6 +13531,12 @@ class OverlayService : LifecycleService() {
                     )
                 )
             } else {
+                clearSlotStagesOnSwitchOut(
+                    isUser = true,
+                    slotIdx = prevIdx,
+                    isFainted = true,
+                    speciesNameHint = prevName
+                )
                 battleTimelineEvents.add(
                     BattleTimelineEvent(
                         type = "FAINT",
@@ -13624,7 +14164,9 @@ class OverlayService : LifecycleService() {
         fastMoveName: String,
         fastTurns: Int,
         isAttackerShadow: Boolean,
-        isDefenderShadow: Boolean
+        isDefenderShadow: Boolean,
+        attackerAtkStage: Int = 0,
+        defenderDefStage: Int = 0
     ): Double {
         val key = fastMoveName.lowercase().trim()
         val power = OverlayService.resolveFastPowerStatic(key, fastTurns)
@@ -13632,8 +14174,8 @@ class OverlayService : LifecycleService() {
         val stab = if (attacker.types.any { it.equals(moveType, ignoreCase = true) }) 1.2 else 1.0
         val typeEff = getTypeEffectiveness(moveType, defender.types)
 
-        val effectiveAtk = attacker.atk * (if (isAttackerShadow) 1.2 else 1.0)
-        val effectiveDef = defender.def * (if (isDefenderShadow) 0.8333333 else 1.0)
+        val effectiveAtk = attacker.atk * (if (isAttackerShadow) 1.2 else 1.0) * OverlayService.getPvpStageMultiplierStatic(attackerAtkStage)
+        val effectiveDef = defender.def * (if (isDefenderShadow) 0.8333333 else 1.0) * OverlayService.getPvpStageMultiplierStatic(defenderDefStage)
 
         val rawDamage = floor(0.5 * power * (effectiveAtk / effectiveDef) * stab * typeEff * 1.3) + 1.0
         return ((rawDamage / defender.hp.toDouble().coerceAtLeast(1.0)) * 100.0).coerceIn(0.35, 100.0)
@@ -13645,7 +14187,9 @@ class OverlayService : LifecycleService() {
         fastMoveName: String,
         fastTurns: Int,
         isAttackerShadow: Boolean,
-        isDefenderShadow: Boolean
+        isDefenderShadow: Boolean,
+        attackerAtkStage: Int = 0,
+        defenderDefStage: Int = 0
     ): Int {
         return calculateFastMoveExactDamagePercent(
             attacker = attacker,
@@ -13653,28 +14197,33 @@ class OverlayService : LifecycleService() {
             fastMoveName = fastMoveName,
             fastTurns = fastTurns,
             isAttackerShadow = isAttackerShadow,
-            isDefenderShadow = isDefenderShadow
+            isDefenderShadow = isDefenderShadow,
+            attackerAtkStage = attackerAtkStage,
+            defenderDefStage = defenderDefStage
         ).roundToInt().coerceIn(1, 100)
     }
 
     /**
      * Computes exact PvPoke Charged Move damage percentage dealt to defender's total HP pool:
      * Damage = floor(0.5 * Power * (EffectiveAtk / EffectiveDef) * STAB * TypeEffectiveness * 1.3) + 1
-     * Accounts for STAB (1.2x), Type Effectiveness, and Shadow modifiers (1.2x Atk / 0.8333333x Def).
+     * Accounts for STAB (1.2x), Type Effectiveness, Shadow modifiers (1.2x Atk / 0.8333333x Def),
+     * and live Attack/Defense stat stage multipliers (v6.40).
      */
     internal fun calculateChargedMoveDamagePercent(
         attacker: PokemonMeta,
         defender: PokemonMeta,
         moveName: String,
         isAttackerShadow: Boolean,
-        isDefenderShadow: Boolean
+        isDefenderShadow: Boolean,
+        attackerAtkStage: Int = 0,
+        defenderDefStage: Int = 0
     ): Int {
         val moveStats = OverlayService.resolveChargedMoveStatsStatic(moveName, attacker.types.firstOrNull() ?: "normal")
         val stab = if (attacker.types.any { it.equals(moveStats.type, ignoreCase = true) }) 1.2 else 1.0
         val typeEff = getTypeEffectiveness(moveStats.type, defender.types)
 
-        val effectiveAtk = attacker.atk * (if (isAttackerShadow) 1.2 else 1.0)
-        val effectiveDef = defender.def * (if (isDefenderShadow) 0.8333333 else 1.0)
+        val effectiveAtk = attacker.atk * (if (isAttackerShadow) 1.2 else 1.0) * OverlayService.getPvpStageMultiplierStatic(attackerAtkStage)
+        val effectiveDef = defender.def * (if (isDefenderShadow) 0.8333333 else 1.0) * OverlayService.getPvpStageMultiplierStatic(defenderDefStage)
 
         val rawDamage = floor(0.5 * moveStats.power * (effectiveAtk / effectiveDef) * stab * typeEff * 1.3) + 1.0
         val pct = ((rawDamage / defender.hp.toDouble()) * 100.0).roundToInt()
@@ -13743,7 +14292,10 @@ class OverlayService : LifecycleService() {
                 "hpPct" to slotHpVal,
                 "energy" to slotEnergyVal,
                 "hasEnteredField" to slotEverOnField,
-                "bankedEnergyLabel" to bankedEnergyLabel
+                "bankedEnergyLabel" to bankedEnergyLabel,
+                "atkStage" to playerSlotAtkStage[i],
+                "defStage" to playerSlotDefStage[i],
+                "disguiseBusted" to playerSlotDisguiseBusted[i]
             )
         }
 
@@ -13824,10 +14376,18 @@ class OverlayService : LifecycleService() {
                 "playerSlotEverOnField" to playerSlotEverOnField.toList(),
                 "activeUserHpPct" to waitingActiveUserHp,
                 "activeOppHpPct" to 100,
-                "activeUserCp" to (playerSlotCp.getOrElse(activeUserSlotIndex.coerceIn(0, 2)) { 0 }.takeIf { it > 0 } ?: (activeSlot?.cp ?: 0)),
-                "activeOppCp" to 0,
-                "playerSlotCp" to (0..2).map { idx -> playerSlotCp[idx].takeIf { it > 0 } ?: (currentPreset?.pokemon?.getOrNull(idx)?.cp ?: 0) },
-                "oppSlotCp" to oppSlotCp.toList(),
+                "activeUserAtkStage" to playerSlotAtkStage.getOrElse(activeUserSlotIndex.coerceIn(0, 2)) { 0 },
+                "activeUserDefStage" to playerSlotDefStage.getOrElse(activeUserSlotIndex.coerceIn(0, 2)) { 0 },
+                "activeUserDisguiseBusted" to playerSlotDisguiseBusted.getOrElse(activeUserSlotIndex.coerceIn(0, 2)) { false },
+                "activeOppAtkStage" to 0,
+                "activeOppDefStage" to 0,
+                "activeOppDisguiseBusted" to false,
+                "playerSlotAtkStage" to playerSlotAtkStage.toList(),
+                "playerSlotDefStage" to playerSlotDefStage.toList(),
+                "playerSlotDisguiseBusted" to playerSlotDisguiseBusted.toList(),
+                "oppSlotAtkStage" to oppSlotAtkStage.toList(),
+                "oppSlotDefStage" to oppSlotDefStage.toList(),
+                "oppSlotDisguiseBusted" to oppSlotDisguiseBusted.toList(),
                 "autoLoggedBanner" to if (!isBattleActive && lastLoggedBattleId.isNotBlank() && (nowMs - lastLoggedBattleTimeMs) <= 45000L) mapOf(
                     "battleId" to lastLoggedBattleId,
                     "result" to lastLoggedBattleResult,
@@ -13915,19 +14475,28 @@ class OverlayService : LifecycleService() {
         val userMove1Name = activeSlot?.chargedMove1?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove1
         val userMove2Name = activeSlot?.chargedMove2?.takeIf { it.isNotBlank() } ?: userMeta.chargedMove2
 
+        val activeUserAtkStg = playerSlotAtkStage.getOrElse(activeUserSlotIndex.coerceIn(0, 2)) { 0 }
+        val activeUserDefStg = playerSlotDefStage.getOrElse(activeUserSlotIndex.coerceIn(0, 2)) { 0 }
+        val activeOppAtkStg = oppSlotAtkStage.getOrElse(activeOpponentSlotIndex.coerceIn(0, 2)) { 0 }
+        val activeOppDefStg = oppSlotDefStage.getOrElse(activeOpponentSlotIndex.coerceIn(0, 2)) { 0 }
+
         val myMove1Pct = calculateChargedMoveDamagePercent(
             attacker = userMeta,
             defender = oppMeta,
             moveName = userMove1Name,
             isAttackerShadow = isUserShadow,
-            isDefenderShadow = isOpponentShadow
+            isDefenderShadow = isOpponentShadow,
+            attackerAtkStage = activeUserAtkStg,
+            defenderDefStage = activeOppDefStg
         )
         val myMove2Pct = calculateChargedMoveDamagePercent(
             attacker = userMeta,
             defender = oppMeta,
             moveName = userMove2Name,
             isAttackerShadow = isUserShadow,
-            isDefenderShadow = isOpponentShadow
+            isDefenderShadow = isOpponentShadow,
+            attackerAtkStage = activeUserAtkStg,
+            defenderDefStage = activeOppDefStg
         )
 
         val myMove1Summary = "${abbrMove5(userMove1Name)} ($myMove1Pct%)"
@@ -13950,7 +14519,9 @@ class OverlayService : LifecycleService() {
             fastMoveName = oppFastMoveName,
             fastTurns = oppFastTurns,
             isAttackerShadow = isOpponentShadow,
-            isDefenderShadow = isUserShadow
+            isDefenderShadow = isUserShadow,
+            attackerAtkStage = activeOppAtkStg,
+            defenderDefStage = activeUserDefStg
         )
         val userFastDmgPct = calculateFastMoveDamagePercent(
             attacker = userMeta,
@@ -13958,7 +14529,9 @@ class OverlayService : LifecycleService() {
             fastMoveName = userFastMoveName,
             fastTurns = userFastTurns,
             isAttackerShadow = isUserShadow,
-            isDefenderShadow = isOpponentShadow
+            isDefenderShadow = isOpponentShadow,
+            attackerAtkStage = activeUserAtkStg,
+            defenderDefStage = activeOppDefStg
         )
 
         val oppFastTelemetry = "${abbrMove5(oppFastMoveName)} ${oppFastTurns}t/${oppFastEnergy}e/${oppFastDmgPct}%"
@@ -13980,19 +14553,24 @@ class OverlayService : LifecycleService() {
             val rawBaseKey = FormResolver.extractBaseSpecies(opp).lowercase()
             val isThisOppShadow = manualShadowOverrides[rawBaseKey] ?: (if (idx == activeOpponentSlotIndex) isOpponentShadow else opp.contains("Shadow", ignoreCase = true))
             val meta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(opp, activeLeague, isThisOppShadow), activeLeague)
+            val thisOppAtkStg = oppSlotAtkStage.getOrElse(idx.coerceIn(0, 2)) { 0 }
             val oppC1Pct = calculateChargedMoveDamagePercent(
                 attacker = meta,
                 defender = userMeta,
                 moveName = meta.chargedMove1,
                 isAttackerShadow = isThisOppShadow,
-                isDefenderShadow = isUserShadow
+                isDefenderShadow = isUserShadow,
+                attackerAtkStage = thisOppAtkStg,
+                defenderDefStage = activeUserDefStg
             )
             val oppC2Pct = calculateChargedMoveDamagePercent(
                 attacker = meta,
                 defender = userMeta,
                 moveName = meta.chargedMove2,
                 isAttackerShadow = isThisOppShadow,
-                isDefenderShadow = isUserShadow
+                isDefenderShadow = isUserShadow,
+                attackerAtkStage = thisOppAtkStg,
+                defenderDefStage = activeUserDefStg
             )
             val thisOppPlusMove = OverlayService.resolveMegaPlusMoveStatic(meta.name, activeLeague)
                 ?: OverlayService.resolveMegaPlusMoveStatic(opp, activeLeague)
@@ -14024,7 +14602,9 @@ class OverlayService : LifecycleService() {
                 defender = userMeta,
                 moveName = thirdMoveName,
                 isAttackerShadow = isThisOppShadow,
-                isDefenderShadow = isUserShadow
+                isDefenderShadow = isUserShadow,
+                attackerAtkStage = thisOppAtkStg,
+                defenderDefStage = activeUserDefStg
             )
             val fourthMoveName = (if (thisOppPlusMove != null) meta.chargedMove3 else meta.chargedMove4).takeIf {
                 it.isNotBlank() &&
@@ -14038,7 +14618,9 @@ class OverlayService : LifecycleService() {
                     defender = userMeta,
                     moveName = fourthMoveName,
                     isAttackerShadow = isThisOppShadow,
-                    isDefenderShadow = isUserShadow
+                    isDefenderShadow = isUserShadow,
+                    attackerAtkStage = thisOppAtkStg,
+                    defenderDefStage = activeUserDefStg
                 )
             } else 0
             val matrix = calculate3v3Matrix(meta, isThisOppShadow, p1, p2, p3, idx)
@@ -14087,6 +14669,9 @@ class OverlayService : LifecycleService() {
                 "c2" to "${abbrMove5(meta.chargedMove2)} ($oppC2Pct%)",
                 "c3" to "${abbrMove5(thirdMoveName)} ($oppC3Pct%)",
                 "c4" to if (enable4ChargedMoves && fourthMoveName.isNotBlank()) "${abbrMove5(fourthMoveName)} ($oppC4Pct%)" else "",
+                "atkStage" to oppSlotAtkStage.getOrElse(idx.coerceIn(0, 2)) { 0 },
+                "defStage" to oppSlotDefStage.getOrElse(idx.coerceIn(0, 2)) { 0 },
+                "disguiseBusted" to oppSlotDisguiseBusted.getOrElse(idx.coerceIn(0, 2)) { false },
                 "matrix" to matrix
             )
         }
@@ -14247,7 +14832,9 @@ class OverlayService : LifecycleService() {
                 defender = userMeta,
                 moveName = moveName,
                 isAttackerShadow = isOpponentShadow,
-                isDefenderShadow = isUserShadow
+                isDefenderShadow = isUserShadow,
+                attackerAtkStage = activeOppAtkStg,
+                defenderDefStage = activeUserDefStg
             )
             val activeEff = getTypeEffectiveness(mStats.type, userMeta.types)
 
@@ -14262,12 +14849,15 @@ class OverlayService : LifecycleService() {
                     tSlot?.cp,
                     tSlot?.ivs
                 )
+                val tDefStage = playerSlotDefStage.getOrElse(tIdx.coerceIn(0, 2)) { 0 }
                 val tDmgPct = calculateChargedMoveDamagePercent(
                     attacker = oppMeta,
                     defender = tMeta,
                     moveName = moveName,
                     isAttackerShadow = isOpponentShadow,
-                    isDefenderShadow = tName.contains("Shadow", ignoreCase = true)
+                    isDefenderShadow = tName.contains("Shadow", ignoreCase = true),
+                    attackerAtkStage = activeOppAtkStg,
+                    defenderDefStage = tDefStage
                 )
                 val tEff = getTypeEffectiveness(mStats.type, tMeta.types)
                 val tier = when {
@@ -14325,7 +14915,9 @@ class OverlayService : LifecycleService() {
                 defender = oppMeta,
                 moveName = mName,
                 isAttackerShadow = isUserShadow,
-                isDefenderShadow = isOpponentShadow
+                isDefenderShadow = isOpponentShadow,
+                attackerAtkStage = activeUserAtkStg,
+                defenderDefStage = activeOppDefStg
             )
             val eff = getTypeEffectiveness(mStats.type, oppMeta.types)
 
@@ -14406,12 +14998,15 @@ class OverlayService : LifecycleService() {
                     val rawBaseKeySlot = FormResolver.extractBaseSpecies(oppNameSlot).lowercase()
                     val isSlotShadow = manualShadowOverrides[rawBaseKeySlot] ?: (if (slotIdx == activeOpponentSlotIndex) isOpponentShadow else oppNameSlot.contains("Shadow", ignoreCase = true))
                     val oppMetaSlot = OverlayService.computeEffectiveCombatStats(getPokemonMeta(oppNameSlot, activeLeague, isSlotShadow), activeLeague)
+                    val oDefStage = oppSlotDefStage.getOrElse(slotIdx.coerceIn(0, 2)) { 0 }
                     val oDmgPct = calculateChargedMoveDamagePercent(
                         attacker = userMeta,
                         defender = oppMetaSlot,
                         moveName = mName,
                         isAttackerShadow = isUserShadow,
-                        isDefenderShadow = isSlotShadow
+                        isDefenderShadow = isSlotShadow,
+                        attackerAtkStage = activeUserAtkStg,
+                        defenderDefStage = oDefStage
                     )
                     val oEff = getTypeEffectiveness(mStats.type, oppMetaSlot.types)
                     val tier = when {
@@ -14488,7 +15083,16 @@ class OverlayService : LifecycleService() {
             val targetBase = FormResolver.extractBaseSpecies(targetOppName).lowercase()
             val oIdx = displayList.indexOfFirst { FormResolver.extractBaseSpecies(it).equals(targetBase, ignoreCase = true) }
             val oHp = if (oIdx in 0..2 && !oppFaintedSlots[oIdx]) oppSlotHpPct[oIdx].coerceIn(1, 100) else 100
-            return scaleBrByHpRatio(baseBr, uHp, oHp)
+            val hpScaledBr = scaleBrByHpRatio(baseBr, uHp, oHp)
+            val uAtk = if (slotIdx in 0..2 && !playerFaintedSlots[slotIdx]) playerSlotAtkStage[slotIdx] else 0
+            val uDef = if (slotIdx in 0..2 && !playerFaintedSlots[slotIdx]) playerSlotDefStage[slotIdx] else 0
+            val oAtk = if (oIdx in 0..2 && !oppFaintedSlots[oIdx]) oppSlotAtkStage[oIdx] else 0
+            val oDef = if (oIdx in 0..2 && !oppFaintedSlots[oIdx]) oppSlotDefStage[oIdx] else 0
+            if (uAtk == 0 && uDef == 0 && oAtk == 0 && oDef == 0) return hpScaledBr
+            val stageMultRatio = (OverlayService.getPvpStageMultiplierStatic(uAtk) * OverlayService.getPvpStageMultiplierStatic(uDef)) /
+                (OverlayService.getPvpStageMultiplierStatic(oAtk) * OverlayService.getPvpStageMultiplierStatic(oDef))
+            val stageBrDelta = (kotlin.math.ln(stageMultRatio) * 180.0).roundToInt()
+            return (hpScaledBr + stageBrDelta).coerceIn(150, 850)
         }
         fun slotBr(slotIdx: Int, uS: Int, oS: Int): Int = slotBrAgainst(slotIdx, oppFullNameForMatrix, uS, oS)
 
@@ -14526,7 +15130,9 @@ class OverlayService : LifecycleService() {
                 defender = userMeta,
                 moveName = activeOppThirdMove,
                 isAttackerShadow = isOpponentShadow,
-                isDefenderShadow = isUserShadow
+                isDefenderShadow = isUserShadow,
+                attackerAtkStage = activeOppAtkStg,
+                defenderDefStage = activeUserDefStg
             )
         } else 0
         val oppMove4DmgPct = if (activeOppConfirmedSet.size < 2 && activeOppFourthMove.isNotBlank()) {
@@ -14535,7 +15141,9 @@ class OverlayService : LifecycleService() {
                 defender = userMeta,
                 moveName = activeOppFourthMove,
                 isAttackerShadow = isOpponentShadow,
-                isDefenderShadow = isUserShadow
+                isDefenderShadow = isUserShadow,
+                attackerAtkStage = activeOppAtkStg,
+                defenderDefStage = activeUserDefStg
             )
         } else 0
 
@@ -14731,7 +15339,9 @@ class OverlayService : LifecycleService() {
             fastMoveName = userFastMoveName,
             fastTurns = userFastTurns,
             isAttackerShadow = isUserShadow,
-            isDefenderShadow = isOpponentShadow
+            isDefenderShadow = isOpponentShadow,
+            attackerAtkStage = activeUserAtkStg,
+            defenderDefStage = activeOppDefStg
         ).coerceAtLeast(0.4)
         val oppFastExactDmgPct = calculateFastMoveExactDamagePercent(
             attacker = oppMeta,
@@ -14739,7 +15349,9 @@ class OverlayService : LifecycleService() {
             fastMoveName = oppFastMoveName,
             fastTurns = oppFastTurns,
             isAttackerShadow = isOpponentShadow,
-            isDefenderShadow = isUserShadow
+            isDefenderShadow = isUserShadow,
+            attackerAtkStage = activeOppAtkStg,
+            defenderDefStage = activeUserDefStg
         ).coerceAtLeast(0.4)
 
         val myFastsToKoOpp = if (activeOppHp <= 0) 0 else kotlin.math.ceil(activeOppHp.toDouble() / userFastExactDmgPct).toInt().coerceAtLeast(1)
@@ -15250,10 +15862,18 @@ class OverlayService : LifecycleService() {
             "playerSlotEverOnField" to playerSlotEverOnField.toList(),
             "activeUserHpPct" to activeUserHp,
             "activeOppHpPct" to activeOppHp,
-            "activeUserCp" to (playerSlotCp.getOrElse(activeSlotIdxSafe) { 0 }.takeIf { it > 0 } ?: (activeSlot?.cp ?: 0)),
-            "activeOppCp" to oppSlotCp.getOrElse(activeOppSlotSafe) { 0 },
-            "playerSlotCp" to (0..2).map { idx -> playerSlotCp[idx].takeIf { it > 0 } ?: (currentPreset?.pokemon?.getOrNull(idx)?.cp ?: 0) },
-            "oppSlotCp" to oppSlotCp.toList(),
+            "activeUserAtkStage" to activeUserAtkStg,
+            "activeUserDefStage" to activeUserDefStg,
+            "activeUserDisguiseBusted" to playerSlotDisguiseBusted.getOrElse(activeSlotIdxSafe) { false },
+            "activeOppAtkStage" to activeOppAtkStg,
+            "activeOppDefStage" to activeOppDefStg,
+            "activeOppDisguiseBusted" to oppSlotDisguiseBusted.getOrElse(activeOppSlotSafe) { false },
+            "playerSlotAtkStage" to playerSlotAtkStage.toList(),
+            "playerSlotDefStage" to playerSlotDefStage.toList(),
+            "playerSlotDisguiseBusted" to playerSlotDisguiseBusted.toList(),
+            "oppSlotAtkStage" to oppSlotAtkStage.toList(),
+            "oppSlotDefStage" to oppSlotDefStage.toList(),
+            "oppSlotDisguiseBusted" to oppSlotDisguiseBusted.toList(),
             "autoLoggedBanner" to if (!isBattleActive && lastLoggedBattleId.isNotBlank() && (nowMs - lastLoggedBattleTimeMs) <= 45000L) mapOf(
                 "battleId" to lastLoggedBattleId,
                 "result" to lastLoggedBattleResult,

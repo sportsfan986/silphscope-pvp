@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * SilphScope PvP v6.27 — Cloudflare Multi-User AI Telemetry, Local Video/Trace Preprocessor & On-Demand Reporter
+ * SilphScope PvP v6.40 — Cloudflare Multi-User AI Telemetry, Local Video/Trace Preprocessor & On-Demand Reporter
  *
  * Modes:
  *   1. Background Sync + Local Preprocess (runs every 5m via Windows Task Scheduler — ZERO AI tokens):
@@ -104,9 +104,19 @@ function loadPreprocessConfig() {
         entryPostFrames: 12,
         entrySampleEveryNFrames: 1,
         exitPreFrames: 8,
-        exitPostFrames: 16,
+        exitPostFrames: 24,
         exitSampleEveryNFrames: 1,
+        postExitKeyframeFrames: 18,
+        postExitKeyframeStep: 1,
         mergeWindowFrames: 10,
+      },
+      buffsAndDebuffs: {
+        enabled: true,
+        preFrames: 8,
+        postFrames: 16,
+        sampleEveryNFrames: 1,
+        cooldownFrames: 8,
+        saveEveryFrameKeyframe: true,
       },
       largeHpChangesAndAnimations: {
         enabled: true,
@@ -211,7 +221,7 @@ async function adminFetchJson(endpointPath) {
   const res = await fetchWithRetry(`${DEFAULT_WORKER_URL}${endpointPath}`, {
     headers: {
       Authorization: `Bearer ${ADMIN_API_KEY}`,
-      "User-Agent": "SilphScopePvP-CloudflareIngest/6.27",
+      "User-Agent": "SilphScopePvP-CloudflareIngest/6.40",
     },
   });
   if (!res.ok) {
@@ -226,7 +236,7 @@ async function adminFetchText(key) {
     {
       headers: {
         Authorization: `Bearer ${ADMIN_API_KEY}`,
-        "User-Agent": "SilphScopePvP-CloudflareIngest/6.27",
+        "User-Agent": "SilphScopePvP-CloudflareIngest/6.40",
       },
     }
   );
@@ -240,7 +250,7 @@ async function adminFetchBytes(key) {
     {
       headers: {
         Authorization: `Bearer ${ADMIN_API_KEY}`,
-        "User-Agent": "SilphScopePvP-CloudflareIngest/6.27",
+        "User-Agent": "SilphScopePvP-CloudflareIngest/6.40",
       },
     }
   );
@@ -255,7 +265,7 @@ async function adminDeleteObject(key) {
       method: "DELETE",
       headers: {
         Authorization: `Bearer ${ADMIN_API_KEY}`,
-        "User-Agent": "SilphScopePvP-CloudflareIngest/6.27",
+        "User-Agent": "SilphScopePvP-CloudflareIngest/6.40",
       },
     }
   );
@@ -294,7 +304,7 @@ function analyzeDeepTraceEvents(frames, config) {
   const totalFrames = frames.length;
   const clampIdx = (idx) => Math.max(0, Math.min(totalFrames - 1, idx));
 
-  const addEvent = (type, category, triggerIdx, startIdx, endIdx, step, summary, details = {}) => {
+  const addEvent = (type, category, triggerIdx, startIdx, endIdx, step, summary, details = {}, kfOverrides = null) => {
     const sIdx = clampIdx(startIdx);
     const eIdx = clampIdx(endIdx);
     const tIdx = clampIdx(triggerIdx);
@@ -309,6 +319,9 @@ function analyzeDeepTraceEvents(frames, config) {
       startArrayIdx: sIdx,
       endArrayIdx: eIdx,
       sampleEveryNFrames: Math.max(1, step || 1),
+      saveBeforeTriggerFramesOverride: kfOverrides?.before,
+      saveAfterTriggerFramesOverride: kfOverrides?.after,
+      sampleStepFramesOverride: kfOverrides?.step,
       triggerFrameIdx: fTrigger.frameIdx ?? tIdx,
       startFrameIdx: fStart.frameIdx ?? sIdx,
       endFrameIdx: fEnd.frameIdx ?? eIdx,
@@ -324,6 +337,12 @@ function analyzeDeepTraceEvents(frames, config) {
         oHp: `${f.committedOppHpPct}%(${f.rawOppHpPct}%)`,
         uE: f.userEnergy,
         oE: f.oppEnergy,
+        uAtk: f.userAtkStage ?? 0,
+        uDef: f.userDefStage ?? 0,
+        uDisg: Boolean(f.userDisguiseBusted),
+        oAtk: f.oppAtkStage ?? 0,
+        oDef: f.oppDefStage ?? 0,
+        oDisg: Boolean(f.oppDisguiseBusted),
         lFill: f.leftCircleFillPct,
         rFill: f.rightCircleFillPct,
         uMon: f.activeUserSpecies,
@@ -428,15 +447,28 @@ function analyzeDeepTraceEvents(frames, config) {
         inCutscene = false;
         if (i - lastExitIdx >= (r.mergeWindowFrames ?? 10)) {
           lastExitIdx = i;
+          const exitPost = r.exitPostFrames ?? 24;
           const postSettled = frames[clampIdx(i + 8)] || curr;
+          const postWindowFrames = frames.slice(Math.max(0, i - 2), clampIdx(i + exitPost) + 1);
+          const detectedBuffDebuffBanners = [
+            ...new Set(
+              postWindowFrames
+                .map((f) => [f.ocrMidBannerText, f.ocrOppTopText, f.ocrUserTopText].filter(Boolean).join(" | "))
+                .filter((txt) =>
+                  /(attack|defense|attacco|difesa|ataque|defensa|angriff|verteidigung|attaque|d[eé]fense)\s+(rose|fell|harshly|sharply|severely|drastically)/i.test(
+                    txt
+                  ) || /disguise\s+is\s+busted/i.test(txt)
+                )
+            ),
+          ];
           addEvent(
             "CHARGE_EXIT_SETTLE",
             "03_charge_out",
             i,
             i - (r.exitPreFrames ?? 8),
-            i + (r.exitPostFrames ?? 16),
+            i + exitPost,
             r.exitSampleEveryNFrames ?? 1,
-            `Transition OUT of charged move & HP settling (Exit U:${curr.committedUserHpPct}%->${postSettled.committedUserHpPct}%, O:${curr.committedOppHpPct}%->${postSettled.committedOppHpPct}%, Shields U:${curr.userShields} O:${curr.oppShields})`,
+            `Transition OUT of charged move, HP settling & buff/debuff validation (Exit U:${curr.committedUserHpPct}%->${postSettled.committedUserHpPct}%, O:${curr.committedOppHpPct}%->${postSettled.committedOppHpPct}%, Shields U:${curr.userShields} O:${curr.oppShields}${detectedBuffDebuffBanners.length > 0 ? `, BuffCallout="${detectedBuffDebuffBanners.join("; ")}"` : ""})`,
             {
               exitUserHp: curr.committedUserHpPct,
               settledUserHp: postSettled.committedUserHpPct,
@@ -446,9 +478,86 @@ function analyzeDeepTraceEvents(frames, config) {
               oppEnergy: curr.oppEnergy,
               userShields: curr.userShields,
               oppShields: curr.oppShields,
+              userAtkStage: postSettled.userAtkStage ?? curr.userAtkStage ?? 0,
+              userDefStage: postSettled.userDefStage ?? curr.userDefStage ?? 0,
+              oppAtkStage: postSettled.oppAtkStage ?? curr.oppAtkStage ?? 0,
+              oppDefStage: postSettled.oppDefStage ?? curr.oppDefStage ?? 0,
+              detectedBuffDebuffBanners,
+            },
+            {
+              before: 4,
+              after: r.postExitKeyframeFrames ?? 18,
+              step: r.postExitKeyframeStep ?? 1,
             }
           );
         }
+      }
+    }
+  }
+
+  // 2b. Buffs, Debuffs & Mimikyu Disguise Events (OCR Callouts + Stage Transitions)
+  if (rules.buffsAndDebuffs?.enabled !== false) {
+    const r = rules.buffsAndDebuffs || {};
+    const cooldown = r.cooldownFrames ?? 8;
+    let lastBuffEventIdx = -999;
+    const buffRe =
+      /(attack|defense|attacco|difesa|ataque|defensa|angriff|verteidigung|attaque|d[eé]fense)\s+(sharply\s+rose|drastically\s+rose|rose|harshly\s+fell|severely\s+fell|fell)/i;
+    const disguiseRe = /disguise\s+is\s+busted/i;
+
+    for (let i = 1; i < totalFrames; i++) {
+      const prev = frames[i - 1];
+      const curr = frames[i];
+      const combinedOcr = [curr.ocrMidBannerText, curr.ocrOppTopText, curr.ocrUserTopText]
+        .filter(Boolean)
+        .join(" | ");
+      const prevOcr = [prev.ocrMidBannerText, prev.ocrOppTopText, prev.ocrUserTopText]
+        .filter(Boolean)
+        .join(" | ");
+
+      const hasBuffCallout =
+        (buffRe.test(combinedOcr) && !buffRe.test(prevOcr)) ||
+        (disguiseRe.test(combinedOcr) && !disguiseRe.test(prevOcr));
+      const stageChanged =
+        (curr.userAtkStage ?? 0) !== (prev.userAtkStage ?? 0) ||
+        (curr.userDefStage ?? 0) !== (prev.userDefStage ?? 0) ||
+        (curr.oppAtkStage ?? 0) !== (prev.oppAtkStage ?? 0) ||
+        (curr.oppDefStage ?? 0) !== (prev.oppDefStage ?? 0) ||
+        Boolean(curr.userDisguiseBusted) !== Boolean(prev.userDisguiseBusted) ||
+        Boolean(curr.oppDisguiseBusted) !== Boolean(prev.oppDisguiseBusted);
+
+      if ((hasBuffCallout || stageChanged) && i - lastBuffEventIdx >= cooldown) {
+        lastBuffEventIdx = i;
+        const kind = disguiseRe.test(combinedOcr)
+          ? "MIMIKYU_DISGUISE_BUST"
+          : hasBuffCallout
+          ? "OCR_BUFF_DEBUFF_CALLOUT"
+          : "STAT_STAGE_CHANGE";
+        addEvent(
+          kind,
+          "03b_buff_debuff",
+          i,
+          i - (r.preFrames ?? 8),
+          i + (r.postFrames ?? 16),
+          r.sampleEveryNFrames ?? 1,
+          `Buff/Debuff (${kind}): OCR="${combinedOcr}", U_Stage=[A:${prev.userAtkStage ?? 0}->${curr.userAtkStage ?? 0}, D:${prev.userDefStage ?? 0}->${curr.userDefStage ?? 0}], O_Stage=[A:${prev.oppAtkStage ?? 0}->${curr.oppAtkStage ?? 0}, D:${prev.oppDefStage ?? 0}->${curr.oppDefStage ?? 0}]`,
+          {
+            kind,
+            ocrText: combinedOcr,
+            userSpecies: curr.activeUserSpecies,
+            oppSpecies: curr.activeOppSpecies,
+            prevUserAtkStage: prev.userAtkStage ?? 0,
+            currUserAtkStage: curr.userAtkStage ?? 0,
+            prevUserDefStage: prev.userDefStage ?? 0,
+            currUserDefStage: curr.userDefStage ?? 0,
+            prevOppAtkStage: prev.oppAtkStage ?? 0,
+            currOppAtkStage: curr.oppAtkStage ?? 0,
+            prevOppDefStage: prev.oppDefStage ?? 0,
+            currOppDefStage: curr.oppDefStage ?? 0,
+            userDisguiseBusted: Boolean(curr.userDisguiseBusted),
+            oppDisguiseBusted: Boolean(curr.oppDisguiseBusted),
+          },
+          r.saveEveryFrameKeyframe !== false ? { before: 4, after: 10, step: 1 } : null
+        );
       }
     }
   }
@@ -709,9 +818,9 @@ function extractEventScreenshotsWithFfmpeg(videoPath, outDir, events, config) {
 
     // 2. Full-Resolution Individual Screenshots across the animation/transition window
     if (kfCfg.enabled !== false) {
-      const before = kfCfg.saveBeforeTriggerFrames ?? 4;
-      const after = kfCfg.saveAfterTriggerFrames ?? 6;
-      const step = Math.max(1, kfCfg.sampleStepFrames ?? 2);
+      const before = ev.saveBeforeTriggerFramesOverride ?? kfCfg.saveBeforeTriggerFrames ?? 4;
+      const after = ev.saveAfterTriggerFramesOverride ?? kfCfg.saveAfterTriggerFrames ?? 6;
+      const step = Math.max(1, ev.sampleStepFramesOverride ?? kfCfg.sampleStepFrames ?? 2);
       const kfStart = Math.max(ev.startArrayIdx, ev.triggerArrayIdx - before);
       const kfEnd = Math.min(ev.endArrayIdx, ev.triggerArrayIdx + after);
       ev.keyframePaths = [];

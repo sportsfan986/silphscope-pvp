@@ -5336,7 +5336,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v6.28 • Android Native Overlay
+                  v6.40 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -13224,13 +13224,13 @@ export default function App() {
             </div>
 
             {/* ===================================================================
-                CARD 3B: 1-BATTLE FULL-SCREEN DVR & ENHANCED ENERGY/HP DIAGNOSTICS (v6.28)
+                CARD 3B: 1-BATTLE FULL-SCREEN DVR & ENHANCED ENERGY/HP DIAGNOSTICS (v6.40)
                =================================================================== */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
                 <div>
                   <span className="text-sm font-bold text-white block">
-                    🎥 1-Battle Full-Screen DVR + Deep Frame Trace &amp; Energy/HP Diagnostics (v6.28)
+                    🎥 1-Battle Full-Screen DVR + Deep Frame Trace &amp; Energy/HP Diagnostics (v6.40)
                   </span>
                   <span className="text-xs text-slate-400">
                     Zero-lag hardware H.264 544×1184 recording reusing existing OCR frames with burned-in timestamp header (<code className="text-amber-300">F#0042 T+14.35s U:88%(88%)/35E O:23%(23%)/7E</code>) + frame-by-frame <code className="text-sky-300">_deep_trace.jsonl</code>. Requires a custom (non-random) Debug ID; the overlay DVR button appears immediately when the overlay or battle starts so you can arm before combat begins.
@@ -15947,7 +15947,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v6.28 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
+        SilphScope PvP v6.40 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
       </footer>
     </div>
   );

@@ -199,6 +199,12 @@ internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap,
         activeOppIdx = oIdx,
         activeUserSpecies = activeUserPokemonName.orEmpty(),
         activeOppSpecies = activeOpponentName,
+        userAtkStage = playerSlotAtkStage.getOrElse(uIdx) { 0 },
+        userDefStage = playerSlotDefStage.getOrElse(uIdx) { 0 },
+        userDisguiseBusted = playerSlotDisguiseBusted.getOrElse(uIdx) { false },
+        oppAtkStage = oppSlotAtkStage.getOrElse(oIdx) { 0 },
+        oppDefStage = oppSlotDefStage.getOrElse(oIdx) { 0 },
+        oppDisguiseBusted = oppSlotDisguiseBusted.getOrElse(oIdx) { false },
         isCutsceneActive = pendingChargedAttackActor.isNotEmpty() || (sampledLeftChargeBtnFillPct == -1 && sampledRightChargeBtnFillPct == -1),
         pendingChargeActor = pendingChargedAttackActor,
         isTopCountdownActive = isTopCountdownCircleActive,
@@ -243,18 +249,34 @@ internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap,
                 }
                 try {
                     canvas.drawBitmap(scaledBmp, 0f, 0f, null)
+                    val uStageTag = buildString {
+                        if (finalTrace.userAtkStage != 0) append(if (finalTrace.userAtkStage > 0) "A+${finalTrace.userAtkStage}" else "A${finalTrace.userAtkStage}")
+                        if (finalTrace.userDefStage != 0) {
+                            if (isNotEmpty()) append(",")
+                            append(if (finalTrace.userDefStage > 0) "D+${finalTrace.userDefStage}" else "D${finalTrace.userDefStage}")
+                        }
+                    }.let { if (it.isNotEmpty()) "[$it]" else "" }
+                    val oStageTag = buildString {
+                        if (finalTrace.oppAtkStage != 0) append(if (finalTrace.oppAtkStage > 0) "A+${finalTrace.oppAtkStage}" else "A${finalTrace.oppAtkStage}")
+                        if (finalTrace.oppDefStage != 0) {
+                            if (isNotEmpty()) append(",")
+                            append(if (finalTrace.oppDefStage > 0) "D+${finalTrace.oppDefStage}" else "D${finalTrace.oppDefStage}")
+                        }
+                    }.let { if (it.isNotEmpty()) "[$it]" else "" }
                     val stamp = String.format(
                         java.util.Locale.US,
-                        "v%s F#%04d T+%05.2fs U:%d%%(%d%%)/%dE O:%d%%(%d%%)/%dE",
+                        "v%s F#%04d T+%05.2fs U:%d%%(%d%%)/%dE%s O:%d%%(%d%%)/%dE%s",
                         APP_VERSION,
                         finalTrace.frameIdx,
                         finalTrace.battleElapsedMs / 1000.0,
                         finalTrace.committedUserHpPct,
                         finalTrace.rawUserHpPct,
                         finalTrace.userEnergy,
+                        uStageTag,
                         finalTrace.committedOppHpPct,
                         finalTrace.rawOppHpPct,
-                        finalTrace.oppEnergy
+                        finalTrace.oppEnergy,
+                        oStageTag
                     )
                     val bannerRect = RectF(6f, 4f, targetW - 6f, 26f)
                     canvas.drawRoundRect(bannerRect, 5f, 5f, dvrBannerBgPaint)
