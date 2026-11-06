@@ -299,6 +299,10 @@ private val SYNCABLE_STRING_PREF_KEYS = listOf(
     OverlayService.PREFS_KEY_AI_ADVICE_HUD_POSITION,
     OverlayService.PREFS_KEY_CHARGE_CIRCLE_PRIORITY_MODE,
     OverlayService.PREFS_KEY_ALT_FAST_DETECT_STRICTNESS,
+    OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY,
+    OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER,
+    OverlayService.PREFS_KEY_REPLAY_LICENSE_JSON,
+    OverlayService.PREFS_KEY_REPLAY_VAULT_MAP_JSON,
     "opp_count_mode",
     "app_combat_mode"
 )
@@ -1978,13 +1982,18 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
     battleId: String,
     summaryRecord: AiTelemetryBattleRecordV510,
     mp4File: File,
-    traceFile: File
+    traceFile: File,
+    deleteFilesOnSuccess: Boolean = true,
+    userIssueNote: String = "",
+    uploadReason: String = ""
 ): Pair<Boolean, String> {
     OverlayService.isDvrUploadInFlight = true
     return try {
         if (!hasCustomScreenNameForVideoLoggingStatic(prefs)) {
-            try { mp4File.delete() } catch (_: Exception) {}
-            try { traceFile.delete() } catch (_: Exception) {}
+            if (deleteFilesOnSuccess) {
+                try { mp4File.delete() } catch (_: Exception) {}
+                try { traceFile.delete() } catch (_: Exception) {}
+            }
             return false to "⚠️ Video logging requires a custom ID (not a random ID)."
         }
         val devHash = getDeviceTelemetryHashStatic(prefs)
@@ -2046,7 +2055,9 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
                 "league" to summaryRecord.league,
                 "result" to summaryRecord.result,
                 "matchupSummary" to matchupSummary,
-                "frameCount" to frameCount
+                "frameCount" to frameCount,
+                "userIssueNote" to userIssueNote,
+                "uploadReason" to uploadReason
             )
         )
 
@@ -2102,8 +2113,10 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
                 .putString(PREFS_KEY_LAST_DVR_UPLOAD_PATH, videoRepoPath)
                 .putInt(PREFS_KEY_TOTAL_DVR_UPLOADED_COUNT, prevCount + 1)
                 .apply()
-            try { mp4File.delete() } catch (_: Exception) {}
-            try { traceFile.delete() } catch (_: Exception) {}
+            if (deleteFilesOnSuccess) {
+                try { mp4File.delete() } catch (_: Exception) {}
+                try { traceFile.delete() } catch (_: Exception) {}
+            }
             true to "🎥 Uploaded 1-Battle Video & Deep Trace ($cleanBattleId) as @$safeUser!"
         } else if (httpCode > 0) {
             false to "⚠️ 1-Battle DVR upload queued for retry (HTTP $httpCode)"
@@ -2115,6 +2128,487 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
     } finally {
         OverlayService.isDvrUploadInFlight = false
     }
+}
+
+internal fun OverlayService.Companion.prependDvrSummaryHeaderIfNeededStatic(
+    prefs: SharedPreferences,
+    gson: Gson,
+    battleId: String,
+    summaryRecord: AiTelemetryBattleRecordV510,
+    traceFile: File
+) {
+    if (!traceFile.exists()) return
+    try {
+        val text = traceFile.readText(Charsets.UTF_8)
+        if (text.startsWith("{\"recordType\":\"BATTLE_DVR_SUMMARY_HEADER\"")) return
+        val devHash = getDeviceTelemetryHashStatic(prefs)
+        val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
+            .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
+        val cleanId = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
+        val resolvedVer = summaryRecord.appVersion.takeIf { it.isNotBlank() && it != "5.10" } ?: APP_VERSION
+        val headerJson = gson.toJson(
+            mapOf(
+                "recordType" to "BATTLE_DVR_SUMMARY_HEADER",
+                "appVersion" to resolvedVer,
+                "versionCode" to APP_VERSION_CODE,
+                "battleId" to battleId,
+                "screenName" to safeUser,
+                "videoRepoPath" to "recordings/$safeUser/${cleanId}_video.mp4",
+                "traceRepoPath" to "recordings/$safeUser/${cleanId}_deep_trace.jsonl",
+                "battleSummary" to summaryRecord.copy(
+                    appVersion = resolvedVer,
+                    schemaVersion = resolvedVer,
+                    uploaderHandle = safeUser
+                )
+            )
+        ) + "\n"
+        traceFile.writeText(headerJson + text, Charsets.UTF_8)
+    } catch (_: Exception) {}
+}
+
+internal fun OverlayService.Companion.loadReplayVaultMapStatic(
+    prefs: SharedPreferences,
+    gson: Gson
+): MutableMap<String, OverlayService.Companion.ReplayVaultEntryMeta> {
+    val raw = prefs.getString(OverlayService.PREFS_KEY_REPLAY_VAULT_MAP_JSON, null)?.trim().orEmpty()
+    if (raw.isEmpty()) return mutableMapOf()
+    return try {
+        val type = object : TypeToken<MutableMap<String, OverlayService.Companion.ReplayVaultEntryMeta>>() {}.type
+        gson.fromJson<MutableMap<String, OverlayService.Companion.ReplayVaultEntryMeta>>(raw, type) ?: mutableMapOf()
+    } catch (_: Exception) {
+        mutableMapOf()
+    }
+}
+
+internal fun OverlayService.Companion.saveReplayVaultMapStatic(
+    prefs: SharedPreferences,
+    gson: Gson,
+    map: Map<String, OverlayService.Companion.ReplayVaultEntryMeta>
+) {
+    prefs.edit().putString(OverlayService.PREFS_KEY_REPLAY_VAULT_MAP_JSON, gson.toJson(map)).apply()
+}
+
+internal fun OverlayService.Companion.getEffectiveReplayTierStatic(prefs: SharedPreferences): String {
+    val screenName = getRequiredScreenNameStatic(prefs).trim()
+    if (screenName.equals("sportsfan986", ignoreCase = true)) return "vip"
+    return (prefs.getString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, "free") ?: "free").lowercase()
+}
+
+internal fun OverlayService.Companion.enforceLocalDvrReplaysQuotaStatic(
+    filesDir: File,
+    prefs: SharedPreferences,
+    gson: Gson
+) {
+    val replaysDir = File(filesDir, "dvr_replays")
+    if (!replaysDir.exists()) return
+    val tier = getEffectiveReplayTierStatic(prefs)
+    val maxUnpinnedLocal = if (tier == "free") 1 else 10
+    val maxLocalBytes = if (tier == "free") 60L * 1024L * 1024L else 300L * 1024L * 1024L
+    val vaultMap = loadReplayVaultMapStatic(prefs, gson)
+
+    val mp4Files = (replaysDir.listFiles { f -> f.isFile && f.name.endsWith("_video.mp4") }?.toList() ?: emptyList())
+        .sortedByDescending { it.lastModified() }
+
+    var unpinnedCount = 0
+    val keptMp4 = mutableListOf<File>()
+    for (mp4 in mp4Files) {
+        val cleanId = mp4.name.removeSuffix("_video.mp4")
+        val meta = vaultMap[cleanId]
+        val isPinned = meta?.isPinned == true && tier != "free"
+        if (isPinned) {
+            keptMp4.add(mp4)
+        } else {
+            unpinnedCount++
+            if (unpinnedCount > maxUnpinnedLocal) {
+                try { mp4.delete() } catch (_: Exception) {}
+                try { File(replaysDir, "${cleanId}_deep_trace.jsonl").delete() } catch (_: Exception) {}
+            } else {
+                keptMp4.add(mp4)
+            }
+        }
+    }
+
+    var totalBytes = keptMp4.sumOf { mp4 ->
+        val cleanId = mp4.name.removeSuffix("_video.mp4")
+        val tr = File(replaysDir, "${cleanId}_deep_trace.jsonl")
+        mp4.length() + (if (tr.exists()) tr.length() else 0L)
+    }
+    for (i in keptMp4.indices.reversed()) {
+        if (totalBytes <= maxLocalBytes) break
+        val mp4 = keptMp4[i]
+        val cleanId = mp4.name.removeSuffix("_video.mp4")
+        val isPinned = vaultMap[cleanId]?.isPinned == true && tier != "free"
+        if (!isPinned && keptMp4.size > 1) {
+            val tr = File(replaysDir, "${cleanId}_deep_trace.jsonl")
+            val freed = mp4.length() + (if (tr.exists()) tr.length() else 0L)
+            try { mp4.delete() } catch (_: Exception) {}
+            try { tr.delete() } catch (_: Exception) {}
+            totalBytes = (totalBytes - freed).coerceAtLeast(0L)
+        }
+    }
+}
+
+internal fun OverlayService.Companion.verifyReplayUnlockKeyBlocking(
+    prefs: SharedPreferences,
+    gson: Gson,
+    inputKey: String = ""
+): Pair<Boolean, String> {
+    return try {
+        val devHash = getDeviceTelemetryHashStatic(prefs)
+        val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
+            .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
+        val keyToUse = inputKey.trim().ifEmpty {
+            prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
+        }
+        val httpClient = buildTelemetryHttpClientStatic(15L, 25L, 20L)
+        val reqBody = gson.toJson(mapOf("unlockKey" to keyToUse))
+            .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+        val req = Request.Builder()
+            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/license/verify")
+            .post(reqBody)
+            .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
+            .header("X-Trainer-Screen-Name", safeUser)
+            .header("X-SilphScope-Unlock-Key", keyToUse)
+            .build()
+
+        httpClient.newCall(req).execute().use { resp ->
+            val bodyStr = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) {
+                return false to "Verification failed (HTTP ${resp.code})"
+            }
+            val root = JsonParser.parseString(bodyStr).asJsonObject
+            val tier = root.get("tier")?.asString?.lowercase() ?: "free"
+            val active = root.get("active")?.asBoolean ?: false
+            val err = root.get("error")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+            val licObj = root.get("license")?.takeIf { it.isJsonObject }?.asJsonObject
+            val resolvedKey = licObj?.get("key")?.takeIf { !it.isJsonNull }?.asString?.ifBlank { keyToUse } ?: keyToUse
+            val label = licObj?.get("label")?.takeIf { !it.isJsonNull }?.asString ?: tier.uppercase()
+
+            prefs.edit()
+                .putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, if (active) resolvedKey else keyToUse)
+                .putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, if (active) tier else "free")
+                .putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_JSON, bodyStr)
+                .apply()
+
+            if (active && tier != "free") {
+                syncCloudReplayListBlocking(prefs, gson)
+                true to "✅ Active Tier: $label (@$safeUser)"
+            } else if (err.isNotBlank()) {
+                false to "⚠️ $err"
+            } else {
+                true to "ℹ️ Free Tier active (1 Local Replay + Manual Issue Reports)"
+            }
+        }
+    } catch (e: Exception) {
+        false to "⚠️ License check failed: ${e.localizedMessage ?: "Network error"}"
+    }
+}
+
+internal fun OverlayService.Companion.syncCloudReplayListBlocking(
+    prefs: SharedPreferences,
+    gson: Gson
+): Pair<Boolean, String> {
+    return try {
+        val devHash = getDeviceTelemetryHashStatic(prefs)
+        val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
+            .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
+        val unlockKey = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
+        val httpClient = buildTelemetryHttpClientStatic(15L, 25L, 20L)
+        val req = Request.Builder()
+            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/list")
+            .get()
+            .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
+            .header("X-Trainer-Screen-Name", safeUser)
+            .header("X-SilphScope-Unlock-Key", unlockKey)
+            .build()
+
+        httpClient.newCall(req).execute().use { resp ->
+            val bodyStr = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) {
+                return false to "HTTP ${resp.code}"
+            }
+            val root = JsonParser.parseString(bodyStr).asJsonObject
+            val tier = root.get("tier")?.asString?.lowercase() ?: "free"
+            val active = root.get("active")?.asBoolean ?: false
+            if (active) {
+                prefs.edit()
+                    .putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, tier)
+                    .putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_JSON, bodyStr)
+                    .apply()
+            }
+            val itemsArr = root.getAsJsonArray("items") ?: JsonArray()
+            val map = loadReplayVaultMapStatic(prefs, gson)
+            for (el in itemsArr) {
+                if (!el.isJsonObject) continue
+                val obj = el.asJsonObject
+                val bId = obj.get("battleId")?.asString.orEmpty()
+                val sId = obj.get("shareId")?.asString.orEmpty()
+                if (bId.isBlank() || sId.isBlank()) continue
+                map[bId] = OverlayService.Companion.ReplayVaultEntryMeta(
+                    battleId = bId,
+                    shareId = sId,
+                    shareUrl = obj.get("shareUrl")?.asString ?: "$CLOUDFLARE_TELEMETRY_WORKER_URL/watch/$sId",
+                    videoStreamUrl = obj.get("videoStreamUrl")?.asString ?: "$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/stream/$sId/video.mp4",
+                    traceStreamUrl = obj.get("traceStreamUrl")?.asString ?: "$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/stream/$sId/trace.jsonl",
+                    isPinned = obj.get("isPinned")?.asBoolean ?: false,
+                    hideNames = obj.get("hideNames")?.asBoolean ?: false,
+                    uploadedAtMs = System.currentTimeMillis()
+                )
+            }
+            saveReplayVaultMapStatic(prefs, gson, map)
+            true to "Synced ${itemsArr.size()} cloud replays"
+        }
+    } catch (e: Exception) {
+        false to (e.localizedMessage ?: "Sync error")
+    }
+}
+
+internal fun OverlayService.Companion.uploadBattleReplayToR2VaultIfUnlockedBlocking(
+    prefs: SharedPreferences,
+    gson: Gson,
+    battleId: String,
+    summaryRecord: AiTelemetryBattleRecordV510?,
+    mp4File: File,
+    traceFile: File,
+    isPinned: Boolean = false
+): Triple<Boolean, String, OverlayService.Companion.ReplayVaultEntryMeta?> {
+    return try {
+        val tier = getEffectiveReplayTierStatic(prefs)
+        if (tier == "free") {
+            return Triple(false, "Free tier (local replay only)", null)
+        }
+        if (!mp4File.exists() || mp4File.length() <= 0L) {
+            return Triple(false, "Local MP4 file not found", null)
+        }
+        val devHash = getDeviceTelemetryHashStatic(prefs)
+        val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
+            .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
+        val cleanBattleId = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
+        val unlockKey = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
+        val traceText = if (traceFile.exists()) traceFile.readText(Charsets.UTF_8) else ""
+        val frameCount = traceText.lineSequence().count {
+            it.isNotBlank() && !it.startsWith("{\"recordType\":\"BATTLE_DVR_SUMMARY_HEADER\"")
+        }
+
+        val userList = summaryRecord?.userTeamSpecs?.map { it.species }?.filter { it.isNotBlank() }?.joinToString(", ").orEmpty()
+        val oppList = summaryRecord?.oppTeamSpecs?.map { it.species }?.filter { it.isNotBlank() }?.joinToString(", ").orEmpty()
+        val matchupSummary = buildString {
+            if (userList.isNotBlank()) append("$userList vs ")
+            append(oppList.ifBlank { "Opponent" })
+        }
+
+        val metadataJson = gson.toJson(
+            mapOf(
+                "battleId" to cleanBattleId,
+                "screenName" to safeUser,
+                "unlockKey" to unlockKey,
+                "appVersion" to APP_VERSION,
+                "versionCode" to APP_VERSION_CODE,
+                "league" to (summaryRecord?.league ?: "GBL"),
+                "result" to (summaryRecord?.result ?: "BATTLE"),
+                "matchupSummary" to matchupSummary,
+                "frameCount" to frameCount,
+                "isPinned" to isPinned
+            )
+        )
+
+        val multipart = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("metadata", metadataJson)
+            .addFormDataPart(
+                "video",
+                "${cleanBattleId}_video.mp4",
+                mp4File.asRequestBody("video/mp4".toMediaTypeOrNull())
+            )
+            .apply {
+                if (traceText.isNotBlank()) {
+                    addFormDataPart(
+                        "deep_trace",
+                        "${cleanBattleId}_deep_trace.jsonl",
+                        traceText.toRequestBody("application/x-ndjson; charset=utf-8".toMediaTypeOrNull())
+                    )
+                }
+            }
+            .build()
+
+        val httpClient = buildTelemetryHttpClientStatic(30L, 180L, 90L)
+        val req = Request.Builder()
+            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/upload")
+            .post(multipart)
+            .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
+            .header("X-Trainer-Screen-Name", safeUser)
+            .header("X-SilphScope-Unlock-Key", unlockKey)
+            .build()
+
+        httpClient.newCall(req).execute().use { resp ->
+            val bodyStr = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) {
+                return Triple(false, "Cloud Replay Vault upload failed (HTTP ${resp.code})", null)
+            }
+            val root = JsonParser.parseString(bodyStr).asJsonObject
+            val shareId = root.get("shareId")?.asString.orEmpty()
+            val shareUrl = root.get("shareUrl")?.asString ?: "$CLOUDFLARE_TELEMETRY_WORKER_URL/watch/$shareId"
+            val entry = OverlayService.Companion.ReplayVaultEntryMeta(
+                battleId = cleanBattleId,
+                shareId = shareId,
+                shareUrl = shareUrl,
+                videoStreamUrl = "$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/stream/$shareId/video.mp4",
+                traceStreamUrl = "$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/stream/$shareId/trace.jsonl",
+                isPinned = root.get("isPinned")?.asBoolean ?: isPinned,
+                hideNames = false,
+                uploadedAtMs = System.currentTimeMillis()
+            )
+            val map = loadReplayVaultMapStatic(prefs, gson)
+            map[cleanBattleId] = entry
+            saveReplayVaultMapStatic(prefs, gson, map)
+            Triple(true, "☁️ Saved to Cloud Replay Vault ($cleanBattleId)", entry)
+        }
+    } catch (e: Exception) {
+        Triple(false, "⚠️ Vault upload error: ${e.localizedMessage ?: "Network error"}", null)
+    }
+}
+
+internal fun OverlayService.Companion.togglePinOrPrivacyReplayBlocking(
+    prefs: SharedPreferences,
+    gson: Gson,
+    battleId: String,
+    isPinned: Boolean? = null,
+    hideNames: Boolean? = null
+): Pair<Boolean, String> {
+    val cleanId = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
+    val map = loadReplayVaultMapStatic(prefs, gson)
+    val existing = map[cleanId] ?: OverlayService.Companion.ReplayVaultEntryMeta(battleId = cleanId)
+    val nextPinned = isPinned ?: existing.isPinned
+    val nextHide = hideNames ?: existing.hideNames
+    map[cleanId] = existing.copy(isPinned = nextPinned, hideNames = nextHide)
+    saveReplayVaultMapStatic(prefs, gson, map)
+
+    if (existing.shareId.isBlank()) {
+        return true to if (nextPinned) "⭐ Pinned locally" else "Unpinned locally"
+    }
+
+    return try {
+        val devHash = getDeviceTelemetryHashStatic(prefs)
+        val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
+            .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
+        val unlockKey = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
+        val payload = mutableMapOf<String, Any>(
+            "battleId" to cleanId,
+            "shareId" to existing.shareId,
+            "unlockKey" to unlockKey
+        )
+        if (isPinned != null) payload["isPinned"] = isPinned
+        if (hideNames != null) payload["hideNames"] = hideNames
+
+        val httpClient = buildTelemetryHttpClientStatic(15L, 25L, 20L)
+        val req = Request.Builder()
+            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/pin")
+            .post(gson.toJson(payload).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
+            .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
+            .header("X-Trainer-Screen-Name", safeUser)
+            .header("X-SilphScope-Unlock-Key", unlockKey)
+            .build()
+
+        httpClient.newCall(req).execute().use { resp ->
+            val bodyStr = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) {
+                val errObj = try { JsonParser.parseString(bodyStr).asJsonObject.get("error")?.asString } catch (_: Exception) { null }
+                return false to "⚠️ ${errObj ?: "HTTP ${resp.code}"}"
+            }
+            true to if (isPinned != null) {
+                if (nextPinned) "⭐ Pinned in Cloud Replay Vault!" else "Unpinned in Cloud Replay Vault"
+            } else {
+                if (nextHide) "🕵️ Trainer Names Hidden on Share Link" else "👤 Trainer Names Visible on Share Link"
+            }
+        }
+    } catch (e: Exception) {
+        false to "⚠️ ${e.localizedMessage ?: "Network error"}"
+    }
+}
+
+internal fun OverlayService.Companion.submitManualDvrIssueReportBlocking(
+    filesDir: File,
+    cacheDir: File,
+    prefs: SharedPreferences,
+    gson: Gson,
+    battleId: String,
+    league: String,
+    result: String,
+    userTeamNames: List<String>,
+    oppTeamNames: List<String>,
+    userIssueNote: String
+): Pair<Boolean, String> {
+    val cleanId = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
+    val replaysDir = File(filesDir, "dvr_replays")
+    var mp4File = File(replaysDir, "${cleanId}_video.mp4")
+    var traceFile = File(replaysDir, "${cleanId}_deep_trace.jsonl")
+
+    // If not in local ring buffer anymore, check if it's in Cloud R2 Vault and download to temp files
+    if (!mp4File.exists()) {
+        val vaultMeta = loadReplayVaultMapStatic(prefs, gson)[cleanId]
+        if (vaultMeta != null && vaultMeta.videoStreamUrl.isNotBlank()) {
+            try {
+                val httpClient = buildTelemetryHttpClientStatic(20L, 90L, 60L)
+                val tmpMp4 = File(cacheDir, "issue_${cleanId}_video.mp4")
+                val tmpTrace = File(cacheDir, "issue_${cleanId}_deep_trace.jsonl")
+                httpClient.newCall(Request.Builder().url(vaultMeta.videoStreamUrl).get().build()).execute().use { r ->
+                    if (r.isSuccessful) {
+                        r.body?.byteStream()?.use { input ->
+                            tmpMp4.outputStream().use { out -> input.copyTo(out) }
+                        }
+                    }
+                }
+                if (vaultMeta.traceStreamUrl.isNotBlank()) {
+                    httpClient.newCall(Request.Builder().url(vaultMeta.traceStreamUrl).get().build()).execute().use { r ->
+                        if (r.isSuccessful) {
+                            tmpTrace.writeText(r.body?.string().orEmpty(), Charsets.UTF_8)
+                        }
+                    }
+                }
+                if (tmpMp4.exists() && tmpMp4.length() > 0L) {
+                    mp4File = tmpMp4
+                    traceFile = tmpTrace
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    if (!mp4File.exists() && !traceFile.exists()) {
+        return false to "⚠️ No DVR video or trace found for this battle."
+    }
+
+    val devHash = getDeviceTelemetryHashStatic(prefs)
+    val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
+        .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
+
+    val summaryRecord = AiTelemetryBattleRecordV510(
+        schemaVersion = APP_VERSION,
+        battleId = cleanId,
+        timestampMs = System.currentTimeMillis(),
+        appVersion = APP_VERSION,
+        uploaderHandle = safeUser,
+        deviceHash = devHash,
+        league = league,
+        teamName = "Manual Issue Report",
+        result = result,
+        settingsProfileSignature = computeDebounceSettingsProfileSignatureStatic(prefs),
+        userTeamSpecs = userTeamNames.mapIndexed { idx, s -> AiTelemetrySlotSpec(slotIndex = idx, species = s) },
+        oppTeamSpecs = oppTeamNames.mapIndexed { idx, s -> AiTelemetryOppSlotSpec(slotIndex = idx, species = s) },
+        dvrVideoPath = "recordings/$safeUser/${cleanId}_video.mp4",
+        dvrDeepTracePath = "recordings/$safeUser/${cleanId}_deep_trace.jsonl"
+    )
+
+    return uploadBattleDvrBundleToGitHubBlocking(
+        prefs = prefs,
+        gson = gson,
+        battleId = cleanId,
+        summaryRecord = summaryRecord,
+        mp4File = mp4File,
+        traceFile = traceFile,
+        deleteFilesOnSuccess = mp4File.parentFile == cacheDir,
+        userIssueNote = userIssueNote.ifBlank { "User-submitted DVR issue report from Replay menu" },
+        uploadReason = "Manual Replay Issue Report"
+    )
 }
 
 /**

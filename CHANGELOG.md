@@ -1,4 +1,32 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.40`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.42`)
+
+---
+
+## v6.42 (2026-11-06) — In-App DVR Video + 4-Mode Live HUD Replay Player, Cloudflare R2 Replay Vault (`9.0 GB` Free-Tier Guard), Tiered Unlock Keys & Web Share Site (`/watch/<shareId>`)
+*Full-stack DVR Video Replay, Cloud R2 Vault, and Web Sharing release (`v6.42`, `versionCode = 1642`) introducing an in-app DVR Video + 4-Mode Interactive HUD Replay player in the Battle Log, automatic `420 kbps` (`~10–12 MB/battle`) local ring-buffer recording, manual `🚩 Submit Issue Report` on any recorded battle, Cloudflare R2 Replay Vault with a strict `9.0 GB` zero-cost hard cap, tiered Replay Unlock Keys (`Free`, `Base / Trainer`, `Pro / Legend`, `VIP / Admin`) with Buy Me a Coffee webhook + Admin CLI (`scripts/manage-keys.mjs`), and a standalone Web Share Player (`/watch/<shareId>`) with Discord/Telegram OpenGraph video embeds and client-side HUD video export.*
+
+- **v6.42 — Enhancement 1: In-App DVR Video + 4-Mode Live HUD Replay Player (`MainActivity.kt`, `BattleDvrEngine.kt`, `OverlayService.kt`, `overlay.html`)**:
+  - **Synchronized Video + Live HUD Stage**: Added **`🎥 Watch DVR Video`** mode directly inside the Battle Log Replay modal (`showInteractiveBattleReplayDialog`), rendering the recorded battle `.mp4` (from local device storage or streamed via Cloudflare R2 `HTTP 206` Range requests) underneath a transparent `overlay.html?replay=1` WebView driven by `applyDeepTraceFrameForReplay(frame)`.
+  - **4 Live-Toggleable HUD Modes (`👁️ HUD: LIVE | COMPACT | DIAG | OFF`)**:
+    - `LIVE`: Full interactive 3x3 Matchup Matrix, 9-Shield badge, Fast-Move Pacing bars, Stat Stage pills, and 2-Line AI Tactical Coach.
+    - `COMPACT`: Top Mirrored Header (`[Stat, HP, E, 🛡️] | [🛡️, E, HP, Stat]`) + 2-Line AI Coach only, keeping 85%+ of the battle video unobstructed.
+    - `DIAG`: Displays live Raw vs. Committed HP %, Charge Circle Fill %, Energy Source, and OCR text lines for frame-accurate debugging.
+    - `OFF`: Clean unobstructed gameplay video.
+  - **Frame-Step, Speed, Scrubber, Event Jump Chips & "What-If" Pause Inspection**: Includes `⏮ -1F` / `⏭ +1F` frame-step buttons, `0.25x / 0.5x / 1.0x / 2.0x` playback speed selector, timeline `SeekBar`, clickable event jump chips (`⚡ Charged Moves`, `🔄 Swaps`, `💀 KOs` seeking to `t - 2.0s`), `⬇️ Bottom / ⬆️ Top` HUD position toggle, live Opacity cycler (`92% / 75% / 55% / 35%`), and interactive **"What-If" Matrix inspection while paused**.
+
+- **v6.42 — Enhancement 2: Auto-DVR Local Ring Buffer (`420 kbps`), `🚩 Submit Issue Report` & Smart Diagnostic Uploads (`BattleDvrEngine.kt`, `GitHubCloudSync.kt`, `MainActivity.kt`)**:
+  - **Crisp `420 kbps` (`~10–12 MB/battle`) Auto-DVR**: Tuned `MediaFormat.KEY_BIT_RATE` to `420_000` at `544p` `10fps` and automatically records every battle when DVR is enabled into `filesDir/dvr_replays/` (`1` rolling battle for Free Tier; `10` rolling battles + ⭐ Pinned battles up to `300 MB` for Unlocked Tiers).
+  - **Smart Diagnostic Upload + Manual `🚩 Report Issue` Button**: Auto-uploads to the diagnostic Telegram pipeline (`/v1/dvr`) when a `HIGH`-severity anomaly is detected or when manually flagged in-battle, and adds a **`🚩 Report Issue`** button in the Replay modal (available on all tiers, including Free Tier) so users can attach a custom note and submit any recorded battle video + trace to Telegram on demand.
+
+- **v6.42 — Enhancement 3: Cloudflare R2 Replay Vault (`9.0 GB` Hard Cap), Tiered Unlock Keys & Web Share Site (`cloudflare/telemetry-worker/worker.mjs`, `scripts/manage-keys.mjs`)**:
+  - **Cloudflare R2 Replay Vault (`silphscope-replays`) & `9.0 GB` Zero-Cost Hard Cap**: Stores user replay videos and traces in Standard R2 with a strict `9.0 GB` global hard cap (`GLOBAL_MAX_R2_STORAGE_GB = "9.0"`) so storage never exceeds Cloudflare's `10 GB/mo` free tier (`$0.00` egress).
+  - **Subscription Tiers, Buy Me a Coffee Webhook & Admin Key CLI**: Added `Free` (`1` local), `Base / Trainer` (`10` rolling + `5` ⭐ Pinned, `7d`, `500 MB`), `Pro / Legend` (`50` rolling + `10` ⭐ Pinned, `30d`, `2 GB`), and `VIP / Admin` (`150` rolling + `25` ⭐ Pinned, `365d`, `4 GB`) tiers, multi-device Debug ID binding (`/v1/license/verify`), automated Buy Me a Coffee webhook key minting (`/v1/webhooks/bmc`), and the `scripts/manage-keys.mjs` CLI.
+  - **Public Web Share Player (`GET /watch/<shareId>`)**: Added `🔗 Share` in the Replay modal producing capability URLs (`https://silphscope-telemetry.silphscope-pvp.workers.dev/watch/<shareId>`) with Discord/Telegram `og:video` embeds, Side-by-Side vs. Overlaid HUD toggle, `🕵️ Hide Names` privacy mode, client-side `💾 Export Video + HUD`, and a direct `🚀 Open Full Simulator` link.
+
+---
+
+## v6.41 (2026-11-06) — Minimal Corner Frame-Index DVR Pill (`#0042`), Local FFmpeg ASS HUD Re-Burn & Multi-Part (`>24 MiB`) Cloudflare Worker KV Chunking
+*Video playback clarity, local FFmpeg preprocessing speed (~30x faster), and large-video upload reliability release (`v6.41`, `versionCode = 1641`) replacing the full-width top DVR video watermark with a tiny `42px × 14px` top-left corner frame-index pill (`#0042`) for clean Telegram playback while burning the full telemetry HUD banner back into local diagnostic keyframes/contact sheets via FFmpeg ASS subtitles.*
 
 ---
 

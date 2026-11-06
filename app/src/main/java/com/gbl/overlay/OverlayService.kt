@@ -91,8 +91,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "6.41"
-        const val APP_VERSION_CODE = 1641
+        const val APP_VERSION = "6.42"
+        const val APP_VERSION_CODE = 1642
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -374,13 +374,17 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS = "gbl_haptic_charge_timing_fasts"
         const val DEFAULT_HAPTIC_CHARGE_TIMING_FASTS = 1 // 1 or 2 fast moves
 
-        // v6.07: 1-Battle Full-Screen DVR & Frame-Synced Deep Logger Constants
+        // v6.07 / v6.42: 1-Battle Full-Screen DVR, Replay Vault & Frame-Synced Deep Logger Constants
         const val PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN = "gbl_show_one_battle_dvr_btn"
         const val DEFAULT_SHOW_ONE_BATTLE_DVR_BTN = false
         const val PREFS_KEY_ARM_ONE_BATTLE_DVR = "gbl_arm_one_battle_dvr"
         const val PREFS_KEY_LAST_DVR_UPLOAD_MS = "gbl_last_dvr_upload_ms"
         const val PREFS_KEY_LAST_DVR_UPLOAD_PATH = "gbl_last_dvr_upload_path"
         const val PREFS_KEY_TOTAL_DVR_UPLOADED_COUNT = "gbl_total_dvr_uploaded_count"
+        const val PREFS_KEY_REPLAY_UNLOCK_KEY = "gbl_replay_unlock_key"
+        const val PREFS_KEY_REPLAY_LICENSE_TIER = "gbl_replay_license_tier"
+        const val PREFS_KEY_REPLAY_LICENSE_JSON = "gbl_replay_license_json"
+        const val PREFS_KEY_REPLAY_VAULT_MAP_JSON = "gbl_replay_vault_map_json"
 
         @Volatile var activeEnergyDebounceSamples: Int = DEFAULT_ENERGY_DEBOUNCE_SAMPLES
         @Volatile var activeEnergyUpdateToasts: Boolean = DEFAULT_ENERGY_UPDATE_TOASTS
@@ -1279,7 +1283,26 @@ class OverlayService : LifecycleService() {
             val userDisguiseBusted: Boolean = false,
             val oppAtkStage: Int = 0,
             val oppDefStage: Int = 0,
-            val oppDisguiseBusted: Boolean = false
+            val oppDisguiseBusted: Boolean = false,
+            val userSlotHpPct: List<Int> = emptyList(),
+            val oppSlotHpPct: List<Int> = emptyList(),
+            val userSlotEnergy: List<Int> = emptyList(),
+            val oppSlotEnergy: List<Int> = emptyList(),
+            val userSlotAtkStage: List<Int> = emptyList(),
+            val userSlotDefStage: List<Int> = emptyList(),
+            val oppSlotAtkStage: List<Int> = emptyList(),
+            val oppSlotDefStage: List<Int> = emptyList()
+        )
+
+        data class ReplayVaultEntryMeta(
+            val battleId: String = "",
+            val shareId: String = "",
+            val shareUrl: String = "",
+            val videoStreamUrl: String = "",
+            val traceStreamUrl: String = "",
+            val isPinned: Boolean = false,
+            val hideNames: Boolean = false,
+            val uploadedAtMs: Long = 0L
         )
 
         data class AiTelemetryBattleRecordV510(
@@ -5404,7 +5427,9 @@ class OverlayService : LifecycleService() {
                     cachedOcrMidBannerLines
                 )
             }
-            if (activeOneBattleDvrArmed && (isBattleActive || hasBattleStarted) && !isWaitingForOpponent) {
+            if ((activeOneBattleDvrArmed || (activeShowOneBattleDvrBtn && hasCustomScreenNameForVideoLoggingStatic(prefs))) &&
+                (isBattleActive || hasBattleStarted) && !isWaitingForOpponent
+            ) {
                 recordOneBattleDvrFrameAndTraceAsync(screen, currentFrameTimestampMs)
             }
         } finally {
@@ -13020,7 +13045,8 @@ class OverlayService : LifecycleService() {
             timelineEvents = finalTimelineEvents,
             sensorTicks = sensorTicksForShadow
         )
-        val wasDvrRecordedThisBattle = !ignoreAiTelemetry && (activeOneBattleDvrRecording || (activeOneBattleDvrArmed && activeOneBattleDvrFrames > 0))
+        val wasExplicitlyFlaggedForDiag = activeOneBattleDvrArmed
+        val wasDvrRecordedThisBattle = !ignoreAiTelemetry && (activeOneBattleDvrRecording || activeOneBattleDvrFrames > 0)
         val devHashForDvr = OverlayService.getDeviceTelemetryHashStatic(prefs)
         val trainerScreenName = OverlayService.getRequiredScreenNameStatic(prefs).ifEmpty { "trainer_$devHashForDvr" }
         val safeUserForDvr = trainerScreenName.replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
@@ -13088,7 +13114,7 @@ class OverlayService : LifecycleService() {
             .apply()
 
         if (wasDvrRecordedThisBattle) {
-            finalizeAndUploadOneBattleDvrAsync(battleId, v510Record)
+            finalizeAndUploadOneBattleDvrAsync(battleId, v510Record, wasExplicitlyFlaggedForDiag)
         } else if (activeOneBattleDvrRecording) {
             abortOneBattleDvrAsync(disarm = true)
         }

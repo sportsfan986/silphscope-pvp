@@ -7,14 +7,15 @@ compatibility_date = "2024-11-01"
 binding = "TELEMETRY_KV"
 id = "e50fe893fefe428b871c9b667ac3edc2"
 
-# Optional: if R2 is also enabled on the account later, uncomment to prefer R2 over KV:
-# [[r2_buckets]]
-# binding = "TELEMETRY_BUCKET"
-# bucket_name = "silphscope-telemetry"
+# Dedicated Cloudflare R2 Bucket for User DVR Replay Vault & Web Share Player (10 GB/mo free, $0 egress):
+[[r2_buckets]]
+binding = "REPLAY_BUCKET"
+bucket_name = "silphscope-replays"
 
 [vars]
-WORKER_VERSION = "1.2.0"
+WORKER_VERSION = "2.0.0"
 TELEGRAM_NOTIFY_TELEMETRY_BATCHES = "false"
+GLOBAL_MAX_R2_STORAGE_GB = "9.0"
 
 # Secrets configured via `npx wrangler secret put <NAME>`:
 # - CLIENT_INGEST_KEY     (Shared key sent by the SilphScope Android app in `X-SilphScope-Client-Key`)

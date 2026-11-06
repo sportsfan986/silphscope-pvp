@@ -114,13 +114,10 @@ internal fun OverlayService.toggleArmOneBattleDvrFromOverlay() {
     val nextArmed = !activeOneBattleDvrArmed
     activeOneBattleDvrArmed = nextArmed
     prefs.edit().putBoolean(PREFS_KEY_ARM_ONE_BATTLE_DVR, nextArmed).apply()
-    if (!nextArmed && activeOneBattleDvrRecording) {
-        abortOneBattleDvrAsync(disarm = true)
-        showBattleToast("⏹️ 1-Battle DVR Disarmed & Stopped")
-    } else if (nextArmed) {
-        showBattleToast("🔴 Armed 1-Battle Full-Screen DVR + Deep Trace (Auto-uploads after match)")
+    if (nextArmed) {
+        showBattleToast("🚩 Flagged Battle for Diagnostic Video & Deep Trace Upload")
     } else {
-        showBattleToast("⚪ 1-Battle DVR Disarmed")
+        showBattleToast("⚪ Cleared Manual Diagnostic Flag (Local Auto-DVR still active)")
     }
     recalculateAndPushBattleData()
 }
@@ -216,12 +213,23 @@ internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap,
         ocrBottomMovesText = cachedOcrPlayerMoveLines.joinToString(" | ") { it.text },
         recommendedPhase = lastRecommendedPhase,
         recommendedAction = lastRecommendedAction,
-        recommendedGoal = lastRecommendedGoal
+        recommendedGoal = lastRecommendedGoal,
+        userSlotHpPct = playerSlotHpPct.toList(),
+        oppSlotHpPct = oppSlotHpPct.toList(),
+        userSlotEnergy = playerSlotEnergy.toList(),
+        oppSlotEnergy = oppSlotEnergy.toList(),
+        userSlotAtkStage = playerSlotAtkStage.toList(),
+        userSlotDefStage = playerSlotDefStage.toList(),
+        oppSlotAtkStage = oppSlotAtkStage.toList(),
+        oppSlotDefStage = oppSlotDefStage.toList()
     )
+
+    val canRecordNow = activeOneBattleDvrArmed ||
+        (activeShowOneBattleDvrBtn && OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs))
 
     handler.post {
         try {
-            if (!activeOneBattleDvrArmed) {
+            if (!canRecordNow) {
                 scaledBmp.recycle()
                 return@post
             }
@@ -294,7 +302,7 @@ internal fun OverlayService.startDvrEncoderLocked(width: Int, height: Int, start
 
         val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-            setInteger(MediaFormat.KEY_BIT_RATE, 700_000)
+            setInteger(MediaFormat.KEY_BIT_RATE, 420_000)
             setInteger(MediaFormat.KEY_FRAME_RATE, 10)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
         }
@@ -417,7 +425,8 @@ internal fun OverlayService.abortOneBattleDvrAsync(disarm: Boolean) {
 
 internal fun OverlayService.finalizeAndUploadOneBattleDvrAsync(
     battleId: String,
-    summaryRecord: AiTelemetryBattleRecordV510
+    summaryRecord: AiTelemetryBattleRecordV510,
+    wasExplicitlyFlaggedForDiag: Boolean = false
 ) {
     activeOneBattleDvrArmed = false
     if (isPrefsInitialized) {
@@ -434,32 +443,86 @@ internal fun OverlayService.finalizeAndUploadOneBattleDvrAsync(
         if (rawMp4 == null && rawTrace == null) return@post
 
         val cleanId = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
-        val finalMp4 = File(cacheDir, "${cleanId}_video.mp4")
-        val finalTrace = File(cacheDir, "${cleanId}_deep_trace.jsonl")
+        val replaysDir = File(filesDir, "dvr_replays").apply { if (!exists()) mkdirs() }
+        val localMp4 = File(replaysDir, "${cleanId}_video.mp4")
+        val localTrace = File(replaysDir, "${cleanId}_deep_trace.jsonl")
         try {
-            if (rawMp4 != null && rawMp4.exists()) rawMp4.renameTo(finalMp4)
-            if (rawTrace != null && rawTrace.exists()) rawTrace.renameTo(finalTrace)
+            if (rawMp4 != null && rawMp4.exists()) {
+                rawMp4.copyTo(localMp4, overwrite = true)
+                rawMp4.delete()
+            }
+            if (rawTrace != null && rawTrace.exists()) {
+                rawTrace.copyTo(localTrace, overwrite = true)
+                rawTrace.delete()
+            }
         } catch (_: Exception) {}
+
+        // Prepend BATTLE_DVR_SUMMARY_HEADER to localTrace so local replay & cloud upload both have full 3v3 metadata
+        OverlayService.prependDvrSummaryHeaderIfNeededStatic(prefs, gson, battleId, summaryRecord, localTrace)
+        OverlayService.enforceLocalDvrReplaysQuotaStatic(filesDir, prefs, gson)
+
+        val shouldUploadDiag = wasExplicitlyFlaggedForDiag || summaryRecord.hasHighSeverityAnomaly
+        val diagReason = when {
+            wasExplicitlyFlaggedForDiag && summaryRecord.hasHighSeverityAnomaly -> "Manual Flag + HIGH Anomaly (${summaryRecord.anomalyCount})"
+            wasExplicitlyFlaggedForDiag -> "Manual In-Battle Flag"
+            summaryRecord.hasHighSeverityAnomaly -> "Auto HIGH-Severity Anomaly (${summaryRecord.anomalyCount})"
+            else -> ""
+        }
 
         Handler(Looper.getMainLooper()).post {
             recalculateAndPushBattleData()
-            showBattleToast("🎥 Uploading 1-Battle Video & Deep Log...")
+            if (shouldUploadDiag) {
+                showBattleToast("🎥 Saved Replay & Uploading Diagnostic DVR ($diagReason)...")
+            } else {
+                showBattleToast("🎬 Battle Replay Saved to DVR History")
+            }
         }
 
         lifecycleScope.launch(Dispatchers.IO) {
-            val (dvrOk, dvrMsg) = OverlayService.uploadBattleDvrBundleToGitHubBlocking(
-                prefs = prefs,
-                gson = gson,
-                battleId = battleId,
-                summaryRecord = summaryRecord,
-                mp4File = finalMp4,
-                traceFile = finalTrace
-            )
-            if (dvrOk) {
-                try {
-                    OverlayService.retryPendingCachedDvrBundlesBlocking(cacheDir, prefs, gson)
-                } catch (_: Exception) {}
+            var toastMsg: String? = null
+            var toastLong = false
+
+            if (shouldUploadDiag) {
+                val (dvrOk, dvrMsg) = OverlayService.uploadBattleDvrBundleToGitHubBlocking(
+                    prefs = prefs,
+                    gson = gson,
+                    battleId = battleId,
+                    summaryRecord = summaryRecord,
+                    mp4File = localMp4,
+                    traceFile = localTrace,
+                    deleteFilesOnSuccess = false,
+                    uploadReason = diagReason
+                )
+                if (!dvrOk) {
+                    // Queue a copy in cacheDir for background retry
+                    try {
+                        if (localMp4.exists()) localMp4.copyTo(File(cacheDir, "${cleanId}_video.mp4"), overwrite = true)
+                        if (localTrace.exists()) localTrace.copyTo(File(cacheDir, "${cleanId}_deep_trace.jsonl"), overwrite = true)
+                    } catch (_: Exception) {}
+                } else {
+                    try {
+                        OverlayService.retryPendingCachedDvrBundlesBlocking(cacheDir, prefs, gson)
+                    } catch (_: Exception) {}
+                }
+                toastMsg = dvrMsg
+                toastLong = dvrOk
             }
+
+            // Auto-upload to Cloud R2 Replay Vault if user has an active Unlock Key (Base / Pro / VIP)
+            try {
+                val (vaultOk, vaultMsg, _) = OverlayService.uploadBattleReplayToR2VaultIfUnlockedBlocking(
+                    prefs = prefs,
+                    gson = gson,
+                    battleId = battleId,
+                    summaryRecord = summaryRecord,
+                    mp4File = localMp4,
+                    traceFile = localTrace
+                )
+                if (vaultOk && toastMsg == null) {
+                    toastMsg = vaultMsg
+                }
+            } catch (_: Exception) {}
+
             try {
                 OverlayService.uploadPendingAiTelemetryBatchBlocking(
                     prefs = prefs,
@@ -468,9 +531,85 @@ internal fun OverlayService.finalizeAndUploadOneBattleDvrAsync(
                     minBattlesRequired = 1
                 )
             } catch (_: Exception) {}
-            withContext(Dispatchers.Main) {
-                showBattleToast(dvrMsg, if (dvrOk) Toast.LENGTH_LONG else Toast.LENGTH_SHORT)
+
+            if (!toastMsg.isNullOrBlank()) {
+                withContext(Dispatchers.Main) {
+                    showBattleToast(toastMsg, if (toastLong) Toast.LENGTH_LONG else Toast.LENGTH_SHORT)
+                }
             }
         }
     }
+}
+
+/**
+ * v6.42: Populates a headless `OverlayService` replay instance from a `BattleDeepTraceFrame`
+ * so `buildBattlePayloadJson(isReplayMode = true)` reconstructs the full 3x3 Matchup Matrix,
+ * 9-Shield badge, Fast-Move Pacing, and 2-Line Tactical Coach at any video timestamp!
+ */
+internal fun OverlayService.applyDeepTraceFrameForReplay(frame: BattleDeepTraceFrame) {
+    val now = System.currentTimeMillis()
+    val uIdx = frame.activeUserIdx.coerceIn(0, 2)
+    val oIdx = frame.activeOppIdx.coerceIn(0, 2)
+
+    if (frame.activeUserSpecies.isNotBlank()) {
+        activeUserPokemonName = frame.activeUserSpecies
+    }
+    if (frame.activeOppSpecies.isNotBlank()) {
+        activeOpponentName = frame.activeOppSpecies
+        if (detectedOpponents.none { FormResolver.extractBaseSpecies(it).equals(FormResolver.extractBaseSpecies(frame.activeOppSpecies), ignoreCase = true) }) {
+            if (detectedOpponents.size < 3) {
+                detectedOpponents.add(frame.activeOppSpecies)
+            } else if (oIdx in detectedOpponents.indices) {
+                detectedOpponents[oIdx] = frame.activeOppSpecies
+            }
+        }
+    }
+
+    for (i in 0..2) {
+        playerSlotHpPct[i] = frame.userSlotHpPct.getOrElse(i) {
+            if (i == uIdx) frame.committedUserHpPct.coerceIn(0, 100) else playerSlotHpPct[i]
+        }
+        oppSlotHpPct[i] = frame.oppSlotHpPct.getOrElse(i) {
+            if (i == oIdx) frame.committedOppHpPct.coerceIn(0, 100) else oppSlotHpPct[i]
+        }
+        playerSlotEnergy[i] = frame.userSlotEnergy.getOrElse(i) {
+            if (i == uIdx) frame.userEnergy.coerceIn(0, 100) else playerSlotEnergy[i]
+        }
+        oppSlotEnergy[i] = frame.oppSlotEnergy.getOrElse(i) {
+            if (i == oIdx) frame.oppEnergy.coerceIn(0, 100) else oppSlotEnergy[i]
+        }
+        playerSlotAtkStage[i] = frame.userSlotAtkStage.getOrElse(i) {
+            if (i == uIdx) frame.userAtkStage.coerceIn(-4, 4) else playerSlotAtkStage[i]
+        }
+        playerSlotDefStage[i] = frame.userSlotDefStage.getOrElse(i) {
+            if (i == uIdx) frame.userDefStage.coerceIn(-4, 4) else playerSlotDefStage[i]
+        }
+        oppSlotAtkStage[i] = frame.oppSlotAtkStage.getOrElse(i) {
+            if (i == oIdx) frame.oppAtkStage.coerceIn(-4, 4) else oppSlotAtkStage[i]
+        }
+        oppSlotDefStage[i] = frame.oppSlotDefStage.getOrElse(i) {
+            if (i == oIdx) frame.oppDefStage.coerceIn(-4, 4) else oppSlotDefStage[i]
+        }
+    }
+    playerSlotDisguiseBusted[uIdx] = frame.userDisguiseBusted
+    oppSlotDisguiseBusted[oIdx] = frame.oppDisguiseBusted
+
+    playerShieldsRemaining = frame.userShields.coerceIn(0, 2)
+    oppShieldsRemaining = frame.oppShields.coerceIn(0, 2)
+    playerPokeballCount = frame.userBalls.coerceIn(0, 3)
+    oppPokeballCount = frame.oppBalls.coerceIn(0, 3)
+
+    sampledPlayerHpPct = frame.rawUserHpPct
+    sampledOppHpPct = frame.rawOppHpPct
+    sampledLeftChargeBtnFillPct = frame.leftCircleFillPct
+    sampledRightChargeBtnFillPct = frame.rightCircleFillPct
+    lastEnergyMutationSource = frame.energySource
+    pendingChargedAttackActor = frame.pendingChargeActor
+    isTopCountdownCircleActive = frame.isTopCountdownActive
+    playerSwapEndTimeMs = if (frame.playerSwapRemainingSec > 0) now + frame.playerSwapRemainingSec * 1000L else 0L
+    oppSwapEndTimeMs = if (frame.oppSwapRemainingSec > 0) now + frame.oppSwapRemainingSec * 1000L else 0L
+
+    if (frame.recommendedPhase.isNotBlank()) lastRecommendedPhase = frame.recommendedPhase
+    if (frame.recommendedAction.isNotBlank()) lastRecommendedAction = frame.recommendedAction
+    if (frame.recommendedGoal.isNotBlank()) lastRecommendedGoal = frame.recommendedGoal
 }

@@ -2564,43 +2564,182 @@ class MainActivity : AppCompatActivity() {
             val lastDvrStr = if (lastDvrAt > 0L) timeFmt.format(java.util.Date(lastDvrAt)) else "Never"
 
             if (showBtn) {
-                btnToggleShowOneBattleDvr.text = "🎥 Overlay 1-Battle DVR Btn: ON"
+                btnToggleShowOneBattleDvr.text = "🎥 Auto-DVR & Overlay Btn: ON"
                 btnToggleShowOneBattleDvr.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
                 btnToggleShowOneBattleDvr.setTextColor(0xFFFFFFFF.toInt())
             } else {
-                btnToggleShowOneBattleDvr.text = if (canVideo) "🎥 Overlay 1-Battle DVR Btn: OFF" else "🔒 Overlay DVR (Requires Custom ID)"
+                btnToggleShowOneBattleDvr.text = if (canVideo) "🎥 Auto-DVR & Overlay Btn: OFF" else "🔒 Auto-DVR (Requires Custom ID)"
                 btnToggleShowOneBattleDvr.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF334155.toInt())
                 btnToggleShowOneBattleDvr.setTextColor(0xFFF8FAFC.toInt())
             }
 
             if (isArmed) {
-                btnArmOneBattleDvrNow.text = "🔴 DVR ARMED (Tap to Disarm)"
+                btnArmOneBattleDvrNow.text = "🚩 Flagged for Diag Upload (Tap to Clear)"
                 btnArmOneBattleDvrNow.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFDC2626.toInt())
                 btnArmOneBattleDvrNow.setTextColor(0xFFFFFFFF.toInt())
             } else {
-                btnArmOneBattleDvrNow.text = if (canVideo) "🔴 Arm 1-Battle DVR" else "🔒 Arm DVR (Custom ID)"
+                btnArmOneBattleDvrNow.text = if (canVideo) "🚩 Flag Next Battle for Diag Upload" else "🔒 Flag DVR (Custom ID)"
                 btnArmOneBattleDvrNow.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
                 btnArmOneBattleDvrNow.setTextColor(0xFFFFFFFF.toInt())
             }
 
             val armStateLabel = when {
                 !canVideo -> "🔒 Custom ID required for video logging (Currently using Random ID)"
-                isArmed -> "🔴 ARMED FOR NEXT BATTLE"
+                isArmed -> "🚩 FLAGGED FOR DIAGNOSTIC UPLOAD"
+                showBtn -> "🟢 Auto-Recording Battles to Replay History"
                 else -> "⚪ Disarmed"
             }
             val pendingDvrCount = OverlayService.countPendingCachedDvrBundlesStatic(cacheDir)
-            val pendingDvrPart = if (pendingDvrCount > 0) " • Queued DVR Videos: $pendingDvrCount" else ""
+            val pendingDvrPart = if (pendingDvrCount > 0) " • Queued Diag Videos: $pendingDvrCount" else ""
             val pathTail = if (lastDvrPath.isNotEmpty()) " ($lastDvrPath)" else ""
             textOneBattleDvrStatus.text =
-                "$armStateLabel • Overlay Button: ${if (showBtn) "ON" else "OFF"}$pendingDvrPart • DVR Bundles Uploaded: $dvrUploadedCount • Last DVR Upload: $lastDvrStr$pathTail"
+                "$armStateLabel • Overlay Button: ${if (showBtn) "ON" else "OFF"}$pendingDvrPart • Diag DVR Uploaded: $dvrUploadedCount • Last Upload: $lastDvrStr$pathTail"
+
+            setupOrUpdateReplayVaultSettingsUi()
         }
     }
 
+    private var replayVaultSettingsBox: LinearLayout? = null
+    private var editReplayUnlockKey: EditText? = null
+    private var textReplayVaultStatus: TextView? = null
+
+    private fun setupOrUpdateReplayVaultSettingsUi() {
+        val parentLayout = (textOneBattleDvrStatus.parent as? LinearLayout) ?: return
+        val density = resources.displayMetrics.density
+        val theme = getActiveAppTheme()
+
+        if (replayVaultSettingsBox == null) {
+            val box = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                val pad = (10 * density).toInt()
+                setPadding(pad, pad, pad, pad)
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(0xFF0B1120.toInt())
+                    setStroke((1 * density).toInt(), 0xFF1E293B.toInt())
+                    cornerRadius = 8f * density
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = (8 * density).toInt()
+                }
+            }
+
+            val titleTv = TextView(this).apply {
+                text = "🔑 In-App DVR Replay Vault & Cloud Share Tier (v6.42)"
+                setTextColor(0xFF38BDF8.toInt())
+                textSize = 12f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            }
+            val subTv = TextView(this).apply {
+                text = "Free Tier stores your last 1 battle video locally on-device (+ Manual Issue Reports). Enter a Trainer/Pro/VIP Unlock Key (or bind to your Debug ID) to unlock 10–50 Cloud R2 Replays, ⭐ Pinned Battles & Web Share Links."
+                setTextColor(0xFF94A3B8.toInt())
+                textSize = 10.5f
+                setPadding(0, (2 * density).toInt(), 0, (6 * density).toInt())
+            }
+
+            val inputRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+            val keyInput = EditText(this).apply {
+                hint = "Unlock Key (e.g. SSPVP-PRO-... or auto-bound by ID)"
+                setHintTextColor(0xFF64748B.toInt())
+                setTextColor(0xFFF8FAFC.toInt())
+                textSize = 11.5f
+                setSingleLine(true)
+                setText(prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "") ?: "")
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            val verifyBtn = Button(this).apply {
+                text = "🔑 Verify / Sync"
+                textSize = 10.5f
+                isAllCaps = false
+                backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+                setTextColor(0xFFFFFFFF.toInt())
+                setOnClickListener {
+                    val entered = keyInput.text?.toString()?.trim().orEmpty()
+                    prefs.edit().putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, entered).apply()
+                    Toast.makeText(this@MainActivity, "🔄 Verifying Replay Unlock Key & syncing Cloud Vault...", Toast.LENGTH_SHORT).show()
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        val (ok, msg) = OverlayService.verifyReplayUnlockKeyBlocking(prefs, gson, entered)
+                        withContext(Dispatchers.Main) {
+                            if (!isFinishing) {
+                                setupOrUpdateReplayVaultSettingsUi()
+                                Toast.makeText(this@MainActivity, msg, if (ok) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+            }
+            inputRow.addView(keyInput)
+            inputRow.addView(verifyBtn)
+
+            val statusTv = TextView(this).apply {
+                setTextColor(0xFFE2E8F0.toInt())
+                textSize = 10.5f
+                setPadding(0, (6 * density).toInt(), 0, 0)
+            }
+
+            box.addView(titleTv)
+            box.addView(subTv)
+            box.addView(inputRow)
+            box.addView(statusTv)
+
+            val idx = parentLayout.indexOfChild(textOneBattleDvrStatus)
+            if (idx >= 0) {
+                parentLayout.addView(box, idx + 1)
+            } else {
+                parentLayout.addView(box)
+            }
+            replayVaultSettingsBox = box
+            editReplayUnlockKey = keyInput
+            textReplayVaultStatus = statusTv
+        }
+
+        val tier = OverlayService.getEffectiveReplayTierStatic(prefs)
+        val tierBadge = when (tier) {
+            "vip" -> "👑 VIP / Admin Tier (150 Cloud + 25 ⭐ Pinned • 365d • 4 GB)"
+            "pro" -> "🏅 Pro / Legend Tier (50 Cloud + 10 ⭐ Pinned • 30d • 2 GB)"
+            "base" -> "🛡️ Base / Trainer Tier (10 Cloud + 5 ⭐ Pinned • 7d • 500 MB)"
+            else -> "🆓 Free Tier (1 Rolling Local Replay + 🚩 Manual Issue Reports)"
+        }
+        val localDir = java.io.File(filesDir, "dvr_replays")
+        val localCount = localDir.listFiles { f -> f.isFile && f.name.endsWith("_video.mp4") }?.size ?: 0
+        val localMb = (localDir.listFiles()?.sumOf { it.length() } ?: 0L).toDouble() / (1024.0 * 1024.0)
+        val vaultMap = OverlayService.loadReplayVaultMapStatic(prefs, gson)
+        val cloudCount = vaultMap.values.count { it.shareId.isNotBlank() }
+        val pinnedCount = vaultMap.values.count { it.isPinned }
+        val savedKey = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
+        if (editReplayUnlockKey?.hasFocus() == false && savedKey.isNotEmpty() && editReplayUnlockKey?.text?.toString().isNullOrBlank()) {
+            editReplayUnlockKey?.setText(savedKey)
+        }
+        textReplayVaultStatus?.text = String.format(
+            java.util.Locale.US,
+            "%s\n📱 On-Device Replays: %d video(s) (%.1f MB) • ☁️ Cloud R2 Replays: %d • ⭐ Pinned: %d",
+            tierBadge,
+            localCount,
+            localMb,
+            cloudCount,
+            pinnedCount
+        )
+    }
+
     private fun retryPendingDvrBundlesInBackground() {
-        val pendingDvrCount = OverlayService.countPendingCachedDvrBundlesStatic(cacheDir)
-        if (pendingDvrCount <= 0) return
         if (!OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs)) return
         lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                OverlayService.verifyReplayUnlockKeyBlocking(prefs, gson)
+                withContext(Dispatchers.Main) {
+                    if (!isFinishing && ::prefs.isInitialized) {
+                        setupOrUpdateReplayVaultSettingsUi()
+                    }
+                }
+            } catch (_: Exception) {}
+
+            val pendingDvrCount = OverlayService.countPendingCachedDvrBundlesStatic(cacheDir)
+            if (pendingDvrCount <= 0) return@launch
             val (uploadedDvrCount, _) = OverlayService.retryPendingCachedDvrBundlesBlocking(cacheDir, prefs, gson)
             if (uploadedDvrCount > 0) {
                 withContext(Dispatchers.Main) {
@@ -6211,14 +6350,26 @@ class MainActivity : AppCompatActivity() {
                     setPadding(0, (6 * density).toInt(), 0, 0)
                 }
 
+                val cleanEntryId = entry.id.replace(Regex("[^a-zA-Z0-9_-]"), "")
+                val localDvrMp4 = java.io.File(java.io.File(filesDir, "dvr_replays"), "${cleanEntryId}_video.mp4")
+                val vaultMetaForCard = OverlayService.loadReplayVaultMapStatic(prefs, gson)[cleanEntryId]
+                val hasDvrVideoForCard = (localDvrMp4.exists() && localDvrMp4.length() > 0L) ||
+                    (vaultMetaForCard?.videoStreamUrl?.isNotBlank() == true)
+                val isPinnedForCard = vaultMetaForCard?.isPinned == true
                 val hasRecentAiLog = aiLogsById.containsKey(entry.id) || entry.timelineEvents.isNotEmpty()
                 val replayHintBtn = TextView(this).apply {
-                    text = if (hasRecentAiLog) {
-                        "🎬 Replay Matrix + Turn Timeline"
-                    } else {
-                        "🔍 Summary Matrix Replay"
+                    text = when {
+                        hasDvrVideoForCard -> "🎥 Watch DVR Video + HUD Replay${if (isPinnedForCard) " ⭐" else ""}"
+                        hasRecentAiLog -> "🎬 Replay Matrix + Turn Timeline"
+                        else -> "🔍 Summary Matrix Replay"
                     }
-                    setTextColor(if (hasRecentAiLog) 0xFF38BDF8.toInt() else 0xFF94A3B8.toInt())
+                    setTextColor(
+                        when {
+                            hasDvrVideoForCard -> 0xFF34D399.toInt()
+                            hasRecentAiLog -> 0xFF38BDF8.toInt()
+                            else -> 0xFF94A3B8.toInt()
+                        }
+                    )
                     textSize = 11f
                     setTypeface(typeface, android.graphics.Typeface.BOLD)
                     layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -6718,8 +6869,13 @@ class MainActivity : AppCompatActivity() {
                 replayEngine = replayEngine,
                 pushReplayStateToWeb = pushReplayStateToWeb,
                 onContentHeightUpdated = { heightDp ->
-                    val targetHeightPx = (kotlin.math.max(480, heightDp + 20) * density).toInt()
                     val lp = replayWebView.layoutParams
+                    val isVideoFrameParent = lp is android.widget.FrameLayout.LayoutParams
+                    val targetHeightPx = if (isVideoFrameParent) {
+                        (heightDp.coerceIn(44, 460) * density).toInt()
+                    } else {
+                        (kotlin.math.max(480, heightDp + 20) * density).toInt()
+                    }
                     if (lp != null && kotlin.math.abs(lp.height - targetHeightPx) > (2 * density).toInt()) {
                         lp.height = targetHeightPx
                         replayWebView.layoutParams = lp
@@ -6737,8 +6893,545 @@ class MainActivity : AppCompatActivity() {
             replayWebView.addJavascriptInterface(replayBridge, "AndroidOverlay")
             replayWebView.loadUrl("file:///android_asset/overlay.html?replay=1")
 
+            val cleanBattleId = entry.id.replace(Regex("[^a-zA-Z0-9_-]"), "")
+            val replaysDir = java.io.File(filesDir, "dvr_replays")
+            var localMp4File = java.io.File(replaysDir, "${cleanBattleId}_video.mp4").takeIf { it.exists() && it.length() > 0L }
+                ?: java.io.File(cacheDir, "${cleanBattleId}_video.mp4").takeIf { it.exists() && it.length() > 0L }
+            var localTraceFile = java.io.File(replaysDir, "${cleanBattleId}_deep_trace.jsonl").takeIf { it.exists() }
+                ?: java.io.File(cacheDir, "${cleanBattleId}_deep_trace.jsonl").takeIf { it.exists() }
+
+            // Fallback: if this battle was logged within 120s of the newest local DVR file, match it
+            if (localMp4File == null && replaysDir.exists()) {
+                val candidate = replaysDir.listFiles { f -> f.isFile && f.name.endsWith("_video.mp4") }
+                    ?.minByOrNull { kotlin.math.abs(it.lastModified() - entry.timestampMs) }
+                if (candidate != null && kotlin.math.abs(candidate.lastModified() - entry.timestampMs) <= 120_000L) {
+                    localMp4File = candidate
+                    val base = candidate.name.removeSuffix("_video.mp4")
+                    localTraceFile = java.io.File(replaysDir, "${base}_deep_trace.jsonl").takeIf { it.exists() }
+                }
+            }
+
+            var vaultMeta = OverlayService.loadReplayVaultMapStatic(prefs, gson)[cleanBattleId]
+            val hasDvrVideoInitial = (localMp4File != null) || (vaultMeta?.videoStreamUrl?.isNotBlank() == true)
+
+            val traceFrames = mutableListOf<OverlayService.Companion.BattleDeepTraceFrame>()
+            fun parseTraceLines(text: String) {
+                traceFrames.clear()
+                for (line in text.lineSequence()) {
+                    val trimmed = line.trim()
+                    if (trimmed.isEmpty() || trimmed.startsWith("{\"recordType\":\"BATTLE_DVR_SUMMARY_HEADER\"")) continue
+                    try {
+                        val f = gson.fromJson(trimmed, OverlayService.Companion.BattleDeepTraceFrame::class.java)
+                        if (f != null && f.frameIdx > 0) traceFrames.add(f)
+                    } catch (_: Exception) {}
+                }
+                if (traceFrames.size > 1) {
+                    val span = traceFrames.last().videoElapsedMs - traceFrames.first().videoElapsedMs
+                    if (span < 2000L) {
+                        for (i in traceFrames.indices) {
+                            traceFrames[i] = traceFrames[i].copy(videoElapsedMs = i * 100L)
+                        }
+                    }
+                }
+            }
+            if (localTraceFile != null && localTraceFile!!.exists()) {
+                try {
+                    parseTraceLines(localTraceFile!!.readText(Charsets.UTF_8))
+                } catch (_: Exception) {}
+            } else if (vaultMeta?.traceStreamUrl?.isNotBlank() == true) {
+                val traceUrl = vaultMeta!!.traceStreamUrl
+                lifecycleScope.launch(Dispatchers.IO) {
+                    try {
+                        val client = OverlayService.buildTelemetryHttpClientStatic(15L, 30L, 20L)
+                        client.newCall(okhttp3.Request.Builder().url(traceUrl).get().build()).execute().use { r ->
+                            if (r.isSuccessful) {
+                                val txt = r.body?.string().orEmpty()
+                                withContext(Dispatchers.Main) {
+                                    parseTraceLines(txt)
+                                }
+                            }
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+
+            var isVideoMode = hasDvrVideoInitial
+            var currentHudMode = "live" // "live" | "compact" | "diagnostic" | "off"
+            var isHudTop = false
+            var hudAlphaPct = 88
+
+            val topToolbar = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(0, 0, 0, (6 * density).toInt())
+            }
+
+            fun styleMiniBtn(btn: TextView, bgHex: Int, fgHex: Int = 0xFFF8FAFC.toInt()) {
+                val pH = (8 * density).toInt()
+                val pV = (5 * density).toInt()
+                btn.setPadding(pH, pV, pH, pV)
+                btn.textSize = 10.5f
+                btn.setTextColor(fgHex)
+                btn.setTypeface(btn.typeface, android.graphics.Typeface.BOLD)
+                btn.background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(bgHex)
+                    cornerRadius = 6f * density
+                }
+            }
+
+            val btnModeToggle = TextView(this).apply {
+                text = if (isVideoMode) "📊 Matrix View" else "🎥 Watch DVR Video"
+                styleMiniBtn(this, if (hasDvrVideoInitial) 0xFF059669.toInt() else 0xFF334155.toInt())
+            }
+            val btnPinToggle = TextView(this).apply {
+                val pinnedNow = vaultMeta?.isPinned == true
+                text = if (pinnedNow) "⭐ Pinned" else "☆ Pin"
+                styleMiniBtn(this, if (pinnedNow) 0xFFD97706.toInt() else 0xFF1E293B.toInt())
+            }
+            val btnShareLink = TextView(this).apply {
+                text = "🔗 Share"
+                styleMiniBtn(this, 0xFF0284C7.toInt())
+            }
+            val btnReportIssue = TextView(this).apply {
+                text = "🚩 Report Issue"
+                styleMiniBtn(this, 0xFFBE123C.toInt())
+            }
+
+            val spacer = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            topToolbar.addView(btnModeToggle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
+            topToolbar.addView(btnPinToggle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
+            topToolbar.addView(btnShareLink, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
+            topToolbar.addView(android.view.View(this), spacer)
+            topToolbar.addView(btnReportIssue)
+
+            val videoStageWrap = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = android.view.Gravity.CENTER_HORIZONTAL
+                visibility = if (isVideoMode) android.view.View.VISIBLE else android.view.View.GONE
+            }
+
+            val videoFrameBox = android.widget.FrameLayout(this).apply {
+                setBackgroundColor(0xFF000000.toInt())
+                val stageW = (resources.displayMetrics.widthPixels - (48 * density).toInt()).coerceAtMost((360 * density).toInt())
+                val stageH = (stageW * 1184) / 544
+                layoutParams = LinearLayout.LayoutParams(stageW, stageH).apply {
+                    gravity = android.view.Gravity.CENTER_HORIZONTAL
+                }
+            }
+
+            val videoView = android.widget.VideoView(this).apply {
+                layoutParams = android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.view.Gravity.CENTER
+                )
+            }
+            var mediaPlayerRef: android.media.MediaPlayer? = null
+            videoView.setOnPreparedListener { mp ->
+                mediaPlayerRef = mp
+                mp.isLooping = false
+            }
+
+            val videoControlsBox = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding((4 * density).toInt(), (6 * density).toInt(), (4 * density).toInt(), (4 * density).toInt())
+            }
+
+            val seekBar = android.widget.SeekBar(this).apply {
+                max = 1000
+            }
+            val transportRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+            val btnStepBack = TextView(this).apply { text = "⏮ -1F"; styleMiniBtn(this, 0xFF1E293B.toInt()) }
+            val btnPlayPause = TextView(this).apply { text = "▶️ Play"; styleMiniBtn(this, 0xFF059669.toInt()) }
+            val btnStepFwd = TextView(this).apply { text = "⏭ +1F"; styleMiniBtn(this, 0xFF1E293B.toInt()) }
+            val btnSpeed = TextView(this).apply { text = "1.0x"; styleMiniBtn(this, 0xFF334155.toInt()) }
+            val tvFrameClock = TextView(this).apply {
+                text = "F#0000 0.0s"
+                setTextColor(0xFF38BDF8.toInt())
+                textSize = 10.5f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setPadding((6 * density).toInt(), 0, 0, 0)
+            }
+            transportRow.addView(btnStepBack, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (4 * density).toInt() })
+            transportRow.addView(btnPlayPause, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (4 * density).toInt() })
+            transportRow.addView(btnStepFwd, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (4 * density).toInt() })
+            transportRow.addView(btnSpeed, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (4 * density).toInt() })
+            transportRow.addView(tvFrameClock)
+
+            val hudControlsRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(0, (5 * density).toInt(), 0, (4 * density).toInt())
+            }
+            val btnHudMode = TextView(this).apply { text = "👁️ HUD: LIVE"; styleMiniBtn(this, 0xFF0F766E.toInt()) }
+            val btnHudPos = TextView(this).apply { text = "⬇️ Pos: Bottom"; styleMiniBtn(this, 0xFF1E293B.toInt()) }
+            val btnHudAlpha = TextView(this).apply { text = "🔆 Opacity: 88%"; styleMiniBtn(this, 0xFF1E293B.toInt()) }
+            hudControlsRow.addView(btnHudMode, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (4 * density).toInt() })
+            hudControlsRow.addView(btnHudPos, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (4 * density).toInt() })
+            hudControlsRow.addView(btnHudAlpha)
+
+            val chipsScroll = android.widget.HorizontalScrollView(this).apply {
+                isHorizontalScrollBarEnabled = false
+                setPadding(0, (4 * density).toInt(), 0, 0)
+            }
+            val chipsRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+            }
+            chipsScroll.addView(chipsRow)
+
+            videoControlsBox.addView(seekBar)
+            videoControlsBox.addView(transportRow)
+            videoControlsBox.addView(hudControlsRow)
+            videoControlsBox.addView(chipsScroll)
+
+            videoFrameBox.addView(videoView)
+            videoStageWrap.addView(videoFrameBox)
+            videoStageWrap.addView(videoControlsBox)
+
+            val matrixStageWrap = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                visibility = if (isVideoMode) android.view.View.GONE else android.view.View.VISIBLE
+            }
+
+            fun syncFrameAtMs(posMs: Long) {
+                if (traceFrames.isEmpty()) return
+                var lo = 0
+                var hi = traceFrames.size - 1
+                while (lo < hi) {
+                    val mid = (lo + hi + 1) ushr 1
+                    if (traceFrames[mid].videoElapsedMs <= posMs) lo = mid else hi = mid - 1
+                }
+                val f = traceFrames[lo]
+                tvFrameClock.text = String.format(java.util.Locale.US, "F#%04d %.1fs", f.frameIdx, posMs / 1000.0)
+                replayEngine.applyDeepTraceFrameForReplay(f)
+                pushReplayStateToWeb()
+                if (currentHudMode == "diagnostic") {
+                    val diagStr = "RAW HP: U=${f.rawUserHpPct}% (commit ${f.committedUserHpPct}%) | O=${f.rawOppHpPct}% (commit ${f.committedOppHpPct}%)\n" +
+                        "CIRCLE: L=${f.leftCircleFillPct}% R=${f.rightCircleFillPct}% | SRC: ${f.energySource}\n" +
+                        "OCR: ${f.ocrMidBannerText.ifBlank { f.ocrOppTopText }.take(64)}"
+                    val escaped = gson.toJson(diagStr)
+                    replayWebView.post {
+                        try {
+                            replayWebView.evaluateJavascript("if (window.setReplayDiagnosticText) setReplayDiagnosticText($escaped);", null)
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+
+            fun attachWebViewToActiveStage() {
+                (replayWebView.parent as? android.view.ViewGroup)?.removeView(replayWebView)
+                if (isVideoMode) {
+                    val flp = android.widget.FrameLayout.LayoutParams(
+                        android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                        android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+                        if (isHudTop) android.view.Gravity.TOP else android.view.Gravity.BOTTOM
+                    ).apply {
+                        val m = (4 * density).toInt()
+                        setMargins(m, if (isHudTop) (20 * density).toInt() else m, m, m)
+                    }
+                    replayWebView.layoutParams = flp
+                    replayWebView.alpha = hudAlphaPct / 100f
+                    videoFrameBox.addView(replayWebView)
+                    replayWebView.post {
+                        try {
+                            replayWebView.evaluateJavascript("if (window.setReplayHudMode) setReplayHudMode('$currentHudMode');", null)
+                        } catch (_: Exception) {}
+                    }
+                } else {
+                    replayWebView.alpha = 1.0f
+                    replayWebView.layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        (540 * density).toInt()
+                    )
+                    matrixStageWrap.addView(replayWebView)
+                    replayWebView.post {
+                        try {
+                            replayWebView.evaluateJavascript("if (window.setReplayHudMode) setReplayHudMode('live');", null)
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+
+            var videoLoadedOnce = false
+            fun ensureVideoSourceLoaded() {
+                if (videoLoadedOnce) return
+                val mp4 = localMp4File
+                val streamUrl = vaultMeta?.videoStreamUrl
+                if (mp4 != null && mp4.exists()) {
+                    videoView.setVideoPath(mp4.absolutePath)
+                    videoLoadedOnce = true
+                } else if (!streamUrl.isNullOrBlank()) {
+                    videoView.setVideoURI(android.net.Uri.parse(streamUrl))
+                    videoLoadedOnce = true
+                }
+            }
+
+            // Populate Timeline Event Jump Chips
+            val chipEvents = mutableListOf<Pair<String, Long>>()
+            for (ev in replayEvents) {
+                val tMs = (ev.t * 1000.0).toLong()
+                val icon = when {
+                    ev.type.contains("CHARGE", ignoreCase = true) -> "⚡"
+                    ev.type.contains("SWAP", ignoreCase = true) -> "🔄"
+                    ev.type.contains("FAINT", ignoreCase = true) || ev.type.contains("KO", ignoreCase = true) -> "💀"
+                    else -> "📌"
+                }
+                chipEvents.add("$icon ${ev.t.toInt()}s ${ev.actor.uppercase()}: ${ev.move.ifBlank { ev.species.ifBlank { ev.type } }}" to tMs)
+            }
+            for ((label, tMs) in chipEvents.take(24)) {
+                val chip = TextView(this).apply {
+                    text = label
+                    styleMiniBtn(this, 0xFF1E293B.toInt(), 0xFFCBD5E1.toInt())
+                    setOnClickListener {
+                        val jumpMs = (tMs - 2000L).coerceAtLeast(0L).toInt()
+                        ensureVideoSourceLoaded()
+                        videoView.seekTo(jumpMs)
+                        syncFrameAtMs(jumpMs.toLong())
+                    }
+                }
+                chipsRow.addView(chip, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (4 * density).toInt() })
+            }
+
+            var isSyncTickActive = true
+            val syncTickRunnable = object : Runnable {
+                override fun run() {
+                    if (!isSyncTickActive) return
+                    try {
+                        if (isVideoMode && videoView.isPlaying) {
+                            val pos = videoView.currentPosition
+                            val dur = videoView.duration.coerceAtLeast(1)
+                            seekBar.progress = ((pos.toLong() * 1000L) / dur).toInt().coerceIn(0, 1000)
+                            syncFrameAtMs(pos.toLong())
+                        }
+                    } catch (_: Exception) {}
+                    replayWebView.postDelayed(this, 80L)
+                }
+            }
+
+            btnPlayPause.setOnClickListener {
+                ensureVideoSourceLoaded()
+                if (videoView.isPlaying) {
+                    videoView.pause()
+                    btnPlayPause.text = "▶️ Play"
+                } else {
+                    videoView.start()
+                    btnPlayPause.text = "⏸ Pause"
+                }
+            }
+            btnStepBack.setOnClickListener {
+                ensureVideoSourceLoaded()
+                videoView.pause()
+                btnPlayPause.text = "▶️ Play"
+                val nextPos = (videoView.currentPosition - 100).coerceAtLeast(0)
+                videoView.seekTo(nextPos)
+                syncFrameAtMs(nextPos.toLong())
+            }
+            btnStepFwd.setOnClickListener {
+                ensureVideoSourceLoaded()
+                videoView.pause()
+                btnPlayPause.text = "▶️ Play"
+                val dur = videoView.duration.takeIf { it > 0 } ?: 300_000
+                val nextPos = (videoView.currentPosition + 100).coerceAtMost(dur)
+                videoView.seekTo(nextPos)
+                syncFrameAtMs(nextPos.toLong())
+            }
+            val speeds = listOf(0.25f, 0.5f, 1.0f, 2.0f)
+            var speedIdx = 2
+            btnSpeed.setOnClickListener {
+                speedIdx = (speedIdx + 1) % speeds.size
+                val spd = speeds[speedIdx]
+                btnSpeed.text = "${spd}x"
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    try {
+                        mediaPlayerRef?.playbackParams = mediaPlayerRef?.playbackParams?.setSpeed(spd)
+                            ?: android.media.PlaybackParams().setSpeed(spd)
+                    } catch (_: Exception) {}
+                }
+            }
+            seekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (fromUser) {
+                        ensureVideoSourceLoaded()
+                        val dur = videoView.duration.takeIf { it > 0 } ?: (traceFrames.lastOrNull()?.videoElapsedMs?.toInt() ?: 180_000)
+                        val targetMs = ((progress.toLong() * dur) / 1000L).toInt()
+                        videoView.seekTo(targetMs)
+                        syncFrameAtMs(targetMs.toLong())
+                    }
+                }
+                override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+                override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
+            })
+
+            val hudModes = listOf("live", "compact", "diagnostic", "off")
+            btnHudMode.setOnClickListener {
+                val nextIdx = (hudModes.indexOf(currentHudMode) + 1) % hudModes.size
+                currentHudMode = hudModes[nextIdx]
+                btnHudMode.text = "👁️ HUD: ${currentHudMode.uppercase()}"
+                replayWebView.evaluateJavascript("if (window.setReplayHudMode) setReplayHudMode('$currentHudMode');", null)
+                syncFrameAtMs(videoView.currentPosition.toLong())
+            }
+            btnHudPos.setOnClickListener {
+                isHudTop = !isHudTop
+                btnHudPos.text = if (isHudTop) "⬆️ Pos: Top" else "⬇️ Pos: Bottom"
+                attachWebViewToActiveStage()
+            }
+            val alphaSteps = listOf(92, 75, 55, 35)
+            btnHudAlpha.setOnClickListener {
+                val curIdx = alphaSteps.indexOf(hudAlphaPct).let { if (it < 0) 0 else it }
+                hudAlphaPct = alphaSteps[(curIdx + 1) % alphaSteps.size]
+                btnHudAlpha.text = "🔆 Opacity: $hudAlphaPct%"
+                replayWebView.alpha = hudAlphaPct / 100f
+            }
+
+            btnModeToggle.setOnClickListener {
+                if (!isVideoMode && localMp4File == null && vaultMeta?.videoStreamUrl.isNullOrBlank()) {
+                    Toast.makeText(this, "🔄 Checking Cloud Replay Vault for this battle...", Toast.LENGTH_SHORT).show()
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        OverlayService.syncCloudReplayListBlocking(prefs, gson)
+                        vaultMeta = OverlayService.loadReplayVaultMapStatic(prefs, gson)[cleanBattleId]
+                        withContext(Dispatchers.Main) {
+                            if (vaultMeta?.videoStreamUrl?.isNotBlank() == true) {
+                                isVideoMode = true
+                                videoStageWrap.visibility = android.view.View.VISIBLE
+                                matrixStageWrap.visibility = android.view.View.GONE
+                                btnModeToggle.text = "📊 Matrix View"
+                                attachWebViewToActiveStage()
+                                ensureVideoSourceLoaded()
+                            } else {
+                                Toast.makeText(this@MainActivity, "ℹ️ No DVR video recording stored for this battle.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                    return@setOnClickListener
+                }
+                isVideoMode = !isVideoMode
+                if (!isVideoMode && videoView.isPlaying) {
+                    videoView.pause()
+                    btnPlayPause.text = "▶️ Play"
+                }
+                videoStageWrap.visibility = if (isVideoMode) android.view.View.VISIBLE else android.view.View.GONE
+                matrixStageWrap.visibility = if (isVideoMode) android.view.View.GONE else android.view.View.VISIBLE
+                btnModeToggle.text = if (isVideoMode) "📊 Matrix View" else "🎥 Watch DVR Video"
+                attachWebViewToActiveStage()
+                if (isVideoMode) {
+                    ensureVideoSourceLoaded()
+                }
+            }
+
+            btnPinToggle.setOnClickListener {
+                val nextPin = !(vaultMeta?.isPinned == true)
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val (ok, msg) = OverlayService.togglePinOrPrivacyReplayBlocking(prefs, gson, cleanBattleId, isPinned = nextPin)
+                    vaultMeta = OverlayService.loadReplayVaultMapStatic(prefs, gson)[cleanBattleId]
+                    withContext(Dispatchers.Main) {
+                        val pinnedNow = vaultMeta?.isPinned == true
+                        btnPinToggle.text = if (pinnedNow) "⭐ Pinned" else "☆ Pin"
+                        styleMiniBtn(btnPinToggle, if (pinnedNow) 0xFFD97706.toInt() else 0xFF1E293B.toInt())
+                        Toast.makeText(this@MainActivity, msg, if (ok) Toast.LENGTH_SHORT else Toast.LENGTH_LONG).show()
+                        renderBattleLogPage()
+                    }
+                }
+            }
+
+            btnShareLink.setOnClickListener {
+                val existingUrl = vaultMeta?.shareUrl.orEmpty()
+                if (existingUrl.isNotBlank()) {
+                    val clip = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                    clip?.setPrimaryClip(android.content.ClipData.newPlainText("SilphScope Replay", existingUrl))
+                    Toast.makeText(this, "🔗 Share URL copied! Opening Share sheet...", Toast.LENGTH_SHORT).show()
+                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, "Watch my Pokémon GO Battle Replay with live interactive SilphScope HUD: $existingUrl")
+                    }
+                    startActivity(Intent.createChooser(sendIntent, "Share Battle Replay"))
+                    return@setOnClickListener
+                }
+                if (localMp4File == null || !localMp4File!!.exists()) {
+                    Toast.makeText(this, "⚠️ No DVR video recording available for this battle.", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                Toast.makeText(this, "☁️ Uploading battle to Cloud Replay Vault for sharing...", Toast.LENGTH_SHORT).show()
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val (ok, msg, uploadedMeta) = OverlayService.uploadBattleReplayToR2VaultIfUnlockedBlocking(
+                        prefs = prefs,
+                        gson = gson,
+                        battleId = cleanBattleId,
+                        summaryRecord = pendingTelemetry,
+                        mp4File = localMp4File!!,
+                        traceFile = localTraceFile ?: java.io.File(replaysDir, "${cleanBattleId}_deep_trace.jsonl")
+                    )
+                    withContext(Dispatchers.Main) {
+                        if (ok && uploadedMeta != null && uploadedMeta.shareUrl.isNotBlank()) {
+                            vaultMeta = uploadedMeta
+                            val clip = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                            clip?.setPrimaryClip(android.content.ClipData.newPlainText("SilphScope Replay", uploadedMeta.shareUrl))
+                            Toast.makeText(this@MainActivity, "🔗 Share Link copied: ${uploadedMeta.shareUrl}", Toast.LENGTH_LONG).show()
+                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, "Watch my Pokémon GO Battle Replay with live interactive SilphScope HUD: ${uploadedMeta.shareUrl}")
+                            }
+                            startActivity(Intent.createChooser(sendIntent, "Share Battle Replay"))
+                        } else {
+                            Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            }
+
+            btnReportIssue.setOnClickListener {
+                val noteInput = EditText(this).apply {
+                    hint = "Describe what happened (e.g., missed opponent swap at 40s, HP spike, wrong move)"
+                    setHintTextColor(0xFF64748B.toInt())
+                    setTextColor(0xFFF8FAFC.toInt())
+                    textSize = 12f
+                    val p = (12 * density).toInt()
+                    setPadding(p, p, p, p)
+                }
+                val issueDialog = AlertDialog.Builder(this)
+                    .setTitle("🚩 Submit DVR Issue Report")
+                    .setMessage("Uploads this battle's DVR video, frame-synced deep trace JSONL, and your note to SilphScope Diagnostics (Telegram):")
+                    .setView(noteInput)
+                    .setPositiveButton("🚀 Upload Report") { _, _ ->
+                        val note = noteInput.text?.toString()?.trim().orEmpty()
+                        Toast.makeText(this, "🚩 Uploading DVR Video & Issue Report...", Toast.LENGTH_SHORT).show()
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            val (ok, msg) = OverlayService.submitManualDvrIssueReportBlocking(
+                                filesDir = filesDir,
+                                cacheDir = cacheDir,
+                                prefs = prefs,
+                                gson = gson,
+                                battleId = cleanBattleId,
+                                league = safeLeague,
+                                result = safeResult,
+                                userTeamNames = teamMembers.map { it.name },
+                                oppTeamNames = replayOpponents,
+                                userIssueNote = note
+                            )
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(this@MainActivity, msg, if (ok) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+                styleThemedAlertDialog(issueDialog)
+            }
+
+            dialogContainer.addView(topToolbar)
             dialogContainer.addView(hintTv)
-            dialogContainer.addView(replayWebView)
+            dialogContainer.addView(videoStageWrap)
+            dialogContainer.addView(matrixStageWrap)
+            attachWebViewToActiveStage()
+            if (isVideoMode) {
+                currentHudMode = "compact"
+                btnHudMode.text = "👁️ HUD: COMPACT"
+                ensureVideoSourceLoaded()
+            }
+            replayWebView.postDelayed(syncTickRunnable, 120L)
+
             val replayScrollView = ScrollView(this).apply {
                 isFillViewport = true
                 setBackgroundColor(0xFF0F172A.toInt())
@@ -6747,7 +7440,7 @@ class MainActivity : AppCompatActivity() {
             val themedReplayRoot = wrapViewWithThemeWatermark(replayScrollView, watermarkSizeDp = 250)
 
             val dialog = AlertDialog.Builder(this)
-                .setTitle("🎬 Battle Matrix Replay • $safeLeague")
+                .setTitle("🎬 Battle Replay & DVR Vault • $safeLeague")
                 .setView(themedReplayRoot)
                 .setPositiveButton("Close Replay", null)
                 .setNeutralButton("✏️ Edit Log") { _, _ ->
@@ -6755,6 +7448,10 @@ class MainActivity : AppCompatActivity() {
                 }
                 .show()
             dialog.setOnDismissListener {
+                isSyncTickActive = false
+                try {
+                    if (videoView.isPlaying) videoView.stopPlayback()
+                } catch (_: Exception) {}
                 try {
                     replayWebView.stopLoading()
                     (replayWebView.parent as? android.view.ViewGroup)?.removeView(replayWebView)

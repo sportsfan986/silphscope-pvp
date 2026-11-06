@@ -1597,6 +1597,7 @@
                 </div>
             </div>
         </div>
+        <div id="sky-replay-diag-row" class="hidden" style="margin-top:3px; padding:4px 6px; border-radius:5px; background:rgba(2,6,23,0.94); border:1px dashed #38bdf8; font-family:monospace; font-size:8.5px; color:#cbd5e1; white-space:pre-wrap; line-height:1.35;"></div>
     </div>
 
     <!-- OPTION 2: Bottom Horizon Belt Fallback -->
@@ -3791,6 +3792,9 @@
                 console.error("Horizon render error", e);
             }
 
+            if (window.replayHudMode && window.replayHudMode !== "live" && window.setReplayHudMode) {
+                window.setReplayHudMode(window.replayHudMode);
+            }
             if (window.requestAnimationFrame) {
                 window.requestAnimationFrame(notifyHeight);
             }
@@ -3801,6 +3805,39 @@
             applyProportionalScale();
             notifyHeight();
         });
+
+        window.replayHudMode = "live";
+        window.setReplayHudMode = function(mode) {
+            window.replayHudMode = mode || "live";
+            const rootPanel = document.getElementById("mode-sky-trench");
+            const toolbars = document.querySelectorAll(".action-toolbar");
+            const timingContainers = document.querySelectorAll(".timing-rows-container");
+            const matrixEl = document.getElementById("sky-matrix-body");
+            const diagRow = document.getElementById("sky-replay-diag-row");
+
+            if (!rootPanel) return;
+            if (window.replayHudMode === "off") {
+                rootPanel.style.display = "none";
+                return;
+            }
+            rootPanel.style.display = "";
+            const hideHeavy = (window.replayHudMode === "compact" || window.replayHudMode === "diagnostic");
+            toolbars.forEach(el => { el.style.display = hideHeavy ? "none" : ""; });
+            timingContainers.forEach(el => { el.style.display = hideHeavy ? "none" : ""; });
+            if (matrixEl && hideHeavy) matrixEl.classList.add("hidden");
+            if (diagRow) {
+                if (window.replayHudMode === "diagnostic") diagRow.classList.remove("hidden");
+                else diagRow.classList.add("hidden");
+            }
+            notifyHeight();
+        };
+
+        window.setReplayDiagnosticText = function(text) {
+            const diagRow = document.getElementById("sky-replay-diag-row");
+            if (diagRow) {
+                diagRow.textContent = text || "";
+            }
+        };
 
         window.onload = function() {
             if (window.location.search && window.location.search.includes("replay=1")) {
