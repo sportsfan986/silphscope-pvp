@@ -21,6 +21,18 @@
 
 ---
 
+## v6.29 (2026-11-06) — Resilient DVR & Telemetry DNS Resolver (`AAAA ::` Sinkhole Bypass, DoH + Edge IPv4 Fallback) & Automatic Queued DVR Video Recovery
+*Network resilience and DVR upload recovery release (`v6.29`, `versionCode = 1629`, branched from `v6.28`) fixing `"Unable to connect to silphscope-telemetry.silphscope-pvp.workers.dev"` errors caused by router/ISP/Private DNS returning unspecified `AAAA ::` (`0:0:0:0:0:0:0:0`) IPv6 sinkholes for `*.workers.dev`, and automatically recovering/uploading any queued 1-Battle DVR recordings stored in `cacheDir`.*
+
+- **v6.29 — Fix 1: `TELEMETRY_RESILIENT_DNS` Resolver (`AAAA ::` Filtering, IPv4 Priority, `1.1.1.1` DoH & Cloudflare Anycast IPv4 Edge Fallbacks) (`GitHubCloudSync.kt`)**:
+  - **Root Cause**: Router/ISP and Private DNS servers that disable IPv6 or filter `*.workers.dev` return `AAAA ::` (`0:0:0:0:0:0:0:0`, TTL 2) alongside valid `A` records (`104.21.76.162`, `172.67.197.119`). On Android dual-stack interfaces, `Dns.SYSTEM` placed `::` first, causing OkHttp to attempt connecting to `[::]:443` (localhost) and fail with `ConnectException: Failed to connect to silphscope-telemetry.silphscope-pvp.workers.dev/0:0:0:0:0:0:0:0:443`.
+  - **Fix**: Added `TELEMETRY_RESILIENT_DNS` and `buildTelemetryHttpClientStatic()` across all 3 telemetry endpoints (`/v1/dvr`, `/v1/telemetry`, `/v1/settings-changes`) to strip unspecified/loopback addresses (`::`, `0.0.0.0`, `127.0.0.1`), sort `Inet4Address` ahead of `Inet6Address`, query Cloudflare DoH (`https://1.1.1.1/dns-query`) if system DNS is blocked, and append verified Cloudflare anycast IPv4 edge routes (`104.21.76.162`, `172.67.197.119`) with a 3-attempt backoff retry loop (`HTTP/1.1`).
+
+- **v6.29 — Fix 2: Automatic Recovery & Upload of Queued 1-Battle DVR Videos in `cacheDir` (`GitHubCloudSync.kt`, `BattleDvrEngine.kt`, `MainActivity.kt`, `OverlayService.kt`)**:
+  - **Persistent DVR Header & Auto-Recovery (`retryPendingCachedDvrBundlesBlocking`)**: Persists the `BATTLE_DVR_SUMMARY_HEADER` inside `*_deep_trace.jsonl` before upload and scans `cacheDir` for any un-uploaded `*_video.mp4` + `*_deep_trace.jsonl` pairs (including DVR recordings from `v6.28` that failed to connect), automatically uploading them on app launch/resume, on `☁️ Upload AI Logs` tap, and after subsequent DVR battles.
+
+---
+
 ## v6.28 (2026-11-06) — Pre-Battle Overlay DVR Button Visibility, Unique Debug ID (Random vs. Custom ID for Video Logging) & 5-Minute Local FFmpeg Telemetry Preprocessor
 *UX, privacy, and local telemetry preprocessing upgrade (`v6.28`, `versionCode = 1628`) ensuring the 1-Battle DVR button is visible immediately upon overlay startup and `Start Battle` press (before the opponent Pokémon spawns), updating the Trainer / Debug ID flow with a 1-tap Random Unique ID generator while requiring a custom (non-random) ID for 1-Battle DVR video logging, removing all UI mentions of Telegram, and adding a 5-minute zero-token local Windows background sync + FFmpeg keyframe/contact-sheet preprocessor.*
 

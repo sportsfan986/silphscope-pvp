@@ -271,6 +271,7 @@ class OverlayService : LifecycleService() {
         const val AI_TELEMETRY_MIN_BATTLES_ON_STOP = 5
         const val AI_TELEMETRY_DAILY_INTERVAL_MS = 24L * 60L * 60L * 1000L
         @Volatile var isAiTelemetryUploadInFlight: Boolean = false
+        @Volatile var isDvrUploadInFlight: Boolean = false
 
         /**
          * v4.08: Scanner-Calibrated 18-Type Charged Move Contrast Ranking (1 = Highest Contrast, 18 = Lowest Contrast).
