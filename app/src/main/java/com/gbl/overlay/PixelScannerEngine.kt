@@ -1837,20 +1837,31 @@ internal fun OverlayService.resolveSub50AndMultiRoundEnergy(
     val slowCost = slowestMoveCost.coerceIn(35, 100)
     val fastCost = fasterMoveCost.coerceIn(35, 100)
     val clampedCurE = curE.coerceIn(0, 100)
-    val maxFastStep = max(14, userFastEnergy * 2)
+    // v6.23: Eliminate off-grid +4E jump allowance (which clamped 3E + 18E + 4E = 25E instead of 21E = 3 + 2*9E)
+    // and enforce a single-move step cap when within 1 fast move duration of the last confirmed fast move.
+    val isSteadySingleMoveWindow = clampedCurE > 0 &&
+        lastConfirmedPlayerFastMoveMs > 0L &&
+        (nowMs - lastConfirmedPlayerFastMoveMs) in 1L..(userMoveDurationMs + 450L)
+    val maxFastStep = if (isSteadySingleMoveWindow) {
+        userFastEnergy
+    } else {
+        max(14, userFastEnergy * 2)
+    }
     val maxAllowedSingleJumpE = if (clampedCurE > 0) {
-        (clampedCurE + maxFastStep + 4).coerceAtMost(100)
+        (clampedCurE + maxFastStep).coerceAtMost(100)
     } else if (playerSlotTurnsOnField[slotIdx] <= 4) {
-        max(22, userFastEnergy * 3 + 4).coerceAtMost(100)
+        max(22, userFastEnergy * 3).coerceAtMost(100)
     } else {
         100
     }
 
-    // v4.06 / v4.08: Compute dual-circle cross-check energy from the secondary charge move circle (`fastCost`)
+    // v4.06 / v4.08 / v6.23: Compute dual-circle cross-check energy from the secondary charge move circle (`fastCost`),
+    // applying a -3% meniscus/bottom-chord geometry offset across intermediate 1st-round fills (22..84%).
     val fasterResolvedE: Int = if (hasSecondUserMove && debouncedFasterPct in 0..300) {
         when (debouncedFasterPct) {
             in 0..99 -> {
-                val f1Raw = (((debouncedFasterPct * fastCost) / 100.0).roundToInt()).coerceIn(0, fastCost - 1)
+                val adjFasterPct = if (debouncedFasterPct in 22..84) (debouncedFasterPct - 3).coerceAtLeast(1) else debouncedFasterPct
+                val f1Raw = (((adjFasterPct * fastCost) / 100.0).roundToInt()).coerceIn(0, fastCost - 1)
                 snapPlayerEnergyToValidStep(
                     slotIdx = slotIdx,
                     rawEnergy = f1Raw,
@@ -1935,7 +1946,8 @@ internal fun OverlayService.resolveSub50AndMultiRoundEnergy(
         rightMeterFilledTwiceLatched[slotIdx] = false
         val r1MaxAllowed = min(slowCost - 1, physicalMaxFromSecondary).coerceAtLeast(0)
         val r1MinAllowed = physicalMinFromSecondary.coerceAtMost(r1MaxAllowed)
-        val r1RawE = (((debouncedSlowestPct * slowCost) / 100.0).roundToInt()).coerceIn(r1MinAllowed, r1MaxAllowed)
+        val adjSlowestPct = if (debouncedSlowestPct in 22..84) (debouncedSlowestPct - 3).coerceAtLeast(1) else debouncedSlowestPct
+        val r1RawE = (((adjSlowestPct * slowCost) / 100.0).roundToInt()).coerceIn(r1MinAllowed, r1MaxAllowed)
         val r1SnappedE = snapPlayerEnergyToValidStep(
             slotIdx = slotIdx,
             rawEnergy = r1RawE,

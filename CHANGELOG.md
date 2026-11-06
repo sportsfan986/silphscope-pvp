@@ -1,4 +1,22 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.22`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.23`)
+
+---
+
+## v6.23 (2026-11-05) — 1-Battle DVR Video Telemetry Fixes: Clipped-Nameplate & Auto-Catcher Guard (`Aron`), 1st-Round Meniscus Energy Calibration, Pre-OCR Lead Turn Sync & Turn-of-Throw Confirmation
+*Precision combat-vision and state-machine release (`v6.23`, `versionCode = 1623`) resolving all root causes identified in the `v6.22` 1-Battle DVR video recording (`log-1793933121234-670`) and companion telemetry batch.*
+
+- **v6.23 — Fix 1: Clipped-Nameplate Substring Guard (`"katon"` $\to$ `Tinkaton` vs `Aron`), Cutscene Switch Lock & Auto-Catcher Filter (`OverlayService.kt`)**:
+  - **Active/Known Opponent Clipped-Substring Guard**: Added Step 2.5 in `findPokemonInText()` so that when the top-right nameplate slides off-screen at the start of a charged-move zoom (`F#0056`), any clipped suffix/substring of the active or already-detected opponent species (such as `"katon"` from `"Tinkaton"`) immediately resolves back to the active species instead of falling through to short-word Levenshtein matching (`levenshteinDistance("katon", "aron") == 2`).
+  - **Tightened Short-Word Levenshtein Matching & Auto-Catcher Ignore List**: Capped edit distance at `1` (and required matching first character) whenever either token or species name has length `<= 5`, and added Pokémon GO Plus / auto-catcher notification words (`caught`, `fled`, `ran`, `pokeball`, `stardust`, `candy`, `xp`, `accessory`, `connected`, `disconnected`) to `OCR_MENU_IGNORED_WORDS`.
+  - **Cutscene Nameplate Visibility & Truncated-CP Guard**: Blocked mid-battle opponent species switches in `handleOpponentLines()` whenever a charged-move prompt/cutscene is active, `!sampledTopRightNameplateVisible`, or the scanned CP is a truncated prefix/suffix of the active opponent's CP (e.g., `CP 249` clipped from `CP 2499`), and required `sampledTopRightNameplateVisible` before auto-latching any provisional swap after `1400ms`.
+
+- **v6.23 — Fix 2: 1st-Round Circle Meniscus Offset, Grid-Aligned Post-Throw Jump Clamp & Pre-OCR Lead Turn Sync (`PixelScannerEngine.kt`, `OverlayService.kt`)**:
+  - **1st-Round Meniscus & Bottom-Chord Offset (`-3%` in `22..84%`)**: Compensated for Pokémon GO's circular charge button bottom-chord geometry and `+3%` bright liquid meniscus ridge (`L=51..53%` at `45%` true energy on `60E` `Gigaton Hammer`), preventing `27E` (3 `Fairy Wind`s) from rounding up to `36E` (4 `Fairy Wind`s) and eliminating the `+1 move` (`+9E`) inflation and subsequent rollback flicker.
+  - **Grid-Aligned `maxAllowedSingleJumpE` & `awaitingPostUserChargeCircleSync` Expiry**: Removed the off-grid `+4E` jump allowance in `resolveSub50AndMultiRoundEnergy()` (which clamped post-throw energy to `3 + 18 + 4 = 25E` instead of `21E = 3 + 2*9E`), enforced a single-move step cap during steady fast-move windows, and expired `awaitingPostUserChargeCircleSync` if delayed past 1 fast move duration with circle fill `>= 28%`.
+  - **Pre-OCR `isWaitingForOpponent` Multi-Move Turn Sync & Turn-of-Throw 1-Frame Confirmation**: Derived `earlyMoves` (`1..4`) from `measuredEarly / userFastEnergyForStats` during `isWaitingForOpponent`, anchored `battleClockAnchorMs` only once on initial battle start, synced `confirmedPhasePlayerTurns` and `confirmedMoveOppEnergy` on lead discovery, and immediately confirmed `proactiveStepPending` on the first frame a circle crosses the `100%` white ring or jumps `>= +6%` so turn-of-throw cutscenes never roll back a completed fast move (`63E -> 54E`).
+
+- **v6.23 — Fix 3: Post-Charge 1-Frame Pokéball Flicker Guard (`OverlayService.kt`)**:
+  - Gated the `debouncedPlayerBalls in 1..2` / `debouncedOppBalls in 1..2` faint-inference branches in `updateSteadyFrameBallAndShieldState()` on `(frameTimeMs - lastChargedAttackLoggedMs) > 1500L`, preventing a 1-frame HUD slide-in ball-count flicker immediately after a charged attack (`F#0259`) from momentarily marking the active Pokémon fainted.
 
 ---
 

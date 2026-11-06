@@ -91,7 +91,7 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "6.22"
+        const val APP_VERSION = "6.23"
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -2891,7 +2891,8 @@ class OverlayService : LifecycleService() {
         val fastE = fastMoveEnergy.coerceIn(2, 25)
         return when (fillPct) {
             in 0..99 -> {
-                val r1Raw = (((fillPct * c) / 100.0).roundToInt()).coerceIn(0, c - 1)
+                val adjFillPct = if (fillPct in 22..84) (fillPct - 3).coerceAtLeast(1) else fillPct
+                val r1Raw = (((adjFillPct * c) / 100.0).roundToInt()).coerceIn(0, c - 1)
                 snapPlayerEnergyToValidStep(slotIdx, r1Raw, fastE, 0, c - 1)
             }
             in 100..199 -> {
@@ -6112,15 +6113,22 @@ class OverlayService : LifecycleService() {
                             secondaryContrastRank = secondaryRankEarly
                         )
                         if (measuredEarly >= userFastEnergyForStats) {
-                            hasBattleStarted = true
-                            battleClockAnchorMs = nowMs - userMoveDurationEarlyMs
-                            lastTurnTickTimeMs = nowMs
-                            turnResidualMs = 0L
-                            battleTurnIndex = userFastTurnsForStats
+                            val earlyMoves = (measuredEarly.toDouble() / userFastEnergyForStats.toDouble()).roundToInt().coerceIn(1, 4)
+                            val earlyTurns = earlyMoves * userFastTurnsForStats
+                            if (!hasBattleStarted) {
+                                hasBattleStarted = true
+                                battleClockAnchorMs = nowMs - (earlyMoves * userMoveDurationEarlyMs)
+                                lastTurnTickTimeMs = nowMs
+                                turnResidualMs = 0L
+                            }
+                            battleTurnIndex = max(battleTurnIndex, earlyTurns)
                             playerAutoIncrementAnchorMs[activeUserIdx] = nowMs
                             playerSlotEnergy[activeUserIdx] = measuredEarly
-                            playerSlotTurnsOnField[activeUserIdx] = userFastTurnsForStats
-                            phasePlayerTurns = userFastTurnsForStats
+                            playerSlotTurnsOnField[activeUserIdx] = earlyTurns
+                            phaseStartPlayerEnergy = 0
+                            confirmedPhasePlayerTurns = earlyTurns
+                            phasePlayerTurns = earlyTurns
+                            lastConfirmedPlayerFastMoveMs = nowMs
                             playerLastFastCreditedAtMs[activeUserIdx] = nowMs
                             lastStableNormalCombatEnergy = measuredEarly
                             prevStableNormalCombatEnergy = measuredEarly
@@ -7012,8 +7020,17 @@ class OverlayService : LifecycleService() {
                 }
 
                 val requiredDebounce = activeEnergyDebounceSamples.coerceIn(2, 4)
-                val slowestDebouncedReady = slowestOnline && slowestFillDebounceCount[activeUserIdx] >= requiredDebounce
-                val fasterDebouncedReady = fasterOnline && fastestFillDebounceCount[activeUserIdx] >= requiredDebounce
+                // v6.23: Immediately confirm a pending proactive fast-move step on the very first frame the circle
+                // either crosses the 100% white-ring threshold or jumps >= +6% above the previous confirmed fill,
+                // preventing turn-of-throw opponent cutscenes from rolling back a completed fast move (e.g. 63E -> 54E).
+                val isImmediateProactiveConfirm = proactiveStepPending &&
+                    proactiveStepSlotIdx == activeUserIdx &&
+                    ((slowestOnline && ((slowestFillPct >= 100 && confirmedSlowestFillPct[activeUserIdx] in 1..99) ||
+                        (confirmedSlowestFillPct[activeUserIdx] in 1..94 && slowestFillPct >= confirmedSlowestFillPct[activeUserIdx] + 6))) ||
+                    (fasterOnline && ((fasterFillPct >= 100 && confirmedFastestFillPct[activeUserIdx] in 1..99) ||
+                        (confirmedFastestFillPct[activeUserIdx] in 1..94 && fasterFillPct >= confirmedFastestFillPct[activeUserIdx] + 6))))
+                val slowestDebouncedReady = slowestOnline && (slowestFillDebounceCount[activeUserIdx] >= requiredDebounce || isImmediateProactiveConfirm)
+                val fasterDebouncedReady = fasterOnline && (fastestFillDebounceCount[activeUserIdx] >= requiredDebounce || isImmediateProactiveConfirm)
                 if (slowestDebouncedReady || fasterDebouncedReady) {
                     val debouncedFillPct = if (slowestDebouncedReady) {
                         candidateSlowestFillPct[activeUserIdx].coerceIn(0, 300).also {
@@ -7066,6 +7083,17 @@ class OverlayService : LifecycleService() {
                             }
                             lastStableRightChargeFillPct = debouncedFasterPct
                         }
+                    }
+
+                    // v6.23: If post-throw circle debouncing was delayed by HUD slide-in past 1 full fast-move duration
+                    // and the circle fill is already >= 28%, expire `awaitingPostUserChargeCircleSync` so Section 1C
+                    // processes the newly accumulated post-throw fast moves instead of locking energy back to the residual!
+                    if (awaitingPostUserChargeCircleSync &&
+                        lastUserChargedAttackLoggedMs > 0L &&
+                        (nowMs - lastUserChargedAttackLoggedMs) > (userMoveDurationMs + 250L) &&
+                        debouncedFillPct >= 28
+                    ) {
+                        awaitingPostUserChargeCircleSync = false
                     }
 
                     // Post-Throw Circle Verification & Round Resync (v5.12: BANNER_OCR Move Lock + Zero Post-Cutscene Turn Inflation):
@@ -9522,7 +9550,9 @@ class OverlayService : LifecycleService() {
         "rank", "rating", "rewards", "reward", "train", "training",
         "season", "current", "great", "ultra", "master", "premier",
         "switch", "shield", "shields", "super", "effective", "not", "very",
-        "attack", "defense", "charged", "fast", "weather", "boost"
+        "attack", "defense", "charged", "fast", "weather", "boost",
+        "caught", "fled", "ran", "pokeball", "stardust", "candy", "xp",
+        "plus", "accessory", "connected", "disconnected"
     )
 
     /**
@@ -9747,6 +9777,12 @@ class OverlayService : LifecycleService() {
 
             if (System.currentTimeMillis() - lastBattleResetTimeMs < 600L) return
             val speciesChanged = isWaitingForOpponent || !newBaseSpecies.equals(activeOpponentSpecies, ignoreCase = true)
+            val isChargedPromptOrCutsceneActive = isAttackIncomingPromptActive ||
+                pendingChargedAttackActor.isNotEmpty() ||
+                isTopCountdownCircleActive ||
+                sampledTopCountdownCircleVisible ||
+                (lastAttackIncomingOcrDetectedMs > 0L && (System.currentTimeMillis() - lastAttackIncomingOcrDetectedMs) <= 4800L) ||
+                matchesAttackIncomingOcrText(cachedOcrPlayerMoveLines + cachedOcrMidBannerLines)
 
             // v3.34: 2nd-Frame Validity Check — If Frame 1 was an unlatched provisional swap and Frame 2 immediately
             // re-detects the OLD opponent species (meaning Frame 1 was a 1-frame OCR glitch), revert the swap & clock!
@@ -9778,6 +9814,12 @@ class OverlayService : LifecycleService() {
             }
 
             if (speciesChanged) {
+                // v6.23: Block mid-battle opponent species switches during charged-move prompts/cutscenes or when
+                // the top-right nameplate is hidden (`!sampledTopRightNameplateVisible`), or when the scanned CP is
+                // a truncated prefix/suffix of the active opponent's CP as the nameplate slides off-screen (e.g. `CP 249` from `CP 2499`).
+                if (!isWaitingForOpponent && (isChargedPromptOrCutsceneActive || !sampledTopRightNameplateVisible)) {
+                    return
+                }
                 val prevOppRawName = activeOpponentName
                 val prevOppRawSpecies = activeOpponentSpecies
                 val prevOppFormattedName = if (!isWaitingForOpponent && activeOpponentName != "Waiting...") {
@@ -9787,6 +9829,16 @@ class OverlayService : LifecycleService() {
                     val base = FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
                     detectedOpponents.indexOfFirst { FormResolver.extractBaseSpecies(it).equals(base, ignoreCase = true) }.coerceAtLeast(0)
                 } else -1
+                if (!isWaitingForOpponent && prevOppSlotIdx in 0..2 && oppSlotCp[prevOppSlotIdx] >= 100) {
+                    val prevCpStr = oppSlotCp[prevOppSlotIdx].toString()
+                    val candidateCpStr = extractCpFromOcrLines(sortedLines)?.toString()
+                    if (candidateCpStr != null &&
+                        candidateCpStr.length < prevCpStr.length &&
+                        (prevCpStr.startsWith(candidateCpStr) || prevCpStr.endsWith(candidateCpStr))
+                    ) {
+                        return
+                    }
+                }
 
                 val wasWaitingForOpponent = isWaitingForOpponent
                 val preDetectedSize = detectedOpponents.size
@@ -9850,6 +9902,16 @@ class OverlayService : LifecycleService() {
                             oppSlotEnergy[0] = (completedLeadOppMoves * leadOppFastEnergy).coerceIn(0, 100)
                             oppSlotTurnsOnField[0] = completedLeadOppMoves * leadOppFastTurns
                             phaseOppTurns = completedLeadOppMoves * leadOppFastTurns
+                            confirmedMoveOppSlotIdx = 0
+                            confirmedMoveOppEnergy = oppSlotEnergy[0]
+                            confirmedMoveOppTurnsOnField = oppSlotTurnsOnField[0]
+                            confirmedMovePhaseOppTurns = phaseOppTurns
+                            if (proactiveStepPending) {
+                                proactiveStepPreOppSlotIdx = 0
+                                proactiveStepPreOppEnergy = oppSlotEnergy[0]
+                                proactiveStepPreOppTurnsOnField = oppSlotTurnsOnField[0]
+                                proactiveStepPrePhaseOppTurns = phaseOppTurns
+                            }
                         }
                     }
                     battleTimelineEvents.clear()
@@ -10170,8 +10232,16 @@ class OverlayService : LifecycleService() {
                     recalculateAndPushBattleData()
                 }
             }
-        } else if (!oppSwitchValidityLatched && (currentFrameTimestampMs - lastOppSwitchFrameMs) >= 1400L) {
-            // If Frame 2 had no conflicting old-species OCR text, latch the provisional swap
+        } else if (!oppSwitchValidityLatched &&
+            !isAllCombatHudGone &&
+            sampledTopRightNameplateVisible &&
+            !isAttackIncomingPromptActive &&
+            pendingChargedAttackActor.isEmpty() &&
+            !isTopCountdownCircleActive &&
+            !sampledTopCountdownCircleVisible &&
+            (currentFrameTimestampMs - lastOppSwitchFrameMs) >= 1400L
+        ) {
+            // If Frame 2 had no conflicting old-species OCR text while the combat nameplate was visible, latch the provisional swap
             oppSwitchValidityLatched = true
             provisionalOppPrevName = ""
             provisionalOppPrevSpecies = ""
@@ -10995,7 +11065,11 @@ class OverlayService : LifecycleService() {
                 }
                 changed = true
             }
-        } else if (isPlayerCombatUiBack && pendingChargedAttackActor.isEmpty() && debouncedPlayerBalls in 1..2) {
+        } else if (isPlayerCombatUiBack &&
+            pendingChargedAttackActor.isEmpty() &&
+            (frameTimeMs - lastChargedAttackLoggedMs) > 1500L &&
+            debouncedPlayerBalls in 1..2
+        ) {
             if (debouncedPlayerBalls == 1 && activeUserIdx in 0..2) {
                 for (idx in 0..2) {
                     if (idx != activeUserIdx && (!playerFaintedSlots[idx] || playerSlotHpPct[idx] != 0)) {
@@ -11102,7 +11176,11 @@ class OverlayService : LifecycleService() {
                 }
                 changed = true
             }
-        } else if (isOppCombatUiBack && pendingChargedAttackActor.isEmpty() && debouncedOppBalls in 1..2) {
+        } else if (isOppCombatUiBack &&
+            pendingChargedAttackActor.isEmpty() &&
+            (frameTimeMs - lastChargedAttackLoggedMs) > 1500L &&
+            debouncedOppBalls in 1..2
+        ) {
             if (debouncedOppBalls == 1 && activeOppIdx in 0..2) {
                 for (idx in 0 until min(3, max(detectedOpponents.size, 3))) {
                     if (idx != activeOppIdx && (!oppFaintedSlots[idx] || oppSlotHpPct[idx] != 0)) {
@@ -12912,6 +12990,30 @@ class OverlayService : LifecycleService() {
             if (exactOrNorm != null) return exactOrNorm
         }
 
+        // 2.5. Active & Known Opponent Clipped-Substring Guard (v6.23):
+        // When a nameplate slides off-screen at the start of a charged-move zoom, a suffix/substring of the active
+        // opponent's name (e.g. "katon" from "Tinkaton") must resolve back to the active/known species before
+        // falling through to short-word Levenshtein matching (which previously matched "katon" -> "aron" at dist 2).
+        val knownSpeciesBases = (listOf(activeOpponentSpecies) + detectedOpponents.map { FormResolver.extractBaseSpecies(it).lowercase() })
+            .map { normalizeOcrToken(it) }
+            .filter { it.length >= 5 }
+            .distinct()
+        if (knownSpeciesBases.isNotEmpty()) {
+            for (token in tokens) {
+                if (isIgnoredMenuToken(token)) continue
+                val normTok = normalizeOcrToken(token)
+                if (normTok.length >= 3) {
+                    val matchedKnownBase = knownSpeciesBases.firstOrNull { known ->
+                        known.contains(normTok) && normTok.length >= min(4, known.length - 2)
+                    }
+                    if (matchedKnownBase != null) {
+                        val knownMeta = sortedByLenDesc.find { normalizeOcrToken(it.baseSpecies) == matchedKnownBase }
+                        if (knownMeta != null) return knownMeta
+                    }
+                }
+            }
+        }
+
         // 3. Prefix match for partially clipped names (e.g. "Kyure", "Feraliga", "Giratin", "Zacia")
         for (token in tokens) {
             if (isIgnoredMenuToken(token)) continue
@@ -12948,15 +13050,23 @@ class OverlayService : LifecycleService() {
             if (tokenNorms.isEmpty()) continue
 
             for (normTok in tokenNorms) {
-                val maxAllowedDist = if (normTok.length >= 5) 2 else 1
+                val maxAllowedDist = if (normTok.length >= 6) 2 else 1
                 for (meta in allMeta) {
                     val target = normalizeOcrToken(meta.baseSpecies)
                     // Never fuzzy-match Mew as Mewtwo or Mewtwo as Mew
                     if (target == "mew" || (target == "mewtwo" && !normTok.startsWith("mewt"))) continue
                     if (normTok.startsWith("mew") && !normTok.startsWith("mewt") && target == "mewtwo") continue
-                    if (kotlin.math.abs(target.length - normTok.length) <= maxAllowedDist) {
+                    val pairMaxDist = if (target.length <= 5 || normTok.length <= 5) 1 else maxAllowedDist
+                    if (kotlin.math.abs(target.length - normTok.length) <= pairMaxDist) {
                         val dist = levenshteinDistance(normTok, target)
-                        if (dist <= maxAllowedDist && dist < bestDistance) {
+                        val anchorOk = if (target.length <= 5 || normTok.length <= 5) {
+                            target.first() == normTok.first()
+                        } else if (dist >= 2) {
+                            target.first() == normTok.first() || target.takeLast(3) == normTok.takeLast(3)
+                        } else {
+                            true
+                        }
+                        if (anchorOk && dist <= pairMaxDist && dist < bestDistance) {
                             bestDistance = dist
                             bestMatch = meta
                         }
