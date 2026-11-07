@@ -149,8 +149,8 @@ internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap,
     val handler = dvrHandler ?: return
     if (screen.isRecycled) return
     if (!dvrFrameInFlight.compareAndSet(false, true)) return
-    val targetW = 480
-    val targetH = (((screen.height.toFloat() / screen.width.toFloat()) * targetW.toFloat()).toInt() / 16 * 16).coerceIn(640, 1280)
+    val targetW = 544
+    val targetH = (((screen.height.toFloat() / screen.width.toFloat()) * targetW.toFloat()).toInt() / 16 * 16).coerceIn(640, 1440)
     val scaledBmp = try {
         Bitmap.createScaledBitmap(screen, targetW, targetH, true)
     } catch (_: Exception) {
@@ -303,35 +303,33 @@ internal fun OverlayService.startDvrEncoderLocked(width: Int, height: Int, start
         dvrTraceFile = trace
         dvrTraceWriter = trace.bufferedWriter(Charsets.UTF_8)
 
-        fun buildEncoderFormat(useCbrAndQpBounds: Boolean): MediaFormat {
+        fun buildEncoderFormat(useQpBounds: Boolean): MediaFormat {
             return MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                setInteger(MediaFormat.KEY_BIT_RATE, 200_000)
-                setInteger(MediaFormat.KEY_FRAME_RATE, 30)
-                setInteger(MediaFormat.KEY_CAPTURE_RATE, 10)
-                setInteger(MediaFormat.KEY_OPERATING_RATE, 10)
-                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 4)
-                if (useCbrAndQpBounds) {
+                setInteger(MediaFormat.KEY_BIT_RATE, 720_000)
+                setInteger(MediaFormat.KEY_FRAME_RATE, 15)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
+                if (useQpBounds) {
                     setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
-                    setInteger(MediaFormat.KEY_VIDEO_QP_I_MIN, 30)
-                    setInteger(MediaFormat.KEY_VIDEO_QP_I_MAX, 44)
-                    setInteger(MediaFormat.KEY_VIDEO_QP_P_MIN, 32)
-                    setInteger(MediaFormat.KEY_VIDEO_QP_P_MAX, 46)
-                    setInteger(MediaFormat.KEY_VIDEO_QP_B_MIN, 32)
-                    setInteger(MediaFormat.KEY_VIDEO_QP_B_MAX, 46)
-                    setInteger("vendor.qti-ext-enc-qp-range.qp-i-min", 30)
-                    setInteger("vendor.qti-ext-enc-qp-range.qp-i-max", 44)
-                    setInteger("vendor.qti-ext-enc-qp-range.qp-p-min", 32)
-                    setInteger("vendor.qti-ext-enc-qp-range.qp-p-max", 46)
+                    setInteger(MediaFormat.KEY_VIDEO_QP_I_MIN, 27)
+                    setInteger(MediaFormat.KEY_VIDEO_QP_I_MAX, 36)
+                    setInteger(MediaFormat.KEY_VIDEO_QP_P_MIN, 29)
+                    setInteger(MediaFormat.KEY_VIDEO_QP_P_MAX, 38)
+                    setInteger(MediaFormat.KEY_VIDEO_QP_B_MIN, 29)
+                    setInteger(MediaFormat.KEY_VIDEO_QP_B_MAX, 38)
+                    setInteger("vendor.qti-ext-enc-qp-range.qp-i-min", 27)
+                    setInteger("vendor.qti-ext-enc-qp-range.qp-i-max", 36)
+                    setInteger("vendor.qti-ext-enc-qp-range.qp-p-min", 29)
+                    setInteger("vendor.qti-ext-enc-qp-range.qp-p-max", 38)
                 }
             }
         }
         val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
         try {
-            codec.configure(buildEncoderFormat(useCbrAndQpBounds = true), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            codec.configure(buildEncoderFormat(useQpBounds = true), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
         } catch (_: Exception) {
             try { codec.reset() } catch (_: Exception) {}
-            codec.configure(buildEncoderFormat(useCbrAndQpBounds = false), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            codec.configure(buildEncoderFormat(useQpBounds = false), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
         }
         val surface = codec.createInputSurface()
         codec.start()

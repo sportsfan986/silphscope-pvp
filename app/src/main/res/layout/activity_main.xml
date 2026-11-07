@@ -1852,7 +1852,7 @@
                     </LinearLayout>
                 </LinearLayout>
 
-                <!-- Overlay Background Transparency Slider (0% - 100%, Default 72%) -->
+                <!-- Overlay Background Transparency Slider (0% - 100%, Default 50%) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -1878,7 +1878,7 @@
                             android:id="@+id/text_overlay_transparency_value"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="72% (Default)"
+                            android:text="50% (Default)"
                             android:textColor="#38bdf8"
                             android:textSize="12sp"
                             android:textStyle="bold" />
@@ -1898,11 +1898,11 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
                         android:max="50"
-                        android:progress="36"
+                        android:progress="25"
                         android:progressTint="#38bdf8"
                         android:thumbTint="#38bdf8" />
 
-                    <!-- Transparency Bounds & Default Tick Marker (72% is 36/50 = 72% along 0%-100% track) -->
+                    <!-- Transparency Bounds & Default Tick Marker (50% is 25/50 = 50% along 0%-100% track) -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -1913,7 +1913,7 @@
                         <TextView
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_weight="36"
+                            android:layout_weight="25"
                             android:text="0% (Solid)"
                             android:textColor="#64748b"
                             android:textSize="10sp" />
@@ -1922,7 +1922,7 @@
                             android:id="@+id/text_overlay_transparency_default_tick"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="▲ 72% Default"
+                            android:text="▲ 50% Default"
                             android:textColor="#38bdf8"
                             android:textSize="10sp"
                             android:textStyle="bold"
@@ -1931,7 +1931,7 @@
                         <TextView
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_weight="14"
+                            android:layout_weight="25"
                             android:gravity="end"
                             android:text="100% (Clear)"
                             android:textColor="#64748b"

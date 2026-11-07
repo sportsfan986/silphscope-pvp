@@ -944,10 +944,18 @@ export default function App() {
     } catch {}
   };
 
-  // App-Level Setting: Overlay Background Transparency (0% - 100%, Default 72%, step 2%)
+  // App-Level Setting: Overlay Background Transparency (0% - 100%, Default 50%, step 2%)
   const [overlayTransparencyPct, setOverlayTransparencyPct] = useState<number>(() => {
     try {
+      const migrated = localStorage.getItem('gbl_v702_overlay_transparency_50_migrated');
       const saved = localStorage.getItem('gbl_overlay_transparency_pct');
+      if (!migrated) {
+        localStorage.setItem('gbl_v702_overlay_transparency_50_migrated', '1');
+        if (saved === null || saved === '72') {
+          localStorage.setItem('gbl_overlay_transparency_pct', '50');
+          return 50;
+        }
+      }
       if (saved !== null) {
         const num = Number(saved);
         if (!Number.isNaN(num) && num >= 0 && num <= 100) {
@@ -955,7 +963,7 @@ export default function App() {
         }
       }
     } catch {}
-    return 72;
+    return 50;
   });
 
   const handleSetOverlayTransparencyPct = (pct: number) => {
@@ -5661,7 +5669,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.00 • Android Native Overlay
+                  v7.02 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -7935,7 +7943,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* App Setting: Overlay Background Transparency (0% - 100%, Default 72%) */}
+                {/* App Setting: Overlay Background Transparency (0% - 100%, Default 50%) */}
                 <div className="mb-4 p-3 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
                   <div className="flex items-center justify-between">
                     <div>
@@ -7947,11 +7955,11 @@ export default function App() {
                       </span>
                     </div>
                     <button
-                      onClick={() => handleSetOverlayTransparencyPct(72)}
+                      onClick={() => handleSetOverlayTransparencyPct(50)}
                       className="text-xs font-mono font-bold text-sky-400 hover:text-sky-300 transition shrink-0"
-                      title="Click to reset to 72% Default"
+                      title="Click to reset to 50% Default"
                     >
-                      {overlayTransparencyPct === 72 ? '72% (Default)' : `${overlayTransparencyPct}%`}
+                      {overlayTransparencyPct === 50 ? '50% (Default)' : `${overlayTransparencyPct}%`}
                     </button>
                   </div>
 
@@ -7965,17 +7973,17 @@ export default function App() {
                     className="w-full accent-sky-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                   />
 
-                  {/* Transparency Bounds & 72% Default Tick Mark */}
+                  {/* Transparency Bounds & 50% Default Tick Mark */}
                   <div className="relative h-4 text-[10px] font-mono text-slate-400">
                     <span className="absolute left-0">0% (Solid)</span>
                     <button
                       type="button"
-                      onClick={() => handleSetOverlayTransparencyPct(72)}
-                      style={{ left: '72%', transform: 'translateX(-50%)' }}
+                      onClick={() => handleSetOverlayTransparencyPct(50)}
+                      style={{ left: '50%', transform: 'translateX(-50%)' }}
                       className="absolute text-sky-400 hover:text-sky-300 font-bold transition"
-                      title="Reset to 72% Default"
+                      title="Reset to 50% Default"
                     >
-                      ▲ 72% Default
+                      ▲ 50% Default
                     </button>
                     <span className="absolute right-0">100% (Clear)</span>
                   </div>
@@ -12387,10 +12395,10 @@ export default function App() {
                     </span>
                   </div>
                   <button
-                    onClick={() => handleSetOverlayTransparencyPct(72)}
+                    onClick={() => handleSetOverlayTransparencyPct(50)}
                     className="text-xs font-mono font-bold text-sky-400 hover:text-sky-300 transition"
                   >
-                    {overlayTransparencyPct === 72 ? '72% (Default)' : `${overlayTransparencyPct}%`}
+                    {overlayTransparencyPct === 50 ? '50% (Default)' : `${overlayTransparencyPct}%`}
                   </button>
                 </div>
                 <input
@@ -12406,11 +12414,11 @@ export default function App() {
                   <span className="absolute left-0">0% (Solid)</span>
                   <button
                     type="button"
-                    onClick={() => handleSetOverlayTransparencyPct(72)}
-                    style={{ left: '72%', transform: 'translateX(-50%)' }}
+                    onClick={() => handleSetOverlayTransparencyPct(50)}
+                    style={{ left: '50%', transform: 'translateX(-50%)' }}
                     className="absolute text-sky-400 hover:text-sky-300 font-bold transition"
                   >
-                    ▲ 72% Default
+                    ▲ 50% Default
                   </button>
                   <span className="absolute right-0">100% (Clear)</span>
                 </div>
@@ -16812,7 +16820,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.01 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
+        SilphScope PvP v7.02 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
       </footer>
     </div>
   );

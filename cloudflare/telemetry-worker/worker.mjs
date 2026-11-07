@@ -8,7 +8,7 @@
  * Responsibilities:
  * 1. Ingests Always-On Lower-Resolution Battle Telemetry (`POST /v1/telemetry`) -> Storage + optional Telegram alert
  * 2. Ingests User Settings Change Audits (`POST /v1/settings-changes`) -> Storage
- * 3. Ingests 1-Battle DVR Video + Deep Trace Bundles (`POST /v1/dvr`) -> Storage + async Telegram Channel video post
+ * 3. Ingests 1-Battle DVR Video + Deep Trace Bundles (`POST /v1/dvr`) -> Storage + async Telegram Channel video post (only for manually flagged battles)
  * 4. Serves Admin Ingestion Endpoints (`GET/DELETE /v1/admin/*`) for `scripts/ingest-telemetry.mjs`
  */
 
@@ -1511,6 +1511,71 @@ function resolveFullTeamMatchupSummary(metadata, deepTraceText) {
   return rawSummary;
 }
 
+/**
+ * Determines whether a battle DVR upload was explicitly/manually flagged by the user
+ * (e.g. 1-Battle REC button, in-battle/post-battle 🚩 Bug Report button, or Replay Menu manual issue report)
+ * rather than an automated Always-On DVR recording or unflagged automatic anomaly upload.
+ */
+function isManuallyFlaggedBattle(metadata, deepTraceText) {
+  if (metadata && typeof metadata === 'object') {
+    if (
+      metadata.manuallyFlagged === true ||
+      metadata.manuallyFlagged === 'true' ||
+      metadata.isManualFlag === true ||
+      metadata.isManualFlag === 'true' ||
+      metadata.wasExplicitlyFlagged === true ||
+      metadata.wasExplicitlyFlagged === 'true'
+    ) {
+      return true;
+    }
+
+    const userIssueNote = String(metadata.userIssueNote || '').trim();
+    if (userIssueNote.length > 0) {
+      return true;
+    }
+
+    const uploadReason = String(metadata.uploadReason || '').trim().toLowerCase();
+    if (
+      uploadReason.includes('manual') ||
+      uploadReason.includes('bug report') ||
+      uploadReason.includes('user flag') ||
+      uploadReason.includes('flagged')
+    ) {
+      return true;
+    }
+  }
+
+  if (deepTraceText && typeof deepTraceText === 'string') {
+    try {
+      const firstNewline = deepTraceText.indexOf('\n');
+      const firstLine = (firstNewline >= 0 ? deepTraceText.slice(0, firstNewline) : deepTraceText).trim();
+      if (firstLine.startsWith('{"recordType":"BATTLE_DVR_SUMMARY_HEADER"')) {
+        const headerObj = JSON.parse(firstLine);
+        if (
+          headerObj.manuallyFlagged === true ||
+          headerObj.isManualFlag === true ||
+          headerObj.wasExplicitlyFlagged === true
+        ) {
+          return true;
+        }
+        const hNote = String(headerObj.userIssueNote || '').trim();
+        if (hNote.length > 0) return true;
+        const hReason = String(headerObj.uploadReason || '').trim().toLowerCase();
+        if (
+          hReason.includes('manual') ||
+          hReason.includes('bug report') ||
+          hReason.includes('user flag') ||
+          hReason.includes('flagged')
+        ) {
+          return true;
+        }
+      }
+    } catch (_) {}
+  }
+
+  return false;
+}
+
 function renderWatchSharePage(origin, shareInfo) {
   const shareId = escapeHtml(shareInfo.shareId || '');
   const hideNamesDefault = Boolean(shareInfo.hideNames);
@@ -1664,6 +1729,7 @@ function renderWatchSharePage(origin, shareInfo) {
       border: none;
       padding: 0;
       pointer-events: auto;
+      opacity: 0.50;
       transition: top 0.2s, bottom 0.2s, opacity 0.15s;
       z-index: 10;
     }
@@ -1776,7 +1842,7 @@ function renderWatchSharePage(origin, shareInfo) {
           <button onclick="setHudMode('off')" id="mode-off">OFF</button>
           <button onclick="toggleShieldHud()" id="btn-shield-hud" class="active">🛡️ Shield: ON</button>
           <button onclick="toggleHudPos()" id="btn-pos">⬆️ Pos: Top</button>
-          <input type="range" id="hud-opacity" min="30" max="100" value="95" style="width:65px" title="HUD Opacity" oninput="updateOpacity(this.value)" />
+          <input type="range" id="hud-opacity" min="25" max="100" value="50" style="width:65px" title="HUD Opacity (50% Default)" oninput="updateOpacity(this.value)" />
         </div>
       </div>
       <div class="chips-row" id="event-chips"></div>
@@ -1796,6 +1862,34 @@ function renderWatchSharePage(origin, shareInfo) {
     let hudTop = true;
     let showShieldHud = true;
     let sideBySide = false;
+    let selectedSpeed = 1;
+    let mp4TimeCompressionRatio = 1.0;
+
+    function updateEffectivePlaybackRate() {
+      const rate = Math.max(0.1, Math.min(4.0, selectedSpeed / mp4TimeCompressionRatio));
+      try {
+        video.playbackRate = rate;
+      } catch (_) {}
+    }
+
+    function recalcMp4TimeCompression() {
+      const vDur = Number(video.duration) || 0;
+      const traceDurSec = (frames.length > 1 && frames[frames.length - 1].relTimeMs)
+        ? (frames[frames.length - 1].relTimeMs / 1000)
+        : 0;
+      if (vDur > 5 && traceDurSec > 10) {
+        const ratio = traceDurSec / vDur;
+        // Compensate for v6.45–v7.01 recordings where KEY_CAPTURE_RATE=10 + KEY_FRAME_RATE=30 compressed PTS by ~3x
+        if (ratio >= 1.8 && ratio <= 3.6) {
+          mp4TimeCompressionRatio = ratio;
+        } else {
+          mp4TimeCompressionRatio = 1.0;
+        }
+      } else {
+        mp4TimeCompressionRatio = 1.0;
+      }
+      updateEffectivePlaybackRate();
+    }
 
     // Interactive HUD manual overrides (matching Android ReplayJavascriptBridge)
     let manualUserSlotOverride = null;
@@ -1874,11 +1968,13 @@ function renderWatchSharePage(origin, shareInfo) {
     }
     function stepFrame(delta) {
       video.pause();
-      video.currentTime = Math.max(0, Math.min(video.duration || 999, video.currentTime + delta * 0.1));
+      const stepSec = 0.067 / mp4TimeCompressionRatio;
+      video.currentTime = Math.max(0, Math.min(video.duration || 999, video.currentTime + delta * stepSec));
       syncHudFrame();
     }
     function setSpeed(s) {
-      video.playbackRate = s;
+      selectedSpeed = s;
+      updateEffectivePlaybackRate();
       ['025','05','1','2'].forEach(k => document.getElementById('spd-' + k).classList.remove('active'));
       const id = s === 0.25 ? '025' : s === 0.5 ? '05' : String(s);
       const el = document.getElementById('spd-' + id);
@@ -2922,7 +3018,8 @@ function renderWatchSharePage(origin, shareInfo) {
     }
 
     function syncHudFrame() {
-      const f = findFrameAtSec(video.currentTime || 0);
+      const effectiveRealSec = (video.currentTime || 0) * mp4TimeCompressionRatio;
+      const f = findFrameAtSec(effectiveRealSec);
       if (!f) return;
       try {
         attachOverlayBridge();
@@ -2950,23 +3047,26 @@ function renderWatchSharePage(origin, shareInfo) {
     }
 
     function scrubVideo(val) {
-      const dur = video.duration || ((frames[frames.length - 1] && frames[frames.length - 1].relTimeMs) ? frames[frames.length - 1].relTimeMs / 1000 : 180);
-      video.currentTime = (Number(val) / 1000) * dur;
+      const vDur = video.duration || ((frames[frames.length - 1] && frames[frames.length - 1].relTimeMs) ? (frames[frames.length - 1].relTimeMs / 1000) / mp4TimeCompressionRatio : 180);
+      video.currentTime = (Number(val) / 1000) * vDur;
       syncHudFrame();
     }
 
     video.addEventListener('timeupdate', () => {
-      const dur = video.duration || ((frames[frames.length - 1] && frames[frames.length - 1].relTimeMs) ? frames[frames.length - 1].relTimeMs / 1000 : 0);
+      const vDur = video.duration || ((frames[frames.length - 1] && frames[frames.length - 1].relTimeMs) ? (frames[frames.length - 1].relTimeMs / 1000) / mp4TimeCompressionRatio : 0);
       const cur = video.currentTime || 0;
-      if (dur > 0) {
-        document.getElementById('video-scrubber').value = String(Math.round((cur / dur) * 1000));
+      if (vDur > 0) {
+        document.getElementById('video-scrubber').value = String(Math.round((cur / vDur) * 1000));
       }
-      document.getElementById('time-readout').textContent = cur.toFixed(1) + 's / ' + dur.toFixed(1) + 's';
+      const dispCur = cur * mp4TimeCompressionRatio;
+      const dispDur = vDur * mp4TimeCompressionRatio;
+      document.getElementById('time-readout').textContent = dispCur.toFixed(1) + 's / ' + dispDur.toFixed(1) + 's';
       syncHudFrame();
     });
     video.addEventListener('loadedmetadata', () => {
-      const dur = video.duration || 0;
-      document.getElementById('time-readout').textContent = '0.0s / ' + dur.toFixed(1) + 's';
+      recalcMp4TimeCompression();
+      const dispDur = (video.duration || 0) * mp4TimeCompressionRatio;
+      document.getElementById('time-readout').textContent = '0.0s / ' + dispDur.toFixed(1) + 's';
     });
     video.addEventListener('seeked', syncHudFrame);
 
@@ -3010,6 +3110,7 @@ function renderWatchSharePage(origin, shareInfo) {
           }
         }
         frames = parsed;
+        recalcMp4TimeCompression();
         buildEventChips();
         syncHudFrame();
       } catch (e) {
@@ -3056,7 +3157,7 @@ function renderWatchSharePage(origin, shareInfo) {
       chip.className = 'event-chip';
       chip.textContent = label;
       chip.onclick = () => {
-        video.currentTime = jumpSec;
+        video.currentTime = jumpSec / mp4TimeCompressionRatio;
         syncHudFrame();
       };
       container.appendChild(chip);
@@ -3995,7 +4096,7 @@ export default {
             });
             if (m.recentBatches.length > 250) m.recentBatches.length = 250;
           });
-          // Generic battle telemetry batches do not send Telegram notifications (only 1-Battle DVR videos post to Telegram).
+          // Generic battle telemetry batches do not send Telegram notifications (only manually flagged 1-Battle DVR videos post to Telegram).
         })()
       );
 
@@ -4113,6 +4214,7 @@ export default {
         const videoKey = `recordings/${screenName}/${battleId}_video.mp4`;
         const traceKey = `recordings/${screenName}/${battleId}_deep_trace.jsonl`;
         const videoByteLen = hasVideo ? videoBytes.byteLength : 0;
+        const isManual = isManuallyFlaggedBattle(metadata, deepTraceText);
 
         const storeMeta = {
           screenName,
@@ -4123,6 +4225,7 @@ export default {
           result,
           frameCount: String(frameCount),
           uploadedAt: now.toISOString(),
+          manuallyFlagged: String(isManual),
         };
 
         if (hasTrace) {
@@ -4172,6 +4275,7 @@ export default {
                   result,
                   matchupSummary,
                   uploadedAt: now.toISOString(),
+                  manuallyFlagged: isManual,
                 });
                 if (m.recentDvr.length > 250) m.recentDvr.length = 250;
               });
@@ -4179,7 +4283,10 @@ export default {
               console.error('Manifest update error:', e);
             }
 
-            if (hasVideo && videoByteLen <= 48 * 1024 * 1024) {
+            const onlyManual = env.TELEGRAM_NOTIFY_ONLY_MANUAL_DVR !== 'false';
+            const shouldSendTelegramVideo = (!onlyManual || isManual) && hasVideo && videoByteLen <= 48 * 1024 * 1024;
+
+            if (shouldSendTelegramVideo) {
               try {
                 const userIssueNote = String(metadata.userIssueNote || '').trim();
                 const uploadReason = String(metadata.uploadReason || '').trim();
@@ -4198,6 +4305,10 @@ export default {
               } catch (e) {
                 console.error('Telegram video send error:', e);
               }
+            } else if (!isManual && hasVideo) {
+              console.log(
+                `Skipping Telegram video for battle ${battleId}: battle was not manually flagged (trigger="${metadata.uploadReason || 'none'}").`
+              );
             }
           })()
         );
@@ -4209,6 +4320,7 @@ export default {
           videoKey: hasVideo ? videoKey : null,
           traceKey: hasTrace ? traceKey : null,
           videoBytes: videoByteLen,
+          manuallyFlagged: isManual,
         });
       } catch (err) {
         console.error('POST /v1/dvr error:', err);

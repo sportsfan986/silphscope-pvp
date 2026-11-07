@@ -93,7 +93,7 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.01"
+        const val APP_VERSION = "7.02"
         const val APP_VERSION_CODE = 1701
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -164,6 +164,7 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_V602_SCANNER_DEFAULTS_MIGRATED = "gbl_v602_scanner_defaults_migrated"
         const val PREFS_KEY_INSTALLED_VERSION_CODE = "gbl_last_installed_version_code"
         const val PREFS_KEY_OVERLAY_TRANSPARENCY_PCT = "overlay_transparency_pct"
+        const val PREFS_KEY_V702_OVERLAY_TRANSPARENCY_MIGRATED = "gbl_v702_overlay_transparency_50_migrated"
         const val PREFS_KEY_APP_THEME_ID = "gbl_app_theme_id"
         const val PREFS_KEY_SHOW_THEME_WATERMARK = "gbl_show_theme_watermark"
         const val PREFS_KEY_LAST_SYNC_TIMESTAMP = "last_sync_timestamp"
@@ -555,8 +556,18 @@ class OverlayService : LifecycleService() {
             editor.putBoolean(PREFS_KEY_V602_SCANNER_DEFAULTS_MIGRATED, true).apply()
         }
 
+        fun runV702OverlayTransparencyMigrationStatic(prefs: SharedPreferences) {
+            if (prefs.getBoolean(PREFS_KEY_V702_OVERLAY_TRANSPARENCY_MIGRATED, false)) return
+            val editor = prefs.edit()
+            if (!prefs.contains(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT) || prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 50) == 72) {
+                editor.putInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 50)
+            }
+            editor.putBoolean(PREFS_KEY_V702_OVERLAY_TRANSPARENCY_MIGRATED, true).apply()
+        }
+
         fun syncTierThresholdsFromPrefs(prefs: SharedPreferences) {
             runV602ScannerDefaultsMigrationStatic(prefs)
+            runV702OverlayTransparencyMigrationStatic(prefs)
             activeTierSwMin = prefs.getInt(PREFS_KEY_TIER_SW_MIN, DEFAULT_TIER_SW_MIN).coerceIn(150, 950)
             activeTierWMin = prefs.getInt(PREFS_KEY_TIER_W_MIN, DEFAULT_TIER_W_MIN).coerceIn(150, 950)
             activeTierLMax = prefs.getInt(PREFS_KEY_TIER_L_MAX, DEFAULT_TIER_L_MAX).coerceIn(100, 900)
@@ -2327,7 +2338,7 @@ class OverlayService : LifecycleService() {
     internal var showShieldDecisionOverlay = true
     internal var aiAdviceHudPosition = DEFAULT_AI_ADVICE_HUD_POSITION
     internal var overlayScalePct = 78
-    internal var overlayTransparencyPct = 72
+    internal var overlayTransparencyPct = 50
     internal var appThemeId = "dialga_shiny_midnight"
     internal var isOverlayMinimized = false
     internal var lastMinimizeTimestampMs: Long = 0L
@@ -3694,6 +3705,7 @@ class OverlayService : LifecycleService() {
         mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         prefs = getSharedPreferences("gbl_overlay_prefs", Context.MODE_PRIVATE)
         runV602ScannerDefaultsMigrationStatic(prefs)
+        runV702OverlayTransparencyMigrationStatic(prefs)
         oppCountMode = prefs.getString("opp_count_mode", "my_fasts") ?: "my_fasts"
         enable4ChargedMoves = prefs.getBoolean(PREFS_KEY_ENABLE_4_CHARGED_MOVES, false)
         disableBattleToasts = prefs.getBoolean(PREFS_KEY_DISABLE_BATTLE_TOASTS, false)
@@ -3708,7 +3720,7 @@ class OverlayService : LifecycleService() {
             ?: DEFAULT_CHARGE_CIRCLE_PRIORITY_MODE
         enableAltFastMoveDetect = prefs.getBoolean(PREFS_KEY_ENABLE_ALT_FAST_MOVE_DETECT, DEFAULT_ENABLE_ALT_FAST_MOVE_DETECT)
         overlayScalePct = prefs.getInt("overlay_scale_pct", 78).coerceIn(50, 100)
-        overlayTransparencyPct = prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 72).coerceIn(0, 100)
+        overlayTransparencyPct = prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 50).coerceIn(0, 100)
         val rawSavedThemeId = prefs.getString(PREFS_KEY_APP_THEME_ID, "dialga_shiny_midnight") ?: "dialga_shiny_midnight"
         appThemeId = if (rawSavedThemeId == "amoled_cyan" || rawSavedThemeId == "amoled_matrix") "dialga_shiny_midnight" else rawSavedThemeId
         syncTierThresholdsFromPrefs(prefs)
@@ -4424,8 +4436,8 @@ class OverlayService : LifecycleService() {
 
             format = PixelFormat.TRANSLUCENT
             gravity = Gravity.TOP or Gravity.START
-            x = (8 * density).toInt()
-            y = (142 * density).toInt()
+            x = 0
+            y = getDefaultOverlayTopYOffsetPx()
             width = (screenWidth * (overlayScalePct.coerceIn(50, 100) / 100f)).toInt()
             height = WindowManager.LayoutParams.WRAP_CONTENT
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -4792,8 +4804,8 @@ class OverlayService : LifecycleService() {
 
                 val startTransparencyPct = intent?.getIntExtra(
                     EXTRA_OVERLAY_TRANSPARENCY_PCT,
-                    prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 72)
-                ) ?: prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 72)
+                    prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 50)
+                ) ?: prefs.getInt(PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 50)
                 applyOverlayTransparency(startTransparencyPct)
 
                 val startThemeId = intent?.getStringExtra(EXTRA_APP_THEME_ID)
@@ -5100,6 +5112,30 @@ class OverlayService : LifecycleService() {
         }
     }
 
+    internal fun getDefaultOverlayTopYOffsetPx(): Int {
+        val density = resources.displayMetrics.density
+        var statusBarPx = 0
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val insets = windowManager.currentWindowMetrics.windowInsets
+                    .getInsetsIgnoringVisibility(
+                        android.view.WindowInsets.Type.statusBars() or
+                            android.view.WindowInsets.Type.displayCutout()
+                    )
+                statusBarPx = max(statusBarPx, insets.top)
+            }
+        } catch (_: Exception) {}
+        try {
+            val resId = resources.getIdentifier("status_bar_height", "dimen", "android")
+            if (resId > 0) {
+                statusBarPx = max(statusBarPx, resources.getDimensionPixelSize(resId))
+            }
+        } catch (_: Exception) {}
+        val fallbackMinPx = (44 * density).toInt()
+        val baseStatusPx = max(statusBarPx, fallbackMinPx)
+        return baseStatusPx + (4 * density).toInt()
+    }
+
     internal fun applyLayoutMode(mode: String) {
         currentLayoutMode = mode
         val density = resources.displayMetrics.density
@@ -5111,9 +5147,9 @@ class OverlayService : LifecycleService() {
             layoutParams.height = WindowManager.LayoutParams.WRAP_CONTENT
         } else {
             layoutParams.gravity = Gravity.TOP or Gravity.START
-            layoutParams.x = (8 * density).toInt()
-            layoutParams.y = (135 * density).toInt()
-            layoutParams.width = min((screenWidth * 0.78f).toInt(), (310 * density).toInt())
+            layoutParams.x = 0
+            layoutParams.y = getDefaultOverlayTopYOffsetPx()
+            layoutParams.width = (screenWidth * (overlayScalePct.coerceIn(50, 100) / 100f)).toInt()
             layoutParams.height = WindowManager.LayoutParams.WRAP_CONTENT
         }
         try {
@@ -5257,12 +5293,12 @@ class OverlayService : LifecycleService() {
                 } catch (_: Exception) {}
                 val nowAfterHpScan = System.currentTimeMillis()
                 val pixelWorkMs = (nowAfterHpScan - cycleStartMs).coerceAtLeast(1L)
-                val targetLoopMs = 100L
+                val targetLoopMs = if ((activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed) && (isBattleActive || hasBattleStarted) && !isWaitingForOpponent) 67L else 100L
                 val sleepMs = (targetLoopMs - pixelWorkMs).coerceAtLeast(5L)
                 val effectiveHpLoopMs = if (actualCadenceMs in 40L..350L) {
                     actualCadenceMs
                 } else {
-                    (pixelWorkMs + sleepMs).coerceAtLeast(80L)
+                    (pixelWorkMs + sleepMs).coerceAtLeast(60L)
                 }
                 lastHpScanDurationMs = effectiveHpLoopMs
                 if (isBattleActive) {

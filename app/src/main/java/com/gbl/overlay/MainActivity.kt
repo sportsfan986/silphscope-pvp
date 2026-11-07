@@ -419,7 +419,7 @@ class MainActivity : AppCompatActivity() {
     private val PREFS_KEY_OVERLAY_SCALE_PCT = "overlay_scale_pct"
     private val DEFAULT_OVERLAY_SCALE_PCT = 78
     private val PREFS_KEY_OVERLAY_TRANSPARENCY_PCT = OverlayService.PREFS_KEY_OVERLAY_TRANSPARENCY_PCT
-    private val DEFAULT_OVERLAY_TRANSPARENCY_PCT = 72
+    private val DEFAULT_OVERLAY_TRANSPARENCY_PCT = 50
     private val PREFS_KEY_BATTLE_LOGS: String
         get() = if (isShow6CombatMode()) OverlayService.PREFS_KEY_SHOW6_BATTLE_LOGS else OverlayService.PREFS_KEY_BATTLE_LOGS
     private val PREFS_KEY_DELETED_LOG_IDS: String
@@ -2223,7 +2223,7 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
 
-        // Clicking the default tick or value label snaps back to 72% (Default)
+        // Clicking the default tick or value label snaps back to 50% (Default)
         val resetToDefaultTransparency = {
             seekbarOverlayTransparency.progress = transparencyPctToProgress(DEFAULT_OVERLAY_TRANSPARENCY_PCT)
         }
@@ -7376,10 +7376,23 @@ class MainActivity : AppCompatActivity() {
                 )
             }
             val speeds = listOf(0.25f, 0.5f, 1.0f, 2.0f)
-            var speedIdx = 3 // Default to 2.0x playback speed
+            var speedIdx = 2 // Default to 1.0x real-time playback speed
             var mediaPlayerRef: android.media.MediaPlayer? = null
+            var mp4TimeCompressionRatio = 1.0f
+            fun recalcMp4TimeCompression() {
+                val mp = mediaPlayerRef ?: return
+                val vDurMs = try { mp.duration.toLong() } catch (_: Exception) { 0L }
+                val traceDurMs = traceFrames.lastOrNull()?.videoElapsedMs ?: 0L
+                if (vDurMs > 5000L && traceDurMs > 10000L) {
+                    val ratio = traceDurMs.toFloat() / vDurMs.toFloat()
+                    mp4TimeCompressionRatio = if (ratio in 1.8f..3.6f) ratio else 1.0f
+                } else {
+                    mp4TimeCompressionRatio = 1.0f
+                }
+            }
             fun applyCurrentPlaybackSpeed() {
-                val spd = speeds.getOrElse(speedIdx) { 2.0f }
+                recalcMp4TimeCompression()
+                val spd = (speeds.getOrElse(speedIdx) { 1.0f } / mp4TimeCompressionRatio).coerceIn(0.1f, 4.0f)
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
                     try {
                         val mp = mediaPlayerRef ?: return
@@ -7392,6 +7405,7 @@ class MainActivity : AppCompatActivity() {
             videoView.setOnPreparedListener { mp ->
                 mediaPlayerRef = mp
                 mp.isLooping = false
+                recalcMp4TimeCompression()
                 if (videoView.isPlaying) {
                     applyCurrentPlaybackSpeed()
                 }
@@ -7412,7 +7426,7 @@ class MainActivity : AppCompatActivity() {
             val btnStepBack = TextView(this).apply { text = "⏮ -1F"; styleMiniBtn(this, 0xFF1E293B.toInt()) }
             val btnPlayPause = TextView(this).apply { text = "▶️ Play"; styleMiniBtn(this, 0xFF059669.toInt()) }
             val btnStepFwd = TextView(this).apply { text = "⏭ +1F"; styleMiniBtn(this, 0xFF1E293B.toInt()) }
-            val btnSpeed = TextView(this).apply { text = "2.0x"; styleMiniBtn(this, 0xFF334155.toInt()) }
+            val btnSpeed = TextView(this).apply { text = "1.0x"; styleMiniBtn(this, 0xFF334155.toInt()) }
             val tvFrameClock = TextView(this).apply {
                 text = "F#0000 0.0s"
                 setTextColor(0xFF38BDF8.toInt())
@@ -7590,10 +7604,12 @@ class MainActivity : AppCompatActivity() {
                     text = label
                     styleMiniBtn(this, 0xFF1E293B.toInt(), 0xFFCBD5E1.toInt())
                     setOnClickListener {
-                        val jumpMs = (tMs - 2000L).coerceAtLeast(0L).toInt()
+                        recalcMp4TimeCompression()
+                        val jumpRealMs = (tMs - 2000L).coerceAtLeast(0L)
+                        val jumpVidMs = (jumpRealMs.toFloat() / mp4TimeCompressionRatio).toInt().coerceAtLeast(0)
                         ensureVideoSourceLoaded()
-                        videoView.seekTo(jumpMs)
-                        syncFrameAtMs(jumpMs.toLong())
+                        videoView.seekTo(jumpVidMs)
+                        syncFrameAtMs(jumpRealMs)
                     }
                 }
                 chipsRow.addView(chip, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (4 * density).toInt() })
@@ -7605,10 +7621,12 @@ class MainActivity : AppCompatActivity() {
                     if (!isSyncTickActive) return
                     try {
                         if (isVideoMode && videoView.isPlaying) {
+                            recalcMp4TimeCompression()
                             val pos = videoView.currentPosition
                             val dur = videoView.duration.coerceAtLeast(1)
                             seekBar.progress = ((pos.toLong() * 1000L) / dur).toInt().coerceIn(0, 1000)
-                            syncFrameAtMs(pos.toLong())
+                            val realPosMs = (pos.toFloat() * mp4TimeCompressionRatio).toLong()
+                            syncFrameAtMs(realPosMs)
                         }
                     } catch (_: Exception) {}
                     replayWebView.postDelayed(this, 80L)
@@ -7630,18 +7648,22 @@ class MainActivity : AppCompatActivity() {
                 ensureVideoSourceLoaded()
                 videoView.pause()
                 btnPlayPause.text = "▶️ Play"
-                val nextPos = (videoView.currentPosition - 100).coerceAtLeast(0)
+                recalcMp4TimeCompression()
+                val stepVidMs = (67f / mp4TimeCompressionRatio).toInt().coerceAtLeast(16)
+                val nextPos = (videoView.currentPosition - stepVidMs).coerceAtLeast(0)
                 videoView.seekTo(nextPos)
-                syncFrameAtMs(nextPos.toLong())
+                syncFrameAtMs((nextPos.toFloat() * mp4TimeCompressionRatio).toLong())
             }
             btnStepFwd.setOnClickListener {
                 ensureVideoSourceLoaded()
                 videoView.pause()
                 btnPlayPause.text = "▶️ Play"
+                recalcMp4TimeCompression()
+                val stepVidMs = (67f / mp4TimeCompressionRatio).toInt().coerceAtLeast(16)
                 val dur = videoView.duration.takeIf { it > 0 } ?: 300_000
-                val nextPos = (videoView.currentPosition + 100).coerceAtMost(dur)
+                val nextPos = (videoView.currentPosition + stepVidMs).coerceAtMost(dur)
                 videoView.seekTo(nextPos)
-                syncFrameAtMs(nextPos.toLong())
+                syncFrameAtMs((nextPos.toFloat() * mp4TimeCompressionRatio).toLong())
             }
             btnSpeed.setOnClickListener {
                 speedIdx = (speedIdx + 1) % speeds.size
@@ -7651,8 +7673,10 @@ class MainActivity : AppCompatActivity() {
                     try {
                         val mp = mediaPlayerRef
                         if (mp != null) {
+                            recalcMp4TimeCompression()
+                            val effSpd = (spd / mp4TimeCompressionRatio).coerceIn(0.1f, 4.0f)
                             val wasPlaying = videoView.isPlaying
-                            mp.playbackParams = (mp.playbackParams ?: android.media.PlaybackParams()).setSpeed(spd)
+                            mp.playbackParams = (mp.playbackParams ?: android.media.PlaybackParams()).setSpeed(effSpd)
                             if (!wasPlaying && videoView.isPlaying) {
                                 videoView.pause()
                             }
@@ -7664,10 +7688,11 @@ class MainActivity : AppCompatActivity() {
                 override fun onProgressChanged(sb: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
                     if (fromUser) {
                         ensureVideoSourceLoaded()
-                        val dur = videoView.duration.takeIf { it > 0 } ?: (traceFrames.lastOrNull()?.videoElapsedMs?.toInt() ?: 180_000)
-                        val targetMs = ((progress.toLong() * dur) / 1000L).toInt()
-                        videoView.seekTo(targetMs)
-                        syncFrameAtMs(targetMs.toLong())
+                        recalcMp4TimeCompression()
+                        val dur = videoView.duration.takeIf { it > 0 } ?: ((traceFrames.lastOrNull()?.videoElapsedMs?.toFloat() ?: 180_000f) / mp4TimeCompressionRatio).toInt()
+                        val targetVidMs = ((progress.toLong() * dur) / 1000L).toInt()
+                        videoView.seekTo(targetVidMs)
+                        syncFrameAtMs((targetVidMs.toFloat() * mp4TimeCompressionRatio).toLong())
                     }
                 }
                 override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}

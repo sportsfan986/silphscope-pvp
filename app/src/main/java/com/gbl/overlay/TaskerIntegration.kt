@@ -191,7 +191,7 @@ class TaskerOverlayActivity : Activity() {
             )
             putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, prefs.getInt(OverlayService.PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2))
             putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt("overlay_scale_pct", 78))
-            putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(OverlayService.PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 72))
+            putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(OverlayService.PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 50))
             putExtra(OverlayService.EXTRA_APP_THEME_ID, prefs.getString(OverlayService.PREFS_KEY_APP_THEME_ID, "slate") ?: "slate")
         }
         try {
@@ -316,7 +316,7 @@ class TaskerBroadcastReceiver : BroadcastReceiver() {
                         )
                         putExtra(OverlayService.EXTRA_FAST_DETECT_TURN_OFFSET, prefs.getInt(OverlayService.PREFS_KEY_FAST_DETECT_TURN_OFFSET, 0).coerceIn(0, 2))
                         putExtra(OverlayService.EXTRA_OVERLAY_SCALE_PCT, prefs.getInt("overlay_scale_pct", 78))
-                        putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(OverlayService.PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 72))
+                        putExtra(OverlayService.EXTRA_OVERLAY_TRANSPARENCY_PCT, prefs.getInt(OverlayService.PREFS_KEY_OVERLAY_TRANSPARENCY_PCT, 50))
                         putExtra(OverlayService.EXTRA_APP_THEME_ID, prefs.getString(OverlayService.PREFS_KEY_APP_THEME_ID, "slate") ?: "slate")
                     }
                     try {

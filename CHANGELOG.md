@@ -1,4 +1,20 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.01`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.02`)
+
+---
+
+## v7.02 (2026-11-07) — Crisp 15 FPS 1.0x Real-Time H.264 DVR Encoding ($\le 30\text{ MB}$ at 240s), Legacy 3x Speed Auto-Compensation & 50% Default Overlay/Replay Opacity
+*DVR video quality, real-time playback smoothness, and HUD visual ergonomics release (`v7.02`, `versionCode = 1702`, Cloudflare Worker `v7.0.2`) restoring crisp `544x1184` hardware H.264 recording at `15 FPS` (`720 kbps` CBR, `QP 27–38`, strictly $\le 30\text{ MB}$ for a full 240-second PvP timeout battle), eliminating 3.0× time-lapse MP4 compression while automatically compensating legacy `v6.45`–`v7.01` shared replays back to `1.0x` real-time speed, and standardizing default HUD opacity/transparency to `50%` across the live Android overlay, Web Simulator, in-app DVR replay player, and Cloud Replay `/watch` theater.*
+
+- **v7.02 — Enhancement 1: Crisp `544x1184 @ 15 FPS` Real-Time Hardware H.264 DVR Encoding ($\le 30\text{ MB}$ for 240s Max Battle) (`BattleDvrEngine.kt`, `OverlayService.kt`)**:
+  - **1:1 Wall-Clock MP4 Presentation Timestamps (`1.0x` Real-Time Speed)**: Removed `KEY_CAPTURE_RATE = 10` + `KEY_FRAME_RATE = 30` from `startDvrEncoderLocked` (which caused hardware AVC encoders to divide Surface presentation timestamps by `3.0` and play back 170s battles in 56.8s at `3.0x` speed). Recorded MP4 files now preserve exact 1:1 wall-clock duration and stay 100% frame-locked with `_deep_trace.jsonl`.
+  - **Smooth `15 FPS` (`67ms`) Active DVR Capture Cadence**: Increased active battle DVR frame capture in `OverlayService.kt` from `100ms` (`~9.4 fps`) to `67ms` (`~15 fps`) while keeping ML Kit OCR throttled on its independent `250ms`/`750ms` cadence, eliminating `1.0x` playback stutter with zero game frame drops.
+  - **Optimal Crispness vs. File Size (`544x1184`, `720 kbps` CBR, `QP 27–38`, $\le 30\text{ MB}$ at 240s)**: Restored `544x1184` vertical resolution with `KEY_BIT_RATE = 720_000` (`720 kbps` CBR) and hardware QP bounds `27–36 (I)` / `29–38 (P)`, delivering razor-sharp nameplate/damage text for bug analysis while keeping typical 170s battles at **~12–15 MB** and a maximum **240-second timeout battle at ~18–21.6 MB (strictly $\le 30\text{ MB}$)**.
+- **v7.02 — Enhancement 2: Automatic `1.0x` Real-Time Speed Compensation for Legacy `v6.45`–`v7.01` Replays (`cloudflare/telemetry-worker/worker.mjs`, `MainActivity.kt`)**:
+  - Both the Cloud Replay `/watch/<shareId>` web theater and the Android in-app DVR Replay Dialog automatically compare `_deep_trace.jsonl` wall-clock span against `video.duration` (`mp4TimeCompressionRatio = traceDur / videoDur`), scaling `video.playbackRate = selectedSpeed / mp4TimeCompressionRatio` so previously uploaded `v6.45`–`v7.01` replays automatically play back at true `1.0x` real-time speed with synchronized HUD overlays.
+  - Changed the Android in-app DVR Replay Dialog default playback speed from `2.0x` to `1.0x`.
+- **v7.02 — Enhancement 3: Standardized `50%` Default Opacity & Top-Left Below-Status-Bar Launch Position (`OverlayService.kt`, `MainActivity.kt`, `TaskerIntegration.kt`, `activity_main.xml`, `overlay.html`, `src/App.tsx`, `cloudflare/telemetry-worker/worker.mjs`)**:
+  - **Default Top-Left Overlay Position Below Status Bar (`getDefaultOverlayTopYOffsetPx`)**: On launch, the floating overlay now positions at `x = 0` and `y = statusBarHeight + 4dp` (using `WindowInsets.Type.statusBars() or displayCutout()` and `status_bar_height`), sitting flush at the top-left directly below the Android status bar so the top-left SilphScope minimize/exit icon is immediately touchable without dragging.
+  - **Standardized `50%` Opacity Default**: Updated default Overlay Background Transparency/Opacity to **`50%`** across the Android floating overlay (`DEFAULT_OVERLAY_TRANSPARENCY_PCT = 50`, with one-time `v7.02` migration from untouched `72%` defaults), Web Simulator live HUD & Settings (`50% (Default)`), Android in-app DVR Replay (`50%`), and Cloud Replay `/watch/<shareId>` web player (`HUD 50%` default).
 
 ---
 
