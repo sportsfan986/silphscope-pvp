@@ -73,6 +73,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textTacticalRecDesc: TextView
     private lateinit var btnCycleAiAdviceHudPos: Button
     private lateinit var textAiAdviceHudPosDesc: TextView
+    private lateinit var btnToggleOverlayHudMode: Button
+    private lateinit var textOverlayHudModeDesc: TextView
+    private lateinit var btnToggleCompactHudMatrix: Button
+    private lateinit var textCompactHudMatrixDesc: TextView
     private lateinit var btnToggleShieldDecisionOverlay: Button
     private lateinit var textShieldDecisionOverlayDesc: TextView
     private lateinit var btnToggleHpTracking: Button
@@ -1182,6 +1186,8 @@ class MainActivity : AppCompatActivity() {
         if (::btnToggleBattleToasts.isInitialized) updateBattleToastsUi()
         if (::btnToggleTacticalRec.isInitialized) updateTacticalRecUi()
         if (::btnCycleAiAdviceHudPos.isInitialized) updateAiAdviceHudPosUi()
+        if (::btnToggleOverlayHudMode.isInitialized) updateOverlayHudModeUi()
+        if (::btnToggleCompactHudMatrix.isInitialized) updateCompactHudMatrixUi()
         if (::btnToggleShieldDecisionOverlay.isInitialized) updateShieldDecisionOverlayUi()
         if (::btnToggleHpTracking.isInitialized) updateHpTrackingUi()
         if (::btnToggleEnergyTracking.isInitialized) updateEnergyTrackingUi()
@@ -1232,6 +1238,10 @@ class MainActivity : AppCompatActivity() {
         textTacticalRecDesc = findViewById(R.id.text_tactical_rec_desc)
         btnCycleAiAdviceHudPos = findViewById(R.id.btn_cycle_ai_advice_hud_pos)
         textAiAdviceHudPosDesc = findViewById(R.id.text_ai_advice_hud_pos_desc)
+        btnToggleOverlayHudMode = findViewById(R.id.btn_toggle_overlay_hud_mode)
+        textOverlayHudModeDesc = findViewById(R.id.text_overlay_hud_mode_desc)
+        btnToggleCompactHudMatrix = findViewById(R.id.btn_toggle_compact_hud_matrix)
+        textCompactHudMatrixDesc = findViewById(R.id.text_compact_hud_matrix_desc)
         btnToggleShieldDecisionOverlay = findViewById(R.id.btn_toggle_shield_decision_overlay)
         textShieldDecisionOverlayDesc = findViewById(R.id.text_shield_decision_overlay_desc)
         btnToggleHpTracking = findViewById(R.id.btn_toggle_hp_tracking)
@@ -1496,6 +1506,8 @@ class MainActivity : AppCompatActivity() {
         updateBattleToastsUi()
         updateTacticalRecUi()
         updateAiAdviceHudPosUi()
+        updateOverlayHudModeUi()
+        updateCompactHudMatrixUi()
         updateShieldDecisionOverlayUi()
         updateHpTrackingUi()
         updateEnergyTrackingUi()
@@ -1945,6 +1957,44 @@ class MainActivity : AppCompatActivity() {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
                     action = OverlayService.ACTION_UPDATE_SETTINGS
                     putExtra(OverlayService.EXTRA_AI_ADVICE_HUD_POSITION, nextPos)
+                }
+                startService(updateIntent)
+            }
+        }
+
+        btnToggleOverlayHudMode.setOnClickListener {
+            val currentMode = prefs.getString(
+                OverlayService.PREFS_KEY_OVERLAY_HUD_MODE,
+                OverlayService.DEFAULT_OVERLAY_HUD_MODE
+            ) ?: OverlayService.DEFAULT_OVERLAY_HUD_MODE
+            val nextMode = if (currentMode.equals("compact", ignoreCase = true)) "full" else "compact"
+            prefs.edit().putString(OverlayService.PREFS_KEY_OVERLAY_HUD_MODE, nextMode).apply()
+            OverlayService.syncTierThresholdsFromPrefs(prefs)
+            updateOverlayHudModeUi()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_OVERLAY_HUD_MODE, nextMode)
+                }
+                startService(updateIntent)
+            }
+        }
+
+        btnToggleCompactHudMatrix.setOnClickListener {
+            val currentShow = prefs.getBoolean(
+                OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX,
+                OverlayService.DEFAULT_COMPACT_HUD_SHOW_MATRIX
+            )
+            val nextShow = !currentShow
+            prefs.edit().putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, nextShow).apply()
+            OverlayService.syncTierThresholdsFromPrefs(prefs)
+            updateCompactHudMatrixUi()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_COMPACT_HUD_SHOW_MATRIX, nextShow)
                 }
                 startService(updateIntent)
             }
@@ -7561,6 +7611,11 @@ class MainActivity : AppCompatActivity() {
                     videoFrameBox.addView(replayWebView)
                     replayWebView.post {
                         try {
+                            val showMatrixInCompact = prefs.getBoolean(
+                                OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX,
+                                OverlayService.DEFAULT_COMPACT_HUD_SHOW_MATRIX
+                            )
+                            replayWebView.evaluateJavascript("if (window.setCompactHudShowMatrix) setCompactHudShowMatrix($showMatrixInCompact);", null)
                             replayWebView.evaluateJavascript("if (window.setReplayHudMode) setReplayHudMode('$currentHudMode');", null)
                             replayWebView.evaluateJavascript("if (window.setReplayShieldOverlayEnabled) setReplayShieldOverlayEnabled($isShieldHudEnabled);", null)
                         } catch (_: Exception) {}
@@ -8037,6 +8092,46 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateOverlayHudModeUi() {
+        if (!::btnToggleOverlayHudMode.isInitialized) return
+        val mode = prefs.getString(
+            OverlayService.PREFS_KEY_OVERLAY_HUD_MODE,
+            OverlayService.DEFAULT_OVERLAY_HUD_MODE
+        ) ?: OverlayService.DEFAULT_OVERLAY_HUD_MODE
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        if (mode.equals("compact", ignoreCase = true)) {
+            btnToggleOverlayHudMode.text = "Compact HUD"
+            btnToggleOverlayHudMode.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
+            btnToggleOverlayHudMode.setTextColor(0xFFFFFFFF.toInt())
+            textOverlayHudModeDesc.text = "Active: Compact HUD (Header + 2-Line Coach + Shield Card; Toolbar shown when idle, hidden in battle • Tap emblem to minimize)"
+        } else {
+            btnToggleOverlayHudMode.text = "Full HUD (Def)"
+            btnToggleOverlayHudMode.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            btnToggleOverlayHudMode.setTextColor(0xFFFFFFFF.toInt())
+            textOverlayHudModeDesc.text = "Default: Full HUD • Tap top-left emblem to cycle Full → Compact → Minimized"
+        }
+    }
+
+    private fun updateCompactHudMatrixUi() {
+        if (!::btnToggleCompactHudMatrix.isInitialized) return
+        val showMatrix = prefs.getBoolean(
+            OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX,
+            OverlayService.DEFAULT_COMPACT_HUD_SHOW_MATRIX
+        )
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        if (showMatrix) {
+            btnToggleCompactHudMatrix.text = "Matrix On"
+            btnToggleCompactHudMatrix.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+            btnToggleCompactHudMatrix.setTextColor(0xFFFFFFFF.toInt())
+            textCompactHudMatrixDesc.text = "Active: 3x3 Matchup Matrix is shown in Compact HUD once opponents are scanned"
+        } else {
+            btnToggleCompactHudMatrix.text = "Matrix Off (Def)"
+            btnToggleCompactHudMatrix.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+            btnToggleCompactHudMatrix.setTextColor(theme.primaryTextColor)
+            textCompactHudMatrixDesc.text = "Default: Hidden in Compact HUD (Header + 2-Line Coach + Shield Card only)"
+        }
+    }
+
     private fun updateShieldDecisionOverlayUi() {
         if (!::btnToggleShieldDecisionOverlay.isInitialized) return
         val showShieldHud = prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true)
@@ -8403,6 +8498,14 @@ class MainActivity : AppCompatActivity() {
             putExtra(
                 OverlayService.EXTRA_AI_ADVICE_HUD_POSITION,
                 prefs.getString(OverlayService.PREFS_KEY_AI_ADVICE_HUD_POSITION, OverlayService.DEFAULT_AI_ADVICE_HUD_POSITION)
+            )
+            putExtra(
+                OverlayService.EXTRA_OVERLAY_HUD_MODE,
+                prefs.getString(OverlayService.PREFS_KEY_OVERLAY_HUD_MODE, OverlayService.DEFAULT_OVERLAY_HUD_MODE)
+            )
+            putExtra(
+                OverlayService.EXTRA_COMPACT_HUD_SHOW_MATRIX,
+                prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, OverlayService.DEFAULT_COMPACT_HUD_SHOW_MATRIX)
             )
             putExtra(OverlayService.EXTRA_SHOW_SHIELD_DECISION_OVERLAY, prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true))
             putExtra(OverlayService.EXTRA_ENABLE_HP_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, OverlayService.DEFAULT_ENABLE_HP_TRACKING))

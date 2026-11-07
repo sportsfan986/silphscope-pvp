@@ -1,4 +1,19 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.04`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.05`)
+
+---
+
+## v7.05 (2026-11-07) — Live Compact HUD Mode, 3-State Emblem Button Cycle (`Full → Compact → Minimized`), Optional 3×3 Matrix in Compact Mode & Idle Team/League Banner
+*Live floating HUD ergonomics and customization release (`v7.05`, `versionCode = 1705`) bringing the streamlined **Compact HUD** mode from the DVR Video Replay viewer to the live Android floating overlay and Web Simulator, introducing a 3-state top-left emblem button cycle (`Full → Compact → Minimized → Full`), an in-app setting to toggle 3×3 Matchup Matrix visibility in Compact mode, and an Idle (`Waiting...`) Team Pokémon & League banner across all HUD variants.*
+
+- **v7.05 — Enhancement 1: Live Compact HUD Mode & 3-State Emblem Cycle (`Full → Compact → Minimized → Full`) (`overlay.html`, `OverlayService.kt`, `MainActivity.kt`, `activity_main.xml`, `src/App.tsx`)**:
+  - **Compact HUD Mode (`gbl_overlay_hud_mode`: `"full"` default vs. `"compact"`)**: Streamlines the active-combat HUD down to the Mirrored Top Header (`[Stat, HP%, E, 🛡️] | [🛡️, E, HP%, Stat]`), the 2-Line 4-Pillar AI Tactical Coach (`#sky-tactical-rec-row` with 2F/1F/0F throw & catch blink alerts and `Swap ➔` / `Send ➔` button), the incoming charged-attack Shield Decision Card (`#sky-shield-decision-card`), and the Post-Battle Win/Loss Log & Auto-Logged banners (`#start-battle-menu` / `#auto-logged-banner`).
+  - **3-State Top-Left Emblem Cycle (`#btn-minimize-sword`)**: Tapping the top-left SilphScope emblem in `Full` mode switches to `Compact` mode; tapping it in `Compact` mode minimizes the overlay to the floating bubble (pausing OCR); tapping `#minimized-bubble` restores back to `Full` mode. Holding `#btn-minimize-sword` for 2 seconds continues to stop the overlay and open the Battle Log.
+  - **100% Pass-Through Shield Decision Card in Compact Mode (`notifyHeight`)**: When `.timing-rows-container` is hidden in Compact mode, `topZoneHeightDp` stops at the top of `#sky-shield-decision-card` when visible so the Shield Decision Card remains 100% pass-through (`FLAG_NOT_TOUCHABLE`).
+- **v7.05 — Enhancement 2: Optional 3×3 Matchup Matrix Visibility in Compact HUD (`overlay.html`, `OverlayService.kt`, `MainActivity.kt`, `activity_main.xml`, `src/App.tsx`)**:
+  - Added **📊 3×3 Matchup Matrix in Compact HUD** (`gbl_compact_hud_show_matrix`, default `false` / hidden in Compact mode) in **Settings → Section 2 (Overlay HUD Behavior)** and the Web Simulator Settings tab, allowing players to optionally keep the 3×3 Matchup Matrix (`#sky-matrix-body`) visible in Compact mode once opponents are scanned while keeping the attack timing tables hidden.
+- **v7.05 — Enhancement 3: Idle (`Waiting...`) Team Pokémon & League Banner + Auto-Hide Action Toolbar in Compact Combat (`overlay.html`, `OverlayService.kt`, `src/App.tsx`)**:
+  - **Selected Team Pokémon & League in `Waiting...` Across All HUD Variants**: Added `#sky-idle-team-banner` in the idle `Waiting...` state across `Full` and `Compact` HUD modes (plus active League and 3 Team Pokémon in Option 2 `#mode-horizon-belt`), displaying the active League pill, Team Name / Archetype, a clickable `📐 FULL HUD` / `⚡ COMPACT HUD` toggle badge, and 3 clickable Team Pokémon pills (`#1`, `#2`, `#3` with CP).
+  - **Idle-Only Action Toolbar in Compact Mode**: In Compact HUD mode, `.action-toolbar` (`Start Battle`, `Shadow`, `Form`, 3-letter team chips) remains visible while idle (`Waiting...` and `!isBattleActive`) so players can switch leads or manually start a battle, and automatically hides as soon as active combat begins.
 
 ---
 

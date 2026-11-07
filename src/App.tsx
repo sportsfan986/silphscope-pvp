@@ -521,6 +521,35 @@ export default function App() {
     } catch {}
   };
 
+  // Overlay HUD Mode ("full" default vs "compact") & 3x3 Matchup Matrix Visibility in Compact HUD
+  const [overlayHudMode, setOverlayHudModeState] = useState<'full' | 'compact'>(() => {
+    try {
+      return localStorage.getItem('gbl_overlay_hud_mode') === 'compact' ? 'compact' : 'full';
+    } catch {
+      return 'full';
+    }
+  });
+  const handleSetOverlayHudMode = (mode: 'full' | 'compact') => {
+    setOverlayHudModeState(mode);
+    try {
+      localStorage.setItem('gbl_overlay_hud_mode', mode);
+    } catch {}
+  };
+
+  const [compactHudShowMatrix, setCompactHudShowMatrixState] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('gbl_compact_hud_show_matrix') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const handleSetCompactHudShowMatrix = (show: boolean) => {
+    setCompactHudShowMatrixState(show);
+    try {
+      localStorage.setItem('gbl_compact_hud_show_matrix', String(show));
+    } catch {}
+  };
+
   // v6.00 📊 Meta Tab State (Mode-Independent League Selectors, Scope Toggle & Collapsible Drawer Default Collapsed)
   const [metaTabGblLeague, setMetaTabGblLeague] = useState<LeagueType>(() => {
     try {
@@ -5683,7 +5712,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.04 • Android Native Overlay
+                  v7.05 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -5932,9 +5961,23 @@ export default function App() {
               <div className="w-full flex items-center justify-between mb-3 px-1 text-xs">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-slate-300">Overlay HUD:</span>
-                  <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-sky-500/20 text-sky-300 border border-sky-400/40">
-                    Sky Trench 3×3 Matrix
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleSetOverlayHudMode(overlayHudMode === 'compact' ? 'full' : 'compact')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-extrabold border transition flex items-center gap-1.5 ${
+                      overlayHudMode === 'compact'
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50 hover:bg-emerald-500/30'
+                        : 'bg-sky-500/20 text-sky-300 border-sky-400/40 hover:bg-sky-500/30'
+                    }`}
+                    title="Click to toggle between Full HUD and Compact HUD (or tap the top-left emblem on the overlay to cycle Full → Compact → Minimized)"
+                  >
+                    <span>{overlayHudMode === 'compact' ? '⚡ Compact HUD' : '📐 Full HUD'}</span>
+                    {overlayHudMode === 'compact' && (
+                      <span className="text-[10px] font-mono opacity-80">
+                        ({compactHudShowMatrix ? '3×3 Matrix ON' : '3×3 Matrix OFF'})
+                      </span>
+                    )}
+                  </button>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -6144,9 +6187,10 @@ export default function App() {
                       onClick={() => {
                         if (!didMoveDuringDrag) {
                           setIsOverlayMinimized(false);
+                          handleSetOverlayHudMode('full');
                         }
                       }}
-                      title="Drag bubble anywhere • Tap to restore overlay & resume 1 Hz OCR"
+                      title="Drag bubble anywhere • Tap to restore Full HUD & resume 1 Hz OCR"
                       style={{
                         top: `${overlayPos.y}px`,
                         left: `${overlayPos.x}px`,
@@ -6212,7 +6256,11 @@ export default function App() {
                                 minimizeHoldTimerRef.current = null;
                               }
                               if (!minimizeHoldTriggeredRef.current) {
-                                setIsOverlayMinimized(true);
+                                if (overlayHudMode === 'full') {
+                                  handleSetOverlayHudMode('compact');
+                                } else {
+                                  setIsOverlayMinimized(true);
+                                }
                               }
                               minimizeHoldTriggeredRef.current = false;
                             }}
@@ -6228,7 +6276,7 @@ export default function App() {
                               backgroundColor: `rgba(${activeTheme.overlayHeaderRgb}, 0.28)`,
                               borderColor: `rgba(${activeTheme.overlayHeaderRgb}, 0.75)`
                             }}
-                            title="Tap: Minimize overlay & pause OCR • Hold 2s: Stop overlay & go to Battle Log"
+                            title="Tap: Cycle Full → Compact → Minimize (Pause OCR) • Hold 2s: Stop overlay & go to Battle Log"
                           >
                             {renderThemeOverlayIcon(activeTheme.id, 13)}
                           </button>
@@ -6475,7 +6523,8 @@ export default function App() {
                         );
                       })()}
 
-                      {/* Action Toolbar: 2-Row Compact Buttons (Start\nBattle, Shadow:\nON/OFF, Form:\n[form], POK(3 letters):\nHP%) */}
+                      {/* Action Toolbar: 2-Row Compact Buttons (Visible in Full HUD, or in Compact HUD when idle Waiting...) */}
+                      {(overlayHudMode !== 'compact' || ((isWaitingOpponent || scannedOpponents.length === 0) && !isBattleActive)) && (
                       <div
                         className="flex items-stretch justify-between gap-0.5 p-1 rounded border border-white/10 my-1"
                         style={{
@@ -6593,8 +6642,66 @@ export default function App() {
                           })}
                         </div>
                       </div>
+                      )}
+
+                      {/* Idle (Waiting...) Screen Banner: Selected Team Pokémon & League Display across Full and Compact HUD modes */}
+                      {(isWaitingOpponent || scannedOpponents.length === 0) && (
+                        <div className="my-1 px-1.5 py-1 rounded bg-slate-950/75 border border-sky-400/35 flex flex-col gap-1 text-[7.5px]">
+                          <div className="flex items-center justify-between gap-1 border-b border-white/10 pb-0.5">
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="px-1 py-0.2 rounded bg-sky-500/20 border border-sky-400/55 text-sky-300 font-extrabold font-mono text-[6.8px] uppercase shrink-0">
+                                {activePreset.league}
+                              </span>
+                              <span className="text-slate-300 font-bold truncate" title={activePreset.name}>
+                                {activePreset.name}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleSetOverlayHudMode(overlayHudMode === 'compact' ? 'full' : 'compact')}
+                              className={`px-1 py-0.2 rounded border font-mono font-extrabold text-[6.5px] uppercase shrink-0 transition ${
+                                overlayHudMode === 'compact'
+                                  ? 'bg-emerald-500/20 border-emerald-400/60 text-emerald-300 hover:bg-emerald-500/35'
+                                  : 'bg-sky-500/20 border-sky-400/60 text-sky-300 hover:bg-sky-500/35'
+                              }`}
+                              title="Tap to toggle Full HUD vs Compact HUD"
+                            >
+                              {overlayHudMode === 'compact' ? '⚡ COMPACT HUD' : '📐 FULL HUD'}
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-3 gap-1">
+                            {activePreset.pokemon.map((member, idx) => {
+                              const isActv = idx === activeUserSlotIndex;
+                              return (
+                                <button
+                                  key={`idle-pill-${member.id}`}
+                                  type="button"
+                                  onClick={() => handleSelectUserSlot(idx)}
+                                  className={`px-1 py-0.5 rounded border text-left transition flex items-center justify-between gap-0.5 min-w-0 ${
+                                    isActv
+                                      ? 'bg-emerald-500/25 border-emerald-400/80 text-white font-extrabold shadow-[0_0_5px_rgba(16,185,129,0.25)]'
+                                      : 'bg-slate-900/70 border-white/15 text-slate-200 hover:bg-slate-800 font-bold'
+                                  }`}
+                                  title={`Select ${member.name} as active Lead`}
+                                >
+                                  <span className="truncate text-[7px]">
+                                    <span className="text-sky-400 mr-0.5">#{idx + 1}</span>
+                                    {member.name}
+                                  </span>
+                                  {member.cp > 0 && (
+                                    <span className="text-[6px] font-mono text-slate-400 shrink-0">
+                                      {member.cp}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
 
                       {/* v3.40: Pokéball Counts, Shield Counts, Persistent Floating HP% & Charged Attack Simulator Controls */}
+                      {(overlayHudMode !== 'compact' || ((isWaitingOpponent || scannedOpponents.length === 0) && !isBattleActive)) && (
                       <div className="flex flex-col gap-0.5 px-1 py-0.5 bg-black/35 rounded border border-white/10 text-[7px] font-mono my-0.5">
                         <div className="flex items-center justify-between gap-1">
                           <div className="flex items-center gap-1">
@@ -6771,6 +6878,7 @@ export default function App() {
                           </div>
                         </div>
                       </div>
+                      )}
 
                       {/* In-Overlay Post-Stop Log Result Action Menu (Lead Matchup + Win/Loss/Skip) */}
                       {showStartBattleMenu && (
@@ -6850,7 +6958,7 @@ export default function App() {
                       )}
 
                       {/* 3v3 Matchup Matrix Dots (FIXED Discovery Order: #1 1st seen, #2 2nd seen, #3 3rd seen) */}
-                      {!(isWaitingOpponent || scannedOpponents.length === 0) && (
+                      {!(isWaitingOpponent || scannedOpponents.length === 0) && (overlayHudMode !== 'compact' || compactHudShowMatrix) && (
                       <div className="my-1 py-1 px-1.5 bg-black/20 rounded flex flex-col gap-0.5 text-[9.5px]">
                         <>
                             <div className="flex items-center justify-between gap-1.5 px-1.5 pb-1 mb-0.5 border-b border-white/10">
@@ -6974,7 +7082,7 @@ export default function App() {
                       )}
 
                       {/* Opponent Attacks & My Attacks (Segmented Range Bars + 3-Column Damage Matrices with Vertical Highlight) */}
-                      {!isWaitingOpponent && scannedOpponents.length > 0 && (
+                      {overlayHudMode !== 'compact' && !isWaitingOpponent && scannedOpponents.length > 0 && (
                         <div className="flex flex-col gap-0.5 my-1">
                           {/* Opponent Attacks Section Header (2-Line) + 3-Team Column Headers & Opponent Swap Clock */}
                           <div className="grid grid-cols-[minmax(0,1fr)_84px] items-stretch gap-1 px-1 pt-0.5">
@@ -12993,6 +13101,79 @@ export default function App() {
               </div>
             </div>
 
+            {/* Overlay HUD Mode (Full vs. Compact) & 3x3 Matchup Matrix Visibility in Compact Mode */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-bold text-sky-400 flex items-center gap-2">
+                  <span>📐 Overlay HUD Mode (Full vs. Compact) &amp; Compact 3×3 Matrix</span>
+                </h3>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/15 border border-sky-500/40 text-sky-300">
+                  {overlayHudMode === 'compact'
+                    ? `Compact HUD • 3×3 Matrix ${compactHudShowMatrix ? 'ON' : 'OFF (Def)'}`
+                    : 'Full HUD (Def)'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                <strong>Compact HUD</strong> shows only the Mirrored Header, 2-Line AI Tactical Coach, Shield Decision Card (on incoming charged attack), and Post-Battle Log. Tapping the top-left emblem on the overlay cycles <strong>Full → Compact → Minimized</strong>. In idle (<code>Waiting...</code>) state, both Full and Compact HUDs display your selected League, Team Name, and 3 Team Pokémon, and Compact HUD auto-hides the action toolbar once battle begins.
+              </p>
+              <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => handleSetOverlayHudMode('full')}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                    overlayHudMode === 'full'
+                      ? 'bg-sky-500/25 border border-sky-400/70 text-sky-200'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  📐 Full HUD (Default)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetOverlayHudMode('compact')}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                    overlayHudMode === 'compact'
+                      ? 'bg-emerald-500/25 border border-emerald-400/70 text-emerald-200'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  ⚡ Compact HUD
+                </button>
+              </div>
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-300">📊 3×3 Matchup Matrix in Compact HUD</span>
+                  <span className="text-[10px] font-mono text-slate-400">
+                    {compactHudShowMatrix ? 'Visible in Compact Mode' : 'Hidden in Compact Mode (Default)'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => handleSetCompactHudShowMatrix(false)}
+                    className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                      !compactHudShowMatrix
+                        ? 'bg-slate-800 border border-slate-600 text-slate-200'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    📊 3×3 Matrix in Compact: OFF (Default)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetCompactHudShowMatrix(true)}
+                    className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                      compactHudShowMatrix
+                        ? 'bg-emerald-500/25 border border-emerald-400/70 text-emerald-200'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    📊 3×3 Matrix in Compact: ON
+                  </button>
+                </div>
+              </div>
+            </div>
+
             {/* v6.02 Default ON Settings: Live HP Bar Tracking & Live Energy Counting */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
               <div className="flex items-center justify-between gap-2">
@@ -16845,7 +17026,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.04 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
+        SilphScope PvP v7.05 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
       </footer>
     </div>
   );

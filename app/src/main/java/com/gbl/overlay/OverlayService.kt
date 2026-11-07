@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.04"
-        const val APP_VERSION_CODE = 1704
+        const val APP_VERSION = "7.05"
+        const val APP_VERSION_CODE = 1705
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -141,6 +141,8 @@ class OverlayService : LifecycleService() {
         const val EXTRA_CHARGE_CIRCLE_PRIORITY_MODE = "extra_charge_circle_priority_mode"
         const val EXTRA_ENABLE_ALT_FAST_MOVE_DETECT = "extra_enable_alt_fast_move_detect"
         const val EXTRA_AI_ADVICE_HUD_POSITION = "extra_ai_advice_hud_position"
+        const val EXTRA_OVERLAY_HUD_MODE = "extra_overlay_hud_mode"
+        const val EXTRA_COMPACT_HUD_SHOW_MATRIX = "extra_compact_hud_show_matrix"
         const val EXTRA_SWAP_THROW_ROLLBACK_WINDOW_MS = "extra_swap_throw_rollback_window_ms"
         const val EXTRA_ALT_FAST_DETECT_STRICTNESS = "extra_alt_fast_detect_strictness"
         const val EXTRA_SHIELD_CHIP_TOLERANCE_PCT = "extra_shield_chip_tolerance_pct"
@@ -151,6 +153,10 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY = "show_shield_decision_overlay"
         const val PREFS_KEY_AI_ADVICE_HUD_POSITION = "ai_advice_hud_position"
         const val DEFAULT_AI_ADVICE_HUD_POSITION = "bottom" // "bottom" (new v6.00 default) | "top"
+        const val PREFS_KEY_OVERLAY_HUD_MODE = "gbl_overlay_hud_mode"
+        const val DEFAULT_OVERLAY_HUD_MODE = "full" // "full" (default) | "compact"
+        const val PREFS_KEY_COMPACT_HUD_SHOW_MATRIX = "gbl_compact_hud_show_matrix"
+        const val DEFAULT_COMPACT_HUD_SHOW_MATRIX = false
         const val PREFS_KEY_ENABLE_HP_TRACKING = "enable_hp_tracking"
         const val DEFAULT_ENABLE_HP_TRACKING = true
         const val PREFS_KEY_ENABLE_ENERGY_TRACKING = "enable_energy_tracking"
@@ -495,6 +501,8 @@ class OverlayService : LifecycleService() {
         @Volatile var activeMachRiskyMin: Int = DEFAULT_MACH_RISKY_MIN
 
         @Volatile var activeAiAdviceHudPosition: String = DEFAULT_AI_ADVICE_HUD_POSITION
+        @Volatile var activeOverlayHudMode: String = DEFAULT_OVERLAY_HUD_MODE
+        @Volatile var activeCompactHudShowMatrix: Boolean = DEFAULT_COMPACT_HUD_SHOW_MATRIX
         @Volatile var activeGblMetaLogWeightPct: Int = DEFAULT_GBL_META_LOG_WEIGHT_PCT
         @Volatile var activeShow6MetaLogWeightPct: Int = DEFAULT_SHOW6_META_LOG_WEIGHT_PCT
         @Volatile var activeGblMetaDecayFactor: Float = DEFAULT_GBL_META_DECAY_FACTOR
@@ -593,6 +601,9 @@ class OverlayService : LifecycleService() {
             }
             activeAiAdviceHudPosition = (prefs.getString(PREFS_KEY_AI_ADVICE_HUD_POSITION, DEFAULT_AI_ADVICE_HUD_POSITION) ?: DEFAULT_AI_ADVICE_HUD_POSITION)
                 .lowercase().let { if (it == "top") "top" else "bottom" }
+            activeOverlayHudMode = (prefs.getString(PREFS_KEY_OVERLAY_HUD_MODE, DEFAULT_OVERLAY_HUD_MODE) ?: DEFAULT_OVERLAY_HUD_MODE)
+                .lowercase().let { if (it == "compact") "compact" else "full" }
+            activeCompactHudShowMatrix = prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, DEFAULT_COMPACT_HUD_SHOW_MATRIX)
             activeGblMetaLogWeightPct = prefs.getInt(PREFS_KEY_GBL_META_LOG_WEIGHT_PCT, DEFAULT_GBL_META_LOG_WEIGHT_PCT).coerceIn(0, 100)
             activeShow6MetaLogWeightPct = prefs.getInt(PREFS_KEY_SHOW6_META_LOG_WEIGHT_PCT, DEFAULT_SHOW6_META_LOG_WEIGHT_PCT).coerceIn(0, 100)
             activeGblMetaDecayFactor = prefs.getFloat(PREFS_KEY_GBL_META_DECAY_FACTOR, DEFAULT_GBL_META_DECAY_FACTOR).coerceIn(0.0f, 0.25f)
@@ -2338,6 +2349,8 @@ class OverlayService : LifecycleService() {
     internal var showTacticalRecommendations = true
     internal var showShieldDecisionOverlay = true
     internal var aiAdviceHudPosition = DEFAULT_AI_ADVICE_HUD_POSITION
+    internal var overlayHudMode = DEFAULT_OVERLAY_HUD_MODE
+    internal var compactHudShowMatrix = DEFAULT_COMPACT_HUD_SHOW_MATRIX
     internal var overlayScalePct = 78
     internal var overlayTransparencyPct = 50
     internal var appThemeId = "dialga_shiny_midnight"
@@ -3714,6 +3727,9 @@ class OverlayService : LifecycleService() {
         showShieldDecisionOverlay = prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true)
         aiAdviceHudPosition = (prefs.getString(PREFS_KEY_AI_ADVICE_HUD_POSITION, DEFAULT_AI_ADVICE_HUD_POSITION) ?: DEFAULT_AI_ADVICE_HUD_POSITION)
             .lowercase().let { if (it == "top") "top" else "bottom" }
+        overlayHudMode = (prefs.getString(PREFS_KEY_OVERLAY_HUD_MODE, DEFAULT_OVERLAY_HUD_MODE) ?: DEFAULT_OVERLAY_HUD_MODE)
+            .lowercase().let { if (it == "compact") "compact" else "full" }
+        compactHudShowMatrix = prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, DEFAULT_COMPACT_HUD_SHOW_MATRIX)
         enableHpTracking = prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, DEFAULT_ENABLE_HP_TRACKING)
         enableEnergyTracking = prefs.getBoolean(PREFS_KEY_ENABLE_ENERGY_TRACKING, DEFAULT_ENABLE_ENERGY_TRACKING)
         fastDetectTurnOffset = prefs.getInt(PREFS_KEY_FAST_DETECT_TURN_OFFSET, DEFAULT_FAST_DETECT_TURN_OFFSET).coerceIn(0, 3)
@@ -4743,6 +4759,11 @@ class OverlayService : LifecycleService() {
         if (!isOverlayMinimized) return
         if (System.currentTimeMillis() - lastMinimizeTimestampMs < 400L) return
         isOverlayMinimized = false
+        overlayHudMode = "full"
+        activeOverlayHudMode = "full"
+        if (::prefs.isInitialized) {
+            prefs.edit().putString(PREFS_KEY_OVERLAY_HUD_MODE, "full").apply()
+        }
         if (::layoutParams.isInitialized) {
             val targetWidth = (screenWidth * (overlayScalePct.coerceIn(50, 100) / 100f)).toInt()
             layoutParams.width = targetWidth
@@ -4756,7 +4777,7 @@ class OverlayService : LifecycleService() {
             syncOverlayTouchZonesLayout()
         }
         overlayView?.evaluateJavascript(
-            "if (window.setOverlayMinimizedState) setOverlayMinimizedState(false); if (window.setOverlayScalePct) setOverlayScalePct($overlayScalePct);",
+            "if (window.setLiveHudMode) setLiveHudMode('full'); if (window.setOverlayMinimizedState) setOverlayMinimizedState(false); if (window.setOverlayScalePct) setOverlayScalePct($overlayScalePct);",
             null
         )
         if (mediaProjection != null && isBattleActive) {
@@ -4881,6 +4902,19 @@ class OverlayService : LifecycleService() {
                         .let { if (it == "top") "top" else "bottom" }
                 }
                 overlayView?.evaluateJavascript("if (window.setAiAdviceHudPosition) setAiAdviceHudPosition('$aiAdviceHudPosition');", null)
+                overlayHudMode = if (intent?.hasExtra(EXTRA_OVERLAY_HUD_MODE) == true) {
+                    (intent.getStringExtra(EXTRA_OVERLAY_HUD_MODE) ?: DEFAULT_OVERLAY_HUD_MODE).lowercase()
+                        .let { if (it == "compact") "compact" else "full" }
+                } else {
+                    (prefs.getString(PREFS_KEY_OVERLAY_HUD_MODE, DEFAULT_OVERLAY_HUD_MODE) ?: DEFAULT_OVERLAY_HUD_MODE).lowercase()
+                        .let { if (it == "compact") "compact" else "full" }
+                }
+                compactHudShowMatrix = if (intent?.hasExtra(EXTRA_COMPACT_HUD_SHOW_MATRIX) == true) {
+                    intent.getBooleanExtra(EXTRA_COMPACT_HUD_SHOW_MATRIX, DEFAULT_COMPACT_HUD_SHOW_MATRIX)
+                } else {
+                    prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, DEFAULT_COMPACT_HUD_SHOW_MATRIX)
+                }
+                overlayView?.evaluateJavascript("if (window.setLiveHudMode) setLiveHudMode('$overlayHudMode'); if (window.setCompactHudShowMatrix) setCompactHudShowMatrix($compactHudShowMatrix);", null)
                 syncTierThresholdsFromPrefs(prefs)
 
                 val requestedTeamName = intent?.getStringExtra(EXTRA_TEAM_NAME)
@@ -5002,6 +5036,19 @@ class OverlayService : LifecycleService() {
                         .let { if (it == "top") "top" else "bottom" }
                 }
                 overlayView?.evaluateJavascript("if (window.setAiAdviceHudPosition) setAiAdviceHudPosition('$aiAdviceHudPosition');", null)
+                if (intent?.hasExtra(EXTRA_OVERLAY_HUD_MODE) == true) {
+                    overlayHudMode = (intent.getStringExtra(EXTRA_OVERLAY_HUD_MODE) ?: DEFAULT_OVERLAY_HUD_MODE).lowercase()
+                        .let { if (it == "compact") "compact" else "full" }
+                } else {
+                    overlayHudMode = (prefs.getString(PREFS_KEY_OVERLAY_HUD_MODE, overlayHudMode) ?: overlayHudMode).lowercase()
+                        .let { if (it == "compact") "compact" else "full" }
+                }
+                if (intent?.hasExtra(EXTRA_COMPACT_HUD_SHOW_MATRIX) == true) {
+                    compactHudShowMatrix = intent.getBooleanExtra(EXTRA_COMPACT_HUD_SHOW_MATRIX, DEFAULT_COMPACT_HUD_SHOW_MATRIX)
+                } else {
+                    compactHudShowMatrix = prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, compactHudShowMatrix)
+                }
+                overlayView?.evaluateJavascript("if (window.setLiveHudMode) setLiveHudMode('$overlayHudMode'); if (window.setCompactHudShowMatrix) setCompactHudShowMatrix($compactHudShowMatrix);", null)
                 syncTierThresholdsFromPrefs(prefs)
                 val updatedScalePct = intent?.getIntExtra(
                     EXTRA_OVERLAY_SCALE_PCT,
@@ -15083,7 +15130,11 @@ class OverlayService : LifecycleService() {
                     "dvrUploadStatus" to lastLoggedBattleDvrUploadStatus
                 ) else null,
                 "teamArchetype" to (currentPreset?.archetype ?: "ABC"),
+                "activeLeague" to (currentPreset?.league ?: "MASTER LEAGUE"),
+                "activeTeamName" to (currentPreset?.name ?: ""),
                 "aiAdviceHudPosition" to aiAdviceHudPosition,
+                "overlayHudMode" to overlayHudMode,
+                "compactHudShowMatrix" to compactHudShowMatrix,
                 "showTacticalRec" to (showTacticalRecommendations && (isBattleActive || isReplayMode)),
                 "showTacticalRecommendations" to (showTacticalRecommendations && (isBattleActive || isReplayMode)),
                 "tacticalRec" to if (isBattleActive || isReplayMode) mapOf(
@@ -16735,6 +16786,10 @@ class OverlayService : LifecycleService() {
             "overlayTransparencyPct" to overlayTransparencyPct,
             "appThemeId" to appThemeId,
             "aiAdviceHudPosition" to aiAdviceHudPosition,
+            "overlayHudMode" to overlayHudMode,
+            "compactHudShowMatrix" to compactHudShowMatrix,
+            "activeLeague" to activeLeague,
+            "activeTeamName" to (currentPreset?.name ?: ""),
             "isOverlayMinimized" to isOverlayMinimized,
             "maxHorizonTurns" to maxHorizonTurns,
             "isOpponentShadow" to isOpponentShadow,
@@ -17282,6 +17337,24 @@ class OverlayService : LifecycleService() {
         }
 
         @JavascriptInterface
+        fun setOverlayHudMode(mode: String) {
+            Handler(Looper.getMainLooper()).post {
+                val normalized = if (mode.trim().equals("compact", ignoreCase = true)) "compact" else "full"
+                overlayHudMode = normalized
+                activeOverlayHudMode = normalized
+                if (::prefs.isInitialized) {
+                    prefs.edit().putString(PREFS_KEY_OVERLAY_HUD_MODE, normalized).apply()
+                }
+                recalculateAndPushBattleData()
+                if (normalized == "compact") {
+                    showStatusBarToast("📐 Compact HUD (Tap emblem again to minimize)", Toast.LENGTH_SHORT)
+                } else {
+                    showStatusBarToast("📐 Full HUD restored", Toast.LENGTH_SHORT)
+                }
+            }
+        }
+
+        @JavascriptInterface
         fun stopOverlayAndOpenBattleLog() {
             Handler(Looper.getMainLooper()).post {
                 if (::prefs.isInitialized) {
@@ -17425,6 +17498,10 @@ class OverlayService : LifecycleService() {
             Handler(Looper.getMainLooper()).post {
                 applyOverlayTransparency(overlayTransparencyPct)
                 applyOverlayTheme(appThemeId)
+                overlayView?.evaluateJavascript(
+                    "if (window.setLiveHudMode) setLiveHudMode('$overlayHudMode'); if (window.setCompactHudShowMatrix) setCompactHudShowMatrix($compactHudShowMatrix);",
+                    null
+                )
                 loadInitialDataIntoOverlay()
             }
         }

@@ -2429,6 +2429,100 @@
                     android:textColor="#ffffff" />
             </LinearLayout>
 
+            <!-- Compact HUD Mode Setting (Full [Default] vs Compact + 3-State Emblem Cycle) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:paddingTop="8dp"
+                android:background="#0f172a"
+                android:paddingHorizontal="10dp"
+                android:paddingBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:paddingEnd="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📐 Overlay HUD Mode (Full vs. Compact)"
+                        android:textColor="#38bdf8"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_overlay_hud_mode_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: Full HUD • Tap top-left emblem to cycle Full → Compact → Minimized"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_toggle_overlay_hud_mode"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="Full HUD (Def)"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#0284c7"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
+            <!-- 3x3 Matchup Matrix Visibility in Compact HUD Mode (Default Hidden) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:paddingTop="8dp"
+                android:background="#0f172a"
+                android:paddingHorizontal="10dp"
+                android:paddingBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:paddingEnd="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📊 3x3 Matchup Matrix in Compact HUD"
+                        android:textColor="#34d399"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_compact_hud_matrix_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: Hidden in Compact HUD (Header + 2-Line Coach + Shield Card only)"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_toggle_compact_hud_matrix"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="Matrix Off (Def)"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#334155"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
             <!-- v4.00: Attack Incoming! Shield Decision Overlay Setting (Default ON) -->
             <LinearLayout
                 android:layout_width="match_parent"
