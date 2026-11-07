@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "6.46"
-        const val APP_VERSION_CODE = 1646
+        const val APP_VERSION = "6.50"
+        const val APP_VERSION_CODE = 1650
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -1195,6 +1195,7 @@ class OverlayService : LifecycleService() {
             val fastTurns: Int = 2,
             val fastEnergy: Int = 6,
             val confirmedChargedMoves: List<String> = emptyList(),
+            val candidateChargedMoves: List<String> = emptyList(),
             val finalHpPct: Int = 0,
             val finalEnergy: Int = 0,
             val fainted: Boolean = false
@@ -1300,7 +1301,8 @@ class OverlayService : LifecycleService() {
             val userSlotAtkStage: List<Int> = emptyList(),
             val userSlotDefStage: List<Int> = emptyList(),
             val oppSlotAtkStage: List<Int> = emptyList(),
-            val oppSlotDefStage: List<Int> = emptyList()
+            val oppSlotDefStage: List<Int> = emptyList(),
+            val oppSlotConfirmedChargedMoves: List<List<String>> = emptyList()
         )
 
         data class ReplayVaultEntryMeta(
@@ -2226,6 +2228,15 @@ class OverlayService : LifecycleService() {
     internal lateinit var windowManager: WindowManager
     internal var overlayView: WebView? = null
     internal lateinit var layoutParams: WindowManager.LayoutParams
+    internal var topTouchZoneView: View? = null
+    internal var topTouchZoneParams: WindowManager.LayoutParams? = null
+    internal var oppHeadersTouchView: View? = null
+    internal var oppHeadersTouchParams: WindowManager.LayoutParams? = null
+    internal var myHeadersTouchView: View? = null
+    internal var myHeadersTouchParams: WindowManager.LayoutParams? = null
+    internal var lastTopZoneHeightPx: Int = 0
+    internal val lastOppHeadersRectPx = Rect(0, 0, 0, 0)
+    internal val lastMyHeadersRectPx = Rect(0, 0, 0, 0)
     internal var statusToastView: TextView? = null
     internal var statusToastParams: WindowManager.LayoutParams? = null
     internal var shieldDecisionOverlayView: LinearLayout? = null
@@ -3807,6 +3818,7 @@ class OverlayService : LifecycleService() {
     )
 
     internal fun hideShieldDecisionOverlay() {
+        val wasVisible = isShieldDecisionOverlayVisible
         isShieldDecisionOverlayVisible = false
         shieldDecisionOverlayShownAtMs = 0L
         shieldHexagonSeenDuringPrompt = false
@@ -3815,11 +3827,17 @@ class OverlayService : LifecycleService() {
             try {
                 shieldDecisionOverlayView?.visibility = View.GONE
             } catch (_: Exception) {}
+            if (wasVisible) {
+                recalculateAndPushBattleData()
+            }
         } else {
             mainToastHandler.post {
                 try {
                     shieldDecisionOverlayView?.visibility = View.GONE
                 } catch (_: Exception) {}
+                if (wasVisible) {
+                    recalculateAndPushBattleData()
+                }
             }
         }
     }
@@ -4179,208 +4197,18 @@ class OverlayService : LifecycleService() {
             isShieldDecisionOverlayVisible = true
             shieldDecisionOverlayShownAtMs = nowMs
         }
-        // v4.06: No 5.0s timer timeout — Shield Decision Overlay stays visible for as long as the top-center
-        // 5-second countdown circle is present on screen and hides immediately when the circle disappears!
+        if (preThrowOppEnergy > pendingChargedAttackPreOppEnergy) {
+            pendingChargedAttackPreOppEnergy = preThrowOppEnergy
+        }
+        // v6.50: Merged Shield Decision Card renders inline at the bottom of the main WebView HUD (#sky-shield-decision-card).
         mainToastHandler.removeCallbacks(hideShieldDecisionOverlayRunnable)
-
         mainToastHandler.post {
             try {
-                if (!isShieldDecisionOverlayVisible) return@post
-                val density = resources.displayMetrics.density
-                val targetWidth = (screenWidth * 0.88f).toInt()
-                // v4.05: Position bottom at 0.340 * screenHeight (y = 0.660h from top) so the card sits cleanly above
-                // Pokémon GO's "Attack incoming! Use a Protect Shield?" text (0.65h..0.77h) without occluding the prompt text.
-                val bottomOffsetY = (screenHeight * 0.340f).toInt()
-
-                if (shieldDecisionOverlayView == null) {
-                    val container = LinearLayout(this).apply {
-                        orientation = LinearLayout.VERTICAL
-                        setPadding(
-                            (10 * density).toInt(),
-                            (6 * density).toInt(),
-                            (10 * density).toInt(),
-                            (6 * density).toInt()
-                        )
-                    }
-                    val params = WindowManager.LayoutParams().apply {
-                        type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                        } else {
-                            @Suppress("DEPRECATION")
-                            WindowManager.LayoutParams.TYPE_PHONE
-                        }
-                        flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-                            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
-                        format = PixelFormat.TRANSLUCENT
-                        gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                        x = 0
-                        y = bottomOffsetY
-                        width = targetWidth
-                        height = WindowManager.LayoutParams.WRAP_CONTENT
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                            layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
-                        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                            layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-                        }
-                    }
-                    windowManager.addView(container, params)
-                    shieldDecisionOverlayView = container
-                    shieldDecisionOverlayParams = params
-                }
-
-                shieldDecisionOverlayView?.let { container ->
-                    container.removeAllViews()
-                    container.background = GradientDrawable().apply {
-                        shape = GradientDrawable.RECTANGLE
-                        cornerRadius = 10f * density
-                        setColor(bgColor)
-                        setStroke(max(2, (2.0f * density).toInt()), strokeColor)
-                    }
-
-                    // Header Row (uses warm gold/cream #FDE68A so createHighContrastWhiteTextBitmap's isWhiteGlyph ignores it)
-                    val headerTv = TextView(this).apply {
-                        text = headerLineText
-                        setTextColor(Color.parseColor("#FEF08A"))
-                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.8f)
-                        typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
-                        setPadding(0, 0, 0, (3 * density).toInt())
-                    }
-                    container.addView(headerTv)
-
-                    // Divider
-                    val divider = View(this).apply {
-                        layoutParams = LinearLayout.LayoutParams(
-                            LinearLayout.LayoutParams.MATCH_PARENT,
-                            max(1, (1f * density).toInt())
-                        ).apply {
-                            bottomMargin = (3 * density).toInt()
-                        }
-                        setBackgroundColor(Color.argb(80, 253, 224, 71))
-                    }
-                    container.addView(divider)
-
-                    // v4.08: Helper to build 4-Tier Remaining HP Pill Badges:
-                    // - > 50% (51-100%): Green check + green pill badge ("✓ 56% HP left")
-                    // - 20%-50%: Yellow pill badge ("35% HP left")
-                    // - 10%-19%: Orange pill badge ("15% HP left")
-                    // - < 10% (0-9% / KO!): Red pill badge ("💥 KO! • 0% HP left" or "8% HP left")
-                    // Note: All text colors are non-pure-white (#ECFDF5, #FEF9C3, #FFEDD5, #FFE4E6) so OCR white-glyph filters ignore them.
-                    fun createRemainingHpBadge(remHpPct: Int, isKo: Boolean, isFunded: Boolean): TextView {
-                        val clampedRem = if (isKo) 0 else remHpPct.coerceIn(0, 100)
-                        val (badgeBgHex, badgeStrokeHex, badgeTextHex) = when {
-                            isKo || clampedRem < 10 -> Triple("#7F1D1D", "#F87171", "#FDA4AF") // Red (<10% or KO, sat=89)
-                            clampedRem < 20 -> Triple("#7C2D12", "#FB923C", "#FDBA74")         // Orange (10-19%, sat=137)
-                            clampedRem <= 50 -> Triple("#713F12", "#FACC15", "#FDE047")        // Yellow (20-50%, sat=182)
-                            else -> Triple("#065F46", "#34D399", "#6EE7B7")                    // Green (>50%, sat=121)
-                        }
-                        val badgeLabel = when {
-                            isKo -> if (isFunded) "💥 KO! • 0% HP left" else "💥 would KO • 0% HP left"
-                            clampedRem > 50 -> "✓ ${clampedRem}% HP left"
-                            else -> "${clampedRem}% HP left"
-                        }
-                        return TextView(this).apply {
-                            text = badgeLabel
-                            setTextColor(Color.parseColor(badgeTextHex))
-                            setTextSize(TypedValue.COMPLEX_UNIT_SP, if (isFunded) 10.8f else 9.8f)
-                            typeface = Typeface.create("sans-serif-condensed", if (isFunded) Typeface.BOLD else Typeface.BOLD_ITALIC)
-                            setPadding(
-                                (6.5f * density).toInt(),
-                                (1.5f * density).toInt(),
-                                (6.5f * density).toInt(),
-                                (1.5f * density).toInt()
-                            )
-                            background = GradientDrawable().apply {
-                                shape = GradientDrawable.RECTANGLE
-                                cornerRadius = 999f
-                                setColor(Color.parseColor(badgeBgHex))
-                                setStroke(max(1, (1.2f * density).toInt()), Color.parseColor(badgeStrokeHex))
-                            }
-                        }
-                    }
-
-                    // 2a: Funded Candidate Moves (individual rows with 4-tier color-coded remaining HP pill badge + Pillar 4 Next-Move Reachability)
-                    for (m in fundedMoves) {
-                        val rowLayout = LinearLayout(this).apply {
-                            orientation = LinearLayout.HORIZONTAL
-                            gravity = Gravity.CENTER_VERTICAL
-                            setPadding(0, (1.5f * density).toInt(), 0, (1.5f * density).toInt())
-                        }
-                        val prefixTv = TextView(this).apply {
-                            text = "⚡ ${OverlayService.abbrMoveCompactStatic(m.moveName)} (${m.energyCost}e) → "
-                            setTextColor(if (m.isKo) Color.parseColor("#FECDD3") else Color.parseColor("#BAE6FD"))
-                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.0f)
-                            typeface = Typeface.create("sans-serif", Typeface.BOLD)
-                        }
-                        val badgeTv = createRemainingHpBadge(m.remHpPct, m.isKo, isFunded = true)
-                        val reachTag = when {
-                            m.isKo -> " (-${m.dmgPct}%)"
-                            m.canReachNextMoveIfTanked -> if (m.fastsToNextMoveIfTanked == 0) {
-                                " • ✓ ${m.userTargetMoveShort} RDY"
-                            } else {
-                                " • ✓ ${m.userTargetMoveShort} in ${m.fastsToNextMoveIfTanked}F"
-                            }
-                            else -> " • ⚠️ Dies ${m.fastsShortIfTanked}F short of ${m.userTargetMoveShort}!"
-                        }
-                        val suffixTv = TextView(this).apply {
-                            text = reachTag
-                            setTextColor(
-                                when {
-                                    m.isKo -> Color.parseColor("#FECDD3")
-                                    !m.canReachNextMoveIfTanked -> Color.parseColor("#FDBA74")
-                                    else -> Color.parseColor("#6EE7B7")
-                                }
-                            )
-                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.2f)
-                            typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
-                        }
-                        rowLayout.addView(prefixTv)
-                        rowLayout.addView(badgeTv)
-                        rowLayout.addView(suffixTv)
-                        container.addView(rowLayout)
-                    }
-
-                    // 2b: Remaining Unfunded Candidate Moves (italics & muted font + 4-tier remaining HP pill badge)
-                    for (m in unfundedMoves) {
-                        val rowLayout = LinearLayout(this).apply {
-                            orientation = LinearLayout.HORIZONTAL
-                            gravity = Gravity.CENTER_VERTICAL
-                            alpha = 0.86f
-                            setPadding(0, (1.5f * density).toInt(), 0, (1.5f * density).toInt())
-                        }
-                        val prefixTv = TextView(this).apply {
-                            text = "• ${m.moveName} (${effectiveBankedE}e/${m.energyCost}e)  —  "
-                            setTextColor(if (m.isKo) Color.parseColor("#FDE68A") else Color.parseColor("#94A3B8"))
-                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.3f)
-                            typeface = Typeface.create("sans-serif", Typeface.ITALIC)
-                        }
-                        val badgeTv = createRemainingHpBadge(m.remHpPct, m.isKo, isFunded = false)
-                        val suffixTv = TextView(this).apply {
-                            text = "  (-${m.dmgPct}%)"
-                            setTextColor(if (m.isKo) Color.parseColor("#FDE68A") else Color.parseColor("#94A3B8"))
-                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.0f)
-                            typeface = Typeface.create("sans-serif", Typeface.ITALIC)
-                        }
-                        rowLayout.addView(prefixTv)
-                        rowLayout.addView(badgeTv)
-                        rowLayout.addView(suffixTv)
-                        container.addView(rowLayout)
-                    }
-
-                    container.visibility = View.VISIBLE
-                    shieldDecisionOverlayParams?.let { p ->
-                        if (p.y != bottomOffsetY || p.width != targetWidth) {
-                            p.y = bottomOffsetY
-                            p.width = targetWidth
-                            try {
-                                windowManager.updateViewLayout(container, p)
-                            } catch (_: Exception) {}
-                        }
-                    }
-                }
+                shieldDecisionOverlayView?.visibility = View.GONE
             } catch (_: Exception) {}
+            if (isShieldDecisionOverlayVisible) {
+                recalculateAndPushBattleData()
+            }
         }
     }
 
@@ -4554,8 +4382,11 @@ class OverlayService : LifecycleService() {
                 @Suppress("DEPRECATION")
                 WindowManager.LayoutParams.TYPE_PHONE
             }
+            // v6.50: Main WebView window is FLAG_NOT_TOUCHABLE so the bottom half (move rows, Tactical Coach, and
+            // merged Shield Decision Card) is 100% pass-through to Pokémon GO. Interactive touches are forwarded
+            // exclusively from topTouchZoneView, oppHeadersTouchView, and myHeadersTouchView.
             flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                     WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
@@ -4573,54 +4404,219 @@ class OverlayService : LifecycleService() {
             }
         }
 
+        try {
+            windowManager.addView(overlayView, layoutParams)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        fun createTouchZoneLayoutParams(initialW: Int, initialH: Int, touchable: Boolean): WindowManager.LayoutParams {
+            return WindowManager.LayoutParams().apply {
+                type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                } else {
+                    @Suppress("DEPRECATION")
+                    WindowManager.LayoutParams.TYPE_PHONE
+                }
+                flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    (if (touchable) WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL else WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                    WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
+                format = PixelFormat.TRANSLUCENT
+                gravity = Gravity.TOP or Gravity.START
+                x = layoutParams.x
+                y = layoutParams.y
+                width = initialW
+                height = initialH
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                }
+            }
+        }
+
+        fun dispatchOffsetTouchToWebView(event: MotionEvent, offsetX: Float, offsetY: Float, actionOverride: Int? = null) {
+            val wv = overlayView ?: return
+            val copy = MotionEvent.obtain(event)
+            try {
+                if (actionOverride != null) {
+                    copy.action = actionOverride
+                }
+                copy.setLocation(event.x + offsetX, event.y + offsetY)
+                wv.dispatchTouchEvent(copy)
+            } catch (_: Exception) {
+            } finally {
+                copy.recycle()
+            }
+        }
+
         var initialX = 0
         var initialY = 0
         var initialTouchX = 0f
         var initialTouchY = 0f
         var isDraggingTouch = false
 
-        overlayView?.setOnTouchListener { _, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    initialX = layoutParams.x
-                    initialY = layoutParams.y
-                    initialTouchX = event.rawX
-                    initialTouchY = event.rawY
-                    isDraggingTouch = false
-                    false
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    val deltaX = (event.rawX - initialTouchX).toInt()
-                    val deltaY = (event.rawY - initialTouchY).toInt()
-                    if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
-                        isDraggingTouch = true
-                        val minYOffset = -(12 * density).toInt()
-                        val maxYOffset = if (isOverlayMinimized) screenHeight - (56 * density).toInt() else screenHeight - 200
-                        layoutParams.x = max(0, min(initialX + deltaX, max(0, screenWidth - layoutParams.width)))
-                        layoutParams.y = max(minYOffset, min(initialY + deltaY, max(0, maxYOffset)))
-                        try {
-                            windowManager.updateViewLayout(overlayView, layoutParams)
-                        } catch (_: Exception) {}
-                        true
-                    } else false
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (isDraggingTouch) {
+        val topZone = View(this).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            setOnTouchListener { _, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        initialX = layoutParams.x
+                        initialY = layoutParams.y
+                        initialTouchX = event.rawX
+                        initialTouchY = event.rawY
                         isDraggingTouch = false
+                        dispatchOffsetTouchToWebView(event, 0f, 0f)
                         true
-                    } else {
-                        false
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val deltaX = (event.rawX - initialTouchX).toInt()
+                        val deltaY = (event.rawY - initialTouchY).toInt()
+                        if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
+                            if (!isDraggingTouch) {
+                                isDraggingTouch = true
+                                dispatchOffsetTouchToWebView(event, 0f, 0f, MotionEvent.ACTION_CANCEL)
+                            }
+                            val minYOffset = -(12 * density).toInt()
+                            val maxYOffset = if (isOverlayMinimized) screenHeight - (56 * density).toInt() else screenHeight - 200
+                            layoutParams.x = max(0, min(initialX + deltaX, max(0, screenWidth - layoutParams.width)))
+                            layoutParams.y = max(minYOffset, min(initialY + deltaY, max(0, maxYOffset)))
+                            try {
+                                windowManager.updateViewLayout(overlayView, layoutParams)
+                            } catch (_: Exception) {}
+                            syncOverlayTouchZonesLayout()
+                            true
+                        } else {
+                            if (!isDraggingTouch) {
+                                dispatchOffsetTouchToWebView(event, 0f, 0f)
+                            }
+                            true
+                        }
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        if (isDraggingTouch) {
+                            isDraggingTouch = false
+                        } else {
+                            dispatchOffsetTouchToWebView(event, 0f, 0f)
+                        }
+                        true
+                    }
+                    else -> {
+                        if (!isDraggingTouch) {
+                            dispatchOffsetTouchToWebView(event, 0f, 0f)
+                        }
+                        true
                     }
                 }
-                else -> false
             }
         }
-
+        val topParams = createTouchZoneLayoutParams(layoutParams.width, (180 * density).toInt(), touchable = true)
         try {
-            windowManager.addView(overlayView, layoutParams)
-        } catch (e: Exception) {
-            e.printStackTrace()
+            windowManager.addView(topZone, topParams)
+            topTouchZoneView = topZone
+            topTouchZoneParams = topParams
+        } catch (_: Exception) {}
+
+        val oppHdrZone = View(this).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            visibility = View.GONE
+            setOnTouchListener { _, event ->
+                dispatchOffsetTouchToWebView(
+                    event,
+                    lastOppHeadersRectPx.left.toFloat(),
+                    lastOppHeadersRectPx.top.toFloat()
+                )
+                true
+            }
         }
+        val oppHdrParams = createTouchZoneLayoutParams(0, 0, touchable = false)
+        try {
+            windowManager.addView(oppHdrZone, oppHdrParams)
+            oppHeadersTouchView = oppHdrZone
+            oppHeadersTouchParams = oppHdrParams
+        } catch (_: Exception) {}
+
+        val myHdrZone = View(this).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            visibility = View.GONE
+            setOnTouchListener { _, event ->
+                dispatchOffsetTouchToWebView(
+                    event,
+                    lastMyHeadersRectPx.left.toFloat(),
+                    lastMyHeadersRectPx.top.toFloat()
+                )
+                true
+            }
+        }
+        val myHdrParams = createTouchZoneLayoutParams(0, 0, touchable = false)
+        try {
+            windowManager.addView(myHdrZone, myHdrParams)
+            myHeadersTouchView = myHdrZone
+            myHeadersTouchParams = myHdrParams
+        } catch (_: Exception) {}
+    }
+
+    internal fun syncOverlayTouchZonesLayout() {
+        if (!::layoutParams.isInitialized) return
+        val density = resources.displayMetrics.density
+        val topView = topTouchZoneView
+        val topParams = topTouchZoneParams
+        if (topView != null && topParams != null) {
+            topParams.gravity = layoutParams.gravity
+            topParams.x = layoutParams.x
+            topParams.y = layoutParams.y
+            topParams.width = layoutParams.width
+            topParams.height = when {
+                isOverlayMinimized -> layoutParams.height
+                currentLayoutMode != "option1" -> {
+                    if (layoutParams.height > 0) layoutParams.height else (64 * density).toInt()
+                }
+                lastTopZoneHeightPx > 0 -> lastTopZoneHeightPx
+                layoutParams.height > 0 -> layoutParams.height
+                else -> (180 * density).toInt()
+            }
+            topView.visibility = View.VISIBLE
+            try {
+                windowManager.updateViewLayout(topView, topParams)
+            } catch (_: Exception) {}
+        }
+
+        val showSubHeaderZones = !isOverlayMinimized && currentLayoutMode == "option1"
+
+        fun updateSubZone(view: View?, params: WindowManager.LayoutParams?, rectPx: Rect) {
+            if (view == null || params == null) return
+            val hasValidRect = showSubHeaderZones && rectPx.width() > 4 && rectPx.height() > 4 && rectPx.top >= lastTopZoneHeightPx - 8
+            if (hasValidRect) {
+                params.gravity = Gravity.TOP or Gravity.START
+                params.x = layoutParams.x + rectPx.left
+                params.y = layoutParams.y + rectPx.top
+                params.width = rectPx.width()
+                params.height = rectPx.height()
+                params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                    WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
+                view.visibility = View.VISIBLE
+            } else {
+                params.width = 0
+                params.height = 0
+                params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                    WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
+                view.visibility = View.GONE
+            }
+            try {
+                windowManager.updateViewLayout(view, params)
+            } catch (_: Exception) {}
+        }
+
+        updateSubZone(oppHeadersTouchView, oppHeadersTouchParams, lastOppHeadersRectPx)
+        updateSubZone(myHeadersTouchView, myHeadersTouchParams, lastMyHeadersRectPx)
     }
 
     internal fun applyOverlayScale(scalePct: Int) {
@@ -4637,6 +4633,7 @@ class OverlayService : LifecycleService() {
                     if (!isOverlayMinimized) {
                         windowManager.updateViewLayout(overlayView, layoutParams)
                     }
+                    syncOverlayTouchZonesLayout()
                     overlayView?.evaluateJavascript("if (window.setOverlayScalePct) setOverlayScalePct($overlayScalePct);", null)
                 }
             } catch (_: Exception) {}
@@ -4691,6 +4688,7 @@ class OverlayService : LifecycleService() {
                     windowManager.updateViewLayout(overlayView, layoutParams)
                 }
             } catch (_: Exception) {}
+            syncOverlayTouchZonesLayout()
         }
         startForegroundNotification()
         showStatusBarToast("Overlay minimized (OCR paused). Tap bubble to resume.", Toast.LENGTH_SHORT)
@@ -4710,6 +4708,7 @@ class OverlayService : LifecycleService() {
                     windowManager.updateViewLayout(overlayView, layoutParams)
                 }
             } catch (_: Exception) {}
+            syncOverlayTouchZonesLayout()
         }
         overlayView?.evaluateJavascript(
             "if (window.setOverlayMinimizedState) setOverlayMinimizedState(false); if (window.setOverlayScalePct) setOverlayScalePct($overlayScalePct);",
@@ -5088,6 +5087,7 @@ class OverlayService : LifecycleService() {
         try {
             windowManager.updateViewLayout(overlayView, layoutParams)
         } catch (_: Exception) {}
+        syncOverlayTouchZonesLayout()
 
         Handler(Looper.getMainLooper()).post {
             overlayView?.evaluateJavascript("setLayoutMode('$mode')", null)
@@ -13036,6 +13036,11 @@ class OverlayService : LifecycleService() {
             val fMove = fOverride ?: oppMeta.defaultFastMove
             val fTurns = OverlayService.resolveFastTurnsStatic(fMove, oppMeta.fastTurns)
             val fEnergy = OverlayService.resolveFastEnergyStatic(fMove, fTurns)
+            val (_, fullChargedPool) = OverlayService.getAvailableMovePoolForSpeciesStatic(oppMeta.name.ifBlank { oppName }, league)
+            val candPool = (listOf(oppMeta.chargedMove1, oppMeta.chargedMove2) + fullChargedPool + listOf(oppMeta.chargedMove3, oppMeta.chargedMove4))
+                .map { it.trim() }
+                .filter { it.isNotBlank() && !it.endsWith("+") }
+                .distinctBy { it.lowercase() }
             AiTelemetryOppSlotSpec(
                 slotIndex = idx,
                 species = oppName,
@@ -13046,6 +13051,7 @@ class OverlayService : LifecycleService() {
                 fastTurns = fTurns,
                 fastEnergy = fEnergy,
                 confirmedChargedMoves = confirmedOppChargedMoves.getOrNull(idx)?.toList() ?: emptyList(),
+                candidateChargedMoves = candPool,
                 finalHpPct = endOppHpList.getOrElse(idx) { 0 },
                 finalEnergy = if (hasLiveOpponents) oppSlotEnergy.getOrElse(idx) { 0 } else 0,
                 fainted = (endOppHpList.getOrElse(idx) { 0 } <= 0)
@@ -15018,32 +15024,45 @@ class OverlayService : LifecycleService() {
         val throwAlignmentText = zeroSneakAttacks.joinToString(", ") { formatOrdinal(it) }
         val throwHorizonText = throwAlignmentText
 
-        val scannedOpponentsData = displayList.mapIndexed { idx, opp ->
-            val rawBaseKey = FormResolver.extractBaseSpecies(opp).lowercase()
-            val isThisOppShadow = manualShadowOverrides[rawBaseKey] ?: (if (idx == activeOpponentSlotIndex) isOpponentShadow else opp.contains("Shadow", ignoreCase = true))
-            val meta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(opp, activeLeague, isThisOppShadow), activeLeague)
-            val thisOppAtkStg = oppSlotAtkStage.getOrElse(idx.coerceIn(0, 2)) { 0 }
-            val oppC1Pct = calculateChargedMoveDamagePercent(
-                attacker = meta,
-                defender = userMeta,
-                moveName = meta.chargedMove1,
-                isAttackerShadow = isThisOppShadow,
-                isDefenderShadow = isUserShadow,
-                attackerAtkStage = thisOppAtkStg,
-                defenderDefStage = activeUserDefStg
-            )
-            val oppC2Pct = calculateChargedMoveDamagePercent(
-                attacker = meta,
-                defender = userMeta,
-                moveName = meta.chargedMove2,
-                isAttackerShadow = isThisOppShadow,
-                isDefenderShadow = isUserShadow,
-                attackerAtkStage = thisOppAtkStg,
-                defenderDefStage = activeUserDefStg
-            )
-            val thisOppPlusMove = OverlayService.resolveMegaPlusMoveStatic(meta.name, activeLeague)
-                ?: OverlayService.resolveMegaPlusMoveStatic(opp, activeLeague)
-            val thirdMoveName = thisOppPlusMove
+        val activeSlotIdxSafe = activeUserSlotIndex.coerceIn(0, 2)
+        val activeOppSlotSafe = activeOpponentSlotIndex.coerceIn(0, 2)
+        val activeUserHp = if (playerFaintedSlots[activeSlotIdxSafe]) 0 else playerSlotHpPct[activeSlotIdxSafe].coerceIn(1, 100)
+        val activeOppHp = if (oppFaintedSlots[activeOppSlotSafe]) 0 else oppSlotHpPct[activeOppSlotSafe].coerceIn(1, 100)
+
+        data class OpponentChargedMoveSelection(
+            val displayedMoves: List<String>,
+            val allPossibleMoves: List<String>,
+            val highRiskThirdMove: String?,
+            val isTwoMovesLocked: Boolean,
+            val plusMove: String?
+        )
+
+        fun selectOpponentThreeDisplayedMoves(
+            oppNameRaw: String,
+            meta: PokemonMeta,
+            isOppShad: Boolean,
+            oppAtkStage: Int,
+            confirmedSet: Set<String>
+        ): OpponentChargedMoveSelection {
+            val plusMove = OverlayService.resolveMegaPlusMoveStatic(meta.name, activeLeague)
+                ?: OverlayService.resolveMegaPlusMoveStatic(oppNameRaw, activeLeague)
+            val confirmedRegular = if (plusMove != null) {
+                confirmedSet.filter { it.isNotBlank() && !it.equals(plusMove, ignoreCase = true) }.distinctBy { it.lowercase() }
+            } else {
+                confirmedSet.filter { it.isNotBlank() }.distinctBy { it.lowercase() }
+            }
+            if (confirmedRegular.size >= 2) {
+                val locked = (confirmedRegular.take(2) + listOfNotNull(plusMove)).distinctBy { it.lowercase() }
+                return OpponentChargedMoveSelection(
+                    displayedMoves = locked,
+                    allPossibleMoves = locked,
+                    highRiskThirdMove = null,
+                    isTwoMovesLocked = true,
+                    plusMove = plusMove
+                )
+            }
+
+            val fallbackThird = plusMove
                 ?: meta.chargedMove3.takeIf { it.isNotBlank() }
                 ?: COMMON_THIRD_CHARGED_MOVE[meta.name]
                 ?: COMMON_THIRD_CHARGED_MOVE.entries.firstOrNull { it.key.equals(meta.name, ignoreCase = true) }?.value
@@ -15066,26 +15085,113 @@ class OverlayService : LifecycleService() {
                     "fairy" -> if (meta.chargedMove1 != "Moonblast" && meta.chargedMove2 != "Moonblast") "Moonblast" else "Dazzling Gleam"
                     else -> "Hyper Beam"
                 }
-            val oppC3Pct = calculateChargedMoveDamagePercent(
+
+            val poolCharged = OverlayService.getAvailableMovePoolForSpeciesStatic(meta.name, activeLeague).second
+            val orderedCandidates = (
+                listOf(meta.chargedMove1, meta.chargedMove2) +
+                poolCharged +
+                listOf(meta.chargedMove3, meta.chargedMove4, fallbackThird) +
+                confirmedRegular +
+                listOfNotNull(plusMove)
+            ).map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinctBy { it.lowercase() }
+
+            val rec2 = listOf(meta.chargedMove1, meta.chargedMove2)
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinctBy { it.lowercase() }
+
+            val uHpForRisk = activeUserHp.coerceIn(1, 100)
+            val confirmedOutsideTop2 = confirmedRegular.firstOrNull { cm ->
+                rec2.none { it.equals(cm, ignoreCase = true) }
+            }
+
+            var chosenThird: String? = null
+            var isRiskBadgeThird = false
+            if (confirmedOutsideTop2 != null) {
+                chosenThird = confirmedOutsideTop2
+                isRiskBadgeThird = false
+            } else {
+                val nextThreeCandidates = orderedCandidates
+                    .filter { cand -> rec2.none { it.equals(cand, ignoreCase = true) } }
+                    .take(3)
+                if (nextThreeCandidates.isNotEmpty()) {
+                    chosenThird = nextThreeCandidates.maxByOrNull { candMove ->
+                        val mStats = OverlayService.resolveChargedMoveStatsStatic(candMove, meta.types.firstOrNull() ?: "normal")
+                        val cost = (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[candMove] ?: 50).coerceIn(35, 100)
+                        val dmgPct = calculateChargedMoveDamagePercent(
+                            attacker = meta,
+                            defender = userMeta,
+                            moveName = candMove,
+                            isAttackerShadow = isOppShad,
+                            isDefenderShadow = isUserShadow,
+                            attackerAtkStage = oppAtkStage,
+                            defenderDefStage = activeUserDefStg
+                        )
+                        val canKoNow = dmgPct >= uHpForRisk
+                        val dpeScore = (dmgPct.toDouble() * 50.0) / cost.toDouble()
+                        (if (canKoNow) 10000.0 + (100 - cost) * 10.0 else 0.0) + dmgPct.toDouble() + dpeScore * 0.65
+                    }
+                    isRiskBadgeThird = chosenThird != null
+                }
+            }
+
+            val displayed = (rec2 + listOfNotNull(chosenThird) + listOfNotNull(plusMove))
+                .filter { it.isNotBlank() }
+                .distinctBy { it.lowercase() }
+
+            return OpponentChargedMoveSelection(
+                displayedMoves = displayed,
+                allPossibleMoves = orderedCandidates.ifEmpty { displayed },
+                highRiskThirdMove = if (isRiskBadgeThird) chosenThird else null,
+                isTwoMovesLocked = false,
+                plusMove = plusMove
+            )
+        }
+
+        val scannedOpponentsData = displayList.mapIndexed { idx, opp ->
+            val rawBaseKey = FormResolver.extractBaseSpecies(opp).lowercase()
+            val isThisOppShadow = manualShadowOverrides[rawBaseKey] ?: (if (idx == activeOpponentSlotIndex) isOpponentShadow else opp.contains("Shadow", ignoreCase = true))
+            val meta = OverlayService.computeEffectiveCombatStats(getPokemonMeta(opp, activeLeague, isThisOppShadow), activeLeague)
+            val thisOppAtkStg = oppSlotAtkStage.getOrElse(idx.coerceIn(0, 2)) { 0 }
+            val slotConfirmedSet = confirmedOppChargedMoves.getOrNull(idx) ?: emptySet()
+            val slotMoveSelection = selectOpponentThreeDisplayedMoves(
+                oppNameRaw = opp,
+                meta = meta,
+                isOppShad = isThisOppShadow,
+                oppAtkStage = thisOppAtkStg,
+                confirmedSet = slotConfirmedSet
+            )
+            val slotDispMoves = slotMoveSelection.displayedMoves
+            val c1Move = slotDispMoves.getOrNull(0) ?: meta.chargedMove1
+            val c2Move = slotDispMoves.getOrNull(1) ?: meta.chargedMove2
+            val thirdMoveName = slotDispMoves.getOrNull(2) ?: ""
+            val oppC1Pct = calculateChargedMoveDamagePercent(
                 attacker = meta,
                 defender = userMeta,
-                moveName = thirdMoveName,
+                moveName = c1Move,
                 isAttackerShadow = isThisOppShadow,
                 isDefenderShadow = isUserShadow,
                 attackerAtkStage = thisOppAtkStg,
                 defenderDefStage = activeUserDefStg
             )
-            val fourthMoveName = (if (thisOppPlusMove != null) meta.chargedMove3 else meta.chargedMove4).takeIf {
-                it.isNotBlank() &&
-                    !it.equals(meta.chargedMove1, ignoreCase = true) &&
-                    !it.equals(meta.chargedMove2, ignoreCase = true) &&
-                    !it.equals(thirdMoveName, ignoreCase = true)
-            } ?: ""
-            val oppC4Pct = if (fourthMoveName.isNotBlank()) {
+            val oppC2Pct = if (c2Move.isNotBlank()) {
                 calculateChargedMoveDamagePercent(
                     attacker = meta,
                     defender = userMeta,
-                    moveName = fourthMoveName,
+                    moveName = c2Move,
+                    isAttackerShadow = isThisOppShadow,
+                    isDefenderShadow = isUserShadow,
+                    attackerAtkStage = thisOppAtkStg,
+                    defenderDefStage = activeUserDefStg
+                )
+            } else 0
+            val oppC3Pct = if (thirdMoveName.isNotBlank()) {
+                calculateChargedMoveDamagePercent(
+                    attacker = meta,
+                    defender = userMeta,
+                    moveName = thirdMoveName,
                     isAttackerShadow = isThisOppShadow,
                     isDefenderShadow = isUserShadow,
                     attackerAtkStage = thisOppAtkStg,
@@ -15095,20 +15201,7 @@ class OverlayService : LifecycleService() {
             val matrix = calculate3v3Matrix(meta, isThisOppShadow, p1, p2, p3, idx)
             val thisOppHpPct = if (idx in 0..2 && oppFaintedSlots[idx]) 0 else oppSlotHpPct.getOrElse(idx) { 100 }.coerceIn(0, 100)
             val thisOppEnergy = if (idx in 0..2 && oppFaintedSlots[idx]) 0 else oppSlotEnergy.getOrElse(idx) { 0 }.coerceIn(0, 100)
-            val slotConfirmedSet = confirmedOppChargedMoves.getOrNull(idx) ?: emptySet()
-            val slotConfirmedRegular = if (thisOppPlusMove != null) {
-                slotConfirmedSet.filter { it.isNotBlank() && !it.equals(thisOppPlusMove, ignoreCase = true) }
-            } else {
-                slotConfirmedSet.filter { it.isNotBlank() }
-            }
-            val rawThisOppMoveNames = (listOf(meta.chargedMove1, meta.chargedMove2, thirdMoveName, fourthMoveName) + slotConfirmedSet + listOfNotNull(thisOppPlusMove))
-                .filter { it.isNotBlank() }
-                .distinctBy { it.lowercase() }
-            val thisOppMoveNames = if (slotConfirmedRegular.size >= 2) {
-                (slotConfirmedRegular.take(2) + listOfNotNull(thisOppPlusMove)).distinctBy { it.lowercase() }.ifEmpty { rawThisOppMoveNames }
-            } else {
-                rawThisOppMoveNames
-            }
+            val thisOppMoveNames = slotMoveSelection.allPossibleMoves.ifEmpty { slotDispMoves }
             val cheapestOppMoveEnergy = thisOppMoveNames.map { mName ->
                 val mStats = OverlayService.resolveChargedMoveStatsStatic(mName, meta.types.firstOrNull() ?: "normal")
                 (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[mName] ?: 50).coerceIn(35, 100)
@@ -15134,10 +15227,11 @@ class OverlayService : LifecycleService() {
                 "fastMove" to slotFastMove,
                 "oppFastMoveStatus" to slotFastStatus,
                 "confirmedChargedMoves" to slotConfirmedSet.toList(),
-                "c1" to "${abbrMove5(meta.chargedMove1)} ($oppC1Pct%)",
-                "c2" to "${abbrMove5(meta.chargedMove2)} ($oppC2Pct%)",
-                "c3" to "${abbrMove5(thirdMoveName)} ($oppC3Pct%)",
-                "c4" to if (enable4ChargedMoves && fourthMoveName.isNotBlank()) "${abbrMove5(fourthMoveName)} ($oppC4Pct%)" else "",
+                "candidateChargedMoves" to slotMoveSelection.allPossibleMoves,
+                "c1" to "${abbrMove5(c1Move)} ($oppC1Pct%)",
+                "c2" to if (c2Move.isNotBlank()) "${abbrMove5(c2Move)} ($oppC2Pct%)" else "",
+                "c3" to if (thirdMoveName.isNotBlank()) "${abbrMove5(thirdMoveName)} ($oppC3Pct%)" else "",
+                "c4" to "",
                 "atkStage" to oppSlotAtkStage.getOrElse(idx.coerceIn(0, 2)) { 0 },
                 "defStage" to oppSlotDefStage.getOrElse(idx.coerceIn(0, 2)) { 0 },
                 "disguiseBusted" to oppSlotDisguiseBusted.getOrElse(idx.coerceIn(0, 2)) { false },
@@ -15162,38 +15256,20 @@ class OverlayService : LifecycleService() {
         // CMP Tie Evaluation: True if player's active Pokémon wins CMP (higher or equal Attack)
         val winsCmp = userMeta.atk >= oppMeta.atk
 
-        // Active opponent's 3 (or 4) charged moves — v3.80 / v6.20: filter to confirmed regular moves once 2 distinct regular moves are known, while keeping Super Mega + move
-        val activeOppPlusMove = OverlayService.resolveMegaPlusMoveStatic(oppMeta.name, activeLeague)
-            ?: OverlayService.resolveMegaPlusMoveStatic(activeOpponentName, activeLeague)
-        val activeOppThirdMove = activeOppPlusMove
-            ?: oppMeta.chargedMove3.takeIf { it.isNotBlank() }
-            ?: COMMON_THIRD_CHARGED_MOVE[oppMeta.name]
-            ?: COMMON_THIRD_CHARGED_MOVE.entries.firstOrNull { it.key.equals(oppMeta.name, ignoreCase = true) }?.value
-            ?: "Outrage"
-        val activeOppFourthMove = (if (activeOppPlusMove != null) oppMeta.chargedMove3 else oppMeta.chargedMove4).takeIf {
-            it.isNotBlank() &&
-                !it.equals(oppMeta.chargedMove1, ignoreCase = true) &&
-                !it.equals(oppMeta.chargedMove2, ignoreCase = true) &&
-                !it.equals(activeOppThirdMove, ignoreCase = true)
-        } ?: ""
+        // v6.50: Active opponent's 3 displayed charged moves (PvPoke's 2 recommended + highest-risk of next 3, locking to 2 once 2 regular moves are confirmed)
         val activeOppConfirmedSet = confirmedOppChargedMoves.getOrNull(activeOppSlotClamped) ?: emptySet()
-        val activeOppConfirmedRegular = if (activeOppPlusMove != null) {
-            activeOppConfirmedSet.filter { it.isNotBlank() && !it.equals(activeOppPlusMove, ignoreCase = true) }.distinctBy { it.lowercase() }
-        } else {
-            activeOppConfirmedSet.filter { it.isNotBlank() }.distinctBy { it.lowercase() }
-        }
-        val rawOppChargedMoveNames = (if (enable4ChargedMoves && activeOppFourthMove.isNotBlank()) {
-            listOf(oppMeta.chargedMove1, oppMeta.chargedMove2, activeOppThirdMove, activeOppFourthMove)
-        } else {
-            listOf(oppMeta.chargedMove1, oppMeta.chargedMove2, activeOppThirdMove)
-        } + activeOppConfirmedSet.toList() + listOfNotNull(activeOppPlusMove))
-            .filter { it.isNotBlank() }
-            .distinctBy { it.lowercase() }
-        val oppChargedMoveNames = if (activeOppConfirmedRegular.size >= 2) {
-            (activeOppConfirmedRegular.take(2) + listOfNotNull(activeOppPlusMove)).distinctBy { it.lowercase() }.ifEmpty { rawOppChargedMoveNames }
-        } else {
-            rawOppChargedMoveNames
-        }
+        val activeOppMoveSelection = selectOpponentThreeDisplayedMoves(
+            oppNameRaw = activeOpponentName,
+            meta = oppMeta,
+            isOppShad = isOpponentShadow,
+            oppAtkStage = activeOppAtkStg,
+            confirmedSet = activeOppConfirmedSet
+        )
+        val oppChargedMoveNames = activeOppMoveSelection.displayedMoves
+        val activeOppThirdMove = oppChargedMoveNames.getOrNull(2) ?: ""
+        val activeOppFourthMove = activeOppMoveSelection.allPossibleMoves.firstOrNull { m ->
+            oppChargedMoveNames.none { it.equals(m, ignoreCase = true) }
+        } ?: ""
 
         val activeUserPlusMove = OverlayService.resolveMegaPlusMoveStatic(userMeta.name, activeLeague)
             ?: OverlayService.resolveMegaPlusMoveStatic(activePlayerName, activeLeague)
@@ -15347,6 +15423,8 @@ class OverlayService : LifecycleService() {
             val safeEnd = max(1, displayReadyCount - 1)
             val safeRangeLabel = if (safeEnd <= 1) "1" else "1–$safeEnd"
             val isConfirmedMove = activeOppConfirmedSet.any { it.equals(moveName, ignoreCase = true) }
+            val isHighRiskThirdMove = activeOppMoveSelection.highRiskThirdMove != null &&
+                moveName.equals(activeOppMoveSelection.highRiskThirdMove, ignoreCase = true)
 
             mapOf(
                 "name" to moveName,
@@ -15360,6 +15438,7 @@ class OverlayService : LifecycleService() {
                 "coAligned" to coAligned,
                 "winsCmp" to winsCmp,
                 "isConfirmedMove" to isConfirmedMove,
+                "isHighRiskThirdMove" to isHighRiskThirdMove,
                 "activeName" to activePlayerName,
                 "activeDmgPct" to activeDmgPct,
                 "activeEff" to activeEff,
@@ -15528,10 +15607,6 @@ class OverlayService : LifecycleService() {
             oppMeta.name
         }
         val teamSlotsList = listOf(p1, p2, p3)
-        val activeSlotIdxSafe = activeUserSlotIndex.coerceIn(0, 2)
-        val activeOppSlotSafe = activeOpponentSlotIndex.coerceIn(0, 2)
-        val activeUserHp = if (playerFaintedSlots[activeSlotIdxSafe]) 0 else playerSlotHpPct[activeSlotIdxSafe].coerceIn(1, 100)
-        val activeOppHp = if (oppFaintedSlots[activeOppSlotSafe]) 0 else oppSlotHpPct[activeOppSlotSafe].coerceIn(1, 100)
 
         fun slotBrAgainst(slotIdx: Int, targetOppName: String, uS: Int, oS: Int): Int {
             val s = teamSlotsList.getOrNull(slotIdx)
@@ -16269,31 +16344,17 @@ class OverlayService : LifecycleService() {
             }
         }
 
-        // v6.42: Build Shield Decision Overlay payload for in-app DVR replay & web replay player parity
+        // v6.42 / v6.50: Build Shield Decision Overlay payload for merged HUD, in-app DVR replay & web replay player parity
+        // Shows ALL possible legal moves for the opponent Pokémon until 2 regular moves are locked, with Overflow Guard.
         val shieldDecisionOverlayPayload: Map<String, Any?> = run {
             val isVisible = (isBattleActive || isReplayMode) &&
                 showShieldDecisionOverlay &&
-                isAttackIncomingPromptActive &&
+                (isAttackIncomingPromptActive || isShieldDecisionOverlayVisible) &&
                 !isWaitingForOpponent
-            val oppPlusMove = OverlayService.resolveMegaPlusMoveStatic(oppMeta.name, activeLeague)
-                ?: OverlayService.resolveMegaPlusMoveStatic(activeOpponentName, activeLeague)
-            val confirmedRegMoves = if (oppPlusMove != null) {
-                activeOppConfirmedSet.filter { it.isNotBlank() && !it.equals(oppPlusMove, ignoreCase = true) }.distinctBy { it.lowercase() }
-            } else {
-                activeOppConfirmedSet.filter { it.isNotBlank() }.distinctBy { it.lowercase() }
-            }
-            val twoRegLocked = confirmedRegMoves.size >= 2
-            val candMoves: List<String> = if (twoRegLocked) {
-                (confirmedRegMoves.take(2) + listOfNotNull(oppPlusMove)).distinctBy { it.lowercase() }
-            } else {
-                val baseList = if (enable4ChargedMoves && activeOppFourthMove.isNotBlank()) {
-                    listOf(oppMeta.chargedMove1, oppMeta.chargedMove2, activeOppThirdMove, activeOppFourthMove)
-                } else {
-                    listOf(oppMeta.chargedMove1, oppMeta.chargedMove2, activeOppThirdMove)
-                }
-                (baseList + activeOppConfirmedSet.toList() + listOfNotNull(oppPlusMove))
-                    .filter { it.isNotBlank() }
-                    .distinctBy { it.lowercase() }
+            val oppPlusMove = activeOppMoveSelection.plusMove
+            val twoRegLocked = activeOppMoveSelection.isTwoMovesLocked
+            val candMoves: List<String> = activeOppMoveSelection.allPossibleMoves.ifEmpty {
+                activeOppMoveSelection.displayedMoves
             }
             val uHp = activeUserHp.coerceIn(1, 100)
             val rawRows = candMoves.map { mName ->
@@ -16347,14 +16408,22 @@ class OverlayService : LifecycleService() {
             }
             val effBankedE = max(rawPreE, minCost).coerceIn(0, 100)
             val normRows = rawRows.map { it.copy(isFunded = effBankedE >= it.energyCost) }
-            val funded = normRows.filter { it.isFunded }.sortedByDescending { it.dmgPct }
-            val unfunded = normRows.filter { !it.isFunded }.sortedBy { it.energyCost }
+            val allFunded = normRows.filter { it.isFunded }
+                .sortedWith(compareByDescending<ShieldOverlayMoveRow> { it.isKo }.thenByDescending { it.dmgPct }.thenBy { it.energyCost })
+            val allUnfunded = normRows.filter { !it.isFunded }
+                .sortedWith(compareByDescending<ShieldOverlayMoveRow> { it.isKo }.thenByDescending { it.dmgPct }.thenBy { it.energyCost })
 
-            val allFundedKo = funded.isNotEmpty() && funded.all { it.isKo }
-            val someFundedKo = funded.any { it.isKo } && funded.any { !it.isKo }
-            val anyFundedFarmed = funded.any { !it.isKo && !it.canReachNextMoveIfTanked }
-            val unfundedKo = funded.none { it.isKo } && unfunded.any { it.isKo }
-            val worstFarmed = funded.firstOrNull { !it.isKo && !it.canReachNextMoveIfTanked }
+            // v6.50 Overflow Guard: show up to 6 funded moves and up to 4 highest-threat unfunded moves
+            val funded = allFunded.take(6)
+            val unfunded = allUnfunded.take(4)
+            val hiddenFundedCount = (allFunded.size - funded.size).coerceAtLeast(0)
+            val hiddenUnfundedCount = (allUnfunded.size - unfunded.size).coerceAtLeast(0)
+
+            val allFundedKo = allFunded.isNotEmpty() && allFunded.all { it.isKo }
+            val someFundedKo = allFunded.any { it.isKo } && allFunded.any { !it.isKo }
+            val anyFundedFarmed = allFunded.any { !it.isKo && !it.canReachNextMoveIfTanked }
+            val unfundedKo = allFunded.none { it.isKo } && allUnfunded.any { it.isKo }
+            val worstFarmed = allFunded.firstOrNull { !it.isKo && !it.canReachNextMoveIfTanked }
 
             val (bgHex, strokeHex, verdictText) = when {
                 allFundedKo -> Triple(
@@ -16400,6 +16469,8 @@ class OverlayService : LifecycleService() {
                 "verdictText" to verdictText,
                 "effectiveBankedEnergy" to effBankedE,
                 "userHpPct" to uHp,
+                "hiddenFundedCount" to hiddenFundedCount,
+                "hiddenUnfundedCount" to hiddenUnfundedCount,
                 "fundedMoves" to funded.map { m ->
                     mapOf(
                         "moveName" to m.moveName,
@@ -16766,6 +16837,28 @@ class OverlayService : LifecycleService() {
 
         dismissPostBattleBugReportDialogOverlay()
 
+        if (topTouchZoneView != null) {
+            try {
+                windowManager.removeView(topTouchZoneView)
+            } catch (_: Exception) {}
+            topTouchZoneView = null
+            topTouchZoneParams = null
+        }
+        if (oppHeadersTouchView != null) {
+            try {
+                windowManager.removeView(oppHeadersTouchView)
+            } catch (_: Exception) {}
+            oppHeadersTouchView = null
+            oppHeadersTouchParams = null
+        }
+        if (myHeadersTouchView != null) {
+            try {
+                windowManager.removeView(myHeadersTouchView)
+            } catch (_: Exception) {}
+            myHeadersTouchView = null
+            myHeadersTouchParams = null
+        }
+
         if (overlayView != null) {
             try {
                 windowManager.removeView(overlayView)
@@ -17060,7 +17153,48 @@ class OverlayService : LifecycleService() {
                     try {
                         windowManager.updateViewLayout(overlayView, layoutParams)
                     } catch (_: Exception) {}
+                    syncOverlayTouchZonesLayout()
                 }
+            }
+        }
+
+        @JavascriptInterface
+        fun updateInteractiveRegions(
+            totalHeightDp: Int,
+            topZoneHeightDp: Int,
+            oppHdrXDp: Int,
+            oppHdrYDp: Int,
+            oppHdrWDp: Int,
+            oppHdrHDp: Int,
+            myHdrXDp: Int,
+            myHdrYDp: Int,
+            myHdrWDp: Int,
+            myHdrHDp: Int
+        ) {
+            Handler(Looper.getMainLooper()).post {
+                if (isOverlayMinimized || currentLayoutMode != "option1") return@post
+                val density = resources.displayMetrics.density
+                val targetHeight = (totalHeightDp * density).toInt()
+                if (targetHeight > 0 && (layoutParams.height < 0 || Math.abs(layoutParams.height - targetHeight) > 1)) {
+                    layoutParams.height = targetHeight
+                    try {
+                        windowManager.updateViewLayout(overlayView, layoutParams)
+                    } catch (_: Exception) {}
+                }
+                lastTopZoneHeightPx = (topZoneHeightDp * density).toInt().coerceAtLeast(0)
+                lastOppHeadersRectPx.set(
+                    (oppHdrXDp * density).toInt(),
+                    (oppHdrYDp * density).toInt(),
+                    ((oppHdrXDp + oppHdrWDp) * density).toInt(),
+                    ((oppHdrYDp + oppHdrHDp) * density).toInt()
+                )
+                lastMyHeadersRectPx.set(
+                    (myHdrXDp * density).toInt(),
+                    (myHdrYDp * density).toInt(),
+                    ((myHdrXDp + myHdrWDp) * density).toInt(),
+                    ((myHdrYDp + myHdrHDp) * density).toInt()
+                )
+                syncOverlayTouchZonesLayout()
             }
         }
 

@@ -222,7 +222,10 @@ internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap,
         userSlotAtkStage = playerSlotAtkStage.toList(),
         userSlotDefStage = playerSlotDefStage.toList(),
         oppSlotAtkStage = oppSlotAtkStage.toList(),
-        oppSlotDefStage = oppSlotDefStage.toList()
+        oppSlotDefStage = oppSlotDefStage.toList(),
+        oppSlotConfirmedChargedMoves = (0..2).map { idx ->
+            confirmedOppChargedMoves.getOrNull(idx)?.toList() ?: emptyList()
+        }
     )
 
     val canRecordNow = activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed
@@ -703,6 +706,13 @@ internal fun OverlayService.applyDeepTraceFrameForReplay(
         }
         oppSlotDefStage[i] = frame.oppSlotDefStage.getOrElse(i) {
             if (i == oIdx) frame.oppDefStage.coerceIn(-4, 4) else oppSlotDefStage[i]
+        }
+        if (frame.oppSlotConfirmedChargedMoves.isNotEmpty()) {
+            val slotMoves = frame.oppSlotConfirmedChargedMoves.getOrNull(i).orEmpty()
+            confirmedOppChargedMoves.getOrNull(i)?.apply {
+                clear()
+                addAll(slotMoves.filter { it.isNotBlank() })
+            }
         }
     }
     playerSlotDisguiseBusted[uIdx] = frame.userDisguiseBusted

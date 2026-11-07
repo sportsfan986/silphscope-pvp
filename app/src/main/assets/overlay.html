@@ -968,6 +968,18 @@
             box-shadow: 0 0 4px rgba(var(--header-accent-rgb), 0.35);
         }
 
+        /* v6.50 High-Risk 3rd Coverage Move Badge */
+        .move-title-line.move-high-risk-badge {
+            display: inline-flex;
+            align-items: center;
+            align-self: flex-start;
+            max-width: 100%;
+            background: rgba(245, 158, 11, 0.16);
+            border: 1px dashed rgba(251, 191, 36, 0.72);
+            border-radius: 3px;
+            padding: 0 2.5px;
+        }
+
         /* v3.80 3-State Opponent Fast Move Typography (Theme-Aware) */
         .opp-fast-unconfirmed {
             font-style: italic;
@@ -2370,9 +2382,51 @@
                 applyProportionalScale();
                 const el = document.getElementById(currentMode === "option1" ? "mode-sky-trench" : "mode-horizon-belt");
                 const rectH = el ? el.getBoundingClientRect().height : (document.body.scrollHeight * currentZoomFactor);
-                const h = rectH + 10;
-                if (window.AndroidOverlay && window.AndroidOverlay.updateContentHeight) {
-                    window.AndroidOverlay.updateContentHeight(Math.max(48, Math.ceil(h)));
+                const totalHeightDp = Math.max(48, Math.ceil(rectH + 10));
+
+                let topZoneHeightDp = totalHeightDp;
+                let oppX = 0, oppY = 0, oppW = 0, oppH = 0;
+                let myX = 0, myY = 0, myW = 0, myH = 0;
+
+                if (currentMode === "option1" && el) {
+                    const firstTimingContainer = el.querySelector(".timing-rows-container");
+                    if (firstTimingContainer && firstTimingContainer.offsetParent !== null) {
+                        const tcRect = firstTimingContainer.getBoundingClientRect();
+                        if (tcRect.height > 4 && tcRect.top > 24) {
+                            topZoneHeightDp = Math.max(36, Math.ceil(tcRect.top));
+                        }
+                    }
+                    const oppHdrEl = document.getElementById("sky-opp-dmg-headers");
+                    if (oppHdrEl && oppHdrEl.offsetParent !== null) {
+                        const r1 = oppHdrEl.getBoundingClientRect();
+                        if (r1.width > 4 && r1.height > 4) {
+                            oppX = Math.max(0, Math.floor(r1.left));
+                            oppY = Math.max(0, Math.floor(r1.top));
+                            oppW = Math.ceil(r1.width);
+                            oppH = Math.ceil(r1.height);
+                        }
+                    }
+                    const myHdrEl = document.getElementById("sky-my-dmg-headers");
+                    if (myHdrEl && myHdrEl.offsetParent !== null) {
+                        const r2 = myHdrEl.getBoundingClientRect();
+                        if (r2.width > 4 && r2.height > 4) {
+                            myX = Math.max(0, Math.floor(r2.left));
+                            myY = Math.max(0, Math.floor(r2.top));
+                            myW = Math.ceil(r2.width);
+                            myH = Math.ceil(r2.height);
+                        }
+                    }
+                }
+
+                if (window.AndroidOverlay && window.AndroidOverlay.updateInteractiveRegions) {
+                    window.AndroidOverlay.updateInteractiveRegions(
+                        totalHeightDp,
+                        topZoneHeightDp,
+                        oppX, oppY, oppW, oppH,
+                        myX, myY, myW, myH
+                    );
+                } else if (window.AndroidOverlay && window.AndroidOverlay.updateContentHeight) {
+                    window.AndroidOverlay.updateContentHeight(totalHeightDp);
                 }
             } catch(e) {}
         }
@@ -3815,12 +3869,16 @@
                                 Array.isArray(battleData.confirmedOppChargedMoves) &&
                                 battleData.confirmedOppChargedMoves.some(m => String(m).toLowerCase() === String(row.name || "").toLowerCase())
                             );
-                            const confirmedBadgeCls = isConfirmedMove ? " move-confirmed-badge" : "";
-                            const confirmedTitleSuffix = isConfirmedMove ? " (Confirmed Used in Battle)" : "";
+                            const isHighRiskThird = !isConfirmedMove && !!row.isHighRiskThirdMove;
+                            const confirmedBadgeCls = isConfirmedMove ? " move-confirmed-badge" : (isHighRiskThird ? " move-high-risk-badge" : "");
+                            const confirmedTitleSuffix = isConfirmedMove
+                                ? " (Confirmed Used in Battle)"
+                                : (isHighRiskThird ? " (Highest-Risk 3rd Coverage Move)" : "");
+                            const riskIconHtml = isHighRiskThird ? `<span style="font-size:6.8px;margin-right:1px;opacity:0.92;">⚠️</span>` : "";
                             return `
                                 <div class="move-timing-row">
                                     <div class="move-col-left">
-                                        <div class="move-title-line threat-${threatClass}${confirmedBadgeCls}" title="${row.name || ''}${confirmedTitleSuffix}">${shortMove}</div>
+                                        <div class="move-title-line threat-${threatClass}${confirmedBadgeCls}" title="${row.name || ''}${confirmedTitleSuffix}">${riskIconHtml}${shortMove}</div>
                                         <div class="move-sub-line">${row.energy || 50}e/${displayReadyCount}f</div>
                                     </div>
                                     <div class="move-col-center">${centerHtml}</div>
@@ -3981,13 +4039,12 @@
                 console.error("Horizon render error", e);
             }
 
-            // v6.42: Render Replay Shield Decision Overlay Card (Red/Orange/Yellow/Green KO & HP summary above Attack incoming!)
+            // v6.42 / v6.50: Render Merged Shield Decision Overlay Card at Bottom of Main Overlay (Live + Replay)
             try {
                 const shieldCardEl = document.getElementById("sky-shield-decision-card");
                 if (shieldCardEl) {
                     const sd = battleData.shieldDecisionOverlay;
-                    const canShowSd = (isReplay || !!battleData.forceInlineShieldDecisionOverlay) &&
-                        window.replayShowShieldOverlay !== false &&
+                    const canShowSd = window.replayShowShieldOverlay !== false &&
                         window.replayHudMode !== "off" &&
                         !isWaitingState &&
                         sd &&
@@ -4056,6 +4113,16 @@
                                 `</div>`;
                         }).join("");
 
+                        const hiddenFunded = typeof sd.hiddenFundedCount === "number" ? sd.hiddenFundedCount : 0;
+                        const hiddenUnfunded = typeof sd.hiddenUnfundedCount === "number" ? sd.hiddenUnfundedCount : 0;
+                        let overflowSummaryHtml = "";
+                        if (hiddenFunded > 0 || hiddenUnfunded > 0) {
+                            const parts = [];
+                            if (hiddenFunded > 0) parts.push(`+${hiddenFunded} more funded`);
+                            if (hiddenUnfunded > 0) parts.push(`+${hiddenUnfunded} lower-risk unfunded`);
+                            overflowSummaryHtml = `<div class="shield-dec-row unfunded" style="color:#94A3B8;font-size:8.4px;padding-top:1px;">… ${parts.join(" • ")} moves in pool</div>`;
+                        }
+
                         shieldCardEl.className = "shield-decision-card";
                         shieldCardEl.style.background = sd.bgColorHex || "rgba(6, 78, 59, 0.95)";
                         shieldCardEl.style.borderColor = sd.strokeColorHex || "#10B981";
@@ -4063,7 +4130,8 @@
                             `<div class="shield-dec-header">${escapeHtml(sd.headerLineText || "🛡️ SHIELD DECISION")}</div>` +
                             `<div class="shield-dec-divider"></div>` +
                             fundedRowsHtml +
-                            unfundedRowsHtml;
+                            unfundedRowsHtml +
+                            overflowSummaryHtml;
                     }
                 }
             } catch (e) {

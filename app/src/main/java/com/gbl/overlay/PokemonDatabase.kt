@@ -3250,6 +3250,13 @@ internal fun OverlayService.Companion.getAvailableMovePoolForSpeciesStatic(
     addCharged(meta.chargedMove4)
     rankEntry?.moves?.chargedMoves?.forEach { addCharged(formatMoveIdDisplay(it.moveId)) }
     effectiveChargedPool?.forEach { addCharged(it) }
+    if (chargedList.size < 3) {
+        val common3rd = COMMON_THIRD_CHARGED_MOVE[meta.name]
+            ?: COMMON_THIRD_CHARGED_MOVE.entries.firstOrNull { it.key.equals(meta.name, ignoreCase = true) }?.value
+        if (!common3rd.isNullOrBlank()) {
+            addCharged(common3rd)
+        }
+    }
     if (chargedList.isEmpty() && meta.chargedMove1.isNotBlank()) {
         chargedList.add(meta.chargedMove1.trim())
     }

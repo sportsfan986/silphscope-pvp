@@ -2246,10 +2246,11 @@
                     android:textColor="#ffffff" />
             </LinearLayout>
 
-            <!-- Opponent Charged Moves Count Setting (3 vs 4 Charged Moves in Overlay) -->
+            <!-- Opponent Charged Moves Count Setting (Retired in v6.50: Always shows 3 most likely moves [2 PvPoke Rec + 1 High-Risk] until 2 are locked) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:visibility="gone"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
                 android:layout_marginTop="8dp"

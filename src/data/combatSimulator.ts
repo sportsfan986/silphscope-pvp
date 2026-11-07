@@ -111,7 +111,7 @@ export function computeSharedHorizonTurns(
   const userFastTurns = userFastMove.turns || 2;
   const userFastEnergy = userFastMove.energyGain || userFastTurns * 4;
 
-  const oppFirstReadyTurns = oppStats.chargedMoves.slice(0, enable4ChargedMoves ? 4 : 3).map((cm) => {
+  const oppFirstReadyTurns = oppStats.chargedMoves.slice(0, 3).map((cm) => {
     const mEnergy = cm.energyCost || 50;
     const fasts = Math.max(1, Math.ceil(mEnergy / oppFastEnergy));
     return fasts * oppFastTurns;
@@ -183,7 +183,28 @@ export function calculateOpponentMoveTimingRows(
   const benchNames = teamNames.filter((n) => n.toLowerCase() !== userLeadName.toLowerCase()).slice(0, 2);
 
   const oppPlusMoveName = resolveMegaPlusMove(oppStats.name, league) || resolveMegaPlusMove(oppStats.speciesId, league);
-  const baseOppCharged = oppStats.chargedMoves.slice(0, enable4ChargedMoves ? 4 : 3);
+  const fullOppPool = getAvailableMovePoolForPokemon(oppStats, league).chargedMoves;
+  const rec2 = oppStats.chargedMoves.slice(0, 2);
+  const nextThreeCandidates = [...fullOppPool, ...oppStats.chargedMoves]
+    .filter((cand, idx, arr) =>
+      arr.findIndex((m) => m.name.toLowerCase() === cand.name.toLowerCase()) === idx &&
+      !rec2.some((r) => r.name.toLowerCase() === cand.name.toLowerCase())
+    )
+    .slice(0, 3);
+  let bestThirdMove: ChargedMove | undefined = oppStats.chargedMoves[2];
+  let bestThirdScore = -1;
+  for (const cand of nextThreeCandidates) {
+    const dPct = calculateChargedDamage(oppStats, userStats, cand, isOppShadow, isUserShadow).percentage;
+    const cost = Math.max(35, Math.min(100, cand.energyCost || 50));
+    const canKo = dPct >= 100;
+    const dpe = (dPct * 50) / cost;
+    const score = (canKo ? 10000 + (100 - cost) * 10 : 0) + dPct + dpe * 0.65;
+    if (score > bestThirdScore) {
+      bestThirdScore = score;
+      bestThirdMove = cand;
+    }
+  }
+  const baseOppCharged = bestThirdMove ? [...rec2, bestThirdMove] : rec2;
   const oppChargedList =
     oppPlusMoveName && !baseOppCharged.some((m) => m.name.toLowerCase() === oppPlusMoveName.toLowerCase())
       ? [...baseOppCharged, buildChargedMoveFromName(oppPlusMoveName, oppStats.types[0], oppStats.chargedMoves)]
@@ -417,7 +438,7 @@ export function calculateMyMoveTimingRows(
 
   // Compute all opponent ready turns (across up to 3 cycles) for CMP tie detection
   const oppReadyTurnsSet = new Set<number>();
-  oppStats.chargedMoves.slice(0, enable4ChargedMoves ? 4 : 3).forEach((cm) => {
+  oppStats.chargedMoves.slice(0, 3).forEach((cm) => {
     const mE = cm.energyCost || 50;
     let leftE = 0;
     let cumF = 0;

@@ -1,4 +1,25 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.46`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.50`)
+
+---
+
+## v6.50 (2026-11-06) — Smart 3-Move Opponent Display (2 PvPoke + Highest-Risk Coverage), All-Possible-Moves Merged Shield Call HUD & Non-Blocking Bottom Overlay Touch Pass-Through
+*Combat HUD, Shield Decision, and touch-ergonomics release (`v6.50`, `versionCode = 1650`) standardizing the Opponent Attacks HUD to 3 dynamically prioritized charged moves (PvPoke's 2 recommended moves + the highest KO/threat move among the next 3 most likely coverage moves at your live HP%, locking to 2 moves once 2 regular moves are confirmed), expanding the Shield Call HUD to evaluate all possible legal moves for that Pokémon until 2 moves are locked, merging the Shield Decision Card into the bottom of the main overlay, and making the bottom half of the overlay non-blocking (`FLAG_NOT_TOUCHABLE`) so taps pass straight through to Pokémon GO while keeping the 3-column Pokémon selector headers interactive.*
+
+- **v6.50 — Enhancement 1: Smart 3-Move Opponent Display & Removal of Quantity Setting (`OverlayService.kt`, `PokemonDatabase.kt`, `overlay.html`, `activity_main.xml`, `combatSimulator.ts`)**:
+  - **2 PvPoke Recommended + Highest-Risk 3rd Coverage Move (`selectOpponentThreeDisplayedMoves`)**: Always displays PvPoke's 2 recommended charged moves (`c1` & `c2`) plus the **1 move with the highest KO/threat score at your active Pokémon's live HP%** out of the next 3 most likely moves (`#3, #4, #5`), automatically re-evaluating when you swap Pokémon or your active HP% drops into KO range of a faster coverage move.
+  - **Subtle Coverage Risk Badge (`.move-high-risk-badge` / `⚠️`)**: Highlights the 3rd dynamically selected coverage move so you can distinguish PvPoke's 2 recommended moves from the high-risk coverage move at a glance.
+  - **1-Confirmed & 2-Confirmed Lock-In**: If 1 move outside the top 2 is confirmed in battle, displays that confirmed move alongside PvPoke's 2 recommended moves (3 moves total); once 2 regular moves are confirmed, locks to those 2 confirmed moves (plus any fixed Super Mega `+` move).
+  - **Removed Charged Move Quantity Setting**: Retired the `3 vs 4 Charged Moves` toggle in Settings in favor of the unified smart 3-move display.
+
+- **v6.50 — Enhancement 2: All-Possible-Moves Merged Shield Call HUD with Overflow Guard (`OverlayService.kt`, `overlay.html`, `BattleDvrEngine.kt`)**:
+  - **Evaluates All Possible Legal Moves Until 2 Locked**: Until 2 regular moves are confirmed for the active opponent Pokémon, the Shield Call HUD evaluates **all legal charged moves** in that species' movepool (sorted by KO threat, damage %, and energy cost), locking to the 2 confirmed moves once known.
+  - **Overflow Guard for Deep Movepools**: Displays up to 6 funded moves and up to 4 highest-threat unfunded moves, collapsing any additional lower-risk unfunded moves on deep-movepool Pokémon (e.g., Mew, Snorlax) into a compact `+N lower-risk unfunded moves in pool` summary row.
+  - **Merged Bottom-of-Overlay Shield Call Card (`#sky-shield-decision-card`)**: Merged the Shield Call overlay directly into the bottom of the main overlay (`#mode-sky-trench`, stacked below the Tactical Coach) when an incoming opponent charged move is detected, retiring the separate floating `shieldDecisionOverlayView` window.
+  - **Enhanced Telemetry & Deep Trace Logging (`AiTelemetryOppSlotSpec.candidateChargedMoves`, `BattleDeepTraceFrame.oppSlotConfirmedChargedMoves`)**: Records each opponent slot's candidate charged move pool and per-frame confirmed charged moves for 1:1 Web Replay Viewer parity.
+
+- **v6.50 — Enhancement 3: Non-Blocking Bottom Half of Overlay with Selective Header Touch Forwarding (`OverlayService.kt`, `overlay.html`)**:
+  - **Game-Safe Touch Pass-Through (`FLAG_NOT_TOUCHABLE` on `overlayView`)**: The entire bottom half of the overlay (`Opp Attacks` move rows, `My Attacks` move rows, Bottom Tactical Coach, and the merged Shield Call Card) now passes touches directly through to Pokémon GO so fast attacks, charge minigames, and Protect Shield taps are never blocked.
+  - **Precision Touch-Forwarding Proxies (`topTouchZoneView`, `oppHeadersTouchView`, `myHeadersTouchView`)**: Keeps the top header/toolbar/3x3 matrix and the **3-column Pokémon selector headers** (`#sky-opp-dmg-headers` and `#sky-my-dmg-headers`) in the attack sections fully interactive and synchronized via `AndroidOverlay.updateInteractiveRegions(...)`.
 
 ---
 
