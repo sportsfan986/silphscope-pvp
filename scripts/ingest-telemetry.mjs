@@ -90,6 +90,7 @@ const PREPROCESSED_DIR = path.join(CACHE_DIR, "preprocessed");
 const STATE_FILE = path.join(CACHE_DIR, "ingested_batches.json");
 const SUMMARY_FILE = path.join(CACHE_DIR, "latest_anomaly_report.json");
 const SYNC_LOG_FILE = path.join(CACHE_DIR, "background_sync.log");
+const LOCK_FILE = path.join(CACHE_DIR, "ingest.lock");
 
 for (const dir of [CACHE_DIR, BATCHES_DIR, SETTINGS_DIR, RECORDINGS_DIR, PREPROCESSED_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
@@ -163,7 +164,8 @@ function loadPreprocessConfig() {
         preAnimationFrames: 10,
         postSettlingFrames: 14,
         sampleEveryNFrames: 1,
-        cooldownFrames: 12,
+        cooldownFrames: 25,
+        maxEventsPerBattle: 25,
       },
       speciesSwapsAndFaints: {
         enabled: true,
@@ -214,6 +216,35 @@ function resolveFfmpegBin() {
 
 const FFMPEG_BIN = resolveFfmpegBin();
 
+function acquireIngestLock() {
+  try {
+    if (fs.existsSync(LOCK_FILE)) {
+      const st = fs.statSync(LOCK_FILE);
+      const ageMs = Date.now() - st.mtimeMs;
+      // Stale lock recovery after 8 minutes
+      if (ageMs < 8 * 60 * 1000) {
+        return false;
+      }
+    }
+    fs.writeFileSync(
+      LOCK_FILE,
+      JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString(), argv: rawArgs }),
+      "utf8"
+    );
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+function releaseIngestLock() {
+  try {
+    if (fs.existsSync(LOCK_FILE)) {
+      fs.unlinkSync(LOCK_FILE);
+    }
+  } catch {}
+}
+
 function loadCacheState() {
   try {
     if (fs.existsSync(STATE_FILE)) {
@@ -221,6 +252,7 @@ function loadCacheState() {
       return {
         ingestedBatchIds: parsed.ingestedBatchIds || {},
         ingestedKeys: parsed.ingestedKeys || {},
+        userTiers: parsed.userTiers || { sportsfan986: "vip" },
         records: Array.isArray(parsed.records) ? parsed.records : [],
         settingsChanges: Array.isArray(parsed.settingsChanges) ? parsed.settingsChanges : [],
         dvrBundles: parsed.dvrBundles || {},
@@ -230,6 +262,7 @@ function loadCacheState() {
   return {
     ingestedBatchIds: {},
     ingestedKeys: {},
+    userTiers: { sportsfan986: "vip" },
     records: [],
     settingsChanges: [],
     dvrBundles: {},
@@ -237,7 +270,243 @@ function loadCacheState() {
 }
 
 function saveCacheState(state) {
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), "utf8");
+  try {
+    if (fs.existsSync(STATE_FILE)) {
+      const onDisk = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+      state.ingestedBatchIds = { ...(onDisk.ingestedBatchIds || {}), ...(state.ingestedBatchIds || {}) };
+      state.ingestedKeys = { ...(onDisk.ingestedKeys || {}), ...(state.ingestedKeys || {}) };
+      state.userTiers = { ...(onDisk.userTiers || {}), ...(state.userTiers || {}) };
+      const mergedBundles = { ...(onDisk.dvrBundles || {}) };
+      for (const [bId, bVal] of Object.entries(state.dvrBundles || {})) {
+        mergedBundles[bId] = { ...(mergedBundles[bId] || {}), ...bVal };
+      }
+      state.dvrBundles = mergedBundles;
+      const byBattleId = new Map();
+      for (const r of [...(onDisk.records || []), ...(state.records || [])]) {
+        if (!r || !r.battleId) continue;
+        const prev = byBattleId.get(r.battleId);
+        if (!prev || (Array.isArray(r.anomalies) && r.anomalies.length >= (prev.anomalies?.length || 0))) {
+          byBattleId.set(r.battleId, { ...(prev || {}), ...r });
+        }
+      }
+      state.records = [...byBattleId.values()];
+    }
+  } catch {}
+  const tmpFile = `${STATE_FILE}.tmp.${process.pid}`;
+  fs.writeFileSync(tmpFile, JSON.stringify(state, null, 2), "utf8");
+  fs.renameSync(tmpFile, STATE_FILE);
+}
+
+const TIER_RANK_MAP = {
+  vip: 4,
+  pro: 3,
+  supporter: 2,
+  base: 2,
+  alumni: 2,
+  free: 1,
+};
+
+function normalizeTier(rawTier, screenName = "") {
+  if (String(screenName || "").toLowerCase() === "sportsfan986") return "vip";
+  const t = String(rawTier || "free").toLowerCase().trim();
+  if (t === "vip") return "vip";
+  if (t === "pro") return "pro";
+  if (t === "supporter" || t === "base" || t === "alumni") return "supporter";
+  return "free";
+}
+
+function resolveUserTier(screenName, userTiers = {}) {
+  const clean = String(screenName || "").trim();
+  if (!clean) return "free";
+  if (clean.toLowerCase() === "sportsfan986") return "vip";
+  const direct = userTiers[clean] || userTiers[clean.toLowerCase()];
+  return normalizeTier(direct, clean);
+}
+
+function computePriorityMetadata({ manuallyFlagged, userTier, severity }) {
+  const tier = normalizeTier(userTier);
+  const tierRank = TIER_RANK_MAP[tier] || 1;
+  const isPaid = tierRank >= 2;
+  const isManual = Boolean(manuallyFlagged);
+  const sevUpper = String(severity || "WARN").toUpperCase();
+  const severityRank = sevUpper === "HIGH" || sevUpper === "CRITICAL" ? 2 : 1;
+
+  let priorityBucket = "P4_FREE_AUTO";
+  let priorityGroupRank = 1;
+  if (isManual && isPaid) {
+    priorityBucket = "P1_PAID_MANUAL";
+    priorityGroupRank = 4;
+  } else if (isManual && !isPaid) {
+    priorityBucket = "P2_FREE_MANUAL";
+    priorityGroupRank = 3;
+  } else if (!isManual && isPaid) {
+    priorityBucket = "P3_PAID_AUTO";
+    priorityGroupRank = 2;
+  }
+
+  const compositePriorityScore =
+    priorityGroupRank * 1000 + tierRank * 100 + severityRank * 10;
+
+  return {
+    priorityBucket,
+    priorityGroupRank,
+    userTier: tier,
+    userTierLabel: tier.toUpperCase(),
+    tierRank,
+    isPaidTier: isPaid,
+    manuallyFlagged: isManual,
+    severityRank,
+    compositePriorityScore,
+  };
+}
+
+/**
+ * Zero-Token Local Root-Cause Classifier:
+ * Cross-references battle timeline events, post-cutscene HP audits, and energy mutation ledgers
+ * to automatically classify known engine/vision patterns without spending AI tokens.
+ */
+function classifyAnomalyLocally(anomaly, record) {
+  const code = String(anomaly?.type || anomaly?.code || "");
+  const detail = String(anomaly?.detail || anomaly?.message || "");
+  const t = Number(anomaly?.tSec ?? anomaly?.t ?? 0);
+  const events = Array.isArray(record?.timelineEvents) ? record.timelineEvents : [];
+  const audits = Array.isArray(record?.postCutsceneHpAudits) ? record.postCutsceneHpAudits : [];
+  const chargedEvents = events.filter((e) => e && e.type === "CHARGED_ATTACK");
+
+  if (code === "USER_MANUAL_ISSUE_REPORT") {
+    return {
+      category: "USER_MANUAL_BUG_REPORT",
+      confidence: "HIGH",
+      isFalsePositive: false,
+      rootCause: detail || "User explicitly flagged this battle for developer review.",
+      suggestedFix: "Inspect userIssueNote and associated contact sheets / deep trace around reported timestamp.",
+    };
+  }
+
+  // 1. Check for CMP Tie Dual CHARGED_ATTACK collision (two charged moves within <= 0.35s)
+  const nearbyCharged = chargedEvents.filter((e) => Math.abs(Number(e.t ?? e.tSec ?? 0) - t) <= 0.35);
+  if (nearbyCharged.length >= 2) {
+    return {
+      category: "CMP_TIE_DUAL_CHARGE_TRANSITION",
+      confidence: "HIGH",
+      isFalsePositive: code === "SHIELD_DESYNC",
+      rootCause:
+        "Genuine CMP tie transition where 1st charged move finalized as 2nd charged move prompt began; defender HP drain finished during/after 2nd cutscene.",
+      suggestedFix:
+        "Resolved in v7.04 (Case 2 CMP uses pendingChargedAttackStartMs, samples post-minigame HP drain, and extends retroactive HP settle window to 12s).",
+    };
+  }
+
+  // 2. Check for Swap-During-Cutscene Banner Clear (POST_CIRCLE_FIT when banner OCR matched a different move)
+  const matchingEv = chargedEvents.find((e) => Math.abs(Number(e.t ?? e.tSec ?? 0) - t) <= 1.0);
+  const moveResSrc = anomaly?.moveResolutionSource || matchingEv?.moveResolutionSource || "";
+  if (
+    (code === "UNEXPECTED_HP_DELTA" || code === "UNSHIELDED_DAMAGE_MISMATCH") &&
+    moveResSrc === "POST_CIRCLE_FIT"
+  ) {
+    return {
+      category: "SWAP_DURING_CUTSCENE_BANNER_CLEARED",
+      confidence: "HIGH",
+      isFalsePositive: false,
+      rootCause:
+        "Player queued a switch during the charged move cutscene, clearing lastDetectedBannerMoveName before Section 4 reconciled the move and falling back to POST_CIRCLE_FIT.",
+      suggestedFix:
+        "Resolved in v7.04 (preserve lastDetectedBannerMoveName while pendingChargedAttackActor is active and fall back to lastUserChargeResolvedMoveName).",
+    };
+  }
+
+  // 3. Check for Legacy Air Cutter (60p/40E) Overestimate on Charizard
+  if (
+    (code === "UNEXPECTED_HP_DELTA" || code === "UNSHIELDED_DAMAGE_MISMATCH") &&
+    (/Air Cutter/i.test(detail) || /^Air Cutter$/i.test(String(anomaly?.moveName || "")))
+  ) {
+    return {
+      category: "LEGACY_STATIC_MOVE_STATS_OVERESTIMATE",
+      confidence: "HIGH",
+      isFalsePositive: true,
+      rootCause:
+        "Static fallback table had legacy Air Cutter stats (60 power / 40E instead of PvPoke's updated 45 power / 35E), inflating expectedDmgPct to 59%.",
+      suggestedFix: "Resolved in v7.04 (Air Cutter updated to 45 power / 35E in PokemonDatabase.kt).",
+    };
+  }
+
+  // 4. Check for Post-Cutscene Camera Zoom Upward Row-Y Spike (oppHpRowY < 750)
+  const matchingAudit = audits.find((a) => Math.abs(Number(a.tSec || 0) - t) <= 12.0);
+  const auditOppRowY = Number(matchingAudit?.oppHpRowY ?? matchingAudit?.oppHpRowYAtExit ?? 999);
+  if (
+    (code === "UNEXPECTED_HP_DELTA" || code === "UNSHIELDED_DAMAGE_MISMATCH") &&
+    matchingAudit &&
+    auditOppRowY > 0 &&
+    auditOppRowY < 750
+  ) {
+    return {
+      category: "POST_CUTSCENE_CAMERA_ZOOM_ROW_Y_SPIKE",
+      confidence: "HIGH",
+      isFalsePositive: false,
+      rootCause: `Post-cutscene camera zoom shifted oppHpRowY upward to y=${auditOppRowY}px, latching a transient low HP% before settling.`,
+      suggestedFix:
+        "Resolved in v7.04 (Section 1B guards against upward oppHpRowY shifts < 0.31h and fast-recovers from <=15% false locks).",
+    };
+  }
+
+  // 5. Check for HP_DELTA Retroactive Move Inference Energy Mismatch
+  if (
+    (code === "ENERGY_DEFICIT_THROW" || code === "ENERGY_DEFICIT_AT_THROW") &&
+    (moveResSrc === "HP_DELTA" || /src=HP_DELTA/i.test(detail))
+  ) {
+    return {
+      category: "HP_DELTA_RETROACTIVE_ENERGY_MISMATCH",
+      confidence: "HIGH",
+      isFalsePositive: true,
+      rootCause:
+        "Section 1A/4 HP_DELTA move inference either initially selected a higher-cost move before HP finished draining or updated inferredMoveName without recalculating requiredMoveEnergy/energyDeficit.",
+      suggestedFix:
+        "Resolved in v7.04 (filter HP_DELTA candidates by preThrowEnergy feasibility and recalculate requiredMoveEnergy & energyDeficit in Section 1A).",
+    };
+  }
+
+  // 6. Check for 1-Fast-Move Turn Boundary Variance (deficit <= 14E)
+  const deficitMatch = detail.match(/deficit\s*-?(\d+)E/i);
+  const deficitVal = Number(anomaly?.energyDeficit ?? (deficitMatch ? deficitMatch[1] : 999));
+  if ((code === "ENERGY_DEFICIT_THROW" || code === "ENERGY_DEFICIT_AT_THROW") && deficitVal <= 14) {
+    return {
+      category: "ONE_FAST_MOVE_TURN_BOUNDARY_VARIANCE",
+      confidence: "HIGH",
+      isFalsePositive: true,
+      rootCause: `Minor 1-fast-move turn boundary timing variance (deficit=${deficitVal}E) during simultaneous tap/zoom transition.`,
+      suggestedFix: "Benign 1-turn cadence boundary variance; no action required.",
+    };
+  }
+
+  // 7. Check for Delayed Post-KO Replacement Nameplate OCR
+  if ((code === "ENERGY_DEFICIT_THROW" || code === "ENERGY_DEFICIT_AT_THROW") && deficitVal > 14) {
+    return {
+      category: "DELAYED_POST_KO_REPLACEMENT_OCR",
+      confidence: "MEDIUM",
+      isFalsePositive: false,
+      rootCause: `Replacement opponent nameplate OCR arrived late after previous opponent KO + immediate charged attack/BLOCKED! banner (deficit=${deficitVal}E).`,
+      suggestedFix:
+        "Resolved in v7.04 (handleOpponentLines credits elapsed post-KO fast-move turns from lastSlotKoTimeMs when replacement species is first recognized).",
+    };
+  }
+
+  if (code === "ENERGY_CAP_DRIFT") {
+    return {
+      category: "CIRCLE_SHRINK_PRE_THROW_CAPTURE",
+      confidence: "MEDIUM",
+      isFalsePositive: true,
+      rootCause: "Charge button circle began shrinking on the tap frame right as the minigame started.",
+      suggestedFix: "Benign pre-minigame circle shrink artifact; tracked energy was already sufficient.",
+    };
+  }
+
+  return {
+    category: "LEGACY_PRE_V704_ANOMALY",
+    confidence: "LOW",
+    isFalsePositive: false,
+    rootCause: detail,
+    suggestedFix: "Inspect preprocessed contact sheets and _deep_trace.jsonl around timestamp.",
+  };
 }
 
 async function fetchWithRetry(url, options, retries = 3) {
@@ -605,11 +874,14 @@ function analyzeDeepTraceEvents(frames, config) {
     const r = rules.largeHpChangesAndAnimations || {};
     const minDelta = r.minCommittedHpDeltaPct ?? 12;
     const minDiscrepancy = r.minRawVsCommittedDiscrepancyPct ?? 10;
-    const cooldown = r.cooldownFrames ?? 12;
+    const cooldown = r.cooldownFrames ?? 25;
+    const maxHpEvents = r.maxEventsPerBattle ?? 25;
+    let hpEventsAdded = 0;
     let lastUserHpEventIdx = -999;
     let lastOppHpEventIdx = -999;
 
     for (let i = 1; i < totalFrames; i++) {
+      if (hpEventsAdded >= maxHpEvents) break;
       const prev = frames[i - 1];
       const curr = frames[i];
 
@@ -625,6 +897,7 @@ function analyzeDeepTraceEvents(frames, config) {
         (Math.abs(userDelta) >= minDelta || userRawDiff >= minDiscrepancy)
       ) {
         lastUserHpEventIdx = i;
+        hpEventsAdded++;
         const kind =
           Math.abs(userDelta) >= minDelta
             ? userDelta < 0
@@ -650,6 +923,8 @@ function analyzeDeepTraceEvents(frames, config) {
         );
       }
 
+      if (hpEventsAdded >= maxHpEvents) break;
+
       // Opponent HP change or large raw discrepancy
       const oppDelta = curr.committedOppHpPct - prev.committedOppHpPct;
       const oppRawDiff =
@@ -662,6 +937,7 @@ function analyzeDeepTraceEvents(frames, config) {
         (Math.abs(oppDelta) >= minDelta || oppRawDiff >= minDiscrepancy)
       ) {
         lastOppHpEventIdx = i;
+        hpEventsAdded++;
         const kind =
           Math.abs(oppDelta) >= minDelta
             ? oppDelta < 0
@@ -1026,11 +1302,12 @@ function preprocessDvrBundle(bundle, config, forceReprocess = false) {
   if (!bundle || !bundle.battleId) return false;
   const outDir = path.join(PREPROCESSED_DIR, bundle.battleId);
   const digestPath = path.join(outDir, "digest.json");
+  const videoExistsOnDisk = Boolean(bundle.videoPath && fs.existsSync(bundle.videoPath));
 
   if (!forceReprocess && fs.existsSync(digestPath)) {
     try {
       const existing = JSON.parse(fs.readFileSync(digestPath, "utf8"));
-      if (existing.configVersion === config.version && (!bundle.videoPath || existing.hasVideoScreenshots)) {
+      if ((!videoExistsOnDisk || existing.hasVideoScreenshots) && existing.totalFrames > 0) {
         bundle.preprocessedDigestPath = digestPath;
         return false;
       }
@@ -1060,7 +1337,7 @@ function preprocessDvrBundle(bundle, config, forceReprocess = false) {
 
   const events = analyzeDeepTraceEvents(frames, config);
   let screenshotStats = { extractedSheets: 0, extractedKeyframes: 0 };
-  const hasVideo = Boolean(bundle.videoPath && fs.existsSync(bundle.videoPath));
+  const hasVideo = videoExistsOnDisk;
   if (hasVideo) {
     screenshotStats = extractEventScreenshotsWithFfmpeg(
       bundle.videoPath,
@@ -1131,7 +1408,7 @@ function collectFilesRecursive(dir, list = []) {
   return list;
 }
 
-function enforceLocalStorageQuota(config) {
+function enforceLocalStorageQuota(config, state = null) {
   const maxMb = config.storage?.maxLocalStorageMb ?? 1024;
   const targetMb = config.storage?.pruneTargetStorageMb ?? 950;
   const maxBytes = maxMb * 1024 * 1024;
@@ -1143,11 +1420,28 @@ function enforceLocalStorageQuota(config) {
     return { totalMb: Number((totalBytes / (1024 * 1024)).toFixed(2)), evictedFiles: 0 };
   }
 
-  // Never delete state metadata or latest report
-  const protectedPaths = new Set([STATE_FILE, SUMMARY_FILE, SYNC_LOG_FILE]);
-  const candidates = allFiles.filter((f) => !protectedPaths.has(f.path));
+  // Never delete state metadata, latest report, .jsonl traces, or digest.json files
+  const protectedPaths = new Set([STATE_FILE, SUMMARY_FILE, SYNC_LOG_FILE, LOCK_FILE]);
+  const manuallyFlaggedBattleIds = new Set(
+    Object.values(state?.dvrBundles || {})
+      .filter((b) => b && b.manuallyFlagged)
+      .map((b) => b.battleId)
+  );
 
-  // Sort: oldest raw .mp4 files first (if configured), then oldest remaining files
+  const candidates = allFiles.filter((f) => {
+    if (protectedPaths.has(f.path)) return false;
+    if (config.storage?.protectDeepTraceJsonl !== false && f.path.endsWith(".jsonl")) return false;
+    if (config.storage?.protectDigestJson !== false && f.path.endsWith("digest.json")) return false;
+    if (f.path.endsWith("telemetry_hud.ass")) return false;
+    if (config.storage?.protectPaidAndFlaggedBundles !== false) {
+      for (const flagId of manuallyFlaggedBattleIds) {
+        if (flagId && f.path.includes(flagId)) return false;
+      }
+    }
+    return true;
+  });
+
+  // Sort: oldest raw .mp4 files first ( once screenshots are extracted ), then oldest keyframes
   candidates.sort((a, b) => {
     const aIsMp4 = a.path.endsWith(".mp4") ? 0 : 1;
     const bIsMp4 = b.path.endsWith(".mp4") ? 0 : 1;
@@ -1173,247 +1467,453 @@ function enforceLocalStorageQuota(config) {
   };
 }
 
+/**
+ * Scans all local `_deep_trace.jsonl` files in `RECORDINGS_DIR` and extracts Line 0
+ * (`BATTLE_DVR_SUMMARY_HEADER`) so any DVR bundle whose summary record or manual bug report flag
+ * arrived via `/v1/dvr` is synchronized into `state.records` and `state.dvrBundles`.
+ */
+function syncLocalDeepTraceHeadersIntoState(state) {
+  if (!fs.existsSync(RECORDINGS_DIR)) return;
+  const byBattleId = new Map();
+  for (const r of state.records || []) {
+    if (r && r.battleId) byBattleId.set(r.battleId, r);
+  }
+
+  for (const userEntry of fs.readdirSync(RECORDINGS_DIR, { withFileTypes: true })) {
+    if (!userEntry.isDirectory()) continue;
+    const userDir = path.join(RECORDINGS_DIR, userEntry.name);
+    for (const fEntry of fs.readdirSync(userDir, { withFileTypes: true })) {
+      if (!fEntry.isFile() || !fEntry.name.endsWith("_deep_trace.jsonl")) continue;
+      const tracePath = path.join(userDir, fEntry.name);
+      const battleId = fEntry.name.replace(/_deep_trace\.jsonl$/, "");
+      const videoPath = path.join(userDir, `${battleId}_video.mp4`);
+      try {
+        const fd = fs.openSync(tracePath, "r");
+        const buf = Buffer.alloc(65536);
+        const bytesRead = fs.readSync(fd, buf, 0, buf.length, 0);
+        fs.closeSync(fd);
+        const firstLine = buf.toString("utf8", 0, bytesRead).split(/\r?\n/)[0] || "";
+        if (!firstLine.startsWith('{"recordType":"BATTLE_DVR_SUMMARY_HEADER"')) continue;
+        const header = JSON.parse(firstLine);
+        const screenName = header.screenName || userEntry.name;
+        const isManual =
+          Boolean(header.manuallyFlagged) ||
+          Boolean(header.userIssueNote && String(header.userIssueNote).trim() !== "");
+        const issueNote = String(header.userIssueNote || "").trim();
+
+        const bundle = state.dvrBundles[battleId] || {
+          battleId,
+          screenName,
+          appVersion: header.appVersion || header.battleSummary?.appVersion || "unknown",
+          league: header.battleSummary?.league || "Unknown",
+          result: header.battleSummary?.result || "UNKNOWN",
+        };
+        bundle.tracePath = tracePath;
+        if (fs.existsSync(videoPath)) {
+          bundle.videoPath = videoPath;
+        }
+        if (isManual) bundle.manuallyFlagged = true;
+        if (issueNote) bundle.userIssueNote = issueNote;
+        if (header.uploadReason) bundle.uploadReason = header.uploadReason;
+        state.dvrBundles[battleId] = bundle;
+
+        if (header.battleSummary && typeof header.battleSummary === "object") {
+          const summaryRec = {
+            ...header.battleSummary,
+            screenName,
+            appVersion: header.appVersion || header.battleSummary.appVersion || "unknown",
+            manuallyFlagged: Boolean(bundle.manuallyFlagged),
+            userIssueNote: bundle.userIssueNote || "",
+          };
+          if (
+            summaryRec.manuallyFlagged &&
+            Array.isArray(summaryRec.anomalies) &&
+            !summaryRec.anomalies.some((a) => a && (a.type === "USER_MANUAL_ISSUE_REPORT" || a.code === "USER_MANUAL_ISSUE_REPORT"))
+          ) {
+            summaryRec.anomalies = [
+              {
+                tSec: 0.0,
+                severity: "HIGH",
+                type: "USER_MANUAL_ISSUE_REPORT",
+                actor: "user",
+                species: summaryRec.userTeamSpecs?.[0]?.species || summaryRec.userPokemon || "",
+                detail: summaryRec.userIssueNote
+                  ? `User-flagged DVR issue report: ${summaryRec.userIssueNote}`
+                  : "User manually flagged this battle for diagnostic review.",
+              },
+              ...summaryRec.anomalies,
+            ];
+            summaryRec.anomalyCount = summaryRec.anomalies.length;
+            summaryRec.hasHighSeverityAnomaly = true;
+          }
+          const existingRec = byBattleId.get(battleId);
+          if (!existingRec || summaryRec.manuallyFlagged || (summaryRec.anomalies?.length || 0) >= (existingRec.anomalies?.length || 0)) {
+            byBattleId.set(battleId, { ...(existingRec || {}), ...summaryRec });
+          }
+        }
+      } catch {}
+    }
+  }
+  state.records = [...byBattleId.values()];
+}
+
 // ============================================================================
 // MAIN SYNC, PREPROCESS & ON-DEMAND REPORT ENGINE
 // ============================================================================
 
 async function runOnce() {
-  const config = loadPreprocessConfig();
-  const state = loadCacheState();
-  let newBatchesCount = 0;
-  let newBattlesCount = 0;
-  let newSettingsLogsCount = 0;
-  let newDvrFilesCount = 0;
-  let preprocessedBundlesCount = 0;
-  let prunedRemoteKeys = 0;
-
-  if (!REPORT_ONLY && !REPROCESS_LOCAL) {
-    // 1. Ingest Always-On Lower-Resolution Battle Telemetry Batches (`batches/...`)
-    const batchObjects = await listAllObjectsByPrefix("batches/");
-    for (const obj of batchObjects) {
-      const key = obj.key;
-      if (!key || !key.endsWith(".jsonl")) continue;
-      const batchId = path.basename(key, ".jsonl");
-
-      if (state.ingestedBatchIds[batchId] || state.ingestedKeys[key]) {
-        if (PRUNE_REMOTE) {
-          if (await adminDeleteObject(key)) prunedRemoteKeys++;
-        }
-        continue;
-      }
-
-      const rawJsonl = await adminFetchText(key);
-      if (!rawJsonl) continue;
-
-      const localBatchPath = path.join(BATCHES_DIR, `${batchId}.jsonl`);
-      fs.writeFileSync(localBatchPath, rawJsonl, "utf8");
-
-      const lines = rawJsonl
-        .split(/\r?\n/)
-        .map((l) => l.trim())
-        .filter(Boolean);
-      const metaScreenName = obj.customMetadata?.screenName || "unknown";
-      const metaAppVer = obj.customMetadata?.appVersion || "unknown";
-
-      for (const line of lines) {
-        try {
-          const parsed = JSON.parse(line);
-          if (!parsed.screenName && metaScreenName !== "unknown") {
-            parsed.screenName = metaScreenName;
-          }
-          if (!parsed.appVersion && metaAppVer !== "unknown") {
-            parsed.appVersion = metaAppVer;
-          }
-          state.records.push(parsed);
-          newBattlesCount++;
-        } catch {}
-      }
-
-      state.ingestedBatchIds[batchId] = {
-        source: "cloudflare",
-        key,
-        screenName: metaScreenName,
-        appVersion: metaAppVer,
-        ingestedAt: new Date().toISOString(),
-        battleCount: lines.length,
-      };
-      state.ingestedKeys[key] = true;
-      newBatchesCount++;
-
-      if (PRUNE_REMOTE) {
-        if (await adminDeleteObject(key)) prunedRemoteKeys++;
-        const userMirrorKey = `users/${metaScreenName}/batches/${batchId}.jsonl`;
-        await adminDeleteObject(userMirrorKey);
-      }
-    }
-
-    // 2. Ingest Settings Change Audit Logs (`users/<screenName>/settings_changes/...`)
-    const userObjects = await listAllObjectsByPrefix("users/");
-    for (const obj of userObjects) {
-      const key = obj.key;
-      if (!key || !key.includes("/settings_changes/") || !key.endsWith(".jsonl")) continue;
-      if (state.ingestedKeys[key]) {
-        if (PRUNE_REMOTE && (await adminDeleteObject(key))) prunedRemoteKeys++;
-        continue;
-      }
-
-      const rawJsonl = await adminFetchText(key);
-      if (!rawJsonl) continue;
-
-      const screenName = obj.customMetadata?.screenName || key.split("/")[1] || "unknown";
-      const safeFile = key.replace(/[^A-Za-z0-9_.-]/g, "_");
-      fs.writeFileSync(path.join(SETTINGS_DIR, safeFile), rawJsonl, "utf8");
-
-      const lines = rawJsonl
-        .split(/\r?\n/)
-        .map((l) => l.trim())
-        .filter(Boolean);
-      for (const line of lines) {
-        try {
-          const parsed = JSON.parse(line);
-          state.settingsChanges.push({ screenName, ...parsed });
-        } catch {}
-      }
-
-      state.ingestedKeys[key] = true;
-      newSettingsLogsCount++;
-
-      if (PRUNE_REMOTE && (await adminDeleteObject(key))) {
-        prunedRemoteKeys++;
-      }
-    }
-
-    // 3. Ingest 1-Battle DVR Bundles (`recordings/<screenName>/<battleId>_video.mp4` & `_deep_trace.jsonl`)
-    const recordingObjects = await listAllObjectsByPrefix("recordings/");
-    for (const obj of recordingObjects) {
-      const key = obj.key;
-      if (!key) continue;
-      const isVideo = key.endsWith("_video.mp4");
-      const isTrace = key.endsWith("_deep_trace.jsonl");
-      if (!isVideo && !isTrace) continue;
-      if (isVideo && SKIP_VIDEOS) continue;
-
-      const parts = key.split("/");
-      const screenName = obj.customMetadata?.screenName || parts[1] || "unknown";
-      const fileName = parts.slice(2).join("_");
-      const userRecDir = path.join(RECORDINGS_DIR, screenName);
-      fs.mkdirSync(userRecDir, { recursive: true });
-      const localFilePath = path.join(userRecDir, fileName);
-
-      if (state.ingestedKeys[key] && fs.existsSync(localFilePath)) {
-        if (PRUNE_REMOTE && (await adminDeleteObject(key))) prunedRemoteKeys++;
-        continue;
-      }
-
-      if (isTrace) {
-        const text = await adminFetchText(key);
-        if (text === null) continue;
-        fs.writeFileSync(localFilePath, text, "utf8");
-      } else if (isVideo) {
-        const bytes = await adminFetchBytes(key);
-        if (!bytes) continue;
-        fs.writeFileSync(localFilePath, bytes);
-      }
-
-      const battleId =
-        obj.customMetadata?.battleId ||
-        fileName.replace(/_(video\.mp4|deep_trace\.jsonl)$/, "");
-      const bundle = state.dvrBundles[battleId] || {
-        battleId,
-        screenName,
-        appVersion: obj.customMetadata?.appVersion || "unknown",
-        league: obj.customMetadata?.league || "Unknown",
-        result: obj.customMetadata?.result || "UNKNOWN",
-        uploadedAt: obj.customMetadata?.uploadedAt || obj.uploaded,
-      };
-      if (isVideo) bundle.videoPath = localFilePath;
-      if (isTrace) bundle.tracePath = localFilePath;
-      state.dvrBundles[battleId] = bundle;
-
-      state.ingestedKeys[key] = true;
-      newDvrFilesCount++;
-
-      if (PRUNE_REMOTE && (await adminDeleteObject(key))) {
-        prunedRemoteKeys++;
-      }
-    }
-  }
-
-  // 4. Local CPU + ffmpeg Preprocessing of DVR Bundles (Start, Charged In/Out, Large HP Animations, Swaps, End)
-  for (const bundle of Object.values(state.dvrBundles)) {
-    if (preprocessDvrBundle(bundle, config, REPROCESS_LOCAL)) {
-      preprocessedBundlesCount++;
-    }
-  }
-
-  saveCacheState(state);
-
-  // 5. Enforce 1.0 GB Local Storage Cap
-  const quotaStatus = enforceLocalStorageQuota(config);
-
-  if (SYNC_ONLY) {
-    const syncLine = `batches=+${newBatchesCount} battles=+${newBattlesCount} dvrFiles=+${newDvrFilesCount} preprocessed=+${preprocessedBundlesCount} prunedRemote=${prunedRemoteKeys} localMb=${quotaStatus.totalMb}MB evictedLocal=${quotaStatus.evictedFiles}`;
-    appendSyncLog(syncLine);
-    console.log(`[SYNC-ONLY] ${syncLine}`);
+  if (!acquireIngestLock()) {
+    console.log("[SKIP] Another ingest-telemetry.mjs instance is currently active.");
     return;
   }
+  try {
+    const config = loadPreprocessConfig();
+    const state = loadCacheState();
+    let newBatchesCount = 0;
+    let newBattlesCount = 0;
+    let newSettingsLogsCount = 0;
+    let newDvrFilesCount = 0;
+    let preprocessedBundlesCount = 0;
+    let prunedRemoteKeys = 0;
 
-  // 6. On-Demand Anomaly & DVR Preprocessed Report Generation
-  const allAnomalies = state.records.flatMap((r) => {
-    const appVer = r.appVersion || r.scannerSettings?.appVersion || r.schemaVersion || "unknown";
-    const trainer = r.screenName || r.uploaderHandle || r.githubUser || "unknown";
-    return (r.anomalies || []).map((a) => ({
-      battleId: r.battleId,
-      screenName: trainer,
-      appVersion: appVer,
-      league: r.league,
-      teamName: r.teamName,
-      result: r.result,
-      userPokemon: r.userPokemon,
-      opponentsSeenOrder: r.opponentsSeenOrder,
-      userTeamSpecs: r.userTeamSpecs,
-      oppTeamSpecs: r.oppTeamSpecs,
-      ...a,
-    }));
-  });
+    if (!REPORT_ONLY && !REPROCESS_LOCAL) {
+      // 0. Sync User License Tiers from `/v1/admin/keys` & `/v1/admin/manifest`
+      try {
+        const keysData = await adminFetchJson("/v1/admin/keys");
+        const keysList = Array.isArray(keysData?.keys) ? keysData.keys : [];
+        for (const lic of keysList) {
+          if (!lic) continue;
+          const tier = normalizeTier(lic.tier);
+          for (const candidateName of [lic.boundScreenName, lic.screenName]) {
+            if (candidateName) {
+              state.userTiers[candidateName] = tier;
+              state.userTiers[String(candidateName).toLowerCase()] = tier;
+            }
+          }
+          if (Array.isArray(lic.claimedScreenNames)) {
+            for (const cName of lic.claimedScreenNames) {
+              if (cName) {
+                state.userTiers[cName] = tier;
+                state.userTiers[String(cName).toLowerCase()] = tier;
+              }
+            }
+          }
+        }
+      } catch {}
+      state.userTiers.sportsfan986 = "vip";
 
-  const battlesByAppVersion = {};
-  const anomaliesByAppVersion = {};
-  const battlesByTrainer = {};
-  for (const r of state.records) {
-    const ver = r.appVersion || r.scannerSettings?.appVersion || r.schemaVersion || "unknown";
-    const trainer = r.screenName || r.uploaderHandle || r.githubUser || "unknown";
-    battlesByAppVersion[ver] = (battlesByAppVersion[ver] || 0) + 1;
-    battlesByTrainer[trainer] = (battlesByTrainer[trainer] || 0) + 1;
-    const aCount = Array.isArray(r.anomalies) ? r.anomalies.length : 0;
-    anomaliesByAppVersion[ver] = (anomaliesByAppVersion[ver] || 0) + aCount;
+      // 1. Ingest Always-On Lower-Resolution Battle Telemetry Batches (`batches/...`)
+      const batchObjects = await listAllObjectsByPrefix("batches/");
+      for (const obj of batchObjects) {
+        const key = obj.key;
+        if (!key || !key.endsWith(".jsonl")) continue;
+        const batchId = path.basename(key, ".jsonl");
+
+        if (state.ingestedBatchIds[batchId] || state.ingestedKeys[key]) {
+          if (PRUNE_REMOTE) {
+            if (await adminDeleteObject(key)) prunedRemoteKeys++;
+          }
+          continue;
+        }
+
+        const rawJsonl = await adminFetchText(key);
+        if (!rawJsonl) continue;
+
+        const localBatchPath = path.join(BATCHES_DIR, `${batchId}.jsonl`);
+        fs.writeFileSync(localBatchPath, rawJsonl, "utf8");
+
+        const lines = rawJsonl
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter(Boolean);
+        const metaScreenName = obj.customMetadata?.screenName || "unknown";
+        const metaAppVer = obj.customMetadata?.appVersion || "unknown";
+
+        for (const line of lines) {
+          try {
+            const parsed = JSON.parse(line);
+            if (!parsed.screenName && metaScreenName !== "unknown") {
+              parsed.screenName = metaScreenName;
+            }
+            if (!parsed.appVersion && metaAppVer !== "unknown") {
+              parsed.appVersion = metaAppVer;
+            }
+            state.records.push(parsed);
+            newBattlesCount++;
+          } catch {}
+        }
+
+        state.ingestedBatchIds[batchId] = {
+          source: "cloudflare",
+          key,
+          screenName: metaScreenName,
+          appVersion: metaAppVer,
+          ingestedAt: new Date().toISOString(),
+          battleCount: lines.length,
+        };
+        state.ingestedKeys[key] = true;
+        newBatchesCount++;
+
+        if (PRUNE_REMOTE) {
+          if (await adminDeleteObject(key)) prunedRemoteKeys++;
+          const userMirrorKey = `users/${metaScreenName}/batches/${batchId}.jsonl`;
+          await adminDeleteObject(userMirrorKey);
+        }
+      }
+
+      // 2. Ingest Settings Change Audit Logs (`users/<screenName>/settings_changes/...`)
+      const userObjects = await listAllObjectsByPrefix("users/");
+      for (const obj of userObjects) {
+        const key = obj.key;
+        if (!key || !key.includes("/settings_changes/") || !key.endsWith(".jsonl")) continue;
+        if (state.ingestedKeys[key]) {
+          if (PRUNE_REMOTE && (await adminDeleteObject(key))) prunedRemoteKeys++;
+          continue;
+        }
+
+        const rawJsonl = await adminFetchText(key);
+        if (!rawJsonl) continue;
+
+        const screenName = obj.customMetadata?.screenName || key.split("/")[1] || "unknown";
+        const safeFile = key.replace(/[^A-Za-z0-9_.-]/g, "_");
+        fs.writeFileSync(path.join(SETTINGS_DIR, safeFile), rawJsonl, "utf8");
+
+        const lines = rawJsonl
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter(Boolean);
+        for (const line of lines) {
+          try {
+            const parsed = JSON.parse(line);
+            state.settingsChanges.push({ screenName, ...parsed });
+          } catch {}
+        }
+
+        state.ingestedKeys[key] = true;
+        newSettingsLogsCount++;
+
+        if (PRUNE_REMOTE && (await adminDeleteObject(key))) {
+          prunedRemoteKeys++;
+        }
+      }
+
+      // 3. Ingest 1-Battle DVR Bundles (`recordings/<screenName>/<battleId>_video.mp4` & `_deep_trace.jsonl`)
+      const recordingObjects = await listAllObjectsByPrefix("recordings/");
+      for (const obj of recordingObjects) {
+        const key = obj.key;
+        if (!key) continue;
+        const isVideo = key.endsWith("_video.mp4");
+        const isTrace = key.endsWith("_deep_trace.jsonl");
+        if (!isVideo && !isTrace) continue;
+        if (isVideo && SKIP_VIDEOS) continue;
+
+        const parts = key.split("/");
+        const screenName = obj.customMetadata?.screenName || parts[1] || "unknown";
+        const fileName = parts.slice(2).join("_");
+        const userRecDir = path.join(RECORDINGS_DIR, screenName);
+        fs.mkdirSync(userRecDir, { recursive: true });
+        const localFilePath = path.join(userRecDir, fileName);
+        const battleId =
+          obj.customMetadata?.battleId ||
+          fileName.replace(/_(video\.mp4|deep_trace\.jsonl)$/, "");
+        const existingBundle = state.dvrBundles[battleId];
+        const remoteManuallyFlagged =
+          obj.customMetadata?.manuallyFlagged === "true" ||
+          obj.customMetadata?.manuallyFlagged === true ||
+          Boolean(obj.customMetadata?.userIssueNote && String(obj.customMetadata.userIssueNote).trim() !== "");
+        const remoteIssueNote = String(obj.customMetadata?.userIssueNote || "").trim();
+        const isNewManualFlagUpgrade =
+          (remoteManuallyFlagged && !existingBundle?.manuallyFlagged) ||
+          (remoteIssueNote && remoteIssueNote !== (existingBundle?.userIssueNote || ""));
+
+        if (state.ingestedKeys[key] && fs.existsSync(localFilePath) && !isNewManualFlagUpgrade) {
+          if (PRUNE_REMOTE && (await adminDeleteObject(key))) prunedRemoteKeys++;
+          continue;
+        }
+
+        if (isTrace) {
+          const text = await adminFetchText(key);
+          if (text === null) continue;
+          fs.writeFileSync(localFilePath, text, "utf8");
+        } else if (isVideo) {
+          const bytes = await adminFetchBytes(key);
+          if (!bytes) continue;
+          fs.writeFileSync(localFilePath, bytes);
+        }
+
+        const resolvedTier = resolveUserTier(screenName, state.userTiers);
+        const bundle = existingBundle || {
+          battleId,
+          screenName,
+          userTier: resolvedTier,
+          appVersion: obj.customMetadata?.appVersion || "unknown",
+          league: obj.customMetadata?.league || "Unknown",
+          result: obj.customMetadata?.result || "UNKNOWN",
+          uploadedAt: obj.customMetadata?.uploadedAt || obj.uploaded,
+        };
+        bundle.userTier = resolvedTier;
+        if (isVideo) bundle.videoPath = localFilePath;
+        if (isTrace) bundle.tracePath = localFilePath;
+        if (remoteManuallyFlagged) bundle.manuallyFlagged = true;
+        if (remoteIssueNote) bundle.userIssueNote = remoteIssueNote;
+        if (obj.customMetadata?.uploadReason) bundle.uploadReason = obj.customMetadata.uploadReason;
+        state.dvrBundles[battleId] = bundle;
+
+        state.ingestedKeys[key] = true;
+        newDvrFilesCount++;
+
+        if (PRUNE_REMOTE && (await adminDeleteObject(key))) {
+          prunedRemoteKeys++;
+        }
+      }
+    }
+
+    // 3b. Synchronize Line 0 BATTLE_DVR_SUMMARY_HEADER from all local _deep_trace.jsonl files
+    syncLocalDeepTraceHeadersIntoState(state);
+
+    // 4. Enrich DVR Bundles with Tier + Priority Metadata & Run Local CPU + ffmpeg Preprocessing
+    for (const bundle of Object.values(state.dvrBundles)) {
+      const tier = resolveUserTier(bundle.screenName, state.userTiers);
+      bundle.userTier = tier;
+      const prio = computePriorityMetadata({
+        manuallyFlagged: Boolean(bundle.manuallyFlagged),
+        userTier: tier,
+        severity: bundle.manuallyFlagged ? "HIGH" : "WARN",
+      });
+      bundle.priorityBucket = prio.priorityBucket;
+      bundle.compositePriorityScore = prio.compositePriorityScore;
+      if (preprocessDvrBundle(bundle, config, REPROCESS_LOCAL)) {
+        preprocessedBundlesCount++;
+      }
+    }
+
+    saveCacheState(state);
+
+    // 5. Enforce 1.0 GB Local Storage Cap
+    const quotaStatus = enforceLocalStorageQuota(config, state);
+
+    if (SYNC_ONLY) {
+      const syncLine = `batches=+${newBatchesCount} battles=+${newBattlesCount} dvrFiles=+${newDvrFilesCount} preprocessed=+${preprocessedBundlesCount} prunedRemote=${prunedRemoteKeys} localMb=${quotaStatus.totalMb}MB evictedLocal=${quotaStatus.evictedFiles}`;
+      appendSyncLog(syncLine);
+      console.log(`[SYNC-ONLY] ${syncLine}`);
+      return;
+    }
+
+    // 6. On-Demand Anomaly & DVR Preprocessed Report Generation (Sorted by Paid-First Priority P1 > P2 > P3 > P4)
+    const allAnomalies = state.records.flatMap((r) => {
+      const appVer = r.appVersion || r.scannerSettings?.appVersion || r.schemaVersion || "unknown";
+      const trainer = r.screenName || r.uploaderHandle || r.githubUser || "unknown";
+      const bundle = state.dvrBundles[r.battleId] || null;
+      const isManuallyFlagged = Boolean(r.manuallyFlagged || bundle?.manuallyFlagged);
+      const userIssueNote = r.userIssueNote || bundle?.userIssueNote || "";
+      const tier = resolveUserTier(trainer, state.userTiers);
+      return (r.anomalies || []).map((a) => {
+        const prio = computePriorityMetadata({
+          manuallyFlagged: isManuallyFlagged || a.code === "USER_MANUAL_ISSUE_REPORT",
+          userTier: tier,
+          severity: a.severity,
+        });
+        const localDiagnosis = classifyAnomalyLocally(a, r);
+        return {
+          priorityBucket: prio.priorityBucket,
+          compositePriorityScore: prio.compositePriorityScore,
+          userTier: prio.userTier,
+          userTierLabel: prio.userTierLabel,
+          isPaidTier: prio.isPaidTier,
+          manuallyFlagged: prio.manuallyFlagged,
+          userIssueNote: userIssueNote || undefined,
+          battleId: r.battleId,
+          timestampMs: r.timestampMs || 0,
+          screenName: trainer,
+          appVersion: appVer,
+          league: r.league,
+          teamName: r.teamName,
+          result: r.result,
+          userPokemon: r.userPokemon,
+          opponentsSeenOrder: r.opponentsSeenOrder,
+          userTeamSpecs: r.userTeamSpecs,
+          oppTeamSpecs: r.oppTeamSpecs,
+          ...a,
+          localDiagnosis,
+        };
+      });
+    });
+
+    // Sort all anomalies by Paid-First Priority:
+    // P1 (Paid Manual: VIP > Pro > Supporter) -> P2 (Free Manual) -> P3 (Paid Auto: VIP > Pro > Supporter, HIGH > WARN) -> P4 (Free Auto: HIGH > WARN)
+    allAnomalies.sort((a, b) => {
+      if (b.compositePriorityScore !== a.compositePriorityScore) {
+        return b.compositePriorityScore - a.compositePriorityScore;
+      }
+      return (b.timestampMs || 0) - (a.timestampMs || 0);
+    });
+
+    const sortedDvrBundles = Object.values(state.dvrBundles).sort((a, b) => {
+      if ((b.compositePriorityScore || 0) !== (a.compositePriorityScore || 0)) {
+        return (b.compositePriorityScore || 0) - (a.compositePriorityScore || 0);
+      }
+      return String(b.uploadedAt || "").localeCompare(String(a.uploadedAt || ""));
+    });
+
+    const battlesByAppVersion = {};
+    const anomaliesByAppVersion = {};
+    const battlesByTrainer = {};
+    const anomaliesByPriorityBucket = {
+      P1_PAID_MANUAL: 0,
+      P2_FREE_MANUAL: 0,
+      P3_PAID_AUTO: 0,
+      P4_FREE_AUTO: 0,
+    };
+    const anomaliesByLocalDiagnosis = {};
+
+    for (const r of state.records) {
+      const ver = r.appVersion || r.scannerSettings?.appVersion || r.schemaVersion || "unknown";
+      const trainer = r.screenName || r.uploaderHandle || r.githubUser || "unknown";
+      battlesByAppVersion[ver] = (battlesByAppVersion[ver] || 0) + 1;
+      battlesByTrainer[trainer] = (battlesByTrainer[trainer] || 0) + 1;
+      const aCount = Array.isArray(r.anomalies) ? r.anomalies.length : 0;
+      anomaliesByAppVersion[ver] = (anomaliesByAppVersion[ver] || 0) + aCount;
+    }
+    for (const a of allAnomalies) {
+      anomaliesByPriorityBucket[a.priorityBucket] =
+        (anomaliesByPriorityBucket[a.priorityBucket] || 0) + 1;
+      const cat = a.localDiagnosis?.category || "UNCLASSIFIED";
+      anomaliesByLocalDiagnosis[cat] = (anomaliesByLocalDiagnosis[cat] || 0) + 1;
+    }
+
+    const summary = {
+      updatedAt: new Date().toISOString(),
+      workerUrl: DEFAULT_WORKER_URL,
+      ffmpegPath: FFMPEG_BIN,
+      preprocessConfigPath: CONFIG_PATH,
+      localStorageMb: quotaStatus.totalMb,
+      maxLocalStorageMb: config.storage?.maxLocalStorageMb ?? 1024,
+      newlyIngestedBatches: newBatchesCount,
+      newlyIngestedBattles: newBattlesCount,
+      newlyIngestedSettingsLogs: newSettingsLogsCount,
+      newlyIngestedDvrFiles: newDvrFilesCount,
+      newlyPreprocessedDvrBundles: preprocessedBundlesCount,
+      prunedRemoteKeys,
+      totalCachedBatches: Object.keys(state.ingestedBatchIds).length,
+      totalCachedBattles: state.records.length,
+      totalCachedDvrBundles: Object.keys(state.dvrBundles).length,
+      totalAnomalies: allAnomalies.length,
+      userTiers: state.userTiers,
+      anomaliesByPriorityBucket,
+      anomaliesByLocalDiagnosis,
+      battlesByTrainer,
+      battlesByAppVersion,
+      anomaliesByAppVersion,
+      prioritizedDvrBundles: sortedDvrBundles.slice(0, 25),
+      prioritizedAnomalies: allAnomalies.slice(0, 40),
+      recentDvrBundles: sortedDvrBundles.slice(0, 15),
+      recentAnomalies: allAnomalies.slice(0, 25),
+    };
+    fs.writeFileSync(SUMMARY_FILE, JSON.stringify(summary, null, 2), "utf8");
+    console.log(JSON.stringify(summary, null, 2));
+  } finally {
+    releaseIngestLock();
   }
-
-  const summary = {
-    updatedAt: new Date().toISOString(),
-    workerUrl: DEFAULT_WORKER_URL,
-    ffmpegPath: FFMPEG_BIN,
-    preprocessConfigPath: CONFIG_PATH,
-    localStorageMb: quotaStatus.totalMb,
-    maxLocalStorageMb: config.storage?.maxLocalStorageMb ?? 1024,
-    newlyIngestedBatches: newBatchesCount,
-    newlyIngestedBattles: newBattlesCount,
-    newlyIngestedSettingsLogs: newSettingsLogsCount,
-    newlyIngestedDvrFiles: newDvrFilesCount,
-    newlyPreprocessedDvrBundles: preprocessedBundlesCount,
-    prunedRemoteKeys,
-    totalCachedBatches: Object.keys(state.ingestedBatchIds).length,
-    totalCachedBattles: state.records.length,
-    totalCachedDvrBundles: Object.keys(state.dvrBundles).length,
-    totalAnomalies: allAnomalies.length,
-    battlesByTrainer,
-    battlesByAppVersion,
-    anomaliesByAppVersion,
-    recentDvrBundles: Object.values(state.dvrBundles).slice(-15),
-    recentAnomalies: allAnomalies.slice(-25),
-  };
-  fs.writeFileSync(SUMMARY_FILE, JSON.stringify(summary, null, 2), "utf8");
-  console.log(JSON.stringify(summary, null, 2));
 }
 
 async function main() {

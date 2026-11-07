@@ -2333,6 +2333,27 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
 
         // Prepend Battle Summary Header Line 0 to deep_trace.jsonl
         val resolvedDvrVer = summaryRecord.appVersion.takeIf { it.isNotBlank() && it != "5.10" } ?: APP_VERSION
+        val cleanNote = userIssueNote.trim()
+        val enrichedAnomalies = if (wasExplicitlyFlagged && summaryRecord.anomalies.none { it.type == "USER_MANUAL_ISSUE_REPORT" }) {
+            summaryRecord.anomalies + BattleAnomalyRecord(
+                type = "USER_MANUAL_ISSUE_REPORT",
+                severity = "HIGH",
+                tSec = 0.0,
+                actor = "user",
+                species = summaryRecord.userTeamSpecs.firstOrNull()?.species.orEmpty(),
+                detail = if (cleanNote.isNotEmpty()) "User-flagged DVR issue report: $cleanNote" else "User manually flagged this battle for diagnostic review."
+            )
+        } else {
+            summaryRecord.anomalies
+        }
+        val enrichedSummary = summaryRecord.copy(
+            appVersion = resolvedDvrVer,
+            schemaVersion = resolvedDvrVer,
+            uploaderHandle = safeUser,
+            anomalies = enrichedAnomalies,
+            anomalyCount = enrichedAnomalies.size,
+            hasHighSeverityAnomaly = summaryRecord.hasHighSeverityAnomaly || wasExplicitlyFlagged
+        )
         val headerJson = gson.toJson(
             mapOf(
                 "recordType" to "BATTLE_DVR_SUMMARY_HEADER",
@@ -2343,17 +2364,24 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
                 "videoRepoPath" to videoRepoPath,
                 "traceRepoPath" to traceRepoPath,
                 "manuallyFlagged" to wasExplicitlyFlagged,
-                "battleSummary" to summaryRecord.copy(
-                    appVersion = resolvedDvrVer,
-                    schemaVersion = resolvedDvrVer,
-                    uploaderHandle = safeUser
-                )
+                "userIssueNote" to cleanNote,
+                "uploadReason" to uploadReason,
+                "battleSummary" to enrichedSummary
             )
         ) + "\n"
         val traceBodyText = if (traceFile.exists()) traceFile.readText(Charsets.UTF_8) else ""
         val alreadyHasHeader = traceBodyText.startsWith("{\"recordType\":\"BATTLE_DVR_SUMMARY_HEADER\"")
-        val combinedTraceText = if (alreadyHasHeader) traceBodyText else (headerJson + traceBodyText)
-        if (!alreadyHasHeader && traceFile.exists()) {
+        val combinedTraceText = if (alreadyHasHeader) {
+            if (wasExplicitlyFlagged || cleanNote.isNotEmpty()) {
+                val nlIdx = traceBodyText.indexOf('\n')
+                if (nlIdx >= 0) headerJson + traceBodyText.substring(nlIdx + 1) else headerJson
+            } else {
+                traceBodyText
+            }
+        } else {
+            headerJson + traceBodyText
+        }
+        if ((!alreadyHasHeader || wasExplicitlyFlagged || cleanNote.isNotEmpty()) && traceFile.exists()) {
             try {
                 traceFile.writeText(combinedTraceText, Charsets.UTF_8)
             } catch (_: Exception) {}
@@ -2464,17 +2492,33 @@ internal fun OverlayService.Companion.prependDvrSummaryHeaderIfNeededStatic(
     gson: Gson,
     battleId: String,
     summaryRecord: AiTelemetryBattleRecordV510,
-    traceFile: File
+    traceFile: File,
+    manuallyFlagged: Boolean = false,
+    userIssueNote: String = ""
 ) {
     if (!traceFile.exists()) return
     try {
         val text = traceFile.readText(Charsets.UTF_8)
-        if (text.startsWith("{\"recordType\":\"BATTLE_DVR_SUMMARY_HEADER\"")) return
+        val alreadyHasHeader = text.startsWith("{\"recordType\":\"BATTLE_DVR_SUMMARY_HEADER\"")
+        val cleanNote = userIssueNote.trim()
+        if (alreadyHasHeader && !manuallyFlagged && cleanNote.isEmpty()) return
         val devHash = getDeviceTelemetryHashStatic(prefs)
         val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
             .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
         val cleanId = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
         val resolvedVer = summaryRecord.appVersion.takeIf { it.isNotBlank() && it != "5.10" } ?: APP_VERSION
+        val enrichedAnomalies = if (manuallyFlagged && summaryRecord.anomalies.none { it.type == "USER_MANUAL_ISSUE_REPORT" }) {
+            summaryRecord.anomalies + BattleAnomalyRecord(
+                type = "USER_MANUAL_ISSUE_REPORT",
+                severity = "HIGH",
+                tSec = 0.0,
+                actor = "user",
+                species = summaryRecord.userTeamSpecs.firstOrNull()?.species.orEmpty(),
+                detail = if (cleanNote.isNotEmpty()) "User-flagged DVR issue report: $cleanNote" else "User manually flagged this battle for diagnostic review."
+            )
+        } else {
+            summaryRecord.anomalies
+        }
         val headerJson = gson.toJson(
             mapOf(
                 "recordType" to "BATTLE_DVR_SUMMARY_HEADER",
@@ -2484,14 +2528,25 @@ internal fun OverlayService.Companion.prependDvrSummaryHeaderIfNeededStatic(
                 "screenName" to safeUser,
                 "videoRepoPath" to "recordings/$safeUser/${cleanId}_video.mp4",
                 "traceRepoPath" to "recordings/$safeUser/${cleanId}_deep_trace.jsonl",
+                "manuallyFlagged" to manuallyFlagged,
+                "userIssueNote" to cleanNote,
                 "battleSummary" to summaryRecord.copy(
                     appVersion = resolvedVer,
                     schemaVersion = resolvedVer,
-                    uploaderHandle = safeUser
+                    uploaderHandle = safeUser,
+                    anomalies = enrichedAnomalies,
+                    anomalyCount = enrichedAnomalies.size,
+                    hasHighSeverityAnomaly = summaryRecord.hasHighSeverityAnomaly || manuallyFlagged
                 )
             )
         ) + "\n"
-        traceFile.writeText(headerJson + text, Charsets.UTF_8)
+        val updatedText = if (alreadyHasHeader) {
+            val nlIdx = text.indexOf('\n')
+            if (nlIdx >= 0) headerJson + text.substring(nlIdx + 1) else headerJson
+        } else {
+            headerJson + text
+        }
+        traceFile.writeText(updatedText, Charsets.UTF_8)
     } catch (_: Exception) {}
 }
 
@@ -3222,7 +3277,34 @@ internal fun OverlayService.Companion.submitManualDvrIssueReportBlocking(
     val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
         .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
 
-    val summaryRecord = AiTelemetryBattleRecordV510(
+    val pendingLogs = loadPendingAiTelemetryLogsStatic(prefs, gson)
+    var existingSummary = pendingLogs.firstOrNull {
+        it.battleId.replace(Regex("[^a-zA-Z0-9_-]"), "") == cleanId
+    }
+    if (existingSummary == null && traceFile.exists()) {
+        try {
+            val firstLine = traceFile.bufferedReader(Charsets.UTF_8).use { it.readLine() }.orEmpty()
+            if (firstLine.startsWith("{\"recordType\":\"BATTLE_DVR_SUMMARY_HEADER\"")) {
+                val obj = JsonParser.parseString(firstLine).asJsonObject
+                if (obj.has("battleSummary") && obj.get("battleSummary").isJsonObject) {
+                    existingSummary = gson.fromJson(obj.get("battleSummary"), AiTelemetryBattleRecordV510::class.java)
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    val summaryRecord = existingSummary?.copy(
+        schemaVersion = APP_VERSION,
+        appVersion = APP_VERSION,
+        uploaderHandle = safeUser,
+        deviceHash = devHash,
+        league = league.ifBlank { existingSummary.league },
+        result = if (result != "UNKNOWN" && result.isNotBlank()) result else existingSummary.result,
+        userTeamSpecs = if (existingSummary.userTeamSpecs.isNotEmpty()) existingSummary.userTeamSpecs else userTeamNames.mapIndexed { idx, s -> AiTelemetrySlotSpec(slotIndex = idx, species = s) },
+        oppTeamSpecs = if (existingSummary.oppTeamSpecs.isNotEmpty()) existingSummary.oppTeamSpecs else oppTeamNames.mapIndexed { idx, s -> AiTelemetryOppSlotSpec(slotIndex = idx, species = s) },
+        dvrVideoPath = "recordings/$safeUser/${cleanId}_video.mp4",
+        dvrDeepTracePath = "recordings/$safeUser/${cleanId}_deep_trace.jsonl"
+    ) ?: AiTelemetryBattleRecordV510(
         schemaVersion = APP_VERSION,
         battleId = cleanId,
         timestampMs = System.currentTimeMillis(),

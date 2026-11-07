@@ -1,4 +1,28 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.03`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.04`)
+
+---
+
+## v7.04 (2026-11-07) — Paid-First Telemetry Priority (`P1`–`P4`), Zero-Token Local Root-Cause Classifier, Manual Bug Report Ingestion Fixes & 5 Combat/Vision Engine Fixes
+*Telemetry pipeline, manual bug report ingestion, and combat/vision engine accuracy release (`v7.04`, `versionCode = 1704`, Cloudflare Worker `v7.0.4`) introducing Paid-First issue prioritization (`P1: Paid Manual` > `P2: Free Manual` > `P3: Paid Auto` [`VIP` > `Pro` > `Supporter`] > `P4: Free Auto`), a zero-token local root-cause classifier in `scripts/ingest-telemetry.mjs`, end-to-end preservation of manual DVR bug report flags and notes across Android/Cloudflare/Local Ingestion, and 5 precision fixes for CMP tie dual-charge transitions, swap-during-cutscene move banner retention, post-cutscene camera-zoom `oppHpRowY` spikes, energy-feasible `HP_DELTA` move inference, and updated `Air Cutter` (`45p/35E`) move stats.*
+
+- **v7.04 — Enhancement 1: Paid-First Issue Priority Ordering (`P1` > `P2` > `P3` > `P4`) & Zero-Token Local Root-Cause Classifier (`scripts/ingest-telemetry.mjs`, `scripts/telemetry-preprocess-config.json`)**:
+  - **Paid-First Priority Buckets**: Joins trainer screen names against `/v1/admin/keys` (`VIP` > `Pro` > `Supporter` > `Free`) and sorts all anomalies and DVR bundles in `latest_anomaly_report.json` by:
+    1. **`P1_PAID_MANUAL`**: Paid-tier manually flagged issues (`VIP` > `Pro` > `Supporter`).
+    2. **`P2_FREE_MANUAL`**: Free-tier manually flagged issues.
+    3. **`P3_PAID_AUTO`**: Paid-tier auto-flagged issues (`VIP` > `Pro` > `Supporter`, then `HIGH` > `WARN`).
+    4. **`P4_FREE_AUTO`**: Free-tier auto-flagged issues (`HIGH` > `WARN`).
+  - **Zero-Token Local Root-Cause Classifier (`classifyAnomalyLocally`)**: Deterministically cross-references `timelineEvents`, `postCutsceneHpAudits`, and `energyMutationLedger` locally in Node.js to classify known combat/vision patterns (`CMP_TIE_DUAL_CHARGE_TRANSITION`, `SWAP_DURING_CUTSCENE_BANNER_CLEARED`, `POST_CUTSCENE_CAMERA_ZOOM_ROW_Y_SPIKE`, `HP_DELTA_RETROACTIVE_ENERGY_MISMATCH`, `LEGACY_STATIC_MOVE_STATS_OVERESTIMATE`, `DELAYED_POST_KO_REPLACEMENT_OCR`, `ONE_FAST_MOVE_TURN_BOUNDARY_VARIANCE`) with zero AI token usage.
+  - **Storage Quota & Preprocessor Hardening**: Added process lockfile (`ingest.lock`) and atomic state merging, fixed the evicted `.mp4` re-preprocess check (`videoExistsOnDisk`), capped `04_hp_change` keyframe extraction (`maxEventsPerBattle: 25`, `cooldownFrames: 25`), and protected `_deep_trace.jsonl`, `digest.json`, and manually flagged bundles from 1 GB quota eviction.
+- **v7.04 — Enhancement 2: End-to-End Manual Bug Report Ingestion Fixes (`BattleDvrEngine.kt`, `GitHubCloudSync.kt`, `cloudflare/telemetry-worker/worker.mjs`, `scripts/ingest-telemetry.mjs`)**:
+  - **In-Place Header Update (`prependDvrSummaryHeaderIfNeededStatic` & `uploadBattleDvrBundleToGitHubBlocking`)**: Replaces Line 0 (`BATTLE_DVR_SUMMARY_HEADER`) in `_deep_trace.jsonl` whenever `manuallyFlagged == true` or `userIssueNote` is provided, and attaches a `HIGH`-severity `USER_MANUAL_ISSUE_REPORT` anomaly so post-battle and replay-menu bug reports are never lost when a header was already prepended.
+  - **Full Summary Preservation (`submitManualDvrIssueReportBlocking`)**: Preserves the existing `AiTelemetryBattleRecordV510` from Line 0 of `traceFile` (or pending telemetry logs) instead of overwriting it with an empty summary record.
+  - **Cloudflare Worker Metadata & Manifest Persistence (`POST /v1/dvr`)**: Persists `userIssueNote`, `uploadReason`, `manuallyFlagged`, and resolved `userTier` on R2/KV object metadata and `manifest.recentDvr`, and re-ingests manual flag upgrades in `scripts/ingest-telemetry.mjs` even if the initial auto-DVR was already ingested.
+- **v7.04 — Enhancement 3: 5 Combat & Vision Engine Accuracy Fixes (`OverlayService.kt`, `PokemonDatabase.kt`)**:
+  - **CMP Tie Dual `CHARGED_ATTACK` Timestamp & Post-Minigame HP Drain Fix**: Uses `getElapsedBattleSeconds(pendingChargedAttackStartMs)` in `Case 2: Genuine CMP Tie Transition` (eliminating the `0.02s–0.08s` timestamp collision with the 2nd CMP throw), enables `isPostUserMinigameOppDrainWindow` in `canSampleOppHpBars` so opponent HP drain is captured before the 2nd CMP throw starts, and extends Section 1B's retroactive player `CHARGED_ATTACK` HP settle window to `12000ms` when an opponent charged move intervenes.
+  - **Swap-During-Cutscene Move Banner Retention**: Preserves `lastDetectedBannerMoveName` / `lastDetectedBannerMoveActor` across `executePlayerSwitch` and `handleOpponentLines` while `pendingChargedAttackActor.isNotEmpty()`, falls back to `lastUserChargeResolvedMoveName` in Section 4, and updates `battleTimelineEvents` in `handleMidBannerUsedMoveLines`'s retroactive user branch.
+  - **Post-Cutscene Camera-Zoom `oppHpRowY` Guard**: Tracks `oppSlotBaselineHpRowY` in Section 1B, rejects upward camera-zoom row-Y distortion dips (`sampledOppHpRowY < 0.31h` or `>= 0.038h` above baseline), and fast-recovers (`>= 2` frames) from `<= 15%` false locks.
+  - **Energy-Feasible `HP_DELTA` Move Inference & Retroactive Cost Sync**: Filters `HP_DELTA` candidate moves by `preThrowEnergy + oppFastEnergy` when a feasible move matches within `18%`, and recalculates `requiredMoveEnergy`, `energyDeficit`, and `expectedMoveDmgPct` when Section 1A retroactively updates `inferredMoveName`.
+  - **Updated `Air Cutter` Stats & Post-KO Replacement Fast-Move Catch-Up**: Updated `Air Cutter` in `PokemonDatabase.kt` from legacy `60 power / 40E` to `45 power / 35E` (and added `Air Cutter` to `Charizard`'s fallback pool), and credited elapsed post-KO fast-move turns in `handleOpponentLines` when a replacement opponent's nameplate OCR resolves after an immediate charged move.
 
 ---
 

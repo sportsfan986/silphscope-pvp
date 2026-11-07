@@ -503,7 +503,15 @@ internal fun OverlayService.finalizeAndUploadOneBattleDvrAsync(
         } catch (_: Exception) {}
 
         // Prepend BATTLE_DVR_SUMMARY_HEADER to localTrace so local replay & cloud upload both have full 3v3 metadata
-        OverlayService.prependDvrSummaryHeaderIfNeededStatic(prefs, gson, battleId, summaryRecord, localTrace)
+        OverlayService.prependDvrSummaryHeaderIfNeededStatic(
+            prefs = prefs,
+            gson = gson,
+            battleId = battleId,
+            summaryRecord = summaryRecord,
+            traceFile = localTrace,
+            manuallyFlagged = wasExplicitlyFlaggedForDiag,
+            userIssueNote = explicitBugReportNote
+        )
         OverlayService.enforceLocalDvrReplaysQuotaStatic(filesDir, prefs, gson)
 
         Handler(Looper.getMainLooper()).post {

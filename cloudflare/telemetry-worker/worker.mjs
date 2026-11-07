@@ -4278,6 +4278,28 @@ export default {
         const traceKey = `recordings/${screenName}/${battleId}_deep_trace.jsonl`;
         const videoByteLen = hasVideo ? videoBytes.byteLength : 0;
         const isManual = isManuallyFlaggedBattle(metadata, deepTraceText);
+        const userIssueNoteClean = String(metadata.userIssueNote || '').trim();
+        const uploadReasonClean = String(metadata.uploadReason || '').trim();
+        let resolvedUserTier = 'free';
+        if (String(screenName || '').toLowerCase() === 'sportsfan986') {
+          resolvedUserTier = 'vip';
+        } else {
+          try {
+            const licMap = (await getJson(store, LICENSE_KEYS_PATH)) || {};
+            for (const rec of Object.values(licMap)) {
+              if (!rec) continue;
+              const claimed = Array.isArray(rec.claimedScreenNames) ? rec.claimedScreenNames : [];
+              const matchName =
+                (rec.boundScreenName && String(rec.boundScreenName).toLowerCase() === String(screenName).toLowerCase()) ||
+                (rec.screenName && String(rec.screenName).toLowerCase() === String(screenName).toLowerCase()) ||
+                claimed.some((n) => String(n).toLowerCase() === String(screenName).toLowerCase());
+              if (matchName) {
+                resolvedUserTier = String(rec.tier || 'supporter').toLowerCase();
+                break;
+              }
+            }
+          } catch (_) {}
+        }
 
         const storeMeta = {
           screenName,
@@ -4289,6 +4311,9 @@ export default {
           frameCount: String(frameCount),
           uploadedAt: now.toISOString(),
           manuallyFlagged: String(isManual),
+          userIssueNote: userIssueNoteClean,
+          uploadReason: uploadReasonClean,
+          userTier: resolvedUserTier,
         };
 
         if (hasTrace) {
@@ -4322,24 +4347,35 @@ export default {
                 u.dvrCount = (u.dvrCount || 0) + 1;
                 u.lastAppVersion = appVersion;
                 u.lastSeenAt = now.toISOString();
+                u.tier = resolvedUserTier;
                 m.users[screenName] = u;
 
                 if (!Array.isArray(m.recentDvr)) m.recentDvr = [];
-                m.recentDvr.unshift({
+                const existingIdx = m.recentDvr.findIndex(
+                  (d) => d && d.battleId === battleId && d.screenName === screenName
+                );
+                const dvrEntry = {
                   battleId,
                   screenName,
-                  videoKey: hasVideo ? videoKey : null,
-                  traceKey: hasTrace ? traceKey : null,
-                  videoBytes: videoByteLen,
-                  frameCount,
+                  userTier: resolvedUserTier,
+                  videoKey: hasVideo ? videoKey : (existingIdx >= 0 ? m.recentDvr[existingIdx].videoKey : null),
+                  traceKey: hasTrace ? traceKey : (existingIdx >= 0 ? m.recentDvr[existingIdx].traceKey : null),
+                  videoBytes: videoByteLen || (existingIdx >= 0 ? m.recentDvr[existingIdx].videoBytes : 0),
+                  frameCount: frameCount || (existingIdx >= 0 ? m.recentDvr[existingIdx].frameCount : 0),
                   appVersion,
                   versionCode,
                   league,
                   result,
                   matchupSummary,
                   uploadedAt: now.toISOString(),
-                  manuallyFlagged: isManual,
-                });
+                  manuallyFlagged: isManual || (existingIdx >= 0 && Boolean(m.recentDvr[existingIdx].manuallyFlagged)),
+                  userIssueNote: userIssueNoteClean || (existingIdx >= 0 ? m.recentDvr[existingIdx].userIssueNote || '' : ''),
+                  uploadReason: uploadReasonClean || (existingIdx >= 0 ? m.recentDvr[existingIdx].uploadReason || '' : ''),
+                };
+                if (existingIdx >= 0) {
+                  m.recentDvr.splice(existingIdx, 1);
+                }
+                m.recentDvr.unshift(dvrEntry);
                 if (m.recentDvr.length > 250) m.recentDvr.length = 250;
               });
             } catch (e) {
