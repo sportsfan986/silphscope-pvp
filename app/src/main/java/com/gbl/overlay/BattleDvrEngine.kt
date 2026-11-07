@@ -599,7 +599,9 @@ internal fun OverlayService.schedulePostBattleDvrAutoUploadJob(
                 mp4File = localMp4,
                 traceFile = localTrace,
                 deleteFilesOnSuccess = false,
-                uploadReason = diagReason
+                userIssueNote = cleanBugNote,
+                uploadReason = diagReason,
+                wasExplicitlyFlagged = wasExplicitlyFlaggedForDiag
             )
             if (!dvrOk) {
                 // Queue a copy in cacheDir for background retry

@@ -15,6 +15,7 @@ bucket_name = "silphscope-replays"
 [vars]
 WORKER_VERSION = "7.0.2"
 TELEGRAM_NOTIFY_TELEMETRY_BATCHES = "false"
+TELEGRAM_NOTIFY_ONLY_MANUAL_DVR = "true"
 GLOBAL_MAX_R2_STORAGE_GB = "9.0"
 
 # Secrets configured via `npx wrangler secret put <NAME>`:

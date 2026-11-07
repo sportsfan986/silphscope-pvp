@@ -2314,7 +2314,8 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
     traceFile: File,
     deleteFilesOnSuccess: Boolean = true,
     userIssueNote: String = "",
-    uploadReason: String = ""
+    uploadReason: String = "",
+    wasExplicitlyFlagged: Boolean = false
 ): Pair<Boolean, String> {
     OverlayService.isDvrUploadInFlight = true
     return try {
@@ -2341,6 +2342,7 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
                 "screenName" to safeUser,
                 "videoRepoPath" to videoRepoPath,
                 "traceRepoPath" to traceRepoPath,
+                "manuallyFlagged" to wasExplicitlyFlagged,
                 "battleSummary" to summaryRecord.copy(
                     appVersion = resolvedDvrVer,
                     schemaVersion = resolvedDvrVer,
@@ -2382,7 +2384,9 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
                 "matchupSummary" to matchupSummary,
                 "frameCount" to frameCount,
                 "userIssueNote" to userIssueNote,
-                "uploadReason" to uploadReason
+                "uploadReason" to uploadReason,
+                "manuallyFlagged" to wasExplicitlyFlagged,
+                "wasExplicitlyFlagged" to wasExplicitlyFlagged
             )
         )
 
@@ -3235,7 +3239,8 @@ internal fun OverlayService.Companion.submitManualDvrIssueReportBlocking(
         traceFile = traceFile,
         deleteFilesOnSuccess = mp4File.parentFile == cacheDir,
         userIssueNote = userIssueNote.ifBlank { "User-submitted DVR issue report from Replay menu" },
-        uploadReason = "Manual Replay Issue Report"
+        uploadReason = "Manual Replay Issue Report",
+        wasExplicitlyFlagged = true
     )
 }
 
