@@ -1,5 +1,5 @@
-import { type FastMove, type TeamMember, type LeagueType, getPinnedShow6LimitedMetas, getEnabledShow6Leagues, getLimitedMetaSheetAliases, getLeagueCpCap, isMegaOrPrimalSpecies, hasMultipleMegas, isMegaAllowedInLeague, isBattleFrontierLeague, normalizeLeagueName, type TeamPreset, getTypeMultiplier, POKEMON_DATABASE, findPokemonByName, calculateChargedDamage, computeEffectiveStatsForLeague, LIVE_RANKINGS_MAP, isDominatedSameTypeChargedPair, simulateTurnByTurnChargedCycle, buildChargedMoveFromName, extractBaseSpeciesKey, getRecommendedMovesForPokemon, getLeagueTop3Template, resolveMegaPlusMove } from "./pokemonDb";
-import { type MatchupTierThresholds, getStoredMatchupTierThresholds, ALL_18_TYPES, resolveCombatPokemonForEngine, buildCombatantCacheKey, getAvailableMovePoolForPokemon, evaluateDiscreteShieldBattleRating, type PositionWeightedMatchupRatings, evaluatePositionWeightedBr } from "./combatSimulator";
+import { type FastMove, type TeamMember, type LeagueType, getPinnedShow6LimitedMetas, getEnabledShow6Leagues, getLimitedMetaSheetAliases, getLeagueCpCap, isMegaOrPrimalSpecies, hasMultipleMegas, isMegaAllowedInLeague, isBattleFrontierLeague, normalizeLeagueName, type TeamPreset, getTypeMultiplier, POKEMON_DATABASE, findPokemonByName, calculateChargedDamage, computeEffectiveStatsForLeague, LIVE_RANKINGS_MAP, isDominatedSameTypeChargedPair, simulateTurnByTurnChargedCycle, buildChargedMoveFromName, extractBaseSpeciesKey, getRecommendedMovesForPokemon, getLeagueTop3Template, resolveMegaPlusMove, registerPokemonDbEngineHooks } from "./pokemonDb";
+import { type MatchupTierThresholds, getStoredMatchupTierThresholds, ALL_18_TYPES, resolveCombatPokemonForEngine, buildCombatantCacheKey, getAvailableMovePoolForPokemon, evaluateDiscreteShieldBattleRating, type PositionWeightedMatchupRatings, evaluatePositionWeightedBr, registerCombatSimulatorMetaHooks } from "./combatSimulator";
 
 export interface BlendedSeasonMetaDistribution {
   league: string;
@@ -2144,6 +2144,17 @@ export function recalculateAllPresetsMetrics(
     return evaluateTeamPresetMetrics({ ...preset, league: lg }, seasonBattleLogs, currentSeason, blended);
   });
 }
+
+registerPokemonDbEngineHooks({
+  evaluateDiscreteShieldBattleRating,
+  getLeagueTopMetaSpeciesNames
+});
+registerCombatSimulatorMetaHooks({
+  canonicalizeMetaPokemonName,
+  getActivePrecomputedTeam9x9State: () => ACTIVE_PRECOMPUTED_TEAM_9X9_STATE,
+  buildPrecomputedTeamSignature,
+  evaluateFastRoughShieldBattleRating
+});
 
 export const INITIAL_PRESETS: TeamPreset[] = recalculateAllPresetsMetrics([
   {

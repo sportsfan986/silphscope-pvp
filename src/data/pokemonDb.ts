@@ -1,6 +1,44 @@
-import { evaluateDiscreteShieldBattleRating } from "./combatSimulator";
-import { getLeagueTopMetaSpeciesNames, type AntiMetaAltMovesetInfo } from "./teamAndMetaEngine";
-import { syncLimitedMetaRankings } from "./show6Engine";
+import type { AntiMetaAltMovesetInfo } from "./teamAndMetaEngine";
+
+let _evaluateDiscreteShieldBattleRatingHook:
+  | ((
+      userInput: TeamMember | string,
+      oppInput: TeamMember | string,
+      userShields: number,
+      oppShields: number,
+      league?: string
+    ) => number)
+  | null = null;
+let _getLeagueTopMetaSpeciesNamesHook:
+  | ((league: string, maxCount?: number, skipUsageFusion?: boolean) => string[])
+  | null = null;
+let _syncLimitedMetaRankingsHook: (() => Promise<unknown>) | null = null;
+
+export function registerPokemonDbEngineHooks(hooks: {
+  evaluateDiscreteShieldBattleRating?: (
+    userInput: TeamMember | string,
+    oppInput: TeamMember | string,
+    userShields: number,
+    oppShields: number,
+    league?: string
+  ) => number;
+  getLeagueTopMetaSpeciesNames?: (
+    league: string,
+    maxCount?: number,
+    skipUsageFusion?: boolean
+  ) => string[];
+  syncLimitedMetaRankings?: () => Promise<unknown>;
+}): void {
+  if (hooks.evaluateDiscreteShieldBattleRating) {
+    _evaluateDiscreteShieldBattleRatingHook = hooks.evaluateDiscreteShieldBattleRating;
+  }
+  if (hooks.getLeagueTopMetaSpeciesNames) {
+    _getLeagueTopMetaSpeciesNamesHook = hooks.getLeagueTopMetaSpeciesNames;
+  }
+  if (hooks.syncLimitedMetaRankings) {
+    _syncLimitedMetaRankingsHook = hooks.syncLimitedMetaRankings;
+  }
+}
 
 export interface FastMove {
   name: string;
@@ -3426,7 +3464,9 @@ export function getPvPokeStyleKeyMatchupsForPokemon(
   };
 
   const simulated: KeyMatchupItem[] = oppList.map((opp) => {
-    const br = evaluateDiscreteShieldBattleRating(candidateMember, opp.name, 1, 1, normLg);
+    const br = _evaluateDiscreteShieldBattleRatingHook
+      ? _evaluateDiscreteShieldBattleRatingHook(candidateMember, opp.name, 1, 1, normLg)
+      : 500;
     const pvBr = Math.round(br * 0.99 + 4);
     return {
       rank: opp.rank,
@@ -5973,7 +6013,9 @@ export async function syncPvPokeDataAndRankings(): Promise<{
   }
 
   try {
-    await syncLimitedMetaRankings();
+    if (_syncLimitedMetaRankingsHook) {
+      await _syncLimitedMetaRankingsHook();
+    }
   } catch {
     // ignore limited meta sync errors
   }
@@ -6640,7 +6682,9 @@ export function getLeagueTop3Template(
     ];
   }
   if (normLeague !== "MASTER LEAGUE") {
-    const topNames = getLeagueTopMetaSpeciesNames(normLeague, 15);
+    const topNames = _getLeagueTopMetaSpeciesNamesHook
+      ? _getLeagueTopMetaSpeciesNamesHook(normLeague, 15)
+      : [];
     const dynamicTriad: TeamMember[] = [];
     const seenBases = new Set<string>();
     let hasMega = false;

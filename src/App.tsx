@@ -231,45 +231,203 @@ export default function App() {
   });
   const [showMembershipModal, setShowMembershipModal] = useState<boolean>(false);
   const [membershipStatusMsg, setMembershipStatusMsg] = useState<string>('');
+  const [webAuthTab, setWebAuthTab] = useState<'token' | 'password' | 'github'>('token');
+  const [webPassword, setWebPassword] = useState<string>('');
+  const [webNewPassword, setWebNewPassword] = useState<string>('');
+  const [webSessionToken, setWebSessionToken] = useState<string>(() => {
+    try {
+      return localStorage.getItem('sspvp_vault_session') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [webVaultVisibility, setWebVaultVisibility] = useState<'starred_only' | 'all' | 'private'>('starred_only');
+  const [ghDeviceCodeInfo, setGhDeviceCodeInfo] = useState<{ user_code: string; verification_uri: string } | null>(null);
+
+  const CLIENT_INGEST_KEY_PUBLIC = 'sspvp_telemetry_v1_9f8e7d6c5b4a3f2e1d0c';
 
   const handleVerifyWebMembership = async () => {
     const cleanName = webScreenName.trim();
     const cleanKey = webUnlockKey.trim().toUpperCase();
     const cleanEmail = webClaimEmail.trim().toLowerCase();
-    if (!cleanKey && !cleanEmail) {
-      setMembershipStatusMsg('⚠️ Enter your SSPVP Unlock Key or Checkout Email + Trainer Name.');
+    const cleanPw = webPassword.trim();
+    if (!cleanName) {
+      setMembershipStatusMsg('⚠️ Enter your Trainer Screen Name first.');
       return;
     }
-    setMembershipStatusMsg('⏳ Verifying with SilphScope Cloud Vault...');
+    if (webAuthTab === 'token' && !cleanKey && !cleanEmail) {
+      setMembershipStatusMsg('⚠️ Enter your SSPVP Unlock Key or Checkout Email.');
+      return;
+    }
+    if (webAuthTab === 'password' && !cleanPw) {
+      setMembershipStatusMsg('⚠️ Enter your Vault Password.');
+      return;
+    }
+    setMembershipStatusMsg('⏳ Authenticating with SilphScope Cloud Vault...');
     try {
-      const resp = await fetch('https://silphscope-telemetry.silphscope-pvp.workers.dev/v1/license/verify', {
+      const resp = await fetch('https://silphscope-telemetry.silphscope-pvp.workers.dev/v1/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC,
+          'X-Trainer-Screen-Name': cleanName
+        },
         body: JSON.stringify({
           screenName: cleanName,
-          unlockKey: cleanKey,
-          claimEmail: cleanEmail,
+          unlockKey: webAuthTab === 'token' ? cleanKey : '',
+          claimEmail: webAuthTab === 'token' ? cleanEmail : '',
+          password: webAuthTab === 'password' ? cleanPw : '',
           deviceHash: 'web-' + (cleanName || 'browser')
         })
       });
       const data = await resp.json();
-      if (data && data.ok && data.tier && data.tier !== 'free') {
-        const t = String(data.tier).toLowerCase() as 'supporter' | 'pro' | 'vip';
+      if (data && data.ok) {
+        const t = String(data.tier || 'free').toLowerCase() as 'free' | 'supporter' | 'pro' | 'vip';
         setWebMembershipTier(t);
         localStorage.setItem('gbl_web_membership_tier_v700', t);
-        localStorage.setItem('gbl_web_screen_name_v700', cleanName);
-        if (data.unlockKey || cleanKey) {
-          setWebUnlockKey(data.unlockKey || cleanKey);
-          localStorage.setItem('gbl_web_unlock_key_v700', data.unlockKey || cleanKey);
+        localStorage.setItem('gbl_web_screen_name_v700', data.screenName || cleanName);
+        if (data.sessionToken) {
+          setWebSessionToken(data.sessionToken);
+          localStorage.setItem('sspvp_vault_session', data.sessionToken);
         }
-        localStorage.setItem('gbl_web_claim_email_v700', cleanEmail);
-        setMembershipStatusMsg(`✅ Activated ${t.toUpperCase()} Tier (${data.maxCloudReplays || 0} Cloud Replays)!`);
+        if (cleanKey) {
+          setWebUnlockKey(cleanKey);
+          localStorage.setItem('gbl_web_unlock_key_v700', cleanKey);
+        }
+        if (data.settings?.publicVisibility) {
+          setWebVaultVisibility(data.settings.publicVisibility);
+        }
+        setMembershipStatusMsg(
+          `✅ Signed in as @${data.screenName || cleanName} (${t.toUpperCase()} Tier)${data.githubUsername ? ` • GitHub: @${data.githubUsername}` : ''}!`
+        );
       } else {
-        setMembershipStatusMsg(`❌ ${data?.reason || 'No active paid license found for that Key / Email.'}`);
+        setMembershipStatusMsg(`❌ ${data?.error || 'Authentication failed. Check your credentials.'}`);
       }
     } catch (e: any) {
-      setMembershipStatusMsg(`⚠️ Network error verifying key: ${e?.message || 'offline'}`);
+      setMembershipStatusMsg(`⚠️ Network error: ${e?.message || 'offline'}`);
     }
+  };
+
+  const handleStartWebGitHubLogin = async () => {
+    setMembershipStatusMsg('⏳ Requesting GitHub OAuth Device Code...');
+    try {
+      const resp = await fetch('https://silphscope-telemetry.silphscope-pvp.workers.dev/v1/auth/github/device-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC }
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.ok) {
+        setMembershipStatusMsg(`❌ ${data?.error || 'Failed to start GitHub login.'}`);
+        return;
+      }
+      setGhDeviceCodeInfo({ user_code: data.user_code, verification_uri: data.verification_uri });
+      try {
+        navigator.clipboard.writeText(data.user_code);
+      } catch {}
+      window.open(data.verification_uri, '_blank', 'noopener');
+      setMembershipStatusMsg(`🐙 Enter code ${data.user_code} on GitHub (copied to clipboard). Waiting for authorization...`);
+
+      const intervalMs = Math.max(5, Number(data.interval) || 5) * 1000;
+      const timer = setInterval(async () => {
+        try {
+          const pollResp = await fetch('https://silphscope-telemetry.silphscope-pvp.workers.dev/v1/auth/github/poll', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC },
+            body: JSON.stringify({
+              device_code: data.device_code,
+              screenName: webScreenName.trim(),
+              unlockKey: webUnlockKey.trim().toUpperCase(),
+              sessionToken: webSessionToken
+            })
+          });
+          const pollData = await pollResp.json();
+          if (pollData.status === 'pending') return;
+          clearInterval(timer);
+          setGhDeviceCodeInfo(null);
+          if (pollData.ok && pollData.sessionToken) {
+            const t = String(pollData.tier || 'free').toLowerCase() as 'free' | 'supporter' | 'pro' | 'vip';
+            setWebMembershipTier(t);
+            setWebScreenName(pollData.screenName || webScreenName);
+            setWebSessionToken(pollData.sessionToken);
+            localStorage.setItem('gbl_web_membership_tier_v700', t);
+            localStorage.setItem('gbl_web_screen_name_v700', pollData.screenName || webScreenName);
+            localStorage.setItem('sspvp_vault_session', pollData.sessionToken);
+            setMembershipStatusMsg(`✅ Signed in via GitHub (@${pollData.githubUsername}) -> Trainer @${pollData.screenName} (${t.toUpperCase()})!`);
+          } else {
+            setMembershipStatusMsg(`❌ ${pollData.error || 'GitHub login did not match an account.'}`);
+          }
+        } catch {}
+      }, intervalMs);
+    } catch (e: any) {
+      setMembershipStatusMsg(`⚠️ Error starting GitHub login: ${e?.message || 'offline'}`);
+    }
+  };
+
+  const handleSaveWebPassword = async () => {
+    const cleanName = webScreenName.trim();
+    const newPw = webNewPassword.trim();
+    if (!cleanName || newPw.length < 6) {
+      setMembershipStatusMsg('⚠️ Enter your Trainer ID and a new password of at least 6 characters.');
+      return;
+    }
+    try {
+      const resp = await fetch('https://silphscope-telemetry.silphscope-pvp.workers.dev/v1/auth/set-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC,
+          'X-Trainer-Screen-Name': cleanName,
+          'X-Vault-Session': webSessionToken,
+          'X-SilphScope-Unlock-Key': webUnlockKey.trim().toUpperCase()
+        },
+        body: JSON.stringify({
+          screenName: cleanName,
+          newPassword: newPw,
+          sessionToken: webSessionToken,
+          unlockKey: webUnlockKey.trim().toUpperCase()
+        })
+      });
+      const data = await resp.json();
+      if (resp.ok && data.ok) {
+        if (data.sessionToken) {
+          setWebSessionToken(data.sessionToken);
+          localStorage.setItem('sspvp_vault_session', data.sessionToken);
+        }
+        setWebNewPassword('');
+        setMembershipStatusMsg(`✅ Password saved for @${cleanName}! You can now sign in with Username + Password anywhere.`);
+      } else {
+        setMembershipStatusMsg(`❌ ${data?.error || 'Failed to save password.'}`);
+      }
+    } catch (e: any) {
+      setMembershipStatusMsg(`⚠️ Error saving password: ${e?.message || 'offline'}`);
+    }
+  };
+
+  const handleUpdateWebVaultVisibility = async (vis: 'starred_only' | 'all' | 'private') => {
+    setWebVaultVisibility(vis);
+    const cleanName = webScreenName.trim();
+    if (!cleanName) return;
+    try {
+      const resp = await fetch('https://silphscope-telemetry.silphscope-pvp.workers.dev/v1/replays/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC,
+          'X-Trainer-Screen-Name': cleanName,
+          'X-Vault-Session': webSessionToken,
+          'X-SilphScope-Unlock-Key': webUnlockKey.trim().toUpperCase()
+        },
+        body: JSON.stringify({
+          publicVisibility: vis,
+          sessionToken: webSessionToken,
+          unlockKey: webUnlockKey.trim().toUpperCase()
+        })
+      });
+      const data = await resp.json();
+      if (resp.ok && data.ok) {
+        setMembershipStatusMsg(`✅ Updated @${cleanName}'s DVR Vault visibility to: ${vis === 'starred_only' ? '⭐ Starred Only (Default)' : vis === 'all' ? '🌐 Public (All Replays)' : '🔒 Private'}`);
+      }
+    } catch {}
   };
 
   // v6.00 AI Advice HUD Position ("bottom" default for higher visibility vs "top")
@@ -16383,50 +16541,136 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Activate / Verify Existing Key or Email */}
+              {/* Activate / Login via Username+Token, Username+Password, or GitHub OAuth */}
               <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
-                <div className="text-xs font-extrabold text-sky-300">
-                  🔐 Already Unlocked via Stripe or Buy Me a Coffee? Activate Your Key / Email:
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <input
-                    type="text"
-                    value={webScreenName}
-                    onChange={(e) => setWebScreenName(e.target.value)}
-                    placeholder="Trainer Screen Name (e.g. sportsfan986)"
-                    className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-bold"
-                  />
-                  <input
-                    type="text"
-                    value={webUnlockKey}
-                    onChange={(e) => setWebUnlockKey(e.target.value)}
-                    placeholder="Unlock Key (SSPVP-PRO-...)"
-                    className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-amber-300 font-mono font-bold"
-                  />
-                  <input
-                    type="email"
-                    value={webClaimEmail}
-                    onChange={(e) => setWebClaimEmail(e.target.value)}
-                    placeholder="Or Checkout Email"
-                    className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
-                  />
-                </div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleVerifyWebMembership}
-                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-lg transition"
-                    >
-                      ✅ Verify &amp; Activate Membership
-                    </button>
+                  <div className="text-xs font-extrabold text-sky-300">
+                    🔐 Sign In / Activate Membership &amp; DVR Vault:
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {(['token', 'password', 'github'] as const).map((tab) => (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setWebAuthTab(tab)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                          webAuthTab === tab
+                            ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300'
+                            : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {tab === 'token'
+                          ? '🔑 Username + Token'
+                          : tab === 'password'
+                          ? '🔒 Username + Password'
+                          : '🐙 GitHub Login'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {webAuthTab === 'token' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <input
+                      type="text"
+                      value={webScreenName}
+                      onChange={(e) => setWebScreenName(e.target.value)}
+                      placeholder="Trainer Screen Name (e.g. sportsfan986)"
+                      className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-bold"
+                    />
+                    <input
+                      type="text"
+                      value={webUnlockKey}
+                      onChange={(e) => setWebUnlockKey(e.target.value)}
+                      placeholder="Unlock Key (SSPVP-PRO-...)"
+                      className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-amber-300 font-mono font-bold"
+                    />
+                    <input
+                      type="email"
+                      value={webClaimEmail}
+                      onChange={(e) => setWebClaimEmail(e.target.value)}
+                      placeholder="Or Checkout Email"
+                      className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                    />
+                  </div>
+                )}
+
+                {webAuthTab === 'password' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <input
+                      type="text"
+                      value={webScreenName}
+                      onChange={(e) => setWebScreenName(e.target.value)}
+                      placeholder="Trainer Screen Name (e.g. sportsfan986)"
+                      className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-bold"
+                    />
+                    <input
+                      type="password"
+                      value={webPassword}
+                      onChange={(e) => setWebPassword(e.target.value)}
+                      placeholder="Vault Password"
+                      className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                    />
+                  </div>
+                )}
+
+                {webAuthTab === 'github' && (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <input
+                        type="text"
+                        value={webScreenName}
+                        onChange={(e) => setWebScreenName(e.target.value)}
+                        placeholder="Trainer Screen Name (optional if matches GitHub)"
+                        className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-bold flex-1 min-w-[200px]"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleStartWebGitHubLogin}
+                        className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-extrabold text-xs shadow transition"
+                      >
+                        🐙 1-Click Sign In with GitHub
+                      </button>
+                    </div>
+                    {ghDeviceCodeInfo && (
+                      <div className="p-2.5 rounded-xl bg-slate-900 border border-sky-500/50 flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <span className="text-slate-300">
+                          One-time GitHub Code:{' '}
+                          <strong className="text-sky-300 font-mono text-sm px-2 py-0.5 bg-slate-950 rounded">
+                            {ghDeviceCodeInfo.user_code}
+                          </strong>
+                        </span>
+                        <a
+                          href={ghDeviceCodeInfo.verification_uri}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1 rounded-lg bg-emerald-600 text-white font-bold"
+                        >
+                          Open GitHub &amp; Authorize ↗
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {webAuthTab !== 'github' && (
+                      <button
+                        type="button"
+                        onClick={handleVerifyWebMembership}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-lg transition"
+                      >
+                        ✅ Sign In &amp; Activate Membership
+                      </button>
+                    )}
                     <a
-                      href="https://silphscope-telemetry.silphscope-pvp.workers.dev/vault"
+                      href={`https://silphscope-telemetry.silphscope-pvp.workers.dev/vault${webScreenName.trim() ? `?user=${encodeURIComponent(webScreenName.trim())}` : ''}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sky-300 font-bold text-xs transition"
                     >
-                      🎬 Open Cloud Replay Vault Portal
+                      🎬 Open Cloud DVR Vault Page
                     </a>
                   </div>
                   <a
@@ -16438,6 +16682,50 @@ export default function App() {
                     ☕ Prefer Buy Me a Coffee (PokéCoins)?
                   </a>
                 </div>
+
+                {/* Owner DVR Vault Visibility & Set Password Controls */}
+                {(webSessionToken || webMembershipTier !== 'free') && (
+                  <div className="pt-3 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-300 block">
+                        🌐 Public DVR Vault Visibility (/vault?user={webScreenName.trim() || 'you'}):
+                      </label>
+                      <select
+                        value={webVaultVisibility}
+                        onChange={(e) => handleUpdateWebVaultVisibility(e.target.value as 'starred_only' | 'all' | 'private')}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white font-bold"
+                      >
+                        <option value="starred_only">⭐ Starred Only (Default — Unstarred Rolling Battles Private)</option>
+                        <option value="all">🌐 Public: All Replays Viewable by Anyone</option>
+                        <option value="private">🔒 Private: Owner Login Required</option>
+                      </select>
+                      <div className="text-[10.5px] text-slate-400">
+                        Direct <code>/watch/...</code> share links always work for anyone you send them to. Only you can ⭐ Star/Unstar videos.
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-300 block">
+                        🔒 Set / Update Password for Username+Password Login:
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="password"
+                          value={webNewPassword}
+                          onChange={(e) => setWebNewPassword(e.target.value)}
+                          placeholder="New Password (min 6 chars)"
+                          className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSaveWebPassword}
+                          className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shrink-0"
+                        >
+                          💾 Save
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -16453,7 +16741,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.00 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
+        SilphScope PvP v7.01 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
       </footer>
     </div>
   );

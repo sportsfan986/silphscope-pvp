@@ -1,4 +1,21 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.00`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.01`)
+
+---
+
+## v7.01 (2026-11-07) — Public & Starred-Only DVR Replay Vault Visibility, Strictly Owner-Only Star/Pin Controls & 3-Method Owner Login (`Username + Token`, `Username + Password`, `GitHub OAuth`)
+*Cloud Replay Vault & Authentication release (`v7.01`, `versionCode = 1701`, Cloudflare Worker `v7.0.1`) introducing configurable Public / Starred-Only / Private DVR Vault visibility on `/vault?user=<username>` (and `/u/<username>`), strictly owner-only `⭐ Star / Pin` controls, and 3 owner login methods (`🔑 Username + Token`, `🔒 Username + Password`, and `🐙 GitHub OAuth Login`) across the Cloud DVR Vault, Web Simulator, and Android App.*
+
+- **v7.01 — Enhancement 1: Configurable DVR Vault Visibility (`⭐ Starred Only` Default, `🌐 Public: All Replays`, `🔒 Private`) (`cloudflare/telemetry-worker/worker.mjs`, `GitHubCloudSync.kt`, `MainActivity.kt`, `src/App.tsx`)**:
+  - **⭐ Starred Only (`starred_only` — Default)**: By default on `/vault?user=<username>` (or `/u/<username>`), anyone can view your **⭐ Starred (Pinned)** highlight battles without logging in, while your unstarred rolling battles remain private to you (preventing opponents from scouting all recent battles/teams).
+  - **🌐 Public — All Replays (`all`)**: When enabled by the vault owner, anyone visiting `/vault?user=<username>` can browse both rolling and starred replays with `🎬 All Replays` and `⭐ Starred Only` filter tabs.
+  - **🔒 Private — Owner Login Only (`private`)**: Visitors cannot view the `/vault?user=<username>` replay list without logging in as the owner.
+  - **Direct Share Link (`/watch/<shareId>`) Always Viewable**: Any individual video whose direct `/watch/<shareId>` link you share is always viewable by anyone with the link, regardless of whether the video is starred or whether your vault page is set to `starred_only` or `private`.
+- **v7.01 — Enhancement 2: Strictly Owner-Only `⭐ Star / Pin` & Vault Management (`cloudflare/telemetry-worker/worker.mjs`)**:
+  - Public visitors (`isOwner === false`) can watch replays and inspect synchronized frame-by-frame telemetry traces, but can **never** star/unstar (`POST /v1/replays/pin`), change vault visibility (`POST /v1/replays/settings`), or delete replays (`DELETE /v1/replays/delete`).
+- **v7.01 — Enhancement 3: 3-Method Owner Login (`🔑 Username + Token`, `🔒 Username + Password`, `🐙 GitHub Login`) (`cloudflare/telemetry-worker/worker.mjs`, `GitHubCloudSync.kt`, `MainActivity.kt`, `src/App.tsx`)**:
+  - **`🔑 Username + Token`**: Sign in with Trainer Screen Name + `SSPVP-...` Unlock Key (plus optional Checkout Email claim).
+  - **`🔒 Username + Password`**: Owners can set or update a password (`POST /v1/auth/set-password`, stored with salted HMAC-SHA256 in KV) from the Cloud Replay Vault, Web Simulator, or Android App Settings (`🔒 Web Password / Login`) and sign in with `Username + Password` on any device.
+  - **`🐙 GitHub OAuth Login`**: 1-click GitHub OAuth Device Flow (`POST /v1/auth/github/device-code` & `POST /v1/auth/github/poll`) matching the Android app's GitHub OAuth identity (`178c6fc778ccc68e1d6a`).
 
 ---
 

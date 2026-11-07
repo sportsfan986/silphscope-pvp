@@ -619,9 +619,155 @@ async function saveLicenseRecord(kv, lic) {
   if (lic.boundGitHubUsername) {
     await kv.put(`gh_license/${String(lic.boundGitHubUsername).toLowerCase()}`, cleanKey);
   }
+  if (lic.boundGitHubUserId) {
+    await kv.put(`gh_id_license/${String(lic.boundGitHubUserId).trim()}`, cleanKey);
+  }
   if (lic.supporterEmail) {
     await kv.put(`email_license/${String(lic.supporterEmail).trim().toLowerCase()}`, cleanKey);
   }
+}
+
+const GITHUB_OAUTH_CLIENT_ID = '178c6fc778ccc68e1d6a';
+
+async function hashUserPassword(env, password, salt) {
+  const secret = String(env.ADMIN_API_KEY || env.CLIENT_INGEST_KEY || 'sspvp_hmac_salt_v7').trim();
+  const enc = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(`${secret}:${salt}`),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sigBuf = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(String(password || '')));
+  return Array.from(new Uint8Array(sigBuf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function loadUserAuthRecord(kv, screenName) {
+  if (!kv || !screenName) return null;
+  const clean = sanitizeScreenName(screenName).toLowerCase();
+  try {
+    const raw = await kv.get(`user_auth/${clean}`, { type: 'text' });
+    if (raw) return JSON.parse(raw);
+  } catch (_) {}
+  return null;
+}
+
+async function saveUserAuthRecord(kv, screenName, authObj) {
+  if (!kv || !screenName || !authObj) return;
+  const clean = sanitizeScreenName(screenName);
+  authObj.screenName = clean;
+  authObj.updatedAt = new Date().toISOString();
+  await kv.put(`user_auth/${clean.toLowerCase()}`, JSON.stringify(authObj, null, 2));
+  if (authObj.githubUsername) {
+    await kv.put(`gh_user_map/${String(authObj.githubUsername).toLowerCase()}`, clean);
+  }
+  if (authObj.githubUserId) {
+    await kv.put(`gh_id_map/${String(authObj.githubUserId).trim()}`, clean);
+  }
+}
+
+async function createVaultSessionToken(env, screenName, tier = 'free', ttlDays = 30) {
+  const cleanName = sanitizeScreenName(screenName);
+  const cleanTier = String(tier || 'free').toLowerCase();
+  const expiresMs = Date.now() + ttlDays * 86400000;
+  const payload = `${cleanName}.${cleanTier}.${expiresMs}`;
+  const secret = String(env.ADMIN_API_KEY || env.CLIENT_INGEST_KEY || 'sspvp_hmac_salt_v7').trim();
+  const enc = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(`${secret}:vault_session_v1`),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sigBuf = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(payload));
+  const sigHex = Array.from(new Uint8Array(sigBuf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return `${payload}.${sigHex}`;
+}
+
+async function verifyVaultSessionToken(env, token) {
+  if (!token || typeof token !== 'string') return { valid: false };
+  const parts = token.trim().split('.');
+  if (parts.length !== 4) return { valid: false };
+  const [screenName, tier, expiresStr, sigHex] = parts;
+  const expiresMs = Number(expiresStr) || 0;
+  if (expiresMs < Date.now()) return { valid: false, expired: true };
+  const payload = `${screenName}.${tier}.${expiresStr}`;
+  const secret = String(env.ADMIN_API_KEY || env.CLIENT_INGEST_KEY || 'sspvp_hmac_salt_v7').trim();
+  const enc = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(`${secret}:vault_session_v1`),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sigBuf = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(payload));
+  const expectedHex = Array.from(new Uint8Array(sigBuf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  if (expectedHex !== sigHex.toLowerCase()) return { valid: false };
+  return { valid: true, screenName, tier, expiresMs };
+}
+
+async function verifyGitHubTokenIdentity(githubToken) {
+  if (!githubToken || typeof githubToken !== 'string') return { ok: false, error: 'Missing GitHub token.' };
+  try {
+    const res = await fetch('https://api.github.com/user', {
+      headers: {
+        Authorization: `Bearer ${githubToken.trim()}`,
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'SilphScope-PvP-Worker/7.0',
+      },
+    });
+    if (!res.ok) {
+      return { ok: false, error: `GitHub token verification failed (HTTP ${res.status}).` };
+    }
+    const data = await res.json();
+    if (!data || !data.login || !data.id) {
+      return { ok: false, error: 'Invalid GitHub user profile response.' };
+    }
+    return {
+      ok: true,
+      githubUsername: String(data.login).trim(),
+      githubUserId: String(data.id).trim(),
+      avatarUrl: String(data.avatar_url || ''),
+    };
+  } catch (e) {
+    return { ok: false, error: `GitHub API error: ${e.message}` };
+  }
+}
+
+async function resolveScreenNameFromGitHub(kv, githubUsername, githubUserId, preferredScreenName = '') {
+  const cleanLogin = String(githubUsername || '').trim();
+  const cleanId = String(githubUserId || '').trim();
+  const cleanPref = preferredScreenName ? sanitizeScreenName(preferredScreenName) : '';
+  if (!kv) return cleanPref || sanitizeScreenName(cleanLogin);
+
+  if (cleanId) {
+    const licKeyById = await kv.get(`gh_id_license/${cleanId}`, { type: 'text' });
+    if (licKeyById) {
+      const lic = await loadLicenseByKey(kv, licKeyById);
+      if (lic && lic.boundScreenName) return lic.boundScreenName;
+    }
+    const mappedById = await kv.get(`gh_id_map/${cleanId}`, { type: 'text' });
+    if (mappedById) return mappedById;
+  }
+  if (cleanLogin) {
+    const licKeyByLogin = await kv.get(`gh_license/${cleanLogin.toLowerCase()}`, { type: 'text' });
+    if (licKeyByLogin) {
+      const lic = await loadLicenseByKey(kv, licKeyByLogin);
+      if (lic && lic.boundScreenName) return lic.boundScreenName;
+    }
+    const mappedByLogin = await kv.get(`gh_user_map/${cleanLogin.toLowerCase()}`, { type: 'text' });
+    if (mappedByLogin) return mappedByLogin;
+  }
+  return cleanPref || sanitizeScreenName(cleanLogin);
 }
 
 async function resolveUserLicense(
@@ -880,22 +1026,289 @@ async function resolveUserLicense(
   };
 }
 
+function normalizeVaultSettings(rawSettings) {
+  const s = rawSettings && typeof rawSettings === 'object' ? rawSettings : {};
+  const vis = String(s.publicVisibility || 'starred_only').toLowerCase();
+  return {
+    publicVisibility: ['starred_only', 'all', 'private'].includes(vis) ? vis : 'starred_only',
+    hideNamesPublic: Boolean(s.hideNamesPublic),
+  };
+}
+
 async function loadUserReplayIndex(kv, screenName) {
-  if (!kv || !screenName) return { screenName, items: [] };
+  const defaultObj = {
+    screenName,
+    settings: normalizeVaultSettings(null),
+    items: [],
+  };
+  if (!kv || !screenName) return defaultObj;
   try {
-    const raw = await kv.get(`replay_index/${screenName}`, { type: 'text' });
+    let raw = await kv.get(`replay_index/${screenName}`, { type: 'text' });
+    if (!raw && screenName !== screenName.toLowerCase()) {
+      raw = await kv.get(`replay_index/${screenName.toLowerCase()}`, { type: 'text' });
+    }
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.items)) return parsed;
+      if (parsed && Array.isArray(parsed.items)) {
+        parsed.settings = normalizeVaultSettings(parsed.settings);
+        return parsed;
+      }
     }
   } catch (_) {}
-  return { screenName, items: [] };
+  return defaultObj;
 }
 
 async function saveUserReplayIndex(kv, screenName, indexObj) {
   if (!kv || !screenName) return;
+  indexObj.settings = normalizeVaultSettings(indexObj.settings);
   indexObj.updatedAt = new Date().toISOString();
   await kv.put(`replay_index/${screenName}`, JSON.stringify(indexObj, null, 2));
+  if (screenName !== screenName.toLowerCase()) {
+    await kv.put(`replay_index/${screenName.toLowerCase()}`, JSON.stringify(indexObj, null, 2));
+  }
+}
+
+async function authenticateVaultOwner(request, env, kv, targetScreenName, body = {}) {
+  const sessionToken = String(
+    body.sessionToken || request.headers.get('X-Vault-Session') || ''
+  ).trim();
+  const unlockKey = String(
+    body.unlockKey || body.key || request.headers.get('X-SilphScope-Unlock-Key') || ''
+  ).trim();
+  const password = String(
+    body.password || request.headers.get('X-Vault-Password') || ''
+  ).trim();
+  const githubToken = String(
+    body.githubToken || request.headers.get('X-GitHub-Token') || ''
+  ).trim();
+  const claimEmail = String(
+    body.claimEmail || body.email || request.headers.get('X-Claim-Email') || ''
+  ).trim();
+  const devHash = String(
+    body.deviceHash || request.headers.get('X-Device-Hash') || ''
+  ).trim();
+
+  let screenName = targetScreenName ? sanitizeScreenName(targetScreenName) : '';
+
+  // 1. Check Session Token (`X-Vault-Session`)
+  if (sessionToken) {
+    const ver = await verifyVaultSessionToken(env, sessionToken);
+    if (
+      ver.valid &&
+      (!screenName || screenName === 'anonymous' || ver.screenName.toLowerCase() === screenName.toLowerCase())
+    ) {
+      const resolvedUser = ver.screenName;
+      const mappedKey =
+        (kv && (await kv.get(`user_license/${resolvedUser}`, { type: 'text' }))) ||
+        (kv && (await kv.get(`user_license/${resolvedUser.toLowerCase()}`, { type: 'text' }))) ||
+        '';
+      const licInfo = await resolveUserLicense(env, kv, resolvedUser, mappedKey, '', '', devHash, '');
+      const authRec = await loadUserAuthRecord(kv, resolvedUser);
+      return {
+        isOwner: true,
+        authMethod: 'session',
+        screenName: resolvedUser,
+        licenseInfo: licInfo,
+        authRecord: authRec,
+        sessionToken,
+      };
+    }
+  }
+
+  // 2. Check GitHub OAuth Token (`X-GitHub-Token` or `body.githubToken`)
+  let verifiedGh = null;
+  if (githubToken) {
+    const ghRes = await verifyGitHubTokenIdentity(githubToken);
+    if (!ghRes.ok) {
+      return {
+        isOwner: false,
+        error: ghRes.error || 'GitHub authentication failed.',
+        screenName,
+      };
+    }
+    verifiedGh = ghRes;
+    if (!screenName || screenName === 'anonymous') {
+      screenName = await resolveScreenNameFromGitHub(
+        kv,
+        ghRes.githubUsername,
+        ghRes.githubUserId,
+        ''
+      );
+    }
+  }
+
+  // 3. Check Explicit Unlock Key / Token (`X-SilphScope-Unlock-Key`) or Claim Email
+  if (unlockKey || claimEmail) {
+    const adminExpected = String(env.ADMIN_API_KEY || '').trim();
+    if (adminExpected && unlockKey === adminExpected && screenName) {
+      const mappedKey =
+        (kv && (await kv.get(`user_license/${screenName}`, { type: 'text' }))) ||
+        (kv && (await kv.get(`user_license/${screenName.toLowerCase()}`, { type: 'text' }))) ||
+        '';
+      const licInfo = mappedKey
+        ? await resolveUserLicense(env, kv, screenName, mappedKey)
+        : { ...TIER_PRESETS.vip, active: true, everPaid: true, boundScreenName: screenName };
+      const authRec = await loadUserAuthRecord(kv, screenName);
+      const mintedSession = await createVaultSessionToken(env, screenName, licInfo.tier || 'vip');
+      return {
+        isOwner: true,
+        authMethod: 'admin_key',
+        screenName,
+        licenseInfo: licInfo,
+        authRecord: authRec,
+        sessionToken: mintedSession,
+      };
+    }
+
+    const licInfo = await resolveUserLicense(
+      env,
+      kv,
+      screenName,
+      unlockKey,
+      verifiedGh ? verifiedGh.githubUsername : '',
+      verifiedGh ? verifiedGh.githubUserId : '',
+      devHash,
+      claimEmail
+    );
+    if (licInfo.active) {
+      const resolvedUser = licInfo.boundScreenName || screenName;
+      let authRec = (await loadUserAuthRecord(kv, resolvedUser)) || { screenName: resolvedUser };
+      if (verifiedGh) {
+        authRec.githubUsername = verifiedGh.githubUsername;
+        authRec.githubUserId = verifiedGh.githubUserId;
+        await saveUserAuthRecord(kv, resolvedUser, authRec);
+      }
+      const mintedSession = await createVaultSessionToken(env, resolvedUser, licInfo.tier);
+      return {
+        isOwner: true,
+        authMethod: unlockKey ? 'unlock_key' : 'claim_email',
+        screenName: resolvedUser,
+        licenseInfo: licInfo,
+        authRecord: authRec,
+        sessionToken: mintedSession,
+      };
+    }
+    return {
+      isOwner: false,
+      error: licInfo.error || 'Invalid Unlock Key or Email.',
+      screenName,
+    };
+  }
+
+  // 4. Check Username + Password (`X-Vault-Password` or `body.password`)
+  if (password && screenName) {
+    const authRec = await loadUserAuthRecord(kv, screenName);
+    if (!authRec || !authRec.passwordHash || !authRec.passwordSalt) {
+      return {
+        isOwner: false,
+        error: `No password has been set for '@${screenName}' yet. Log in once with your Unlock Key or GitHub account (or set a password in the Android App Settings) first.`,
+        screenName,
+      };
+    }
+    const computedHash = await hashUserPassword(env, password, authRec.passwordSalt);
+    if (computedHash !== authRec.passwordHash) {
+      return {
+        isOwner: false,
+        error: 'Incorrect password for @' + screenName + '.',
+        screenName,
+      };
+    }
+    const resolvedUser = authRec.screenName || screenName;
+    if (verifiedGh) {
+      authRec.githubUsername = verifiedGh.githubUsername;
+      authRec.githubUserId = verifiedGh.githubUserId;
+      await saveUserAuthRecord(kv, resolvedUser, authRec);
+    }
+    const mappedKey =
+      authRec.boundKey ||
+      (kv && (await kv.get(`user_license/${resolvedUser}`, { type: 'text' }))) ||
+      (kv && (await kv.get(`user_license/${resolvedUser.toLowerCase()}`, { type: 'text' }))) ||
+      '';
+    const licInfo = await resolveUserLicense(
+      env,
+      kv,
+      resolvedUser,
+      mappedKey,
+      authRec.githubUsername || '',
+      authRec.githubUserId || '',
+      devHash,
+      ''
+    );
+    const mintedSession = await createVaultSessionToken(env, resolvedUser, licInfo.tier || 'free');
+    return {
+      isOwner: true,
+      authMethod: 'password',
+      screenName: resolvedUser,
+      licenseInfo: licInfo,
+      authRecord: authRec,
+      sessionToken: mintedSession,
+    };
+  }
+
+  // 5. Pure GitHub Login (no Unlock Key or Password needed if GitHub account matches or is linked)
+  if (verifiedGh && screenName) {
+    const authRec = await loadUserAuthRecord(kv, screenName);
+    const mappedKey =
+      (kv && (await kv.get(`gh_id_license/${verifiedGh.githubUserId}`, { type: 'text' }))) ||
+      (kv && (await kv.get(`gh_license/${verifiedGh.githubUsername.toLowerCase()}`, { type: 'text' }))) ||
+      (kv && (await kv.get(`user_license/${screenName}`, { type: 'text' }))) ||
+      (kv && (await kv.get(`user_license/${screenName.toLowerCase()}`, { type: 'text' }))) ||
+      '';
+    const lic = mappedKey ? await loadLicenseByKey(kv, mappedKey) : null;
+    const chk = await checkScreenNameRegistration(kv, screenName, devHash, verifiedGh.githubUserId);
+
+    const ghMatchesAuthRec =
+      authRec &&
+      ((authRec.githubUserId && String(authRec.githubUserId) === verifiedGh.githubUserId) ||
+        (authRec.githubUsername &&
+          String(authRec.githubUsername).toLowerCase() === verifiedGh.githubUsername.toLowerCase()));
+    const ghMatchesLic =
+      lic &&
+      ((lic.boundGitHubUserId && String(lic.boundGitHubUserId) === verifiedGh.githubUserId) ||
+        (lic.boundGitHubUsername &&
+          String(lic.boundGitHubUsername).toLowerCase() === verifiedGh.githubUsername.toLowerCase()));
+    const ghMatchesUsername =
+      verifiedGh.githubUsername.toLowerCase() === screenName.toLowerCase() &&
+      (!lic || !lic.boundGitHubUserId || String(lic.boundGitHubUserId) === verifiedGh.githubUserId) &&
+      (!authRec || !authRec.githubUserId || String(authRec.githubUserId) === verifiedGh.githubUserId);
+
+    if (ghMatchesAuthRec || ghMatchesLic || chk.ownedByCaller || ghMatchesUsername) {
+      const resolvedUser = (lic && lic.boundScreenName) || (authRec && authRec.screenName) || screenName;
+      const updatedAuth = authRec || { screenName: resolvedUser };
+      updatedAuth.githubUsername = verifiedGh.githubUsername;
+      updatedAuth.githubUserId = verifiedGh.githubUserId;
+      if (lic && lic.key) updatedAuth.boundKey = lic.key;
+      await saveUserAuthRecord(kv, resolvedUser, updatedAuth);
+
+      const licInfo = await resolveUserLicense(
+        env,
+        kv,
+        resolvedUser,
+        lic ? lic.key : '',
+        verifiedGh.githubUsername,
+        verifiedGh.githubUserId,
+        devHash,
+        ''
+      );
+      const mintedSession = await createVaultSessionToken(env, resolvedUser, licInfo.tier || 'free');
+      return {
+        isOwner: true,
+        authMethod: 'github',
+        screenName: resolvedUser,
+        licenseInfo: licInfo,
+        authRecord: updatedAuth,
+        sessionToken: mintedSession,
+      };
+    }
+
+    return {
+      isOwner: false,
+      error: `GitHub account '@${verifiedGh.githubUsername}' is not linked to Trainer ID '@${screenName}' yet. Log in once with your Unlock Key or Password while signed into GitHub to link them.`,
+      screenName,
+    };
+  }
+
+  return { isOwner: false, screenName };
 }
 
 async function deleteReplayObjects(env, kv, item) {
@@ -1252,9 +1665,10 @@ function renderWatchSharePage(origin, shareInfo) {
       <span>🛡️ SilphScope PvP Replay</span>
       <span class="badge" id="hdr-trainer">${trainerDisplay}</span>
       <span class="badge" style="background:rgba(6,182,212,0.15);color:#38bdf8;border-color:rgba(6,182,212,0.35)">${league} • ${result}</span>
+      ${shareInfo.isPinned ? '<span class="badge" style="background:rgba(245,158,11,0.18);color:#fbbf24;border-color:rgba(245,158,11,0.45)">⭐ Starred</span>' : ''}
     </div>
     <div class="header-actions">
-      <a class="btn-link" href="/vault">☁️ My Replay Vault</a>
+      <a class="btn-link" href="/vault?user=${encodeURIComponent(shareInfo.screenName || '')}">☁️ @${trainerDisplay}'s Vault</a>
       <button id="btn-privacy" onclick="togglePrivacy()">🕵️ ${hideNamesDefault ? 'Names Hidden' : 'Hide Names'}</button>
       <button id="btn-layout" onclick="toggleLayout()">📐 Side-by-Side: OFF</button>
       <button id="btn-export" onclick="exportWithHud()">💾 Export Video + HUD</button>
@@ -2697,19 +3111,19 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       padding: 20px 16px;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 14px;
     }
     .login-card {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 16px;
+      padding: 14px 16px;
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
       align-items: center;
     }
-    input {
+    input, select {
       background: #020617;
       color: var(--text);
       border: 1px solid #334155;
@@ -2717,7 +3131,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       padding: 9px 12px;
       font-size: 13px;
       flex: 1;
-      min-width: 180px;
+      min-width: 170px;
     }
     button, .btn-link {
       background: #1e293b;
@@ -2732,23 +3146,34 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      transition: all 0.15s ease;
     }
     button.primary {
       background: #059669;
+      border-color: #10b981;
+    }
+    button.tab-btn {
+      background: #0f172a;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      padding: 7px 12px;
+      font-size: 12px;
+    }
+    button.tab-btn.active {
+      background: rgba(16, 185, 129, 0.18);
+      color: #34d399;
       border-color: #10b981;
     }
     button:hover, .btn-link:hover {
       filter: brightness(1.12);
     }
     .stats-bar {
-      background: rgba(15, 23, 42, 0.8);
+      background: rgba(15, 23, 42, 0.85);
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 12px 16px;
       display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      align-items: center;
+      flex-direction: column;
       gap: 10px;
       font-size: 13px;
     }
@@ -2767,7 +3192,8 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       gap: 10px;
     }
     .replay-card.pinned {
-      border-color: rgba(245, 158, 11, 0.55);
+      border-color: rgba(245, 158, 11, 0.65);
+      box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.15);
     }
     .pill {
       padding: 2px 8px;
@@ -2777,6 +3203,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     }
     .pill-win { background: rgba(16, 185, 129, 0.18); color: #34d399; }
     .pill-loss { background: rgba(244, 63, 94, 0.18); color: #fb7185; }
+    .pill-star { background: rgba(245, 158, 11, 0.18); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
   </style>
 </head>
 <body>
@@ -2791,11 +3218,63 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
   </header>
 
   <div class="container">
-    <div class="login-card">
-      <input id="inp-user" type="text" placeholder="Trainer / Debug ID (e.g. sportsfan986)" />
-      <input id="inp-key" type="password" placeholder="Unlock Key (SSPVP-PRO-XXXX-XXXX)" />
-      <input id="inp-email" type="email" placeholder="Or Checkout Email (to claim / resolve ID)" style="max-width:240px" />
-      <button class="primary" onclick="loadVault()">🔓 Load My Cloud Replays</button>
+    <!-- Top Bar: Public Trainer Lookup + Owner Login Toggle -->
+    <div class="login-card" style="justify-content:space-between">
+      <div style="display:flex;gap:8px;flex:1;flex-wrap:wrap;align-items:center">
+        <span style="font-size:13px;font-weight:800;color:#cbd5e1">👤 Trainer Vault:</span>
+        <input id="inp-user" type="text" placeholder="Enter Trainer ID (e.g. sportsfan986)" style="max-width:260px" onkeydown="if(event.key==='Enter')loadVault()" />
+        <button class="primary" onclick="loadVault()">👁️ View DVR Vault</button>
+        <button onclick="copyVaultShareUrl()" title="Copy link to this trainer's DVR page">🔗 Share Vault Page</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center" id="auth-header-controls">
+        <button id="btn-toggle-login" onclick="toggleLoginPanel()" style="border-color:#38bdf8;color:#38bdf8">🔐 Owner Login</button>
+        <button id="btn-logout" onclick="logoutVault()" style="display:none;border-color:#f43f5e;color:#fb7185">🚪 Log Out</button>
+      </div>
+    </div>
+
+    <!-- Collapsible Owner Login Card (3 Methods: Username/Token, Username/Password, GitHub OAuth) -->
+    <div class="login-card" id="owner-login-panel" style="display:none;flex-direction:column;align-items:stretch;gap:12px;border-color:#334155">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="tab-btn active" id="tab-token" onclick="setAuthTab('token')">🔑 Username + Token</button>
+          <button class="tab-btn" id="tab-password" onclick="setAuthTab('password')">🔒 Username + Password</button>
+          <button class="tab-btn" id="tab-github" onclick="setAuthTab('github')">🐙 GitHub Login</button>
+        </div>
+        <span style="font-size:11.5px;color:#94a3b8">Log in as the vault owner to view unstarred rolling battles, ⭐ Star/Pin battles, or change visibility.</span>
+      </div>
+
+      <!-- Tab 1: Username + Token / Unlock Key -->
+      <div id="pane-token" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input id="inp-key" type="password" placeholder="Unlock Key / Token (SSPVP-PRO-XXXX-XXXX)" />
+        <input id="inp-email" type="email" placeholder="Or Checkout Email (optional claim)" style="max-width:230px" />
+        <button class="primary" onclick="loginWithToken()">🔓 Sign In with Token</button>
+      </div>
+
+      <!-- Tab 2: Username + Password -->
+      <div id="pane-password" style="display:none;gap:8px;flex-wrap:wrap;align-items:center">
+        <input id="inp-password" type="password" placeholder="Vault Password for this Trainer ID" onkeydown="if(event.key==='Enter')loginWithPassword()" />
+        <button class="primary" onclick="loginWithPassword()">🔓 Sign In with Password</button>
+        <span style="font-size:11px;color:#94a3b8;width:100%">Tip: First log in with your Unlock Key or GitHub (or use the Android App Settings) to set your password.</span>
+      </div>
+
+      <!-- Tab 3: GitHub OAuth Device Flow / Token -->
+      <div id="pane-github" style="display:none;flex-direction:column;gap:10px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="primary" style="background:#24292f;border-color:#6e7681" onclick="startGitHubDeviceLogin()">🐙 1-Click Sign In with GitHub</button>
+          <span style="font-size:12px;color:#94a3b8">or paste a GitHub token:</span>
+          <input id="inp-gh-token" type="password" placeholder="gho_... / ghp_... (optional)" style="max-width:220px" />
+          <button onclick="loginWithGitHubToken()">Verify Token</button>
+        </div>
+        <div id="gh-device-box" style="display:none;background:#020617;border:1px solid #38bdf8;border-radius:8px;padding:10px 14px;font-size:13px"></div>
+      </div>
+    </div>
+
+    <!-- Set / Change Password Modal Box (Owner Only) -->
+    <div class="login-card" id="password-setup-box" style="display:none;border-color:#f59e0b;background:rgba(15,23,42,0.95)">
+      <strong style="font-size:13px;color:#fbbf24">🔒 Set / Update Password for @<span id="pw-target-user"></span>:</strong>
+      <input id="inp-new-password" type="password" placeholder="New Password (min 6 characters)" style="max-width:240px" />
+      <button class="primary" onclick="saveNewPassword()">💾 Save Password</button>
+      <button onclick="document.getElementById('password-setup-box').style.display='none'">Cancel</button>
     </div>
 
     <div class="login-card" style="justify-content:space-between;background:rgba(15,23,42,0.65);font-size:12px;color:#cbd5e1">
@@ -2812,106 +3291,423 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     </div>
 
     <div class="stats-bar" id="stats-bar" style="display:none"></div>
+    <div id="filter-bar" style="display:none;gap:8px;align-items:center;flex-wrap:wrap"></div>
     <div class="grid" id="replays-grid"></div>
   </div>
 
   <script>
     const CLIENT_KEY = ${JSON.stringify(clientIngestKey || '')};
     const params = new URLSearchParams(window.location.search);
-    const savedUser = params.get('user') || localStorage.getItem('sspvp_vault_user') || '';
+    const pathParts = window.location.pathname.split('/').filter(Boolean);
+    const pathUser = (pathParts[0] === 'u' || pathParts[0] === 'vault') && pathParts[1] ? decodeURIComponent(pathParts[1]) : '';
+    const savedUser = params.get('user') || pathUser || localStorage.getItem('sspvp_vault_user') || '';
     const savedKey = params.get('key') || localStorage.getItem('sspvp_vault_key') || '';
     const savedEmail = params.get('email') || localStorage.getItem('sspvp_vault_email') || '';
+    let sessionToken = localStorage.getItem('sspvp_vault_session') || '';
+    let currentVaultData = null;
+    let currentFilter = 'all'; // 'all' | 'starred'
+    let ghPollTimer = null;
+
     document.getElementById('inp-user').value = savedUser;
     document.getElementById('inp-key').value = savedKey;
     document.getElementById('inp-email').value = savedEmail;
+
+    function toggleLoginPanel() {
+      const el = document.getElementById('owner-login-panel');
+      el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+    }
+
+    function setAuthTab(tab) {
+      ['token', 'password', 'github'].forEach(t => {
+        document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+        document.getElementById('pane-' + t).style.display = t === tab ? 'flex' : 'none';
+      });
+    }
+
+    function logoutVault() {
+      sessionToken = '';
+      localStorage.removeItem('sspvp_vault_session');
+      localStorage.removeItem('sspvp_vault_key');
+      document.getElementById('inp-key').value = '';
+      document.getElementById('inp-password').value = '';
+      document.getElementById('btn-logout').style.display = 'none';
+      loadVault();
+    }
+
+    function copyVaultShareUrl() {
+      const user = document.getElementById('inp-user').value.trim();
+      if (!user) return alert('Enter a Trainer ID first.');
+      const shareUrl = window.location.origin + '/vault?user=' + encodeURIComponent(user);
+      navigator.clipboard.writeText(shareUrl);
+      alert('Copied Vault Page URL: ' + shareUrl);
+    }
+
+    async function loginWithToken() {
+      const user = document.getElementById('inp-user').value.trim();
+      const key = document.getElementById('inp-key').value.trim();
+      const email = document.getElementById('inp-email').value.trim();
+      if (!user) return alert('Enter your Trainer ID first.');
+      if (!key && !email) return alert('Enter your Unlock Key (or Checkout Email).');
+      await performOwnerLogin({ screenName: user, unlockKey: key, claimEmail: email });
+    }
+
+    async function loginWithPassword() {
+      const user = document.getElementById('inp-user').value.trim();
+      const password = document.getElementById('inp-password').value.trim();
+      if (!user) return alert('Enter your Trainer ID first.');
+      if (!password) return alert('Enter your Password.');
+      await performOwnerLogin({ screenName: user, password });
+    }
+
+    async function loginWithGitHubToken() {
+      const user = document.getElementById('inp-user').value.trim();
+      const githubToken = document.getElementById('inp-gh-token').value.trim();
+      if (!githubToken) return alert('Paste a GitHub token or click 1-Click Sign In with GitHub.');
+      const key = document.getElementById('inp-key').value.trim();
+      await performOwnerLogin({ screenName: user, githubToken, unlockKey: key });
+    }
+
+    async function performOwnerLogin(payload) {
+      try {
+        const res = await fetch('/v1/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-SilphScope-Client-Key': CLIENT_KEY,
+            'X-Trainer-Screen-Name': payload.screenName || 'anonymous'
+          },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          alert(data.error || 'Authentication failed.');
+          return;
+        }
+        sessionToken = data.sessionToken || '';
+        if (sessionToken) localStorage.setItem('sspvp_vault_session', sessionToken);
+        if (data.screenName) {
+          document.getElementById('inp-user').value = data.screenName;
+          localStorage.setItem('sspvp_vault_user', data.screenName);
+        }
+        if (payload.unlockKey) localStorage.setItem('sspvp_vault_key', payload.unlockKey);
+        if (payload.claimEmail) localStorage.setItem('sspvp_vault_email', payload.claimEmail);
+        document.getElementById('owner-login-panel').style.display = 'none';
+        await loadVault();
+      } catch (e) {
+        alert('Login error: ' + e.message);
+      }
+    }
+
+    async function startGitHubDeviceLogin() {
+      const box = document.getElementById('gh-device-box');
+      box.style.display = 'block';
+      box.innerHTML = '⏳ Requesting GitHub Device Code...';
+      if (ghPollTimer) clearInterval(ghPollTimer);
+      try {
+        const res = await fetch('/v1/auth/github/device-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-SilphScope-Client-Key': CLIENT_KEY }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          box.innerHTML = '<span style="color:#fb7185">' + (data.error || 'Failed to start GitHub login.') + '</span>';
+          return;
+        }
+        box.innerHTML =
+          '<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px">' +
+            '<div>1. Copy one-time code: <strong style="font-size:16px;color:#38bdf8;letter-spacing:1px;padding:2px 8px;background:#0f172a;border-radius:6px">' + data.user_code + '</strong></div>' +
+            '<a class="btn-link" style="background:#059669;border-color:#10b981" href="' + data.verification_uri + '" target="_blank" rel="noopener">2. Open GitHub & Authorize ↗</a>' +
+          '</div>' +
+          '<div style="margin-top:6px;font-size:11.5px;color:#94a3b8" id="gh-poll-status">Waiting for authorization on GitHub...</div>';
+        try { navigator.clipboard.writeText(data.user_code); } catch (_) {}
+        window.open(data.verification_uri, '_blank', 'noopener');
+
+        const intervalMs = Math.max(5, Number(data.interval) || 5) * 1000;
+        ghPollTimer = setInterval(async () => {
+          try {
+            const prefUser = document.getElementById('inp-user').value.trim();
+            const key = document.getElementById('inp-key').value.trim();
+            const pollRes = await fetch('/v1/auth/github/poll', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-SilphScope-Client-Key': CLIENT_KEY },
+              body: JSON.stringify({
+                device_code: data.device_code,
+                screenName: prefUser,
+                unlockKey: key,
+                sessionToken
+              })
+            });
+            const pollData = await pollRes.json();
+            if (pollData.status === 'pending') return;
+            clearInterval(ghPollTimer);
+            ghPollTimer = null;
+            if (pollData.ok && pollData.sessionToken) {
+              sessionToken = pollData.sessionToken;
+              localStorage.setItem('sspvp_vault_session', sessionToken);
+              if (pollData.screenName) {
+                document.getElementById('inp-user').value = pollData.screenName;
+                localStorage.setItem('sspvp_vault_user', pollData.screenName);
+              }
+              box.style.display = 'none';
+              document.getElementById('owner-login-panel').style.display = 'none';
+              await loadVault();
+            } else {
+              box.innerHTML = '<span style="color:#fb7185">' + (pollData.error || 'GitHub login did not match an account.') + '</span>';
+            }
+          } catch (_) {}
+        }, intervalMs);
+      } catch (e) {
+        box.innerHTML = '<span style="color:#fb7185">Error: ' + e.message + '</span>';
+      }
+    }
+
+    function openPasswordSetup() {
+      const user = (currentVaultData && currentVaultData.screenName) || document.getElementById('inp-user').value.trim();
+      document.getElementById('pw-target-user').textContent = user;
+      document.getElementById('inp-new-password').value = '';
+      document.getElementById('password-setup-box').style.display = 'flex';
+    }
+
+    async function saveNewPassword() {
+      const user = (currentVaultData && currentVaultData.screenName) || document.getElementById('inp-user').value.trim();
+      const newPassword = document.getElementById('inp-new-password').value.trim();
+      const key = document.getElementById('inp-key').value.trim();
+      if (!newPassword || newPassword.length < 6) {
+        return alert('Password must be at least 6 characters.');
+      }
+      try {
+        const res = await fetch('/v1/auth/set-password', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-SilphScope-Client-Key': CLIENT_KEY,
+            'X-Trainer-Screen-Name': user,
+            'X-Vault-Session': sessionToken,
+            'X-SilphScope-Unlock-Key': key
+          },
+          body: JSON.stringify({ screenName: user, newPassword, sessionToken, unlockKey: key })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          return alert(data.error || 'Failed to save password.');
+        }
+        if (data.sessionToken) {
+          sessionToken = data.sessionToken;
+          localStorage.setItem('sspvp_vault_session', sessionToken);
+        }
+        document.getElementById('password-setup-box').style.display = 'none';
+        alert('✅ Password saved for @' + user + '! You can now log in anytime with Username + Password.');
+        loadVault();
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    }
+
+    async function updateVaultVisibility(newVis) {
+      const user = (currentVaultData && currentVaultData.screenName) || document.getElementById('inp-user').value.trim();
+      const key = document.getElementById('inp-key').value.trim();
+      try {
+        const res = await fetch('/v1/replays/settings', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-SilphScope-Client-Key': CLIENT_KEY,
+            'X-Trainer-Screen-Name': user,
+            'X-Vault-Session': sessionToken,
+            'X-SilphScope-Unlock-Key': key
+          },
+          body: JSON.stringify({ publicVisibility: newVis, sessionToken, unlockKey: key })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          return alert(data.error || 'Failed to update visibility.');
+        }
+        loadVault();
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    }
 
     async function loadVault() {
       const user = document.getElementById('inp-user').value.trim();
       const key = document.getElementById('inp-key').value.trim();
       const email = document.getElementById('inp-email').value.trim();
-      if (!user) return alert('Enter your Trainer / Debug ID first.');
-      if (!key && !email) return alert('Enter your Unlock Key (or Checkout Email) to authenticate your Cloud Replay Vault.');
+      if (!user) {
+        document.getElementById('replays-grid').innerHTML =
+          '<div style="color:#94a3b8;padding:24px;grid-column:1/-1;text-align:center;background:#0f172a;border:1px solid #1e293b;border-radius:12px">' +
+            '<div style="font-size:15px;font-weight:800;color:#f8fafc;margin-bottom:6px">🔍 Enter a Trainer ID above to view their Public DVR Replay Vault</div>' +
+            '<div style="font-size:12.5px;color:#94a3b8">Starred replays are viewable by anyone by default, or click <strong>🔐 Owner Login</strong> to sign in with your Token, Password, or GitHub account.</div>' +
+          '</div>';
+        return;
+      }
       localStorage.setItem('sspvp_vault_user', user);
       if (key) localStorage.setItem('sspvp_vault_key', key);
       if (email) localStorage.setItem('sspvp_vault_email', email);
 
       const grid = document.getElementById('replays-grid');
-      grid.innerHTML = '<div style="color:#94a3b8;padding:20px">Loading Cloud Replay Vault...</div>';
+      grid.innerHTML = '<div style="color:#94a3b8;padding:20px">Loading Cloud Replay Vault for @' + user + '...</div>';
 
       try {
-        const res = await fetch('/v1/replays/list', {
+        const res = await fetch('/v1/replays/list?user=' + encodeURIComponent(user), {
           headers: {
             'X-SilphScope-Client-Key': CLIENT_KEY,
             'X-Trainer-Screen-Name': user,
             'X-SilphScope-Unlock-Key': key,
+            'X-Vault-Session': sessionToken,
             'X-Claim-Email': email
           }
         });
         const data = await res.json();
         if (!res.ok || !data.ok) {
-          grid.innerHTML = '<div style="color:#fb7185;padding:20px">' + (data.error || 'Failed to load vault') + '</div>';
+          document.getElementById('stats-bar').style.display = 'none';
+          document.getElementById('filter-bar').style.display = 'none';
+          document.getElementById('owner-login-panel').style.display = 'flex';
+          grid.innerHTML = '<div style="color:#fb7185;padding:20px;grid-column:1/-1;background:#0f172a;border:1px solid #334155;border-radius:12px">' + (data.error || 'Failed to load vault') + '</div>';
           return;
         }
+
+        currentVaultData = data;
+        if (data.sessionToken) {
+          sessionToken = data.sessionToken;
+          localStorage.setItem('sspvp_vault_session', sessionToken);
+        }
+
+        const isOwner = Boolean(data.isOwner);
+        document.getElementById('btn-logout').style.display = isOwner ? 'inline-flex' : 'none';
+        document.getElementById('btn-toggle-login').textContent = isOwner ? '⚙️ Account / Login' : '🔐 Owner Login';
+
         const sb = document.getElementById('stats-bar');
         sb.style.display = 'flex';
         const lim = data.limits || {};
         const usg = data.usage || {};
-        sb.innerHTML =
-          '<div><strong>👤 @' + data.screenName + '</strong> • <span style="color:#38bdf8;font-weight:700">' + (lim.label || data.tier.toUpperCase()) + '</span></div>' +
-          '<div style="color:#cbd5e1">☁️ Storage: <strong>' + (usg.usedMb || 0) + ' MB</strong> / ' + (lim.maxStorageMb || 0) + ' MB • Rolling: <strong>' + (usg.rollingCount || 0) + '/' + (lim.maxRollingBattles || 0) + '</strong> • ⭐ Pinned: <strong>' + (usg.pinnedCount || 0) + '/' + (lim.maxPinnedBattles || 0) + '</strong></div>';
+        const vis = (data.settings && data.settings.publicVisibility) || data.visibility || 'starred_only';
 
-        const items = data.items || [];
-        if (!items.length) {
-          grid.innerHTML = '<div style="color:#94a3b8;padding:20px">No replays stored in your Cloud Vault yet. Record a battle in SilphScope PvP v6.42+ with Auto-DVR enabled!</div>';
-          return;
+        if (isOwner) {
+          const ghBadge = data.githubUsername
+            ? '<span style="color:#34d399;font-size:12px">🐙 GitHub: @' + data.githubUsername + '</span>'
+            : '<button onclick="toggleLoginPanel();setAuthTab(\\'github\\')" style="padding:4px 9px;font-size:11.5px">🐙 Link GitHub</button>';
+          const pwBtn = '<button onclick="openPasswordSetup()" style="padding:4px 9px;font-size:11.5px">' + (data.hasPassword ? '🔒 Change Password' : '🔒 Set Password') + '</button>';
+
+          sb.innerHTML =
+            '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">' +
+              '<div><strong>👤 @' + data.screenName + ' (Owner)</strong> • <span style="color:#38bdf8;font-weight:700">' + (lim.label || (data.tier || 'FREE').toUpperCase()) + '</span></div>' +
+              '<div style="color:#cbd5e1">☁️ Storage: <strong>' + (usg.usedMb || 0) + ' MB</strong> / ' + (lim.maxStorageMb || 0) + ' MB • Rolling: <strong>' + (usg.rollingCount || 0) + '/' + (lim.maxRollingBattles || 0) + '</strong> • ⭐ Starred: <strong>' + (usg.pinnedCount || 0) + '/' + (lim.maxPinnedBattles || 0) + '</strong></div>' +
+            '</div>' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-top:8px;border-top:1px solid #1e293b">' +
+              '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+                '<span style="font-size:12px;color:#94a3b8;font-weight:700">🌐 Public Vault Page Visibility:</span>' +
+                '<select onchange="updateVaultVisibility(this.value)" style="min-width:240px;padding:5px 10px;font-size:12px">' +
+                  '<option value="starred_only"' + (vis === 'starred_only' ? ' selected' : '') + '>⭐ Starred Only (Default — Unstarred Battles Private)</option>' +
+                  '<option value="all"' + (vis === 'all' ? ' selected' : '') + '>🌐 Public: All Replays Viewable by Anyone</option>' +
+                  '<option value="private"' + (vis === 'private' ? ' selected' : '') + '>🔒 Private: Owner Login Required</option>' +
+                '</select>' +
+                '<span style="font-size:11px;color:#64748b">(Direct /watch/... links always work when shared)</span>' +
+              '</div>' +
+              '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' + pwBtn + ghBadge + '</div>' +
+            '</div>';
+        } else {
+          const visLabel = vis === 'all' ? '🌐 Public Vault (All Replays)' : '⭐ Public Vault (Starred Replays Only)';
+          const hiddenNote = (vis === 'starred_only' && data.hiddenRollingCount > 0)
+            ? ' • <span style="color:#94a3b8">' + data.hiddenRollingCount + ' unstarred rolling battle(s) hidden (Owner-only)</span>'
+            : '';
+          sb.innerHTML =
+            '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">' +
+              '<div><strong>👤 @' + data.screenName + '</strong> • <span style="color:#fbbf24;font-weight:700">' + visLabel + '</span>' + hiddenNote + '</div>' +
+              '<button onclick="toggleLoginPanel()" style="padding:5px 10px;font-size:11.5px;border-color:#38bdf8;color:#38bdf8">🔐 Are you @' + data.screenName + '? Log In to Manage & Star</button>' +
+            '</div>';
         }
-        grid.innerHTML = items.map(item => {
-          const isWin = String(item.result || '').toUpperCase().includes('WIN');
-          const mb = ((item.totalBytes || item.videoBytes || 0) / (1024 * 1024)).toFixed(1);
-          const dateStr = item.createdAt ? new Date(item.createdAt).toLocaleString() : '';
-          return '<div class="replay-card ' + (item.isPinned ? 'pinned' : '') + '">' +
-            '<div style="display:flex;justify-content:space-between;align-items:center">' +
-              '<span class="pill ' + (isWin ? 'pill-win' : 'pill-loss') + '">' + (item.result || 'BATTLE') + ' • ' + (item.league || 'GBL') + '</span>' +
-              '<span style="font-size:11px;color:#94a3b8">' + mb + ' MB • ' + (item.durationSec || 0) + 's</span>' +
-            '</div>' +
-            '<div style="font-weight:800;font-size:13.5px;color:#f1f5f9">' + (item.matchupSummary || item.battleId) + '</div>' +
-            '<div style="font-size:11px;color:#64748b">' + dateStr + ' • ID: ' + item.battleId + '</div>' +
-            '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">' +
-              '<a class="btn-link" style="background:#059669;border-color:#10b981;flex:1;justify-content:center" href="' + item.shareUrl + '">▶️ Watch + HUD</a>' +
-              '<button onclick="togglePin(\\'' + item.battleId + '\\', ' + (!item.isPinned) + ')">' + (item.isPinned ? '⭐ Pinned' : '☆ Pin') + '</button>' +
-              '<button onclick="copyLink(\\'' + item.shareUrl + '\\')">🔗 Copy Link</button>' +
-            '</div>' +
-          '</div>';
-        }).join('');
+
+        renderReplayGrid();
       } catch (e) {
         grid.innerHTML = '<div style="color:#fb7185;padding:20px">Error: ' + e.message + '</div>';
       }
     }
 
+    function setFilter(f) {
+      currentFilter = f;
+      renderReplayGrid();
+    }
+
+    function renderReplayGrid() {
+      const grid = document.getElementById('replays-grid');
+      const filterBar = document.getElementById('filter-bar');
+      if (!currentVaultData) return;
+
+      const isOwner = Boolean(currentVaultData.isOwner);
+      const vis = (currentVaultData.settings && currentVaultData.settings.publicVisibility) || currentVaultData.visibility || 'starred_only';
+      const allItems = currentVaultData.items || [];
+      const starredItems = allItems.filter(i => i.isPinned);
+
+      if (isOwner || vis === 'all') {
+        filterBar.style.display = 'flex';
+        filterBar.innerHTML =
+          '<button class="tab-btn ' + (currentFilter === 'all' ? 'active' : '') + '" onclick="setFilter(\\'all\\')">🎬 All Replays (' + allItems.length + ')</button>' +
+          '<button class="tab-btn ' + (currentFilter === 'starred' ? 'active' : '') + '" onclick="setFilter(\\'starred\\')">⭐ Starred Only (' + starredItems.length + ')</button>';
+      } else {
+        filterBar.style.display = 'none';
+      }
+
+      const items = (currentFilter === 'starred' && (isOwner || vis === 'all')) ? starredItems : allItems;
+      if (!items.length) {
+        const emptyMsg = !isOwner && vis === 'starred_only'
+          ? 'No ⭐ Starred replays published by @' + currentVaultData.screenName + ' yet. If this is your vault, click 🔐 Owner Login above to view your rolling battles and ⭐ Star the ones you want to feature!'
+          : 'No replays found in this view.';
+        grid.innerHTML = '<div style="color:#94a3b8;padding:20px;grid-column:1/-1">' + emptyMsg + '</div>';
+        return;
+      }
+
+      grid.innerHTML = items.map(item => {
+        const isWin = String(item.result || '').toUpperCase().includes('WIN');
+        const mb = ((item.totalBytes || item.videoBytes || 0) / (1024 * 1024)).toFixed(1);
+        const dateStr = item.createdAt ? new Date(item.createdAt).toLocaleString() : '';
+        const starControl = isOwner
+          ? '<button onclick="togglePin(\\'' + item.battleId + '\\', ' + (!item.isPinned) + ')" title="Starred replays are kept for 365 days and shown on your public vault page">' + (item.isPinned ? '⭐ Starred' : '☆ Star') + '</button>'
+          : (item.isPinned ? '<span class="pill pill-star">⭐ Starred</span>' : '');
+        return '<div class="replay-card ' + (item.isPinned ? 'pinned' : '') + '">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px">' +
+            '<span class="pill ' + (isWin ? 'pill-win' : 'pill-loss') + '">' + (item.result || 'BATTLE') + ' • ' + (item.league || 'GBL') + '</span>' +
+            '<span style="font-size:11px;color:#94a3b8">' + mb + ' MB • ' + (item.durationSec || 0) + 's</span>' +
+          '</div>' +
+          '<div style="font-weight:800;font-size:13.5px;color:#f1f5f9">' + (item.matchupSummary || item.battleId) + '</div>' +
+          '<div style="font-size:11px;color:#64748b">' + dateStr + ' • ID: ' + item.battleId + '</div>' +
+          '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;align-items:center">' +
+            '<a class="btn-link" style="background:#059669;border-color:#10b981;flex:1;justify-content:center" href="' + item.shareUrl + '">▶️ Watch + HUD</a>' +
+            starControl +
+            '<button onclick="copyLink(\\'' + item.shareUrl + '\\')" title="Anyone with this direct link can watch this replay">🔗 Copy Link</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+
     async function togglePin(battleId, nextPinned) {
-      const user = document.getElementById('inp-user').value.trim();
+      const user = (currentVaultData && currentVaultData.screenName) || document.getElementById('inp-user').value.trim();
       const key = document.getElementById('inp-key').value.trim();
       const email = document.getElementById('inp-email').value.trim();
-      await fetch('/v1/replays/pin', {
+      const res = await fetch('/v1/replays/pin', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-SilphScope-Client-Key': CLIENT_KEY,
           'X-Trainer-Screen-Name': user,
           'X-SilphScope-Unlock-Key': key,
+          'X-Vault-Session': sessionToken,
           'X-Claim-Email': email
         },
-        body: JSON.stringify({ battleId, isPinned: nextPinned, unlockKey: key, claimEmail: email })
+        body: JSON.stringify({ battleId, isPinned: nextPinned, unlockKey: key, sessionToken, claimEmail: email })
       });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        return alert(data.error || 'Only the vault owner can star/unstar replays.');
+      }
       loadVault();
     }
 
     function copyLink(url) {
       navigator.clipboard.writeText(url);
-      alert('Copied Share URL: ' + url);
+      alert('Copied Direct Share URL (viewable by anyone with the link): ' + url);
     }
 
-    if (savedUser && (savedKey || savedEmail)) loadVault();
+    if (savedUser) loadVault();
   </script>
 </body>
 </html>`;
@@ -2929,7 +3725,7 @@ export default {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
           'Access-Control-Allow-Headers':
-            'Content-Type, Authorization, X-SilphScope-Client-Key, X-Trainer-Screen-Name, X-SilphScope-Unlock-Key, X-Device-Hash, X-Claim-Email, X-GitHub-Username, X-GitHub-User-Id, Range',
+            'Content-Type, Authorization, X-SilphScope-Client-Key, X-Trainer-Screen-Name, X-SilphScope-Unlock-Key, X-Vault-Session, X-Vault-Password, X-GitHub-Token, X-Device-Hash, X-Claim-Email, X-GitHub-Username, X-GitHub-User-Id, Range',
           'Access-Control-Expose-Headers': 'Content-Range, Accept-Ranges, Content-Length',
         },
       });
@@ -2937,8 +3733,15 @@ export default {
 
     const store = getStorageAdapter(env);
 
-    // 0. Public Cloud DVR Replay Vault Web Portal (`GET /` or `GET /vault`)
-    if (request.method === 'GET' && (path === '/' || path === '/vault' || path === '/replays')) {
+    // 0. Public Cloud DVR Replay Vault Web Portal (`GET /`, `GET /vault`, `GET /vault/:user`, `GET /u/:user`)
+    if (
+      request.method === 'GET' &&
+      (path === '/' ||
+        path === '/vault' ||
+        path === '/replays' ||
+        path.startsWith('/vault/') ||
+        path.startsWith('/u/'))
+    ) {
       return new Response(
         renderVaultDashboardPage(url.origin, (env.CLIENT_INGEST_KEY || '').trim()),
         {
@@ -3924,55 +4727,417 @@ export default {
       }
     }
 
-    // 8. List User's Cloud R2 Replays (`GET /v1/replays/list`)
-    if (request.method === 'GET' && path === '/v1/replays/list') {
+    // 7b. Unified Vault & Simulator Login (`POST /v1/auth/login`)
+    if (request.method === 'POST' && path === '/v1/auth/login') {
       const auth = verifyClientAuth(request, env);
       if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
-      const { screenName } = auth;
 
-      const inputKey = String(request.headers.get('X-SilphScope-Unlock-Key') || '').trim();
-      const devHash = String(request.headers.get('X-Device-Hash') || '').trim();
-      const claimEmail = String(request.headers.get('X-Claim-Email') || '').trim();
-      const licenseInfo = await resolveUserLicense(
+      let body = {};
+      try {
+        body = await request.json();
+      } catch (_) {}
+
+      const rawTarget = String(
+        body.screenName || request.headers.get('X-Trainer-Screen-Name') || auth.screenName || ''
+      ).trim();
+      const targetScreenName = rawTarget ? sanitizeScreenName(rawTarget) : '';
+
+      const ownerAuth = await authenticateVaultOwner(
+        request,
         env,
         env.TELEMETRY_KV,
-        screenName,
-        inputKey,
-        '',
-        '',
-        devHash,
-        claimEmail
+        targetScreenName,
+        body
       );
-      if (!licenseInfo.active) {
+      if (!ownerAuth.isOwner) {
         return jsonResponse(
           {
             ok: false,
+            isOwner: false,
             error:
-              licenseInfo.error ||
-              'Enter your Unlock Key (or Checkout Email) to view and manage your Cloud Replay Vault.',
-            tier: 'free',
+              ownerAuth.error ||
+              'Authentication failed. Check your Username + Token, Password, or GitHub account.',
           },
           403
         );
       }
-      const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, screenName);
-      const usage = await enforceUserReplayQuota(
-        env,
-        env.TELEMETRY_KV,
-        screenName,
-        licenseInfo,
-        indexObj
-      );
-      await saveUserReplayIndex(env.TELEMETRY_KV, screenName, indexObj);
+
+      const resolvedName = ownerAuth.screenName || targetScreenName;
+      const licInfo = ownerAuth.licenseInfo || { ...TIER_PRESETS.free, active: false };
+      const authRec = ownerAuth.authRecord || (await loadUserAuthRecord(env.TELEMETRY_KV, resolvedName));
+      const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, resolvedName);
 
       return jsonResponse({
         ok: true,
+        isOwner: true,
+        authMethod: ownerAuth.authMethod,
+        screenName: resolvedName,
+        sessionToken: ownerAuth.sessionToken,
+        tier: licInfo.tier || 'free',
+        active: Boolean(licInfo.active),
+        everPaid: Boolean(licInfo.everPaid),
+        signature: licInfo.signature || '',
+        license: licInfo,
+        limits: licInfo,
+        hasPassword: Boolean(authRec && authRec.passwordHash),
+        githubUsername:
+          (authRec && authRec.githubUsername) || licInfo.boundGitHubUsername || '',
+        settings: indexObj.settings,
+      });
+    }
+
+    // 7c. Set or Update User Password (`POST /v1/auth/set-password`)
+    if (request.method === 'POST' && path === '/v1/auth/set-password') {
+      const auth = verifyClientAuth(request, env);
+      if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
+
+      let body = {};
+      try {
+        body = await request.json();
+      } catch (_) {
+        return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400);
+      }
+
+      const targetName = sanitizeScreenName(body.screenName || auth.screenName || '');
+      const newPassword = String(body.newPassword || '').trim();
+      if (!targetName || targetName === 'anonymous') {
+        return jsonResponse({ ok: false, error: 'Enter a valid Trainer ID first.' }, 400);
+      }
+      if (!newPassword || newPassword.length < 6) {
+        return jsonResponse({ ok: false, error: 'Password must be at least 6 characters.' }, 400);
+      }
+
+      const existingAuth = await loadUserAuthRecord(env.TELEMETRY_KV, targetName);
+      const devHash = String(body.deviceHash || request.headers.get('X-Device-Hash') || '').trim();
+      const ghId = String(body.githubUserId || request.headers.get('X-GitHub-User-Id') || '').trim();
+
+      let authorizedToSet = false;
+      const ownerAuth = await authenticateVaultOwner(
+        request,
+        env,
+        env.TELEMETRY_KV,
+        targetName,
+        {
+          ...body,
+          password: body.currentPassword || body.password || '',
+        }
+      );
+
+      if (ownerAuth.isOwner) {
+        authorizedToSet = true;
+      } else if (!existingAuth || !existingAuth.passwordHash) {
+        // Allow first-time password creation from the owning Android device / GitHub account
+        const chk = await checkScreenNameRegistration(env.TELEMETRY_KV, targetName, devHash, ghId);
+        if (chk.available && (devHash || ghId)) {
+          authorizedToSet = true;
+        }
+      }
+
+      if (!authorizedToSet) {
+        return jsonResponse(
+          {
+            ok: false,
+            error:
+              'Authenticate with your Unlock Key, GitHub account, or current password before changing your password.',
+          },
+          403
+        );
+      }
+
+      const salt = generateShareId().replace(/^r_/, '') + Date.now().toString(36);
+      const passwordHash = await hashUserPassword(env, newPassword, salt);
+      const updatedAuth = existingAuth || { screenName: targetName };
+      updatedAuth.passwordSalt = salt;
+      updatedAuth.passwordHash = passwordHash;
+      if (ownerAuth.licenseInfo && ownerAuth.licenseInfo.key) {
+        updatedAuth.boundKey = ownerAuth.licenseInfo.key;
+      }
+      await saveUserAuthRecord(env.TELEMETRY_KV, targetName, updatedAuth);
+
+      const tier = (ownerAuth.licenseInfo && ownerAuth.licenseInfo.tier) || 'free';
+      const sessionToken = await createVaultSessionToken(env, targetName, tier);
+      return jsonResponse({
+        ok: true,
+        screenName: targetName,
+        hasPassword: true,
+        sessionToken,
+      });
+    }
+
+    // 7d. GitHub OAuth Device Flow Proxy (`POST /v1/auth/github/device-code` & `POST /v1/auth/github/poll`)
+    if (request.method === 'POST' && path === '/v1/auth/github/device-code') {
+      try {
+        const ghRes = await fetch('https://github.com/login/device/code', {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'SilphScope-PvP-Worker/7.0',
+          },
+          body: `client_id=${encodeURIComponent(GITHUB_OAUTH_CLIENT_ID)}&scope=read%3Auser`,
+        });
+        const ghData = await ghRes.json();
+        if (!ghRes.ok || !ghData.device_code) {
+          return jsonResponse(
+            { ok: false, error: ghData.error_description || 'Failed to start GitHub Device Flow.' },
+            400
+          );
+        }
+        return jsonResponse({
+          ok: true,
+          device_code: ghData.device_code,
+          user_code: ghData.user_code,
+          verification_uri: ghData.verification_uri || 'https://github.com/login/device',
+          expires_in: ghData.expires_in || 900,
+          interval: ghData.interval || 5,
+        });
+      } catch (e) {
+        return jsonResponse({ ok: false, error: e.message }, 500);
+      }
+    }
+
+    if (request.method === 'POST' && path === '/v1/auth/github/poll') {
+      let body = {};
+      try {
+        body = await request.json();
+      } catch (_) {}
+      const deviceCode = String(body.device_code || '').trim();
+      if (!deviceCode) {
+        return jsonResponse({ ok: false, error: 'Missing device_code' }, 400);
+      }
+      try {
+        const ghRes = await fetch('https://github.com/login/oauth/access_token', {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'SilphScope-PvP-Worker/7.0',
+          },
+          body:
+            `client_id=${encodeURIComponent(GITHUB_OAUTH_CLIENT_ID)}` +
+            `&device_code=${encodeURIComponent(deviceCode)}` +
+            `&grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code`,
+        });
+        const ghData = await ghRes.json();
+        if (ghData.error === 'authorization_pending' || ghData.error === 'slow_down') {
+          return jsonResponse({ ok: true, status: 'pending' });
+        }
+        if (!ghData.access_token) {
+          return jsonResponse(
+            {
+              ok: false,
+              status: 'error',
+              error: ghData.error_description || ghData.error || 'GitHub authorization failed.',
+            },
+            400
+          );
+        }
+        const githubToken = String(ghData.access_token).trim();
+        const ghUser = await verifyGitHubTokenIdentity(githubToken);
+        if (!ghUser.ok) {
+          return jsonResponse({ ok: false, status: 'error', error: ghUser.error }, 400);
+        }
+
+        const preferredName = body.screenName ? sanitizeScreenName(body.screenName) : '';
+        const resolvedName = await resolveScreenNameFromGitHub(
+          env.TELEMETRY_KV,
+          ghUser.githubUsername,
+          ghUser.githubUserId,
+          preferredName
+        );
+        const ownerAuth = await authenticateVaultOwner(
+          request,
+          env,
+          env.TELEMETRY_KV,
+          resolvedName,
+          {
+            ...body,
+            screenName: resolvedName,
+            githubToken,
+          }
+        );
+
+        if (!ownerAuth.isOwner) {
+          return jsonResponse(
+            {
+              ok: false,
+              status: 'error',
+              githubUsername: ghUser.githubUsername,
+              githubUserId: ghUser.githubUserId,
+              githubToken,
+              error:
+                ownerAuth.error ||
+                `GitHub account @${ghUser.githubUsername} is not linked to @${resolvedName} yet. Enter your Unlock Key once and click Verify Token to link them.`,
+            },
+            403
+          );
+        }
+
+        const licInfo = ownerAuth.licenseInfo || { ...TIER_PRESETS.free, active: false };
+        return jsonResponse({
+          ok: true,
+          status: 'authorized',
+          isOwner: true,
+          screenName: ownerAuth.screenName,
+          githubUsername: ghUser.githubUsername,
+          githubUserId: ghUser.githubUserId,
+          githubToken,
+          sessionToken: ownerAuth.sessionToken,
+          tier: licInfo.tier || 'free',
+          active: Boolean(licInfo.active),
+          everPaid: Boolean(licInfo.everPaid),
+          signature: licInfo.signature || '',
+          license: licInfo,
+          limits: licInfo,
+        });
+      } catch (e) {
+        return jsonResponse({ ok: false, status: 'error', error: e.message }, 500);
+      }
+    }
+
+    // 7e. Update DVR Vault Visibility Settings (`POST /v1/replays/settings`)
+    if (request.method === 'POST' && path === '/v1/replays/settings') {
+      const auth = verifyClientAuth(request, env);
+      if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
+      const { screenName } = auth;
+
+      let body = {};
+      try {
+        body = await request.json();
+      } catch (_) {
+        return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400);
+      }
+
+      const ownerAuth = await authenticateVaultOwner(
+        request,
+        env,
+        env.TELEMETRY_KV,
         screenName,
-        tier: licenseInfo.tier,
-        active: licenseInfo.active,
-        limits: licenseInfo,
-        usage,
-        items: (indexObj.items || []).map((item) => ({
+        body
+      );
+      if (!ownerAuth.isOwner) {
+        return jsonResponse(
+          { ok: false, error: 'Only the authenticated vault owner can change visibility settings.' },
+          403
+        );
+      }
+
+      const resolvedName = ownerAuth.screenName || screenName;
+      const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, resolvedName);
+      indexObj.settings = normalizeVaultSettings({
+        ...indexObj.settings,
+        ...(body.publicVisibility !== undefined ? { publicVisibility: body.publicVisibility } : {}),
+        ...(body.hideNamesPublic !== undefined ? { hideNamesPublic: body.hideNamesPublic } : {}),
+      });
+      await saveUserReplayIndex(env.TELEMETRY_KV, resolvedName, indexObj);
+
+      return jsonResponse({
+        ok: true,
+        screenName: resolvedName,
+        settings: indexObj.settings,
+      });
+    }
+
+    // 8. List User's Cloud R2 Replays (`GET /v1/replays/list`) — Supports Owner Mode & Public Visitor Mode
+    if (request.method === 'GET' && path === '/v1/replays/list') {
+      const auth = verifyClientAuth(request, env);
+      const requestedUser = url.searchParams.get('user')
+        ? sanitizeScreenName(url.searchParams.get('user'))
+        : auth.ok
+        ? auth.screenName
+        : sanitizeScreenName(request.headers.get('X-SilphScope-Screen-Name') || '');
+
+      if (!requestedUser || requestedUser === 'anonymous') {
+        return jsonResponse({ ok: false, error: 'Please specify a Trainer ID.' }, 400);
+      }
+
+      const ownerAuth = await authenticateVaultOwner(
+        request,
+        env,
+        env.TELEMETRY_KV,
+        requestedUser
+      );
+
+      if (ownerAuth.isOwner) {
+        const resolvedName = ownerAuth.screenName || requestedUser;
+        const licenseInfo = ownerAuth.licenseInfo || { ...TIER_PRESETS.free, active: false };
+        const authRec = ownerAuth.authRecord || (await loadUserAuthRecord(env.TELEMETRY_KV, resolvedName));
+        const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, resolvedName);
+        const usage = licenseInfo.active
+          ? await enforceUserReplayQuota(
+              env,
+              env.TELEMETRY_KV,
+              resolvedName,
+              licenseInfo,
+              indexObj
+            )
+          : {
+              usedBytes: (indexObj.items || []).reduce((s, i) => s + (Number(i.totalBytes) || 0), 0),
+              usedMb: Number(
+                (
+                  (indexObj.items || []).reduce((s, i) => s + (Number(i.totalBytes) || 0), 0) /
+                  (1024 * 1024)
+                ).toFixed(2)
+              ),
+              rollingCount: (indexObj.items || []).filter((i) => !i.isPinned).length,
+              pinnedCount: (indexObj.items || []).filter((i) => i.isPinned).length,
+            };
+        await saveUserReplayIndex(env.TELEMETRY_KV, resolvedName, indexObj);
+
+        return jsonResponse({
+          ok: true,
+          isOwner: true,
+          canStar: true,
+          screenName: resolvedName,
+          sessionToken: ownerAuth.sessionToken,
+          tier: licenseInfo.tier || 'free',
+          active: Boolean(licenseInfo.active),
+          hasPassword: Boolean(authRec && authRec.passwordHash),
+          githubUsername:
+            (authRec && authRec.githubUsername) || licenseInfo.boundGitHubUsername || '',
+          settings: indexObj.settings,
+          visibility: indexObj.settings.publicVisibility,
+          limits: licenseInfo,
+          usage,
+          items: (indexObj.items || []).map((item) => ({
+            ...item,
+            shareUrl: `${url.origin}/watch/${item.shareId}`,
+            videoStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/video.mp4`,
+            traceStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/trace.jsonl`,
+          })),
+        });
+      }
+
+      // Public Visitor Mode (`isOwner === false`)
+      const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, requestedUser);
+      const vis = (indexObj.settings && indexObj.settings.publicVisibility) || 'starred_only';
+      if (vis === 'private') {
+        return jsonResponse(
+          {
+            ok: false,
+            isOwner: false,
+            visibility: 'private',
+            error: `Trainer @${requestedUser}'s DVR Replay Vault is set to Private. Click '🔐 Owner Login' if this is your vault.`,
+          },
+          403
+        );
+      }
+
+      const allItems = indexObj.items || [];
+      const starredItems = allItems.filter((i) => Boolean(i.isPinned));
+      const visibleItems = vis === 'all' ? allItems : starredItems;
+      const hiddenRollingCount = Math.max(0, allItems.length - visibleItems.length);
+
+      return jsonResponse({
+        ok: true,
+        isOwner: false,
+        canStar: false,
+        screenName: indexObj.screenName || requestedUser,
+        visibility: vis,
+        settings: indexObj.settings,
+        hiddenRollingCount,
+        totalStarredCount: starredItems.length,
+        items: visibleItems.map((item) => ({
           ...item,
           shareUrl: `${url.origin}/watch/${item.shareId}`,
           videoStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/video.mp4`,
@@ -3981,7 +5146,7 @@ export default {
       });
     }
 
-    // 9. Pin / Unpin or Toggle Privacy on a Cloud Replay (`POST /v1/replays/pin`)
+    // 9. Star / Pin or Toggle Privacy on a Cloud Replay (`POST /v1/replays/pin`) — Strictly Owner-Only
     if (request.method === 'POST' && path === '/v1/replays/pin') {
       const auth = verifyClientAuth(request, env);
       if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
@@ -3994,24 +5159,28 @@ export default {
         return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400);
       }
 
-      const targetBattleId = String(body.battleId || '').trim();
-      const targetShareId = String(body.shareId || '').trim();
-      const devHash = String(body.deviceHash || request.headers.get('X-Device-Hash') || '').trim();
-      const claimEmail = String(body.claimEmail || request.headers.get('X-Claim-Email') || '').trim();
-      const licenseInfo = await resolveUserLicense(
+      const ownerAuth = await authenticateVaultOwner(
+        request,
         env,
         env.TELEMETRY_KV,
         screenName,
-        body.unlockKey || request.headers.get('X-SilphScope-Unlock-Key') || '',
-        '',
-        '',
-        devHash,
-        claimEmail
+        body
       );
-      if (!licenseInfo.active) {
-        return jsonResponse({ ok: false, error: 'Unlock Key required to modify Cloud Vault items.' }, 403);
+      if (!ownerAuth.isOwner) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: 'Only the authenticated vault owner can star/unstar or modify replays.',
+          },
+          403
+        );
       }
-      const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, screenName);
+
+      const resolvedName = ownerAuth.screenName || screenName;
+      const licenseInfo = ownerAuth.licenseInfo || TIER_PRESETS.supporter;
+      const targetBattleId = String(body.battleId || '').trim();
+      const targetShareId = String(body.shareId || '').trim();
+      const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, resolvedName);
 
       const item = (indexObj.items || []).find(
         (i) =>
@@ -4025,11 +5194,12 @@ export default {
       if (typeof body.isPinned === 'boolean') {
         if (body.isPinned && !item.isPinned) {
           const currentPinned = (indexObj.items || []).filter((i) => i.isPinned).length;
-          if (currentPinned >= licenseInfo.maxPinnedBattles) {
+          const maxPins = Math.max(10, Number(licenseInfo.maxPinnedBattles) || 10);
+          if (currentPinned >= maxPins) {
             return jsonResponse(
               {
                 ok: false,
-                error: `Pin limit reached (${licenseInfo.maxPinnedBattles} pinned battles max for ${licenseInfo.label}).`,
+                error: `Star/Pin limit reached (${maxPins} starred battles max for ${licenseInfo.label || 'your tier'}).`,
               },
               400
             );
@@ -4044,7 +5214,7 @@ export default {
 
       item.updatedAt = new Date().toISOString();
       await env.TELEMETRY_KV.put(`share_lookup/${item.shareId}`, JSON.stringify(item));
-      await saveUserReplayIndex(env.TELEMETRY_KV, screenName, indexObj);
+      await saveUserReplayIndex(env.TELEMETRY_KV, resolvedName, indexObj);
 
       return jsonResponse({
         ok: true,
@@ -4056,15 +5226,26 @@ export default {
       });
     }
 
-    // 10. Delete a Cloud Replay (`DELETE /v1/replays/delete`)
+    // 10. Delete a Cloud Replay (`DELETE /v1/replays/delete`) — Strictly Owner-Only
     if (request.method === 'DELETE' && path === '/v1/replays/delete') {
       const auth = verifyClientAuth(request, env);
       if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
       const { screenName } = auth;
 
+      const ownerAuth = await authenticateVaultOwner(
+        request,
+        env,
+        env.TELEMETRY_KV,
+        screenName
+      );
+      if (!ownerAuth.isOwner) {
+        return jsonResponse({ ok: false, error: 'Owner authentication required to delete replays.' }, 403);
+      }
+
+      const resolvedName = ownerAuth.screenName || screenName;
       const targetBattleId = url.searchParams.get('battleId') || '';
       const targetShareId = url.searchParams.get('shareId') || '';
-      const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, screenName);
+      const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, resolvedName);
       const idx = (indexObj.items || []).findIndex(
         (i) =>
           (targetBattleId && i.battleId === targetBattleId) ||
@@ -4075,7 +5256,7 @@ export default {
       }
       const [removed] = indexObj.items.splice(idx, 1);
       await deleteReplayObjects(env, env.TELEMETRY_KV, removed);
-      await saveUserReplayIndex(env.TELEMETRY_KV, screenName, indexObj);
+      await saveUserReplayIndex(env.TELEMETRY_KV, resolvedName, indexObj);
 
       return jsonResponse({ ok: true, deletedBattleId: removed.battleId, deletedShareId: removed.shareId });
     }

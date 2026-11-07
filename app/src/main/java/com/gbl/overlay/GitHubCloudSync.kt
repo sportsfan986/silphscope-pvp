@@ -2775,6 +2775,125 @@ internal fun OverlayService.Companion.verifyReplayUnlockKeyBlocking(
     }
 }
 
+internal fun OverlayService.Companion.setOrLoginVaultPasswordBlocking(
+    prefs: SharedPreferences,
+    gson: Gson,
+    passwordInput: String,
+    isSettingNewPassword: Boolean
+): Pair<Boolean, String> {
+    return try {
+        val devHash = getDeviceTelemetryHashStatic(prefs)
+        val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
+            .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
+        val unlockKey = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
+        val ghToken = getEffectiveSyncToken(prefs)
+        val ghUser = if (ghToken.isNotEmpty()) prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty() else ""
+        val ghId = if (ghToken.isNotEmpty()) prefs.getString(OverlayService.PREFS_KEY_SYNC_GITHUB_USER_ID, "")?.trim().orEmpty() else ""
+        val httpClient = buildTelemetryHttpClientStatic(15L, 25L, 20L)
+
+        val endpoint = if (isSettingNewPassword) "/v1/auth/set-password" else "/v1/auth/login"
+        val reqMap = mutableMapOf<String, Any>(
+            "screenName" to safeUser,
+            "unlockKey" to unlockKey,
+            "deviceHash" to devHash
+        )
+        if (isSettingNewPassword) {
+            reqMap["newPassword"] = passwordInput.trim()
+        } else {
+            reqMap["password"] = passwordInput.trim()
+        }
+        if (ghToken.isNotEmpty()) reqMap["githubToken"] = ghToken
+        if (ghUser.isNotEmpty()) reqMap["githubUsername"] = ghUser
+        if (ghId.isNotEmpty()) reqMap["githubUserId"] = ghId
+
+        val reqBody = gson.toJson(reqMap)
+            .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+        val req = Request.Builder()
+            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL$endpoint")
+            .post(reqBody)
+            .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
+            .header("X-Trainer-Screen-Name", safeUser)
+            .header("X-SilphScope-Unlock-Key", unlockKey)
+            .header("X-Device-Hash", devHash)
+            .build()
+
+        httpClient.newCall(req).execute().use { resp ->
+            val bodyStr = resp.body?.string().orEmpty()
+            val root = try { JsonParser.parseString(bodyStr).asJsonObject } catch (_: Exception) { null }
+            val ok = resp.isSuccessful && (root?.get("ok")?.asBoolean == true)
+            if (!ok) {
+                val err = root?.get("error")?.takeIf { !it.isJsonNull }?.asString ?: "HTTP ${resp.code}"
+                return false to "⚠️ $err"
+            }
+            if (!isSettingNewPassword && root != null) {
+                val rawTier = root.get("tier")?.asString?.lowercase() ?: "free"
+                val tier = if (rawTier == "base") "supporter" else rawTier
+                val active = root.get("active")?.asBoolean ?: false
+                val everPaid = root.get("everPaid")?.asBoolean ?: (active && tier != "free")
+                val sig = root.get("signature")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                val licObj = root.get("license")?.takeIf { it.isJsonObject }?.asJsonObject
+                val resolvedKey = licObj?.get("key")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                val editor = prefs.edit()
+                    .putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, if (active) tier else if (everPaid) "supporter" else "free")
+                    .putBoolean(OverlayService.PREFS_KEY_REPLAY_EVER_PAID, everPaid)
+                    .putString(OverlayService.PREFS_KEY_REPLAY_OFFLINE_SIG, sig)
+                if (resolvedKey.isNotBlank()) {
+                    editor.putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, resolvedKey)
+                }
+                editor.apply()
+                return true to "✅ Signed in as @$safeUser (${tier.uppercase()})!"
+            }
+            true to "✅ Web Password saved for @$safeUser! You can now log in on /vault or the Web Simulator using Username + Password."
+        }
+    } catch (e: Exception) {
+        false to "⚠️ ${e.localizedMessage ?: "Network error"}"
+    }
+}
+
+internal fun OverlayService.Companion.updateVaultVisibilitySettingBlocking(
+    prefs: SharedPreferences,
+    gson: Gson,
+    publicVisibility: String
+): Pair<Boolean, String> {
+    return try {
+        val devHash = getDeviceTelemetryHashStatic(prefs)
+        val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
+            .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
+        val unlockKey = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
+        val ghToken = getEffectiveSyncToken(prefs)
+        val httpClient = buildTelemetryHttpClientStatic(15L, 25L, 20L)
+        val reqMap = mutableMapOf<String, Any>(
+            "publicVisibility" to publicVisibility,
+            "unlockKey" to unlockKey,
+            "deviceHash" to devHash
+        )
+        if (ghToken.isNotEmpty()) reqMap["githubToken"] = ghToken
+        val reqBody = gson.toJson(reqMap)
+            .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+        val req = Request.Builder()
+            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/settings")
+            .post(reqBody)
+            .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
+            .header("X-Trainer-Screen-Name", safeUser)
+            .header("X-SilphScope-Unlock-Key", unlockKey)
+            .header("X-Device-Hash", devHash)
+            .build()
+        httpClient.newCall(req).execute().use { resp ->
+            val bodyStr = resp.body?.string().orEmpty()
+            val root = try { JsonParser.parseString(bodyStr).asJsonObject } catch (_: Exception) { null }
+            val ok = resp.isSuccessful && (root?.get("ok")?.asBoolean == true)
+            if (!ok) {
+                val err = root?.get("error")?.takeIf { !it.isJsonNull }?.asString ?: "HTTP ${resp.code}"
+                return false to "⚠️ $err"
+            }
+            prefs.edit().putString("gbl_vault_public_visibility_v701", publicVisibility).apply()
+            true to "✅ Updated @$safeUser's DVR Vault visibility to: $publicVisibility"
+        }
+    } catch (e: Exception) {
+        false to "⚠️ ${e.localizedMessage ?: "Network error"}"
+    }
+}
+
 internal fun OverlayService.Companion.syncCloudReplayListBlocking(
     prefs: SharedPreferences,
     gson: Gson

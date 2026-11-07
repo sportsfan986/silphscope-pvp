@@ -1,5 +1,38 @@
 import { type FastMove, type ChargedMove, type PokemonStats, type TeamMember, normalizeLeagueName, getTypeMultiplier, POKEMON_DATABASE, abbrMove5, resolveFastMove, calculateChargedDamage, computeEffectiveStatsForLeague, LIVE_RANKINGS_MAP, simulateTurnByTurnChargedCycle, SPECIES_FAST_MOVES_POOL, SPECIES_CHARGED_MOVES_POOL, formatMoveIdToDisplayName, buildChargedMoveFromName, applyRankingMovesToPokemonStats, resolveMegaPlusMove } from "./pokemonDb";
-import { canonicalizeMetaPokemonName, ACTIVE_PRECOMPUTED_TEAM_9X9_STATE, buildPrecomputedTeamSignature, evaluateFastRoughShieldBattleRating } from "./teamAndMetaEngine";
+import type { PrecomputedTeam9x9State } from "./teamAndMetaEngine";
+
+let _canonicalizeMetaPokemonNameHook: ((rawName: string) => string) | null = null;
+let _getActivePrecomputedTeam9x9StateHook: (() => PrecomputedTeam9x9State | null) | null = null;
+let _buildPrecomputedTeamSignatureHook:
+  | ((teamMembers: Array<TeamMember | string>, league: string) => string)
+  | null = null;
+let _evaluateFastRoughShieldBattleRatingHook:
+  | ((
+      userInput: TeamMember | string,
+      oppInput: TeamMember | string,
+      userShields: number,
+      oppShields: number,
+      league?: string
+    ) => number)
+  | null = null;
+
+export function registerCombatSimulatorMetaHooks(hooks: {
+  canonicalizeMetaPokemonName: (rawName: string) => string;
+  getActivePrecomputedTeam9x9State: () => PrecomputedTeam9x9State | null;
+  buildPrecomputedTeamSignature: (teamMembers: Array<TeamMember | string>, league: string) => string;
+  evaluateFastRoughShieldBattleRating: (
+    userInput: TeamMember | string,
+    oppInput: TeamMember | string,
+    userShields: number,
+    oppShields: number,
+    league?: string
+  ) => number;
+}): void {
+  _canonicalizeMetaPokemonNameHook = hooks.canonicalizeMetaPokemonName;
+  _getActivePrecomputedTeam9x9StateHook = hooks.getActivePrecomputedTeam9x9State;
+  _buildPrecomputedTeamSignatureHook = hooks.buildPrecomputedTeamSignature;
+  _evaluateFastRoughShieldBattleRatingHook = hooks.evaluateFastRoughShieldBattleRating;
+}
 
 export type OppCountMode = "my_fasts" | "opp_fasts";
 
@@ -687,16 +720,23 @@ export function calculateShieldMatrix(
 
   // O(1) Precomputed Top-200 League Meta Lookup (when active team's 9x9 matrix was precomputed before overlay launch)
   const normLg = (league || "GREAT LEAGUE").toUpperCase();
-  const teamSig = buildPrecomputedTeamSignature(teamMembers, normLg);
+  const teamSig = _buildPrecomputedTeamSignatureHook
+    ? _buildPrecomputedTeamSignatureHook(teamMembers, normLg)
+    : "";
+  const activePrecomputedState = _getActivePrecomputedTeam9x9StateHook
+    ? _getActivePrecomputedTeam9x9StateHook()
+    : null;
   if (
-    ACTIVE_PRECOMPUTED_TEAM_9X9_STATE &&
-    ACTIVE_PRECOMPUTED_TEAM_9X9_STATE.teamSignature === teamSig
+    activePrecomputedState &&
+    teamSig &&
+    activePrecomputedState.teamSignature === teamSig
   ) {
+    const canonOpp = _canonicalizeMetaPokemonNameHook
+      ? _canonicalizeMetaPokemonNameHook(oppTarget)
+      : oppTarget;
     const preEntry =
-      ACTIVE_PRECOMPUTED_TEAM_9X9_STATE.opponentsMap.get(oppLookupKey) ||
-      ACTIVE_PRECOMPUTED_TEAM_9X9_STATE.opponentsMap.get(
-        (canonicalizeMetaPokemonName(oppTarget) || oppTarget).toLowerCase()
-      );
+      activePrecomputedState.opponentsMap.get(oppLookupKey) ||
+      activePrecomputedState.opponentsMap.get((canonOpp || oppTarget).toLowerCase());
     if (preEntry) {
       teamMembers.forEach((_, idx) => {
         const key = `p${idx + 1}`;
@@ -713,14 +753,17 @@ export function calculateShieldMatrix(
       return result;
     }
     // Non-Top-200 Opponent Fallback during active overlay session: use ultra-fast real-time single-moveset rough math
-    teamMembers.forEach((member, idx) => {
-      const key = `p${idx + 1}`;
-      const rating0s = evaluateFastRoughShieldBattleRating(member, oppTarget, 0, 0, league);
-      const rating1s = evaluateFastRoughShieldBattleRating(member, oppTarget, 1, 1, league);
-      const rating2s = evaluateFastRoughShieldBattleRating(member, oppTarget, 2, 2, league);
-      result[key] = `${toTier(rating0s)},${toTier(rating1s)},${toTier(rating2s)}`;
-    });
-    return result;
+    if (_evaluateFastRoughShieldBattleRatingHook) {
+      const evalFast = _evaluateFastRoughShieldBattleRatingHook;
+      teamMembers.forEach((member, idx) => {
+        const key = `p${idx + 1}`;
+        const rating0s = evalFast(member, oppTarget, 0, 0, league);
+        const rating1s = evalFast(member, oppTarget, 1, 1, league);
+        const rating2s = evalFast(member, oppTarget, 2, 2, league);
+        result[key] = `${toTier(rating0s)},${toTier(rating1s)},${toTier(rating2s)}`;
+      });
+      return result;
+    }
   }
 
   teamMembers.forEach((member, idx) => {

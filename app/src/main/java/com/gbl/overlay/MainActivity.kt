@@ -2887,6 +2887,101 @@ class MainActivity : AppCompatActivity() {
             vipRow.addView(vipLabel)
             vipRow.addView(vipSeek)
 
+            val vaultOptionsRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                val padV = (3 * density).toInt()
+                setPadding(0, padV, 0, padV)
+            }
+            fun formatVisLabel(v: String): String = when (v) {
+                "all" -> "🌐 Vault: Public (All)"
+                "private" -> "🔒 Vault: Private"
+                else -> "⭐ Vault: Starred Only"
+            }
+            val btnVaultVisibility = Button(this).apply {
+                val curVis = prefs.getString("gbl_vault_public_visibility_v701", "starred_only") ?: "starred_only"
+                text = formatVisLabel(curVis)
+                textSize = 9.5f
+                isAllCaps = false
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF1E293B.toInt())
+                setTextColor(0xFFFBBF24.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    rightMargin = (4 * density).toInt()
+                }
+                setOnClickListener {
+                    val options = arrayOf(
+                        "⭐ Starred Only (Default — Unstarred Rolling Battles Private)",
+                        "🌐 Public: All Replays Viewable by Anyone",
+                        "🔒 Private: Owner Login Required"
+                    )
+                    val values = arrayOf("starred_only", "all", "private")
+                    val current = prefs.getString("gbl_vault_public_visibility_v701", "starred_only") ?: "starred_only"
+                    val checkedIdx = values.indexOf(current).coerceAtLeast(0)
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("🌐 Public DVR Vault Visibility")
+                        .setSingleChoiceItems(options, checkedIdx) { dialog, which ->
+                            val chosen = values.getOrElse(which) { "starred_only" }
+                            dialog.dismiss()
+                            text = formatVisLabel(chosen)
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                val (_, msg) = OverlayService.updateVaultVisibilitySettingBlocking(prefs, gson, chosen)
+                                withContext(Dispatchers.Main) {
+                                    if (!isFinishing) Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                }
+            }
+            val btnVaultPassword = Button(this).apply {
+                text = "🔒 Web Password / Login"
+                textSize = 9.5f
+                isAllCaps = false
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF1E293B.toInt())
+                setTextColor(0xFF38BDF8.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                setOnClickListener {
+                    val pwEdit = EditText(this@MainActivity).apply {
+                        hint = "Enter Password (min 6 characters)"
+                        inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                    }
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("🔒 Vault & Simulator Web Password")
+                        .setMessage("Set a password for your Trainer ID so you can sign in on /vault or the Web Simulator with Username + Password, or sign in with an existing password:")
+                        .setView(pwEdit)
+                        .setPositiveButton("💾 Set / Save Password") { _, _ ->
+                            val pw = pwEdit.text?.toString()?.trim().orEmpty()
+                            if (pw.length < 6) {
+                                Toast.makeText(this@MainActivity, "Password must be at least 6 characters.", Toast.LENGTH_SHORT).show()
+                                return@setPositiveButton
+                            }
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                val (_, msg) = OverlayService.setOrLoginVaultPasswordBlocking(prefs, gson, pw, true)
+                                withContext(Dispatchers.Main) {
+                                    if (!isFinishing) Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                        .setNeutralButton("🔓 Login with Password") { _, _ ->
+                            val pw = pwEdit.text?.toString()?.trim().orEmpty()
+                            if (pw.isEmpty()) return@setNeutralButton
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                val (_, msg) = OverlayService.setOrLoginVaultPasswordBlocking(prefs, gson, pw, false)
+                                withContext(Dispatchers.Main) {
+                                    if (!isFinishing) {
+                                        setupOrUpdateReplayVaultSettingsUi()
+                                        Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            }
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                }
+            }
+            vaultOptionsRow.addView(btnVaultVisibility)
+            vaultOptionsRow.addView(btnVaultPassword)
+
             val statusTv = TextView(this).apply {
                 setTextColor(0xFFE2E8F0.toInt())
                 textSize = 10.5f
@@ -2900,6 +2995,7 @@ class MainActivity : AppCompatActivity() {
             box.addView(payRow2)
             box.addView(inputRow)
             box.addView(emailInput)
+            box.addView(vaultOptionsRow)
             box.addView(vipRow)
             box.addView(statusTv)
 
