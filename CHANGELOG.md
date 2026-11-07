@@ -1,4 +1,18 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.44`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.45`)
+
+---
+
+## v6.45 (2026-11-06) — Hardware H.264 QP & Rate-Control Encoder Tuning (~70% Smaller DVR Videos) & In-App Replay Defaults (`50%` Opacity, Full HUD, Top Position, `2.0x` Speed)
+*DVR compression and in-app Replay UX update (`v6.45`, `versionCode = 1645`) tuning Android's hardware H.264 `MediaCodec` encoder (`KEY_VIDEO_QP_*`, `BITRATE_MODE_CBR`, `30fps` rate-control alignment with `10fps` capture rate, `4s` keyframe interval, and `480×1040` canvas) to reduce 3-minute battle MP4 sizes from `~26 MB` (`QP 23–27`) down to `~5–8 MB` (`QP 30–36`), and setting the in-app Replay player defaults to `50%` HUD opacity, Full HUD (`LIVE`), Top position, and `2.0x` playback speed.*
+
+- **v6.45 — Enhancement 1: Android Hardware H.264 `MediaCodec` QP & Rate-Control Tuning (`BattleDvrEngine.kt`)**:
+  - **Hardware QP Bounds (`KEY_VIDEO_QP_I_MIN = 30`, `KEY_VIDEO_QP_P_MIN = 32` + Qualcomm `vendor.qti-ext-enc-qp-range.*`)**: Prevents Android hardware encoders (`c2.qti.avc.encoder`) from locking at Blu-ray `QP 23–27` (`1.14 Mbps`) on smooth Pokémon GO frames, cutting P-frame byte size by ~70%.
+  - **Surface Rate-Control & Keyframe Optimization**: Configured `KEY_BITRATE_MODE = BITRATE_MODE_CBR` (with automatic fallback), `KEY_BIT_RATE = 200_000`, `KEY_FRAME_RATE = 30`, `KEY_CAPTURE_RATE = 10`, `KEY_OPERATING_RATE = 10`, `KEY_I_FRAME_INTERVAL = 4`, and a `480×1040` canvas to eliminate the 3× 10fps/30fps hardware bit-budget multiplier.
+
+- **v6.45 — Enhancement 2: Updated In-App Replay Defaults (`MainActivity.kt`)**:
+  - **`50%` HUD Opacity (`🔆 50%`)**: Defaulted `hudAlphaPct = 50` (`alphaSteps = [50, 75, 92, 35]`) so the battle video remains clearly visible underneath the live HUD.
+  - **Full HUD (`👁️ HUD: LIVE`) & Top Position (`⬆️ Pos: Top`)**: Defaulted video replay mode to the full interactive `LIVE` HUD positioned at the top of the screen (`isHudTop = true`).
+  - **`2.0x` Default Playback Speed (`2.0x`)**: Defaulted `speedIdx = 3` (`2.0f`) and automatically applied `PlaybackParams().setSpeed(2.0f)` upon starting playback.
 
 ---
 

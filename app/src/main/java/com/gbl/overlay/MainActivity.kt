@@ -6973,7 +6973,7 @@ class MainActivity : AppCompatActivity() {
             var currentHudMode = "live" // "live" | "compact" | "diagnostic" | "off"
             var isHudTop = true
             var isShieldHudEnabled = true
-            var hudAlphaPct = 88
+            var hudAlphaPct = 50
 
             val topToolbar = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -7047,10 +7047,26 @@ class MainActivity : AppCompatActivity() {
                     android.view.Gravity.CENTER
                 )
             }
+            val speeds = listOf(0.25f, 0.5f, 1.0f, 2.0f)
+            var speedIdx = 3 // Default to 2.0x playback speed
             var mediaPlayerRef: android.media.MediaPlayer? = null
+            fun applyCurrentPlaybackSpeed() {
+                val spd = speeds.getOrElse(speedIdx) { 2.0f }
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    try {
+                        val mp = mediaPlayerRef ?: return
+                        if (videoView.isPlaying) {
+                            mp.playbackParams = (mp.playbackParams ?: android.media.PlaybackParams()).setSpeed(spd)
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
             videoView.setOnPreparedListener { mp ->
                 mediaPlayerRef = mp
                 mp.isLooping = false
+                if (videoView.isPlaying) {
+                    applyCurrentPlaybackSpeed()
+                }
             }
 
             val videoControlsBox = LinearLayout(this).apply {
@@ -7068,7 +7084,7 @@ class MainActivity : AppCompatActivity() {
             val btnStepBack = TextView(this).apply { text = "⏮ -1F"; styleMiniBtn(this, 0xFF1E293B.toInt()) }
             val btnPlayPause = TextView(this).apply { text = "▶️ Play"; styleMiniBtn(this, 0xFF059669.toInt()) }
             val btnStepFwd = TextView(this).apply { text = "⏭ +1F"; styleMiniBtn(this, 0xFF1E293B.toInt()) }
-            val btnSpeed = TextView(this).apply { text = "1.0x"; styleMiniBtn(this, 0xFF334155.toInt()) }
+            val btnSpeed = TextView(this).apply { text = "2.0x"; styleMiniBtn(this, 0xFF334155.toInt()) }
             val tvFrameClock = TextView(this).apply {
                 text = "F#0000 0.0s"
                 setTextColor(0xFF38BDF8.toInt())
@@ -7090,7 +7106,7 @@ class MainActivity : AppCompatActivity() {
             val btnHudMode = TextView(this).apply { text = "👁️ HUD: LIVE"; styleMiniBtn(this, 0xFF0F766E.toInt()) }
             val btnShieldHud = TextView(this).apply { text = "🛡️ Shield: ON"; styleMiniBtn(this, 0xFF059669.toInt()) }
             val btnHudPos = TextView(this).apply { text = "⬆️ Pos: Top"; styleMiniBtn(this, 0xFF1E293B.toInt()) }
-            val btnHudAlpha = TextView(this).apply { text = "🔆 88%"; styleMiniBtn(this, 0xFF1E293B.toInt()) }
+            val btnHudAlpha = TextView(this).apply { text = "🔆 50%"; styleMiniBtn(this, 0xFF1E293B.toInt()) }
             hudControlsRow.addView(btnHudMode, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (4 * density).toInt() })
             hudControlsRow.addView(btnShieldHud, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (4 * density).toInt() })
             hudControlsRow.addView(btnHudPos, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (4 * density).toInt() })
@@ -7278,6 +7294,7 @@ class MainActivity : AppCompatActivity() {
                     btnPlayPause.text = "▶️ Play"
                 } else {
                     videoView.start()
+                    applyCurrentPlaybackSpeed()
                     btnPlayPause.text = "⏸ Pause"
                 }
             }
@@ -7298,16 +7315,20 @@ class MainActivity : AppCompatActivity() {
                 videoView.seekTo(nextPos)
                 syncFrameAtMs(nextPos.toLong())
             }
-            val speeds = listOf(0.25f, 0.5f, 1.0f, 2.0f)
-            var speedIdx = 2
             btnSpeed.setOnClickListener {
                 speedIdx = (speedIdx + 1) % speeds.size
                 val spd = speeds[speedIdx]
                 btnSpeed.text = "${spd}x"
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
                     try {
-                        mediaPlayerRef?.playbackParams = mediaPlayerRef?.playbackParams?.setSpeed(spd)
-                            ?: android.media.PlaybackParams().setSpeed(spd)
+                        val mp = mediaPlayerRef
+                        if (mp != null) {
+                            val wasPlaying = videoView.isPlaying
+                            mp.playbackParams = (mp.playbackParams ?: android.media.PlaybackParams()).setSpeed(spd)
+                            if (!wasPlaying && videoView.isPlaying) {
+                                videoView.pause()
+                            }
+                        }
                     } catch (_: Exception) {}
                 }
             }
@@ -7344,7 +7365,7 @@ class MainActivity : AppCompatActivity() {
                 btnHudPos.text = if (isHudTop) "⬆️ Pos: Top" else "⬇️ Pos: Bottom"
                 attachWebViewToActiveStage()
             }
-            val alphaSteps = listOf(92, 75, 55, 35)
+            val alphaSteps = listOf(50, 75, 92, 35)
             btnHudAlpha.setOnClickListener {
                 val curIdx = alphaSteps.indexOf(hudAlphaPct).let { if (it < 0) 0 else it }
                 hudAlphaPct = alphaSteps[(curIdx + 1) % alphaSteps.size]
@@ -7519,8 +7540,8 @@ class MainActivity : AppCompatActivity() {
             dialogContainer.addView(matrixStageWrap)
             attachWebViewToActiveStage()
             if (isVideoMode) {
-                currentHudMode = "compact"
-                btnHudMode.text = "👁️ HUD: COMPACT"
+                currentHudMode = "live"
+                btnHudMode.text = "👁️ HUD: LIVE"
                 ensureVideoSourceLoaded()
             }
             replayWebView.postDelayed(syncTickRunnable, 120L)
