@@ -1,4 +1,17 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.50`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.51`)
+
+---
+
+## v6.51 (2026-11-06) — Super Mega Plus Move Level (`Off`, `Lv1..Lv4`) Selector, Asymmetric Player vs. Opponent Plus-Move Scaling & 9-Shield Matrix Integration
+*Super Mega Plus Move Level release (`v6.51`, `versionCode = 1651`) adding per-slot Plus Move Level (`0 = Off/Not Unlocked`, `Lv1 = 1.0x`, `Lv2 = 1.1x`, `Lv3 = 1.2x`, `Lv4 = 1.3x`, default `Lv4`) across Android and Web Team Presets, applying your configured Plus Move Level to all player Charged Move damage calculations, 3x3 / 9-Shield Matchup Matrices, and Team Builder evaluations while always assuming opponents are at Plus Move Level 4 (`1.3x`).*
+
+- **v6.51 — Enhancement 1: Per-Slot Super Mega Plus Move Level (`Off`, `Lv1`, `Lv2`, `Lv3`, `Lv4`) (`AppModels.kt`, `OverlayService.kt`, `dialog_create_preset.xml`, `MainActivity.kt`, `pokemonDb.ts`, `App.tsx`)**:
+  - **Auto-Detected Plus Move Level Selector**: Whenever a Super Mega / Primal Pokémon with a fixed 3rd `+` move is selected in any Team Preset slot (Android Edit Team dialog or Web Edit Team modal), an interactive `[Off | Lv1 (1.0x) | Lv2 (1.1x) | Lv3 (1.2x) | Lv4 (1.3x)]` selector row automatically appears beneath that slot's moveset inputs with live effective power readout (e.g., `Volt Tackle+ • Lv4 (130p / 1.3x • 55E)`), defaulting to `Lv4`.
+  - **Backward-Compatible Cloud Sync & Persistence**: Stored in `PokemonSlot.plusMoveLevel` (`Int? = 4`), `TeamMember.plusMoveLevel`, and `SyncTeamSlot.plusMoveLevel` so existing presets seamlessly default to `Lv4` while syncing across devices via GitHub Cloud Delta Sync.
+
+- **v6.51 — Enhancement 2: Asymmetric Player vs. Opponent Plus Move Damage & 9-Shield Matrix Scaling (`PokemonDatabase.kt`, `TeamAndMetaEngine.kt`, `OverlayService.kt`, `combatSimulator.ts`)**:
+  - **Player Plus Move Level Applied to Damage & Shield Matrix**: Scales your Super Mega `+` move base power by `getPlusMovePowerMultiplierStatic(plusMoveLevel)` (`Lv1 = 1.00x`, `Lv2 = 1.10x`, `Lv3 = 1.20x`, `Lv4 = 1.30x`) across live HUD `My Attacks` damage percentages, the 3x3 Matchup Matrix, the Top-200 9-Shield Matrix cache (`buildUserSlotCacheKey`), BMF/WAE analytics, and Team Builder / Role Upgrader / Moveset Optimizer simulations. Setting `Off (0)` completely excludes the 3rd `+` move from your simulations and HUD rows.
+  - **Opponent Always Assumed Level 4 (`1.30x`)**: All opponent Super Mega / Primal Pokémon are always evaluated at maximum **Plus Move Level 4 (`1.30x`)** across incoming Charged Move damage math, Pillar 4 survival / Shield Call math, and 9-Shield Matrix ratings.
 
 ---
 

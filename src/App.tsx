@@ -2679,6 +2679,7 @@ export default function App() {
   const [p1Fast, setP1Fast] = useState('Poison Sting');
   const [p1C1, setP1C1] = useState('Earthquake');
   const [p1C2, setP1C2] = useState('Stone Edge');
+  const [p1PlusLevel, setP1PlusLevel] = useState<number>(4);
 
   const [p2Name, setP2Name] = useState('Feraligatr');
   const [p2Cp, setP2Cp] = useState(1498);
@@ -2686,6 +2687,7 @@ export default function App() {
   const [p2Fast, setP2Fast] = useState('Shadow Claw');
   const [p2C1, setP2C1] = useState('Hydro Cannon');
   const [p2C2, setP2C2] = useState('Ice Beam');
+  const [p2PlusLevel, setP2PlusLevel] = useState<number>(4);
 
   const [p3Name, setP3Name] = useState('Mandibuzz');
   const [p3Cp, setP3Cp] = useState(1496);
@@ -2693,6 +2695,7 @@ export default function App() {
   const [p3Fast, setP3Fast] = useState('Snarl');
   const [p3C1, setP3C1] = useState('Dark Pulse');
   const [p3C2, setP3C2] = useState('Aerial Ace');
+  const [p3PlusLevel, setP3PlusLevel] = useState<number>(4);
 
   // Clipboard Copy State
   const [copiedFile, setCopiedFile] = useState(false);
@@ -4330,6 +4333,7 @@ export default function App() {
     setP1Fast(top3[0].fastMove);
     setP1C1(top3[0].chargedMove1);
     setP1C2(top3[0].chargedMove2);
+    setP1PlusLevel(top3[0].plusMoveLevel ?? 4);
 
     setP2Name(top3[1].name);
     setP2Cp(top3[1].cp);
@@ -4337,6 +4341,7 @@ export default function App() {
     setP2Fast(top3[1].fastMove);
     setP2C1(top3[1].chargedMove1);
     setP2C2(top3[1].chargedMove2);
+    setP2PlusLevel(top3[1].plusMoveLevel ?? 4);
 
     setP3Name(top3[2].name);
     setP3Cp(top3[2].cp);
@@ -4344,6 +4349,7 @@ export default function App() {
     setP3Fast(top3[2].fastMove);
     setP3C1(top3[2].chargedMove1);
     setP3C2(top3[2].chargedMove2);
+    setP3PlusLevel(top3[2].plusMoveLevel ?? 4);
   };
 
   const handleAutoFillSlotMoves = (
@@ -4459,6 +4465,7 @@ export default function App() {
       setP1Fast(s1.fastMove);
       setP1C1(s1.chargedMove1);
       setP1C2(s1.chargedMove2);
+      setP1PlusLevel(s1.plusMoveLevel ?? 4);
     }
     if (s2) {
       setP2Name(s2.name);
@@ -4467,6 +4474,7 @@ export default function App() {
       setP2Fast(s2.fastMove);
       setP2C1(s2.chargedMove1);
       setP2C2(s2.chargedMove2);
+      setP2PlusLevel(s2.plusMoveLevel ?? 4);
     }
     if (s3) {
       setP3Name(s3.name);
@@ -4475,6 +4483,7 @@ export default function App() {
       setP3Fast(s3.fastMove);
       setP3C1(s3.chargedMove1);
       setP3C2(s3.chargedMove2);
+      setP3PlusLevel(s3.plusMoveLevel ?? 4);
     }
     setModalCloneTargetLeague(preset.league);
     setIsNewPresetOpen(true);
@@ -4490,6 +4499,7 @@ export default function App() {
       rawC1: string,
       rawC2: string,
       rawIvs: string,
+      plusMoveLevel: number,
       fallback: TeamMember
     ): TeamMember => {
       const finalName = rawName.trim() || fallback.name;
@@ -4502,13 +4512,14 @@ export default function App() {
         fastMove: rawFast.trim() || rec?.fastMove || fallback.fastMove,
         chargedMove1: rawC1.trim() || rec?.chargedMove1 || fallback.chargedMove1,
         chargedMove2: rawC2.trim() || rec?.chargedMove2 || fallback.chargedMove2,
-        ivs: cleanIvs
+        ivs: cleanIvs,
+        plusMoveLevel: Math.max(0, Math.min(4, plusMoveLevel ?? 4))
       };
     };
     return [
-      resolveSlot('p1', p1Name, p1Cp, p1Fast, p1C1, p1C2, p1Ivs, top3[0]),
-      resolveSlot('p2', p2Name, p2Cp, p2Fast, p2C1, p2C2, p2Ivs, top3[1]),
-      resolveSlot('p3', p3Name, p3Cp, p3Fast, p3C1, p3C2, p3Ivs, top3[2])
+      resolveSlot('p1', p1Name, p1Cp, p1Fast, p1C1, p1C2, p1Ivs, p1PlusLevel, top3[0]),
+      resolveSlot('p2', p2Name, p2Cp, p2Fast, p2C1, p2C2, p2Ivs, p2PlusLevel, top3[1]),
+      resolveSlot('p3', p3Name, p3Cp, p3Fast, p3C1, p3C2, p3Ivs, p3PlusLevel, top3[2])
     ];
   };
 
@@ -4521,6 +4532,7 @@ export default function App() {
       setP1Fast(m1.fastMove);
       setP1C1(m1.chargedMove1);
       setP1C2(m1.chargedMove2);
+      setP1PlusLevel(m1.plusMoveLevel ?? 4);
     }
     if (m2) {
       setP2Name(m2.name);
@@ -4529,6 +4541,7 @@ export default function App() {
       setP2Fast(m2.fastMove);
       setP2C1(m2.chargedMove1);
       setP2C2(m2.chargedMove2);
+      setP2PlusLevel(m2.plusMoveLevel ?? 4);
     }
     if (m3) {
       setP3Name(m3.name);
@@ -4537,6 +4550,7 @@ export default function App() {
       setP3Fast(m3.fastMove);
       setP3C1(m3.chargedMove1);
       setP3C2(m3.chargedMove2);
+      setP3PlusLevel(m3.plusMoveLevel ?? 4);
     }
   };
 
@@ -4552,9 +4566,9 @@ export default function App() {
       manualArchetypeOverride
     );
   }, [
-    p1Name, p1Cp, p1Ivs, p1Fast, p1C1, p1C2,
-    p2Name, p2Cp, p2Ivs, p2Fast, p2C1, p2C2,
-    p3Name, p3Cp, p3Ivs, p3Fast, p3C1, p3C2,
+    p1Name, p1Cp, p1Ivs, p1Fast, p1C1, p1C2, p1PlusLevel,
+    p2Name, p2Cp, p2Ivs, p2Fast, p2C1, p2C2, p2PlusLevel,
+    p3Name, p3Cp, p3Ivs, p3Fast, p3C1, p3C2, p3PlusLevel,
     newPresetLeague,
     manualArchetypeOverride,
     battleLogs,
@@ -5336,7 +5350,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v6.50 • Android Native Overlay
+                  v6.51 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -10350,8 +10364,13 @@ export default function App() {
                               <div className="font-bold text-xs text-white mt-1 truncate">
                                 {member.name}
                                 {resolveMegaPlusMove(member.name, preset.league) && (
-                                  <span className="ml-1 text-[9px] font-mono text-amber-300 font-bold">
-                                    [+ {resolveMegaPlusMove(member.name, preset.league)}]
+                                  <span
+                                    className={`ml-1 text-[9px] font-mono font-bold ${
+                                      (member.plusMoveLevel ?? 4) <= 0 ? 'text-slate-400' : 'text-amber-300'
+                                    }`}
+                                  >
+                                    [+ {resolveMegaPlusMove(member.name, preset.league)}{' '}
+                                    {(member.plusMoveLevel ?? 4) <= 0 ? 'Off' : `Lv${member.plusMoveLevel ?? 4}`}]
                                   </span>
                                 )}
                               </div>
@@ -11015,8 +11034,43 @@ export default function App() {
                         />
                       </div>
                       {resolveMegaPlusMove(p1Name, newPresetLeague) && (
-                        <div className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-400/50 text-[10.5px] font-mono text-amber-300 font-bold">
-                          ⚡ Super Mega 3rd Move (Mega League Only): + {resolveMegaPlusMove(p1Name, newPresetLeague)} [Mega4]
+                        <div className="px-2.5 py-1.5 rounded-lg bg-purple-950/60 border border-purple-500/50 space-y-1.5">
+                          <div className="flex items-center justify-between gap-2 flex-wrap text-[10.5px] font-mono font-bold">
+                            <span className={p1PlusLevel <= 0 ? 'text-slate-400' : 'text-purple-200'}>
+                              🔥 +3rd Move: {resolveMegaPlusMove(p1Name, newPresetLeague)} •{' '}
+                              {p1PlusLevel <= 0
+                                ? 'Off (Not Unlocked)'
+                                : `Lv${p1PlusLevel} (${(1.0 + (p1PlusLevel - 1) * 0.1).toFixed(1)}x Power)`}
+                            </span>
+                            <span className="text-[9.5px] text-amber-300/90">Opp Assumed = Lv4 (1.3x)</span>
+                          </div>
+                          <div className="grid grid-cols-5 gap-1">
+                            {[
+                              { lv: 0, label: 'Off' },
+                              { lv: 1, label: 'Lv1 (1.0x)' },
+                              { lv: 2, label: 'Lv2 (1.1x)' },
+                              { lv: 3, label: 'Lv3 (1.2x)' },
+                              { lv: 4, label: 'Lv4 (1.3x)' }
+                            ].map((opt) => {
+                              const active = p1PlusLevel === opt.lv;
+                              return (
+                                <button
+                                  key={`p1-plus-${opt.lv}`}
+                                  type="button"
+                                  onClick={() => setP1PlusLevel(opt.lv)}
+                                  className={`py-1 px-1 rounded text-[9.5px] font-mono font-bold border transition ${
+                                    active
+                                      ? opt.lv === 0
+                                        ? 'bg-rose-600/80 border-rose-400 text-white'
+                                        : 'bg-purple-600 border-purple-300 text-white shadow'
+                                      : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                                  }`}
+                                >
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
                       {modalRoleRecommendations && (
@@ -11267,8 +11321,43 @@ export default function App() {
                         />
                       </div>
                       {resolveMegaPlusMove(p2Name, newPresetLeague) && (
-                        <div className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-400/50 text-[10.5px] font-mono text-amber-300 font-bold">
-                          ⚡ Super Mega 3rd Move (Mega League Only): + {resolveMegaPlusMove(p2Name, newPresetLeague)} [Mega4]
+                        <div className="px-2.5 py-1.5 rounded-lg bg-purple-950/60 border border-purple-500/50 space-y-1.5">
+                          <div className="flex items-center justify-between gap-2 flex-wrap text-[10.5px] font-mono font-bold">
+                            <span className={p2PlusLevel <= 0 ? 'text-slate-400' : 'text-purple-200'}>
+                              🔥 +3rd Move: {resolveMegaPlusMove(p2Name, newPresetLeague)} •{' '}
+                              {p2PlusLevel <= 0
+                                ? 'Off (Not Unlocked)'
+                                : `Lv${p2PlusLevel} (${(1.0 + (p2PlusLevel - 1) * 0.1).toFixed(1)}x Power)`}
+                            </span>
+                            <span className="text-[9.5px] text-amber-300/90">Opp Assumed = Lv4 (1.3x)</span>
+                          </div>
+                          <div className="grid grid-cols-5 gap-1">
+                            {[
+                              { lv: 0, label: 'Off' },
+                              { lv: 1, label: 'Lv1 (1.0x)' },
+                              { lv: 2, label: 'Lv2 (1.1x)' },
+                              { lv: 3, label: 'Lv3 (1.2x)' },
+                              { lv: 4, label: 'Lv4 (1.3x)' }
+                            ].map((opt) => {
+                              const active = p2PlusLevel === opt.lv;
+                              return (
+                                <button
+                                  key={`p2-plus-${opt.lv}`}
+                                  type="button"
+                                  onClick={() => setP2PlusLevel(opt.lv)}
+                                  className={`py-1 px-1 rounded text-[9.5px] font-mono font-bold border transition ${
+                                    active
+                                      ? opt.lv === 0
+                                        ? 'bg-rose-600/80 border-rose-400 text-white'
+                                        : 'bg-purple-600 border-purple-300 text-white shadow'
+                                      : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                                  }`}
+                                >
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
                       {modalRoleRecommendations && (
@@ -11519,8 +11608,43 @@ export default function App() {
                         />
                       </div>
                       {resolveMegaPlusMove(p3Name, newPresetLeague) && (
-                        <div className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-400/50 text-[10.5px] font-mono text-amber-300 font-bold">
-                          ⚡ Super Mega 3rd Move (Mega League Only): + {resolveMegaPlusMove(p3Name, newPresetLeague)} [Mega4]
+                        <div className="px-2.5 py-1.5 rounded-lg bg-purple-950/60 border border-purple-500/50 space-y-1.5">
+                          <div className="flex items-center justify-between gap-2 flex-wrap text-[10.5px] font-mono font-bold">
+                            <span className={p3PlusLevel <= 0 ? 'text-slate-400' : 'text-purple-200'}>
+                              🔥 +3rd Move: {resolveMegaPlusMove(p3Name, newPresetLeague)} •{' '}
+                              {p3PlusLevel <= 0
+                                ? 'Off (Not Unlocked)'
+                                : `Lv${p3PlusLevel} (${(1.0 + (p3PlusLevel - 1) * 0.1).toFixed(1)}x Power)`}
+                            </span>
+                            <span className="text-[9.5px] text-amber-300/90">Opp Assumed = Lv4 (1.3x)</span>
+                          </div>
+                          <div className="grid grid-cols-5 gap-1">
+                            {[
+                              { lv: 0, label: 'Off' },
+                              { lv: 1, label: 'Lv1 (1.0x)' },
+                              { lv: 2, label: 'Lv2 (1.1x)' },
+                              { lv: 3, label: 'Lv3 (1.2x)' },
+                              { lv: 4, label: 'Lv4 (1.3x)' }
+                            ].map((opt) => {
+                              const active = p3PlusLevel === opt.lv;
+                              return (
+                                <button
+                                  key={`p3-plus-${opt.lv}`}
+                                  type="button"
+                                  onClick={() => setP3PlusLevel(opt.lv)}
+                                  className={`py-1 px-1 rounded text-[9.5px] font-mono font-bold border transition ${
+                                    active
+                                      ? opt.lv === 0
+                                        ? 'bg-rose-600/80 border-rose-400 text-white'
+                                        : 'bg-purple-600 border-purple-300 text-white shadow'
+                                      : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+                                  }`}
+                                >
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
                       {modalRoleRecommendations && (
@@ -15947,7 +16071,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v6.50 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
+        SilphScope PvP v6.51 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
       </footer>
     </div>
   );

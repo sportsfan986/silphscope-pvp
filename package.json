@@ -1,7 +1,7 @@
 {
   "name": "silphscope-pvp",
   "private": true,
-  "version": "6.50.0",
+  "version": "6.51.0",
   "type": "module",
   "engines": {
     "node": ">=22.0.0"

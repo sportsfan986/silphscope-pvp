@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "6.50"
-        const val APP_VERSION_CODE = 1650
+        const val APP_VERSION = "6.51"
+        const val APP_VERSION_CODE = 1651
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -1081,7 +1081,8 @@ class OverlayService : LifecycleService() {
             val fastMove: String,
             val chargedMove1: String,
             val chargedMove2: String,
-            val ivs: String? = null
+            val ivs: String? = null,
+            val plusMoveLevel: Int? = 4
         )
 
         data class SyncTeamPresetRecord(
@@ -3635,7 +3636,8 @@ class OverlayService : LifecycleService() {
         val fastMove: String,
         val chargedMove1: String,
         val chargedMove2: String,
-        val ivs: String? = null
+        val ivs: String? = null,
+        val plusMoveLevel: Int? = 4
     )
     data class TeamPreset(
         val id: String,
@@ -14684,7 +14686,8 @@ class OverlayService : LifecycleService() {
         isAttackerShadow: Boolean,
         isDefenderShadow: Boolean,
         attackerAtkStage: Int = 0,
-        defenderDefStage: Int = 0
+        defenderDefStage: Int = 0,
+        plusMoveLevel: Int = 4
     ): Int {
         val moveStats = OverlayService.resolveChargedMoveStatsStatic(moveName, attacker.types.firstOrNull() ?: "normal")
         val stab = if (attacker.types.any { it.equals(moveStats.type, ignoreCase = true) }) 1.2 else 1.0
@@ -14693,7 +14696,11 @@ class OverlayService : LifecycleService() {
         val effectiveAtk = attacker.atk * (if (isAttackerShadow) 1.2 else 1.0) * OverlayService.getPvpStageMultiplierStatic(attackerAtkStage)
         val effectiveDef = defender.def * (if (isDefenderShadow) 0.8333333 else 1.0) * OverlayService.getPvpStageMultiplierStatic(defenderDefStage)
 
-        val rawDamage = floor(0.5 * moveStats.power * (effectiveAtk / effectiveDef) * stab * typeEff * 1.3) + 1.0
+        val isPlusMove = moveName.trim().endsWith("+")
+        val plusMult = if (isPlusMove) OverlayService.getPlusMovePowerMultiplierStatic(plusMoveLevel) else 1.0
+        if (isPlusMove && plusMult <= 0.0) return 0
+        val effectivePower = moveStats.power.toDouble() * plusMult
+        val rawDamage = floor(0.5 * effectivePower * (effectiveAtk / effectiveDef) * stab * typeEff * 1.3) + 1.0
         val pct = ((rawDamage / defender.hp.toDouble()) * 100.0).roundToInt()
         return pct.coerceIn(5, 100)
     }
@@ -15272,8 +15279,13 @@ class OverlayService : LifecycleService() {
             oppChargedMoveNames.none { it.equals(m, ignoreCase = true) }
         } ?: ""
 
-        val activeUserPlusMove = OverlayService.resolveMegaPlusMoveStatic(userMeta.name, activeLeague)
-            ?: OverlayService.resolveMegaPlusMoveStatic(activePlayerName, activeLeague)
+        val activeUserPlusLvl = (activeSlot?.plusMoveLevel ?: 4).coerceIn(0, 4)
+        val activeUserPlusMove = if (activeUserPlusLvl <= 0) {
+            null
+        } else {
+            OverlayService.resolveMegaPlusMoveStatic(userMeta.name, activeLeague)
+                ?: OverlayService.resolveMegaPlusMoveStatic(activePlayerName, activeLeague)
+        }
         val myChargedMoveNames = listOfNotNull(userMove1Name, userMove2Name, activeUserPlusMove).filter { it.isNotBlank() }.distinct()
 
         // Compute shared 1st-throw maximum turn horizon across all 5 moves (Opponent's 3 + Player's 2)
@@ -15466,7 +15478,8 @@ class OverlayService : LifecycleService() {
                 isAttackerShadow = isUserShadow,
                 isDefenderShadow = isOpponentShadow,
                 attackerAtkStage = activeUserAtkStg,
-                defenderDefStage = activeOppDefStg
+                defenderDefStage = activeOppDefStg,
+                plusMoveLevel = activeUserPlusLvl
             )
             val eff = getTypeEffectiveness(mStats.type, oppMeta.types)
 
@@ -15555,7 +15568,8 @@ class OverlayService : LifecycleService() {
                         isAttackerShadow = isUserShadow,
                         isDefenderShadow = isSlotShadow,
                         attackerAtkStage = activeUserAtkStg,
-                        defenderDefStage = oDefStage
+                        defenderDefStage = oDefStage,
+                        plusMoveLevel = activeUserPlusLvl
                     )
                     val oEff = getTypeEffectiveness(mStats.type, oppMetaSlot.types)
                     val tier = when {
@@ -15622,7 +15636,8 @@ class OverlayService : LifecycleService() {
                 myCharged1 = s?.chargedMove1,
                 myCharged2 = s?.chargedMove2,
                 myCp = s?.cp,
-                myIvs = s?.ivs
+                myIvs = s?.ivs,
+                myPlusMoveLevel = s?.plusMoveLevel
             )
             val uHp = if (slotIdx in 0..2 && !playerFaintedSlots[slotIdx]) playerSlotHpPct[slotIdx].coerceIn(1, 100) else 100
             val targetBase = FormResolver.extractBaseSpecies(targetOppName).lowercase()
@@ -16676,7 +16691,8 @@ class OverlayService : LifecycleService() {
                 myCharged1 = slot?.chargedMove1,
                 myCharged2 = slot?.chargedMove2,
                 myCp = slot?.cp,
-                myIvs = slot?.ivs
+                myIvs = slot?.ivs,
+                myPlusMoveLevel = slot?.plusMoveLevel
             )
             val rating1s = OverlayService.getOverlayRealtimeMatchupRatingStatic(
                 myName = userName,
@@ -16688,7 +16704,8 @@ class OverlayService : LifecycleService() {
                 myCharged1 = slot?.chargedMove1,
                 myCharged2 = slot?.chargedMove2,
                 myCp = slot?.cp,
-                myIvs = slot?.ivs
+                myIvs = slot?.ivs,
+                myPlusMoveLevel = slot?.plusMoveLevel
             )
             val rating2s = OverlayService.getOverlayRealtimeMatchupRatingStatic(
                 myName = userName,
@@ -16700,7 +16717,8 @@ class OverlayService : LifecycleService() {
                 myCharged1 = slot?.chargedMove1,
                 myCharged2 = slot?.chargedMove2,
                 myCp = slot?.cp,
-                myIvs = slot?.ivs
+                myIvs = slot?.ivs,
+                myPlusMoveLevel = slot?.plusMoveLevel
             )
 
             fun toTier(r: Int): String = when {

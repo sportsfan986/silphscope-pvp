@@ -453,10 +453,13 @@ export function calculateMyMoveTimingRows(
 
   const oppSlots = scannedOpponentNames.length > 0 ? scannedOpponentNames : [oppStats.name];
 
+  const userPlusLvl = Math.max(0, Math.min(4, activeUserMember?.plusMoveLevel ?? 4));
   const userPlusMoveName =
-    resolveMegaPlusMove(userLeadName, league) ||
-    resolveMegaPlusMove(userStats.name, league) ||
-    resolveMegaPlusMove(userStats.speciesId, league);
+    userPlusLvl <= 0
+      ? null
+      : resolveMegaPlusMove(userLeadName, league) ||
+        resolveMegaPlusMove(userStats.name, league) ||
+        resolveMegaPlusMove(userStats.speciesId, league);
   const effectiveCustomMoves =
     userPlusMoveName && !customMoves.some((m) => m.toLowerCase() === userPlusMoveName.toLowerCase())
       ? [...customMoves, userPlusMoveName]
@@ -468,7 +471,7 @@ export function calculateMyMoveTimingRows(
     const mEnergy = existing.energyCost || 50;
     const myTapsNeeded = Math.max(1, Math.ceil(mEnergy / userFastEnergy));
     const myReadyTurn = myTapsNeeded * userFastTurns;
-    const actvDmg = calculateChargedDamage(userStats, oppStats, existing, isUserShadow, isOppShadow);
+    const actvDmg = calculateChargedDamage(userStats, oppStats, existing, isUserShadow, isOppShadow, userPlusLvl);
 
     // Multi-cycle calculation using true PvPoke residual energy up to maxHorizonTurns
     const cycles: MoveCycleSegment[] = [];
@@ -558,7 +561,7 @@ export function calculateMyMoveTimingRows(
         oppStats;
       const oStats = computeEffectiveStatsForLeague(rawOStats, league);
       const isOShadow = (slotIdx === 0 && isOppShadow) || oName.toLowerCase().startsWith("shadow ");
-      const oDmg = calculateChargedDamage(userStats, oStats, existing, isUserShadow, isOShadow);
+      const oDmg = calculateChargedDamage(userStats, oStats, existing, isUserShadow, isOShadow, userPlusLvl);
       const tier: "resist" | "neutral" | "weak" =
         oDmg.percentage >= 60 || oDmg.mult >= 1.5
           ? "resist"
@@ -976,7 +979,8 @@ export const POSITION_WEIGHTED_BR_CACHE = new Map<string, PositionWeightedMatchu
 
 export function buildCombatantCacheKey(input: TeamMember | string): string {
   if (typeof input === "string") return input.trim().toLowerCase();
-  return `${(input.name || "").trim().toLowerCase()}|${input.cp || ""}|${input.ivs || ""}|${input.fastMove || ""}|${input.chargedMove1 || ""}|${input.chargedMove2 || ""}`;
+  const plusLvl = Math.max(0, Math.min(4, input.plusMoveLevel ?? 4));
+  return `${(input.name || "").trim().toLowerCase()}|${input.cp || ""}|${input.ivs || ""}|${input.fastMove || ""}|${input.chargedMove1 || ""}|${input.chargedMove2 || ""}|+${plusLvl}`;
 }
 
 /**
@@ -1222,9 +1226,10 @@ export function evaluateDiscreteShieldBattleRating(
     defender: PokemonStats,
     cm: ChargedMove,
     atkShadow: boolean,
-    defShadow: boolean
+    defShadow: boolean,
+    plusMoveLevel: number = 4
   ): { pct: number; energy: number } => {
-    const rawPct = calculateChargedDamage(attacker, defender, cm, atkShadow, defShadow).percentage;
+    const rawPct = calculateChargedDamage(attacker, defender, cm, atkShadow, defShadow, plusMoveLevel).percentage;
     const energy = Math.max(35, cm.energyCost || 50);
     const paceFactor = Math.max(0.86, Math.min(1.18, Math.pow(50.0 / energy, 0.26)));
     return {
@@ -1258,9 +1263,13 @@ export function evaluateDiscreteShieldBattleRating(
   const userFastTurns = Math.max(1, userResolved.fastMove.turns || 2);
   const userFastEnergy = userResolved.fastMove.energyGain || userFastTurns * 3.5;
   const userFastEpt = userFastEnergy / userFastTurns;
+  const userPlusLvl =
+    typeof userInput === "object" ? Math.max(0, Math.min(4, userInput.plusMoveLevel ?? 4)) : 4;
   const userPlusMoveName =
-    resolveMegaPlusMove(myStats.name, league) ||
-    resolveMegaPlusMove(myStats.speciesId, league);
+    userPlusLvl <= 0
+      ? null
+      : resolveMegaPlusMove(myStats.name, league) ||
+        resolveMegaPlusMove(myStats.speciesId, league);
   const userC3Move = userPlusMoveName
     ? buildChargedMoveFromName(userPlusMoveName, myStats.types[0], myStats.chargedMoves)
     : null;
@@ -1270,7 +1279,8 @@ export function evaluateDiscreteShieldBattleRating(
         oppStats,
         userC3Move,
         userResolved.isShadow,
-        oppResolved.isShadow
+        oppResolved.isShadow,
+        userPlusLvl
       ).percentage
     : 0;
   const oppPlusMoveName =
@@ -1285,7 +1295,8 @@ export function evaluateDiscreteShieldBattleRating(
         myStats,
         oppC3Move,
         oppResolved.isShadow,
-        userResolved.isShadow
+        userResolved.isShadow,
+        4
       ).percentage
     : 0;
 
@@ -1305,7 +1316,7 @@ export function evaluateDiscreteShieldBattleRating(
     ? [...userResolved.chargedMoves.slice(0, 2), userC3Move]
     : userResolved.chargedMoves.slice(0, 2);
   const userChargedEval = userChargedForEval.map((cm) =>
-    evalChargedMoveAgainst(myStats, oppStats, cm, userResolved.isShadow, oppResolved.isShadow)
+    evalChargedMoveAgainst(myStats, oppStats, cm, userResolved.isShadow, oppResolved.isShadow, userPlusLvl)
   );
   const bestUserCharged = userChargedEval.length ? Math.max(...userChargedEval.map((c) => c.pct)) : 45;
   const minUserCharged = userChargedEval.length ? Math.min(...userChargedEval.map((c) => c.pct)) : 35;

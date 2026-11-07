@@ -41,6 +41,7 @@ export interface TeamMember {
   chargedMove1: string;
   chargedMove2: string;
   ivs?: string;
+  plusMoveLevel?: number;
 }
 
 export type CoreLeagueType =
@@ -4008,6 +4009,14 @@ export function calculateFastDamage(
   };
 }
 
+export function getPlusMovePowerMultiplier(level: number = 4): number {
+  if (level <= 0) return 0;
+  if (level === 1) return 1.0;
+  if (level === 2) return 1.1;
+  if (level === 3) return 1.2;
+  return 1.3;
+}
+
 /**
  * Computes exact PvPoke Charged Move damage %:
  * Floor(0.5 * Power * (EffectiveAtk / EffectiveDef) * STAB * TypeMultiplier * 1.3) + 1
@@ -4018,11 +4027,18 @@ export function calculateChargedDamage(
   defender: PokemonStats,
   move: ChargedMove,
   isAttackerShadow: boolean = false,
-  isDefenderShadow: boolean = false
+  isDefenderShadow: boolean = false,
+  plusMoveLevel: number = 4
 ): { damage: number; percentage: number; isStab: boolean; mult: number } {
   const atkSpeciesLower = (attacker.baseSpecies || attacker.speciesId || attacker.name).toLowerCase();
   const defSpeciesLower = (defender.baseSpecies || defender.speciesId || defender.name).toLowerCase();
   const moveLower = (move.name || "").toLowerCase();
+  const isPlusMove = move.name.trim().endsWith("+");
+  const plusMult = isPlusMove ? getPlusMovePowerMultiplier(plusMoveLevel) : 1.3;
+  if (isPlusMove && plusMult <= 0) {
+    return { damage: 0, percentage: 0, isStab: false, mult: 1.0 };
+  }
+  const effectiveMovePower = isPlusMove ? Math.round((move.power / 1.3) * plusMult) : move.power;
 
   const isMorpekoAuraWheel =
     atkSpeciesLower.includes("morpeko") && moveLower.includes("aura wheel");
@@ -4065,7 +4081,7 @@ export function calculateChargedDamage(
   }
   const maxHp = Math.max(1, defender.baseStats.hp);
 
-  const baseDamage = Math.floor(0.5 * move.power * (atk / def) * stabMult * typeMult * 1.3) + 1;
+  const baseDamage = Math.floor(0.5 * effectiveMovePower * (atk / def) * stabMult * typeMult * 1.3) + 1;
   const percentage = Math.min(100, Math.max(5, Math.round((baseDamage / maxHp) * 100)));
 
   return {

@@ -144,10 +144,12 @@ internal fun OverlayService.Companion.buildUserSlotCacheKey(
     charged2: String?,
     cp: Int?,
     ivs: String?,
-    oppName: String
+    oppName: String,
+    plusMoveLevel: Int? = 4
 ): String {
     val normLeague = getLeagueAbbreviationStatic(league)
-    val uSig = "${userName.lowercase().trim()}|${fastMove.orEmpty().lowercase().trim()}|${charged1.orEmpty().lowercase().trim()}|${charged2.orEmpty().lowercase().trim()}|${cp ?: 0}|${ivs.orEmpty().trim()}"
+    val pLvl = (plusMoveLevel ?: 4).coerceIn(0, 4)
+    val uSig = "${userName.lowercase().trim()}|${fastMove.orEmpty().lowercase().trim()}|${charged1.orEmpty().lowercase().trim()}|${charged2.orEmpty().lowercase().trim()}|${cp ?: 0}|${ivs.orEmpty().trim()}|+$pLvl"
     val oSig = oppName.lowercase().trim()
     return "$normLeague||$uSig||$oSig"
 }
@@ -166,10 +168,12 @@ internal fun OverlayService.Companion.calculateFastRoughMatchupRatingStatic(
     myCharged1: String? = null,
     myCharged2: String? = null,
     myCp: Int? = null,
-    myIvs: String? = null
+    myIvs: String? = null,
+    myPlusMoveLevel: Int? = 4
 ): Int {
     val sUser = userShields.coerceIn(0, 2)
     val sOpp = oppShields.coerceIn(0, 2)
+    val effectiveUserPlusLvl = (myPlusMoveLevel ?: 4).coerceIn(0, 4)
     val myShadow = myName.trim().startsWith("Shadow ", ignoreCase = true) || myName.contains("(Shadow)", ignoreCase = true)
     val oppShadow = oppName.trim().startsWith("Shadow ", ignoreCase = true) || oppName.contains("(Shadow)", ignoreCase = true)
 
@@ -186,10 +190,14 @@ internal fun OverlayService.Companion.calculateFastRoughMatchupRatingStatic(
     val userC2Stats = resolveChargedMoveStatsStatic(uC2, myMeta.types.firstOrNull() ?: "normal")
     val userC1Pct = calculateChargedMoveDamagePctStatic(myMeta, oppMeta, uC1, myShadow, oppShadow)
     val userC2Pct = calculateChargedMoveDamagePctStatic(myMeta, oppMeta, uC2, myShadow, oppShadow)
-    val userPlusMove = resolveMegaPlusMoveStatic(myMeta.name, league) ?: resolveMegaPlusMoveStatic(myName, league)
+    val userPlusMove = if (effectiveUserPlusLvl <= 0) {
+        null
+    } else {
+        resolveMegaPlusMoveStatic(myMeta.name, league) ?: resolveMegaPlusMoveStatic(myName, league)
+    }
     val oppPlusMove = resolveMegaPlusMoveStatic(oppMeta.name, league) ?: resolveMegaPlusMoveStatic(oppName, league)
     val userC3Stats = userPlusMove?.let { resolveChargedMoveStatsStatic(it, myMeta.types.firstOrNull() ?: "normal") }
-    val userC3Pct = userPlusMove?.let { calculateChargedMoveDamagePctStatic(myMeta, oppMeta, it, myShadow, oppShadow) } ?: 0
+    val userC3Pct = userPlusMove?.let { calculateChargedMoveDamagePctStatic(myMeta, oppMeta, it, myShadow, oppShadow, plusMoveLevel = effectiveUserPlusLvl) } ?: 0
     val bestUserCharged = max(max(userC1Pct, userC2Pct), userC3Pct)
 
     val oppC1Stats = resolveChargedMoveStatsStatic(oppMeta.chargedMove1, oppMeta.types.firstOrNull() ?: "normal")
@@ -197,7 +205,7 @@ internal fun OverlayService.Companion.calculateFastRoughMatchupRatingStatic(
     val oppC1Pct = calculateChargedMoveDamagePctStatic(oppMeta, myMeta, oppMeta.chargedMove1, oppShadow, myShadow)
     val oppC2Pct = calculateChargedMoveDamagePctStatic(oppMeta, myMeta, oppMeta.chargedMove2, oppShadow, myShadow)
     val oppC3Stats = oppPlusMove?.let { resolveChargedMoveStatsStatic(it, oppMeta.types.firstOrNull() ?: "normal") }
-    val oppC3Pct = oppPlusMove?.let { calculateChargedMoveDamagePctStatic(oppMeta, myMeta, it, oppShadow, myShadow) } ?: 0
+    val oppC3Pct = oppPlusMove?.let { calculateChargedMoveDamagePctStatic(oppMeta, myMeta, it, oppShadow, myShadow, plusMoveLevel = 4) } ?: 0
     val bestOppCharged = max(max(oppC1Pct, oppC2Pct), oppC3Pct)
 
     val uFastKey = uFast.lowercase().trim()
@@ -263,7 +271,7 @@ internal fun OverlayService.Companion.calculateFastRoughMatchupRatingStatic(
 internal fun OverlayService.Companion.precomputeActiveTeamTop200MatrixStatic(preset: OverlayService.TeamPreset?) {
     if (preset == null || preset.pokemon.isEmpty()) return
     val sig = "${preset.league}|" + preset.pokemon.joinToString(";") {
-        "${it.name}|${it.fastMove}|${it.chargedMove1}|${it.chargedMove2}|${it.cp}|${it.ivs}"
+        "${it.name}|${it.fastMove}|${it.chargedMove1}|${it.chargedMove2}|${it.cp}|${it.ivs}|${(it.plusMoveLevel ?: 4).coerceIn(0, 4)}"
     }
     if (sig == lastPrecomputedTeamSignature && PRECOMPUTED_TOP200_9X9_CACHE.isNotEmpty()) return
 
@@ -278,7 +286,8 @@ internal fun OverlayService.Companion.precomputeActiveTeamTop200MatrixStatic(pre
                 charged2 = slot.chargedMove2,
                 cp = slot.cp,
                 ivs = slot.ivs,
-                oppName = oppName
+                oppName = oppName,
+                plusMoveLevel = slot.plusMoveLevel
             )
             if (!PRECOMPUTED_TOP200_9X9_CACHE.containsKey(key)) {
                 PRECOMPUTED_TOP200_9X9_CACHE[key] = calculateAllShieldPermutationsStatic(
@@ -289,7 +298,8 @@ internal fun OverlayService.Companion.precomputeActiveTeamTop200MatrixStatic(pre
                     myCharged1 = slot.chargedMove1,
                     myCharged2 = slot.chargedMove2,
                     myCp = slot.cp,
-                    myIvs = slot.ivs
+                    myIvs = slot.ivs,
+                    myPlusMoveLevel = slot.plusMoveLevel
                 )
             }
             // Also precompute Shadow counterpart if opponent is non-Shadow and Shadow-eligible
@@ -303,7 +313,8 @@ internal fun OverlayService.Companion.precomputeActiveTeamTop200MatrixStatic(pre
                     charged2 = slot.chargedMove2,
                     cp = slot.cp,
                     ivs = slot.ivs,
-                    oppName = shadowOppName
+                    oppName = shadowOppName,
+                    plusMoveLevel = slot.plusMoveLevel
                 )
                 if (!PRECOMPUTED_TOP200_9X9_CACHE.containsKey(shadKey)) {
                     PRECOMPUTED_TOP200_9X9_CACHE[shadKey] = calculateAllShieldPermutationsStatic(
@@ -314,7 +325,8 @@ internal fun OverlayService.Companion.precomputeActiveTeamTop200MatrixStatic(pre
                         myCharged1 = slot.chargedMove1,
                         myCharged2 = slot.chargedMove2,
                         myCp = slot.cp,
-                        myIvs = slot.ivs
+                        myIvs = slot.ivs,
+                        myPlusMoveLevel = slot.plusMoveLevel
                     )
                 }
             }
@@ -337,12 +349,13 @@ internal fun OverlayService.Companion.getOverlayRealtimeMatchupRatingStatic(
     myCharged1: String? = null,
     myCharged2: String? = null,
     myCp: Int? = null,
-    myIvs: String? = null
+    myIvs: String? = null,
+    myPlusMoveLevel: Int? = 4
 ): Int {
     val sUser = userShields.coerceIn(0, 2)
     val sOpp = oppShields.coerceIn(0, 2)
     val code = "${sUser}v${sOpp}"
-    val key = buildUserSlotCacheKey(league, myName, myFastMove, myCharged1, myCharged2, myCp, myIvs, oppName)
+    val key = buildUserSlotCacheKey(league, myName, myFastMove, myCharged1, myCharged2, myCp, myIvs, oppName, myPlusMoveLevel)
     PRECOMPUTED_TOP200_9X9_CACHE[key]?.get(code)?.let { return it }
 
     return calculateFastRoughMatchupRatingStatic(
@@ -355,7 +368,8 @@ internal fun OverlayService.Companion.getOverlayRealtimeMatchupRatingStatic(
         myCharged1 = myCharged1,
         myCharged2 = myCharged2,
         myCp = myCp,
-        myIvs = myIvs
+        myIvs = myIvs,
+        myPlusMoveLevel = myPlusMoveLevel
     )
 }
 
@@ -406,7 +420,7 @@ internal fun OverlayService.Companion.calculateBlindMatchupFavorabilityStatic(
     val weight = if (unrevealedThird) 0.75 else 1.0
 
     val (lead1v1, lead2v2) = calculate1v1And2v2RatingsStatic(
-        myLead, oppLead, league, slot0?.fastMove, slot0?.chargedMove1, slot0?.chargedMove2, slot0?.cp, slot0?.ivs
+        myLead, oppLead, league, slot0?.fastMove, slot0?.chargedMove1, slot0?.chargedMove2, slot0?.cp, slot0?.ivs, slot0?.plusMoveLevel
     )
     val sLead = 0.50 * lead1v1.toDouble() + 0.50 * lead2v2.toDouble()
 
@@ -414,32 +428,32 @@ internal fun OverlayService.Companion.calculateBlindMatchupFavorabilityStatic(
     val scoreB: Double
     if (!unrevealedThird) {
         val rSwapVsOppSwap = calculateMatchupRatingStatic(
-            mySwap, oppSwap, 1, 1, league, slot1?.fastMove, slot1?.chargedMove1, slot1?.chargedMove2, slot1?.cp, slot1?.ivs
+            mySwap, oppSwap, 1, 1, league, slot1?.fastMove, slot1?.chargedMove1, slot1?.chargedMove2, slot1?.cp, slot1?.ivs, slot1?.plusMoveLevel
         ).toDouble()
         val rCloseVsOppClose = calculateMatchupRatingStatic(
-            myClose, oppClose, 1, 1, league, slot2?.fastMove, slot2?.chargedMove1, slot2?.chargedMove2, slot2?.cp, slot2?.ivs
+            myClose, oppClose, 1, 1, league, slot2?.fastMove, slot2?.chargedMove1, slot2?.chargedMove2, slot2?.cp, slot2?.ivs, slot2?.plusMoveLevel
         ).toDouble()
         val rSwapVsOppClose = calculateMatchupRatingStatic(
-            mySwap, oppClose, 1, 1, league, slot1?.fastMove, slot1?.chargedMove1, slot1?.chargedMove2, slot1?.cp, slot1?.ivs
+            mySwap, oppClose, 1, 1, league, slot1?.fastMove, slot1?.chargedMove1, slot1?.chargedMove2, slot1?.cp, slot1?.ivs, slot1?.plusMoveLevel
         ).toDouble()
         val rCloseVsOppSwap = calculateMatchupRatingStatic(
-            myClose, oppSwap, 1, 1, league, slot2?.fastMove, slot2?.chargedMove1, slot2?.chargedMove2, slot2?.cp, slot2?.ivs
+            myClose, oppSwap, 1, 1, league, slot2?.fastMove, slot2?.chargedMove1, slot2?.chargedMove2, slot2?.cp, slot2?.ivs, slot2?.plusMoveLevel
         ).toDouble()
 
         scoreA = (rSwapVsOppSwap + rCloseVsOppClose) / 2.0
         scoreB = (rSwapVsOppClose + rCloseVsOppSwap) / 2.0
     } else {
         val rBarSwap = computeMetaAverage1v1RatingStatic(
-            mySwap, league, slot1?.fastMove, slot1?.chargedMove1, slot1?.chargedMove2, slot1?.cp, slot1?.ivs, metaPool
+            mySwap, league, slot1?.fastMove, slot1?.chargedMove1, slot1?.chargedMove2, slot1?.cp, slot1?.ivs, metaPool, slot1?.plusMoveLevel
         )
         val rBarClose = computeMetaAverage1v1RatingStatic(
-            myClose, league, slot2?.fastMove, slot2?.chargedMove1, slot2?.chargedMove2, slot2?.cp, slot2?.ivs, metaPool
+            myClose, league, slot2?.fastMove, slot2?.chargedMove1, slot2?.chargedMove2, slot2?.cp, slot2?.ivs, metaPool, slot2?.plusMoveLevel
         )
         val rSwapVsOppSwap = calculateMatchupRatingStatic(
-            mySwap, oppSwap, 1, 1, league, slot1?.fastMove, slot1?.chargedMove1, slot1?.chargedMove2, slot1?.cp, slot1?.ivs
+            mySwap, oppSwap, 1, 1, league, slot1?.fastMove, slot1?.chargedMove1, slot1?.chargedMove2, slot1?.cp, slot1?.ivs, slot1?.plusMoveLevel
         ).toDouble()
         val rCloseVsOppSwap = calculateMatchupRatingStatic(
-            myClose, oppSwap, 1, 1, league, slot2?.fastMove, slot2?.chargedMove1, slot2?.chargedMove2, slot2?.cp, slot2?.ivs
+            myClose, oppSwap, 1, 1, league, slot2?.fastMove, slot2?.chargedMove1, slot2?.chargedMove2, slot2?.cp, slot2?.ivs, slot2?.plusMoveLevel
         ).toDouble()
 
         scoreA = (rSwapVsOppSwap + rBarClose) / 2.0
@@ -583,7 +597,8 @@ internal fun OverlayService.Companion.calculateDynamicExecutionWAEStatic(
                         myCharged1 = uSlot?.chargedMove1,
                         myCharged2 = uSlot?.chargedMove2,
                         myCp = uSlot?.cp,
-                        myIvs = uSlot?.ivs
+                        myIvs = uSlot?.ivs,
+                        myPlusMoveLevel = uSlot?.plusMoveLevel
                     ).toDouble()
                     rawIntervals.add(
                         ExecutionIntervalSegment(
@@ -661,7 +676,8 @@ internal fun OverlayService.Companion.calculateDynamicExecutionWAEStatic(
                 myCharged1 = uSlot?.chargedMove1,
                 myCharged2 = uSlot?.chargedMove2,
                 myCp = uSlot?.cp,
-                myIvs = uSlot?.ivs
+                myIvs = uSlot?.ivs,
+                myPlusMoveLevel = uSlot?.plusMoveLevel
             ).toDouble()
             rawIntervals.add(
                 ExecutionIntervalSegment(
@@ -1887,13 +1903,13 @@ internal fun OverlayService.Companion.evaluateOrAutoOrderTeamStatic(
     for (i in 0 until 3) {
         val slot = padded[i]
         for (opp in allOpps) {
-            val b00 = calculateMatchupRatingStatic(slot.name, opp, 0, 0, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs).toDouble()
-            val b01 = calculateMatchupRatingStatic(slot.name, opp, 0, 1, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs).toDouble()
-            val b10 = calculateMatchupRatingStatic(slot.name, opp, 1, 0, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs).toDouble()
-            val b11 = calculateMatchupRatingStatic(slot.name, opp, 1, 1, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs).toDouble()
-            val b12 = calculateMatchupRatingStatic(slot.name, opp, 1, 2, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs).toDouble()
-            val b21 = calculateMatchupRatingStatic(slot.name, opp, 2, 1, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs).toDouble()
-            val b22 = calculateMatchupRatingStatic(slot.name, opp, 2, 2, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs).toDouble()
+            val b00 = calculateMatchupRatingStatic(slot.name, opp, 0, 0, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs, slot.plusMoveLevel).toDouble()
+            val b01 = calculateMatchupRatingStatic(slot.name, opp, 0, 1, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs, slot.plusMoveLevel).toDouble()
+            val b10 = calculateMatchupRatingStatic(slot.name, opp, 1, 0, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs, slot.plusMoveLevel).toDouble()
+            val b11 = calculateMatchupRatingStatic(slot.name, opp, 1, 1, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs, slot.plusMoveLevel).toDouble()
+            val b12 = calculateMatchupRatingStatic(slot.name, opp, 1, 2, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs, slot.plusMoveLevel).toDouble()
+            val b21 = calculateMatchupRatingStatic(slot.name, opp, 2, 1, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs, slot.plusMoveLevel).toDouble()
+            val b22 = calculateMatchupRatingStatic(slot.name, opp, 2, 2, league, slot.fastMove, slot.chargedMove1, slot.chargedMove2, slot.cp, slot.ivs, slot.plusMoveLevel).toDouble()
 
             slotLeadBrMap[i][opp] = 0.45 * b11 + 0.35 * b22 + 0.10 * b00 + 0.05 * b12 + 0.05 * b21
             slotSwapBrMap[i][opp] = 0.40 * b11 + 0.20 * b10 + 0.20 * b01 + 0.10 * b21 + 0.10 * b00
@@ -2446,13 +2462,13 @@ internal fun OverlayService.Companion.recommendTop3UpgradesPerRoleStatic(
     for (i in 0 until 3) {
         val s = currentSlots[i]
         for (opp in allOpps) {
-            val b00 = calculateMatchupRatingStatic(s.name, opp, 0, 0, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs).toDouble()
-            val b01 = calculateMatchupRatingStatic(s.name, opp, 0, 1, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs).toDouble()
-            val b10 = calculateMatchupRatingStatic(s.name, opp, 1, 0, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs).toDouble()
-            val b11 = calculateMatchupRatingStatic(s.name, opp, 1, 1, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs).toDouble()
-            val b12 = calculateMatchupRatingStatic(s.name, opp, 1, 2, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs).toDouble()
-            val b21 = calculateMatchupRatingStatic(s.name, opp, 2, 1, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs).toDouble()
-            val b22 = calculateMatchupRatingStatic(s.name, opp, 2, 2, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs).toDouble()
+            val b00 = calculateMatchupRatingStatic(s.name, opp, 0, 0, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs, s.plusMoveLevel).toDouble()
+            val b01 = calculateMatchupRatingStatic(s.name, opp, 0, 1, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs, s.plusMoveLevel).toDouble()
+            val b10 = calculateMatchupRatingStatic(s.name, opp, 1, 0, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs, s.plusMoveLevel).toDouble()
+            val b11 = calculateMatchupRatingStatic(s.name, opp, 1, 1, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs, s.plusMoveLevel).toDouble()
+            val b12 = calculateMatchupRatingStatic(s.name, opp, 1, 2, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs, s.plusMoveLevel).toDouble()
+            val b21 = calculateMatchupRatingStatic(s.name, opp, 2, 1, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs, s.plusMoveLevel).toDouble()
+            val b22 = calculateMatchupRatingStatic(s.name, opp, 2, 2, league, s.fastMove, s.chargedMove1, s.chargedMove2, s.cp, s.ivs, s.plusMoveLevel).toDouble()
 
             curLeadMap[i][opp] = 0.45 * b11 + 0.35 * b22 + 0.10 * b00 + 0.05 * b12 + 0.05 * b21
             curSwapMap[i][opp] = 0.40 * b11 + 0.20 * b10 + 0.20 * b01 + 0.10 * b21 + 0.10 * b00
@@ -2691,13 +2707,13 @@ internal fun OverlayService.Companion.recommendTop3MovesetsForTeamStatic(
     for (i in 0..2) {
         val m = curSlots.getOrNull(i) ?: continue
         for (opp in allOpps) {
-            val b00 = calculateMatchupRatingStatic(m.name, opp, 0, 0, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs).toDouble()
-            val b01 = calculateMatchupRatingStatic(m.name, opp, 0, 1, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs).toDouble()
-            val b10 = calculateMatchupRatingStatic(m.name, opp, 1, 0, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs).toDouble()
-            val b11 = calculateMatchupRatingStatic(m.name, opp, 1, 1, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs).toDouble()
-            val b12 = calculateMatchupRatingStatic(m.name, opp, 1, 2, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs).toDouble()
-            val b21 = calculateMatchupRatingStatic(m.name, opp, 2, 1, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs).toDouble()
-            val b22 = calculateMatchupRatingStatic(m.name, opp, 2, 2, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs).toDouble()
+            val b00 = calculateMatchupRatingStatic(m.name, opp, 0, 0, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs, m.plusMoveLevel).toDouble()
+            val b01 = calculateMatchupRatingStatic(m.name, opp, 0, 1, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs, m.plusMoveLevel).toDouble()
+            val b10 = calculateMatchupRatingStatic(m.name, opp, 1, 0, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs, m.plusMoveLevel).toDouble()
+            val b11 = calculateMatchupRatingStatic(m.name, opp, 1, 1, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs, m.plusMoveLevel).toDouble()
+            val b12 = calculateMatchupRatingStatic(m.name, opp, 1, 2, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs, m.plusMoveLevel).toDouble()
+            val b21 = calculateMatchupRatingStatic(m.name, opp, 2, 1, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs, m.plusMoveLevel).toDouble()
+            val b22 = calculateMatchupRatingStatic(m.name, opp, 2, 2, league, m.fastMove, m.chargedMove1, m.chargedMove2, m.cp, m.ivs, m.plusMoveLevel).toDouble()
 
             curLeadMap[i][opp] = 0.45 * b11 + 0.35 * b22 + 0.10 * b00 + 0.05 * b12 + 0.05 * b21
             curSwapMap[i][opp] = 0.40 * b11 + 0.20 * b10 + 0.20 * b01 + 0.10 * b21 + 0.10 * b00
@@ -2782,13 +2798,13 @@ internal fun OverlayService.Companion.recommendTop3MovesetsForTeamStatic(
                 val candCloserMap = HashMap<String, Double>(allOpps.size)
 
                 for (opp in allOpps) {
-                    val b00 = calculateMatchupRatingStatic(m.name, opp, 0, 0, league, fMove, c1Move, c2Move, m.cp, m.ivs).toDouble()
-                    val b01 = calculateMatchupRatingStatic(m.name, opp, 0, 1, league, fMove, c1Move, c2Move, m.cp, m.ivs).toDouble()
-                    val b10 = calculateMatchupRatingStatic(m.name, opp, 1, 0, league, fMove, c1Move, c2Move, m.cp, m.ivs).toDouble()
-                    val b11 = calculateMatchupRatingStatic(m.name, opp, 1, 1, league, fMove, c1Move, c2Move, m.cp, m.ivs).toDouble()
-                    val b12 = calculateMatchupRatingStatic(m.name, opp, 1, 2, league, fMove, c1Move, c2Move, m.cp, m.ivs).toDouble()
-                    val b21 = calculateMatchupRatingStatic(m.name, opp, 2, 1, league, fMove, c1Move, c2Move, m.cp, m.ivs).toDouble()
-                    val b22 = calculateMatchupRatingStatic(m.name, opp, 2, 2, league, fMove, c1Move, c2Move, m.cp, m.ivs).toDouble()
+                    val b00 = calculateMatchupRatingStatic(m.name, opp, 0, 0, league, fMove, c1Move, c2Move, m.cp, m.ivs, m.plusMoveLevel).toDouble()
+                    val b01 = calculateMatchupRatingStatic(m.name, opp, 0, 1, league, fMove, c1Move, c2Move, m.cp, m.ivs, m.plusMoveLevel).toDouble()
+                    val b10 = calculateMatchupRatingStatic(m.name, opp, 1, 0, league, fMove, c1Move, c2Move, m.cp, m.ivs, m.plusMoveLevel).toDouble()
+                    val b11 = calculateMatchupRatingStatic(m.name, opp, 1, 1, league, fMove, c1Move, c2Move, m.cp, m.ivs, m.plusMoveLevel).toDouble()
+                    val b12 = calculateMatchupRatingStatic(m.name, opp, 1, 2, league, fMove, c1Move, c2Move, m.cp, m.ivs, m.plusMoveLevel).toDouble()
+                    val b21 = calculateMatchupRatingStatic(m.name, opp, 2, 1, league, fMove, c1Move, c2Move, m.cp, m.ivs, m.plusMoveLevel).toDouble()
+                    val b22 = calculateMatchupRatingStatic(m.name, opp, 2, 2, league, fMove, c1Move, c2Move, m.cp, m.ivs, m.plusMoveLevel).toDouble()
 
                     candLeadMap[opp] = 0.45 * b11 + 0.35 * b22 + 0.10 * b00 + 0.05 * b12 + 0.05 * b21
                     candSwapMap[opp] = 0.40 * b11 + 0.20 * b10 + 0.20 * b01 + 0.10 * b21 + 0.10 * b00

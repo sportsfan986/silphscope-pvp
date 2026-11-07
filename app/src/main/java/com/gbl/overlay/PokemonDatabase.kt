@@ -3126,12 +3126,21 @@ internal fun OverlayService.Companion.getTypeEffectivenessStatic(moveType: Strin
     return multiplier
 }
 
+internal fun OverlayService.Companion.getPlusMovePowerMultiplierStatic(level: Int): Double = when {
+    level <= 0 -> 0.0
+    level == 1 -> 1.00
+    level == 2 -> 1.10
+    level == 3 -> 1.20
+    else -> 1.30
+}
+
 internal fun OverlayService.Companion.calculateChargedMoveDamagePctStatic(
     attacker: PokemonMeta,
     defender: PokemonMeta,
     moveName: String,
     isAttackerShadow: Boolean,
-    isDefenderShadow: Boolean
+    isDefenderShadow: Boolean,
+    plusMoveLevel: Int = 4
 ): Int {
     val moveStats = resolveChargedMoveStatsStatic(moveName, attacker.types.firstOrNull() ?: "normal")
     val isMorpeko = attacker.baseSpecies.equals("morpeko", ignoreCase = true)
@@ -3165,7 +3174,11 @@ internal fun OverlayService.Companion.calculateChargedMoveDamagePctStatic(
 
     val effectiveAtk = attacker.atk * (if (isAttackerShadow) 1.2 else 1.0) * stanceAtkMultiplier * buffAtkMultiplier
     val effectiveDef = defender.def * (if (isDefenderShadow) 0.8333333 else 1.0) * defenderGulpMultiplier
-    val rawDamage = floor(0.5 * moveStats.power * (effectiveAtk / effectiveDef) * stab * typeEff * 1.3) + 1.0
+    val isPlusMove = moveName.trim().endsWith("+")
+    val plusMult = if (isPlusMove) getPlusMovePowerMultiplierStatic(plusMoveLevel) else 1.0
+    if (isPlusMove && plusMult <= 0.0) return 0
+    val effectivePower = moveStats.power.toDouble() * plusMult
+    val rawDamage = floor(0.5 * effectivePower * (effectiveAtk / effectiveDef) * stab * typeEff * 1.3) + 1.0
     return ((rawDamage / defender.hp.toDouble()) * 100.0).roundToInt().coerceIn(5, 100)
 }
 
@@ -3286,7 +3299,8 @@ internal fun OverlayService.Companion.calculateMatchupRatingStatic(
     myCharged1: String? = null,
     myCharged2: String? = null,
     myCp: Int? = null,
-    myIvs: String? = null
+    myIvs: String? = null,
+    myPlusMoveLevel: Int? = 4
 ): Int {
     val sUser = userShields.coerceIn(0, 2)
     val sOpp = oppShields.coerceIn(0, 2)
@@ -3307,7 +3321,8 @@ internal fun OverlayService.Companion.calculateMatchupRatingStatic(
     val uFast = myFastMove?.takeIf { it.isNotBlank() } ?: myMeta.defaultFastMove
     val uC1 = myCharged1?.takeIf { it.isNotBlank() } ?: myMeta.chargedMove1
     val uC2 = myCharged2?.takeIf { it.isNotBlank() } ?: myMeta.chargedMove2
-    val userPlusMove = resolveMegaPlusMoveStatic(myMeta.name, league) ?: resolveMegaPlusMoveStatic(myName, league)
+    val effectiveUserPlusLvl = (myPlusMoveLevel ?: 4).coerceIn(0, 4)
+    val userPlusMove = if (effectiveUserPlusLvl <= 0) null else (resolveMegaPlusMoveStatic(myMeta.name, league) ?: resolveMegaPlusMoveStatic(myName, league))
     val oppPlusMove = resolveMegaPlusMoveStatic(oppMeta.name, league) ?: resolveMegaPlusMoveStatic(oppName, league)
 
     val userC1Stats = resolveChargedMoveStatsStatic(uC1, myMeta.types.firstOrNull() ?: "normal")
@@ -3315,7 +3330,7 @@ internal fun OverlayService.Companion.calculateMatchupRatingStatic(
     val userC3Stats = userPlusMove?.let { resolveChargedMoveStatsStatic(it, myMeta.types.firstOrNull() ?: "normal") }
     val userC1Pct = calculateChargedMoveDamagePctStatic(myMeta, oppMeta, uC1, myShadow, oppShadow)
     val userC2Pct = calculateChargedMoveDamagePctStatic(myMeta, oppMeta, uC2, myShadow, oppShadow)
-    val userC3Pct = userPlusMove?.let { calculateChargedMoveDamagePctStatic(myMeta, oppMeta, it, myShadow, oppShadow) } ?: 0
+    val userC3Pct = userPlusMove?.let { calculateChargedMoveDamagePctStatic(myMeta, oppMeta, it, myShadow, oppShadow, effectiveUserPlusLvl) } ?: 0
     val bestUserCharged = max(max(userC1Pct, userC2Pct), userC3Pct)
     val minUserCharged = if (userC3Pct > 0) min(min(userC1Pct, userC2Pct), userC3Pct) else min(userC1Pct, userC2Pct)
     val fastestUserChargedPct = listOfNotNull(
@@ -3537,7 +3552,8 @@ internal fun OverlayService.Companion.calculateAllShieldPermutationsStatic(
     myCharged1: String? = null,
     myCharged2: String? = null,
     myCp: Int? = null,
-    myIvs: String? = null
+    myIvs: String? = null,
+    myPlusMoveLevel: Int? = 4
 ): Map<String, Int> {
     return ALL_SHIELD_PERMUTATIONS.associate { (sUser, sOpp, code) ->
         code to calculateMatchupRatingStatic(
@@ -3550,7 +3566,8 @@ internal fun OverlayService.Companion.calculateAllShieldPermutationsStatic(
             myCharged1 = myCharged1,
             myCharged2 = myCharged2,
             myCp = myCp,
-            myIvs = myIvs
+            myIvs = myIvs,
+            myPlusMoveLevel = myPlusMoveLevel
         )
     }
 }
@@ -3563,13 +3580,14 @@ internal fun OverlayService.Companion.calculate1v1And2v2RatingsStatic(
     myCharged1: String? = null,
     myCharged2: String? = null,
     myCp: Int? = null,
-    myIvs: String? = null
+    myIvs: String? = null,
+    myPlusMoveLevel: Int? = 4
 ): Pair<Int, Int> {
     val r1v1 = calculateMatchupRatingStatic(
-        myName, oppName, 1, 1, league, myFastMove, myCharged1, myCharged2, myCp, myIvs
+        myName, oppName, 1, 1, league, myFastMove, myCharged1, myCharged2, myCp, myIvs, myPlusMoveLevel
     )
     val r2v2 = calculateMatchupRatingStatic(
-        myName, oppName, 2, 2, league, myFastMove, myCharged1, myCharged2, myCp, myIvs
+        myName, oppName, 2, 2, league, myFastMove, myCharged1, myCharged2, myCp, myIvs, myPlusMoveLevel
     )
     return r1v1 to r2v2
 }
@@ -3586,7 +3604,8 @@ internal fun OverlayService.Companion.computeMetaAverage1v1RatingStatic(
     myCharged2: String? = null,
     myCp: Int? = null,
     myIvs: String? = null,
-    metaPool: List<String>? = null
+    metaPool: List<String>? = null,
+    myPlusMoveLevel: Int? = 4
 ): Double {
     val activeMetaPool = metaPool?.takeIf { it.isNotEmpty() } ?: getTopMetaPoolForLeagueStatic(league)
     if (activeMetaPool.isEmpty()) return 500.0
@@ -3601,7 +3620,8 @@ internal fun OverlayService.Companion.computeMetaAverage1v1RatingStatic(
             myCharged1 = myCharged1,
             myCharged2 = myCharged2,
             myCp = myCp,
-            myIvs = myIvs
+            myIvs = myIvs,
+            myPlusMoveLevel = myPlusMoveLevel
         ).toDouble()
     }.average()
 }
@@ -3614,7 +3634,8 @@ internal fun OverlayService.Companion.calculateAutoLeadMatchupStatic(
     myCharged1: String? = null,
     myCharged2: String? = null,
     myCp: Int? = null,
-    myIvs: String? = null
+    myIvs: String? = null,
+    myPlusMoveLevel: Int? = 4
 ): String {
     if (myLead.isBlank() || oppLead.isBlank()) return "NEUTRAL"
     val rating1s = calculateMatchupRatingStatic(
@@ -3627,7 +3648,8 @@ internal fun OverlayService.Companion.calculateAutoLeadMatchupStatic(
         myCharged1 = myCharged1,
         myCharged2 = myCharged2,
         myCp = myCp,
-        myIvs = myIvs
+        myIvs = myIvs,
+        myPlusMoveLevel = myPlusMoveLevel
     )
     return when {
         rating1s >= activeTierWMin -> "FAVORABLE"

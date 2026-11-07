@@ -12,7 +12,8 @@ data class PokemonSlot(
     val fastMove: String = "",
     val chargedMove1: String = "",
     val chargedMove2: String = "",
-    val ivs: String? = null
+    val ivs: String? = null,
+    val plusMoveLevel: Int? = 4
 )
 
 data class TeamPreset(

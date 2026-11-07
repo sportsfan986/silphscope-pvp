@@ -3864,7 +3864,7 @@ class MainActivity : AppCompatActivity() {
             safeUserMons
         }
         val serviceSlots = matchedPreset?.pokemon?.map {
-            OverlayService.TeamMember(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs)
+            OverlayService.TeamMember(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs, it.plusMoveLevel)
         }
         val aiLogEvents = loadAiTrainingLogs().find { it.battleId == entry.id }?.timelineEvents
         val safeTimeline = (entry.timelineEvents ?: emptyList()).ifEmpty { aiLogEvents ?: emptyList() }
@@ -5323,7 +5323,7 @@ class MainActivity : AppCompatActivity() {
     ): TeamPreset {
         val seasonLogs = getCurrentSeasonLogsForLeague(preset.league, preloadedLogs)
         val serviceMembers = preset.pokemon.map {
-            OverlayService.TeamMember(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs)
+            OverlayService.TeamMember(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs, it.plusMoveLevel)
         }
         val manualOverride = if (preset.isArchetypeManual && !autoReorder) preset.archetype else null
         val eval = OverlayService.evaluateOrAutoOrderTeamStatic(
@@ -5334,7 +5334,7 @@ class MainActivity : AppCompatActivity() {
             manualArchetypeOverride = manualOverride
         )
         val orderedPokemon = eval.orderedSlots.map {
-            PokemonSlot(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs)
+            PokemonSlot(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs, it.plusMoveLevel)
         }
         return preset.copy(
             pokemon = orderedPokemon,
@@ -6613,7 +6613,7 @@ class MainActivity : AppCompatActivity() {
                 val chosenMons = chosenPreset?.pokemon?.map { it.name } ?: existing?.userPokemon ?: emptyList()
                 val chosenResult = resultsArr.getOrElse(spinnerResult.selectedItemPosition) { "WIN" }
                 val serviceSlots = chosenPreset?.pokemon?.map {
-                    OverlayService.TeamMember(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs)
+                    OverlayService.TeamMember(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs, it.plusMoveLevel)
                 }
                 val computedQuality = OverlayService.calculateBattleQuality(
                     myTeam = chosenMons,
@@ -6758,7 +6758,7 @@ class MainActivity : AppCompatActivity() {
 
             val teamMembers: List<OverlayService.TeamMember> = if (matchedPreset != null && matchedPreset.pokemon.isNotEmpty()) {
                 matchedPreset.pokemon.map {
-                    OverlayService.TeamMember(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs)
+                    OverlayService.TeamMember(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs, it.plusMoveLevel)
                 }
             } else {
                 val fallbackNames = if (safeUserPokemon.size >= 3) safeUserPokemon else getLeagueTop3Defaults(safeLeague).map { it.name }
@@ -8528,7 +8528,11 @@ class MainActivity : AppCompatActivity() {
                 val rTag = roleLabels.getOrElse(sIdx) { "Slot ${sIdx + 1}" }
                 val brTag = slotBrHtmlLabels.getOrElse(sIdx) { "" }
                 val plusMove = OverlayService.resolveMegaPlusMoveStatic(slot.name, resolvedLeague, prefs)
-                val plusBadge = if (plusMove != null) " <font color='#f472b6'><b>[+ $plusMove [Mega4]]</b></font>" else ""
+                val plusLvl = (slot.plusMoveLevel ?: 4).coerceIn(0, 4)
+                val plusBadge = if (plusMove != null) {
+                    if (plusLvl <= 0) " <font color='#94a3b8'><b>[+ $plusMove [Off]]</b></font>"
+                    else " <font color='#f472b6'><b>[+ $plusMove [Lv$plusLvl]]</b></font>"
+                } else ""
                 val movesSummary = "${slot.fastMove} + ${slot.chargedMove1}/${slot.chargedMove2}"
                 "• <b>[$rTag · $brTag]</b> ${slot.name}$plusBadge <font color='#cbd5e1'>($movesSummary)</font> <font color='#94a3b8'>($ivText · CP ${slot.cp})</font>"
             }.joinToString("<br>")
@@ -11659,6 +11663,38 @@ class MainActivity : AppCompatActivity() {
             dialogView.findViewById<Button>(R.id.btn_p3_rec_5)
         )
 
+        val layoutP1PlusLevel = dialogView.findViewById<LinearLayout>(R.id.layout_p1_plus_level)
+        val textP1PlusMoveLabel = dialogView.findViewById<TextView>(R.id.text_p1_plus_move_label)
+        val btnP1PlusLvBtns = listOf(
+            dialogView.findViewById<TextView>(R.id.btn_p1_plus_lv0),
+            dialogView.findViewById<TextView>(R.id.btn_p1_plus_lv1),
+            dialogView.findViewById<TextView>(R.id.btn_p1_plus_lv2),
+            dialogView.findViewById<TextView>(R.id.btn_p1_plus_lv3),
+            dialogView.findViewById<TextView>(R.id.btn_p1_plus_lv4)
+        )
+        val layoutP2PlusLevel = dialogView.findViewById<LinearLayout>(R.id.layout_p2_plus_level)
+        val textP2PlusMoveLabel = dialogView.findViewById<TextView>(R.id.text_p2_plus_move_label)
+        val btnP2PlusLvBtns = listOf(
+            dialogView.findViewById<TextView>(R.id.btn_p2_plus_lv0),
+            dialogView.findViewById<TextView>(R.id.btn_p2_plus_lv1),
+            dialogView.findViewById<TextView>(R.id.btn_p2_plus_lv2),
+            dialogView.findViewById<TextView>(R.id.btn_p2_plus_lv3),
+            dialogView.findViewById<TextView>(R.id.btn_p2_plus_lv4)
+        )
+        val layoutP3PlusLevel = dialogView.findViewById<LinearLayout>(R.id.layout_p3_plus_level)
+        val textP3PlusMoveLabel = dialogView.findViewById<TextView>(R.id.text_p3_plus_move_label)
+        val btnP3PlusLvBtns = listOf(
+            dialogView.findViewById<TextView>(R.id.btn_p3_plus_lv0),
+            dialogView.findViewById<TextView>(R.id.btn_p3_plus_lv1),
+            dialogView.findViewById<TextView>(R.id.btn_p3_plus_lv2),
+            dialogView.findViewById<TextView>(R.id.btn_p3_plus_lv3),
+            dialogView.findViewById<TextView>(R.id.btn_p3_plus_lv4)
+        )
+
+        var p1PlusLevel = (existingPreset?.pokemon?.getOrNull(0)?.plusMoveLevel ?: 4).coerceIn(0, 4)
+        var p2PlusLevel = (existingPreset?.pokemon?.getOrNull(1)?.plusMoveLevel ?: 4).coerceIn(0, 4)
+        var p3PlusLevel = (existingPreset?.pokemon?.getOrNull(2)?.plusMoveLevel ?: 4).coerceIn(0, 4)
+
         var dialogManualArchetypeOverride: String? =
             if (existingPreset?.isArchetypeManual == true) existingPreset.archetype else null
 
@@ -11696,7 +11732,8 @@ class MainActivity : AppCompatActivity() {
             c1Edit: EditText,
             c2Edit: EditText,
             league: String,
-            fallbackSlot: PokemonSlot
+            fallbackSlot: PokemonSlot,
+            plusMoveLevel: Int = 4
         ): PokemonSlot {
             val finalName = nameEdit.text.toString().trim().ifEmpty { fallbackSlot.name }
             val enteredIvs = ivsEdit.text.toString().trim().takeIf { it.isNotEmpty() }
@@ -11723,7 +11760,8 @@ class MainActivity : AppCompatActivity() {
                 fastMove = finalFast,
                 chargedMove1 = finalC1,
                 chargedMove2 = finalC2,
-                ivs = enteredIvs
+                ivs = enteredIvs,
+                plusMoveLevel = plusMoveLevel.coerceIn(0, 4)
             )
         }
 
@@ -11735,6 +11773,7 @@ class MainActivity : AppCompatActivity() {
                 editP1Fast.setText(it.fastMove)
                 editP1C1.setText(it.chargedMove1)
                 editP1C2.setText(it.chargedMove2)
+                p1PlusLevel = (it.plusMoveLevel ?: 4).coerceIn(0, 4)
             }
             slots.getOrNull(1)?.let {
                 editP2.setText(it.name, false)
@@ -11743,6 +11782,7 @@ class MainActivity : AppCompatActivity() {
                 editP2Fast.setText(it.fastMove)
                 editP2C1.setText(it.chargedMove1)
                 editP2C2.setText(it.chargedMove2)
+                p2PlusLevel = (it.plusMoveLevel ?: 4).coerceIn(0, 4)
             }
             slots.getOrNull(2)?.let {
                 editP3.setText(it.name, false)
@@ -11751,6 +11791,44 @@ class MainActivity : AppCompatActivity() {
                 editP3Fast.setText(it.fastMove)
                 editP3C1.setText(it.chargedMove1)
                 editP3C2.setText(it.chargedMove2)
+                p3PlusLevel = (it.plusMoveLevel ?: 4).coerceIn(0, 4)
+            }
+        }
+
+        fun updateSlotPlusLevelRowUi(
+            layoutRow: LinearLayout?,
+            labelTv: TextView?,
+            lvBtns: List<TextView?>,
+            monName: String,
+            league: String,
+            curLvl: Int
+        ) {
+            val plusMove = OverlayService.resolveMegaPlusMoveStatic(monName, league, prefs)
+            if (plusMove == null) {
+                layoutRow?.visibility = android.view.View.GONE
+                return
+            }
+            layoutRow?.visibility = android.view.View.VISIBLE
+            val mStats = OverlayService.resolveChargedMoveStatsStatic(plusMove, "normal")
+            val basePwr = (mStats.basePower / 1.30).roundToInt()
+            val mult = OverlayService.getPlusMovePowerMultiplierStatic(curLvl)
+            val effPwr = (basePwr * mult).roundToInt()
+            labelTv?.text = if (curLvl <= 0) {
+                "🔥 +3rd Move: $plusMove • Off (Not Unlocked — Excluded from Sim & HUD)"
+            } else {
+                "🔥 +3rd Move: $plusMove • Lv$curLvl (${effPwr}p / ${String.format(java.util.Locale.US, "%.1f", mult)}x • ${mStats.energyCost}E) • Opp = Lv4"
+            }
+            labelTv?.setTextColor(if (curLvl <= 0) 0xFF94A3B8.toInt() else 0xFFC084FC.toInt())
+            lvBtns.forEachIndexed { idx, btn ->
+                val isSelected = idx == curLvl
+                val bgColor = when {
+                    !isSelected -> 0xFF0F172A.toInt()
+                    idx == 0 -> 0xFFBE123C.toInt()
+                    else -> 0xFF6D28D9.toInt()
+                }
+                val txtColor = if (isSelected) 0xFFF5F3FF.toInt() else 0xFF94A3B8.toInt()
+                btn?.setBackgroundColor(bgColor)
+                btn?.setTextColor(txtColor)
             }
         }
 
@@ -11759,15 +11837,15 @@ class MainActivity : AppCompatActivity() {
         fun refreshDialogTeamEvaluation(autoReorder: Boolean): OverlayService.Companion.TeamArchetypeEvaluationResult {
             val lg = currentLeagueProvider()
             val top3Defaults = getLeagueTop3Defaults(lg)
-            val s1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0])
-            val s2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1])
-            val s3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2])
+            val s1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0], p1PlusLevel)
+            val s2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1], p2PlusLevel)
+            val s3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2], p3PlusLevel)
             val seasonLogs = getCurrentSeasonLogsForLeague(lg, preloadedDialogLogs)
             val eval = OverlayService.evaluateOrAutoOrderTeamStatic(
                 slots = listOf(
-                    OverlayService.TeamMember(s1.name, s1.cp, s1.fastMove, s1.chargedMove1, s1.chargedMove2, s1.ivs),
-                    OverlayService.TeamMember(s2.name, s2.cp, s2.fastMove, s2.chargedMove1, s2.chargedMove2, s2.ivs),
-                    OverlayService.TeamMember(s3.name, s3.cp, s3.fastMove, s3.chargedMove1, s3.chargedMove2, s3.ivs)
+                    OverlayService.TeamMember(s1.name, s1.cp, s1.fastMove, s1.chargedMove1, s1.chargedMove2, s1.ivs, s1.plusMoveLevel),
+                    OverlayService.TeamMember(s2.name, s2.cp, s2.fastMove, s2.chargedMove1, s2.chargedMove2, s2.ivs, s2.plusMoveLevel),
+                    OverlayService.TeamMember(s3.name, s3.cp, s3.fastMove, s3.chargedMove1, s3.chargedMove2, s3.ivs, s3.plusMoveLevel)
                 ),
                 league = lg,
                 seasonLogs = seasonLogs,
@@ -11776,12 +11854,15 @@ class MainActivity : AppCompatActivity() {
             )
             if (autoReorder) {
                 val orderedSlots = eval.orderedSlots.map {
-                    PokemonSlot(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs)
+                    PokemonSlot(it.name, it.cp, it.fastMove, it.chargedMove1, it.chargedMove2, it.ivs, it.plusMoveLevel)
                 }
                 applySlotsToDialogInputs(orderedSlots)
             }
 
             updateStyleModeButtonsUi()
+            updateSlotPlusLevelRowUi(layoutP1PlusLevel, textP1PlusMoveLabel, btnP1PlusLvBtns, s1.name, lg, p1PlusLevel)
+            updateSlotPlusLevelRowUi(layoutP2PlusLevel, textP2PlusMoveLabel, btnP2PlusLvBtns, s2.name, lg, p2PlusLevel)
+            updateSlotPlusLevelRowUi(layoutP3PlusLevel, textP3PlusMoveLabel, btnP3PlusLvBtns, s3.name, lg, p3PlusLevel)
 
             val isAbb = eval.archetype.equals("ABB", ignoreCase = true)
             val isDuo = eval.archetype.equals("DUO", ignoreCase = true)
@@ -11843,9 +11924,9 @@ class MainActivity : AppCompatActivity() {
             val alt1Tag = if (eval.altMovesetSlots.getOrNull(0)?.isAltMoveset == true) " ⚡Alt" else ""
             val alt2Tag = if (eval.altMovesetSlots.getOrNull(1)?.isAltMoveset == true) " ⚡Alt" else ""
             val alt3Tag = if (eval.altMovesetSlots.getOrNull(2)?.isAltMoveset == true) " ⚡Alt" else ""
-            val plus1Tag = OverlayService.resolveMegaPlusMoveStatic(s1.name, lg, prefs)?.let { " [+$it]" } ?: ""
-            val plus2Tag = OverlayService.resolveMegaPlusMoveStatic(s2.name, lg, prefs)?.let { " [+$it]" } ?: ""
-            val plus3Tag = OverlayService.resolveMegaPlusMoveStatic(s3.name, lg, prefs)?.let { " [+$it]" } ?: ""
+            val plus1Tag = OverlayService.resolveMegaPlusMoveStatic(s1.name, lg, prefs)?.let { if (p1PlusLevel <= 0) " [+$it Off]" else " [+$it Lv$p1PlusLevel]" } ?: ""
+            val plus2Tag = OverlayService.resolveMegaPlusMoveStatic(s2.name, lg, prefs)?.let { if (p2PlusLevel <= 0) " [+$it Off]" else " [+$it Lv$p2PlusLevel]" } ?: ""
+            val plus3Tag = OverlayService.resolveMegaPlusMoveStatic(s3.name, lg, prefs)?.let { if (p3PlusLevel <= 0) " [+$it Off]" else " [+$it Lv$p3PlusLevel]" } ?: ""
             textP1RoleTitle?.text = when {
                 isAbb -> "⚔️ Slot 1 (Lead A) & Moveset"
                 isDuo -> "☯️ Slot 1 (Core 1 Lead) & Moveset"
@@ -12081,12 +12162,31 @@ class MainActivity : AppCompatActivity() {
             ).show()
         }
 
+        btnP1PlusLvBtns.forEachIndexed { lvl, btn ->
+            btn?.setOnClickListener {
+                p1PlusLevel = lvl
+                refreshDialogTeamEvaluation(autoReorder = false)
+            }
+        }
+        btnP2PlusLvBtns.forEachIndexed { lvl, btn ->
+            btn?.setOnClickListener {
+                p2PlusLevel = lvl
+                refreshDialogTeamEvaluation(autoReorder = false)
+            }
+        }
+        btnP3PlusLvBtns.forEachIndexed { lvl, btn ->
+            btn?.setOnClickListener {
+                p3PlusLevel = lvl
+                refreshDialogTeamEvaluation(autoReorder = false)
+            }
+        }
+
         btnSwapSlot12?.setOnClickListener {
             val lg = currentLeagueProvider()
             val top3Defaults = getLeagueTop3Defaults(lg)
-            val s1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0])
-            val s2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1])
-            val s3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2])
+            val s1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0], p1PlusLevel)
+            val s2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1], p2PlusLevel)
+            val s3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2], p3PlusLevel)
             applySlotsToDialogInputs(listOf(s2, s1, s3))
             val eval = refreshDialogTeamEvaluation(autoReorder = false)
             textDialogAutoDetectBanner?.text =
@@ -12097,9 +12197,9 @@ class MainActivity : AppCompatActivity() {
         btnSwapSlot23?.setOnClickListener {
             val lg = currentLeagueProvider()
             val top3Defaults = getLeagueTop3Defaults(lg)
-            val s1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0])
-            val s2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1])
-            val s3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2])
+            val s1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0], p1PlusLevel)
+            val s2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1], p2PlusLevel)
+            val s3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2], p3PlusLevel)
             applySlotsToDialogInputs(listOf(s1, s3, s2))
             val eval = refreshDialogTeamEvaluation(autoReorder = false)
             textDialogAutoDetectBanner?.text =
@@ -12110,9 +12210,9 @@ class MainActivity : AppCompatActivity() {
         btnSwapSlot13?.setOnClickListener {
             val lg = currentLeagueProvider()
             val top3Defaults = getLeagueTop3Defaults(lg)
-            val s1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0])
-            val s2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1])
-            val s3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2])
+            val s1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0], p1PlusLevel)
+            val s2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1], p2PlusLevel)
+            val s3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2], p3PlusLevel)
             applySlotsToDialogInputs(listOf(s3, s2, s1))
             val eval = refreshDialogTeamEvaluation(autoReorder = false)
             textDialogAutoDetectBanner?.text =
@@ -12124,9 +12224,9 @@ class MainActivity : AppCompatActivity() {
         fun runTop100RoleUpgradesSimulation(showBannerOnComplete: Boolean) {
             val lg = currentLeagueProvider()
             val top3Defaults = getLeagueTop3Defaults(lg)
-            val s1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0])
-            val s2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1])
-            val s3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2])
+            val s1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0], p1PlusLevel)
+            val s2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1], p2PlusLevel)
+            val s3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2], p3PlusLevel)
             val seasonLogs = getCurrentSeasonLogsForLeague(lg, preloadedDialogLogs)
             val manualArch = dialogManualArchetypeOverride
 
@@ -12137,9 +12237,9 @@ class MainActivity : AppCompatActivity() {
             roleUpgradeJob = lifecycleScope.launch(Dispatchers.Default) {
                 val recResult = OverlayService.recommendTop3UpgradesPerRoleStatic(
                     slots = listOf(
-                        OverlayService.TeamMember(s1.name, s1.cp, s1.fastMove, s1.chargedMove1, s1.chargedMove2, s1.ivs),
-                        OverlayService.TeamMember(s2.name, s2.cp, s2.fastMove, s2.chargedMove1, s2.chargedMove2, s2.ivs),
-                        OverlayService.TeamMember(s3.name, s3.cp, s3.fastMove, s3.chargedMove1, s3.chargedMove2, s3.ivs)
+                        OverlayService.TeamMember(s1.name, s1.cp, s1.fastMove, s1.chargedMove1, s1.chargedMove2, s1.ivs, s1.plusMoveLevel),
+                        OverlayService.TeamMember(s2.name, s2.cp, s2.fastMove, s2.chargedMove1, s2.chargedMove2, s2.ivs, s2.plusMoveLevel),
+                        OverlayService.TeamMember(s3.name, s3.cp, s3.fastMove, s3.chargedMove1, s3.chargedMove2, s3.ivs, s3.plusMoveLevel)
                     ),
                     league = lg,
                     seasonLogs = seasonLogs,
@@ -12186,13 +12286,14 @@ class MainActivity : AppCompatActivity() {
                                         fastMove = cand.fastMove,
                                         chargedMove1 = cand.chargedMove1,
                                         chargedMove2 = cand.chargedMove2,
-                                        ivs = cand.ivs
+                                        ivs = cand.ivs,
+                                        plusMoveLevel = 4
                                     )
                                     val curLg = currentLeagueProvider()
                                     val curDefs = getLeagueTop3Defaults(curLg)
-                                    val cur1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, curLg, curDefs[0])
-                                    val cur2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, curLg, curDefs[1])
-                                    val cur3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, curLg, curDefs[2])
+                                    val cur1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, curLg, curDefs[0], p1PlusLevel)
+                                    val cur2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, curLg, curDefs[1], p2PlusLevel)
+                                    val cur3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, curLg, curDefs[2], p3PlusLevel)
                                     val replacedName = when (slotIndex) {
                                         0 -> cur1.name
                                         1 -> cur2.name
@@ -12262,9 +12363,9 @@ class MainActivity : AppCompatActivity() {
         fun runTeamMovesetOptimizationSimulation(showBannerOnComplete: Boolean) {
             val lg = currentLeagueProvider()
             val top3Defaults = getLeagueTop3Defaults(lg)
-            val s1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0])
-            val s2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1])
-            val s3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2])
+            val s1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, lg, top3Defaults[0], p1PlusLevel)
+            val s2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, lg, top3Defaults[1], p2PlusLevel)
+            val s3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, lg, top3Defaults[2], p3PlusLevel)
             val seasonLogs = getCurrentSeasonLogsForLeague(lg, preloadedDialogLogs)
             val manualArch = dialogManualArchetypeOverride
 
@@ -12275,9 +12376,9 @@ class MainActivity : AppCompatActivity() {
             movesetOptJob = lifecycleScope.launch(Dispatchers.Default) {
                 val moveResult = OverlayService.recommendTop3MovesetsForTeamStatic(
                     slots = listOf(
-                        OverlayService.TeamMember(s1.name, s1.cp, s1.fastMove, s1.chargedMove1, s1.chargedMove2, s1.ivs),
-                        OverlayService.TeamMember(s2.name, s2.cp, s2.fastMove, s2.chargedMove1, s2.chargedMove2, s2.ivs),
-                        OverlayService.TeamMember(s3.name, s3.cp, s3.fastMove, s3.chargedMove1, s3.chargedMove2, s3.ivs)
+                        OverlayService.TeamMember(s1.name, s1.cp, s1.fastMove, s1.chargedMove1, s1.chargedMove2, s1.ivs, s1.plusMoveLevel),
+                        OverlayService.TeamMember(s2.name, s2.cp, s2.fastMove, s2.chargedMove1, s2.chargedMove2, s2.ivs, s2.plusMoveLevel),
+                        OverlayService.TeamMember(s3.name, s3.cp, s3.fastMove, s3.chargedMove1, s3.chargedMove2, s3.ivs, s3.plusMoveLevel)
                     ),
                     league = lg,
                     seasonLogs = seasonLogs,
@@ -12315,7 +12416,14 @@ class MainActivity : AppCompatActivity() {
                                 val roleDeltaStr = formatSignedDelta(sug.roleBrDelta)
                                 val leadDeltaStr = formatSignedDelta(sug.leadBrDelta)
                                 val plusMove = OverlayService.resolveMegaPlusMoveStatic(sug.pokemonName, lg, prefs)
-                                val plusTag = if (plusMove != null) " + $plusMove [Mega4]" else ""
+                                val slotPlusLvl = when (slotIndex) {
+                                    0 -> p1PlusLevel
+                                    1 -> p2PlusLevel
+                                    else -> p3PlusLevel
+                                }
+                                val plusTag = if (plusMove != null) {
+                                    if (slotPlusLvl <= 0) " + $plusMove [Off]" else " + $plusMove [Lv$slotPlusLvl]"
+                                } else ""
                                 btn?.text = "${idx + 1}. ${sug.proposedFastMove} / ${sug.proposedCharged1} + ${sug.proposedCharged2}$plusTag  •  Team Core ${sug.newMachineAggBr} ($machDeltaStr) • Pos $roleMetricName ${sug.newRoleBr} ($roleDeltaStr)"
                                 btn?.setOnClickListener {
                                     when (slotIndex) {
@@ -12405,9 +12513,9 @@ class MainActivity : AppCompatActivity() {
                 val top3Defaults = getLeagueTop3Defaults(league)
                 val name = editName.text.toString().trim().ifEmpty { "${league.split(" ").first().lowercase().replaceFirstChar { it.uppercase() }} Team" }
 
-                val p1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, league, top3Defaults[0])
-                val p2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, league, top3Defaults[1])
-                val p3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, league, top3Defaults[2])
+                val p1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, league, top3Defaults[0], p1PlusLevel)
+                val p2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, league, top3Defaults[1], p2PlusLevel)
+                val p3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, league, top3Defaults[2], p3PlusLevel)
 
                 if (OverlayService.hasMultipleMegasStatic(listOf(p1.name, p2.name, p3.name))) {
                     Toast.makeText(this, "⚠️ Max 1 Mega/Primal Pokémon allowed per team!", Toast.LENGTH_LONG).show()
@@ -12463,9 +12571,9 @@ class MainActivity : AppCompatActivity() {
 
         fun collectCurrentDialogSlotsForTargetLeague(targetLg: String): List<PokemonSlot>? {
             val top3Defaults = getLeagueTop3Defaults(targetLg)
-            val p1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, targetLg, top3Defaults[0])
-            val p2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, targetLg, top3Defaults[1])
-            val p3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, targetLg, top3Defaults[2])
+            val p1 = buildResolvedSlot(editP1, editP1Cp, editP1Ivs, editP1Fast, editP1C1, editP1C2, targetLg, top3Defaults[0], p1PlusLevel)
+            val p2 = buildResolvedSlot(editP2, editP2Cp, editP2Ivs, editP2Fast, editP2C1, editP2C2, targetLg, top3Defaults[1], p2PlusLevel)
+            val p3 = buildResolvedSlot(editP3, editP3Cp, editP3Ivs, editP3Fast, editP3C1, editP3C2, targetLg, top3Defaults[2], p3PlusLevel)
             if (OverlayService.hasMultipleMegasStatic(listOf(p1.name, p2.name, p3.name))) {
                 Toast.makeText(this, "⚠️ Max 1 Mega/Primal Pokémon allowed per team!", Toast.LENGTH_LONG).show()
                 return null
