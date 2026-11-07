@@ -404,17 +404,25 @@ class OverlayService : LifecycleService() {
 
         // v7.00: Stripe & Buy Me a Coffee Official Checkout Links
         const val STRIPE_URL_SUPPORTER = "https://buy.stripe.com/dRmeVe8F36By2Dr5221Jm00"
+        const val STRIPE_URL_SUPPORTER_3 = STRIPE_URL_SUPPORTER
         const val STRIPE_URL_PRO_SEASON = "https://buy.stripe.com/bJe4gAg7v7FC4Lz0LM1Jm01"
+        const val STRIPE_URL_PRO_SEASON_10 = STRIPE_URL_PRO_SEASON
         const val STRIPE_URL_PRO_INTRO = "https://buy.stripe.com/fZubJ28F32li3HvgKK1Jm02"
+        const val STRIPE_URL_PRO_INTRO_5 = STRIPE_URL_PRO_INTRO
         const val STRIPE_URL_PRO_MONTHLY = "https://buy.stripe.com/28E7sM6wV5xu5PD7aa1Jm03"
         const val STRIPE_URL_VIP_SEASON = "https://buy.stripe.com/00w8wQaNbf841zngKK1Jm04"
+        const val STRIPE_URL_VIP_SEASON_20 = STRIPE_URL_VIP_SEASON
         const val STRIPE_URL_VIP_INTRO = "https://buy.stripe.com/aFabJ29J78JG2Dr8ee1Jm05"
+        const val STRIPE_URL_VIP_INTRO_10 = STRIPE_URL_VIP_INTRO
         const val STRIPE_URL_VIP_MONTHLY = "https://buy.stripe.com/aFa7sM08x2liem9cuu1Jm06"
         const val BMC_URL_PAGE = "https://buymeacoffee.com/silphscopepvp"
         const val BMC_URL_MEMBERSHIP = "https://buymeacoffee.com/silphscopepvp/membership"
         const val BMC_URL_SUPPORTER = "https://buymeacoffee.com/silphscopepvp/e/595787"
+        const val BMC_URL_SUPPORTER_3 = BMC_URL_SUPPORTER
         const val BMC_URL_PRO_SEASON = "https://buymeacoffee.com/silphscopepvp/e/595788"
+        const val BMC_URL_PRO_SEASON_10 = BMC_URL_PRO_SEASON
         const val BMC_URL_VIP_SEASON = "https://buymeacoffee.com/silphscopepvp/e/595789"
+        const val BMC_URL_VIP_SEASON_20 = BMC_URL_VIP_SEASON
 
         @Volatile var appContext: Context? = null
         @Volatile var activeEnergyDebounceSamples: Int = DEFAULT_ENERGY_DEBOUNCE_SAMPLES
