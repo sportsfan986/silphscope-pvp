@@ -1,4 +1,13 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.45`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.46`)
+
+---
+
+## v6.46 (2026-11-06) — Post-Battle Bug Report Input Modal & Cancel Option in Floating HUD
+*UX enhancement (`v6.46`, `versionCode = 1646`) adding a focusable `🚩 Submit DVR Issue Report` input modal with `Cancel Report` and `🚀 Submit Report` / `🚩 Flag Report` buttons whenever `🚩 Bug Report` is tapped in the post-battle HUD, matching the Battle Log issue-reporting workflow.*
+
+- **v6.46 — Enhancement: Post-Battle HUD Bug Report Issue Note Input & Cancel Dialog (`OverlayService.kt`, `BattleDvrEngine.kt`, `overlay.html`)**:
+  - **Focusable `🚩 Submit DVR Issue Report` Overlay Modal**: Tapping `🚩 Bug Report` in the post-battle HUD banner (`#auto-logged-banner`) or stopped-battle menu (`#start-battle-menu`) now opens a focusable native overlay dialog with an `EditText` input box (`"Describe what happened (e.g., missed opponent swap at 40s, HP spike, wrong move)"`), automatically pausing the 12-second background upload timer while typing.
+  - **`🚀 Submit Report` / `🚩 Flag Report` & `Cancel Report` Actions**: Submitting attaches the custom issue description to the diagnostic DVR bundle (`submitManualDvrIssueReportBlocking` and `finalizeAndUploadOneBattleDvrAsync`), while tapping **`Cancel Report`** cleanly closes the modal without flagging the recording (and resumes normal background auto-upload if pending).
 
 ---
 

@@ -44,6 +44,8 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -91,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "6.45"
-        const val APP_VERSION_CODE = 1645
+        const val APP_VERSION = "6.46"
+        const val APP_VERSION_CODE = 1646
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -3100,6 +3102,8 @@ class OverlayService : LifecycleService() {
     internal var pendingPostBattleDvrUploadJob: Job? = null
     internal var stoppedBattleDiscardDvr: Boolean = false
     internal var stoppedBattleFlagBugReport: Boolean = false
+    internal var stoppedBattleBugReportNote: String = ""
+    internal var bugReportDialogOverlayView: View? = null
 
     /**
      * v6.40: Clears a Pokémon slot's Attack and Defense stat stages when it switches out or faints,
@@ -12525,6 +12529,10 @@ class OverlayService : LifecycleService() {
         autoEndCandidateFrames = 0
         lastLoggedBattleId = ""
         lastLoggedBattleWasAuto = false
+        stoppedBattleDiscardDvr = false
+        stoppedBattleFlagBugReport = false
+        stoppedBattleBugReportNote = ""
+        dismissPostBattleBugReportDialogOverlay()
         playerSlotTurnsOnField.fill(0)
         oppSlotTurnsOnField.fill(0)
         playerSlotCurrentMoveTurns.fill(0)
@@ -12761,6 +12769,8 @@ class OverlayService : LifecycleService() {
         hasBattleStarted = false
         stoppedBattleDiscardDvr = false
         stoppedBattleFlagBugReport = false
+        stoppedBattleBugReportNote = ""
+        dismissPostBattleBugReportDialogOverlay()
         val stopDvrElapsedSec = if (dvrRecordingStartMs > 0L) (System.currentTimeMillis() - dvrRecordingStartMs).coerceAtLeast(0L) / 1000.0 else 0.0
         val stopBattleDurSec = max(lastClearedBattleDurationSec ?: 0.0, stopDvrElapsedSec)
         if (detectedOpponents.isEmpty() || stopBattleDurSec < 10.0 || activeOneBattleDvrFrames < 15) {
@@ -13166,14 +13176,17 @@ class OverlayService : LifecycleService() {
             stoppedBattleDiscardDvr -> "DELETED"
             else -> "DISCARDED_SHORT"
         }
+        val capturedBugReportNote = stoppedBattleBugReportNote
         lastLoggedBattleSummaryRecord = v510Record
         stoppedBattleDiscardDvr = false
         stoppedBattleFlagBugReport = false
+        stoppedBattleBugReportNote = ""
+        dismissPostBattleBugReportDialogOverlay()
         autoEndCandidateResult = ""
         autoEndCandidateFrames = 0
 
         if (wasDvrRecordedThisBattle) {
-            finalizeAndUploadOneBattleDvrAsync(battleId, v510Record, wasExplicitlyFlaggedForDiag)
+            finalizeAndUploadOneBattleDvrAsync(battleId, v510Record, wasExplicitlyFlaggedForDiag, capturedBugReportNote)
         } else if (activeOneBattleDvrRecording || activeOneBattleDvrFrames > 0) {
             abortOneBattleDvrAsync(disarm = true)
         }
@@ -13476,28 +13489,272 @@ class OverlayService : LifecycleService() {
 
     fun flagLastBattleDvrBugReportFromOverlay(battleId: String) {
         val targetId = battleId.ifBlank { lastLoggedBattleId }
-        if (targetId.isBlank()) {
-            // Stopped battle before logging Win/Loss: toggle flag so logging Win/Loss sends bug report
-            stoppedBattleFlagBugReport = !stoppedBattleFlagBugReport
-            if (stoppedBattleFlagBugReport) {
-                stoppedBattleDiscardDvr = false
-                showBattleToast("🚩 Bug Report Flagged — Log WIN or LOSS to Upload DVR")
-            } else {
-                showBattleToast("⚪ Cleared Post-Battle Bug Report Flag")
-            }
-            recalculateAndPushBattleData()
+        if (targetId.isNotBlank() && lastLoggedBattleDvrDeleted) {
+            showBattleToast("⚠️ Recording was already deleted.")
             return
         }
+        if (targetId.isNotBlank()) {
+            // Pause any pending 12s auto-upload timer and keep the post-battle banner alive while typing
+            pendingPostBattleDvrUploadJob?.cancel()
+            pendingPostBattleDvrUploadJob = null
+            lastLoggedBattleTimeMs = System.currentTimeMillis()
+        }
+        showPostBattleBugReportDialogFromOverlay(targetId)
+    }
+
+    internal fun dismissPostBattleBugReportDialogOverlay() {
+        val existing = bugReportDialogOverlayView ?: return
+        bugReportDialogOverlayView = null
+        try {
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            imm?.hideSoftInputFromWindow(existing.windowToken, 0)
+        } catch (_: Exception) {}
+        try {
+            windowManager.removeView(existing)
+        } catch (_: Exception) {}
+    }
+
+    internal fun showPostBattleBugReportDialogFromOverlay(targetId: String) {
+        Handler(Looper.getMainLooper()).post {
+            dismissPostBattleBugReportDialogOverlay()
+            val density = resources.displayMetrics.density
+            val isStoppedPreLog = targetId.isBlank()
+
+            val backdrop = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setBackgroundColor(Color.parseColor("#B8020617"))
+                val hPad = (20 * density).toInt()
+                setPadding(hPad, hPad, hPad, hPad)
+            }
+
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                val pad = (16 * density).toInt()
+                setPadding(pad, pad, pad, pad)
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = 14f * density
+                    setColor(Color.parseColor("#0F172A"))
+                    setStroke((1.5f * density).toInt().coerceAtLeast(1), Color.parseColor("#F59E0B"))
+                }
+            }
+
+            val titleTv = TextView(this).apply {
+                text = "🚩 Submit DVR Issue Report"
+                setTextColor(Color.parseColor("#FDE68A"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                setTypeface(typeface, Typeface.BOLD)
+            }
+            card.addView(titleTv)
+
+            val subTv = TextView(this).apply {
+                text = if (isStoppedPreLog) {
+                    "Describe the issue with this battle. It will be uploaded with the DVR when you log WIN or LOSS, or tap Cancel Report."
+                } else {
+                    "Describe what happened in this battle recording, or tap Cancel Report to close without flagging."
+                }
+                setTextColor(Color.parseColor("#94A3B8"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                setPadding(0, (6 * density).toInt(), 0, (10 * density).toInt())
+            }
+            card.addView(subTv)
+
+            val noteInput = EditText(this).apply {
+                hint = "Describe what happened (e.g., missed opponent swap at 40s, HP spike, wrong move)"
+                setHintTextColor(Color.parseColor("#64748B"))
+                setTextColor(Color.parseColor("#F8FAFC"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                minLines = 2
+                maxLines = 4
+                gravity = Gravity.TOP or Gravity.START
+                val inPad = (10 * density).toInt()
+                setPadding(inPad, inPad, inPad, inPad)
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = 8f * density
+                    setColor(Color.parseColor("#1E293B"))
+                    setStroke((1f * density).toInt().coerceAtLeast(1), Color.parseColor("#334155"))
+                }
+                if (isStoppedPreLog && stoppedBattleBugReportNote.isNotBlank()) {
+                    setText(stoppedBattleBugReportNote)
+                    setSelection(text.length)
+                }
+            }
+            card.addView(
+                noteInput,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            )
+
+            val btnRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.END
+                setPadding(0, (12 * density).toInt(), 0, 0)
+            }
+
+            val cancelBtn = TextView(this).apply {
+                text = "Cancel Report"
+                setTextColor(Color.parseColor("#CBD5E1"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+                setTypeface(typeface, Typeface.BOLD)
+                gravity = Gravity.CENTER
+                val vPad = (8 * density).toInt()
+                val hPad = (14 * density).toInt()
+                setPadding(hPad, vPad, hPad, vPad)
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = 8f * density
+                    setColor(Color.parseColor("#1E293B"))
+                    setStroke((1f * density).toInt().coerceAtLeast(1), Color.parseColor("#475569"))
+                }
+                setOnClickListener {
+                    dismissPostBattleBugReportDialogOverlay()
+                    if (isStoppedPreLog) {
+                        val wasFlagged = stoppedBattleFlagBugReport
+                        stoppedBattleFlagBugReport = false
+                        stoppedBattleBugReportNote = ""
+                        recalculateAndPushBattleData()
+                        if (wasFlagged) {
+                            showBattleToast("⚪ Cleared Post-Battle Bug Report Flag")
+                        } else {
+                            showBattleToast("⚪ Bug Report Canceled")
+                        }
+                    } else {
+                        lastLoggedBattleTimeMs = System.currentTimeMillis()
+                        lastLoggedBattleDvrBugReported = false
+                        val sumRec = lastLoggedBattleSummaryRecord
+                        if (targetId == lastLoggedBattleId &&
+                            lastLoggedBattleHasDvr &&
+                            !lastLoggedBattleDvrDeleted &&
+                            lastLoggedBattleDvrUploadStatus == "PENDING" &&
+                            sumRec != null
+                        ) {
+                            schedulePostBattleDvrAutoUploadJob(
+                                battleId = targetId,
+                                summaryRecord = sumRec,
+                                wasExplicitlyFlaggedForDiag = false,
+                                explicitBugReportNote = "",
+                                initialDelayMs = 8_000L
+                            )
+                        }
+                        recalculateAndPushBattleData()
+                        showBattleToast("⚪ Bug Report Canceled")
+                    }
+                }
+            }
+
+            val submitBtn = TextView(this).apply {
+                text = if (isStoppedPreLog) "🚩 Flag Report" else "🚀 Submit Report"
+                setTextColor(Color.parseColor("#FEF3C7"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+                setTypeface(typeface, Typeface.BOLD)
+                gravity = Gravity.CENTER
+                val vPad = (8 * density).toInt()
+                val hPad = (14 * density).toInt()
+                setPadding(hPad, vPad, hPad, vPad)
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = 8f * density
+                    setColor(Color.parseColor("#B45309"))
+                    setStroke((1f * density).toInt().coerceAtLeast(1), Color.parseColor("#F59E0B"))
+                }
+                setOnClickListener {
+                    val userNote = noteInput.text?.toString()?.trim().orEmpty()
+                    dismissPostBattleBugReportDialogOverlay()
+                    if (isStoppedPreLog) {
+                        stoppedBattleFlagBugReport = true
+                        stoppedBattleDiscardDvr = false
+                        stoppedBattleBugReportNote = userNote
+                        recalculateAndPushBattleData()
+                        showBattleToast("🚩 Bug Report Flagged — Log WIN or LOSS to Upload DVR")
+                    } else {
+                        submitConfirmedPostBattleBugReportFromOverlay(targetId, userNote)
+                    }
+                }
+            }
+
+            btnRow.addView(
+                cancelBtn,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { rightMargin = (8 * density).toInt() }
+            )
+            btnRow.addView(
+                submitBtn,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            )
+            card.addView(btnRow)
+
+            val maxCardWidth = min((screenWidth * 0.92f).toInt(), (360 * density).toInt())
+            backdrop.addView(
+                card,
+                LinearLayout.LayoutParams(
+                    maxCardWidth,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            )
+
+            val dialogParams = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                } else {
+                    @Suppress("DEPRECATION")
+                    WindowManager.LayoutParams.TYPE_PHONE
+                },
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.CENTER
+                softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
+                    WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
+            }
+
+            try {
+                windowManager.addView(backdrop, dialogParams)
+                bugReportDialogOverlayView = backdrop
+                noteInput.postDelayed({
+                    try {
+                        noteInput.requestFocus()
+                        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                        imm?.showSoftInput(noteInput, InputMethodManager.SHOW_IMPLICIT)
+                    } catch (_: Exception) {}
+                }, 80L)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                // Fallback if overlay window creation fails
+                if (isStoppedPreLog) {
+                    stoppedBattleFlagBugReport = true
+                    stoppedBattleDiscardDvr = false
+                    recalculateAndPushBattleData()
+                } else {
+                    submitConfirmedPostBattleBugReportFromOverlay(targetId, "")
+                }
+            }
+        }
+    }
+
+    internal fun submitConfirmedPostBattleBugReportFromOverlay(targetId: String, userNote: String) {
         if (lastLoggedBattleDvrDeleted) {
             showBattleToast("⚠️ Recording was already deleted.")
             return
         }
         pendingPostBattleDvrUploadJob?.cancel()
         pendingPostBattleDvrUploadJob = null
+        lastLoggedBattleTimeMs = System.currentTimeMillis()
         lastLoggedBattleDvrBugReported = true
         lastLoggedBattleDvrUploadStatus = "UPLOADING"
         recalculateAndPushBattleData()
         showBattleToast("🚩 Flagged Bug Report — Uploading Battle Video & Deep Trace...")
+        val resolvedNote = userNote.trim().ifBlank { "Post-Battle HUD Flagged Bug Report" }
         dvrUploadScope.launch {
             val sumRec = lastLoggedBattleSummaryRecord
             val (ok, msg) = OverlayService.submitManualDvrIssueReportBlocking(
@@ -13510,7 +13767,7 @@ class OverlayService : LifecycleService() {
                 result = sumRec?.result ?: lastLoggedBattleResult.ifBlank { "UNKNOWN" },
                 userTeamNames = sumRec?.userTeamSpecs?.map { it.species } ?: (currentPreset?.pokemon?.map { it.name } ?: emptyList()),
                 oppTeamNames = sumRec?.oppTeamSpecs?.map { it.species } ?: emptyList(),
-                userIssueNote = "Post-Battle HUD Flagged Bug Report"
+                userIssueNote = resolvedNote
             )
             try {
                 val cleanId = targetId.replace(Regex("[^a-zA-Z0-9_-]"), "")
@@ -13549,11 +13806,14 @@ class OverlayService : LifecycleService() {
     fun discardStoppedBattleDvrFromOverlay() {
         stoppedBattleDiscardDvr = true
         stoppedBattleFlagBugReport = false
+        stoppedBattleBugReportNote = ""
+        dismissPostBattleBugReportDialogOverlay()
         abortOneBattleDvrAsync(disarm = true)
         recalculateAndPushBattleData()
     }
 
     fun dismissAutoLoggedBanner() {
+        dismissPostBattleBugReportDialogOverlay()
         lastLoggedBattleId = ""
         lastLoggedBattleWasAuto = false
         recalculateAndPushBattleData()
@@ -16503,6 +16763,8 @@ class OverlayService : LifecycleService() {
             } catch (_: Exception) {}
             shieldDecisionOverlayView = null
         }
+
+        dismissPostBattleBugReportDialogOverlay()
 
         if (overlayView != null) {
             try {

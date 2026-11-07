@@ -450,7 +450,8 @@ internal fun OverlayService.abortOneBattleDvrAsync(disarm: Boolean) {
 internal fun OverlayService.finalizeAndUploadOneBattleDvrAsync(
     battleId: String,
     summaryRecord: AiTelemetryBattleRecordV510,
-    wasExplicitlyFlaggedForDiag: Boolean = false
+    wasExplicitlyFlaggedForDiag: Boolean = false,
+    explicitBugReportNote: String = ""
 ) {
     activeOneBattleDvrArmed = false
     if (isPrefsInitialized) {
@@ -504,14 +505,6 @@ internal fun OverlayService.finalizeAndUploadOneBattleDvrAsync(
         OverlayService.prependDvrSummaryHeaderIfNeededStatic(prefs, gson, battleId, summaryRecord, localTrace)
         OverlayService.enforceLocalDvrReplaysQuotaStatic(filesDir, prefs, gson)
 
-        val shouldUploadDiag = activeAlwaysOnDvrEnabled || wasExplicitlyFlaggedForDiag || summaryRecord.hasHighSeverityAnomaly
-        val diagReason = when {
-            wasExplicitlyFlaggedForDiag && summaryRecord.hasHighSeverityAnomaly -> "Manual Flag + HIGH Anomaly (${summaryRecord.anomalyCount})"
-            wasExplicitlyFlaggedForDiag -> "Post-Battle User Bug Report Flag"
-            summaryRecord.hasHighSeverityAnomaly -> "Auto HIGH-Severity Anomaly (${summaryRecord.anomalyCount})"
-            else -> "Always-On Auto DVR"
-        }
-
         Handler(Looper.getMainLooper()).post {
             recalculateAndPushBattleData()
             if (wasExplicitlyFlaggedForDiag) {
@@ -521,104 +514,138 @@ internal fun OverlayService.finalizeAndUploadOneBattleDvrAsync(
             }
         }
 
-        pendingPostBattleDvrUploadJob?.cancel()
-        pendingPostBattleDvrUploadJob = OverlayService.dvrUploadScope.launch {
-            if (!wasExplicitlyFlaggedForDiag) {
-                // Hold automatic upload for 12s so the user can review and tap 🗑️ Delete Video or 🚩 Bug Report in the HUD
-                delay(12_000L)
-            }
-            if ((lastLoggedBattleId == battleId && lastLoggedBattleDvrDeleted) || (!localMp4.exists() && !localTrace.exists())) {
-                return@launch
-            }
+        schedulePostBattleDvrAutoUploadJob(
+            battleId = battleId,
+            summaryRecord = summaryRecord,
+            wasExplicitlyFlaggedForDiag = wasExplicitlyFlaggedForDiag,
+            explicitBugReportNote = explicitBugReportNote,
+            initialDelayMs = if (wasExplicitlyFlaggedForDiag) 0L else 12_000L
+        )
+    }
+}
 
-            val networkAllowed = OverlayService.isDvrUploadAllowedOnCurrentNetworkStatic(prefs)
-            if (!networkAllowed) {
-                if (shouldUploadDiag) {
-                    try {
-                        if (localMp4.exists()) localMp4.copyTo(File(cacheDir, "${cleanId}_video.mp4"), overwrite = true)
-                        if (localTrace.exists()) localTrace.copyTo(File(cacheDir, "${cleanId}_deep_trace.jsonl"), overwrite = true)
-                    } catch (_: Exception) {}
-                }
-                withContext(Dispatchers.Main) {
-                    if (lastLoggedBattleId == battleId) {
-                        lastLoggedBattleDvrUploadStatus = "WIFI_WAIT"
-                        recalculateAndPushBattleData()
-                    }
-                    if (shouldUploadDiag) {
-                        showBattleToast("📶 DVR queued for Wi-Fi (Mobile Data upload is OFF in Settings)")
-                    }
-                }
-                return@launch
-            }
+internal fun OverlayService.schedulePostBattleDvrAutoUploadJob(
+    battleId: String,
+    summaryRecord: AiTelemetryBattleRecordV510,
+    wasExplicitlyFlaggedForDiag: Boolean = false,
+    explicitBugReportNote: String = "",
+    initialDelayMs: Long = 12_000L
+) {
+    val cleanId = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
+    val replaysDir = File(filesDir, "dvr_replays").apply { if (!exists()) mkdirs() }
+    val localMp4 = File(replaysDir, "${cleanId}_video.mp4")
+    val localTrace = File(replaysDir, "${cleanId}_deep_trace.jsonl")
+    val shouldUploadDiag = activeAlwaysOnDvrEnabled || wasExplicitlyFlaggedForDiag || summaryRecord.hasHighSeverityAnomaly
+    val cleanBugNote = explicitBugReportNote.trim()
+    val diagReason = when {
+        wasExplicitlyFlaggedForDiag && cleanBugNote.isNotEmpty() && summaryRecord.hasHighSeverityAnomaly ->
+            "Manual Flag + HIGH Anomaly (${summaryRecord.anomalyCount}): $cleanBugNote"
+        wasExplicitlyFlaggedForDiag && cleanBugNote.isNotEmpty() ->
+            "Post-Battle User Bug Report: $cleanBugNote"
+        wasExplicitlyFlaggedForDiag && summaryRecord.hasHighSeverityAnomaly ->
+            "Manual Flag + HIGH Anomaly (${summaryRecord.anomalyCount})"
+        wasExplicitlyFlaggedForDiag -> "Post-Battle User Bug Report Flag"
+        summaryRecord.hasHighSeverityAnomaly -> "Auto HIGH-Severity Anomaly (${summaryRecord.anomalyCount})"
+        else -> "Always-On Auto DVR"
+    }
 
-            withContext(Dispatchers.Main) {
-                if (lastLoggedBattleId == battleId && !lastLoggedBattleDvrDeleted) {
-                    lastLoggedBattleDvrUploadStatus = "UPLOADING"
-                    recalculateAndPushBattleData()
-                }
-            }
+    pendingPostBattleDvrUploadJob?.cancel()
+    pendingPostBattleDvrUploadJob = OverlayService.dvrUploadScope.launch {
+        if (initialDelayMs > 0L) {
+            // Hold automatic upload so the user can review and tap 🗑️ Delete Video or 🚩 Bug Report in the HUD
+            delay(initialDelayMs)
+        }
+        if ((lastLoggedBattleId == battleId && lastLoggedBattleDvrDeleted) || (!localMp4.exists() && !localTrace.exists())) {
+            return@launch
+        }
 
-            var toastMsg: String? = null
-            var toastLong = false
-
+        val networkAllowed = OverlayService.isDvrUploadAllowedOnCurrentNetworkStatic(prefs)
+        if (!networkAllowed) {
             if (shouldUploadDiag) {
-                val (dvrOk, dvrMsg) = OverlayService.uploadBattleDvrBundleToGitHubBlocking(
-                    prefs = prefs,
-                    gson = gson,
-                    battleId = battleId,
-                    summaryRecord = summaryRecord,
-                    mp4File = localMp4,
-                    traceFile = localTrace,
-                    deleteFilesOnSuccess = false,
-                    uploadReason = diagReason
-                )
-                if (!dvrOk) {
-                    // Queue a copy in cacheDir for background retry
-                    try {
-                        if (localMp4.exists()) localMp4.copyTo(File(cacheDir, "${cleanId}_video.mp4"), overwrite = true)
-                        if (localTrace.exists()) localTrace.copyTo(File(cacheDir, "${cleanId}_deep_trace.jsonl"), overwrite = true)
-                    } catch (_: Exception) {}
-                } else {
-                    try {
-                        OverlayService.retryPendingCachedDvrBundlesBlocking(cacheDir, prefs, gson)
-                    } catch (_: Exception) {}
-                }
-                toastMsg = dvrMsg
-                toastLong = dvrOk
+                try {
+                    if (localMp4.exists()) localMp4.copyTo(File(cacheDir, "${cleanId}_video.mp4"), overwrite = true)
+                    if (localTrace.exists()) localTrace.copyTo(File(cacheDir, "${cleanId}_deep_trace.jsonl"), overwrite = true)
+                } catch (_: Exception) {}
             }
-
-            // Auto-upload to Cloud R2 Replay Vault if user has an active Unlock Key (Base / Pro / VIP)
-            try {
-                val (vaultOk, vaultMsg, _) = OverlayService.uploadBattleReplayToR2VaultIfUnlockedBlocking(
-                    prefs = prefs,
-                    gson = gson,
-                    battleId = battleId,
-                    summaryRecord = summaryRecord,
-                    mp4File = localMp4,
-                    traceFile = localTrace
-                )
-                if (vaultOk && toastMsg == null) {
-                    toastMsg = vaultMsg
-                }
-            } catch (_: Exception) {}
-
-            try {
-                OverlayService.uploadPendingAiTelemetryBatchBlocking(
-                    prefs = prefs,
-                    gson = gson,
-                    forceUpload = true,
-                    minBattlesRequired = 1
-                )
-            } catch (_: Exception) {}
-
             withContext(Dispatchers.Main) {
-                if (lastLoggedBattleId == battleId && !lastLoggedBattleDvrDeleted) {
-                    lastLoggedBattleDvrUploadStatus = "UPLOADED"
+                if (lastLoggedBattleId == battleId) {
+                    lastLoggedBattleDvrUploadStatus = "WIFI_WAIT"
                     recalculateAndPushBattleData()
                 }
-                if (!toastMsg.isNullOrBlank()) {
-                    showBattleToast(toastMsg, if (toastLong) Toast.LENGTH_LONG else Toast.LENGTH_SHORT)
+                if (shouldUploadDiag) {
+                    showBattleToast("📶 DVR queued for Wi-Fi (Mobile Data upload is OFF in Settings)")
                 }
+            }
+            return@launch
+        }
+
+        withContext(Dispatchers.Main) {
+            if (lastLoggedBattleId == battleId && !lastLoggedBattleDvrDeleted) {
+                lastLoggedBattleDvrUploadStatus = "UPLOADING"
+                recalculateAndPushBattleData()
+            }
+        }
+
+        var toastMsg: String? = null
+        var toastLong = false
+
+        if (shouldUploadDiag) {
+            val (dvrOk, dvrMsg) = OverlayService.uploadBattleDvrBundleToGitHubBlocking(
+                prefs = prefs,
+                gson = gson,
+                battleId = battleId,
+                summaryRecord = summaryRecord,
+                mp4File = localMp4,
+                traceFile = localTrace,
+                deleteFilesOnSuccess = false,
+                uploadReason = diagReason
+            )
+            if (!dvrOk) {
+                // Queue a copy in cacheDir for background retry
+                try {
+                    if (localMp4.exists()) localMp4.copyTo(File(cacheDir, "${cleanId}_video.mp4"), overwrite = true)
+                    if (localTrace.exists()) localTrace.copyTo(File(cacheDir, "${cleanId}_deep_trace.jsonl"), overwrite = true)
+                } catch (_: Exception) {}
+            } else {
+                try {
+                    OverlayService.retryPendingCachedDvrBundlesBlocking(cacheDir, prefs, gson)
+                } catch (_: Exception) {}
+            }
+            toastMsg = dvrMsg
+            toastLong = dvrOk
+        }
+
+        // Auto-upload to Cloud R2 Replay Vault if user has an active Unlock Key (Base / Pro / VIP)
+        try {
+            val (vaultOk, vaultMsg, _) = OverlayService.uploadBattleReplayToR2VaultIfUnlockedBlocking(
+                prefs = prefs,
+                gson = gson,
+                battleId = battleId,
+                summaryRecord = summaryRecord,
+                mp4File = localMp4,
+                traceFile = localTrace
+            )
+            if (vaultOk && toastMsg == null) {
+                toastMsg = vaultMsg
+            }
+        } catch (_: Exception) {}
+
+        try {
+            OverlayService.uploadPendingAiTelemetryBatchBlocking(
+                prefs = prefs,
+                gson = gson,
+                forceUpload = true,
+                minBattlesRequired = 1
+            )
+        } catch (_: Exception) {}
+
+        withContext(Dispatchers.Main) {
+            if (lastLoggedBattleId == battleId && !lastLoggedBattleDvrDeleted) {
+                lastLoggedBattleDvrUploadStatus = "UPLOADED"
+                recalculateAndPushBattleData()
+            }
+            if (!toastMsg.isNullOrBlank()) {
+                showBattleToast(toastMsg, if (toastLong) Toast.LENGTH_LONG else Toast.LENGTH_SHORT)
             }
         }
     }

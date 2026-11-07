@@ -2745,6 +2745,10 @@
             const bId = explicitBattleId !== undefined
                 ? explicitBattleId
                 : ((battleData.autoLoggedBanner && battleData.autoLoggedBanner.battleId) ? battleData.autoLoggedBanner.battleId : "");
+            if (window.AndroidOverlay && window.AndroidOverlay.flagLastBattleBugReport) {
+                window.AndroidOverlay.flagLastBattleBugReport(bId);
+                return;
+            }
             if (battleData.autoLoggedBanner && bId) {
                 battleData.autoLoggedBanner.dvrBugReported = true;
                 battleData.autoLoggedBanner.dvrUploadStatus = "UPLOADING";
@@ -2752,9 +2756,6 @@
                 battleData.stoppedBattleFlagBugReport = !battleData.stoppedBattleFlagBugReport;
             }
             render();
-            if (window.AndroidOverlay && window.AndroidOverlay.flagLastBattleBugReport) {
-                window.AndroidOverlay.flagLastBattleBugReport(bId);
-            }
             setTimeout(notifyHeight, 25);
         }
 
