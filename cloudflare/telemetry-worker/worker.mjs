@@ -1032,9 +1032,16 @@ async function resolveUserLicense(
 
 function normalizeVaultSettings(rawSettings) {
   const s = rawSettings && typeof rawSettings === 'object' ? rawSettings : {};
-  const vis = String(s.publicVisibility || 'starred_only').toLowerCase();
+  const rawVis = String(s.publicVisibility || 'public_only').toLowerCase().trim();
+  let vis = rawVis;
+  if (rawVis === 'private' || rawVis === 'no_videos') {
+    vis = 'none';
+  } else if (rawVis === 'starred_and_private' || rawVis === 'starred_plus_private') {
+    vis = 'starred_and_public';
+  }
+  const allowed = ['public_only', 'starred_only', 'starred_and_public', 'all', 'none'];
   return {
-    publicVisibility: ['starred_only', 'all', 'private'].includes(vis) ? vis : 'starred_only',
+    publicVisibility: allowed.includes(vis) ? vis : 'public_only',
     hideNamesPublic: Boolean(s.hideNamesPublic),
   };
 }
@@ -3805,7 +3812,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         sb.style.display = 'flex';
         const lim = data.limits || {};
         const usg = data.usage || {};
-        const vis = (data.settings && data.settings.publicVisibility) || data.visibility || 'starred_only';
+        const vis = (data.settings && data.settings.publicVisibility) || data.visibility || 'public_only';
 
         if (isOwner) {
           const ghBadge = data.githubUsername
@@ -3816,24 +3823,33 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           sb.innerHTML =
             '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">' +
               '<div><strong>👤 @' + data.screenName + ' (Owner)</strong> • <span style="color:#38bdf8;font-weight:700">' + (lim.label || (data.tier || 'FREE').toUpperCase()) + '</span></div>' +
-              '<div style="color:#cbd5e1">☁️ Storage: <strong>' + (usg.usedMb || 0) + ' MB</strong> / ' + (lim.maxStorageMb || 0) + ' MB • Rolling: <strong>' + (usg.rollingCount || 0) + '/' + (lim.maxRollingBattles || 0) + '</strong> • ⭐ Starred: <strong>' + (usg.pinnedCount || 0) + '/' + (lim.maxPinnedBattles || 0) + '</strong></div>' +
+              '<div style="color:#cbd5e1">☁️ Storage: <strong>' + (usg.usedMb || 0) + ' MB</strong> / ' + (lim.maxStorageMb || 0) + ' MB • Rolling: <strong>' + (usg.rollingCount || 0) + '/' + (lim.maxRollingBattles || 0) + '</strong> • ⭐ Starred: <strong>' + (usg.pinnedCount || 0) + '/' + (lim.maxPinnedBattles || 0) + '</strong> • 🌐 Public: <strong>' + (usg.publicCount || 0) + '</strong></div>' +
             '</div>' +
             '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-top:8px;border-top:1px solid #1e293b">' +
               '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
-                '<span style="font-size:12px;color:#94a3b8;font-weight:700">🌐 Public Vault Page Visibility:</span>' +
-                '<select onchange="updateVaultVisibility(this.value)" style="min-width:240px;padding:5px 10px;font-size:12px">' +
-                  '<option value="starred_only"' + (vis === 'starred_only' ? ' selected' : '') + '>⭐ Starred Only (Default — Unstarred Battles Private)</option>' +
-                  '<option value="all"' + (vis === 'all' ? ' selected' : '') + '>🌐 Public: All Replays Viewable by Anyone</option>' +
-                  '<option value="private"' + (vis === 'private' ? ' selected' : '') + '>🔒 Private: Owner Login Required</option>' +
+                '<span style="font-size:12px;color:#94a3b8;font-weight:700">🌐 Public Vault Visibility:</span>' +
+                '<select onchange="updateVaultVisibility(this.value)" style="min-width:265px;padding:5px 10px;font-size:12px">' +
+                  '<option value="public_only"' + (vis === 'public_only' ? ' selected' : '') + '>🔒 Private (Only shows ones manually made public)</option>' +
+                  '<option value="starred_only"' + (vis === 'starred_only' ? ' selected' : '') + '>⭐ Starred only</option>' +
+                  '<option value="starred_and_public"' + (vis === 'starred_and_public' || vis === 'starred_and_private' ? ' selected' : '') + '>⭐+🌐 Starred + Private (Starred or manually made public)</option>' +
+                  '<option value="all"' + (vis === 'all' ? ' selected' : '') + '>🌐 All videos shared (Overrides per-video private)</option>' +
+                  '<option value="none"' + (vis === 'none' || vis === 'private' ? ' selected' : '') + '>🚫 No videos shared without login</option>' +
                 '</select>' +
-                '<span style="font-size:11px;color:#64748b">(Direct /watch/... links always work when shared)</span>' +
+                '<span style="font-size:11px;color:#64748b">(All videos default to 🔒 Private unless toggled 🌐 Public or overridden)</span>' +
               '</div>' +
               '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' + pwBtn + ghBadge + '</div>' +
             '</div>';
         } else {
-          const visLabel = vis === 'all' ? '🌐 Public Vault (All Replays)' : '⭐ Public Vault (Starred Replays Only)';
-          const hiddenNote = (vis === 'starred_only' && data.hiddenRollingCount > 0)
-            ? ' • <span style="color:#94a3b8">' + data.hiddenRollingCount + ' unstarred rolling battle(s) hidden (Owner-only)</span>'
+          const visLabel =
+            vis === 'all'
+              ? '🌐 Public Vault (All Videos Shared)'
+              : vis === 'starred_only'
+              ? '⭐ Public Vault (Starred Only)'
+              : vis === 'starred_and_public'
+              ? '⭐+🌐 Public Vault (Starred + Public Videos)'
+              : '🔒 Public Vault (Manually Shared Public Videos Only)';
+          const hiddenNote = (vis !== 'all' && data.hiddenRollingCount > 0)
+            ? ' • <span style="color:#94a3b8">' + data.hiddenRollingCount + ' private battle(s) hidden (Owner-only)</span>'
             : '';
           sb.innerHTML =
             '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">' +
@@ -3859,24 +3875,42 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       if (!currentVaultData) return;
 
       const isOwner = Boolean(currentVaultData.isOwner);
-      const vis = (currentVaultData.settings && currentVaultData.settings.publicVisibility) || currentVaultData.visibility || 'starred_only';
+      const vis = (currentVaultData.settings && currentVaultData.settings.publicVisibility) || currentVaultData.visibility || 'public_only';
       const allItems = currentVaultData.items || [];
       const starredItems = allItems.filter(i => i.isPinned);
+      const publicItems = allItems.filter(i => i.isPublic);
+      const privateItems = allItems.filter(i => !i.isPublic);
 
-      if (isOwner || vis === 'all') {
+      if (isOwner) {
         filterBar.style.display = 'flex';
         filterBar.innerHTML =
           '<button class="tab-btn ' + (currentFilter === 'all' ? 'active' : '') + '" onclick="setFilter(\\'all\\')">🎬 All Replays (' + allItems.length + ')</button>' +
-          '<button class="tab-btn ' + (currentFilter === 'starred' ? 'active' : '') + '" onclick="setFilter(\\'starred\\')">⭐ Starred Only (' + starredItems.length + ')</button>';
+          '<button class="tab-btn ' + (currentFilter === 'starred' ? 'active' : '') + '" onclick="setFilter(\\'starred\\')">⭐ Starred (' + starredItems.length + ')</button>' +
+          '<button class="tab-btn ' + (currentFilter === 'public' ? 'active' : '') + '" onclick="setFilter(\\'public\\')">🌐 Public (' + publicItems.length + ')</button>' +
+          '<button class="tab-btn ' + (currentFilter === 'private' ? 'active' : '') + '" onclick="setFilter(\\'private\\')">🔒 Private (' + privateItems.length + ')</button>';
+      } else if (vis === 'all' || vis === 'starred_and_public') {
+        filterBar.style.display = 'flex';
+        filterBar.innerHTML =
+          '<button class="tab-btn ' + (currentFilter === 'all' ? 'active' : '') + '" onclick="setFilter(\\'all\\')">🎬 All Shared (' + allItems.length + ')</button>' +
+          '<button class="tab-btn ' + (currentFilter === 'starred' ? 'active' : '') + '" onclick="setFilter(\\'starred\\')">⭐ Starred (' + starredItems.length + ')</button>' +
+          '<button class="tab-btn ' + (currentFilter === 'public' ? 'active' : '') + '" onclick="setFilter(\\'public\\')">🌐 Public (' + publicItems.length + ')</button>';
       } else {
         filterBar.style.display = 'none';
       }
 
-      const items = (currentFilter === 'starred' && (isOwner || vis === 'all')) ? starredItems : allItems;
+      let items = allItems;
+      if (currentFilter === 'starred') {
+        items = starredItems;
+      } else if (currentFilter === 'public') {
+        items = publicItems;
+      } else if (currentFilter === 'private' && isOwner) {
+        items = privateItems;
+      }
+
       if (!items.length) {
-        const emptyMsg = !isOwner && vis === 'starred_only'
-          ? 'No ⭐ Starred replays published by @' + currentVaultData.screenName + ' yet. If this is your vault, click 🔐 Owner Login above to view your rolling battles and ⭐ Star the ones you want to feature!'
-          : 'No replays found in this view.';
+        const emptyMsg = !isOwner
+          ? 'No public replays published by @' + currentVaultData.screenName + ' under their current visibility filter. If this is your vault, click 🔐 Owner Login above to view all private battles and toggle 🌐 Public or ⭐ Star!'
+          : 'No replays found in this filter view.';
         grid.innerHTML = '<div style="color:#94a3b8;padding:20px;grid-column:1/-1">' + emptyMsg + '</div>';
         return;
       }
@@ -3885,9 +3919,14 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         const isWin = String(item.result || '').toUpperCase().includes('WIN');
         const mb = ((item.totalBytes || item.videoBytes || 0) / (1024 * 1024)).toFixed(1);
         const dateStr = item.createdAt ? new Date(item.createdAt).toLocaleString() : '';
+        const isPub = Boolean(item.isPublic);
+        const isOverriddenPublic = !isPub && vis === 'all';
         const starControl = isOwner
-          ? '<button onclick="togglePin(\\'' + item.battleId + '\\', ' + (!item.isPinned) + ')" title="Starred replays are kept for 365 days and shown on your public vault page">' + (item.isPinned ? '⭐ Starred' : '☆ Star') + '</button>'
-          : (item.isPinned ? '<span class="pill pill-star">⭐ Starred</span>' : '');
+          ? '<button onclick="togglePin(\\'' + item.battleId + '\\', ' + (!item.isPinned) + ')" style="padding:7px 10px;font-size:12px;border-color:' + (item.isPinned ? '#f59e0b' : '#334155') + ';color:' + (item.isPinned ? '#fbbf24' : '#e2e8f0') + '" title="Starred replays are kept for 365 days">' + (item.isPinned ? '⭐ Starred' : '☆ Star') + '</button>'
+          : '<button disabled style="padding:7px 10px;font-size:12px;opacity:0.85;cursor:default;border-color:' + (item.isPinned ? '#f59e0b' : '#334155') + ';color:' + (item.isPinned ? '#fbbf24' : '#94a3b8') + '">' + (item.isPinned ? '⭐ Starred' : '☆ Star') + '</button>';
+        const pubControl = isOwner
+          ? '<button onclick="toggleVideoPublic(\\'' + item.battleId + '\\', ' + (!isPub) + ')" style="padding:7px 10px;font-size:12px;border-color:' + (isPub ? '#38bdf8' : '#334155') + ';color:' + (isPub ? '#38bdf8' : '#94a3b8') + ';background:' + (isPub ? 'rgba(56,189,248,0.12)' : '#1e293b') + '" title="' + (isOverriddenPublic ? 'Per-video setting is Private (currently overridden because Vault Visibility is set to All Videos Shared)' : 'Toggle whether this video is Public or Private (Default: Private)') + '">' + (isPub ? '🌐 Public' : (isOverriddenPublic ? '🔒 Private (All)' : '🔒 Private')) + '</button>'
+          : '<button disabled style="padding:7px 10px;font-size:12px;opacity:0.85;cursor:default;border-color:' + (isPub || isOverriddenPublic ? '#38bdf8' : '#334155') + ';color:' + (isPub || isOverriddenPublic ? '#38bdf8' : '#94a3b8') + '">' + (isPub ? '🌐 Public' : (isOverriddenPublic ? '🌐 Shared (All)' : '🔒 Private')) + '</button>';
         return '<div class="replay-card ' + (item.isPinned ? 'pinned' : '') + '">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px">' +
             '<span class="pill ' + (isWin ? 'pill-win' : 'pill-loss') + '">' + (item.result || 'BATTLE') + ' • ' + (item.league || 'GBL') + '</span>' +
@@ -3896,9 +3935,10 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           '<div style="font-weight:800;font-size:13.5px;color:#f1f5f9">' + (item.matchupSummary || item.battleId) + '</div>' +
           '<div style="font-size:11px;color:#64748b">' + dateStr + ' • ID: ' + item.battleId + '</div>' +
           '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;align-items:center">' +
-            '<a class="btn-link" style="background:#059669;border-color:#10b981;flex:1;justify-content:center" href="' + item.shareUrl + '">▶️ Watch + HUD</a>' +
+            '<a class="btn-link" style="background:#059669;border-color:#10b981;padding:7px 10px;font-size:12px;flex:1;justify-content:center" href="' + item.shareUrl + '">▶️ Watch + HUD</a>' +
             starControl +
-            '<button onclick="copyLink(\\'' + item.shareUrl + '\\')" title="Anyone with this direct link can watch this replay">🔗 Copy Link</button>' +
+            pubControl +
+            '<button onclick="copyLink(\\'' + item.shareUrl + '\\')" style="padding:7px 10px;font-size:12px" title="Anyone with this direct link can watch this replay">🔗 Copy Link</button>' +
           '</div>' +
         '</div>';
       }).join('');
@@ -3923,6 +3963,29 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       const data = await res.json();
       if (!res.ok || !data.ok) {
         return alert(data.error || 'Only the vault owner can star/unstar replays.');
+      }
+      loadVault();
+    }
+
+    async function toggleVideoPublic(battleId, nextPublic) {
+      const user = (currentVaultData && currentVaultData.screenName) || document.getElementById('inp-user').value.trim();
+      const key = document.getElementById('inp-key').value.trim();
+      const email = document.getElementById('inp-email').value.trim();
+      const res = await fetch('/v1/replays/pin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-SilphScope-Client-Key': CLIENT_KEY,
+          'X-Trainer-Screen-Name': user,
+          'X-SilphScope-Unlock-Key': key,
+          'X-Vault-Session': sessionToken,
+          'X-Claim-Email': email
+        },
+        body: JSON.stringify({ battleId, isPublic: nextPublic, unlockKey: key, sessionToken, claimEmail: email })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        return alert(data.error || 'Only the vault owner can change video public/private status.');
       }
       loadVault();
     }
@@ -4882,6 +4945,9 @@ export default {
         const isPinned = Boolean(
           metadata.isPinned !== undefined ? metadata.isPinned : existingItem && existingItem.isPinned
         );
+        const isPublic = Boolean(
+          metadata.isPublic !== undefined ? metadata.isPublic : existingItem && existingItem.isPublic
+        );
         const hideNames = Boolean(
           metadata.hideNames !== undefined ? metadata.hideNames : existingItem && existingItem.hideNames
         );
@@ -4916,6 +4982,7 @@ export default {
           durationSec,
           appVersion,
           isPinned,
+          isPublic,
           hideNames,
           createdAt: existingItem && existingItem.createdAt ? existingItem.createdAt : now.toISOString(),
           uploadedAt: existingItem && existingItem.uploadedAt ? existingItem.uploadedAt : now.toISOString(),
@@ -4952,6 +5019,7 @@ export default {
           shareUrl: `${url.origin}/watch/${shareId}`,
           tier: licenseInfo.tier,
           isPinned,
+          isPublic,
           usage,
         });
       } catch (err) {
@@ -5322,7 +5390,7 @@ export default {
         const licenseInfo = ownerAuth.licenseInfo || { ...TIER_PRESETS.free, active: false };
         const authRec = ownerAuth.authRecord || (await loadUserAuthRecord(env.TELEMETRY_KV, resolvedName));
         const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, resolvedName);
-        const usage = licenseInfo.active
+        const baseUsage = licenseInfo.active
           ? await enforceUserReplayQuota(
               env,
               env.TELEMETRY_KV,
@@ -5341,6 +5409,10 @@ export default {
               rollingCount: (indexObj.items || []).filter((i) => !i.isPinned).length,
               pinnedCount: (indexObj.items || []).filter((i) => i.isPinned).length,
             };
+        const usage = {
+          ...baseUsage,
+          publicCount: (indexObj.items || []).filter((i) => Boolean(i.isPublic)).length,
+        };
         await saveUserReplayIndex(env.TELEMETRY_KV, resolvedName, indexObj);
 
         return jsonResponse({
@@ -5360,6 +5432,8 @@ export default {
           usage,
           items: (indexObj.items || []).map((item) => ({
             ...item,
+            isPinned: Boolean(item.isPinned),
+            isPublic: Boolean(item.isPublic),
             shareUrl: `${url.origin}/watch/${item.shareId}`,
             videoStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/video.mp4`,
             traceStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/trace.jsonl`,
@@ -5369,14 +5443,14 @@ export default {
 
       // Public Visitor Mode (`isOwner === false`)
       const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, requestedUser);
-      const vis = (indexObj.settings && indexObj.settings.publicVisibility) || 'starred_only';
-      if (vis === 'private') {
+      const vis = (indexObj.settings && indexObj.settings.publicVisibility) || 'public_only';
+      if (vis === 'none' || vis === 'private') {
         return jsonResponse(
           {
             ok: false,
             isOwner: false,
-            visibility: 'private',
-            error: `Trainer @${requestedUser}'s DVR Replay Vault is set to Private. Click '🔐 Owner Login' if this is your vault.`,
+            visibility: 'none',
+            error: `Trainer @${requestedUser}'s DVR Replay Vault requires Owner Login (No videos shared without login). Click '🔐 Owner Login' if this is your vault.`,
           },
           403
         );
@@ -5384,7 +5458,18 @@ export default {
 
       const allItems = indexObj.items || [];
       const starredItems = allItems.filter((i) => Boolean(i.isPinned));
-      const visibleItems = vis === 'all' ? allItems : starredItems;
+      const publicItems = allItems.filter((i) => Boolean(i.isPublic));
+      let visibleItems = publicItems;
+      if (vis === 'all') {
+        visibleItems = allItems;
+      } else if (vis === 'starred_only') {
+        visibleItems = starredItems;
+      } else if (vis === 'starred_and_public' || vis === 'starred_and_private') {
+        visibleItems = allItems.filter((i) => Boolean(i.isPinned) || Boolean(i.isPublic));
+      } else {
+        // 'public_only' — Private default (only shows ones manually made public)
+        visibleItems = publicItems;
+      }
       const hiddenRollingCount = Math.max(0, allItems.length - visibleItems.length);
 
       return jsonResponse({
@@ -5396,8 +5481,11 @@ export default {
         settings: indexObj.settings,
         hiddenRollingCount,
         totalStarredCount: starredItems.length,
+        totalPublicCount: publicItems.length,
         items: visibleItems.map((item) => ({
           ...item,
+          isPinned: Boolean(item.isPinned),
+          isPublic: Boolean(item.isPublic),
           shareUrl: `${url.origin}/watch/${item.shareId}`,
           videoStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/video.mp4`,
           traceStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/trace.jsonl`,
@@ -5429,7 +5517,7 @@ export default {
         return jsonResponse(
           {
             ok: false,
-            error: 'Only the authenticated vault owner can star/unstar or modify replays.',
+            error: 'Only the authenticated vault owner can star/unstar or modify replay visibility.',
           },
           403
         );
@@ -5467,6 +5555,10 @@ export default {
         item.isPinned = body.isPinned;
       }
 
+      if (typeof body.isPublic === 'boolean') {
+        item.isPublic = body.isPublic;
+      }
+
       if (typeof body.hideNames === 'boolean') {
         item.hideNames = body.hideNames;
       }
@@ -5479,8 +5571,9 @@ export default {
         ok: true,
         battleId: item.battleId,
         shareId: item.shareId,
-        isPinned: item.isPinned,
-        hideNames: item.hideNames,
+        isPinned: Boolean(item.isPinned),
+        isPublic: Boolean(item.isPublic),
+        hideNames: Boolean(item.hideNames),
         shareUrl: `${url.origin}/watch/${item.shareId}`,
       });
     }

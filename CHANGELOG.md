@@ -1,4 +1,24 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.02`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.03`)
+
+---
+
+## v7.03 (2026-11-07) — 4-Button Replay Cards (`Watch + HUD`, `Star/Starred`, `Private/Public`, `Copy Link`), Per-Video Private Default & 5 Public Vault Visibility Modes
+*Cloud DVR Replay Vault privacy & sharing controls release (`v7.03`, `versionCode = 1703`, Cloudflare Worker `v7.0.3`) adding a 4th per-video `🔒 Private` / `🌐 Public` toggle button to every replay card (defaulting all videos to `🔒 Private`), introducing 5 granular Public Vault Visibility modes on `/vault`, the Web Simulator, and Android App, and supporting vault-wide override when set to `All videos shared`.*
+
+- **v7.03 — Enhancement 1: 4 Action Buttons per Replay Card & Per-Video `🔒 Private` Default (`cloudflare/telemetry-worker/worker.mjs`, `GitHubCloudSync.kt`, `MainActivity.kt`, `OverlayService.kt`)**:
+  - Every replay card on `/vault` (and in the Android in-app DVR Replay toolbar) now provides 4 action buttons:
+    1. **`▶️ Watch + HUD`**: Opens the interactive frame-synced `/watch/<shareId>` theater with live SilphScope HUD overlay.
+    2. **`☆ Star` / `⭐ Starred`**: Toggles 365-day starred retention and starred showcase status (strictly owner-only).
+    3. **`🔒 Private` / `🌐 Public` (New Button — Default `🔒 Private`)**: Toggles individual video public visibility (`isPublic: false` by default on all uploaded videos; strictly owner-only).
+    4. **`🔗 Copy Link`**: Copies the direct `/watch/<shareId>` share URL to clipboard.
+  - Added owner filter tabs on `/vault` for `🎬 All Replays`, `⭐ Starred`, `🌐 Public`, and `🔒 Private`.
+- **v7.03 — Enhancement 2: 5 Public Vault Visibility Modes & `All Videos Shared` Override (`cloudflare/telemetry-worker/worker.mjs`, `src/App.tsx`, `MainActivity.kt`, `GitHubCloudSync.kt`)**:
+  - Vault owners can now choose from **5 Public Vault Visibility modes** across `/vault`, the Web Simulator Membership & Vault modal, and Android App Settings:
+    1. **`🔒 Private (Only shows ones manually made public)` (`public_only` — Default)**: Visitors without login only see videos manually toggled to `🌐 Public`.
+    2. **`⭐ Starred only` (`starred_only`)**: Visitors without login only see `⭐ Starred` videos.
+    3. **`⭐+🌐 Starred + Private (Starred or manually made public)` (`starred_and_public`)**: Visitors without login see any video that is either `⭐ Starred` OR manually toggled to `🌐 Public`.
+    4. **`🌐 All videos shared (Overrides per-video private)` (`all`)**: Overrides individual per-video `🔒 Private` settings so all videos in the vault are shared publicly on the vault page.
+    5. **`🚫 No videos shared without login` (`none`)**: Blocks unauthenticated access to the public vault page (`403` Owner Login required).
 
 ---
 

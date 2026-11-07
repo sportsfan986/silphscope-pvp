@@ -2893,12 +2893,14 @@ class MainActivity : AppCompatActivity() {
                 setPadding(0, padV, 0, padV)
             }
             fun formatVisLabel(v: String): String = when (v) {
-                "all" -> "🌐 Vault: Public (All)"
-                "private" -> "🔒 Vault: Private"
-                else -> "⭐ Vault: Starred Only"
+                "all" -> "🌐 Vault: All Shared"
+                "starred_only" -> "⭐ Vault: Starred Only"
+                "starred_and_public", "starred_and_private" -> "⭐+🌐 Vault: Star+Pub"
+                "none", "private" -> "🚫 Vault: Login Req"
+                else -> "🔒 Vault: Private (Pub Only)"
             }
             val btnVaultVisibility = Button(this).apply {
-                val curVis = prefs.getString("gbl_vault_public_visibility_v701", "starred_only") ?: "starred_only"
+                val curVis = prefs.getString("gbl_vault_public_visibility_v701", "public_only") ?: "public_only"
                 text = formatVisLabel(curVis)
                 textSize = 9.5f
                 isAllCaps = false
@@ -2909,17 +2911,19 @@ class MainActivity : AppCompatActivity() {
                 }
                 setOnClickListener {
                     val options = arrayOf(
-                        "⭐ Starred Only (Default — Unstarred Rolling Battles Private)",
-                        "🌐 Public: All Replays Viewable by Anyone",
-                        "🔒 Private: Owner Login Required"
+                        "🔒 Private (Only shows ones manually made public)",
+                        "⭐ Starred only",
+                        "⭐+🌐 Starred + Private (Starred or manually made public)",
+                        "🌐 All videos shared (Overrides per-video private)",
+                        "🚫 No videos shared without login"
                     )
-                    val values = arrayOf("starred_only", "all", "private")
-                    val current = prefs.getString("gbl_vault_public_visibility_v701", "starred_only") ?: "starred_only"
+                    val values = arrayOf("public_only", "starred_only", "starred_and_public", "all", "none")
+                    val current = prefs.getString("gbl_vault_public_visibility_v701", "public_only") ?: "public_only"
                     val checkedIdx = values.indexOf(current).coerceAtLeast(0)
                     AlertDialog.Builder(this@MainActivity)
                         .setTitle("🌐 Public DVR Vault Visibility")
                         .setSingleChoiceItems(options, checkedIdx) { dialog, which ->
-                            val chosen = values.getOrElse(which) { "starred_only" }
+                            val chosen = values.getOrElse(which) { "public_only" }
                             dialog.dismiss()
                             text = formatVisLabel(chosen)
                             lifecycleScope.launch(Dispatchers.IO) {
@@ -7328,11 +7332,16 @@ class MainActivity : AppCompatActivity() {
             }
             val btnPinToggle = TextView(this).apply {
                 val pinnedNow = vaultMeta?.isPinned == true
-                text = if (pinnedNow) "⭐ Pinned" else "☆ Pin"
+                text = if (pinnedNow) "⭐ Starred" else "☆ Star"
                 styleMiniBtn(this, if (pinnedNow) 0xFFD97706.toInt() else 0xFF1E293B.toInt())
             }
+            val btnPublicToggle = TextView(this).apply {
+                val pubNow = vaultMeta?.isPublic == true
+                text = if (pubNow) "🌐 Public" else "🔒 Private"
+                styleMiniBtn(this, if (pubNow) 0xFF0284C7.toInt() else 0xFF1E293B.toInt())
+            }
             val btnShareLink = TextView(this).apply {
-                text = "🔗 Share"
+                text = "🔗 Copy Link"
                 styleMiniBtn(this, 0xFF0284C7.toInt())
             }
             val btnReportIssue = TextView(this).apply {
@@ -7348,6 +7357,7 @@ class MainActivity : AppCompatActivity() {
             val spacer = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             topToolbar.addView(btnModeToggle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
             topToolbar.addView(btnPinToggle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
+            topToolbar.addView(btnPublicToggle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
             topToolbar.addView(btnShareLink, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
             topToolbar.addView(android.view.View(this), spacer)
             topToolbar.addView(btnDeleteDvr, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
@@ -7768,10 +7778,24 @@ class MainActivity : AppCompatActivity() {
                     vaultMeta = OverlayService.loadReplayVaultMapStatic(prefs, gson)[cleanBattleId]
                     withContext(Dispatchers.Main) {
                         val pinnedNow = vaultMeta?.isPinned == true
-                        btnPinToggle.text = if (pinnedNow) "⭐ Pinned" else "☆ Pin"
+                        btnPinToggle.text = if (pinnedNow) "⭐ Starred" else "☆ Star"
                         styleMiniBtn(btnPinToggle, if (pinnedNow) 0xFFD97706.toInt() else 0xFF1E293B.toInt())
                         Toast.makeText(this@MainActivity, msg, if (ok) Toast.LENGTH_SHORT else Toast.LENGTH_LONG).show()
                         renderBattleLogPage()
+                    }
+                }
+            }
+
+            btnPublicToggle.setOnClickListener {
+                val nextPub = !(vaultMeta?.isPublic == true)
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val (ok, msg) = OverlayService.togglePinOrPrivacyReplayBlocking(prefs, gson, cleanBattleId, isPublic = nextPub)
+                    vaultMeta = OverlayService.loadReplayVaultMapStatic(prefs, gson)[cleanBattleId]
+                    withContext(Dispatchers.Main) {
+                        val pubNow = vaultMeta?.isPublic == true
+                        btnPublicToggle.text = if (pubNow) "🌐 Public" else "🔒 Private"
+                        styleMiniBtn(btnPublicToggle, if (pubNow) 0xFF0284C7.toInt() else 0xFF1E293B.toInt())
+                        Toast.makeText(this@MainActivity, msg, if (ok) Toast.LENGTH_SHORT else Toast.LENGTH_LONG).show()
                     }
                 }
             }

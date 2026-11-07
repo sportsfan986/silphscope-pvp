@@ -93,7 +93,7 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.02"
+        const val APP_VERSION = "7.03"
         const val APP_VERSION_CODE = 1701
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -1353,6 +1353,7 @@ class OverlayService : LifecycleService() {
             val videoStreamUrl: String = "",
             val traceStreamUrl: String = "",
             val isPinned: Boolean = false,
+            val isPublic: Boolean = false,
             val hideNames: Boolean = false,
             val uploadedAtMs: Long = 0L
         )

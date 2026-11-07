@@ -2950,6 +2950,7 @@ internal fun OverlayService.Companion.syncCloudReplayListBlocking(
                     videoStreamUrl = obj.get("videoStreamUrl")?.asString ?: "$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/stream/$sId/video.mp4",
                     traceStreamUrl = obj.get("traceStreamUrl")?.asString ?: "$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/stream/$sId/trace.jsonl",
                     isPinned = obj.get("isPinned")?.asBoolean ?: false,
+                    isPublic = obj.get("isPublic")?.asBoolean ?: false,
                     hideNames = obj.get("hideNames")?.asBoolean ?: false,
                     uploadedAtMs = System.currentTimeMillis()
                 )
@@ -3061,6 +3062,7 @@ internal fun OverlayService.Companion.uploadBattleReplayToR2VaultIfUnlockedBlock
                 videoStreamUrl = "$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/stream/$shareId/video.mp4",
                 traceStreamUrl = "$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/stream/$shareId/trace.jsonl",
                 isPinned = root.get("isPinned")?.asBoolean ?: isPinned,
+                isPublic = root.get("isPublic")?.asBoolean ?: false,
                 hideNames = false,
                 uploadedAtMs = System.currentTimeMillis()
             )
@@ -3079,18 +3081,24 @@ internal fun OverlayService.Companion.togglePinOrPrivacyReplayBlocking(
     gson: Gson,
     battleId: String,
     isPinned: Boolean? = null,
+    isPublic: Boolean? = null,
     hideNames: Boolean? = null
 ): Pair<Boolean, String> {
     val cleanId = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
     val map = loadReplayVaultMapStatic(prefs, gson)
     val existing = map[cleanId] ?: OverlayService.Companion.ReplayVaultEntryMeta(battleId = cleanId)
     val nextPinned = isPinned ?: existing.isPinned
+    val nextPublic = isPublic ?: existing.isPublic
     val nextHide = hideNames ?: existing.hideNames
-    map[cleanId] = existing.copy(isPinned = nextPinned, hideNames = nextHide)
+    map[cleanId] = existing.copy(isPinned = nextPinned, isPublic = nextPublic, hideNames = nextHide)
     saveReplayVaultMapStatic(prefs, gson, map)
 
     if (existing.shareId.isBlank()) {
-        return true to if (nextPinned) "⭐ Pinned locally" else "Unpinned locally"
+        return true to when {
+            isPinned != null -> if (nextPinned) "⭐ Starred locally" else "Unstarred locally"
+            isPublic != null -> if (nextPublic) "🌐 Marked Public locally" else "🔒 Marked Private locally"
+            else -> "Updated locally"
+        }
     }
 
     return try {
@@ -3104,6 +3112,7 @@ internal fun OverlayService.Companion.togglePinOrPrivacyReplayBlocking(
             "unlockKey" to unlockKey
         )
         if (isPinned != null) payload["isPinned"] = isPinned
+        if (isPublic != null) payload["isPublic"] = isPublic
         if (hideNames != null) payload["hideNames"] = hideNames
 
         val httpClient = buildTelemetryHttpClientStatic(15L, 25L, 20L)
@@ -3121,10 +3130,10 @@ internal fun OverlayService.Companion.togglePinOrPrivacyReplayBlocking(
                 val errObj = try { JsonParser.parseString(bodyStr).asJsonObject.get("error")?.asString } catch (_: Exception) { null }
                 return false to "⚠️ ${errObj ?: "HTTP ${resp.code}"}"
             }
-            true to if (isPinned != null) {
-                if (nextPinned) "⭐ Pinned in Cloud Replay Vault!" else "Unpinned in Cloud Replay Vault"
-            } else {
-                if (nextHide) "🕵️ Trainer Names Hidden on Share Link" else "👤 Trainer Names Visible on Share Link"
+            true to when {
+                isPinned != null -> if (nextPinned) "⭐ Starred in Cloud Replay Vault!" else "☆ Unstarred in Cloud Replay Vault"
+                isPublic != null -> if (nextPublic) "🌐 Video set to Public in Cloud Vault!" else "🔒 Video set to Private in Cloud Vault"
+                else -> if (nextHide) "🕵️ Trainer Names Hidden on Share Link" else "👤 Trainer Names Visible on Share Link"
             }
         }
     } catch (e: Exception) {

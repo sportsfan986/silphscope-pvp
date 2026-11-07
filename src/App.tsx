@@ -241,7 +241,9 @@ export default function App() {
       return '';
     }
   });
-  const [webVaultVisibility, setWebVaultVisibility] = useState<'starred_only' | 'all' | 'private'>('starred_only');
+  const [webVaultVisibility, setWebVaultVisibility] = useState<
+    'public_only' | 'starred_only' | 'starred_and_public' | 'all' | 'none'
+  >('public_only');
   const [ghDeviceCodeInfo, setGhDeviceCodeInfo] = useState<{
     device_code: string;
     user_code: string;
@@ -465,7 +467,9 @@ export default function App() {
     }
   };
 
-  const handleUpdateWebVaultVisibility = async (vis: 'starred_only' | 'all' | 'private') => {
+  const handleUpdateWebVaultVisibility = async (
+    vis: 'public_only' | 'starred_only' | 'starred_and_public' | 'all' | 'none'
+  ) => {
     setWebVaultVisibility(vis);
     const cleanName = webScreenName.trim();
     if (!cleanName) return;
@@ -487,7 +491,17 @@ export default function App() {
       });
       const data = await resp.json();
       if (resp.ok && data.ok) {
-        setMembershipStatusMsg(`✅ Updated @${cleanName}'s DVR Vault visibility to: ${vis === 'starred_only' ? '⭐ Starred Only (Default)' : vis === 'all' ? '🌐 Public (All Replays)' : '🔒 Private'}`);
+        const label =
+          vis === 'public_only'
+            ? '🔒 Private (Only Shows Videos Made Public)'
+            : vis === 'starred_only'
+            ? '⭐ Starred Only'
+            : vis === 'starred_and_public'
+            ? '⭐+🌐 Starred + Private (Starred or Made Public)'
+            : vis === 'all'
+            ? '🌐 All Videos Shared (Overrides Per-Video Private)'
+            : '🚫 No Videos Shared Without Login';
+        setMembershipStatusMsg(`✅ Updated @${cleanName}'s DVR Vault visibility to: ${label}`);
       }
     } catch {}
   };
@@ -5669,7 +5683,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.02 • Android Native Overlay
+                  v7.03 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -16771,12 +16785,23 @@ export default function App() {
                       </label>
                       <select
                         value={webVaultVisibility}
-                        onChange={(e) => handleUpdateWebVaultVisibility(e.target.value as 'starred_only' | 'all' | 'private')}
+                        onChange={(e) =>
+                          handleUpdateWebVaultVisibility(
+                            e.target.value as
+                              | 'public_only'
+                              | 'starred_only'
+                              | 'starred_and_public'
+                              | 'all'
+                              | 'none'
+                          )
+                        }
                         className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white font-bold"
                       >
-                        <option value="starred_only">⭐ Starred Only (Default — Unstarred Rolling Battles Private)</option>
-                        <option value="all">🌐 Public: All Replays Viewable by Anyone</option>
-                        <option value="private">🔒 Private: Owner Login Required</option>
+                        <option value="public_only">🔒 Private (Only shows ones manually made public)</option>
+                        <option value="starred_only">⭐ Starred only</option>
+                        <option value="starred_and_public">⭐+🌐 Starred + Private (Starred or manually made public)</option>
+                        <option value="all">🌐 All videos shared (Overrides per-video private)</option>
+                        <option value="none">🚫 No videos shared without login</option>
                       </select>
                       <div className="text-[10.5px] text-slate-400">
                         Direct <code>/watch/...</code> share links always work for anyone you send them to. Only you can ⭐ Star/Unstar videos.
@@ -16820,7 +16845,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.02 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
+        SilphScope PvP v7.03 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
       </footer>
     </div>
   );
