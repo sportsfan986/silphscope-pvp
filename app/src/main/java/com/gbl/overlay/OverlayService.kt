@@ -14699,7 +14699,7 @@ class OverlayService : LifecycleService() {
         val isPlusMove = moveName.trim().endsWith("+")
         val plusMult = if (isPlusMove) OverlayService.getPlusMovePowerMultiplierStatic(plusMoveLevel) else 1.0
         if (isPlusMove && plusMult <= 0.0) return 0
-        val effectivePower = moveStats.power.toDouble() * plusMult
+        val effectivePower = if (isPlusMove) (moveStats.power.toDouble() / 1.3) * plusMult else moveStats.power.toDouble()
         val rawDamage = floor(0.5 * effectivePower * (effectiveAtk / effectiveDef) * stab * typeEff * 1.3) + 1.0
         val pct = ((rawDamage / defender.hp.toDouble()) * 100.0).roundToInt()
         return pct.coerceIn(5, 100)

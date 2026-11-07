@@ -11810,7 +11810,7 @@ class MainActivity : AppCompatActivity() {
             }
             layoutRow?.visibility = android.view.View.VISIBLE
             val mStats = OverlayService.resolveChargedMoveStatsStatic(plusMove, "normal")
-            val basePwr = (mStats.basePower / 1.30).roundToInt()
+            val basePwr = (mStats.power / 1.30).roundToInt()
             val mult = OverlayService.getPlusMovePowerMultiplierStatic(curLvl)
             val effPwr = (basePwr * mult).roundToInt()
             labelTv?.text = if (curLvl <= 0) {
