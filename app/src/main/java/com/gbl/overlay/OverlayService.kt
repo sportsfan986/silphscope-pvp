@@ -4463,8 +4463,8 @@ class OverlayService : LifecycleService() {
             setOnTouchListener { _, event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
-                        initialX = layoutParams.x
-                        initialY = layoutParams.y
+                        initialX = this@OverlayService.layoutParams.x
+                        initialY = this@OverlayService.layoutParams.y
                         initialTouchX = event.rawX
                         initialTouchY = event.rawY
                         isDraggingTouch = false
@@ -4481,10 +4481,11 @@ class OverlayService : LifecycleService() {
                             }
                             val minYOffset = -(12 * density).toInt()
                             val maxYOffset = if (isOverlayMinimized) screenHeight - (56 * density).toInt() else screenHeight - 200
-                            layoutParams.x = max(0, min(initialX + deltaX, max(0, screenWidth - layoutParams.width)))
-                            layoutParams.y = max(minYOffset, min(initialY + deltaY, max(0, maxYOffset)))
+                            val rootLp = this@OverlayService.layoutParams
+                            rootLp.x = max(0, min(initialX + deltaX, max(0, screenWidth - rootLp.width)))
+                            rootLp.y = max(minYOffset, min(initialY + deltaY, max(0, maxYOffset)))
                             try {
-                                windowManager.updateViewLayout(overlayView, layoutParams)
+                                windowManager.updateViewLayout(overlayView, rootLp)
                             } catch (_: Exception) {}
                             syncOverlayTouchZonesLayout()
                             true
