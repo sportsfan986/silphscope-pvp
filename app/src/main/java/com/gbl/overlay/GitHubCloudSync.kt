@@ -3329,9 +3329,9 @@ internal fun OverlayService.Companion.submitManualDvrIssueReportBlocking(
         mp4File = mp4File,
         traceFile = traceFile,
         deleteFilesOnSuccess = mp4File.parentFile == cacheDir,
-        userIssueNote = userIssueNote.ifBlank { "User-submitted DVR issue report from Replay menu" },
+        userIssueNote = userIssueNote.trim(),
         uploadReason = "Manual Replay Issue Report",
-        wasExplicitlyFlagged = true
+        wasExplicitlyFlagged = userIssueNote.trim().isNotEmpty()
     )
 }
 

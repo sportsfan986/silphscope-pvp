@@ -933,6 +933,7 @@ async function resolveUserLicense(
   }
 
   let updatedBinding = false;
+  const wasNeverActivated = !lic.activatedAt;
   if (screenName && !lic.boundScreenName) {
     const chk = await checkScreenNameRegistration(kv, screenName, cleanDev, cleanGhId);
     if (!chk.available) {
@@ -946,6 +947,10 @@ async function resolveUserLicense(
     }
     lic.boundScreenName = screenName;
     lic.activatedAt = lic.activatedAt || new Date().toISOString();
+    updatedBinding = true;
+  }
+  if (!lic.activatedAt && (cleanProvided || cleanEmail || cleanGhUser || cleanGhId)) {
+    lic.activatedAt = new Date().toISOString();
     updatedBinding = true;
   }
   if (cleanGhUser && !lic.boundGitHubUsername) {
@@ -966,6 +971,7 @@ async function resolveUserLicense(
   }
 
   if (updatedBinding) {
+    lic.lastActivatedAt = new Date().toISOString();
     await saveLicenseRecord(kv, lic);
     if (screenName) {
       await kv.put(
@@ -979,6 +985,34 @@ async function resolveUserLicense(
         })
       );
     }
+
+    // Send Telegram notification upon membership activation or new device/GitHub binding
+    try {
+      const actTier = lic.tier === 'base' ? 'supporter' : lic.tier || 'supporter';
+      const actPreset = TIER_PRESETS[actTier] || TIER_PRESETS.supporter;
+      const actUser = lic.boundScreenName || screenName || 'Unknown';
+      const actHeader = wasNeverActivated
+        ? '✅ <b>Membership Activated!</b>'
+        : '🔗 <b>Membership Linked to New Device / Account!</b>';
+      await sendTelegramMessage(
+        env,
+        `${actHeader}\n` +
+          `👤 <b>Trainer ID:</b> <code>@${escapeHtml(actUser)}</code>\n` +
+          `🏅 <b>Paid Tier:</b> <code>${escapeHtml(actPreset.label)} (${actTier.toUpperCase()})</code>\n` +
+          `🔑 <b>Unlock Key:</b> <code>${escapeHtml(lic.key)}</code>\n` +
+          (lic.boundGitHubUsername
+            ? `🐙 <b>GitHub:</b> <code>@${escapeHtml(lic.boundGitHubUsername)}</code>\n`
+            : '') +
+          (lic.supporterEmail || cleanEmail
+            ? `📧 <b>Email:</b> <code>${escapeHtml(lic.supporterEmail || cleanEmail)}</code>\n`
+            : '') +
+          (lic.boundDeviceHash || cleanDev
+            ? `📱 <b>Device Hash:</b> <code>${escapeHtml(lic.boundDeviceHash || cleanDev)}</code>\n`
+            : '') +
+          `⏳ <b>Expires:</b> <code>${escapeHtml(lic.expiresAt ? lic.expiresAt.slice(0, 10) : 'LIFETIME')}</code>\n` +
+          `☁️ <b>Vault:</b> https://silphscope-telemetry.silphscope-pvp.workers.dev/vault?user=${encodeURIComponent(actUser)}`
+      );
+    } catch (_) {}
   }
 
   // Check if Pro/VIP subscription expired -> Graduate to Lifetime Supporter (Alumni) instead of Free!
@@ -1583,6 +1617,87 @@ function isManuallyFlaggedBattle(metadata, deepTraceText) {
   return false;
 }
 
+/**
+ * Extracts a genuine user-provided issue description from metadata or Line 0 of deep_trace.jsonl,
+ * filtering out generic auto-generated placeholder strings when the user did not enter a description.
+ */
+function extractUserIssueDescription(metadata, deepTraceText) {
+  const genericPlaceholders = new Set([
+    'post-battle hud flagged bug report',
+    'user-submitted dvr issue report from replay menu',
+    'user manually flagged this battle for diagnostic review.',
+    'post-battle user bug report flag',
+    'always-on auto dvr',
+  ]);
+  let candidate = '';
+  if (metadata && typeof metadata === 'object' && metadata.userIssueNote) {
+    candidate = String(metadata.userIssueNote).trim();
+  }
+  if ((!candidate || genericPlaceholders.has(candidate.toLowerCase())) && deepTraceText && typeof deepTraceText === 'string') {
+    try {
+      const firstNewline = deepTraceText.indexOf('\n');
+      const firstLine = (firstNewline >= 0 ? deepTraceText.slice(0, firstNewline) : deepTraceText).trim();
+      if (firstLine.startsWith('{"recordType":"BATTLE_DVR_SUMMARY_HEADER"')) {
+        const headerObj = JSON.parse(firstLine);
+        if (headerObj && headerObj.userIssueNote) {
+          candidate = String(headerObj.userIssueNote).trim();
+        }
+      }
+    } catch (_) {}
+  }
+  if (!candidate || genericPlaceholders.has(candidate.toLowerCase())) {
+    return '';
+  }
+  return candidate;
+}
+
+async function resolveUserPaidTierSummary(kv, screenName) {
+  const clean = String(screenName || '').trim();
+  if (!clean) {
+    return { tier: 'free', badge: '🆓 Free Tier', key: '', expiresAt: null };
+  }
+  if (clean.toLowerCase() === 'sportsfan986') {
+    return { tier: 'vip', badge: '👑 VIP / Coach Pass (Founder)', key: 'SSPVP-VIP-FOUNDER-986', expiresAt: null };
+  }
+  if (!kv) {
+    return { tier: 'free', badge: '🆓 Free Tier', key: '', expiresAt: null };
+  }
+  try {
+    let mappedKey =
+      (await kv.get(`user_license/${clean}`, { type: 'text' })) ||
+      (await kv.get(`user_license/${clean.toLowerCase()}`, { type: 'text' })) ||
+      '';
+    if (!mappedKey) {
+      const authRec = await loadUserAuthRecord(kv, clean);
+      if (authRec && authRec.boundKey) mappedKey = authRec.boundKey;
+    }
+    if (mappedKey) {
+      const lic = await loadLicenseByKey(kv, mappedKey);
+      if (lic && !lic.revoked) {
+        const isExpired = Boolean(lic.expiresAt && new Date(lic.expiresAt).getTime() < Date.now());
+        const effTier = isExpired && lic.tier !== 'supporter' && lic.tier !== 'base'
+          ? 'supporter'
+          : lic.tier === 'base'
+          ? 'supporter'
+          : String(lic.tier || 'supporter').toLowerCase();
+        const badgeMap = {
+          vip: '👑 VIP / Coach Pass',
+          pro: '🏆 Legend Pro Pass',
+          supporter: isExpired ? '🏅 Lifetime Supporter (Alumni)' : '🏅 Lifetime Supporter',
+          free: '🆓 Free Tier',
+        };
+        return {
+          tier: effTier,
+          badge: badgeMap[effTier] || `🏅 ${effTier.toUpperCase()}`,
+          key: lic.key || mappedKey,
+          expiresAt: lic.expiresAt || null,
+        };
+      }
+    }
+  } catch (_) {}
+  return { tier: 'free', badge: '🆓 Free Tier', key: '', expiresAt: null };
+}
+
 function renderWatchSharePage(origin, shareInfo) {
   const shareId = escapeHtml(shareInfo.shareId || '');
   const hideNamesDefault = Boolean(shareInfo.hideNames);
@@ -1818,6 +1933,14 @@ function renderWatchSharePage(origin, shareInfo) {
 
   <main>
     <div style="font-size:13px;font-weight:700;color:#cbd5e1;text-align:center">${matchup}</div>
+    ${
+      shareInfo.userIssueNote
+        ? `<div style="width:100%;max-width:860px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.45);border-radius:10px;padding:10px 14px;font-size:12.5px;color:#fef3c7;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px">
+            <div>🚩 <strong>Reported Diagnostic Issue:</strong> ${escapeHtml(shareInfo.userIssueNote)}</div>
+            ${shareInfo.userTierBadge ? `<span class="badge" style="background:rgba(168,85,247,0.2);color:#e9d5ff;border-color:rgba(168,85,247,0.45)">${escapeHtml(shareInfo.userTierBadge)}</span>` : ''}
+          </div>`
+        : ''
+    }
     <div class="stage-wrap" id="stage-wrap">
       <div class="video-box" id="video-box">
         <video id="replay-video" src="${videoUrl}" playsinline preload="metadata" crossorigin="anonymous"></video>
@@ -4278,28 +4401,10 @@ export default {
         const traceKey = `recordings/${screenName}/${battleId}_deep_trace.jsonl`;
         const videoByteLen = hasVideo ? videoBytes.byteLength : 0;
         const isManual = isManuallyFlaggedBattle(metadata, deepTraceText);
-        const userIssueNoteClean = String(metadata.userIssueNote || '').trim();
+        const userIssueNoteClean = extractUserIssueDescription(metadata, deepTraceText);
         const uploadReasonClean = String(metadata.uploadReason || '').trim();
-        let resolvedUserTier = 'free';
-        if (String(screenName || '').toLowerCase() === 'sportsfan986') {
-          resolvedUserTier = 'vip';
-        } else {
-          try {
-            const licMap = (await getJson(store, LICENSE_KEYS_PATH)) || {};
-            for (const rec of Object.values(licMap)) {
-              if (!rec) continue;
-              const claimed = Array.isArray(rec.claimedScreenNames) ? rec.claimedScreenNames : [];
-              const matchName =
-                (rec.boundScreenName && String(rec.boundScreenName).toLowerCase() === String(screenName).toLowerCase()) ||
-                (rec.screenName && String(rec.screenName).toLowerCase() === String(screenName).toLowerCase()) ||
-                claimed.some((n) => String(n).toLowerCase() === String(screenName).toLowerCase());
-              if (matchName) {
-                resolvedUserTier = String(rec.tier || 'supporter').toLowerCase();
-                break;
-              }
-            }
-          } catch (_) {}
-        }
+        const tierSummary = await resolveUserPaidTierSummary(env.TELEMETRY_KV, screenName);
+        const resolvedUserTier = tierSummary.tier;
 
         const storeMeta = {
           screenName,
@@ -4310,7 +4415,7 @@ export default {
           result,
           frameCount: String(frameCount),
           uploadedAt: now.toISOString(),
-          manuallyFlagged: String(isManual),
+          manuallyFlagged: String(isManual && userIssueNoteClean.length > 0),
           userIssueNote: userIssueNoteClean,
           uploadReason: uploadReasonClean,
           userTier: resolvedUserTier,
@@ -4328,6 +4433,68 @@ export default {
             contentType: 'video/mp4',
             metadata: storeMeta,
           });
+        }
+
+        // Only send diagnostic videos to the Telegram chat when explicitly flagged by the user WITH an issue description
+        const isFlaggedWithIssueDescription = isManual && userIssueNoteClean.length > 0;
+        let diagShareId = '';
+        let diagWatchOverlayUrl = '';
+
+        if (isFlaggedWithIssueDescription && hasVideo && env.TELEMETRY_KV) {
+          try {
+            const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, screenName);
+            const existingItem = (indexObj.items || []).find((i) => i.battleId === battleId);
+            diagShareId = existingItem && existingItem.shareId ? existingItem.shareId : generateShareId();
+            diagWatchOverlayUrl = `${url.origin}/watch/${diagShareId}`;
+
+            let r2VideoKey = videoKey;
+            let r2TraceKey = hasTrace ? traceKey : null;
+            if (env.REPLAY_BUCKET) {
+              r2VideoKey = `replays/${screenName}/${battleId}_video.mp4`;
+              await env.REPLAY_BUCKET.put(r2VideoKey, videoBytes, {
+                httpMetadata: { contentType: 'video/mp4' },
+                customMetadata: { screenName, battleId, shareId: diagShareId },
+              });
+              if (hasTrace) {
+                r2TraceKey = `replays/${screenName}/${battleId}_deep_trace.jsonl`;
+                await env.REPLAY_BUCKET.put(r2TraceKey, deepTraceText.trim() + '\n', {
+                  httpMetadata: { contentType: 'application/x-ndjson' },
+                  customMetadata: { screenName, battleId, shareId: diagShareId },
+                });
+              }
+            }
+
+            const diagShareRecord = {
+              battleId,
+              shareId: diagShareId,
+              screenName,
+              videoKey: r2VideoKey,
+              fallbackKvVideoKey: videoKey,
+              traceKey: r2TraceKey,
+              fallbackKvTraceKey: hasTrace ? traceKey : null,
+              videoBytes: videoByteLen,
+              traceBytes: hasTrace ? new TextEncoder().encode(deepTraceText).byteLength : 0,
+              totalBytes: videoByteLen,
+              league,
+              result,
+              matchupSummary,
+              frameCount,
+              durationSec: Math.max(1, Math.round(frameCount / 10)),
+              appVersion,
+              userIssueNote: userIssueNoteClean,
+              userTier: resolvedUserTier,
+              userTierBadge: tierSummary.badge,
+              isPinned: Boolean(existingItem && existingItem.isPinned),
+              isPublic: Boolean(existingItem && existingItem.isPublic),
+              hideNames: Boolean(existingItem && existingItem.hideNames),
+              createdAt: existingItem && existingItem.createdAt ? existingItem.createdAt : now.toISOString(),
+              uploadedAt: now.toISOString(),
+              updatedAt: now.toISOString(),
+            };
+            await env.TELEMETRY_KV.put(`share_lookup/${diagShareId}`, JSON.stringify(diagShareRecord));
+          } catch (e) {
+            console.error('Diag share link creation error:', e);
+          }
         }
 
         ctx.waitUntil(
@@ -4358,6 +4525,8 @@ export default {
                   battleId,
                   screenName,
                   userTier: resolvedUserTier,
+                  shareId: diagShareId || (existingIdx >= 0 ? m.recentDvr[existingIdx].shareId || '' : ''),
+                  watchUrl: diagWatchOverlayUrl || (existingIdx >= 0 ? m.recentDvr[existingIdx].watchUrl || '' : ''),
                   videoKey: hasVideo ? videoKey : (existingIdx >= 0 ? m.recentDvr[existingIdx].videoKey : null),
                   traceKey: hasTrace ? traceKey : (existingIdx >= 0 ? m.recentDvr[existingIdx].traceKey : null),
                   videoBytes: videoByteLen || (existingIdx >= 0 ? m.recentDvr[existingIdx].videoBytes : 0),
@@ -4368,7 +4537,7 @@ export default {
                   result,
                   matchupSummary,
                   uploadedAt: now.toISOString(),
-                  manuallyFlagged: isManual || (existingIdx >= 0 && Boolean(m.recentDvr[existingIdx].manuallyFlagged)),
+                  manuallyFlagged: isFlaggedWithIssueDescription || (existingIdx >= 0 && Boolean(m.recentDvr[existingIdx].manuallyFlagged)),
                   userIssueNote: userIssueNoteClean || (existingIdx >= 0 ? m.recentDvr[existingIdx].userIssueNote || '' : ''),
                   uploadReason: uploadReasonClean || (existingIdx >= 0 ? m.recentDvr[existingIdx].uploadReason || '' : ''),
                 };
@@ -4382,20 +4551,22 @@ export default {
               console.error('Manifest update error:', e);
             }
 
-            const onlyManual = env.TELEGRAM_NOTIFY_ONLY_MANUAL_DVR !== 'false';
-            const shouldSendTelegramVideo = (!onlyManual || isManual) && hasVideo && videoByteLen <= 48 * 1024 * 1024;
+            // Strictly only send to Telegram diagnostic chat when user-flagged WITH an issue description
+            const shouldSendTelegramVideo =
+              isFlaggedWithIssueDescription && hasVideo && videoByteLen <= 48 * 1024 * 1024;
 
             if (shouldSendTelegramVideo) {
               try {
-                const userIssueNote = String(metadata.userIssueNote || '').trim();
-                const uploadReason = String(metadata.uploadReason || '').trim();
                 const caption =
-                  `🎬 <b>SilphScope 1-Battle DVR</b>\n` +
-                  `👤 <b>Trainer:</b> <code>${escapeHtml(screenName)}</code>\n` +
+                  `🚩 <b>SilphScope Flagged Diagnostic DVR</b>\n` +
+                  `👤 <b>Trainer:</b> <code>@${escapeHtml(screenName)}</code>\n` +
+                  `💳 <b>Paid Tier:</b> <b>${escapeHtml(tierSummary.badge)}</b>\n` +
+                  `📝 <b>Issue Description:</b> <b>${escapeHtml(userIssueNoteClean)}</b>\n` +
+                  (diagWatchOverlayUrl
+                    ? `▶️ <b>Watch Video + HUD Overlay:</b>\n${escapeHtml(diagWatchOverlayUrl)}\n`
+                    : '') +
                   `🏆 <b>League:</b> ${escapeHtml(league)} (${escapeHtml(result)})\n` +
                   (matchupSummary ? `⚔️ <b>Matchup:</b> ${escapeHtml(matchupSummary)}\n` : '') +
-                  (userIssueNote ? `🚩 <b>Issue Report:</b> ${escapeHtml(userIssueNote)}\n` : '') +
-                  (uploadReason ? `📌 <b>Trigger:</b> ${escapeHtml(uploadReason)}\n` : '') +
                   `🎞️ <b>Frames:</b> ${frameCount} | <b>Size:</b> ${(videoByteLen / (1024 * 1024)).toFixed(2)} MB\n` +
                   `📱 <b>App:</b> <code>v${escapeHtml(appVersion)} (${versionCode})</code>\n` +
                   `🆔 <code>${escapeHtml(battleId)}</code>`;
@@ -4404,9 +4575,9 @@ export default {
               } catch (e) {
                 console.error('Telegram video send error:', e);
               }
-            } else if (!isManual && hasVideo) {
+            } else if (hasVideo) {
               console.log(
-                `Skipping Telegram video for battle ${battleId}: battle was not manually flagged (trigger="${metadata.uploadReason || 'none'}").`
+                `Skipping Telegram video for battle ${battleId}: requires user flag + issue description (isManual=${isManual}, noteLen=${userIssueNoteClean.length}).`
               );
             }
           })()
@@ -4673,6 +4844,7 @@ export default {
       let supporterEmail = '';
       let supportNote = '';
       let rawScreenNameCandidate = '';
+      let isWebhookRenewalEvent = false;
 
       if (isStripe) {
         const eventType = String(body.type || '');
@@ -4684,6 +4856,13 @@ export default {
           return jsonResponse({ ok: true, ignored: true, eventType });
         }
         const obj = (body.data && body.data.object) || body || {};
+        if (
+          eventType.includes('invoice.paid') ||
+          String(obj.billing_reason || '').toLowerCase().includes('subscription_cycle') ||
+          String(obj.billing_reason || '').toLowerCase().includes('subscription_update')
+        ) {
+          isWebhookRenewalEvent = true;
+        }
         amount = Number(obj.amount_total ?? obj.amount_paid ?? 0) / 100;
         supporterEmail = String(
           (obj.customer_details && obj.customer_details.email) || obj.customer_email || ''
@@ -4707,6 +4886,14 @@ export default {
         levelName = String((obj.metadata && obj.metadata.tier) || '').toLowerCase();
         supportNote = `Stripe ${eventType || 'checkout'} ($${amount.toFixed(2)})`;
       } else {
+        const eventType = String(body.type || body.event || '').toLowerCase();
+        if (
+          eventType.includes('renew') ||
+          eventType.includes('recurring') ||
+          eventType.includes('subscription_payment')
+        ) {
+          isWebhookRenewalEvent = true;
+        }
         const data = body.data || body || {};
         amount = Number(data.amount || data.support_coffee_price || 0);
         levelName = String(data.membership_level_name || data.title || data.extra_title || '').toLowerCase();
@@ -4777,8 +4964,9 @@ export default {
         expiresAt = new Date(now.getTime() + 35 * 24 * 3600 * 1000).toISOString();
       }
 
-      // Check if boundScreenName collides with an existing registered user
+      // Check if buyer already has an existing license by boundScreenName or supporterEmail (Renewal / Upgrade detection)
       let screenNameConflict = false;
+      let existingMatchedLicense = null;
       if (boundScreenName) {
         const chk = await checkScreenNameRegistration(env.TELEMETRY_KV, boundScreenName, '', '');
         if (!chk.available) {
@@ -4792,20 +4980,72 @@ export default {
               (existingLic &&
                 existingLic.supporterEmail &&
                 existingLic.supporterEmail.toLowerCase() === supporterEmail));
-          if (!sameEmail) {
+          if (!sameEmail && existingRec && existingRec.email && supporterEmail) {
             screenNameConflict = true;
+          } else if (existingLic) {
+            existingMatchedLicense = existingLic;
           }
         }
+        if (!existingMatchedLicense && !screenNameConflict) {
+          const boundKey = await env.TELEMETRY_KV.get(`user_license/${boundScreenName.toLowerCase()}`);
+          if (boundKey) {
+            existingMatchedLicense = await loadLicenseByKey(env.TELEMETRY_KV, boundKey);
+          }
+        }
+      }
+
+      if (!existingMatchedLicense && supporterEmail) {
+        try {
+          const listed = await env.TELEMETRY_KV.list({ prefix: 'licenses/' });
+          for (const k of listed.keys || []) {
+            const raw = await env.TELEMETRY_KV.get(k.name);
+            if (!raw) continue;
+            const rec = JSON.parse(raw);
+            if (rec && rec.supporterEmail && String(rec.supporterEmail).toLowerCase() === supporterEmail) {
+              existingMatchedLicense = rec;
+              break;
+            }
+          }
+        } catch (_) {}
+      }
+
+      const isRenewal = Boolean(isWebhookRenewalEvent || existingMatchedLicense);
+      const effectiveScreenName =
+        boundScreenName || (existingMatchedLicense && existingMatchedLicense.boundScreenName) || '';
+
+      // If renewing an existing active license, extend/upgrade that existing license key in-place AND mint/link the new key
+      if (existingMatchedLicense) {
+        const tierRank = { free: 0, supporter: 1, pro: 2, vip: 3 };
+        if ((tierRank[tier] || 0) >= (tierRank[existingMatchedLicense.tier] || 0)) {
+          existingMatchedLicense.tier = tier;
+          existingMatchedLicense.label = preset.label;
+        }
+        if (expiresAt) {
+          const prevExpMs = existingMatchedLicense.expiresAt ? Date.parse(existingMatchedLicense.expiresAt) : 0;
+          const durationAddedMs = isSeasonPass ? 95 * 86400000 : 35 * 86400000;
+          const extendedMs =
+            prevExpMs > now.getTime()
+              ? prevExpMs + durationAddedMs
+              : Date.parse(expiresAt);
+          existingMatchedLicense.expiresAt = new Date(extendedMs).toISOString();
+          expiresAt = existingMatchedLicense.expiresAt;
+        }
+        existingMatchedLicense.revoked = false;
+        existingMatchedLicense.everPaid = true;
+        existingMatchedLicense.lastRenewedAt = now.toISOString();
+        await saveLicenseRecord(env.TELEMETRY_KV, existingMatchedLicense);
       }
 
       const licenseRecord = {
         key: newKey,
         tier,
         label: preset.label,
-        boundScreenName,
+        boundScreenName: effectiveScreenName,
         screenNameConflict,
         everPaid: true,
         isIntroPromo,
+        isRenewal,
+        renewedFromKey: existingMatchedLicense ? existingMatchedLicense.key : null,
         supporterName,
         supporterEmail,
         supportNote,
@@ -4818,23 +5058,30 @@ export default {
       await saveLicenseRecord(env.TELEMETRY_KV, licenseRecord);
       if (isIntroPromo) {
         await markUserIntroPromoUsed(env.TELEMETRY_KV, {
-          screenName: boundScreenName,
+          screenName: effectiveScreenName,
           email: supporterEmail,
           key: newKey,
         });
       }
 
+      const headlineHtml = isRenewal
+        ? `${isStripe ? '🔄 <b>Stripe Subscription Renewal!' : '🔄 <b>Buy Me a Coffee Renewal!'}</b>`
+        : `${isStripe ? '💳 <b>New Stripe Subscription Purchase!' : '☕ <b>New Buy Me a Coffee Purchase!'}</b>`;
+
       ctx.waitUntil(
         sendTelegramMessage(
           env,
-          `${isStripe ? '💳 <b>New Stripe' : '☕ <b>New Buy Me a Coffee'} Unlock Key Minted!</b>\n` +
+          `${headlineHtml}\n` +
             `👤 <b>Trainer:</b> ${escapeHtml(supporterName)} (${escapeHtml(supporterEmail || 'no-email')})\n` +
-            `💵 <b>Amount:</b> $${amount.toFixed(2)}${isIntroPromo ? ' (Day 15+ First-Season Promo!)' : ''}\n` +
-            `🏅 <b>Tier:</b> <code>${escapeHtml(preset.label)} (${tier.toUpperCase()})</code>\n` +
-            `🔑 <b>Unlock Key:</b> <code>${escapeHtml(newKey)}</code>\n` +
+            `💵 <b>Amount:</b> $${amount.toFixed(2)}${isIntroPromo ? ' (Day 15+ First-Season Promo!)' : ''}${isRenewal ? ' (RENEWAL)' : ' (NEW PURCHASE)'}\n` +
+            `🏅 <b>Paid Tier:</b> <code>${escapeHtml(preset.label)} (${tier.toUpperCase()})</code>\n` +
+            `🔑 <b>Unlock Key:</b> <code>${escapeHtml(newKey)}</code>` +
+            (existingMatchedLicense ? ` (Also extended <code>${escapeHtml(existingMatchedLicense.key)}</code>)` : '') +
+            `\n` +
             `⏳ <b>Expires:</b> <code>${escapeHtml(expiresAt ? expiresAt.slice(0, 10) : 'LIFETIME')}</code>\n` +
-            (boundScreenName
-              ? `🎮 <b>Trainer ID:</b> <code>${escapeHtml(boundScreenName)}</code>${screenNameConflict ? ' ⚠️ (DUPLICATE ID — Buyer can change ID in-app via Email Claim)' : ''}\n`
+            (effectiveScreenName
+              ? `🎮 <b>Trainer ID:</b> <code>@${escapeHtml(effectiveScreenName)}</code>${screenNameConflict ? ' ⚠️ (DUPLICATE ID — Buyer can change ID in-app via Email Claim)' : ''}\n` +
+                `🌐 <b>Vault URL:</b> https://silphscope-telemetry.silphscope-pvp.workers.dev/u/${encodeURIComponent(effectiveScreenName)}\n`
               : '') +
             (supportNote ? `💬 <b>Note:</b> ${escapeHtml(supportNote)}` : '')
         )
@@ -4843,9 +5090,11 @@ export default {
       return jsonResponse({
         ok: true,
         source: licenseRecord.source,
+        isRenewal,
         tier,
         unlockKey: newKey,
-        boundScreenName: boundScreenName || null,
+        renewedKey: existingMatchedLicense ? existingMatchedLicense.key : null,
+        boundScreenName: effectiveScreenName || null,
         screenNameConflict,
         isIntroPromo,
         expiresAt,
@@ -5654,7 +5903,7 @@ export default {
       const parts = path.split('/').filter(Boolean); // ['v1','replays','stream', shareId, asset]
       const shareId = sanitizeId(parts[3] || '');
       const asset = parts[4] || '';
-      if (!shareId || !env.REPLAY_BUCKET) {
+      if (!shareId) {
         return jsonResponse({ ok: false, error: 'Invalid stream URL.' }, 404);
       }
 
@@ -5666,52 +5915,83 @@ export default {
 
       if (asset === 'video.mp4') {
         const rangeHeader = request.headers.get('Range');
-        if (rangeHeader && rangeHeader.startsWith('bytes=')) {
-          const headObj = await env.REPLAY_BUCKET.head(shareInfo.videoKey);
-          if (!headObj) return new Response('Video not found', { status: 404 });
-          const totalSize = headObj.size;
-          const [startStr, endStr] = rangeHeader.replace('bytes=', '').split('-');
-          const start = Math.max(0, parseInt(startStr, 10) || 0);
-          const end = endStr ? Math.min(totalSize - 1, parseInt(endStr, 10)) : totalSize - 1;
-          const length = Math.max(0, end - start + 1);
+        if (env.REPLAY_BUCKET && shareInfo.videoKey) {
+          if (rangeHeader && rangeHeader.startsWith('bytes=')) {
+            const headObj = await env.REPLAY_BUCKET.head(shareInfo.videoKey);
+            if (headObj) {
+              const totalSize = headObj.size;
+              const [startStr, endStr] = rangeHeader.replace('bytes=', '').split('-');
+              const start = Math.max(0, parseInt(startStr, 10) || 0);
+              const end = endStr ? Math.min(totalSize - 1, parseInt(endStr, 10)) : totalSize - 1;
+              const length = Math.max(0, end - start + 1);
 
-          const rangedObj = await env.REPLAY_BUCKET.get(shareInfo.videoKey, {
-            range: { offset: start, length },
-          });
-          if (!rangedObj) return new Response('Range not satisfiable', { status: 416 });
+              const rangedObj = await env.REPLAY_BUCKET.get(shareInfo.videoKey, {
+                range: { offset: start, length },
+              });
+              if (!rangedObj) return new Response('Range not satisfiable', { status: 416 });
 
-          return new Response(rangedObj.body, {
-            status: 206,
-            headers: {
-              'Content-Type': 'video/mp4',
-              'Content-Range': `bytes ${start}-${end}/${totalSize}`,
-              'Accept-Ranges': 'bytes',
-              'Content-Length': String(length),
-              'Cache-Control': 'public, max-age=86400',
-              'Access-Control-Allow-Origin': '*',
-            },
-          });
+              return new Response(rangedObj.body, {
+                status: 206,
+                headers: {
+                  'Content-Type': 'video/mp4',
+                  'Content-Range': `bytes ${start}-${end}/${totalSize}`,
+                  'Accept-Ranges': 'bytes',
+                  'Content-Length': String(length),
+                  'Cache-Control': 'public, max-age=86400',
+                  'Access-Control-Allow-Origin': '*',
+                },
+              });
+            }
+          } else {
+            const fullObj = await env.REPLAY_BUCKET.get(shareInfo.videoKey);
+            if (fullObj) {
+              return new Response(fullObj.body, {
+                status: 200,
+                headers: {
+                  'Content-Type': 'video/mp4',
+                  'Accept-Ranges': 'bytes',
+                  'Content-Length': String(fullObj.size),
+                  'Cache-Control': 'public, max-age=86400',
+                  'Access-Control-Allow-Origin': '*',
+                },
+              });
+            }
+          }
         }
 
-        const fullObj = await env.REPLAY_BUCKET.get(shareInfo.videoKey);
-        if (!fullObj) return new Response('Video not found', { status: 404 });
-        return new Response(fullObj.body, {
-          status: 200,
-          headers: {
-            'Content-Type': 'video/mp4',
-            'Accept-Ranges': 'bytes',
-            'Content-Length': String(fullObj.size),
-            'Cache-Control': 'public, max-age=86400',
-            'Access-Control-Allow-Origin': '*',
-          },
-        });
+        // Fallback to TELEMETRY_KV store for diagnostic DVR videos if R2 object is missing
+        if (shareInfo.fallbackKvVideoKey) {
+          const kvBytes = await store.getBytes(shareInfo.fallbackKvVideoKey);
+          if (kvBytes) {
+            const u8 = new Uint8Array(kvBytes);
+            return new Response(u8, {
+              status: 200,
+              headers: {
+                'Content-Type': 'video/mp4',
+                'Accept-Ranges': 'bytes',
+                'Content-Length': String(u8.byteLength),
+                'Cache-Control': 'public, max-age=86400',
+                'Access-Control-Allow-Origin': '*',
+              },
+            });
+          }
+        }
+        return new Response('Video not found', { status: 404 });
       }
 
       if (asset === 'trace.jsonl') {
-        if (!shareInfo.traceKey) return new Response('', { status: 200 });
-        const traceObj = await env.REPLAY_BUCKET.get(shareInfo.traceKey);
-        if (!traceObj) return new Response('', { status: 404 });
-        let text = await traceObj.text();
+        if (!shareInfo.traceKey && !shareInfo.fallbackKvTraceKey) return new Response('', { status: 200 });
+        let text = null;
+        if (env.REPLAY_BUCKET && shareInfo.traceKey) {
+          const traceObj = await env.REPLAY_BUCKET.get(shareInfo.traceKey);
+          if (traceObj) {
+            text = await traceObj.text();
+          }
+        }
+        if (text === null && shareInfo.fallbackKvTraceKey) {
+          text = await store.getText(shareInfo.fallbackKvTraceKey);
+        }
+        if (text === null) return new Response('', { status: 404 });
         if (shareInfo.hideNames || url.searchParams.get('hideNames') === '1') {
           text = text.replace(new RegExp(shareInfo.screenName, 'gi'), 'Trainer');
         }
@@ -5815,6 +6095,17 @@ export default {
             source: 'admin_cli',
           };
           await saveLicenseRecord(env.TELEMETRY_KV, record);
+          ctx.waitUntil(
+            sendTelegramMessage(
+              env,
+              `🛠️ <b>Admin Membership Key Created!</b>\n` +
+                `🏅 <b>Paid Tier:</b> <code>${escapeHtml(preset.label)} (${tier.toUpperCase()})</code>\n` +
+                `🔑 <b>Unlock Key:</b> <code>${escapeHtml(key)}</code>\n` +
+                (boundScreenName ? `🎮 <b>Trainer ID:</b> <code>@${escapeHtml(boundScreenName)}</code>\n` : '') +
+                `⏳ <b>Expires:</b> <code>${escapeHtml(expiresAt ? expiresAt.slice(0, 10) : 'LIFETIME')}</code>` +
+                (record.note ? `\n💬 <b>Note:</b> ${escapeHtml(record.note)}` : '')
+            )
+          );
           return jsonResponse({ ok: true, action: 'create', license: record, limits: preset });
         }
 
@@ -5841,6 +6132,20 @@ export default {
             existing.boundScreenName = sanitizeScreenName(body.screenName);
           }
           await saveLicenseRecord(env.TELEMETRY_KV, existing);
+          if (action === 'extend') {
+            ctx.waitUntil(
+              sendTelegramMessage(
+                env,
+                `🔄 <b>Membership Renewed / Extended (Admin)!</b>\n` +
+                  `🏅 <b>Paid Tier:</b> <code>${escapeHtml(existing.label || existing.tier)}</code>\n` +
+                  `🔑 <b>Unlock Key:</b> <code>${escapeHtml(existing.key)}</code>\n` +
+                  (existing.boundScreenName
+                    ? `🎮 <b>Trainer ID:</b> <code>@${escapeHtml(existing.boundScreenName)}</code>\n`
+                    : '') +
+                  `⏳ <b>New Expiration:</b> <code>${escapeHtml(existing.expiresAt ? existing.expiresAt.slice(0, 10) : 'LIFETIME')}</code>`
+              )
+            );
+          }
           return jsonResponse({ ok: true, action, license: existing });
         }
 

@@ -93,7 +93,7 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.05"
+        const val APP_VERSION = "7.06"
         const val APP_VERSION_CODE = 1705
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -13922,6 +13922,11 @@ class OverlayService : LifecycleService() {
                 }
                 setOnClickListener {
                     val userNote = noteInput.text?.toString()?.trim().orEmpty()
+                    if (userNote.isBlank()) {
+                        noteInput.error = "Please enter a brief issue description so we know what to inspect."
+                        showBattleToast("⚠️ Please enter an issue description before submitting a diagnostic video report.")
+                        return@setOnClickListener
+                    }
                     dismissPostBattleBugReportDialogOverlay()
                     if (isStoppedPreLog) {
                         stoppedBattleFlagBugReport = true
@@ -14013,7 +14018,7 @@ class OverlayService : LifecycleService() {
         lastLoggedBattleDvrUploadStatus = "UPLOADING"
         recalculateAndPushBattleData()
         showBattleToast("🚩 Flagged Bug Report — Uploading Battle Video & Deep Trace...")
-        val resolvedNote = userNote.trim().ifBlank { "Post-Battle HUD Flagged Bug Report" }
+        val resolvedNote = userNote.trim()
         dvrUploadScope.launch {
             val sumRec = lastLoggedBattleSummaryRecord
             val (ok, msg) = OverlayService.submitManualDvrIssueReportBlocking(

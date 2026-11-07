@@ -7942,6 +7942,14 @@ class MainActivity : AppCompatActivity() {
                     .setView(noteInput)
                     .setPositiveButton("🚀 Upload Report") { _, _ ->
                         val note = noteInput.text?.toString()?.trim().orEmpty()
+                        if (note.isBlank()) {
+                            Toast.makeText(
+                                this,
+                                "⚠️ Please describe the issue before submitting a diagnostic video report.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            return@setPositiveButton
+                        }
                         Toast.makeText(this, "🚩 Uploading DVR Video & Issue Report...", Toast.LENGTH_SHORT).show()
                         lifecycleScope.launch(Dispatchers.IO) {
                             val (ok, msg) = OverlayService.submitManualDvrIssueReportBlocking(

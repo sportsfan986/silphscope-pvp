@@ -1,4 +1,17 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.05`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.06`)
+
+---
+
+## v7.06 (2026-11-07) — Telegram Subscription Purchase/Renewal/Activation Alerts, Diagnostic Video `/watch/:shareId` Overlay Links & Required Issue Description Gate
+*Telegram diagnostic channel & membership notification release (`v7.06`, `versionCode = 1706`, Cloudflare Worker `v7.0.6`) adding instant Telegram notifications on every Stripe/Buy Me a Coffee subscription purchase, renewal (with automatic in-place license extension), and membership activation/device link, enriching user-flagged diagnostic video alerts with a direct `/watch/:shareId` synchronized HUD overlay player link, user issue description, and resolved paid tier badge, and strictly gating diagnostic video chat uploads to user-flagged videos with a non-blank issue description.*
+
+- **v7.06 — Enhancement 1: Telegram Alerts on Subscription Purchase, Renewal & Membership Activation (`cloudflare/telemetry-worker/worker.mjs`)**:
+  - **Purchase & Renewal Alerts (`POST /v1/webhooks/stripe`, `POST /v1/webhooks/bmc`, `POST /v1/admin/keys`)**: Detects whether a payment event is a **New Subscription Purchase** (`💳 New Stripe Subscription Purchase!` / `☕ New Buy Me a Coffee Purchase!`) or a **Subscription Renewal** (`🔄 Stripe Subscription Renewal!` / `🔄 Buy Me a Coffee Renewal!`), automatically extends/upgrades any existing license key for that buyer's `boundScreenName` or `supporterEmail` in-place in KV, and sends a Telegram message with Trainer ID, Paid Tier, Unlock Key, Expiration, and Vault URL.
+  - **Membership Activation & Device Link Alerts (`resolveUserLicense`)**: Sends an instant Telegram notification (`✅ Membership Activated!` or `🔗 Membership Linked to New Device / Account!`) whenever a trainer activates their key for the first time or links a new Trainer ID, GitHub account, or Android device hash.
+- **v7.06 — Enhancement 2: Diagnostic Video Chat with Synchronized HUD Overlay Link, Issue Description & Paid Tier (`cloudflare/telemetry-worker/worker.mjs`, `OverlayService.kt`, `MainActivity.kt`, `GitHubCloudSync.kt`)**:
+  - **Strict Flagged + Issue Description Filter (`POST /v1/dvr`)**: Only sends DVR videos to the Telegram diagnostic video chat when the battle was explicitly flagged by the user **and** includes a genuine user-written issue description (`isManual && userIssueNoteClean.length > 0`).
+  - **Mandatory Issue Description in App (`OverlayService.kt`, `MainActivity.kt`, `GitHubCloudSync.kt`)**: Requires a non-blank issue description when submitting a DVR bug report from the post-battle HUD or Battle Log replay dialog and removes generic auto-filled placeholder strings.
+  - **Synchronized HUD Overlay Player Link (`/watch/:shareId`), Issue Banner & Paid Tier Badge**: Automatically mints a capability share link (`https://silphscope-telemetry.silphscope-pvp.workers.dev/watch/<shareId>`) backed by R2 + KV fallback for every user-flagged diagnostic report, includes `💳 Paid Tier`, `📝 Issue Description`, and `▶️ Watch Video + HUD Overlay` directly in the Telegram video caption, and renders a prominent `🚩 Reported Diagnostic Issue` + `Paid Tier` banner at the top of `/watch/:shareId`.
 
 ---
 
