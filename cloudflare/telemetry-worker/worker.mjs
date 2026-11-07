@@ -1381,8 +1381,13 @@ function renderWatchSharePage(origin, shareInfo) {
         const fastMove = s.inferredFastMove || meta.fastMove;
         const fStats = lookupFastStats(fastMove, s.fastTurns || meta.fastTurns);
         const confirmed = Array.isArray(s.confirmedChargedMoves) ? s.confirmedChargedMoves.map(m => String(m).replace(/\\*/g, '').trim()).filter(Boolean) : [];
-        const c1 = confirmed[0] || meta.c1 || 'Body Slam';
-        const c2 = (confirmed[1] && confirmed[1].toLowerCase() !== c1.toLowerCase()) ? confirmed[1] : (meta.c2 && meta.c2.toLowerCase() !== c1.toLowerCase() ? meta.c2 : 'Surf');
+        const candidatePoolFromSummary = Array.isArray(s.candidateChargedMoves)
+          ? s.candidateChargedMoves.map(m => String(m).replace(/\\*/g, '').trim()).filter(Boolean)
+          : [];
+        const c1 = meta.c1 || confirmed[0] || 'Body Slam';
+        const c2 = (meta.c2 && meta.c2.toLowerCase() !== c1.toLowerCase())
+          ? meta.c2
+          : (confirmed[1] && confirmed[1].toLowerCase() !== c1.toLowerCase() ? confirmed[1] : 'Surf');
         const c3 = meta.c3 || 'Outrage';
         return {
           slotIndex: i,
@@ -1396,6 +1401,7 @@ function renderWatchSharePage(origin, shareInfo) {
           fastStatus: s.fastMoveStatus || (s.fastMoveConfirmed ? 'confirmed' : 'default'),
           fastConfirmed: Boolean(s.fastMoveConfirmed),
           confirmedMoves: confirmed,
+          candidateChargedMoves: candidatePoolFromSummary,
           c1,
           c2,
           c3,
@@ -1408,6 +1414,7 @@ function renderWatchSharePage(origin, shareInfo) {
       const lg = (summaryHeader && summaryHeader.league) || SHARE_LEAGUE;
       const uSpecs = getResolvedUserSpecs();
       const oSpecs = getResolvedOppSpecs();
+      const frameArrayIdx = Math.max(0, frames.indexOf(f));
 
       const uIdx = manualUserSlotOverride !== null
         ? manualUserSlotOverride
@@ -1433,6 +1440,7 @@ function renderWatchSharePage(origin, shareInfo) {
         fastStatus: 'default',
         fastConfirmed: false,
         confirmedMoves: [],
+        candidateChargedMoves: [],
         c1: 'Body Slam',
         c2: 'Surf',
         c3: 'Earthquake',
@@ -1462,16 +1470,132 @@ function renderWatchSharePage(origin, shareInfo) {
       const oDefStg = f.oppSlotDefStage || [0, 0, 0];
 
       const winsCmp = actUser.meta.effAtk >= actOpp.meta.effAtk;
+      const uHpNow = Math.max(1, Math.min(100, Number(pSlotHp[uIdx] ?? 100)));
+
+      // v6.50: Resolve progressive confirmed charged moves per opponent slot at current frame f
+      function getSlotConfirmedMovesAtFrame(slotSpec, sIdx) {
+        if (Array.isArray(f.oppSlotConfirmedChargedMoves) && f.oppSlotConfirmedChargedMoves.length > 0) {
+          const arr = f.oppSlotConfirmedChargedMoves[sIdx];
+          return Array.isArray(arr) ? arr.map(m => String(m).replace(/\\*/g, '').trim()).filter(Boolean) : [];
+        }
+        // Fallback for pre-v6.50 traces: scan frames[0..frameArrayIdx] for used-move announcements by this opponent species
+        const summaryConfirmed = Array.isArray(slotSpec.confirmedMoves) ? slotSpec.confirmedMoves : [];
+        if (summaryConfirmed.length === 0) return [];
+        const baseSp = String(slotSpec.meta.baseSpecies || slotSpec.name || '').replace(/^Shadow\\s+/i, '').split('(')[0].trim().toLowerCase();
+        const foundSoFar = [];
+        for (let k = 0; k <= frameArrayIdx; k++) {
+          const fk = frames[k];
+          if (!fk) continue;
+          const bTxt = String((fk.moveBannerText || '') + ' ' + (fk.ocrMidBannerText || '')).toLowerCase();
+          if (!bTxt.includes('used')) continue;
+          const activeAtK = Number(fk.oppActiveIndex ?? 0) === sIdx || (baseSp && bTxt.includes(baseSp));
+          if (!activeAtK) continue;
+          for (const cm of summaryConfirmed) {
+            const cLower = cm.toLowerCase();
+            if (bTxt.includes(cLower) && !foundSoFar.some(x => x.toLowerCase() === cLower)) {
+              foundSoFar.push(cm);
+            }
+          }
+        }
+        return foundSoFar;
+      }
+
+      // v6.50: Smart 3-Move Selection (2 PvPoke Recommended + Highest Risk of Next 3, locking to 2 once 2 moves confirmed)
+      function selectOppThreeMovesForSlot(slotSpec, sIdx) {
+        const confirmedAtFrame = getSlotConfirmedMovesAtFrame(slotSpec, sIdx);
+        const rawCandidates = [
+          slotSpec.meta.c1,
+          slotSpec.meta.c2,
+          ...(Array.isArray(slotSpec.candidateChargedMoves) ? slotSpec.candidateChargedMoves : []),
+          ...(Array.isArray(slotSpec.meta.pool) ? slotSpec.meta.pool : []),
+          slotSpec.meta.c3,
+          slotSpec.c1,
+          slotSpec.c2,
+          slotSpec.c3,
+          ...confirmedAtFrame,
+          ...(Array.isArray(slotSpec.confirmedMoves) ? slotSpec.confirmedMoves : [])
+        ];
+        const orderedCandidates = [];
+        for (const rawM of rawCandidates) {
+          const trimmed = String(rawM || '').replace(/\\*/g, '').trim();
+          if (trimmed && !orderedCandidates.some(p => p.toLowerCase() === trimmed.toLowerCase())) {
+            orderedCandidates.push(trimmed);
+          }
+        }
+
+        if (confirmedAtFrame.length >= 2) {
+          const locked = confirmedAtFrame.slice(0, 2);
+          return {
+            displayedMoves: locked,
+            allPossibleMoves: locked,
+            highRiskThirdMove: null,
+            isTwoMovesLocked: true,
+            confirmedAtFrame
+          };
+        }
+
+        const rec2 = [slotSpec.meta.c1 || slotSpec.c1, slotSpec.meta.c2 || slotSpec.c2]
+          .map(m => String(m || '').trim())
+          .filter((v, i, a) => v && a.findIndex(x => x.toLowerCase() === v.toLowerCase()) === i);
+
+        const confirmedOutsideTop2 = confirmedAtFrame.find(cm => !rec2.some(r => r.toLowerCase() === cm.toLowerCase()));
+        let chosenThird = null;
+        let isRiskBadgeThird = false;
+
+        if (confirmedOutsideTop2) {
+          chosenThird = confirmedOutsideTop2;
+          isRiskBadgeThird = false;
+        } else {
+          const nextThree = orderedCandidates
+            .filter(cand => !rec2.some(r => r.toLowerCase() === cand.toLowerCase()))
+            .slice(0, 3);
+          let bestScore = -1;
+          for (const candMove of nextThree) {
+            const { pct: dmgPct, mStats } = calcChargedDmgPct(
+              slotSpec.meta, actUser.meta, candMove, slotSpec.isShadow, actUser.isShadow, oAtkStg[sIdx] || 0, pDefStg[uIdx] || 0
+            );
+            const cost = Math.max(35, Math.min(100, mStats.energy || 50));
+            const canKoNow = dmgPct >= uHpNow;
+            const dpeScore = (dmgPct * 50) / cost;
+            const score = (canKoNow ? 10000 + (100 - cost) * 10 : 0) + dmgPct + dpeScore * 0.65;
+            if (score > bestScore) {
+              bestScore = score;
+              chosenThird = candMove;
+            }
+          }
+          isRiskBadgeThird = Boolean(chosenThird);
+        }
+
+        const displayed = [...rec2, ...(chosenThird ? [chosenThird] : [])]
+          .filter((v, i, a) => v && a.findIndex(x => x.toLowerCase() === v.toLowerCase()) === i);
+
+        return {
+          displayedMoves: displayed,
+          allPossibleMoves: orderedCandidates.length > 0 ? orderedCandidates : displayed,
+          highRiskThirdMove: isRiskBadgeThird ? chosenThird : null,
+          isTwoMovesLocked: false,
+          confirmedAtFrame
+        };
+      }
+
+      const slotMoveSelections = oSpecs.map((o, idx) => selectOppThreeMovesForSlot(o, idx));
+      const activeOppSelection = slotMoveSelections[oIdx] || selectOppThreeMovesForSlot(actOpp, oIdx);
 
       // Build scannedOpponents array for 3v3 Matrix
       const scannedOpponents = oSpecs.map((o, idx) => {
-        const d1 = calcChargedDmgPct(o.meta, actUser.meta, o.c1, o.isShadow, actUser.isShadow, oAtkStg[idx] || 0, pDefStg[uIdx] || 0).pct;
-        const d2 = calcChargedDmgPct(o.meta, actUser.meta, o.c2, o.isShadow, actUser.isShadow, oAtkStg[idx] || 0, pDefStg[uIdx] || 0).pct;
-        const d3 = calcChargedDmgPct(o.meta, actUser.meta, o.c3, o.isShadow, actUser.isShadow, oAtkStg[idx] || 0, pDefStg[uIdx] || 0).pct;
-        const m1 = lookupChargedStats(o.c1, o.meta.types[0]);
-        const m2 = lookupChargedStats(o.c2, o.meta.types[0]);
-        const m3 = lookupChargedStats(o.c3, o.meta.types[0]);
-        const cheapestE = Math.min(m1.energy, m2.energy, m3.energy);
+        const sel = slotMoveSelections[idx] || selectOppThreeMovesForSlot(o, idx);
+        const disp = sel.displayedMoves;
+        const m1Name = disp[0] || o.c1;
+        const m2Name = disp[1] || o.c2;
+        const m3Name = disp[2] || '';
+        const d1 = m1Name ? calcChargedDmgPct(o.meta, actUser.meta, m1Name, o.isShadow, actUser.isShadow, oAtkStg[idx] || 0, pDefStg[uIdx] || 0).pct : 0;
+        const d2 = m2Name ? calcChargedDmgPct(o.meta, actUser.meta, m2Name, o.isShadow, actUser.isShadow, oAtkStg[idx] || 0, pDefStg[uIdx] || 0).pct : 0;
+        const d3 = m3Name ? calcChargedDmgPct(o.meta, actUser.meta, m3Name, o.isShadow, actUser.isShadow, oAtkStg[idx] || 0, pDefStg[uIdx] || 0).pct : 0;
+        const allSlotMoves = sel.allPossibleMoves.length > 0 ? sel.allPossibleMoves : disp;
+        const cheapestE = allSlotMoves.reduce((minE, mn) => {
+          const st = lookupChargedStats(mn, o.meta.types[0]);
+          return Math.min(minE, Math.max(35, Math.min(100, st.energy || 50)));
+        }, 50);
         const curHp = oSlotHp[idx];
         const curE = oSlotE[idx];
         const isReady = curHp > 0 && curE >= cheapestE;
@@ -1489,10 +1613,11 @@ function renderWatchSharePage(origin, shareInfo) {
           turns: o.fastTurns,
           fastMove: o.fastMove,
           oppFastMoveStatus: o.fastStatus,
-          confirmedChargedMoves: o.confirmedMoves,
-          c1: abbrMove5(o.c1) + ' (' + d1 + '%)',
-          c2: abbrMove5(o.c2) + ' (' + d2 + '%)',
-          c3: abbrMove5(o.c3) + ' (' + d3 + '%)',
+          confirmedChargedMoves: sel.confirmedAtFrame,
+          candidateChargedMoves: sel.allPossibleMoves,
+          c1: m1Name ? (abbrMove5(m1Name) + ' (' + d1 + '%)') : '',
+          c2: m2Name ? (abbrMove5(m2Name) + ' (' + d2 + '%)') : '',
+          c3: m3Name ? (abbrMove5(m3Name) + ' (' + d3 + '%)') : '',
           c4: '',
           atkStage: oAtkStg[idx] || 0,
           defStage: oDefStg[idx] || 0,
@@ -1506,7 +1631,7 @@ function renderWatchSharePage(origin, shareInfo) {
       });
 
       // Compute shared horizon turns
-      const oppMoveNames = [actOpp.c1, actOpp.c2, actOpp.c3].filter((v, i, a) => v && a.findIndex(x => x.toLowerCase() === v.toLowerCase()) === i);
+      const oppMoveNames = activeOppSelection.displayedMoves;
       const myMoveNames = [actUser.c1, actUser.c2].filter((v, i, a) => v && a.findIndex(x => x.toLowerCase() === v.toLowerCase()) === i);
 
       let maxHorizonTurns = 12;
@@ -1588,7 +1713,10 @@ function renderWatchSharePage(origin, shareInfo) {
           };
         });
 
-        const isConfirmed = actOpp.confirmedMoves.some(cm => cm.toLowerCase() === mName.toLowerCase());
+        const isConfirmed = activeOppSelection.confirmedAtFrame.some(cm => cm.toLowerCase() === mName.toLowerCase());
+        const isHighRiskThirdMove = !isConfirmed &&
+          activeOppSelection.highRiskThirdMove &&
+          activeOppSelection.highRiskThirdMove.toLowerCase() === mName.toLowerCase();
         return {
           name: mName,
           shortName: abbrMove5(mName),
@@ -1599,6 +1727,7 @@ function renderWatchSharePage(origin, shareInfo) {
           displayReadyCount,
           winsCmp,
           isConfirmedMove: isConfirmed,
+          isHighRiskThirdMove: Boolean(isHighRiskThirdMove),
           activeName: actUser.name,
           activeDmgPct,
           activeEff,
@@ -1708,8 +1837,7 @@ function renderWatchSharePage(origin, shareInfo) {
       const oppFastTelemetry = abbrMove5(actOpp.fastMove) + ' ' + actOpp.fastTurns + 't(' + (actOpp.fastTurns * 0.5).toFixed(1) + 's)/+' + actOpp.fastEnergy + 'e';
       const userFastTelemetry = abbrMove5(actUser.fastMove) + ' ' + actUser.fastTurns + 't(' + (actUser.fastTurns * 0.5).toFixed(1) + 's)/+' + actUser.fastEnergy + 'e';
 
-      // v6.42: Reconstruct Shield Decision Overlay (Red/Orange/Yellow/Green KO & HP summary above Attack incoming!)
-      const frameArrayIdx = Math.max(0, frames.indexOf(f));
+      // v6.42 / v6.50: Reconstruct Shield Decision Overlay (Evaluates ALL possible legal moves until 2 locked + Overflow Guard)
       let chargeStartIdx = frameArrayIdx;
       while (chargeStartIdx > 0 && (
         String(frames[chargeStartIdx - 1].pendingChargeActor || '').toLowerCase() === 'opp' ||
@@ -1736,7 +1864,6 @@ function renderWatchSharePage(origin, shareInfo) {
       const isShieldDecisionVisible = Boolean(showShieldHud && isOppChargeWin && !hasUsedBannerSoFar && elapsedInChargeMs <= 5500);
 
       // Compute Pillar 4 & candidate moves for Shield Decision Overlay
-      const uHpNow = Math.max(1, Math.min(100, Number(pSlotHp[uIdx] ?? 100)));
       const uEnergyNow = Math.max(0, Math.min(100, Number(pSlotE[uIdx] ?? 0)));
       const bestUserRow = myMoveTimingRows[0] || { name: actUser.c1, shortName: abbrMove5(actUser.c1), energy: actUser.c1Energy || 45 };
       const myTargetMoveShort = bestUserRow.shortName || abbrMove5(bestUserRow.name);
@@ -1749,10 +1876,10 @@ function renderWatchSharePage(origin, shareInfo) {
       const oFastRaw = Math.floor(0.5 * oFastStats.power * ((actOpp.meta.effAtk * (actOpp.isShadow ? 1.2 : 1.0) * stageMult(oAtkStg[oIdx] || 0)) / Math.max(10, actUser.meta.effDef * (actUser.isShadow ? 0.8333333 : 1.0) * stageMult(pDefStg[uIdx] || 0))) * oFastStab * oFastEff * 1.3) + 1;
       const oppFastExactDmgPct = Math.max(0.5, (oFastRaw / Math.max(20, actUser.meta.effHp)) * 100);
 
-      const twoMovesLocked = Array.isArray(actOpp.confirmedMoves) && actOpp.confirmedMoves.length >= 2;
-      const rawCandNames = twoMovesLocked
-        ? actOpp.confirmedMoves.slice(0, 2)
-        : [actOpp.c1, actOpp.c2, actOpp.c3].filter(Boolean);
+      const twoMovesLocked = Boolean(activeOppSelection.isTwoMovesLocked);
+      const rawCandNames = activeOppSelection.allPossibleMoves.length > 0
+        ? activeOppSelection.allPossibleMoves
+        : activeOppSelection.displayedMoves;
       const seenMoveLower = new Set();
       const candMoveNames = rawCandNames.filter(m => {
         const kl = String(m).toLowerCase();
@@ -1799,14 +1926,21 @@ function renderWatchSharePage(origin, shareInfo) {
       const effectiveBankedE = Math.max(minCandCost, Math.min(100, Math.max(preWindowOppE, postDeductPlusMin)));
 
       const normShieldRows = rawShieldRows.map(r => ({ ...r, isFunded: effectiveBankedE >= r.energyCost }));
-      const fundedMoves = normShieldRows.filter(r => r.isFunded).sort((a, b) => b.dmgPct - a.dmgPct);
-      const unfundedMoves = normShieldRows.filter(r => !r.isFunded).sort((a, b) => a.energyCost - b.energyCost);
+      const sortShieldRows = (a, b) => (Number(b.isKo) - Number(a.isKo)) || (b.dmgPct - a.dmgPct) || (a.energyCost - b.energyCost);
+      const allFundedMoves = normShieldRows.filter(r => r.isFunded).sort(sortShieldRows);
+      const allUnfundedMoves = normShieldRows.filter(r => !r.isFunded).sort(sortShieldRows);
 
-      const allFundedKo = fundedMoves.length > 0 && fundedMoves.every(r => r.isKo);
-      const someFundedKo = fundedMoves.some(r => r.isKo) && fundedMoves.some(r => !r.isKo);
-      const anyFundedFarmed = fundedMoves.some(r => !r.isKo && !r.canReachNextMoveIfTanked);
-      const unfundedKo = fundedMoves.every(r => !r.isKo) && unfundedMoves.some(r => r.isKo);
-      const worstFarmed = fundedMoves.find(r => !r.isKo && !r.canReachNextMoveIfTanked);
+      // v6.50 Overflow Guard: show up to 6 funded moves and up to 4 highest-threat unfunded moves
+      const fundedMoves = allFundedMoves.slice(0, 6);
+      const unfundedMoves = allUnfundedMoves.slice(0, 4);
+      const hiddenFundedCount = Math.max(0, allFundedMoves.length - fundedMoves.length);
+      const hiddenUnfundedCount = Math.max(0, allUnfundedMoves.length - unfundedMoves.length);
+
+      const allFundedKo = allFundedMoves.length > 0 && allFundedMoves.every(r => r.isKo);
+      const someFundedKo = allFundedMoves.some(r => r.isKo) && allFundedMoves.some(r => !r.isKo);
+      const anyFundedFarmed = allFundedMoves.some(r => !r.isKo && !r.canReachNextMoveIfTanked);
+      const unfundedKo = allFundedMoves.every(r => !r.isKo) && allUnfundedMoves.some(r => r.isKo);
+      const worstFarmed = allFundedMoves.find(r => !r.isKo && !r.canReachNextMoveIfTanked);
 
       let sdBgHex = 'rgba(6, 78, 59, 0.95)';
       let sdStrokeHex = '#10B981';
@@ -1843,6 +1977,8 @@ function renderWatchSharePage(origin, shareInfo) {
           verdictText: sdVerdict,
           effectiveBankedEnergy: effectiveBankedE,
           userHpPct: uHpNow,
+          hiddenFundedCount,
+          hiddenUnfundedCount,
           fundedMoves,
           unfundedMoves
         },
@@ -1851,7 +1987,7 @@ function renderWatchSharePage(origin, shareInfo) {
         oppFastTelemetry,
         oppFastMoveStatus: actOpp.fastStatus,
         oppFastMoveConfirmed: actOpp.fastConfirmed,
-        confirmedOppChargedMoves: actOpp.confirmedMoves,
+        confirmedOppChargedMoves: activeOppSelection.confirmedAtFrame,
         userFastTelemetry,
         oppCountMode: 'my_fasts',
         enable4ChargedMoves: false,

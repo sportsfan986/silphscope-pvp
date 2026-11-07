@@ -78,13 +78,45 @@ for (const k of new Set([
   };
 }
 
-// 3. Parse RECOMMENDED_CHARGED_MOVES and COMMON_THIRD_CHARGED_MOVE
+// 3. Parse RECOMMENDED_CHARGED_MOVES, COMMON_THIRD_CHARGED_MOVE, and species charged move pools
 const recCharged = {};
 const recRegex = /"([^"]+)"\s+to\s+Triple\("([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\)/g;
 while ((m = recRegex.exec(ktSrc)) !== null) {
   recCharged[m[1].trim().toLowerCase()] = [m[2].trim(), m[3].trim(), m[4].trim()];
 }
 const thirdCharged = extractKtMap("val COMMON_THIRD_CHARGED_MOVE");
+
+const speciesChargedPoolMap = {};
+const tsPoolBlockMatch = tsSrc.match(/export const SPECIES_CHARGED_MOVES_POOL:\s*Record<string,\s*string\[\]>\s*=\s*\{([\s\S]*?)\n\};/);
+if (tsPoolBlockMatch) {
+  const lineRe = /^\s*([a-zA-Z0-9_]+|"[^"]+")\s*:\s*\[([^\]]*)\]/gm;
+  let pm;
+  while ((pm = lineRe.exec(tsPoolBlockMatch[1])) !== null) {
+    const rawKey = pm[1].replace(/"/g, "").trim().toLowerCase();
+    const moves = pm[2]
+      .split(",")
+      .map((s) => s.replace(/"/g, "").trim())
+      .filter(Boolean);
+    if (moves.length > 0) {
+      speciesChargedPoolMap[rawKey] = moves;
+    }
+  }
+}
+const ktFallbackPoolMatch = ktSrc.match(/val FALLBACK_SPECIES_CHARGED_POOL:\s*Map<String,\s*List<String>>\s*=\s*mapOf\(([\s\S]*?)\n\s*\)/);
+if (ktFallbackPoolMatch) {
+  const ktPoolRe = /"([^"]+)"\s+to\s+listOf\(([^)]*)\)/g;
+  let km;
+  while ((km = ktPoolRe.exec(ktFallbackPoolMatch[1])) !== null) {
+    const rawKey = km[1].trim().toLowerCase();
+    const moves = km[2]
+      .split(",")
+      .map((s) => s.replace(/"/g, "").trim())
+      .filter(Boolean);
+    if (moves.length > 0 && !speciesChargedPoolMap[rawKey]) {
+      speciesChargedPoolMap[rawKey] = moves;
+    }
+  }
+}
 
 // 4. Parse POKEMON_META_DATABASE from PokemonDatabase.kt
 const speciesMap = {};
@@ -109,6 +141,8 @@ while ((m = pokeLineRegex.exec(ktSrc)) !== null) {
   const rest = m[16] || "";
   const c3Match = rest.match(/chargedMove3\s*=\s*"([^"]*)"/);
   let c3 = c3Match ? c3Match[1].trim() : "";
+  const c4Match = rest.match(/chargedMove4\s*=\s*"([^"]*)"/);
+  const c4 = c4Match ? c4Match[1].trim() : "";
 
   const rec =
     recCharged[name.toLowerCase()] ||
@@ -123,6 +157,21 @@ while ((m = pokeLineRegex.exec(ktSrc)) !== null) {
     c3 = thirdCharged[name.toLowerCase()] || thirdCharged[baseSpecies.toLowerCase()] || "";
   }
 
+  const cleanSpeciesId = speciesId.toLowerCase().replace(/_shadow$/, "");
+  const rawPool =
+    speciesChargedPoolMap[speciesId.toLowerCase()] ||
+    speciesChargedPoolMap[cleanSpeciesId] ||
+    speciesChargedPoolMap[name.toLowerCase()] ||
+    speciesChargedPoolMap[baseSpecies.toLowerCase()] ||
+    [];
+  const pool = [];
+  for (const cand of [c1, c2, c3, c4, ...rawPool]) {
+    const trimmed = (cand || "").trim();
+    if (trimmed && !pool.some((p) => p.toLowerCase() === trimmed.toLowerCase())) {
+      pool.push(trimmed);
+    }
+  }
+
   const entry = {
     name,
     speciesId,
@@ -135,6 +184,7 @@ while ((m = pokeLineRegex.exec(ktSrc)) !== null) {
     c1,
     c2,
     c3,
+    pool,
     atk,
     def,
     hp
