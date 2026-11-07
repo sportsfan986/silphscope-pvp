@@ -242,16 +242,23 @@ export default function App() {
     }
   });
   const [webVaultVisibility, setWebVaultVisibility] = useState<'starred_only' | 'all' | 'private'>('starred_only');
-  const [ghDeviceCodeInfo, setGhDeviceCodeInfo] = useState<{ user_code: string; verification_uri: string } | null>(null);
+  const [ghDeviceCodeInfo, setGhDeviceCodeInfo] = useState<{
+    device_code: string;
+    user_code: string;
+    verification_uri: string;
+  } | null>(null);
+  const ghPollTimerRef = useRef<number | null>(null);
+  const lastGhPollMsRef = useRef<number>(0);
 
-  const CLIENT_INGEST_KEY_PUBLIC = 'sspvp_telemetry_v1_9f8e7d6c5b4a3f2e1d0c';
+  const CLIENT_INGEST_KEY_PUBLIC = 'ssk_client_v615_telemetry_ingest_9f8a7b6c5d4e3f2a1b0c';
 
   const handleVerifyWebMembership = async () => {
     const cleanName = webScreenName.trim();
     const cleanKey = webUnlockKey.trim().toUpperCase();
     const cleanEmail = webClaimEmail.trim().toLowerCase();
     const cleanPw = webPassword.trim();
-    if (!cleanName) {
+    const cleanGhTok = (localStorage.getItem('gbl_sync_github_token') || localStorage.getItem('sspvp_github_token') || '').trim();
+    if (!cleanName && webAuthTab !== 'github') {
       setMembershipStatusMsg('⚠️ Enter your Trainer Screen Name first.');
       return;
     }
@@ -263,6 +270,10 @@ export default function App() {
       setMembershipStatusMsg('⚠️ Enter your Vault Password.');
       return;
     }
+    if (webAuthTab === 'github' && !cleanGhTok) {
+      await handleStartWebGitHubLogin();
+      return;
+    }
     setMembershipStatusMsg('⏳ Authenticating with SilphScope Cloud Vault...');
     try {
       const resp = await fetch('https://silphscope-telemetry.silphscope-pvp.workers.dev/v1/auth/login', {
@@ -270,13 +281,14 @@ export default function App() {
         headers: {
           'Content-Type': 'application/json',
           'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC,
-          'X-Trainer-Screen-Name': cleanName
+          'X-Trainer-Screen-Name': cleanName || 'sportsfan986'
         },
         body: JSON.stringify({
           screenName: cleanName,
           unlockKey: webAuthTab === 'token' ? cleanKey : '',
           claimEmail: webAuthTab === 'token' ? cleanEmail : '',
           password: webAuthTab === 'password' ? cleanPw : '',
+          githubToken: webAuthTab === 'github' ? cleanGhTok : '',
           deviceHash: 'web-' + (cleanName || 'browser')
         })
       });
@@ -284,6 +296,7 @@ export default function App() {
       if (data && data.ok) {
         const t = String(data.tier || 'free').toLowerCase() as 'free' | 'supporter' | 'pro' | 'vip';
         setWebMembershipTier(t);
+        if (data.screenName) setWebScreenName(data.screenName);
         localStorage.setItem('gbl_web_membership_tier_v700', t);
         localStorage.setItem('gbl_web_screen_name_v700', data.screenName || cleanName);
         if (data.sessionToken) {
@@ -308,8 +321,75 @@ export default function App() {
     }
   };
 
+  const pollWebGitHubDeviceNow = async (deviceCode: string, isManualClick = false, delayMs = 6500) => {
+    if (!deviceCode) return;
+    const now = Date.now();
+    if (!isManualClick && now - lastGhPollMsRef.current < 5200) return;
+    lastGhPollMsRef.current = now;
+    if (isManualClick) {
+      setMembershipStatusMsg('🔄 Checking GitHub authorization status...');
+    }
+    try {
+      const pollResp = await fetch('https://silphscope-telemetry.silphscope-pvp.workers.dev/v1/auth/github/poll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC },
+        body: JSON.stringify({
+          device_code: deviceCode,
+          screenName: webScreenName.trim(),
+          unlockKey: webUnlockKey.trim().toUpperCase()
+        })
+      });
+      const pollData = await pollResp.json();
+      if (pollData.status === 'pending') {
+        const nextDelay =
+          pollData.slowDown || pollData.interval
+            ? (Math.max(10, Number(pollData.interval) || 10) + 2) * 1000
+            : delayMs;
+        if (isManualClick) {
+          setMembershipStatusMsg(
+            '⏳ Still waiting for GitHub authorization. Click "Authorize" in the GitHub tab, wait 5s, and click Finish Sign-In again.'
+          );
+        }
+        if (ghPollTimerRef.current) window.clearTimeout(ghPollTimerRef.current);
+        ghPollTimerRef.current = window.setTimeout(
+          () => pollWebGitHubDeviceNow(deviceCode, false, nextDelay),
+          nextDelay
+        );
+        return;
+      }
+      if (ghPollTimerRef.current) window.clearTimeout(ghPollTimerRef.current);
+      ghPollTimerRef.current = null;
+      setGhDeviceCodeInfo(null);
+      if (pollData.ok && pollData.sessionToken) {
+        const t = String(pollData.tier || 'free').toLowerCase() as 'free' | 'supporter' | 'pro' | 'vip';
+        setWebMembershipTier(t);
+        setWebScreenName(pollData.screenName || webScreenName);
+        setWebSessionToken(pollData.sessionToken);
+        localStorage.setItem('gbl_web_membership_tier_v700', t);
+        localStorage.setItem('gbl_web_screen_name_v700', pollData.screenName || webScreenName);
+        localStorage.setItem('sspvp_vault_session', pollData.sessionToken);
+        if (pollData.githubToken) {
+          localStorage.setItem('sspvp_github_token', pollData.githubToken);
+          localStorage.setItem('gbl_sync_github_token', pollData.githubToken);
+        }
+        setMembershipStatusMsg(
+          `✅ Signed in via GitHub (@${pollData.githubUsername}) -> Trainer @${pollData.screenName} (${t.toUpperCase()})!`
+        );
+      } else {
+        setMembershipStatusMsg(`❌ ${pollData.error || 'GitHub login did not match an account.'}`);
+      }
+    } catch {
+      if (ghPollTimerRef.current) window.clearTimeout(ghPollTimerRef.current);
+      ghPollTimerRef.current = window.setTimeout(
+        () => pollWebGitHubDeviceNow(deviceCode, false, delayMs),
+        delayMs
+      );
+    }
+  };
+
   const handleStartWebGitHubLogin = async () => {
     setMembershipStatusMsg('⏳ Requesting GitHub OAuth Device Code...');
+    if (ghPollTimerRef.current) window.clearTimeout(ghPollTimerRef.current);
     try {
       const resp = await fetch('https://silphscope-telemetry.silphscope-pvp.workers.dev/v1/auth/github/device-code', {
         method: 'POST',
@@ -320,44 +400,26 @@ export default function App() {
         setMembershipStatusMsg(`❌ ${data?.error || 'Failed to start GitHub login.'}`);
         return;
       }
-      setGhDeviceCodeInfo({ user_code: data.user_code, verification_uri: data.verification_uri });
+      const codeInfo = {
+        device_code: data.device_code,
+        user_code: data.user_code,
+        verification_uri: data.verification_uri
+      };
+      setGhDeviceCodeInfo(codeInfo);
       try {
         navigator.clipboard.writeText(data.user_code);
       } catch {}
       window.open(data.verification_uri, '_blank', 'noopener');
-      setMembershipStatusMsg(`🐙 Enter code ${data.user_code} on GitHub (copied to clipboard). Waiting for authorization...`);
+      setMembershipStatusMsg(
+        `🐙 Enter code ${data.user_code} on GitHub (copied to clipboard). Auto-unlocks when you return!`
+      );
 
-      const intervalMs = Math.max(5, Number(data.interval) || 5) * 1000;
-      const timer = setInterval(async () => {
-        try {
-          const pollResp = await fetch('https://silphscope-telemetry.silphscope-pvp.workers.dev/v1/auth/github/poll', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC },
-            body: JSON.stringify({
-              device_code: data.device_code,
-              screenName: webScreenName.trim(),
-              unlockKey: webUnlockKey.trim().toUpperCase(),
-              sessionToken: webSessionToken
-            })
-          });
-          const pollData = await pollResp.json();
-          if (pollData.status === 'pending') return;
-          clearInterval(timer);
-          setGhDeviceCodeInfo(null);
-          if (pollData.ok && pollData.sessionToken) {
-            const t = String(pollData.tier || 'free').toLowerCase() as 'free' | 'supporter' | 'pro' | 'vip';
-            setWebMembershipTier(t);
-            setWebScreenName(pollData.screenName || webScreenName);
-            setWebSessionToken(pollData.sessionToken);
-            localStorage.setItem('gbl_web_membership_tier_v700', t);
-            localStorage.setItem('gbl_web_screen_name_v700', pollData.screenName || webScreenName);
-            localStorage.setItem('sspvp_vault_session', pollData.sessionToken);
-            setMembershipStatusMsg(`✅ Signed in via GitHub (@${pollData.githubUsername}) -> Trainer @${pollData.screenName} (${t.toUpperCase()})!`);
-          } else {
-            setMembershipStatusMsg(`❌ ${pollData.error || 'GitHub login did not match an account.'}`);
-          }
-        } catch {}
-      }, intervalMs);
+      const initialDelayMs = (Math.max(5, Number(data.interval) || 5) + 1.5) * 1000;
+      lastGhPollMsRef.current = Date.now();
+      ghPollTimerRef.current = window.setTimeout(
+        () => pollWebGitHubDeviceNow(data.device_code, false, initialDelayMs),
+        initialDelayMs
+      );
     } catch (e: any) {
       setMembershipStatusMsg(`⚠️ Error starting GitHub login: ${e?.message || 'offline'}`);
     }
@@ -16635,19 +16697,28 @@ export default function App() {
                     {ghDeviceCodeInfo && (
                       <div className="p-2.5 rounded-xl bg-slate-900 border border-sky-500/50 flex flex-wrap items-center justify-between gap-2 text-xs">
                         <span className="text-slate-300">
-                          One-time GitHub Code:{' '}
+                          1. Copy Code:{' '}
                           <strong className="text-sky-300 font-mono text-sm px-2 py-0.5 bg-slate-950 rounded">
                             {ghDeviceCodeInfo.user_code}
                           </strong>
                         </span>
-                        <a
-                          href={ghDeviceCodeInfo.verification_uri}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1 rounded-lg bg-emerald-600 text-white font-bold"
-                        >
-                          Open GitHub &amp; Authorize ↗
-                        </a>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <a
+                            href={ghDeviceCodeInfo.verification_uri}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1 rounded-lg bg-emerald-600 text-white font-bold"
+                          >
+                            2. Open GitHub &amp; Authorize ↗
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => pollWebGitHubDeviceNow(ghDeviceCodeInfo.device_code, true)}
+                            className="px-3 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold"
+                          >
+                            ✅ 3. I&apos;ve Authorized — Finish Sign-In
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

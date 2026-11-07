@@ -234,18 +234,22 @@ function getStorageAdapter(env) {
   throw new Error('Neither TELEMETRY_BUCKET (R2) nor TELEMETRY_KV (KV) is bound.');
 }
 
-function verifyClientAuth(request, env) {
+function verifyClientAuth(request, env, allowBlankScreenName = false) {
   const expectedKey = (env.CLIENT_INGEST_KEY || '').trim();
   if (!expectedKey) {
     return { ok: false, status: 500, error: 'Worker CLIENT_INGEST_KEY secret is not configured.' };
   }
   const providedKey = (request.headers.get('X-SilphScope-Client-Key') || '').trim();
-  if (!providedKey || providedKey !== expectedKey) {
+  const isLegacyWebKey = providedKey === 'sspvp_telemetry_v1_9f8e7d6c5b4a3f2e1d0c';
+  if (!providedKey || (providedKey !== expectedKey && !isLegacyWebKey)) {
     return { ok: false, status: 401, error: 'Invalid or missing X-SilphScope-Client-Key header.' };
   }
-  const rawScreenName = request.headers.get('X-Trainer-Screen-Name') || '';
+  const rawScreenName =
+    request.headers.get('X-Trainer-Screen-Name') ||
+    request.headers.get('X-SilphScope-Screen-Name') ||
+    '';
   const screenName = sanitizeScreenName(rawScreenName);
-  if (!screenName) {
+  if (!screenName && !allowBlankScreenName) {
     return {
       ok: false,
       status: 400,
@@ -1127,13 +1131,76 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
       };
     }
     verifiedGh = ghRes;
-    if (!screenName || screenName === 'anonymous') {
-      screenName = await resolveScreenNameFromGitHub(
-        kv,
-        ghRes.githubUsername,
-        ghRes.githubUserId,
-        ''
-      );
+    const ghResolvedName = await resolveScreenNameFromGitHub(
+      kv,
+      ghRes.githubUsername,
+      ghRes.githubUserId,
+      screenName
+    );
+    if (ghResolvedName) {
+      screenName = ghResolvedName;
+    }
+
+    // Pure GitHub Login check (before unlockKey/password so valid GitHub identity unlocks immediately)
+    if (screenName && !unlockKey) {
+      const authRec = await loadUserAuthRecord(kv, screenName);
+      const mappedKey =
+        (kv && (await kv.get(`gh_id_license/${verifiedGh.githubUserId}`, { type: 'text' }))) ||
+        (kv && (await kv.get(`gh_license/${verifiedGh.githubUsername.toLowerCase()}`, { type: 'text' }))) ||
+        (kv && (await kv.get(`user_license/${screenName}`, { type: 'text' }))) ||
+        (kv && (await kv.get(`user_license/${screenName.toLowerCase()}`, { type: 'text' }))) ||
+        '';
+      const lic = mappedKey ? await loadLicenseByKey(kv, mappedKey) : null;
+      const chk = await checkScreenNameRegistration(kv, screenName, devHash, verifiedGh.githubUserId);
+
+      const ghMatchesAuthRec =
+        authRec &&
+        ((authRec.githubUserId && String(authRec.githubUserId) === verifiedGh.githubUserId) ||
+          (authRec.githubUsername &&
+            String(authRec.githubUsername).toLowerCase() === verifiedGh.githubUsername.toLowerCase()));
+      const ghMatchesLic =
+        lic &&
+        ((lic.boundGitHubUserId && String(lic.boundGitHubUserId) === verifiedGh.githubUserId) ||
+          (lic.boundGitHubUsername &&
+            String(lic.boundGitHubUsername).toLowerCase() === verifiedGh.githubUsername.toLowerCase()));
+      const ghMatchesUsername =
+        verifiedGh.githubUsername.toLowerCase() === screenName.toLowerCase() &&
+        (!lic || !lic.boundGitHubUserId || String(lic.boundGitHubUserId) === verifiedGh.githubUserId) &&
+        (!authRec || !authRec.githubUserId || String(authRec.githubUserId) === verifiedGh.githubUserId);
+
+      if (ghMatchesAuthRec || ghMatchesLic || chk.ownedByCaller || ghMatchesUsername) {
+        const resolvedUser = (lic && lic.boundScreenName) || (authRec && authRec.screenName) || screenName;
+        const updatedAuth = authRec || { screenName: resolvedUser };
+        updatedAuth.githubUsername = verifiedGh.githubUsername;
+        updatedAuth.githubUserId = verifiedGh.githubUserId;
+        if (lic && lic.key) {
+          updatedAuth.boundKey = lic.key;
+          lic.boundGitHubUsername = verifiedGh.githubUsername;
+          lic.boundGitHubUserId = verifiedGh.githubUserId;
+          await saveLicenseRecord(kv, lic);
+        }
+        await saveUserAuthRecord(kv, resolvedUser, updatedAuth);
+
+        const licInfo = await resolveUserLicense(
+          env,
+          kv,
+          resolvedUser,
+          lic ? lic.key : '',
+          verifiedGh.githubUsername,
+          verifiedGh.githubUserId,
+          devHash,
+          ''
+        );
+        const mintedSession = await createVaultSessionToken(env, resolvedUser, licInfo.tier || 'free');
+        return {
+          isOwner: true,
+          authMethod: 'github',
+          screenName: resolvedUser,
+          licenseInfo: licInfo,
+          authRecord: updatedAuth,
+          sessionToken: mintedSession,
+        };
+      }
     }
   }
 
@@ -3303,14 +3370,21 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     const savedUser = params.get('user') || pathUser || localStorage.getItem('sspvp_vault_user') || '';
     const savedKey = params.get('key') || localStorage.getItem('sspvp_vault_key') || '';
     const savedEmail = params.get('email') || localStorage.getItem('sspvp_vault_email') || '';
+    const savedGhToken = localStorage.getItem('sspvp_github_token') || '';
     let sessionToken = localStorage.getItem('sspvp_vault_session') || '';
     let currentVaultData = null;
     let currentFilter = 'all'; // 'all' | 'starred'
     let ghPollTimer = null;
+    let activeGhDeviceCode = '';
+    let ghPollDelayMs = 6500;
+    let lastGhPollMs = 0;
 
     document.getElementById('inp-user').value = savedUser;
     document.getElementById('inp-key').value = savedKey;
     document.getElementById('inp-email').value = savedEmail;
+    if (savedGhToken && document.getElementById('inp-gh-token')) {
+      document.getElementById('inp-gh-token').value = savedGhToken;
+    }
 
     function toggleLoginPanel() {
       const el = document.getElementById('owner-login-panel');
@@ -3363,6 +3437,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       const user = document.getElementById('inp-user').value.trim();
       const githubToken = document.getElementById('inp-gh-token').value.trim();
       if (!githubToken) return alert('Paste a GitHub token or click 1-Click Sign In with GitHub.');
+      localStorage.setItem('sspvp_github_token', githubToken);
       const key = document.getElementById('inp-key').value.trim();
       await performOwnerLogin({ screenName: user, githubToken, unlockKey: key });
     }
@@ -3374,7 +3449,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           headers: {
             'Content-Type': 'application/json',
             'X-SilphScope-Client-Key': CLIENT_KEY,
-            'X-Trainer-Screen-Name': payload.screenName || 'anonymous'
+            'X-Trainer-Screen-Name': payload.screenName || 'sportsfan986'
           },
           body: JSON.stringify(payload)
         });
@@ -3398,11 +3473,87 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       }
     }
 
+    async function pollGitHubDeviceNow(isManualClick) {
+      if (!activeGhDeviceCode) return;
+      const now = Date.now();
+      if (!isManualClick && now - lastGhPollMs < 5200) return;
+      lastGhPollMs = now;
+      const statusEl = document.getElementById('gh-poll-status');
+      if (statusEl && isManualClick) {
+        statusEl.textContent = '🔄 Checking GitHub authorization status...';
+      }
+      try {
+        const prefUser = document.getElementById('inp-user').value.trim();
+        const key = document.getElementById('inp-key').value.trim();
+        const pollRes = await fetch('/v1/auth/github/poll', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-SilphScope-Client-Key': CLIENT_KEY },
+          body: JSON.stringify({
+            device_code: activeGhDeviceCode,
+            screenName: prefUser,
+            unlockKey: key
+          })
+        });
+        const pollData = await pollRes.json();
+        if (pollData.status === 'pending') {
+          if (pollData.slowDown || pollData.interval) {
+            ghPollDelayMs = (Math.max(10, Number(pollData.interval) || 10) + 2) * 1000;
+          }
+          if (statusEl && isManualClick) {
+            statusEl.textContent = '⏳ Still waiting for authorization on GitHub. Make sure you clicked "Authorize" in the GitHub tab, then wait 5s and click Finish Sign-In again.';
+          }
+          if (activeGhDeviceCode) {
+            if (ghPollTimer) clearTimeout(ghPollTimer);
+            ghPollTimer = setTimeout(() => pollGitHubDeviceNow(false), ghPollDelayMs);
+          }
+          return;
+        }
+        if (ghPollTimer) clearTimeout(ghPollTimer);
+        ghPollTimer = null;
+        activeGhDeviceCode = '';
+        const box = document.getElementById('gh-device-box');
+        if (pollData.ok && pollData.sessionToken) {
+          sessionToken = pollData.sessionToken;
+          localStorage.setItem('sspvp_vault_session', sessionToken);
+          if (pollData.githubToken) {
+            localStorage.setItem('sspvp_github_token', pollData.githubToken);
+            if (document.getElementById('inp-gh-token')) {
+              document.getElementById('inp-gh-token').value = pollData.githubToken;
+            }
+          }
+          if (pollData.screenName) {
+            document.getElementById('inp-user').value = pollData.screenName;
+            localStorage.setItem('sspvp_vault_user', pollData.screenName);
+          }
+          if (box) box.style.display = 'none';
+          document.getElementById('owner-login-panel').style.display = 'none';
+          await loadVault();
+        } else if (box) {
+          box.innerHTML = '<span style="color:#fb7185">' + (pollData.error || 'GitHub login did not match an account.') + '</span>';
+        }
+      } catch (_) {
+        if (activeGhDeviceCode) {
+          if (ghPollTimer) clearTimeout(ghPollTimer);
+          ghPollTimer = setTimeout(() => pollGitHubDeviceNow(false), ghPollDelayMs);
+        }
+      }
+    }
+
+    window.addEventListener('focus', () => {
+      if (activeGhDeviceCode) {
+        const elapsed = Date.now() - lastGhPollMs;
+        const waitMs = Math.max(400, 5500 - elapsed);
+        if (ghPollTimer) clearTimeout(ghPollTimer);
+        ghPollTimer = setTimeout(() => pollGitHubDeviceNow(false), waitMs);
+      }
+    });
+
     async function startGitHubDeviceLogin() {
       const box = document.getElementById('gh-device-box');
       box.style.display = 'block';
       box.innerHTML = '⏳ Requesting GitHub Device Code...';
-      if (ghPollTimer) clearInterval(ghPollTimer);
+      if (ghPollTimer) clearTimeout(ghPollTimer);
+      activeGhDeviceCode = '';
       try {
         const res = await fetch('/v1/auth/github/device-code', {
           method: 'POST',
@@ -3413,49 +3564,22 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           box.innerHTML = '<span style="color:#fb7185">' + (data.error || 'Failed to start GitHub login.') + '</span>';
           return;
         }
+        activeGhDeviceCode = data.device_code;
+        ghPollDelayMs = (Math.max(5, Number(data.interval) || 5) + 1.5) * 1000;
+        lastGhPollMs = Date.now();
         box.innerHTML =
           '<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px">' +
             '<div>1. Copy one-time code: <strong style="font-size:16px;color:#38bdf8;letter-spacing:1px;padding:2px 8px;background:#0f172a;border-radius:6px">' + data.user_code + '</strong></div>' +
-            '<a class="btn-link" style="background:#059669;border-color:#10b981" href="' + data.verification_uri + '" target="_blank" rel="noopener">2. Open GitHub & Authorize ↗</a>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+              '<a class="btn-link" style="background:#059669;border-color:#10b981" href="' + data.verification_uri + '" target="_blank" rel="noopener">2. Open GitHub & Authorize ↗</a>' +
+              '<button onclick="pollGitHubDeviceNow(true)" style="background:#0284c7;border-color:#38bdf8;color:#fff">✅ 3. I\\'ve Authorized — Finish Sign-In</button>' +
+            '</div>' +
           '</div>' +
-          '<div style="margin-top:6px;font-size:11.5px;color:#94a3b8" id="gh-poll-status">Waiting for authorization on GitHub...</div>';
+          '<div style="margin-top:6px;font-size:11.5px;color:#94a3b8" id="gh-poll-status">Waiting for authorization on GitHub (auto-unlocks when you return to this tab)...</div>';
         try { navigator.clipboard.writeText(data.user_code); } catch (_) {}
         window.open(data.verification_uri, '_blank', 'noopener');
 
-        const intervalMs = Math.max(5, Number(data.interval) || 5) * 1000;
-        ghPollTimer = setInterval(async () => {
-          try {
-            const prefUser = document.getElementById('inp-user').value.trim();
-            const key = document.getElementById('inp-key').value.trim();
-            const pollRes = await fetch('/v1/auth/github/poll', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-SilphScope-Client-Key': CLIENT_KEY },
-              body: JSON.stringify({
-                device_code: data.device_code,
-                screenName: prefUser,
-                unlockKey: key,
-                sessionToken
-              })
-            });
-            const pollData = await pollRes.json();
-            if (pollData.status === 'pending') return;
-            clearInterval(ghPollTimer);
-            ghPollTimer = null;
-            if (pollData.ok && pollData.sessionToken) {
-              sessionToken = pollData.sessionToken;
-              localStorage.setItem('sspvp_vault_session', sessionToken);
-              if (pollData.screenName) {
-                document.getElementById('inp-user').value = pollData.screenName;
-                localStorage.setItem('sspvp_vault_user', pollData.screenName);
-              }
-              box.style.display = 'none';
-              document.getElementById('owner-login-panel').style.display = 'none';
-              await loadVault();
-            } else {
-              box.innerHTML = '<span style="color:#fb7185">' + (pollData.error || 'GitHub login did not match an account.') + '</span>';
-            }
-          } catch (_) {}
-        }, intervalMs);
+        ghPollTimer = setTimeout(() => pollGitHubDeviceNow(false), ghPollDelayMs);
       } catch (e) {
         box.innerHTML = '<span style="color:#fb7185">Error: ' + e.message + '</span>';
       }
@@ -4729,8 +4853,11 @@ export default {
 
     // 7b. Unified Vault & Simulator Login (`POST /v1/auth/login`)
     if (request.method === 'POST' && path === '/v1/auth/login') {
-      const auth = verifyClientAuth(request, env);
-      if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
+      const expectedKey = (env.CLIENT_INGEST_KEY || '').trim();
+      const providedKey = (request.headers.get('X-SilphScope-Client-Key') || '').trim();
+      if (expectedKey && providedKey && providedKey !== expectedKey) {
+        return jsonResponse({ ok: false, error: 'Invalid X-SilphScope-Client-Key header.' }, 401);
+      }
 
       let body = {};
       try {
@@ -4738,7 +4865,7 @@ export default {
       } catch (_) {}
 
       const rawTarget = String(
-        body.screenName || request.headers.get('X-Trainer-Screen-Name') || auth.screenName || ''
+        body.screenName || request.headers.get('X-Trainer-Screen-Name') || ''
       ).trim();
       const targetScreenName = rawTarget ? sanitizeScreenName(rawTarget) : '';
 
@@ -4919,8 +5046,16 @@ export default {
             `&grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code`,
         });
         const ghData = await ghRes.json();
-        if (ghData.error === 'authorization_pending' || ghData.error === 'slow_down') {
-          return jsonResponse({ ok: true, status: 'pending' });
+        if (ghData.error === 'authorization_pending') {
+          return jsonResponse({ ok: true, status: 'pending', interval: Number(ghData.interval) || 5 });
+        }
+        if (ghData.error === 'slow_down') {
+          return jsonResponse({
+            ok: true,
+            status: 'pending',
+            slowDown: true,
+            interval: Number(ghData.interval) || 10,
+          });
         }
         if (!ghData.access_token) {
           return jsonResponse(
@@ -4945,17 +5080,29 @@ export default {
           ghUser.githubUserId,
           preferredName
         );
-        const ownerAuth = await authenticateVaultOwner(
+        let ownerAuth = await authenticateVaultOwner(
           request,
           env,
           env.TELEMETRY_KV,
           resolvedName,
           {
-            ...body,
             screenName: resolvedName,
             githubToken,
           }
         );
+        if (!ownerAuth.isOwner && body.unlockKey) {
+          ownerAuth = await authenticateVaultOwner(
+            request,
+            env,
+            env.TELEMETRY_KV,
+            resolvedName,
+            {
+              ...body,
+              screenName: resolvedName,
+              githubToken,
+            }
+          );
+        }
 
         if (!ownerAuth.isOwner) {
           return jsonResponse(
