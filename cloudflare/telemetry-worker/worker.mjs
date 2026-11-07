@@ -354,41 +354,204 @@ function escapeHtml(str) {
 const TIER_PRESETS = {
   free: {
     tier: 'free',
-    label: 'Free Tier (1 Local Video)',
+    label: 'Free / Community (1 Local Video • GL & ML 1-Team Anti-Meta)',
     maxLocalBattles: 1,
     maxRollingBattles: 0,
     maxPinnedBattles: 0,
     retentionDays: 0,
+    pinnedRetentionDays: 0,
     maxStorageMb: 0,
+    allowedLeagues: ['GREAT LEAGUE', 'MASTER LEAGUE'],
+    teamsPerArchetype: 1,
+    allowAltMovesets: false,
+    lifetimeHistory: false,
+    seasonGraceDays: 14,
+  },
+  supporter: {
+    tier: 'supporter',
+    label: 'Lifetime Supporter (Alumni • 5 Local Videos • Core 3 Leagues • Lifetime Logs)',
+    maxLocalBattles: 5,
+    maxRollingBattles: 0,
+    maxPinnedBattles: 0,
+    retentionDays: 0,
+    pinnedRetentionDays: 365,
+    maxStorageMb: 2000,
+    allowedLeagues: ['GREAT LEAGUE', 'ULTRA LEAGUE', 'MASTER LEAGUE'],
+    teamsPerArchetype: 2,
+    allowAltMovesets: false,
+    lifetimeHistory: true,
+    seasonGraceDays: 36500,
   },
   base: {
-    tier: 'base',
-    label: 'Trainer Tier (10 Battles / 7d / 500 MB + 5 Pinned)',
-    maxLocalBattles: 10,
-    maxRollingBattles: 10,
-    maxPinnedBattles: 5,
-    retentionDays: 7,
-    maxStorageMb: 500,
+    tier: 'supporter',
+    label: 'Lifetime Supporter (Alumni • 5 Local Videos • Core 3 Leagues • Lifetime Logs)',
+    maxLocalBattles: 5,
+    maxRollingBattles: 0,
+    maxPinnedBattles: 0,
+    retentionDays: 0,
+    pinnedRetentionDays: 365,
+    maxStorageMb: 2000,
+    allowedLeagues: ['GREAT LEAGUE', 'ULTRA LEAGUE', 'MASTER LEAGUE'],
+    teamsPerArchetype: 2,
+    allowAltMovesets: false,
+    lifetimeHistory: true,
+    seasonGraceDays: 36500,
   },
   pro: {
     tier: 'pro',
-    label: 'Legend Tier (50 Battles / 30d / 2 GB + 10 Pinned)',
-    maxLocalBattles: 10,
+    label: 'Legend Pro Pass ($5/mo or $10/season • 25 Local • 50 Cloud / 10 Pinned • All Cups + Alt Moves)',
+    maxLocalBattles: 25,
     maxRollingBattles: 50,
     maxPinnedBattles: 10,
     retentionDays: 30,
+    pinnedRetentionDays: 365,
     maxStorageMb: 2000,
+    allowedLeagues: ['ALL'],
+    teamsPerArchetype: 5,
+    allowAltMovesets: true,
+    lifetimeHistory: true,
+    seasonGraceDays: 36500,
   },
   vip: {
     tier: 'vip',
-    label: 'VIP / Admin Tier (150 Battles / 365d / 4 GB + 25 Pinned)',
-    maxLocalBattles: 20,
+    label: 'VIP / Coach Pass ($10/mo or $20/season • 100 Local Slider • 150 Cloud / 25 Pinned • 365d Vault)',
+    maxLocalBattles: 100,
     maxRollingBattles: 150,
     maxPinnedBattles: 25,
     retentionDays: 365,
+    pinnedRetentionDays: 365,
     maxStorageMb: 4000,
+    allowedLeagues: ['ALL'],
+    teamsPerArchetype: 5,
+    allowAltMovesets: true,
+    lifetimeHistory: true,
+    seasonGraceDays: 36500,
   },
 };
+
+const STRIPE_PAYMENT_LINKS = {
+  supporter: 'https://buy.stripe.com/dRmeVe8F36By2Dr5221Jm00',
+  pro_season: 'https://buy.stripe.com/bJe4gAg7v7FC4Lz0LM1Jm01',
+  pro_intro: 'https://buy.stripe.com/fZubJ28F32li3HvgKK1Jm02',
+  pro_monthly: 'https://buy.stripe.com/28E7sM6wV5xu5PD7aa1Jm03',
+  vip_season: 'https://buy.stripe.com/00w8wQaNbf841zngKK1Jm04',
+  vip_intro: 'https://buy.stripe.com/aFabJ29J78JG2Dr8ee1Jm05',
+  vip_monthly: 'https://buy.stripe.com/aFa7sM08x2liem9cuu1Jm06',
+};
+
+const BMC_LINKS = {
+  page: 'https://buymeacoffee.com/silphscopepvp',
+  membership: 'https://buymeacoffee.com/silphscopepvp/membership',
+  supporter: 'https://buymeacoffee.com/silphscopepvp/e/595787',
+  pro_season: 'https://buymeacoffee.com/silphscopepvp/e/595788',
+  vip_season: 'https://buymeacoffee.com/silphscopepvp/e/595789',
+};
+
+function getActiveGblSeasonWindow(nowMs = Date.now()) {
+  // Standard GBL seasons start on Dec 1, Mar 1, Jun 1, Sep 1 at 21:00 UTC (90 days each)
+  const d = new Date(nowMs);
+  const year = d.getUTCFullYear();
+  const anchors = [
+    Date.UTC(year - 1, 11, 1, 21, 0, 0),
+    Date.UTC(year, 2, 1, 21, 0, 0),
+    Date.UTC(year, 5, 1, 21, 0, 0),
+    Date.UTC(year, 8, 1, 21, 0, 0),
+    Date.UTC(year, 11, 1, 21, 0, 0),
+    Date.UTC(year + 1, 2, 1, 21, 0, 0),
+  ];
+  let startMs = anchors[0];
+  let endMs = anchors[1];
+  for (let i = 0; i < anchors.length - 1; i++) {
+    if (nowMs >= anchors[i] && nowMs < anchors[i + 1]) {
+      startMs = anchors[i];
+      endMs = anchors[i + 1];
+      break;
+    }
+  }
+  const daysElapsed = Math.max(0, Math.floor((nowMs - startMs) / 86400000));
+  const daysRemaining = Math.max(1, Math.ceil((endMs - nowMs) / 86400000));
+  const isDay15Plus = daysElapsed >= 14;
+  return {
+    startMs,
+    endMs,
+    startIso: new Date(startMs).toISOString(),
+    endIso: new Date(endMs).toISOString(),
+    daysElapsed,
+    daysRemaining,
+    isDay15Plus,
+  };
+}
+
+async function signLicensePayloadHmac(env, screenName, tier, expiresAt, everPaid) {
+  const secret = String(env.ADMIN_API_KEY || env.CLIENT_INGEST_KEY || 'sspvp_hmac_salt_v7').trim();
+  const msg = `${String(screenName || '').toLowerCase()}|${String(tier || 'free').toLowerCase()}|${String(expiresAt || 'never')}|${Boolean(everPaid)}`;
+  const enc = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sigBuf = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(msg));
+  return Array.from(new Uint8Array(sigBuf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function hasUserUsedIntroPromo(kv, { screenName = '', email = '', deviceHash = '', githubUserId = '' }) {
+  if (!kv) return false;
+  const checks = [];
+  if (screenName) checks.push(kv.get(`promo_used/user/${screenName.toLowerCase()}`, { type: 'text' }));
+  if (email) checks.push(kv.get(`promo_used/email/${email.toLowerCase()}`, { type: 'text' }));
+  if (deviceHash) checks.push(kv.get(`promo_used/dev/${deviceHash.toLowerCase()}`, { type: 'text' }));
+  if (githubUserId) checks.push(kv.get(`promo_used/gh/${githubUserId}`, { type: 'text' }));
+  const results = await Promise.all(checks);
+  return results.some(Boolean);
+}
+
+async function markUserIntroPromoUsed(kv, { screenName = '', email = '', deviceHash = '', githubUserId = '', key = '' }) {
+  if (!kv) return;
+  const stamp = JSON.stringify({ usedAt: new Date().toISOString(), key, screenName, email });
+  const puts = [];
+  if (screenName) puts.push(kv.put(`promo_used/user/${screenName.toLowerCase()}`, stamp));
+  if (email) puts.push(kv.put(`promo_used/email/${email.toLowerCase()}`, stamp));
+  if (deviceHash) puts.push(kv.put(`promo_used/dev/${deviceHash.toLowerCase()}`, stamp));
+  if (githubUserId) puts.push(kv.put(`promo_used/gh/${githubUserId}`, stamp));
+  await Promise.all(puts);
+}
+
+async function checkScreenNameRegistration(kv, screenName, deviceHash = '', githubUserId = '') {
+  if (!kv || !screenName) return { available: false, ownedByCaller: false, record: null };
+  const cleanName = sanitizeScreenName(screenName);
+  const rawReg = await kv.get(`registered_user/${cleanName.toLowerCase()}`, { type: 'text' });
+  const existingLicKey = await kv.get(`user_license/${cleanName}`, { type: 'text' }) ||
+    await kv.get(`user_license/${cleanName.toLowerCase()}`, { type: 'text' });
+  let lic = existingLicKey ? await loadLicenseByKey(kv, existingLicKey) : null;
+
+  if (!rawReg && !lic) {
+    return { available: true, ownedByCaller: false, record: null };
+  }
+  let reg = null;
+  try {
+    if (rawReg) reg = JSON.parse(rawReg);
+  } catch (_) {}
+
+  const cleanDev = String(deviceHash || '').trim().toLowerCase();
+  const cleanGhId = String(githubUserId || '').trim();
+
+  const matchesRegDev = cleanDev && reg && reg.deviceHash && String(reg.deviceHash).toLowerCase() === cleanDev;
+  const matchesRegGh = cleanGhId && reg && reg.githubUserId && String(reg.githubUserId) === cleanGhId;
+  const matchesLicDev = cleanDev && lic && lic.boundDeviceHash && String(lic.boundDeviceHash).toLowerCase() === cleanDev;
+  const matchesLicGh = cleanGhId && lic && lic.boundGitHubUserId && String(lic.boundGitHubUserId) === cleanGhId;
+
+  const ownedByCaller = Boolean(matchesRegDev || matchesRegGh || matchesLicDev || matchesLicGh);
+  return {
+    available: ownedByCaller,
+    ownedByCaller,
+    record: reg || (lic ? { screenName: lic.boundScreenName, boundKey: lic.key } : null),
+  };
+}
 
 function generateUnlockKey(tier = 'base', prefix = 'SSPVP') {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -449,20 +612,40 @@ async function saveLicenseRecord(kv, lic) {
   const cleanKey = String(lic.key).trim().toUpperCase();
   lic.key = cleanKey;
   await kv.put(`licenses/${cleanKey}`, JSON.stringify(lic, null, 2));
-  if (lic.boundScreenName) {
+  if (lic.boundScreenName && !lic.screenNameConflict) {
     await kv.put(`user_license/${lic.boundScreenName}`, cleanKey);
+    await kv.put(`user_license/${lic.boundScreenName.toLowerCase()}`, cleanKey);
   }
   if (lic.boundGitHubUsername) {
     await kv.put(`gh_license/${String(lic.boundGitHubUsername).toLowerCase()}`, cleanKey);
   }
+  if (lic.supporterEmail) {
+    await kv.put(`email_license/${String(lic.supporterEmail).trim().toLowerCase()}`, cleanKey);
+  }
 }
 
-async function resolveUserLicense(kv, screenName, providedKey = '', githubUsername = '', githubUserId = '') {
-  if (!kv) return { ...TIER_PRESETS.free, active: false, key: '' };
+async function resolveUserLicense(
+  env,
+  kv,
+  screenName,
+  providedKey = '',
+  githubUsername = '',
+  githubUserId = '',
+  deviceHash = '',
+  claimEmail = ''
+) {
+  if (!kv) {
+    const sig = await signLicensePayloadHmac(env, screenName, 'free', null, false);
+    return { ...TIER_PRESETS.free, active: false, key: '', everPaid: false, signature: sig };
+  }
   let lic = null;
   const cleanProvided = String(providedKey || '').trim().toUpperCase();
   const cleanGhUser = String(githubUsername || '').trim().toLowerCase();
   const cleanGhId = String(githubUserId || '').trim();
+  const cleanDev = String(deviceHash || '').trim().toLowerCase();
+  const cleanEmail = String(claimEmail || '').trim().toLowerCase();
+
+  // 1. Explicit Unlock Key provided
   if (cleanProvided) {
     lic = await loadLicenseByKey(kv, cleanProvided);
     if (!lic) {
@@ -470,117 +653,230 @@ async function resolveUserLicense(kv, screenName, providedKey = '', githubUserna
         ...TIER_PRESETS.free,
         active: false,
         key: '',
+        everPaid: false,
         error: 'Invalid Unlock Key. Check the key and try again.',
       };
     }
-    if (lic.revoked) {
-      return {
-        ...TIER_PRESETS.free,
-        active: false,
-        key: '',
-        error: 'This Unlock Key has been revoked.',
-      };
-    }
-    if (lic.expiresAt && new Date(lic.expiresAt).getTime() < Date.now()) {
-      return {
-        ...TIER_PRESETS.free,
-        active: false,
-        key: lic.key,
-        expired: true,
-        expiresAt: lic.expiresAt,
-        error: `This Unlock Key expired on ${lic.expiresAt.slice(0, 10)}.`,
-      };
-    }
-    const isSameGhOwner =
-      (cleanGhId && lic.boundGitHubUserId && String(lic.boundGitHubUserId) === cleanGhId) ||
-      (cleanGhUser && lic.boundGitHubUsername && String(lic.boundGitHubUsername).toLowerCase() === cleanGhUser);
-    if (
-      lic.boundGitHubUsername &&
-      cleanGhUser &&
-      String(lic.boundGitHubUsername).toLowerCase() !== cleanGhUser &&
-      (!cleanGhId || !lic.boundGitHubUserId || String(lic.boundGitHubUserId) !== cleanGhId)
-    ) {
-      return {
-        ...TIER_PRESETS.free,
-        active: false,
-        key: '',
-        error: `This Unlock Key is bound to another GitHub account (@${lic.boundGitHubUsername}).`,
-      };
-    }
-    if (
-      !isSameGhOwner &&
-      lic.boundScreenName &&
-      screenName &&
-      lic.boundScreenName.toLowerCase() !== screenName.toLowerCase()
-    ) {
-      return {
-        ...TIER_PRESETS.free,
-        active: false,
-        key: '',
-        error: `This Unlock Key is already bound to another Debug ID (@${lic.boundScreenName}).`,
-      };
-    }
-    let updatedBinding = false;
-    if (screenName && !lic.boundScreenName) {
-      lic.boundScreenName = screenName;
-      lic.activatedAt = lic.activatedAt || new Date().toISOString();
-      updatedBinding = true;
-    }
-    if (cleanGhUser && !lic.boundGitHubUsername) {
-      lic.boundGitHubUsername = cleanGhUser;
-      updatedBinding = true;
-    }
-    if (cleanGhId && !lic.boundGitHubUserId) {
-      lic.boundGitHubUserId = cleanGhId;
-      updatedBinding = true;
-    }
-    if (updatedBinding) {
-      await saveLicenseRecord(kv, lic);
-    } else {
-      if (screenName) await kv.put(`user_license/${screenName}`, lic.key);
-      if (cleanGhUser) await kv.put(`gh_license/${cleanGhUser}`, lic.key);
-    }
   } else {
-    if (screenName) {
-      const mappedKey = await kv.get(`user_license/${screenName}`, { type: 'text' });
-      if (mappedKey) {
-        lic = await loadLicenseByKey(kv, mappedKey);
-      }
-    }
-    if (!lic && cleanGhUser) {
+    // 2. Anti-Spoofing: NEVER look up by screenName alone when providedKey is blank!
+    // Only allow lookup by authenticated GitHub identity OR matching Checkout Email + Screen Name claim.
+    if (cleanGhUser) {
       const ghMappedKey = await kv.get(`gh_license/${cleanGhUser}`, { type: 'text' });
       if (ghMappedKey) {
         lic = await loadLicenseByKey(kv, ghMappedKey);
       }
     }
+    if (!lic && cleanEmail) {
+      const emailMappedKey = await kv.get(`email_license/${cleanEmail}`, { type: 'text' });
+      if (emailMappedKey) {
+        const candidate = await loadLicenseByKey(kv, emailMappedKey);
+        if (candidate && !candidate.revoked) {
+          // Verify either screenName matches checkout note OR buyer is resolving a screenNameConflict with a new available name
+          const chk = await checkScreenNameRegistration(kv, screenName, cleanDev, cleanGhId);
+          if (
+            !candidate.boundScreenName ||
+            candidate.boundScreenName.toLowerCase() === String(screenName || '').toLowerCase() ||
+            (candidate.screenNameConflict && chk.available)
+          ) {
+            candidate.boundScreenName = screenName;
+            candidate.screenNameConflict = false;
+            lic = candidate;
+          }
+        }
+      }
+    }
+    // 3. Also allow lookup if screenName is bound AND caller proves ownership via boundDeviceHash or boundGitHubUserId
+    if (!lic && screenName && (cleanDev || cleanGhId)) {
+      const mappedKey =
+        (await kv.get(`user_license/${screenName}`, { type: 'text' })) ||
+        (await kv.get(`user_license/${screenName.toLowerCase()}`, { type: 'text' }));
+      if (mappedKey) {
+        const candidate = await loadLicenseByKey(kv, mappedKey);
+        if (
+          candidate &&
+          ((cleanDev && candidate.boundDeviceHash && String(candidate.boundDeviceHash).toLowerCase() === cleanDev) ||
+            (cleanGhId && candidate.boundGitHubUserId && String(candidate.boundGitHubUserId) === cleanGhId))
+        ) {
+          lic = candidate;
+        }
+      }
+    }
   }
 
-  if (!lic || lic.revoked) {
-    return { ...TIER_PRESETS.free, active: false, key: '' };
+  if (!lic) {
+    const sig = await signLicensePayloadHmac(env, screenName, 'free', null, false);
+    return { ...TIER_PRESETS.free, active: false, key: '', everPaid: false, signature: sig };
   }
-  if (lic.expiresAt && new Date(lic.expiresAt).getTime() < Date.now()) {
+
+  if (lic.revoked) {
     return {
       ...TIER_PRESETS.free,
       active: false,
-      key: lic.key,
-      expired: true,
-      expiresAt: lic.expiresAt,
+      key: '',
+      everPaid: false,
+      error: 'This Unlock Key has been revoked.',
     };
   }
 
-  const preset = TIER_PRESETS[lic.tier] || TIER_PRESETS.base;
+  const isSameGhOwner =
+    (cleanGhId && lic.boundGitHubUserId && String(lic.boundGitHubUserId) === cleanGhId) ||
+    (cleanGhUser && lic.boundGitHubUsername && String(lic.boundGitHubUsername).toLowerCase() === cleanGhUser);
+  const isSameEmailOwner =
+    cleanEmail && lic.supporterEmail && String(lic.supporterEmail).trim().toLowerCase() === cleanEmail;
+  const isSameDeviceOwner =
+    cleanDev && lic.boundDeviceHash && String(lic.boundDeviceHash).toLowerCase() === cleanDev;
+
+  if (
+    lic.boundGitHubUsername &&
+    cleanGhUser &&
+    String(lic.boundGitHubUsername).toLowerCase() !== cleanGhUser &&
+    (!cleanGhId || !lic.boundGitHubUserId || String(lic.boundGitHubUserId) !== cleanGhId) &&
+    !isSameEmailOwner
+  ) {
+    return {
+      ...TIER_PRESETS.free,
+      active: false,
+      key: '',
+      everPaid: false,
+      error: `This Unlock Key is bound to another GitHub account (@${lic.boundGitHubUsername}).`,
+    };
+  }
+
+  if (
+    !isSameGhOwner &&
+    !isSameEmailOwner &&
+    !isSameDeviceOwner &&
+    lic.boundScreenName &&
+    screenName &&
+    lic.boundScreenName.toLowerCase() !== screenName.toLowerCase()
+  ) {
+    // Allow if the key had a screenNameConflict and the user is supplying the key to claim a new available screenName
+    const chk = await checkScreenNameRegistration(kv, screenName, cleanDev, cleanGhId);
+    if (lic.screenNameConflict && chk.available) {
+      lic.boundScreenName = screenName;
+      lic.screenNameConflict = false;
+    } else {
+      return {
+        ...TIER_PRESETS.free,
+        active: false,
+        key: '',
+        everPaid: false,
+        error: `This Unlock Key is already bound to another Trainer ID (@${lic.boundScreenName}). Enter your Checkout Email if resolving a duplicate name.`,
+      };
+    }
+  }
+
+  // If the key's boundScreenName had a conflict at checkout, require the user to pick an available screenName before binding
+  if (lic.screenNameConflict && screenName) {
+    const chk = await checkScreenNameRegistration(kv, screenName, cleanDev, cleanGhId);
+    if (!chk.available) {
+      return {
+        ...TIER_PRESETS.free,
+        active: false,
+        key: lic.key,
+        screenNameConflict: true,
+        error: `Trainer ID '@${screenName}' is already registered by another device. Please change your Trainer ID in Settings to a unique name and tap Verify again.`,
+      };
+    }
+    lic.boundScreenName = screenName;
+    lic.screenNameConflict = false;
+  }
+
+  let updatedBinding = false;
+  if (screenName && !lic.boundScreenName) {
+    const chk = await checkScreenNameRegistration(kv, screenName, cleanDev, cleanGhId);
+    if (!chk.available) {
+      return {
+        ...TIER_PRESETS.free,
+        active: false,
+        key: lic.key,
+        screenNameConflict: true,
+        error: `Trainer ID '@${screenName}' is already taken by another player. Choose a unique Trainer ID first.`,
+      };
+    }
+    lic.boundScreenName = screenName;
+    lic.activatedAt = lic.activatedAt || new Date().toISOString();
+    updatedBinding = true;
+  }
+  if (cleanGhUser && !lic.boundGitHubUsername) {
+    lic.boundGitHubUsername = cleanGhUser;
+    updatedBinding = true;
+  }
+  if (cleanGhId && !lic.boundGitHubUserId) {
+    lic.boundGitHubUserId = cleanGhId;
+    updatedBinding = true;
+  }
+  if (cleanDev && !lic.boundDeviceHash) {
+    lic.boundDeviceHash = cleanDev;
+    updatedBinding = true;
+  }
+  if (!lic.everPaid) {
+    lic.everPaid = true;
+    updatedBinding = true;
+  }
+
+  if (updatedBinding) {
+    await saveLicenseRecord(kv, lic);
+    if (screenName) {
+      await kv.put(
+        `registered_user/${screenName.toLowerCase()}`,
+        JSON.stringify({
+          screenName,
+          deviceHash: cleanDev || lic.boundDeviceHash || '',
+          githubUserId: cleanGhId || lic.boundGitHubUserId || '',
+          boundKey: lic.key,
+          registeredAt: new Date().toISOString(),
+        })
+      );
+    }
+  }
+
+  // Check if Pro/VIP subscription expired -> Graduate to Lifetime Supporter (Alumni) instead of Free!
+  const isExpired = Boolean(lic.expiresAt && new Date(lic.expiresAt).getTime() < Date.now());
+  if (isExpired && lic.tier !== 'supporter' && lic.tier !== 'base') {
+    const alumniPreset = TIER_PRESETS.supporter;
+    const sig = await signLicensePayloadHmac(env, lic.boundScreenName || screenName, 'supporter', null, true);
+    return {
+      ...alumniPreset,
+      tier: 'supporter',
+      label: alumniPreset.label,
+      key: lic.key,
+      active: true,
+      everPaid: true,
+      alumniFromTier: lic.tier,
+      expired: true,
+      expiresAt: lic.expiresAt,
+      boundScreenName: lic.boundScreenName || screenName || '',
+      signature: sig,
+    };
+  }
+
+  const normalizedTier = lic.tier === 'base' ? 'supporter' : lic.tier || 'supporter';
+  const preset = TIER_PRESETS[normalizedTier] || TIER_PRESETS.supporter;
+  const sig = await signLicensePayloadHmac(
+    env,
+    lic.boundScreenName || screenName,
+    preset.tier,
+    lic.expiresAt || null,
+    true
+  );
+
   return {
-    tier: lic.tier || preset.tier,
+    ...preset,
+    tier: preset.tier,
     label: lic.label || preset.label,
     key: lic.key,
     active: true,
+    everPaid: true,
     boundScreenName: lic.boundScreenName || screenName || '',
     maxLocalBattles: Number(lic.maxLocalBattles ?? preset.maxLocalBattles),
     maxRollingBattles: Number(lic.maxRollingBattles ?? preset.maxRollingBattles),
     maxPinnedBattles: Number(lic.maxPinnedBattles ?? preset.maxPinnedBattles),
     retentionDays: Number(lic.retentionDays ?? preset.retentionDays),
+    pinnedRetentionDays: Number(lic.pinnedRetentionDays ?? preset.pinnedRetentionDays ?? 365),
     maxStorageMb: Number(lic.maxStorageMb ?? preset.maxStorageMb),
     expiresAt: lic.expiresAt || null,
+    signature: sig,
   };
 }
 
@@ -627,15 +923,18 @@ async function deleteReplayObjects(env, kv, item) {
 
 async function enforceUserReplayQuota(env, kv, screenName, license, indexObj, incomingBytes = 0) {
   const nowMs = Date.now();
-  const maxRetentionMs = (Number(license.retentionDays) || 7) * 24 * 60 * 60 * 1000;
-  const maxStorageBytes = (Number(license.maxStorageMb) || 500) * 1024 * 1024;
-  const maxRolling = Number(license.maxRollingBattles) || 10;
+  const maxRetentionMs = Math.max(0, Number(license.retentionDays ?? 0)) * 24 * 60 * 60 * 1000;
+  const maxPinnedRetentionMs = Math.max(0, Number(license.pinnedRetentionDays ?? 365)) * 24 * 60 * 60 * 1000;
+  const maxStorageBytes = Math.max(0, Number(license.maxStorageMb ?? 0)) * 1024 * 1024;
+  const maxRolling = Math.max(0, Number(license.maxRollingBattles ?? 0));
 
   const kept = [];
-  // 1. Prune expired unpinned items
+  // 1. Prune expired items (pinned items use maxPinnedRetentionMs = 365d for Alumni/Pro/VIP; unpinned use maxRetentionMs)
   for (const item of indexObj.items) {
     const uploadedMs = item.uploadedAt ? new Date(item.uploadedAt).getTime() : nowMs;
-    const isExpired = !item.isPinned && nowMs - uploadedMs > maxRetentionMs;
+    const isExpired = item.isPinned
+      ? maxPinnedRetentionMs <= 0 || nowMs - uploadedMs > maxPinnedRetentionMs
+      : maxRetentionMs <= 0 || nowMs - uploadedMs > maxRetentionMs;
     if (isExpired) {
       await deleteReplayObjects(env, kv, item);
     } else {
@@ -2494,8 +2793,22 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
   <div class="container">
     <div class="login-card">
       <input id="inp-user" type="text" placeholder="Trainer / Debug ID (e.g. sportsfan986)" />
-      <input id="inp-key" type="password" placeholder="Optional Unlock Key (auto-bound if already verified)" />
+      <input id="inp-key" type="password" placeholder="Unlock Key (SSPVP-PRO-XXXX-XXXX)" />
+      <input id="inp-email" type="email" placeholder="Or Checkout Email (to claim / resolve ID)" style="max-width:240px" />
       <button class="primary" onclick="loadVault()">🔓 Load My Cloud Replays</button>
+    </div>
+
+    <div class="login-card" style="justify-content:space-between;background:rgba(15,23,42,0.65);font-size:12px;color:#cbd5e1">
+      <div>
+        <strong>⚡ Upgrade or Renew Season Pass:</strong>
+        <span style="color:#94a3b8;margin-left:6px">First 14 days of GBL Season = Full Season ($10 Pro / $20 VIP). Day 15+ First-Time Promo = 1-Month Rate ($5 Pro / $10 VIP) for the entire remainder of the season!</span>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <a class="btn-link" style="background:#0284c7;border-color:#38bdf8" href="${STRIPE_PAYMENT_LINKS.supporter}" target="_blank" rel="noopener">🏅 Supporter ($3)</a>
+        <a class="btn-link" style="background:#059669;border-color:#10b981" href="${STRIPE_PAYMENT_LINKS.pro_season}" target="_blank" rel="noopener">💳 Stripe Pro Pass</a>
+        <a class="btn-link" style="background:#7c3aed;border-color:#a78bfa" href="${STRIPE_PAYMENT_LINKS.vip_season}" target="_blank" rel="noopener">👑 Stripe VIP Pass</a>
+        <a class="btn-link" style="background:#d97706;border-color:#f59e0b" href="${BMC_LINKS.page}" target="_blank" rel="noopener">☕ Buy Me a Coffee</a>
+      </div>
     </div>
 
     <div class="stats-bar" id="stats-bar" style="display:none"></div>
@@ -2505,17 +2818,22 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
   <script>
     const CLIENT_KEY = ${JSON.stringify(clientIngestKey || '')};
     const params = new URLSearchParams(window.location.search);
-    const savedUser = params.get('user') || localStorage.getItem('sspvp_vault_user') || 'sportsfan986';
+    const savedUser = params.get('user') || localStorage.getItem('sspvp_vault_user') || '';
     const savedKey = params.get('key') || localStorage.getItem('sspvp_vault_key') || '';
+    const savedEmail = params.get('email') || localStorage.getItem('sspvp_vault_email') || '';
     document.getElementById('inp-user').value = savedUser;
     document.getElementById('inp-key').value = savedKey;
+    document.getElementById('inp-email').value = savedEmail;
 
     async function loadVault() {
       const user = document.getElementById('inp-user').value.trim();
       const key = document.getElementById('inp-key').value.trim();
+      const email = document.getElementById('inp-email').value.trim();
       if (!user) return alert('Enter your Trainer / Debug ID first.');
+      if (!key && !email) return alert('Enter your Unlock Key (or Checkout Email) to authenticate your Cloud Replay Vault.');
       localStorage.setItem('sspvp_vault_user', user);
       if (key) localStorage.setItem('sspvp_vault_key', key);
+      if (email) localStorage.setItem('sspvp_vault_email', email);
 
       const grid = document.getElementById('replays-grid');
       grid.innerHTML = '<div style="color:#94a3b8;padding:20px">Loading Cloud Replay Vault...</div>';
@@ -2525,7 +2843,8 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           headers: {
             'X-SilphScope-Client-Key': CLIENT_KEY,
             'X-Trainer-Screen-Name': user,
-            'X-SilphScope-Unlock-Key': key
+            'X-SilphScope-Unlock-Key': key,
+            'X-Claim-Email': email
           }
         });
         const data = await res.json();
@@ -2572,15 +2891,17 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     async function togglePin(battleId, nextPinned) {
       const user = document.getElementById('inp-user').value.trim();
       const key = document.getElementById('inp-key').value.trim();
+      const email = document.getElementById('inp-email').value.trim();
       await fetch('/v1/replays/pin', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-SilphScope-Client-Key': CLIENT_KEY,
           'X-Trainer-Screen-Name': user,
-          'X-SilphScope-Unlock-Key': key
+          'X-SilphScope-Unlock-Key': key,
+          'X-Claim-Email': email
         },
-        body: JSON.stringify({ battleId, isPinned: nextPinned, unlockKey: key })
+        body: JSON.stringify({ battleId, isPinned: nextPinned, unlockKey: key, claimEmail: email })
       });
       loadVault();
     }
@@ -2590,7 +2911,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       alert('Copied Share URL: ' + url);
     }
 
-    if (savedUser) loadVault();
+    if (savedUser && (savedKey || savedEmail)) loadVault();
   </script>
 </body>
 </html>`;
@@ -2608,7 +2929,7 @@ export default {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
           'Access-Control-Allow-Headers':
-            'Content-Type, Authorization, X-SilphScope-Client-Key, X-Trainer-Screen-Name, X-SilphScope-Unlock-Key, Range',
+            'Content-Type, Authorization, X-SilphScope-Client-Key, X-Trainer-Screen-Name, X-SilphScope-Unlock-Key, X-Device-Hash, X-Claim-Email, X-GitHub-Username, X-GitHub-User-Id, Range',
           'Access-Control-Expose-Headers': 'Content-Range, Accept-Ranges, Content-Length',
         },
       });
@@ -2994,8 +3315,23 @@ export default {
       const ghId = String(
         body.githubUserId || request.headers.get('X-GitHub-User-Id') || ''
       ).trim();
+      const devHash = String(
+        body.deviceHash || request.headers.get('X-Device-Hash') || ''
+      ).trim();
+      const claimEmail = String(
+        body.claimEmail || body.email || request.headers.get('X-Claim-Email') || ''
+      ).trim();
 
-      const licenseInfo = await resolveUserLicense(env.TELEMETRY_KV, screenName, inputKey, ghUser, ghId);
+      const licenseInfo = await resolveUserLicense(
+        env,
+        env.TELEMETRY_KV,
+        screenName,
+        inputKey,
+        ghUser,
+        ghId,
+        devHash,
+        claimEmail
+      );
       const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, screenName);
       const usage = await enforceUserReplayQuota(
         env,
@@ -3006,16 +3342,35 @@ export default {
       );
       await saveUserReplayIndex(env.TELEMETRY_KV, screenName, indexObj);
       const globalStats = await getGlobalR2Stats(env.TELEMETRY_KV);
+      const seasonWindow = getActiveGblSeasonWindow();
+      const introUsed = await hasUserUsedIntroPromo(env.TELEMETRY_KV, {
+        screenName,
+        email: claimEmail,
+        deviceHash: devHash,
+        githubUserId: ghId,
+      });
 
       return jsonResponse({
         ok: true,
         screenName,
         tier: licenseInfo.tier,
         active: licenseInfo.active,
+        everPaid: Boolean(licenseInfo.everPaid),
+        signature: licenseInfo.signature || '',
+        screenNameConflict: Boolean(licenseInfo.screenNameConflict),
         error: licenseInfo.error || null,
         license: licenseInfo,
         limits: licenseInfo,
         usage,
+        seasonPromo: {
+          ...seasonWindow,
+          introPromoEligible: seasonWindow.isDay15Plus && !introUsed,
+          introPromoAlreadyUsed: introUsed,
+        },
+        paymentLinks: {
+          stripe: STRIPE_PAYMENT_LINKS,
+          bmc: BMC_LINKS,
+        },
         globalR2: {
           usedMb: Number((globalStats.totalBytes / (1024 * 1024)).toFixed(2)),
           maxGb: Number(env.GLOBAL_MAX_R2_STORAGE_GB) || 9.0,
@@ -3024,8 +3379,148 @@ export default {
       });
     }
 
-    // 6. Buy Me a Coffee Automated Key Webhook (`POST /v1/webhooks/bmc`)
-    if (request.method === 'POST' && path === '/v1/webhooks/bmc') {
+    // 5b. Pre-Checkout Unique Screen Name Registration & Dupe Check (`POST /v1/users/register-name`)
+    if (request.method === 'POST' && path === '/v1/users/register-name') {
+      const auth = verifyClientAuth(request, env);
+      if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
+
+      let body = {};
+      try {
+        body = await request.json();
+      } catch (_) {}
+
+      const desiredName = sanitizeScreenName(body.screenName || auth.screenName || '');
+      const devHash = String(body.deviceHash || request.headers.get('X-Device-Hash') || '').trim();
+      const ghId = String(body.githubUserId || request.headers.get('X-GitHub-User-Id') || '').trim();
+      const email = String(body.email || '').trim().toLowerCase();
+
+      if (!desiredName || desiredName === 'anonymous' || desiredName.length < 3) {
+        return jsonResponse(
+          {
+            ok: false,
+            available: false,
+            error: 'Please enter a unique Trainer ID (at least 3 characters, not "anonymous").',
+          },
+          400
+        );
+      }
+
+      const chk = await checkScreenNameRegistration(env.TELEMETRY_KV, desiredName, devHash, ghId);
+      if (!chk.available) {
+        return jsonResponse({
+          ok: true,
+          available: false,
+          ownedByCaller: false,
+          screenName: desiredName,
+          error: `Trainer ID '@${desiredName}' is already registered by another player. Please choose a unique Trainer ID before purchasing.`,
+        });
+      }
+
+      if (env.TELEMETRY_KV && (devHash || ghId)) {
+        await env.TELEMETRY_KV.put(
+          `registered_user/${desiredName.toLowerCase()}`,
+          JSON.stringify({
+            screenName: desiredName,
+            deviceHash: devHash,
+            githubUserId: ghId,
+            email,
+            registeredAt: new Date().toISOString(),
+          })
+        );
+      }
+
+      const seasonWindow = getActiveGblSeasonWindow();
+      const introUsed = await hasUserUsedIntroPromo(env.TELEMETRY_KV, {
+        screenName: desiredName,
+        email,
+        deviceHash: devHash,
+        githubUserId: ghId,
+      });
+
+      return jsonResponse({
+        ok: true,
+        available: true,
+        ownedByCaller: true,
+        screenName: desiredName,
+        seasonPromo: {
+          ...seasonWindow,
+          introPromoEligible: seasonWindow.isDay15Plus && !introUsed,
+          introPromoAlreadyUsed: introUsed,
+        },
+        paymentLinks: {
+          stripe: STRIPE_PAYMENT_LINKS,
+          bmc: BMC_LINKS,
+        },
+      });
+    }
+
+    // 5c. Dynamic Season Pass / Intro Promo Checkout Quote (`POST /v1/users/checkout-quote`)
+    if ((request.method === 'POST' || request.method === 'GET') && path === '/v1/users/checkout-quote') {
+      let body = {};
+      if (request.method === 'POST') {
+        try {
+          body = await request.json();
+        } catch (_) {}
+      }
+      const screenName = sanitizeScreenName(
+        body.screenName || url.searchParams.get('screenName') || request.headers.get('X-Trainer-Screen-Name') || ''
+      );
+      const email = String(body.email || url.searchParams.get('email') || '').trim().toLowerCase();
+      const devHash = String(body.deviceHash || url.searchParams.get('deviceHash') || '').trim();
+      const ghId = String(body.githubUserId || url.searchParams.get('githubUserId') || '').trim();
+
+      const seasonWindow = getActiveGblSeasonWindow();
+      const introUsed = await hasUserUsedIntroPromo(env.TELEMETRY_KV, {
+        screenName,
+        email,
+        deviceHash: devHash,
+        githubUserId: ghId,
+      });
+      const introEligible = seasonWindow.isDay15Plus && !introUsed;
+
+      return jsonResponse({
+        ok: true,
+        screenName,
+        seasonWindow,
+        introPromoEligible: introEligible,
+        introPromoAlreadyUsed: introUsed,
+        recommendedLinks: {
+          supporter: {
+            priceUsd: 3,
+            label: 'Lifetime Supporter ($3 One-Time • 5 Local Videos + Core 3 Leagues + Lifetime Logs)',
+            stripeUrl: `${STRIPE_PAYMENT_LINKS.supporter}?client_reference_id=${encodeURIComponent(screenName)}`,
+            bmcUrl: BMC_LINKS.supporter,
+          },
+          pro: {
+            priceUsd: introEligible ? 5 : 10,
+            isIntroPromo: introEligible,
+            label: introEligible
+              ? `Legend Pro First-Season Intro Promo ($5 for Remainder of GBL Season • ${seasonWindow.daysRemaining}d left)`
+              : 'Legend Pro 90-Day GBL Season Pass ($10 / Season)',
+            stripeUrl: `${introEligible ? STRIPE_PAYMENT_LINKS.pro_intro : STRIPE_PAYMENT_LINKS.pro_season}?client_reference_id=${encodeURIComponent(screenName)}`,
+            stripeMonthlyUrl: `${STRIPE_PAYMENT_LINKS.pro_monthly}?client_reference_id=${encodeURIComponent(screenName)}`,
+            bmcUrl: introEligible ? BMC_LINKS.membership : BMC_LINKS.pro_season,
+          },
+          vip: {
+            priceUsd: introEligible ? 10 : 20,
+            isIntroPromo: introEligible,
+            label: introEligible
+              ? `VIP / Coach First-Season Intro Promo ($10 for Remainder of GBL Season • ${seasonWindow.daysRemaining}d left)`
+              : 'VIP / Coach 90-Day GBL Season Pass ($20 / Season)',
+            stripeUrl: `${introEligible ? STRIPE_PAYMENT_LINKS.vip_intro : STRIPE_PAYMENT_LINKS.vip_season}?client_reference_id=${encodeURIComponent(screenName)}`,
+            stripeMonthlyUrl: `${STRIPE_PAYMENT_LINKS.vip_monthly}?client_reference_id=${encodeURIComponent(screenName)}`,
+            bmcUrl: introEligible ? BMC_LINKS.membership : BMC_LINKS.vip_season,
+          },
+        },
+        paymentLinks: {
+          stripe: STRIPE_PAYMENT_LINKS,
+          bmc: BMC_LINKS,
+        },
+      });
+    }
+
+    // 6. Buy Me a Coffee & Stripe Automated Key Webhooks (`POST /v1/webhooks/bmc` & `POST /v1/webhooks/stripe`)
+    if (request.method === 'POST' && (path === '/v1/webhooks/bmc' || path === '/v1/webhooks/stripe')) {
       let body = {};
       try {
         body = await request.json();
@@ -3033,24 +3528,136 @@ export default {
         return jsonResponse({ ok: false, error: 'Invalid JSON payload' }, 400);
       }
 
-      const data = body.data || body || {};
-      const amount = Number(data.amount || data.support_coffee_price || 0);
-      const levelName = String(data.membership_level_name || data.title || '').toLowerCase();
-      const supporterName = String(data.supporter_name || data.payer_name || 'Supporter').trim();
-      const supporterEmail = String(data.supporter_email || data.payer_email || '').trim();
-      const supportNote = String(data.support_note || data.message || '').trim();
+      const isStripe = path === '/v1/webhooks/stripe';
+      let amount = 0;
+      let levelName = '';
+      let supporterName = 'Trainer';
+      let supporterEmail = '';
+      let supportNote = '';
+      let rawScreenNameCandidate = '';
 
-      const tier =
-        amount >= 8 || levelName.includes('pro') || levelName.includes('legend') ? 'pro' : 'base';
-      const preset = TIER_PRESETS[tier];
+      if (isStripe) {
+        const eventType = String(body.type || '');
+        if (
+          eventType &&
+          !eventType.includes('checkout.session.completed') &&
+          !eventType.includes('invoice.paid')
+        ) {
+          return jsonResponse({ ok: true, ignored: true, eventType });
+        }
+        const obj = (body.data && body.data.object) || body || {};
+        amount = Number(obj.amount_total ?? obj.amount_paid ?? 0) / 100;
+        supporterEmail = String(
+          (obj.customer_details && obj.customer_details.email) || obj.customer_email || ''
+        )
+          .trim()
+          .toLowerCase();
+        supporterName = String(
+          (obj.customer_details && obj.customer_details.name) || supporterEmail || 'Stripe Supporter'
+        ).trim();
+        const customFields = Array.isArray(obj.custom_fields) ? obj.custom_fields : [];
+        for (const cf of customFields) {
+          const val = cf && cf.text && cf.text.value ? String(cf.text.value).trim() : '';
+          if (val) {
+            rawScreenNameCandidate = val;
+            break;
+          }
+        }
+        if (!rawScreenNameCandidate && obj.client_reference_id) {
+          rawScreenNameCandidate = String(obj.client_reference_id).trim();
+        }
+        levelName = String((obj.metadata && obj.metadata.tier) || '').toLowerCase();
+        supportNote = `Stripe ${eventType || 'checkout'} ($${amount.toFixed(2)})`;
+      } else {
+        const data = body.data || body || {};
+        amount = Number(data.amount || data.support_coffee_price || 0);
+        levelName = String(data.membership_level_name || data.title || data.extra_title || '').toLowerCase();
+        supporterName = String(data.supporter_name || data.payer_name || 'Supporter').trim();
+        supporterEmail = String(data.supporter_email || data.payer_email || '').trim().toLowerCase();
+        supportNote = String(data.support_note || data.message || '').trim();
+        const idMatch = supportNote.match(/(?:trainer|id|user|name|@)\s*[:=-]?\s*([A-Za-z0-9_.-]{3,36})/i);
+        if (idMatch && idMatch[1]) {
+          rawScreenNameCandidate = idMatch[1];
+        } else if (/^[A-Za-z0-9_.-]{3,28}$/.test(supportNote)) {
+          rawScreenNameCandidate = supportNote;
+        } else if (supporterName && /^[A-Za-z0-9_.-]{3,28}$/.test(supporterName)) {
+          rawScreenNameCandidate = supporterName;
+        }
+      }
+
+      const boundScreenName = rawScreenNameCandidate ? sanitizeScreenName(rawScreenNameCandidate) : '';
+      const seasonWindow = getActiveGblSeasonWindow();
+      const alreadyUsedPromo = await hasUserUsedIntroPromo(env.TELEMETRY_KV, {
+        screenName: boundScreenName,
+        email: supporterEmail,
+      });
+
+      let tier = 'supporter';
+      let isSeasonPass = false;
+      let isIntroPromo = false;
+
+      if (amount >= 18 || levelName.includes('vip') || levelName.includes('coach')) {
+        tier = 'vip';
+        isSeasonPass = true;
+      } else if (
+        amount >= 9.5 &&
+        (levelName.includes('vip') || levelName.includes('coach'))
+      ) {
+        tier = 'vip';
+        if (seasonWindow.isDay15Plus && !alreadyUsedPromo) {
+          isSeasonPass = true;
+          isIntroPromo = true;
+        }
+      } else if (amount >= 9.5 || (levelName.includes('season') && !levelName.includes('vip'))) {
+        tier = 'pro';
+        isSeasonPass = true;
+      } else if (amount >= 4.5 || levelName.includes('pro') || levelName.includes('legend')) {
+        tier = 'pro';
+        if (seasonWindow.isDay15Plus && !alreadyUsedPromo) {
+          isSeasonPass = true;
+          isIntroPromo = true;
+        }
+      } else {
+        tier = 'supporter';
+      }
+
+      const preset = TIER_PRESETS[tier] || TIER_PRESETS.supporter;
       const newKey = generateUnlockKey(tier);
       const now = new Date();
-      const expiresAt = new Date(now.getTime() + 35 * 24 * 3600 * 1000).toISOString();
+      let expiresAt = null;
+      if (tier === 'supporter') {
+        expiresAt = null; // Lifetime Supporter never expires!
+      } else if (isSeasonPass) {
+        // Unlocks remainder of current GBL season + 7-day buffer (or full 95 days if purchased in Days 1-14)
+        const seasonEndBufferMs = seasonWindow.endMs + 7 * 86400000;
+        const min35DaysMs = now.getTime() + 35 * 86400000;
+        const full95DaysMs = now.getTime() + 95 * 86400000;
+        expiresAt = new Date(
+          isIntroPromo ? Math.max(seasonEndBufferMs, min35DaysMs) : Math.max(seasonEndBufferMs, full95DaysMs)
+        ).toISOString();
+      } else {
+        expiresAt = new Date(now.getTime() + 35 * 24 * 3600 * 1000).toISOString();
+      }
 
-      let boundScreenName = '';
-      const idMatch = supportNote.match(/(?:trainer|id|user|name)\s*[:=-]?\s*([A-Za-z0-9_.-]{3,36})/i);
-      if (idMatch && idMatch[1]) {
-        boundScreenName = sanitizeScreenName(idMatch[1]);
+      // Check if boundScreenName collides with an existing registered user
+      let screenNameConflict = false;
+      if (boundScreenName) {
+        const chk = await checkScreenNameRegistration(env.TELEMETRY_KV, boundScreenName, '', '');
+        if (!chk.available) {
+          const existingRec = chk.record;
+          const existingLic = existingRec && existingRec.boundKey
+            ? await loadLicenseByKey(env.TELEMETRY_KV, existingRec.boundKey)
+            : null;
+          const sameEmail =
+            supporterEmail &&
+            ((existingRec && existingRec.email && existingRec.email.toLowerCase() === supporterEmail) ||
+              (existingLic &&
+                existingLic.supporterEmail &&
+                existingLic.supporterEmail.toLowerCase() === supporterEmail));
+          if (!sameEmail) {
+            screenNameConflict = true;
+          }
+        }
       }
 
       const licenseRecord = {
@@ -3058,34 +3665,51 @@ export default {
         tier,
         label: preset.label,
         boundScreenName,
+        screenNameConflict,
+        everPaid: true,
+        isIntroPromo,
         supporterName,
         supporterEmail,
         supportNote,
         createdAt: now.toISOString(),
         expiresAt,
         revoked: false,
-        source: 'bmc_webhook',
+        source: isStripe ? 'stripe_webhook' : 'bmc_webhook',
       };
 
       await saveLicenseRecord(env.TELEMETRY_KV, licenseRecord);
+      if (isIntroPromo) {
+        await markUserIntroPromoUsed(env.TELEMETRY_KV, {
+          screenName: boundScreenName,
+          email: supporterEmail,
+          key: newKey,
+        });
+      }
 
       ctx.waitUntil(
         sendTelegramMessage(
           env,
-          `☕ <b>New Buy Me a Coffee Replay Key Minted!</b>\n` +
-            `👤 <b>Supporter:</b> ${escapeHtml(supporterName)} (${escapeHtml(supporterEmail || 'no-email')})\n` +
+          `${isStripe ? '💳 <b>New Stripe' : '☕ <b>New Buy Me a Coffee'} Unlock Key Minted!</b>\n` +
+            `👤 <b>Trainer:</b> ${escapeHtml(supporterName)} (${escapeHtml(supporterEmail || 'no-email')})\n` +
+            `💵 <b>Amount:</b> $${amount.toFixed(2)}${isIntroPromo ? ' (Day 15+ First-Season Promo!)' : ''}\n` +
             `🏅 <b>Tier:</b> <code>${escapeHtml(preset.label)} (${tier.toUpperCase()})</code>\n` +
             `🔑 <b>Unlock Key:</b> <code>${escapeHtml(newKey)}</code>\n` +
-            (boundScreenName ? `🎮 <b>Auto-Bound Trainer ID:</b> <code>${escapeHtml(boundScreenName)}</code>\n` : '') +
+            `⏳ <b>Expires:</b> <code>${escapeHtml(expiresAt ? expiresAt.slice(0, 10) : 'LIFETIME')}</code>\n` +
+            (boundScreenName
+              ? `🎮 <b>Trainer ID:</b> <code>${escapeHtml(boundScreenName)}</code>${screenNameConflict ? ' ⚠️ (DUPLICATE ID — Buyer can change ID in-app via Email Claim)' : ''}\n`
+              : '') +
             (supportNote ? `💬 <b>Note:</b> ${escapeHtml(supportNote)}` : '')
         )
       );
 
       return jsonResponse({
         ok: true,
+        source: licenseRecord.source,
         tier,
         unlockKey: newKey,
         boundScreenName: boundScreenName || null,
+        screenNameConflict,
+        isIntroPromo,
         expiresAt,
       });
     }
@@ -3148,13 +3772,28 @@ export default {
         const inputKey = String(
           metadata.unlockKey || request.headers.get('X-SilphScope-Unlock-Key') || ''
         ).trim();
-        const licenseInfo = await resolveUserLicense(env.TELEMETRY_KV, screenName, inputKey);
-        if (!licenseInfo.active || licenseInfo.tier === 'free') {
+        const devHash = String(
+          metadata.deviceHash || request.headers.get('X-Device-Hash') || ''
+        ).trim();
+        const licenseInfo = await resolveUserLicense(
+          env,
+          env.TELEMETRY_KV,
+          screenName,
+          inputKey,
+          '',
+          '',
+          devHash,
+          ''
+        );
+        if (!licenseInfo.active || licenseInfo.tier === 'free' || licenseInfo.tier === 'supporter') {
           return jsonResponse(
             {
               ok: false,
-              error: 'Active Replay Unlock Key required for Cloud R2 Replay Vault storage.',
-              tier: 'free',
+              error:
+                licenseInfo.tier === 'supporter'
+                  ? 'Lifetime Supporter retains past pinned cloud replays for 365 days, plus 5 local on-device videos. Upgrade to Legend Pro ($5/mo or $10/season) for new Cloud R2 Replay Vault uploads.'
+                  : 'Active Legend Pro or VIP Unlock Key required for Cloud R2 Replay Vault uploads.',
+              tier: licenseInfo.tier,
             },
             403
           );
@@ -3292,7 +3931,30 @@ export default {
       const { screenName } = auth;
 
       const inputKey = String(request.headers.get('X-SilphScope-Unlock-Key') || '').trim();
-      const licenseInfo = await resolveUserLicense(env.TELEMETRY_KV, screenName, inputKey);
+      const devHash = String(request.headers.get('X-Device-Hash') || '').trim();
+      const claimEmail = String(request.headers.get('X-Claim-Email') || '').trim();
+      const licenseInfo = await resolveUserLicense(
+        env,
+        env.TELEMETRY_KV,
+        screenName,
+        inputKey,
+        '',
+        '',
+        devHash,
+        claimEmail
+      );
+      if (!licenseInfo.active) {
+        return jsonResponse(
+          {
+            ok: false,
+            error:
+              licenseInfo.error ||
+              'Enter your Unlock Key (or Checkout Email) to view and manage your Cloud Replay Vault.',
+            tier: 'free',
+          },
+          403
+        );
+      }
       const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, screenName);
       const usage = await enforceUserReplayQuota(
         env,
@@ -3334,7 +3996,21 @@ export default {
 
       const targetBattleId = String(body.battleId || '').trim();
       const targetShareId = String(body.shareId || '').trim();
-      const licenseInfo = await resolveUserLicense(env.TELEMETRY_KV, screenName, body.unlockKey || '');
+      const devHash = String(body.deviceHash || request.headers.get('X-Device-Hash') || '').trim();
+      const claimEmail = String(body.claimEmail || request.headers.get('X-Claim-Email') || '').trim();
+      const licenseInfo = await resolveUserLicense(
+        env,
+        env.TELEMETRY_KV,
+        screenName,
+        body.unlockKey || request.headers.get('X-SilphScope-Unlock-Key') || '',
+        '',
+        '',
+        devHash,
+        claimEmail
+      );
+      if (!licenseInfo.active) {
+        return jsonResponse({ ok: false, error: 'Unlock Key required to modify Cloud Vault items.' }, 403);
+      }
       const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, screenName);
 
       const item = (indexObj.items || []).find(
@@ -3541,21 +4217,28 @@ export default {
         const action = String(body.action || 'create').toLowerCase();
 
         if (action === 'create') {
-          const tier = ['base', 'pro', 'vip'].includes(String(body.tier || '').toLowerCase())
-            ? String(body.tier).toLowerCase()
+          const rawTier = String(body.tier || '').toLowerCase();
+          const tier = ['supporter', 'base', 'pro', 'vip'].includes(rawTier)
+            ? rawTier === 'base'
+              ? 'supporter'
+              : rawTier
             : 'pro';
           const preset = TIER_PRESETS[tier];
           const key = body.customKey ? String(body.customKey).trim().toUpperCase() : generateUnlockKey(tier);
           const boundScreenName = body.screenName ? sanitizeScreenName(body.screenName) : '';
-          const days = Number(body.days) || (tier === 'vip' ? 3650 : 35);
+          const days = Number(body.days) || (tier === 'supporter' ? 36500 : tier === 'vip' ? 95 : 95);
           const now = new Date();
-          const expiresAt = new Date(now.getTime() + days * 24 * 3600 * 1000).toISOString();
+          const expiresAt =
+            tier === 'supporter' && !body.days
+              ? null
+              : new Date(now.getTime() + days * 24 * 3600 * 1000).toISOString();
 
           const record = {
             key,
             tier,
             label: preset.label,
             boundScreenName,
+            everPaid: true,
             note: String(body.note || ''),
             createdAt: now.toISOString(),
             expiresAt,

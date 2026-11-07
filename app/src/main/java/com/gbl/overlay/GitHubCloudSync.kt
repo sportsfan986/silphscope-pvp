@@ -2516,7 +2516,41 @@ internal fun OverlayService.Companion.saveReplayVaultMapStatic(
 internal fun OverlayService.Companion.getEffectiveReplayTierStatic(prefs: SharedPreferences): String {
     val screenName = getRequiredScreenNameStatic(prefs).trim()
     if (screenName.equals("sportsfan986", ignoreCase = true)) return "vip"
-    return (prefs.getString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, "free") ?: "free").lowercase()
+    val unlockKey = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
+    val rawTier = (prefs.getString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, "free") ?: "free").lowercase()
+    val everPaid = prefs.getBoolean(OverlayService.PREFS_KEY_REPLAY_EVER_PAID, false)
+    val expiresAtStr = prefs.getString(OverlayService.PREFS_KEY_REPLAY_EXPIRES_AT, "")?.trim().orEmpty()
+
+    // Anti-Spoofing: If no unlock key and never verified via key/claim, default to free
+    if (unlockKey.isEmpty() && !everPaid && rawTier != "free") {
+        return "free"
+    }
+
+    // Check offline expiration: if Pro/VIP expired locally, automatically graduate to "supporter" (Alumni)
+    if (expiresAtStr.isNotEmpty() && (rawTier == "pro" || rawTier == "vip")) {
+        try {
+            val expMs = java.time.Instant.parse(expiresAtStr).toEpochMilli()
+            if (expMs < System.currentTimeMillis()) {
+                return "supporter"
+            }
+        } catch (_: Exception) {}
+    }
+
+    return when (rawTier) {
+        "vip" -> "vip"
+        "pro" -> "pro"
+        "supporter", "base" -> "supporter"
+        else -> if (everPaid) "supporter" else "free"
+    }
+}
+
+internal fun OverlayService.Companion.getMaxLocalDvrBattlesForTierStatic(prefs: SharedPreferences): Int {
+    return when (getEffectiveReplayTierStatic(prefs)) {
+        "vip" -> prefs.getInt(OverlayService.PREFS_KEY_VIP_LOCAL_DVR_LIMIT, OverlayService.DEFAULT_VIP_LOCAL_DVR_LIMIT).coerceIn(25, 100)
+        "pro" -> 25
+        "supporter" -> 5
+        else -> 1
+    }
 }
 
 internal fun OverlayService.Companion.enforceLocalDvrReplaysQuotaStatic(
@@ -2527,8 +2561,13 @@ internal fun OverlayService.Companion.enforceLocalDvrReplaysQuotaStatic(
     val replaysDir = File(filesDir, "dvr_replays")
     if (!replaysDir.exists()) return
     val tier = getEffectiveReplayTierStatic(prefs)
-    val maxUnpinnedLocal = if (tier == "free") 1 else 10
-    val maxLocalBytes = if (tier == "free") 60L * 1024L * 1024L else 300L * 1024L * 1024L
+    val maxUnpinnedLocal = getMaxLocalDvrBattlesForTierStatic(prefs)
+    val maxLocalBytes = when (tier) {
+        "vip" -> 3000L * 1024L * 1024L
+        "pro" -> 800L * 1024L * 1024L
+        "supporter" -> 200L * 1024L * 1024L
+        else -> 60L * 1024L * 1024L
+    }
     val vaultMap = loadReplayVaultMapStatic(prefs, gson)
 
     val mp4Files = (replaysDir.listFiles { f -> f.isFile && f.name.endsWith("_video.mp4") }?.toList() ?: emptyList())
@@ -2573,10 +2612,77 @@ internal fun OverlayService.Companion.enforceLocalDvrReplaysQuotaStatic(
     }
 }
 
+internal fun OverlayService.Companion.registerUniqueScreenNameBlocking(
+    prefs: SharedPreferences,
+    gson: Gson,
+    desiredScreenName: String,
+    email: String = ""
+): Pair<Boolean, String> {
+    return try {
+        val cleanName = sanitizeScreenNameStatic(desiredScreenName)
+        if (cleanName.isEmpty()) {
+            return false to "⚠️ Enter a valid Trainer ID (3–24 letters/numbers, not 'anonymous')."
+        }
+        val devHash = getDeviceTelemetryHashStatic(prefs)
+        val ghToken = getEffectiveSyncToken(prefs)
+        val ghId = if (ghToken.isNotEmpty()) prefs.getString(PREFS_KEY_SYNC_GITHUB_USER_ID, "")?.trim().orEmpty() else ""
+        val httpClient = buildTelemetryHttpClientStatic(12L, 20L, 15L)
+        val reqBody = gson.toJson(
+            mapOf(
+                "screenName" to cleanName,
+                "deviceHash" to devHash,
+                "githubUserId" to ghId,
+                "email" to email.trim()
+            )
+        ).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+        val req = Request.Builder()
+            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/users/register-name")
+            .post(reqBody)
+            .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
+            .header("X-Trainer-Screen-Name", cleanName)
+            .header("X-Device-Hash", devHash)
+            .build()
+
+        httpClient.newCall(req).execute().use { resp ->
+            val bodyStr = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful && bodyStr.isBlank()) {
+                return false to "⚠️ Registration check failed (HTTP ${resp.code})"
+            }
+            val root = JsonParser.parseString(bodyStr).asJsonObject
+            val available = root.get("available")?.asBoolean ?: false
+            val err = root.get("error")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+            if (!available) {
+                return false to (err.ifBlank { "⚠️ '@$cleanName' is already registered by another player." })
+            }
+            prefs.edit()
+                .putString(PREFS_KEY_USER_SCREEN_NAME, cleanName)
+                .putBoolean(PREFS_KEY_IS_RANDOM_SCREEN_NAME, false)
+                .putString(PREFS_KEY_SCREEN_NAME_REGISTERED_V700, cleanName)
+                .apply {
+                    if (email.isNotBlank()) putString(PREFS_KEY_CLAIM_EMAIL, email.trim())
+                }
+                .apply()
+
+            val promoObj = root.get("seasonPromo")?.takeIf { it.isJsonObject }?.asJsonObject
+            val introEligible = promoObj?.get("introPromoEligible")?.asBoolean ?: false
+            val daysLeft = promoObj?.get("daysRemaining")?.asInt ?: 0
+            val promoNote = if (introEligible) {
+                " • 🎉 Eligible for Day 15+ First-Season Promo ($5 Pro / $10 VIP for remaining ${daysLeft}d of season)!"
+            } else {
+                " • Ready for Season Pass / Supporter checkout."
+            }
+            true to "✅ '@$cleanName' verified & locked to your device!$promoNote"
+        }
+    } catch (e: Exception) {
+        false to "⚠️ Name check error: ${e.localizedMessage ?: "Network error"}"
+    }
+}
+
 internal fun OverlayService.Companion.verifyReplayUnlockKeyBlocking(
     prefs: SharedPreferences,
     gson: Gson,
-    inputKey: String = ""
+    inputKey: String = "",
+    claimEmail: String = ""
 ): Pair<Boolean, String> {
     return try {
         val devHash = getDeviceTelemetryHashStatic(prefs)
@@ -2589,7 +2695,14 @@ internal fun OverlayService.Companion.verifyReplayUnlockKeyBlocking(
         val ghUser = if (ghToken.isNotEmpty()) prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty() else ""
         val ghId = if (ghToken.isNotEmpty()) prefs.getString(OverlayService.PREFS_KEY_SYNC_GITHUB_USER_ID, "")?.trim().orEmpty() else ""
         val httpClient = buildTelemetryHttpClientStatic(15L, 25L, 20L)
-        val reqMap = mutableMapOf<String, Any>("unlockKey" to keyToUse)
+        val emailToUse = claimEmail.trim().ifEmpty {
+            prefs.getString(OverlayService.PREFS_KEY_CLAIM_EMAIL, "")?.trim().orEmpty()
+        }
+        val reqMap = mutableMapOf<String, Any>(
+            "unlockKey" to keyToUse,
+            "deviceHash" to devHash
+        )
+        if (emailToUse.isNotEmpty()) reqMap["claimEmail"] = emailToUse
         if (ghUser.isNotEmpty()) reqMap["githubUsername"] = ghUser
         if (ghId.isNotEmpty()) reqMap["githubUserId"] = ghId
         val reqBody = gson.toJson(reqMap)
@@ -2600,6 +2713,8 @@ internal fun OverlayService.Companion.verifyReplayUnlockKeyBlocking(
             .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
             .header("X-Trainer-Screen-Name", safeUser)
             .header("X-SilphScope-Unlock-Key", keyToUse)
+            .header("X-Device-Hash", devHash)
+        if (emailToUse.isNotEmpty()) reqBuilder.header("X-Claim-Email", emailToUse)
         if (ghUser.isNotEmpty()) reqBuilder.header("X-GitHub-Username", ghUser)
         if (ghId.isNotEmpty()) reqBuilder.header("X-GitHub-User-Id", ghId)
         val req = reqBuilder.build()
@@ -2610,36 +2725,53 @@ internal fun OverlayService.Companion.verifyReplayUnlockKeyBlocking(
                 return false to "Verification failed (HTTP ${resp.code})"
             }
             val root = JsonParser.parseString(bodyStr).asJsonObject
-            val tier = root.get("tier")?.asString?.lowercase() ?: "free"
+            val rawTier = root.get("tier")?.asString?.lowercase() ?: "free"
+            val tier = if (rawTier == "base") "supporter" else rawTier
             val active = root.get("active")?.asBoolean ?: false
+            val everPaid = root.get("everPaid")?.asBoolean ?: (active && tier != "free")
+            val sig = root.get("signature")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
             val err = root.get("error")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
             val licObj = root.get("license")?.takeIf { it.isJsonObject }?.asJsonObject
             val resolvedKey = licObj?.get("key")?.takeIf { !it.isJsonNull }?.asString?.ifBlank { keyToUse } ?: keyToUse
+            val expiresAt = licObj?.get("expiresAt")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
             val label = licObj?.get("label")?.takeIf { !it.isJsonNull }?.asString ?: tier.uppercase()
 
             val prevKey = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
             val newKeyVal = if (active) resolvedKey else keyToUse
             val editor = prefs.edit()
                 .putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, newKeyVal)
-                .putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, if (active) tier else "free")
+                .putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, if (active) tier else if (everPaid) "supporter" else "free")
+                .putBoolean(OverlayService.PREFS_KEY_REPLAY_EVER_PAID, everPaid)
+                .putString(OverlayService.PREFS_KEY_REPLAY_EXPIRES_AT, expiresAt)
+                .putString(OverlayService.PREFS_KEY_REPLAY_OFFLINE_SIG, sig)
                 .putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_JSON, bodyStr)
+            if (emailToUse.isNotEmpty()) {
+                editor.putString(OverlayService.PREFS_KEY_CLAIM_EMAIL, emailToUse)
+            }
             if (newKeyVal.isNotEmpty() && newKeyVal != prevKey) {
                 editor.putLong(PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
             }
             editor.apply()
 
             if (active && tier != "free") {
-                syncCloudReplayListBlocking(prefs, gson)
-                val syncNote = if (ghUser.isNotEmpty()) " • 🔒 Synced via @$ghUser" else ""
+                if (tier == "pro" || tier == "vip") {
+                    syncCloudReplayListBlocking(prefs, gson)
+                }
+                val syncNote = if (ghUser.isNotEmpty()) " • 🔒 Synced via @$ghUser" else " • 📴 Offline-Ready"
                 true to "✅ Active Tier: $label (@$safeUser$syncNote)"
             } else if (err.isNotBlank()) {
                 false to "⚠️ $err"
             } else {
-                true to "ℹ️ Free Tier active (1 Local Replay + Manual Issue Reports)"
+                true to "ℹ️ Free Tier active (1 Local Replay + GL/ML 1-Team Anti-Meta)"
             }
         }
     } catch (e: Exception) {
-        false to "⚠️ License check failed: ${e.localizedMessage ?: "Network error"}"
+        val cachedTier = getEffectiveReplayTierStatic(prefs)
+        if (cachedTier != "free") {
+            true to "📴 Offline Mode — Cached ${cachedTier.uppercase()} tier active"
+        } else {
+            false to "⚠️ License check failed: ${e.localizedMessage ?: "Network error"}"
+        }
     }
 }
 
@@ -2718,8 +2850,12 @@ internal fun OverlayService.Companion.uploadBattleReplayToR2VaultIfUnlockedBlock
 ): Triple<Boolean, String, OverlayService.Companion.ReplayVaultEntryMeta?> {
     return try {
         val tier = getEffectiveReplayTierStatic(prefs)
-        if (tier == "free") {
-            return Triple(false, "Free tier (local replay only)", null)
+        if (tier == "free" || tier == "supporter") {
+            return Triple(
+                false,
+                if (tier == "supporter") "Supporter tier (5 local replays + 365d pinned retention)" else "Free tier (1 local replay only)",
+                null
+            )
         }
         if (!isDvrUploadAllowedOnCurrentNetworkStatic(prefs)) {
             return Triple(false, "📶 DVR saved locally (Wi-Fi Only mode — enable Mobile Data Upload in Settings to upload on cellular)", null)

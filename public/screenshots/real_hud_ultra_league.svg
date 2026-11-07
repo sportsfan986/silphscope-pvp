@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 520" width="100%" height="100%">
+  <defs>
+    <style>
+      .overlay-bg { fill: rgba(15, 23, 42, 0.94); stroke: #334155; stroke-width: 1.5; rx: 12; }
+      .header-title { font-family: sans-serif; font-weight: 800; font-size: 13px; fill: #facc15; }
+      .btn { fill: #334155; rx: 4; }
+      .btn-active { fill: #0284c7; rx: 4; }
+      .btn-txt { font-family: sans-serif; font-size: 10px; font-weight: 700; fill: #ffffff; text-anchor: middle; }
+      .row-txt { font-family: sans-serif; font-size: 11px; fill: #f1f5f9; font-weight: 600; }
+      .cell-green { fill: #166534; rx: 3; }
+      .cell-blue { fill: #1e3a8a; rx: 3; }
+      .cell-red { fill: #991b1b; rx: 3; }
+      .cell-orange { fill: #c2410c; rx: 3; }
+      .val-txt { font-family: monospace; font-size: 10px; font-weight: 700; fill: #ffffff; text-anchor: middle; }
+    </style>
+  </defs>
+
+  <!-- Overlay Container -->
+  <rect x="10" y="10" width="480" height="500" class="overlay-bg" />
+
+  <!-- Top Title Bar -->
+  <g transform="translate(20, 25)">
+    <text x="0" y="12" class="header-title">✖ VS AMPHAROS</text>
+    <text x="140" y="12" font-family="monospace" font-size="11px" fill="#94a3b8">(4t Volt Switch)</text>
+  </g>
+
+  <!-- Buttons -->
+  <g transform="translate(20, 48)">
+    <rect x="0" y="0" width="80" height="22" class="btn" />
+    <text x="40" y="14" class="btn-txt" fill="#fca5a5">↺ Reset Opp</text>
+
+    <rect x="86" y="0" width="80" height="22" class="btn" />
+    <text x="126" y="14" class="btn-txt">Shadow: OFF</text>
+
+    <rect x="172" y="0" width="75" height="22" class="btn-active" />
+    <text x="209" y="14" class="btn-txt">Form: Base</text>
+
+    <rect x="253" y="0" width="60" height="22" class="btn" />
+    <text x="283" y="14" class="btn-txt">Zygard</text>
+
+    <rect x="318" y="0" width="60" height="22" class="btn" />
+    <text x="348" y="14" class="btn-txt">Corvik</text>
+
+    <rect x="383" y="0" width="65" height="22" class="btn-active" />
+    <text x="415" y="14" class="btn-txt">Mimiky</text>
+  </g>
+
+  <!-- Matrix Grid -->
+  <g transform="translate(20, 82)">
+    <text x="0" y="16" class="row-txt">Ampharos</text>
+    <text x="120" y="16" font-family="monospace" font-size="11px" fill="#cbd5e1">Z: 🟢 🟢 🟢 | C: 🔴 🔴 ❌ | M: ⚪ ⚪ ⚪</text>
+
+    <text x="0" y="36" class="row-txt">Rillaboom</text>
+    <text x="120" y="36" font-family="monospace" font-size="11px" fill="#cbd5e1">Z: ⚪ ⚪ ⚪ | C: 🟢 🟢 🟢 | M: ❌ ❌ ⚪</text>
+
+    <text x="0" y="56" class="row-txt">Feraligatr</text>
+    <text x="120" y="56" font-family="monospace" font-size="11px" fill="#cbd5e1">Z: 🟢 🟢 🟢 | C: ⚪ ⚪ ⚪ | M: ⚪ ⚪ ⚪</text>
+  </g>
+
+  <!-- Opponent Attacks -->
+  <!-- Brutal Swing -->
+  <g transform="translate(20, 155)">
+    <text x="0" y="15" class="row-txt">Brutal.</text>
+    <text x="42" y="15" font-family="monospace" font-size="10px" fill="#cbd5e1">(40e 28% on Mim)</text>
+    <rect x="150" y="2" width="100" height="18" class="cell-green" />
+    <text x="200" y="15" class="val-txt">1-5 SAFE (Odd)</text>
+
+    <rect x="256" y="2" width="60" height="18" class="cell-orange" />
+    <text x="286" y="15" class="val-txt">#6 CATCH</text>
+
+    <text x="325" y="15" font-family="monospace" font-size="10px" fill="#38bdf8">Zyg:12% Tank</text>
+    <text x="400" y="15" font-family="monospace" font-size="10px" fill="#38bdf8">Cor:20% Tank</text>
+  </g>
+
+  <!-- Trailblaze -->
+  <g transform="translate(20, 185)">
+    <text x="0" y="15" class="row-txt">Trailbl.</text>
+    <text x="42" y="15" font-family="monospace" font-size="10px" fill="#cbd5e1">(45e 28% on Mim)</text>
+    <rect x="150" y="2" width="100" height="18" class="cell-green" />
+    <text x="200" y="15" class="val-txt">1-5 SAFE (Odd)</text>
+
+    <rect x="256" y="2" width="60" height="18" class="cell-orange" />
+    <text x="286" y="15" class="val-txt">#6 CATCH</text>
+
+    <text x="325" y="15" font-family="monospace" font-size="10px" fill="#38bdf8">Zyg:12% Tank</text>
+    <text x="400" y="15" font-family="monospace" font-size="10px" fill="#38bdf8">Cor:8% 2xRes</text>
+  </g>
+
+  <!-- Focus Blast -->
+  <g transform="translate(20, 215)">
+    <text x="0" y="15" class="row-txt">Foc.Blst</text>
+    <text x="48" y="15" font-family="monospace" font-size="10px" fill="#cbd5e1">(75e 16% on Mim)</text>
+    <rect x="150" y="2" width="100" height="18" class="cell-green" />
+    <text x="200" y="15" class="val-txt">1-9 SAFE (Odd)</text>
+
+    <rect x="256" y="2" width="65" height="18" class="cell-orange" />
+    <text x="288" y="15" class="val-txt">#10 CATCH</text>
+
+    <text x="328" y="15" font-family="monospace" font-size="10px" fill="#38bdf8">Zyg:26% Tank</text>
+    <text x="400" y="15" font-family="monospace" font-size="10px" fill="#38bdf8">Cor:46%</text>
+  </g>
+
+  <!-- My Move Timing -->
+  <g transform="translate(20, 255)">
+    <text x="0" y="15" font-family="sans-serif" font-weight="700" font-size="11px" fill="#ef4444">❌ Mim (2t) → Amp:</text>
+    <text x="125" y="15" font-family="sans-serif" font-weight="700" font-size="11px" fill="#22c55e">Play.Rgh (47%)</text>
+    <text x="230" y="15" font-family="sans-serif" font-weight="700" font-size="11px" fill="#38bdf8">| Shd.Snk (26%)</text>
+    <rect x="350" y="2" width="65" height="18" fill="#ef4444" rx="3" />
+    <text x="382" y="15" class="btn-txt">CMP LOSS</text>
+  </g>
+</svg>

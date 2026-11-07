@@ -3246,7 +3246,9 @@ internal fun OverlayService.Companion.computeRoleWeightedTop100MetaStatic(
 internal fun OverlayService.Companion.generateAntiMetaTeamOptionsStatic(
     league: String,
     featuredPokemonNames: List<String>,
-    seasonLogs: List<Pair<Long, List<String>>> = emptyList()
+    seasonLogs: List<Pair<Long, List<String>>> = emptyList(),
+    maxTeamsPerArchetype: Int = 5,
+    allowAltMovesets: Boolean = true
 ): AntiMetaTeamBuilderResult {
     val t0 = System.currentTimeMillis()
     val normLeague = normalizeLeagueKeyStatic(league)
@@ -4127,14 +4129,24 @@ internal fun OverlayService.Companion.generateAntiMetaTeamOptionsStatic(
             altSlots
         )
         val coreDelta = finalTeam.machineAggBr - baseTeam.machineAggBr
-        return finalTeam.copy(
-            id = option.id,
-            altMovesetSlots = altSlots.map { a ->
-                if (a.isAltMoveset) a.copy(coreBrDelta = coreDelta) else a
-            }
-        )
+        val enrichedAltSlots = altSlots.map { a ->
+            if (a.isAltMoveset) a.copy(coreBrDelta = coreDelta) else a
+        }
+        return if (allowAltMovesets) {
+            finalTeam.copy(
+                id = option.id,
+                altMovesetSlots = enrichedAltSlots
+            )
+        } else {
+            // Free / Supporter Tier: Keep standard PvPoke movesets on the team, but attach enrichedAltSlots so the UI can show a teaser badge (+XX BR gain available in Legend Pro!)
+            baseTeam.copy(
+                id = option.id,
+                altMovesetSlots = enrichedAltSlots
+            )
+        }
     }
 
+    val capCount = maxTeamsPerArchetype.coerceIn(1, 5)
     val abbFinalists = pickTopDiverseFinalists(abbCandidates, 6).map { optimizeTeamOptionMovesets(it) }
         .sortedByDescending { it.compositeAntiMetaScore }
     val abcFinalists = pickTopDiverseFinalists(abcCandidates, 6).map { optimizeTeamOptionMovesets(it) }
@@ -4142,9 +4154,9 @@ internal fun OverlayService.Companion.generateAntiMetaTeamOptionsStatic(
     val duoFinalists = pickTopDiverseFinalists(duoCandidates, 6).map { optimizeTeamOptionMovesets(it) }
         .sortedByDescending { it.compositeAntiMetaScore }
 
-    val top5Abb = abbFinalists.take(5).mapIndexed { idx, item -> item.copy(rank = idx + 1) }
-    val top5Abc = abcFinalists.take(5).mapIndexed { idx, item -> item.copy(rank = idx + 1) }
-    val top5Duo = duoFinalists.take(5).mapIndexed { idx, item -> item.copy(rank = idx + 1) }
+    val top5Abb = abbFinalists.take(capCount).mapIndexed { idx, item -> item.copy(rank = idx + 1) }
+    val top5Abc = abcFinalists.take(capCount).mapIndexed { idx, item -> item.copy(rank = idx + 1) }
+    val top5Duo = duoFinalists.take(capCount).mapIndexed { idx, item -> item.copy(rank = idx + 1) }
     val elapsed = max(1L, System.currentTimeMillis() - t0)
 
     return AntiMetaTeamBuilderResult(

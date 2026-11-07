@@ -35,6 +35,9 @@ export interface MetaTabProps {
   handleChangeShow6UsageWeightPct: (val: number) => void;
   gblLogWeightCapPct: number;
   setGblLogWeightCapPct: React.Dispatch<React.SetStateAction<number>>;
+  webMembershipTier?: 'free' | 'supporter' | 'pro' | 'vip';
+  onBuildAntiNemesisTeam?: (league: LeagueType, nemesisNames: string[]) => void;
+  onOpenMembershipModal?: () => void;
 }
 
 export function MetaTab(props: MetaTabProps) {
@@ -63,8 +66,12 @@ export function MetaTab(props: MetaTabProps) {
     show6UsageWeightPct,
     handleChangeShow6UsageWeightPct,
     gblLogWeightCapPct,
-    setGblLogWeightCapPct
+    setGblLogWeightCapPct,
+    webMembershipTier = 'free',
+    onBuildAntiNemesisTeam,
+    onOpenMembershipModal
   } = props;
+  const isProOrVip = webMembershipTier === 'pro' || webMembershipTier === 'vip';
           const activeMetaLg = appCombatMode === 'show6' ? metaTabShow6League : metaTabGblLeague;
           const setActiveMetaLg = (lg: LeagueType) => {
             if (appCombatMode === 'show6') {
@@ -156,7 +163,7 @@ export function MetaTab(props: MetaTabProps) {
                         📊 Personalized Meta &amp; Top Cores ({appCombatMode === 'show6' ? 'Show 6 Mode' : 'GBL Blind 3 Mode'})
                       </span>
                       <span className="px-2 py-0.5 rounded bg-sky-500/20 border border-sky-400/50 text-sky-300 text-[10px] font-mono">
-                        v6.12
+                        v7.00
                       </span>
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
@@ -399,6 +406,82 @@ export function MetaTab(props: MetaTabProps) {
                   </div>
                 </div>
               )}
+
+              {/* v7.00 Idea D: Personal Nemesis & Blind-Spot Meta Analyzer Card */}
+              {(() => {
+                const nemesisMap = new Map<string, { name: string; wins: number; losses: number }>();
+                scopedLogs.forEach((b) => {
+                  const isWin = b.result === 'WIN';
+                  const isLoss = b.result === 'LOSS';
+                  if (!isWin && !isLoss) return;
+                  const distinctOpps = Array.from(new Set((b.opponents || []).map((o) => o.trim()).filter(Boolean)));
+                  distinctOpps.forEach((opp) => {
+                    if (/^(unknown|waiting)/i.test(opp)) return;
+                    const prev = nemesisMap.get(opp) || { name: opp, wins: 0, losses: 0 };
+                    if (isWin) prev.wins += 1;
+                    else prev.losses += 1;
+                    nemesisMap.set(opp, prev);
+                  });
+                });
+                const topNemeses = Array.from(nemesisMap.values())
+                  .filter((n) => n.wins + n.losses >= 2 && n.losses >= 1)
+                  .sort((a, b) => {
+                    const rA = a.losses / Math.max(1, a.wins + a.losses);
+                    const rB = b.losses / Math.max(1, b.wins + b.losses);
+                    return rB !== rA ? rB - rA : b.losses - a.losses;
+                  })
+                  .slice(0, 3);
+
+                return (
+                  <div className="bg-indigo-950/50 border border-amber-500/40 rounded-2xl p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-extrabold text-amber-300">
+                          🎯 Personal Nemesis &amp; Blind-Spot Meta Analyzer ({activeMetaLg})
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-400/50 text-amber-200 text-[10px] font-black">
+                          {isProOrVip ? '🏆 PRO ACTIVE' : '🔒 PRO FEATURE'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-200">
+                        {topNemeses.length === 0
+                          ? `Log at least 2 battles against repeated opponents in ${activeMetaLg} to automatically isolate your highest-loss-rate Nemesis threats & blind spots.`
+                          : topNemeses
+                              .map((n, i) => {
+                                const tot = n.wins + n.losses;
+                                const lossPct = Math.round((n.losses * 100) / Math.max(1, tot));
+                                return `#${i + 1} ${n.name} (${n.wins}W-${n.losses}L • ${lossPct}% Loss Rate)`;
+                              })
+                              .join('  •  ')}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!isProOrVip) {
+                          if (onOpenMembershipModal) onOpenMembershipModal();
+                          return;
+                        }
+                        if (onBuildAntiNemesisTeam) {
+                          onBuildAntiNemesisTeam(
+                            activeMetaLg,
+                            topNemeses.map((n) => n.name)
+                          );
+                        }
+                      }}
+                      className={`px-4 py-2 rounded-xl font-extrabold text-xs shrink-0 transition shadow-lg ${
+                        isProOrVip
+                          ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                          : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                      }`}
+                    >
+                      {isProOrVip
+                        ? '🎯 Build Anti-Nemesis Team'
+                        : '🔒 Unlock 🎯 Anti-Nemesis Team Builder (Pro)'}
+                    </button>
+                  </div>
+                );
+              })()}
 
               {/* Side-by-Side: Top Personalized Meta Cores & Top Personalized Meta Pokémon */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">

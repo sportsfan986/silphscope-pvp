@@ -1,4 +1,25 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v6.51`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.00`)
+
+---
+
+## v7.00 (2026-11-07) — 4-Tier Membership & Cloud Replay Vault System, Stripe & Buy Me a Coffee Automated Webhooks, Day 15+ First-Season Promo, Anti-Spoofing Trainer ID Verification, Nemesis Meta Analyzer & APK Signing Key Capability Hardening
+*Major milestone release (`v7.00`, `versionCode = 1700`) introducing the 4-tier Membership & Cloud Replay Vault ecosystem (`Free`, `Lifetime Supporter / Alumni`, `Legend Pro`, `VIP / Coach`), automated Stripe & Buy Me a Coffee (`💰 pokécoin`) webhook provisioning with Day 15+ first-season promotional pricing, anti-spoofing Trainer Screen Name pre-registration and HMAC-SHA256 offline license verification, Personal Nemesis & Blind-Spot Meta Analyzer + "What-If" Mid-Battle Simulator Branching, updated real gameplay DVR HUD screenshots, and Android APK Signing Key Rotation lineage hardening.*
+
+- **v7.00 — Enhancement 1: 4-Tier Membership Ecosystem & Permanent Alumni Graduation (`cloudflare/telemetry-worker/worker.mjs`, `OverlayService.kt`, `GitHubCloudSync.kt`, `MainActivity.kt`, `src/App.tsx`)**:
+  - **🆓 Free Community (`$0`)**: 100% full real-time combat HUD overlay, 9-shield matrix, fast-move turn cadence, and haptics forever; Current Season Battle Logs (+ 14-day post-season grace period & unlimited CSV/JSON export); 1 local DVR battle; Open Great League & Master League Anti-Meta Generator (1 team per archetype, standard movesets with `🔒 ⚡ Pro Alt Moveset` teaser badges).
+  - **🏅 Lifetime Supporter / Alumni (`$3` One-Time or Automatic Graduation)**: Unlocks **Unlimited Lifetime Battle Log History & Multi-Device Sync** across all seasons, **5 local DVR battles**, **Open Ultra League** (Core 3: GL + UL + ML) with **2 teams per archetype**, and **365-day retention on pinned Cloud R2 replays**. Automatically granted forever whenever a user subscribes to Legend Pro or VIP even once!
+  - **🏆 Legend Pro Pass (`$5/mo` or `$10/Season [90d]`)**: Unlocks **50 rolling Cloud R2 replays + 10 pinned replays**, **25 local DVR battles (5 full GBL sets)**, **All Limited/Mega/Retro/Battle Frontier Cups**, **Top 5 teams per archetype (15+ teams)**, **⚡ Alternate Moveset Role Synthesis (+BR Deltas)**, **🎯 Personal Nemesis & Blind-Spot Team Builder**, and **🌿 "What-If" Mid-Battle Simulator Branching**.
+  - **👑 VIP / Coach Pass (`$10/mo` or `$20/Season [90d]`)**: Unlocks **150 rolling Cloud R2 replays (365-day retention) + 25 pinned replays**, **configurable 25–100 local DVR battle ring buffer slider**, and priority cloud processing.
+- **v7.00 — Enhancement 2: Stripe & Buy Me a Coffee Automated Webhooks + Day 15+ First-Season Promo (`cloudflare/telemetry-worker/worker.mjs`, `MainActivity.kt`)**:
+  - **Day 15+ First-Season Promotional Pricing (`/v1/users/checkout-quote`)**: Joining on Days 1–14 of a GBL Season (or renewing) charges the standard 90-day Season Pass (`$10` Pro / `$20` VIP). First-time buyers joining on **Day 15 or later** of a GBL Season pay only the **1-month rate (`$5` Pro / `$10` VIP)** to unlock the **entire remainder of the current GBL season** (strictly once per unique Trainer ID / Device / Email / GitHub ID).
+  - **Automated Key Minting (`/v1/webhooks/stripe` & `/v1/webhooks/bmc`)**: Automatically mints and binds `SSPVP-<TIER>-XXXX-XXXX` keys upon Stripe Payment Link or Buy Me a Coffee checkout completion.
+- **v7.00 — Enhancement 3: Anti-Spoofing Trainer ID Pre-Registration & 100% Offline HMAC License Cache (`cloudflare/telemetry-worker/worker.mjs`, `GitHubCloudSync.kt`, `MainActivity.kt`)**:
+  - **Pre-Payment Screen Name Verification (`/v1/users/register-name`)**: Prevents spoofing by never returning a paid license from a bare `screenName` alone, binding licenses to `deviceHash` / `githubUserId` / `claimEmail`, and allowing collision-safe activation via Checkout Email + Screen Name proof.
+  - **One-Time Online Unlock $\to$ 100% Offline Operation**: Caches an HMAC-SHA256 verification token (`signature`) locally in `SharedPreferences` so all local features work 100% offline after a single verification.
+- **v7.00 — Enhancement 4: Personal Nemesis & Blind-Spot Analyzer, Cloud DVR Theater & APK Lineage Hardening (`MainActivity.kt`, `src/components/MetaTab.tsx`, `src/App.tsx`)**:
+  - **🎯 Personal Nemesis & Blind-Spot Analyzer**: Automatically identifies your top 3 highest-loss-rate opponent species in the Meta Tab with a 1-click **`🎯 Build Anti-Nemesis Team`** button.
+  - **🎥 Cloud DVR Theater & 🌿 "What-If" Simulator Branching**: Added direct Cloud DVR Theater launch and 1-click mid-battle state branching into the interactive Web Simulator from any Battle Log row.
+  - **Signing Key Rotation Capability Hardening**: Revoked `auth`, `permission`, `shared-uid`, and `rollback` capabilities on legacy `Signer #1` (`CN=GBL Battle Matrix`) in `silphscope-rotation.lineage` while preserving `--set-installed-data true` for seamless in-place APK upgrades.
 
 ---
 

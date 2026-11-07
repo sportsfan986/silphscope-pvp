@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "6.51"
-        const val APP_VERSION_CODE = 1651
+        const val APP_VERSION = "7.00"
+        const val APP_VERSION_CODE = 1700
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -392,8 +392,29 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_REPLAY_LICENSE_TIER = "gbl_replay_license_tier"
         const val PREFS_KEY_REPLAY_LICENSE_JSON = "gbl_replay_license_json"
         const val PREFS_KEY_REPLAY_VAULT_MAP_JSON = "gbl_replay_vault_map_json"
+        const val PREFS_KEY_REPLAY_EVER_PAID = "gbl_replay_ever_paid_v700"
+        const val PREFS_KEY_REPLAY_EXPIRES_AT = "gbl_replay_expires_at_v700"
+        const val PREFS_KEY_REPLAY_OFFLINE_SIG = "gbl_replay_offline_sig_v700"
+        const val PREFS_KEY_CLAIM_EMAIL = "gbl_claim_email_v700"
+        const val PREFS_KEY_VIP_LOCAL_DVR_LIMIT = "gbl_vip_local_dvr_limit"
+        const val DEFAULT_VIP_LOCAL_DVR_LIMIT = 100
+        const val PREFS_KEY_SCREEN_NAME_REGISTERED_V700 = "gbl_screen_name_registered_v700"
         const val PREFS_KEY_SYNC_GITHUB_USER_ID = "gbl_sync_github_user_id"
         const val PREFS_KEY_SYNC_PRIVATE_REPO_MIGRATED_V643 = "gbl_sync_private_repo_migrated_v643"
+
+        // v7.00: Stripe & Buy Me a Coffee Official Checkout Links
+        const val STRIPE_URL_SUPPORTER = "https://buy.stripe.com/dRmeVe8F36By2Dr5221Jm00"
+        const val STRIPE_URL_PRO_SEASON = "https://buy.stripe.com/bJe4gAg7v7FC4Lz0LM1Jm01"
+        const val STRIPE_URL_PRO_INTRO = "https://buy.stripe.com/fZubJ28F32li3HvgKK1Jm02"
+        const val STRIPE_URL_PRO_MONTHLY = "https://buy.stripe.com/28E7sM6wV5xu5PD7aa1Jm03"
+        const val STRIPE_URL_VIP_SEASON = "https://buy.stripe.com/00w8wQaNbf841zngKK1Jm04"
+        const val STRIPE_URL_VIP_INTRO = "https://buy.stripe.com/aFabJ29J78JG2Dr8ee1Jm05"
+        const val STRIPE_URL_VIP_MONTHLY = "https://buy.stripe.com/aFa7sM08x2liem9cuu1Jm06"
+        const val BMC_URL_PAGE = "https://buymeacoffee.com/silphscopepvp"
+        const val BMC_URL_MEMBERSHIP = "https://buymeacoffee.com/silphscopepvp/membership"
+        const val BMC_URL_SUPPORTER = "https://buymeacoffee.com/silphscopepvp/e/595787"
+        const val BMC_URL_PRO_SEASON = "https://buymeacoffee.com/silphscopepvp/e/595788"
+        const val BMC_URL_VIP_SEASON = "https://buymeacoffee.com/silphscopepvp/e/595789"
 
         @Volatile var appContext: Context? = null
         @Volatile var activeEnergyDebounceSamples: Int = DEFAULT_ENERGY_DEBOUNCE_SAMPLES

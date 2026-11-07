@@ -200,6 +200,78 @@ export default function App() {
   const [selectedCardSpecies, setSelectedCardSpecies] = useState<string>('Melmetal');
   const [expandedFormId, setExpandedFormId] = useState<string>('morpeko-forms');
 
+  // v7.00 Web Membership Tier, License Unlock & Cloud Vault Theater State
+  const [webMembershipTier, setWebMembershipTier] = useState<'free' | 'supporter' | 'pro' | 'vip'>(() => {
+    try {
+      const saved = (localStorage.getItem('gbl_web_membership_tier_v700') || 'free').toLowerCase();
+      if (saved === 'vip' || saved === 'pro' || saved === 'supporter') return saved;
+    } catch {}
+    return 'free';
+  });
+  const [webScreenName, setWebScreenName] = useState<string>(() => {
+    try {
+      return localStorage.getItem('gbl_web_screen_name_v700') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [webUnlockKey, setWebUnlockKey] = useState<string>(() => {
+    try {
+      return localStorage.getItem('gbl_web_unlock_key_v700') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [webClaimEmail, setWebClaimEmail] = useState<string>(() => {
+    try {
+      return localStorage.getItem('gbl_web_claim_email_v700') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [showMembershipModal, setShowMembershipModal] = useState<boolean>(false);
+  const [membershipStatusMsg, setMembershipStatusMsg] = useState<string>('');
+
+  const handleVerifyWebMembership = async () => {
+    const cleanName = webScreenName.trim();
+    const cleanKey = webUnlockKey.trim().toUpperCase();
+    const cleanEmail = webClaimEmail.trim().toLowerCase();
+    if (!cleanKey && !cleanEmail) {
+      setMembershipStatusMsg('⚠️ Enter your SSPVP Unlock Key or Checkout Email + Trainer Name.');
+      return;
+    }
+    setMembershipStatusMsg('⏳ Verifying with SilphScope Cloud Vault...');
+    try {
+      const resp = await fetch('https://silphscope-telemetry.silphscope-pvp.workers.dev/v1/license/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          screenName: cleanName,
+          unlockKey: cleanKey,
+          claimEmail: cleanEmail,
+          deviceHash: 'web-' + (cleanName || 'browser')
+        })
+      });
+      const data = await resp.json();
+      if (data && data.ok && data.tier && data.tier !== 'free') {
+        const t = String(data.tier).toLowerCase() as 'supporter' | 'pro' | 'vip';
+        setWebMembershipTier(t);
+        localStorage.setItem('gbl_web_membership_tier_v700', t);
+        localStorage.setItem('gbl_web_screen_name_v700', cleanName);
+        if (data.unlockKey || cleanKey) {
+          setWebUnlockKey(data.unlockKey || cleanKey);
+          localStorage.setItem('gbl_web_unlock_key_v700', data.unlockKey || cleanKey);
+        }
+        localStorage.setItem('gbl_web_claim_email_v700', cleanEmail);
+        setMembershipStatusMsg(`✅ Activated ${t.toUpperCase()} Tier (${data.maxCloudReplays || 0} Cloud Replays)!`);
+      } else {
+        setMembershipStatusMsg(`❌ ${data?.reason || 'No active paid license found for that Key / Email.'}`);
+      }
+    } catch (e: any) {
+      setMembershipStatusMsg(`⚠️ Network error verifying key: ${e?.message || 'offline'}`);
+    }
+  };
+
   // v6.00 AI Advice HUD Position ("bottom" default for higher visibility vs "top")
   const [aiAdviceHudPosition, setAiAdviceHudPositionState] = useState<'bottom' | 'top'>(() => {
     try {
@@ -5035,13 +5107,26 @@ export default function App() {
     setTimeout(() => setStartBattleToast(null), 2400);
   };
 
-  // Anti-Meta Team Builder: Generate Best 5 ABB + Best 5 ABC Teams & Select Option to Create + Open Edit Modal
+  // Anti-Meta Team Builder: Generate Best ABB + ABC + Duo Teams (Tier-Gated in v7.00) & Select Option to Create + Open Edit Modal
   const handleGenerateAntiMetaTeams = (
     overrideLeague?: LeagueType,
     overrideFeat1?: string,
     overrideFeat2?: string
   ) => {
     const targetLeague = overrideLeague || antiMetaLeague;
+    const normLg = normalizeLeagueName(targetLeague);
+    const isGlOrMl = normLg === 'GREAT LEAGUE' || normLg === 'MASTER LEAGUE';
+    const isCore3 = isGlOrMl || normLg === 'ULTRA LEAGUE';
+    if (webMembershipTier === 'free' && !isGlOrMl) {
+      setShowMembershipModal(true);
+      setMembershipStatusMsg(`🔒 ${targetLeague} requires Lifetime Supporter ($3) for Ultra League or Legend Pro ($5 Intro / $10 Season) for Limited/Mega Cups!`);
+      return;
+    }
+    if (webMembershipTier === 'supporter' && !isCore3) {
+      setShowMembershipModal(true);
+      setMembershipStatusMsg(`🏆 ${targetLeague} is a Limited/Mega Cup and requires Legend Pro ($5 First-Season Intro / $10 Season Pass)!`);
+      return;
+    }
     const f1 = (overrideFeat1 !== undefined ? overrideFeat1 : antiMetaFeat1).trim();
     const f2 = (overrideFeat2 !== undefined ? overrideFeat2 : antiMetaFeat2).trim();
     const featuredList = [f1, f2].filter((s) => s.length > 0);
@@ -5051,7 +5136,13 @@ export default function App() {
       battleLogs,
       activeSeasonBounds
     );
-    setAntiMetaResult(res);
+    const maxPerArch = webMembershipTier === 'pro' || webMembershipTier === 'vip' ? 5 : webMembershipTier === 'supporter' ? 2 : 1;
+    setAntiMetaResult({
+      ...res,
+      top5AbbTeams: res.top5AbbTeams.slice(0, maxPerArch),
+      top5AbcTeams: res.top5AbcTeams.slice(0, maxPerArch),
+      top5DuoTeams: (res.top5DuoTeams || []).slice(0, maxPerArch)
+    });
   };
 
   const handleSelectAntiMetaTeamOption = (option: AntiMetaTeamOption) => {
@@ -5350,7 +5441,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v6.51 • Android Native Overlay
+                  v7.00 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -5456,12 +5547,29 @@ export default function App() {
               </button>
             </nav>
 
+            <button
+              type="button"
+              onClick={() => setShowMembershipModal(true)}
+              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 transition"
+              title="Manage SilphScope PvP Membership Tier, Unlock Key & Cloud Vault"
+            >
+              <span>
+                {webMembershipTier === 'vip'
+                  ? '👑 VIP Active'
+                  : webMembershipTier === 'pro'
+                  ? '🏆 Pro Active'
+                  : webMembershipTier === 'supporter'
+                  ? '🏅 Supporter'
+                  : '🔑 Unlock Pro / Tiers'}
+              </span>
+            </button>
+
             <a
-              href="https://buymeacoffee.com/sportsfan986"
+              href="https://buymeacoffee.com/silphscopepvp"
               target="_blank"
               rel="noopener noreferrer"
               className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition"
-              title="Support SilphScope PvP on Buy Me a Coffee"
+              title="Support SilphScope PvP on Buy Me a Coffee (PokéCoins & Season Passes)"
             >
               <span>☕ Buy Me a Coffee</span>
             </a>
@@ -9673,9 +9781,16 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Step 2b & 2c: Display Best 5 ABB & Best 5 ABC Anti-Meta Team Options */}
+                  {/* Step 2b & 2c: Display Best ABB, ABC & Duo-Core Anti-Meta Team Options (Tier-Gated in v7.00) */}
                   {(() => {
-                    const currentResult =
+                    const maxPerArch =
+                      webMembershipTier === 'pro' || webMembershipTier === 'vip'
+                        ? 5
+                        : webMembershipTier === 'supporter'
+                        ? 2
+                        : 1;
+                    const isProOrVipTier = webMembershipTier === 'pro' || webMembershipTier === 'vip';
+                    const rawResult =
                       antiMetaResult && antiMetaResult.league === antiMetaLeague
                         ? antiMetaResult
                         : generateAntiMetaTeamOptions(
@@ -9684,6 +9799,12 @@ export default function App() {
                             battleLogs,
                             activeSeasonBounds
                           );
+                    const currentResult = {
+                      ...rawResult,
+                      top5AbbTeams: rawResult.top5AbbTeams.slice(0, maxPerArch),
+                      top5AbcTeams: rawResult.top5AbcTeams.slice(0, maxPerArch),
+                      top5DuoTeams: (rawResult.top5DuoTeams || []).slice(0, maxPerArch)
+                    };
 
                     const renderOptionCard = (opt: AntiMetaTeamOption) => {
                       const machBadge = getMachineBrTierInfo(opt.machineAggBr, machineBrThresholds);
@@ -9796,16 +9917,20 @@ export default function App() {
                                         className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/25 border border-amber-400/50 text-amber-200 font-extrabold"
                                         title={`Standard: ${altInfo?.standardFastMove} + ${altInfo?.standardCharged1}/${altInfo?.standardCharged2}`}
                                       >
-                                        ⚡ Alt Moveset{altInfo && altInfo.roleBrDelta > 0 ? ` (+${altInfo.roleBrDelta} BR)` : ''}
+                                        {isProOrVipTier
+                                          ? `⚡ Alt Moveset${altInfo && altInfo.roleBrDelta > 0 ? ` (+${altInfo.roleBrDelta} BR)` : ''}`
+                                          : `🔒 ⚡ Pro Alt Moveset${altInfo && altInfo.roleBrDelta > 0 ? ` (+${altInfo.roleBrDelta} BR)` : ''} Available`}
                                       </span>
                                     )}
                                   </div>
                                   <div
                                     className={`text-[10px] truncate mt-0.5 ${
-                                      isAltMove ? 'text-amber-300 font-semibold' : 'text-slate-400'
+                                      isAltMove && isProOrVipTier ? 'text-amber-300 font-semibold' : 'text-slate-400'
                                     }`}
                                   >
-                                    {mon.fastMove} • {mon.chargedMove1}/{mon.chargedMove2}
+                                    {isAltMove && !isProOrVipTier && altInfo
+                                      ? `${altInfo.standardFastMove} • ${altInfo.standardCharged1}/${altInfo.standardCharged2}`
+                                      : `${mon.fastMove} • ${mon.chargedMove1}/${mon.chargedMove2}`}
                                     {resolveMegaPlusMove(mon.name, opt.league) ? ` [+ ${resolveMegaPlusMove(mon.name, opt.league)}]` : ''}
                                   </div>
                                 </div>
@@ -9919,6 +10044,26 @@ export default function App() {
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                               {duoTeamsList.map((opt) => renderOptionCard(opt))}
                             </div>
+                          </div>
+                        )}
+
+                        {!isProOrVipTier && (
+                          <div className="bg-indigo-950/60 border border-amber-400/50 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="space-y-1">
+                              <h5 className="text-xs font-extrabold text-amber-300">
+                                🏆 Unlock All 15 Anti-Meta Teams, Limited Cups &amp; ⚡ Alternate Moveset Role Synthesis
+                              </h5>
+                              <p className="text-[11px] text-slate-300">
+                                Free tier shows 1 team per archetype (GL/ML) with standard movesets. Upgrade to <strong>Lifetime Supporter ($3)</strong> for Ultra League + 2 teams/archetype + Unlimited Battle Log History, or <strong>Legend Pro ($5 First-Season Intro / $10 Season Pass)</strong> for all 15 teams, Limited/Mega Cups, and ⚡ Alt Movesets!
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setShowMembershipModal(true)}
+                              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shrink-0 transition shadow-lg"
+                            >
+                              🔑 Unlock Tiers / Enter Key
+                            </button>
                           </div>
                         )}
 
@@ -13624,7 +13769,11 @@ export default function App() {
             const startOfYesterday = new Date(startOfToday);
             startOfYesterday.setDate(startOfYesterday.getDate() - 1);
             const sevenDaysAgo = nowMs - 7 * 24 * 60 * 60 * 1000;
+            const isPastGrace = nowMs > currentSeason.startMs + 14 * 24 * 60 * 60 * 1000;
             return entries.filter((e) => {
+              if (webMembershipTier === 'free' && e.timestampMs < currentSeason.startMs && isPastGrace) {
+                return false;
+              }
               const leagueOk = matchesTwoTierLeagueFilter(
                 e.league,
                 logFilterCpTier,
@@ -14957,6 +15106,50 @@ export default function App() {
                                   </button>
                                   <button
                                     type="button"
+                                    onClick={() => {
+                                      if (webMembershipTier !== 'pro' && webMembershipTier !== 'vip') {
+                                        setShowMembershipModal(true);
+                                        setMembershipStatusMsg('🎬 Cloud DVR Video & Trace Theater and "What-If" Mid-Battle Branching require Legend Pro ($5 Intro / $10 Season) or VIP!');
+                                        return;
+                                      }
+                                      window.open(
+                                        `https://silphscope-telemetry.silphscope-pvp.workers.dev/vault?user=${encodeURIComponent(webScreenName || 'sportsfan986')}&key=${encodeURIComponent(webUnlockKey)}`,
+                                        '_blank'
+                                      );
+                                    }}
+                                    className="px-2.5 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/35 border border-indigo-400/50 text-indigo-200 font-bold text-[11px] transition"
+                                    title="Open Cloud DVR Video & Frame-by-Frame Trace Theater (Pro / VIP)"
+                                  >
+                                    🎥 Cloud DVR
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (webMembershipTier !== 'pro' && webMembershipTier !== 'vip') {
+                                        setShowMembershipModal(true);
+                                        setMembershipStatusMsg('🌿 "What-If" Mid-Battle Simulator Branching requires Legend Pro ($5 Intro / $10 Season) or VIP!');
+                                        return;
+                                      }
+                                      if (entry.opponents?.length) {
+                                        setScannedOpponents(entry.opponents.slice(0, 3));
+                                        setActiveOpponentSlotIndex(0);
+                                        setActiveOpponentKey(entry.opponents[0]);
+                                        setIsWaitingOpponent(false);
+                                      }
+                                      setUserShields(entry.userShieldsRemaining ?? 1);
+                                      setOppShields(entry.oppShieldsRemaining ?? 1);
+                                      setActiveTab('simulator');
+                                      setIsOverlayVisible(true);
+                                      setStartBattleToast(`🌿 Branched Battle vs ${entry.opponents.join('/')} into Live Simulator!`);
+                                      setTimeout(() => setStartBattleToast(null), 2600);
+                                    }}
+                                    className="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/50 text-emerald-200 font-bold text-[11px] transition"
+                                    title='Branch this battle into the Interactive Overlay Simulator ("What-If" Mode — Pro / VIP)'
+                                  >
+                                    🌿 What-If Sim
+                                  </button>
+                                  <button
+                                    type="button"
                                     onClick={() => setEditingLogEntry({ ...entry })}
                                     className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 border border-amber-400/50 text-amber-200 font-bold text-[11px] transition"
                                   >
@@ -15517,6 +15710,13 @@ export default function App() {
             handleChangeShow6UsageWeightPct={handleChangeShow6UsageWeightPct}
             gblLogWeightCapPct={gblLogWeightCapPct}
             setGblLogWeightCapPct={setGblLogWeightCapPct}
+            webMembershipTier={webMembershipTier}
+            onOpenMembershipModal={() => setShowMembershipModal(true)}
+            onBuildAntiNemesisTeam={(lg) => {
+              setAntiMetaLeague(lg);
+              setActiveTab('presets');
+              handleGenerateAntiMetaTeams(lg);
+            }}
           />
         )}
 
@@ -16061,6 +16261,188 @@ export default function App() {
           setActiveTab={setActiveTab}
         />
 
+        {/* v7.00 Membership Tiers, Unlock Key Verification & Stripe / Buy Me a Coffee Modal */}
+        {showMembershipModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-slate-900 border border-indigo-500/50 rounded-2xl max-w-3xl w-full p-5 shadow-2xl space-y-4 my-auto max-h-[92vh] overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div>
+                  <h3 className="font-extrabold text-base text-white flex items-center gap-2">
+                    <span>🔑 SilphScope PvP v7.00 Membership Tiers &amp; Cloud Vault Unlock</span>
+                    <span className="px-2 py-0.5 rounded bg-indigo-500/20 border border-indigo-400/50 text-indigo-300 text-[10px] font-mono uppercase">
+                      Active: {webMembershipTier}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    The real-time floating HUD, 9-shield matrix, energy cadence &amp; haptics are <strong>100% Free forever</strong>. Unlock Cloud DVR Replays, Lifetime Battle Log History &amp; Full Anti-Meta Role Synthesis below!
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowMembershipModal(false)}
+                  className="text-slate-400 hover:text-white font-bold text-lg px-2"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {membershipStatusMsg && (
+                <div className="p-3 rounded-xl bg-slate-950 border border-amber-400/50 text-xs font-bold text-amber-200">
+                  {membershipStatusMsg}
+                </div>
+              )}
+
+              {/* 4-Tier Comparison Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                  <div className="font-extrabold text-slate-200">🆓 Free Community</div>
+                  <div className="text-base font-black text-white">$0</div>
+                  <ul className="text-[10.5px] text-slate-400 space-y-1">
+                    <li>• 100% Live HUD &amp; Haptics</li>
+                    <li>• Current Season Logs (+14d grace)</li>
+                    <li>• 1 Local DVR Battle</li>
+                    <li>• GL &amp; ML Anti-Meta (1/arch)</li>
+                  </ul>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-950 border border-sky-500/40 space-y-1.5">
+                  <div className="font-extrabold text-sky-300">🏅 Lifetime Supporter</div>
+                  <div className="text-base font-black text-white">$3 One-Time</div>
+                  <ul className="text-[10.5px] text-slate-300 space-y-1">
+                    <li>• <strong>Unlimited Lifetime Battle Logs</strong></li>
+                    <li>• 5 Local DVR Battles</li>
+                    <li>• 365d Pinned Cloud Retention</li>
+                    <li>• Core 3 (GL/UL/ML • 2/arch)</li>
+                  </ul>
+                  <a
+                    href="https://buy.stripe.com/dRmeVe8F36By2Dr5221Jm00"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block w-full text-center py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-[11px] mt-2"
+                  >
+                    💳 $3 Stripe Unlock
+                  </a>
+                </div>
+
+                <div className="p-3 rounded-xl bg-indigo-950/40 border border-amber-400/60 space-y-1.5">
+                  <div className="font-extrabold text-amber-300">🏆 Legend Pro Pass</div>
+                  <div className="text-base font-black text-white">$5 Intro / $10 Season</div>
+                  <ul className="text-[10.5px] text-slate-200 space-y-1">
+                    <li>• <strong>50 Cloud R2 Replays + 10 Pinned</strong></li>
+                    <li>• 25 Local DVR Battles (5 Sets)</li>
+                    <li>• <strong>All Limited Cups + Top 5/Arch</strong></li>
+                    <li>• <strong>⚡ Alt Movesets + Nemesis Sim</strong></li>
+                  </ul>
+                  <div className="space-y-1 pt-1">
+                    <a
+                      href="https://buy.stripe.com/fZubJ28F32li3HvgKK1Jm02"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block w-full text-center py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[10.5px]"
+                    >
+                      💳 $5 Day 15+ First Season
+                    </a>
+                    <a
+                      href="https://buy.stripe.com/bJe4gAg7v7FC4Lz0LM1Jm01"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block w-full text-center py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10.5px]"
+                    >
+                      💳 $10 Full 90d Season Pass
+                    </a>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-purple-950/30 border border-purple-400/50 space-y-1.5">
+                  <div className="font-extrabold text-purple-300">👑 VIP / Coach Pass</div>
+                  <div className="text-base font-black text-white">$10 Intro / $20 Season</div>
+                  <ul className="text-[10.5px] text-slate-200 space-y-1">
+                    <li>• <strong>150 Cloud Replays (365d) + 25 Pin</strong></li>
+                    <li>• Up to 100 Local DVR Battles</li>
+                    <li>• All Pro Features + Priority</li>
+                    <li>• Includes Lifetime Supporter!</li>
+                  </ul>
+                  <div className="space-y-1 pt-1">
+                    <a
+                      href="https://buy.stripe.com/aFabJ29J78JG2Dr8ee1Jm05"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block w-full text-center py-1.5 rounded-lg bg-purple-500 hover:bg-purple-400 text-white font-black text-[10.5px]"
+                    >
+                      💳 $10 Day 15+ First Season
+                    </a>
+                    <a
+                      href="https://buy.stripe.com/00w8wQaNbf841zngKK1Jm04"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block w-full text-center py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-purple-200 font-bold text-[10.5px]"
+                    >
+                      💳 $20 Full 90d Season Pass
+                    </a>
+                  </div>
+                </div>
+              </div>
+
+              {/* Activate / Verify Existing Key or Email */}
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+                <div className="text-xs font-extrabold text-sky-300">
+                  🔐 Already Unlocked via Stripe or Buy Me a Coffee? Activate Your Key / Email:
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <input
+                    type="text"
+                    value={webScreenName}
+                    onChange={(e) => setWebScreenName(e.target.value)}
+                    placeholder="Trainer Screen Name (e.g. sportsfan986)"
+                    className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-bold"
+                  />
+                  <input
+                    type="text"
+                    value={webUnlockKey}
+                    onChange={(e) => setWebUnlockKey(e.target.value)}
+                    placeholder="Unlock Key (SSPVP-PRO-...)"
+                    className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-amber-300 font-mono font-bold"
+                  />
+                  <input
+                    type="email"
+                    value={webClaimEmail}
+                    onChange={(e) => setWebClaimEmail(e.target.value)}
+                    placeholder="Or Checkout Email"
+                    className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleVerifyWebMembership}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-lg transition"
+                    >
+                      ✅ Verify &amp; Activate Membership
+                    </button>
+                    <a
+                      href="https://silphscope-telemetry.silphscope-pvp.workers.dev/vault"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sky-300 font-bold text-xs transition"
+                    >
+                      🎬 Open Cloud Replay Vault Portal
+                    </a>
+                  </div>
+                  <a
+                    href="https://buymeacoffee.com/silphscopepvp"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-300 font-bold text-xs transition"
+                  >
+                    ☕ Prefer Buy Me a Coffee (PokéCoins)?
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
       </main>
 
       {/* Footer */}
@@ -16071,7 +16453,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v6.51 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
+        SilphScope PvP v7.00 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
       </footer>
     </div>
   );

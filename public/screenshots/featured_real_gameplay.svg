@@ -1,0 +1,264 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 2280" width="100%" height="100%">
+  <defs>
+    <!-- Realistic Sky Gradient -->
+    <linearGradient id="skyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="30%" stop-color="#93c5fd" />
+      <stop offset="55%" stop-color="#e0f2fe" />
+      <stop offset="70%" stop-color="#86efac" />
+      <stop offset="100%" stop-color="#15803d" />
+    </linearGradient>
+
+    <!-- Arena Ground Gradient -->
+    <linearGradient id="groundGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#334155" />
+      <stop offset="30%" stop-color="#475569" />
+      <stop offset="100%" stop-color="#1e293b" />
+    </linearGradient>
+
+    <!-- Translucent HUD Glass Overlay -->
+    <linearGradient id="hudGlass" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="rgba(15, 23, 42, 0.90)" />
+      <stop offset="100%" stop-color="rgba(15, 23, 42, 0.94)" />
+    </linearGradient>
+
+    <style>
+      .font-sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+      .font-mono { font-family: "SF Mono", Consolas, "Courier New", monospace; }
+      .text-white { fill: #ffffff; }
+      .text-gray { fill: #94a3b8; }
+      .text-green { fill: #4ade80; }
+      .text-red { fill: #f87171; }
+      .text-yellow { fill: #facc15; }
+      .text-cyan { fill: #38bdf8; }
+    </style>
+  </defs>
+
+  <!-- Background Mobile Screen Frame -->
+  <rect width="1080" height="2280" fill="#090d16" />
+
+  <!-- Pokemon GO Arena Field -->
+  <rect x="0" y="0" width="1080" height="1500" fill="url(#skyGrad)" />
+  <polygon points="0,1100 1080,1100 1080,2280 0,2280" fill="url(#groundGrad)" />
+
+  <!-- Arena Lines & Trees -->
+  <path d="M 0 1100 Q 540 1050 1080 1100" stroke="#22c55e" stroke-width="20" fill="none" opacity="0.6" />
+  <path d="M 100 1400 L 980 1400 M 200 1650 L 880 1650 M 50 1900 L 1030 1900" stroke="#94a3b8" stroke-width="6" opacity="0.4" />
+  <path d="M 540 1100 L 100 2280 M 540 1100 L 980 2280" stroke="#94a3b8" stroke-width="6" opacity="0.4" />
+
+  <!-- Pokemon GO Top Status Bar -->
+  <!-- Left Side: Active Dialga -->
+  <g transform="translate(40, 80)">
+    <rect x="0" y="0" width="460" height="120" fill="rgba(255,255,255,0.85)" rx="20" />
+    <text x="24" y="52" class="font-sans" font-weight="800" font-size="34px" fill="#0f172a">Dialga</text>
+    <text x="280" y="52" class="font-sans" font-weight="800" font-size="30px" fill="#0284c7">CP 4624</text>
+    
+    <!-- HP Bar -->
+    <rect x="24" y="70" width="412" height="20" fill="#cbd5e1" rx="10" />
+    <rect x="24" y="70" width="412" height="20" fill="#22c55e" rx="10" />
+
+    <!-- Shields & Balls -->
+    <circle cx="36" cy="115" r="14" fill="#ef4444" stroke="#ffffff" stroke-width="3" />
+    <circle cx="72" cy="115" r="14" fill="#ef4444" stroke="#ffffff" stroke-width="3" />
+    <circle cx="108" cy="115" r="14" fill="#ef4444" stroke="#ffffff" stroke-width="3" />
+    <rect x="140" y="103" width="24" height="24" fill="#c084fc" rx="4" />
+    <rect x="172" y="103" width="24" height="24" fill="#c084fc" rx="4" />
+  </g>
+
+  <!-- Right Side: Opponent Mewtwo -->
+  <g transform="translate(580, 80)">
+    <rect x="0" y="0" width="460" height="120" fill="rgba(255,255,255,0.85)" rx="20" />
+    <text x="436" y="52" class="font-sans" font-weight="800" font-size="34px" fill="#0f172a" text-anchor="end">Mewtwo</text>
+    <text x="180" y="52" class="font-sans" font-weight="800" font-size="30px" fill="#d97706" text-anchor="end">CP 4144</text>
+    
+    <!-- HP Bar -->
+    <rect x="24" y="70" width="412" height="20" fill="#cbd5e1" rx="10" />
+    <rect x="24" y="70" width="412" height="20" fill="#22c55e" rx="10" />
+
+    <!-- Shields & Balls -->
+    <circle cx="424" cy="115" r="14" fill="#ef4444" stroke="#ffffff" stroke-width="3" />
+    <circle cx="388" cy="115" r="14" fill="#ef4444" stroke="#ffffff" stroke-width="3" />
+    <circle cx="352" cy="115" r="14" fill="#1e293b" stroke="#facc15" stroke-width="3" />
+    <rect x="306" y="103" width="24" height="24" fill="#c084fc" rx="4" />
+    <rect x="274" y="103" width="24" height="24" fill="#c084fc" rx="4" />
+  </g>
+
+  <!-- FLOATING HUD OVERLAY (In-Game Battle Matrix Real-Time UI) -->
+  <g transform="translate(25, 230)">
+    <!-- Overlay Outer Glass Container -->
+    <rect width="1030" height="980" fill="url(#hudGlass)" stroke="#38bdf8" stroke-width="3" rx="24" />
+
+    <!-- Top Overlay Header -->
+    <g transform="translate(30, 50)">
+      <text x="0" y="0" class="font-sans" font-weight="900" font-size="32px" fill="#facc15">✖ VS MEWTWO</text>
+      <text x="280" y="0" class="font-mono" font-weight="700" font-size="28px" fill="#fbbf24">[PC 2t/9e/1%]</text>
+      
+      <rect x="640" y="-32" width="330" height="48" fill="#166534" rx="10" />
+      <text x="805" y="0" class="font-sans" font-weight="800" font-size="24px" fill="#4ade80" text-anchor="middle">You: DB 1t/3e/3%</text>
+    </g>
+
+    <!-- Overlay Quick Buttons -->
+    <g transform="translate(30, 95)">
+      <rect x="0" y="0" width="150" height="42" fill="#334155" rx="8" />
+      <text x="75" y="27" class="font-sans" font-weight="700" font-size="18px" fill="#fca5a5" text-anchor="middle">↺ Reset Opp</text>
+
+      <rect x="162" y="0" width="160" height="42" fill="#334155" rx="8" />
+      <text x="242" y="27" class="font-sans" font-weight="700" font-size="18px" fill="#ffffff" text-anchor="middle">Shadow: OFF</text>
+
+      <rect x="334" y="0" width="160" height="42" fill="#0284c7" rx="8" />
+      <text x="414" y="27" class="font-sans" font-weight="700" font-size="18px" fill="#ffffff" text-anchor="middle">Form: Base</text>
+
+      <rect x="506" y="0" width="140" height="42" fill="#0284c7" rx="8" />
+      <text x="576" y="27" class="font-sans" font-weight="700" font-size="18px" fill="#ffffff" text-anchor="middle">Dialga</text>
+
+      <rect x="658" y="0" width="140" height="42" fill="#334155" rx="8" />
+      <text x="728" y="27" class="font-sans" font-weight="700" font-size="18px" fill="#ffffff" text-anchor="middle">Lugia</text>
+
+      <rect x="810" y="0" width="140" height="42" fill="#334155" rx="8" />
+      <text x="880" y="27" class="font-sans" font-weight="700" font-size="18px" fill="#ffffff" text-anchor="middle">Kyogre</text>
+    </g>
+
+    <!-- Matchup Matrix Section -->
+    <g transform="translate(30, 185)">
+      <text x="0" y="24" class="font-sans" font-weight="800" font-size="24px" fill="#ffffff">#1 Mewtwo</text>
+      <text x="320" y="24" class="font-mono" font-size="22px" fill="#e2e8f0">D: 🟢 🟢 🟢 | L: ⚪ ⚪ ⚪ | K: 🟢 🟢 ⚪</text>
+
+      <text x="0" y="62" class="font-sans" font-weight="800" font-size="24px" fill="#ffffff">#2 Zacian (Crowned)</text>
+      <text x="320" y="62" class="font-mono" font-size="22px" fill="#e2e8f0">D: 🔴 🔴 🔴 | L: ⚪ ⚪ ⚪ | K: 🟢 🟢 ⚪</text>
+
+      <text x="0" y="100" class="font-sans" font-weight="800" font-size="24px" fill="#ffffff">#3 Kyurem (White)</text>
+      <text x="320" y="100" class="font-mono" font-size="22px" fill="#e2e8f0">D: 🟢 🟢 🟢 | L: 🔴 🔴 🔴 | K: 🔴 🔴 🔴</text>
+    </g>
+
+    <!-- OPPONENT ATTACKS Header -->
+    <g transform="translate(30, 330)">
+      <text x="0" y="20" class="font-sans" font-weight="900" font-size="22px" fill="#94a3b8">OPPONENT ATTACKS</text>
+      
+      <rect x="460" y="-6" width="140" height="36" fill="#ef4444" rx="8" />
+      <text x="530" y="18" class="font-sans" font-weight="900" font-size="18px" fill="#ffffff" text-anchor="middle">CMP LOSS</text>
+
+      <text x="680" y="20" class="font-sans" font-weight="800" font-size="20px" fill="#38bdf8">DIA</text>
+      <text x="790" y="20" class="font-sans" font-weight="800" font-size="20px" fill="#94a3b8">LUG</text>
+      <text x="900" y="20" class="font-sans" font-weight="800" font-size="20px" fill="#94a3b8">KYO</text>
+    </g>
+
+    <!-- Opponent Attack Rows -->
+    <!-- Psystrike -->
+    <g transform="translate(30, 380)">
+      <text x="0" y="28" class="font-sans" font-weight="800" font-size="22px" fill="#ffffff">Pstk</text>
+      <text x="0" y="52" class="font-mono" font-size="16px" fill="#64748b">45e/10f</text>
+
+      <rect x="150" y="10" width="140" height="38" fill="#1e3a8a" rx="6" />
+      <text x="220" y="35" class="font-mono" font-weight="700" font-size="20px" fill="#ffffff" text-anchor="middle">1 - 9</text>
+      <rect x="296" y="10" width="60" height="38" fill="#991b1b" rx="6" />
+      <text x="326" y="35" class="font-mono" font-weight="700" font-size="20px" fill="#ffffff" text-anchor="middle">#10</text>
+
+      <rect x="370" y="10" width="140" height="38" fill="#1e3a8a" rx="6" />
+      <text x="440" y="35" class="font-mono" font-weight="700" font-size="20px" fill="#ffffff" text-anchor="middle">11 - 19</text>
+      <rect x="516" y="10" width="60" height="38" fill="#991b1b" rx="6" />
+      <text x="546" y="35" class="font-mono" font-weight="700" font-size="20px" fill="#ffffff" text-anchor="middle">#20</text>
+
+      <text x="680" y="36" class="font-sans" font-weight="800" font-size="24px" fill="#4ade80">32%</text>
+      <text x="790" y="36" class="font-sans" font-weight="800" font-size="24px" fill="#4ade80">20%</text>
+      <text x="900" y="36" class="font-sans" font-weight="800" font-size="24px" fill="#facc15">50%</text>
+    </g>
+
+    <!-- Shadow Ball -->
+    <g transform="translate(30, 460)">
+      <text x="0" y="28" class="font-sans" font-weight="800" font-size="22px" fill="#ffffff">SB</text>
+      <text x="0" y="52" class="font-mono" font-size="16px" fill="#64748b">55e/14f</text>
+
+      <rect x="150" y="10" width="220" height="38" fill="#1e3a8a" rx="6" />
+      <text x="260" y="35" class="font-mono" font-weight="700" font-size="20px" fill="#ffffff" text-anchor="middle">1 - 13</text>
+      <rect x="376" y="10" width="60" height="38" fill="#991b1b" rx="6" />
+      <text x="406" y="35" class="font-mono" font-weight="700" font-size="20px" fill="#ffffff" text-anchor="middle">#14</text>
+
+      <text x="680" y="36" class="font-sans" font-weight="800" font-size="24px" fill="#facc15">46%</text>
+      <text x="790" y="36" class="font-sans" font-weight="800" font-size="24px" fill="#facc15">48%</text>
+      <text x="900" y="36" class="font-sans" font-weight="800" font-size="24px" fill="#facc15">46%</text>
+    </g>
+
+    <!-- Focus Blast -->
+    <g transform="translate(30, 540)">
+      <text x="0" y="28" class="font-sans" font-weight="800" font-size="22px" fill="#ffffff">FB</text>
+      <text x="0" y="52" class="font-mono" font-size="16px" fill="#64748b">75e/18f</text>
+
+      <rect x="150" y="10" width="280" height="38" fill="#1e3a8a" rx="6" />
+      <text x="290" y="35" class="font-mono" font-weight="700" font-size="20px" fill="#ffffff" text-anchor="middle">1 - 17</text>
+      <rect x="436" y="10" width="60" height="38" fill="#991b1b" rx="6" />
+      <text x="466" y="35" class="font-mono" font-weight="700" font-size="20px" fill="#ffffff" text-anchor="middle">#18</text>
+
+      <text x="680" y="36" class="font-sans" font-weight="900" font-size="24px" fill="#ef4444">100%</text>
+      <text x="790" y="36" class="font-sans" font-weight="800" font-size="24px" fill="#4ade80">18%</text>
+      <text x="900" y="36" class="font-sans" font-weight="800" font-size="24px" fill="#ef4444">70%</text>
+    </g>
+
+    <!-- MY ATTACKS Header -->
+    <g transform="translate(30, 640)">
+      <text x="0" y="20" class="font-sans" font-weight="900" font-size="22px" fill="#38bdf8">MY ATTACKS</text>
+      <text x="180" y="20" class="font-mono" font-weight="700" font-size="20px" fill="#cbd5e1">DIA • DB 1t/3e/3%</text>
+
+      <text x="680" y="20" class="font-sans" font-weight="800" font-size="20px" fill="#38bdf8">MEW</text>
+      <text x="790" y="20" class="font-sans" font-weight="800" font-size="20px" fill="#94a3b8">ZAC</text>
+      <text x="900" y="20" class="font-sans" font-weight="800" font-size="20px" fill="#94a3b8">KYU</text>
+    </g>
+
+    <!-- My Attack Rows -->
+    <!-- Roar of Time -->
+    <g transform="translate(30, 690)">
+      <text x="0" y="28" class="font-sans" font-weight="800" font-size="22px" fill="#ffffff">RoT</text>
+      <text x="0" y="52" class="font-mono" font-size="16px" fill="#64748b">65e/22f</text>
+
+      <rect x="150" y="10" width="320" height="38" fill="#166534" rx="6" />
+      <text x="310" y="35" class="font-mono" font-weight="700" font-size="20px" fill="#ffffff" text-anchor="middle">Safe 1,3,5</text>
+      <rect x="476" y="10" width="60" height="38" fill="#1e3a8a" rx="6" />
+      <text x="506" y="35" class="font-mono" font-weight="700" font-size="20px" fill="#ffffff" text-anchor="middle">#22</text>
+
+      <text x="680" y="36" class="font-sans" font-weight="800" font-size="24px" fill="#4ade80">88%</text>
+      <text x="790" y="36" class="font-sans" font-weight="800" font-size="24px" fill="#4ade80">18%</text>
+      <text x="900" y="36" class="font-sans" font-weight="900" font-size="24px" fill="#ef4444">KO!</text>
+    </g>
+
+    <!-- Iron Head -->
+    <g transform="translate(30, 770)">
+      <text x="0" y="28" class="font-sans" font-weight="800" font-size="22px" fill="#ffffff">IH</text>
+      <text x="0" y="52" class="font-mono" font-size="16px" fill="#64748b">50e/17f</text>
+
+      <rect x="150" y="10" width="320" height="38" fill="#166534" rx="6" />
+      <text x="310" y="35" class="font-mono" font-weight="700" font-size="20px" fill="#ffffff" text-anchor="middle">Safe 1,3,5</text>
+      <rect x="476" y="10" width="60" height="38" fill="#1e3a8a" rx="6" />
+      <text x="506" y="35" class="font-mono" font-weight="700" font-size="20px" fill="#ffffff" text-anchor="middle">#17</text>
+
+      <text x="680" y="36" class="font-sans" font-weight="800" font-size="24px" fill="#facc15">41%</text>
+      <text x="790" y="36" class="font-sans" font-weight="800" font-size="24px" fill="#4ade80">35%</text>
+      <text x="900" y="36" class="font-sans" font-weight="800" font-size="24px" fill="#4ade80">57%</text>
+    </g>
+  </g>
+
+  <!-- Right Side In-Game Team Switch Buttons -->
+  <g transform="translate(880, 1250)">
+    <!-- Switch to Lugia CP 4179 -->
+    <rect x="0" y="0" width="160" height="150" fill="rgba(15,23,42,0.85)" stroke="#64748b" stroke-width="3" rx="16" />
+    <text x="140" y="30" class="font-sans" font-weight="800" font-size="18px" fill="#ffffff" text-anchor="end">CP 4179</text>
+    <!-- Lugia Avatar Circle -->
+    <circle cx="80" cy="90" r="40" fill="#38bdf8" opacity="0.6" />
+  </g>
+
+  <g transform="translate(880, 1430)">
+    <!-- Switch to Kyogre CP 4652 -->
+    <rect x="0" y="0" width="160" height="150" fill="rgba(15,23,42,0.85)" stroke="#38bdf8" stroke-width="3" rx="16" />
+    <text x="140" y="30" class="font-sans" font-weight="800" font-size="18px" fill="#ffffff" text-anchor="end">CP 4652</text>
+    <circle cx="80" cy="90" r="40" fill="#0284c7" opacity="0.6" />
+  </g>
+
+  <!-- Bottom In-Game Charged Move Buttons -->
+  <g transform="translate(240, 1950)">
+    <!-- Roar of Time Charged Button -->
+    <circle cx="160" cy="110" r="100" fill="rgba(15, 23, 42, 0.85)" stroke="#38bdf8" stroke-width="8" />
+    <text x="160" y="240" class="font-sans" font-weight="900" font-size="28px" fill="#ffffff" text-anchor="middle">ROAR OF TIME</text>
+
+    <!-- Iron Head Charged Button -->
+    <circle cx="440" cy="110" r="100" fill="rgba(15, 23, 42, 0.85)" stroke="#94a3b8" stroke-width="8" />
+    <text x="440" y="240" class="font-sans" font-weight="900" font-size="28px" fill="#ffffff" text-anchor="middle">IRON HEAD</text>
+  </g>
+</svg>

@@ -436,7 +436,7 @@ class MainActivity : AppCompatActivity() {
     private val PREFS_KEY_SYNC_GIST_ID = OverlayService.PREFS_KEY_SYNC_GIST_ID
     private val PREFS_KEY_SYNC_LAST_AT = OverlayService.PREFS_KEY_SYNC_LAST_AT
     private val SCRAPEDDUCK_EVENTS_URL = "https://raw.githubusercontent.com/bigfoott/ScrapedDuck/data/events.min.json"
-    private val DONATION_URL = "https://buymeacoffee.com/sportsfan986"
+    private val DONATION_URL = "https://buymeacoffee.com/silphscopepvp"
     private val GAMEMASTER_URL = "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/gamemaster.json"
     private val RANKINGS_ENDPOINTS = listOf(
         Triple("GREAT LEAGUE", "pvpoke_rankings_gl.json", "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-1500.json"),
@@ -2594,7 +2594,11 @@ class MainActivity : AppCompatActivity() {
 
     private var replayVaultSettingsBox: LinearLayout? = null
     private var editReplayUnlockKey: EditText? = null
+    private var editReplayClaimEmail: EditText? = null
     private var textReplayVaultStatus: TextView? = null
+    private var layoutVipLocalSliderRow: LinearLayout? = null
+    private var textVipLocalSliderLabel: TextView? = null
+    private var seekVipLocalSlider: SeekBar? = null
 
     private fun setupOrUpdateReplayVaultSettingsUi() {
         val parentLayout = (textOneBattleDvrStatus.parent as? LinearLayout) ?: return
@@ -2620,51 +2624,217 @@ class MainActivity : AppCompatActivity() {
             }
 
             val titleTv = TextView(this).apply {
-                text = "🔑 In-App DVR Replay Vault & Cloud Share Tier (v6.43)"
+                text = "🔑 Membership Tier, Season Pass & Replay Vault (v7.00)"
                 setTextColor(0xFF38BDF8.toInt())
                 textSize = 12f
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
             }
             val subTv = TextView(this).apply {
-                text = "Free Tier stores your last 1 battle video locally on-device (+ Manual Issue Reports). Enter a Trainer/Pro/VIP Unlock Key to unlock 10–50 Cloud R2 Replays, ⭐ Pinned Battles & Web Share Links. When signed in with GitHub, your Unlock Key is AES-256-GCM encrypted & synced across your devices via your private vault."
+                text = "1️⃣ First tap '🛡️ Verify Unique Trainer ID' so your handle is locked to your device.\n" +
+                    "2️⃣ Upgrade via Stripe or Buy Me a Coffee: First 14 days of a GBL Season = Full Season ($10 Pro / $20 VIP). Day 15+ First-Time Promo = 1-Month Rate ($5 Pro / $10 VIP) for the entire remainder of the season! Plus any Pro/VIP pass permanently unlocks Lifetime Supporter (Alumni: 5 Local Videos + Core 3 Leagues + Lifetime Battle Logs) forever.\n" +
+                    "3️⃣ One-time online verification caches an offline cryptographic token so HUD, DVR & Anti-Meta work 100% offline."
                 setTextColor(0xFF94A3B8.toInt())
                 textSize = 10.5f
                 setPadding(0, (2 * density).toInt(), 0, (6 * density).toInt())
             }
+
+            // Pre-Checkout Unique Screen Name Registration & Dupe Check Row
+            val regBtn = Button(this).apply {
+                text = "🛡️ Step 1: Verify & Lock Unique Trainer ID Before Checkout"
+                textSize = 10.5f
+                isAllCaps = false
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF0284C7.toInt())
+                setTextColor(0xFFFFFFFF.toInt())
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = (6 * density).toInt()
+                }
+                setOnClickListener {
+                    val currentId = OverlayService.getRequiredScreenNameStatic(prefs)
+                    val emailStr = editReplayClaimEmail?.text?.toString()?.trim().orEmpty()
+                    if (currentId.isEmpty() || OverlayService.isRandomDebugIdStatic(prefs)) {
+                        promptCustomIdForVideoLogging()
+                        return@setOnClickListener
+                    }
+                    Toast.makeText(this@MainActivity, "🔍 Checking uniqueness of @$currentId...", Toast.LENGTH_SHORT).show()
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        val (ok, msg) = OverlayService.registerUniqueScreenNameBlocking(prefs, gson, currentId, emailStr)
+                        withContext(Dispatchers.Main) {
+                            if (!isFinishing) {
+                                setupOrUpdateReplayVaultSettingsUi()
+                                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Stripe & Buy Me a Coffee Checkout Buttons Row
+            val payRow1 = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = (4 * density).toInt()
+                }
+            }
+            fun openCheckoutUrl(baseUrl: String) {
+                val user = OverlayService.getRequiredScreenNameStatic(prefs)
+                val fullUrl = if (baseUrl.contains("buy.stripe.com") && user.isNotEmpty()) {
+                    "$baseUrl?client_reference_id=${android.net.Uri.encode(user)}"
+                } else {
+                    baseUrl
+                }
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(fullUrl)))
+                } catch (_: Exception) {}
+            }
+
+            // Calculate whether Day 15+ Intro Promo applies right now
+            val nowMs = System.currentTimeMillis()
+            val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+            val yr = cal.get(java.util.Calendar.YEAR)
+            val seasonStarts = listOf(
+                java.time.ZonedDateTime.of(yr - 1, 12, 1, 21, 0, 0, 0, java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
+                java.time.ZonedDateTime.of(yr, 3, 1, 21, 0, 0, 0, java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
+                java.time.ZonedDateTime.of(yr, 6, 1, 21, 0, 0, 0, java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
+                java.time.ZonedDateTime.of(yr, 9, 1, 21, 0, 0, 0, java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
+                java.time.ZonedDateTime.of(yr, 12, 1, 21, 0, 0, 0, java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+            )
+            val curSeasonStart = seasonStarts.lastOrNull { it <= nowMs } ?: seasonStarts.first()
+            val isDay15Plus = ((nowMs - curSeasonStart) / 86400000L) >= 14L
+            val everPaidAlready = prefs.getBoolean(OverlayService.PREFS_KEY_REPLAY_EVER_PAID, false)
+            val useIntroPromo = isDay15Plus && !everPaidAlready
+
+            val btnStripeSupporter = Button(this).apply {
+                text = "🏅 Supporter ($3)"
+                textSize = 10f
+                isAllCaps = false
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF0369A1.toInt())
+                setTextColor(0xFFFFFFFF.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    rightMargin = (4 * density).toInt()
+                }
+                setOnClickListener { openCheckoutUrl(OverlayService.STRIPE_URL_SUPPORTER) }
+            }
+            val btnStripePro = Button(this).apply {
+                text = if (useIntroPromo) "💳 Pro Season ($5 Intro!)" else "💳 Pro Season ($10)"
+                textSize = 10f
+                isAllCaps = false
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF059669.toInt())
+                setTextColor(0xFFFFFFFF.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.2f).apply {
+                    rightMargin = (4 * density).toInt()
+                }
+                setOnClickListener {
+                    openCheckoutUrl(if (useIntroPromo) OverlayService.STRIPE_URL_PRO_INTRO else OverlayService.STRIPE_URL_PRO_SEASON)
+                }
+            }
+            val btnStripeVip = Button(this).apply {
+                text = if (useIntroPromo) "👑 VIP Season ($10 Intro!)" else "👑 VIP Season ($20)"
+                textSize = 10f
+                isAllCaps = false
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF7C3AED.toInt())
+                setTextColor(0xFFFFFFFF.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.2f)
+                setOnClickListener {
+                    openCheckoutUrl(if (useIntroPromo) OverlayService.STRIPE_URL_VIP_INTRO else OverlayService.STRIPE_URL_VIP_SEASON)
+                }
+            }
+            payRow1.addView(btnStripeSupporter)
+            payRow1.addView(btnStripePro)
+            payRow1.addView(btnStripeVip)
+
+            val payRow2 = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = (6 * density).toInt()
+                }
+            }
+            val btnBmcShop = Button(this).apply {
+                text = "☕ Buy Me a Coffee (PokéCoins & Season Shop)"
+                textSize = 10f
+                isAllCaps = false
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFD97706.toInt())
+                setTextColor(0xFFFFFFFF.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.3f).apply {
+                    rightMargin = (4 * density).toInt()
+                }
+                setOnClickListener { openCheckoutUrl(OverlayService.BMC_URL_PAGE) }
+            }
+            val btnWebVault = Button(this).apply {
+                text = "☁️ Open Web Vault"
+                textSize = 10f
+                isAllCaps = false
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF334155.toInt())
+                setTextColor(0xFFF8FAFC.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.9f)
+                setOnClickListener {
+                    val u = OverlayService.getRequiredScreenNameStatic(prefs)
+                    val k = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "") ?: ""
+                    openCheckoutUrl("${OverlayService.CLOUDFLARE_TELEMETRY_WORKER_URL}/vault?user=${android.net.Uri.encode(u)}&key=${android.net.Uri.encode(k)}")
+                }
+            }
+            payRow2.addView(btnBmcShop)
+            payRow2.addView(btnWebVault)
 
             val inputRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = android.view.Gravity.CENTER_VERTICAL
             }
             val keyInput = EditText(this).apply {
-                hint = "Unlock Key (e.g. SSPVP-PRO-... or synced via GitHub)"
+                hint = "Unlock Key (SSPVP-PRO-XXXX-XXXX)"
                 setHintTextColor(0xFF64748B.toInt())
                 setTextColor(0xFFF8FAFC.toInt())
-                textSize = 11.5f
+                textSize = 11f
                 setSingleLine(true)
                 setText(prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "") ?: "")
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             }
+            val emailInput = EditText(this).apply {
+                hint = "Checkout Email (auto-claim / resolve dupe ID)"
+                setHintTextColor(0xFF64748B.toInt())
+                setTextColor(0xFFF8FAFC.toInt())
+                textSize = 11f
+                setSingleLine(true)
+                setText(prefs.getString(OverlayService.PREFS_KEY_CLAIM_EMAIL, "") ?: "")
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = (2 * density).toInt()
+                    bottomMargin = (4 * density).toInt()
+                }
+            }
             val verifyBtn = Button(this).apply {
-                text = "🔑 Verify / Sync"
+                text = "🔑 Verify / Claim"
                 textSize = 10.5f
                 isAllCaps = false
                 backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
                 setTextColor(0xFFFFFFFF.toInt())
                 setOnClickListener {
                     val entered = keyInput.text?.toString()?.trim().orEmpty()
+                    val enteredEmail = emailInput.text?.toString()?.trim().orEmpty()
                     prefs.edit()
                         .putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, entered)
+                        .putString(OverlayService.PREFS_KEY_CLAIM_EMAIL, enteredEmail)
                         .putLong(OverlayService.PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
                         .apply()
-                    Toast.makeText(this@MainActivity, "🔄 Verifying Replay Unlock Key & syncing Private Vault...", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "🔄 Verifying Membership Key / Email Claim...", Toast.LENGTH_SHORT).show()
                     lifecycleScope.launch(Dispatchers.IO) {
-                        val (ok, msg) = OverlayService.verifyReplayUnlockKeyBlocking(prefs, gson, entered)
+                        val (ok, msg) = OverlayService.verifyReplayUnlockKeyBlocking(prefs, gson, entered, enteredEmail)
                         if (OverlayService.getEffectiveSyncToken(prefs).isNotEmpty()) {
                             try {
                                 OverlayService.syncWithGitHubGistBlocking(prefs, gson)
                             } catch (_: Exception) {}
                         }
+                        OverlayService.enforceLocalDvrReplaysQuotaStatic(filesDir, prefs, gson)
                         withContext(Dispatchers.Main) {
                             if (!isFinishing) {
                                 setupOrUpdateReplayVaultSettingsUi()
@@ -2679,6 +2849,44 @@ class MainActivity : AppCompatActivity() {
             inputRow.addView(keyInput)
             inputRow.addView(verifyBtn)
 
+            // VIP Configurable Local DVR Buffer Slider (25 to 100 battles)
+            val vipRow = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                val padV = (6 * density).toInt()
+                setPadding(0, padV, 0, padV)
+                visibility = android.view.View.GONE
+            }
+            val vipLabel = TextView(this).apply {
+                setTextColor(0xFFC4B5FD.toInt())
+                textSize = 11f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            }
+            val vipSeek = SeekBar(this).apply {
+                max = 75 // 0..75 => 25..100 battles
+                val savedLimit = prefs.getInt(OverlayService.PREFS_KEY_VIP_LOCAL_DVR_LIMIT, OverlayService.DEFAULT_VIP_LOCAL_DVR_LIMIT).coerceIn(25, 100)
+                progress = savedLimit - 25
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                        val limit = (progress + 25).coerceIn(25, 100)
+                        vipLabel.text = "👑 VIP Local On-Device DVR Ring Buffer: $limit Battles (25–100 Configurable)"
+                        if (fromUser) {
+                            prefs.edit().putInt(OverlayService.PREFS_KEY_VIP_LOCAL_DVR_LIMIT, limit).apply()
+                        }
+                    }
+                    override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                    override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            OverlayService.enforceLocalDvrReplaysQuotaStatic(filesDir, prefs, gson)
+                            withContext(Dispatchers.Main) {
+                                if (!isFinishing) setupOrUpdateReplayVaultSettingsUi()
+                            }
+                        }
+                    }
+                })
+            }
+            vipRow.addView(vipLabel)
+            vipRow.addView(vipSeek)
+
             val statusTv = TextView(this).apply {
                 setTextColor(0xFFE2E8F0.toInt())
                 textSize = 10.5f
@@ -2687,7 +2895,12 @@ class MainActivity : AppCompatActivity() {
 
             box.addView(titleTv)
             box.addView(subTv)
+            box.addView(regBtn)
+            box.addView(payRow1)
+            box.addView(payRow2)
             box.addView(inputRow)
+            box.addView(emailInput)
+            box.addView(vipRow)
             box.addView(statusTv)
 
             val idx = parentLayout.indexOfChild(textOneBattleDvrStatus)
@@ -2698,16 +2911,28 @@ class MainActivity : AppCompatActivity() {
             }
             replayVaultSettingsBox = box
             editReplayUnlockKey = keyInput
+            editReplayClaimEmail = emailInput
             textReplayVaultStatus = statusTv
+            layoutVipLocalSliderRow = vipRow
+            textVipLocalSliderLabel = vipLabel
+            seekVipLocalSlider = vipSeek
         }
 
         val tier = OverlayService.getEffectiveReplayTierStatic(prefs)
+        val maxLocal = OverlayService.getMaxLocalDvrBattlesForTierStatic(prefs)
         val tierBadge = when (tier) {
-            "vip" -> "👑 VIP / Admin Tier (150 Cloud + 25 ⭐ Pinned • 365d • 4 GB)"
-            "pro" -> "🏅 Pro / Legend Tier (50 Cloud + 10 ⭐ Pinned • 30d • 2 GB)"
-            "base" -> "🛡️ Base / Trainer Tier (10 Cloud + 5 ⭐ Pinned • 7d • 500 MB)"
-            else -> "🆓 Free Tier (1 Rolling Local Replay + 🚩 Manual Issue Reports)"
+            "vip" -> "👑 VIP / Coach Pass ($maxLocal Local Slider • 150 Cloud + 25 ⭐ Pinned • 365d • All Cups + Alt Moves)"
+            "pro" -> "🏅 Legend Pro Pass (25 Local • 50 Cloud + 10 ⭐ Pinned • 30d • All Cups + ⚡ Alt Movesets)"
+            "supporter" -> "🛡️ Lifetime Supporter / Alumni (5 Local • 365d Past Pinned Cloud • Core 3 Leagues • Lifetime Battle Logs)"
+            else -> "🆓 Free / Community Tier (1 Local Video • GL & ML 1-Team Anti-Meta • Current Season + 14d Grace)"
         }
+        layoutVipLocalSliderRow?.visibility = if (tier == "vip") android.view.View.VISIBLE else android.view.View.GONE
+        if (tier == "vip") {
+            val savedLimit = prefs.getInt(OverlayService.PREFS_KEY_VIP_LOCAL_DVR_LIMIT, OverlayService.DEFAULT_VIP_LOCAL_DVR_LIMIT).coerceIn(25, 100)
+            textVipLocalSliderLabel?.text = "👑 VIP Local On-Device DVR Ring Buffer: $savedLimit Battles (25–100 Configurable)"
+            seekVipLocalSlider?.progress = savedLimit - 25
+        }
+
         val localDir = java.io.File(filesDir, "dvr_replays")
         val localCount = localDir.listFiles { f -> f.isFile && f.name.endsWith("_video.mp4") }?.size ?: 0
         val localMb = (localDir.listFiles()?.sumOf { it.length() } ?: 0L).toDouble() / (1024.0 * 1024.0)
@@ -2723,13 +2948,14 @@ class MainActivity : AppCompatActivity() {
         val syncSecurityLine = if (ghToken.isNotEmpty() && ghUsername.isNotEmpty()) {
             "🔒 Multi-Device Key Sync: AES-256-GCM Encrypted in @$ghUsername's Private GitHub Vault"
         } else {
-            "🔓 Multi-Device Key Sync: Sign in with GitHub above to securely sync your Unlock Key across devices"
+            "📴 Offline-Ready: Verified tier is cached locally on-device (Sign in with GitHub above for multi-device sync)"
         }
         textReplayVaultStatus?.text = String.format(
             java.util.Locale.US,
-            "%s\n📱 On-Device Replays: %d video(s) (%.1f MB) • ☁️ Cloud R2 Replays: %d • ⭐ Pinned: %d\n%s",
+            "%s\n📱 On-Device Replays: %d/%d video(s) (%.1f MB) • ☁️ Cloud R2 Replays: %d • ⭐ Pinned: %d\n%s",
             tierBadge,
             localCount,
+            maxLocal,
             localMb,
             cloudCount,
             pinnedCount,
@@ -4527,6 +4753,9 @@ class MainActivity : AppCompatActivity() {
     ): List<BattleLogEntry> {
         val isShow6 = isShow6CombatMode()
         val (currSeason, prevSeason) = getCurrentAndPreviousSeason()
+        val nowMs = System.currentTimeMillis()
+        val tier = if (::prefs.isInitialized) OverlayService.getEffectiveReplayTierStatic(prefs) else "free"
+        val isPastGracePeriod = nowMs > (currSeason.startMs + 14L * 86_400_000L)
         val cal = java.util.Calendar.getInstance()
         cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
         cal.set(java.util.Calendar.MINUTE, 0)
@@ -4538,6 +4767,9 @@ class MainActivity : AppCompatActivity() {
         val sevenDaysAgoMs = startOfTodayMs - 6L * 86400000L
 
         return logs.filter { entry ->
+            if (tier == "free" && entry.timestampMs < currSeason.startMs && isPastGracePeriod) {
+                return@filter false
+            }
             val leagueOk = OverlayService.matchesEncodedLeagueFilterStatic(entry.league, leagueFilter, isShow6, prefs)
             val teamOk = teamFilter == "ALL" || entry.userTeamName.equals(teamFilter, ignoreCase = true)
             val timeOk = when (timeframeKey) {
@@ -11174,6 +11406,46 @@ class MainActivity : AppCompatActivity() {
     private fun runAntiMetaTeamBuilderGeneration() {
         if (!::spinnerAntiMetaLeague.isInitialized) return
         val lg = spinnerAntiMetaLeague.selectedItem?.toString() ?: "GREAT LEAGUE"
+        val tier = if (::prefs.isInitialized) OverlayService.getEffectiveReplayTierStatic(prefs) else "free"
+        val normLg = lg.trim().uppercase()
+        val isGlOrMl = normLg == "GREAT LEAGUE" || normLg == "MASTER LEAGUE"
+        val isCore3 = isGlOrMl || normLg == "ULTRA LEAGUE"
+        if (tier == "free" && !isGlOrMl) {
+            AlertDialog.Builder(this)
+                .setTitle("🔒 Unlock $lg in Anti-Meta Generator")
+                .setMessage(
+                    "Free tier includes Open Great League & Master League (1 team per archetype).\n\n" +
+                        "• Lifetime Supporter ($3 one-time): Unlocks Open Ultra League + 2 teams per archetype + Unlimited Lifetime Battle Log History!\n" +
+                        "• Legend Pro ($5 Intro / $10 Season Pass): Unlocks ALL Limited/Mega/Specialty Cups, Top 5 teams per archetype, ⚡ Alternate Moveset Role Synthesis (+BR Deltas), and 50 Cloud Replay Vault slots!"
+                )
+                .setPositiveButton("💳 Unlock via Stripe") { _, _ ->
+                    val url = if (normLg == "ULTRA LEAGUE") OverlayService.STRIPE_URL_SUPPORTER_3 else OverlayService.STRIPE_URL_PRO_INTRO_5
+                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                }
+                .setNeutralButton("☕ Buy Me a Coffee") { _, _ ->
+                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(DONATION_URL)))
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+            return
+        }
+        if (tier == "supporter" && !isCore3) {
+            AlertDialog.Builder(this)
+                .setTitle("🏆 Legend Pro Required for $lg")
+                .setMessage(
+                    "Lifetime Supporter includes Core 3 Open Leagues (Great, Ultra & Master League).\n\n" +
+                        "Upgrade to Legend Pro ($5 First-Season Intro / $10 Season Pass) to unlock all Limited, Retro, Mega & Battle Frontier Cups, Top 5 teams per archetype, and ⚡ Alternate Moveset Role Synthesis!"
+                )
+                .setPositiveButton("💳 Upgrade on Stripe") { _, _ ->
+                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(OverlayService.STRIPE_URL_PRO_INTRO_5)))
+                }
+                .setNeutralButton("☕ Buy Me a Coffee") { _, _ ->
+                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(OverlayService.BMC_URL_PRO_SEASON_10)))
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+            return
+        }
         val f1 = editAntiMetaFeat1.text.toString().trim()
         val f2 = editAntiMetaFeat2.text.toString().trim()
         val f1Range = OverlayService.parseFeaturedRankRangeQueryStatic(f1)
@@ -11197,8 +11469,14 @@ class MainActivity : AppCompatActivity() {
         val seasonLogs = getCurrentSeasonLogsForLeague(lg, preloadedLogs)
         val defaultNamePreview = OverlayService.formatAntiMetaDefaultTeamNameStatic(lg)
 
+        val maxPerArch = when (tier) {
+            "pro", "vip" -> 5
+            "supporter" -> 2
+            else -> 1
+        }
+        val allowAlt = tier == "pro" || tier == "vip"
         btnGenerateAntiMetaTeams.isEnabled = false
-        btnGenerateAntiMetaTeams.text = "⏳ Generating Best 5 ABB, 5 ABC & 5 Duo-Core Teams..."
+        btnGenerateAntiMetaTeams.text = "⏳ Generating Best $maxPerArch ABB, $maxPerArch ABC & $maxPerArch Duo-Core Teams..."
         textAntiMetaStatus.text = "Simulating $lg Anti-Meta lineups (${if (featuredList.isEmpty()) "0 Featured" else featuredList.joinToString(" + ")})..."
 
         antiMetaJob?.cancel()
@@ -11206,18 +11484,26 @@ class MainActivity : AppCompatActivity() {
             val result = OverlayService.generateAntiMetaTeamOptionsStatic(
                 league = lg,
                 featuredPokemonNames = featuredList,
-                seasonLogs = seasonLogs
+                seasonLogs = seasonLogs,
+                maxTeamsPerArchetype = maxPerArch,
+                allowAltMovesets = allowAlt
             )
             withContext(Dispatchers.Main) {
                 btnGenerateAntiMetaTeams.isEnabled = true
-                btnGenerateAntiMetaTeams.text = "⚡ Generate Best 5 ABB, 5 ABC & 5 Duo-Core Teams"
+                btnGenerateAntiMetaTeams.text = "⚡ Generate Best $maxPerArch ABB, $maxPerArch ABC & $maxPerArch Duo-Core Teams"
                 val featLabel = if (result.featuredPokemon.isEmpty()) {
                     "0 Featured Picks (Full Meta)"
                 } else {
                     "Featuring ${result.featuredPokemon.joinToString(" + ")}"
                 }
+                val tierTag = when (tier) {
+                    "vip" -> "👑 VIP"
+                    "pro" -> "🏆 PRO"
+                    "supporter" -> "🏅 SUPPORTER (Top 2/Arch • Std Moves)"
+                    else -> "🆓 FREE (Top 1/Arch • GL/ML • Std Moves)"
+                }
                 textAntiMetaStatus.text =
-                    "✅ Generated Top ${result.top5AbbTeams.size} ABB, Top ${result.top5AbcTeams.size} ABC & Top ${result.top5DuoTeams.size} Duo-Core Teams ($featLabel • ${result.candidatesEvaluated} trios + ${result.movesetCombosSimulated} alt moveset sims in ${result.elapsedMs}ms)\n• ${result.metaSummaryLabel} • Default Name: \"$defaultNamePreview\""
+                    "✅ [$tierTag] Generated Top ${result.top5AbbTeams.size} ABB, Top ${result.top5AbcTeams.size} ABC & Top ${result.top5DuoTeams.size} Duo-Core Teams ($featLabel • ${result.candidatesEvaluated} trios + ${result.movesetCombosSimulated} alt moveset sims in ${result.elapsedMs}ms)\n• ${result.metaSummaryLabel} • Default Name: \"$defaultNamePreview\""
                 renderAntiMetaBuilderResults(result)
             }
         }
@@ -11228,6 +11514,8 @@ class MainActivity : AppCompatActivity() {
         val density = resources.displayMetrics.density
         val activeTheme = getActiveAppTheme()
         val defaultTeamName = OverlayService.formatAntiMetaDefaultTeamNameStatic(result.league)
+        val tier = if (::prefs.isInitialized) OverlayService.getEffectiveReplayTierStatic(prefs) else "free"
+        val isProOrVip = tier == "pro" || tier == "vip"
 
         fun addSectionHeader(title: String, subtitle: String, titleColor: Int) {
             val hdrBox = LinearLayout(this).apply {
@@ -11288,7 +11576,11 @@ class MainActivity : AppCompatActivity() {
             }
             val altCount = opt.altMovesetSlots.count { it.isAltMoveset }
             val altHeaderBadge = if (altCount > 0) {
-                "  •  <font color='#c4b5fd'><b>[⚡ $altCount Alt Moveset${if (altCount > 1) "s" else ""}]</b></font>"
+                if (isProOrVip) {
+                    "  •  <font color='#c4b5fd'><b>[⚡ $altCount Alt Moveset${if (altCount > 1) "s" else ""}]</b></font>"
+                } else {
+                    "  •  <font color='#fbbf24'><b>[🔒 $altCount Pro Alt Moveset${if (altCount > 1) "s" else ""} Available]</b></font>"
+                }
             } else {
                 ""
             }
@@ -11352,7 +11644,11 @@ class MainActivity : AppCompatActivity() {
                 val altBadge = if (isAlt) {
                     val gainVal = kotlin.math.max(altInfo?.roleBrDelta ?: 0, altInfo?.coreBrDelta ?: 0)
                     val gainPart = if (gainVal > 0) " +$gainVal BR" else ""
-                    " <font color='#c4b5fd'><b>[⚡ Alt Moveset$gainPart]</b></font>"
+                    if (isProOrVip) {
+                        " <font color='#c4b5fd'><b>[⚡ Alt Moveset$gainPart]</b></font>"
+                    } else {
+                        " <font color='#fbbf24'><b>[🔒 ⚡ Pro Alt Moveset$gainPart Available]</b></font>"
+                    }
                 } else {
                     ""
                 }
@@ -11493,6 +11789,68 @@ class MainActivity : AppCompatActivity() {
             }
             metaCard.addView(metaTv)
             layoutAntiMetaResults.addView(metaCard)
+        }
+
+        if (!isProOrVip) {
+            val upsellCard = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setBackgroundColor(0xFF1E1B4B.toInt())
+                val pad = (12 * density).toInt()
+                setPadding(pad, pad, pad, pad)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = (8 * density).toInt()
+                    bottomMargin = (8 * density).toInt()
+                }
+            }
+            val upsellTitle = TextView(this).apply {
+                text = "🏆 Unlock Full Anti-Meta Generator & ⚡ Alt Moveset Synthesis"
+                textSize = 12.5f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(0xFFFBBF24.toInt())
+            }
+            val upsellBody = TextView(this).apply {
+                text = "• Lifetime Supporter ($3 one-time): Unlocks Ultra League + Top 2 teams per archetype + Unlimited Lifetime Battle Log History!\n" +
+                    "• Legend Pro ($5 Day 15+ Intro / $10 Season Pass): Unlocks ALL Limited/Mega Cups, Top 5 teams per archetype (15+ teams), ⚡ Alternate Moveset Role Synthesis (+BR Deltas), Nemesis Builder, and 50 Cloud Replay Vault slots!"
+                textSize = 10.5f
+                setTextColor(0xFFE2E8F0.toInt())
+                setPadding(0, (4 * density).toInt(), 0, (8 * density).toInt())
+            }
+            val btnRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+            }
+            val btnStripe = Button(this).apply {
+                text = "💳 Unlock via Stripe"
+                textSize = 10.5f
+                isAllCaps = false
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF6366F1.toInt())
+                setTextColor(0xFFFFFFFF.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginEnd = (6 * density).toInt()
+                }
+                setOnClickListener {
+                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(OverlayService.STRIPE_URL_PRO_INTRO_5)))
+                }
+            }
+            val btnBmc = Button(this).apply {
+                text = "☕ Buy Me a Coffee"
+                textSize = 10.5f
+                isAllCaps = false
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFD97706.toInt())
+                setTextColor(0xFF0F172A.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                setOnClickListener {
+                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(DONATION_URL)))
+                }
+            }
+            btnRow.addView(btnStripe)
+            btnRow.addView(btnBmc)
+            upsellCard.addView(upsellTitle)
+            upsellCard.addView(upsellBody)
+            upsellCard.addView(btnRow)
+            layoutAntiMetaResults.addView(upsellCard)
         }
     }
 
@@ -13202,8 +13560,100 @@ class MainActivity : AppCompatActivity() {
             withContext(Dispatchers.Main) {
                 val density = resources.displayMetrics.density
                 val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+                val tier = if (::prefs.isInitialized) OverlayService.getEffectiveReplayTierStatic(prefs) else "free"
+                val isProOrVip = tier == "pro" || tier == "vip"
 
                 coresContainer.removeAllViews()
+
+                // v7.00 Idea D: Personal Nemesis & Blind-Spot Meta Analyzer Card
+                data class NemesisStat(val name: String, var wins: Int = 0, var losses: Int = 0)
+                val nemesisMap = mutableMapOf<String, NemesisStat>()
+                val currentSeasonEntries = allLogs.filter {
+                    it.timestampMs in currSeason.startMs..currSeason.endMs &&
+                        it.league.equals(selectedLeague, ignoreCase = true)
+                }
+                for (entry in currentSeasonEntries) {
+                    val isWin = entry.result.equals("WIN", ignoreCase = true)
+                    val isLoss = entry.result.equals("LOSS", ignoreCase = true)
+                    if (!isWin && !isLoss) continue
+                    for (opp in entry.opponents.distinct()) {
+                        val clean = opp.trim()
+                        if (clean.isEmpty() || clean.equals("Unknown", ignoreCase = true) || clean.equals("Waiting...", ignoreCase = true)) continue
+                        val st = nemesisMap.getOrPut(clean) { NemesisStat(clean) }
+                        if (isWin) st.wins++ else st.losses++
+                    }
+                }
+                val topNemeses: List<NemesisStat> = nemesisMap.values
+                    .filter { (it.wins + it.losses) >= 2 && it.losses >= 1 }
+                    .sortedWith(
+                        compareByDescending<NemesisStat> { it.losses.toDouble() / (it.wins + it.losses).coerceAtLeast(1).toDouble() }
+                            .thenByDescending { it.losses }
+                    )
+                    .take(3)
+
+                val nemesisCard = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setBackgroundColor(0xFF1E1B4B.toInt())
+                    val pad = (10 * density).toInt()
+                    setPadding(pad, pad, pad, pad)
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        bottomMargin = (8 * density).toInt()
+                    }
+                }
+                val nemTitle = TextView(this@MainActivity).apply {
+                    text = "🎯 Personal Nemesis & Blind-Spot Analyzer (${if (isProOrVip) "🏆 PRO ACTIVE" else "🔒 PRO FEATURE"})"
+                    setTextColor(0xFFFBBF24.toInt())
+                    textSize = 11.5f
+                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                }
+                val nemSummaryText = if (topNemeses.isEmpty()) {
+                    "Log at least 2 battles against repeated opponents in $selectedLeague to automatically detect your highest-loss-rate Nemesis threats & blind spots."
+                } else {
+                    topNemeses.mapIndexed { i, n ->
+                        val tot = n.wins + n.losses
+                        val lossPct = Math.round((n.losses.toDouble() / tot.toDouble()) * 100.0).toInt()
+                        "#${i + 1} ${n.name}: ${n.wins}W-${n.losses}L ($lossPct% Loss Rate)"
+                    }.joinToString("  •  ")
+                }
+                val nemBody = TextView(this@MainActivity).apply {
+                    text = nemSummaryText
+                    setTextColor(0xFFE2E8F0.toInt())
+                    textSize = 10.5f
+                    setPadding(0, (4 * density).toInt(), 0, (6 * density).toInt())
+                }
+                val nemBtn = Button(this@MainActivity).apply {
+                    text = if (isProOrVip) "🎯 Build Anti-Nemesis Team in Anti-Meta Generator" else "🔒 Unlock 🎯 Anti-Nemesis Team Builder (Legend Pro)"
+                    textSize = 10.5f
+                    isAllCaps = false
+                    backgroundTintList = android.content.res.ColorStateList.valueOf(if (isProOrVip) 0xFF059669.toInt() else 0xFF6366F1.toInt())
+                    setTextColor(0xFFFFFFFF.toInt())
+                    setOnClickListener {
+                        if (!isProOrVip) {
+                            startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(OverlayService.STRIPE_URL_PRO_INTRO_5)))
+                        } else {
+                            switchMainPage("teams")
+                            if (::spinnerAntiMetaLeague.isInitialized) {
+                                val adapter = spinnerAntiMetaLeague.adapter
+                                if (adapter != null) {
+                                    for (idx in 0 until adapter.count) {
+                                        if (adapter.getItem(idx)?.toString().equals(selectedLeague, ignoreCase = true)) {
+                                            spinnerAntiMetaLeague.setSelection(idx)
+                                            break
+                                        }
+                                    }
+                                }
+                            }
+                            runAntiMetaTeamBuilderGeneration()
+                        }
+                    }
+                }
+                nemesisCard.addView(nemTitle)
+                nemesisCard.addView(nemBody)
+                nemesisCard.addView(nemBtn)
+                coresContainer.addView(nemesisCard)
                 if (topCores.isEmpty()) {
                     val emptyTv = TextView(this@MainActivity).apply {
                         text = if (empiricalLimit != null) {
