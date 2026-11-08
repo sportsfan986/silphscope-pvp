@@ -93,7 +93,7 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.08"
+        const val APP_VERSION = "7.09"
         const val APP_VERSION_CODE = 1708
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -2350,6 +2350,17 @@ class OverlayService : LifecycleService() {
     internal var disableBattleToasts = false
     internal var showTacticalRecommendations = true
     internal var showShieldDecisionOverlay = true
+    internal fun isShieldDecisionOverlayUnlockedByTier(): Boolean {
+        return try {
+            if (::prefs.isInitialized) {
+                OverlayService.getEffectiveReplayTierStatic(prefs) != "free"
+            } else {
+                false
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
     internal var aiAdviceHudPosition = DEFAULT_AI_ADVICE_HUD_POSITION
     internal var overlayHudMode = DEFAULT_OVERLAY_HUD_MODE
     internal var compactHudShowMatrix = DEFAULT_COMPACT_HUD_SHOW_MATRIX
@@ -4050,7 +4061,7 @@ class OverlayService : LifecycleService() {
         userSlotIdx: Int,
         preThrowOppEnergy: Int
     ) {
-        if (!showShieldDecisionOverlay || !isBattleActive || isWaitingForOpponent) {
+        if (!showShieldDecisionOverlay || !isShieldDecisionOverlayUnlockedByTier() || !isBattleActive || isWaitingForOpponent) {
             hideShieldDecisionOverlay()
             return
         }
@@ -9154,7 +9165,7 @@ class OverlayService : LifecycleService() {
                 lastShieldOverlayConfirmFrameMs = currentFrameTimestampMs
                 shieldOverlayShowConfirmFrames = (shieldOverlayShowConfirmFrames + 1).coerceAtMost(30)
             }
-            if (showShieldDecisionOverlay && (isShieldDecisionOverlayVisible || shieldOverlayShowConfirmFrames >= 2)) {
+            if (showShieldDecisionOverlay && isShieldDecisionOverlayUnlockedByTier() && (isShieldDecisionOverlayVisible || shieldOverlayShowConfirmFrames >= 2)) {
                 val oppIdxForOverlay = if (pendingChargedAttackOppSlotIdx in 0..2) pendingChargedAttackOppSlotIdx else activeOppIdx.coerceIn(0, 2)
                 val preThrowE = if (pendingChargedAttackPreOppEnergy > 0) {
                     pendingChargedAttackPreOppEnergy
@@ -9166,7 +9177,7 @@ class OverlayService : LifecycleService() {
                     userSlotIdx = activeUserIdx.coerceIn(0, 2),
                     preThrowOppEnergy = preThrowE
                 )
-            } else if (!showShieldDecisionOverlay && isShieldDecisionOverlayVisible) {
+            } else if ((!showShieldDecisionOverlay || !isShieldDecisionOverlayUnlockedByTier()) && isShieldDecisionOverlayVisible) {
                 hideShieldDecisionOverlay()
             }
             if (!wasPromptActive || hpChanged) {
@@ -16661,6 +16672,7 @@ class OverlayService : LifecycleService() {
         val shieldDecisionOverlayPayload: Map<String, Any?> = run {
             val isVisible = (isBattleActive || isReplayMode) &&
                 showShieldDecisionOverlay &&
+                isShieldDecisionOverlayUnlockedByTier() &&
                 (isAttackIncomingPromptActive || isShieldDecisionOverlayVisible) &&
                 !isWaitingForOpponent
             val oppPlusMove = activeOppMoveSelection.plusMove

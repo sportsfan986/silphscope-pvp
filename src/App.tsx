@@ -5712,7 +5712,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.07 • Android Native Overlay
+                  v7.09 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -10404,7 +10404,7 @@ export default function App() {
                                 🏆 Unlock All 15 Anti-Meta Teams, Limited Cups &amp; ⚡ Alternate Moveset Role Synthesis
                               </h5>
                               <p className="text-[11px] text-slate-300">
-                                Free tier shows 1 team per archetype (GL/ML) with standard movesets. Upgrade to <strong>Lifetime Supporter ($3)</strong> for Ultra League + 2 teams/archetype + Unlimited Battle Log History, or <strong>Legend Pro ($5 First-Season Intro / $10 Season Pass)</strong> for all 15 teams, Limited/Mega Cups, and ⚡ Alt Movesets!
+                                Free tier shows 1 team per archetype (GL/ML) with standard movesets. Upgrade to <strong>Lifetime Supporter ($3)</strong> for the 🛡️ Attack Incoming! Shield Decision Overlay + Ultra League + 2 teams/archetype + Unlimited Battle Log History, or <strong>Legend Pro ($5 First-Season Intro / $10 Season Pass)</strong> for all 15 teams, Limited/Mega Cups, and ⚡ Alt Movesets!
                               </p>
                             </div>
                             <button
@@ -16721,21 +16721,23 @@ export default function App() {
                   <div className="font-extrabold text-slate-200">🆓 Free Community</div>
                   <div className="text-base font-black text-white">$0</div>
                   <ul className="text-[10.5px] text-slate-400 space-y-1">
-                    <li>• 100% Live HUD &amp; Haptics</li>
+                    <li>• Live 9-Shield Matrix &amp; Haptics</li>
                     <li>• Current Season Logs (+14d grace)</li>
-                    <li>• 1 Local DVR Battle</li>
+                    <li>• 1 Local DVR Battle (15 FPS)</li>
                     <li>• GL &amp; ML Anti-Meta (1/arch)</li>
+                    <li className="text-rose-400/90">• No Shield Decision HUD Card</li>
                   </ul>
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-950 border border-sky-500/40 space-y-1.5">
                   <div className="font-extrabold text-sky-300">🏅 Lifetime Supporter</div>
-                  <div className="text-base font-black text-white">$3 One-Time</div>
+                  <div className="text-base font-black text-white">$3 One-Time / Alumni</div>
                   <ul className="text-[10.5px] text-slate-300 space-y-1">
+                    <li>• <strong>🛡️ Attack Incoming! Shield Decision HUD</strong></li>
                     <li>• <strong>Unlimited Lifetime Battle Logs</strong></li>
-                    <li>• 5 Local DVR Battles</li>
-                    <li>• 365d Pinned Cloud Retention</li>
+                    <li>• 5 Local DVR Battles (15 FPS)</li>
                     <li>• Core 3 (GL/UL/ML • 2/arch)</li>
+                    <li>• 365d Pinned Cloud Retention</li>
                   </ul>
                   <a
                     href="https://buy.stripe.com/dRmeVe8F36By2Dr5221Jm00"
@@ -16751,6 +16753,7 @@ export default function App() {
                   <div className="font-extrabold text-amber-300">🏆 Legend Pro Pass</div>
                   <div className="text-base font-black text-white">$5 Intro / $10 Season</div>
                   <ul className="text-[10.5px] text-slate-200 space-y-1">
+                    <li>• <strong>🛡️ Shield HUD + Supporter Forever</strong></li>
                     <li>• <strong>50 Cloud R2 Replays + 10 Pinned (15 FPS)</strong></li>
                     <li>• 25 Local DVR Battles (5 Sets)</li>
                     <li>• <strong>All Limited Cups + Top 5/Arch</strong></li>
@@ -16782,8 +16785,8 @@ export default function App() {
                   <ul className="text-[10.5px] text-slate-200 space-y-1">
                     <li>• <strong>🎥 30 FPS Smooth DVR (+ 15 FPS Saver)</strong></li>
                     <li>• <strong>150 Cloud Replays (365d) + 25 Pin</strong></li>
-                    <li>• Up to 100 Local DVR Battles</li>
-                    <li>• All Pro Features + Lifetime Supporter</li>
+                    <li>• Up to 100 Local DVR Battles (Slider)</li>
+                    <li>• <strong>🛡️ Shield HUD + All Pro &amp; Alumni Perks</strong></li>
                   </ul>
                   <div className="space-y-1 pt-1">
                     <a
@@ -17026,7 +17029,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.07 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
+        SilphScope PvP v7.09 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
       </footer>
     </div>
   );

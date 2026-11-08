@@ -21,8 +21,8 @@ android {
         // devices and enforces modern foreground-service / PendingIntent security boundaries.
         minSdk = 31
         targetSdk = 35
-        versionCode = 1708
-        versionName = "7.08"
+        versionCode = 1709
+        versionName = "7.09"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

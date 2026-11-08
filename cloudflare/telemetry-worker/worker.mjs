@@ -358,7 +358,7 @@ function escapeHtml(str) {
 const TIER_PRESETS = {
   free: {
     tier: 'free',
-    label: 'Free / Community (1 Local Video • GL & ML 1-Team Anti-Meta)',
+    label: 'Free / Community (1 Local Video (15 FPS) • GL & ML 1-Team Anti-Meta)',
     maxLocalBattles: 1,
     maxRollingBattles: 0,
     maxPinnedBattles: 0,
@@ -368,12 +368,13 @@ const TIER_PRESETS = {
     allowedLeagues: ['GREAT LEAGUE', 'MASTER LEAGUE'],
     teamsPerArchetype: 1,
     allowAltMovesets: false,
+    shieldDecisionOverlay: false,
     lifetimeHistory: false,
     seasonGraceDays: 14,
   },
   supporter: {
     tier: 'supporter',
-    label: 'Lifetime Supporter (Alumni • 5 Local Videos • Core 3 Leagues • Lifetime Logs)',
+    label: 'Lifetime Supporter (Alumni • 🛡️ Shield Decision HUD • 5 Local Videos (15 FPS) • Core 3 Leagues • Lifetime Logs)',
     maxLocalBattles: 5,
     maxRollingBattles: 0,
     maxPinnedBattles: 0,
@@ -383,12 +384,13 @@ const TIER_PRESETS = {
     allowedLeagues: ['GREAT LEAGUE', 'ULTRA LEAGUE', 'MASTER LEAGUE'],
     teamsPerArchetype: 2,
     allowAltMovesets: false,
+    shieldDecisionOverlay: true,
     lifetimeHistory: true,
     seasonGraceDays: 36500,
   },
   base: {
     tier: 'supporter',
-    label: 'Lifetime Supporter (Alumni • 5 Local Videos • Core 3 Leagues • Lifetime Logs)',
+    label: 'Lifetime Supporter (Alumni • 🛡️ Shield Decision HUD • 5 Local Videos (15 FPS) • Core 3 Leagues • Lifetime Logs)',
     maxLocalBattles: 5,
     maxRollingBattles: 0,
     maxPinnedBattles: 0,
@@ -398,12 +400,13 @@ const TIER_PRESETS = {
     allowedLeagues: ['GREAT LEAGUE', 'ULTRA LEAGUE', 'MASTER LEAGUE'],
     teamsPerArchetype: 2,
     allowAltMovesets: false,
+    shieldDecisionOverlay: true,
     lifetimeHistory: true,
     seasonGraceDays: 36500,
   },
   pro: {
     tier: 'pro',
-    label: 'Legend Pro Pass ($5/mo or $10/season • 15 FPS DVR • 25 Local • 50 Cloud / 10 Pinned • All Cups + Alt Moves)',
+    label: 'Legend Pro Pass ($5/mo or $10/season • 🛡️ Shield Decision HUD • 15 FPS DVR • 25 Local • 50 Cloud / 10 Pinned • All Cups + Alt Moves)',
     maxLocalBattles: 25,
     maxRollingBattles: 50,
     maxPinnedBattles: 10,
@@ -413,12 +416,13 @@ const TIER_PRESETS = {
     allowedLeagues: ['ALL'],
     teamsPerArchetype: 5,
     allowAltMovesets: true,
+    shieldDecisionOverlay: true,
     lifetimeHistory: true,
     seasonGraceDays: 36500,
   },
   vip: {
     tier: 'vip',
-    label: 'VIP / Coach Pass ($10/mo or $20/season • 30 FPS Smooth DVR (+ 15 FPS Storage Saver) • 100 Local Slider • 150 Cloud / 25 Pinned • 365d Vault)',
+    label: 'VIP / Coach Pass ($10/mo or $20/season • 🎥 30 FPS Smooth DVR (+ 15 FPS Storage Saver) • 🛡️ Shield Decision HUD • 100 Local Slider • 150 Cloud / 25 Pinned • 365d Vault)',
     maxLocalBattles: 100,
     maxRollingBattles: 150,
     maxPinnedBattles: 25,
@@ -428,6 +432,7 @@ const TIER_PRESETS = {
     allowedLeagues: ['ALL'],
     teamsPerArchetype: 5,
     allowAltMovesets: true,
+    shieldDecisionOverlay: true,
     lifetimeHistory: true,
     seasonGraceDays: 36500,
   },
@@ -1970,7 +1975,7 @@ function renderWatchSharePage(origin, shareInfo) {
           <button onclick="setHudMode('compact')" id="mode-compact">COMPACT</button>
           <button onclick="setHudMode('diag')" id="mode-diag">DIAG</button>
           <button onclick="setHudMode('off')" id="mode-off">OFF</button>
-          <button onclick="toggleShieldHud()" id="btn-shield-hud" class="active">🛡️ Shield: ON</button>
+          <button onclick="toggleShieldHud()" id="btn-shield-hud" class="${shareInfo.userTier && shareInfo.userTier !== 'free' ? 'active' : ''}">${shareInfo.userTier && shareInfo.userTier !== 'free' ? '🛡️ Shield: ON' : '🔒 Shield ($3 Supporter)'}</button>
           <button onclick="toggleHudPos()" id="btn-pos">⬆️ Pos: Top</button>
           <input type="range" id="hud-opacity" min="25" max="100" value="50" style="width:65px" title="HUD Opacity (50% Default)" oninput="updateOpacity(this.value)" />
         </div>
@@ -1984,13 +1989,15 @@ function renderWatchSharePage(origin, shareInfo) {
     const PVP_DB = ${JSON.stringify(COMPACT_PVP_DB)};
     const SHARE_LEAGUE = ${JSON.stringify(shareInfo.league || 'GREAT LEAGUE')};
     const SHARE_MATCHUP = ${JSON.stringify(shareInfo.matchup || '')};
+    const SHARE_USER_TIER = ${JSON.stringify(shareInfo.userTier || 'pro')};
+    const IS_SHIELD_HUD_UNLOCKED = SHARE_USER_TIER !== 'free';
     let hideNames = ${JSON.stringify(hideNamesDefault)};
     const rawTrainerName = ${JSON.stringify(shareInfo.screenName || 'Trainer')};
     let frames = [];
     let summaryHeader = null;
     let hudMode = 'live';
     let hudTop = true;
-    let showShieldHud = true;
+    let showShieldHud = IS_SHIELD_HUD_UNLOCKED;
     let sideBySide = false;
     let selectedSpeed = 1;
     let mp4TimeCompressionRatio = 1.0;
@@ -2124,6 +2131,10 @@ function renderWatchSharePage(origin, shareInfo) {
       syncHudFrame();
     }
     function toggleShieldHud() {
+      if (!IS_SHIELD_HUD_UNLOCKED) {
+        alert('🏅 The Attack Incoming! Shield Decision Overlay is unlocked permanently with Lifetime Supporter ($3 one-time) or any Legend Pro / VIP pass!');
+        return;
+      }
       showShieldHud = !showShieldHud;
       const btn = document.getElementById('btn-shield-hud');
       if (btn) {
@@ -4803,7 +4814,7 @@ export default {
         recommendedLinks: {
           supporter: {
             priceUsd: 3,
-            label: 'Lifetime Supporter ($3 One-Time • 5 Local Videos + Core 3 Leagues + Lifetime Logs)',
+            label: 'Lifetime Supporter ($3 One-Time • 🛡️ Shield Decision HUD + 5 Local Videos + Core 3 Leagues + Lifetime Logs)',
             stripeUrl: `${STRIPE_PAYMENT_LINKS.supporter}?client_reference_id=${encodeURIComponent(screenName)}`,
             bmcUrl: BMC_LINKS.supporter,
           },
@@ -4811,8 +4822,8 @@ export default {
             priceUsd: introEligible ? 5 : 10,
             isIntroPromo: introEligible,
             label: introEligible
-              ? `Legend Pro First-Season Intro Promo ($5 for Remainder of GBL Season • ${seasonWindow.daysRemaining}d left)`
-              : 'Legend Pro 90-Day GBL Season Pass ($10 / Season)',
+              ? `Legend Pro First-Season Intro Promo ($5 for Remainder of GBL Season • ${seasonWindow.daysRemaining}d left • 15 FPS DVR + 50 Cloud Replays + Shield HUD)`
+              : 'Legend Pro 90-Day GBL Season Pass ($10 / Season • 15 FPS DVR + 50 Cloud Replays + Shield HUD)',
             stripeUrl: `${introEligible ? STRIPE_PAYMENT_LINKS.pro_intro : STRIPE_PAYMENT_LINKS.pro_season}?client_reference_id=${encodeURIComponent(screenName)}`,
             stripeMonthlyUrl: `${STRIPE_PAYMENT_LINKS.pro_monthly}?client_reference_id=${encodeURIComponent(screenName)}`,
             bmcUrl: introEligible ? BMC_LINKS.membership : BMC_LINKS.pro_season,
@@ -4821,8 +4832,8 @@ export default {
             priceUsd: introEligible ? 10 : 20,
             isIntroPromo: introEligible,
             label: introEligible
-              ? `VIP / Coach First-Season Intro Promo ($10 for Remainder of GBL Season • ${seasonWindow.daysRemaining}d left)`
-              : 'VIP / Coach 90-Day GBL Season Pass ($20 / Season)',
+              ? `VIP / Coach First-Season Intro Promo ($10 for Remainder of GBL Season • ${seasonWindow.daysRemaining}d left • 30 FPS Smooth DVR + 150 Cloud Replays)`
+              : 'VIP / Coach 90-Day GBL Season Pass ($20 / Season • 30 FPS Smooth DVR + 150 Cloud Replays)',
             stripeUrl: `${introEligible ? STRIPE_PAYMENT_LINKS.vip_intro : STRIPE_PAYMENT_LINKS.vip_season}?client_reference_id=${encodeURIComponent(screenName)}`,
             stripeMonthlyUrl: `${STRIPE_PAYMENT_LINKS.vip_monthly}?client_reference_id=${encodeURIComponent(screenName)}`,
             bmcUrl: introEligible ? BMC_LINKS.membership : BMC_LINKS.vip_season,
@@ -6025,6 +6036,13 @@ export default {
         );
       }
       const shareInfo = JSON.parse(rawLookup);
+      if (!shareInfo.userTier && shareInfo.screenName) {
+        try {
+          const tierSum = await resolveUserPaidTierSummary(env.TELEMETRY_KV, shareInfo.screenName);
+          shareInfo.userTier = tierSum.tier;
+          if (!shareInfo.userTierBadge) shareInfo.userTierBadge = tierSum.badge;
+        } catch (_) {}
+      }
       return new Response(renderWatchSharePage(url.origin, shareInfo), {
         status: 200,
         headers: {

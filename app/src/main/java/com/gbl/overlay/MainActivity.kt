@@ -2001,6 +2001,30 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnToggleShieldDecisionOverlay.setOnClickListener {
+            val tier = OverlayService.getEffectiveReplayTierStatic(prefs)
+            if (tier == "free") {
+                AlertDialog.Builder(this)
+                    .setTitle("🏅 Lifetime Supporter Required")
+                    .setMessage(
+                        "The 🛡️ Attack Incoming! Shield Decision Overlay (Red/Orange/Yellow/Green KO & Tank/Farm Verdict Card) is unlocked permanently in the Lifetime Supporter ($3 one-time) tier — or unlocked forever automatically when you subscribe to Legend Pro or VIP even once!\n\n" +
+                            "Scroll to Section 3 (Membership Tier & Replay Vault) in Settings to unlock via Stripe or Buy Me a Coffee."
+                    )
+                    .setPositiveButton("💳 Unlock ($3 Supporter)") { _, _ ->
+                        val user = OverlayService.getRequiredScreenNameStatic(prefs)
+                        val url = if (user.isNotEmpty()) {
+                            "${OverlayService.STRIPE_URL_SUPPORTER}?client_reference_id=${android.net.Uri.encode(user)}"
+                        } else {
+                            OverlayService.STRIPE_URL_SUPPORTER
+                        }
+                        try {
+                            startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                        } catch (_: Exception) {}
+                    }
+                    .setNegativeButton("Close", null)
+                    .show()
+                updateShieldDecisionOverlayUi()
+                return@setOnClickListener
+            }
             val currentShow = prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true)
             val nextShow = !currentShow
             prefs.edit().putBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, nextShow).apply()
@@ -2681,8 +2705,8 @@ class MainActivity : AppCompatActivity() {
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
             }
             val subTv = TextView(this).apply {
-                text = "1️⃣ First tap '🛡️ Verify Unique Trainer ID' so your handle is locked to your device.\n" +
-                    "2️⃣ Upgrade via Stripe or Buy Me a Coffee: First 14 days of a GBL Season = Full Season ($10 Pro / $20 VIP). Day 15+ First-Time Promo = 1-Month Rate ($5 Pro / $10 VIP) for the entire remainder of the season! Plus any Pro/VIP pass permanently unlocks Lifetime Supporter (Alumni: 5 Local Videos + Core 3 Leagues + Lifetime Battle Logs) forever.\n" +
+                text = "1️⃣ First tap '🛡️ Step 1: Verify & Lock Unique Trainer ID' so your handle is locked to your device.\n" +
+                    "2️⃣ Upgrade via Stripe or Buy Me a Coffee: First 14 days of a GBL Season = Full Season ($10 Pro / $20 VIP). Day 15+ First-Time Promo = 1-Month Rate ($5 Pro / $10 VIP) for the entire remainder of the season! Plus any Pro/VIP pass permanently unlocks Lifetime Supporter (Alumni: 🛡️ Attack Incoming! Shield Decision Overlay + 5 Local Videos + Core 3 Leagues + Lifetime Battle Logs) forever.\n" +
                     "3️⃣ One-time online verification caches an offline cryptographic token so HUD, DVR & Anti-Meta work 100% offline."
                 setTextColor(0xFF94A3B8.toInt())
                 textSize = 10.5f
@@ -3120,10 +3144,10 @@ class MainActivity : AppCompatActivity() {
         val maxLocal = OverlayService.getMaxLocalDvrBattlesForTierStatic(prefs)
         val effFps = OverlayService.getEffectiveDvrFpsForTierStatic(prefs)
         val tierBadge = when (tier) {
-            "vip" -> "👑 VIP / Coach Pass (${effFps} FPS DVR • $maxLocal Local Slider • 150 Cloud + 25 ⭐ Pinned • 365d • All Cups + Alt Moves)"
-            "pro" -> "🏅 Legend Pro Pass (15 FPS DVR • 25 Local • 50 Cloud + 10 ⭐ Pinned • 30d • All Cups + ⚡ Alt Movesets)"
-            "supporter" -> "🛡️ Lifetime Supporter / Alumni (5 Local • 365d Past Pinned Cloud • Core 3 Leagues • Lifetime Battle Logs)"
-            else -> "🆓 Free / Community Tier (1 Local Video • GL & ML 1-Team Anti-Meta • Current Season + 14d Grace)"
+            "vip" -> "👑 VIP / Coach Pass (${effFps} FPS DVR • 🛡️ Shield HUD • $maxLocal Local Slider • 150 Cloud + 25 ⭐ Pinned • 365d • All Cups + Alt Moves)"
+            "pro" -> "🏅 Legend Pro Pass (15 FPS DVR • 🛡️ Shield HUD • 25 Local • 50 Cloud + 10 ⭐ Pinned • 30d • All Cups + ⚡ Alt Movesets)"
+            "supporter" -> "🛡️ Lifetime Supporter / Alumni (🛡️ Shield Decision HUD • 5 Local (15 FPS) • 365d Past Pinned Cloud • Core 3 Leagues • Lifetime Battle Logs)"
+            else -> "🆓 Free / Community Tier (1 Local Video (15 FPS) • GL & ML 1-Team Anti-Meta • Current Season + 14d Grace)"
         }
         layoutVipLocalSliderRow?.visibility = if (tier == "vip") android.view.View.VISIBLE else android.view.View.GONE
         if (tier == "vip") {
@@ -8206,9 +8230,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateShieldDecisionOverlayUi() {
         if (!::btnToggleShieldDecisionOverlay.isInitialized) return
+        val tier = if (::prefs.isInitialized) OverlayService.getEffectiveReplayTierStatic(prefs) else "free"
         val showShieldHud = prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true)
         val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
-        if (showShieldHud) {
+        if (tier == "free") {
+            btnToggleShieldDecisionOverlay.text = "🔒 Supporter ($3)"
+            btnToggleShieldDecisionOverlay.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+            btnToggleShieldDecisionOverlay.setTextColor(0xFFFBBF24.toInt())
+            textShieldDecisionOverlayDesc.text = "🏅 Paid-Once / Alumni Tier: Unlocks permanently with Lifetime Supporter ($3 once) or any Pro/VIP pass!"
+        } else if (showShieldHud) {
             btnToggleShieldDecisionOverlay.text = "Shield HUD On"
             btnToggleShieldDecisionOverlay.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
             btnToggleShieldDecisionOverlay.setTextColor(0xFFFFFFFF.toInt())
@@ -11735,7 +11765,7 @@ class MainActivity : AppCompatActivity() {
                 .setTitle("🔒 Unlock $lg in Anti-Meta Generator")
                 .setMessage(
                     "Free tier includes Open Great League & Master League (1 team per archetype).\n\n" +
-                        "• Lifetime Supporter ($3 one-time): Unlocks Open Ultra League + 2 teams per archetype + Unlimited Lifetime Battle Log History!\n" +
+                        "• Lifetime Supporter ($3 one-time): Unlocks 🛡️ Attack Incoming! Shield Decision Overlay + Open Ultra League + 2 teams per archetype + Unlimited Lifetime Battle Log History!\n" +
                         "• Legend Pro ($5 Intro / $10 Season Pass): Unlocks ALL Limited/Mega/Specialty Cups, Top 5 teams per archetype, ⚡ Alternate Moveset Role Synthesis (+BR Deltas), and 50 Cloud Replay Vault slots!"
                 )
                 .setPositiveButton("💳 Unlock via Stripe") { _, _ ->
@@ -12132,7 +12162,7 @@ class MainActivity : AppCompatActivity() {
                 setTextColor(0xFFFBBF24.toInt())
             }
             val upsellBody = TextView(this).apply {
-                text = "• Lifetime Supporter ($3 one-time): Unlocks Ultra League + Top 2 teams per archetype + Unlimited Lifetime Battle Log History!\n" +
+                text = "• Lifetime Supporter ($3 one-time): Unlocks 🛡️ Attack Incoming! Shield Decision Overlay + Ultra League + Top 2 teams per archetype + Unlimited Lifetime Battle Log History!\n" +
                     "• Legend Pro ($5 Day 15+ Intro / $10 Season Pass): Unlocks ALL Limited/Mega Cups, Top 5 teams per archetype (15+ teams), ⚡ Alternate Moveset Role Synthesis (+BR Deltas), Nemesis Builder, and 50 Cloud Replay Vault slots!"
                 textSize = 10.5f
                 setTextColor(0xFFE2E8F0.toInt())

@@ -1,4 +1,16 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.08`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.09`)
+
+---
+
+## v7.09 (2026-11-07) — Shield Decision Overlay Moved to Paid-Once / Alumni (`Lifetime Supporter` / `Pro` / `VIP`) Tier & Updated Infographic / Stripe / Buy Me a Coffee Perks
+*Membership tier alignment & marketing update (`v7.09`, `versionCode = 1709`, Cloudflare Worker `v7.0.9`) moving the **🛡️ Attack Incoming! Shield Decision Overlay** (Red/Orange/Yellow/Green KO & Tank/Farm Verdict Card) into the **🏅 Lifetime Supporter (`$3` One-Time or Alumni)** / **🏆 Legend Pro** / **👑 VIP** tiers (and out of Free tier), and updating the 4-tier comparison infographic (`docs/screenshots/silphscope_tiers_infographic.jpg`), Stripe Payment Link product descriptions, Buy Me a Coffee Memberships/Shop/Gallery/Bio, Web Simulator, `/vault`, and `README.md` with this change and the VIP **`30 FPS Smooth`** DVR recording feature.*
+
+- **v7.09 — Enhancement 1: Shield Decision Overlay Gated to Paid-Once / Alumni (`Lifetime Supporter`, `Legend Pro`, `VIP`) (`OverlayService.kt`, `MainActivity.kt`, `activity_main.xml`, `cloudflare/telemetry-worker/worker.mjs`)**:
+  - **Live HUD & In-App Replay Gating (`isShieldDecisionOverlayUnlockedByTier`)**: Gates `showOrUpdateShieldDecisionOverlay` and `shieldDecisionOverlayPayload.isVisible` on `OverlayService.getEffectiveReplayTierStatic(prefs) != "free"`, unlocking the **🛡️ Attack Incoming! Shield Decision Overlay** permanently with **Lifetime Supporter (`$3` one-time)** or automatically forever when subscribing to **Legend Pro** or **VIP** even once.
+  - **Settings Toggle & Prompt (`MainActivity.kt`, `activity_main.xml`)**: In Free tier, the **🛡️ Attack Incoming! Shield Decision Overlay** button displays `🔒 Supporter ($3)` and opens a 1-tap unlock prompt explaining that any `$3` Lifetime Supporter purchase or Pro/VIP subscription permanently unlocks the Shield Decision HUD forever.
+  - **Cloudflare Worker `/watch/:shareId` Replay Gating**: Gates the Shield Decision Overlay toggle on `/watch/:shareId` by the uploader's resolved paid tier (`SHARE_USER_TIER !== 'free'`).
+- **v7.09 — Enhancement 2: Updated 4-Tier Infographic, Stripe Products, Buy Me a Coffee & Tier Comparisons (`docs/screenshots/silphscope_tiers_infographic.jpg`, `README.md`, `src/App.tsx`, `cloudflare/telemetry-worker/worker.mjs`)**:
+  - Regenerated `docs/screenshots/silphscope_tiers_infographic.jpg` and updated all 7 live Stripe products, Buy Me a Coffee Memberships/Shop/Gallery/Bio, `README.md`, `src/App.tsx`, and `TIER_PRESETS` in `worker.mjs` to reflect **🛡️ Attack Incoming! Shield Decision Overlay** in **Lifetime Supporter (`$3` once / Alumni)** + **Pro** + **VIP**, and **`🎥 30 FPS Smooth DVR Default (+ 💾 15 FPS Storage Saver)`** in **VIP / Coach Pass**.
 
 ---
 

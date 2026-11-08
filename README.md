@@ -1,4 +1,4 @@
-# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v7.08)
+# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v7.09)
 
 [![Live Web Simulator](https://img.shields.io/badge/🌐%20Live%20Web%20Simulator-Try%20in%20Browser-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white)](https://sportsfan986.github.io/silphscope-pvp/)
 [![Stripe Season Pass](https://img.shields.io/badge/💳%20Stripe%20Checkout-Unlock%20Pro%20%2F%20VIP-6366f1?style=for-the-badge&logo=stripe&logoColor=white)](https://buy.stripe.com/fZubJ28F32li3HvgKK1Jm02)
@@ -18,13 +18,14 @@
 
 ## 🏆 Membership Tiers & Cloud Replay Vault (`v7.00`)
 
-The **real-time floating HUD overlay, 9-shield matrix, fast-move turn pacing, and synchronized haptics are 100% Free forever**. Optional supporter & season passes fund Cloudflare R2 video hosting and unlock deep post-game DVR theater, unlimited multi-season history, and full Anti-Meta role synthesis:
+The **real-time floating HUD overlay, 9-shield matrix, fast-move turn pacing, and synchronized haptics are 100% Free forever**. Unlocking **🏅 Lifetime Supporter (`$3` once — or automatically forever when you subscribe to Legend Pro or VIP once)** adds the **🛡️ Attack Incoming! Shield Decision Overlay (KO & Tank/Farm Verdict Card)**, 5 local DVR videos, Open Ultra League Anti-Meta, and unlimited lifetime battle log history, while **Legend Pro** and **VIP / Coach** add Cloud R2 DVR Replay Vaults, full Anti-Meta role synthesis, and VIP **`30 FPS Smooth`** DVR recording:
 
 ![SilphScope PvP Membership Tiers Infographic](./docs/screenshots/silphscope_tiers_infographic.jpg)
 
 | Feature / Capability | 🆓 Free Community (`$0`) | 🏅 Lifetime Supporter (`$3` One-Time or Alumni) | 🏆 Legend Pro (`$5/mo` or `$10/Season`*) | 👑 VIP / Coach (`$10/mo` or `$20/Season`*) |
 | :--- | :---: | :---: | :---: | :---: |
 | **Live In-Game HUD, 9-Shield Matrix & Haptics** | ✅ **100% Free** | ✅ **100% Free** | ✅ **100% Free** | ✅ **100% Free** |
+| **🛡️ Attack Incoming! Shield Decision Overlay** | — | ✅ **Unlocked Forever** | ✅ **Unlocked Forever** | ✅ **Unlocked Forever** |
 | **Battle Log History & Multi-Device Sync** | Current Season (+14d grace) | **Unlimited Lifetime** | **Unlimited Lifetime** | **Unlimited Lifetime** |
 | **Local On-Device DVR Ring Buffer** | **1 Battle** | **5 Battles** | **25 Battles (5 Sets)** | **25–100 Battles (Slider)** |
 | **Hardware H.264 DVR Video Framerate** | 15 FPS (`720 kbps`) | 15 FPS (`720 kbps`) | **15 FPS (`720 kbps` • ~14 MB)** | **🎥 30 FPS Smooth (`900 kbps` • <=30 MB max) + 💾 15 FPS Storage Saver** |
@@ -64,7 +65,7 @@ Experience **SilphScope PvP** instantly in your web browser — completely free,
 
 ---
 
-## Advanced Analytics & Quality Metrics (v7.07)
+## Advanced Analytics & Quality Metrics (v7.09)
 
 Raw win rate in GO Battle League is heavily influenced by matchmaking alignment and blind 3v3 team-composition luck (RPS). **SilphScope PvP v3.00** separates **Matchup Luck (Blind Matchup Favorability — BMF)** from **Dynamic Execution WAE (Wins Above Expected)** so you can track both matchmaking favorability and your in-battle micro-execution skill (energy farming, fast move denial, sacrificial catches, shield discipline, and CMP timing).
 
@@ -154,13 +155,13 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## 📥 Download & Install Native Android APK (v7.07)
+## 📥 Download & Install Native Android APK (v7.09)
 
 > **✅ Note on Live HP & Energy Counting (Enabled by Default since v6.02)**:
 > **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting** are **ENABLED (ON)** by default with optimal scanner tuning (`2 samples`, `±2%` tolerance, `200ms` proactive energy lead, `+1t` fast offset, and `4.0s` swap-throw rollback). You can customize all scanner, haptics, and Always-On DVR controls in **⚙️ Settings**.
 
 1. Visit the **[Official GitHub Releases Page](https://github.com/sportsfan986/silphscope-pvp/releases)**.
-2. Download **`silphscope-pvp-v7.07.apk`** directly to your Android device.
+2. Download **`silphscope-pvp-v7.09.apk`** directly to your Android device.
 3. Tap the downloaded APK file to install (grant *"Install unknown apps"* permission if prompted).
 4. Launch **SilphScope PvP**:
    - Select, reorder, or customize your **GBL or Show 6 Team Presets**, set **Opponent Move Count Basis** (`My Fasts` vs. `Their Fasts`), adjust **Overlay Size** (`50%–100%` screen width slider) and **Background Transparency**, and configure **Synchronized Haptics** or **1-Battle DVR** in **⚙️ Settings**.
