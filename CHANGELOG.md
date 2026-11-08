@@ -1,4 +1,20 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.21`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.22`)
+
+---
+
+## v7.22 (2026-11-08) — Expanded 24 MiB Deep-Trace / 64 MiB Video Ingest Limits, Automatic DVR-to-Vault Mirroring & Battle Log Sync Queue Flush
+*Live Cloudflare Worker & Android sync reliability release (`v7.22`, `versionCode = 1722`) resolving the `HTTP 413: DVR trace exceeds 3 MiB limit` error on `v7.20+` dual-source energy traces, automatically mirroring recovered `/v1/dvr` uploads into the Cloud R2 Replay Vault (`/vault`) for Pro/VIP users, and flushing queued DVR bundles + AI telemetry logs whenever `☁️ Sync` is tapped in the Battle Log.*
+
+- **v7.22 — Fix 1: Expanded Deep-Trace & Video Payload Limits on Live Cloudflare Worker (`cloudflare/telemetry-worker/worker.mjs`)**:
+  - Identified that `v7.20+` `_deep_trace.jsonl` files with dual-source energy fields (`userEnergyMeter`, `userEnergyHp`, `oppEnergyMeter`, `oppEnergyHp`, confidence scores, and promo tags) average **4.0–6.5 MB** per battle, exceeding the `3 MiB` (`MAX_TRACE_BYTES`) cap introduced in `v7.13` and causing `/v1/dvr` and `/v1/replays/upload` to return `HTTP 413`.
+  - Increased `MAX_TRACE_BYTES` from `3 MiB` to **`24 MiB`** and `MAX_VIDEO_BYTES` from `36 MiB` to **`64 MiB`** on both `POST /v1/dvr` and `POST /v1/replays/upload`, and increased `POST /v1/telemetry` batch size cap to `16 MiB` and `POST /v1/settings-changes` to `4 MiB`.
+- **v7.22 — Fix 2: Automatic `/v1/dvr` → Cloud R2 Replay Vault Mirroring & Bound-Device Auth (`cloudflare/telemetry-worker/worker.mjs`, `GitHubCloudSync.kt`)**:
+  - Updated `POST /v1/dvr` on the Cloudflare Worker so DVR uploads from active Legend Pro / VIP users (including queued DVR bundles retried from `cacheDir`) are automatically mirrored into `replays/<screenName>/<battleId>_video.mp4` and indexed in `replay_index/<screenName>` and `share_lookup/<shareId>`.
+  - Updated `authenticateVaultOwner` and `resolveUserLicense` to accept `metadata.deviceId` / `X-Device-Hash` bound-device authentication and seamlessly follow rotated keys (`rotatedTo`) for matching `boundScreenName`.
+  - Updated `retryPendingCachedDvrBundlesBlocking` in `GitHubCloudSync.kt` to also invoke `uploadBattleReplayToR2VaultIfUnlockedBlocking` (with 3-host failover) before deleting cached files.
+- **v7.22 — Fix 3: Unified Battle Log `☁️ Sync` Queue Flush & GitHub Large-Vault Blob Fallback (`MainActivity.kt`, `GitHubCloudSync.kt`)**:
+  - Updated `triggerTwoDeviceCloudSync` (`☁️ Sync` button in the Battle Log and Settings) to also flush any queued cached DVR bundles and pending AI telemetry batches in the same sync pass.
+  - Added Git Blobs API (`GET /repos/:owner/:repo/git/blobs/:sha`) fallback in `syncWithGitHubGistBlocking` when `battlematrix_gbl_sync_vault.json` exceeds GitHub's 1 MB `/contents/` inline limit, and surfaced exact DVR upload status details in `triggerManualAiTelemetryUpload`.
 
 ---
 

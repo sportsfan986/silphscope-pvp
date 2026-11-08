@@ -1214,7 +1214,12 @@ async function resolveUserLicense(
             String(lic.boundGitHubUsername).toLowerCase() === cleanGhUser))) ||
       (isValidDevToken &&
         lic.boundDeviceHash &&
-        String(lic.boundDeviceHash).toLowerCase() === cleanDev);
+        String(lic.boundDeviceHash).toLowerCase() === cleanDev) ||
+      Boolean(
+        screenName &&
+          lic.boundScreenName &&
+          String(lic.boundScreenName).toLowerCase() === String(screenName).toLowerCase()
+      );
     if (lic.rotatedTo && isVerifiedBoundOwner) {
       const rotatedLic = await loadLicenseByKey(kv, lic.rotatedTo);
       if (rotatedLic && !rotatedLic.revoked) {
@@ -1500,7 +1505,7 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
     body.claimEmail || body.email || request.headers.get('X-Claim-Email') || ''
   ).trim();
   const devHash = String(
-    body.deviceHash || request.headers.get('X-Device-Hash') || ''
+    body.deviceHash || body.deviceId || request.headers.get('X-Device-Hash') || ''
   ).trim();
 
   let screenName = targetScreenName ? sanitizeScreenName(targetScreenName) : '';
@@ -1798,6 +1803,56 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
       authRecord: authRec,
       sessionToken: mintedSession,
     };
+  }
+
+  // 4b. Check Bound Device Hash (`X-Device-Hash`, `body.deviceHash`, or `body.deviceId`) for app uploads
+  if (
+    devHash &&
+    devHash.length >= 8 &&
+    !devHash.toLowerCase().startsWith('web-') &&
+    screenName &&
+    kv
+  ) {
+    const cleanDev = devHash.toLowerCase();
+    const mappedKey =
+      (await kv.get(`user_license/${screenName}`, { type: 'text' })) ||
+      (await kv.get(`user_license/${screenName.toLowerCase()}`, { type: 'text' })) ||
+      '';
+    const licCandidate = mappedKey ? await loadLicenseByKey(kv, mappedKey) : null;
+    let regDeviceMatch = false;
+    try {
+      const rawReg = await kv.get(`registered_user/${screenName.toLowerCase()}`, { type: 'text' });
+      if (rawReg) {
+        const parsedReg = JSON.parse(rawReg);
+        if (parsedReg && parsedReg.deviceHash && String(parsedReg.deviceHash).toLowerCase() === cleanDev) {
+          regDeviceMatch = true;
+        }
+      }
+    } catch (_) {}
+    if (
+      regDeviceMatch ||
+      (licCandidate &&
+        licCandidate.boundDeviceHash &&
+        String(licCandidate.boundDeviceHash).toLowerCase() === cleanDev)
+    ) {
+      const licInfo = await resolveUserLicense(
+        env,
+        kv,
+        screenName,
+        mappedKey,
+        '',
+        '',
+        devHash,
+        '',
+        { revealFullKey: false, isOwnerCaller: true }
+      );
+      return {
+        isOwner: true,
+        authMethod: 'bound_device',
+        screenName,
+        licenseInfo: licInfo,
+      };
+    }
   }
 
   // 5. If verifiedGh was present but did not match an existing linked account
@@ -5422,8 +5477,8 @@ export default {
       if (!jsonlPayload) {
         return jsonResponse({ ok: false, error: 'Missing or empty `jsonl` field.' }, 400);
       }
-      if (jsonlPayload.length > 1024 * 1024) {
-        return jsonResponse({ ok: false, error: 'Telemetry batch exceeds 1 MiB limit.' }, 413);
+      if (jsonlPayload.length > 16 * 1024 * 1024) {
+        return jsonResponse({ ok: false, error: 'Telemetry batch exceeds 16 MiB limit.' }, 413);
       }
 
       const now = new Date();
@@ -5531,8 +5586,8 @@ export default {
       if (!jsonlPayload) {
         return jsonResponse({ ok: false, error: 'Missing or empty `jsonl` field.' }, 400);
       }
-      if (jsonlPayload.length > 256 * 1024) {
-        return jsonResponse({ ok: false, error: 'Settings payload exceeds 256 KiB limit.' }, 413);
+      if (jsonlPayload.length > 4 * 1024 * 1024) {
+        return jsonResponse({ ok: false, error: 'Settings payload exceeds 4 MiB limit.' }, 413);
       }
 
       const now = new Date();
@@ -5567,8 +5622,8 @@ export default {
           return jsonResponse({ ok: false, error: 'Rate limit exceeded for DVR upload.' }, 429);
         }
 
-        const MAX_VIDEO_BYTES = 36 * 1024 * 1024;
-        const MAX_TRACE_BYTES = 3 * 1024 * 1024;
+        const MAX_VIDEO_BYTES = 64 * 1024 * 1024;
+        const MAX_TRACE_BYTES = 24 * 1024 * 1024;
 
         const contentType = request.headers.get('Content-Type') || '';
         let videoBytes = null;
@@ -5583,7 +5638,7 @@ export default {
 
           if (videoFile && typeof videoFile.arrayBuffer === 'function') {
             if (typeof videoFile.size === 'number' && videoFile.size > MAX_VIDEO_BYTES) {
-              return jsonResponse({ ok: false, error: 'DVR video exceeds 36 MiB limit.' }, 413);
+              return jsonResponse({ ok: false, error: 'DVR video exceeds 64 MiB limit.' }, 413);
             }
             videoBytes = new Uint8Array(await videoFile.arrayBuffer());
           }
@@ -5610,7 +5665,7 @@ export default {
           deepTraceText = String(body.deepTraceJsonl || '');
           if (typeof body.videoBase64 === 'string' && body.videoBase64.length > 0) {
             if (body.videoBase64.length > Math.ceil(MAX_VIDEO_BYTES * 1.38)) {
-              return jsonResponse({ ok: false, error: 'DVR video payload exceeds 36 MiB limit.' }, 413);
+              return jsonResponse({ ok: false, error: 'DVR video payload exceeds 64 MiB limit.' }, 413);
             }
             const binaryStr = atob(body.videoBase64);
             const bytes = new Uint8Array(binaryStr.length);
@@ -5622,10 +5677,10 @@ export default {
         }
 
         if (videoBytes && videoBytes.byteLength > MAX_VIDEO_BYTES) {
-          return jsonResponse({ ok: false, error: 'DVR video exceeds 36 MiB limit.' }, 413);
+          return jsonResponse({ ok: false, error: 'DVR video exceeds 64 MiB limit.' }, 413);
         }
         if (deepTraceText && deepTraceText.length > MAX_TRACE_BYTES) {
-          return jsonResponse({ ok: false, error: 'DVR trace exceeds 3 MiB limit.' }, 413);
+          return jsonResponse({ ok: false, error: 'DVR trace exceeds 24 MiB limit.' }, 413);
         }
 
         const hasVideo = Boolean(videoBytes && videoBytes.byteLength > 0);
@@ -5710,19 +5765,28 @@ export default {
         let diagShareId = '';
         let diagWatchOverlayUrl = '';
 
-        if (isFlaggedWithIssueDescription && hasVideo && env.TELEMETRY_KV) {
+        // Automatically mirror DVR uploads into the Cloud R2 Replay Vault (`replays/<screenName>/...` + `replay_index/<screenName>`)
+        // for active Legend Pro / VIP users (especially when queued DVR bundles are retried via `/v1/dvr`).
+        const isProOrVipUploader =
+          (resolvedUserTier === 'pro' || resolvedUserTier === 'vip') &&
+          Boolean(ownerAuth.isOwner || screenName);
+        if (hasVideo && env.TELEMETRY_KV && (isFlaggedWithIssueDescription || (isProOrVipUploader && env.REPLAY_BUCKET))) {
           try {
             diagShareId =
               canUpdateExisting && existingItem && existingItem.shareId
                 ? existingItem.shareId
-                : generateShareId();
+                : existingItem && existingItem.shareId
+                  ? existingItem.shareId
+                  : generateShareId();
             diagWatchOverlayUrl = `${url.origin}/watch/${diagShareId}`;
 
             let r2VideoKey = videoKey;
             let r2TraceKey = hasTrace ? traceKey : null;
             if (env.REPLAY_BUCKET) {
-              // Store diagnostic R2 objects under a dedicated recordings/ prefix unless caller is verified owner
-              const r2Prefix = ownerAuth.isOwner ? `replays/${screenName}` : `recordings/${screenName}`;
+              const r2Prefix =
+                ownerAuth.isOwner || isProOrVipUploader
+                  ? `replays/${screenName}`
+                  : `recordings/${screenName}`;
               r2VideoKey = `${r2Prefix}/${battleId}_video.mp4`;
               await env.REPLAY_BUCKET.put(r2VideoKey, videoBytes, {
                 httpMetadata: { contentType: 'video/mp4' },
@@ -5737,6 +5801,7 @@ export default {
               }
             }
 
+            const traceByteLen = hasTrace ? new TextEncoder().encode(deepTraceText).byteLength : 0;
             const diagShareRecord = {
               battleId,
               shareId: diagShareId,
@@ -5746,8 +5811,8 @@ export default {
               traceKey: r2TraceKey,
               fallbackKvTraceKey: hasTrace ? traceKey : null,
               videoBytes: videoByteLen,
-              traceBytes: hasTrace ? new TextEncoder().encode(deepTraceText).byteLength : 0,
-              totalBytes: videoByteLen,
+              traceBytes: traceByteLen,
+              totalBytes: videoByteLen + traceByteLen,
               league,
               result,
               matchupSummary,
@@ -5757,19 +5822,39 @@ export default {
               userIssueNote: userIssueNoteClean,
               userTier: resolvedUserTier,
               userTierBadge: tierSummary.badge,
-              isPinned: Boolean(canUpdateExisting && existingItem && existingItem.isPinned),
-              isPublic: Boolean(canUpdateExisting && existingItem && existingItem.isPublic),
-              hideNames: Boolean(canUpdateExisting && existingItem && existingItem.hideNames),
+              isPinned: Boolean(existingItem && existingItem.isPinned),
+              isPublic: Boolean(existingItem && existingItem.isPublic),
+              hideNames: Boolean(existingItem && existingItem.hideNames),
               createdAt:
-                canUpdateExisting && existingItem && existingItem.createdAt
+                existingItem && existingItem.createdAt
                   ? existingItem.createdAt
                   : now.toISOString(),
               uploadedAt: now.toISOString(),
               updatedAt: now.toISOString(),
             };
             await env.TELEMETRY_KV.put(`share_lookup/${diagShareId}`, JSON.stringify(diagShareRecord));
+
+            if (isProOrVipUploader && env.REPLAY_BUCKET && !existingItem) {
+              indexObj.items = [
+                diagShareRecord,
+                ...(indexObj.items || []).filter((i) => i.battleId !== battleId),
+              ];
+              const licInfoForQuota = ownerAuth.licenseInfo || {
+                ...TIER_PRESETS[resolvedUserTier],
+                tier: resolvedUserTier,
+                active: true,
+              };
+              await enforceUserReplayQuota(
+                env,
+                env.TELEMETRY_KV,
+                screenName,
+                licInfoForQuota,
+                indexObj
+              );
+              await saveUserReplayIndex(env.TELEMETRY_KV, screenName, indexObj);
+            }
           } catch (e) {
-            console.error('Diag share link creation error:', e);
+            console.error('Diag/Vault share link creation error:', e);
           }
         }
 
@@ -6524,8 +6609,8 @@ export default {
           return jsonResponse({ ok: false, error: 'R2 Replay Bucket not bound on Worker.' }, 503);
         }
 
-        const MAX_VIDEO_BYTES = 36 * 1024 * 1024;
-        const MAX_TRACE_BYTES = 3 * 1024 * 1024;
+        const MAX_VIDEO_BYTES = 64 * 1024 * 1024;
+        const MAX_TRACE_BYTES = 24 * 1024 * 1024;
 
         const contentType = request.headers.get('Content-Type') || '';
         let videoBytes = null;
@@ -6540,7 +6625,7 @@ export default {
 
           if (videoFile && typeof videoFile.arrayBuffer === 'function') {
             if (typeof videoFile.size === 'number' && videoFile.size > MAX_VIDEO_BYTES) {
-              return jsonResponse({ ok: false, error: 'Replay video exceeds 36 MiB limit.' }, 413);
+              return jsonResponse({ ok: false, error: 'Replay video exceeds 64 MiB limit.' }, 413);
             }
             videoBytes = new Uint8Array(await videoFile.arrayBuffer());
           }
@@ -6566,7 +6651,7 @@ export default {
           deepTraceText = String(body.deepTraceJsonl || '');
           if (typeof body.videoBase64 === 'string' && body.videoBase64.length > 0) {
             if (body.videoBase64.length > Math.ceil(MAX_VIDEO_BYTES * 1.38)) {
-              return jsonResponse({ ok: false, error: 'Replay video payload exceeds 36 MiB limit.' }, 413);
+              return jsonResponse({ ok: false, error: 'Replay video payload exceeds 64 MiB limit.' }, 413);
             }
             const binaryStr = atob(body.videoBase64);
             const bytes = new Uint8Array(binaryStr.length);
@@ -6578,17 +6663,17 @@ export default {
         }
 
         if (videoBytes && videoBytes.byteLength > MAX_VIDEO_BYTES) {
-          return jsonResponse({ ok: false, error: 'Replay video exceeds 36 MiB limit.' }, 413);
+          return jsonResponse({ ok: false, error: 'Replay video exceeds 64 MiB limit.' }, 413);
         }
         if (deepTraceText && deepTraceText.length > MAX_TRACE_BYTES) {
-          return jsonResponse({ ok: false, error: 'Replay trace exceeds 3 MiB limit.' }, 413);
+          return jsonResponse({ ok: false, error: 'Replay trace exceeds 24 MiB limit.' }, 413);
         }
 
         const inputKey = String(
           metadata.unlockKey || request.headers.get('X-SilphScope-Unlock-Key') || ''
         ).trim();
         const devHash = String(
-          metadata.deviceHash || request.headers.get('X-Device-Hash') || ''
+          metadata.deviceHash || metadata.deviceId || request.headers.get('X-Device-Hash') || ''
         ).trim();
         const ghToken = String(
           metadata.githubToken || request.headers.get('X-GitHub-Token') || ''

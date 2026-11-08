@@ -3354,9 +3354,11 @@ class MainActivity : AppCompatActivity() {
         textAiTelemetryStatus.text = "⏳ Uploading $queuedCount battle logs, $pendingDvrCount DVR video(s) & $queuedSettingsCount settings changes..."
         lifecycleScope.launch(Dispatchers.IO) {
             var uploadedDvrCount = 0
+            var dvrUploadDetail = ""
             if (pendingDvrCount > 0 && OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs)) {
-                val (dCount, _) = OverlayService.retryPendingCachedDvrBundlesBlocking(cacheDir, prefs, gson)
+                val (dCount, dMsg) = OverlayService.retryPendingCachedDvrBundlesBlocking(cacheDir, prefs, gson)
                 uploadedDvrCount = dCount
+                dvrUploadDetail = dMsg
             }
             if (queuedSettingsCount > 0) {
                 OverlayService.uploadSettingsChangeHistoryBlocking(
@@ -3371,11 +3373,14 @@ class MainActivity : AppCompatActivity() {
                     forceUpload = true,
                     minBattlesRequired = 1
                 )
+            } else if (uploadedDvrCount > 0 || queuedSettingsCount > 0) {
+                true to "Uploaded $uploadedDvrCount DVR video(s) & $queuedSettingsCount settings change(s)"
             } else {
-                (uploadedDvrCount > 0 || queuedSettingsCount > 0) to "Uploaded $uploadedDvrCount DVR video(s) & $queuedSettingsCount settings change(s)"
+                false to dvrUploadDetail.ifBlank { "Uploaded 0 DVR video(s) & 0 settings change(s)" }
             }
             withContext(Dispatchers.Main) {
                 updateAiTelemetryStatusUi()
+                setupOrUpdateReplayVaultSettingsUi()
                 renderBattleLogPage()
                 if (ok || uploadedDvrCount > 0) {
                     val dvrSuffix = if (uploadedDvrCount > 0) ", $uploadedDvrCount DVR video(s)" else ""
@@ -3387,7 +3392,7 @@ class MainActivity : AppCompatActivity() {
                 } else if (!silentIfEmpty) {
                     Toast.makeText(
                         this@MainActivity,
-                        "⚠️ Upload failed: $msg",
+                        if (msg.startsWith("⚠️") || msg.startsWith("📶")) msg else "⚠️ Upload failed: $msg",
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -3610,6 +3615,24 @@ class MainActivity : AppCompatActivity() {
             btnSyncBattleLog.isEnabled = false
         }
         lifecycleScope.launch(Dispatchers.IO) {
+            // Also flush any queued DVR bundles & pending AI telemetry logs when syncing Battle Log
+            var recoveredDvrCount = 0
+            try {
+                if (OverlayService.countPendingCachedDvrBundlesStatic(cacheDir) > 0 &&
+                    OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs)
+                ) {
+                    val (dCount, _) = OverlayService.retryPendingCachedDvrBundlesBlocking(cacheDir, prefs, gson)
+                    recoveredDvrCount = dCount
+                }
+                if (OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson).isNotEmpty()) {
+                    OverlayService.uploadPendingAiTelemetryBatchBlocking(
+                        prefs = prefs,
+                        gson = gson,
+                        forceUpload = true,
+                        minBattlesRequired = 1
+                    )
+                }
+            } catch (_: Exception) {}
             val (ok, msg) = OverlayService.syncWithGitHubGistBlocking(prefs, gson)
             withContext(Dispatchers.Main) {
                 btnSyncDevicesSettings.isEnabled = true
@@ -3618,15 +3641,17 @@ class MainActivity : AppCompatActivity() {
                 updateTrainerScreenNameUi()
                 ensureRequiredScreenNameOrPrompt()
                 updateSyncStatusUi()
+                updateAiTelemetryStatusUi()
                 setupOrUpdateReplayVaultSettingsUi()
                 applyCurrentAppTheme(notifyOverlay = true)
                 refreshPresetsUi()
                 setupBattleLogFilters()
                 renderBattleLogPage()
+                val dvrNote = if (recoveredDvrCount > 0) " • 🎥 Uploaded $recoveredDvrCount queued DVR video(s)" else ""
                 if (!silent) {
-                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-                } else if (ok && (!msg.contains("+0 from other devices") || !msg.contains("+0 updated"))) {
-                    Toast.makeText(this@MainActivity, "☁️ Auto-synced on open: $msg", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "$msg$dvrNote", Toast.LENGTH_LONG).show()
+                } else if (ok && (!msg.contains("+0 from other devices") || !msg.contains("+0 updated") || recoveredDvrCount > 0)) {
+                    Toast.makeText(this@MainActivity, "☁️ Auto-synced on open: $msg$dvrNote", Toast.LENGTH_SHORT).show()
                 }
             }
         }

@@ -869,7 +869,11 @@ internal fun OverlayService.Companion.syncWithGitHubGistBlocking(prefs: SharedPr
     if (token.isEmpty()) {
         return false to "Tap '🔑 Login with GitHub' in Settings to enable automatic multi-device sync."
     }
-    val httpClient = OkHttpClient()
+    val httpClient = OkHttpClient.Builder()
+        .connectTimeout(30L, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(60L, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(60L, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
     val fileName = "battlematrix_gbl_sync_vault.json"
     val privateRepoName = "silphscope-private-vault"
 
@@ -1042,6 +1046,26 @@ internal fun OverlayService.Companion.syncWithGitHubGistBlocking(prefs: SharedPr
                             remotePayload = try {
                                 gson.fromJson(decodedStr, SyncVaultPayload::class.java) ?: SyncVaultPayload()
                             } catch (_: Exception) { SyncVaultPayload() }
+                        } else if (remoteFileSha.isNotBlank()) {
+                            // GitHub Contents API omits `content` when vault JSON > 1 MB; fetch via Git Blobs API
+                            val blobReq = Request.Builder()
+                                .url("https://api.github.com/repos/$username/$privateRepoName/git/blobs/$remoteFileSha")
+                                .header("Authorization", "Bearer $token")
+                                .header("Accept", "application/vnd.github+json")
+                                .build()
+                            httpClient.newCall(blobReq).execute().use { blobResp ->
+                                if (blobResp.isSuccessful) {
+                                    val blobRoot = JsonParser.parseString(blobResp.body?.string().orEmpty()).asJsonObject
+                                    val blobB64 = blobRoot.get("content")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                                    if (blobB64.isNotBlank()) {
+                                        val decodedBytes = android.util.Base64.decode(blobB64.replace("\n", "").replace("\r", ""), android.util.Base64.DEFAULT)
+                                        val decodedStr = String(decodedBytes, Charsets.UTF_8)
+                                        remotePayload = try {
+                                            gson.fromJson(decodedStr, SyncVaultPayload::class.java) ?: SyncVaultPayload()
+                                        } catch (_: Exception) { SyncVaultPayload() }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -2462,10 +2486,23 @@ internal fun OverlayService.Companion.retryPendingCachedDvrBundlesBlocking(
             battleId = summaryRecord.battleId,
             summaryRecord = summaryRecord,
             mp4File = mp4File,
-            traceFile = traceFile
+            traceFile = traceFile,
+            deleteFilesOnSuccess = false
         )
         lastMsg = msg
         if (ok) {
+            try {
+                uploadBattleReplayToR2VaultIfUnlockedBlocking(
+                    prefs = prefs,
+                    gson = gson,
+                    battleId = summaryRecord.battleId,
+                    summaryRecord = summaryRecord,
+                    mp4File = mp4File,
+                    traceFile = traceFile
+                )
+            } catch (_: Exception) {}
+            try { mp4File.delete() } catch (_: Exception) {}
+            try { traceFile.delete() } catch (_: Exception) {}
             uploadedCount++
         }
     }
@@ -3278,6 +3315,8 @@ internal fun OverlayService.Companion.uploadBattleReplayToR2VaultIfUnlockedBlock
             mapOf(
                 "battleId" to cleanBattleId,
                 "screenName" to safeUser,
+                "deviceId" to devHash,
+                "deviceHash" to devHash,
                 "unlockKey" to unlockKey,
                 "appVersion" to APP_VERSION,
                 "versionCode" to APP_VERSION_CODE,
@@ -3289,60 +3328,84 @@ internal fun OverlayService.Companion.uploadBattleReplayToR2VaultIfUnlockedBlock
             )
         )
 
-        val multipart = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart("metadata", metadataJson)
-            .addFormDataPart(
-                "video",
-                "${cleanBattleId}_video.mp4",
-                mp4File.asRequestBody("video/mp4".toMediaTypeOrNull())
-            )
-            .apply {
-                if (traceText.isNotBlank()) {
-                    addFormDataPart(
-                        "deep_trace",
-                        "${cleanBattleId}_deep_trace.jsonl",
-                        traceText.toRequestBody("application/x-ndjson; charset=utf-8".toMediaTypeOrNull())
-                    )
-                }
-            }
-            .build()
-
         val httpClient = buildTelemetryHttpClientStatic(30L, 180L, 90L)
-        val req = applyWorkerClientAuthHeaders(
-            Request.Builder()
-                .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/upload")
-                .post(multipart)
-                .header("X-SilphScope-Unlock-Key", unlockKey),
-            prefs,
-            safeUser,
-            devHash
-        ).build()
+        var lastCode = 0
+        var lastErr = ""
+        for (attempt in 1..3) {
+            val baseUrl = CLOUDFLARE_INGEST_BASE_URLS.getOrElse(attempt - 1) { CLOUDFLARE_TELEMETRY_WORKER_URL }
+            try {
+                val multipart = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("metadata", metadataJson)
+                    .addFormDataPart(
+                        "video",
+                        "${cleanBattleId}_video.mp4",
+                        mp4File.asRequestBody("video/mp4".toMediaTypeOrNull())
+                    )
+                    .apply {
+                        if (traceText.isNotBlank()) {
+                            addFormDataPart(
+                                "deep_trace",
+                                "${cleanBattleId}_deep_trace.jsonl",
+                                traceText.toRequestBody("application/x-ndjson; charset=utf-8".toMediaTypeOrNull())
+                            )
+                        }
+                    }
+                    .build()
 
-        httpClient.newCall(req).execute().use { resp ->
-            val bodyStr = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful) {
-                return Triple(false, "Cloud Replay Vault upload failed (HTTP ${resp.code})", null)
+                val req = applyWorkerClientAuthHeaders(
+                    Request.Builder()
+                        .url("$baseUrl/v1/replays/upload")
+                        .post(multipart)
+                        .header("X-SilphScope-Unlock-Key", unlockKey),
+                    prefs,
+                    safeUser,
+                    devHash
+                ).build()
+
+                httpClient.newCall(req).execute().use { resp ->
+                    lastCode = resp.code
+                    val bodyStr = resp.body?.string().orEmpty()
+                    if (resp.isSuccessful) {
+                        val root = JsonParser.parseString(bodyStr).asJsonObject
+                        val shareId = root.get("shareId")?.asString.orEmpty()
+                        val shareUrl = root.get("shareUrl")?.asString ?: "${OverlayService.CLOUDFLARE_DVR_VAULT_URL}/watch/$shareId"
+                        val entry = OverlayService.Companion.ReplayVaultEntryMeta(
+                            battleId = cleanBattleId,
+                            shareId = shareId,
+                            shareUrl = shareUrl,
+                            videoStreamUrl = "$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/stream/$shareId/video.mp4",
+                            traceStreamUrl = "$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/stream/$shareId/trace.jsonl",
+                            isPinned = root.get("isPinned")?.asBoolean ?: isPinned,
+                            isPublic = root.get("isPublic")?.asBoolean ?: false,
+                            hideNames = false,
+                            uploadedAtMs = System.currentTimeMillis()
+                        )
+                        val map = loadReplayVaultMapStatic(prefs, gson)
+                        map[cleanBattleId] = entry
+                        saveReplayVaultMapStatic(prefs, gson, map)
+                        return Triple(true, "☁️ Saved to Cloud Replay Vault ($cleanBattleId)", entry)
+                    } else {
+                        val parsedErr = try { JsonParser.parseString(bodyStr).asJsonObject.get("error")?.asString.orEmpty() } catch (_: Exception) { "" }
+                        if (parsedErr.isNotBlank()) lastErr = parsedErr
+                    }
+                }
+                if (lastCode in 400..499 && lastCode != 404 && lastCode != 429) {
+                    break
+                }
+            } catch (e: Exception) {
+                lastErr = e.localizedMessage ?: e.javaClass.simpleName
             }
-            val root = JsonParser.parseString(bodyStr).asJsonObject
-            val shareId = root.get("shareId")?.asString.orEmpty()
-            val shareUrl = root.get("shareUrl")?.asString ?: "$CLOUDFLARE_TELEMETRY_WORKER_URL/watch/$shareId"
-            val entry = OverlayService.Companion.ReplayVaultEntryMeta(
-                battleId = cleanBattleId,
-                shareId = shareId,
-                shareUrl = shareUrl,
-                videoStreamUrl = "$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/stream/$shareId/video.mp4",
-                traceStreamUrl = "$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/stream/$shareId/trace.jsonl",
-                isPinned = root.get("isPinned")?.asBoolean ?: isPinned,
-                isPublic = root.get("isPublic")?.asBoolean ?: false,
-                hideNames = false,
-                uploadedAtMs = System.currentTimeMillis()
-            )
-            val map = loadReplayVaultMapStatic(prefs, gson)
-            map[cleanBattleId] = entry
-            saveReplayVaultMapStatic(prefs, gson, map)
-            Triple(true, "☁️ Saved to Cloud Replay Vault ($cleanBattleId)", entry)
+            if (attempt < 3) {
+                try { Thread.sleep(1500L * attempt) } catch (_: Exception) {}
+            }
         }
+        val detail = if (lastCode > 0) {
+            if (lastErr.isNotBlank()) "HTTP $lastCode: $lastErr" else "HTTP $lastCode"
+        } else {
+            lastErr.ifBlank { "Network error" }
+        }
+        Triple(false, "⚠️ Cloud Replay Vault upload failed ($detail)", null)
     } catch (e: Exception) {
         Triple(false, "⚠️ Vault upload error: ${e.localizedMessage ?: "Network error"}", null)
     }
