@@ -58,9 +58,9 @@ const DEFAULT_CSP_HEADER =
   "font-src 'self' data: https://fonts.gstatic.com; " +
   "img-src 'self' data: blob: https:; " +
   "media-src 'self' blob: https:; " +
-  "connect-src 'self' https://api.silphscopepvp.com https://dvr.silphscopepvp.com https://silphscopepvp.com https://www.silphscopepvp.com https://api.github.com; " +
-  "frame-src 'self'; " +
-  "frame-ancestors 'self'; " +
+  "connect-src 'self' https://api.silphscopepvp.com https://dvr.silphscopepvp.com https://silphscopepvp.com https://www.silphscopepvp.com https://*.silphscopepvp.com https://silphscope-telemetry.silphscope-pvp.workers.dev https://api.github.com https://raw.githubusercontent.com https://docs.google.com https://*.googleusercontent.com; " +
+  "frame-src 'self' https://*.silphscopepvp.com https://silphscopepvp.com; " +
+  "frame-ancestors 'self' https://*.silphscopepvp.com https://silphscopepvp.com; " +
   "object-src 'none'; " +
   "base-uri 'self'";
 
@@ -2915,8 +2915,8 @@ function renderWatchSharePage(origin, shareInfo) {
 
     function cleanBaseSpeciesKey(name) {
       return String(name || '')
-        .replace(/^Shadow\s+/i, '')
-        .replace(/\s*\(Shadow\)/i, '')
+        .replace(/^Shadow\\s+/i, '')
+        .replace(/\\s*\\(Shadow\\)/i, '')
         .split('(')[0]
         .trim()
         .toLowerCase();
@@ -2924,8 +2924,8 @@ function renderWatchSharePage(origin, shareInfo) {
 
     function buildSingleOppSpec(s, slotIdx, lg) {
       const spName = String(s.species || 'Opponent')
-        .replace(/^Shadow\s+/i, '')
-        .replace(/\s*\(Shadow\)/i, '')
+        .replace(/^Shadow\\s+/i, '')
+        .replace(/\\s*\\(Shadow\\)/i, '')
         .trim() || 'Opponent';
       const meta = lookupSpeciesMeta(spName, lg);
       const isShad = manualOppShadowOverride !== null && slotIdx === 0
@@ -2933,9 +2933,9 @@ function renderWatchSharePage(origin, shareInfo) {
         : (s.isShadow !== undefined ? Boolean(s.isShadow) : (Boolean(s.rawNameHasShadow) || meta.isShadow));
       const fastMove = s.inferredFastMove || meta.fastMove;
       const fStats = lookupFastStats(fastMove, s.fastTurns || meta.fastTurns);
-      const confirmed = Array.isArray(s.confirmedChargedMoves) ? s.confirmedChargedMoves.map(m => String(m).replace(/\*/g, '').trim()).filter(Boolean) : [];
+      const confirmed = Array.isArray(s.confirmedChargedMoves) ? s.confirmedChargedMoves.map(m => String(m).replace(/\\*/g, '').trim()).filter(Boolean) : [];
       const candidatePoolFromSummary = Array.isArray(s.candidateChargedMoves)
-        ? s.candidateChargedMoves.map(m => String(m).replace(/\*/g, '').trim()).filter(Boolean)
+        ? s.candidateChargedMoves.map(m => String(m).replace(/\\*/g, '').trim()).filter(Boolean)
         : [];
       const c1 = meta.c1 || confirmed[0] || 'Body Slam';
       const c2 = (meta.c2 && meta.c2.toLowerCase() !== c1.toLowerCase())
@@ -5092,8 +5092,9 @@ export default {
     const store = getStorageAdapter(env);
 
     // 0a. Instant 1-Click APK Download Subdomain (`dl.silphscopepvp.com` or `/download` / `/apk`)
+    const isGetOrHead = request.method === 'GET' || request.method === 'HEAD';
     if (
-      request.method === 'GET' &&
+      isGetOrHead &&
       (url.hostname === 'dl.silphscopepvp.com' || path === '/download' || path === '/apk')
     ) {
       let apkUrl = 'https://github.com/sportsfan986/silphscope-pvp/releases/latest';
@@ -5133,14 +5134,14 @@ export default {
     const isMainMarketingHost =
       url.hostname === 'silphscopepvp.com' || url.hostname === 'www.silphscopepvp.com';
     if (
-      request.method === 'GET' &&
+      isGetOrHead &&
       ((!isMainMarketingHost && path === '/') ||
         path === '/vault' ||
         path === '/replays' ||
         path.startsWith('/vault/') ||
         path.startsWith('/u/'))
     ) {
-      return new Response(renderVaultDashboardPage(url.origin), {
+      return new Response(request.method === 'HEAD' ? null : renderVaultDashboardPage(url.origin), {
         status: 200,
         headers: buildSecurityHeaders(
           {
@@ -5154,7 +5155,7 @@ export default {
 
     // 0a-2. Marketing Website & Web Simulator Edge Proxy on `silphscopepvp.com` / `www.silphscopepvp.com`
     if (
-      request.method === 'GET' &&
+      isGetOrHead &&
       isMainMarketingHost &&
       !path.startsWith('/v1/') &&
       !path.startsWith('/watch/') &&
@@ -5162,6 +5163,13 @@ export default {
       path !== '/health'
     ) {
       const cleanRelPath = path.replace(/^\/silphscope-pvp(\/|$)/, '/');
+      const isHtmlRoute =
+        cleanRelPath === '/' ||
+        cleanRelPath === '/index.html' ||
+        cleanRelPath === '/guide' ||
+        cleanRelPath === '/compare' ||
+        cleanRelPath === '/app' ||
+        cleanRelPath.endsWith('.html');
       const targetGhUrl =
         cleanRelPath === '/' || cleanRelPath === '/guide' || cleanRelPath === '/compare' || cleanRelPath === '/app'
           ? 'https://sportsfan986.github.io/silphscope-pvp/index.html'
@@ -5176,19 +5184,19 @@ export default {
       const respHeaders = new Headers(ghResp.headers);
       respHeaders.set('Access-Control-Allow-Origin', resolveAllowedCorsOrigin(request, true));
       respHeaders.set('Vary', 'Origin');
-      const secHeaders = buildSecurityHeaders({}, true);
+      const secHeaders = buildSecurityHeaders({}, isHtmlRoute);
       for (const [hk, hv] of Object.entries(secHeaders)) {
         respHeaders.set(hk, hv);
       }
-      return new Response(ghResp.body, {
+      return new Response(request.method === 'HEAD' ? null : ghResp.body, {
         status: ghResp.status,
         headers: respHeaders,
       });
     }
 
     // 0b. Exact In-App HUD WebView Asset (`GET /overlay.html`)
-    if (request.method === 'GET' && path === '/overlay.html') {
-      return new Response(OVERLAY_HTML, {
+    if (isGetOrHead && path === '/overlay.html') {
+      return new Response(request.method === 'HEAD' ? null : OVERLAY_HTML, {
         status: 200,
         headers: buildSecurityHeaders(
           {
