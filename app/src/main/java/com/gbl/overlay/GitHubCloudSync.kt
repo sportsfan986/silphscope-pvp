@@ -1248,9 +1248,8 @@ internal fun OverlayService.Companion.buildDebounceAndSettlingSettingsMapStatic(
     val hpSamples = prefs.getInt(PREFS_KEY_HP_DEBOUNCE_SAMPLES, DEFAULT_HP_DEBOUNCE_SAMPLES).coerceIn(2, 4)
     val energySamples = prefs.getInt(PREFS_KEY_ENERGY_DEBOUNCE_SAMPLES, DEFAULT_ENERGY_DEBOUNCE_SAMPLES).coerceIn(2, 4)
     val tolPct = prefs.getInt(PREFS_KEY_DEBOUNCE_TOLERANCE_PCT, DEFAULT_DEBOUNCE_TOLERANCE_PCT).coerceIn(0, 3)
-    val leadMs = prefs.getInt(PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS, DEFAULT_PROACTIVE_ENERGY_LEAD_MS).let {
-        if (it in listOf(0, 200, 300, 400)) it else DEFAULT_PROACTIVE_ENERGY_LEAD_MS
-    }
+    val leadMs = prefs.getInt(PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS, DEFAULT_PROACTIVE_ENERGY_LEAD_MS).coerceIn(0, 450)
+    val guiHapticLeadMs = prefs.getInt(PREFS_KEY_PREDICTIVE_GUI_HAPTIC_LEAD_MS, DEFAULT_PREDICTIVE_GUI_HAPTIC_LEAD_MS).coerceIn(100, 500)
     val circlePriority = prefs.getString("charge_circle_priority_mode", "smart_hybrid") ?: "smart_hybrid"
     val altFastDetect = prefs.getBoolean("enable_alt_fast_move_detect", true)
     val fastTurnOffset = prefs.getInt("fast_detect_turn_offset", DEFAULT_FAST_DETECT_TURN_OFFSET).coerceIn(0, 3)
@@ -1277,6 +1276,7 @@ internal fun OverlayService.Companion.buildDebounceAndSettlingSettingsMapStatic(
         "energyDebounceWindowMs" to (energySamples * 100),
         "debounceTolerancePct" to tolPct,
         "proactiveEnergyLeadMs" to leadMs,
+        "predictiveGuiHapticLeadMs" to guiHapticLeadMs,
         "chargeCirclePriorityMode" to circlePriority,
         "altFastMoveDetectEnabled" to altFastDetect,
         "fastDetectTurnOffset" to fastTurnOffset,
@@ -1793,9 +1793,7 @@ internal fun OverlayService.Companion.evaluateShadowSettingsProfilesStatic(
     val userHpSamples = prefs.getInt(PREFS_KEY_HP_DEBOUNCE_SAMPLES, DEFAULT_HP_DEBOUNCE_SAMPLES).coerceIn(2, 4)
     val userEnergySamples = prefs.getInt(PREFS_KEY_ENERGY_DEBOUNCE_SAMPLES, DEFAULT_ENERGY_DEBOUNCE_SAMPLES).coerceIn(2, 4)
     val userTolPct = prefs.getInt(PREFS_KEY_DEBOUNCE_TOLERANCE_PCT, DEFAULT_DEBOUNCE_TOLERANCE_PCT).coerceIn(0, 3)
-    val userLeadMs = prefs.getInt(PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS, DEFAULT_PROACTIVE_ENERGY_LEAD_MS).let {
-        if (it in listOf(0, 200, 300, 400)) it else DEFAULT_PROACTIVE_ENERGY_LEAD_MS
-    }
+    val userLeadMs = prefs.getInt(PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS, DEFAULT_PROACTIVE_ENERGY_LEAD_MS).coerceIn(0, 400)
     val userCirclePriority = prefs.getString("charge_circle_priority_mode", "smart_hybrid") ?: "smart_hybrid"
     val userFastOffset = prefs.getInt("fast_detect_turn_offset", DEFAULT_FAST_DETECT_TURN_OFFSET).coerceIn(0, 3)
     val userSwapRollbackMs = prefs.getInt(PREFS_KEY_SWAP_THROW_ROLLBACK_WINDOW_MS, DEFAULT_SWAP_THROW_ROLLBACK_WINDOW_MS).let {
@@ -1995,16 +1993,17 @@ internal fun OverlayService.Companion.evaluateShadowSettingsProfilesStatic(
 
     val namedProfiles = listOf(
         baseSpec,
+        ShadowProfileSpec("v715_ai_tuned_default", 2, 2, 1, 300, "smart_hybrid", "aggressive", 1, 4000, 10),
         ShadowProfileSpec("v602_recommended_default", 2, 2, 1, 300, "smart_hybrid", "strict", 1, 4000, 10),
         ShadowProfileSpec("low_latency_fast", 2, 2, 2, 400, "smart_hybrid", "balanced", 0, 3000, 10),
         ShadowProfileSpec("high_stability_strict", 3, 3, 1, 200, "highest_contrast", "strict", 2, 5000, 14),
-        ShadowProfileSpec("balanced_alt_fast", 2, 2, 1, 300, "smart_hybrid", "balanced", 1, 4000, 10),
+        ShadowProfileSpec("balanced_alt_fast", 2, 2, 1, 250, "smart_hybrid", "balanced", 1, 4000, 10),
         ShadowProfileSpec("no_swap_rollback_baseline", 2, 2, 1, 300, "smart_hybrid", "aggressive", 0, 0, 6)
     )
 
     val profileResults = namedProfiles.associate { it.id to evalSingleProfile(it) }
 
-    // Single-parameter sensitivity sweeps (holding v602_recommended_default fixed while varying 1 parameter at a time)
+    // Single-parameter sensitivity sweeps (holding v715_ai_tuned_default fixed while varying 1 parameter at a time, @ 100ms/10fps scan basis)
     val recDefault = namedProfiles[1]
     val paramSweeps = mapOf(
         "hpDebounceSamples" to listOf(2, 3, 4).associate { v ->
@@ -2016,8 +2015,19 @@ internal fun OverlayService.Companion.evaluateShadowSettingsProfilesStatic(
         "debounceTolerancePct" to listOf(0, 1, 2, 3).associate { v ->
             v.toString() to evalSingleProfile(recDefault.copy(id = "tol_$v", tolPct = v))["qualityScore"]!!
         },
-        "proactiveEnergyLeadMs" to listOf(0, 200, 300, 400).associate { v ->
+        "proactiveEnergyLeadMs" to listOf(0, 100, 150, 200, 250, 300, 350, 400).associate { v ->
             v.toString() to evalSingleProfile(recDefault.copy(id = "lead_$v", leadMs = v))["qualityScore"]!!
+        },
+        "predictiveGuiHapticLeadMs" to listOf(100, 200, 250, 300, 350, 400, 450).associate { v ->
+            v.toString() to evalSingleProfile(recDefault.copy(id = "guilead_$v", leadMs = v))["qualityScore"]!!
+        },
+        "hpDebounceWindowMs" to listOf(200, 300, 400).associate { v ->
+            val equivSamples = (v / 100).coerceIn(2, 4)
+            v.toString() to evalSingleProfile(recDefault.copy(id = "hpw_$v", hpSamples = equivSamples))["qualityScore"]!!
+        },
+        "energyDebounceWindowMs" to listOf(200, 300, 400).associate { v ->
+            val equivSamples = (v / 100).coerceIn(2, 4)
+            v.toString() to evalSingleProfile(recDefault.copy(id = "enw_$v", energySamples = equivSamples))["qualityScore"]!!
         },
         "swapThrowRollbackWindowMs" to listOf(0, 3000, 4000, 5000).associate { v ->
             v.toString() to evalSingleProfile(recDefault.copy(id = "swap_$v", swapRollbackWindowMs = v))["qualityScore"]!!

@@ -2481,6 +2481,7 @@ function renderWatchSharePage(origin, shareInfo) {
     <div class="stage-wrap" id="stage-wrap">
       <div class="video-box" id="video-box">
         <video id="replay-video" src="${videoUrl}" playsinline preload="metadata" crossorigin="anonymous"></video>
+        <div id="dual-energy-pill" style="position:absolute;top:4px;left:6px;z-index:25;background:rgba(15,23,42,0.92);border:1.2px solid #2dd4bf;border-radius:999px;padding:2px 9px;font-size:10.5px;font-weight:700;font-family:'Roboto Condensed',sans-serif;color:#f8fafc;white-space:nowrap;pointer-events:none;box-shadow:0 2px 6px rgba(0,0,0,0.55)">⚡ U: 0E [M:0E 90% | H:0E 75%] • O: 0E [M:0E 88% | H:0E 75%]</div>
         <div class="hud-layer pos-top" id="hud-layer">
           <iframe id="hud-iframe" src="/overlay.html?replay=1" scrolling="no" title="SilphScope PvP HUD"></iframe>
         </div>
@@ -3405,11 +3406,16 @@ function renderWatchSharePage(origin, shareInfo) {
           ? Number(pf.oppSlotEnergy[oIdx])
           : Number(pf.oppEnergy ?? -1);
       }
-      const reconstructedPreThrowOppE = isOppChargeWin
+      const rawPreThrowOppE = isOppChargeWin
         ? ((startWinOppE >= minCandCost && (prevBeforeOppE <= 0 || startWinOppE >= prevBeforeOppE))
             ? Math.max(minCandCost, Math.min(100, startWinOppE))
             : Math.max(minCandCost, Math.min(100, Math.max(prevBeforeOppE, startWinOppE + minCandCost))))
         : Math.max(minCandCost, Math.min(100, Number(oSlotE[oIdx] ?? 0)));
+      const hpOppEAtStart = Number(startOppF.oppEnergyHp ?? f.oppEnergyHp ?? rawPreThrowOppE);
+      const hpOppConfAtStart = Number(startOppF.oppConfHp ?? f.oppConfHp ?? 75);
+      const promotedByHpReplay = isOppChargeWin && hpOppConfAtStart >= 55 && hpOppEAtStart > rawPreThrowOppE;
+      const reconstructedPreThrowOppE = promotedByHpReplay ? Math.min(100, hpOppEAtStart) : rawPreThrowOppE;
+      const oppHpPromoTagReplay = String(f.oppHpPromoTag || startOppF.oppHpPromoTag || (promotedByHpReplay ? '[+1F HP]' : '')).trim();
 
       if (isOppChargeWin) {
         if (isOppCountdownPhase) {
@@ -3851,7 +3857,8 @@ function renderWatchSharePage(origin, shareInfo) {
         sdVerdict = '🛡️ TANK (0S) -> ' + myTargetMoveShort + ' IN ' + myFastsNeededForNext + 'F (Unfunded KO)';
       }
       const lockedTag = twoMovesLocked ? ' • 2M' : '';
-      const sdHeaderLine = sdVerdict + '  •  ' + actOpp.code + '(' + effectiveBankedE + 'e) vs ' + actUser.code + '(' + uHpNow + '%)' + lockedTag;
+      const promoBadgeReplay = oppHpPromoTagReplay && oppHpPromoTagReplay.startsWith('[+') ? (' ' + oppHpPromoTagReplay) : '';
+      const sdHeaderLine = sdVerdict + '  •  ' + actOpp.code + '(' + effectiveBankedE + 'e' + promoBadgeReplay + ') vs ' + actUser.code + '(' + uHpNow + '%)' + lockedTag;
 
       return {
         activeOpponent: actOpp.name,
@@ -4043,6 +4050,23 @@ function renderWatchSharePage(origin, shareInfo) {
         const win = hudIframe.contentWindow;
         if (!win || typeof win.updateBattleData !== 'function') return;
         const payload = buildReplayOverlayPayload(f);
+        const pillEl = document.getElementById('dual-energy-pill');
+        if (pillEl) {
+          const uEff = Number(payload.activeUserEnergy ?? f.userEnergy ?? 0);
+          const oEff = Number(payload.activeOppEnergy ?? f.oppEnergy ?? 0);
+          const uM = Number(f.userEnergyMeter ?? uEff);
+          const uH = Number(f.userEnergyHp ?? uEff);
+          const uCm = Number(f.userConfMeter ?? (f.leftCircleFillPct >= 1 && f.leftCircleFillPct <= 94 ? 96 : 84));
+          const uCh = Number(f.userConfHp ?? 82);
+          const oM = Number(f.oppEnergyMeter ?? oEff);
+          const oH = Number(f.oppEnergyHp ?? oEff);
+          const oCm = Number(f.oppConfMeter ?? 86);
+          const oCh = Number(f.oppConfHp ?? 82);
+          const pTag = String(f.oppHpPromoTag || (oEff > oM && oH >= oEff ? '★HP' : '')).trim();
+          const pSuffix = pTag ? (' ' + pTag) : '';
+          pillEl.textContent = '⚡ U: ' + uEff + 'E [M:' + uM + 'E ' + uCm + '% | H:' + uH + 'E ' + uCh + '%] • O: ' + oEff + 'E [M:' + oM + 'E ' + oCm + '% | H:' + oH + 'E ' + oCh + '%' + pSuffix + ']';
+          pillEl.style.display = hudMode === 'off' ? 'none' : 'block';
+        }
         if (typeof win.setReplayShieldOverlayEnabled === 'function') {
           win.setReplayShieldOverlayEnabled(showShieldHud);
         }
@@ -4051,8 +4075,19 @@ function renderWatchSharePage(origin, shareInfo) {
           win.setReplayHudMode(hudMode === 'diag' ? 'diagnostic' : hudMode);
         }
         if (hudMode === 'diag' && typeof win.setReplayDiagnosticText === 'function') {
+          const uEff = Number(payload.activeUserEnergy ?? f.userEnergy ?? 0);
+          const oEff = Number(payload.activeOppEnergy ?? f.oppEnergy ?? 0);
+          const uM = Number(f.userEnergyMeter ?? uEff);
+          const uH = Number(f.userEnergyHp ?? uEff);
+          const uCm = Number(f.userConfMeter ?? 90);
+          const uCh = Number(f.userConfHp ?? 82);
+          const oM = Number(f.oppEnergyMeter ?? oEff);
+          const oH = Number(f.oppEnergyHp ?? oEff);
+          const oCm = Number(f.oppConfMeter ?? 86);
+          const oCh = Number(f.oppConfHp ?? 82);
           const diagStr =
             'F#' + String(f.frameIdx || 0).padStart(4, '0') + ' (' + ((f.relTimeMs || 0) / 1000).toFixed(2) + 's) | Cutscene=' + Boolean(f.isCutsceneActive) + '\\n' +
+            'DUAL E: U=' + uEff + 'E [M:' + uM + 'E ' + uCm + '% | H:' + uH + 'E ' + uCh + '%] • O=' + oEff + 'E [M:' + oM + 'E ' + oCm + '% | H:' + oH + 'E ' + oCh + '% ' + (f.oppHpPromoTag || '') + ']\\n' +
             'RAW HP: U=' + (f.rawUserHpPct ?? -1) + '% (commit ' + (f.userHpPct ?? -1) + '%) | O=' + (f.rawOppHpPct ?? -1) + '% (commit ' + (f.oppHpPct ?? -1) + '%)\\n' +
             'CIRCLE: L=' + (f.leftCircleFillPct ?? -1) + '% R=' + (f.rightCircleFillPct ?? -1) + '% | SRC=' + (f.energySource || 'FAST_CADENCE') + '\\n' +
             'OCR: ' + JSON.stringify((f.ocrTopRightText || '').replace(/\\n/g, ' ')) + ' | Banner: ' + JSON.stringify((f.ocrMidBannerText || '').replace(/\\n/g, ' '));

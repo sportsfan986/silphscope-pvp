@@ -82,7 +82,7 @@
                 android:id="@+id/tv_app_main_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Real-Time PvP Floating Overlay • v7.14"
+                android:text="Real-Time PvP Floating Overlay • v7.20"
                 android:textSize="11sp"
                 android:textColor="#94a3b8"
                 android:layout_marginTop="1dp" />
@@ -2196,6 +2196,46 @@
                             android:textColor="#cbd5e1" />
                     </LinearLayout>
                 </LinearLayout>
+
+                <!-- 3. Post-Battle 1-Tap Tuning Feedback Micro-Poll (Default ON for @sportsfan986, OFF for others) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="#1e293b"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="6dp"
+                    android:layout_marginTop="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Provide Post-Battle Tuning Feedback"
+                            android:textColor="#f8fafc"
+                            android:textSize="11.5sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Shows 1 quick post-battle poll (Haptic Timing Early/Ideal/Late, or Shield Call Energy when HP-promoted) for daily AI calibration"
+                            android:textColor="#94a3b8"
+                            android:textSize="9.5sp" />
+                    </LinearLayout>
+
+                    <Switch
+                        android:id="@+id/switch_post_battle_tuning_feedback"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="false" />
+                </LinearLayout>
             </LinearLayout>
 
             <!-- ===================================================================
@@ -2613,14 +2653,16 @@
                     android:textColor="#ffffff" />
             </LinearLayout>
 
-            <!-- v3.89: HP Bar Meter Debounce & Upward Self-Correction Card -->
+            <!-- v3.89: HP Bar Meter Debounce & Upward Self-Correction Card (v7.15: Hidden & AI-Tunable) -->
             <LinearLayout
+                android:id="@+id/card_hp_debounce_settings"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:layout_marginTop="8dp"
                 android:padding="10dp"
-                android:background="#0f172a">
+                android:background="#0f172a"
+                android:visibility="gone">
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -2810,14 +2852,16 @@
                     android:textColor="#ffffff" />
             </LinearLayout>
 
-            <!-- v3.87: Energy Meter Debounce & Slowest Move Snap Card -->
+            <!-- v3.87: Energy Meter Debounce & Slowest Move Snap Card (v7.15: 3-Ring & Proactive Lead Hidden & AI-Tunable; Toast Card Admin-Only) -->
             <LinearLayout
+                android:id="@+id/layout_admin_energy_toasts_card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:layout_marginTop="8dp"
                 android:background="#0f172a"
-                android:padding="10dp">
+                android:padding="10dp"
+                android:visibility="gone">
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -2825,24 +2869,27 @@
                     android:text="⚡ 3-Ring Energy Meter, Proactive Lead &amp; 100E Opp Clock (v4.13)"
                     android:textColor="#38bdf8"
                     android:textSize="12sp"
-                    android:textStyle="bold" />
+                    android:textStyle="bold"
+                    android:visibility="gone" />
 
                 <TextView
                     android:id="@+id/tv_energy_debounce_summary"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="• Active: 2 Matching Samples (Default • Fastest Response, ±2% Fill Tolerance)
-• Proactive Fast-Move Energy Lead: 200ms (Default • ~200ms early + charges opp at 100E with charge-scene gates)
+• Proactive Fast-Move Energy Lead: 236ms (AI-Tuned • Continuous ms + HP-Drop Dual Validation)
 • Live Energy &amp; Circle % Battle Toasts: Enabled"
                     android:textColor="#94a3b8"
                     android:textSize="10sp"
-                    android:layout_marginTop="3dp" />
+                    android:layout_marginTop="3dp"
+                    android:visibility="gone" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:layout_marginTop="8dp">
+                    android:layout_marginTop="8dp"
+                    android:visibility="gone">
 
                     <Button
                         android:id="@+id/btn_debounce_2_samples"
@@ -2883,7 +2930,7 @@
                         android:textColor="#94a3b8" />
                 </LinearLayout>
 
-                <!-- v6.02: Proactive Fast-Move Energy Lead Time Selector (0 / 200 (Def) / 300 / 400ms) -->
+                <!-- v6.02: Proactive Fast-Move Energy Lead Time Selector (v7.15: Hidden & AI-Tunable) -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -2891,22 +2938,25 @@
                     android:text="⏱️ Proactive Fast-Move Energy Lead Time (Player &amp; Opponent + 100E Clock)"
                     android:textColor="#e2e8f0"
                     android:textSize="11sp"
-                    android:textStyle="bold" />
+                    android:textStyle="bold"
+                    android:visibility="gone" />
 
                 <TextView
                     android:id="@+id/text_proactive_energy_lead_desc"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Default: 200ms — Advances player &amp; opponent energy ~200ms early (keeps charging opp at 100E with charge-scene gates); auto-rolls back if &gt;500ms lag"
+                    android:text="Default: 236ms (AI-Tuned) — Advances player &amp; opponent energy early; auto-tuned via shadow telemetry"
                     android:textColor="#94a3b8"
                     android:textSize="9.5sp"
-                    android:layout_marginTop="1dp" />
+                    android:layout_marginTop="1dp"
+                    android:visibility="gone" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:layout_marginTop="5dp">
+                    android:layout_marginTop="5dp"
+                    android:visibility="gone">
 
                     <Button
                         android:id="@+id/btn_proactive_lead_0"
@@ -2960,14 +3010,13 @@
                         android:textColor="#94a3b8" />
                 </LinearLayout>
 
-                <!-- Live Energy & Circle % Update Toast Toggle -->
+                <!-- Live Energy & Circle % Update Toast Toggle (v7.15: Admin-Only Persistent Meter vs HP Confidence Toast) -->
                 <LinearLayout
+                    android:id="@+id/layout_admin_energy_toasts_row"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginTop="8dp"
-                    android:paddingTop="6dp">
+                    android:gravity="center_vertical">
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -2979,7 +3028,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="⚡ Live Energy &amp; Circle % Battle Toasts"
+                            android:text="⚡ Live Energy &amp; Circle % Battle Toasts (👑 Admin)"
                             android:textColor="#e2e8f0"
                             android:textSize="11.5sp"
                             android:textStyle="bold" />
@@ -2988,7 +3037,7 @@
                             android:id="@+id/text_energy_update_toasts_desc"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Default: On — Shows tracked move, circle % &amp; energy on every change"
+                            android:text="Admin Only (@sportsfan986) — Persistent dual-source Meter [M:] vs HP [H:] energy &amp; confidence toast"
                             android:textColor="#94a3b8"
                             android:textSize="10sp" />
                     </LinearLayout>

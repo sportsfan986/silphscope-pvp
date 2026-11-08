@@ -100,6 +100,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnProactiveLead300: Button
     private lateinit var btnProactiveLead400: Button
     private lateinit var textProactiveEnergyLeadDesc: TextView
+    private lateinit var layoutAdminEnergyToastsCard: LinearLayout
     private lateinit var btnToggleEnergyUpdateToasts: Button
     private lateinit var textEnergyUpdateToastsDesc: TextView
     private lateinit var btnCycleChargeCirclePriority: Button
@@ -1265,6 +1266,7 @@ class MainActivity : AppCompatActivity() {
         btnProactiveLead300 = findViewById(R.id.btn_proactive_lead_300)
         btnProactiveLead400 = findViewById(R.id.btn_proactive_lead_400)
         textProactiveEnergyLeadDesc = findViewById(R.id.text_proactive_energy_lead_desc)
+        layoutAdminEnergyToastsCard = findViewById(R.id.layout_admin_energy_toasts_card)
         btnToggleEnergyUpdateToasts = findViewById(R.id.btn_toggle_energy_update_toasts)
         textEnergyUpdateToastsDesc = findViewById(R.id.text_energy_update_toasts_desc)
         btnCycleChargeCirclePriority = findViewById(R.id.btn_cycle_charge_circle_priority)
@@ -1448,6 +1450,14 @@ class MainActivity : AppCompatActivity() {
         btnTestHapticCharge.setOnClickListener {
             OverlayService.triggerDoubleHapticPulseStatic(this)
             Toast.makeText(this, "📳📳 80ms Double Pulse (Charged Move Alert)", Toast.LENGTH_SHORT).show()
+        }
+        val switchPostBattleTuning = findViewById<android.widget.Switch>(R.id.switch_post_battle_tuning_feedback)
+        if (switchPostBattleTuning != null) {
+            switchPostBattleTuning.isChecked = OverlayService.isPostBattleTuningFeedbackEnabledStatic(prefs)
+            switchPostBattleTuning.setOnCheckedChangeListener { _, isChecked ->
+                prefs.edit().putBoolean(OverlayService.PREFS_KEY_POST_BATTLE_TUNING_FEEDBACK, isChecked).apply()
+                pushHapticSettingsToOverlay()
+            }
         }
 
         isUpdatingThemeSpinner = true
@@ -2361,6 +2371,9 @@ class MainActivity : AppCompatActivity() {
                 "⚠️ Unique Debug ID Required (3–24 chars or tap '🎲 Random ID') before launching the overlay."
             textTrainerScreenNameStatus.setTextColor(0xFFFBBF24.toInt())
         }
+        findViewById<android.widget.Switch>(R.id.switch_post_battle_tuning_feedback)?.isChecked =
+            OverlayService.isPostBattleTuningFeedbackEnabledStatic(prefs)
+        loadAndRenderEnergyDebounceUi()
     }
 
     private fun saveTrainerScreenNameFromInput() {
@@ -5611,17 +5624,22 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        if (::layoutAdminEnergyToastsCard.isInitialized) {
+            val isAdmin = if (::prefs.isInitialized) OverlayService.isAdminTrainerStatic(prefs) else false
+            layoutAdminEnergyToastsCard.visibility = if (isAdmin) android.view.View.VISIBLE else android.view.View.GONE
+        }
+
         if (::btnToggleEnergyUpdateToasts.isInitialized && ::textEnergyUpdateToastsDesc.isInitialized) {
             if (toastsOn) {
                 btnToggleEnergyUpdateToasts.text = "Toasts On"
                 btnToggleEnergyUpdateToasts.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
                 btnToggleEnergyUpdateToasts.setTextColor(0xFFFFFFFF.toInt())
-                textEnergyUpdateToastsDesc.text = "Active: Shows ⚡ [Move] ([Cost]E) • Circle [X]% → [Y]E on every energy change"
+                textEnergyUpdateToastsDesc.text = "Active (👑 Admin): Persistent top-left pill showing ⚡ U: [M:%|H:%] • O: [M:%|H:%] dual-source energy & confidence"
             } else {
                 btnToggleEnergyUpdateToasts.text = "Toasts Off"
                 btnToggleEnergyUpdateToasts.backgroundTintList = inactiveTint
                 btnToggleEnergyUpdateToasts.setTextColor(theme.secondaryTextColor)
-                textEnergyUpdateToastsDesc.text = "Muted: Live energy & circle % update toasts hidden during battle"
+                textEnergyUpdateToastsDesc.text = "Muted: Persistent dual-source energy & confidence battle toast hidden"
             }
         }
 
@@ -5645,7 +5663,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveProactiveEnergyLeadMs(leadMs: Int, showToast: Boolean) {
-        val valid = if (leadMs in listOf(0, 200, 300, 400)) leadMs else OverlayService.DEFAULT_PROACTIVE_ENERGY_LEAD_MS
+        val valid = leadMs.coerceIn(0, 400)
         prefs.edit().putInt(OverlayService.PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS, valid).apply()
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         OverlayService.recordDebounceSettingsChangeIfNeededStatic(

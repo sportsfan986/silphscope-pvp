@@ -1681,6 +1681,10 @@
                     </button>
                 </div>
             </div>
+            <div id="auto-logged-tuning-feedback-row" class="hidden" style="display:flex; justify-content:space-between; align-items:center; gap:3px; padding-top:2px; border-top:1px solid rgba(148,163,184,0.2);">
+                <span id="auto-logged-tuning-label" style="font-size:7.6px; font-weight:800; color:#38bdf8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📳 Haptic Timing:</span>
+                <div id="auto-logged-tuning-btns" style="display:flex; gap:2.5px; align-items:center; flex-shrink:0;"></div>
+            </div>
         </div>
 
         <!-- 3v3 Matchup Matrix Dots (Full Opponent Names, Fixed 1st/2nd/3rd Order) -->
@@ -2959,6 +2963,20 @@
             setTimeout(notifyHeight, 25);
         }
 
+        function submitTuningFeedback(questionId, answer) {
+            const bId = (battleData.autoLoggedBanner && battleData.autoLoggedBanner.battleId) ? battleData.autoLoggedBanner.battleId : "";
+            if (!bId) return;
+            if (!battleData.autoLoggedBanner.tuningFeedback) {
+                battleData.autoLoggedBanner.tuningFeedback = {};
+            }
+            battleData.autoLoggedBanner.tuningFeedback[questionId] = answer;
+            render();
+            if (window.AndroidOverlay && window.AndroidOverlay.submitPostBattleTuningFeedback) {
+                window.AndroidOverlay.submitPostBattleTuningFeedback(bId, questionId, answer);
+            }
+            setTimeout(notifyHeight, 25);
+        }
+
         function updateLeadMatchupButtonUi() {
             const leadBtn = document.getElementById("btn-lead-matchup");
             if (!leadBtn) return;
@@ -3457,6 +3475,49 @@
                                     dvrStEl.style.color = "#93c5fd";
                                 }
                             }
+                        }
+                    }
+                    const tuningRowEl = document.getElementById("auto-logged-tuning-feedback-row");
+                    const tuningLblEl = document.getElementById("auto-logged-tuning-label");
+                    const tuningBtnsEl = document.getElementById("auto-logged-tuning-btns");
+                    if (tuningRowEl && tuningLblEl && tuningBtnsEl) {
+                        if (ab.showTuningFeedbackPrompt && !ab.telemetryIgnored) {
+                            tuningRowEl.classList.remove("hidden");
+                            const qType = ab.tuningQuestionType === "shield_energy" ? "shield_energy" : "haptic_timing";
+                            const fbMap = ab.tuningFeedback || {};
+                            const chosen = fbMap[qType] || "";
+                            const leadMs = typeof ab.predictiveGuiHapticLeadMs === "number" ? ab.predictiveGuiHapticLeadMs : 300;
+                            if (qType === "shield_energy") {
+                                tuningLblEl.innerHTML = chosen
+                                    ? `🛡️ HP Shield Call: <span style="color:#4ade80;">${escapeHtml(chosen)} ✓</span>`
+                                    : `🛡️ HP Shield Call Energy:`;
+                                const opts = [
+                                    { val: "UNDERCOUNTED", label: "⬇️ Under" },
+                                    { val: "ACCURATE", label: "✅ Spot-On" },
+                                    { val: "OVERCOUNTED", label: "⬆️ Over" }
+                                ];
+                                tuningBtnsEl.innerHTML = opts.map(o => {
+                                    const isSel = chosen === o.val;
+                                    const activeStyle = isSel ? "background:#0284c7;color:#fff;border-color:#38bdf8;" : "";
+                                    return `<button class="menu-btn menu-btn-lead-neu" style="${activeStyle}" onclick="submitTuningFeedback('shield_energy','${o.val}')">${o.label}</button>`;
+                                }).join("");
+                            } else {
+                                tuningLblEl.innerHTML = chosen
+                                    ? `📳 Haptic (${leadMs}ms): <span style="color:#4ade80;">${escapeHtml(chosen)} ✓</span>`
+                                    : `📳 Haptic Timing (${leadMs}ms):`;
+                                const opts = [
+                                    { val: "TOO_EARLY", label: "⏪ Early" },
+                                    { val: "IDEAL", label: "✅ Ideal" },
+                                    { val: "TOO_LATE", label: "⏩ Late" }
+                                ];
+                                tuningBtnsEl.innerHTML = opts.map(o => {
+                                    const isSel = chosen === o.val;
+                                    const activeStyle = isSel ? "background:#0284c7;color:#fff;border-color:#38bdf8;" : "";
+                                    return `<button class="menu-btn menu-btn-lead-neu" style="${activeStyle}" onclick="submitTuningFeedback('haptic_timing','${o.val}')">${o.label}</button>`;
+                                }).join("");
+                            }
+                        } else {
+                            tuningRowEl.classList.add("hidden");
                         }
                     }
                 } else {

@@ -1,4 +1,23 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.14`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.20`)
+
+---
+
+## v7.20 (2026-11-08) — Dual-Source Energy Tracking (`E_meter` vs. `E_hp`), Two-Stage Predictive GUI & Haptic Lead Time with Asymmetric Fast-Move Duration Physics, 4 Hidden 10-FPS AI-Tunable Settings & Post-Battle Tuning Micro-Poll
+*Combat intelligence & AI telemetry calibration release (`v7.20`, `versionCode = 1720`) introducing Dual-Source Energy Tracking (`E_meter` / `C_meter` vs. `E_hp` / `C_hp`), asymmetric Shield Call (`[+NF HP]`) vs. Normal Combat (`★HP`) promotion rules, Two-Stage Compensated Predictive GUI & Haptic Lead Time accounting for asymmetric fast-move durations (`U` turns vs. `O` turns) and 10 FPS (`200ms`) pixel debounce lag, 4 hidden AI-tunable parameters continuously evaluated across shadow profiles, and a smart 1-question Post-Battle Tuning Feedback micro-poll.*
+
+- **v7.20 — Feature 1: Dual-Source Energy Tracking & Asymmetric Promotion Policy (`OverlayService.kt`, `BattleDvrEngine.kt`, `cloudflare/telemetry-worker/worker.mjs`)**:
+  - Simultaneously tracks player and opponent energy via **Circle/Turn-Cadence Meter (`E_meter`, `C_meter`)** and **HP-Drop Fast-Move Cadence (`E_hp`, `C_hp`)**, using player fast-move circle steps vs. opponent HP drops as an in-battle symmetric calibration loop.
+  - **Shield Call Overlay (`Attack incoming!`)**: Promotes opponent energy to `max(E_meter, E_hp)` whenever `C_hp >= 55%` and appends a `[+NF HP]` badge on the Shield Decision Overlay so nukes are never undercounted when a fast move snuck in before camera zoom.
+  - **Normal Combat (Catch/Swap Safety)**: Requires `>= 2` consecutive phase-aligned HP drops and `C_hp >= C_meter + 10%` (or player charge circle saturated `>= 95%`), capped at `+1` fast move (`★HP`) to prevent premature catch-swaps.
+  - **Post-Player-Throw Snuck Fast-Move Audit**: Compares player HP before vs. after firing a charged move (`userHpPre` vs. `userHpPost`) to detect if the opponent snuck a fast move in before the camera zoom cut in.
+- **v7.20 — Feature 2: Two-Stage Compensated Predictive GUI & Haptic Lead Time + Asymmetric Fast-Move Duration Physics (`OverlayService.kt`)**:
+  - Accounts for the `200ms` 2-sample pixel debounce lag on the 10 FPS (`100ms`) scan loop and compares `turnsFromCurrentPlayerMoveStart` against `userFastTurns`.
+  - When a slow player fast move (`3T`/`4T`/`5T`) would animation-lock the player past the opponent's charged move turn, `BLINK_1_FAST` and the double haptic vibration fire `300ms` (`predictiveGuiHapticLeadMs`) before the end of the player's **last safe** fast move (`T_action_boundary - 300ms`), locked to a single alert per opponent charge cycle (`chargeCycleKey`).
+- **v7.20 — Feature 3: 10 FPS (`100ms`) Scan Basis & 4 Hidden AI-Tunable Settings (`activity_main.xml`, `MainActivity.kt`, `GitHubCloudSync.kt`, `scripts/nightly-telemetry-audit.mjs`)**:
+  - Hid `HP Bar Meter Debounce & Upward Self-Correction`, `3-Ring Energy Meter, Proactive Lead & 100E Opp Clock`, `Proactive Fast-Move Energy Lead Time`, and `Predictive GUI & Haptic Lead Time` from the UI, locking starting defaults to `@sportsfan986`'s active telemetry baseline (`hpDebounceSamples = 2` / `200ms`, `energyDebounceSamples = 2` / `200ms`, `debounceTolerancePct = 1%`, `chargeCirclePriorityMode = "smart_hybrid"`, `proactiveEnergyLeadMs = 300ms`, `predictiveGuiHapticLeadMs = 300ms`) and evaluating 6 continuous shadow profiles on every battle.
+- **v7.20 — Feature 4: Post-Battle Tuning Feedback Smart Micro-Poll & Admin Persistent Dual-Source Toast (`activity_main.xml`, `MainActivity.kt`, `overlay.html`, `OverlayService.kt`, `scripts/nightly-telemetry-audit.mjs`)**:
+  - Added `Provide Post-Battle Tuning Feedback` in **Settings → Haptics** (default **ON** for `@sportsfan986`, **OFF** for all other users), rendering 1 smart micro-poll question per battle in `#auto-logged-banner`: **Haptic Catch/Throw Timing (`⏪ Early` / `✅ Ideal` / `⏩ Late`)** by default, automatically swapping to **HP Shield Call Energy (`⬇️ Under` / `✅ Spot-On` / `⬆️ Over`)** whenever `[+NF HP]` triggered in that battle.
+  - Gated `Live Energy & Circle % Battle Toasts` strictly to `@sportsfan986` and upgraded it to a persistent top-left pill (`⚡ U: M:..E(..%) H:..E(..%) | O: M:..E(..%) H:..E(..%)`) mirrored in `/watch/:shareId`.
 
 ---
 

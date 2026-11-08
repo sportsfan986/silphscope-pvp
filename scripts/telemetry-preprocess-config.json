@@ -102,5 +102,13 @@
       "tailFrameCount": 24,
       "sampleEveryNFrames": 2
     }
+  },
+  "nightlyModelBudget": {
+    "stage0LocalCpuAndFfmpeg": "0_AI_TOKENS (100% Local Node.js + ffmpeg + detectFloatingHpBarPctV708)",
+    "stage1OcrAndVideoSubagentModel": "flash",
+    "stage2SupporterAndFreeHighEffort": "argon_low",
+    "maxSupporterAndFreeHighIssuesPerDay": 3,
+    "stage3ProAndVipCriticalEffort": "argon_medium",
+    "stage4FinalSynthesisPass": "argon_high_cached_digest_only_1x"
   }
 }

@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.14"
-        const val APP_VERSION_CODE = 1713
+        const val APP_VERSION = "7.20"
+        const val APP_VERSION_CODE = 1720
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -273,6 +273,20 @@ class OverlayService : LifecycleService() {
             return hasValidScreenNameStatic(prefs) && !isRandomDebugIdStatic(prefs)
         }
 
+        fun isAdminTrainerStatic(prefs: SharedPreferences): Boolean {
+            val screen = getRequiredScreenNameStatic(prefs)
+            if (screen.equals("sportsfan986", ignoreCase = true)) return true
+            val gh = sanitizeScreenNameStatic(prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, null))
+            return gh.equals("sportsfan986", ignoreCase = true)
+        }
+
+        const val PREFS_KEY_POST_BATTLE_TUNING_FEEDBACK = "gbl_post_battle_tuning_feedback_enabled"
+
+        fun isPostBattleTuningFeedbackEnabledStatic(prefs: SharedPreferences): Boolean {
+            val defaultVal = isAdminTrainerStatic(prefs)
+            return prefs.getBoolean(PREFS_KEY_POST_BATTLE_TUNING_FEEDBACK, defaultVal)
+        }
+
         const val PREFS_KEY_AI_TELEMETRY_V510_MIGRATED = "gbl_ai_telemetry_v510_migrated"
         const val PREFS_KEY_AI_TELEMETRY_ONBOARDING_SHOWN = "gbl_ai_telemetry_v510_onboarding_shown"
         const val PREFS_KEY_AUTO_UPLOAD_AI_LOGS = "gbl_auto_upload_ai_logs_v510"
@@ -370,9 +384,23 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_DEBOUNCE_TOLERANCE_PCT = "gbl_debounce_tolerance_pct"
         const val DEFAULT_DEBOUNCE_TOLERANCE_PCT = 1
 
-        // v4.12: Proactive Fast-Move Energy Lead Time (0 / 200 / 300 / 400ms, Default 300ms)
+        // v4.12 / v7.15: Proactive Fast-Move Energy Lead Time (AI-Tuned @ 100ms/10fps scan basis, Starting Default 300ms from latest telemetry log)
         const val PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS = "gbl_proactive_energy_lead_ms"
         const val DEFAULT_PROACTIVE_ENERGY_LEAD_MS = 300
+
+        // v7.15: Predictive Energy GUI & Haptic Lead Time (AI-Tuned @ 100ms/10fps scan basis, Starting Default 300ms)
+        const val PREFS_KEY_PREDICTIVE_GUI_HAPTIC_LEAD_MS = "gbl_predictive_gui_haptic_lead_ms"
+        const val DEFAULT_PREDICTIVE_GUI_HAPTIC_LEAD_MS = 300
+
+        // v7.15: Millisecond AI-Tunable Debounce & EMA Offset Parameters (10 FPS / 100ms per sample -> 2 samples = 200ms, 1% tolerance)
+        const val PREFS_KEY_HP_DEBOUNCE_WINDOW_MS = "gbl_hp_debounce_window_ms"
+        const val DEFAULT_HP_DEBOUNCE_WINDOW_MS = 200
+        const val PREFS_KEY_HP_DEBOUNCE_TOLERANCE_PCT_F = "gbl_hp_debounce_tolerance_pct_f"
+        const val DEFAULT_HP_DEBOUNCE_TOLERANCE_PCT_F = 1.0f
+        const val PREFS_KEY_ENERGY_DEBOUNCE_WINDOW_MS = "gbl_energy_debounce_window_ms"
+        const val DEFAULT_ENERGY_DEBOUNCE_WINDOW_MS = 200
+        const val PREFS_KEY_AI_TUNED_LEAD_EMA_OFFSET_MS = "gbl_ai_tuned_lead_ema_offset_ms"
+        const val DEFAULT_AI_TUNED_LEAD_EMA_OFFSET_MS = 0
 
         // v6.02: Swap-and-Immediate-Throw Rollback Window, Alt Fast Move Override Strictness & Shield Chip Tolerance
         const val PREFS_KEY_SWAP_THROW_ROLLBACK_WINDOW_MS = "gbl_swap_throw_rollback_window_ms"
@@ -449,6 +477,12 @@ class OverlayService : LifecycleService() {
         @Volatile var activeHpDebounceSamples: Int = DEFAULT_HP_DEBOUNCE_SAMPLES
         @Volatile var activeDebounceTolerancePct: Int = DEFAULT_DEBOUNCE_TOLERANCE_PCT
         @Volatile var activeProactiveEnergyLeadMs: Int = DEFAULT_PROACTIVE_ENERGY_LEAD_MS
+        @Volatile var activePredictiveGuiHapticLeadMs: Int = DEFAULT_PREDICTIVE_GUI_HAPTIC_LEAD_MS
+        @Volatile var activePostBattleTuningFeedbackEnabled: Boolean = false
+        @Volatile var activeHpDebounceWindowMs: Int = DEFAULT_HP_DEBOUNCE_WINDOW_MS
+        @Volatile var activeHpDebounceTolerancePctF: Float = DEFAULT_HP_DEBOUNCE_TOLERANCE_PCT_F
+        @Volatile var activeEnergyDebounceWindowMs: Int = DEFAULT_ENERGY_DEBOUNCE_WINDOW_MS
+        @Volatile var activeAiTunedLeadEmaOffsetMs: Int = DEFAULT_AI_TUNED_LEAD_EMA_OFFSET_MS
         @Volatile var activeSwapThrowRollbackWindowMs: Int = DEFAULT_SWAP_THROW_ROLLBACK_WINDOW_MS
         @Volatile var activeAltFastDetectStrictness: String = DEFAULT_ALT_FAST_DETECT_STRICTNESS
         @Volatile var activeShieldChipTolerancePct: Int = DEFAULT_SHIELD_CHIP_TOLERANCE_PCT
@@ -597,12 +631,16 @@ class OverlayService : LifecycleService() {
             activeMachPlayableMin = prefs.getInt(PREFS_KEY_MACH_PLAYABLE_MIN, DEFAULT_MACH_PLAYABLE_MIN).coerceIn(390, 800)
             activeMachRiskyMin = prefs.getInt(PREFS_KEY_MACH_RISKY_MIN, DEFAULT_MACH_RISKY_MIN).coerceIn(350, 780)
             activeEnergyDebounceSamples = prefs.getInt(PREFS_KEY_ENERGY_DEBOUNCE_SAMPLES, DEFAULT_ENERGY_DEBOUNCE_SAMPLES).coerceIn(2, 4)
-            activeEnergyUpdateToasts = prefs.getBoolean(PREFS_KEY_ENERGY_UPDATE_TOASTS, DEFAULT_ENERGY_UPDATE_TOASTS)
+            activeEnergyUpdateToasts = isAdminTrainerStatic(prefs) && prefs.getBoolean(PREFS_KEY_ENERGY_UPDATE_TOASTS, DEFAULT_ENERGY_UPDATE_TOASTS)
             activeHpDebounceSamples = prefs.getInt(PREFS_KEY_HP_DEBOUNCE_SAMPLES, DEFAULT_HP_DEBOUNCE_SAMPLES).coerceIn(2, 4)
             activeDebounceTolerancePct = prefs.getInt(PREFS_KEY_DEBOUNCE_TOLERANCE_PCT, DEFAULT_DEBOUNCE_TOLERANCE_PCT).coerceIn(0, 3)
-            activeProactiveEnergyLeadMs = prefs.getInt(PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS, DEFAULT_PROACTIVE_ENERGY_LEAD_MS).let {
-                if (it in listOf(0, 200, 300, 400)) it else DEFAULT_PROACTIVE_ENERGY_LEAD_MS
-            }
+            activeProactiveEnergyLeadMs = prefs.getInt(PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS, DEFAULT_PROACTIVE_ENERGY_LEAD_MS).coerceIn(0, 450)
+            activePredictiveGuiHapticLeadMs = prefs.getInt(PREFS_KEY_PREDICTIVE_GUI_HAPTIC_LEAD_MS, DEFAULT_PREDICTIVE_GUI_HAPTIC_LEAD_MS).coerceIn(100, 500)
+            activePostBattleTuningFeedbackEnabled = isPostBattleTuningFeedbackEnabledStatic(prefs)
+            activeHpDebounceWindowMs = prefs.getInt(PREFS_KEY_HP_DEBOUNCE_WINDOW_MS, activeHpDebounceSamples * 100).coerceIn(100, 400)
+            activeHpDebounceTolerancePctF = prefs.getFloat(PREFS_KEY_HP_DEBOUNCE_TOLERANCE_PCT_F, activeDebounceTolerancePct.toFloat().coerceAtLeast(1.0f)).coerceIn(0.5f, 3.5f)
+            activeEnergyDebounceWindowMs = prefs.getInt(PREFS_KEY_ENERGY_DEBOUNCE_WINDOW_MS, activeEnergyDebounceSamples * 100).coerceIn(100, 400)
+            activeAiTunedLeadEmaOffsetMs = prefs.getInt(PREFS_KEY_AI_TUNED_LEAD_EMA_OFFSET_MS, DEFAULT_AI_TUNED_LEAD_EMA_OFFSET_MS).coerceIn(-50, 50)
             activeSwapThrowRollbackWindowMs = prefs.getInt(PREFS_KEY_SWAP_THROW_ROLLBACK_WINDOW_MS, DEFAULT_SWAP_THROW_ROLLBACK_WINDOW_MS).let {
                 if (it in listOf(0, 3000, 4000, 5000)) it else DEFAULT_SWAP_THROW_ROLLBACK_WINDOW_MS
             }
@@ -1332,6 +1370,15 @@ class OverlayService : LifecycleService() {
             val userEnergy: Int = 0,
             val oppEnergy: Int = 0,
             val energySource: String = "FAST_CADENCE",
+            val userEnergyMeter: Int = 0,
+            val userEnergyHp: Int = 0,
+            val userConfMeter: Int = 0,
+            val userConfHp: Int = 0,
+            val oppEnergyMeter: Int = 0,
+            val oppEnergyHp: Int = 0,
+            val oppConfMeter: Int = 0,
+            val oppConfHp: Int = 0,
+            val oppHpPromoTag: String = "",
             val userShields: Int = 2,
             val oppShields: Int = 2,
             val userBalls: Int = 3,
@@ -1423,7 +1470,8 @@ class OverlayService : LifecycleService() {
             val energyLedger: List<EnergyLedgerEntry> = emptyList(),
             val hpAndEnergyDiagnosticsSummary: Map<String, Any> = emptyMap(),
             val dvrVideoPath: String? = null,
-            val dvrDeepTracePath: String? = null
+            val dvrDeepTracePath: String? = null,
+            val tuningFeedback: Map<String, String> = emptyMap()
         )
 
         /**
@@ -1449,7 +1497,16 @@ class OverlayService : LifecycleService() {
             val oppHpRowY: Int = -1,
             val userEnergy: Int = 0,
             val oppEnergy: Int = 0,
-            val energyMutationSource: String = "NONE"
+            val energyMutationSource: String = "NONE",
+            val userEnergyMeter: Int = 0,
+            val userEnergyHp: Int = 0,
+            val userConfMeter: Int = 0,
+            val userConfHp: Int = 0,
+            val oppEnergyMeter: Int = 0,
+            val oppEnergyHp: Int = 0,
+            val oppConfMeter: Int = 0,
+            val oppConfHp: Int = 0,
+            val oppHpPromoTag: String = ""
         )
 
         data class AiTelemetryManifestEntry(
@@ -2727,6 +2784,68 @@ class OverlayService : LifecycleService() {
     internal var confirmedPhasePlayerTurns: Int = 0
     internal var lastConfirmedPlayerFastMoveMs: Long = 0L
 
+    // v7.15: Dual-Source Energy Tracking & Confidence Scoring (Meter-Based vs. HP-Drop Fast-Move Quantization)
+    internal val userSlotEnergyMeter = IntArray(3) { 0 }
+    internal val userSlotEnergyHp = IntArray(3) { 0 }
+    internal val userSlotConfMeter = IntArray(3) { 90 }
+    internal val userSlotConfHp = IntArray(3) { 75 }
+    internal val oppSlotEnergyMeter = IntArray(3) { 0 }
+    internal val oppSlotEnergyHp = IntArray(3) { 0 }
+    internal val oppSlotConfMeter = IntArray(3) { 88 }
+    internal val oppSlotConfHp = IntArray(3) { 75 }
+    internal val userSlotHpDmgRemainder = DoubleArray(3) { 0.0 }
+    internal val oppSlotHpDmgRemainder = DoubleArray(3) { 0.0 }
+    internal val oppSlotConsecutiveAlignedHpSteps = IntArray(3) { 0 }
+    internal val oppSlotLastHpStepMs = LongArray(3) { 0L }
+    internal val userSlotLastHpStepMs = LongArray(3) { 0L }
+    internal val oppSlotHpPromoBadge = Array(3) { "" }
+    internal var lastPersistentAdminToastSignature: String = ""
+
+    internal fun resetDualSourceEnergyState() {
+        userSlotEnergyMeter.fill(0)
+        userSlotEnergyHp.fill(0)
+        userSlotConfMeter.fill(90)
+        userSlotConfHp.fill(75)
+        oppSlotEnergyMeter.fill(0)
+        oppSlotEnergyHp.fill(0)
+        oppSlotConfMeter.fill(88)
+        oppSlotConfHp.fill(75)
+        userSlotHpDmgRemainder.fill(0.0)
+        oppSlotHpDmgRemainder.fill(0.0)
+        oppSlotConsecutiveAlignedHpSteps.fill(0)
+        oppSlotLastHpStepMs.fill(0L)
+        userSlotLastHpStepMs.fill(0L)
+        for (i in 0..2) oppSlotHpPromoBadge[i] = ""
+        lastPersistentAdminToastSignature = ""
+    }
+
+    internal fun formatAdminDualSourceEnergyPill(uIdx: Int, oIdx: Int): String {
+        val uSafe = uIdx.coerceIn(0, 2)
+        val oSafe = oIdx.coerceIn(0, 2)
+        val uEff = playerSlotEnergy.getOrElse(uSafe) { 0 }.coerceIn(0, 100)
+        val uM = userSlotEnergyMeter.getOrElse(uSafe) { uEff }.coerceIn(0, 100)
+        val uH = userSlotEnergyHp.getOrElse(uSafe) { uEff }.coerceIn(0, 100)
+        val uCm = userSlotConfMeter.getOrElse(uSafe) { 90 }.coerceIn(10, 99)
+        val uCh = userSlotConfHp.getOrElse(uSafe) { 75 }.coerceIn(10, 99)
+        val oEff = oppSlotEnergy.getOrElse(oSafe) { 0 }.coerceIn(0, 100)
+        val oM = oppSlotEnergyMeter.getOrElse(oSafe) { oEff }.coerceIn(0, 100)
+        val oH = oppSlotEnergyHp.getOrElse(oSafe) { oEff }.coerceIn(0, 100)
+        val oCm = oppSlotConfMeter.getOrElse(oSafe) { 88 }.coerceIn(10, 99)
+        val oCh = oppSlotConfHp.getOrElse(oSafe) { 75 }.coerceIn(10, 99)
+        val promo = oppSlotHpPromoBadge.getOrElse(oSafe) { "" }
+        val promoSuffix = if (promo.isNotBlank()) " $promo" else if (oEff > oM && oH >= oEff) " ★HP" else ""
+        return "⚡ U: ${uEff}E [M:${uM}E ${uCm}% | H:${uH}E ${uCh}%] • O: ${oEff}E [M:${oM}E ${oCm}% | H:${oH}E ${oCh}%$promoSuffix]"
+    }
+
+    internal fun updatePersistentAdminEnergyToastIfNeeded(uIdx: Int = lastNormalCombatUserSlotIdx, oIdx: Int = lastNormalCombatOppSlotIdx) {
+        if (!isBattleActive || isWaitingForOpponent || disableBattleToasts) return
+        if (!activeEnergyUpdateToasts || !isAdminTrainerStatic(prefs)) return
+        val pill = formatAdminDualSourceEnergyPill(uIdx, oIdx)
+        if (pill == lastPersistentAdminToastSignature) return
+        lastPersistentAdminToastSignature = pill
+        showStatusBarToast(pill, duration = -1)
+    }
+
     // v4.12: Proactive ~300ms Early Fast-Move Energy & Turn Step (Both Player & Opponent) with >500ms 1-Turn Lag Rollback
     internal var proactiveStepPending: Boolean = false
     internal var proactiveStepSlotIdx: Int = -1
@@ -3125,17 +3244,8 @@ class OverlayService : LifecycleService() {
         val clampedE = newEnergy.coerceIn(0, 100)
         if (lastToastedSlotEnergy[slotIdx] == clampedE) return
         lastToastedSlotEnergy[slotIdx] = clampedE
-        if (!activeEnergyUpdateToasts) return
-        val atkNum = primaryAtkIndex.coerceIn(1, 2)
-        val a1PctLabel = if (leftFillPct in 0..300) "${leftFillPct}%" else "--%"
-        val a1ELabel = if (leftEnergy in 0..100) "${leftEnergy}E" else "--E"
-        if (hasSecondMove) {
-            val a2PctLabel = if (rightFillPct in 0..300) "${rightFillPct}%" else "--%"
-            val a2ELabel = if (rightEnergy in 0..100) "${rightEnergy}E" else "--E"
-            showBattleToast("⚡ [Atk $atkNum: $moveName ${moveCost}E] A1:$a1PctLabel($a1ELabel) | A2:$a2PctLabel($a2ELabel) → ${clampedE}E")
-        } else {
-            showBattleToast("⚡ [Atk 1: $moveName ${moveCost}E] A1:$a1PctLabel($a1ELabel) → ${clampedE}E")
-        }
+        if (!activeEnergyUpdateToasts || !isAdminTrainerStatic(prefs)) return
+        updatePersistentAdminEnergyToastIfNeeded(slotIdx, lastNormalCombatOppSlotIdx)
     }
 
     // Phase 2: Battle Clock Synchronization (t0) & Live Timeline Event Logger
@@ -3879,8 +3989,20 @@ class OverlayService : LifecycleService() {
                 }
 
                 mainToastHandler.removeCallbacks(hideStatusToastRunnable)
-                val delayMs = if (duration == Toast.LENGTH_LONG) 2800L else 1900L
-                mainToastHandler.postDelayed(hideStatusToastRunnable, delayMs)
+                val isAdminPersistentMode = isBattleActive && !isWaitingForOpponent && activeEnergyUpdateToasts && isAdminTrainerStatic(prefs)
+                if (duration < 0 || (isAdminPersistentMode && message.startsWith("⚡ U:"))) {
+                    // Persistent Admin 1-line Dual-Source Energy & Confidence pill stays visible until battle stops
+                } else {
+                    val delayMs = if (duration == Toast.LENGTH_LONG) 2800L else 1900L
+                    if (isAdminPersistentMode) {
+                        mainToastHandler.postDelayed({
+                            lastPersistentAdminToastSignature = ""
+                            updatePersistentAdminEnergyToastIfNeeded()
+                        }, 1600L)
+                    } else {
+                        mainToastHandler.postDelayed(hideStatusToastRunnable, delayMs)
+                    }
+                }
             } catch (_: Exception) {
                 val toast = Toast.makeText(this, message, duration)
                 toast.setGravity(Gravity.TOP or Gravity.START, 16, 4)
@@ -4225,7 +4347,21 @@ class OverlayService : LifecycleService() {
         }
 
         val cheapestCost = allMoveRows.minOfOrNull { it.energyCost } ?: 35
-        val effectiveBankedE = max(preThrowOppEnergy, cheapestCost).coerceIn(0, 100)
+        // A1 Shield Call Overlay Policy: Promote to max(E_meter, E_hp) whenever C_hp >= 55% and append [+NF HP] badge
+        val hpTrackedOppE = oppSlotEnergyHp.getOrElse(clampedOppIdx) { 0 }.coerceIn(0, 100)
+        val hpTrackedOppConf = oppSlotConfHp.getOrElse(clampedOppIdx) { 75 }.coerceIn(0, 100)
+        val meterTrackedOppE = oppSlotEnergyMeter.getOrElse(clampedOppIdx) { preThrowOppEnergy }.coerceIn(0, 100)
+        val basePreThrowE = max(preThrowOppEnergy, meterTrackedOppE)
+        val promotedByHpNow = hpTrackedOppConf >= 55 && hpTrackedOppE > basePreThrowE
+        val effectiveBankedE = max(if (promotedByHpNow) hpTrackedOppE else basePreThrowE, cheapestCost).coerceIn(0, 100)
+        if (promotedByHpNow) {
+            val oppFastEnergyNow = OverlayService.resolveFastEnergyStatic(oppFastMoveName, oppFastTurns).coerceAtLeast(2)
+            val stepsAdded = max(1, ((hpTrackedOppE - basePreThrowE + oppFastEnergyNow - 1) / oppFastEnergyNow).coerceIn(1, 3))
+            oppSlotHpPromoBadge[clampedOppIdx] = "[+${stepsAdded}F HP]"
+        }
+        val hpPromoBadgeText = oppSlotHpPromoBadge.getOrElse(clampedOppIdx) { "" }.let {
+            if (it.startsWith("[+")) " $it" else ""
+        }
         val normalizedRows = allMoveRows.map { row ->
             row.copy(isFunded = effectiveBankedE >= row.energyCost)
         }
@@ -4274,7 +4410,7 @@ class OverlayService : LifecycleService() {
         val oppShort = OverlayService.abbrPokeCompactStatic(oppMeta.name, isOppShad)
         val userShort = OverlayService.abbrPokeCompactStatic(userMeta.name, isUserShad)
         val lockedTag = if (twoRegularMovesLocked) { if (oppPlusMove != null) " • 3M+" else " • 2M" } else ""
-        val headerLineText = "$headerVerdictText  •  $oppShort(${effectiveBankedE}e) vs $userShort(${userHpPct}%)$lockedTag"
+        val headerLineText = "$headerVerdictText  •  $oppShort(${effectiveBankedE}e$hpPromoBadgeText) vs $userShort(${userHpPct}%)$lockedTag"
 
         val nowMs = System.currentTimeMillis()
         val isFirstShow = !isShieldDecisionOverlayVisible
@@ -7169,7 +7305,9 @@ class OverlayService : LifecycleService() {
             val isOpponentThrowingNow = isAttackIncomingPromptActive ||
                 hasAttackIncomingText ||
                 (isTopCountdownCircleActive && !isPostFaintSwitchPromptActive) ||
-                pendingChargedAttackActor == "opp"
+                pendingChargedAttackActor == "opp" ||
+                (activeOppIdx in 0..2 && oppSlotEnergyHp[activeOppIdx] >= oppSlotEnergy[activeOppIdx] && oppSlotConfHp[activeOppIdx] >= 55) ||
+                (consecutiveMissingCirclesFrames in 1..6 && !hasUserChargedBannerText)
             rollbackPendingProactiveStep(
                 markAnchorRolledBack = false,
                 preserveOppSubTurnEnergy = isOpponentThrowingNow
@@ -7325,8 +7463,38 @@ class OverlayService : LifecycleService() {
                 }
 
                 // Accumulate fast-move damage dealt by this opponent for the Non-Standard Opponent Fast Move Detector (1E)
+                // and v7.15 Dual-Source HP-Drop Opponent Energy Quantizer (E_opp,hp & C_hp)
                 if (realUserDrop in 1..25 && (hasBattleStarted || realUserDrop >= 2) && canAccumulateFastEnergy && !isCameraZoomUpwardYShift) {
                     oppCumulativeFastDmgPct[activeOppIdx] = (oppCumulativeFastDmgPct[activeOppIdx] + realUserDrop).coerceIn(0, 300)
+                    val safeOppExactDmg = oppExactDmgPct.coerceAtLeast(0.8)
+                    val totalAccUserDrop = realUserDrop.toDouble() + oppSlotHpDmgRemainder[activeOppIdx]
+                    val rawSteps = (totalAccUserDrop / safeOppExactDmg).roundToInt().coerceIn(0, 3)
+                    val quantizedSteps = when {
+                        rawSteps >= 1 && kotlin.math.abs(totalAccUserDrop - rawSteps * safeOppExactDmg) <= max(1.6, safeOppExactDmg * 0.45) -> rawSteps
+                        realUserDrop >= max(2, (safeOppExactDmg * 0.65).roundToInt()) -> 1
+                        else -> 0
+                    }
+                    if (quantizedSteps > 0) {
+                        oppSlotHpDmgRemainder[activeOppIdx] = (totalAccUserDrop - quantizedSteps * safeOppExactDmg).coerceIn(-1.5, 2.5)
+                        val prevHpE = max(oppSlotEnergyHp[activeOppIdx], oppSlotEnergyMeter[activeOppIdx].coerceAtMost(oppSlotEnergy[activeOppIdx]))
+                        oppSlotEnergyHp[activeOppIdx] = (prevHpE + quantizedSteps * oppFastEnergyForStats).coerceIn(0, 100)
+                        val expectedIntervalMs = (oppFastTurnsForStats * 500L).coerceAtLeast(500L)
+                        val prevStepMs = oppSlotLastHpStepMs[activeOppIdx]
+                        val isPhaseAligned = prevStepMs <= 0L || kotlin.math.abs((nowMs - prevStepMs) - expectedIntervalMs * quantizedSteps) <= 450L
+                        oppSlotLastHpStepMs[activeOppIdx] = nowMs
+                        oppSlotConsecutiveAlignedHpSteps[activeOppIdx] = if (isPhaseAligned) {
+                            (oppSlotConsecutiveAlignedHpSteps[activeOppIdx] + quantizedSteps).coerceAtMost(8)
+                        } else {
+                            1
+                        }
+                        val snrScore = ((safeOppExactDmg - 1.2) / 4.5).coerceIn(0.0, 1.0)
+                        val fitErr = kotlin.math.abs(totalAccUserDrop - quantizedSteps * safeOppExactDmg)
+                        val fitScore = (1.0 - (fitErr / max(1.8, safeOppExactDmg * 0.60))).coerceIn(0.2, 1.0)
+                        val alignBonus = if (oppSlotConsecutiveAlignedHpSteps[activeOppIdx] >= 2) 10 else 0
+                        oppSlotConfHp[activeOppIdx] = (58 + (snrScore * 18.0).roundToInt() + (fitScore * 14.0).roundToInt() + alignBonus).coerceIn(45, 98)
+                    } else {
+                        oppSlotHpDmgRemainder[activeOppIdx] = totalAccUserDrop.coerceIn(0.0, safeOppExactDmg * 0.95)
+                    }
                 }
 
                 // v6.04 / v6.05 / v6.22 / v6.26: Block upward HP self-correction during mid-combat after >=4 turns on field (unless >=6 consecutive frames confirm, or >=4 when recovering from <=12% false lock),
@@ -7618,6 +7786,36 @@ class OverlayService : LifecycleService() {
                 val realOppDrop = lastScannedOppHp - confirmedOppHp
                 val halfUserDmg = max(1, (userExactDmgPct * 0.50).roundToInt())
                 val minUserFastDmgThreshold = halfUserDmg
+
+                // v7.15: Player Fast-Attack -> Opponent HP-Drop Truth Source (E_user,hp & C_user,hp + Per-Device Lead EMA Auto-Tuning)
+                if (realOppDrop in 1..25 && (hasBattleStarted || realOppDrop >= 2) && canAccumulateFastEnergy && !isCameraZoomOppUpwardYShift) {
+                    val safeUserExactDmg = userExactDmgPct.coerceAtLeast(0.8)
+                    val totalAccOppDrop = realOppDrop.toDouble() + userSlotHpDmgRemainder[activeUserIdx]
+                    val rawUserSteps = (totalAccOppDrop / safeUserExactDmg).roundToInt().coerceIn(0, 3)
+                    val quantizedUserSteps = when {
+                        rawUserSteps >= 1 && kotlin.math.abs(totalAccOppDrop - rawUserSteps * safeUserExactDmg) <= max(1.6, safeUserExactDmg * 0.45) -> rawUserSteps
+                        realOppDrop >= max(2, (safeUserExactDmg * 0.65).roundToInt()) -> 1
+                        else -> 0
+                    }
+                    if (quantizedUserSteps > 0) {
+                        userSlotHpDmgRemainder[activeUserIdx] = (totalAccOppDrop - quantizedUserSteps * safeUserExactDmg).coerceIn(-1.5, 2.5)
+                        val prevUserHpE = max(userSlotEnergyHp[activeUserIdx], userSlotEnergyMeter[activeUserIdx].coerceAtMost(playerSlotEnergy[activeUserIdx]))
+                        userSlotEnergyHp[activeUserIdx] = (prevUserHpE + quantizedUserSteps * userFastEnergyForStats).coerceIn(0, 100)
+                        userSlotLastHpStepMs[activeUserIdx] = nowMs
+                        val snrScore = ((safeUserExactDmg - 1.2) / 4.5).coerceIn(0.0, 1.0)
+                        val fitErr = kotlin.math.abs(totalAccOppDrop - quantizedUserSteps * safeUserExactDmg)
+                        val fitScore = (1.0 - (fitErr / max(1.8, safeUserExactDmg * 0.60))).coerceIn(0.2, 1.0)
+                        userSlotConfHp[activeUserIdx] = (62 + (snrScore * 18.0).roundToInt() + (fitScore * 16.0).roundToInt()).coerceIn(50, 98)
+                        // Continuous per-device EMA lead offset calibration (±25ms safe band around 236ms baseline)
+                        if (lastConfirmedPlayerFastMoveMs > 0L && (nowMs - lastConfirmedPlayerFastMoveMs) in -350L..350L) {
+                            val observedLagMs = (nowMs - lastConfirmedPlayerFastMoveMs).toInt()
+                            val targetOffset = (observedLagMs / 6).coerceIn(-25, 25)
+                            activeAiTunedLeadEmaOffsetMs = ((activeAiTunedLeadEmaOffsetMs * 7 + targetOffset) / 8).coerceIn(-25, 25)
+                        }
+                    } else {
+                        userSlotHpDmgRemainder[activeUserIdx] = totalAccOppDrop.coerceIn(0.0, safeUserExactDmg * 0.95)
+                    }
+                }
 
                 // v6.04 / v6.05 / v6.12 / v6.22 / v6.26 / v7.04: Block upward opponent HP jumps while a PLAYER charged attack is active or within 2500ms of defending a player charged attack,
                 // or any mid-combat upward jumps after >=4 turns (>3s on field) unless a switch occurred or >=6 consecutive frames confirm (or >=2 when recovering from <=15% camera-zoom false lock)
@@ -8201,6 +8399,11 @@ class OverlayService : LifecycleService() {
                             }
 
                             playerSlotEnergy[activeUserIdx] = measuredEnergy
+                            userSlotEnergyMeter[activeUserIdx] = measuredEnergy
+                            if (userSlotEnergyHp[activeUserIdx] < measuredEnergy) {
+                                userSlotEnergyHp[activeUserIdx] = measuredEnergy
+                            }
+                            userSlotConfMeter[activeUserIdx] = if (debouncedFillPct in 1..94) 96 else 84
                             val curLeftPct = if (slowestIsRight) debouncedFasterPct else debouncedFillPct
                             val curRightPct = if (slowestIsRight) debouncedFillPct else debouncedFasterPct
                             emitEnergyUpdateToastIfEnabled(
@@ -8415,7 +8618,7 @@ class OverlayService : LifecycleService() {
                 }
             }
 
-            val leadMs = activeProactiveEnergyLeadMs.coerceIn(0, 400).toLong()
+            val leadMs = (activeProactiveEnergyLeadMs + activeAiTunedLeadEmaOffsetMs).coerceIn(0, 400).toLong()
             val curConfirmedE = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
             val isAt100ReadyForClock = curConfirmedE >= 100 && areCirclesVisibleAt100
             if (!proactiveStepPending &&
@@ -8600,7 +8803,7 @@ class OverlayService : LifecycleService() {
                 } else if (lastConfirmedPlayerFastMoveMs != proactiveRolledBackAnchorMs &&
                     (confirmedPhasePlayerTurns > 0 || isAt100ReadyForSubTurns)
                 ) {
-                    val leadOffsetMs = activeProactiveEnergyLeadMs.coerceIn(0, 400).toLong()
+                    val leadOffsetMs = (activeProactiveEnergyLeadMs + activeAiTunedLeadEmaOffsetMs).coerceIn(0, 400).toLong()
                     val interpolatedSubTurns = ((elapsedSinceLastConfirmedMoveMs + leadOffsetMs) / 500L).toInt().coerceIn(0, userFastTurnsForStats - 1)
                     val interpolatedTotalTurns = confirmedPhasePlayerTurns + interpolatedSubTurns
                     if (interpolatedTotalTurns > phasePlayerTurns) {
@@ -8645,6 +8848,50 @@ class OverlayService : LifecycleService() {
                     }
                 }
                 oppSlotCurrentMoveTurns[activeOppIdx] = (phasePlayerTurns - phaseOppTurns).coerceIn(0, oppFastTurnsForStats - 1)
+            }
+
+            // v7.15: Sync Meter-Based Energy (`E_meter`), Confidence (`C_meter` & `C_hp`), and A2 Normal Combat Policy
+            userSlotEnergyMeter[activeUserIdx] = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
+            if (userSlotEnergyHp[activeUserIdx] == 0 && playerSlotEnergy[activeUserIdx] > 0) {
+                userSlotEnergyHp[activeUserIdx] = playerSlotEnergy[activeUserIdx].coerceIn(0, 100)
+            }
+            userSlotConfMeter[activeUserIdx] = when {
+                isAt100ReadyForSubTurns -> 76
+                proactiveStepPending && proactiveStepSlotIdx == activeUserIdx -> 86
+                sampledLeftChargeBtnFillPct in 1..94 || sampledRightChargeBtnFillPct in 1..94 -> 96
+                else -> 88
+            }
+            if (oppSlotEnergyMeter[activeOppIdx] < oppSlotEnergy[activeOppIdx] && oppSlotHpPromoBadge[activeOppIdx].isEmpty()) {
+                oppSlotEnergyMeter[activeOppIdx] = oppSlotEnergy[activeOppIdx].coerceIn(0, 100)
+            } else if (oppSlotEnergy[activeOppIdx] < oppSlotEnergyMeter[activeOppIdx]) {
+                oppSlotEnergyMeter[activeOppIdx] = oppSlotEnergy[activeOppIdx].coerceIn(0, 100)
+            }
+            if (oppSlotEnergyHp[activeOppIdx] < oppSlotEnergyMeter[activeOppIdx]) {
+                oppSlotEnergyHp[activeOppIdx] = oppSlotEnergyMeter[activeOppIdx]
+            }
+            val stallPenalty = if (lastConfirmedPlayerFastMoveMs > 0L && (nowMs - lastConfirmedPlayerFastMoveMs) > (userMoveDurationMs + 250L)) 18 else 0
+            oppSlotConfMeter[activeOppIdx] = when {
+                isAt100ReadyForSubTurns -> (68 - stallPenalty).coerceIn(45, 78)
+                proactiveStepPending -> (80 - stallPenalty).coerceIn(55, 86)
+                else -> (90 - stallPenalty).coerceIn(60, 95)
+            }
+            // A2 Normal Combat Policy: Require >= 2 consecutive phase-aligned HP steps AND (C_hp >= C_meter + 10 OR 100E circle saturation), capped at +1 fast move step
+            val meterOppE = oppSlotEnergyMeter[activeOppIdx].coerceIn(0, 100)
+            val hpOppE = oppSlotEnergyHp[activeOppIdx].coerceIn(0, 100)
+            if (hpOppE > meterOppE &&
+                oppSlotConsecutiveAlignedHpSteps[activeOppIdx] >= 2 &&
+                (oppSlotConfHp[activeOppIdx] >= oppSlotConfMeter[activeOppIdx] + 10 || isAt100ReadyForSubTurns)
+            ) {
+                val maxNormalCombatPromoE = (meterOppE + oppFastEnergyForStats).coerceIn(0, 100)
+                val targetNormalE = min(hpOppE, maxNormalCombatPromoE)
+                if (targetNormalE > oppSlotEnergy[activeOppIdx]) {
+                    oppSlotEnergy[activeOppIdx] = targetNormalE
+                    oppSlotHpPromoBadge[activeOppIdx] = "★HP"
+                    lastEnergyMutationSource = "HP_DROP_FAST_SYNC"
+                    hpChanged = true
+                }
+            } else if (oppSlotHpPromoBadge[activeOppIdx] == "★HP" && meterOppE >= oppSlotEnergy[activeOppIdx]) {
+                oppSlotHpPromoBadge[activeOppIdx] = ""
             }
         }
 
@@ -9122,10 +9369,24 @@ class OverlayService : LifecycleService() {
                         oppSlotTurnsOnField[throwerOppIdx] = (oppSlotTurnsOnField[throwerOppIdx] + missingFullOppMoves * oppFastTurnsForStats).coerceAtLeast(0)
                     }
                 }
+                oppSlotEnergyMeter[throwerOppIdx] = oppSlotEnergy[throwerOppIdx].coerceIn(0, 100)
                 if (oppSlotEnergy[throwerOppIdx] < cheapestOppEnergy) {
                     val neededOppMoves = ceil((cheapestOppEnergy - oppSlotEnergy[throwerOppIdx]).toDouble() / oppFastEnergyForStats.toDouble()).toInt().coerceIn(1, 4)
                     oppSlotEnergy[throwerOppIdx] = (oppSlotEnergy[throwerOppIdx] + neededOppMoves * oppFastEnergyForStats).coerceIn(0, 100)
                     oppSlotTurnsOnField[throwerOppIdx] = (oppSlotTurnsOnField[throwerOppIdx] + neededOppMoves * oppFastTurnsForStats).coerceAtLeast(0)
+                    oppSlotEnergyMeter[throwerOppIdx] = oppSlotEnergy[throwerOppIdx]
+                }
+                // v7.15 A1 Shield Call Overlay Policy: Promote immediately to max(E_meter, E_hp) whenever C_hp >= 55%
+                if (oppSlotEnergyHp[throwerOppIdx] > oppSlotEnergy[throwerOppIdx] && oppSlotConfHp[throwerOppIdx] >= 55) {
+                    val baseMeterE = oppSlotEnergy[throwerOppIdx]
+                    val promotedE = oppSlotEnergyHp[throwerOppIdx].coerceIn(baseMeterE, 100)
+                    val fastStepsAdded = max(1, ((promotedE - baseMeterE + oppFastEnergyForStats - 1) / oppFastEnergyForStats).coerceIn(1, 3))
+                    oppSlotEnergy[throwerOppIdx] = promotedE
+                    oppSlotHpPromoBadge[throwerOppIdx] = "[+${fastStepsAdded}F HP]"
+                    hadHpPromotedShieldCallInBattle = true
+                    lastEnergyMutationSource = "SHIELD_CALL_HP_PROMO"
+                } else if (oppSlotEnergyHp[throwerOppIdx] < oppSlotEnergy[throwerOppIdx]) {
+                    oppSlotEnergyHp[throwerOppIdx] = oppSlotEnergy[throwerOppIdx]
                 }
                 pendingChargedAttackActor = "opp"
                 pendingChargedAttackStartMs = nowMs
@@ -9884,7 +10145,13 @@ class OverlayService : LifecycleService() {
                 }
                 val effectivePreOppEForFinal = max(pendingChargedAttackPreOppEnergy, totalTargetEnergy).coerceIn(totalTargetEnergy, 100)
                 if (attackerOppSlotIdx in 0..2) {
-                    oppSlotEnergy[attackerOppSlotIdx] = (effectivePreOppEForFinal - totalTargetEnergy).coerceIn(0, 100)
+                    val remOppE = (effectivePreOppEForFinal - totalTargetEnergy).coerceIn(0, 100)
+                    oppSlotEnergy[attackerOppSlotIdx] = remOppE
+                    oppSlotEnergyMeter[attackerOppSlotIdx] = remOppE
+                    oppSlotEnergyHp[attackerOppSlotIdx] = remOppE
+                    oppSlotHpDmgRemainder[attackerOppSlotIdx] = 0.0
+                    oppSlotConsecutiveAlignedHpSteps[attackerOppSlotIdx] = 0
+                    oppSlotHpPromoBadge[attackerOppSlotIdx] = ""
                 }
                 lastOppChargeDeductedEnergySnapshot = totalTargetEnergy
                 if (lastDetectedBannerMoveActor == "opp") {
@@ -10392,11 +10659,28 @@ class OverlayService : LifecycleService() {
                 }
                 val finalEffectivePreEnergy = max(effectivePreEnergy, preChargeUserEnergy).coerceIn(totalUserEnergy, 100)
 
-                // v3.83/v3.95/v4.00: Preserve exact leftover charged move energy delta (`finalEffectivePreEnergy - totalUserEnergy`),
+                // v3.83/v3.95/v4.00/v7.15: Preserve exact leftover charged move energy delta (`finalEffectivePreEnergy - totalUserEnergy`),
                 // update the slot's post-throw discharge anchor (`playerSlotEnergyAnchor`), and resync fill round to post-throw bars!
                 val computedResidualEnergy = (finalEffectivePreEnergy - totalUserEnergy).coerceIn(0, 100)
                 playerSlotEnergy[attackerUserIdx] = computedResidualEnergy
+                userSlotEnergyMeter[attackerUserIdx] = computedResidualEnergy
+                userSlotEnergyHp[attackerUserIdx] = computedResidualEnergy
+                userSlotHpDmgRemainder[attackerUserIdx] = 0.0
                 playerSlotEnergyAnchor[attackerUserIdx] = computedResidualEnergy
+
+                // v7.15: Post-Player-Charged-Move HP Audit -> Detect Snuck Opponent Fast Move During User Throw!
+                val preThrowUserHpRef = pendingChargedAttackPreUserHp.coerceIn(1, 100)
+                val postThrowUserHpNow = playerSlotHpPct[activeUserIdx].coerceIn(1, 100)
+                val userHpDropAcrossOwnThrow = (preThrowUserHpRef - postThrowUserHpNow).coerceAtLeast(0)
+                val minSnuckFastHpDrop = max(2, (oppExactDmgPct * 0.65).roundToInt())
+                if (userHpDropAcrossOwnThrow in minSnuckFastHpDrop..22 && activeOppIdx in 0..2 && !oppFaintedSlots[activeOppIdx]) {
+                    oppSlotEnergyHp[activeOppIdx] = (max(oppSlotEnergyHp[activeOppIdx], oppSlotEnergy[activeOppIdx]) + oppFastEnergyForStats).coerceIn(0, 100)
+                    oppSlotEnergy[activeOppIdx] = oppSlotEnergyHp[activeOppIdx]
+                    oppSlotEnergyMeter[activeOppIdx] = oppSlotEnergy[activeOppIdx]
+                    oppSlotConfHp[activeOppIdx] = max(oppSlotConfHp[activeOppIdx], 90)
+                    oppSlotHpPromoBadge[activeOppIdx] = "★HP"
+                    lastEnergyMutationSource = "POST_USER_THROW_HP_SNUCK"
+                }
                 nearCeilingStepStartMs[attackerUserIdx] = 0L
                 playerSlotCeilingLatched100[attackerUserIdx] = false
                 lastUserChargePreEnergySnapshot = finalEffectivePreEnergy
@@ -10462,7 +10746,10 @@ class OverlayService : LifecycleService() {
                 needsPostSwapOrMoveTurnReindex = true
 
                 val formattedDefenderOppName = formatOpponentNameWithShadow(defenderOppRawName)
-                val userRawPreEnergy = preChargeUserEnergy.coerceIn(0, 100)
+                val userRawPreEnergy = max(
+                    finalEffectivePreEnergy,
+                    max(userSlotEnergyMeter[attackerUserIdx], userSlotEnergyHp[attackerUserIdx])
+                ).coerceIn(0, 100)
                 val userEnergyDeficit = max(0, totalUserEnergy - userRawPreEnergy)
                 val userExpectedDmgPct = candPairs.find { it.first.equals(resolvedUserMove, ignoreCase = true) }?.second
                 // v6.40: Apply Layer 1 Deterministic 100%-chance move buffs/debuffs & Mimikyu Disguise bust
@@ -10597,8 +10884,21 @@ class OverlayService : LifecycleService() {
                 oppHpRowY = sampledOppHpRowY,
                 userEnergy = finalUserE,
                 oppEnergy = finalOppE,
-                energyMutationSource = resolvedEnergySrc
+                energyMutationSource = resolvedEnergySrc,
+                userEnergyMeter = userSlotEnergyMeter[activeUserIdx].coerceIn(0, 100),
+                userEnergyHp = userSlotEnergyHp[activeUserIdx].coerceIn(0, 100),
+                userConfMeter = userSlotConfMeter[activeUserIdx].coerceIn(0, 100),
+                userConfHp = userSlotConfHp[activeUserIdx].coerceIn(0, 100),
+                oppEnergyMeter = oppSlotEnergyMeter[activeOppIdx].coerceIn(0, 100),
+                oppEnergyHp = oppSlotEnergyHp[activeOppIdx].coerceIn(0, 100),
+                oppConfMeter = oppSlotConfMeter[activeOppIdx].coerceIn(0, 100),
+                oppConfHp = oppSlotConfHp[activeOppIdx].coerceIn(0, 100),
+                oppHpPromoTag = oppSlotHpPromoBadge[activeOppIdx]
             )
+        }
+
+        if (isBattleActive && !isWaitingForOpponent && activeEnergyUpdateToasts && isAdminTrainerStatic(prefs)) {
+            updatePersistentAdminEnergyToastIfNeeded(activeUserIdx, activeOppIdx)
         }
 
         if (hpChanged) {
@@ -12768,6 +13068,9 @@ class OverlayService : LifecycleService() {
      */
     @Volatile internal var lastSwapHapticAlertEpochMs: Long = 0L
     @Volatile internal var lastChargeWarnHapticKey: String = ""
+    @Volatile internal var hadHpPromotedShieldCallInBattle: Boolean = false
+    @Volatile internal var lastLoggedBattleTuningQuestionType: String = "haptic_timing"
+    internal val lastLoggedBattleTuningFeedback = mutableMapOf<String, String>()
 
     fun startNewBattle() {
         // Snapshot opponents and lead matchup before clearing, so if the user taps
@@ -12934,6 +13237,7 @@ class OverlayService : LifecycleService() {
         lastNormalCombatOppShadow = false
         playerSlotEnergy.fill(0)
         oppSlotEnergy.fill(0)
+        resetDualSourceEnergyState()
         playerSlotAtkStage.fill(0)
         playerSlotDefStage.fill(0)
         playerSlotDisguiseBusted.fill(false)
@@ -12959,6 +13263,9 @@ class OverlayService : LifecycleService() {
         autoEndCandidateFrames = 0
         lastLoggedBattleId = ""
         lastLoggedBattleWasAuto = false
+        hadHpPromotedShieldCallInBattle = false
+        lastLoggedBattleTuningQuestionType = "haptic_timing"
+        lastLoggedBattleTuningFeedback.clear()
         stoppedBattleDiscardDvr = false
         stoppedBattleFlagBugReport = false
         stoppedBattleBugReportNote = ""
@@ -13613,6 +13920,9 @@ class OverlayService : LifecycleService() {
             else -> "DISCARDED_SHORT"
         }
         val capturedBugReportNote = stoppedBattleBugReportNote
+        lastLoggedBattleTuningQuestionType = if (hadHpPromotedShieldCallInBattle) "shield_energy" else "haptic_timing"
+        hadHpPromotedShieldCallInBattle = false
+        lastLoggedBattleTuningFeedback.clear()
         lastLoggedBattleSummaryRecord = v510Record
         stoppedBattleDiscardDvr = false
         stoppedBattleFlagBugReport = false
@@ -13816,6 +14126,42 @@ class OverlayService : LifecycleService() {
         }
         recalculateAndPushBattleData()
         showBattleToast("🚫 AI Telemetry Ignored for Battle (Win/Loss Record Kept)")
+    }
+
+    /**
+     * v7.15: Records 1-tap post-battle tuning feedback (e.g. `haptic_timing` -> `TOO_EARLY` | `IDEAL` | `TOO_LATE`,
+     * `shield_energy` -> `UNDERCOUNTED` | `ACCURATE` | `OVERCOUNTED`) onto the battle's AI telemetry record.
+     * Consolidated strictly as informational tuning data in the daily telemetry summary (never triggers a bug report).
+     */
+    fun submitPostBattleTuningFeedback(battleId: String, questionId: String, answer: String) {
+        val targetId = battleId.ifBlank { lastLoggedBattleId }
+        val qKey = questionId.trim().lowercase().replace(Regex("[^a-z0-9_-]"), "")
+        val ansVal = answer.trim().uppercase().replace(Regex("[^A-Z0-9_-]"), "")
+        if (targetId.isBlank() || qKey.isBlank() || ansVal.isBlank()) return
+        if (targetId == lastLoggedBattleId) {
+            lastLoggedBattleTuningFeedback[qKey] = ansVal
+            lastLoggedBattleTimeMs = System.currentTimeMillis()
+        }
+        val pendingQueue = OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
+        val pIdx = pendingQueue.indexOfFirst { it.battleId == targetId }
+        if (pIdx >= 0) {
+            val existingRec = pendingQueue[pIdx]
+            val mergedFeedback = existingRec.tuningFeedback.toMutableMap()
+            mergedFeedback[qKey] = ansVal
+            val updatedRec = existingRec.copy(tuningFeedback = mergedFeedback)
+            pendingQueue[pIdx] = updatedRec
+            prefs.edit().putString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(pendingQueue)).apply()
+            if (targetId == lastLoggedBattleId) {
+                lastLoggedBattleSummaryRecord = updatedRec
+            }
+        }
+        recalculateAndPushBattleData()
+        val qLabel = when (qKey) {
+            "haptic_timing" -> "Haptic Lead"
+            "shield_energy" -> "Shield Energy"
+            else -> qKey
+        }
+        showBattleToast("🎯 Tuning Saved ($qLabel: $ansVal) — Consolidated in Daily Audit")
     }
 
     fun flipAutoLoggedBattleResult(battleId: String) {
@@ -15309,7 +15655,11 @@ class OverlayService : LifecycleService() {
                     "hasDvr" to lastLoggedBattleHasDvr,
                     "dvrDeleted" to lastLoggedBattleDvrDeleted,
                     "dvrBugReported" to lastLoggedBattleDvrBugReported,
-                    "dvrUploadStatus" to lastLoggedBattleDvrUploadStatus
+                    "dvrUploadStatus" to lastLoggedBattleDvrUploadStatus,
+                    "showTuningFeedbackPrompt" to activePostBattleTuningFeedbackEnabled,
+                    "tuningQuestionType" to lastLoggedBattleTuningQuestionType,
+                    "tuningFeedback" to lastLoggedBattleTuningFeedback.toMap(),
+                    "predictiveGuiHapticLeadMs" to activePredictiveGuiHapticLeadMs
                 ) else null,
                 "teamArchetype" to (currentPreset?.archetype ?: "ABC"),
                 "activeLeague" to (currentPreset?.league ?: "MASTER LEAGUE"),
@@ -16379,12 +16729,49 @@ class OverlayService : LifecycleService() {
         } else {
             kotlin.math.ceil((oppNextMoveCost - activeOppEnergyNow).toDouble() / oppFastEnergy.toDouble()).toInt().coerceAtLeast(1)
         }
-        val turnsUntilOppCharged = oppFastsToNextMove * oppFastTurns
-        val safeMyFastsBeforeOppMove = when {
-            oppFastsToNextMove <= 0 -> 0
-            winsCmp -> (turnsUntilOppCharged / userFastTurns).coerceAtLeast(0)
-            else -> ((turnsUntilOppCharged - 1).coerceAtLeast(0) / userFastTurns)
+        val oppElapsedSubTurns = oppSlotCurrentMoveTurns.getOrElse(activeOppSlotSafe) { 0 }.coerceIn(0, (oppFastTurns - 1).coerceAtLeast(0))
+        val playerElapsedSubTurns = playerSlotCurrentMoveTurns.getOrElse(activeSlotIdxSafe) { 0 }.coerceIn(0, (userFastTurns - 1).coerceAtLeast(0))
+        val turnsUntilOppCharged = if (oppFastsToNextMove <= 0) {
+            0
+        } else {
+            (oppFastsToNextMove * oppFastTurns - oppElapsedSubTurns).coerceAtLeast(1)
         }
+        // v7.15: Asymmetric Fast-Move Duration Physics (U turns vs O turns) + Two-Stage Compensated Predictive GUI/Haptic Lead Time
+        // Anchor remaining turns from the start of the player's current fast move (`turnsUntilOppCharged + playerElapsedSubTurns`)
+        // so opponent sub-turn completions mid-animation never glitch `safeMyFastsBeforeOppMove`, and slow player fast moves (3T/4T/5T)
+        // that would animation-lock the player past the opponent's ready turn are flagged at the end of the last safe player fast move.
+        val turnsFromCurrentPlayerMoveStart = turnsUntilOppCharged + playerElapsedSubTurns
+        val rawSafeMyFastsBeforeOppMove = when {
+            oppFastsToNextMove <= 0 -> 0
+            winsCmp -> (turnsFromCurrentPlayerMoveStart / userFastTurns).coerceAtLeast(0)
+            else -> ((turnsFromCurrentPlayerMoveStart - 1).coerceAtLeast(0) / userFastTurns)
+        }
+        val userMoveDurationMsForTiming = (userFastTurns * 500L).coerceAtLeast(500L)
+        val elapsedSinceLastPlayerFastMs = if (lastConfirmedPlayerFastMoveMs > 0L && nowMs >= lastConfirmedPlayerFastMoveMs) {
+            (nowMs - lastConfirmedPlayerFastMoveMs).coerceAtLeast(0L)
+        } else {
+            (playerElapsedSubTurns * 500L)
+        }
+        val debounceLagMsForTiming = activeEnergyDebounceWindowMs.coerceIn(0, 600).toLong()
+        val predictiveGuiLeadMsForTiming = activePredictiveGuiHapticLeadMs.coerceIn(0, 600).toLong()
+        val remMsInCurrentPlayerMove = (userMoveDurationMsForTiming - debounceLagMsForTiming - elapsedSinceLastPlayerFastMs)
+            .coerceIn(0L, userMoveDurationMsForTiming)
+        val isCurrentPlayerMoveInPredictiveEndWindow = hasBattleStarted &&
+            lastConfirmedPlayerFastMoveMs > 0L &&
+            remMsInCurrentPlayerMove <= predictiveGuiLeadMsForTiming
+        val safeMyFastsBeforeOppMove = if (isCurrentPlayerMoveInPredictiveEndWindow && rawSafeMyFastsBeforeOppMove > 0) {
+            (rawSafeMyFastsBeforeOppMove - 1).coerceAtLeast(0)
+        } else {
+            rawSafeMyFastsBeforeOppMove
+        }
+        val remMsToActionBoundary = if (rawSafeMyFastsBeforeOppMove <= 0) {
+            0L
+        } else {
+            remMsInCurrentPlayerMove + ((rawSafeMyFastsBeforeOppMove - 1).coerceAtLeast(0) * userMoveDurationMsForTiming)
+        }
+        val hapticActionWindowMs = (activeHapticChargeTimingFasts.coerceIn(1, 2) * min(userMoveDurationMsForTiming, 1000L)) + predictiveGuiLeadMsForTiming
+        val isWithinPredictiveHapticActionWindow = rawSafeMyFastsBeforeOppMove >= 1 &&
+            remMsToActionBoundary <= hapticActionWindowMs
         val canFarmDownBeforeOppMove = activeOppHp in 1..38 &&
             myFastsToKoOpp <= safeMyFastsBeforeOppMove &&
             myFastsToKoOpp < oppFastsToKoMe &&
@@ -16783,15 +17170,16 @@ class OverlayService : LifecycleService() {
                     }
                 }
             }
-            if (timingAlertLevel == "BLINK_1_FAST") {
-                val chargeCycleKey = "$activeOppSlotSafe:${oppNextMoveName}:${activeOppEnergyNow / max(1, oppFastEnergy)}"
+            if ((timingAlertLevel == "BLINK_1_FAST" && isWithinPredictiveHapticActionWindow) || timingAlertLevel == "IMMEDIATE_0_FAST") {
+                val oppThrowsCount = battleTimelineEvents.count { it.type == "CHARGED_ATTACK" && it.actor == "opp" }
+                val chargeCycleKey = "$activeOppSlotSafe:${oppNextMoveName}:$oppThrowsCount"
                 if (lastChargeWarnHapticKey != chargeCycleKey) {
                     lastChargeWarnHapticKey = chargeCycleKey
                     if (activeHapticMasterEnabled && activeHapticOppChargeWarnEnabled) {
                         triggerDoubleHapticPulseStatic(this@OverlayService)
                     }
                 }
-            } else if (safeMyFastsBeforeOppMove > activeHapticChargeTimingFasts) {
+            } else if (rawSafeMyFastsBeforeOppMove > activeHapticChargeTimingFasts + 1) {
                 lastChargeWarnHapticKey = ""
             }
         }
@@ -16860,7 +17248,18 @@ class OverlayService : LifecycleService() {
                 pendingChargedAttackActor == "opp" -> activeOppEnergyNow + alreadyDeductedOppE
                 else -> activeOppEnergyNow
             }
-            val effBankedE = max(rawPreE, minCost).coerceIn(0, 100)
+            val hpOppENow = oppSlotEnergyHp.getOrElse(activeOppSlotSafe) { 0 }.coerceIn(0, 100)
+            val hpOppConfNow = oppSlotConfHp.getOrElse(activeOppSlotSafe) { 75 }.coerceIn(0, 100)
+            val promotedByHpHud = hpOppConfNow >= 55 && hpOppENow > rawPreE
+            val effBankedE = max(if (promotedByHpHud) hpOppENow else rawPreE, minCost).coerceIn(0, 100)
+            if (promotedByHpHud && oppSlotHpPromoBadge[activeOppSlotSafe].isBlank()) {
+                val oppFastENow = OverlayService.resolveFastEnergyStatic(oppFastMoveName, oppFastTurns).coerceAtLeast(2)
+                val steps = max(1, ((hpOppENow - rawPreE + oppFastENow - 1) / oppFastENow).coerceIn(1, 3))
+                oppSlotHpPromoBadge[activeOppSlotSafe] = "[+${steps}F HP]"
+            }
+            val hpPromoBadgeHud = oppSlotHpPromoBadge.getOrElse(activeOppSlotSafe) { "" }.let {
+                if (it.startsWith("[+")) " $it" else ""
+            }
             val normRows = rawRows.map { it.copy(isFunded = effBankedE >= it.energyCost) }
             val allFunded = normRows.filter { it.isFunded }
                 .sortedWith(compareByDescending<ShieldOverlayMoveRow> { it.isKo }.thenByDescending { it.dmgPct }.thenBy { it.energyCost })
@@ -16913,7 +17312,7 @@ class OverlayService : LifecycleService() {
             val oppShort = OverlayService.abbrPokeCompactStatic(oppMeta.name, isOpponentShadow)
             val userShort = OverlayService.abbrPokeCompactStatic(userMeta.name, isUserShadow)
             val lockedTag = if (twoRegLocked) { if (oppPlusMove != null) " • 3M+" else " • 2M" } else ""
-            val headerLineText = "$verdictText  •  $oppShort(${effBankedE}e) vs $userShort(${uHp}%)$lockedTag"
+            val headerLineText = "$verdictText  •  $oppShort(${effBankedE}e$hpPromoBadgeHud) vs $userShort(${uHp}%)$lockedTag"
 
             mapOf(
                 "visible" to isVisible,
@@ -17047,10 +17446,23 @@ class OverlayService : LifecycleService() {
                 "hasDvr" to lastLoggedBattleHasDvr,
                 "dvrDeleted" to lastLoggedBattleDvrDeleted,
                 "dvrBugReported" to lastLoggedBattleDvrBugReported,
-                "dvrUploadStatus" to lastLoggedBattleDvrUploadStatus
+                "dvrUploadStatus" to lastLoggedBattleDvrUploadStatus,
+                "showTuningFeedbackPrompt" to activePostBattleTuningFeedbackEnabled,
+                "tuningQuestionType" to lastLoggedBattleTuningQuestionType,
+                "tuningFeedback" to lastLoggedBattleTuningFeedback.toMap(),
+                "predictiveGuiHapticLeadMs" to activePredictiveGuiHapticLeadMs
             ) else null,
             "activeUserEnergy" to playerSlotEnergy.getOrElse(activeSlotIdxSafe) { 0 }.coerceIn(0, 100),
             "activeOppEnergy" to oppSlotEnergy.getOrElse(activeOppSlotSafe) { 0 }.coerceIn(0, 100),
+            "userEnergyMeter" to userSlotEnergyMeter.getOrElse(activeSlotIdxSafe) { 0 }.coerceIn(0, 100),
+            "userEnergyHp" to userSlotEnergyHp.getOrElse(activeSlotIdxSafe) { 0 }.coerceIn(0, 100),
+            "userConfMeter" to userSlotConfMeter.getOrElse(activeSlotIdxSafe) { 90 }.coerceIn(0, 100),
+            "userConfHp" to userSlotConfHp.getOrElse(activeSlotIdxSafe) { 75 }.coerceIn(0, 100),
+            "oppEnergyMeter" to oppSlotEnergyMeter.getOrElse(activeOppSlotSafe) { 0 }.coerceIn(0, 100),
+            "oppEnergyHp" to oppSlotEnergyHp.getOrElse(activeOppSlotSafe) { 0 }.coerceIn(0, 100),
+            "oppConfMeter" to oppSlotConfMeter.getOrElse(activeOppSlotSafe) { 88 }.coerceIn(0, 100),
+            "oppConfHp" to oppSlotConfHp.getOrElse(activeOppSlotSafe) { 75 }.coerceIn(0, 100),
+            "oppHpPromoTag" to oppSlotHpPromoBadge.getOrElse(activeOppSlotSafe) { "" },
             "activeOppMoveReady" to ((scannedOpponentsData.getOrNull(activeOppSlotSafe)?.get("isMoveReady") as? Boolean) ?: false),
             "activeOppEnergyLabel" to ((scannedOpponentsData.getOrNull(activeOppSlotSafe)?.get("energyLabel") as? String) ?: "0E"),
             "scanHzMode" to currentScanHzMode,
@@ -17418,6 +17830,13 @@ class OverlayService : LifecycleService() {
         fun ignoreLastBattleTelemetry(battleId: String) {
             Handler(Looper.getMainLooper()).post {
                 this@OverlayService.ignoreTelemetryForBattle(battleId)
+            }
+        }
+
+        @JavascriptInterface
+        fun submitPostBattleTuningFeedback(battleId: String, questionId: String, answer: String) {
+            Handler(Looper.getMainLooper()).post {
+                this@OverlayService.submitPostBattleTuningFeedback(battleId, questionId, answer)
             }
         }
 
