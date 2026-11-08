@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.07"
-        const val APP_VERSION_CODE = 1705
+        const val APP_VERSION = "7.08"
+        const val APP_VERSION_CODE = 1708
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -5437,9 +5437,9 @@ class OverlayService : LifecycleService() {
             (h * 0.125f).toInt().coerceIn(1, h)
         )
 
-        // v6.12 / v6.22: Tightened 2D Floating HP Bar Corridors so O_HP never scans the lower half of the screen (<= 0.50h)
-        // and U_HP only tightens its bottom edge (0.665h) while the Shield Decision Overlay is actually visible,
-        // giving short sprites (e.g. Mimikyu at y=0.642h..0.661h) full vertical clearance (0.78h) during normal combat!
+        // v6.12 / v6.22 / v7.05: Tightened 2D Floating HP Bar Corridors so O_HP never scans the lower half of the screen (<= 0.50h)
+        // and U_HP spans 0.18h..0.78h (0.72h when Shield Decision Overlay is visible), capturing both tall/flying Mega Master League
+        // Pokémon (e.g. Primal Kyogre at 0.25h, Lugia at 0.27h, Dialga-O at 0.32h) and short sprites (e.g. Mimikyu at 0.65h)!
         val oppHpCorridorRect = Rect(
             (w * 0.395f).toInt().coerceIn(0, w - 1),
             (h * 0.055f).toInt().coerceIn(0, h - 1),
@@ -5449,8 +5449,8 @@ class OverlayService : LifecycleService() {
         val playerHpBottomFrac = if (isShieldDecisionOverlayVisible) 0.72f else 0.78f
         val playerHpCorridorRect = Rect(
             (w * 0.010f).toInt().coerceIn(0, w - 1),
-            (h * 0.45f).toInt().coerceIn(0, h - 1),
-            (w * 0.520f).toInt().coerceIn(1, w),
+            (h * 0.18f).toInt().coerceIn(0, h - 1),
+            (w * 0.560f).toInt().coerceIn(1, w),
             (h * playerHpBottomFrac).toInt().coerceIn(1, h)
         )
 
@@ -7510,7 +7510,7 @@ class OverlayService : LifecycleService() {
             val lastScannedOppHp = lastScannedOppSlotHpPct[activeOppIdx].coerceIn(1, 100)
             val currentOppHp = oppSlotHpPct[activeOppIdx].coerceIn(1, 100)
 
-            val minValidOppHpRowY = (screenHeight * 0.31f).toInt()
+            val minValidOppHpRowY = (screenHeight * 0.22f).toInt()
             if (areChargeCirclesVisibleNow && pendingChargedAttackActor.isEmpty() && sampledOppHpRowY >= minValidOppHpRowY) {
                 val prevBaseOppY = oppSlotBaselineHpRowY[activeOppIdx]
                 if (prevBaseOppY <= 0) {

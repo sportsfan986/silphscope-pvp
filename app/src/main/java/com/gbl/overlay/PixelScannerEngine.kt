@@ -2198,15 +2198,17 @@ internal fun OverlayService.detectFloatingHpBarPct(
         val maxFillH = max(26, (fullScreenWidth * 0.028f).toInt())
 
         // Expected left-edge X anchor in full-screen coordinates (relX = absX - left)
+        // v7.05: Expanded absAnchorMaxX for Mega Master League pulled-back camera angles where opponent
+        // HP bars start up to 0.665w (e.g. Keldeo vs Dialga-O/Lugia) and player bars start up to 0.230w (Primal Kyogre).
         val absAnchorMinX = if (isOpponent) {
             (fullScreenWidth * 0.400f).toInt()
         } else {
             (fullScreenWidth * 0.018f).toInt()
         }
         val absAnchorMaxX = if (isOpponent) {
-            (fullScreenWidth * 0.585f).toInt()
+            (fullScreenWidth * 0.715f).toInt()
         } else {
-            (fullScreenWidth * 0.220f).toInt()
+            (fullScreenWidth * 0.260f).toInt()
         }
         val relAnchorMinX = (absAnchorMinX - left).coerceIn(0, cw - 1)
         val relAnchorMaxX = (absAnchorMaxX - left).coerceIn(relAnchorMinX, cw - 1)
@@ -2222,7 +2224,8 @@ internal fun OverlayService.detectFloatingHpBarPct(
             return (r + g + b) / 3
         }
 
-        // v3.83/v6.26: Neutral White/Grey Capsule Border Classifier (including #0B111E overlay-dimmed borders and pink/bright Tinkaton anti-aliasing).
+        // v3.83/v6.26/v7.05: Neutral White/Grey Capsule Border Classifier (including #0B111E overlay-dimmed borders,
+        // pink/bright Tinkaton anti-aliasing, and blue/indigo night-sky or Primal Kyogre/Lugia translucent borders).
         // Explicitly rejects yellow/cream fur & feathers (e.g., Ninetales tails, Pidgeot wings)
         // where G >= R - 25 and (G - B) >= 55, as well as dark background trees/hills (luma < 95).
         fun isBorderPixel(pixel: Int, refDarkLuma: Int = 40): Boolean {
@@ -2237,11 +2240,17 @@ internal fun OverlayService.detectFloatingHpBarPct(
                 return (maxCh - minCh) <= 115 && (g - b) <= 64 && b >= 125
             }
             if (luma >= 95) {
-                return (luma - refDarkLuma) >= 16 &&
-                    (maxCh - minCh) <= 52 &&
+                if ((luma - refDarkLuma) < 16) return false
+                val isNeutralGrey = (maxCh - minCh) <= 52 &&
                     (g - b) <= 32 &&
                     (r - b) <= 44 &&
                     r >= 82 && g >= 82 && b >= 82
+                // v7.05: Semi-translucent white capsule border rendered over indigo night sky or blue Pokémon models (Primal Kyogre, Lugia):
+                val isCoolTranslucentBorder = (luma - refDarkLuma) >= 18 &&
+                    (maxCh - minCh) <= 115 &&
+                    b >= 115 && g >= 90 && r >= 72 &&
+                    b >= g - 12 && b >= r
+                return isNeutralGrey || isCoolTranslucentBorder
             }
             return false
         }
@@ -2475,9 +2484,25 @@ internal fun OverlayService.detectFloatingHpBarPct(
                                     else -> false
                                 }
                                 if (wFill >= 2 && fullInteriorW >= minRequiredInteriorW && isBandConsistentWithPct) {
-                                    val expectedDarkFraction = (1.0f - candHpFraction).coerceIn(0.0f, 1.0f)
+                                    // v7.05: Skip up to 3px of green/yellow anti-aliased right cap at 94%-98% HP before measuring darkTrackStartX
+                                    var capAdjust = 0
+                                    while (capAdjust < 3 && (xEnd + pendingW + 1 + capAdjust) <= trackEndX) {
+                                        val cp = pixels[rowOffset + xEnd + pendingW + 1 + capAdjust]
+                                        val cr = (cp shr 16) and 0xFF
+                                        val cg = (cp shr 8) and 0xFF
+                                        val cb = cp and 0xFF
+                                        val cLuma = (cr + cg + cb) / 3
+                                        if (cLuma >= 110 && cg >= cr - 15 && cg >= cb + 15) {
+                                            capAdjust++
+                                        } else {
+                                            break
+                                        }
+                                    }
+                                    val effectiveWFill = wFill + capAdjust
+                                    val effectiveHpFrac = (effectiveWFill.toFloat() / fullInteriorW.toFloat()).coerceIn(0.0f, 1.0f)
+                                    val expectedDarkFraction = (1.0f - effectiveHpFrac).coerceIn(0.0f, 1.0f)
 
-                                    val darkTrackStartX = xEnd + pendingW + 1
+                                    val darkTrackStartX = xEnd + pendingW + 1 + capAdjust
                                     val darkTrackSpan = max(0, trackEndX - darkTrackStartX + 1)
                                     var darkPx = 0
                                     var brightWhitePx = 0
@@ -2526,8 +2551,8 @@ internal fun OverlayService.detectFloatingHpBarPct(
                                                 leftBorderX = leftBorderX,
                                                 rightBorderX = rightBorderX,
                                                 xStart = xStart,
-                                                xEnd = xEnd,
-                                                wFill = wFill,
+                                                xEnd = xEnd + capAdjust,
+                                                wFill = effectiveWFill,
                                                 fullInteriorW = fullInteriorW,
                                                 leftBand = leftBand,
                                                 borderLuma = borderLuma,

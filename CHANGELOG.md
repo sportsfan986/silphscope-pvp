@@ -1,4 +1,19 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.07`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.08`)
+
+---
+
+## v7.08 (2026-11-07) — Mega Master League Floating HP Bar Tracking Fix (Giant/Flying Sprites & Pulled-Back Camera Geometry)
+*Vision pipeline & floating HP bar scanner hotfix (`v7.08`, `versionCode = 1708`) resolving missing player and opponent HP tracking in **Mega Master League** when giant/flying Pokémon (**Primal Kyogre**, **Lugia**, **Dialga-Origin**) pull the battle camera back (`log-1794102269182-295`).*
+
+- **v7.08 — Fix 1: Upper-Battlefield Player HP Corridor Expansion for Giant & Flying Pokémon (`OverlayService.kt`, `PixelScannerEngine.kt`)**:
+  - Expanded `playerHpCorridorRect.top` from `0.45h` up to **`0.18h`** (safely below the `0.125h` nameplate and `0.165h` Run button) and `playerHpCorridorRect.right` to `0.560w`, capturing tall and high-altitude floating player Pokémon whose HP bars sit in the upper-left battlefield (`Primal Kyogre` at `0.25h`, `Lugia` at `0.26h`, `Dialga-Origin` at `0.31h`).
+  - Expanded player left-border X anchor (`absAnchorMaxX`) from `0.220w` to **`0.260w`** so wide Primal/Mega models whose HP bars start near `0.228w` are never clipped.
+- **v7.08 — Fix 2: Pulled-Back Camera Opponent X-Anchor & Tall Opponent Row-Y Baseline (`PixelScannerEngine.kt`, `OverlayService.kt`)**:
+  - Expanded opponent left-border X anchor (`absAnchorMaxX`) from `0.585w` to **`0.715w`** so opponent Pokémon shifted rightward by the pulled-back Mega Master League camera (e.g. `Keldeo` starting at `0.656w..0.664w` opposite `Dialga-Origin` / `Lugia`) are tracked across 100% of normal combat frames.
+  - Lowered `minValidOppHpRowY` from `0.31h` to **`0.22h`** so tall opponent bosses (`Primal Kyogre` at `0.285h`) lock in their normal-combat baseline row Y and commit HP drops without triggering false camera-zoom upward-shift suppression.
+- **v7.08 — Fix 3: Translucent Capsule Border over Blue Models/Night Sky & `94%–98%` Anti-Aliased Cap Handling (`PixelScannerEngine.kt`)**:
+  - Updated `isBorderPixel` to accept semi-translucent white capsule borders (`luma 95..174`, `luma - refDarkLuma >= 18`) rendered over the indigo night sky or royal-blue Pokémon bodies (`Primal Kyogre`, `Lugia`).
+  - Skipped up to `3px` of yellow-green anti-aliased right-tip transition pixels immediately after `xEnd` before measuring `darkTrackStartX` so `94%–98%` green HP bars pass dark-track verification cleanly.
 
 ---
 
