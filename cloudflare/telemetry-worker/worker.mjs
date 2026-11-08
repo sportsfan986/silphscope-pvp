@@ -406,7 +406,7 @@ const TIER_PRESETS = {
   },
   pro: {
     tier: 'pro',
-    label: 'Legend Pro Pass ($5/mo or $10/season • 🛡️ Shield Decision HUD • 15 FPS DVR • 25 Local • 50 Cloud / 10 Pinned • All Cups + Alt Moves)',
+    label: 'Legend Pro Pass ($3/mo or $6/season • 🛡️ Shield Decision HUD • 15 FPS DVR • 25 Local • 50 Cloud / 10 Pinned • All Cups + Alt Moves)',
     maxLocalBattles: 25,
     maxRollingBattles: 50,
     maxPinnedBattles: 10,
@@ -422,7 +422,7 @@ const TIER_PRESETS = {
   },
   vip: {
     tier: 'vip',
-    label: 'VIP / Coach Pass ($10/mo or $20/season • 🎥 30 FPS Smooth DVR (+ 15 FPS Storage Saver) • 🛡️ Shield Decision HUD • 100 Local Slider • 150 Cloud / 25 Pinned • 365d Vault)',
+    label: 'VIP / Coach Pass ($5/mo or $10/season • 🎥 30 FPS Smooth DVR (+ 15 FPS Storage Saver) • 🛡️ Shield Decision HUD • 100 Local Slider • 150 Cloud / 25 Pinned • 365d Vault)',
     maxLocalBattles: 100,
     maxRollingBattles: 150,
     maxPinnedBattles: 25,
@@ -439,13 +439,13 @@ const TIER_PRESETS = {
 };
 
 const STRIPE_PAYMENT_LINKS = {
-  supporter: 'https://buy.stripe.com/dRmeVe8F36By2Dr5221Jm00',
-  pro_season: 'https://buy.stripe.com/bJe4gAg7v7FC4Lz0LM1Jm01',
-  pro_intro: 'https://buy.stripe.com/fZubJ28F32li3HvgKK1Jm02',
-  pro_monthly: 'https://buy.stripe.com/28E7sM6wV5xu5PD7aa1Jm03',
-  vip_season: 'https://buy.stripe.com/00w8wQaNbf841zngKK1Jm04',
-  vip_intro: 'https://buy.stripe.com/aFabJ29J78JG2Dr8ee1Jm05',
-  vip_monthly: 'https://buy.stripe.com/aFa7sM08x2liem9cuu1Jm06',
+  supporter: 'https://buy.stripe.com/4gM3cwf3r8JG7XLamm1Jm07',
+  pro_season: 'https://buy.stripe.com/8x2aEY8F33pma5TgKK1Jm08',
+  pro_intro: 'https://buy.stripe.com/14A4gAcVjf8491P8ee1Jm09',
+  pro_monthly: 'https://buy.stripe.com/4gM3cw7AZ0dab9XeCC1Jm0a',
+  vip_season: 'https://buy.stripe.com/9B6fZi3kJ6By4Lzamm1Jm0b',
+  vip_intro: 'https://buy.stripe.com/4gM7sM5sR5xudi5amm1Jm0c',
+  vip_monthly: 'https://buy.stripe.com/28E00k2gFaRO5PD2TU1Jm0d',
 };
 
 const BMC_LINKS = {
@@ -1975,7 +1975,7 @@ function renderWatchSharePage(origin, shareInfo) {
           <button onclick="setHudMode('compact')" id="mode-compact">COMPACT</button>
           <button onclick="setHudMode('diag')" id="mode-diag">DIAG</button>
           <button onclick="setHudMode('off')" id="mode-off">OFF</button>
-          <button onclick="toggleShieldHud()" id="btn-shield-hud" class="${shareInfo.userTier && shareInfo.userTier !== 'free' ? 'active' : ''}">${shareInfo.userTier && shareInfo.userTier !== 'free' ? '🛡️ Shield: ON' : '🔒 Shield ($3 Supporter)'}</button>
+          <button onclick="toggleShieldHud()" id="btn-shield-hud" class="${shareInfo.userTier && shareInfo.userTier !== 'free' ? 'active' : ''}">${shareInfo.userTier && shareInfo.userTier !== 'free' ? '🛡️ Shield: ON' : '🔒 Shield ($2 Supporter)'}</button>
           <button onclick="toggleHudPos()" id="btn-pos">⬆️ Pos: Top</button>
           <input type="range" id="hud-opacity" min="25" max="100" value="50" style="width:65px" title="HUD Opacity (50% Default)" oninput="updateOpacity(this.value)" />
         </div>
@@ -2135,7 +2135,7 @@ function renderWatchSharePage(origin, shareInfo) {
     }
     function toggleShieldHud() {
       if (!IS_SHIELD_HUD_UNLOCKED) {
-        alert('🏅 The Attack Incoming! Shield Decision Overlay is unlocked permanently with Lifetime Supporter ($3 one-time) or any Legend Pro / VIP pass!');
+        alert('🏅 The Attack Incoming! Shield Decision Overlay is unlocked permanently with Lifetime Supporter ($2 one-time) or any Legend Pro / VIP pass!');
         return;
       }
       showShieldHud = !showShieldHud;
@@ -3817,10 +3817,10 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     <div class="login-card" style="justify-content:space-between;background:rgba(15,23,42,0.65);font-size:12px;color:#cbd5e1">
       <div>
         <strong>⚡ Upgrade or Renew Season Pass:</strong>
-        <span style="color:#94a3b8;margin-left:6px">First 14 days of GBL Season = Full Season ($10 Pro / $20 VIP). Day 15+ First-Time Promo = 1-Month Rate ($5 Pro / $10 VIP) for the entire remainder of the season!</span>
+        <span style="color:#94a3b8;margin-left:6px">First 14 days of GBL Season = Full Season ($6 Pro / $10 VIP). Day 15+ First-Time Promo = 1-Month Rate ($3 Pro / $5 VIP) for the entire remainder of the season!</span>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <a class="btn-link" style="background:#0284c7;border-color:#38bdf8" href="${STRIPE_PAYMENT_LINKS.supporter}" target="_blank" rel="noopener">🏅 Supporter ($3)</a>
+        <a class="btn-link" style="background:#0284c7;border-color:#38bdf8" href="${STRIPE_PAYMENT_LINKS.supporter}" target="_blank" rel="noopener">🏅 Supporter ($2)</a>
         <a class="btn-link" style="background:#059669;border-color:#10b981" href="${STRIPE_PAYMENT_LINKS.pro_season}" target="_blank" rel="noopener">💳 Stripe Pro Pass</a>
         <a class="btn-link" style="background:#7c3aed;border-color:#a78bfa" href="${STRIPE_PAYMENT_LINKS.vip_season}" target="_blank" rel="noopener">👑 Stripe VIP Pass</a>
         <a class="btn-link" style="background:#d97706;border-color:#f59e0b" href="${BMC_LINKS.page}" target="_blank" rel="noopener">☕ Buy Me a Coffee</a>
@@ -5034,27 +5034,27 @@ export default {
         introPromoAlreadyUsed: introUsed,
         recommendedLinks: {
           supporter: {
-            priceUsd: 3,
-            label: 'Lifetime Supporter ($3 One-Time • 🛡️ Shield Decision HUD + 5 Local Videos + Core 3 Leagues + Lifetime Logs)',
+            priceUsd: 2,
+            label: 'Lifetime Supporter ($2 One-Time • 🛡️ Shield Decision HUD + 5 Local Videos + Core 3 Leagues + Lifetime Logs)',
             stripeUrl: `${STRIPE_PAYMENT_LINKS.supporter}?client_reference_id=${encodeURIComponent(screenName)}`,
             bmcUrl: BMC_LINKS.supporter,
           },
           pro: {
-            priceUsd: introEligible ? 5 : 10,
+            priceUsd: introEligible ? 3 : 6,
             isIntroPromo: introEligible,
             label: introEligible
-              ? `Legend Pro First-Season Intro Promo ($5 for Remainder of GBL Season • ${seasonWindow.daysRemaining}d left • 15 FPS DVR + 50 Cloud Replays + Shield HUD)`
-              : 'Legend Pro 90-Day GBL Season Pass ($10 / Season • 15 FPS DVR + 50 Cloud Replays + Shield HUD)',
+              ? `Legend Pro First-Season Intro Promo ($3 for Remainder of GBL Season • ${seasonWindow.daysRemaining}d left • 15 FPS DVR + 50 Cloud Replays + Shield HUD)`
+              : 'Legend Pro 90-Day GBL Season Pass ($6 / Season • 15 FPS DVR + 50 Cloud Replays + Shield HUD)',
             stripeUrl: `${introEligible ? STRIPE_PAYMENT_LINKS.pro_intro : STRIPE_PAYMENT_LINKS.pro_season}?client_reference_id=${encodeURIComponent(screenName)}`,
             stripeMonthlyUrl: `${STRIPE_PAYMENT_LINKS.pro_monthly}?client_reference_id=${encodeURIComponent(screenName)}`,
             bmcUrl: introEligible ? BMC_LINKS.membership : BMC_LINKS.pro_season,
           },
           vip: {
-            priceUsd: introEligible ? 10 : 20,
+            priceUsd: introEligible ? 5 : 10,
             isIntroPromo: introEligible,
             label: introEligible
-              ? `VIP / Coach First-Season Intro Promo ($10 for Remainder of GBL Season • ${seasonWindow.daysRemaining}d left • 30 FPS Smooth DVR + 150 Cloud Replays)`
-              : 'VIP / Coach 90-Day GBL Season Pass ($20 / Season • 30 FPS Smooth DVR + 150 Cloud Replays)',
+              ? `VIP / Coach First-Season Intro Promo ($5 for Remainder of GBL Season • ${seasonWindow.daysRemaining}d left • 30 FPS Smooth DVR + 150 Cloud Replays)`
+              : 'VIP / Coach 90-Day GBL Season Pass ($10 / Season • 30 FPS Smooth DVR + 150 Cloud Replays)',
             stripeUrl: `${introEligible ? STRIPE_PAYMENT_LINKS.vip_intro : STRIPE_PAYMENT_LINKS.vip_season}?client_reference_id=${encodeURIComponent(screenName)}`,
             stripeMonthlyUrl: `${STRIPE_PAYMENT_LINKS.vip_monthly}?client_reference_id=${encodeURIComponent(screenName)}`,
             bmcUrl: introEligible ? BMC_LINKS.membership : BMC_LINKS.vip_season,
@@ -5160,22 +5160,39 @@ export default {
       let isSeasonPass = false;
       let isIntroPromo = false;
 
-      if (amount >= 18 || levelName.includes('vip') || levelName.includes('coach')) {
+      if (levelName.includes('vip') || levelName.includes('coach')) {
+        tier = 'vip';
+        if (amount >= 8.5 || levelName.includes('season')) {
+          isSeasonPass = true;
+        } else if (seasonWindow.isDay15Plus && !alreadyUsedPromo) {
+          isSeasonPass = true;
+          isIntroPromo = true;
+        }
+      } else if (
+        levelName.includes('pro') ||
+        levelName.includes('legend') ||
+        levelName.includes('season')
+      ) {
+        tier = 'pro';
+        if (amount >= 5.5 || levelName.includes('season')) {
+          isSeasonPass = true;
+        } else if (seasonWindow.isDay15Plus && !alreadyUsedPromo) {
+          isSeasonPass = true;
+          isIntroPromo = true;
+        }
+      } else if (amount >= 8.5) {
         tier = 'vip';
         isSeasonPass = true;
-      } else if (
-        amount >= 9.5 &&
-        (levelName.includes('vip') || levelName.includes('coach'))
-      ) {
+      } else if (amount >= 5.5) {
+        tier = 'pro';
+        isSeasonPass = true;
+      } else if (amount >= 4.5) {
         tier = 'vip';
         if (seasonWindow.isDay15Plus && !alreadyUsedPromo) {
           isSeasonPass = true;
           isIntroPromo = true;
         }
-      } else if (amount >= 9.5 || (levelName.includes('season') && !levelName.includes('vip'))) {
-        tier = 'pro';
-        isSeasonPass = true;
-      } else if (amount >= 4.5 || levelName.includes('pro') || levelName.includes('legend')) {
+      } else if (amount >= 2.8) {
         tier = 'pro';
         if (seasonWindow.isDay15Plus && !alreadyUsedPromo) {
           isSeasonPass = true;
@@ -5417,7 +5434,7 @@ export default {
               ok: false,
               error:
                 licenseInfo.tier === 'supporter'
-                  ? 'Lifetime Supporter retains past pinned cloud replays for 365 days, plus 5 local on-device videos. Upgrade to Legend Pro ($5/mo or $10/season) for new Cloud R2 Replay Vault uploads.'
+                  ? 'Lifetime Supporter retains past pinned cloud replays for 365 days, plus 5 local on-device videos. Upgrade to Legend Pro ($3/mo or $6/season) for new Cloud R2 Replay Vault uploads.'
                   : 'Active Legend Pro or VIP Unlock Key required for Cloud R2 Replay Vault uploads.',
               tier: licenseInfo.tier,
             },

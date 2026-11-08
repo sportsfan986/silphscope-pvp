@@ -2738,7 +2738,7 @@ internal fun OverlayService.Companion.registerUniqueScreenNameBlocking(
             val introEligible = promoObj?.get("introPromoEligible")?.asBoolean ?: false
             val daysLeft = promoObj?.get("daysRemaining")?.asInt ?: 0
             val promoNote = if (introEligible) {
-                " • 🎉 Eligible for Day 15+ First-Season Promo ($5 Pro / $10 VIP for remaining ${daysLeft}d of season)!"
+                " • 🎉 Eligible for Day 15+ First-Season Promo ($3 Pro / $5 VIP for remaining ${daysLeft}d of season)!"
             } else {
                 " • Ready for Season Pass / Supporter checkout."
             }

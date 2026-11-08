@@ -2553,7 +2553,7 @@
                         android:id="@+id/text_shield_decision_overlay_desc"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="🏅 Lifetime Supporter ($3 once) or Pro/VIP — Red/Orange/Yellow/Green KO &amp; Tank/Farm summary above Attack incoming!"
+                        android:text="🏅 Lifetime Supporter ($2 once) or Pro/VIP — Red/Orange/Yellow/Green KO &amp; Tank/Farm summary above Attack incoming!"
                         android:textColor="#94a3b8"
                         android:textSize="10sp" />
                 </LinearLayout>

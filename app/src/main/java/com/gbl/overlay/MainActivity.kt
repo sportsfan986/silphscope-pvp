@@ -7638,13 +7638,13 @@ class MainActivity : AppCompatActivity() {
                     .replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "")
                     .replace(Regex("\\s*\\(Shadow\\)", RegexOption.IGNORE_CASE), "")
                     .trim()
-                val base = OverlayService.FormResolver.extractBaseSpecies(clean).lowercase()
+                val base = OverlayService.Companion.FormResolver.extractBaseSpecies(clean).lowercase()
                 val matchedSummary = summaryOppTeamSpecs.firstOrNull {
-                    OverlayService.FormResolver.extractBaseSpecies(it.species).equals(base, ignoreCase = true)
+                    OverlayService.Companion.FormResolver.extractBaseSpecies(it.species).equals(base, ignoreCase = true)
                 }
                 val matchedReplay = replayOpponents.firstOrNull {
                     val c = it.replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "").replace(Regex("\\s*\\(Shadow\\)", RegexOption.IGNORE_CASE), "").trim()
-                    OverlayService.FormResolver.extractBaseSpecies(c).equals(base, ignoreCase = true)
+                    OverlayService.Companion.FormResolver.extractBaseSpecies(c).equals(base, ignoreCase = true)
                 }
                 val isShad = rawSpecies.contains("Shadow", ignoreCase = true) ||
                     (matchedSummary?.isShadow == true) ||
@@ -7700,7 +7700,7 @@ class MainActivity : AppCompatActivity() {
                         .replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "")
                         .replace(Regex("\\s*\\(Shadow\\)", RegexOption.IGNORE_CASE), "")
                         .trim()
-                    val base = OverlayService.FormResolver.extractBaseSpecies(clean).lowercase()
+                    val base = OverlayService.Companion.FormResolver.extractBaseSpecies(clean).lowercase()
                     if (base.isNotEmpty() && seenBases.add(base) && revealedOppsAtFrame.size < 3) {
                         revealedOppsAtFrame.add(resolveShadowDecoratedOppName(trimmed))
                     }

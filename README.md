@@ -1,7 +1,7 @@
-# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v7.10)
+# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v7.11)
 
 [![Live Web Simulator](https://img.shields.io/badge/🌐%20Live%20Web%20Simulator-Try%20in%20Browser-0284c7?style=for-the-badge&logo=googlechrome&logoColor=white)](https://sportsfan986.github.io/silphscope-pvp/)
-[![Stripe Season Pass](https://img.shields.io/badge/💳%20Stripe%20Checkout-Unlock%20Pro%20%2F%20VIP-6366f1?style=for-the-badge&logo=stripe&logoColor=white)](https://buy.stripe.com/fZubJ28F32li3HvgKK1Jm02)
+[![Stripe Season Pass](https://img.shields.io/badge/💳%20Stripe%20Checkout-Unlock%20Pro%20%2F%20VIP-6366f1?style=for-the-badge&logo=stripe&logoColor=white)](https://buy.stripe.com/14A4gAcVjf8491P8ee1Jm09)
 [![Buy Me A Coffee](https://img.shields.io/badge/☕%20Buy%20Me%20a%20Coffee-PokéCoins%20%26%20Passes-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/silphscopepvp)
 [![Cloud Replay Vault](https://img.shields.io/badge/🎬%20Cloud%20Replay%20Vault-Watch%20%26%20Analyze-a855f7?style=for-the-badge)](https://silphscope-telemetry.silphscope-pvp.workers.dev/vault)
 [![Latest Release](https://img.shields.io/github/v/release/sportsfan986/silphscope-pvp?style=for-the-badge&color=10b981&label=Latest%20APK)](https://github.com/sportsfan986/silphscope-pvp/releases)
@@ -16,13 +16,13 @@
 
 ---
 
-## 🏆 Membership Tiers & Cloud Replay Vault (`v7.00`)
+## 🏆 Membership Tiers & Cloud Replay Vault (`v7.10`)
 
-The **real-time floating HUD overlay, 9-shield matrix, fast-move turn pacing, and synchronized haptics are 100% Free forever**. Unlocking **🏅 Lifetime Supporter (`$3` once — or automatically forever when you subscribe to Legend Pro or VIP once)** adds the **🛡️ Attack Incoming! Shield Decision Overlay (KO & Tank/Farm Verdict Card)**, 5 local DVR videos, Open Ultra League Anti-Meta, and unlimited lifetime battle log history, while **Legend Pro** and **VIP / Coach** add Cloud R2 DVR Replay Vaults, full Anti-Meta role synthesis, and VIP **`30 FPS Smooth`** DVR recording:
+The **real-time floating HUD overlay, 9-shield matrix, fast-move turn pacing, and synchronized haptics are 100% Free forever**. Unlocking **🏅 Lifetime Supporter (`$2` once — or automatically forever when you subscribe to Legend Pro or VIP once)** adds the **🛡️ Attack Incoming! Shield Decision Overlay (KO & Tank/Farm Verdict Card)**, 5 local DVR videos, Open Ultra League Anti-Meta, and unlimited lifetime battle log history, while **Legend Pro** (`$3/mo` or `$6/Season` = `$2/mo` effective) and **VIP / Coach** (`$5/mo` or `$10/Season` = `$3.33/mo` effective) add Cloud R2 DVR Replay Vaults, full Anti-Meta role synthesis, and VIP **`30 FPS Smooth`** DVR recording:
 
 ![SilphScope PvP Membership Tiers Infographic](./docs/screenshots/silphscope_tiers_infographic.jpg)
 
-| Feature / Capability | 🆓 Free Community (`$0`) | 🏅 Lifetime Supporter (`$3` One-Time or Alumni) | 🏆 Legend Pro (`$5/mo` or `$10/Season`*) | 👑 VIP / Coach (`$10/mo` or `$20/Season`*) |
+| Feature / Capability | 🆓 Free Community (`$0`) | 🏅 Lifetime Supporter (`$2` One-Time or Alumni) | 🏆 Legend Pro (`$3/mo` or `$6/Season`*) | 👑 VIP / Coach (`$5/mo` or `$10/Season`*) |
 | :--- | :---: | :---: | :---: | :---: |
 | **Live In-Game HUD, 9-Shield Matrix & Haptics** | ✅ **100% Free** | ✅ **100% Free** | ✅ **100% Free** | ✅ **100% Free** |
 | **🛡️ Attack Incoming! Shield Decision Overlay** | — | ✅ **Unlocked Forever** | ✅ **Unlocked Forever** | ✅ **Unlocked Forever** |
@@ -34,8 +34,8 @@ The **real-time floating HUD overlay, 9-shield matrix, fast-move turn pacing, an
 | **Anti-Meta Teams & ⚡ Alt Moveset Synthesis** | 1 / Archetype (Std Moves) | 2 / Archetype (Std Moves) | **Top 5 / Arch + ⚡ Alt Movesets** | **Top 5 / Arch + ⚡ Alt Movesets** |
 | **🎯 Nemesis Analyzer & 🌿 What-If Branching** | Preview | Preview | ✅ **Full Access** | ✅ **Full Access + Priority** |
 
-> 💡 **\*Day 15+ First-Season Promo**: Joining **Legend Pro** or **VIP** on **Day 15 or later** of a GBL Season charges only the **1-month rate (`$5` Pro / `$10` VIP)** for the **entire remainder of the current GBL season** (one-time per unique Trainer ID). Plus, subscribing to Pro or VIP even once permanently unlocks **🏅 Lifetime Supporter (Alumni)** benefits forever!
-> - **Stripe Instant Checkout**: [🏅 $3 Lifetime Supporter](https://buy.stripe.com/dRmeVe8F36By2Dr5221Jm00) • [🏆 $5 Pro First-Season Promo](https://buy.stripe.com/fZubJ28F32li3HvgKK1Jm02) • [🏆 $10 Pro 90d Season Pass](https://buy.stripe.com/bJe4gAg7v7FC4Lz0LM1Jm01) • [👑 $10 VIP First-Season Promo](https://buy.stripe.com/aFabJ29J78JG2Dr8ee1Jm05) • [👑 $20 VIP 90d Season Pass](https://buy.stripe.com/00w8wQaNbf841zngKK1Jm04)
+> 💡 **\*Day 15+ First-Season Promo**: Joining **Legend Pro** or **VIP** on **Day 15 or later** of a GBL Season charges only the **1-month rate (`$3` Pro / `$5` VIP)** for the **entire remainder of the current GBL season** (one-time per unique Trainer ID). Plus, subscribing to Pro or VIP even once permanently unlocks **🏅 Lifetime Supporter (Alumni)** benefits forever!
+> - **Stripe Instant Checkout**: [🏅 $2 Lifetime Supporter](https://buy.stripe.com/4gM3cwf3r8JG7XLamm1Jm07) • [🏆 $3 Pro First-Season Promo](https://buy.stripe.com/14A4gAcVjf8491P8ee1Jm09) • [🏆 $6 Pro 90d Season Pass](https://buy.stripe.com/8x2aEY8F33pma5TgKK1Jm08) • [👑 $5 VIP First-Season Promo](https://buy.stripe.com/4gM7sM5sR5xudi5amm1Jm0c) • [👑 $10 VIP 90d Season Pass](https://buy.stripe.com/9B6fZi3kJ6By4Lzamm1Jm0b)
 > - **Buy Me a Coffee (💰 PokéCoins & Memberships)**: [https://buymeacoffee.com/silphscopepvp](https://buymeacoffee.com/silphscopepvp)
 
 ---
@@ -65,7 +65,7 @@ Experience **SilphScope PvP** instantly in your web browser — completely free,
 
 ---
 
-## Advanced Analytics & Quality Metrics (v7.10)
+## Advanced Analytics & Quality Metrics (v7.11)
 
 Raw win rate in GO Battle League is heavily influenced by matchmaking alignment and blind 3v3 team-composition luck (RPS). **SilphScope PvP v3.00** separates **Matchup Luck (Blind Matchup Favorability — BMF)** from **Dynamic Execution WAE (Wins Above Expected)** so you can track both matchmaking favorability and your in-battle micro-execution skill (energy farming, fast move denial, sacrificial catches, shield discipline, and CMP timing).
 
@@ -155,13 +155,13 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## 📥 Download & Install Native Android APK (v7.10)
+## 📥 Download & Install Native Android APK (v7.11)
 
 > **✅ Note on Live HP & Energy Counting (Enabled by Default since v6.02)**:
 > **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting** are **ENABLED (ON)** by default with optimal scanner tuning (`2 samples`, `±2%` tolerance, `200ms` proactive energy lead, `+1t` fast offset, and `4.0s` swap-throw rollback). You can customize all scanner, haptics, and Always-On DVR controls in **⚙️ Settings**.
 
 1. Visit the **[Official GitHub Releases Page](https://github.com/sportsfan986/silphscope-pvp/releases)**.
-2. Download **`silphscope-pvp-v7.10.apk`** directly to your Android device.
+2. Download **`silphscope-pvp-v7.11.apk`** directly to your Android device.
 3. Tap the downloaded APK file to install (grant *"Install unknown apps"* permission if prompted).
 4. Launch **SilphScope PvP**:
    - Select, reorder, or customize your **GBL or Show 6 Team Presets**, set **Opponent Move Count Basis** (`My Fasts` vs. `Their Fasts`), adjust **Overlay Size** (`50%–100%` screen width slider) and **Background Transparency**, and configure **Synchronized Haptics** or **1-Battle DVR** in **⚙️ Settings**.

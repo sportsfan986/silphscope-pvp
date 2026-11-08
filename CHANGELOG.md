@@ -1,4 +1,18 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.10`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.11`)
+
+---
+
+## v7.11 (2026-11-07) — Competitive `$2 / $3-$6 / $5-$10` Pricing Alignment Across Stripe, Buy Me a Coffee, Infographic, App, Web Simulator, Cloudflare Worker & Shared Knowledgebase
+*Competitive pricing update (`v7.11`, `versionCode = 1711`, Cloudflare Worker `v7.1.1`) lowering and aligning membership pricing across all platforms to **`$2` Lifetime Supporter (One-Time or Alumni)**, **`$3/mo` or `$3` Day 15+ First-Season Intro / `$6` 90-Day Season Pass (`$2/mo` effective) Legend Pro**, and **`$5/mo` or `$5` Day 15+ First-Season Intro / `$10` 90-Day Season Pass (`$3.33/mo` effective) VIP / Coach**.*
+
+- **v7.11 — Enhancement 1: Live Stripe Payment Links, Buy Me a Coffee (`$1/PokéCoin`) & 4-Tier Infographic (`docs/screenshots/silphscope_tiers_infographic.jpg`)**:
+  - Provisioned 7 new live Stripe prices and Payment Links (`$2` Supporter `4gM3cwf3r8JG7XLamm1Jm07`, `$6` Pro Season `8x2aEY8F33pma5TgKK1Jm08`, `$3` Pro Intro `14A4gAcVjf8491P8ee1Jm09`, `$3/mo` Pro Monthly `4gM3cw7AZ0dab9XeCC1Jm0a`, `$10` VIP Season `9B6fZi3kJ6By4Lzamm1Jm0b`, `$5` VIP Intro `4gM7sM5sR5xudi5amm1Jm0c`, `$5/mo` VIP Monthly `28E00k2gFaRO5PD2TU1Jm0d`) and deactivated the old payment links.
+  - Updated Buy Me a Coffee Memberships (`$3/mo` Legend Pro, `$5/mo` VIP / Coach), Shop Extras (`595787` `$2` Supporter, `595788` `$6` Pro Season Pass, `595789` `$10` VIP Season Pass), Gallery post, and Page Bio (`$1` per PokéCoin).
+  - Regenerated `docs/screenshots/silphscope_tiers_infographic.jpg` with the new `$2 / $3-$6 / $5-$10` pricing, **🛡️ Attack Incoming! Shield Decision Overlay** in Paid-Once / Alumni + Pro + VIP, and **🎥 30 FPS Smooth DVR** in VIP.
+- **v7.11 — Enhancement 2: App, Web Simulator, Cloudflare Worker Webhooks & Shared Website Knowledgebase (`OverlayService.kt`, `MainActivity.kt`, `GitHubCloudSync.kt`, `activity_main.xml`, `src/App.tsx`, `cloudflare/telemetry-worker/worker.mjs`, `README.md`, `ANTIGRAVITY.md`)**:
+  - Updated `STRIPE_PAYMENT_LINKS`, `TIER_PRESETS`, `/v1/users/checkout-quote`, `/vault`, `/watch/:shareId`, and Stripe/BMC webhook tier amount thresholds (`POST /v1/webhooks/stripe` & `POST /v1/webhooks/bmc`) in `worker.mjs` to match `$2` Supporter, `$3`/`$6` Pro, and `$5`/`$10` VIP.
+  - Updated all checkout URLs and pricing badges across `OverlayService.kt`, `MainActivity.kt`, `GitHubCloudSync.kt`, `activity_main.xml`, `src/App.tsx`, and `README.md`.
+  - Added Section 3.7 (**Membership Tiers, Pricing, Payment Links & Website Integration Spec**) in `ANTIGRAVITY.md` & `AGENTS.md` so other chats and upcoming website builds share the exact URLs, tier matrix, and API endpoints.
 
 ---
 

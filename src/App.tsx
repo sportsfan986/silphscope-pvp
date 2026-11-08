@@ -5390,12 +5390,12 @@ export default function App() {
     const isCore3 = isGlOrMl || normLg === 'ULTRA LEAGUE';
     if (webMembershipTier === 'free' && !isGlOrMl) {
       setShowMembershipModal(true);
-      setMembershipStatusMsg(`🔒 ${targetLeague} requires Lifetime Supporter ($3) for Ultra League or Legend Pro ($5 Intro / $10 Season) for Limited/Mega Cups!`);
+      setMembershipStatusMsg(`🔒 ${targetLeague} requires Lifetime Supporter ($2) for Ultra League or Legend Pro ($3 Intro / $6 Season) for Limited/Mega Cups!`);
       return;
     }
     if (webMembershipTier === 'supporter' && !isCore3) {
       setShowMembershipModal(true);
-      setMembershipStatusMsg(`🏆 ${targetLeague} is a Limited/Mega Cup and requires Legend Pro ($5 First-Season Intro / $10 Season Pass)!`);
+      setMembershipStatusMsg(`🏆 ${targetLeague} is a Limited/Mega Cup and requires Legend Pro ($3 First-Season Intro / $6 Season Pass)!`);
       return;
     }
     const f1 = (overrideFeat1 !== undefined ? overrideFeat1 : antiMetaFeat1).trim();
@@ -5712,7 +5712,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.10 • Android Native Overlay
+                  v7.11 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -10404,7 +10404,7 @@ export default function App() {
                                 🏆 Unlock All 15 Anti-Meta Teams, Limited Cups &amp; ⚡ Alternate Moveset Role Synthesis
                               </h5>
                               <p className="text-[11px] text-slate-300">
-                                Free tier shows 1 team per archetype (GL/ML) with standard movesets. Upgrade to <strong>Lifetime Supporter ($3)</strong> for the 🛡️ Attack Incoming! Shield Decision Overlay + Ultra League + 2 teams/archetype + Unlimited Battle Log History, or <strong>Legend Pro ($5 First-Season Intro / $10 Season Pass)</strong> for all 15 teams, Limited/Mega Cups, and ⚡ Alt Movesets!
+                                Free tier shows 1 team per archetype (GL/ML) with standard movesets. Upgrade to <strong>Lifetime Supporter ($2)</strong> for the 🛡️ Attack Incoming! Shield Decision Overlay + Ultra League + 2 teams/archetype + Unlimited Battle Log History, or <strong>Legend Pro ($3 First-Season Intro / $6 Season Pass)</strong> for all 15 teams, Limited/Mega Cups, and ⚡ Alt Movesets!
                               </p>
                             </div>
                             <button
@@ -15532,7 +15532,7 @@ export default function App() {
                                     onClick={() => {
                                       if (webMembershipTier !== 'pro' && webMembershipTier !== 'vip') {
                                         setShowMembershipModal(true);
-                                        setMembershipStatusMsg('🎬 Cloud DVR Video & Trace Theater and "What-If" Mid-Battle Branching require Legend Pro ($5 Intro / $10 Season) or VIP!');
+                                        setMembershipStatusMsg('🎬 Cloud DVR Video & Trace Theater and "What-If" Mid-Battle Branching require Legend Pro ($3 Intro / $6 Season) or VIP!');
                                         return;
                                       }
                                       window.open(
@@ -15550,7 +15550,7 @@ export default function App() {
                                     onClick={() => {
                                       if (webMembershipTier !== 'pro' && webMembershipTier !== 'vip') {
                                         setShowMembershipModal(true);
-                                        setMembershipStatusMsg('🌿 "What-If" Mid-Battle Simulator Branching requires Legend Pro ($5 Intro / $10 Season) or VIP!');
+                                        setMembershipStatusMsg('🌿 "What-If" Mid-Battle Simulator Branching requires Legend Pro ($3 Intro / $6 Season) or VIP!');
                                         return;
                                       }
                                       if (entry.opponents?.length) {
@@ -16731,7 +16731,7 @@ export default function App() {
 
                 <div className="p-3 rounded-xl bg-slate-950 border border-sky-500/40 space-y-1.5">
                   <div className="font-extrabold text-sky-300">🏅 Lifetime Supporter</div>
-                  <div className="text-base font-black text-white">$3 One-Time / Alumni</div>
+                  <div className="text-base font-black text-white">$2 One-Time / Alumni</div>
                   <ul className="text-[10.5px] text-slate-300 space-y-1">
                     <li>• <strong>🛡️ Attack Incoming! Shield Decision HUD</strong></li>
                     <li>• <strong>Unlimited Lifetime Battle Logs</strong></li>
@@ -16740,18 +16740,18 @@ export default function App() {
                     <li>• 365d Pinned Cloud Retention</li>
                   </ul>
                   <a
-                    href="https://buy.stripe.com/dRmeVe8F36By2Dr5221Jm00"
+                    href="https://buy.stripe.com/4gM3cwf3r8JG7XLamm1Jm07"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block w-full text-center py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-[11px] mt-2"
                   >
-                    💳 $3 Stripe Unlock
+                    💳 $2 Stripe Unlock
                   </a>
                 </div>
 
                 <div className="p-3 rounded-xl bg-indigo-950/40 border border-amber-400/60 space-y-1.5">
                   <div className="font-extrabold text-amber-300">🏆 Legend Pro Pass</div>
-                  <div className="text-base font-black text-white">$5 Intro / $10 Season</div>
+                  <div className="text-base font-black text-white">$3 Intro / $6 Season</div>
                   <ul className="text-[10.5px] text-slate-200 space-y-1">
                     <li>• <strong>🛡️ Shield HUD + Supporter Forever</strong></li>
                     <li>• <strong>50 Cloud R2 Replays + 10 Pinned (15 FPS)</strong></li>
@@ -16761,27 +16761,27 @@ export default function App() {
                   </ul>
                   <div className="space-y-1 pt-1">
                     <a
-                      href="https://buy.stripe.com/fZubJ28F32li3HvgKK1Jm02"
+                      href="https://buy.stripe.com/14A4gAcVjf8491P8ee1Jm09"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="block w-full text-center py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[10.5px]"
                     >
-                      💳 $5 Day 15+ First Season
+                      💳 $3 Day 15+ First Season
                     </a>
                     <a
-                      href="https://buy.stripe.com/bJe4gAg7v7FC4Lz0LM1Jm01"
+                      href="https://buy.stripe.com/8x2aEY8F33pma5TgKK1Jm08"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="block w-full text-center py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10.5px]"
                     >
-                      💳 $10 Full 90d Season Pass
+                      💳 $6 Full 90d Season Pass
                     </a>
                   </div>
                 </div>
 
                 <div className="p-3 rounded-xl bg-purple-950/30 border border-purple-400/50 space-y-1.5">
                   <div className="font-extrabold text-purple-300">👑 VIP / Coach Pass</div>
-                  <div className="text-base font-black text-white">$10 Intro / $20 Season</div>
+                  <div className="text-base font-black text-white">$5 Intro / $10 Season</div>
                   <ul className="text-[10.5px] text-slate-200 space-y-1">
                     <li>• <strong>🎥 30 FPS Smooth DVR (+ 15 FPS Saver)</strong></li>
                     <li>• <strong>150 Cloud Replays (365d) + 25 Pin</strong></li>
@@ -16790,20 +16790,20 @@ export default function App() {
                   </ul>
                   <div className="space-y-1 pt-1">
                     <a
-                      href="https://buy.stripe.com/aFabJ29J78JG2Dr8ee1Jm05"
+                      href="https://buy.stripe.com/4gM7sM5sR5xudi5amm1Jm0c"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="block w-full text-center py-1.5 rounded-lg bg-purple-500 hover:bg-purple-400 text-white font-black text-[10.5px]"
                     >
-                      💳 $10 Day 15+ First Season
+                      💳 $5 Day 15+ First Season
                     </a>
                     <a
-                      href="https://buy.stripe.com/00w8wQaNbf841zngKK1Jm04"
+                      href="https://buy.stripe.com/9B6fZi3kJ6By4Lzamm1Jm0b"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="block w-full text-center py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-purple-200 font-bold text-[10.5px]"
                     >
-                      💳 $20 Full 90d Season Pass
+                      💳 $10 Full 90d Season Pass
                     </a>
                   </div>
                 </div>
@@ -17029,7 +17029,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.10 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
+        SilphScope PvP v7.11 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
       </footer>
     </div>
   );

@@ -93,7 +93,7 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.10"
+        const val APP_VERSION = "7.11"
         const val APP_VERSION_CODE = 1710
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -411,19 +411,19 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_SYNC_GITHUB_USER_ID = "gbl_sync_github_user_id"
         const val PREFS_KEY_SYNC_PRIVATE_REPO_MIGRATED_V643 = "gbl_sync_private_repo_migrated_v643"
 
-        // v7.00: Stripe & Buy Me a Coffee Official Checkout Links
-        const val STRIPE_URL_SUPPORTER = "https://buy.stripe.com/dRmeVe8F36By2Dr5221Jm00"
+        // v7.10: Stripe & Buy Me a Coffee Official Checkout Links ($2 Supporter / $3-$6 Pro / $5-$10 VIP)
+        const val STRIPE_URL_SUPPORTER = "https://buy.stripe.com/4gM3cwf3r8JG7XLamm1Jm07"
         const val STRIPE_URL_SUPPORTER_3 = STRIPE_URL_SUPPORTER
-        const val STRIPE_URL_PRO_SEASON = "https://buy.stripe.com/bJe4gAg7v7FC4Lz0LM1Jm01"
+        const val STRIPE_URL_PRO_SEASON = "https://buy.stripe.com/8x2aEY8F33pma5TgKK1Jm08"
         const val STRIPE_URL_PRO_SEASON_10 = STRIPE_URL_PRO_SEASON
-        const val STRIPE_URL_PRO_INTRO = "https://buy.stripe.com/fZubJ28F32li3HvgKK1Jm02"
+        const val STRIPE_URL_PRO_INTRO = "https://buy.stripe.com/14A4gAcVjf8491P8ee1Jm09"
         const val STRIPE_URL_PRO_INTRO_5 = STRIPE_URL_PRO_INTRO
-        const val STRIPE_URL_PRO_MONTHLY = "https://buy.stripe.com/28E7sM6wV5xu5PD7aa1Jm03"
-        const val STRIPE_URL_VIP_SEASON = "https://buy.stripe.com/00w8wQaNbf841zngKK1Jm04"
+        const val STRIPE_URL_PRO_MONTHLY = "https://buy.stripe.com/4gM3cw7AZ0dab9XeCC1Jm0a"
+        const val STRIPE_URL_VIP_SEASON = "https://buy.stripe.com/9B6fZi3kJ6By4Lzamm1Jm0b"
         const val STRIPE_URL_VIP_SEASON_20 = STRIPE_URL_VIP_SEASON
-        const val STRIPE_URL_VIP_INTRO = "https://buy.stripe.com/aFabJ29J78JG2Dr8ee1Jm05"
+        const val STRIPE_URL_VIP_INTRO = "https://buy.stripe.com/4gM7sM5sR5xudi5amm1Jm0c"
         const val STRIPE_URL_VIP_INTRO_10 = STRIPE_URL_VIP_INTRO
-        const val STRIPE_URL_VIP_MONTHLY = "https://buy.stripe.com/aFa7sM08x2liem9cuu1Jm06"
+        const val STRIPE_URL_VIP_MONTHLY = "https://buy.stripe.com/28E00k2gFaRO5PD2TU1Jm0d"
         const val BMC_URL_PAGE = "https://buymeacoffee.com/silphscopepvp"
         const val BMC_URL_MEMBERSHIP = "https://buymeacoffee.com/silphscopepvp/membership"
         const val BMC_URL_SUPPORTER = "https://buymeacoffee.com/silphscopepvp/e/595787"

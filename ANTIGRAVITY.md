@@ -2,7 +2,7 @@
 
 > **Target Audience**: Antigravity agents, Claude/Gemini coding assistants, and core developers maintaining or extending **SilphScope PvP**.  
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v7.10` (`versionCode = 1710`)  
+> **Current Version**: `v7.11` (`versionCode = 1711`)  
 > **Primary Branches**: `main` (source code & releases) | **Telemetry & DVR Endpoint**: `https://silphscope-telemetry.silphscope-pvp.workers.dev` (Cloudflare Worker + KV/R2 + Telegram Channel `SilphScope DVR`).
 
 ---
@@ -133,7 +133,9 @@ The HUD displays a compact, high-contrast 2-line tactical recommendation banner 
 
 ### 3.6. 1-Battle Full-Screen H.264 DVR + Deep Frame Trace
 - **Zero-Impact Hardware Encoding**:
-  - Uses `MediaCodec.createEncoderByType("video/avc")` configured at $544 \times 1184$, $1.2\text{ Mbps}$, $30\text{ fps}$, baseline profile.
+  - Uses `MediaCodec.createEncoderByType("video/avc")` configured at $544 \times 1184$, baseline profile:
+    - **Free / Supporter / Legend Pro**: $15\text{ fps}$, $720\text{ kbps}$ CBR (`QP 27–38`), ~14 MB per battle.
+    - **VIP / Coach Pass (`30 FPS Smooth` Default)**: $30\text{ fps}$, $900\text{ kbps}$ CBR (`QP 27–38`), ~20 MB avg / strictly $\le 30\text{ MB}$ at 240s max battle length (with a 1-tap `15 FPS Storage Saver` toggle).
   - Feeds scaled frames onto `MediaCodec.createInputSurface()` from the background `GBLBattleDvrThread`.
   - Runs at `Process.THREAD_PRIORITY_BACKGROUND`, offloading all compression to the hardware DSP with $< 0.5\%$ CPU load.
 - **Burned-In Watermark**: Draws a high-contrast top banner onto the video frame (`F#0042 T+14.35s U:88%(88%)/35E O:23%(23%)/7E`) ensuring that every frame in the video matches the timestamp and frame index in the companion `_deep_trace.jsonl` exactly.
@@ -141,9 +143,54 @@ The HUD displays a compact, high-contrast 2-line tactical recommendation banner 
   - Setting: `Show 1-Battle DVR Button in Overlay` enables/disables the `REC 1` HUD button.
   - Overlay: Tapping `REC 1` arms recording for **exactly 1 battle** (`OFF` $\to$ `ARMED` $\to$ `REC F#...`).
   - Auto-Disarm: Automatically disarms immediately upon battle stop/completion.
-- **Auto-Upload Engine**:
-  - Automatically commits and uploads `recordings/<safeUser>/<battleId>_video.mp4` and `recordings/<safeUser>/<battleId>_deep_trace.jsonl` to the `ai-telemetry-logs` branch using the GitHub Contents API.
-  - Deletes temporary local files immediately after successful transmission to maintain minimal storage footprint.
+- **Cloudflare R2 Replay Vault & Diagnostic Engine**:
+  - Uploads DVR `.mp4` videos and `_deep_trace.jsonl` traces to the Cloudflare Worker (`https://silphscope-telemetry.silphscope-pvp.workers.dev/v1/dvr`) backed by R2 bucket `silphscope-replays` and KV namespace `TELEMETRY_KV`.
+  - User-flagged diagnostic videos (requiring a non-blank user issue description) also mirror to the `SilphScope DVR` Telegram channel with a direct `/watch/:shareId` synchronized HUD overlay player link, issue description, and paid tier badge.
+
+### 3.7. Membership Tiers, Pricing, Payment Links & Website Integration Spec (`v7.11`)
+> **Shared Knowledgebase for Website & Other Chats**: When building the official SilphScope PvP marketing website, landing pages, or checkout flows in any other chat/workspace, use the exact finalized pricing, Stripe Payment Links, Buy Me a Coffee URLs, and Cloudflare Worker API endpoints below.
+
+#### 4-Tier Membership Structure & Feature Matrix
+| Feature / Capability | 🆓 Free Community (`$0`) | 🏅 Lifetime Supporter (`$2` One-Time or Alumni*) | 🏆 Legend Pro (`$3/mo` or `$6/Season`**) | 👑 VIP / Coach (`$5/mo` or `$10/Season`**) |
+| :--- | :---: | :---: | :---: | :---: |
+| **Price & Billing** | **$0 Forever** | **$2 One-Time** *(or Free forever after any Pro/VIP sub)* | **$3/mo** or **$3 First-Season Intro** / **$6 per 90d GBL Season** (`$2/mo` eff.) | **$5/mo** or **$5 First-Season Intro** / **$10 per 90d GBL Season** (`$3.33/mo` eff.) |
+| **Live In-Game HUD, 9-Shield Matrix & Haptics** | ✅ **100% Free** | ✅ **100% Free** | ✅ **100% Free** | ✅ **100% Free** |
+| **🛡️ Attack Incoming! Shield Decision Overlay** | — | ✅ **Unlocked Forever** | ✅ **Unlocked Forever** | ✅ **Unlocked Forever** |
+| **Battle Log History & Multi-Device GitHub Sync** | Current Season (+14d grace) | **Unlimited Lifetime** | **Unlimited Lifetime** | **Unlimited Lifetime** |
+| **Local On-Device DVR Ring Buffer** | **1 Battle** | **5 Battles** | **25 Battles (5 Sets)** | **25–100 Battles (Slider)** |
+| **Hardware H.264 DVR Video Framerate** | 15 FPS (`720 kbps`) | 15 FPS (`720 kbps`) | **15 FPS (`720 kbps` • ~14 MB)** | **🎥 30 FPS Smooth (`900 kbps` • <=30 MB max) + 💾 15 FPS Storage Saver** |
+| **Cloud R2 Video & Frame Trace Vault** | — | Keeps Pinned 365d | **50 Rolling (30d) + 10 Pinned (365d) • 2 GB** | **150 Rolling (365d) + 25 Pinned (365d) • 4 GB** |
+| **Anti-Meta Team Generator Leagues** | Great & Master League | **Core 3 (GL + UL + ML)** | **All Leagues + Limited/Mega/Specialty Cups** | **All Leagues + Limited/Mega/Specialty Cups** |
+| **Anti-Meta Teams & ⚡ Alt Moveset Synthesis** | 1 / Archetype (Std Moves) | 2 / Archetype (Std Moves) | **Top 5 / Arch (15+ Teams) + ⚡ Alt Movesets** | **Top 5 / Arch (15+ Teams) + ⚡ Alt Movesets** |
+| **🎯 Nemesis Analyzer & 🌿 What-If Branching** | Preview | Preview | ✅ **Full Access** | ✅ **Full Access + Priority Review** |
+
+- **\*Alumni Rule (`everPaid`)**: Subscribing to **Legend Pro** or **VIP** even once sets `everPaid = true` on the trainer's license and permanently unlocks **🏅 Lifetime Supporter (Alumni)** benefits forever (including the **🛡️ Attack Incoming! Shield Decision Overlay**, Unlimited Lifetime Battle Logs, 5 Local DVR Videos, Core 3 Open Leagues, and 365d Pinned Cloud Replay retention) even if their seasonal pass later expires.
+- **\*\*Day 15+ First-Season Intro Promo**: GBL seasons run 90 days starting `Dec 1`, `Mar 1`, `Jun 1`, and `Sep 1` at `21:00 UTC`. During the **first 14 days** of a season, a Season Pass is full price (`$6` Legend Pro / `$10` VIP). Starting on **Day 15+** of a season, first-time subscribers (`!introPromoAlreadyUsed`) unlock the **entire remainder of the current GBL season** at the 1-month rate (`$3` Legend Pro / `$5` VIP).
+
+#### Official Live Stripe Payment Links
+Append `?client_reference_id=<urlEncodedTrainerScreenName>` to any Stripe URL when the user's Trainer Screen Name is known so the Stripe webhook (`POST /v1/webhooks/stripe`) automatically binds the license key to their handle:
+- **🏅 Lifetime Supporter (`$2` One-Time)**: `https://buy.stripe.com/4gM3cwf3r8JG7XLamm1Jm07`
+- **🏆 Legend Pro — 90-Day GBL Season Pass (`$6` / 3 months)**: `https://buy.stripe.com/8x2aEY8F33pma5TgKK1Jm08`
+- **🏆 Legend Pro — Day 15+ First-Season Intro Promo (`$3` One-Time for Remainder of Season)**: `https://buy.stripe.com/14A4gAcVjf8491P8ee1Jm09`
+- **🏆 Legend Pro — Monthly Pass (`$3` / month)**: `https://buy.stripe.com/4gM3cw7AZ0dab9XeCC1Jm0a`
+- **👑 VIP / Coach — 90-Day GBL Season Pass (`$10` / 3 months)**: `https://buy.stripe.com/9B6fZi3kJ6By4Lzamm1Jm0b`
+- **👑 VIP / Coach — Day 15+ First-Season Intro Promo (`$5` One-Time for Remainder of Season)**: `https://buy.stripe.com/4gM7sM5sR5xudi5amm1Jm0c`
+- **👑 VIP / Coach — Monthly Pass (`$5` / month)**: `https://buy.stripe.com/28E00k2gFaRO5PD2TU1Jm0d`
+
+#### Official Buy Me a Coffee Links (`$1` per PokéCoin)
+- **Creator Page**: `https://buymeacoffee.com/silphscopepvp`
+- **Memberships (`$3/mo` Legend Pro • `$5/mo` VIP / Coach)**: `https://buymeacoffee.com/silphscopepvp/membership`
+- **Shop Extra `595787` — 🏅 Lifetime Supporter (`$2` One-Time)**: `https://buymeacoffee.com/silphscopepvp/e/595787`
+- **Shop Extra `595788` — 🏆 Legend Pro 90-Day Season Pass (`$6`)**: `https://buymeacoffee.com/silphscopepvp/e/595788`
+- **Shop Extra `595789` — 👑 VIP / Coach 90-Day Season Pass (`$10`)**: `https://buymeacoffee.com/silphscopepvp/e/595789`
+
+#### Website & Web App API Endpoints (`https://silphscope-telemetry.silphscope-pvp.workers.dev`)
+- **Pre-Checkout Unique Trainer ID Registration (`POST /v1/users/register-name`)**: Checks availability and locks `screenName` to `deviceHash` / `email` / `githubUserId`; returns `seasonPromo` (`isDay15Plus`, `introPromoEligible`, `daysRemaining`) and `paymentLinks`.
+- **Dynamic Checkout Quote (`GET/POST /v1/users/checkout-quote?screenName=<id>&email=<email>`)**: Returns `introPromoEligible` and pre-populated `recommendedLinks.supporter` (`$2`), `recommendedLinks.pro` (`$3` Intro or `$6` Season), and `recommendedLinks.vip` (`$5` Intro or `$10` Season) with `?client_reference_id=` attached.
+- **License & Tier Verification (`POST /v1/users/verify-key`)**: Accepts `{ key, screenName, email, password, githubAccessToken }` (supporting 3 sign-in methods: `Username + Token`, `Username + Password`, and `1-Click GitHub OAuth`) and returns `{ ok, active, tier, label, limits, sessionToken }`.
+- **Public & Owner Cloud DVR Replay Vault (`/vault` & `/u/:screenName`)**: Interactive browser DVR Replay Vault with 5 owner-configurable public visibility modes (`private_only`, `starred_only`, `starred_and_private`, `all`, `none`).
+- **Synchronized Web Replay Theater (`/watch/:shareId`)**: Frame-synced H.264 video + live `overlay.html` HUD replay player (`Full` / `Compact` / `Diag` / `Off` HUD modes, progressive opponent reveal, `0.25x–2x` speed, `-1F`/`+1F` frame stepping, and WebM video+HUD export).
+- **4-Tier Comparison Infographic Asset**: `docs/screenshots/silphscope_tiers_infographic.jpg` (16:9 high-resolution dark esports comparison graphic).
 
 ---
 
@@ -226,9 +273,9 @@ The HUD displays a compact, high-contrast 2-line tactical recommendation banner 
   - `AndroidManifest.xml`, `OverlayService.kt`, `MainActivity.kt`, `BattleDvrEngine.kt`, `TaskerIntegration.kt`, `overlay.html`: Set `android:allowBackup="false"`, added `escapeHtml()` across HUD dynamic strings, marshaled all `@JavascriptInterface` mutations onto the main Looper, closed `textRecognizer` and destroyed WebViews on teardown, switched DVR rendering to `lockHardwareCanvas()` with `AtomicBoolean` backpressure, and guarded `startForegroundService` in `TaskerBroadcastReceiver`.
   - `src/App.tsx`, `index.html`, `tsconfig.json`, `package.json`, `.github/workflows/deploy-pages.yml`: Fixed Show 6 vs. GBL trash/migration storage keys, gated swap countdown interval ticks so idle tabs consume zero re-renders, narrowed web PAT link scope to `gist`, added a strict `Content-Security-Policy`, enabled TypeScript `"strict": true`, and upgraded GitHub Pages CI to Node 22 + `npm ci` + `npm run lint`.
 
-### Turn 11 — Membership Tiers (`Free`, `Lifetime Supporter`, `Legend Pro`, `VIP`), Stripe & Buy Me a Coffee Webhooks, Cloud R2 DVR Replay Vault, Compact HUD & v7.02–v7.07 Enhancements
-- **Delivered Changes (`v7.00` – `v7.07`)**:
-  - **`v7.00`–`v7.01` (4-Tier Membership & Cloud R2 Replay Vault)**: Added 4-tier membership system (`Free $0`, `Lifetime Supporter $3`, `Legend Pro $5 Intro / $10 Season`, `VIP / Coach $10 Intro / $20 Season`), automated Stripe + Buy Me a Coffee webhooks (`POST /v1/webhooks/stripe`, `POST /v1/webhooks/bmc`), 3-method `/vault` & Web Simulator sign-in (`Username + Token`, `Username + Password`, `1-Click GitHub OAuth`), and synchronized `/watch/:shareId` web replay theater.
+### Turn 11 — Membership Tiers (`Free`, `Lifetime Supporter`, `Legend Pro`, `VIP`), Stripe & Buy Me a Coffee Webhooks, Cloud R2 DVR Replay Vault, Compact HUD & v7.02–v7.11 Enhancements
+- **Delivered Changes (`v7.00` – `v7.11`)**:
+  - **`v7.00`–`v7.01` (4-Tier Membership & Cloud R2 Replay Vault)**: Added 4-tier membership system, automated Stripe + Buy Me a Coffee webhooks (`POST /v1/webhooks/stripe`, `POST /v1/webhooks/bmc`), 3-method `/vault` & Web Simulator sign-in (`Username + Token`, `Username + Password`, `1-Click GitHub OAuth`), and synchronized `/watch/:shareId` web replay theater.
   - **`v7.02` (15 FPS / 720 kbps CBR DVR Optimization, 3.0x Timestamp Fix, 50% Default HUD Opacity & Top-Left Default Launch)**: Restored `544x1184 @ 15 FPS` (`720 kbps` CBR, `QP 27–38`, strictly $\le 30\text{ MB}$ at 240s max battle length), replaced `eglPresentationTimeANDROID` overriding with real wall-clock timestamps + legacy `1.0x` auto-speed compensation, standardized `50%` default HUD opacity across Android overlay, Web Simulator, and `/watch/`, and set default overlay launch position to top-left below the status bar (`x=0`, `y = statusBarHeight + 4dp`).
   - **`v7.03` (4-Button Replay Cards, Default Per-Video Private & 5 Public Vault Visibility Modes)**: Updated `/vault` replay cards to 4 action buttons (`▶️ Watch + HUD`, `☆ Star / ⭐ Starred`, `🔒 Private / 🌐 Public` defaulting to `Private`, `🔗 Copy Link`) and added 5 Public Vault Visibility modes (`🔒 Private (Only shows ones manually made public)`, `⭐ Starred only`, `⭐+🌐 Starred + Private`, `🌐 All videos shared`, `🚫 No videos shared without login`).
   - **`v7.04` (Paid-First Telemetry Priority `P1`–`P4`, Local Root-Cause Classifier & 5 Combat/Vision Fixes)**: Added `P1`–`P4` paid-first anomaly sorting, zero-token local root-cause classifier in `scripts/ingest-telemetry.mjs`, end-to-end manual bug report header preservation, and 5 combat/vision fixes (CMP tie dual-charge transitions, swap-during-cutscene move banner retention, post-cutscene camera-zoom `oppHpRowY` spikes, energy-feasible `HP_DELTA` move inference, and `Air Cutter` `45p/35E` stats).
@@ -236,8 +283,9 @@ The HUD displays a compact, high-contrast 2-line tactical recommendation banner 
   - **`v7.06` (Telegram Subscription Purchase/Renewal/Activation Alerts & Diagnostic Video `/watch/:shareId` Overlay Links)**: Added instant Telegram alerts on Stripe/BMC purchases, renewals, and device activations, required non-blank issue descriptions for diagnostic DVR uploads, and added `/watch/:shareId` HUD overlay links + paid tier badges to Telegram diagnostic video captions.
   - **`v7.07` (VIP Tier `30 FPS Smooth` DVR + `15 FPS Storage Saver` Mode)**: Added **👑 VIP / Coach Pass** `30 FPS Smooth` hardware H.264 DVR recording by default (`544x1184 @ 30 FPS`, `900 kbps` CBR, `QP 27–38`, ~20 MB avg / $\le 30\text{ MB}$ at 240s max battle length) with an in-app **👑 VIP Battle DVR Framerate Mode** selector (`gbl_vip_dvr_fps_mode`: `🎥 30 FPS Smooth` vs `💾 15 FPS Storage Saver` at `720 kbps` CBR saving ~30% local & cloud R2 storage), while keeping combat pixel/HP/energy vision scanning on its calibrated `~67ms` cadence via lightweight intermediate `33ms` DVR frame ticks.
   - **`v7.08` (Mega Master League Giant/Flying Floating HP Bar Scanner Fix)**: Expanded player upper-battlefield HP corridor (`0.18h..0.78h`), opponent pulled-back camera X anchor (`<= 0.715w`), tall opponent row-Y baseline (`>= 0.22h`), and translucent capsule border detection over blue sprites/night sky.
-  - **`v7.09` (Shield Decision Overlay Moved to Paid-Once / Alumni Tier & Full Tier Sync)**: Moved the **🛡️ Attack Incoming! Shield Decision Overlay** (KO & Tank/Farm Verdict Card) out of Free tier and into **🏅 Lifetime Supporter (`$3` one-time or Alumni)**, **🏆 Legend Pro**, and **👑 VIP**, and updated the 4-tier comparison infographic (`docs/screenshots/silphscope_tiers_infographic.jpg`), Stripe product descriptions, Buy Me a Coffee Memberships/Shop/Gallery/Bio, Web Simulator, `/vault`, and `README.md`.
+  - **`v7.09` (Shield Decision Overlay Moved to Paid-Once / Alumni Tier & Full Tier Sync)**: Moved the **🛡️ Attack Incoming! Shield Decision Overlay** (KO & Tank/Farm Verdict Card) out of Free tier and into **🏅 Lifetime Supporter (One-Time or Alumni)**, **🏆 Legend Pro**, and **👑 VIP**.
   - **`v7.10` (Progressive Opponent Reveal & Field-Entry Banked Energy in Web & Android DVR Replays)**: Updated the Cloudflare Worker `/watch/:shareId` Web Replay Player (`worker.mjs`) and Android App DVR Video Replay (`MainActivity.kt`, `BattleDvrEngine.kt`, `OverlayService.kt`) so that only opponent Pokémon revealed on the field up to the current playback timestamp $t$ appear in the 3x3 Matchup Matrix and `MY ATTACKS` damage columns (with unrevealed slots showing `—`), while unrevealed player bench Pokémon show `-E` until they enter the field, matching real live gameplay.
+  - **`v7.11` (Competitive `$2 / $3-$6 / $5-$10` Pricing Alignment Across Stripe, Buy Me a Coffee, Infographic, App, Web Simulator, Cloudflare Worker & Shared Knowledgebase)**: Updated membership pricing to **`$2` Lifetime Supporter** (one-time or Alumni), **`$3/mo` or `$3` Day 15+ First-Season Intro / `$6` 90-Day Season Pass (`$2/mo` eff.) Legend Pro**, and **`$5/mo` or `$5` Day 15+ First-Season Intro / `$10` 90-Day Season Pass (`$3.33/mo` eff.) VIP / Coach** across all 7 live Stripe Payment Links, Buy Me a Coffee Memberships/Shop/Gallery/Bio (`$1` per PokéCoin), `docs/screenshots/silphscope_tiers_infographic.jpg`, Cloudflare Worker webhooks & `/vault`, Android App, Web Simulator, `README.md`, and Section 3.7 of `ANTIGRAVITY.md` (serving as the single source of truth for other chats and the upcoming website).
 
 ---
 
