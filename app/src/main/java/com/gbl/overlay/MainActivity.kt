@@ -2717,7 +2717,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             val titleTv = TextView(this).apply {
-                text = "🔑 Membership Tier, Season Pass & Replay Vault (v7.13)"
+                text = "🔑 Membership Tier, Season Pass & Replay Vault (v7.14)"
                 setTextColor(0xFF38BDF8.toInt())
                 textSize = 12f
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
@@ -7837,7 +7837,7 @@ class MainActivity : AppCompatActivity() {
                     ever.toList()
                 }
 
-                // Reconstruct opponent pre-throw energy & continuous 5s shield-decision window
+                // Reconstruct opponent & player pre-throw energy and 3-stage charged-move deduction lifecycle (5s countdown -> OCR or provisional deduction -> HP resolution)
                 var chargeStartIdx = lo
                 while (chargeStartIdx > 0 && (
                     traceFrames[chargeStartIdx - 1].pendingChargeActor.equals("opp", ignoreCase = true) ||
@@ -7846,17 +7846,18 @@ class MainActivity : AppCompatActivity() {
                     chargeStartIdx--
                 }
                 val isOppChargeWindow = f.pendingChargeActor.equals("opp", ignoreCase = true) || f.isTopCountdownActive
-                var hasUsedBannerSoFar = false
+                var usedBannerTextInCharge: String? = null
                 if (isOppChargeWindow) {
                     for (k in chargeStartIdx..lo) {
                         if (traceFrames[k].ocrMidBannerText.contains(" used ", ignoreCase = true)) {
-                            hasUsedBannerSoFar = true
+                            usedBannerTextInCharge = traceFrames[k].ocrMidBannerText
                             break
                         }
                     }
                 }
+                val hasUsedBannerSoFar = usedBannerTextInCharge != null
                 val elapsedInChargeMs = (f.videoElapsedMs - traceFrames[chargeStartIdx].videoElapsedMs).coerceAtLeast(0L)
-                val forceShieldWindow = isOppChargeWindow && !hasUsedBannerSoFar && elapsedInChargeMs <= 5500L
+                val forceShieldWindow = isOppChargeWindow && !hasUsedBannerSoFar && (f.isTopCountdownActive || elapsedInChargeMs < 4800L)
                 val oIdx = f.activeOppIdx.coerceIn(0, 2)
                 val preThrowEnergyHint = if (chargeStartIdx > 0) {
                     val prevF = traceFrames[chargeStartIdx - 1]
@@ -7864,11 +7865,60 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     f.oppSlotEnergy.getOrElse(oIdx) { f.oppEnergy }
                 }
+                val startWindowOppEnergy = traceFrames[chargeStartIdx].let { sf ->
+                    sf.oppSlotEnergy.getOrElse(oIdx) { sf.oppEnergy }
+                }
+
+                var userChargeStartIdx = lo
+                while (userChargeStartIdx > 0 &&
+                    traceFrames[userChargeStartIdx - 1].pendingChargeActor.equals("user", ignoreCase = true)
+                ) {
+                    userChargeStartIdx--
+                }
+                val isUserChargeWindow = f.pendingChargeActor.equals("user", ignoreCase = true)
+                var userUsedBannerTextInCharge: String? = null
+                if (isUserChargeWindow) {
+                    for (k in userChargeStartIdx..lo) {
+                        if (traceFrames[k].ocrMidBannerText.contains(" used ", ignoreCase = true)) {
+                            userUsedBannerTextInCharge = traceFrames[k].ocrMidBannerText
+                            break
+                        }
+                    }
+                }
+                val elapsedInUserChargeMs = (f.videoElapsedMs - traceFrames[userChargeStartIdx].videoElapsedMs).coerceAtLeast(0L)
+                val combMidBottomLower = "${f.ocrMidBannerText} ${f.ocrBottomMovesText}".lowercase()
+                val hasUserMinigameBannerNow = combMidBottomLower.contains("get ready") ||
+                    combMidBottomLower.contains("nice") ||
+                    combMidBottomLower.contains("great") ||
+                    combMidBottomLower.contains("excellent")
+                val isUserMinigamePhase = isUserChargeWindow && userUsedBannerTextInCharge == null &&
+                    (hasUserMinigameBannerNow || elapsedInUserChargeMs < 4000L)
+                val preThrowUserEnergyHint = if (userChargeStartIdx > 0) {
+                    val prevF = traceFrames[userChargeStartIdx - 1]
+                    prevF.userSlotEnergy.getOrElse(uIdxNow) { prevF.userEnergy }
+                } else {
+                    f.userSlotEnergy.getOrElse(uIdxNow) { f.userEnergy }
+                }
+                val startWindowUserEnergy = traceFrames[userChargeStartIdx].let { sf ->
+                    sf.userSlotEnergy.getOrElse(uIdxNow) { sf.userEnergy }
+                }
+                val prevBeforeLeftFill = if (userChargeStartIdx > 0) traceFrames[userChargeStartIdx - 1].leftCircleFillPct else f.leftCircleFillPct
+                val prevBeforeRightFill = if (userChargeStartIdx > 0) traceFrames[userChargeStartIdx - 1].rightCircleFillPct else f.rightCircleFillPct
 
                 replayEngine.applyDeepTraceFrameForReplay(
                     frame = f,
                     preThrowOppEnergyHint = preThrowEnergyHint,
+                    startWindowOppEnergy = startWindowOppEnergy,
+                    isOppChargeWindow = isOppChargeWindow,
                     forceShieldDecisionActive = forceShieldWindow,
+                    usedBannerTextInCharge = usedBannerTextInCharge,
+                    preThrowUserEnergyHint = preThrowUserEnergyHint,
+                    startWindowUserEnergy = startWindowUserEnergy,
+                    isUserChargeWindow = isUserChargeWindow,
+                    isUserMinigamePhase = isUserMinigamePhase,
+                    userUsedBannerTextInCharge = userUsedBannerTextInCharge,
+                    prevBeforeLeftFill = prevBeforeLeftFill,
+                    prevBeforeRightFill = prevBeforeRightFill,
                     revealedOpponentsAtFrame = revealedOppsAtFrame,
                     userSlotsEverOnFieldAtFrame = userEverOnFieldAtFrame
                 )

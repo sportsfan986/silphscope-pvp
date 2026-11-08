@@ -2,7 +2,7 @@
 
 > **Target Audience**: Antigravity agents, Claude/Gemini coding assistants, and core developers maintaining or extending **SilphScope PvP**.  
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v7.13` (`versionCode = 1713`)  
+> **Current Version**: `v7.14` (`versionCode = 1714`)  
 > **Official Domains**: `https://silphscopepvp.com` (Website & Web Simulator) • `https://dvr.silphscopepvp.com` (Cloud DVR Vault & `/watch/:shareId`) • `https://api.silphscopepvp.com` (Telemetry, Auth & Webhooks API) • `https://dl.silphscopepvp.com` (1-Click APK Download).
 
 ---
@@ -375,10 +375,10 @@ When working on this repository inside Antigravity:
    - All telemetry batches (`POST /v1/telemetry`), settings change audits (`POST /v1/settings-changes`), and 1-Battle DVR recordings (`POST /v1/dvr`) upload directly to the Cloudflare Worker (`https://silphscope-telemetry.silphscope-pvp.workers.dev`) and mirror DVR videos to the `SilphScope DVR` Telegram channel.
    - **5-Minute Local Background Sync (`SilphScope-Telemetry-Sync`)**: A native Windows Scheduled Task runs `node scripts/ingest-telemetry.mjs --sync-only --prune-remote` every 5 minutes using local Node 22 + `ffmpeg.exe` (0 AI tokens). It downloads new batches and DVR `.mp4` videos into `.aistudio/telemetry_cache/`, deletes them from Cloudflare once safely saved locally, enforces a **1.0 GB local storage cap** (keeping ~70–80 full `.mp4` videos on disk for regression testing), and pre-renders `digest.json`, `4x6` (24-frame) tiled contact sheets, and individual keyframes into `.aistudio/telemetry_cache/preprocessed/<battleId>/`.
    - **Tunable Preprocessing Config**: Edit [`scripts/telemetry-preprocess-config.json`](./scripts/telemetry-preprocess-config.json) and run `npm run telemetry:reprocess` to adjust screenshot rules (Battle Start, Charged Move In/Out transitions, Large HP Changes & Animation windows, Swaps, Energy Shifts, Battle End).
-   - **On-Demand Reporting**: Only generate or analyze telemetry reports when requested by the user:
-   ```bash
-   npm run telemetry:report
-   ```
+   - **On-Demand Reporting & Nightly Dynamic Model Cost Tiering**: Only generate or analyze telemetry reports when requested by the user (`npm run telemetry:report`) or via the 5:00 AM nightly orchestrator (`scripts/trigger-daily-telemetry-plan.mjs` + `scripts/nightly-telemetry-audit.mjs`):
+     - **Tier 0 (`0 AI Tokens` — Local Node.js + `ffmpeg` + `detectFloatingHpBarPctV708`)**: Executes 100% of telemetry ingestion, 24h/7d trainer summaries, version regression matrices, 7-day retroactive fix verification, paid-player full-frame pixel re-scans, the 5:00–5:52 AM late-arrival watch, and the 6:00 AM Telegram summary locally with 0 AI tokens.
+     - **Tier 1 (`flash` / `flash_lite` — All OCR / Video Frame Inspection & Routine Briefings)**: Whenever visual OCR, contact-sheet inspection, or keyframe verification is needed, **always delegate via `invoke_subagent(TypeName: "research", Model: "flash")`** (never inspect video frames/images directly on a `pro` model).
+     - **Tier 2 (`pro` / Argon Med-Pro — High-Severity Action Plans Only)**: Reserve `pro` strictly for unresolved `P1_PAID_MANUAL`, `P2_FREE_MANUAL`, or `P3_PAID_AUTO` `HIGH`-severity architectural action plans.
 
 ### 5.3. Version Bumping & Default Release Checklist
 When publishing a new release:

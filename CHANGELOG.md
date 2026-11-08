@@ -1,4 +1,24 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.12`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.14`)
+
+---
+
+## v7.14 (2026-11-08) — 3-Stage Charged-Move GUI Energy Deduction Lifecycle Across Live Overlay, In-App Replay & Web Replay Theater
+*Combat HUD & Replay parity release (`v7.14`, `versionCode = 1714`, Cloudflare Worker `v7.1.4`) eliminating premature minimum charged-move energy deduction during the 5-second countdown/minigame so the HUD header, move timing rows, 3v3 matrix, and Shield Decision Overlay remain 100% consistent across Live Overlay, In-App DVR Replay, and Web Replay Theater (for both newly recorded and historical replays).*
+
+- **v7.14 — Fix 1: Hold Pre-Throw Energy During the 5s Countdown & Swipe Minigame (`OverlayService.kt`)**:
+  - **Opponent Incoming Charged Move**: Holds `oppSlotEnergy[throwerOppIdx] = pendingChargedAttackPreOppEnergy` (`pendingChargedAttackDeductedEnergy = 0`) throughout the 5s countdown so the HUD header, move timing rows, 3v3 matrix, and Shield Decision Overlay all display the pre-throw banked energy. Formats the initial toast with banked energy (`"⚡ Attack Incoming! (50E)"` / `"⚡ Attack Incoming (No Shields)! (50E)"`).
+  - **Player Charged Move Minigame**: Holds `playerSlotEnergy[activeUserIdx] = preChargeUserEnergy` (`pendingChargedAttackDeductedEnergy = 0`) during the 5s swipe minigame.
+- **v7.14 — Fix 2: Immediate OCR-Validated Move Deduction & Post-Countdown Provisional Fallback (`OverlayService.kt`)**:
+  - **Stage 2 (Banner OCR Validated)**: As soon as `"<Pokemon> used <Move>!"` is validated by OCR in `handleMidBannerUsedMoveLines`, immediately deducts the move's exact energy cost (`bannerMoveCost` / `trueCost`) on the GUI, closes the Shield Decision Overlay, and pushes the updated HUD state.
+  - **Stage 3 (Post-Countdown Provisional Deduction While Waiting on HP)**: If the 5s countdown/minigame ends and Banner OCR has not validated the move yet while waiting on post-cutscene HP to resolve, provisionally deducts the minimum charged move energy (`OPP_CHARGE_PROVISIONAL` / `USER_CHARGE_PROVISIONAL`) on the GUI before reconciling to the final move energy in Section 4.
+  - Updated `shieldDecisionOverlayPayload` to use `activeOppEnergyNow + pendingChargedAttackDeductedEnergy.coerceAtLeast(0)` instead of unconditionally adding `+ minCost`.
+- **v7.14 — Fix 3: 100% Parity & Historical Replay Reconstruction in In-App Replay & Web Replay (`MainActivity.kt`, `BattleDvrEngine.kt`, `cloudflare/telemetry-worker/worker.mjs`)**:
+  - Updated `syncFrameAtMs`, `applyDeepTraceFrameForReplay`, and `buildReplayOverlayPayload` to reconstruct pre-throw energy across both new and existing `_deep_trace.jsonl` recordings and apply the exact same 3-stage GUI energy lifecycle for opponent and player charged moves.
+
+---
+
+## v7.13 (2026-11-08) — Full Web, Worker & Android APK Security Audit Remediation, Keystore AES-256-GCM Pref Encryption, Active Key UI Masking & R8 Shrinking
+*Security & performance release (`v7.13`, `versionCode = 1713`, Cloudflare Worker `v7.1.3`) hardening `silphscopepvp.com`, `dvr.silphscopepvp.com`, `api.silphscopepvp.com`, `dl.silphscopepvp.com`, and the Android APK with domain-separated cryptographic secrets, Android Keystore AES-256-GCM secret storage, masked active keys in the UI, R8 code shrinking, and deferred Simulator boot computations.*
 
 ---
 

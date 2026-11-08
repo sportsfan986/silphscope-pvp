@@ -3346,6 +3346,167 @@ function renderWatchSharePage(origin, shareInfo) {
       const slotMoveSelections = oSpecs.map((o, idx) => selectOppThreeMovesForSlot(o, idx));
       const activeOppSelection = slotMoveSelections[oIdx] || selectOppThreeMovesForSlot(actOpp, oIdx);
 
+      // v7.14: Reconstruct 3-Stage Charged-Move GUI Energy Lifecycle (5s Countdown/Minigame -> OCR Validation or Provisional Deduction -> HP Resolution)
+      const combinedBannerStr = String((f.ocrMidBannerText || f.moveBannerText || '') + ' ' + (f.ocrBottomMovesText || '')).toLowerCase();
+      let chargeStartIdx = frameArrayIdx;
+      while (chargeStartIdx > 0 && (
+        String(frames[chargeStartIdx - 1].pendingChargeActor || '').toLowerCase() === 'opp' ||
+        Boolean(frames[chargeStartIdx - 1].isTopCountdownActive)
+      )) {
+        chargeStartIdx--;
+      }
+      const isOppChargeWin = String(f.pendingChargeActor || '').toLowerCase() === 'opp' ||
+        Boolean(f.isTopCountdownActive) ||
+        /attack incoming|protect shield|shields remaining/i.test(combinedBannerStr) ||
+        String(f.recommendedPhase || '').toUpperCase() === 'SHIELD_CALL';
+      let usedBannerTxtInCharge = '';
+      if (isOppChargeWin) {
+        for (let k = chargeStartIdx; k <= frameArrayIdx; k++) {
+          const bTxt = String((frames[k] && (frames[k].ocrMidBannerText || frames[k].moveBannerText)) || '');
+          if (/\\bused\\b/i.test(bTxt)) {
+            usedBannerTxtInCharge = bTxt;
+            break;
+          }
+        }
+      }
+      const hasUsedBannerSoFar = Boolean(usedBannerTxtInCharge);
+      const elapsedInChargeMs = frames[chargeStartIdx] ? Math.max(0, (f.relTimeMs || 0) - (frames[chargeStartIdx].relTimeMs || 0)) : 0;
+      const isOppCountdownPhase = Boolean(isOppChargeWin && !hasUsedBannerSoFar && (Boolean(f.isTopCountdownActive) || elapsedInChargeMs < 4800));
+      const isShieldDecisionVisible = Boolean(showShieldHud && isOppCountdownPhase);
+
+      const rawCandNames = activeOppSelection.allPossibleMoves.length > 0
+        ? activeOppSelection.allPossibleMoves
+        : activeOppSelection.displayedMoves;
+      const seenMoveLower = new Set();
+      const candMoveNames = rawCandNames.filter(m => {
+        const kl = String(m).toLowerCase();
+        if (seenMoveLower.has(kl)) return false;
+        seenMoveLower.add(kl);
+        return true;
+      });
+      const oppCandCostMap = {};
+      let minCandCost = 50;
+      for (const mn of candMoveNames) {
+        const st = lookupChargedStats(mn, actOpp.meta.types[0]);
+        const c = Math.max(35, Math.min(100, st.energy || 50));
+        oppCandCostMap[mn] = c;
+        if (c < minCandCost) minCandCost = c;
+      }
+      if (candMoveNames.length === 0) minCandCost = 35;
+
+      const startOppF = frames[chargeStartIdx] || f;
+      const startWinOppE = (Array.isArray(startOppF.oppSlotEnergy) && startOppF.oppSlotEnergy[oIdx] !== undefined)
+        ? Number(startOppF.oppSlotEnergy[oIdx])
+        : Number(startOppF.oppEnergy ?? oSlotE[oIdx] ?? 0);
+      let prevBeforeOppE = -1;
+      if (chargeStartIdx > 0 && frames[chargeStartIdx - 1]) {
+        const pf = frames[chargeStartIdx - 1];
+        prevBeforeOppE = (Array.isArray(pf.oppSlotEnergy) && pf.oppSlotEnergy[oIdx] !== undefined)
+          ? Number(pf.oppSlotEnergy[oIdx])
+          : Number(pf.oppEnergy ?? -1);
+      }
+      const reconstructedPreThrowOppE = isOppChargeWin
+        ? ((startWinOppE >= minCandCost && (prevBeforeOppE <= 0 || startWinOppE >= prevBeforeOppE))
+            ? Math.max(minCandCost, Math.min(100, startWinOppE))
+            : Math.max(minCandCost, Math.min(100, Math.max(prevBeforeOppE, startWinOppE + minCandCost))))
+        : Math.max(minCandCost, Math.min(100, Number(oSlotE[oIdx] ?? 0)));
+
+      if (isOppChargeWin) {
+        if (isOppCountdownPhase) {
+          // Stage 1 (5s Countdown): Hold pre-throw energy on the GUI so header, move rows, 3v3 matrix, and Shield Decision Overlay match!
+          oSlotE[oIdx] = reconstructedPreThrowOppE;
+        } else if (usedBannerTxtInCharge) {
+          // Stage 2 (Validated by "<Opponent> used <Move>!" OCR): Deduct exact move cost immediately!
+          const mMatch = usedBannerTxtInCharge.match(/\\bused\\s+([^!.]+)/i);
+          const rawMoveStr = mMatch ? mMatch[1].trim() : '';
+          let ocrMoveCost = minCandCost;
+          if (rawMoveStr) {
+            const matchedCand = candMoveNames.find(mn =>
+              mn.toLowerCase() === rawMoveStr.toLowerCase() || rawMoveStr.toLowerCase().includes(mn.toLowerCase())
+            );
+            if (matchedCand && oppCandCostMap[matchedCand]) {
+              ocrMoveCost = oppCandCostMap[matchedCand];
+            } else {
+              const st = lookupChargedStats(rawMoveStr, actOpp.meta.types[0]);
+              ocrMoveCost = Math.max(35, Math.min(100, st.energy || minCandCost));
+            }
+          }
+          const effPre = Math.max(reconstructedPreThrowOppE, ocrMoveCost);
+          oSlotE[oIdx] = Math.max(0, Math.min(100, effPre - ocrMoveCost));
+        } else {
+          // Stage 3 (5s Countdown ended, waiting on HP to resolve while OCR failed): Provisionally deduct minimum move energy!
+          oSlotE[oIdx] = Math.max(0, Math.min(100, reconstructedPreThrowOppE - minCandCost));
+        }
+      }
+
+      let userChargeStartIdx = frameArrayIdx;
+      while (userChargeStartIdx > 0 &&
+        String(frames[userChargeStartIdx - 1].pendingChargeActor || '').toLowerCase() === 'user'
+      ) {
+        userChargeStartIdx--;
+      }
+      const isUserChargeWin = String(f.pendingChargeActor || '').toLowerCase() === 'user';
+      let userUsedBannerTxtInCharge = '';
+      if (isUserChargeWin) {
+        for (let k = userChargeStartIdx; k <= frameArrayIdx; k++) {
+          const bTxt = String((frames[k] && (frames[k].ocrMidBannerText || frames[k].moveBannerText)) || '');
+          if (/\\bused\\b/i.test(bTxt)) {
+            userUsedBannerTxtInCharge = bTxt;
+            break;
+          }
+        }
+      }
+      const elapsedInUserChargeMs = frames[userChargeStartIdx] ? Math.max(0, (f.relTimeMs || 0) - (frames[userChargeStartIdx].relTimeMs || 0)) : 0;
+      const hasUserMinigameNow = /get ready|nice|great|excellent/i.test(combinedBannerStr);
+      const isUserMinigamePhase = Boolean(isUserChargeWin && !userUsedBannerTxtInCharge && (hasUserMinigameNow || elapsedInUserChargeMs < 4000));
+      if (isUserChargeWin) {
+        const uC1Cost = Math.max(35, Math.min(100, lookupChargedStats(actUser.c1, actUser.meta.types[0]).energy || 45));
+        const hasU2 = Boolean(actUser.c2 && actUser.c2.toLowerCase() !== String(actUser.c1 || '').toLowerCase());
+        const uC2Cost = hasU2 ? Math.max(35, Math.min(100, lookupChargedStats(actUser.c2, actUser.meta.types[0]).energy || 50)) : uC1Cost;
+        const cheapestUserCost = Math.min(uC1Cost, uC2Cost);
+        const prevUserF = userChargeStartIdx > 0 ? frames[userChargeStartIdx - 1] : f;
+        const prevLeftFill = Number(prevUserF?.leftCircleFillPct ?? -1);
+        const prevRightFill = Number(prevUserF?.rightCircleFillPct ?? -1);
+        const provisionalUserCost = (hasU2 && prevRightFill >= 95 && prevLeftFill >= 0 && prevLeftFill < 92)
+          ? uC2Cost
+          : ((prevLeftFill >= 95 && (!hasU2 || (prevRightFill >= 0 && prevRightFill < 92))) ? uC1Cost : cheapestUserCost);
+        const startUserF = frames[userChargeStartIdx] || f;
+        const startWinUserE = (Array.isArray(startUserF.userSlotEnergy) && startUserF.userSlotEnergy[uIdx] !== undefined)
+          ? Number(startUserF.userSlotEnergy[uIdx])
+          : Number(startUserF.userEnergy ?? pSlotE[uIdx] ?? 0);
+        let prevBeforeUserE = -1;
+        if (userChargeStartIdx > 0 && frames[userChargeStartIdx - 1]) {
+          const pf = frames[userChargeStartIdx - 1];
+          prevBeforeUserE = (Array.isArray(pf.userSlotEnergy) && pf.userSlotEnergy[uIdx] !== undefined)
+            ? Number(pf.userSlotEnergy[uIdx])
+            : Number(pf.userEnergy ?? -1);
+        }
+        const reconstructedPreThrowUserE = (startWinUserE >= cheapestUserCost && (prevBeforeUserE <= 0 || startWinUserE >= prevBeforeUserE))
+          ? Math.max(cheapestUserCost, Math.min(100, startWinUserE))
+          : Math.max(cheapestUserCost, Math.min(100, Math.max(prevBeforeUserE, startWinUserE + provisionalUserCost)));
+        if (isUserMinigamePhase) {
+          pSlotE[uIdx] = reconstructedPreThrowUserE;
+        } else if (userUsedBannerTxtInCharge) {
+          const mMatch = userUsedBannerTxtInCharge.match(/\\bused\\s+([^!.]+)/i);
+          const rawMoveStr = mMatch ? mMatch[1].trim() : '';
+          let ocrUserCost = provisionalUserCost;
+          if (rawMoveStr) {
+            if (hasU2 && (rawMoveStr.toLowerCase() === actUser.c2.toLowerCase() || rawMoveStr.toLowerCase().includes(actUser.c2.toLowerCase()))) {
+              ocrUserCost = uC2Cost;
+            } else if (actUser.c1 && (rawMoveStr.toLowerCase() === actUser.c1.toLowerCase() || rawMoveStr.toLowerCase().includes(actUser.c1.toLowerCase()))) {
+              ocrUserCost = uC1Cost;
+            } else {
+              ocrUserCost = Math.max(35, Math.min(100, lookupChargedStats(rawMoveStr, actUser.meta.types[0]).energy || provisionalUserCost));
+            }
+          }
+          const effPreU = Math.max(reconstructedPreThrowUserE, ocrUserCost);
+          pSlotE[uIdx] = Math.max(0, Math.min(100, effPreU - ocrUserCost));
+        } else {
+          const effPreU = Math.max(reconstructedPreThrowUserE, provisionalUserCost);
+          pSlotE[uIdx] = Math.max(0, Math.min(100, effPreU - provisionalUserCost));
+        }
+      }
+
       // Build scannedOpponents array for 3v3 Matrix
       const scannedOpponents = oSpecs.map((o, idx) => {
         const sel = slotMoveSelections[idx] || selectOppThreeMovesForSlot(o, idx);
@@ -3607,33 +3768,7 @@ function renderWatchSharePage(origin, shareInfo) {
       const oppFastTelemetry = abbrMove5(actOpp.fastMove) + ' ' + actOpp.fastTurns + 't(' + (actOpp.fastTurns * 0.5).toFixed(1) + 's)/+' + actOpp.fastEnergy + 'e';
       const userFastTelemetry = abbrMove5(actUser.fastMove) + ' ' + actUser.fastTurns + 't(' + (actUser.fastTurns * 0.5).toFixed(1) + 's)/+' + actUser.fastEnergy + 'e';
 
-      // v6.42 / v6.50: Reconstruct Shield Decision Overlay (Evaluates ALL possible legal moves until 2 locked + Overflow Guard)
-      let chargeStartIdx = frameArrayIdx;
-      while (chargeStartIdx > 0 && (
-        String(frames[chargeStartIdx - 1].pendingChargeActor || '').toLowerCase() === 'opp' ||
-        Boolean(frames[chargeStartIdx - 1].isTopCountdownActive)
-      )) {
-        chargeStartIdx--;
-      }
-      const combinedBannerStr = String((f.ocrMidBannerText || f.moveBannerText || '') + ' ' + (f.ocrBottomMovesText || '')).toLowerCase();
-      const isOppChargeWin = String(f.pendingChargeActor || '').toLowerCase() === 'opp' ||
-        Boolean(f.isTopCountdownActive) ||
-        /attack incoming|protect shield|shields remaining/i.test(combinedBannerStr) ||
-        String(f.recommendedPhase || '').toUpperCase() === 'SHIELD_CALL';
-      let hasUsedBannerSoFar = /\\bused\\b/i.test(combinedBannerStr);
-      if (isOppChargeWin && !hasUsedBannerSoFar) {
-        for (let k = chargeStartIdx; k <= frameArrayIdx; k++) {
-          const bTxt = String((frames[k] && (frames[k].ocrMidBannerText || frames[k].moveBannerText)) || '');
-          if (/\\bused\\b/i.test(bTxt)) {
-            hasUsedBannerSoFar = true;
-            break;
-          }
-        }
-      }
-      const elapsedInChargeMs = frames[chargeStartIdx] ? Math.max(0, (f.relTimeMs || 0) - (frames[chargeStartIdx].relTimeMs || 0)) : 0;
-      const isShieldDecisionVisible = Boolean(showShieldHud && isOppChargeWin && !hasUsedBannerSoFar && elapsedInChargeMs <= 5500);
-
-      // Compute Pillar 4 & candidate moves for Shield Decision Overlay
+      // v6.42 / v6.50 / v7.14: Compute Pillar 4 & candidate moves for Shield Decision Overlay
       const uEnergyNow = Math.max(0, Math.min(100, Number(pSlotE[uIdx] ?? 0)));
       const bestUserRow = myMoveTimingRows[0] || { name: actUser.c1, shortName: abbrMove5(actUser.c1), energy: actUser.c1Energy || 45 };
       const myTargetMoveShort = bestUserRow.shortName || abbrMove5(bestUserRow.name);
@@ -3647,16 +3782,6 @@ function renderWatchSharePage(origin, shareInfo) {
       const oppFastExactDmgPct = Math.max(0.5, (oFastRaw / Math.max(20, actUser.meta.effHp)) * 100);
 
       const twoMovesLocked = Boolean(activeOppSelection.isTwoMovesLocked);
-      const rawCandNames = activeOppSelection.allPossibleMoves.length > 0
-        ? activeOppSelection.allPossibleMoves
-        : activeOppSelection.displayedMoves;
-      const seenMoveLower = new Set();
-      const candMoveNames = rawCandNames.filter(m => {
-        const kl = String(m).toLowerCase();
-        if (seenMoveLower.has(kl)) return false;
-        seenMoveLower.add(kl);
-        return true;
-      });
 
       const rawShieldRows = candMoveNames.map(mName => {
         const res = calcChargedDmgPct(actOpp.meta, actUser.meta, mName, actOpp.isShadow, actUser.isShadow, oAtkStg[oIdx] || 0, pDefStg[uIdx] || 0);
@@ -3684,16 +3809,7 @@ function renderWatchSharePage(origin, shareInfo) {
         };
       });
 
-      const minCandCost = rawShieldRows.reduce((minC, r) => Math.min(minC, r.energyCost), 35);
-      let preWindowOppE = curOppE;
-      if (chargeStartIdx > 0 && frames[chargeStartIdx - 1]) {
-        const pf = frames[chargeStartIdx - 1];
-        preWindowOppE = (Array.isArray(pf.oppSlotEnergy) && pf.oppSlotEnergy[oIdx] !== undefined)
-          ? Number(pf.oppSlotEnergy[oIdx])
-          : Number(pf.oppEnergy ?? curOppE);
-      }
-      const postDeductPlusMin = String(f.pendingChargeActor || '').toLowerCase() === 'opp' ? (curOppE + minCandCost) : curOppE;
-      const effectiveBankedE = Math.max(minCandCost, Math.min(100, Math.max(preWindowOppE, postDeductPlusMin)));
+      const effectiveBankedE = reconstructedPreThrowOppE;
 
       const normShieldRows = rawShieldRows.map(r => ({ ...r, isFunded: effectiveBankedE >= r.energyCost }));
       const sortShieldRows = (a, b) => (Number(b.isKo) - Number(a.isKo)) || (b.dmgPct - a.dmgPct) || (a.energyCost - b.energyCost);
@@ -3796,7 +3912,7 @@ function renderWatchSharePage(origin, shareInfo) {
         playerSwitchValidityLatched: true,
         oppSwitchValidityLatched: true,
         isPostFaintSwitchPromptActive: false,
-        isAttackIncomingPromptActive: Boolean(f.isCutsceneActive),
+        isAttackIncomingPromptActive: Boolean(isOppCountdownPhase || f.isCutsceneActive),
         playerPokeballs: f.userBalls ?? 3,
         oppPokeballs: f.oppBalls ?? 3,
         playerShields: uShields,
@@ -7917,6 +8033,21 @@ export default {
           return jsonResponse(result, 400);
         }
         return jsonResponse(result);
+      }
+
+      if (request.method === 'POST' && path === '/v1/admin/notify-telegram') {
+        let body = {};
+        try {
+          body = await request.json();
+        } catch (_) {
+          return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400);
+        }
+        const htmlText = String(body.html || body.text || '').trim();
+        if (!htmlText) {
+          return jsonResponse({ ok: false, error: 'Missing `html` or `text` field.' }, 400);
+        }
+        await sendTelegramMessage(env, htmlText);
+        return jsonResponse({ ok: true });
       }
     }
 

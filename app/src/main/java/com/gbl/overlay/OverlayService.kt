@@ -93,7 +93,7 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.13"
+        const val APP_VERSION = "7.14"
         const val APP_VERSION_CODE = 1713
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -6433,28 +6433,49 @@ class OverlayService : LifecycleService() {
                 lastDetectedBannerMoveTimeMs = nowMs
                 if (actorRole == "opp") {
                     lastDetectedBannerMoveOppSlotIdx = resolvedOppSlotIdx
-                    // v6.02: If the banner proved a DIFFERENT opponent slot threw the move than the provisional pre-charge slot,
-                    // refund the provisional deduction on the old slot and switch pendingChargedAttackOppSlotIdx to resolvedOppSlotIdx!
-                    if (pendingChargedAttackActor == "opp" &&
-                        pendingChargedAttackOppSlotIdx in 0..2 &&
-                        resolvedOppSlotIdx in 0..2 &&
-                        resolvedOppSlotIdx != pendingChargedAttackOppSlotIdx
-                    ) {
-                        val oldSlot = pendingChargedAttackOppSlotIdx
-                        if (pendingChargedAttackDeductedEnergy > 0) {
-                            oppSlotEnergy[oldSlot] = (oppSlotEnergy[oldSlot] + pendingChargedAttackDeductedEnergy).coerceIn(0, 100)
+                    val mStatsBanner = OverlayService.resolveChargedMoveStatsStatic(moveName, oppMeta?.types?.firstOrNull() ?: "normal")
+                    val bannerMoveCost = (mStatsBanner.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[moveName] ?: 45).coerceIn(35, 100)
+                    // v6.02 / v7.14: Once the opponent's charged move is thrown and validated via "<Opponent> used <Move>!" OCR,
+                    // immediately close the 5s Shield Decision Overlay and deduct the validated move's exact energy cost on the GUI!
+                    // If the banner proved a DIFFERENT opponent slot threw the move than the pre-charge slot,
+                    // refund any provisional deduction on the old slot and switch pendingChargedAttackOppSlotIdx to resolvedOppSlotIdx!
+                    if (pendingChargedAttackActor == "opp" && resolvedOppSlotIdx in 0..2) {
+                        if (pendingChargedAttackOppSlotIdx in 0..2 && resolvedOppSlotIdx != pendingChargedAttackOppSlotIdx) {
+                            val oldSlot = pendingChargedAttackOppSlotIdx
+                            if (pendingChargedAttackDeductedEnergy > 0) {
+                                oppSlotEnergy[oldSlot] = (oppSlotEnergy[oldSlot] + pendingChargedAttackDeductedEnergy).coerceIn(0, 100)
+                            }
+                            val newPreE = max(oppSlotEnergy[resolvedOppSlotIdx], bannerMoveCost).coerceIn(bannerMoveCost, 100)
+                            pendingChargedAttackPreOppEnergy = newPreE
+                            oppSlotEnergy[resolvedOppSlotIdx] = (newPreE - bannerMoveCost).coerceIn(0, 100)
+                            pendingChargedAttackDeductedEnergy = bannerMoveCost
+                            pendingChargedAttackOppSlotIdx = resolvedOppSlotIdx
+                            pendingChargedAttackOppRawName = detectedOpponents.getOrNull(resolvedOppSlotIdx) ?: oppMeta?.name ?: activeOpponentName
+                            pendingChargedAttackAttackerName = formatOpponentNameWithShadow(pendingChargedAttackOppRawName)
+                            lastOppChargedAttackerSlotIdx = resolvedOppSlotIdx
+                            lastOppChargedAttackerRawName = pendingChargedAttackOppRawName
+                        } else {
+                            val priorPreE = if (pendingChargedAttackPreOppEnergy > 0) {
+                                pendingChargedAttackPreOppEnergy
+                            } else {
+                                (oppSlotEnergy[resolvedOppSlotIdx] + pendingChargedAttackDeductedEnergy.coerceAtLeast(0))
+                            }
+                            pendingChargedAttackPreOppEnergy = priorPreE
+                            val effectivePreE = max(priorPreE, bannerMoveCost).coerceIn(bannerMoveCost, 100)
+                            oppSlotEnergy[resolvedOppSlotIdx] = (effectivePreE - bannerMoveCost).coerceIn(0, 100)
+                            pendingChargedAttackDeductedEnergy = bannerMoveCost
+                            pendingChargedAttackOppSlotIdx = resolvedOppSlotIdx
                         }
-                        val mStatsSwap = OverlayService.resolveChargedMoveStatsStatic(moveName, oppMeta?.types?.firstOrNull() ?: "normal")
-                        val swapMoveCost = (mStatsSwap.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[moveName] ?: 45).coerceIn(35, 100)
-                        val newPreE = max(oppSlotEnergy[resolvedOppSlotIdx], swapMoveCost).coerceIn(swapMoveCost, 100)
-                        pendingChargedAttackPreOppEnergy = newPreE
-                        oppSlotEnergy[resolvedOppSlotIdx] = (newPreE - swapMoveCost).coerceIn(0, 100)
-                        pendingChargedAttackDeductedEnergy = swapMoveCost
-                        pendingChargedAttackOppSlotIdx = resolvedOppSlotIdx
-                        pendingChargedAttackOppRawName = detectedOpponents.getOrNull(resolvedOppSlotIdx) ?: oppMeta?.name ?: activeOpponentName
-                        pendingChargedAttackAttackerName = formatOpponentNameWithShadow(pendingChargedAttackOppRawName)
-                        lastOppChargedAttackerSlotIdx = resolvedOppSlotIdx
-                        lastOppChargedAttackerRawName = pendingChargedAttackOppRawName
+                        lastEnergyMutationSource = "OPP_CHARGE_BANNER_OCR"
+                        isAttackIncomingPromptActive = false
+                        isTopCountdownCircleActive = false
+                        topCountdownCircleConfirmFrames = 0
+                        lastAttackIncomingOcrDetectedMs = 0L
+                        shieldOverlayShowConfirmFrames = 0
+                        lastShieldOverlayConfirmFrameMs = 0L
+                        if (isShieldDecisionOverlayVisible) {
+                            hideShieldDecisionOverlay()
+                        }
                     }
                 } else if (actorRole == "user") {
                     lastDetectedBannerMoveUserSlotIdx = resolvedUserSlotIdx
@@ -6463,7 +6484,7 @@ class OverlayService : LifecycleService() {
                 // v4.02: Mark confirmed opponent charged move on `resolvedOppSlotIdx` (both shielded & unshielded, even if Section 4 reconciled first)
                 // If Section 4 had previously guessed a different move via HP delta (`lastOppChargeHpInferredMoveName`), replace it with the OCR-confirmed banner move!
                 if (actorRole == "opp" && (hasRecentShieldPrompt || matchedOppSlotByActor in 0..2) && resolvedOppSlotIdx in 0..2) {
-                    var updatedRetroactive = false
+                    var updatedRetroactive = (pendingChargedAttackActor == "opp")
                     if ((nowMs - lastChargedAttackLoggedMs) <= 4500L &&
                         lastChargedPromptActor == "opp" &&
                         lastOppChargeHpInferredMoveName.isNotEmpty() &&
@@ -6605,9 +6626,16 @@ class OverlayService : LifecycleService() {
                         val residualE = (effectivePreE - trueCost).coerceIn(0, 100)
                         playerSlotEnergy[targetUserIdx] = residualE
                         playerSlotEnergyAnchor[targetUserIdx] = residualE
+                        nearCeilingStepStartMs[targetUserIdx] = 0L
+                        playerSlotCeilingLatched100[targetUserIdx] = false
+                        pendingChargedAttackDeductedEnergy = trueCost
                         lastUserChargePreEnergySnapshot = effectivePreE
                         lastUserChargeDeductedEnergySnapshot = trueCost
                         lastUserChargeResolvedMoveName = moveName
+                        phaseStartPlayerEnergy = residualE
+                        awaitingPostUserChargeCircleSync = true
+                        resetSlotEnergyTracking(targetUserIdx, residualE)
+                        lastEnergyMutationSource = "USER_CHARGE_BANNER_OCR"
                         recalculateAndPushBattleData()
                     } else if (pendingChargedAttackActor.isEmpty() && (nowMs - lastChargedAttackLoggedMs) <= 3500L && lastChargedPromptActor == "user") {
                         val retroDefOppIdx = lastUserChargedDefenderOppSlotIdx.takeIf { it in 0..2 } ?: resolvedOppSlotIdx.coerceIn(0, 2)
@@ -6934,23 +6962,28 @@ class OverlayService : LifecycleService() {
         // cancel the Shield Decision Overlay or trigger a premature post-charge resolution!
         val rawMatchedAttackIncomingOcr = !rawHasUserChargedBannerText &&
             matchesAttackIncomingOcrText(playerMoveLines + midBannerLines)
-        val hasRecentOppUsedMoveBanner = lastDetectedBannerMoveActor == "opp" &&
+        var hasRecentOppUsedMoveBanner = lastDetectedBannerMoveActor == "opp" &&
             lastDetectedBannerMoveTimeMs > 0L &&
             (nowMs - lastDetectedBannerMoveTimeMs) <= 2600L &&
             lastDetectedBannerMoveTimeMs >= lastAttackIncomingOcrDetectedMs
-        if (rawMatchedAttackIncomingOcr && (isHudHiddenForOpponentPrompt || isTopCountdownCircleActive)) {
+        val isWithinOppCountdownWindow = pendingChargedAttackActor != "opp" ||
+            pendingChargedAttackStartMs <= 0L ||
+            (nowMs - pendingChargedAttackStartMs) < 5000L
+        if (rawMatchedAttackIncomingOcr && (isHudHiddenForOpponentPrompt || isTopCountdownCircleActive) && isWithinOppCountdownWindow) {
             lastAttackIncomingOcrDetectedMs = nowMs
-        } else if (rawHasUserChargedBannerText || isPostFaintSwitchPromptActive || !isHudHiddenForOpponentPrompt || hasRecentOppUsedMoveBanner) {
+        } else if (rawHasUserChargedBannerText || isPostFaintSwitchPromptActive || !isHudHiddenForOpponentPrompt || hasRecentOppUsedMoveBanner || !isWithinOppCountdownWindow) {
             lastAttackIncomingOcrDetectedMs = 0L
         }
         val hasRecentAttackIncomingOcr = lastAttackIncomingOcrDetectedMs > 0L &&
             (nowMs - lastAttackIncomingOcrDetectedMs) <= 4800L &&
+            isWithinOppCountdownWindow &&
             isHudHiddenForOpponentPrompt &&
             !hasRecentOppUsedMoveBanner &&
             !isPostFaintSwitchPromptActive &&
             !rawHasUserChargedBannerText
-        val hasAttackIncomingText = ((isHudHiddenForOpponentPrompt || isTopCountdownCircleActive) && rawMatchedAttackIncomingOcr) ||
-            hasRecentAttackIncomingOcr
+        var hasAttackIncomingText = isWithinOppCountdownWindow &&
+            (((isHudHiddenForOpponentPrompt || isTopCountdownCircleActive) && rawMatchedAttackIncomingOcr) ||
+                hasRecentAttackIncomingOcr)
 
         // v4.10: While the opponent's 5-second shield decision prompt is active and bottom Charge Move Circles are hidden,
         // suppress any false red/orange Pokéball pixel hits caused by tall Pokémon antlers/wings (e.g. Xerneas) at the top of the screen!
@@ -7001,6 +7034,13 @@ class OverlayService : LifecycleService() {
 
         if (midBannerLines.isNotEmpty()) {
             handleMidBannerUsedMoveLines(midBannerLines)
+            if (lastDetectedBannerMoveActor == "opp" &&
+                lastDetectedBannerMoveTimeMs > 0L &&
+                (nowMs - lastDetectedBannerMoveTimeMs) <= 2600L
+            ) {
+                hasRecentOppUsedMoveBanner = true
+                hasAttackIncomingText = false
+            }
         }
 
         val activeOppBase = FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
@@ -8865,9 +8905,12 @@ class OverlayService : LifecycleService() {
             lastSteadyMoveButtonsSeenMs = nowMs
         }
 
-        // 2. Detect Opponent Charged Attack (v4.06 / v4.10 / v5.13: Driven by the top-center 5-second countdown circle detector AND/OR
-        //    "Attack incoming!" OCR text, gated on `isHudHiddenForOpponentPrompt` and never triggered by `sampledOppHpPct` alone when player HP is missing!)
+        // 2. Detect Opponent Charged Attack (v4.06 / v4.10 / v5.13 / v7.14: Driven by the top-center 5-second countdown circle detector AND/OR
+        //    "Attack incoming!" OCR text, gated on `isHudHiddenForOpponentPrompt` and never triggered by `sampledOppHpPct` alone when player HP is missing!
+        //    During the 5s countdown, hold pre-throw energy on the GUI so header/matrix and Shield Decision Overlay match; deduct once thrown & validated by OCR or provisionally after the 5s countdown while waiting on HP to resolve.)
         val isOpponentCountdownCircleActive = isTopCountdownCircleActive &&
+            isWithinOppCountdownWindow &&
+            !hasRecentOppUsedMoveBanner &&
             !isPostFaintSwitchPromptActive &&
             !sampledTopRightNameplateVisible &&
             isHudHiddenForOpponentPrompt &&
@@ -8877,11 +8920,13 @@ class OverlayService : LifecycleService() {
                 hasAttackIncomingText ||
                 isAttackIncomingPromptActive ||
                 pendingChargedAttackActor == "opp")
-        val isOpponentChargedScreen = isOpponentCountdownCircleActive ||
-            (hasAttackIncomingText &&
-                !isPostFaintSwitchPromptActive &&
-                !hasUserChargedBannerText &&
-                isHudHiddenForOpponentPrompt)
+        val isOpponentChargedScreen = isWithinOppCountdownWindow &&
+            !hasRecentOppUsedMoveBanner &&
+            (isOpponentCountdownCircleActive ||
+                (hasAttackIncomingText &&
+                    !isPostFaintSwitchPromptActive &&
+                    !hasUserChargedBannerText &&
+                    isHudHiddenForOpponentPrompt))
         if (isOpponentChargedScreen) {
             if (pendingChargedAttackActor == "user") {
                 if (!pendingUserChargeConfirmedByOcr && !hasUserBannerResolvedSinceThrow) {
@@ -9144,8 +9189,9 @@ class OverlayService : LifecycleService() {
                 pendingChargedAttackAttackerName = formatOpponentNameWithShadow(pendingChargedAttackOppRawName)
                 pendingChargedAttackDefenderName = activeUserPokemonName ?: userSlotCfg?.name ?: "Player"
                 pendingChargedAttackPreOppEnergy = oppSlotEnergy[throwerOppIdx].coerceIn(cheapestOppEnergy, 100)
-                oppSlotEnergy[throwerOppIdx] = (oppSlotEnergy[throwerOppIdx] - cheapestOppEnergy).coerceIn(0, 100)
-                pendingChargedAttackDeductedEnergy = cheapestOppEnergy
+                // v7.14: Hold pre-throw energy on the GUI during the 5s countdown so HUD header, move rows, and Shield Decision Overlay stay in sync!
+                oppSlotEnergy[throwerOppIdx] = pendingChargedAttackPreOppEnergy
+                pendingChargedAttackDeductedEnergy = 0
                 if (!playerFaintedSlots[activeUserIdx] && lastStableNormalCombatEnergy > playerSlotEnergy[activeUserIdx]) {
                     playerSlotEnergy[activeUserIdx] = lastStableNormalCombatEnergy.coerceIn(0, 100)
                 }
@@ -9166,10 +9212,15 @@ class OverlayService : LifecycleService() {
                 combinedBannerLower.contains("no protect") ||
                 combinedBannerLower.contains("shields remaining")
             if (!wasPromptActive) {
-                val toastMsg = if (isZeroShieldPrompt) {
-                    "⚡ Attack Incoming (No Shields)! (-${cheapestOppEnergy}E)"
+                val bankedForToast = if (pendingChargedAttackPreOppEnergy > 0) {
+                    pendingChargedAttackPreOppEnergy
                 } else {
-                    "⚡ Attack Incoming! (-${cheapestOppEnergy}E)"
+                    oppSlotEnergy[activeOppIdx.coerceIn(0, 2)].coerceIn(cheapestOppEnergy, 100)
+                }
+                val toastMsg = if (isZeroShieldPrompt) {
+                    "⚡ Attack Incoming (No Shields)! (${bankedForToast}E)"
+                } else {
+                    "⚡ Attack Incoming! (${bankedForToast}E)"
                 }
                 showBattleToast(toastMsg)
             }
@@ -9186,7 +9237,7 @@ class OverlayService : LifecycleService() {
                 val preThrowE = if (pendingChargedAttackPreOppEnergy > 0) {
                     pendingChargedAttackPreOppEnergy
                 } else {
-                    (oppSlotEnergy[oppIdxForOverlay] + pendingChargedAttackDeductedEnergy).coerceIn(cheapestOppEnergy, 100)
+                    (oppSlotEnergy[oppIdxForOverlay] + pendingChargedAttackDeductedEnergy.coerceAtLeast(0)).coerceIn(cheapestOppEnergy, 100)
                 }
                 showOrUpdateShieldDecisionOverlay(
                     oppSlotIdx = oppIdxForOverlay,
@@ -9210,6 +9261,46 @@ class OverlayService : LifecycleService() {
                     hideShieldDecisionOverlay()
                 }
             }
+            // v7.14: Once the 5s countdown ends and we are waiting on HP to resolve, if Banner OCR has not validated
+            // the opponent's move yet (`pendingChargedAttackDeductedEnergy == 0`), provisionally deduct minimum charged move energy on the GUI!
+            if (pendingChargedAttackActor == "opp" &&
+                pendingChargedAttackDeductedEnergy == 0 &&
+                pendingChargedAttackStartMs > 0L &&
+                ((nowMs - pendingChargedAttackStartMs) >= 4200L || !isTopCountdownCircleActive)
+            ) {
+                val provSlot = pendingChargedAttackOppSlotIdx.takeIf { it in 0..2 } ?: activeOppIdx.coerceIn(0, 2)
+                val provRawName = detectedOpponents.getOrNull(provSlot) ?: pendingChargedAttackOppRawName.ifBlank { activeOpponentName }
+                val provBase = FormResolver.extractBaseSpecies(provRawName).lowercase()
+                val provShad = manualShadowOverrides[provBase] ?: pendingChargedAttackOppShadow
+                val provMeta = if (provSlot != activeOppIdx) {
+                    OverlayService.computeEffectiveCombatStats(
+                        getPokemonMeta(provRawName, activeLeague, provShad),
+                        activeLeague
+                    )
+                } else {
+                    oppMetaForStats
+                }
+                val provCandMoves = listOf(provMeta.chargedMove1, provMeta.chargedMove2).filter { it.isNotBlank() }.distinct()
+                val provCheapest = provCandMoves.map { mName ->
+                    val mStats = OverlayService.resolveChargedMoveStatsStatic(mName, provMeta.types.firstOrNull() ?: "normal")
+                    (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[mName] ?: cheapestOppEnergy).coerceIn(35, 100)
+                }.minOrNull() ?: cheapestOppEnergy
+                val preE = if (pendingChargedAttackPreOppEnergy > 0) {
+                    pendingChargedAttackPreOppEnergy
+                } else {
+                    oppSlotEnergy[provSlot].coerceIn(provCheapest, 100)
+                }
+                pendingChargedAttackPreOppEnergy = preE
+                oppSlotEnergy[provSlot] = (preE - provCheapest).coerceIn(0, 100)
+                pendingChargedAttackDeductedEnergy = provCheapest
+                lastEnergyMutationSource = "OPP_CHARGE_PROVISIONAL"
+                isAttackIncomingPromptActive = false
+                pllValidatedThisShieldDelay = false
+                if (isShieldDecisionOverlayVisible) {
+                    hideShieldDecisionOverlay()
+                }
+                hpChanged = true
+            }
             if (isAttackIncomingPromptActive && !isTopCountdownCircleActive &&
                 (isNormalFastCombatFrame || postOppChargedMissingPlayerHpFrames >= 6 || (nowMs - attackIncomingDetectedAtMs) > 1200L)
             ) {
@@ -9221,11 +9312,17 @@ class OverlayService : LifecycleService() {
 
         // 3. Detect Player Charged Attack Minigame ("Get ready!" / "GREAT!" / "EXCELLENT!" / "NICE!" or both floating HP bars & Charge Move buttons hidden for >= 1400ms)
         //    Gated by NO shield prompt before the attack (`hadShieldPromptBeforeCurrentCharge = false`, `lastChargedPromptActor = "user"`).
-        //    Rolls back any spurious energy registered during the throw zoom-in animation, and waits for Section 4 to show the toast with the ACTUAL move used!
-        val isPlayerChargedScreen = hasUserChargedBannerText ||
-            (missingBothHpBarsFrames >= 14 && !isRecentAnySwitchForChargeGuard && !sampledTopRightNameplateVisible &&
-                pendingChargedAttackActor != "opp" && !isAttackIncomingPromptActive &&
-                (sampledOppBalls in 1..3 || sampledPlayerBalls in 1..3 || (lastSteadyMoveButtonsSeenMs > 0L && (nowMs - lastSteadyMoveButtonsSeenMs) <= 6000L)))
+        //    v7.14: Hold pre-throw energy on the GUI during the 5s swipe minigame; deduct once validated by "<Player> used <Move>!" OCR or provisionally once the minigame ends while waiting on HP to resolve!
+        val isWithinUserMinigameWindow = pendingChargedAttackActor != "user" ||
+            pendingChargedAttackStartMs <= 0L ||
+            (nowMs - pendingChargedAttackStartMs) < (if (pendingUserChargeConfirmedByOcr) 4500L else 3200L)
+        val isPlayerChargedScreen = !hasUserBannerResolvedSinceThrow && (
+            hasUserChargedBannerText ||
+                (isWithinUserMinigameWindow &&
+                    missingBothHpBarsFrames >= 14 && !isRecentAnySwitchForChargeGuard && !sampledTopRightNameplateVisible &&
+                    pendingChargedAttackActor != "opp" && !isAttackIncomingPromptActive &&
+                    (sampledOppBalls in 1..3 || sampledPlayerBalls in 1..3 || (lastSteadyMoveButtonsSeenMs > 0L && (nowMs - lastSteadyMoveButtonsSeenMs) <= 6000L)))
+        )
         if (isPlayerChargedScreen && !isPostFaintSwitchPromptActive) {
             if (hasUserChargedBannerText) {
                 pendingUserChargeConfirmedByOcr = true
@@ -9332,25 +9429,18 @@ class OverlayService : LifecycleService() {
                 pendingChargedAttackAttackerName = activeUserPokemonName ?: userSlotCfg?.name ?: "Player"
                 pendingChargedAttackDefenderName = formatOpponentNameWithShadow(pendingChargedAttackOppRawName)
 
-                // Provisional deduction during minigame (reconciled to exact Move 1 vs Move 2 energy in Section 4; NO premature -50E toast here!)
-                val initialProvisionalCost = when {
-                    hasSecondUserMove && preChargeRightFillPct >= 95 && preChargeLeftFillPct < 92 -> userMove2Energy
-                    preChargeLeftFillPct >= 95 && (!hasSecondUserMove || preChargeRightFillPct < 92) -> userMove1Energy
-                    else -> cheapestUserEnergy
-                }
-                val postProvisionalEnergy = (preChargeUserEnergy - initialProvisionalCost).coerceIn(0, 100)
-                playerSlotEnergy[activeUserIdx] = postProvisionalEnergy
-                playerSlotEnergyAnchor[activeUserIdx] = postProvisionalEnergy
+                // v7.14: Hold pre-throw energy on the GUI during the 5s player swipe minigame; deduct once validated by OCR or provisionally after the minigame ends while waiting on HP to resolve!
+                playerSlotEnergy[activeUserIdx] = preChargeUserEnergy
+                playerSlotEnergyAnchor[activeUserIdx] = preChargeUserEnergy
                 nearCeilingStepStartMs[activeUserIdx] = 0L
                 playerSlotCeilingLatched100[activeUserIdx] = false
-                pendingChargedAttackDeductedEnergy = initialProvisionalCost
+                pendingChargedAttackDeductedEnergy = 0
                 lastUserChargePreEnergySnapshot = preChargeUserEnergy
-                lastUserChargeDeductedEnergySnapshot = initialProvisionalCost
-                phaseStartPlayerEnergy = postProvisionalEnergy
+                lastUserChargeDeductedEnergySnapshot = 0
+                phaseStartPlayerEnergy = preChargeUserEnergy
                 confirmedPhasePlayerTurns = 0
                 lastConfirmedPlayerFastMoveMs = 0L
-                awaitingPostUserChargeCircleSync = true
-                resetSlotEnergyTracking(activeUserIdx, postProvisionalEnergy)
+                awaitingPostUserChargeCircleSync = false
                 phasePlayerTurns = 0
                 phaseOppTurns = 0
                 playerSlotCurrentMoveTurns[activeUserIdx] = 0
@@ -9365,19 +9455,6 @@ class OverlayService : LifecycleService() {
             return
         }
 
-        val isPostChargedKoReady = (pendingChargedAttackActor == "user" && postUserChargedMissingOppHpFrames >= 6) ||
-            (pendingChargedAttackActor == "opp" && postOppChargedMissingPlayerHpFrames >= 6)
-
-        if (!isNormalFastCombatFrame && !isPostChargedKoReady) {
-            lastTurnTickTimeMs = System.currentTimeMillis()
-            turnResidualMs = 0L
-            if (hpChanged) recalculateAndPushBattleData()
-            return
-        }
-
-        // 4. Reconcile Pending Charged Attack once defender's HP bar returns or KO is confirmed
-        //    v3.92 / v4.10 / v6.04: <name> used <move> Gated Attribution + Pre-Charge Attacker Slot Lock + Bidirectional Catch Handling
-        //    + Post-Cutscene HP Drain Settle Window (950ms when no shield dropped and HP delta <= 3%) + Combat HUD Return KO Gate!
         val hasReturnedCombatCircles = (sampledLeftChargeBtnFillPct in 0..300 || sampledRightChargeBtnFillPct in 0..300) &&
             (sampledPlayerBalls in 1..3 || sampledOppBalls in 1..3)
         val hasReturnedTopHudOrCircles = hasReturnedCombatCircles ||
@@ -9417,7 +9494,44 @@ class OverlayService : LifecycleService() {
             pendingUserChargeConfirmedByOcr = false
             postChargeCirclesReturnedAtMs = 0L
             hpChanged = true
+        } else if (pendingChargedAttackActor == "user" && pendingChargedAttackDeductedEnergy == 0) {
+            // v7.14: Once the 5s player swipe minigame ends and we are waiting on HP to resolve, if Banner OCR has not
+            // validated the player's move yet, provisionally deduct charged move energy on the GUI!
+            val provUserIdx = pendingChargedAttackUserSlotIdx.takeIf { it in 0..2 } ?: activeUserIdx.coerceIn(0, 2)
+            val initialProvisionalCost = when {
+                hasSecondUserMove && preChargeRightFillPct >= 95 && preChargeLeftFillPct < 92 -> userMove2Energy
+                preChargeLeftFillPct >= 95 && (!hasSecondUserMove || preChargeRightFillPct < 92) -> userMove1Energy
+                else -> cheapestUserEnergy
+            }
+            val effectivePreUserE = max(preChargeUserEnergy, initialProvisionalCost).coerceIn(initialProvisionalCost, 100)
+            val postProvisionalEnergy = (effectivePreUserE - initialProvisionalCost).coerceIn(0, 100)
+            playerSlotEnergy[provUserIdx] = postProvisionalEnergy
+            playerSlotEnergyAnchor[provUserIdx] = postProvisionalEnergy
+            nearCeilingStepStartMs[provUserIdx] = 0L
+            playerSlotCeilingLatched100[provUserIdx] = false
+            pendingChargedAttackDeductedEnergy = initialProvisionalCost
+            lastUserChargePreEnergySnapshot = effectivePreUserE
+            lastUserChargeDeductedEnergySnapshot = initialProvisionalCost
+            phaseStartPlayerEnergy = postProvisionalEnergy
+            awaitingPostUserChargeCircleSync = true
+            resetSlotEnergyTracking(provUserIdx, postProvisionalEnergy)
+            lastEnergyMutationSource = "USER_CHARGE_PROVISIONAL"
+            hpChanged = true
         }
+
+        val isPostChargedKoReady = (pendingChargedAttackActor == "user" && postUserChargedMissingOppHpFrames >= 6) ||
+            (pendingChargedAttackActor == "opp" && postOppChargedMissingPlayerHpFrames >= 6)
+
+        if (!isNormalFastCombatFrame && !isPostChargedKoReady) {
+            lastTurnTickTimeMs = System.currentTimeMillis()
+            turnResidualMs = 0L
+            if (hpChanged) recalculateAndPushBattleData()
+            return
+        }
+
+        // 4. Reconcile Pending Charged Attack once defender's HP bar returns or KO is confirmed
+        //    v3.92 / v4.10 / v6.04: <name> used <move> Gated Attribution + Pre-Charge Attacker Slot Lock + Bidirectional Catch Handling
+        //    + Post-Cutscene HP Drain Settle Window (950ms when no shield dropped and HP delta <= 3%) + Combat HUD Return KO Gate!
         if (pendingChargedAttackActor == "opp" &&
             !isTopCountdownCircleActive &&
             !isOpponentCountdownCircleActive &&
@@ -9768,10 +9882,9 @@ class OverlayService : LifecycleService() {
                         oppSlotTurnsOnField[attackerOppSlotIdx] = (oppSlotTurnsOnField[attackerOppSlotIdx] + attackerFastTurns).coerceAtLeast(0)
                     }
                 }
-                val effectiveAlreadyDeducted = pendingChargedAttackDeductedEnergy.coerceAtLeast(0)
-                val extraToDeduct = (totalTargetEnergy - effectiveAlreadyDeducted).coerceAtLeast(0)
-                if (extraToDeduct > 0 && attackerOppSlotIdx in 0..2) {
-                    oppSlotEnergy[attackerOppSlotIdx] = (oppSlotEnergy[attackerOppSlotIdx] - extraToDeduct).coerceIn(0, 100)
+                val effectivePreOppEForFinal = max(pendingChargedAttackPreOppEnergy, totalTargetEnergy).coerceIn(totalTargetEnergy, 100)
+                if (attackerOppSlotIdx in 0..2) {
+                    oppSlotEnergy[attackerOppSlotIdx] = (effectivePreOppEForFinal - totalTargetEnergy).coerceIn(0, 100)
                 }
                 lastOppChargeDeductedEnergySnapshot = totalTargetEnergy
                 if (lastDetectedBannerMoveActor == "opp") {
@@ -16738,12 +16851,13 @@ class OverlayService : LifecycleService() {
                 )
             }
             val minCost = rawRows.minOfOrNull { it.energyCost } ?: 35
+            val alreadyDeductedOppE = if (pendingChargedAttackActor == "opp") pendingChargedAttackDeductedEnergy.coerceAtLeast(0) else 0
             val rawPreE = when {
                 pendingChargedAttackPreOppEnergy > 0 -> max(
                     pendingChargedAttackPreOppEnergy,
-                    if (pendingChargedAttackActor == "opp") activeOppEnergyNow + minCost else activeOppEnergyNow
+                    activeOppEnergyNow + alreadyDeductedOppE
                 )
-                pendingChargedAttackActor == "opp" -> activeOppEnergyNow + minCost
+                pendingChargedAttackActor == "opp" -> activeOppEnergyNow + alreadyDeductedOppE
                 else -> activeOppEnergyNow
             }
             val effBankedE = max(rawPreE, minCost).coerceIn(0, 100)

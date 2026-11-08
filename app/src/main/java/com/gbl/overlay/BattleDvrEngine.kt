@@ -679,7 +679,17 @@ internal fun OverlayService.schedulePostBattleDvrAutoUploadJob(
 internal fun OverlayService.applyDeepTraceFrameForReplay(
     frame: BattleDeepTraceFrame,
     preThrowOppEnergyHint: Int = 0,
+    startWindowOppEnergy: Int = -1,
+    isOppChargeWindow: Boolean = false,
     forceShieldDecisionActive: Boolean = false,
+    usedBannerTextInCharge: String? = null,
+    preThrowUserEnergyHint: Int = 0,
+    startWindowUserEnergy: Int = -1,
+    isUserChargeWindow: Boolean = false,
+    isUserMinigamePhase: Boolean = false,
+    userUsedBannerTextInCharge: String? = null,
+    prevBeforeLeftFill: Int = -1,
+    prevBeforeRightFill: Int = -1,
     revealedOpponentsAtFrame: List<String>? = null,
     userSlotsEverOnFieldAtFrame: List<Boolean>? = null
 ) {
@@ -814,22 +824,139 @@ internal fun OverlayService.applyDeepTraceFrameForReplay(
     oppSwapEndTimeMs = if (frame.oppSwapRemainingSec > 0) now + frame.oppSwapRemainingSec * 1000L else 0L
 
     val combinedBanner = "${frame.ocrMidBannerText} ${frame.ocrBottomMovesText}".lowercase()
-    val hasUsedBanner = combinedBanner.contains(" used ")
+    val hasUsedBanner = combinedBanner.contains(" used ") || !usedBannerTextInCharge.isNullOrBlank()
     val hasIncomingBanner = combinedBanner.contains("attack incoming") ||
         combinedBanner.contains("protect shield") ||
         combinedBanner.contains("shields remaining")
-    isAttackIncomingPromptActive = forceShieldDecisionActive || (!hasUsedBanner && (
+    isAttackIncomingPromptActive = forceShieldDecisionActive || (!hasUsedBanner && !isOppChargeWindow && (
         frame.isTopCountdownActive ||
             hasIncomingBanner ||
-            frame.recommendedPhase.equals("SHIELD_CALL", ignoreCase = true) ||
-            (frame.pendingChargeActor.equals("opp", ignoreCase = true) && frame.leftCircleFillPct == -1 && frame.rightCircleFillPct == -1)
+            frame.recommendedPhase.equals("SHIELD_CALL", ignoreCase = true)
         ))
-    if (isAttackIncomingPromptActive) {
+
+    val activeLeague = currentPreset?.league ?: "MASTER LEAGUE"
+    if (isOppChargeWindow) {
+        val oppMeta = getPokemonMeta(activeOpponentName, activeLeague, isOpponentShadow)
+        val availPool = OverlayService.getAvailableMovePoolForSpeciesStatic(oppMeta.name, activeLeague).second
+        val candMoves = (availPool + listOf(oppMeta.chargedMove1, oppMeta.chargedMove2))
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.equals("None", ignoreCase = true) }
+            .distinct()
+        val moveCosts = candMoves.associateWith { mName ->
+            val mStats = OverlayService.resolveChargedMoveStatsStatic(mName, oppMeta.types.firstOrNull() ?: "normal")
+            (mStats.energyCost.takeIf { it > 0 } ?: OverlayService.MOVE_ENERGY_COST[mName] ?: 45).coerceIn(35, 100)
+        }
+        val defaultMoves = listOf(oppMeta.chargedMove1, oppMeta.chargedMove2).filter { it.isNotBlank() }
+        val cheapestOppCost = defaultMoves.mapNotNull { moveCosts[it] }.minOrNull()
+            ?: moveCosts.values.minOrNull()
+            ?: 35
+        val startWinE = if (startWindowOppEnergy >= 0) startWindowOppEnergy else oppSlotEnergy[oIdx]
+        val preThrowOppE = when {
+            startWinE >= cheapestOppCost && (preThrowOppEnergyHint <= 0 || startWinE >= preThrowOppEnergyHint) ->
+                startWinE.coerceIn(cheapestOppCost, 100)
+            else ->
+                kotlin.math.max(preThrowOppEnergyHint, startWinE + cheapestOppCost).coerceIn(cheapestOppCost, 100)
+        }
+        pendingChargedAttackOppSlotIdx = oIdx
+        pendingChargedAttackUserSlotIdx = uIdx
+        if (forceShieldDecisionActive) {
+            // Stage 1 (5s Countdown): Hold pre-throw energy on the GUI so header, move rows, and Shield Decision Overlay match!
+            oppSlotEnergy[oIdx] = preThrowOppE
+            pendingChargedAttackPreOppEnergy = preThrowOppE
+            pendingChargedAttackDeductedEnergy = 0
+        } else if (!usedBannerTextInCharge.isNullOrBlank()) {
+            // Stage 2 (Validated by "<Opponent> used <Move>!" OCR): Deduct exact move cost immediately!
+            val rawAfterUsed = Regex("(?i)\\bused\\s+([^!.]+)").find(usedBannerTextInCharge)?.groupValues?.getOrNull(1)?.trim()
+                ?: usedBannerTextInCharge.substringAfter(" used ", "").replace("!", "").replace(".", "").trim()
+            val matchedCandCost = moveCosts.entries.firstOrNull { (mName, _) ->
+                rawAfterUsed.equals(mName, ignoreCase = true) || (mName.isNotBlank() && rawAfterUsed.contains(mName, ignoreCase = true))
+            }?.value ?: run {
+                val s = OverlayService.resolveChargedMoveStatsStatic(rawAfterUsed, oppMeta.types.firstOrNull() ?: "normal")
+                s.energyCost.takeIf { it > 0 } ?: OverlayService.MOVE_ENERGY_COST[rawAfterUsed]
+            }
+            val ocrMoveCost = (matchedCandCost ?: cheapestOppCost).coerceIn(35, 100)
+            val effPre = kotlin.math.max(preThrowOppE, ocrMoveCost).coerceIn(ocrMoveCost, 100)
+            oppSlotEnergy[oIdx] = (effPre - ocrMoveCost).coerceIn(0, 100)
+            pendingChargedAttackPreOppEnergy = effPre
+            pendingChargedAttackDeductedEnergy = ocrMoveCost
+        } else {
+            // Stage 3 (5s Countdown ended, waiting on HP to resolve while OCR failed): Provisionally deduct minimum move energy!
+            oppSlotEnergy[oIdx] = (preThrowOppE - cheapestOppCost).coerceIn(0, 100)
+            pendingChargedAttackPreOppEnergy = preThrowOppE
+            pendingChargedAttackDeductedEnergy = cheapestOppCost
+        }
+    } else if (isAttackIncomingPromptActive) {
         pendingChargedAttackOppSlotIdx = oIdx
         pendingChargedAttackUserSlotIdx = uIdx
         pendingChargedAttackPreOppEnergy = preThrowOppEnergyHint.coerceIn(0, 100)
+        pendingChargedAttackDeductedEnergy = 0
     } else {
         pendingChargedAttackPreOppEnergy = 0
+        if (!isUserChargeWindow) {
+            pendingChargedAttackDeductedEnergy = 0
+        }
+    }
+
+    if (isUserChargeWindow) {
+        val preset = currentPreset
+        val uCfg = preset?.pokemon?.getOrNull(uIdx)
+        val uMonName = uCfg?.name ?: activeUserPokemonName ?: "Player"
+        val uShad = uMonName.contains("Shadow", ignoreCase = true)
+        val uMeta = getPokemonMeta(uMonName, activeLeague, uShad)
+        val uMove1 = uCfg?.chargedMove1?.takeIf { it.isNotBlank() } ?: uMeta.chargedMove1
+        val uMove2 = uCfg?.chargedMove2?.takeIf { it.isNotBlank() } ?: uMeta.chargedMove2
+        val hasSecondUMove = uMove2.isNotBlank() && !uMove2.equals(uMove1, ignoreCase = true)
+        val uCost1 = (OverlayService.resolveChargedMoveStatsStatic(uMove1, uMeta.types.firstOrNull() ?: "normal").energyCost
+            .takeIf { it > 0 } ?: OverlayService.MOVE_ENERGY_COST[uMove1] ?: 50).coerceIn(35, 100)
+        val uCost2 = if (hasSecondUMove) {
+            (OverlayService.resolveChargedMoveStatsStatic(uMove2, uMeta.types.firstOrNull() ?: "normal").energyCost
+                .takeIf { it > 0 } ?: OverlayService.MOVE_ENERGY_COST[uMove2] ?: 50).coerceIn(35, 100)
+        } else uCost1
+        val cheapestUserCost = kotlin.math.min(uCost1, uCost2).coerceIn(35, 100)
+        val provisionalUserCost = when {
+            hasSecondUMove && prevBeforeRightFill >= 95 && prevBeforeLeftFill in 0 until 92 -> uCost2
+            prevBeforeLeftFill >= 95 && (!hasSecondUMove || prevBeforeRightFill in 0 until 92) -> uCost1
+            else -> cheapestUserCost
+        }
+        val startWinUserE = if (startWindowUserEnergy >= 0) startWindowUserEnergy else playerSlotEnergy[uIdx]
+        val preThrowUserE = when {
+            startWinUserE >= cheapestUserCost && (preThrowUserEnergyHint <= 0 || startWinUserE >= preThrowUserEnergyHint) ->
+                startWinUserE.coerceIn(cheapestUserCost, 100)
+            else ->
+                kotlin.math.max(preThrowUserEnergyHint, startWinUserE + provisionalUserCost).coerceIn(cheapestUserCost, 100)
+        }
+        pendingChargedAttackUserSlotIdx = uIdx
+        pendingChargedAttackOppSlotIdx = oIdx
+        if (isUserMinigamePhase) {
+            // Stage 1 (5s Player Swipe Minigame): Hold pre-throw energy on the GUI!
+            playerSlotEnergy[uIdx] = preThrowUserE
+            playerSlotEnergyAnchor[uIdx] = preThrowUserE
+            pendingChargedAttackDeductedEnergy = 0
+        } else if (!userUsedBannerTextInCharge.isNullOrBlank()) {
+            // Stage 2 (Validated by "<Player> used <Move>!" OCR): Deduct exact move cost immediately!
+            val rawAfterUsed = Regex("(?i)\\bused\\s+([^!.]+)").find(userUsedBannerTextInCharge)?.groupValues?.getOrNull(1)?.trim()
+                ?: userUsedBannerTextInCharge.substringAfter(" used ", "").replace("!", "").replace(".", "").trim()
+            val ocrUserCost = when {
+                uMove2.isNotBlank() && (rawAfterUsed.equals(uMove2, ignoreCase = true) || rawAfterUsed.contains(uMove2, ignoreCase = true)) -> uCost2
+                uMove1.isNotBlank() && (rawAfterUsed.equals(uMove1, ignoreCase = true) || rawAfterUsed.contains(uMove1, ignoreCase = true)) -> uCost1
+                else -> {
+                    val s = OverlayService.resolveChargedMoveStatsStatic(rawAfterUsed, uMeta.types.firstOrNull() ?: "normal")
+                    (s.energyCost.takeIf { it > 0 } ?: OverlayService.MOVE_ENERGY_COST[rawAfterUsed] ?: provisionalUserCost).coerceIn(35, 100)
+                }
+            }
+            val effPreU = kotlin.math.max(preThrowUserE, ocrUserCost).coerceIn(ocrUserCost, 100)
+            val resU = (effPreU - ocrUserCost).coerceIn(0, 100)
+            playerSlotEnergy[uIdx] = resU
+            playerSlotEnergyAnchor[uIdx] = resU
+            pendingChargedAttackDeductedEnergy = ocrUserCost
+        } else {
+            // Stage 3 (5s Minigame ended, waiting on HP to resolve while OCR failed): Provisionally deduct move energy!
+            val effPreU = kotlin.math.max(preThrowUserE, provisionalUserCost).coerceIn(provisionalUserCost, 100)
+            val resU = (effPreU - provisionalUserCost).coerceIn(0, 100)
+            playerSlotEnergy[uIdx] = resU
+            playerSlotEnergyAnchor[uIdx] = resU
+            pendingChargedAttackDeductedEnergy = provisionalUserCost
+        }
     }
 
     if (frame.recommendedPhase.isNotBlank()) lastRecommendedPhase = frame.recommendedPhase
