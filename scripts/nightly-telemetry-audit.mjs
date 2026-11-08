@@ -675,7 +675,7 @@ async function sendTelegramSummary(htmlMessage) {
       headers: {
         Authorization: `Bearer ${ADMIN_API_KEY}`,
         "Content-Type": "application/json",
-        "User-Agent": "SilphScopePvP-NightlyAudit/7.08",
+        "User-Agent": "SilphScopePvP-NightlyAudit/7.23",
       },
       body: JSON.stringify({ html: htmlMessage }),
     });
@@ -689,6 +689,28 @@ async function sendTelegramSummary(htmlMessage) {
     console.warn("[TELEGRAM] Failed to send Telegram summary:", err.message || err);
     return false;
   }
+}
+
+async function pushDailyTuningAndQuestionPoolToWorker(payload) {
+  if (!ADMIN_API_KEY) return false;
+  try {
+    const res = await fetch(`${DEFAULT_WORKER_URL}/v1/admin/tuning-config`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${ADMIN_API_KEY}`,
+        "Content-Type": "application/json",
+        "User-Agent": "SilphScopePvP-NightlyAudit/7.23",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      console.error("[TUNING-SYNC] Published daily AI-tuned settings & prioritized post-battle survey pool to Cloudflare KV.");
+      return true;
+    }
+  } catch (err) {
+    console.warn("[TUNING-SYNC] Could not push daily tuning config:", err.message || err);
+  }
+  return false;
 }
 
 async function main() {
@@ -1097,6 +1119,92 @@ async function main() {
     postBattleTuningFeedbackSummary,
   };
 
+  // Build Daily Prioritized Post-Battle Survey Question Pool (pushed to APKs via `/v1/tuning-config`)
+  // Automatically includes verification questions for recent high-priority fixes and any open anomalies!
+  const dailySurveyQuestionPool = [
+    {
+      id: "shield_energy",
+      priority: 100,
+      trigger: "hp_promoted_shield_call",
+      prompt: "🛡️ HP Shield Call Energy:",
+      shortLabel: "Shield Energy",
+      options: [
+        { val: "UNDERCOUNTED", label: "⬇️ Under" },
+        { val: "ACCURATE", label: "✅ Spot-On" },
+        { val: "OVERCOUNTED", label: "⬆️ Over" },
+      ],
+    },
+    {
+      id: "mml_hp_tracking_v708",
+      priority: 95,
+      trigger: "master_league",
+      prompt: "🦖 Master League HP Bars (v7.08 Fix):",
+      shortLabel: "MML HP Fix",
+      options: [
+        { val: "MISSED_BARS", label: "⚠️ Missed" },
+        { val: "LOCKED_CLEAN", label: "✅ Locked" },
+        { val: "FLICKERED", label: "🔄 Flicker" },
+      ],
+    },
+    {
+      id: "pre_zoom_energy_v720",
+      priority: 90,
+      trigger: "charged_move_thrown",
+      prompt: "⚡ Pre-Throw Energy Sync (v7.20 Fix):",
+      shortLabel: "Throw Energy",
+      options: [
+        { val: "UNDER_BY_1F", label: "⬇️ -1 Fast" },
+        { val: "EXACT_MATCH", label: "✅ Exact" },
+        { val: "OVER_BY_1F", label: "⬆️ +1 Fast" },
+      ],
+    },
+    {
+      id: "haptic_timing",
+      priority: 50,
+      trigger: "always",
+      prompt: "📳 Haptic Timing ({leadMs}ms):",
+      shortLabel: "Haptic Lead",
+      options: [
+        { val: "TOO_EARLY", label: "⏪ Early" },
+        { val: "IDEAL", label: "✅ Ideal" },
+        { val: "TOO_LATE", label: "⏩ Late" },
+      ],
+    },
+  ];
+
+  // Dynamically inject high-priority verification questions for any open action items
+  for (const openItem of openActionItems.slice(0, 2)) {
+    const cleanId = `issue_${String(openItem.type || "check").toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 18)}`;
+    if (!dailySurveyQuestionPool.some((q) => q.id === cleanId)) {
+      const isMaster = /master/i.test(String(openItem.league || ""));
+      dailySurveyQuestionPool.unshift({
+        id: cleanId,
+        priority: 98,
+        trigger: isMaster ? "master_league" : "charged_move_thrown",
+        prompt: `🔍 Verify ${openItem.type}: Did energy/HP stay in sync?`,
+        shortLabel: openItem.type.slice(0, 12),
+        options: [
+          { val: "DESYNCED", label: "⚠️ Desync" },
+          { val: "IN_SYNC", label: "✅ In Sync" },
+          { val: "UNSURE", label: "🤷 Unsure" },
+        ],
+      });
+    }
+  }
+  dailySurveyQuestionPool.sort((a, b) => b.priority - a.priority);
+
+  await pushDailyTuningAndQuestionPoolToWorker({
+    targetVersion: currentVersion,
+    tunedSettings: {
+      proactiveEnergyLeadMs: aiAutoTunedSettingsRecommendation.proactiveEnergyLeadMs,
+      predictiveGuiHapticLeadMs: aiAutoTunedSettingsRecommendation.predictiveGuiHapticLeadMs,
+      hpDebounceSamples: aiAutoTunedSettingsRecommendation.hpDebounceSamples,
+      hpDebounceTolerancePct: aiAutoTunedSettingsRecommendation.hpDebounceTolerancePct,
+      energyDebounceSamples: aiAutoTunedSettingsRecommendation.energyDebounceSamples,
+    },
+    questions: dailySurveyQuestionPool,
+  });
+
   const digest = {
     generatedAt: new Date().toISOString(),
     startedAt: startedAtIso,
@@ -1104,6 +1212,7 @@ async function main() {
     referenceLatestIngestIso: new Date(latestIngestMs).toISOString(),
     modelRoutingPolicy,
     aiAutoTunedSettingsRecommendation,
+    dailySurveyQuestionPool,
     postBattleTuningFeedbackSummary,
     totals: {
       uniqueTrainers: trainerTable.length,

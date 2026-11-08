@@ -3483,11 +3483,28 @@
                     if (tuningRowEl && tuningLblEl && tuningBtnsEl) {
                         if (ab.showTuningFeedbackPrompt && !ab.telemetryIgnored) {
                             tuningRowEl.classList.remove("hidden");
-                            const qType = ab.tuningQuestionType === "shield_energy" ? "shield_energy" : "haptic_timing";
+                            const qType = (ab.tuningQuestionType && String(ab.tuningQuestionType).trim()) || "haptic_timing";
                             const fbMap = ab.tuningFeedback || {};
                             const chosen = fbMap[qType] || "";
                             const leadMs = typeof ab.predictiveGuiHapticLeadMs === "number" ? ab.predictiveGuiHapticLeadMs : 300;
-                            if (qType === "shield_energy") {
+                            const dynOpts = Array.isArray(ab.tuningQuestionOptions) && ab.tuningQuestionOptions.length > 0
+                                ? ab.tuningQuestionOptions
+                                : null;
+                            const dynPrompt = (ab.tuningQuestionPrompt && String(ab.tuningQuestionPrompt).trim()) || "";
+
+                            if (dynOpts && dynPrompt) {
+                                const cleanPrompt = dynPrompt.replace(/\{leadMs\}/g, String(leadMs));
+                                tuningLblEl.innerHTML = chosen
+                                    ? `${escapeHtml(cleanPrompt)} <span style="color:#4ade80;">${escapeHtml(chosen)} ✓</span>`
+                                    : escapeHtml(cleanPrompt);
+                                tuningBtnsEl.innerHTML = dynOpts.map(o => {
+                                    const valStr = String(o.val || "");
+                                    const lblStr = String(o.label || valStr);
+                                    const isSel = chosen === valStr;
+                                    const activeStyle = isSel ? "background:#0284c7;color:#fff;border-color:#38bdf8;" : "";
+                                    return `<button class="menu-btn menu-btn-lead-neu" style="${activeStyle}" onclick="submitTuningFeedback('${escapeHtml(qType)}','${escapeHtml(valStr)}')">${escapeHtml(lblStr)}</button>`;
+                                }).join("");
+                            } else if (qType === "shield_energy") {
                                 tuningLblEl.innerHTML = chosen
                                     ? `🛡️ HP Shield Call: <span style="color:#4ade80;">${escapeHtml(chosen)} ✓</span>`
                                     : `🛡️ HP Shield Call Energy:`;

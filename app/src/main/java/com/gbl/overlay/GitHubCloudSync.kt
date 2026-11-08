@@ -3712,9 +3712,11 @@ internal fun OverlayService.Companion.uploadPendingAiTelemetryBatchBlocking(
                 httpClient.newCall(req).execute().use { resp ->
                     httpCode = resp.code
                     uploadedOk = resp.isSuccessful
-                    if (!uploadedOk) {
-                        val errBody = try { resp.body?.string().orEmpty() } catch (_: Exception) { "" }
-                        val parsedErr = try { JsonParser.parseString(errBody).asJsonObject.get("error")?.asString.orEmpty() } catch (_: Exception) { "" }
+                    val respBodyStr = try { resp.body?.string().orEmpty() } catch (_: Exception) { "" }
+                    if (uploadedOk && respBodyStr.isNotBlank()) {
+                        applyRemoteDailyTuningConfigStatic(prefs, gson, respBodyStr)
+                    } else if (!uploadedOk && respBodyStr.isNotBlank()) {
+                        val parsedErr = try { JsonParser.parseString(respBodyStr).asJsonObject.get("error")?.asString.orEmpty() } catch (_: Exception) { "" }
                         if (parsedErr.isNotBlank()) lastErr = parsedErr
                     }
                 }
@@ -3765,6 +3767,110 @@ internal fun OverlayService.Companion.uploadPendingAiTelemetryBatchBlocking(
 }
 
 /**
+ * v7.23: Applies the remote Daily AI Auto-Tuned Settings & Post-Battle Survey Question Pool
+ * returned by `GET /v1/tuning-config` or embedded inside `POST /v1/telemetry` responses.
+ */
+internal fun OverlayService.Companion.applyRemoteDailyTuningConfigStatic(
+    prefs: SharedPreferences,
+    gson: Gson,
+    rawJsonString: String
+): Boolean {
+    return try {
+        val rootObj = JsonParser.parseString(rawJsonString).asJsonObject
+        val cfgObj = if (rootObj.has("dailyTuningConfig") && rootObj.get("dailyTuningConfig").isJsonObject) {
+            rootObj.getAsJsonObject("dailyTuningConfig")
+        } else {
+            rootObj
+        }
+        val editor = prefs.edit()
+        var changed = false
+
+        if (cfgObj.has("tunedSettings") && cfgObj.get("tunedSettings").isJsonObject) {
+            val ts = cfgObj.getAsJsonObject("tunedSettings")
+            if (ts.has("proactiveEnergyLeadMs")) {
+                val v = ts.get("proactiveEnergyLeadMs").asInt.coerceIn(0, 450)
+                editor.putInt(PREFS_KEY_PROACTIVE_ENERGY_LEAD_MS, v)
+                changed = true
+            }
+            if (ts.has("predictiveGuiHapticLeadMs")) {
+                val v = ts.get("predictiveGuiHapticLeadMs").asInt.coerceIn(100, 500)
+                editor.putInt(OverlayService.PREFS_KEY_PREDICTIVE_GUI_HAPTIC_LEAD_MS, v)
+                changed = true
+            }
+            if (ts.has("hpDebounceSamples")) {
+                val v = ts.get("hpDebounceSamples").asInt.coerceIn(2, 4)
+                editor.putInt(PREFS_KEY_HP_DEBOUNCE_SAMPLES, v)
+                editor.putInt(OverlayService.PREFS_KEY_HP_DEBOUNCE_WINDOW_MS, v * 100)
+                changed = true
+            }
+            if (ts.has("hpDebounceTolerancePct")) {
+                val v = ts.get("hpDebounceTolerancePct").asInt.coerceIn(0, 3)
+                editor.putInt(PREFS_KEY_DEBOUNCE_TOLERANCE_PCT, v)
+                editor.putFloat(OverlayService.PREFS_KEY_HP_DEBOUNCE_TOLERANCE_PCT_F, v.toFloat().coerceAtLeast(1.0f))
+                changed = true
+            }
+            if (ts.has("energyDebounceSamples")) {
+                val v = ts.get("energyDebounceSamples").asInt.coerceIn(2, 4)
+                editor.putInt(PREFS_KEY_ENERGY_DEBOUNCE_SAMPLES, v)
+                editor.putInt(OverlayService.PREFS_KEY_ENERGY_DEBOUNCE_WINDOW_MS, v * 100)
+                changed = true
+            }
+        }
+
+        if (cfgObj.has("questions") && cfgObj.get("questions").isJsonArray) {
+            val qArr = cfgObj.getAsJsonArray("questions")
+            if (qArr.size() > 0) {
+                editor.putString(OverlayService.PREFS_KEY_DYNAMIC_TUNING_QUESTIONS_JSON, gson.toJson(qArr))
+                changed = true
+            }
+        }
+
+        if (changed) {
+            editor.putLong(OverlayService.PREFS_KEY_LAST_TUNING_CONFIG_SYNC_MS, System.currentTimeMillis()).apply()
+            OverlayService.syncTierThresholdsFromPrefs(prefs)
+        }
+        changed
+    } catch (_: Exception) {
+        false
+    }
+}
+
+internal fun OverlayService.Companion.syncDailyTuningAndQuestionPoolAsync(
+    prefs: SharedPreferences,
+    gson: Gson,
+    forceSync: Boolean = false
+) {
+    val nowMs = System.currentTimeMillis()
+    val lastSyncMs = prefs.getLong(OverlayService.PREFS_KEY_LAST_TUNING_CONFIG_SYNC_MS, 0L)
+    if (!forceSync && (nowMs - lastSyncMs) < 6L * 60L * 60L * 1000L) return
+
+    kotlinx.coroutines.CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob()).launch {
+        try {
+            val httpClient = buildTelemetryHttpClientStatic(10L, 15L, 15L)
+            for (baseUrl in CLOUDFLARE_INGEST_BASE_URLS) {
+                try {
+                    val req = Request.Builder()
+                        .url("$baseUrl/v1/tuning-config")
+                        .get()
+                        .build()
+                    var ok = false
+                    httpClient.newCall(req).execute().use { resp ->
+                        if (resp.isSuccessful) {
+                            val bodyStr = resp.body?.string().orEmpty()
+                            if (bodyStr.isNotBlank()) {
+                                applyRemoteDailyTuningConfigStatic(prefs, gson, bodyStr)
+                                ok = true
+                            }
+                        }
+                    }
+                    if (ok) break
+                } catch (_: Exception) {}
+            }
+        } catch (_: Exception) {}
+    }
+}
+
+/**
  * Trigger #1 (Once Daily on App Launch):
  * Runs in background on app launch if `autoUploadEnabled`,
  * at least 1 battle is pending, and `nowMs - lastUploadMs >= 24h` (or `>= 5` battles pending).
@@ -3774,6 +3880,7 @@ internal fun OverlayService.Companion.triggerAutoUploadOnAppLaunchAsync(
     gson: Gson,
     onComplete: ((Boolean, String) -> Unit)? = null
 ) {
+    syncDailyTuningAndQuestionPoolAsync(prefs, gson, forceSync = false)
     val autoEnabled = prefs.getBoolean(PREFS_KEY_AUTO_UPLOAD_AI_LOGS, DEFAULT_AUTO_UPLOAD_AI_LOGS)
     if (!autoEnabled) return
     val pending = loadPendingAiTelemetryLogsStatic(prefs, gson)

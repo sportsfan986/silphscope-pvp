@@ -1,4 +1,17 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.22`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.23`)
+
+---
+
+## v7.23 (2026-11-08) — Dynamic Daily Post-Battle Survey Question Pool, Contextual Fix Verification & Remote AI-Tuned Settings Sync
+*Live Android APK, Cloudflare Worker & Nightly Audit release (`v7.23`, `versionCode = 1723`) introducing remote over-the-air synchronization for the Daily Prioritized Post-Battle Survey Question Pool and AI-Tuned Hidden Settings (`GET /v1/tuning-config` + piggybacked `POST /v1/telemetry` response), enabling recent fixes and open issues from the nightly 5:00 AM audit to be verified directly in the post-battle `#auto-logged-banner` micro-poll.*
+
+- **v7.23 — Feature 1: Dynamic Daily Post-Battle Survey Question Pool (`OverlayService.kt`, `overlay.html`, `GitHubCloudSync.kt`)**:
+  - Added `DynamicSurveyQuestion` & `DynamicSurveyOption` schema (`id`, `priority`, `trigger`, `prompt`, `shortLabel`, and 3-button `options[]`) synced into `SharedPreferences` (`PREFS_KEY_DYNAMIC_TUNING_QUESTIONS_JSON`).
+  - Added `selectHighestPriorityPostBattleQuestion(...)` in `OverlayService.kt` to evaluate the completed battle's context (`hp_promoted_shield_call`, `energy_deficit_anomaly`, `master_league`, `great_league`, `ultra_league`, `charged_move_thrown`, `always`) and pick the highest-priority matching question from the daily pool (rotating ties via `battleSurveyRotationCounter`).
+  - Updated `#auto-logged-tuning-feedback-row` in `overlay.html` to dynamically render any remote survey question prompt (with `{leadMs}` interpolation) and 3-option buttons while logging responses to both `POST_BATTLE_TUNING_FEEDBACK` telemetry events and the local device EMA tuning loop.
+- **v7.23 — Feature 2: Remote AI-Tuned Settings & Question Pool Sync (`cloudflare/telemetry-worker/worker.mjs`, `GitHubCloudSync.kt`, `scripts/nightly-telemetry-audit.mjs`)**:
+  - Added `GET /v1/tuning-config` and `POST /v1/admin/tuning-config` to `cloudflare/telemetry-worker/worker.mjs` backed by `TELEMETRY_KV` (`daily_tuning_config/latest`), and piggybacked `dailyTuningConfig` onto every `POST /v1/telemetry` response so active APKs receive the latest question pool and tuned millisecond settings with zero extra HTTP requests.
+  - Updated `scripts/nightly-telemetry-audit.mjs` to automatically construct the prioritized `dailySurveyQuestionPool` (combining fix-verification polls for `v7.08` Master League HP bars, `v7.15` HP-promoted shield calls, `v7.20` pre-zoom throw energy, and dynamic priority-98 polls for any active open action items) and publish it alongside `aiAutoTunedSettingsRecommendation` to `https://api.silphscopepvp.com/v1/admin/tuning-config`.
 
 ---
 

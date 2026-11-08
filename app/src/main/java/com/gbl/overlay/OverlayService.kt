@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.22"
-        const val APP_VERSION_CODE = 1722
+        const val APP_VERSION = "7.23"
+        const val APP_VERSION_CODE = 1723
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -281,6 +281,88 @@ class OverlayService : LifecycleService() {
         }
 
         const val PREFS_KEY_POST_BATTLE_TUNING_FEEDBACK = "gbl_post_battle_tuning_feedback_enabled"
+        const val PREFS_KEY_DYNAMIC_TUNING_QUESTIONS_JSON = "gbl_dynamic_tuning_questions_pool_json"
+        const val PREFS_KEY_LAST_TUNING_CONFIG_SYNC_MS = "gbl_last_tuning_config_sync_ms"
+
+        data class DynamicSurveyOption(
+            val `val`: String = "",
+            val label: String = ""
+        )
+
+        data class DynamicSurveyQuestion(
+            val id: String = "",
+            val priority: Int = 50,
+            val trigger: String = "always",
+            val prompt: String = "",
+            val shortLabel: String = "",
+            val options: List<DynamicSurveyOption> = emptyList()
+        )
+
+        fun defaultDynamicSurveyQuestionsStatic(): List<DynamicSurveyQuestion> = listOf(
+            DynamicSurveyQuestion(
+                id = "shield_energy",
+                priority = 100,
+                trigger = "hp_promoted_shield_call",
+                prompt = "🛡️ HP Shield Call Energy:",
+                shortLabel = "Shield Energy",
+                options = listOf(
+                    DynamicSurveyOption("UNDERCOUNTED", "⬇️ Under"),
+                    DynamicSurveyOption("ACCURATE", "✅ Spot-On"),
+                    DynamicSurveyOption("OVERCOUNTED", "⬆️ Over")
+                )
+            ),
+            DynamicSurveyQuestion(
+                id = "mml_hp_tracking_v708",
+                priority = 95,
+                trigger = "master_league",
+                prompt = "🦖 Master League HP Bars (v7.08 Fix):",
+                shortLabel = "MML HP Fix",
+                options = listOf(
+                    DynamicSurveyOption("MISSED_BARS", "⚠️ Missed"),
+                    DynamicSurveyOption("LOCKED_CLEAN", "✅ Locked"),
+                    DynamicSurveyOption("FLICKERED", "🔄 Flicker")
+                )
+            ),
+            DynamicSurveyQuestion(
+                id = "pre_zoom_energy_v720",
+                priority = 90,
+                trigger = "charged_move_thrown",
+                prompt = "⚡ Pre-Throw Energy Sync (v7.20 Fix):",
+                shortLabel = "Throw Energy",
+                options = listOf(
+                    DynamicSurveyOption("UNDER_BY_1F", "⬇️ -1 Fast"),
+                    DynamicSurveyOption("EXACT_MATCH", "✅ Exact"),
+                    DynamicSurveyOption("OVER_BY_1F", "⬆️ +1 Fast")
+                )
+            ),
+            DynamicSurveyQuestion(
+                id = "haptic_timing",
+                priority = 50,
+                trigger = "always",
+                prompt = "📳 Haptic Timing ({leadMs}ms):",
+                shortLabel = "Haptic Lead",
+                options = listOf(
+                    DynamicSurveyOption("TOO_EARLY", "⏪ Early"),
+                    DynamicSurveyOption("IDEAL", "✅ Ideal"),
+                    DynamicSurveyOption("TOO_LATE", "⏩ Late")
+                )
+            )
+        )
+
+        fun loadDynamicSurveyQuestionsStatic(prefs: SharedPreferences, gson: Gson): List<DynamicSurveyQuestion> {
+            val raw = prefs.getString(PREFS_KEY_DYNAMIC_TUNING_QUESTIONS_JSON, null)
+            if (!raw.isNullOrBlank()) {
+                try {
+                    val listType = object : TypeToken<List<DynamicSurveyQuestion>>() {}.type
+                    val parsed = gson.fromJson<List<DynamicSurveyQuestion>>(raw, listType)
+                    if (!parsed.isNullOrEmpty()) {
+                        return parsed.filter { it.id.isNotBlank() && it.options.isNotEmpty() }
+                            .sortedByDescending { it.priority }
+                    }
+                } catch (_: Exception) {}
+            }
+            return defaultDynamicSurveyQuestionsStatic()
+        }
 
         fun isPostBattleTuningFeedbackEnabledStatic(prefs: SharedPreferences): Boolean {
             val defaultVal = isAdminTrainerStatic(prefs)
@@ -3876,6 +3958,7 @@ class OverlayService : LifecycleService() {
         val rawSavedThemeId = prefs.getString(PREFS_KEY_APP_THEME_ID, "dialga_shiny_midnight") ?: "dialga_shiny_midnight"
         appThemeId = if (rawSavedThemeId == "amoled_cyan" || rawSavedThemeId == "amoled_matrix") "dialga_shiny_midnight" else rawSavedThemeId
         syncTierThresholdsFromPrefs(prefs)
+        OverlayService.syncDailyTuningAndQuestionPoolAsync(prefs, gson, forceSync = false)
 
         val metrics = resources.displayMetrics
         screenWidth = metrics.widthPixels
@@ -13070,7 +13153,48 @@ class OverlayService : LifecycleService() {
     @Volatile internal var lastChargeWarnHapticKey: String = ""
     @Volatile internal var hadHpPromotedShieldCallInBattle: Boolean = false
     @Volatile internal var lastLoggedBattleTuningQuestionType: String = "haptic_timing"
+    @Volatile internal var lastLoggedBattleTuningQuestionPrompt: String = ""
+    @Volatile internal var lastLoggedBattleTuningQuestionShortLabel: String = "Haptic Lead"
+    @Volatile internal var lastLoggedBattleTuningQuestionOptions: List<Map<String, String>> = emptyList()
+    @Volatile internal var battleSurveyRotationCounter: Int = 0
     internal val lastLoggedBattleTuningFeedback = mutableMapOf<String, String>()
+
+    private fun selectHighestPriorityPostBattleQuestion(
+        leagueName: String,
+        hadHpPromoShieldCall: Boolean,
+        timelineEvents: List<BattleTimelineEvent>,
+        anomalies: List<BattleAnomalyRecord>
+    ) {
+        val pool = loadDynamicSurveyQuestionsStatic(prefs, gson)
+        val hasChargedThrow = timelineEvents.any { it.type.equals("CHARGED_ATTACK", ignoreCase = true) }
+        val hasEnergyDeficit = anomalies.any { it.type.contains("ENERGY_DEFICIT", ignoreCase = true) }
+        val isMasterLeague = leagueName.contains("master", ignoreCase = true) || leagueName.contains("10000")
+        val isGreatLeague = leagueName.contains("great", ignoreCase = true) || leagueName.contains("1500")
+        val isUltraLeague = leagueName.contains("ultra", ignoreCase = true) || leagueName.contains("2500")
+
+        val matching = pool.filter { q ->
+            when (q.trigger.trim().lowercase()) {
+                "hp_promoted_shield_call" -> hadHpPromoShieldCall
+                "energy_deficit_anomaly" -> hasEnergyDeficit
+                "master_league" -> isMasterLeague
+                "great_league" -> isGreatLeague
+                "ultra_league" -> isUltraLeague
+                "charged_move_thrown" -> hasChargedThrow
+                "always", "" -> true
+                else -> true
+            }
+        }
+        val candidates = if (matching.isNotEmpty()) matching else defaultDynamicSurveyQuestionsStatic()
+        val topPriority = candidates.first().priority
+        val topTierCandidates = candidates.filter { it.priority >= topPriority - 5 }
+        val chosen = topTierCandidates[battleSurveyRotationCounter % topTierCandidates.size]
+        battleSurveyRotationCounter++
+
+        lastLoggedBattleTuningQuestionType = chosen.id
+        lastLoggedBattleTuningQuestionPrompt = chosen.prompt.replace("{leadMs}", activePredictiveGuiHapticLeadMs.toString())
+        lastLoggedBattleTuningQuestionShortLabel = chosen.shortLabel.ifBlank { chosen.id }
+        lastLoggedBattleTuningQuestionOptions = chosen.options.map { mapOf("val" to it.`val`, "label" to it.label) }
+    }
 
     fun startNewBattle() {
         // Snapshot opponents and lead matchup before clearing, so if the user taps
@@ -13920,7 +14044,12 @@ class OverlayService : LifecycleService() {
             else -> "DISCARDED_SHORT"
         }
         val capturedBugReportNote = stoppedBattleBugReportNote
-        lastLoggedBattleTuningQuestionType = if (hadHpPromotedShieldCallInBattle) "shield_energy" else "haptic_timing"
+        selectHighestPriorityPostBattleQuestion(
+            leagueName = currentLeagueName,
+            hadHpPromoShieldCall = hadHpPromotedShieldCallInBattle,
+            timelineEvents = finalTimelineEvents,
+            anomalies = detectedAnomalies
+        )
         hadHpPromotedShieldCallInBattle = false
         lastLoggedBattleTuningFeedback.clear()
         lastLoggedBattleSummaryRecord = v510Record
@@ -14156,9 +14285,10 @@ class OverlayService : LifecycleService() {
             }
         }
         recalculateAndPushBattleData()
-        val qLabel = when (qKey) {
-            "haptic_timing" -> "Haptic Lead"
-            "shield_energy" -> "Shield Energy"
+        val qLabel = when {
+            qKey == lastLoggedBattleTuningQuestionType && lastLoggedBattleTuningQuestionShortLabel.isNotBlank() -> lastLoggedBattleTuningQuestionShortLabel
+            qKey == "haptic_timing" -> "Haptic Lead"
+            qKey == "shield_energy" -> "Shield Energy"
             else -> qKey
         }
         showBattleToast("🎯 Tuning Saved ($qLabel: $ansVal) — Consolidated in Daily Audit")
@@ -15658,6 +15788,8 @@ class OverlayService : LifecycleService() {
                     "dvrUploadStatus" to lastLoggedBattleDvrUploadStatus,
                     "showTuningFeedbackPrompt" to activePostBattleTuningFeedbackEnabled,
                     "tuningQuestionType" to lastLoggedBattleTuningQuestionType,
+                    "tuningQuestionPrompt" to lastLoggedBattleTuningQuestionPrompt,
+                    "tuningQuestionOptions" to lastLoggedBattleTuningQuestionOptions,
                     "tuningFeedback" to lastLoggedBattleTuningFeedback.toMap(),
                     "predictiveGuiHapticLeadMs" to activePredictiveGuiHapticLeadMs
                 ) else null,
@@ -17449,6 +17581,8 @@ class OverlayService : LifecycleService() {
                 "dvrUploadStatus" to lastLoggedBattleDvrUploadStatus,
                 "showTuningFeedbackPrompt" to activePostBattleTuningFeedbackEnabled,
                 "tuningQuestionType" to lastLoggedBattleTuningQuestionType,
+                "tuningQuestionPrompt" to lastLoggedBattleTuningQuestionPrompt,
+                "tuningQuestionOptions" to lastLoggedBattleTuningQuestionOptions,
                 "tuningFeedback" to lastLoggedBattleTuningFeedback.toMap(),
                 "predictiveGuiHapticLeadMs" to activePredictiveGuiHapticLeadMs
             ) else null,
