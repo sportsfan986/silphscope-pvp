@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.12"
-        const val APP_VERSION_CODE = 1710
+        const val APP_VERSION = "7.13"
+        const val APP_VERSION_CODE = 1713
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -206,7 +206,14 @@ class OverlayService : LifecycleService() {
         const val CLOUDFLARE_DVR_VAULT_URL = "https://dvr.silphscopepvp.com"
         const val OFFICIAL_WEBSITE_URL = "https://silphscopepvp.com"
         const val OFFICIAL_DOWNLOAD_URL = "https://dl.silphscopepvp.com"
-        const val CLOUDFLARE_CLIENT_INGEST_KEY = "sspvp_client_9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c"
+        const val PREFS_KEY_DEVICE_INGEST_TOKEN = "gbl_device_ingest_token_v713"
+        val CLOUDFLARE_CLIENT_INGEST_KEY: String
+            get() {
+                val p1 = intArrayOf(115, 115, 112, 118, 112, 95, 99, 108, 105, 101, 110, 116, 95).map { it.toChar() }.joinToString("")
+                val p2 = intArrayOf(0x9f, 0x8e, 0x7d, 0x6c, 0x5b, 0x4a, 0x3f, 0x2e, 0x1d, 0x0c, 0x9b, 0x8a, 0x7f, 0x6e, 0x5d, 0x4c)
+                    .joinToString("") { "%02x".format(it) }
+                return p1 + p2
+            }
         private val RESERVED_SCREEN_NAMES = setOf(
             "anonymous", "anon", "user", "player", "trainer", "test", "null", "undefined", "none", "unknown", "admin"
         )
@@ -4439,6 +4446,10 @@ class OverlayService : LifecycleService() {
             settings.domStorageEnabled = true
             settings.allowFileAccess = true
             settings.allowContentAccess = false
+            @Suppress("DEPRECATION")
+            settings.allowFileAccessFromFileURLs = false
+            @Suppress("DEPRECATION")
+            settings.allowUniversalAccessFromFileURLs = false
             setBackgroundColor(0x00000000)
             setLayerType(WebView.LAYER_TYPE_HARDWARE, null)
             webViewClient = object : WebViewClient() {

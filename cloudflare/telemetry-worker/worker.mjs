@@ -28,14 +28,80 @@ const RESERVED_SCREEN_NAMES = new Set([
   'admin',
 ]);
 
-function jsonResponse(data, status = 200) {
+const ALLOWED_CORS_ORIGINS = new Set([
+  'https://silphscopepvp.com',
+  'https://www.silphscopepvp.com',
+  'https://dvr.silphscopepvp.com',
+  'https://api.silphscopepvp.com',
+  'https://dl.silphscopepvp.com',
+]);
+
+function resolveAllowedCorsOrigin(request, restrictOrigin = false) {
+  if (!request) return '*';
+  const origin = (request.headers.get('Origin') || '').trim();
+  if (!origin) {
+    return restrictOrigin ? 'https://silphscopepvp.com' : '*';
+  }
+  if (
+    ALLOWED_CORS_ORIGINS.has(origin) ||
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)
+  ) {
+    return origin;
+  }
+  return restrictOrigin ? 'https://silphscopepvp.com' : '*';
+}
+
+const DEFAULT_CSP_HEADER =
+  "default-src 'self'; " +
+  "script-src 'self' 'unsafe-inline'; " +
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+  "font-src 'self' data: https://fonts.gstatic.com; " +
+  "img-src 'self' data: blob: https:; " +
+  "media-src 'self' blob: https:; " +
+  "connect-src 'self' https://api.silphscopepvp.com https://dvr.silphscopepvp.com https://silphscopepvp.com https://www.silphscopepvp.com https://api.github.com; " +
+  "frame-src 'self'; " +
+  "frame-ancestors 'self'; " +
+  "object-src 'none'; " +
+  "base-uri 'self'";
+
+function buildSecurityHeaders(extraHeaders = {}, isHtml = false) {
+  const h = {
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'X-Frame-Options': 'SAMEORIGIN',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    ...extraHeaders,
+  };
+  if (isHtml && !h['Content-Security-Policy']) {
+    h['Content-Security-Policy'] = DEFAULT_CSP_HEADER;
+  }
+  return h;
+}
+
+function jsonResponse(data, status = 200, request = null, restrictCors = false) {
   return new Response(JSON.stringify(data, null, 2), {
     status,
-    headers: {
+    headers: buildSecurityHeaders({
       'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': '*',
-    },
+      'Access-Control-Allow-Origin': resolveAllowedCorsOrigin(request, restrictCors),
+      Vary: 'Origin',
+    }),
   });
+}
+
+function timingSafeEqualStr(a, b) {
+  const strA = typeof a === 'string' ? a : '';
+  const strB = typeof b === 'string' ? b : '';
+  const enc = new TextEncoder();
+  const bufA = enc.encode(strA);
+  const bufB = enc.encode(strB);
+  const len = Math.max(bufA.byteLength, bufB.byteLength);
+  let diff = bufA.byteLength ^ bufB.byteLength;
+  for (let i = 0; i < len; i++) {
+    diff |= (bufA[i] || 0) ^ (bufB[i] || 0);
+  }
+  return diff === 0 && strA.length > 0;
 }
 
 function sanitizeScreenName(raw) {
@@ -48,8 +114,29 @@ function sanitizeScreenName(raw) {
 
 function sanitizeId(raw, fallback = 'id') {
   if (!raw || typeof raw !== 'string') return fallback;
-  const cleaned = raw.trim().replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 96);
+  const cleaned = raw
+    .trim()
+    .replace(/\.\.+/g, '_')
+    .replace(/[^A-Za-z0-9_.-]/g, '_')
+    .replace(/^[._-]+|[._-]+$/g, '')
+    .slice(0, 96);
   return cleaned || fallback;
+}
+
+function sanitizeEmailKey(rawEmail) {
+  if (!rawEmail || typeof rawEmail !== 'string') return '';
+  return rawEmail
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9@._+-]/g, '')
+    .slice(0, 120);
+}
+
+function maskSecretKey(rawKey) {
+  const s = String(rawKey || '').trim();
+  if (!s) return '';
+  if (s.length <= 8) return '****';
+  return `${s.slice(0, 6)}...${s.slice(-4)}`;
 }
 
 /**
@@ -73,6 +160,10 @@ function getStorageAdapter(env) {
       async getText(key) {
         const obj = await bucket.get(key);
         return obj ? await obj.text() : null;
+      },
+      async getBytes(key) {
+        const obj = await bucket.get(key);
+        return obj ? await obj.arrayBuffer() : null;
       },
       async getResponse(key) {
         const obj = await bucket.get(key);
@@ -173,6 +264,29 @@ function getStorageAdapter(env) {
       async getText(key) {
         return await kv.get(key, { type: 'text' });
       },
+      async getBytes(key) {
+        const { value, metadata } = await kv.getWithMetadata(key, { type: 'arrayBuffer' });
+        if (!value) return null;
+        const chunkCount = Number((metadata && metadata.chunkCount) || 1);
+        if (chunkCount <= 1) return value;
+        const chunks = [new Uint8Array(value)];
+        let totalLen = chunks[0].byteLength;
+        for (let i = 1; i < chunkCount; i++) {
+          const partBuf = await kv.get(`${key}.__part${i}`, { type: 'arrayBuffer' });
+          if (partBuf) {
+            const u8 = new Uint8Array(partBuf);
+            chunks.push(u8);
+            totalLen += u8.byteLength;
+          }
+        }
+        const merged = new Uint8Array(totalLen);
+        let offset = 0;
+        for (const c of chunks) {
+          merged.set(c, offset);
+          offset += c.byteLength;
+        }
+        return merged.buffer;
+      },
       async getResponse(key) {
         const { value, metadata } = await kv.getWithMetadata(key, { type: 'arrayBuffer' });
         if (!value) return null;
@@ -234,14 +348,53 @@ function getStorageAdapter(env) {
   throw new Error('Neither TELEMETRY_BUCKET (R2) nor TELEMETRY_KV (KV) is bound.');
 }
 
-function verifyClientAuth(request, env, allowBlankScreenName = false) {
+async function computeDeviceIngestToken(env, deviceHash) {
+  const cleanDev = String(deviceHash || '').trim().toLowerCase();
+  if (cleanDev.length < 8) return '';
+  try {
+    const secret = getSessionHmacSecret(env);
+    const enc = new TextEncoder();
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      enc.encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    const payload = `device_ingest_v1|${cleanDev}`;
+    const sigBuf = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(payload));
+    const sigHex = Array.from(new Uint8Array(sigBuf))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+    return `dit1_${sigHex}`;
+  } catch (_) {
+    return '';
+  }
+}
+
+async function verifyClientAuth(request, env, allowBlankScreenName = false, allowWebClientKey = false) {
   const expectedKey = (env.CLIENT_INGEST_KEY || '').trim();
   if (!expectedKey) {
     return { ok: false, status: 500, error: 'Worker CLIENT_INGEST_KEY secret is not configured.' };
   }
   const providedKey = (request.headers.get('X-SilphScope-Client-Key') || '').trim();
-  const isLegacyWebKey = providedKey === 'sspvp_telemetry_v1_9f8e7d6c5b4a3f2e1d0c';
-  if (!providedKey || (providedKey !== expectedKey && !isLegacyWebKey)) {
+  const isValidPrimary = providedKey && timingSafeEqualStr(providedKey, expectedKey);
+  const isValidWebKey =
+    allowWebClientKey &&
+    providedKey &&
+    timingSafeEqualStr(providedKey, 'ssk_client_v615_telemetry_ingest_9f8a7b6c5d4e3f2a1b0c');
+
+  let isValidDeviceToken = false;
+  const providedDevToken = (request.headers.get('X-Device-Ingest-Token') || '').trim();
+  const providedDevHash = (request.headers.get('X-Device-Hash') || '').trim();
+  if (providedDevToken && providedDevHash.length >= 8) {
+    const expectedDevToken = await computeDeviceIngestToken(env, providedDevHash);
+    if (expectedDevToken && timingSafeEqualStr(providedDevToken, expectedDevToken)) {
+      isValidDeviceToken = true;
+    }
+  }
+
+  if (!isValidPrimary && !isValidWebKey && !isValidDeviceToken) {
     return { ok: false, status: 401, error: 'Invalid or missing X-SilphScope-Client-Key header.' };
   }
   const rawScreenName =
@@ -256,7 +409,7 @@ function verifyClientAuth(request, env, allowBlankScreenName = false) {
       error: 'Valid X-Trainer-Screen-Name header (3-24 alphanumeric/underscore chars) is required.',
     };
   }
-  return { ok: true, screenName };
+  return { ok: true, screenName, isValidDeviceToken };
 }
 
 function verifyAdminAuth(request, env) {
@@ -266,10 +419,46 @@ function verifyAdminAuth(request, env) {
   }
   const authHeader = request.headers.get('Authorization') || '';
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-  if (!token || token !== expectedAdmin) {
+  if (!token || !timingSafeEqualStr(token, expectedAdmin)) {
     return { ok: false, status: 401, error: 'Unauthorized: invalid ADMIN_API_KEY.' };
   }
   return { ok: true };
+}
+
+function getClientIp(request) {
+  return (
+    request.headers.get('CF-Connecting-IP') ||
+    (request.headers.get('X-Forwarded-For') || '').split(',')[0].trim() ||
+    '0.0.0.0'
+  );
+}
+
+async function checkAndIncrementRateLimit(kv, bucketName, subjectKey, maxHits = 10, windowSec = 600) {
+  if (!kv) return { allowed: true, remaining: maxHits };
+  const cleanSub = String(subjectKey || 'anon')
+    .toLowerCase()
+    .replace(/[^a-z0-9._:-]/g, '_')
+    .slice(0, 80);
+  const slot = Math.floor(Date.now() / (windowSec * 1000));
+  const kvKey = `ratelimit/${bucketName}/${cleanSub}/${slot}`;
+  try {
+    const raw = await kv.get(kvKey, { type: 'text' });
+    const count = (Number(raw) || 0) + 1;
+    if (count > maxHits) {
+      return { allowed: false, remaining: 0, retryAfterSec: windowSec };
+    }
+    await kv.put(kvKey, String(count), { expirationTtl: Math.max(60, windowSec + 30) });
+    return { allowed: true, remaining: Math.max(0, maxHits - count) };
+  } catch (_) {
+    return { allowed: true, remaining: maxHits };
+  }
+}
+
+function isValidMp4Bytes(bytes) {
+  if (!bytes || bytes.byteLength < 12) return false;
+  // Standard ISO BMFF / MP4 boxes contain 'ftyp', 'moov', 'mdat', 'wide', or 'free' at bytes 4..7
+  const tag = String.fromCharCode(bytes[4], bytes[5], bytes[6], bytes[7]);
+  return tag === 'ftyp' || tag === 'moov' || tag === 'mdat' || tag === 'free' || tag === 'wide';
 }
 
 async function updateManifest(store, updater) {
@@ -348,7 +537,18 @@ function escapeHtml(str) {
   return String(str || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function safeJsonForScript(val) {
+  return JSON.stringify(val)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 // ============================================================================
@@ -491,8 +691,50 @@ function getActiveGblSeasonWindow(nowMs = Date.now()) {
   };
 }
 
+function getLicenseHmacSecret(env) {
+  const sec = String(env.LICENSE_HMAC_KEY || env.ADMIN_API_KEY || '').trim();
+  if (!sec) {
+    throw new Error('Server cryptographic secret (LICENSE_HMAC_KEY / ADMIN_API_KEY) is not configured.');
+  }
+  return `${sec}:license_hmac_v2`;
+}
+
+function getSessionHmacSecret(env) {
+  const sec = String(env.SESSION_HMAC_KEY || env.ADMIN_API_KEY || '').trim();
+  if (!sec) {
+    throw new Error('Server cryptographic secret (SESSION_HMAC_KEY / ADMIN_API_KEY) is not configured.');
+  }
+  return `${sec}:vault_session_v2`;
+}
+
+function getPasswordPepperSecret(env) {
+  const sec = String(env.PASSWORD_PEPPER || env.ADMIN_API_KEY || '').trim();
+  if (!sec) {
+    throw new Error('Server cryptographic secret (PASSWORD_PEPPER / ADMIN_API_KEY) is not configured.');
+  }
+  return sec;
+}
+
+function randomCharsFromAlphabet(len, alphabet) {
+  const bytes = new Uint8Array(len);
+  crypto.getRandomValues(bytes);
+  let out = '';
+  for (let i = 0; i < len; i++) {
+    out += alphabet[bytes[i] % alphabet.length];
+  }
+  return out;
+}
+
+function generateSecureSaltHex(byteLen = 16) {
+  const bytes = new Uint8Array(byteLen);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 async function signLicensePayloadHmac(env, screenName, tier, expiresAt, everPaid) {
-  const secret = String(env.ADMIN_API_KEY || env.CLIENT_INGEST_KEY || 'sspvp_hmac_salt_v7').trim();
+  const secret = getLicenseHmacSecret(env);
   const msg = `${String(screenName || '').toLowerCase()}|${String(tier || 'free').toLowerCase()}|${String(expiresAt || 'never')}|${Boolean(everPaid)}`;
   const enc = new TextEncoder();
   const cryptoKey = await crypto.subtle.importKey(
@@ -511,32 +753,39 @@ async function signLicensePayloadHmac(env, screenName, tier, expiresAt, everPaid
 async function hasUserUsedIntroPromo(kv, { screenName = '', email = '', deviceHash = '', githubUserId = '' }) {
   if (!kv) return false;
   const checks = [];
+  const cleanEmail = sanitizeEmailKey(email);
+  const cleanDev = sanitizeId(deviceHash, '');
+  const cleanGh = sanitizeId(githubUserId, '');
   if (screenName) checks.push(kv.get(`promo_used/user/${screenName.toLowerCase()}`, { type: 'text' }));
-  if (email) checks.push(kv.get(`promo_used/email/${email.toLowerCase()}`, { type: 'text' }));
-  if (deviceHash) checks.push(kv.get(`promo_used/dev/${deviceHash.toLowerCase()}`, { type: 'text' }));
-  if (githubUserId) checks.push(kv.get(`promo_used/gh/${githubUserId}`, { type: 'text' }));
+  if (cleanEmail) checks.push(kv.get(`promo_used/email/${cleanEmail}`, { type: 'text' }));
+  if (cleanDev) checks.push(kv.get(`promo_used/dev/${cleanDev.toLowerCase()}`, { type: 'text' }));
+  if (cleanGh) checks.push(kv.get(`promo_used/gh/${cleanGh}`, { type: 'text' }));
   const results = await Promise.all(checks);
   return results.some(Boolean);
 }
 
 async function markUserIntroPromoUsed(kv, { screenName = '', email = '', deviceHash = '', githubUserId = '', key = '' }) {
   if (!kv) return;
-  const stamp = JSON.stringify({ usedAt: new Date().toISOString(), key, screenName, email });
+  const cleanEmail = sanitizeEmailKey(email);
+  const cleanDev = sanitizeId(deviceHash, '');
+  const cleanGh = sanitizeId(githubUserId, '');
+  const stamp = JSON.stringify({ usedAt: new Date().toISOString(), key, screenName, email: cleanEmail });
   const puts = [];
   if (screenName) puts.push(kv.put(`promo_used/user/${screenName.toLowerCase()}`, stamp));
-  if (email) puts.push(kv.put(`promo_used/email/${email.toLowerCase()}`, stamp));
-  if (deviceHash) puts.push(kv.put(`promo_used/dev/${deviceHash.toLowerCase()}`, stamp));
-  if (githubUserId) puts.push(kv.put(`promo_used/gh/${githubUserId}`, stamp));
+  if (cleanEmail) puts.push(kv.put(`promo_used/email/${cleanEmail}`, stamp));
+  if (cleanDev) puts.push(kv.put(`promo_used/dev/${cleanDev.toLowerCase()}`, stamp));
+  if (cleanGh) puts.push(kv.put(`promo_used/gh/${cleanGh}`, stamp));
   await Promise.all(puts);
 }
 
-async function checkScreenNameRegistration(kv, screenName, deviceHash = '', githubUserId = '') {
+async function checkScreenNameRegistration(kv, screenName, deviceHash = '', verifiedGitHubUserId = '') {
   if (!kv || !screenName) return { available: false, ownedByCaller: false, record: null };
   const cleanName = sanitizeScreenName(screenName);
+  if (!cleanName) return { available: false, ownedByCaller: false, record: null };
   const rawReg = await kv.get(`registered_user/${cleanName.toLowerCase()}`, { type: 'text' });
   const existingLicKey = await kv.get(`user_license/${cleanName}`, { type: 'text' }) ||
     await kv.get(`user_license/${cleanName.toLowerCase()}`, { type: 'text' });
-  let lic = existingLicKey ? await loadLicenseByKey(kv, existingLicKey) : null;
+  const lic = existingLicKey ? await loadLicenseByKey(kv, existingLicKey) : null;
 
   if (!rawReg && !lic) {
     return { available: true, ownedByCaller: false, record: null };
@@ -547,12 +796,19 @@ async function checkScreenNameRegistration(kv, screenName, deviceHash = '', gith
   } catch (_) {}
 
   const cleanDev = String(deviceHash || '').trim().toLowerCase();
-  const cleanGhId = String(githubUserId || '').trim();
+  const cleanGhId = String(verifiedGitHubUserId || '').trim();
 
-  const matchesRegDev = cleanDev && reg && reg.deviceHash && String(reg.deviceHash).toLowerCase() === cleanDev;
-  const matchesRegGh = cleanGhId && reg && reg.githubUserId && String(reg.githubUserId) === cleanGhId;
-  const matchesLicDev = cleanDev && lic && lic.boundDeviceHash && String(lic.boundDeviceHash).toLowerCase() === cleanDev;
-  const matchesLicGh = cleanGhId && lic && lic.boundGitHubUserId && String(lic.boundGitHubUserId) === cleanGhId;
+  // Require a non-trivial deviceHash (not a predictable 'web-...' placeholder) when matching device ownership
+  const isValidDevToken = cleanDev.length >= 8 && !cleanDev.startsWith('web-');
+
+  const matchesRegDev =
+    isValidDevToken && reg && reg.deviceHash && String(reg.deviceHash).toLowerCase() === cleanDev;
+  const matchesRegGh =
+    cleanGhId && reg && reg.githubUserId && String(reg.githubUserId) === cleanGhId;
+  const matchesLicDev =
+    isValidDevToken && lic && lic.boundDeviceHash && String(lic.boundDeviceHash).toLowerCase() === cleanDev;
+  const matchesLicGh =
+    cleanGhId && lic && lic.boundGitHubUserId && String(lic.boundGitHubUserId) === cleanGhId;
 
   const ownedByCaller = Boolean(matchesRegDev || matchesRegGh || matchesLicDev || matchesLicGh);
   return {
@@ -564,15 +820,12 @@ async function checkScreenNameRegistration(kv, screenName, deviceHash = '', gith
 
 function generateUnlockKey(tier = 'base', prefix = 'SSPVP') {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const seg = (len) =>
-    Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-  return `${prefix}-${String(tier).toUpperCase().slice(0, 4)}-${seg(4)}-${seg(4)}`;
+  return `${prefix}-${String(tier).toUpperCase().slice(0, 4)}-${randomCharsFromAlphabet(4, chars)}-${randomCharsFromAlphabet(4, chars)}-${randomCharsFromAlphabet(4, chars)}`;
 }
 
 function generateShareId() {
   const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
-  const seg = Array.from({ length: 9 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-  return `r_${seg}`;
+  return `r_${randomCharsFromAlphabet(16, chars)}`;
 }
 
 async function getGlobalR2Stats(kv) {
@@ -632,14 +885,45 @@ async function saveLicenseRecord(kv, lic) {
     await kv.put(`gh_id_license/${String(lic.boundGitHubUserId).trim()}`, cleanKey);
   }
   if (lic.supporterEmail) {
-    await kv.put(`email_license/${String(lic.supporterEmail).trim().toLowerCase()}`, cleanKey);
+    const cleanEmail = sanitizeEmailKey(lic.supporterEmail);
+    if (cleanEmail) {
+      await kv.put(`email_license/${cleanEmail}`, cleanKey);
+    }
   }
 }
 
 const GITHUB_OAUTH_CLIENT_ID = '178c6fc778ccc68e1d6a';
+const PBKDF2_ITERATIONS = 100000;
 
 async function hashUserPassword(env, password, salt) {
-  const secret = String(env.ADMIN_API_KEY || env.CLIENT_INGEST_KEY || 'sspvp_hmac_salt_v7').trim();
+  const secret = getPasswordPepperSecret(env);
+  const enc = new TextEncoder();
+  const baseKey = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(`${secret}:${String(password || '')}`),
+    { name: 'PBKDF2' },
+    false,
+    ['deriveBits']
+  );
+  const derivedBits = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: enc.encode(`sspvp_pw_v2:${salt}`),
+      iterations: PBKDF2_ITERATIONS,
+      hash: 'SHA-256',
+    },
+    baseKey,
+    256
+  );
+  const hex = Array.from(new Uint8Array(derivedBits))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return `pbkdf2_${PBKDF2_ITERATIONS}$${hex}`;
+}
+
+async function hashLegacyHmacPassword(env, password, salt) {
+  const secret = String(env.ADMIN_API_KEY || '').trim();
+  if (!secret) return '';
   const enc = new TextEncoder();
   const cryptoKey = await crypto.subtle.importKey(
     'raw',
@@ -652,6 +936,19 @@ async function hashUserPassword(env, password, salt) {
   return Array.from(new Uint8Array(sigBuf))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
+}
+
+async function verifyUserPassword(env, password, salt, storedHash) {
+  if (!storedHash || !salt) return { valid: false, needsUpgrade: false };
+  if (storedHash.startsWith('pbkdf2_')) {
+    const computed = await hashUserPassword(env, password, salt);
+    return { valid: timingSafeEqualStr(computed, storedHash), needsUpgrade: false };
+  }
+  const legacyHash = await hashLegacyHmacPassword(env, password, salt);
+  if (legacyHash && timingSafeEqualStr(legacyHash, storedHash)) {
+    return { valid: true, needsUpgrade: true };
+  }
+  return { valid: false, needsUpgrade: false };
 }
 
 async function loadUserAuthRecord(kv, screenName) {
@@ -678,16 +975,17 @@ async function saveUserAuthRecord(kv, screenName, authObj) {
   }
 }
 
-async function createVaultSessionToken(env, screenName, tier = 'free', ttlDays = 30) {
+async function createVaultSessionToken(env, screenName, tier = 'free', ttlDays = 14, sessionEpoch = 1) {
   const cleanName = sanitizeScreenName(screenName);
   const cleanTier = String(tier || 'free').toLowerCase();
+  const epoch = Math.max(1, Number(sessionEpoch) || 1);
   const expiresMs = Date.now() + ttlDays * 86400000;
-  const payload = `${cleanName}.${cleanTier}.${expiresMs}`;
-  const secret = String(env.ADMIN_API_KEY || env.CLIENT_INGEST_KEY || 'sspvp_hmac_salt_v7').trim();
+  const payload = `${cleanName}.${cleanTier}.${expiresMs}.${epoch}`;
+  const secret = getSessionHmacSecret(env);
   const enc = new TextEncoder();
   const cryptoKey = await crypto.subtle.importKey(
     'raw',
-    enc.encode(`${secret}:vault_session_v1`),
+    enc.encode(secret),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign']
@@ -699,19 +997,34 @@ async function createVaultSessionToken(env, screenName, tier = 'free', ttlDays =
   return `${payload}.${sigHex}`;
 }
 
-async function verifyVaultSessionToken(env, token) {
+async function verifyVaultSessionToken(env, token, kv = null) {
   if (!token || typeof token !== 'string') return { valid: false };
   const parts = token.trim().split('.');
-  if (parts.length !== 4) return { valid: false };
-  const [screenName, tier, expiresStr, sigHex] = parts;
+  if (parts.length !== 4 && parts.length !== 5) return { valid: false };
+  const isV2 = parts.length === 5;
+  const screenName = parts[0];
+  const tier = parts[1];
+  const expiresStr = parts[2];
+  const epochStr = isV2 ? parts[3] : '1';
+  const sigHex = isV2 ? parts[4] : parts[3];
+
   const expiresMs = Number(expiresStr) || 0;
   if (expiresMs < Date.now()) return { valid: false, expired: true };
-  const payload = `${screenName}.${tier}.${expiresStr}`;
-  const secret = String(env.ADMIN_API_KEY || env.CLIENT_INGEST_KEY || 'sspvp_hmac_salt_v7').trim();
+  const payload = isV2
+    ? `${screenName}.${tier}.${expiresStr}.${epochStr}`
+    : `${screenName}.${tier}.${expiresStr}`;
+  let secret;
+  try {
+    secret = isV2
+      ? getSessionHmacSecret(env)
+      : `${String(env.ADMIN_API_KEY || '').trim()}:vault_session_v1`;
+  } catch (_) {
+    return { valid: false };
+  }
   const enc = new TextEncoder();
   const cryptoKey = await crypto.subtle.importKey(
     'raw',
-    enc.encode(`${secret}:vault_session_v1`),
+    enc.encode(secret),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign']
@@ -720,8 +1033,16 @@ async function verifyVaultSessionToken(env, token) {
   const expectedHex = Array.from(new Uint8Array(sigBuf))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
-  if (expectedHex !== sigHex.toLowerCase()) return { valid: false };
-  return { valid: true, screenName, tier, expiresMs };
+  if (!timingSafeEqualStr(expectedHex, sigHex.toLowerCase())) return { valid: false };
+
+  if (kv) {
+    const authRec = await loadUserAuthRecord(kv, screenName);
+    const requiredEpoch = Number(authRec && authRec.sessionEpoch) || 1;
+    if ((Number(epochStr) || 1) < requiredEpoch) {
+      return { valid: false, expired: true };
+    }
+  }
+  return { valid: true, screenName, tier, expiresMs, sessionEpoch: Number(epochStr) || 1 };
 }
 
 async function verifyGitHubTokenIdentity(githubToken) {
@@ -787,18 +1108,22 @@ async function resolveUserLicense(
   githubUsername = '',
   githubUserId = '',
   deviceHash = '',
-  claimEmail = ''
+  claimEmail = '',
+  options = {}
 ) {
+  const isServerVerifiedGh = Boolean(options && options.isServerVerifiedGh);
+  const revealFullKey = Boolean(options && options.revealFullKey);
   if (!kv) {
     const sig = await signLicensePayloadHmac(env, screenName, 'free', null, false);
     return { ...TIER_PRESETS.free, active: false, key: '', everPaid: false, signature: sig };
   }
   let lic = null;
   const cleanProvided = String(providedKey || '').trim().toUpperCase();
-  const cleanGhUser = String(githubUsername || '').trim().toLowerCase();
-  const cleanGhId = String(githubUserId || '').trim();
+  const cleanGhUser = isServerVerifiedGh ? String(githubUsername || '').trim().toLowerCase() : '';
+  const cleanGhId = isServerVerifiedGh ? String(githubUserId || '').trim() : '';
   const cleanDev = String(deviceHash || '').trim().toLowerCase();
-  const cleanEmail = String(claimEmail || '').trim().toLowerCase();
+  const isValidDevToken = cleanDev.length >= 8 && !cleanDev.startsWith('web-');
+  const cleanEmail = sanitizeEmailKey(claimEmail);
 
   // 1. Explicit Unlock Key provided
   if (cleanProvided) {
@@ -813,9 +1138,15 @@ async function resolveUserLicense(
       };
     }
   } else {
-    // 2. Anti-Spoofing: NEVER look up by screenName alone when providedKey is blank!
-    // Only allow lookup by authenticated GitHub identity OR matching Checkout Email + Screen Name claim.
-    if (cleanGhUser) {
+    // 2. Anti-Spoofing: NEVER look up by screenName alone or unverified GitHub headers when providedKey is blank!
+    // Only allow lookup by server-verified GitHub identity OR first-time unactivated Checkout Email claim.
+    if (isServerVerifiedGh && cleanGhId) {
+      const ghIdKey = await kv.get(`gh_id_license/${cleanGhId}`, { type: 'text' });
+      if (ghIdKey) {
+        lic = await loadLicenseByKey(kv, ghIdKey);
+      }
+    }
+    if (!lic && isServerVerifiedGh && cleanGhUser) {
       const ghMappedKey = await kv.get(`gh_license/${cleanGhUser}`, { type: 'text' });
       if (ghMappedKey) {
         lic = await loadLicenseByKey(kv, ghMappedKey);
@@ -825,8 +1156,9 @@ async function resolveUserLicense(
       const emailMappedKey = await kv.get(`email_license/${cleanEmail}`, { type: 'text' });
       if (emailMappedKey) {
         const candidate = await loadLicenseByKey(kv, emailMappedKey);
-        if (candidate && !candidate.revoked) {
-          // Verify either screenName matches checkout note OR buyer is resolving a screenNameConflict with a new available name
+        // Only allow email-only claim if the license has not yet been bound/activated to a different device,
+        // or if the buyer is resolving an initial checkout screenNameConflict prior to activation.
+        if (candidate && !candidate.revoked && !candidate.activatedAt) {
           const chk = await checkScreenNameRegistration(kv, screenName, cleanDev, cleanGhId);
           if (
             !candidate.boundScreenName ||
@@ -840,8 +1172,8 @@ async function resolveUserLicense(
         }
       }
     }
-    // 3. Also allow lookup if screenName is bound AND caller proves ownership via boundDeviceHash or boundGitHubUserId
-    if (!lic && screenName && (cleanDev || cleanGhId)) {
+    // 3. Also allow lookup if screenName is bound AND caller proves ownership via boundDeviceHash or server-verified boundGitHubUserId
+    if (!lic && screenName && (isValidDevToken || cleanGhId)) {
       const mappedKey =
         (await kv.get(`user_license/${screenName}`, { type: 'text' })) ||
         (await kv.get(`user_license/${screenName.toLowerCase()}`, { type: 'text' }));
@@ -849,8 +1181,12 @@ async function resolveUserLicense(
         const candidate = await loadLicenseByKey(kv, mappedKey);
         if (
           candidate &&
-          ((cleanDev && candidate.boundDeviceHash && String(candidate.boundDeviceHash).toLowerCase() === cleanDev) ||
-            (cleanGhId && candidate.boundGitHubUserId && String(candidate.boundGitHubUserId) === cleanGhId))
+          ((isValidDevToken &&
+            candidate.boundDeviceHash &&
+            String(candidate.boundDeviceHash).toLowerCase() === cleanDev) ||
+            (cleanGhId &&
+              candidate.boundGitHubUserId &&
+              String(candidate.boundGitHubUserId) === cleanGhId))
         ) {
           lic = candidate;
         }
@@ -864,22 +1200,45 @@ async function resolveUserLicense(
   }
 
   if (lic.revoked) {
-    return {
-      ...TIER_PRESETS.free,
-      active: false,
-      key: '',
-      everPaid: false,
-      error: 'This Unlock Key has been revoked.',
-    };
+    // Seamless key rotation: if this key was rotated (`lic.rotatedTo`) AND the caller is the verified bound owner
+    // (same GitHub account or same bound deviceHash), transparently migrate them to the new rotated key!
+    const isVerifiedBoundOwner =
+      (isServerVerifiedGh &&
+        ((cleanGhId && lic.boundGitHubUserId && String(lic.boundGitHubUserId) === cleanGhId) ||
+          (cleanGhUser &&
+            lic.boundGitHubUsername &&
+            String(lic.boundGitHubUsername).toLowerCase() === cleanGhUser))) ||
+      (isValidDevToken &&
+        lic.boundDeviceHash &&
+        String(lic.boundDeviceHash).toLowerCase() === cleanDev);
+    if (lic.rotatedTo && isVerifiedBoundOwner) {
+      const rotatedLic = await loadLicenseByKey(kv, lic.rotatedTo);
+      if (rotatedLic && !rotatedLic.revoked) {
+        lic = rotatedLic;
+      }
+    }
+    if (lic.revoked) {
+      return {
+        ...TIER_PRESETS.free,
+        active: false,
+        key: '',
+        everPaid: false,
+        error: 'This Unlock Key has been revoked.',
+      };
+    }
   }
 
   const isSameGhOwner =
-    (cleanGhId && lic.boundGitHubUserId && String(lic.boundGitHubUserId) === cleanGhId) ||
-    (cleanGhUser && lic.boundGitHubUsername && String(lic.boundGitHubUsername).toLowerCase() === cleanGhUser);
+    isServerVerifiedGh &&
+    ((cleanGhId && lic.boundGitHubUserId && String(lic.boundGitHubUserId) === cleanGhId) ||
+      (cleanGhUser && lic.boundGitHubUsername && String(lic.boundGitHubUsername).toLowerCase() === cleanGhUser));
   const isSameEmailOwner =
-    cleanEmail && lic.supporterEmail && String(lic.supporterEmail).trim().toLowerCase() === cleanEmail;
+    Boolean(cleanProvided) &&
+    cleanEmail &&
+    lic.supporterEmail &&
+    sanitizeEmailKey(lic.supporterEmail) === cleanEmail;
   const isSameDeviceOwner =
-    cleanDev && lic.boundDeviceHash && String(lic.boundDeviceHash).toLowerCase() === cleanDev;
+    isValidDevToken && lic.boundDeviceHash && String(lic.boundDeviceHash).toLowerCase() === cleanDev;
 
   if (
     lic.boundGitHubUsername &&
@@ -907,7 +1266,7 @@ async function resolveUserLicense(
   ) {
     // Allow if the key had a screenNameConflict and the user is supplying the key to claim a new available screenName
     const chk = await checkScreenNameRegistration(kv, screenName, cleanDev, cleanGhId);
-    if (lic.screenNameConflict && chk.available) {
+    if (cleanProvided && lic.screenNameConflict && chk.available) {
       lic.boundScreenName = screenName;
       lic.screenNameConflict = false;
     } else {
@@ -916,7 +1275,7 @@ async function resolveUserLicense(
         active: false,
         key: '',
         everPaid: false,
-        error: `This Unlock Key is already bound to another Trainer ID (@${lic.boundScreenName}). Enter your Checkout Email if resolving a duplicate name.`,
+        error: `This Unlock Key is already bound to another Trainer ID (@${lic.boundScreenName}). Enter your Unlock Key + Checkout Email if resolving a duplicate name.`,
       };
     }
   }
@@ -928,7 +1287,7 @@ async function resolveUserLicense(
       return {
         ...TIER_PRESETS.free,
         active: false,
-        key: lic.key,
+        key: cleanProvided ? lic.key : '',
         screenNameConflict: true,
         error: `Trainer ID '@${screenName}' is already registered by another device. Please change your Trainer ID in Settings to a unique name and tap Verify again.`,
       };
@@ -939,13 +1298,15 @@ async function resolveUserLicense(
 
   let updatedBinding = false;
   const wasNeverActivated = !lic.activatedAt;
-  if (screenName && !lic.boundScreenName) {
+  const callerProvedKeyOrGh = Boolean(cleanProvided || isSameGhOwner || wasNeverActivated);
+
+  if (screenName && !lic.boundScreenName && callerProvedKeyOrGh) {
     const chk = await checkScreenNameRegistration(kv, screenName, cleanDev, cleanGhId);
     if (!chk.available) {
       return {
         ...TIER_PRESETS.free,
         active: false,
-        key: lic.key,
+        key: cleanProvided ? lic.key : '',
         screenNameConflict: true,
         error: `Trainer ID '@${screenName}' is already taken by another player. Choose a unique Trainer ID first.`,
       };
@@ -954,19 +1315,19 @@ async function resolveUserLicense(
     lic.activatedAt = lic.activatedAt || new Date().toISOString();
     updatedBinding = true;
   }
-  if (!lic.activatedAt && (cleanProvided || cleanEmail || cleanGhUser || cleanGhId)) {
+  if (!lic.activatedAt && callerProvedKeyOrGh) {
     lic.activatedAt = new Date().toISOString();
     updatedBinding = true;
   }
-  if (cleanGhUser && !lic.boundGitHubUsername) {
+  if (isServerVerifiedGh && cleanGhUser && !lic.boundGitHubUsername && callerProvedKeyOrGh) {
     lic.boundGitHubUsername = cleanGhUser;
     updatedBinding = true;
   }
-  if (cleanGhId && !lic.boundGitHubUserId) {
+  if (isServerVerifiedGh && cleanGhId && !lic.boundGitHubUserId && callerProvedKeyOrGh) {
     lic.boundGitHubUserId = cleanGhId;
     updatedBinding = true;
   }
-  if (cleanDev && !lic.boundDeviceHash) {
+  if (isValidDevToken && !lic.boundDeviceHash && callerProvedKeyOrGh) {
     lic.boundDeviceHash = cleanDev;
     updatedBinding = true;
   }
@@ -978,12 +1339,12 @@ async function resolveUserLicense(
   if (updatedBinding) {
     lic.lastActivatedAt = new Date().toISOString();
     await saveLicenseRecord(kv, lic);
-    if (screenName) {
+    if (screenName && lic.boundScreenName && lic.boundScreenName.toLowerCase() === screenName.toLowerCase()) {
       await kv.put(
         `registered_user/${screenName.toLowerCase()}`,
         JSON.stringify({
           screenName,
-          deviceHash: cleanDev || lic.boundDeviceHash || '',
+          deviceHash: (isValidDevToken ? cleanDev : '') || lic.boundDeviceHash || '',
           githubUserId: cleanGhId || lic.boundGitHubUserId || '',
           boundKey: lic.key,
           registeredAt: new Date().toISOString(),
@@ -1004,21 +1365,18 @@ async function resolveUserLicense(
         `${actHeader}\n` +
           `👤 <b>Trainer ID:</b> <code>@${escapeHtml(actUser)}</code>\n` +
           `🏅 <b>Paid Tier:</b> <code>${escapeHtml(actPreset.label)} (${actTier.toUpperCase()})</code>\n` +
-          `🔑 <b>Unlock Key:</b> <code>${escapeHtml(lic.key)}</code>\n` +
+          `🔑 <b>Unlock Key:</b> <code>${escapeHtml(maskSecretKey(lic.key))}</code>\n` +
           (lic.boundGitHubUsername
             ? `🐙 <b>GitHub:</b> <code>@${escapeHtml(lic.boundGitHubUsername)}</code>\n`
             : '') +
-          (lic.supporterEmail || cleanEmail
-            ? `📧 <b>Email:</b> <code>${escapeHtml(lic.supporterEmail || cleanEmail)}</code>\n`
-            : '') +
-          (lic.boundDeviceHash || cleanDev
-            ? `📱 <b>Device Hash:</b> <code>${escapeHtml(lic.boundDeviceHash || cleanDev)}</code>\n`
-            : '') +
           `⏳ <b>Expires:</b> <code>${escapeHtml(lic.expiresAt ? lic.expiresAt.slice(0, 10) : 'LIFETIME')}</code>\n` +
-          `☁️ <b>Vault:</b> https://silphscope-telemetry.silphscope-pvp.workers.dev/vault?user=${encodeURIComponent(actUser)}`
+          `☁️ <b>Vault:</b> https://dvr.silphscopepvp.com/vault?user=${encodeURIComponent(actUser)}`
       );
     } catch (_) {}
   }
+
+  const exposedKey =
+    cleanProvided || revealFullKey || isSameGhOwner || isSameDeviceOwner ? lic.key : '';
 
   // Check if Pro/VIP subscription expired -> Graduate to Lifetime Supporter (Alumni) instead of Free!
   const isExpired = Boolean(lic.expiresAt && new Date(lic.expiresAt).getTime() < Date.now());
@@ -1029,7 +1387,7 @@ async function resolveUserLicense(
       ...alumniPreset,
       tier: 'supporter',
       label: alumniPreset.label,
-      key: lic.key,
+      key: exposedKey,
       active: true,
       everPaid: true,
       alumniFromTier: lic.tier,
@@ -1054,7 +1412,7 @@ async function resolveUserLicense(
     ...preset,
     tier: preset.tier,
     label: lic.label || preset.label,
-    key: lic.key,
+    key: exposedKey,
     active: true,
     everPaid: true,
     boundScreenName: lic.boundScreenName || screenName || '',
@@ -1131,6 +1489,9 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
   const githubToken = String(
     body.githubToken || request.headers.get('X-GitHub-Token') || ''
   ).trim();
+  const pendingGhLinkToken = String(
+    body.pendingGhLinkToken || request.headers.get('X-GitHub-Link-Token') || ''
+  ).trim();
   const claimEmail = String(
     body.claimEmail || body.email || request.headers.get('X-Claim-Email') || ''
   ).trim();
@@ -1142,7 +1503,7 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
 
   // 1. Check Session Token (`X-Vault-Session`)
   if (sessionToken) {
-    const ver = await verifyVaultSessionToken(env, sessionToken);
+    const ver = await verifyVaultSessionToken(env, sessionToken, kv);
     if (
       ver.valid &&
       (!screenName || screenName === 'anonymous' || ver.screenName.toLowerCase() === screenName.toLowerCase())
@@ -1152,7 +1513,17 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
         (kv && (await kv.get(`user_license/${resolvedUser}`, { type: 'text' }))) ||
         (kv && (await kv.get(`user_license/${resolvedUser.toLowerCase()}`, { type: 'text' }))) ||
         '';
-      const licInfo = await resolveUserLicense(env, kv, resolvedUser, mappedKey, '', '', devHash, '');
+      const licInfo = await resolveUserLicense(
+        env,
+        kv,
+        resolvedUser,
+        mappedKey,
+        '',
+        '',
+        devHash,
+        '',
+        { revealFullKey: false }
+      );
       const authRec = await loadUserAuthRecord(kv, resolvedUser);
       return {
         isOwner: true,
@@ -1165,29 +1536,46 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
     }
   }
 
-  // 2. Check GitHub OAuth Token (`X-GitHub-Token` or `body.githubToken`)
+  // 2. Check GitHub OAuth Token (`X-GitHub-Token`, `body.githubToken`, or server-side `pendingGhLinkToken`)
   let verifiedGh = null;
-  if (githubToken) {
+  if (pendingGhLinkToken && kv) {
+    try {
+      const rawPending = await kv.get(`gh_pending_link/${sanitizeId(pendingGhLinkToken)}`, { type: 'text' });
+      if (rawPending) {
+        const parsedPending = JSON.parse(rawPending);
+        if (parsedPending && parsedPending.githubUserId && parsedPending.githubUsername) {
+          verifiedGh = {
+            ok: true,
+            githubUsername: String(parsedPending.githubUsername).trim(),
+            githubUserId: String(parsedPending.githubUserId).trim(),
+          };
+        }
+      }
+    } catch (_) {}
+  } else if (githubToken) {
     const ghRes = await verifyGitHubTokenIdentity(githubToken);
     if (!ghRes.ok) {
       return {
         isOwner: false,
-        error: ghRes.error || 'GitHub authentication failed.',
+        error: 'GitHub authentication failed.',
         screenName,
       };
     }
     verifiedGh = ghRes;
+  }
+
+  if (verifiedGh) {
     const ghResolvedName = await resolveScreenNameFromGitHub(
       kv,
-      ghRes.githubUsername,
-      ghRes.githubUserId,
+      verifiedGh.githubUsername,
+      verifiedGh.githubUserId,
       screenName
     );
     if (ghResolvedName) {
       screenName = ghResolvedName;
     }
 
-    // Pure GitHub Login check (before unlockKey/password so valid GitHub identity unlocks immediately)
+    // Pure GitHub Login check (before unlockKey/password so already-linked GitHub identity unlocks immediately)
     if (screenName && !unlockKey) {
       const authRec = await loadUserAuthRecord(kv, screenName);
       const mappedKey =
@@ -1197,29 +1585,34 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
         (kv && (await kv.get(`user_license/${screenName.toLowerCase()}`, { type: 'text' }))) ||
         '';
       const lic = mappedKey ? await loadLicenseByKey(kv, mappedKey) : null;
-      const chk = await checkScreenNameRegistration(kv, screenName, devHash, verifiedGh.githubUserId);
+      const chk = await checkScreenNameRegistration(kv, screenName, '', verifiedGh.githubUserId);
 
+      // Strictly require explicit prior GitHub ID/username binding (or an unclaimed brand-new free account);
+      // NEVER grant ownership of an existing account merely because the GitHub username matches screenName!
       const ghMatchesAuthRec =
         authRec &&
         ((authRec.githubUserId && String(authRec.githubUserId) === verifiedGh.githubUserId) ||
-          (authRec.githubUsername &&
+          (!authRec.githubUserId &&
+            authRec.githubUsername &&
             String(authRec.githubUsername).toLowerCase() === verifiedGh.githubUsername.toLowerCase()));
       const ghMatchesLic =
         lic &&
         ((lic.boundGitHubUserId && String(lic.boundGitHubUserId) === verifiedGh.githubUserId) ||
-          (lic.boundGitHubUsername &&
+          (!lic.boundGitHubUserId &&
+            lic.boundGitHubUsername &&
             String(lic.boundGitHubUsername).toLowerCase() === verifiedGh.githubUsername.toLowerCase()));
-      const ghMatchesUsername =
-        verifiedGh.githubUsername.toLowerCase() === screenName.toLowerCase() &&
-        (!lic || !lic.boundGitHubUserId || String(lic.boundGitHubUserId) === verifiedGh.githubUserId) &&
-        (!authRec || !authRec.githubUserId || String(authRec.githubUserId) === verifiedGh.githubUserId);
+      const isUnclaimedNewAccount =
+        chk.available &&
+        !lic &&
+        !authRec &&
+        verifiedGh.githubUsername.toLowerCase() === screenName.toLowerCase();
 
-      if (ghMatchesAuthRec || ghMatchesLic || chk.ownedByCaller || ghMatchesUsername) {
+      if (ghMatchesAuthRec || ghMatchesLic || isUnclaimedNewAccount) {
         const resolvedUser = (lic && lic.boundScreenName) || (authRec && authRec.screenName) || screenName;
-        const updatedAuth = authRec || { screenName: resolvedUser };
+        const updatedAuth = authRec || { screenName: resolvedUser, sessionEpoch: 1 };
         updatedAuth.githubUsername = verifiedGh.githubUsername;
         updatedAuth.githubUserId = verifiedGh.githubUserId;
-        if (lic && lic.key) {
+        if (lic && lic.key && ghMatchesLic) {
           updatedAuth.boundKey = lic.key;
           lic.boundGitHubUsername = verifiedGh.githubUsername;
           lic.boundGitHubUserId = verifiedGh.githubUserId;
@@ -1231,13 +1624,20 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
           env,
           kv,
           resolvedUser,
-          lic ? lic.key : '',
+          lic && ghMatchesLic ? lic.key : '',
           verifiedGh.githubUsername,
           verifiedGh.githubUserId,
           devHash,
-          ''
+          '',
+          { isServerVerifiedGh: true, revealFullKey: false }
         );
-        const mintedSession = await createVaultSessionToken(env, resolvedUser, licInfo.tier || 'free');
+        const mintedSession = await createVaultSessionToken(
+          env,
+          resolvedUser,
+          licInfo.tier || 'free',
+          14,
+          updatedAuth.sessionEpoch || 1
+        );
         return {
           isOwner: true,
           authMethod: 'github',
@@ -1250,19 +1650,25 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
     }
   }
 
-  // 3. Check Explicit Unlock Key / Token (`X-SilphScope-Unlock-Key`) or Claim Email
-  if (unlockKey || claimEmail) {
+  // 3. Check Explicit Unlock Key / Token (`X-SilphScope-Unlock-Key`)
+  if (unlockKey) {
     const adminExpected = String(env.ADMIN_API_KEY || '').trim();
-    if (adminExpected && unlockKey === adminExpected && screenName) {
+    if (adminExpected && timingSafeEqualStr(unlockKey, adminExpected) && screenName) {
       const mappedKey =
         (kv && (await kv.get(`user_license/${screenName}`, { type: 'text' }))) ||
         (kv && (await kv.get(`user_license/${screenName.toLowerCase()}`, { type: 'text' }))) ||
         '';
       const licInfo = mappedKey
-        ? await resolveUserLicense(env, kv, screenName, mappedKey)
+        ? await resolveUserLicense(env, kv, screenName, mappedKey, '', '', '', '', { revealFullKey: true })
         : { ...TIER_PRESETS.vip, active: true, everPaid: true, boundScreenName: screenName };
       const authRec = await loadUserAuthRecord(kv, screenName);
-      const mintedSession = await createVaultSessionToken(env, screenName, licInfo.tier || 'vip');
+      const mintedSession = await createVaultSessionToken(
+        env,
+        screenName,
+        licInfo.tier || 'vip',
+        14,
+        (authRec && authRec.sessionEpoch) || 1
+      );
       return {
         isOwner: true,
         authMethod: 'admin_key',
@@ -1281,20 +1687,30 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
       verifiedGh ? verifiedGh.githubUsername : '',
       verifiedGh ? verifiedGh.githubUserId : '',
       devHash,
-      claimEmail
+      claimEmail,
+      { isServerVerifiedGh: Boolean(verifiedGh), revealFullKey: true }
     );
     if (licInfo.active) {
       const resolvedUser = licInfo.boundScreenName || screenName;
-      let authRec = (await loadUserAuthRecord(kv, resolvedUser)) || { screenName: resolvedUser };
+      let authRec = (await loadUserAuthRecord(kv, resolvedUser)) || {
+        screenName: resolvedUser,
+        sessionEpoch: 1,
+      };
       if (verifiedGh) {
         authRec.githubUsername = verifiedGh.githubUsername;
         authRec.githubUserId = verifiedGh.githubUserId;
         await saveUserAuthRecord(kv, resolvedUser, authRec);
       }
-      const mintedSession = await createVaultSessionToken(env, resolvedUser, licInfo.tier);
+      const mintedSession = await createVaultSessionToken(
+        env,
+        resolvedUser,
+        licInfo.tier,
+        14,
+        authRec.sessionEpoch || 1
+      );
       return {
         isOwner: true,
-        authMethod: unlockKey ? 'unlock_key' : 'claim_email',
+        authMethod: 'unlock_key',
         screenName: resolvedUser,
         licenseInfo: licInfo,
         authRecord: authRec,
@@ -1303,7 +1719,7 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
     }
     return {
       isOwner: false,
-      error: licInfo.error || 'Invalid Unlock Key or Email.',
+      error: licInfo.error || 'Invalid Unlock Key.',
       screenName,
     };
   }
@@ -1314,22 +1730,37 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
     if (!authRec || !authRec.passwordHash || !authRec.passwordSalt) {
       return {
         isOwner: false,
-        error: `No password has been set for '@${screenName}' yet. Log in once with your Unlock Key or GitHub account (or set a password in the Android App Settings) first.`,
+        error: 'Invalid Trainer ID or password.',
         screenName,
       };
     }
-    const computedHash = await hashUserPassword(env, password, authRec.passwordSalt);
-    if (computedHash !== authRec.passwordHash) {
+    const pwVerify = await verifyUserPassword(
+      env,
+      password,
+      authRec.passwordSalt,
+      authRec.passwordHash
+    );
+    if (!pwVerify.valid) {
       return {
         isOwner: false,
-        error: 'Incorrect password for @' + screenName + '.',
+        error: 'Invalid Trainer ID or password.',
         screenName,
       };
     }
     const resolvedUser = authRec.screenName || screenName;
+    let shouldSaveAuth = false;
+    if (pwVerify.needsUpgrade) {
+      const newSalt = generateSecureSaltHex(16);
+      authRec.passwordSalt = newSalt;
+      authRec.passwordHash = await hashUserPassword(env, password, newSalt);
+      shouldSaveAuth = true;
+    }
     if (verifiedGh) {
       authRec.githubUsername = verifiedGh.githubUsername;
       authRec.githubUserId = verifiedGh.githubUserId;
+      shouldSaveAuth = true;
+    }
+    if (shouldSaveAuth) {
       await saveUserAuthRecord(kv, resolvedUser, authRec);
     }
     const mappedKey =
@@ -1345,9 +1776,16 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
       authRec.githubUsername || '',
       authRec.githubUserId || '',
       devHash,
-      ''
+      '',
+      { isServerVerifiedGh: Boolean(authRec.githubUserId), revealFullKey: false }
     );
-    const mintedSession = await createVaultSessionToken(env, resolvedUser, licInfo.tier || 'free');
+    const mintedSession = await createVaultSessionToken(
+      env,
+      resolvedUser,
+      licInfo.tier || 'free',
+      14,
+      authRec.sessionEpoch || 1
+    );
     return {
       isOwner: true,
       authMethod: 'password',
@@ -1358,62 +1796,8 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
     };
   }
 
-  // 5. Pure GitHub Login (no Unlock Key or Password needed if GitHub account matches or is linked)
+  // 5. If verifiedGh was present but did not match an existing linked account
   if (verifiedGh && screenName) {
-    const authRec = await loadUserAuthRecord(kv, screenName);
-    const mappedKey =
-      (kv && (await kv.get(`gh_id_license/${verifiedGh.githubUserId}`, { type: 'text' }))) ||
-      (kv && (await kv.get(`gh_license/${verifiedGh.githubUsername.toLowerCase()}`, { type: 'text' }))) ||
-      (kv && (await kv.get(`user_license/${screenName}`, { type: 'text' }))) ||
-      (kv && (await kv.get(`user_license/${screenName.toLowerCase()}`, { type: 'text' }))) ||
-      '';
-    const lic = mappedKey ? await loadLicenseByKey(kv, mappedKey) : null;
-    const chk = await checkScreenNameRegistration(kv, screenName, devHash, verifiedGh.githubUserId);
-
-    const ghMatchesAuthRec =
-      authRec &&
-      ((authRec.githubUserId && String(authRec.githubUserId) === verifiedGh.githubUserId) ||
-        (authRec.githubUsername &&
-          String(authRec.githubUsername).toLowerCase() === verifiedGh.githubUsername.toLowerCase()));
-    const ghMatchesLic =
-      lic &&
-      ((lic.boundGitHubUserId && String(lic.boundGitHubUserId) === verifiedGh.githubUserId) ||
-        (lic.boundGitHubUsername &&
-          String(lic.boundGitHubUsername).toLowerCase() === verifiedGh.githubUsername.toLowerCase()));
-    const ghMatchesUsername =
-      verifiedGh.githubUsername.toLowerCase() === screenName.toLowerCase() &&
-      (!lic || !lic.boundGitHubUserId || String(lic.boundGitHubUserId) === verifiedGh.githubUserId) &&
-      (!authRec || !authRec.githubUserId || String(authRec.githubUserId) === verifiedGh.githubUserId);
-
-    if (ghMatchesAuthRec || ghMatchesLic || chk.ownedByCaller || ghMatchesUsername) {
-      const resolvedUser = (lic && lic.boundScreenName) || (authRec && authRec.screenName) || screenName;
-      const updatedAuth = authRec || { screenName: resolvedUser };
-      updatedAuth.githubUsername = verifiedGh.githubUsername;
-      updatedAuth.githubUserId = verifiedGh.githubUserId;
-      if (lic && lic.key) updatedAuth.boundKey = lic.key;
-      await saveUserAuthRecord(kv, resolvedUser, updatedAuth);
-
-      const licInfo = await resolveUserLicense(
-        env,
-        kv,
-        resolvedUser,
-        lic ? lic.key : '',
-        verifiedGh.githubUsername,
-        verifiedGh.githubUserId,
-        devHash,
-        ''
-      );
-      const mintedSession = await createVaultSessionToken(env, resolvedUser, licInfo.tier || 'free');
-      return {
-        isOwner: true,
-        authMethod: 'github',
-        screenName: resolvedUser,
-        licenseInfo: licInfo,
-        authRecord: updatedAuth,
-        sessionToken: mintedSession,
-      };
-    }
-
     return {
       isOwner: false,
       error: `GitHub account '@${verifiedGh.githubUsername}' is not linked to Trainer ID '@${screenName}' yet. Log in once with your Unlock Key or Password while signed into GitHub to link them.`,
@@ -1809,7 +2193,7 @@ async function resolveUserPaidTierSummary(kv, screenName) {
     return { tier: 'free', badge: '🆓 Free Tier', key: '', expiresAt: null };
   }
   if (clean.toLowerCase() === 'sportsfan986') {
-    return { tier: 'vip', badge: '👑 VIP / Coach Pass (Founder)', key: 'SSPVP-VIP-FOUNDER-986', expiresAt: null };
+    return { tier: 'vip', badge: '👑 VIP / Coach Pass (Founder)', key: '', expiresAt: null };
   }
   if (!kv) {
     return { tier: 'free', badge: '🆓 Free Tier', key: '', expiresAt: null };
@@ -2133,14 +2517,14 @@ function renderWatchSharePage(origin, shareInfo) {
   </main>
 
   <script>
-    const TRACE_URL = ${JSON.stringify(traceUrl)};
-    const PVP_DB = ${JSON.stringify(COMPACT_PVP_DB)};
-    const SHARE_LEAGUE = ${JSON.stringify(shareInfo.league || 'GREAT LEAGUE')};
-    const SHARE_MATCHUP = ${JSON.stringify(shareInfo.matchup || '')};
-    const SHARE_USER_TIER = ${JSON.stringify(shareInfo.userTier || 'pro')};
+    const TRACE_URL = ${safeJsonForScript(traceUrl)};
+    const PVP_DB = ${safeJsonForScript(COMPACT_PVP_DB)};
+    const SHARE_LEAGUE = ${safeJsonForScript(shareInfo.league || 'GREAT LEAGUE')};
+    const SHARE_MATCHUP = ${safeJsonForScript(shareInfo.matchup || '')};
+    const SHARE_USER_TIER = ${safeJsonForScript(shareInfo.userTier || 'pro')};
     const IS_SHIELD_HUD_UNLOCKED = SHARE_USER_TIER !== 'free';
-    let hideNames = ${JSON.stringify(hideNamesDefault)};
-    const rawTrainerName = ${JSON.stringify(shareInfo.screenName || 'Trainer')};
+    let hideNames = ${safeJsonForScript(hideNamesDefault)};
+    const rawTrainerName = ${safeJsonForScript(shareInfo.screenName || 'Trainer')};
     let frames = [];
     let summaryHeader = null;
     let hudMode = 'live';
@@ -3973,7 +4357,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     <!-- Set / Change Password Modal Box (Owner Only) -->
     <div class="login-card" id="password-setup-box" style="display:none;border-color:#f59e0b;background:rgba(15,23,42,0.95)">
       <strong style="font-size:13px;color:#fbbf24">🔒 Set / Update Password for @<span id="pw-target-user"></span>:</strong>
-      <input id="inp-new-password" type="password" placeholder="New Password (min 6 characters)" style="max-width:240px" />
+      <input id="inp-new-password" type="password" placeholder="New Password (min 8 characters)" style="max-width:240px" />
       <button class="primary" onclick="saveNewPassword()">💾 Save Password</button>
       <button onclick="document.getElementById('password-setup-box').style.display='none'">Cancel</button>
     </div>
@@ -3997,15 +4381,27 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
   </div>
 
   <script>
-    const CLIENT_KEY = ${JSON.stringify(clientIngestKey || '')};
+    const CLIENT_KEY = 'ssk_client_v615_telemetry_ingest_9f8a7b6c5d4e3f2a1b0c';
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+    function escJsArg(s) {
+      return esc(String(s == null ? '' : s).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, "\\\\'"));
+    }
+
     const params = new URLSearchParams(window.location.search);
     const pathParts = window.location.pathname.split('/').filter(Boolean);
     const pathUser = (pathParts[0] === 'u' || pathParts[0] === 'vault') && pathParts[1] ? decodeURIComponent(pathParts[1]) : '';
     const savedUser = params.get('user') || pathUser || localStorage.getItem('sspvp_vault_user') || '';
     const savedKey = params.get('key') || localStorage.getItem('sspvp_vault_key') || '';
     const savedEmail = params.get('email') || localStorage.getItem('sspvp_vault_email') || '';
-    const savedGhToken = localStorage.getItem('sspvp_github_token') || '';
     let sessionToken = localStorage.getItem('sspvp_vault_session') || '';
+    let pendingGhLinkToken = '';
     let currentVaultData = null;
     let currentFilter = 'all'; // 'all' | 'starred'
     let ghPollTimer = null;
@@ -4013,12 +4409,12 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     let ghPollDelayMs = 6500;
     let lastGhPollMs = 0;
 
+    // Clean up any legacy stored GitHub OAuth token from localStorage
+    try { localStorage.removeItem('sspvp_github_token'); } catch (_) {}
+
     document.getElementById('inp-user').value = savedUser;
     document.getElementById('inp-key').value = savedKey;
     document.getElementById('inp-email').value = savedEmail;
-    if (savedGhToken && document.getElementById('inp-gh-token')) {
-      document.getElementById('inp-gh-token').value = savedGhToken;
-    }
 
     function toggleLoginPanel() {
       const el = document.getElementById('owner-login-panel');
@@ -4034,6 +4430,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
 
     function logoutVault() {
       sessionToken = '';
+      pendingGhLinkToken = '';
       localStorage.removeItem('sspvp_vault_session');
       localStorage.removeItem('sspvp_vault_key');
       document.getElementById('inp-key').value = '';
@@ -4056,7 +4453,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       const email = document.getElementById('inp-email').value.trim();
       if (!user) return alert('Enter your Trainer ID first.');
       if (!key && !email) return alert('Enter your Unlock Key (or Checkout Email).');
-      await performOwnerLogin({ screenName: user, unlockKey: key, claimEmail: email });
+      await performOwnerLogin({ screenName: user, unlockKey: key, claimEmail: email, pendingGhLinkToken });
     }
 
     async function loginWithPassword() {
@@ -4064,16 +4461,15 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       const password = document.getElementById('inp-password').value.trim();
       if (!user) return alert('Enter your Trainer ID first.');
       if (!password) return alert('Enter your Password.');
-      await performOwnerLogin({ screenName: user, password });
+      await performOwnerLogin({ screenName: user, password, pendingGhLinkToken });
     }
 
     async function loginWithGitHubToken() {
       const user = document.getElementById('inp-user').value.trim();
       const githubToken = document.getElementById('inp-gh-token').value.trim();
-      if (!githubToken) return alert('Paste a GitHub token or click 1-Click Sign In with GitHub.');
-      localStorage.setItem('sspvp_github_token', githubToken);
+      if (!githubToken && !pendingGhLinkToken) return alert('Paste a GitHub token or click 1-Click Sign In with GitHub.');
       const key = document.getElementById('inp-key').value.trim();
-      await performOwnerLogin({ screenName: user, githubToken, unlockKey: key });
+      await performOwnerLogin({ screenName: user, githubToken, pendingGhLinkToken, unlockKey: key });
     }
 
     async function performOwnerLogin(payload) {
@@ -4146,15 +4542,12 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         ghPollTimer = null;
         activeGhDeviceCode = '';
         const box = document.getElementById('gh-device-box');
+        if (pollData.pendingGhLinkToken) {
+          pendingGhLinkToken = pollData.pendingGhLinkToken;
+        }
         if (pollData.ok && pollData.sessionToken) {
           sessionToken = pollData.sessionToken;
           localStorage.setItem('sspvp_vault_session', sessionToken);
-          if (pollData.githubToken) {
-            localStorage.setItem('sspvp_github_token', pollData.githubToken);
-            if (document.getElementById('inp-gh-token')) {
-              document.getElementById('inp-gh-token').value = pollData.githubToken;
-            }
-          }
           if (pollData.screenName) {
             document.getElementById('inp-user').value = pollData.screenName;
             localStorage.setItem('sspvp_vault_user', pollData.screenName);
@@ -4163,7 +4556,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           document.getElementById('owner-login-panel').style.display = 'none';
           await loadVault();
         } else if (box) {
-          box.innerHTML = '<span style="color:#fb7185">' + (pollData.error || 'GitHub login did not match an account.') + '</span>';
+          box.innerHTML = '<span style="color:#fb7185">' + esc(pollData.error || 'GitHub login did not match an account.') + '</span>';
         }
       } catch (_) {
         if (activeGhDeviceCode) {
@@ -4185,7 +4578,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     async function startGitHubDeviceLogin() {
       const box = document.getElementById('gh-device-box');
       box.style.display = 'block';
-      box.innerHTML = '⏳ Requesting GitHub Device Code...';
+      box.textContent = '⏳ Requesting GitHub Device Code...';
       if (ghPollTimer) clearTimeout(ghPollTimer);
       activeGhDeviceCode = '';
       try {
@@ -4195,27 +4588,30 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         });
         const data = await res.json();
         if (!res.ok || !data.ok) {
-          box.innerHTML = '<span style="color:#fb7185">' + (data.error || 'Failed to start GitHub login.') + '</span>';
+          box.innerHTML = '<span style="color:#fb7185">' + esc(data.error || 'Failed to start GitHub login.') + '</span>';
           return;
         }
         activeGhDeviceCode = data.device_code;
         ghPollDelayMs = (Math.max(5, Number(data.interval) || 5) + 1.5) * 1000;
         lastGhPollMs = Date.now();
+        const safeUri = /^https:\\/\\/github\\.com\\//i.test(String(data.verification_uri || ''))
+          ? data.verification_uri
+          : 'https://github.com/login/device';
         box.innerHTML =
           '<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px">' +
-            '<div>1. Copy one-time code: <strong style="font-size:16px;color:#38bdf8;letter-spacing:1px;padding:2px 8px;background:#0f172a;border-radius:6px">' + data.user_code + '</strong></div>' +
+            '<div>1. Copy one-time code: <strong style="font-size:16px;color:#38bdf8;letter-spacing:1px;padding:2px 8px;background:#0f172a;border-radius:6px">' + esc(data.user_code) + '</strong></div>' +
             '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-              '<a class="btn-link" style="background:#059669;border-color:#10b981" href="' + data.verification_uri + '" target="_blank" rel="noopener">2. Open GitHub & Authorize ↗</a>' +
+              '<a class="btn-link" style="background:#059669;border-color:#10b981" href="' + esc(safeUri) + '" target="_blank" rel="noopener">2. Open GitHub & Authorize ↗</a>' +
               '<button onclick="pollGitHubDeviceNow(true)" style="background:#0284c7;border-color:#38bdf8;color:#fff">✅ 3. I\\'ve Authorized — Finish Sign-In</button>' +
             '</div>' +
           '</div>' +
           '<div style="margin-top:6px;font-size:11.5px;color:#94a3b8" id="gh-poll-status">Waiting for authorization on GitHub (auto-unlocks when you return to this tab)...</div>';
         try { navigator.clipboard.writeText(data.user_code); } catch (_) {}
-        window.open(data.verification_uri, '_blank', 'noopener');
+        window.open(safeUri, '_blank', 'noopener');
 
         ghPollTimer = setTimeout(() => pollGitHubDeviceNow(false), ghPollDelayMs);
       } catch (e) {
-        box.innerHTML = '<span style="color:#fb7185">Error: ' + e.message + '</span>';
+        box.innerHTML = '<span style="color:#fb7185">Error: ' + esc(e.message) + '</span>';
       }
     }
 
@@ -4230,8 +4626,8 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       const user = (currentVaultData && currentVaultData.screenName) || document.getElementById('inp-user').value.trim();
       const newPassword = document.getElementById('inp-new-password').value.trim();
       const key = document.getElementById('inp-key').value.trim();
-      if (!newPassword || newPassword.length < 6) {
-        return alert('Password must be at least 6 characters.');
+      if (!newPassword || newPassword.length < 8) {
+        return alert('Password must be at least 8 characters.');
       }
       try {
         const res = await fetch('/v1/auth/set-password', {
@@ -4303,7 +4699,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       if (email) localStorage.setItem('sspvp_vault_email', email);
 
       const grid = document.getElementById('replays-grid');
-      grid.innerHTML = '<div style="color:#94a3b8;padding:20px">Loading Cloud Replay Vault for @' + user + '...</div>';
+      grid.innerHTML = '<div style="color:#94a3b8;padding:20px">Loading Cloud Replay Vault for @' + esc(user) + '...</div>';
 
       try {
         const res = await fetch('/v1/replays/list?user=' + encodeURIComponent(user), {
@@ -4320,7 +4716,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           document.getElementById('stats-bar').style.display = 'none';
           document.getElementById('filter-bar').style.display = 'none';
           document.getElementById('owner-login-panel').style.display = 'flex';
-          grid.innerHTML = '<div style="color:#fb7185;padding:20px;grid-column:1/-1;background:#0f172a;border:1px solid #334155;border-radius:12px">' + (data.error || 'Failed to load vault') + '</div>';
+          grid.innerHTML = '<div style="color:#fb7185;padding:20px;grid-column:1/-1;background:#0f172a;border:1px solid #334155;border-radius:12px">' + esc(data.error || 'Failed to load vault') + '</div>';
           return;
         }
 
@@ -4342,14 +4738,14 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
 
         if (isOwner) {
           const ghBadge = data.githubUsername
-            ? '<span style="color:#34d399;font-size:12px">🐙 GitHub: @' + data.githubUsername + '</span>'
+            ? '<span style="color:#34d399;font-size:12px">🐙 GitHub: @' + esc(data.githubUsername) + '</span>'
             : '<button onclick="toggleLoginPanel();setAuthTab(\\'github\\')" style="padding:4px 9px;font-size:11.5px">🐙 Link GitHub</button>';
           const pwBtn = '<button onclick="openPasswordSetup()" style="padding:4px 9px;font-size:11.5px">' + (data.hasPassword ? '🔒 Change Password' : '🔒 Set Password') + '</button>';
 
           sb.innerHTML =
             '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">' +
-              '<div><strong>👤 @' + data.screenName + ' (Owner)</strong> • <span style="color:#38bdf8;font-weight:700">' + (lim.label || (data.tier || 'FREE').toUpperCase()) + '</span></div>' +
-              '<div style="color:#cbd5e1">☁️ Storage: <strong>' + (usg.usedMb || 0) + ' MB</strong> / ' + (lim.maxStorageMb || 0) + ' MB • Rolling: <strong>' + (usg.rollingCount || 0) + '/' + (lim.maxRollingBattles || 0) + '</strong> • ⭐ Starred: <strong>' + (usg.pinnedCount || 0) + '/' + (lim.maxPinnedBattles || 0) + '</strong> • 🌐 Public: <strong>' + (usg.publicCount || 0) + '</strong></div>' +
+              '<div><strong>👤 @' + esc(data.screenName) + ' (Owner)</strong> • <span style="color:#38bdf8;font-weight:700">' + esc(lim.label || (data.tier || 'FREE').toUpperCase()) + '</span></div>' +
+              '<div style="color:#cbd5e1">☁️ Storage: <strong>' + esc(usg.usedMb || 0) + ' MB</strong> / ' + esc(lim.maxStorageMb || 0) + ' MB • Rolling: <strong>' + esc(usg.rollingCount || 0) + '/' + esc(lim.maxRollingBattles || 0) + '</strong> • ⭐ Starred: <strong>' + esc(usg.pinnedCount || 0) + '/' + esc(lim.maxPinnedBattles || 0) + '</strong> • 🌐 Public: <strong>' + esc(usg.publicCount || 0) + '</strong></div>' +
             '</div>' +
             '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-top:8px;border-top:1px solid #1e293b">' +
               '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
@@ -4375,18 +4771,18 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
               ? '⭐+🌐 Public Vault (Starred + Public Videos)'
               : '🔒 Public Vault (Manually Shared Public Videos Only)';
           const hiddenNote = (vis !== 'all' && data.hiddenRollingCount > 0)
-            ? ' • <span style="color:#94a3b8">' + data.hiddenRollingCount + ' private battle(s) hidden (Owner-only)</span>'
+            ? ' • <span style="color:#94a3b8">' + esc(data.hiddenRollingCount) + ' private battle(s) hidden (Owner-only)</span>'
             : '';
           sb.innerHTML =
             '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">' +
-              '<div><strong>👤 @' + data.screenName + '</strong> • <span style="color:#fbbf24;font-weight:700">' + visLabel + '</span>' + hiddenNote + '</div>' +
-              '<button onclick="toggleLoginPanel()" style="padding:5px 10px;font-size:11.5px;border-color:#38bdf8;color:#38bdf8">🔐 Are you @' + data.screenName + '? Log In to Manage & Star</button>' +
+              '<div><strong>👤 @' + esc(data.screenName) + '</strong> • <span style="color:#fbbf24;font-weight:700">' + visLabel + '</span>' + hiddenNote + '</div>' +
+              '<button onclick="toggleLoginPanel()" style="padding:5px 10px;font-size:11.5px;border-color:#38bdf8;color:#38bdf8">🔐 Are you @' + esc(data.screenName) + '? Log In to Manage & Star</button>' +
             '</div>';
         }
 
         renderReplayGrid();
       } catch (e) {
-        grid.innerHTML = '<div style="color:#fb7185;padding:20px">Error: ' + e.message + '</div>';
+        grid.innerHTML = '<div style="color:#fb7185;padding:20px">Error: ' + esc(e.message) + '</div>';
       }
     }
 
@@ -4435,7 +4831,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
 
       if (!items.length) {
         const emptyMsg = !isOwner
-          ? 'No public replays published by @' + currentVaultData.screenName + ' under their current visibility filter. If this is your vault, click 🔐 Owner Login above to view all private battles and toggle 🌐 Public or ⭐ Star!'
+          ? 'No public replays published by @' + esc(currentVaultData.screenName) + ' under their current visibility filter. If this is your vault, click 🔐 Owner Login above to view all private battles and toggle 🌐 Public or ⭐ Star!'
           : 'No replays found in this filter view.';
         grid.innerHTML = '<div style="color:#94a3b8;padding:20px;grid-column:1/-1">' + emptyMsg + '</div>';
         return;
@@ -4447,30 +4843,35 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         const dateStr = item.createdAt ? new Date(item.createdAt).toLocaleString() : '';
         const isPub = Boolean(item.isPublic);
         const isOverriddenPublic = !isPub && vis === 'all';
+        const safeBattleIdJs = escJsArg(item.battleId);
+        const safeShareIdJs = escJsArg(item.shareId);
+        const safeShareUrl = esc(item.shareUrl || ('/watch/' + encodeURIComponent(item.shareId || '')));
+        const safeShareUrlJs = escJsArg(item.shareUrl || ('/watch/' + encodeURIComponent(item.shareId || '')));
+        const highlightSecNum = Number(item.highlightSec) || 0;
         const starControl = isOwner
-          ? '<button onclick="togglePin(\\'' + item.battleId + '\\', ' + (!item.isPinned) + ')" style="padding:7px 10px;font-size:12px;border-color:' + (item.isPinned ? '#f59e0b' : '#334155') + ';color:' + (item.isPinned ? '#fbbf24' : '#e2e8f0') + '" title="Starred replays are kept for 365 days">' + (item.isPinned ? '⭐ Starred' : '☆ Star') + '</button>'
+          ? '<button onclick="togglePin(\\'' + safeBattleIdJs + '\\', ' + (!item.isPinned) + ')" style="padding:7px 10px;font-size:12px;border-color:' + (item.isPinned ? '#f59e0b' : '#334155') + ';color:' + (item.isPinned ? '#fbbf24' : '#e2e8f0') + '" title="Starred replays are kept for 365 days">' + (item.isPinned ? '⭐ Starred' : '☆ Star') + '</button>'
           : '<button disabled style="padding:7px 10px;font-size:12px;opacity:0.85;cursor:default;border-color:' + (item.isPinned ? '#f59e0b' : '#334155') + ';color:' + (item.isPinned ? '#fbbf24' : '#94a3b8') + '">' + (item.isPinned ? '⭐ Starred' : '☆ Star') + '</button>';
         const pubControl = isOwner
-          ? '<button onclick="toggleVideoPublic(\\'' + item.battleId + '\\', ' + (!isPub) + ')" style="padding:7px 10px;font-size:12px;border-color:' + (isPub ? '#38bdf8' : '#334155') + ';color:' + (isPub ? '#38bdf8' : '#94a3b8') + ';background:' + (isPub ? 'rgba(56,189,248,0.12)' : '#1e293b') + '" title="' + (isOverriddenPublic ? 'Per-video setting is Private (currently overridden because Vault Visibility is set to All Videos Shared)' : 'Toggle whether this video is Public or Private (Default: Private)') + '">' + (isPub ? '🌐 Public' : (isOverriddenPublic ? '🔒 Private (All)' : '🔒 Private')) + '</button>'
+          ? '<button onclick="toggleVideoPublic(\\'' + safeBattleIdJs + '\\', ' + (!isPub) + ')" style="padding:7px 10px;font-size:12px;border-color:' + (isPub ? '#38bdf8' : '#334155') + ';color:' + (isPub ? '#38bdf8' : '#94a3b8') + ';background:' + (isPub ? 'rgba(56,189,248,0.12)' : '#1e293b') + '" title="' + (isOverriddenPublic ? 'Per-video setting is Private (currently overridden because Vault Visibility is set to All Videos Shared)' : 'Toggle whether this video is Public or Private (Default: Private)') + '">' + (isPub ? '🌐 Public' : (isOverriddenPublic ? '🔒 Private (All)' : '🔒 Private')) + '</button>'
           : '<button disabled style="padding:7px 10px;font-size:12px;opacity:0.85;cursor:default;border-color:' + (isPub || isOverriddenPublic ? '#38bdf8' : '#334155') + ';color:' + (isPub || isOverriddenPublic ? '#38bdf8' : '#94a3b8') + '">' + (isPub ? '🌐 Public' : (isOverriddenPublic ? '🌐 Shared (All)' : '🔒 Private')) + '</button>';
         const isAdminOwner = isOwner && String(currentVaultData.screenName || '').toLowerCase() === 'sportsfan986';
         const featControl = isAdminOwner
-          ? '<button onclick="promoteToFeatured(\\'' + item.shareId + '\\')" style="padding:7px 10px;font-size:12px;border-color:' + (item.featuredShareId ? '#facc15' : '#2dd4bf') + ';color:' + (item.featuredShareId ? '#fde047' : '#2dd4bf') + ';background:rgba(45,212,191,0.12)" title="Clone this battle into persistent @Featured Official Showcase storage">' + (item.featuredShareId ? '🌟 Featured (' + item.featuredShareId + ')' : '🌟 Promote to Featured') + '</button>'
+          ? '<button onclick="promoteToFeatured(\\'' + safeShareIdJs + '\\')" style="padding:7px 10px;font-size:12px;border-color:' + (item.featuredShareId ? '#facc15' : '#2dd4bf') + ';color:' + (item.featuredShareId ? '#fde047' : '#2dd4bf') + ';background:rgba(45,212,191,0.12)" title="Clone this battle into persistent @Featured Official Showcase storage">' + (item.featuredShareId ? '🌟 Featured (' + esc(item.featuredShareId) + ')' : '🌟 Promote to Featured') + '</button>'
           : '';
         return '<div class="replay-card ' + (item.isPinned ? 'pinned' : '') + '">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px">' +
-            '<span class="pill ' + (isWin ? 'pill-win' : 'pill-loss') + '">' + (item.result || 'BATTLE') + ' • ' + (item.league || 'GBL') + '</span>' +
-            '<span style="font-size:11px;color:#94a3b8">' + mb + ' MB • ' + (item.durationSec || 0) + 's</span>' +
+            '<span class="pill ' + (isWin ? 'pill-win' : 'pill-loss') + '">' + esc(item.result || 'BATTLE') + ' • ' + esc(item.league || 'GBL') + '</span>' +
+            '<span style="font-size:11px;color:#94a3b8">' + esc(mb) + ' MB • ' + esc(Number(item.durationSec) || 0) + 's</span>' +
           '</div>' +
-          '<div style="font-weight:800;font-size:13.5px;color:#f1f5f9">' + (item.showcaseTitle || item.matchupSummary || item.battleId) + '</div>' +
-          '<div style="font-size:11px;color:#64748b">' + dateStr + ' • ID: ' + item.battleId + (item.highlightSec ? ' • ⚡ Highlight @ ' + item.highlightSec + 's' : '') + '</div>' +
+          '<div style="font-weight:800;font-size:13.5px;color:#f1f5f9">' + esc(item.showcaseTitle || item.matchupSummary || item.battleId) + '</div>' +
+          '<div style="font-size:11px;color:#64748b">' + esc(dateStr) + ' • ID: ' + esc(item.battleId) + (highlightSecNum ? ' • ⚡ Highlight @ ' + highlightSecNum + 's' : '') + '</div>' +
           '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;align-items:center">' +
-            '<a class="btn-link" style="background:#059669;border-color:#10b981;padding:7px 10px;font-size:12px;flex:1;justify-content:center" href="' + item.shareUrl + '">▶️ Watch + HUD</a>' +
-            (item.highlightSec ? '<a class="btn-link" style="background:rgba(250,204,21,0.18);border-color:#facc15;color:#fde047;padding:7px 10px;font-size:12px" href="' + item.shareUrl + '?t=' + item.highlightSec + '" title="Jump directly to the key highlight moment">⚡ Key Moment (' + item.highlightSec + 's)</a>' : '') +
+            '<a class="btn-link" style="background:#059669;border-color:#10b981;padding:7px 10px;font-size:12px;flex:1;justify-content:center" href="' + safeShareUrl + '">▶️ Watch + HUD</a>' +
+            (highlightSecNum ? '<a class="btn-link" style="background:rgba(250,204,21,0.18);border-color:#facc15;color:#fde047;padding:7px 10px;font-size:12px" href="' + safeShareUrl + '?t=' + highlightSecNum + '" title="Jump directly to the key highlight moment">⚡ Key Moment (' + highlightSecNum + 's)</a>' : '') +
             starControl +
             pubControl +
             featControl +
-            '<button onclick="copyLink(\\'' + item.shareUrl + '\\')" style="padding:7px 10px;font-size:12px" title="Anyone with this direct link can watch this replay">🔗 Copy Link</button>' +
+            '<button onclick="copyLink(\\'' + safeShareUrlJs + '\\')" style="padding:7px 10px;font-size:12px" title="Anyone with this direct link can watch this replay">🔗 Copy Link</button>' +
           '</div>' +
         '</div>';
       }).join('');
@@ -4573,21 +4974,118 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
 </html>`;
 }
 
+async function computeHmacSha256Hex(secret, payload) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(String(secret || '')),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sigBuf = await crypto.subtle.sign('HMAC', key, enc.encode(String(payload || '')));
+  return Array.from(new Uint8Array(sigBuf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function verifyStripeWebhookSignature(request, rawBody, env) {
+  const secret = (env.STRIPE_WEBHOOK_SECRET || '').trim();
+  if (!secret) {
+    return {
+      ok: false,
+      error: 'STRIPE_WEBHOOK_SECRET is not configured on Worker.',
+    };
+  }
+  const sigHeader = (request.headers.get('Stripe-Signature') || '').trim();
+  if (!sigHeader) {
+    return { ok: false, error: 'Missing Stripe-Signature header.' };
+  }
+  const parts = sigHeader.split(',').map((p) => p.trim());
+  let timestamp = '';
+  const v1Sigs = [];
+  for (const part of parts) {
+    const eqIdx = part.indexOf('=');
+    if (eqIdx <= 0) continue;
+    const k = part.slice(0, eqIdx).trim();
+    const v = part.slice(eqIdx + 1).trim();
+    if (k === 't') timestamp = v;
+    if (k === 'v1' && v) v1Sigs.push(v.toLowerCase());
+  }
+  const tsNum = Number(timestamp);
+  if (!timestamp || !Number.isFinite(tsNum) || v1Sigs.length === 0) {
+    return { ok: false, error: 'Malformed Stripe-Signature header.' };
+  }
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (Math.abs(nowSec - tsNum) > 300) {
+    return { ok: false, error: 'Stripe webhook timestamp outside 300s tolerance window.' };
+  }
+  const expectedSig = await computeHmacSha256Hex(secret, `${timestamp}.${rawBody}`);
+  const matched = v1Sigs.some((candidate) => timingSafeEqualStr(candidate, expectedSig));
+  if (!matched) {
+    return { ok: false, error: 'Invalid Stripe webhook HMAC signature.' };
+  }
+  return { ok: true };
+}
+
+async function verifyBmcWebhookSignature(request, rawBody, env) {
+  const secret = (env.BMC_WEBHOOK_SECRET || '').trim();
+  if (!secret) {
+    return {
+      ok: false,
+      error: 'BMC_WEBHOOK_SECRET is not configured on Worker.',
+    };
+  }
+  const sigHeader = (
+    request.headers.get('x-signature-sha256') ||
+    request.headers.get('x-bmc-signature') ||
+    ''
+  )
+    .trim()
+    .toLowerCase();
+  if (!sigHeader) {
+    return { ok: false, error: 'Missing Buy Me a Coffee x-signature-sha256 header.' };
+  }
+  const expectedSig = await computeHmacSha256Hex(secret, rawBody);
+  if (!timingSafeEqualStr(sigHeader, expectedSig)) {
+    return { ok: false, error: 'Invalid Buy Me a Coffee webhook HMAC signature.' };
+  }
+  return { ok: true };
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
 
+    // Enforce HTTPS redirect on all official silphscopepvp.com domains
+    if (
+      url.protocol === 'http:' &&
+      (url.hostname === 'silphscopepvp.com' || url.hostname.endsWith('.silphscopepvp.com'))
+    ) {
+      return new Response(null, {
+        status: 301,
+        headers: buildSecurityHeaders({
+          Location: `https://${url.host}${url.pathname}${url.search}`,
+        }),
+      });
+    }
+
     if (request.method === 'OPTIONS') {
+      const isPublicStreamOrAsset =
+        path.startsWith('/v1/replays/stream/') ||
+        path === '/v1/replays/featured' ||
+        path === '/overlay.html';
       return new Response(null, {
         status: 204,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
+        headers: buildSecurityHeaders({
+          'Access-Control-Allow-Origin': resolveAllowedCorsOrigin(request, !isPublicStreamOrAsset),
+          Vary: 'Origin',
           'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
           'Access-Control-Allow-Headers':
             'Content-Type, Authorization, X-SilphScope-Client-Key, X-Trainer-Screen-Name, X-SilphScope-Unlock-Key, X-Vault-Session, X-Vault-Password, X-GitHub-Token, X-Device-Hash, X-Claim-Email, X-GitHub-Username, X-GitHub-User-Id, Range',
           'Access-Control-Expose-Headers': 'Content-Range, Accept-Ranges, Content-Length',
-        },
+        }),
       });
     }
 
@@ -4605,7 +5103,7 @@ export default {
           {
             headers: {
               Accept: 'application/vnd.github+json',
-              'User-Agent': 'SilphScope-PvP-Download-Redirect/7.12',
+              'User-Agent': 'SilphScope-PvP-Download-Redirect/7.13',
             },
             cf: { cacheTtl: 300, cacheEverything: true },
           }
@@ -4622,7 +5120,13 @@ export default {
           }
         }
       } catch (_) {}
-      return Response.redirect(apkUrl, 302);
+      return new Response(null, {
+        status: 302,
+        headers: buildSecurityHeaders({
+          Location: apkUrl,
+          'Cache-Control': 'public, max-age=300',
+        }),
+      });
     }
 
     // 0. Public Cloud DVR Replay Vault Web Portal (`GET /` on dvr.*, or `GET /vault`, `GET /vault/:user`, `GET /u/:user`)
@@ -4636,16 +5140,16 @@ export default {
         path.startsWith('/vault/') ||
         path.startsWith('/u/'))
     ) {
-      return new Response(
-        renderVaultDashboardPage(url.origin, (env.CLIENT_INGEST_KEY || '').trim()),
-        {
-          status: 200,
-          headers: {
+      return new Response(renderVaultDashboardPage(url.origin), {
+        status: 200,
+        headers: buildSecurityHeaders(
+          {
             'Content-Type': 'text/html; charset=utf-8',
             'Cache-Control': 'no-cache',
           },
-        }
-      );
+          true
+        ),
+      });
     }
 
     // 0a-2. Marketing Website & Web Simulator Edge Proxy on `silphscopepvp.com` / `www.silphscopepvp.com`
@@ -4664,15 +5168,18 @@ export default {
           : `https://sportsfan986.github.io/silphscope-pvp${cleanRelPath}`;
       const ghResp = await fetch(targetGhUrl, {
         headers: {
-          'User-Agent': 'SilphScope-Edge-Proxy/7.12',
+          'User-Agent': 'SilphScope-Edge-Proxy/7.13',
           Accept: request.headers.get('Accept') || '*/*',
         },
         cf: { cacheTtl: cleanRelPath.startsWith('/assets/') ? 86400 : 60, cacheEverything: true },
       });
       const respHeaders = new Headers(ghResp.headers);
-      respHeaders.set('Access-Control-Allow-Origin', '*');
-      // Relax GitHub Pages CSP so api.silphscopepvp.com and dvr.silphscopepvp.com calls succeed
-      respHeaders.delete('Content-Security-Policy');
+      respHeaders.set('Access-Control-Allow-Origin', resolveAllowedCorsOrigin(request, true));
+      respHeaders.set('Vary', 'Origin');
+      const secHeaders = buildSecurityHeaders({}, true);
+      for (const [hk, hv] of Object.entries(secHeaders)) {
+        respHeaders.set(hk, hv);
+      }
       return new Response(ghResp.body, {
         status: ghResp.status,
         headers: respHeaders,
@@ -4683,21 +5190,33 @@ export default {
     if (request.method === 'GET' && path === '/overlay.html') {
       return new Response(OVERLAY_HTML, {
         status: 200,
-        headers: {
-          'Content-Type': 'text/html; charset=utf-8',
-          'Cache-Control': 'no-cache',
-        },
+        headers: buildSecurityHeaders(
+          {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-cache',
+          },
+          true
+        ),
       });
     }
 
-    // 1. Public Health Check
+    // 1. Public Health Check (detailed metrics require ADMIN_API_KEY)
     if (request.method === 'GET' && path === '/v1/health') {
+      const isAdmin = verifyAdminAuth(request, env).ok;
+      if (!isAdmin) {
+        return jsonResponse({
+          ok: true,
+          service: 'silphscope-telemetry-worker',
+          version: env.WORKER_VERSION || '7.1.3',
+          timestamp: new Date().toISOString(),
+        });
+      }
       const r2Stats = await getGlobalR2Stats(env.TELEMETRY_KV);
       const maxGb = Number(env.GLOBAL_MAX_R2_STORAGE_GB) || 9.0;
       return jsonResponse({
         ok: true,
         service: 'silphscope-telemetry-worker',
-        version: env.WORKER_VERSION || '2.0.0',
+        version: env.WORKER_VERSION || '7.1.3',
         storageBackend: store.backend,
         r2ReplayBucketBound: Boolean(env.REPLAY_BUCKET),
         r2GlobalUsedMb: Number((r2Stats.totalBytes / (1024 * 1024)).toFixed(2)),
@@ -4714,9 +5233,20 @@ export default {
 
     // 2. Always-On Lower-Resolution Battle Telemetry Ingest (`POST /v1/telemetry`)
     if (request.method === 'POST' && path === '/v1/telemetry') {
-      const auth = verifyClientAuth(request, env);
+      const auth = await verifyClientAuth(request, env);
       if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
       const { screenName } = auth;
+
+      const rl = await checkAndIncrementRateLimit(
+        env.TELEMETRY_KV,
+        'telemetry',
+        `${getClientIp(request)}_${screenName}`,
+        60,
+        600
+      );
+      if (!rl.allowed) {
+        return jsonResponse({ ok: false, error: 'Rate limit exceeded for telemetry ingest.' }, 429);
+      }
 
       let body;
       try {
@@ -4729,6 +5259,9 @@ export default {
       if (!jsonlPayload) {
         return jsonResponse({ ok: false, error: 'Missing or empty `jsonl` field.' }, 400);
       }
+      if (jsonlPayload.length > 1024 * 1024) {
+        return jsonResponse({ ok: false, error: 'Telemetry batch exceeds 1 MiB limit.' }, 413);
+      }
 
       const now = new Date();
       const dateFolder = now.toISOString().slice(0, 10);
@@ -4736,10 +5269,9 @@ export default {
         body.batchId || `${now.toISOString().replace(/[:.]/g, '-')}_${screenName}`
       );
       const recordCount = Number(body.recordCount) || jsonlPayload.split('\n').filter(Boolean).length;
-      const appVersion = String(body.appVersion || 'unknown');
+      const appVersion = String(body.appVersion || 'unknown').slice(0, 32);
       const versionCode = Number(body.versionCode) || 0;
       const deviceId = sanitizeId(body.deviceId || 'unknown');
-      const anomalySummary = String(body.anomalySummary || '');
 
       const batchKey = `batches/${dateFolder}/${batchId}.jsonl`;
       const userBatchKey = `users/${screenName}/batches/${batchId}.jsonl`;
@@ -4796,7 +5328,6 @@ export default {
             });
             if (m.recentBatches.length > 250) m.recentBatches.length = 250;
           });
-          // Generic battle telemetry batches do not send Telegram notifications (only manually flagged 1-Battle DVR videos post to Telegram).
         })()
       );
 
@@ -4811,9 +5342,20 @@ export default {
 
     // 3. Settings Change History Ingest (`POST /v1/settings-changes`)
     if (request.method === 'POST' && path === '/v1/settings-changes') {
-      const auth = verifyClientAuth(request, env);
+      const auth = await verifyClientAuth(request, env);
       if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
       const { screenName } = auth;
+
+      const rl = await checkAndIncrementRateLimit(
+        env.TELEMETRY_KV,
+        'settings_changes',
+        `${getClientIp(request)}_${screenName}`,
+        30,
+        600
+      );
+      if (!rl.allowed) {
+        return jsonResponse({ ok: false, error: 'Rate limit exceeded.' }, 429);
+      }
 
       let body;
       try {
@@ -4826,6 +5368,9 @@ export default {
       if (!jsonlPayload) {
         return jsonResponse({ ok: false, error: 'Missing or empty `jsonl` field.' }, 400);
       }
+      if (jsonlPayload.length > 256 * 1024) {
+        return jsonResponse({ ok: false, error: 'Settings payload exceeds 256 KiB limit.' }, 413);
+      }
 
       const now = new Date();
       const key = `users/${screenName}/settings_changes/${now.toISOString().replace(/[:.]/g, '-')}.jsonl`;
@@ -4833,7 +5378,7 @@ export default {
         contentType: 'application/x-ndjson',
         metadata: {
           screenName,
-          appVersion: String(body.appVersion || 'unknown'),
+          appVersion: String(body.appVersion || 'unknown').slice(0, 32),
           uploadedAt: now.toISOString(),
         },
       });
@@ -4844,9 +5389,23 @@ export default {
     // 4. 1-Battle DVR Bundle Ingest (`POST /v1/dvr`)
     if (request.method === 'POST' && path === '/v1/dvr') {
       try {
-        const auth = verifyClientAuth(request, env);
+        const auth = await verifyClientAuth(request, env);
         if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
         const { screenName } = auth;
+
+        const rl = await checkAndIncrementRateLimit(
+          env.TELEMETRY_KV,
+          'dvr_ingest',
+          `${getClientIp(request)}_${screenName}`,
+          20,
+          600
+        );
+        if (!rl.allowed) {
+          return jsonResponse({ ok: false, error: 'Rate limit exceeded for DVR upload.' }, 429);
+        }
+
+        const MAX_VIDEO_BYTES = 36 * 1024 * 1024;
+        const MAX_TRACE_BYTES = 3 * 1024 * 1024;
 
         const contentType = request.headers.get('Content-Type') || '';
         let videoBytes = null;
@@ -4860,6 +5419,9 @@ export default {
           const metaPart = form.get('metadata');
 
           if (videoFile && typeof videoFile.arrayBuffer === 'function') {
+            if (typeof videoFile.size === 'number' && videoFile.size > MAX_VIDEO_BYTES) {
+              return jsonResponse({ ok: false, error: 'DVR video exceeds 36 MiB limit.' }, 413);
+            }
             videoBytes = new Uint8Array(await videoFile.arrayBuffer());
           }
           if (tracePart) {
@@ -4884,6 +5446,9 @@ export default {
           metadata = body.metadata || {};
           deepTraceText = String(body.deepTraceJsonl || '');
           if (typeof body.videoBase64 === 'string' && body.videoBase64.length > 0) {
+            if (body.videoBase64.length > Math.ceil(MAX_VIDEO_BYTES * 1.38)) {
+              return jsonResponse({ ok: false, error: 'DVR video payload exceeds 36 MiB limit.' }, 413);
+            }
             const binaryStr = atob(body.videoBase64);
             const bytes = new Uint8Array(binaryStr.length);
             for (let i = 0; i < binaryStr.length; i++) {
@@ -4893,30 +5458,58 @@ export default {
           }
         }
 
+        if (videoBytes && videoBytes.byteLength > MAX_VIDEO_BYTES) {
+          return jsonResponse({ ok: false, error: 'DVR video exceeds 36 MiB limit.' }, 413);
+        }
+        if (deepTraceText && deepTraceText.length > MAX_TRACE_BYTES) {
+          return jsonResponse({ ok: false, error: 'DVR trace exceeds 3 MiB limit.' }, 413);
+        }
+
         const hasVideo = Boolean(videoBytes && videoBytes.byteLength > 0);
         const hasTrace = Boolean(deepTraceText && deepTraceText.trim().length > 0);
         if (!hasVideo && !hasTrace) {
           return jsonResponse({ ok: false, error: 'Missing DVR video and trace payload.' }, 400);
         }
+        if (hasVideo && !isValidMp4Bytes(videoBytes)) {
+          return jsonResponse({ ok: false, error: 'Invalid MP4 container header.' }, 400);
+        }
 
         const now = new Date();
-        const battleId = sanitizeId(
+        const rawBattleId = sanitizeId(
           metadata.battleId || `dvr_${now.getTime()}`,
           `dvr_${now.getTime()}`
         );
-        const appVersion = String(metadata.appVersion || 'unknown');
+        const appVersion = String(metadata.appVersion || 'unknown').slice(0, 32);
         const versionCode = Number(metadata.versionCode) || 0;
-        const league = String(metadata.league || 'Unknown League');
-        const result = String(metadata.result || 'UNKNOWN');
-        const matchupSummary = resolveFullTeamMatchupSummary(metadata, deepTraceText);
-        const frameCount = Number(metadata.frameCount) || 0;
+        const league = String(metadata.league || 'Unknown League').slice(0, 64);
+        const result = String(metadata.result || 'UNKNOWN').slice(0, 32);
+        const matchupSummary = String(resolveFullTeamMatchupSummary(metadata, deepTraceText) || '').slice(0, 180);
+        const frameCount = Math.max(0, Math.min(20000, Number(metadata.frameCount) || 0));
+
+        // Verify whether the uploader owns this screenName before allowing overwrite of any existing replay
+        const ownerAuth = await authenticateVaultOwner(
+          request,
+          env,
+          env.TELEMETRY_KV,
+          screenName,
+          metadata
+        );
+        const indexObj = env.TELEMETRY_KV
+          ? await loadUserReplayIndex(env.TELEMETRY_KV, screenName)
+          : { items: [] };
+        const existingItem = (indexObj.items || []).find((i) => i.battleId === rawBattleId);
+        const canUpdateExisting = Boolean(existingItem && ownerAuth.isOwner);
+        const battleId =
+          existingItem && !canUpdateExisting
+            ? `${rawBattleId}_${randomCharsFromAlphabet(4, 'abcdefghjkmnpqrstuvwxyz23456789')}`
+            : rawBattleId;
 
         const videoKey = `recordings/${screenName}/${battleId}_video.mp4`;
         const traceKey = `recordings/${screenName}/${battleId}_deep_trace.jsonl`;
         const videoByteLen = hasVideo ? videoBytes.byteLength : 0;
         const isManual = isManuallyFlaggedBattle(metadata, deepTraceText);
         const userIssueNoteClean = extractUserIssueDescription(metadata, deepTraceText);
-        const uploadReasonClean = String(metadata.uploadReason || '').trim();
+        const uploadReasonClean = String(metadata.uploadReason || '').trim().slice(0, 120);
         const tierSummary = await resolveUserPaidTierSummary(env.TELEMETRY_KV, screenName);
         const resolvedUserTier = tierSummary.tier;
 
@@ -4956,21 +5549,24 @@ export default {
 
         if (isFlaggedWithIssueDescription && hasVideo && env.TELEMETRY_KV) {
           try {
-            const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, screenName);
-            const existingItem = (indexObj.items || []).find((i) => i.battleId === battleId);
-            diagShareId = existingItem && existingItem.shareId ? existingItem.shareId : generateShareId();
+            diagShareId =
+              canUpdateExisting && existingItem && existingItem.shareId
+                ? existingItem.shareId
+                : generateShareId();
             diagWatchOverlayUrl = `${url.origin}/watch/${diagShareId}`;
 
             let r2VideoKey = videoKey;
             let r2TraceKey = hasTrace ? traceKey : null;
             if (env.REPLAY_BUCKET) {
-              r2VideoKey = `replays/${screenName}/${battleId}_video.mp4`;
+              // Store diagnostic R2 objects under a dedicated recordings/ prefix unless caller is verified owner
+              const r2Prefix = ownerAuth.isOwner ? `replays/${screenName}` : `recordings/${screenName}`;
+              r2VideoKey = `${r2Prefix}/${battleId}_video.mp4`;
               await env.REPLAY_BUCKET.put(r2VideoKey, videoBytes, {
                 httpMetadata: { contentType: 'video/mp4' },
                 customMetadata: { screenName, battleId, shareId: diagShareId },
               });
               if (hasTrace) {
-                r2TraceKey = `replays/${screenName}/${battleId}_deep_trace.jsonl`;
+                r2TraceKey = `${r2Prefix}/${battleId}_deep_trace.jsonl`;
                 await env.REPLAY_BUCKET.put(r2TraceKey, deepTraceText.trim() + '\n', {
                   httpMetadata: { contentType: 'application/x-ndjson' },
                   customMetadata: { screenName, battleId, shareId: diagShareId },
@@ -4998,10 +5594,13 @@ export default {
               userIssueNote: userIssueNoteClean,
               userTier: resolvedUserTier,
               userTierBadge: tierSummary.badge,
-              isPinned: Boolean(existingItem && existingItem.isPinned),
-              isPublic: Boolean(existingItem && existingItem.isPublic),
-              hideNames: Boolean(existingItem && existingItem.hideNames),
-              createdAt: existingItem && existingItem.createdAt ? existingItem.createdAt : now.toISOString(),
+              isPinned: Boolean(canUpdateExisting && existingItem && existingItem.isPinned),
+              isPublic: Boolean(canUpdateExisting && existingItem && existingItem.isPublic),
+              hideNames: Boolean(canUpdateExisting && existingItem && existingItem.hideNames),
+              createdAt:
+                canUpdateExisting && existingItem && existingItem.createdAt
+                  ? existingItem.createdAt
+                  : now.toISOString(),
               uploadedAt: now.toISOString(),
               updatedAt: now.toISOString(),
             };
@@ -5111,7 +5710,7 @@ export default {
         return jsonResponse(
           {
             ok: false,
-            error: String((err && err.message) || err || 'Internal Worker Error'),
+            error: 'Internal server error processing DVR bundle.',
           },
           500
         );
@@ -5120,9 +5719,25 @@ export default {
 
     // 5. License / Unlock Key Verification & Multi-Device Sync (`POST /v1/license/verify`)
     if (request.method === 'POST' && path === '/v1/license/verify') {
-      const auth = verifyClientAuth(request, env);
-      if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
+      const auth = await verifyClientAuth(request, env, false, true);
+      if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status, request, true);
       const { screenName } = auth;
+
+      const rl = await checkAndIncrementRateLimit(
+        env.TELEMETRY_KV,
+        'license_verify',
+        `${getClientIp(request)}_${screenName}`,
+        30,
+        600
+      );
+      if (!rl.allowed) {
+        return jsonResponse(
+          { ok: false, error: 'Too many verification attempts. Please wait a few minutes.' },
+          429,
+          request,
+          true
+        );
+      }
 
       let body = {};
       try {
@@ -5132,12 +5747,20 @@ export default {
       const inputKey = String(
         body.unlockKey || body.key || request.headers.get('X-SilphScope-Unlock-Key') || ''
       ).trim();
-      const ghUser = String(
-        body.githubUsername || request.headers.get('X-GitHub-Username') || ''
+      const ghToken = String(
+        body.githubToken || request.headers.get('X-GitHub-Token') || ''
       ).trim();
-      const ghId = String(
-        body.githubUserId || request.headers.get('X-GitHub-User-Id') || ''
-      ).trim();
+      let verifiedGhUser = '';
+      let verifiedGhId = '';
+      let isServerVerifiedGh = false;
+      if (ghToken) {
+        const ghCheck = await verifyGitHubTokenIdentity(ghToken);
+        if (ghCheck.ok) {
+          verifiedGhUser = ghCheck.githubUsername;
+          verifiedGhId = ghCheck.githubUserId;
+          isServerVerifiedGh = true;
+        }
+      }
       const devHash = String(
         body.deviceHash || request.headers.get('X-Device-Hash') || ''
       ).trim();
@@ -5150,10 +5773,14 @@ export default {
         env.TELEMETRY_KV,
         screenName,
         inputKey,
-        ghUser,
-        ghId,
+        verifiedGhUser,
+        verifiedGhId,
         devHash,
-        claimEmail
+        claimEmail,
+        {
+          isServerVerifiedGh,
+          isOwnerCaller: Boolean(inputKey || isServerVerifiedGh),
+        }
       );
       const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, screenName);
       const usage = await enforceUserReplayQuota(
@@ -5170,42 +5797,65 @@ export default {
         screenName,
         email: claimEmail,
         deviceHash: devHash,
-        githubUserId: ghId,
+        githubUserId: verifiedGhId,
       });
 
-      return jsonResponse({
-        ok: true,
-        screenName,
-        tier: licenseInfo.tier,
-        active: licenseInfo.active,
-        everPaid: Boolean(licenseInfo.everPaid),
-        signature: licenseInfo.signature || '',
-        screenNameConflict: Boolean(licenseInfo.screenNameConflict),
-        error: licenseInfo.error || null,
-        license: licenseInfo,
-        limits: licenseInfo,
-        usage,
-        seasonPromo: {
-          ...seasonWindow,
-          introPromoEligible: seasonWindow.isDay15Plus && !introUsed,
-          introPromoAlreadyUsed: introUsed,
+      const deviceIngestToken = devHash ? await computeDeviceIngestToken(env, devHash) : '';
+      return jsonResponse(
+        {
+          ok: true,
+          screenName,
+          tier: licenseInfo.tier,
+          active: licenseInfo.active,
+          everPaid: Boolean(licenseInfo.everPaid),
+          signature: licenseInfo.signature || '',
+          deviceIngestToken,
+          screenNameConflict: Boolean(licenseInfo.screenNameConflict),
+          error: licenseInfo.error || null,
+          license: licenseInfo,
+          limits: licenseInfo,
+          usage,
+          seasonPromo: {
+            ...seasonWindow,
+            introPromoEligible: seasonWindow.isDay15Plus && !introUsed,
+            introPromoAlreadyUsed: introUsed,
+          },
+          paymentLinks: {
+            stripe: STRIPE_PAYMENT_LINKS,
+            bmc: BMC_LINKS,
+          },
+          globalR2: {
+            usedMb: Number((globalStats.totalBytes / (1024 * 1024)).toFixed(2)),
+            maxGb: Number(env.GLOBAL_MAX_R2_STORAGE_GB) || 9.0,
+            totalReplays: globalStats.totalReplays,
+          },
         },
-        paymentLinks: {
-          stripe: STRIPE_PAYMENT_LINKS,
-          bmc: BMC_LINKS,
-        },
-        globalR2: {
-          usedMb: Number((globalStats.totalBytes / (1024 * 1024)).toFixed(2)),
-          maxGb: Number(env.GLOBAL_MAX_R2_STORAGE_GB) || 9.0,
-          totalReplays: globalStats.totalReplays,
-        },
-      });
+        200,
+        request,
+        true
+      );
     }
 
     // 5b. Pre-Checkout Unique Screen Name Registration & Dupe Check (`POST /v1/users/register-name`)
     if (request.method === 'POST' && path === '/v1/users/register-name') {
-      const auth = verifyClientAuth(request, env);
-      if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
+      const auth = await verifyClientAuth(request, env, true, true);
+      if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status, request, true);
+
+      const rl = await checkAndIncrementRateLimit(
+        env.TELEMETRY_KV,
+        'register_name',
+        getClientIp(request),
+        20,
+        600
+      );
+      if (!rl.allowed) {
+        return jsonResponse(
+          { ok: false, error: 'Too many registration checks. Please wait a few minutes.' },
+          429,
+          request,
+          true
+        );
+      }
 
       let body = {};
       try {
@@ -5214,7 +5864,12 @@ export default {
 
       const desiredName = sanitizeScreenName(body.screenName || auth.screenName || '');
       const devHash = String(body.deviceHash || request.headers.get('X-Device-Hash') || '').trim();
-      const ghId = String(body.githubUserId || request.headers.get('X-GitHub-User-Id') || '').trim();
+      const ghToken = String(body.githubToken || request.headers.get('X-GitHub-Token') || '').trim();
+      let verifiedGhId = '';
+      if (ghToken) {
+        const ghCheck = await verifyGitHubTokenIdentity(ghToken);
+        if (ghCheck.ok) verifiedGhId = ghCheck.githubUserId;
+      }
       const email = String(body.email || '').trim().toLowerCase();
 
       if (!desiredName || desiredName === 'anonymous' || desiredName.length < 3) {
@@ -5224,30 +5879,46 @@ export default {
             available: false,
             error: 'Please enter a unique Trainer ID (at least 3 characters, not "anonymous").',
           },
-          400
+          400,
+          request,
+          true
         );
       }
 
-      const chk = await checkScreenNameRegistration(env.TELEMETRY_KV, desiredName, devHash, ghId);
+      const chk = await checkScreenNameRegistration(
+        env.TELEMETRY_KV,
+        desiredName,
+        devHash,
+        verifiedGhId
+      );
       if (!chk.available) {
-        return jsonResponse({
-          ok: true,
-          available: false,
-          ownedByCaller: false,
-          screenName: desiredName,
-          error: `Trainer ID '@${desiredName}' is already registered by another player. Please choose a unique Trainer ID before purchasing.`,
-        });
+        return jsonResponse(
+          {
+            ok: true,
+            available: false,
+            ownedByCaller: false,
+            screenName: desiredName,
+            error: `Trainer ID '@${desiredName}' is already registered by another player. Please choose a unique Trainer ID before purchasing.`,
+          },
+          200,
+          request,
+          true
+        );
       }
 
-      if (env.TELEMETRY_KV && (devHash || ghId)) {
+      const isValidDevToken = devHash.length >= 8 && !devHash.toLowerCase().startsWith('web-');
+      if (env.TELEMETRY_KV && (isValidDevToken || verifiedGhId) && (!chk.record || chk.ownedByCaller)) {
+        const prevRec = chk.record && typeof chk.record === 'object' ? chk.record : {};
         await env.TELEMETRY_KV.put(
           `registered_user/${desiredName.toLowerCase()}`,
           JSON.stringify({
+            ...prevRec,
             screenName: desiredName,
-            deviceHash: devHash,
-            githubUserId: ghId,
-            email,
-            registeredAt: new Date().toISOString(),
+            deviceHash: isValidDevToken ? devHash : prevRec.deviceHash || '',
+            githubUserId: verifiedGhId || prevRec.githubUserId || '',
+            email: email || prevRec.email || '',
+            registeredAt: prevRec.registeredAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
           })
         );
       }
@@ -5257,24 +5928,31 @@ export default {
         screenName: desiredName,
         email,
         deviceHash: devHash,
-        githubUserId: ghId,
+        githubUserId: verifiedGhId,
       });
 
-      return jsonResponse({
-        ok: true,
-        available: true,
-        ownedByCaller: true,
-        screenName: desiredName,
-        seasonPromo: {
-          ...seasonWindow,
-          introPromoEligible: seasonWindow.isDay15Plus && !introUsed,
-          introPromoAlreadyUsed: introUsed,
+      const deviceIngestToken = devHash ? await computeDeviceIngestToken(env, devHash) : '';
+      return jsonResponse(
+        {
+          ok: true,
+          available: true,
+          ownedByCaller: Boolean(chk.ownedByCaller || !chk.record),
+          screenName: desiredName,
+          deviceIngestToken,
+          seasonPromo: {
+            ...seasonWindow,
+            introPromoEligible: seasonWindow.isDay15Plus && !introUsed,
+            introPromoAlreadyUsed: introUsed,
+          },
+          paymentLinks: {
+            stripe: STRIPE_PAYMENT_LINKS,
+            bmc: BMC_LINKS,
+          },
         },
-        paymentLinks: {
-          stripe: STRIPE_PAYMENT_LINKS,
-          bmc: BMC_LINKS,
-        },
-      });
+        200,
+        request,
+        true
+      );
     }
 
     // 5c. Dynamic Season Pass / Intro Promo Checkout Quote (`POST /v1/users/checkout-quote`)
@@ -5301,57 +5979,89 @@ export default {
       });
       const introEligible = seasonWindow.isDay15Plus && !introUsed;
 
-      return jsonResponse({
-        ok: true,
-        screenName,
-        seasonWindow,
-        introPromoEligible: introEligible,
-        introPromoAlreadyUsed: introUsed,
-        recommendedLinks: {
-          supporter: {
-            priceUsd: 2,
-            label: 'Lifetime Supporter ($2 One-Time • 🛡️ Shield Decision HUD + 5 Local Videos + Core 3 Leagues + Lifetime Logs)',
-            stripeUrl: `${STRIPE_PAYMENT_LINKS.supporter}?client_reference_id=${encodeURIComponent(screenName)}`,
-            bmcUrl: BMC_LINKS.supporter,
+      return jsonResponse(
+        {
+          ok: true,
+          screenName,
+          seasonWindow,
+          introPromoEligible: introEligible,
+          introPromoAlreadyUsed: introUsed,
+          recommendedLinks: {
+            supporter: {
+              priceUsd: 2,
+              label: 'Lifetime Supporter ($2 One-Time • 🛡️ Shield Decision HUD + 5 Local Videos + Core 3 Leagues + Lifetime Logs)',
+              stripeUrl: `${STRIPE_PAYMENT_LINKS.supporter}?client_reference_id=${encodeURIComponent(screenName)}`,
+              bmcUrl: BMC_LINKS.supporter,
+            },
+            pro: {
+              priceUsd: introEligible ? 3 : 6,
+              isIntroPromo: introEligible,
+              label: introEligible
+                ? `Legend Pro First-Season Intro Promo ($3 for Remainder of GBL Season • ${seasonWindow.daysRemaining}d left • 15 FPS DVR + 50 Cloud Replays + Shield HUD)`
+                : 'Legend Pro 90-Day GBL Season Pass ($6 / Season • 15 FPS DVR + 50 Cloud Replays + Shield HUD)',
+              stripeUrl: `${introEligible ? STRIPE_PAYMENT_LINKS.pro_intro : STRIPE_PAYMENT_LINKS.pro_season}?client_reference_id=${encodeURIComponent(screenName)}`,
+              stripeMonthlyUrl: `${STRIPE_PAYMENT_LINKS.pro_monthly}?client_reference_id=${encodeURIComponent(screenName)}`,
+              bmcUrl: introEligible ? BMC_LINKS.membership : BMC_LINKS.pro_season,
+            },
+            vip: {
+              priceUsd: introEligible ? 5 : 10,
+              isIntroPromo: introEligible,
+              label: introEligible
+                ? `VIP / Coach First-Season Intro Promo ($5 for Remainder of GBL Season • ${seasonWindow.daysRemaining}d left • 30 FPS Smooth DVR + 150 Cloud Replays)`
+                : 'VIP / Coach 90-Day GBL Season Pass ($10 / Season • 30 FPS Smooth DVR + 150 Cloud Replays)',
+              stripeUrl: `${introEligible ? STRIPE_PAYMENT_LINKS.vip_intro : STRIPE_PAYMENT_LINKS.vip_season}?client_reference_id=${encodeURIComponent(screenName)}`,
+              stripeMonthlyUrl: `${STRIPE_PAYMENT_LINKS.vip_monthly}?client_reference_id=${encodeURIComponent(screenName)}`,
+              bmcUrl: introEligible ? BMC_LINKS.membership : BMC_LINKS.vip_season,
+            },
           },
-          pro: {
-            priceUsd: introEligible ? 3 : 6,
-            isIntroPromo: introEligible,
-            label: introEligible
-              ? `Legend Pro First-Season Intro Promo ($3 for Remainder of GBL Season • ${seasonWindow.daysRemaining}d left • 15 FPS DVR + 50 Cloud Replays + Shield HUD)`
-              : 'Legend Pro 90-Day GBL Season Pass ($6 / Season • 15 FPS DVR + 50 Cloud Replays + Shield HUD)',
-            stripeUrl: `${introEligible ? STRIPE_PAYMENT_LINKS.pro_intro : STRIPE_PAYMENT_LINKS.pro_season}?client_reference_id=${encodeURIComponent(screenName)}`,
-            stripeMonthlyUrl: `${STRIPE_PAYMENT_LINKS.pro_monthly}?client_reference_id=${encodeURIComponent(screenName)}`,
-            bmcUrl: introEligible ? BMC_LINKS.membership : BMC_LINKS.pro_season,
-          },
-          vip: {
-            priceUsd: introEligible ? 5 : 10,
-            isIntroPromo: introEligible,
-            label: introEligible
-              ? `VIP / Coach First-Season Intro Promo ($5 for Remainder of GBL Season • ${seasonWindow.daysRemaining}d left • 30 FPS Smooth DVR + 150 Cloud Replays)`
-              : 'VIP / Coach 90-Day GBL Season Pass ($10 / Season • 30 FPS Smooth DVR + 150 Cloud Replays)',
-            stripeUrl: `${introEligible ? STRIPE_PAYMENT_LINKS.vip_intro : STRIPE_PAYMENT_LINKS.vip_season}?client_reference_id=${encodeURIComponent(screenName)}`,
-            stripeMonthlyUrl: `${STRIPE_PAYMENT_LINKS.vip_monthly}?client_reference_id=${encodeURIComponent(screenName)}`,
-            bmcUrl: introEligible ? BMC_LINKS.membership : BMC_LINKS.vip_season,
+          paymentLinks: {
+            stripe: STRIPE_PAYMENT_LINKS,
+            bmc: BMC_LINKS,
           },
         },
-        paymentLinks: {
-          stripe: STRIPE_PAYMENT_LINKS,
-          bmc: BMC_LINKS,
-        },
-      });
+        200,
+        request,
+        true
+      );
     }
 
     // 6. Buy Me a Coffee & Stripe Automated Key Webhooks (`POST /v1/webhooks/bmc` & `POST /v1/webhooks/stripe`)
     if (request.method === 'POST' && (path === '/v1/webhooks/bmc' || path === '/v1/webhooks/stripe')) {
+      const isStripe = path === '/v1/webhooks/stripe';
+      const rawBody = await request.text();
+
+      const adminOverride = verifyAdminAuth(request, env).ok;
+      if (!adminOverride) {
+        const sigCheck = isStripe
+          ? await verifyStripeWebhookSignature(request, rawBody, env)
+          : await verifyBmcWebhookSignature(request, rawBody, env);
+        if (!sigCheck.ok) {
+          return jsonResponse({ ok: false, error: sigCheck.error }, 401);
+        }
+      }
+
       let body = {};
       try {
-        body = await request.json();
+        body = JSON.parse(rawBody);
       } catch (_) {
         return jsonResponse({ ok: false, error: 'Invalid JSON payload' }, 400);
       }
 
-      const isStripe = path === '/v1/webhooks/stripe';
+      // Deduplicate webhook deliveries by provider event ID
+      const rawEventId = String(
+        body.id || body.event_id || (body.data && body.data.id) || ''
+      ).trim();
+      const eventId = rawEventId ? sanitizeId(rawEventId, '') : '';
+      const dedupKey = eventId
+        ? `webhook_event/${isStripe ? 'stripe' : 'bmc'}/${eventId}`
+        : '';
+      if (dedupKey && env.TELEMETRY_KV) {
+        const alreadyProcessed = await env.TELEMETRY_KV.get(dedupKey, { type: 'text' });
+        if (alreadyProcessed) {
+          return jsonResponse({ ok: true, deduplicated: true, eventId });
+        }
+      }
+
       let amount = 0;
       let levelName = '';
       let supporterName = 'Trainer';
@@ -5484,7 +6194,6 @@ export default {
       if (tier === 'supporter') {
         expiresAt = null; // Lifetime Supporter never expires!
       } else if (isSeasonPass) {
-        // Unlocks remainder of current GBL season + 7-day buffer (or full 95 days if purchased in Days 1-14)
         const seasonEndBufferMs = seasonWindow.endMs + 7 * 86400000;
         const min35DaysMs = now.getTime() + 35 * 86400000;
         const full95DaysMs = now.getTime() + 95 * 86400000;
@@ -5495,56 +6204,49 @@ export default {
         expiresAt = new Date(now.getTime() + 35 * 24 * 3600 * 1000).toISOString();
       }
 
-      // Check if buyer already has an existing license by boundScreenName or supporterEmail (Renewal / Upgrade detection)
+      // Check if buyer already has an existing license by boundScreenName or O(1) email_license index
       let screenNameConflict = false;
       let existingMatchedLicense = null;
-      if (boundScreenName) {
+      if (boundScreenName && env.TELEMETRY_KV) {
         const chk = await checkScreenNameRegistration(env.TELEMETRY_KV, boundScreenName, '', '');
-        if (!chk.available) {
+        const existingBoundKey =
+          (chk.record && chk.record.boundKey) ||
+          (await env.TELEMETRY_KV.get(`user_license/${boundScreenName.toLowerCase()}`, { type: 'text' }));
+        const existingLic = existingBoundKey
+          ? await loadLicenseByKey(env.TELEMETRY_KV, existingBoundKey)
+          : null;
+        if (!chk.available || existingLic) {
           const existingRec = chk.record;
-          const existingLic = existingRec && existingRec.boundKey
-            ? await loadLicenseByKey(env.TELEMETRY_KV, existingRec.boundKey)
-            : null;
           const sameEmail =
             supporterEmail &&
             ((existingRec && existingRec.email && existingRec.email.toLowerCase() === supporterEmail) ||
               (existingLic &&
                 existingLic.supporterEmail &&
                 existingLic.supporterEmail.toLowerCase() === supporterEmail));
-          if (!sameEmail && existingRec && existingRec.email && supporterEmail) {
-            screenNameConflict = true;
-          } else if (existingLic) {
+          if (sameEmail && existingLic) {
             existingMatchedLicense = existingLic;
-          }
-        }
-        if (!existingMatchedLicense && !screenNameConflict) {
-          const boundKey = await env.TELEMETRY_KV.get(`user_license/${boundScreenName.toLowerCase()}`);
-          if (boundKey) {
-            existingMatchedLicense = await loadLicenseByKey(env.TELEMETRY_KV, boundKey);
+          } else {
+            // Different user already owns this screenName — mark conflict so we never overwrite their user_license
+            screenNameConflict = true;
           }
         }
       }
 
-      if (!existingMatchedLicense && supporterEmail) {
-        try {
-          const listed = await env.TELEMETRY_KV.list({ prefix: 'licenses/' });
-          for (const k of listed.keys || []) {
-            const raw = await env.TELEMETRY_KV.get(k.name);
-            if (!raw) continue;
-            const rec = JSON.parse(raw);
-            if (rec && rec.supporterEmail && String(rec.supporterEmail).toLowerCase() === supporterEmail) {
-              existingMatchedLicense = rec;
-              break;
-            }
+      if (!existingMatchedLicense && supporterEmail && env.TELEMETRY_KV) {
+        const cleanEmailKey = sanitizeEmailKey(supporterEmail);
+        if (cleanEmailKey) {
+          const emailLicKey = await env.TELEMETRY_KV.get(`email_license/${cleanEmailKey}`, { type: 'text' });
+          if (emailLicKey) {
+            existingMatchedLicense = await loadLicenseByKey(env.TELEMETRY_KV, emailLicKey);
           }
-        } catch (_) {}
+        }
       }
 
       const isRenewal = Boolean(isWebhookRenewalEvent || existingMatchedLicense);
-      const effectiveScreenName =
-        boundScreenName || (existingMatchedLicense && existingMatchedLicense.boundScreenName) || '';
+      const effectiveScreenName = screenNameConflict
+        ? ''
+        : boundScreenName || (existingMatchedLicense && existingMatchedLicense.boundScreenName) || '';
 
-      // If renewing an existing active license, extend/upgrade that existing license key in-place AND mint/link the new key
       if (existingMatchedLicense) {
         const tierRank = { free: 0, supporter: 1, pro: 2, vip: 3 };
         if ((tierRank[tier] || 0) >= (tierRank[existingMatchedLicense.tier] || 0)) {
@@ -5572,6 +6274,7 @@ export default {
         tier,
         label: preset.label,
         boundScreenName: effectiveScreenName,
+        requestedScreenName: boundScreenName || null,
         screenNameConflict,
         everPaid: true,
         isIntroPromo,
@@ -5587,6 +6290,9 @@ export default {
       };
 
       await saveLicenseRecord(env.TELEMETRY_KV, licenseRecord);
+      if (dedupKey && env.TELEMETRY_KV) {
+        await env.TELEMETRY_KV.put(dedupKey, now.toISOString(), { expirationTtl: 86400 * 30 });
+      }
       if (isIntroPromo) {
         await markUserIntroPromoUsed(env.TELEMETRY_KV, {
           screenName: effectiveScreenName,
@@ -5611,8 +6317,10 @@ export default {
             `\n` +
             `⏳ <b>Expires:</b> <code>${escapeHtml(expiresAt ? expiresAt.slice(0, 10) : 'LIFETIME')}</code>\n` +
             (effectiveScreenName
-              ? `🎮 <b>Trainer ID:</b> <code>@${escapeHtml(effectiveScreenName)}</code>${screenNameConflict ? ' ⚠️ (DUPLICATE ID — Buyer can change ID in-app via Email Claim)' : ''}\n` +
-                `🌐 <b>Vault URL:</b> https://silphscope-telemetry.silphscope-pvp.workers.dev/u/${encodeURIComponent(effectiveScreenName)}\n`
+              ? `🎮 <b>Trainer ID:</b> <code>@${escapeHtml(effectiveScreenName)}</code>\n` +
+                `🌐 <b>Vault URL:</b> https://dvr.silphscopepvp.com/u/${encodeURIComponent(effectiveScreenName)}\n`
+              : screenNameConflict
+              ? `⚠️ <b>Duplicate ID Requested:</b> <code>@${escapeHtml(boundScreenName)}</code> (Buyer can claim via email in-app)\n`
               : '') +
             (supportNote ? `💬 <b>Note:</b> ${escapeHtml(supportNote)}` : '')
         )
@@ -5623,8 +6331,7 @@ export default {
         source: licenseRecord.source,
         isRenewal,
         tier,
-        unlockKey: newKey,
-        renewedKey: existingMatchedLicense ? existingMatchedLicense.key : null,
+        unlockKeyMasked: maskSecretKey(newKey),
         boundScreenName: effectiveScreenName || null,
         screenNameConflict,
         isIntroPromo,
@@ -5635,13 +6342,27 @@ export default {
     // 7. Cloud R2 Replay Vault Upload (`POST /v1/replays/upload`)
     if (request.method === 'POST' && path === '/v1/replays/upload') {
       try {
-        const auth = verifyClientAuth(request, env);
+        const auth = await verifyClientAuth(request, env);
         if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
         const { screenName } = auth;
+
+        const rl = await checkAndIncrementRateLimit(
+          env.TELEMETRY_KV,
+          'replay_upload',
+          `${getClientIp(request)}_${screenName}`,
+          20,
+          600
+        );
+        if (!rl.allowed) {
+          return jsonResponse({ ok: false, error: 'Rate limit exceeded for Replay Vault upload.' }, 429);
+        }
 
         if (!env.REPLAY_BUCKET) {
           return jsonResponse({ ok: false, error: 'R2 Replay Bucket not bound on Worker.' }, 503);
         }
+
+        const MAX_VIDEO_BYTES = 36 * 1024 * 1024;
+        const MAX_TRACE_BYTES = 3 * 1024 * 1024;
 
         const contentType = request.headers.get('Content-Type') || '';
         let videoBytes = null;
@@ -5655,6 +6376,9 @@ export default {
           const metaPart = form.get('metadata');
 
           if (videoFile && typeof videoFile.arrayBuffer === 'function') {
+            if (typeof videoFile.size === 'number' && videoFile.size > MAX_VIDEO_BYTES) {
+              return jsonResponse({ ok: false, error: 'Replay video exceeds 36 MiB limit.' }, 413);
+            }
             videoBytes = new Uint8Array(await videoFile.arrayBuffer());
           }
           if (tracePart) {
@@ -5678,6 +6402,9 @@ export default {
           metadata = body.metadata || {};
           deepTraceText = String(body.deepTraceJsonl || '');
           if (typeof body.videoBase64 === 'string' && body.videoBase64.length > 0) {
+            if (body.videoBase64.length > Math.ceil(MAX_VIDEO_BYTES * 1.38)) {
+              return jsonResponse({ ok: false, error: 'Replay video payload exceeds 36 MiB limit.' }, 413);
+            }
             const binaryStr = atob(body.videoBase64);
             const bytes = new Uint8Array(binaryStr.length);
             for (let i = 0; i < binaryStr.length; i++) {
@@ -5687,23 +6414,53 @@ export default {
           }
         }
 
+        if (videoBytes && videoBytes.byteLength > MAX_VIDEO_BYTES) {
+          return jsonResponse({ ok: false, error: 'Replay video exceeds 36 MiB limit.' }, 413);
+        }
+        if (deepTraceText && deepTraceText.length > MAX_TRACE_BYTES) {
+          return jsonResponse({ ok: false, error: 'Replay trace exceeds 3 MiB limit.' }, 413);
+        }
+
         const inputKey = String(
           metadata.unlockKey || request.headers.get('X-SilphScope-Unlock-Key') || ''
         ).trim();
         const devHash = String(
           metadata.deviceHash || request.headers.get('X-Device-Hash') || ''
         ).trim();
+        const ghToken = String(
+          metadata.githubToken || request.headers.get('X-GitHub-Token') || ''
+        ).trim();
+        let verifiedGhUser = '';
+        let verifiedGhId = '';
+        let isServerVerifiedGh = false;
+        if (ghToken) {
+          const ghCheck = await verifyGitHubTokenIdentity(ghToken);
+          if (ghCheck.ok) {
+            verifiedGhUser = ghCheck.githubUsername;
+            verifiedGhId = ghCheck.githubUserId;
+            isServerVerifiedGh = true;
+          }
+        }
         const licenseInfo = await resolveUserLicense(
           env,
           env.TELEMETRY_KV,
           screenName,
           inputKey,
-          '',
-          '',
+          verifiedGhUser,
+          verifiedGhId,
           devHash,
-          ''
+          '',
+          {
+            isServerVerifiedGh,
+            isOwnerCaller: Boolean(inputKey || isServerVerifiedGh),
+          }
         );
-        if (!licenseInfo.active || licenseInfo.tier === 'free' || licenseInfo.tier === 'supporter') {
+        if (
+          !licenseInfo.active ||
+          licenseInfo.screenNameConflict ||
+          licenseInfo.tier === 'free' ||
+          licenseInfo.tier === 'supporter'
+        ) {
           return jsonResponse(
             {
               ok: false,
@@ -5717,10 +6474,36 @@ export default {
           );
         }
 
+        // Verify caller actually proved ownership of this license (via unlockKey, verified GitHub, session, or bound deviceHash)
+        const ownerAuth = await authenticateVaultOwner(
+          request,
+          env,
+          env.TELEMETRY_KV,
+          screenName,
+          metadata
+        );
+        const matchesBoundDev =
+          devHash.length >= 8 &&
+          !devHash.toLowerCase().startsWith('web-') &&
+          licenseInfo.boundDeviceHash &&
+          String(licenseInfo.boundDeviceHash).toLowerCase() === devHash.toLowerCase();
+        if (!ownerAuth.isOwner && !matchesBoundDev && !inputKey && !isServerVerifiedGh) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: 'Owner authentication (Unlock Key, Session, or bound device) required to upload replays.',
+            },
+            403
+          );
+        }
+
         const hasVideo = Boolean(videoBytes && videoBytes.byteLength > 0);
         const hasTrace = Boolean(deepTraceText && deepTraceText.trim().length > 0);
         if (!hasVideo) {
           return jsonResponse({ ok: false, error: 'Missing MP4 video payload for Replay Vault.' }, 400);
+        }
+        if (!isValidMp4Bytes(videoBytes)) {
+          return jsonResponse({ ok: false, error: 'Invalid MP4 container header.' }, 400);
         }
 
         const traceBytesLen = hasTrace ? new TextEncoder().encode(deepTraceText).byteLength : 0;
@@ -5752,12 +6535,12 @@ export default {
 
         const videoKey = `replays/${screenName}/${battleId}_video.mp4`;
         const traceKey = `replays/${screenName}/${battleId}_deep_trace.jsonl`;
-        const league = String(metadata.league || 'GBL');
-        const result = String(metadata.result || 'BATTLE');
-        const matchupSummary = resolveFullTeamMatchupSummary(metadata, deepTraceText);
-        const frameCount = Number(metadata.frameCount) || 0;
-        const durationSec = Number(metadata.durationSec) || Math.round(frameCount / 10);
-        const appVersion = String(metadata.appVersion || '6.42');
+        const league = String(metadata.league || 'GBL').slice(0, 64);
+        const result = String(metadata.result || 'BATTLE').slice(0, 32);
+        const matchupSummary = String(resolveFullTeamMatchupSummary(metadata, deepTraceText) || '').slice(0, 180);
+        const frameCount = Math.max(0, Math.min(20000, Number(metadata.frameCount) || 0));
+        const durationSec = Math.max(1, Math.min(600, Number(metadata.durationSec) || Math.round(frameCount / 10)));
+        const appVersion = String(metadata.appVersion || '7.13').slice(0, 32);
         const isPinned = Boolean(
           metadata.isPinned !== undefined ? metadata.isPinned : existingItem && existingItem.isPinned
         );
@@ -5841,7 +6624,7 @@ export default {
       } catch (err) {
         console.error('POST /v1/replays/upload error:', err);
         return jsonResponse(
-          { ok: false, error: String((err && err.message) || err || 'Upload error') },
+          { ok: false, error: 'Internal server error uploading replay.' },
           500
         );
       }
@@ -5849,10 +6632,16 @@ export default {
 
     // 7b. Unified Vault & Simulator Login (`POST /v1/auth/login`)
     if (request.method === 'POST' && path === '/v1/auth/login') {
-      const expectedKey = (env.CLIENT_INGEST_KEY || '').trim();
-      const providedKey = (request.headers.get('X-SilphScope-Client-Key') || '').trim();
-      if (expectedKey && providedKey && providedKey !== expectedKey) {
-        return jsonResponse({ ok: false, error: 'Invalid X-SilphScope-Client-Key header.' }, 401);
+      const providedKey = (
+        request.headers.get('X-SilphScope-Client-Key') ||
+        request.headers.get('X-Device-Ingest-Token') ||
+        ''
+      ).trim();
+      if (providedKey) {
+        const auth = await verifyClientAuth(request, env, true, true);
+        if (!auth.ok) {
+          return jsonResponse({ ok: false, error: auth.error }, auth.status, request, true);
+        }
       }
 
       let body = {};
@@ -5864,6 +6653,26 @@ export default {
         body.screenName || request.headers.get('X-Trainer-Screen-Name') || ''
       ).trim();
       const targetScreenName = rawTarget ? sanitizeScreenName(rawTarget) : '';
+
+      const rl = await checkAndIncrementRateLimit(
+        env.TELEMETRY_KV,
+        'auth_login',
+        `${getClientIp(request)}_${targetScreenName || 'anon'}`,
+        12,
+        600
+      );
+      if (!rl.allowed) {
+        return jsonResponse(
+          {
+            ok: false,
+            isOwner: false,
+            error: 'Too many login attempts. Please wait a few minutes and try again.',
+          },
+          429,
+          request,
+          true
+        );
+      }
 
       const ownerAuth = await authenticateVaultOwner(
         request,
@@ -5881,7 +6690,9 @@ export default {
               ownerAuth.error ||
               'Authentication failed. Check your Username + Token, Password, or GitHub account.',
           },
-          403
+          403,
+          request,
+          true
         );
       }
 
@@ -5890,49 +6701,83 @@ export default {
       const authRec = ownerAuth.authRecord || (await loadUserAuthRecord(env.TELEMETRY_KV, resolvedName));
       const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, resolvedName);
 
-      return jsonResponse({
-        ok: true,
-        isOwner: true,
-        authMethod: ownerAuth.authMethod,
-        screenName: resolvedName,
-        sessionToken: ownerAuth.sessionToken,
-        tier: licInfo.tier || 'free',
-        active: Boolean(licInfo.active),
-        everPaid: Boolean(licInfo.everPaid),
-        signature: licInfo.signature || '',
-        license: licInfo,
-        limits: licInfo,
-        hasPassword: Boolean(authRec && authRec.passwordHash),
-        githubUsername:
-          (authRec && authRec.githubUsername) || licInfo.boundGitHubUsername || '',
-        settings: indexObj.settings,
-      });
+      return jsonResponse(
+        {
+          ok: true,
+          isOwner: true,
+          authMethod: ownerAuth.authMethod,
+          screenName: resolvedName,
+          sessionToken: ownerAuth.sessionToken,
+          tier: licInfo.tier || 'free',
+          active: Boolean(licInfo.active),
+          everPaid: Boolean(licInfo.everPaid),
+          signature: licInfo.signature || '',
+          license: licInfo,
+          limits: licInfo,
+          hasPassword: Boolean(authRec && authRec.passwordHash),
+          githubUsername:
+            (authRec && authRec.githubUsername) || licInfo.boundGitHubUsername || '',
+          settings: indexObj.settings,
+        },
+        200,
+        request,
+        true
+      );
     }
 
     // 7c. Set or Update User Password (`POST /v1/auth/set-password`)
     if (request.method === 'POST' && path === '/v1/auth/set-password') {
-      const auth = verifyClientAuth(request, env);
-      if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
+      const providedKey = (
+        request.headers.get('X-SilphScope-Client-Key') ||
+        request.headers.get('X-Device-Ingest-Token') ||
+        ''
+      ).trim();
+      let authScreenName = '';
+      if (providedKey) {
+        const auth = await verifyClientAuth(request, env, true, true);
+        if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status, request, true);
+        authScreenName = auth.screenName;
+      }
 
       let body = {};
       try {
         body = await request.json();
       } catch (_) {
-        return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400);
+        return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400, request, true);
       }
 
-      const targetName = sanitizeScreenName(body.screenName || auth.screenName || '');
+      const targetName = sanitizeScreenName(body.screenName || authScreenName || '');
       const newPassword = String(body.newPassword || '').trim();
       if (!targetName || targetName === 'anonymous') {
-        return jsonResponse({ ok: false, error: 'Enter a valid Trainer ID first.' }, 400);
+        return jsonResponse({ ok: false, error: 'Enter a valid Trainer ID first.' }, 400, request, true);
       }
-      if (!newPassword || newPassword.length < 6) {
-        return jsonResponse({ ok: false, error: 'Password must be at least 6 characters.' }, 400);
+      if (!newPassword || newPassword.length < 8 || newPassword.length > 128) {
+        return jsonResponse(
+          { ok: false, error: 'Password must be between 8 and 128 characters.' },
+          400,
+          request,
+          true
+        );
+      }
+
+      const rl = await checkAndIncrementRateLimit(
+        env.TELEMETRY_KV,
+        'set_password',
+        `${getClientIp(request)}_${targetName}`,
+        10,
+        600
+      );
+      if (!rl.allowed) {
+        return jsonResponse(
+          { ok: false, error: 'Too many password update attempts. Please wait a few minutes.' },
+          429,
+          request,
+          true
+        );
       }
 
       const existingAuth = await loadUserAuthRecord(env.TELEMETRY_KV, targetName);
       const devHash = String(body.deviceHash || request.headers.get('X-Device-Hash') || '').trim();
-      const ghId = String(body.githubUserId || request.headers.get('X-GitHub-User-Id') || '').trim();
 
       let authorizedToSet = false;
       const ownerAuth = await authenticateVaultOwner(
@@ -5949,9 +6794,9 @@ export default {
       if (ownerAuth.isOwner) {
         authorizedToSet = true;
       } else if (!existingAuth || !existingAuth.passwordHash) {
-        // Allow first-time password creation from the owning Android device / GitHub account
-        const chk = await checkScreenNameRegistration(env.TELEMETRY_KV, targetName, devHash, ghId);
-        if (chk.available && (devHash || ghId)) {
+        // Only allow first-time password creation without ownerAuth if caller proves ownership via previously registered non-web deviceHash
+        const chk = await checkScreenNameRegistration(env.TELEMETRY_KV, targetName, devHash, '');
+        if (chk.ownedByCaller) {
           authorizedToSet = true;
         }
       }
@@ -5961,41 +6806,69 @@ export default {
           {
             ok: false,
             error:
-              'Authenticate with your Unlock Key, GitHub account, or current password before changing your password.',
+              'Authenticate with your Unlock Key, GitHub account, or current password before setting or changing your password.',
           },
-          403
+          403,
+          request,
+          true
         );
       }
 
-      const salt = generateShareId().replace(/^r_/, '') + Date.now().toString(36);
+      const salt = generateSecureSaltHex(16);
       const passwordHash = await hashUserPassword(env, newPassword, salt);
       const updatedAuth = existingAuth || { screenName: targetName };
       updatedAuth.passwordSalt = salt;
       updatedAuth.passwordHash = passwordHash;
+      updatedAuth.sessionEpoch = (Number(updatedAuth.sessionEpoch) || 1) + 1;
       if (ownerAuth.licenseInfo && ownerAuth.licenseInfo.key) {
         updatedAuth.boundKey = ownerAuth.licenseInfo.key;
       }
       await saveUserAuthRecord(env.TELEMETRY_KV, targetName, updatedAuth);
 
       const tier = (ownerAuth.licenseInfo && ownerAuth.licenseInfo.tier) || 'free';
-      const sessionToken = await createVaultSessionToken(env, targetName, tier);
-      return jsonResponse({
-        ok: true,
-        screenName: targetName,
-        hasPassword: true,
-        sessionToken,
-      });
+      const sessionToken = await createVaultSessionToken(
+        env,
+        targetName,
+        tier,
+        updatedAuth.sessionEpoch
+      );
+      return jsonResponse(
+        {
+          ok: true,
+          screenName: targetName,
+          hasPassword: true,
+          sessionToken,
+        },
+        200,
+        request,
+        true
+      );
     }
 
     // 7d. GitHub OAuth Device Flow Proxy (`POST /v1/auth/github/device-code` & `POST /v1/auth/github/poll`)
     if (request.method === 'POST' && path === '/v1/auth/github/device-code') {
+      const rl = await checkAndIncrementRateLimit(
+        env.TELEMETRY_KV,
+        'gh_device_code',
+        getClientIp(request),
+        15,
+        600
+      );
+      if (!rl.allowed) {
+        return jsonResponse(
+          { ok: false, error: 'Too many GitHub login requests. Please wait a few minutes.' },
+          429,
+          request,
+          true
+        );
+      }
       try {
         const ghRes = await fetch('https://github.com/login/device/code', {
           method: 'POST',
           headers: {
             Accept: 'application/json',
             'Content-Type': 'application/x-www-form-urlencoded',
-            'User-Agent': 'SilphScope-PvP-Worker/7.0',
+            'User-Agent': 'SilphScope-PvP-Worker/7.13',
           },
           body: `client_id=${encodeURIComponent(GITHUB_OAUTH_CLIENT_ID)}&scope=read%3Auser`,
         });
@@ -6003,30 +6876,58 @@ export default {
         if (!ghRes.ok || !ghData.device_code) {
           return jsonResponse(
             { ok: false, error: ghData.error_description || 'Failed to start GitHub Device Flow.' },
-            400
+            400,
+            request,
+            true
           );
         }
-        return jsonResponse({
-          ok: true,
-          device_code: ghData.device_code,
-          user_code: ghData.user_code,
-          verification_uri: ghData.verification_uri || 'https://github.com/login/device',
-          expires_in: ghData.expires_in || 900,
-          interval: ghData.interval || 5,
-        });
+        return jsonResponse(
+          {
+            ok: true,
+            device_code: ghData.device_code,
+            user_code: ghData.user_code,
+            verification_uri: ghData.verification_uri || 'https://github.com/login/device',
+            expires_in: ghData.expires_in || 900,
+            interval: ghData.interval || 5,
+          },
+          200,
+          request,
+          true
+        );
       } catch (e) {
-        return jsonResponse({ ok: false, error: e.message }, 500);
+        return jsonResponse(
+          { ok: false, error: 'GitHub OAuth service unavailable.' },
+          500,
+          request,
+          true
+        );
       }
     }
 
     if (request.method === 'POST' && path === '/v1/auth/github/poll') {
+      const rl = await checkAndIncrementRateLimit(
+        env.TELEMETRY_KV,
+        'gh_poll',
+        getClientIp(request),
+        60,
+        600
+      );
+      if (!rl.allowed) {
+        return jsonResponse(
+          { ok: false, status: 'error', error: 'Rate limit exceeded for GitHub device polling.' },
+          429,
+          request,
+          true
+        );
+      }
+
       let body = {};
       try {
         body = await request.json();
       } catch (_) {}
       const deviceCode = String(body.device_code || '').trim();
       if (!deviceCode) {
-        return jsonResponse({ ok: false, error: 'Missing device_code' }, 400);
+        return jsonResponse({ ok: false, error: 'Missing device_code' }, 400, request, true);
       }
       try {
         const ghRes = await fetch('https://github.com/login/oauth/access_token', {
@@ -6034,7 +6935,7 @@ export default {
           headers: {
             Accept: 'application/json',
             'Content-Type': 'application/x-www-form-urlencoded',
-            'User-Agent': 'SilphScope-PvP-Worker/7.0',
+            'User-Agent': 'SilphScope-PvP-Worker/7.13',
           },
           body:
             `client_id=${encodeURIComponent(GITHUB_OAUTH_CLIENT_ID)}` +
@@ -6043,15 +6944,25 @@ export default {
         });
         const ghData = await ghRes.json();
         if (ghData.error === 'authorization_pending') {
-          return jsonResponse({ ok: true, status: 'pending', interval: Number(ghData.interval) || 5 });
+          return jsonResponse(
+            { ok: true, status: 'pending', interval: Number(ghData.interval) || 5 },
+            200,
+            request,
+            true
+          );
         }
         if (ghData.error === 'slow_down') {
-          return jsonResponse({
-            ok: true,
-            status: 'pending',
-            slowDown: true,
-            interval: Number(ghData.interval) || 10,
-          });
+          return jsonResponse(
+            {
+              ok: true,
+              status: 'pending',
+              slowDown: true,
+              interval: Number(ghData.interval) || 10,
+            },
+            200,
+            request,
+            true
+          );
         }
         if (!ghData.access_token) {
           return jsonResponse(
@@ -6060,13 +6971,20 @@ export default {
               status: 'error',
               error: ghData.error_description || ghData.error || 'GitHub authorization failed.',
             },
-            400
+            400,
+            request,
+            true
           );
         }
         const githubToken = String(ghData.access_token).trim();
         const ghUser = await verifyGitHubTokenIdentity(githubToken);
         if (!ghUser.ok) {
-          return jsonResponse({ ok: false, status: 'error', error: ghUser.error }, 400);
+          return jsonResponse(
+            { ok: false, status: 'error', error: ghUser.error },
+            400,
+            request,
+            true
+          );
         }
 
         const preferredName = body.screenName ? sanitizeScreenName(body.screenName) : '';
@@ -6101,54 +7019,87 @@ export default {
         }
 
         if (!ownerAuth.isOwner) {
+          // Mint a short-lived server-side pending link token so the GitHub OAuth access_token is never exposed to browser JS
+          let pendingGhLinkToken = '';
+          if (env.TELEMETRY_KV) {
+            pendingGhLinkToken = `ghl_${generateSecureSaltHex(16)}`;
+            await env.TELEMETRY_KV.put(
+              `gh_pending_link/${pendingGhLinkToken}`,
+              JSON.stringify({
+                githubUsername: ghUser.githubUsername,
+                githubUserId: ghUser.githubUserId,
+                createdAt: new Date().toISOString(),
+              }),
+              { expirationTtl: 600 }
+            );
+          }
           return jsonResponse(
             {
               ok: false,
               status: 'error',
               githubUsername: ghUser.githubUsername,
               githubUserId: ghUser.githubUserId,
-              githubToken,
+              pendingGhLinkToken,
               error:
                 ownerAuth.error ||
                 `GitHub account @${ghUser.githubUsername} is not linked to @${resolvedName} yet. Enter your Unlock Key once and click Verify Token to link them.`,
             },
-            403
+            403,
+            request,
+            true
           );
         }
 
         const licInfo = ownerAuth.licenseInfo || { ...TIER_PRESETS.free, active: false };
-        return jsonResponse({
-          ok: true,
-          status: 'authorized',
-          isOwner: true,
-          screenName: ownerAuth.screenName,
-          githubUsername: ghUser.githubUsername,
-          githubUserId: ghUser.githubUserId,
-          githubToken,
-          sessionToken: ownerAuth.sessionToken,
-          tier: licInfo.tier || 'free',
-          active: Boolean(licInfo.active),
-          everPaid: Boolean(licInfo.everPaid),
-          signature: licInfo.signature || '',
-          license: licInfo,
-          limits: licInfo,
-        });
+        return jsonResponse(
+          {
+            ok: true,
+            status: 'authorized',
+            isOwner: true,
+            screenName: ownerAuth.screenName,
+            githubUsername: ghUser.githubUsername,
+            githubUserId: ghUser.githubUserId,
+            sessionToken: ownerAuth.sessionToken,
+            tier: licInfo.tier || 'free',
+            active: Boolean(licInfo.active),
+            everPaid: Boolean(licInfo.everPaid),
+            signature: licInfo.signature || '',
+            license: licInfo,
+            limits: licInfo,
+          },
+          200,
+          request,
+          true
+        );
       } catch (e) {
-        return jsonResponse({ ok: false, status: 'error', error: e.message }, 500);
+        return jsonResponse(
+          { ok: false, status: 'error', error: 'GitHub OAuth verification failed.' },
+          500,
+          request,
+          true
+        );
       }
     }
 
     // 7e. Update DVR Vault Visibility Settings (`POST /v1/replays/settings`)
     if (request.method === 'POST' && path === '/v1/replays/settings') {
-      const auth = verifyClientAuth(request, env);
-      if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
-      const { screenName } = auth;
+      const providedKey = (
+        request.headers.get('X-SilphScope-Client-Key') ||
+        request.headers.get('X-Device-Ingest-Token') ||
+        ''
+      ).trim();
+      let screenName = sanitizeScreenName(request.headers.get('X-Trainer-Screen-Name') || '');
+      if (providedKey) {
+        const auth = await verifyClientAuth(request, env, false, true);
+        if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status, request, true);
+        screenName = auth.screenName;
+      }
 
       let body = {};
       try {
         body = await request.json();
       } catch (_) {
-        return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400);
+        return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400, request, true);
       }
 
       const ownerAuth = await authenticateVaultOwner(
@@ -6161,7 +7112,9 @@ export default {
       if (!ownerAuth.isOwner) {
         return jsonResponse(
           { ok: false, error: 'Only the authenticated vault owner can change visibility settings.' },
-          403
+          403,
+          request,
+          true
         );
       }
 
@@ -6174,16 +7127,21 @@ export default {
       });
       await saveUserReplayIndex(env.TELEMETRY_KV, resolvedName, indexObj);
 
-      return jsonResponse({
-        ok: true,
-        screenName: resolvedName,
-        settings: indexObj.settings,
-      });
+      return jsonResponse(
+        {
+          ok: true,
+          screenName: resolvedName,
+          settings: indexObj.settings,
+        },
+        200,
+        request,
+        true
+      );
     }
 
     // 8. List User's Cloud R2 Replays (`GET /v1/replays/list`) — Supports Owner Mode, Public Visitor Mode & `@Featured`
     if (request.method === 'GET' && (path === '/v1/replays/list' || path === '/v1/replays/featured')) {
-      const auth = verifyClientAuth(request, env);
+      const auth = await verifyClientAuth(request, env, true, true);
       const rawUserParam =
         path === '/v1/replays/featured'
           ? 'Featured'
@@ -6217,12 +7175,16 @@ export default {
 
       const requestedUser = rawUserParam
         ? sanitizeScreenName(rawUserParam)
-        : auth.ok
+        : auth.ok && auth.screenName
         ? auth.screenName
-        : sanitizeScreenName(request.headers.get('X-SilphScope-Screen-Name') || '');
+        : sanitizeScreenName(
+            request.headers.get('X-Trainer-Screen-Name') ||
+              request.headers.get('X-SilphScope-Screen-Name') ||
+              ''
+          );
 
       if (!requestedUser || requestedUser === 'anonymous') {
-        return jsonResponse({ ok: false, error: 'Please specify a Trainer ID.' }, 400);
+        return jsonResponse({ ok: false, error: 'Please specify a Trainer ID.' }, 400, request, true);
       }
 
       const ownerAuth = await authenticateVaultOwner(
@@ -6262,30 +7224,38 @@ export default {
         };
         await saveUserReplayIndex(env.TELEMETRY_KV, resolvedName, indexObj);
 
-        return jsonResponse({
-          ok: true,
-          isOwner: true,
-          canStar: true,
-          screenName: resolvedName,
-          sessionToken: ownerAuth.sessionToken,
-          tier: licenseInfo.tier || 'free',
-          active: Boolean(licenseInfo.active),
-          hasPassword: Boolean(authRec && authRec.passwordHash),
-          githubUsername:
-            (authRec && authRec.githubUsername) || licenseInfo.boundGitHubUsername || '',
-          settings: indexObj.settings,
-          visibility: indexObj.settings.publicVisibility,
-          limits: licenseInfo,
-          usage,
-          items: (indexObj.items || []).map((item) => ({
-            ...item,
-            isPinned: Boolean(item.isPinned),
-            isPublic: Boolean(item.isPublic),
-            shareUrl: `${url.origin}/watch/${item.shareId}`,
-            videoStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/video.mp4`,
-            traceStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/trace.jsonl`,
-          })),
-        });
+        const devHashHdr = (request.headers.get('X-Device-Hash') || '').trim();
+        const deviceIngestToken = devHashHdr ? await computeDeviceIngestToken(env, devHashHdr) : '';
+        return jsonResponse(
+          {
+            ok: true,
+            isOwner: true,
+            canStar: true,
+            screenName: resolvedName,
+            sessionToken: ownerAuth.sessionToken,
+            deviceIngestToken,
+            tier: licenseInfo.tier || 'free',
+            active: Boolean(licenseInfo.active),
+            hasPassword: Boolean(authRec && authRec.passwordHash),
+            githubUsername:
+              (authRec && authRec.githubUsername) || licenseInfo.boundGitHubUsername || '',
+            settings: indexObj.settings,
+            visibility: indexObj.settings.publicVisibility,
+            limits: licenseInfo,
+            usage,
+            items: (indexObj.items || []).map((item) => ({
+              ...item,
+              isPinned: Boolean(item.isPinned),
+              isPublic: Boolean(item.isPublic),
+              shareUrl: `${url.origin}/watch/${item.shareId}`,
+              videoStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/video.mp4`,
+              traceStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/trace.jsonl`,
+            })),
+          },
+          200,
+          request,
+          true
+        );
       }
 
       // Public Visitor Mode (`isOwner === false`)
@@ -6299,7 +7269,9 @@ export default {
             visibility: 'none',
             error: `Trainer @${requestedUser}'s DVR Replay Vault requires Owner Login (No videos shared without login). Click '🔐 Owner Login' if this is your vault.`,
           },
-          403
+          403,
+          request,
+          true
         );
       }
 
@@ -6314,43 +7286,55 @@ export default {
       } else if (vis === 'starred_and_public' || vis === 'starred_and_private') {
         visibleItems = allItems.filter((i) => Boolean(i.isPinned) || Boolean(i.isPublic));
       } else {
-        // 'public_only' — Private default (only shows ones manually made public)
         visibleItems = publicItems;
       }
       const hiddenRollingCount = Math.max(0, allItems.length - visibleItems.length);
 
-      return jsonResponse({
-        ok: true,
-        isOwner: false,
-        canStar: false,
-        screenName: indexObj.screenName || requestedUser,
-        visibility: vis,
-        settings: indexObj.settings,
-        hiddenRollingCount,
-        totalStarredCount: starredItems.length,
-        totalPublicCount: publicItems.length,
-        items: visibleItems.map((item) => ({
-          ...item,
-          isPinned: Boolean(item.isPinned),
-          isPublic: Boolean(item.isPublic),
-          shareUrl: `${url.origin}/watch/${item.shareId}`,
-          videoStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/video.mp4`,
-          traceStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/trace.jsonl`,
-        })),
-      });
+      return jsonResponse(
+        {
+          ok: true,
+          isOwner: false,
+          canStar: false,
+          screenName: indexObj.screenName || requestedUser,
+          visibility: vis,
+          settings: indexObj.settings,
+          hiddenRollingCount,
+          totalStarredCount: starredItems.length,
+          totalPublicCount: publicItems.length,
+          items: visibleItems.map((item) => ({
+            ...item,
+            isPinned: Boolean(item.isPinned),
+            isPublic: Boolean(item.isPublic),
+            shareUrl: `${url.origin}/watch/${item.shareId}`,
+            videoStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/video.mp4`,
+            traceStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/trace.jsonl`,
+          })),
+        },
+        200,
+        request,
+        true
+      );
     }
 
     // 9. Star / Pin or Toggle Privacy on a Cloud Replay (`POST /v1/replays/pin`) — Strictly Owner-Only
     if (request.method === 'POST' && path === '/v1/replays/pin') {
-      const auth = verifyClientAuth(request, env);
-      if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
-      const { screenName } = auth;
+      const providedKey = (
+        request.headers.get('X-SilphScope-Client-Key') ||
+        request.headers.get('X-Device-Ingest-Token') ||
+        ''
+      ).trim();
+      let screenName = sanitizeScreenName(request.headers.get('X-Trainer-Screen-Name') || '');
+      if (providedKey) {
+        const auth = await verifyClientAuth(request, env, false, true);
+        if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status, request, true);
+        screenName = auth.screenName;
+      }
 
       let body = {};
       try {
         body = await request.json();
       } catch (_) {
-        return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400);
+        return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400, request, true);
       }
 
       const ownerAuth = await authenticateVaultOwner(
@@ -6366,7 +7350,9 @@ export default {
             ok: false,
             error: 'Only the authenticated vault owner can star/unstar or modify replay visibility.',
           },
-          403
+          403,
+          request,
+          true
         );
       }
 
@@ -6382,7 +7368,7 @@ export default {
           (targetShareId && i.shareId === targetShareId)
       );
       if (!item) {
-        return jsonResponse({ ok: false, error: 'Replay not found in Cloud Vault.' }, 404);
+        return jsonResponse({ ok: false, error: 'Replay not found in Cloud Vault.' }, 404, request, true);
       }
 
       if (typeof body.isPinned === 'boolean') {
@@ -6395,7 +7381,9 @@ export default {
                 ok: false,
                 error: `Star/Pin limit reached (${maxPins} starred battles max for ${licenseInfo.label || 'your tier'}).`,
               },
-              400
+              400,
+              request,
+              true
             );
           }
         }
@@ -6414,59 +7402,85 @@ export default {
       await env.TELEMETRY_KV.put(`share_lookup/${item.shareId}`, JSON.stringify(item));
       await saveUserReplayIndex(env.TELEMETRY_KV, resolvedName, indexObj);
 
-      return jsonResponse({
-        ok: true,
-        battleId: item.battleId,
-        shareId: item.shareId,
-        isPinned: Boolean(item.isPinned),
-        isPublic: Boolean(item.isPublic),
-        hideNames: Boolean(item.hideNames),
-        shareUrl: `${url.origin}/watch/${item.shareId}`,
-      });
+      return jsonResponse(
+        {
+          ok: true,
+          battleId: item.battleId,
+          shareId: item.shareId,
+          isPinned: Boolean(item.isPinned),
+          isPublic: Boolean(item.isPublic),
+          hideNames: Boolean(item.hideNames),
+          shareUrl: `${url.origin}/watch/${item.shareId}`,
+        },
+        200,
+        request,
+        true
+      );
     }
 
     // 9b. Promote a Cloud Replay to Persistent `@Featured` Showcase (`POST /v1/replays/feature`) — Strictly Admin Owner
     if (request.method === 'POST' && path === '/v1/replays/feature') {
-      const auth = verifyClientAuth(request, env);
-      if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
-      const { screenName } = auth;
+      const isAdminBearer = verifyAdminAuth(request, env).ok;
+      let screenName = sanitizeScreenName(request.headers.get('X-Trainer-Screen-Name') || '');
+      const providedKey = (
+        request.headers.get('X-SilphScope-Client-Key') ||
+        request.headers.get('X-Device-Ingest-Token') ||
+        ''
+      ).trim();
+      if (!isAdminBearer && providedKey) {
+        const auth = await verifyClientAuth(request, env, false, true);
+        if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status, request, true);
+        screenName = auth.screenName;
+      }
 
       let body = {};
       try {
         body = await request.json();
       } catch (_) {
-        return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400);
+        return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400, request, true);
       }
 
-      const ownerAuth = await authenticateVaultOwner(
-        request,
-        env,
-        env.TELEMETRY_KV,
-        screenName,
-        body
-      );
-      if (
-        !ownerAuth.isOwner ||
-        String(ownerAuth.screenName || screenName || '').toLowerCase() !== 'sportsfan986'
-      ) {
-        return jsonResponse(
-          { ok: false, error: 'Only the official showcase admin (@sportsfan986) can promote featured replays.' },
-          403
+      if (!isAdminBearer) {
+        const ownerAuth = await authenticateVaultOwner(
+          request,
+          env,
+          env.TELEMETRY_KV,
+          screenName,
+          body
         );
+        if (
+          !ownerAuth.isOwner ||
+          String(ownerAuth.screenName || screenName || '').toLowerCase() !== 'sportsfan986'
+        ) {
+          return jsonResponse(
+            { ok: false, error: 'Only the official showcase admin (@sportsfan986) can promote featured replays.' },
+            403,
+            request,
+            true
+          );
+        }
       }
 
       const result = await cloneReplayToFeatured(env, env.TELEMETRY_KV, store, body);
       if (!result.ok) {
-        return jsonResponse(result, 400);
+        return jsonResponse(result, 400, request, true);
       }
-      return jsonResponse(result);
+      return jsonResponse(result, 200, request, true);
     }
 
     // 10. Delete a Cloud Replay (`DELETE /v1/replays/delete`) — Strictly Owner-Only
     if (request.method === 'DELETE' && path === '/v1/replays/delete') {
-      const auth = verifyClientAuth(request, env);
-      if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
-      const { screenName } = auth;
+      const providedKey = (
+        request.headers.get('X-SilphScope-Client-Key') ||
+        request.headers.get('X-Device-Ingest-Token') ||
+        ''
+      ).trim();
+      let screenName = sanitizeScreenName(request.headers.get('X-Trainer-Screen-Name') || '');
+      if (providedKey) {
+        const auth = await verifyClientAuth(request, env, false, true);
+        if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status, request, true);
+        screenName = auth.screenName;
+      }
 
       const ownerAuth = await authenticateVaultOwner(
         request,
@@ -6475,7 +7489,12 @@ export default {
         screenName
       );
       if (!ownerAuth.isOwner) {
-        return jsonResponse({ ok: false, error: 'Owner authentication required to delete replays.' }, 403);
+        return jsonResponse(
+          { ok: false, error: 'Owner authentication required to delete replays.' },
+          403,
+          request,
+          true
+        );
       }
 
       const resolvedName = ownerAuth.screenName || screenName;
@@ -6488,13 +7507,18 @@ export default {
           (targetShareId && i.shareId === targetShareId)
       );
       if (idx === -1) {
-        return jsonResponse({ ok: false, error: 'Replay not found.' }, 404);
+        return jsonResponse({ ok: false, error: 'Replay not found.' }, 404, request, true);
       }
       const [removed] = indexObj.items.splice(idx, 1);
       await deleteReplayObjects(env, env.TELEMETRY_KV, removed);
       await saveUserReplayIndex(env.TELEMETRY_KV, resolvedName, indexObj);
 
-      return jsonResponse({ ok: true, deletedBattleId: removed.battleId, deletedShareId: removed.shareId });
+      return jsonResponse(
+        { ok: true, deletedBattleId: removed.battleId, deletedShareId: removed.shareId },
+        200,
+        request,
+        true
+      );
     }
 
     // 11. Public Capability-URL Video & Trace Streaming (`GET /v1/replays/stream/:shareId/:asset`)
@@ -6531,14 +7555,14 @@ export default {
 
               return new Response(rangedObj.body, {
                 status: 206,
-                headers: {
+                headers: buildSecurityHeaders({
                   'Content-Type': 'video/mp4',
                   'Content-Range': `bytes ${start}-${end}/${totalSize}`,
                   'Accept-Ranges': 'bytes',
                   'Content-Length': String(length),
                   'Cache-Control': 'public, max-age=86400',
                   'Access-Control-Allow-Origin': '*',
-                },
+                }),
               });
             }
           } else {
@@ -6546,13 +7570,13 @@ export default {
             if (fullObj) {
               return new Response(fullObj.body, {
                 status: 200,
-                headers: {
+                headers: buildSecurityHeaders({
                   'Content-Type': 'video/mp4',
                   'Accept-Ranges': 'bytes',
                   'Content-Length': String(fullObj.size),
                   'Cache-Control': 'public, max-age=86400',
                   'Access-Control-Allow-Origin': '*',
-                },
+                }),
               });
             }
           }
@@ -6565,21 +7589,23 @@ export default {
             const u8 = new Uint8Array(kvBytes);
             return new Response(u8, {
               status: 200,
-              headers: {
+              headers: buildSecurityHeaders({
                 'Content-Type': 'video/mp4',
                 'Accept-Ranges': 'bytes',
                 'Content-Length': String(u8.byteLength),
                 'Cache-Control': 'public, max-age=86400',
                 'Access-Control-Allow-Origin': '*',
-              },
+              }),
             });
           }
         }
-        return new Response('Video not found', { status: 404 });
+        return new Response('Video not found', { status: 404, headers: buildSecurityHeaders() });
       }
 
       if (asset === 'trace.jsonl') {
-        if (!shareInfo.traceKey && !shareInfo.fallbackKvTraceKey) return new Response('', { status: 200 });
+        if (!shareInfo.traceKey && !shareInfo.fallbackKvTraceKey) {
+          return new Response('', { status: 200, headers: buildSecurityHeaders() });
+        }
         let text = null;
         if (env.REPLAY_BUCKET && shareInfo.traceKey) {
           const traceObj = await env.REPLAY_BUCKET.get(shareInfo.traceKey);
@@ -6590,17 +7616,23 @@ export default {
         if (text === null && shareInfo.fallbackKvTraceKey) {
           text = await store.getText(shareInfo.fallbackKvTraceKey);
         }
-        if (text === null) return new Response('', { status: 404 });
-        if (shareInfo.hideNames || url.searchParams.get('hideNames') === '1') {
-          text = text.replace(new RegExp(shareInfo.screenName, 'gi'), 'Trainer');
+        if (text === null) return new Response('', { status: 404, headers: buildSecurityHeaders() });
+        if (
+          (shareInfo.hideNames || url.searchParams.get('hideNames') === '1') &&
+          shareInfo.screenName
+        ) {
+          const escapedName = String(shareInfo.screenName).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          if (escapedName) {
+            text = text.replace(new RegExp(escapedName, 'gi'), 'Trainer');
+          }
         }
         return new Response(text, {
           status: 200,
-          headers: {
+          headers: buildSecurityHeaders({
             'Content-Type': 'application/x-ndjson; charset=utf-8',
             'Cache-Control': 'public, max-age=3600',
             'Access-Control-Allow-Origin': '*',
-          },
+          }),
         });
       }
     }
@@ -6608,12 +7640,15 @@ export default {
     // 12. Public Web Share Player (`GET /watch/:shareId`)
     if (request.method === 'GET' && path.startsWith('/watch/')) {
       const shareId = sanitizeId(path.slice('/watch/'.length).split('/')[0] || '');
-      if (!shareId) return new Response('Invalid Share Link', { status: 404 });
+      if (!shareId) return new Response('Invalid Share Link', { status: 404, headers: buildSecurityHeaders() });
       const rawLookup = await env.TELEMETRY_KV.get(`share_lookup/${shareId}`);
       if (!rawLookup) {
         return new Response(
           `<!DOCTYPE html><html><body style="background:#070b14;color:#f8fafc;font-family:sans-serif;padding:40px;text-align:center"><h2>🛡️ SilphScope PvP Replay Expired or Not Found</h2><p>This replay link (<code>${escapeHtml(shareId)}</code>) has expired or was removed by the trainer.</p></body></html>`,
-          { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+          {
+            status: 404,
+            headers: buildSecurityHeaders({ 'Content-Type': 'text/html; charset=utf-8' }, true),
+          }
         );
       }
       const shareInfo = JSON.parse(rawLookup);
@@ -6626,10 +7661,13 @@ export default {
       }
       return new Response(renderWatchSharePage(url.origin, shareInfo), {
         status: 200,
-        headers: {
-          'Content-Type': 'text/html; charset=utf-8',
-          'Cache-Control': 'no-cache',
-        },
+        headers: buildSecurityHeaders(
+          {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-cache',
+          },
+          true
+        ),
       });
     }
 
@@ -6753,6 +7791,62 @@ export default {
             );
           }
           return jsonResponse({ ok: true, action, license: existing });
+        }
+
+        if (action === 'rotate') {
+          const targetKey = String(body.key || '').trim().toUpperCase();
+          const existing = await loadLicenseByKey(env.TELEMETRY_KV, targetKey);
+          if (!existing) {
+            return jsonResponse({ ok: false, error: `Key not found: ${targetKey}` }, 404);
+          }
+          const tier = existing.tier || 'vip';
+          const newKey = body.newKey
+            ? String(body.newKey).trim().toUpperCase()
+            : generateUnlockKey(tier);
+          const nowIso = new Date().toISOString();
+
+          const rotatedRecord = {
+            ...existing,
+            key: newKey,
+            rotatedFrom: targetKey,
+            rotatedAt: nowIso,
+            revoked: false,
+          };
+          delete rotatedRecord.revokedAt;
+          delete rotatedRecord.rotatedTo;
+
+          existing.revoked = true;
+          existing.revokedAt = nowIso;
+          existing.rotatedTo = newKey;
+          await env.TELEMETRY_KV.put(`licenses/${targetKey}`, JSON.stringify(existing, null, 2));
+          await saveLicenseRecord(env.TELEMETRY_KV, rotatedRecord);
+
+          if (rotatedRecord.boundScreenName) {
+            const bName = rotatedRecord.boundScreenName;
+            const regRaw = await env.TELEMETRY_KV.get(`registered_user/${bName.toLowerCase()}`, { type: 'text' });
+            if (regRaw) {
+              try {
+                const regObj = JSON.parse(regRaw);
+                regObj.boundKey = newKey;
+                regObj.updatedAt = nowIso;
+                await env.TELEMETRY_KV.put(`registered_user/${bName.toLowerCase()}`, JSON.stringify(regObj));
+              } catch (_) {}
+            }
+            const authRec = await loadUserAuthRecord(env.TELEMETRY_KV, bName);
+            if (authRec) {
+              authRec.boundKey = newKey;
+              authRec.sessionEpoch = (Number(authRec.sessionEpoch) || 1) + 1;
+              await saveUserAuthRecord(env.TELEMETRY_KV, bName, authRec);
+            }
+          }
+
+          return jsonResponse({
+            ok: true,
+            action: 'rotate',
+            oldKey: targetKey,
+            newKey,
+            license: rotatedRecord,
+          });
         }
 
         return jsonResponse({ ok: false, error: `Unknown action: ${action}` }, 400);

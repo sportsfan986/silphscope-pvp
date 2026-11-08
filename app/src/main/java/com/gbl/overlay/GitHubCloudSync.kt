@@ -472,7 +472,11 @@ internal fun OverlayService.Companion.exportSyncableSettingsMapStatic(
     for (k in SYNCABLE_STRING_PREF_KEYS) {
         if (k in SENSITIVE_VAULT_STRING_PREF_KEYS) {
             if (!canSyncSecrets) continue
-            val rawSecret = prefs.getString(k, null)?.trim().orEmpty()
+            val rawSecret = if (k == OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY) {
+                getEffectiveReplayUnlockKey(prefs)
+            } else {
+                prefs.getString(k, null)?.trim().orEmpty()
+            }
             if (rawSecret.isNotEmpty()) {
                 val enc = encryptVaultSecretForGitHubUserStatic(rawSecret, githubUserId, githubUsername)
                 if (enc.isNotEmpty()) {
@@ -524,7 +528,11 @@ internal fun OverlayService.Companion.applySyncedSettingsMapStatic(
                     if (!isGitHubLoggedIn) continue
                     val decrypted = decryptVaultSecretForGitHubUserStatic(rawVal, githubUserId, githubUsername)
                     if (!decrypted.isNullOrBlank()) {
-                        editor.putString(key, decrypted)
+                        if (key == OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY) {
+                            editor.putString(key, encryptSecretWithKeystore(decrypted))
+                        } else {
+                            editor.putString(key, decrypted)
+                        }
                     }
                 } else if (key == PREFS_KEY_USER_SCREEN_NAME) {
                     val clean = OverlayService.sanitizeScreenNameStatic(rawVal)
@@ -613,8 +621,147 @@ internal fun OverlayService.Companion.saveReconciledSyncVaultLocally(
     }
 }
 
+private const val KEYSTORE_SECRET_ENC_PREFIX = "KS_GCM_V1:"
+private const val ANDROID_KEYSTORE_ALIAS = "silphscope_keystore_aes_gcm_v1"
+
+private fun getOrCreateAndroidKeystoreAesKey(): javax.crypto.SecretKey? {
+    return try {
+        val ks = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        val existing = ks.getEntry(ANDROID_KEYSTORE_ALIAS, null) as? java.security.KeyStore.SecretKeyEntry
+        if (existing != null) return existing.secretKey
+        val keyGenerator = javax.crypto.KeyGenerator.getInstance(
+            android.security.keystore.KeyProperties.KEY_ALGORITHM_AES,
+            "AndroidKeyStore"
+        )
+        val spec = android.security.keystore.KeyGenParameterSpec.Builder(
+            ANDROID_KEYSTORE_ALIAS,
+            android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or android.security.keystore.KeyProperties.PURPOSE_DECRYPT
+        )
+            .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setKeySize(256)
+            .build()
+        keyGenerator.init(spec)
+        keyGenerator.generateKey()
+    } catch (_: Exception) {
+        null
+    }
+}
+
+internal fun OverlayService.Companion.encryptSecretWithKeystore(plaintext: String): String {
+    val clean = plaintext.trim()
+    if (clean.isEmpty()) return ""
+    if (clean.startsWith(KEYSTORE_SECRET_ENC_PREFIX)) return clean
+    return try {
+        val secretKey = getOrCreateAndroidKeystoreAesKey() ?: return clean
+        val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, secretKey)
+        val iv = cipher.iv
+        val cipherBytes = cipher.doFinal(clean.toByteArray(Charsets.UTF_8))
+        val combined = ByteArray(1 + iv.size + cipherBytes.size)
+        combined[0] = iv.size.toByte()
+        System.arraycopy(iv, 0, combined, 1, iv.size)
+        System.arraycopy(cipherBytes, 0, combined, 1 + iv.size, cipherBytes.size)
+        KEYSTORE_SECRET_ENC_PREFIX + android.util.Base64.encodeToString(combined, android.util.Base64.NO_WRAP)
+    } catch (_: Exception) {
+        clean
+    }
+}
+
+internal fun OverlayService.Companion.decryptSecretWithKeystore(stored: String?): String {
+    val raw = stored?.trim().orEmpty()
+    if (raw.isEmpty()) return ""
+    if (!raw.startsWith(KEYSTORE_SECRET_ENC_PREFIX)) return raw
+    return try {
+        val b64 = raw.removePrefix(KEYSTORE_SECRET_ENC_PREFIX)
+        val combined = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+        if (combined.size <= 13) return ""
+        val ivLen = combined[0].toInt() and 0xFF
+        if (ivLen !in 12..16 || combined.size <= 1 + ivLen) return ""
+        val iv = combined.copyOfRange(1, 1 + ivLen)
+        val cipherBytes = combined.copyOfRange(1 + ivLen, combined.size)
+        val secretKey = getOrCreateAndroidKeystoreAesKey() ?: return ""
+        val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(javax.crypto.Cipher.DECRYPT_MODE, secretKey, javax.crypto.spec.GCMParameterSpec(128, iv))
+        String(cipher.doFinal(cipherBytes), Charsets.UTF_8).trim()
+    } catch (_: Exception) {
+        ""
+    }
+}
+
 internal fun OverlayService.Companion.getEffectiveSyncToken(prefs: SharedPreferences): String {
-    return prefs.getString(PREFS_KEY_SYNC_GITHUB_TOKEN, "")?.trim().orEmpty()
+    val raw = prefs.getString(PREFS_KEY_SYNC_GITHUB_TOKEN, "")?.trim().orEmpty()
+    if (raw.isEmpty()) return ""
+    if (!raw.startsWith(KEYSTORE_SECRET_ENC_PREFIX)) {
+        val encrypted = encryptSecretWithKeystore(raw)
+        if (encrypted.startsWith(KEYSTORE_SECRET_ENC_PREFIX)) {
+            prefs.edit().putString(PREFS_KEY_SYNC_GITHUB_TOKEN, encrypted).apply()
+        }
+        return raw
+    }
+    return decryptSecretWithKeystore(raw)
+}
+
+internal fun OverlayService.Companion.setEffectiveSyncToken(prefs: SharedPreferences, token: String) {
+    val clean = token.trim()
+    if (clean.isEmpty()) {
+        prefs.edit().remove(PREFS_KEY_SYNC_GITHUB_TOKEN).apply()
+    } else {
+        prefs.edit().putString(PREFS_KEY_SYNC_GITHUB_TOKEN, encryptSecretWithKeystore(clean)).apply()
+    }
+}
+
+internal fun OverlayService.Companion.getEffectiveReplayUnlockKey(prefs: SharedPreferences): String {
+    val raw = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
+    if (raw.isEmpty()) return ""
+    if (!raw.startsWith(KEYSTORE_SECRET_ENC_PREFIX)) {
+        val encrypted = encryptSecretWithKeystore(raw)
+        if (encrypted.startsWith(KEYSTORE_SECRET_ENC_PREFIX)) {
+            prefs.edit().putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, encrypted).apply()
+        }
+        return raw
+    }
+    return decryptSecretWithKeystore(raw)
+}
+
+internal fun OverlayService.Companion.setEffectiveReplayUnlockKey(prefs: SharedPreferences, key: String) {
+    val clean = key.trim()
+    if (clean.isEmpty()) {
+        prefs.edit().remove(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY).apply()
+    } else {
+        prefs.edit().putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, encryptSecretWithKeystore(clean)).apply()
+    }
+}
+
+internal fun OverlayService.Companion.getDeviceIngestTokenStatic(prefs: SharedPreferences): String {
+    val raw = prefs.getString(OverlayService.PREFS_KEY_DEVICE_INGEST_TOKEN, "")?.trim().orEmpty()
+    if (raw.isEmpty()) return ""
+    return decryptSecretWithKeystore(raw)
+}
+
+internal fun OverlayService.Companion.setDeviceIngestTokenStatic(prefs: SharedPreferences, token: String) {
+    val clean = token.trim()
+    if (clean.isNotEmpty()) {
+        prefs.edit().putString(OverlayService.PREFS_KEY_DEVICE_INGEST_TOKEN, encryptSecretWithKeystore(clean)).apply()
+    }
+}
+
+internal fun OverlayService.Companion.applyWorkerClientAuthHeaders(
+    builder: Request.Builder,
+    prefs: SharedPreferences,
+    screenName: String,
+    deviceHash: String = getDeviceTelemetryHashStatic(prefs)
+): Request.Builder {
+    builder.header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
+    builder.header("X-Trainer-Screen-Name", screenName)
+    if (deviceHash.isNotBlank()) {
+        builder.header("X-Device-Hash", deviceHash)
+    }
+    val devToken = getDeviceIngestTokenStatic(prefs)
+    if (devToken.isNotBlank()) {
+        builder.header("X-Device-Ingest-Token", devToken)
+    }
+    return builder
 }
 
 internal fun OverlayService.Companion.fetchGitHubUserProfileBlocking(token: String): Pair<String, String> {
@@ -956,7 +1103,7 @@ internal fun OverlayService.Companion.syncWithGitHubGistBlocking(prefs: SharedPr
                 verifyReplayUnlockKeyBlocking(prefs, gson)
             } catch (_: Exception) {}
 
-            val hasSyncedKey = !prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "").isNullOrBlank()
+            val hasSyncedKey = getEffectiveReplayUnlockKey(prefs).isNotBlank()
             val keyBadge = if (hasSyncedKey) " · 🔒 Unlock Key Encrypted & Synced" else ""
             return true to "Synced (@$username Private Vault)! (${finalMergedPayload.battleLogs.size} battles, +$totalNewLogs from other devices · ${finalMergedPayload.teamPresets.size} teams, +$totalNewTeams updated$keyBadge)"
         }
@@ -1069,7 +1216,7 @@ internal fun OverlayService.Companion.syncWithGitHubGistBlocking(prefs: SharedPr
             verifyReplayUnlockKeyBlocking(prefs, gson)
         } catch (_: Exception) {}
 
-        val hasSyncedKey = !prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "").isNullOrBlank()
+        val hasSyncedKey = getEffectiveReplayUnlockKey(prefs).isNotBlank()
         val keyBadge = if (hasSyncedKey) " · 🔒 Unlock Key Encrypted & Synced" else ""
         return true to "Synced (@$username Private Gist)! (${mergedPayload.battleLogs.size} battles, +$newLogsCount from other devices · ${mergedPayload.teamPresets.size} teams, +$newTeamsCount updated$keyBadge)"
     } catch (e: Exception) {
@@ -1079,9 +1226,10 @@ internal fun OverlayService.Companion.syncWithGitHubGistBlocking(prefs: SharedPr
 
 internal fun OverlayService.Companion.getDeviceTelemetryHashStatic(prefs: SharedPreferences): String {
     val existing = prefs.getString(PREFS_KEY_DEVICE_TELEMETRY_HASH, null)?.trim().orEmpty()
-    if (existing.length >= 6) return existing
-    val rawSeed = "${Build.MANUFACTURER}_${Build.MODEL}_${System.currentTimeMillis()}_${(1000..9999).random()}"
-    val hash = Integer.toHexString(rawSeed.hashCode()).lowercase().padStart(8, '0').take(8)
+    if (existing.length >= 8) return existing
+    val randomBytes = ByteArray(16)
+    java.security.SecureRandom().nextBytes(randomBytes)
+    val hash = randomBytes.joinToString("") { "%02x".format(it) }
     prefs.edit().putString(PREFS_KEY_DEVICE_TELEMETRY_HASH, hash).apply()
     return hash
 }
@@ -1311,12 +1459,14 @@ internal fun OverlayService.Companion.uploadSettingsChangeHistoryBlocking(prefs:
             "jsonl" to jsonlContent
         )
     )
-    val req = Request.Builder()
-        .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/settings-changes")
-        .post(payloadJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
-        .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
-        .header("X-Trainer-Screen-Name", safeUser)
-        .build()
+    val req = applyWorkerClientAuthHeaders(
+        Request.Builder()
+            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/settings-changes")
+            .post(payloadJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())),
+        prefs,
+        safeUser,
+        devHash
+    ).build()
 
     val ok = try {
         httpClient.newCall(req).execute().use { resp -> resp.isSuccessful }
@@ -2444,12 +2594,14 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
                         mp4File.asRequestBody("video/mp4".toMediaTypeOrNull())
                     )
                 }
-                val req = Request.Builder()
-                    .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/dvr")
-                    .post(multipartBuilder.build())
-                    .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
-                    .header("X-Trainer-Screen-Name", safeUser)
-                    .build()
+                val req = applyWorkerClientAuthHeaders(
+                    Request.Builder()
+                        .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/dvr")
+                        .post(multipartBuilder.build()),
+                    prefs,
+                    safeUser,
+                    devHash
+                ).build()
 
                 httpClient.newCall(req).execute().use { resp ->
                     httpCode = resp.code
@@ -2577,9 +2729,7 @@ internal fun OverlayService.Companion.saveReplayVaultMapStatic(
 }
 
 internal fun OverlayService.Companion.getEffectiveReplayTierStatic(prefs: SharedPreferences): String {
-    val screenName = getRequiredScreenNameStatic(prefs).trim()
-    if (screenName.equals("sportsfan986", ignoreCase = true)) return "vip"
-    val unlockKey = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
+    val unlockKey = getEffectiveReplayUnlockKey(prefs)
     val rawTier = (prefs.getString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, "free") ?: "free").lowercase()
     val everPaid = prefs.getBoolean(OverlayService.PREFS_KEY_REPLAY_EVER_PAID, false)
     val expiresAtStr = prefs.getString(OverlayService.PREFS_KEY_REPLAY_EXPIRES_AT, "")?.trim().orEmpty()
@@ -2704,17 +2854,21 @@ internal fun OverlayService.Companion.registerUniqueScreenNameBlocking(
             mapOf(
                 "screenName" to cleanName,
                 "deviceHash" to devHash,
+                "githubToken" to ghToken,
                 "githubUserId" to ghId,
                 "email" to email.trim()
             )
         ).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-        val req = Request.Builder()
-            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/users/register-name")
-            .post(reqBody)
-            .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
-            .header("X-Trainer-Screen-Name", cleanName)
-            .header("X-Device-Hash", devHash)
-            .build()
+        val reqBuilder = applyWorkerClientAuthHeaders(
+            Request.Builder()
+                .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/users/register-name")
+                .post(reqBody),
+            prefs,
+            cleanName,
+            devHash
+        )
+        if (ghToken.isNotEmpty()) reqBuilder.header("X-GitHub-Token", ghToken)
+        val req = reqBuilder.build()
 
         httpClient.newCall(req).execute().use { resp ->
             val bodyStr = resp.body?.string().orEmpty()
@@ -2722,6 +2876,10 @@ internal fun OverlayService.Companion.registerUniqueScreenNameBlocking(
                 return false to "⚠️ Registration check failed (HTTP ${resp.code})"
             }
             val root = JsonParser.parseString(bodyStr).asJsonObject
+            val devToken = root.get("deviceIngestToken")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+            if (devToken.isNotBlank()) {
+                setDeviceIngestTokenStatic(prefs, devToken)
+            }
             val available = root.get("available")?.asBoolean ?: false
             val err = root.get("error")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
             if (!available) {
@@ -2762,7 +2920,7 @@ internal fun OverlayService.Companion.verifyReplayUnlockKeyBlocking(
         val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
             .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
         val keyToUse = inputKey.trim().ifEmpty {
-            prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
+            getEffectiveReplayUnlockKey(prefs)
         }
         val ghToken = getEffectiveSyncToken(prefs)
         val ghUser = if (ghToken.isNotEmpty()) prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty() else ""
@@ -2776,18 +2934,22 @@ internal fun OverlayService.Companion.verifyReplayUnlockKeyBlocking(
             "deviceHash" to devHash
         )
         if (emailToUse.isNotEmpty()) reqMap["claimEmail"] = emailToUse
+        if (ghToken.isNotEmpty()) reqMap["githubToken"] = ghToken
         if (ghUser.isNotEmpty()) reqMap["githubUsername"] = ghUser
         if (ghId.isNotEmpty()) reqMap["githubUserId"] = ghId
         val reqBody = gson.toJson(reqMap)
             .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-        val reqBuilder = Request.Builder()
-            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/license/verify")
-            .post(reqBody)
-            .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
-            .header("X-Trainer-Screen-Name", safeUser)
-            .header("X-SilphScope-Unlock-Key", keyToUse)
-            .header("X-Device-Hash", devHash)
+        val reqBuilder = applyWorkerClientAuthHeaders(
+            Request.Builder()
+                .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/license/verify")
+                .post(reqBody)
+                .header("X-SilphScope-Unlock-Key", keyToUse),
+            prefs,
+            safeUser,
+            devHash
+        )
         if (emailToUse.isNotEmpty()) reqBuilder.header("X-Claim-Email", emailToUse)
+        if (ghToken.isNotEmpty()) reqBuilder.header("X-GitHub-Token", ghToken)
         if (ghUser.isNotEmpty()) reqBuilder.header("X-GitHub-Username", ghUser)
         if (ghId.isNotEmpty()) reqBuilder.header("X-GitHub-User-Id", ghId)
         val req = reqBuilder.build()
@@ -2798,6 +2960,10 @@ internal fun OverlayService.Companion.verifyReplayUnlockKeyBlocking(
                 return false to "Verification failed (HTTP ${resp.code})"
             }
             val root = JsonParser.parseString(bodyStr).asJsonObject
+            val devToken = root.get("deviceIngestToken")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+            if (devToken.isNotBlank()) {
+                setDeviceIngestTokenStatic(prefs, devToken)
+            }
             val rawTier = root.get("tier")?.asString?.lowercase() ?: "free"
             val tier = if (rawTier == "base") "supporter" else rawTier
             val active = root.get("active")?.asBoolean ?: false
@@ -2809,10 +2975,10 @@ internal fun OverlayService.Companion.verifyReplayUnlockKeyBlocking(
             val expiresAt = licObj?.get("expiresAt")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
             val label = licObj?.get("label")?.takeIf { !it.isJsonNull }?.asString ?: tier.uppercase()
 
-            val prevKey = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
+            val prevKey = getEffectiveReplayUnlockKey(prefs)
             val newKeyVal = if (active) resolvedKey else keyToUse
             val editor = prefs.edit()
-                .putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, newKeyVal)
+                .putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, encryptSecretWithKeystore(newKeyVal))
                 .putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, if (active) tier else if (everPaid) "supporter" else "free")
                 .putBoolean(OverlayService.PREFS_KEY_REPLAY_EVER_PAID, everPaid)
                 .putString(OverlayService.PREFS_KEY_REPLAY_EXPIRES_AT, expiresAt)
@@ -2858,7 +3024,7 @@ internal fun OverlayService.Companion.setOrLoginVaultPasswordBlocking(
         val devHash = getDeviceTelemetryHashStatic(prefs)
         val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
             .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
-        val unlockKey = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
+        val unlockKey = getEffectiveReplayUnlockKey(prefs)
         val ghToken = getEffectiveSyncToken(prefs)
         val ghUser = if (ghToken.isNotEmpty()) prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty() else ""
         val ghId = if (ghToken.isNotEmpty()) prefs.getString(OverlayService.PREFS_KEY_SYNC_GITHUB_USER_ID, "")?.trim().orEmpty() else ""
@@ -2881,14 +3047,15 @@ internal fun OverlayService.Companion.setOrLoginVaultPasswordBlocking(
 
         val reqBody = gson.toJson(reqMap)
             .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-        val req = Request.Builder()
-            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL$endpoint")
-            .post(reqBody)
-            .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
-            .header("X-Trainer-Screen-Name", safeUser)
-            .header("X-SilphScope-Unlock-Key", unlockKey)
-            .header("X-Device-Hash", devHash)
-            .build()
+        val req = applyWorkerClientAuthHeaders(
+            Request.Builder()
+                .url("$CLOUDFLARE_TELEMETRY_WORKER_URL$endpoint")
+                .post(reqBody)
+                .header("X-SilphScope-Unlock-Key", unlockKey),
+            prefs,
+            safeUser,
+            devHash
+        ).build()
 
         httpClient.newCall(req).execute().use { resp ->
             val bodyStr = resp.body?.string().orEmpty()
@@ -2911,7 +3078,7 @@ internal fun OverlayService.Companion.setOrLoginVaultPasswordBlocking(
                     .putBoolean(OverlayService.PREFS_KEY_REPLAY_EVER_PAID, everPaid)
                     .putString(OverlayService.PREFS_KEY_REPLAY_OFFLINE_SIG, sig)
                 if (resolvedKey.isNotBlank()) {
-                    editor.putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, resolvedKey)
+                    editor.putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, encryptSecretWithKeystore(resolvedKey))
                 }
                 editor.apply()
                 return true to "✅ Signed in as @$safeUser (${tier.uppercase()})!"
@@ -2932,7 +3099,7 @@ internal fun OverlayService.Companion.updateVaultVisibilitySettingBlocking(
         val devHash = getDeviceTelemetryHashStatic(prefs)
         val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
             .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
-        val unlockKey = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
+        val unlockKey = getEffectiveReplayUnlockKey(prefs)
         val ghToken = getEffectiveSyncToken(prefs)
         val httpClient = buildTelemetryHttpClientStatic(15L, 25L, 20L)
         val reqMap = mutableMapOf<String, Any>(
@@ -2943,14 +3110,15 @@ internal fun OverlayService.Companion.updateVaultVisibilitySettingBlocking(
         if (ghToken.isNotEmpty()) reqMap["githubToken"] = ghToken
         val reqBody = gson.toJson(reqMap)
             .toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
-        val req = Request.Builder()
-            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/settings")
-            .post(reqBody)
-            .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
-            .header("X-Trainer-Screen-Name", safeUser)
-            .header("X-SilphScope-Unlock-Key", unlockKey)
-            .header("X-Device-Hash", devHash)
-            .build()
+        val req = applyWorkerClientAuthHeaders(
+            Request.Builder()
+                .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/settings")
+                .post(reqBody)
+                .header("X-SilphScope-Unlock-Key", unlockKey),
+            prefs,
+            safeUser,
+            devHash
+        ).build()
         httpClient.newCall(req).execute().use { resp ->
             val bodyStr = resp.body?.string().orEmpty()
             val root = try { JsonParser.parseString(bodyStr).asJsonObject } catch (_: Exception) { null }
@@ -2975,17 +3143,21 @@ internal fun OverlayService.Companion.syncCloudReplayListBlocking(
         val devHash = getDeviceTelemetryHashStatic(prefs)
         val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
             .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
-        val unlockKey = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
+        val unlockKey = getEffectiveReplayUnlockKey(prefs)
         val ghToken = getEffectiveSyncToken(prefs)
         val ghUser = if (ghToken.isNotEmpty()) prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty() else ""
         val ghId = if (ghToken.isNotEmpty()) prefs.getString(OverlayService.PREFS_KEY_SYNC_GITHUB_USER_ID, "")?.trim().orEmpty() else ""
         val httpClient = buildTelemetryHttpClientStatic(15L, 25L, 20L)
-        val reqBuilder = Request.Builder()
-            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/list")
-            .get()
-            .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
-            .header("X-Trainer-Screen-Name", safeUser)
-            .header("X-SilphScope-Unlock-Key", unlockKey)
+        val reqBuilder = applyWorkerClientAuthHeaders(
+            Request.Builder()
+                .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/list")
+                .get()
+                .header("X-SilphScope-Unlock-Key", unlockKey),
+            prefs,
+            safeUser,
+            devHash
+        )
+        if (ghToken.isNotEmpty()) reqBuilder.header("X-GitHub-Token", ghToken)
         if (ghUser.isNotEmpty()) reqBuilder.header("X-GitHub-Username", ghUser)
         if (ghId.isNotEmpty()) reqBuilder.header("X-GitHub-User-Id", ghId)
         val req = reqBuilder.build()
@@ -2996,6 +3168,10 @@ internal fun OverlayService.Companion.syncCloudReplayListBlocking(
                 return false to "HTTP ${resp.code}"
             }
             val root = JsonParser.parseString(bodyStr).asJsonObject
+            val devToken = root.get("deviceIngestToken")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+            if (devToken.isNotBlank()) {
+                setDeviceIngestTokenStatic(prefs, devToken)
+            }
             val tier = root.get("tier")?.asString?.lowercase() ?: "free"
             val active = root.get("active")?.asBoolean ?: false
             if (active) {
@@ -3060,7 +3236,7 @@ internal fun OverlayService.Companion.uploadBattleReplayToR2VaultIfUnlockedBlock
         val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
             .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
         val cleanBattleId = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
-        val unlockKey = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
+        val unlockKey = getEffectiveReplayUnlockKey(prefs)
         val traceText = if (traceFile.exists()) traceFile.readText(Charsets.UTF_8) else ""
         val frameCount = traceText.lineSequence().count {
             it.isNotBlank() && !it.startsWith("{\"recordType\":\"BATTLE_DVR_SUMMARY_HEADER\"")
@@ -3108,13 +3284,15 @@ internal fun OverlayService.Companion.uploadBattleReplayToR2VaultIfUnlockedBlock
             .build()
 
         val httpClient = buildTelemetryHttpClientStatic(30L, 180L, 90L)
-        val req = Request.Builder()
-            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/upload")
-            .post(multipart)
-            .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
-            .header("X-Trainer-Screen-Name", safeUser)
-            .header("X-SilphScope-Unlock-Key", unlockKey)
-            .build()
+        val req = applyWorkerClientAuthHeaders(
+            Request.Builder()
+                .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/upload")
+                .post(multipart)
+                .header("X-SilphScope-Unlock-Key", unlockKey),
+            prefs,
+            safeUser,
+            devHash
+        ).build()
 
         httpClient.newCall(req).execute().use { resp ->
             val bodyStr = resp.body?.string().orEmpty()
@@ -3174,7 +3352,7 @@ internal fun OverlayService.Companion.togglePinOrPrivacyReplayBlocking(
         val devHash = getDeviceTelemetryHashStatic(prefs)
         val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
             .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
-        val unlockKey = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
+        val unlockKey = getEffectiveReplayUnlockKey(prefs)
         val payload = mutableMapOf<String, Any>(
             "battleId" to cleanId,
             "shareId" to existing.shareId,
@@ -3185,13 +3363,15 @@ internal fun OverlayService.Companion.togglePinOrPrivacyReplayBlocking(
         if (hideNames != null) payload["hideNames"] = hideNames
 
         val httpClient = buildTelemetryHttpClientStatic(15L, 25L, 20L)
-        val req = Request.Builder()
-            .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/pin")
-            .post(gson.toJson(payload).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
-            .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
-            .header("X-Trainer-Screen-Name", safeUser)
-            .header("X-SilphScope-Unlock-Key", unlockKey)
-            .build()
+        val req = applyWorkerClientAuthHeaders(
+            Request.Builder()
+                .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/pin")
+                .post(gson.toJson(payload).toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
+                .header("X-SilphScope-Unlock-Key", unlockKey),
+            prefs,
+            safeUser,
+            devHash
+        ).build()
 
         httpClient.newCall(req).execute().use { resp ->
             val bodyStr = resp.body?.string().orEmpty()
@@ -3431,12 +3611,14 @@ internal fun OverlayService.Companion.uploadPendingAiTelemetryBatchBlocking(
         var lastErr = ""
         for (attempt in 1..3) {
             try {
-                val req = Request.Builder()
-                    .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/telemetry")
-                    .post(payloadJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull()))
-                    .header("X-SilphScope-Client-Key", CLOUDFLARE_CLIENT_INGEST_KEY)
-                    .header("X-Trainer-Screen-Name", safeUser)
-                    .build()
+                val req = applyWorkerClientAuthHeaders(
+                    Request.Builder()
+                        .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/telemetry")
+                        .post(payloadJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())),
+                    prefs,
+                    safeUser,
+                    devHash
+                ).build()
 
                 httpClient.newCall(req).execute().use { resp ->
                     httpCode = resp.code

@@ -3224,7 +3224,7 @@
                 if (formBtn) {
                     const forms = battleData.availableForms || [];
                     const formLabel = battleData.currentFormLabel || "Base";
-                    formBtn.innerHTML = `<span class="btn-row-top">Form:</span><span class="btn-row-sub">${formLabel}</span>`;
+                    formBtn.innerHTML = `<span class="btn-row-top">Form:</span><span class="btn-row-sub">${escapeHtml(formLabel)}</span>`;
                     if (forms.length > 1 && !isWaitingState) {
                         formBtn.disabled = false;
                         formBtn.classList.remove("disabled");
@@ -3748,7 +3748,7 @@
                         ? "Confirmed Standard Fast Move (>=10% HP damage check)"
                         : "Unconfirmed Standard Fast Move (awaiting >=10% HP damage check)");
                 if (oppMoveEl) {
-                    oppMoveEl.innerHTML = `${opp3Letter}${oppHpSuffix} · <span class="${oppFastSpanCls}" title="${oppFastTitle}">${oppFastTelemetry}</span>`;
+                    oppMoveEl.innerHTML = `${escapeHtml(opp3Letter)}${oppHpSuffix} · <span class="${oppFastSpanCls}" title="${oppFastTitle}">${escapeHtml(oppFastTelemetry)}</span>`;
                 }
 
                 const winsCmp = battleData.winsCmp !== undefined ? !!battleData.winsCmp : true;
@@ -3941,15 +3941,15 @@
                                 : (opp.energyLabel || (isMoveRdy ? `${oppSlotE}E READY` : `${oppSlotE}E`));
                             const energyBadgeHtml = (oppFainted || !energyTrackingEnabled)
                                 ? ""
-                                : `<span class="energy-slot-pill ${isMoveRdy ? 'ready' : 'building'}" title="Opponent Energy: ${oppSlotE}E (Cheapest Charged Move: ${cheapestE}E)">${oppEnergyText}</span>`;
+                                : `<span class="energy-slot-pill ${isMoveRdy ? 'ready' : 'building'}" title="Opponent Energy: ${oppSlotE}E (Cheapest Charged Move: ${cheapestE}E)">${escapeHtml(oppEnergyText)}</span>`;
                             const p1Dots = renderTierDots(opp.matrix ? opp.matrix.p1 : "W,N,L");
                             const p2Dots = renderTierDots(opp.matrix ? opp.matrix.p2 : "N,N,N");
                             const p3Dots = renderTierDots(opp.matrix ? opp.matrix.p3 : "SW,W,W");
                             const ordTag = ordLabels[idx] || `#${idx + 1}`;
                             const rowFaintStyle = oppFainted && !isActiveOpp ? "opacity:0.55;" : "";
                             return `
-                            <div class="matrix-row ${isActiveOpp ? 'active-lead' : ''}" onclick="swapOpponentByIndex(${idx})" style="cursor:pointer;${rowFaintStyle}" title="${isActiveOpp ? 'Active Opponent (' + ordTag + ' seen, ' + oppSlotHp + '% HP, ' + oppEnergyText + ')' : 'Tap to inspect/activate (' + ordTag + ' seen, ' + oppSlotHp + '% HP, ' + oppEnergyText + ')'}">
-                                <span class="matrix-opp-name" title="${fullOppDisplay} (${oppSlotHp}% HP • ${oppEnergyText})">
+                            <div class="matrix-row ${isActiveOpp ? 'active-lead' : ''}" onclick="swapOpponentByIndex(${idx})" style="cursor:pointer;${rowFaintStyle}" title="${isActiveOpp ? 'Active Opponent (' + ordTag + ' seen, ' + oppSlotHp + '% HP, ' + escapeHtml(oppEnergyText) + ')' : 'Tap to inspect/activate (' + ordTag + ' seen, ' + oppSlotHp + '% HP, ' + escapeHtml(oppEnergyText) + ')'}">
+                                <span class="matrix-opp-name" title="${escapeHtml(fullOppDisplay)} (${oppSlotHp}% HP • ${escapeHtml(oppEnergyText)})">
                                     <span style="color:${isActiveOpp ? '#38bdf8' : '#64748b'}; font-weight:700; font-size:7.5px; margin-right:3px;">${ordTag}</span>
                                     <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;${oppFainted ? 'text-decoration:line-through;' : ''}">${escapeHtml(fullOppDisplay)}</span>
                                     ${hpBadgeHtml}${energyBadgeHtml}
@@ -4000,7 +4000,7 @@
                                 cyclesHtml = row.cycles.map(cycle => {
                                     const wPct = typeof cycle.widthPct === "number" ? cycle.widthPct.toFixed(2) : "100";
                                     const rangePart = cycle.rangeLabel
-                                        ? `<span class="seg-block seg-range seg-safe" title="Turns ${cycle.startTurn + 1}–${cycle.readyTurn}">${cycle.rangeLabel}</span>`
+                                        ? `<span class="seg-block seg-range seg-safe" title="Turns ${cycle.startTurn + 1}–${cycle.readyTurn}">${escapeHtml(cycle.rangeLabel)}</span>`
                                         : "";
                                     const readyCls = cycle.readyState === "cmp" ? "seg-cmp" : "seg-catch";
                                     const readyTitle = cycle.readyState === "cmp"
@@ -4009,7 +4009,7 @@
                                     return `
                                         <div class="seg-cycle-group" style="width:${wPct}%;">
                                             ${rangePart}
-                                            <span class="seg-block seg-ready ${readyCls}" title="${readyTitle}">${cycle.readyLabel}</span>
+                                            <span class="seg-block seg-ready ${readyCls}" title="${readyTitle}">${escapeHtml(cycle.readyLabel)}</span>
                                         </div>
                                     `;
                                 }).join("");
@@ -4020,7 +4020,7 @@
                                     : `<span class="seg-block seg-ready seg-catch" title="Opponent can throw on #${displayReadyCount} (Catch)">#${displayReadyCount}</span>`;
                                 cyclesHtml = `
                                     <div class="seg-cycle-group" style="width:100%;">
-                                        <span class="seg-block seg-range seg-safe">${safeLabel}</span>
+                                        <span class="seg-block seg-range seg-safe">${escapeHtml(safeLabel)}</span>
                                         ${actionBlock}
                                     </div>
                                 `;
@@ -4048,7 +4048,7 @@
                                 const isKo = !isFainted && targetHp > 0 && td.dmgPct >= targetHp;
                                 const koCls = isKo ? "dmg-ko" : "";
                                 const labelTxt = isKo ? `${td.dmgPct}% KO` : `${td.dmgPct}%`;
-                                return `<div class="dmg-cell ${tierCls} ${isAct && !isFainted ? 'active-col' : ''} ${faintCls} ${koCls}" title="${td.code || ''}: ${td.dmgPct}% dmg vs ${targetHp}% HP">${labelTxt}</div>`;
+                                return `<div class="dmg-cell ${tierCls} ${isAct && !isFainted ? 'active-col' : ''} ${faintCls} ${koCls}" title="${escapeHtml(td.code || '')}: ${td.dmgPct}% dmg vs ${targetHp}% HP">${labelTxt}</div>`;
                             }).join("");
 
                             const isConfirmedMove = !!row.isConfirmedMove || (
@@ -4064,7 +4064,7 @@
                             return `
                                 <div class="move-timing-row">
                                     <div class="move-col-left">
-                                        <div class="move-title-line threat-${threatClass}${confirmedBadgeCls}" title="${row.name || ''}${confirmedTitleSuffix}">${riskIconHtml}${shortMove}</div>
+                                        <div class="move-title-line threat-${threatClass}${confirmedBadgeCls}" title="${escapeHtml(row.name || '')}${confirmedTitleSuffix}">${riskIconHtml}${escapeHtml(shortMove)}</div>
                                         <div class="move-sub-line">${row.energy || 50}e/${displayReadyCount}f</div>
                                     </div>
                                     <div class="move-col-center">${centerHtml}</div>
@@ -4092,7 +4092,7 @@
                             const hpText = slotHp !== null ? `${slotHp}%` : "—";
                             const hpColor = !opp ? "#475569" : (isFainted ? "#64748b" : (slotHp > 50 ? "#6ee7b7" : (slotHp > 20 ? "#fde047" : "#fca5a5")));
                             const faintCls = isFainted ? "col-fainted" : "";
-                            const clickAttr = opp ? `onclick="swapOpponentByIndex(${idx})" style="cursor:pointer;" title="${opp.name || code} (${slotHp}% HP)"` : "";
+                            const clickAttr = opp ? `onclick="swapOpponentByIndex(${idx})" style="cursor:pointer;" title="${escapeHtml(opp.name || code)} (${slotHp}% HP)"` : "";
                             return `<span class="dmg-col-hdr ${opp && isAct && !isFainted ? 'active-col' : ''} ${faintCls}" ${clickAttr}><span class="dmg-col-hdr-code">${escapeHtml(code)}</span><span class="dmg-col-hdr-hp" style="color:${hpColor};">${hpText}</span></span>`;
                         }).join("");
                     }
@@ -4115,7 +4115,7 @@
                                         ? `Zero-sneak leak-free taps: ${cycle.rangeLabel}`
                                         : `Charging taps: ${cycle.rangeLabel}`;
                                     const rangePart = cycle.rangeLabel
-                                        ? `<span class="seg-block seg-range ${rangeCls}" title="${rangeTitle}">${cycle.rangeLabel}</span>`
+                                        ? `<span class="seg-block seg-range ${rangeCls}" title="${escapeHtml(rangeTitle)}">${escapeHtml(cycle.rangeLabel)}</span>`
                                         : "";
                                     const readyCls = cycle.readyState === "cmp"
                                         ? "seg-cmp"
@@ -4130,7 +4130,7 @@
                                     return `
                                         <div class="seg-cycle-group" style="width:${wPct}%;">
                                             ${rangePart}
-                                            <span class="seg-block seg-ready ${readyCls}" title="${readyTitle}">${cycle.readyLabel}</span>
+                                            <span class="seg-block seg-ready ${readyCls}" title="${readyTitle}">${escapeHtml(cycle.readyLabel)}</span>
                                         </div>
                                     `;
                                 }).join("");
@@ -4144,7 +4144,7 @@
                                     : `<span class="seg-block seg-ready seg-safe" title="Ready on #${myTaps}">#${myTaps}</span>`;
                                 cyclesHtml = `
                                     <div class="seg-cycle-group" style="width:100%;">
-                                        <span class="seg-block seg-range ${rangeCls}">${rangeLabel}</span>
+                                        <span class="seg-block seg-range ${rangeCls}">${escapeHtml(rangeLabel)}</span>
                                         ${readyBlock}
                                     </div>
                                 `;
@@ -4174,13 +4174,13 @@
                                 const isKo = !isFainted && targetHp > 0 && od.dmgPct >= targetHp;
                                 const koCls = isKo ? "dmg-ko" : "";
                                 const text = od.dmgPct >= 100 ? "KO!" : (isKo ? `${od.dmgPct}% KO` : `${od.dmgPct}%`);
-                                return `<div class="dmg-cell ${tierCls} ${isAct && !isFainted ? 'active-col' : ''} ${faintCls} ${koCls}" title="${od.code || ''}: ${od.dmgPct}% dmg vs ${targetHp}% HP">${text}</div>`;
+                                return `<div class="dmg-cell ${tierCls} ${isAct && !isFainted ? 'active-col' : ''} ${faintCls} ${koCls}" title="${escapeHtml(od.code || '')}: ${od.dmgPct}% dmg vs ${targetHp}% HP">${text}</div>`;
                             }).join("");
 
                             return `
                                 <div class="move-timing-row">
                                     <div class="move-col-left">
-                                        <div class="move-title-line threat-${threatClass}" title="${row.name || ''}">${shortMove}</div>
+                                        <div class="move-title-line threat-${threatClass}" title="${escapeHtml(row.name || '')}">${escapeHtml(shortMove)}</div>
                                         <div class="move-sub-line">${row.energy || 50}e/${myTaps}f</div>
                                     </div>
                                     <div class="move-col-center">${centerHtml}</div>

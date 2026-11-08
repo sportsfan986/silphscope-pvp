@@ -2228,12 +2228,30 @@ export function isShadowEligibleForTop100(name: string, baseSpecies: string): bo
   return !nonShadowBases.has(baseLower);
 }
 
+let _speciesIdToDbMonMap: Map<string, (typeof POKEMON_DATABASE)[string]> | null = null;
+const TOP_META_CANDIDATES_CACHE = new Map<string, TeamMember[]>();
+
+function getDbMonBySpeciesIdFast(sid: string): (typeof POKEMON_DATABASE)[string] | undefined {
+  if (!_speciesIdToDbMonMap) {
+    _speciesIdToDbMonMap = new Map();
+    for (const p of Object.values(POKEMON_DATABASE)) {
+      _speciesIdToDbMonMap.set(p.speciesId.toLowerCase(), p);
+    }
+  }
+  return _speciesIdToDbMonMap.get(sid.toLowerCase());
+}
+
 /**
  * Returns up to `maxCount` (default 200) Top Meta candidate Pokémon for the selected league,
  * including eligible Shadow variants, for simulating role upgrades.
  */
 export function getTop100MetaCandidatesForLeague(league: string, maxCount: number = 200): TeamMember[] {
   const normLeague = normalizeLeagueName(league);
+  const liveSize = LIVE_RANKINGS_MAP[normLeague]?.size || 0;
+  const cacheKey = `${normLeague}||${maxCount}||${liveSize}`;
+  const cached = TOP_META_CANDIDATES_CACHE.get(cacheKey);
+  if (cached) return cached;
+
   const isBf = isBattleFrontierLeague(normLeague);
 
   const results: TeamMember[] = [];
@@ -2275,9 +2293,7 @@ export function getTop100MetaCandidatesForLeague(league: string, maxCount: numbe
       const sid = entry.speciesId.toLowerCase();
       const isShad = sid.endsWith("_shadow");
       const cleanSid = sid.replace(/_shadow$/i, "");
-      const matchedMon =
-        Object.values(POKEMON_DATABASE).find((p) => p.speciesId.toLowerCase() === sid) ||
-        Object.values(POKEMON_DATABASE).find((p) => p.speciesId.toLowerCase() === cleanSid);
+      const matchedMon = getDbMonBySpeciesIdFast(sid) || getDbMonBySpeciesIdFast(cleanSid);
       if (matchedMon) {
         const displayName =
           isShad && !matchedMon.name.toLowerCase().startsWith("shadow ")
@@ -2328,7 +2344,9 @@ export function getTop100MetaCandidatesForLeague(league: string, maxCount: numbe
     }
   }
 
-  return results.slice(0, maxCount);
+  const finalSlice = results.slice(0, maxCount);
+  TOP_META_CANDIDATES_CACHE.set(cacheKey, finalSlice);
+  return finalSlice;
 }
 
 /**
@@ -3800,6 +3818,8 @@ export function computeRoleWeightedTop100Meta(
   };
 }
 
+const ANTI_META_RESULT_CACHE = new Map<string, AntiMetaTeamBuilderResult>();
+
 /**
  * Generates the Best 5 ABB and Best 5 ABC Anti-Meta team options for the selected league
  * that MUST include the 0, 1, or 2 user-selected featured Pokémon (or rank-range constraints
@@ -3817,6 +3837,16 @@ export function generateAntiMetaTeamOptions(
   const normLeague = normalizeLeagueName(league);
 
   const roleMeta = computeRoleWeightedTop100Meta(normLeague, seasonBattleLogs, currentSeason);
+  const featKey = (featuredPokemonNames || [])
+    .slice(0, 2)
+    .map((f) => (f || "").trim().toLowerCase())
+    .filter(Boolean)
+    .join("||");
+  const liveSize = LIVE_RANKINGS_MAP[normLeague]?.size || 0;
+  const resultCacheKey = `${normLeague}||${featKey}||${roleMeta.seasonMatchCount}||${roleMeta.wHistPct}||${liveSize}`;
+  const cachedResult = ANTI_META_RESULT_CACHE.get(resultCacheKey);
+  if (cachedResult) return cachedResult;
+
   const fullRankedPool = getTop100MetaCandidatesForLeague(normLeague, 360);
   const rankByLowerName = new Map<string, number>();
   fullRankedPool.forEach((m, idx) => {
@@ -4265,7 +4295,7 @@ export function generateAntiMetaTeamOptions(
       }
     }
   } else {
-    const poolLimit = Math.min(34, metaPartnerPool.length);
+    const poolLimit = Math.min(28, metaPartnerPool.length);
     for (let i = 0; i < poolLimit; i++) {
       const c1 = metaPartnerPool[i];
       const b1 = slotEvalCache.get(c1.name.toLowerCase())?.baseSpecies || c1.name.toLowerCase();
@@ -4273,7 +4303,7 @@ export function generateAntiMetaTeamOptions(
         const c2 = metaPartnerPool[j];
         const b2 = slotEvalCache.get(c2.name.toLowerCase())?.baseSpecies || c2.name.toLowerCase();
         if (b2 === b1) continue;
-        const maxK = i < 12 ? Math.min(52, metaPartnerPool.length) : poolLimit;
+        const maxK = i < 10 ? Math.min(44, metaPartnerPool.length) : poolLimit;
         for (let k = j + 1; k < maxK; k++) {
           const c3 = metaPartnerPool[k];
           const b3 = slotEvalCache.get(c3.name.toLowerCase())?.baseSpecies || c3.name.toLowerCase();
@@ -4623,13 +4653,13 @@ export function generateAntiMetaTeamOptions(
       const fastPool = pool.fastMoves
         .map((f) => f.name.trim())
         .filter((f) => f && f.toLowerCase() !== "struggle")
-        .slice(0, 3);
+        .slice(0, 2);
       if (fastPool.length === 0) fastPool.push(stdEval.member.fastMove);
 
       const chargedPool = pool.chargedMoves
         .map((c) => c.name.trim())
         .filter((c) => c && c.toLowerCase() !== "struggle" && c.toLowerCase() !== "frustration")
-        .slice(0, 5);
+        .slice(0, 4);
       if (chargedPool.length === 0) {
         chargedPool.push(stdEval.member.chargedMove1, stdEval.member.chargedMove2);
       }
@@ -4764,13 +4794,13 @@ export function generateAntiMetaTeamOptions(
     return finalTeam;
   };
 
-  const abbFinalists = pickTopDiverseFinalists(abbCandidates, 7).map((opt) =>
+  const abbFinalists = pickTopDiverseFinalists(abbCandidates, 5).map((opt) =>
     optimizeTeamOptionMovesets(opt)
   );
-  const abcFinalists = pickTopDiverseFinalists(abcCandidates, 7).map((opt) =>
+  const abcFinalists = pickTopDiverseFinalists(abcCandidates, 5).map((opt) =>
     optimizeTeamOptionMovesets(opt)
   );
-  const duoFinalists = pickTopDiverseFinalists(duoCandidates, 7).map((opt) =>
+  const duoFinalists = pickTopDiverseFinalists(duoCandidates, 5).map((opt) =>
     optimizeTeamOptionMovesets(opt)
   );
 
@@ -4783,7 +4813,7 @@ export function generateAntiMetaTeamOptions(
   const top5DuoTeams = duoFinalists.slice(0, 5).map((item, idx) => ({ ...item, rank: idx + 1 }));
   const t1 = typeof performance !== "undefined" ? performance.now() : Date.now();
 
-  return {
+  const finalResult: AntiMetaTeamBuilderResult = {
     league: normLeague,
     leagueAbbr: getLeagueAbbreviation(normLeague),
     featuredPokemon: featuredConstraints.map((fc) => fc.displayLabel),
@@ -4799,6 +4829,11 @@ export function generateAntiMetaTeamOptions(
     metaSummaryLabel: `Top-100 Flattened Role-Weighted Synthetic Meta (${roleMeta.wMetaPct}% PvPoke Role Meta / ${roleMeta.wHistPct}% Season Logs • Auditing Top 50 Meta w/ Battle Rankings)`,
     elapsedMs: Math.max(1, Math.round(t1 - t0))
   };
+  if (ANTI_META_RESULT_CACHE.size > 40) {
+    ANTI_META_RESULT_CACHE.clear();
+  }
+  ANTI_META_RESULT_CACHE.set(resultCacheKey, finalResult);
+  return finalResult;
 }
 
 export interface CompetitiveArchetypePlaybook {

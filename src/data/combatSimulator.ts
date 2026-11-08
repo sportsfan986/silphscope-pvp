@@ -947,6 +947,52 @@ export const ALL_18_TYPES = [
   "rock", "ghost", "dragon", "dark", "steel", "fairy"
 ] as const;
 
+let _dbMonLookupIndex: Map<string, PokemonStats> | null = null;
+let _dbMonValuesCache: PokemonStats[] | null = null;
+
+function getDbPokemonFast(rawName: string, cleanName: string): PokemonStats {
+  if (POKEMON_DATABASE[rawName]) return POKEMON_DATABASE[rawName];
+  if (POKEMON_DATABASE[cleanName]) return POKEMON_DATABASE[cleanName];
+  if (!_dbMonLookupIndex || !_dbMonValuesCache) {
+    _dbMonLookupIndex = new Map<string, PokemonStats>();
+    _dbMonValuesCache = Object.values(POKEMON_DATABASE);
+    for (const p of _dbMonValuesCache) {
+      _dbMonLookupIndex.set(p.name.toLowerCase(), p);
+      _dbMonLookupIndex.set(p.speciesId.toLowerCase(), p);
+    }
+  }
+  const lowerRaw = (rawName || "").toLowerCase();
+  const lowerClean = (cleanName || "").toLowerCase();
+  const slugClean = lowerClean.replace(/[^a-z0-9]+/g, "_");
+  const hit =
+    _dbMonLookupIndex.get(lowerRaw) ||
+    _dbMonLookupIndex.get(lowerClean) ||
+    _dbMonLookupIndex.get(slugClean);
+  if (hit) return hit;
+  return (
+    _dbMonValuesCache.find((p) => p.name.toLowerCase().includes(lowerClean)) ||
+    _dbMonValuesCache[0]
+  );
+}
+
+export const RESOLVED_COMBAT_POKEMON_CACHE = new Map<
+  string,
+  {
+    stats: PokemonStats & { resolvedCp: number };
+    isShadow: boolean;
+    fastMove: FastMove;
+    chargedMoves: ChargedMove[];
+  }
+>();
+
+export const AVAILABLE_MOVE_POOL_CACHE = new Map<
+  string,
+  {
+    fastMoves: FastMove[];
+    chargedMoves: ChargedMove[];
+  }
+>();
+
 export function resolveCombatPokemonForEngine(
   input: TeamMember | string,
   league: string = "GREAT LEAGUE"
@@ -956,6 +1002,11 @@ export function resolveCombatPokemonForEngine(
   fastMove: FastMove;
   chargedMoves: ChargedMove[];
 } {
+  const normLg = (league || "GREAT LEAGUE").toUpperCase();
+  const cacheKey = `${normLg}||${buildCombatantCacheKey(input)}`;
+  const cached = RESOLVED_COMBAT_POKEMON_CACHE.get(cacheKey);
+  if (cached) return cached;
+
   const rawName = typeof input === "string" ? input : input.name;
   const customCp = typeof input === "object" ? input.cp : undefined;
   const customIvs = typeof input === "object" ? input.ivs : undefined;
@@ -967,18 +1018,7 @@ export function resolveCombatPokemonForEngine(
     .replace(/\s*\(Shadow\)/i, "")
     .trim();
 
-  const dbValues = Object.values(POKEMON_DATABASE);
-  const rawBase =
-    POKEMON_DATABASE[rawName] ||
-    POKEMON_DATABASE[cleanName] ||
-    dbValues.find(
-      (p) =>
-        p.name.toLowerCase() === (rawName || "").toLowerCase() ||
-        p.name.toLowerCase() === cleanName.toLowerCase() ||
-        p.speciesId.toLowerCase() === cleanName.toLowerCase().replace(/[^a-z0-9]+/g, "_")
-    ) ||
-    dbValues.find((p) => p.name.toLowerCase().includes(cleanName.toLowerCase())) ||
-    dbValues[0];
+  const rawBase = getDbPokemonFast(rawName || "", cleanName);
 
   const rankedStats = applyRankingMovesToPokemonStats(rawBase, league, isShadow);
   const effectiveStats = computeEffectiveStatsForLeague(
@@ -1009,12 +1049,17 @@ export function resolveCombatPokemonForEngine(
     ];
   }
 
-  return {
+  const resolved = {
     stats: effectiveStats,
     isShadow,
     fastMove,
     chargedMoves
   };
+  if (RESOLVED_COMBAT_POKEMON_CACHE.size > 50000) {
+    RESOLVED_COMBAT_POKEMON_CACHE.clear();
+  }
+  RESOLVED_COMBAT_POKEMON_CACHE.set(cacheKey, resolved);
+  return resolved;
 }
 
 export const DISCRETE_SHIELD_BR_CACHE = new Map<string, number>();
@@ -1058,23 +1103,16 @@ export function getAvailableMovePoolForPokemon(
   chargedMoves: ChargedMove[];
 } {
   const normLeague = normalizeLeagueName(league);
+  const poolCacheKey = `${normLeague}||${typeof input === "string" ? input.trim().toLowerCase() : `${input.speciesId.toLowerCase()}|${input.name.toLowerCase()}`}`;
+  const cachedPool = AVAILABLE_MOVE_POOL_CACHE.get(poolCacheKey);
+  if (cachedPool) return cachedPool;
 
   let stats: PokemonStats;
   let isShadow = false;
   if (typeof input === "string") {
     isShadow = /^Shadow\s+/i.test(input) || input.toLowerCase().includes("(shadow)");
     const clean = input.replace(/^Shadow\s+/i, "").replace(/\s*\(Shadow\)/i, "").trim();
-    const dbValues = Object.values(POKEMON_DATABASE);
-    const rawBase =
-      POKEMON_DATABASE[input] ||
-      POKEMON_DATABASE[clean] ||
-      dbValues.find(
-        (p) =>
-          p.name.toLowerCase() === input.toLowerCase() ||
-          p.name.toLowerCase() === clean.toLowerCase() ||
-          p.speciesId.toLowerCase() === clean.toLowerCase().replace(/[^a-z0-9]+/g, "_")
-      ) ||
-      dbValues[0];
+    const rawBase = getDbPokemonFast(input, clean);
     stats = applyRankingMovesToPokemonStats(rawBase, normLeague, isShadow);
   } else {
     isShadow =
@@ -1189,10 +1227,15 @@ export function getAvailableMovePoolForPokemon(
     );
   }
 
-  return {
+  const poolResult = {
     fastMoves: resolvedFastMoves,
     chargedMoves: resolvedChargedMoves
   };
+  if (AVAILABLE_MOVE_POOL_CACHE.size > 10000) {
+    AVAILABLE_MOVE_POOL_CACHE.clear();
+  }
+  AVAILABLE_MOVE_POOL_CACHE.set(poolCacheKey, poolResult);
+  return poolResult;
 }
 
 /**
@@ -1571,7 +1614,7 @@ export function evaluateDiscreteShieldBattleRating(
       : brDefault;
 
   const finalRating = Math.max(150, Math.min(850, weightedRating));
-  if (DISCRETE_SHIELD_BR_CACHE.size > 40000) {
+  if (DISCRETE_SHIELD_BR_CACHE.size > 250000) {
     DISCRETE_SHIELD_BR_CACHE.clear();
   }
   DISCRETE_SHIELD_BR_CACHE.set(cacheKey, finalRating);
@@ -1629,7 +1672,7 @@ export function evaluatePositionWeightedBr(
     0.15 * r1v1;
 
   const res = { leadBr, swapBr, closerBr };
-  if (POSITION_WEIGHTED_BR_CACHE.size > 40000) {
+  if (POSITION_WEIGHTED_BR_CACHE.size > 250000) {
     POSITION_WEIGHTED_BR_CACHE.clear();
   }
   POSITION_WEIGHTED_BR_CACHE.set(pwKey, res);

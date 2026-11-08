@@ -65,9 +65,29 @@ dns.lookup = function patchedDnsLookup(hostname, options, callback) {
 const DEFAULT_WORKER_URL =
   process.env.SILPHSCOPE_TELEMETRY_WORKER_URL ||
   "https://api.silphscopepvp.com";
-const ADMIN_API_KEY =
-  process.env.SILPHSCOPE_TELEMETRY_ADMIN_KEY ||
-  "sspvp_admin_a1b2c3d4e5f60718293a4b5c6d7e8f90";
+
+function loadAdminKeyFromEnvOrFile() {
+  const fromEnv = (
+    process.env.SILPHSCOPE_TELEMETRY_ADMIN_KEY ||
+    process.env.SILPHSCOPE_ADMIN_KEY ||
+    process.env.ADMIN_API_KEY ||
+    ""
+  ).trim();
+  if (fromEnv) return fromEnv;
+  try {
+    const envAdminPath = path.resolve(process.cwd(), ".env.admin");
+    if (fs.existsSync(envAdminPath)) {
+      const lines = fs.readFileSync(envAdminPath, "utf8").split(/\r?\n/);
+      for (const line of lines) {
+        const m = line.match(/^(?:SILPHSCOPE_TELEMETRY_ADMIN_KEY|SILPHSCOPE_ADMIN_KEY|ADMIN_API_KEY)=(.+)$/);
+        if (m && m[1]) return m[1].trim().replace(/^["']|["']$/g, "");
+      }
+    }
+  } catch {}
+  return "";
+}
+
+const ADMIN_API_KEY = loadAdminKeyFromEnvOrFile();
 
 const rawArgs = process.argv.slice(2);
 const args = new Set(rawArgs);
@@ -526,6 +546,11 @@ async function fetchWithRetry(url, options, retries = 3) {
 }
 
 async function adminFetchJson(endpointPath) {
+  if (!ADMIN_API_KEY) {
+    throw new Error(
+      "Missing SILPHSCOPE_ADMIN_KEY (or SILPHSCOPE_TELEMETRY_ADMIN_KEY) environment variable."
+    );
+  }
   const res = await fetchWithRetry(`${DEFAULT_WORKER_URL}${endpointPath}`, {
     headers: {
       Authorization: `Bearer ${ADMIN_API_KEY}`,

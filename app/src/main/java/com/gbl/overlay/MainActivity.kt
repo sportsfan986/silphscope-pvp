@@ -1526,7 +1526,8 @@ class MainActivity : AppCompatActivity() {
             assignRandomTrainerDebugId()
         }
 
-        editSyncGithubToken.setText(prefs.getString(PREFS_KEY_SYNC_GITHUB_TOKEN, "") ?: "")
+        editSyncGithubToken.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        editSyncGithubToken.setText("")
         editSyncGistId.setText(prefs.getString(PREFS_KEY_SYNC_GIST_ID, "") ?: "")
         updateSyncStatusUi()
 
@@ -2326,14 +2327,16 @@ class MainActivity : AppCompatActivity() {
     private fun saveSyncCredentialsFromInputs() {
         val tok = editSyncGithubToken.text.toString().trim()
         val gist = editSyncGistId.text.toString().trim()
-        val oldTok = prefs.getString(PREFS_KEY_SYNC_GITHUB_TOKEN, "")?.trim().orEmpty()
-        val editor = prefs.edit()
-            .putString(PREFS_KEY_SYNC_GITHUB_TOKEN, tok)
-            .putString(PREFS_KEY_SYNC_GIST_ID, gist)
-        if (tok != oldTok) {
+        val oldTok = OverlayService.getEffectiveSyncToken(prefs)
+        val editor = prefs.edit().putString(PREFS_KEY_SYNC_GIST_ID, gist)
+        if (tok.isNotEmpty() && tok != oldTok) {
             editor.putString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")
         }
         editor.apply()
+        if (tok.isNotEmpty()) {
+            OverlayService.setEffectiveSyncToken(prefs, tok)
+            editSyncGithubToken.setText("")
+        }
         updateSyncStatusUi()
     }
 
@@ -2575,11 +2578,16 @@ class MainActivity : AppCompatActivity() {
             btnGithubLoginSettings.setTextColor(0xFFFFFFFF.toInt())
             val vaultShort = if (gistId.isNotEmpty()) "Gist: ${gistId.take(8)}…" else "Account Vault ($userLabel)"
             textSyncStatus.text = "🟢 Auto-Sync Active ($userLabel) • Last: $lastStr • $vaultShort • Logs: ${loadBattleLogs().size} • Teams: ${loadPresets().size} • Settings Synced"
+            editSyncGithubToken.setText("")
+            editSyncGithubToken.visibility = android.view.View.GONE
+            editSyncGistId.visibility = android.view.View.GONE
         } else {
             btnGithubLoginSettings.text = "🔑 Login with GitHub (Optional Multi-Device Sync)"
             btnGithubLoginSettings.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
             btnGithubLoginSettings.setTextColor(0xFFFFFFFF.toInt())
             textSyncStatus.text = "⚪ Not signed in (Local-only) • Optional: Sign in with GitHub to sync Battle Logs, Teams & Settings across your devices"
+            editSyncGithubToken.visibility = android.view.View.VISIBLE
+            editSyncGistId.visibility = android.view.View.VISIBLE
         }
         updateAiTelemetryStatusUi()
     }
@@ -2667,6 +2675,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var replayVaultSettingsBox: LinearLayout? = null
+    private var textReplaySubHeader: TextView? = null
+    private var btnReplayRegisterId: Button? = null
+    private var layoutReplayPayRow1: LinearLayout? = null
+    private var btnReplayStripeSupporter: Button? = null
+    private var btnReplayStripePro: Button? = null
+    private var btnReplayStripeVip: Button? = null
+    private var btnReplayBmcShop: Button? = null
+    private var btnToggleUpgradeKeyEntry: Button? = null
+    private var layoutReplayKeyInputRow: LinearLayout? = null
+    private var isUpgradeKeyEntryExpanded: Boolean = false
     private var editReplayUnlockKey: EditText? = null
     private var editReplayClaimEmail: EditText? = null
     private var textReplayVaultStatus: TextView? = null
@@ -2699,7 +2717,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             val titleTv = TextView(this).apply {
-                text = "🔑 Membership Tier, Season Pass & Replay Vault (v7.00)"
+                text = "🔑 Membership Tier, Season Pass & Replay Vault (v7.13)"
                 setTextColor(0xFF38BDF8.toInt())
                 textSize = 12f
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
@@ -2735,7 +2753,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     Toast.makeText(this@MainActivity, "🔍 Checking uniqueness of @$currentId...", Toast.LENGTH_SHORT).show()
                     lifecycleScope.launch(Dispatchers.IO) {
-                        val (ok, msg) = OverlayService.registerUniqueScreenNameBlocking(prefs, gson, currentId, emailStr)
+                        val (_, msg) = OverlayService.registerUniqueScreenNameBlocking(prefs, gson, currentId, emailStr)
                         withContext(Dispatchers.Main) {
                             if (!isFinishing) {
                                 setupOrUpdateReplayVaultSettingsUi()
@@ -2852,24 +2870,43 @@ class MainActivity : AppCompatActivity() {
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.9f)
                 setOnClickListener {
                     val u = OverlayService.getRequiredScreenNameStatic(prefs)
-                    val k = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "") ?: ""
-                    openCheckoutUrl("${OverlayService.CLOUDFLARE_DVR_VAULT_URL}/vault?user=${android.net.Uri.encode(u)}&key=${android.net.Uri.encode(k)}")
+                    openCheckoutUrl("${OverlayService.CLOUDFLARE_DVR_VAULT_URL}/vault?user=${android.net.Uri.encode(u)}")
+                }
+            }
+            val toggleUpgradeKeyBtn = Button(this).apply {
+                text = "🔑 Enter Upgrade Key"
+                textSize = 10f
+                isAllCaps = false
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF1E293B.toInt())
+                setTextColor(0xFF38BDF8.toInt())
+                visibility = android.view.View.GONE
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.1f).apply {
+                    leftMargin = (4 * density).toInt()
+                }
+                setOnClickListener {
+                    isUpgradeKeyEntryExpanded = !isUpgradeKeyEntryExpanded
+                    if (!isUpgradeKeyEntryExpanded) {
+                        editReplayUnlockKey?.setText("")
+                    }
+                    setupOrUpdateReplayVaultSettingsUi()
                 }
             }
             payRow2.addView(btnBmcShop)
             payRow2.addView(btnWebVault)
+            payRow2.addView(toggleUpgradeKeyBtn)
 
             val inputRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = android.view.Gravity.CENTER_VERTICAL
             }
             val keyInput = EditText(this).apply {
-                hint = "Unlock Key (SSPVP-PRO-XXXX-XXXX)"
+                hint = "Enter New / Upgrade Key (SSPVP-...)"
                 setHintTextColor(0xFF64748B.toInt())
                 setTextColor(0xFFF8FAFC.toInt())
                 textSize = 11f
                 setSingleLine(true)
-                setText(prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "") ?: "")
+                inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                setText("")
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             }
             val emailInput = EditText(this).apply {
@@ -2896,14 +2933,18 @@ class MainActivity : AppCompatActivity() {
                 setOnClickListener {
                     val entered = keyInput.text?.toString()?.trim().orEmpty()
                     val enteredEmail = emailInput.text?.toString()?.trim().orEmpty()
+                    if (entered.isNotEmpty()) {
+                        OverlayService.setEffectiveReplayUnlockKey(prefs, entered)
+                    }
                     prefs.edit()
-                        .putString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, entered)
                         .putString(OverlayService.PREFS_KEY_CLAIM_EMAIL, enteredEmail)
                         .putLong(OverlayService.PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
                         .apply()
+                    keyInput.setText("")
                     Toast.makeText(this@MainActivity, "🔄 Verifying Membership Key / Email Claim...", Toast.LENGTH_SHORT).show()
                     lifecycleScope.launch(Dispatchers.IO) {
-                        val (ok, msg) = OverlayService.verifyReplayUnlockKeyBlocking(prefs, gson, entered, enteredEmail)
+                        val effectiveKey = entered.ifEmpty { OverlayService.getEffectiveReplayUnlockKey(prefs) }
+                        val (ok, msg) = OverlayService.verifyReplayUnlockKeyBlocking(prefs, gson, effectiveKey, enteredEmail)
                         if (OverlayService.getEffectiveSyncToken(prefs).isNotEmpty()) {
                             try {
                                 OverlayService.syncWithGitHubGistBlocking(prefs, gson)
@@ -2912,6 +2953,9 @@ class MainActivity : AppCompatActivity() {
                         OverlayService.enforceLocalDvrReplaysQuotaStatic(filesDir, prefs, gson)
                         withContext(Dispatchers.Main) {
                             if (!isFinishing) {
+                                if (ok) {
+                                    isUpgradeKeyEntryExpanded = false
+                                }
                                 setupOrUpdateReplayVaultSettingsUi()
                                 updateSyncStatusUi()
                                 renderBattleLogPage()
@@ -3131,6 +3175,15 @@ class MainActivity : AppCompatActivity() {
                 parentLayout.addView(box)
             }
             replayVaultSettingsBox = box
+            textReplaySubHeader = subTv
+            btnReplayRegisterId = regBtn
+            layoutReplayPayRow1 = payRow1
+            btnReplayStripeSupporter = btnStripeSupporter
+            btnReplayStripePro = btnStripePro
+            btnReplayStripeVip = btnStripeVip
+            btnReplayBmcShop = btnBmcShop
+            btnToggleUpgradeKeyEntry = toggleUpgradeKeyBtn
+            layoutReplayKeyInputRow = inputRow
             editReplayUnlockKey = keyInput
             editReplayClaimEmail = emailInput
             textReplayVaultStatus = statusTv
@@ -3141,12 +3194,60 @@ class MainActivity : AppCompatActivity() {
         }
 
         val tier = OverlayService.getEffectiveReplayTierStatic(prefs)
+        val hasActiveMembership = tier == "supporter" || tier == "pro" || tier == "vip"
+
+        // Dynamically show/hide checkout buttons & key entry based on active tier
+        textReplaySubHeader?.visibility = if (hasActiveMembership) android.view.View.GONE else android.view.View.VISIBLE
+        btnReplayRegisterId?.visibility = if (hasActiveMembership) android.view.View.GONE else android.view.View.VISIBLE
+
+        when (tier) {
+            "vip" -> {
+                layoutReplayPayRow1?.visibility = android.view.View.GONE
+                btnReplayBmcShop?.visibility = android.view.View.GONE
+                btnToggleUpgradeKeyEntry?.visibility = android.view.View.VISIBLE
+                btnToggleUpgradeKeyEntry?.text = if (isUpgradeKeyEntryExpanded) "✖️ Hide Key Input" else "🔄 Update / Renew Key"
+            }
+            "pro" -> {
+                layoutReplayPayRow1?.visibility = android.view.View.VISIBLE
+                btnReplayStripeSupporter?.visibility = android.view.View.GONE
+                btnReplayStripePro?.visibility = android.view.View.GONE
+                btnReplayStripeVip?.visibility = android.view.View.VISIBLE
+                btnReplayBmcShop?.visibility = android.view.View.GONE
+                btnToggleUpgradeKeyEntry?.visibility = android.view.View.VISIBLE
+                btnToggleUpgradeKeyEntry?.text = if (isUpgradeKeyEntryExpanded) "✖️ Hide Key Input" else "🔑 Enter Upgrade Key"
+            }
+            "supporter" -> {
+                layoutReplayPayRow1?.visibility = android.view.View.VISIBLE
+                btnReplayStripeSupporter?.visibility = android.view.View.GONE
+                btnReplayStripePro?.visibility = android.view.View.VISIBLE
+                btnReplayStripeVip?.visibility = android.view.View.VISIBLE
+                btnReplayBmcShop?.visibility = android.view.View.VISIBLE
+                btnToggleUpgradeKeyEntry?.visibility = android.view.View.VISIBLE
+                btnToggleUpgradeKeyEntry?.text = if (isUpgradeKeyEntryExpanded) "✖️ Hide Key Input" else "🔑 Enter Upgrade Key"
+            }
+            else -> {
+                layoutReplayPayRow1?.visibility = android.view.View.VISIBLE
+                btnReplayStripeSupporter?.visibility = android.view.View.VISIBLE
+                btnReplayStripePro?.visibility = android.view.View.VISIBLE
+                btnReplayStripeVip?.visibility = android.view.View.VISIBLE
+                btnReplayBmcShop?.visibility = android.view.View.VISIBLE
+                btnToggleUpgradeKeyEntry?.visibility = android.view.View.GONE
+            }
+        }
+
+        val showKeyInputs = !hasActiveMembership || isUpgradeKeyEntryExpanded
+        layoutReplayKeyInputRow?.visibility = if (showKeyInputs) android.view.View.VISIBLE else android.view.View.GONE
+        editReplayClaimEmail?.visibility = if (showKeyInputs) android.view.View.VISIBLE else android.view.View.GONE
+        if (!showKeyInputs) {
+            editReplayUnlockKey?.setText("")
+        }
+
         val maxLocal = OverlayService.getMaxLocalDvrBattlesForTierStatic(prefs)
         val effFps = OverlayService.getEffectiveDvrFpsForTierStatic(prefs)
         val tierBadge = when (tier) {
-            "vip" -> "👑 VIP / Coach Pass (${effFps} FPS DVR • 🛡️ Shield HUD • $maxLocal Local Slider • 150 Cloud + 25 ⭐ Pinned • 365d • All Cups + Alt Moves)"
-            "pro" -> "🏅 Legend Pro Pass (15 FPS DVR • 🛡️ Shield HUD • 25 Local • 50 Cloud + 10 ⭐ Pinned • 30d • All Cups + ⚡ Alt Movesets)"
-            "supporter" -> "🛡️ Lifetime Supporter / Alumni (🛡️ Shield Decision HUD • 5 Local (15 FPS) • 365d Past Pinned Cloud • Core 3 Leagues • Lifetime Battle Logs)"
+            "vip" -> "👑 VIP / Coach Pass Active (${effFps} FPS DVR • 🛡️ Shield HUD • $maxLocal Local Slider • 150 Cloud + 25 ⭐ Pinned • 365d • All Cups + Alt Moves)"
+            "pro" -> "🏅 Legend Pro Pass Active (15 FPS DVR • 🛡️ Shield HUD • 25 Local • 50 Cloud + 10 ⭐ Pinned • 30d • All Cups + ⚡ Alt Movesets)"
+            "supporter" -> "🛡️ Lifetime Supporter / Alumni Active (🛡️ Shield Decision HUD • 5 Local (15 FPS) • 365d Past Pinned Cloud • Core 3 Leagues • Lifetime Battle Logs)"
             else -> "🆓 Free / Community Tier (1 Local Video (15 FPS) • GL & ML 1-Team Anti-Meta • Current Season + 14d Grace)"
         }
         layoutVipLocalSliderRow?.visibility = if (tier == "vip") android.view.View.VISIBLE else android.view.View.GONE
@@ -3168,14 +3269,12 @@ class MainActivity : AppCompatActivity() {
         val vaultMap = OverlayService.loadReplayVaultMapStatic(prefs, gson)
         val cloudCount = vaultMap.values.count { it.shareId.isNotBlank() }
         val pinnedCount = vaultMap.values.count { it.isPinned }
-        val savedKey = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "")?.trim().orEmpty()
-        if (editReplayUnlockKey?.hasFocus() == false && savedKey.isNotEmpty() && editReplayUnlockKey?.text?.toString() != savedKey) {
-            editReplayUnlockKey?.setText(savedKey)
-        }
         val ghToken = OverlayService.getEffectiveSyncToken(prefs)
         val ghUsername = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty()
         val syncSecurityLine = if (ghToken.isNotEmpty() && ghUsername.isNotEmpty()) {
-            "🔒 Multi-Device Key Sync: AES-256-GCM Encrypted in @$ghUsername's Private GitHub Vault"
+            "🔒 Key Security: Hidden & AES-256-GCM Encrypted (Android Keystore + @$ghUsername's Private GitHub Vault)"
+        } else if (hasActiveMembership) {
+            "🔒 Key Security: Hidden & AES-256-GCM Encrypted in Android Hardware Keystore"
         } else {
             "📴 Offline-Ready: Verified tier is cached locally on-device (Sign in with GitHub above for multi-device sync)"
         }
@@ -3359,14 +3458,14 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             val (status, tokenOrErr, username) = OverlayService.pollGitHubDeviceTokenOnceBlocking(pendingCode)
             if (status == "SUCCESS" && tokenOrErr.isNotEmpty()) {
+                OverlayService.setEffectiveSyncToken(prefs, tokenOrErr)
                 prefs.edit()
                     .remove("pending_github_device_code")
                     .remove("pending_github_device_expires_at")
-                    .putString(PREFS_KEY_SYNC_GITHUB_TOKEN, tokenOrErr)
                     .putString(PREFS_KEY_SYNC_GITHUB_USERNAME, username)
                     .apply()
                 withContext(Dispatchers.Main) {
-                    editSyncGithubToken.setText(tokenOrErr)
+                    editSyncGithubToken.setText("")
                     updateSyncStatusUi()
                     val userTag = if (username.isNotEmpty()) "@$username" else "GitHub"
                     Toast.makeText(
@@ -3449,14 +3548,14 @@ class MainActivity : AppCompatActivity() {
                 when (status) {
                     "SUCCESS" -> {
                         isPollingActive = false
+                        OverlayService.setEffectiveSyncToken(prefs, tokenOrErr)
                         prefs.edit()
                             .remove("pending_github_device_code")
                             .remove("pending_github_device_expires_at")
-                            .putString(PREFS_KEY_SYNC_GITHUB_TOKEN, tokenOrErr)
                             .putString(PREFS_KEY_SYNC_GITHUB_USERNAME, username)
                             .apply()
                         withContext(Dispatchers.Main) {
-                            editSyncGithubToken.setText(tokenOrErr)
+                            editSyncGithubToken.setText("")
                             updateSyncStatusUi()
                             if (dialog.isShowing) dialog.dismiss()
                             val userTag = if (username.isNotEmpty()) "@$username" else "GitHub"
@@ -7312,6 +7411,8 @@ class MainActivity : AppCompatActivity() {
                 settings.domStorageEnabled = true
                 settings.allowFileAccess = true
                 settings.allowContentAccess = false
+                settings.allowFileAccessFromFileURLs = false
+                settings.allowUniversalAccessFromFileURLs = false
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
                 setBackgroundColor(0x00000000)

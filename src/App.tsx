@@ -274,6 +274,7 @@ export default function App() {
   } | null>(null);
   const ghPollTimerRef = useRef<number | null>(null);
   const lastGhPollMsRef = useRef<number>(0);
+  const pendingGhLinkTokenRef = useRef<string>('');
 
   const CLIENT_INGEST_KEY_PUBLIC = 'ssk_client_v615_telemetry_ingest_9f8a7b6c5d4e3f2a1b0c';
 
@@ -282,7 +283,7 @@ export default function App() {
     const cleanKey = webUnlockKey.trim().toUpperCase();
     const cleanEmail = webClaimEmail.trim().toLowerCase();
     const cleanPw = webPassword.trim();
-    const cleanGhTok = (localStorage.getItem('gbl_sync_github_token') || localStorage.getItem('sspvp_github_token') || '').trim();
+    const cleanGhTok = (localStorage.getItem('gbl_sync_github_token') || '').trim();
     if (!cleanName && webAuthTab !== 'github') {
       setMembershipStatusMsg('⚠️ Enter your Trainer Screen Name first.');
       return;
@@ -314,11 +315,13 @@ export default function App() {
           claimEmail: webAuthTab === 'token' ? cleanEmail : '',
           password: webAuthTab === 'password' ? cleanPw : '',
           githubToken: webAuthTab === 'github' ? cleanGhTok : '',
+          pendingGhLinkToken: pendingGhLinkTokenRef.current || '',
           deviceHash: 'web-' + (cleanName || 'browser')
         })
       });
       const data = await resp.json();
       if (data && data.ok) {
+        pendingGhLinkTokenRef.current = '';
         const t = String(data.tier || 'free').toLowerCase() as 'free' | 'supporter' | 'pro' | 'vip';
         setWebMembershipTier(t);
         if (data.screenName) setWebScreenName(data.screenName);
@@ -386,6 +389,7 @@ export default function App() {
       ghPollTimerRef.current = null;
       setGhDeviceCodeInfo(null);
       if (pollData.ok && pollData.sessionToken) {
+        pendingGhLinkTokenRef.current = '';
         const t = String(pollData.tier || 'free').toLowerCase() as 'free' | 'supporter' | 'pro' | 'vip';
         setWebMembershipTier(t);
         setWebScreenName(pollData.screenName || webScreenName);
@@ -393,14 +397,13 @@ export default function App() {
         localStorage.setItem('gbl_web_membership_tier_v700', t);
         localStorage.setItem('gbl_web_screen_name_v700', pollData.screenName || webScreenName);
         localStorage.setItem('sspvp_vault_session', pollData.sessionToken);
-        if (pollData.githubToken) {
-          localStorage.setItem('sspvp_github_token', pollData.githubToken);
-          localStorage.setItem('gbl_sync_github_token', pollData.githubToken);
-        }
         setMembershipStatusMsg(
           `✅ Signed in via GitHub (@${pollData.githubUsername}) -> Trainer @${pollData.screenName} (${t.toUpperCase()})!`
         );
       } else {
+        if (pollData.pendingGhLinkToken) {
+          pendingGhLinkTokenRef.current = String(pollData.pendingGhLinkToken);
+        }
         setMembershipStatusMsg(`❌ ${pollData.error || 'GitHub login did not match an account.'}`);
       }
     } catch {
@@ -453,8 +456,8 @@ export default function App() {
   const handleSaveWebPassword = async () => {
     const cleanName = webScreenName.trim();
     const newPw = webNewPassword.trim();
-    if (!cleanName || newPw.length < 6) {
-      setMembershipStatusMsg('⚠️ Enter your Trainer ID and a new password of at least 6 characters.');
+    if (!cleanName || newPw.length < 8) {
+      setMembershipStatusMsg('⚠️ Enter your Trainer ID and a new password of at least 8 characters.');
       return;
     }
     try {
@@ -654,6 +657,7 @@ export default function App() {
   const [antiMetaFeat2, setAntiMetaFeat2] = useState<string>('');
   const [antiMetaDropdownSlot, setAntiMetaDropdownSlot] = useState<1 | 2 | null>(null);
   const [antiMetaResult, setAntiMetaResult] = useState<AntiMetaTeamBuilderResult | null>(null);
+  const [isGeneratingAntiMeta, setIsGeneratingAntiMeta] = useState<boolean>(false);
 
   // Floating Overlay Visibility & Minimized Bubble State
   const [isOverlayVisible, setIsOverlayVisible] = useState(true);
@@ -2032,13 +2036,7 @@ export default function App() {
     group: 'my6' | 'opp6' | 'lock6';
     idx: number;
   } | null>(null);
-  const [show6Pick3Result, setShow6Pick3Result] = useState<Show6Pick3MatchupResult | null>(() =>
-    evaluateShow6Pick3Matchup(
-      'Battle Frontier (Spectral)',
-      getDefaultShow6RosterNames('Battle Frontier (Spectral)').my6,
-      getDefaultShow6RosterNames('Battle Frontier (Spectral)').opp6
-    )
-  );
+  const [show6Pick3Result, setShow6Pick3Result] = useState<Show6Pick3MatchupResult | null>(null);
 
   useEffect(() => {
     try {
@@ -2186,17 +2184,36 @@ export default function App() {
   ]);
   const [blindShow6HistoricalChipQuery, setBlindShow6HistoricalChipQuery] = useState<string>('');
   const [blindShow6HistoricalWeightPct, setBlindShow6HistoricalWeightPct] = useState<number>(35);
-  const [blindShow6Result, setBlindShow6Result] = useState<BlindShow6RosterResult | null>(() =>
-    generateBlindShow6Roster({
-      league: 'Battle Frontier (Spectral)',
-      lockedCoreNames: [],
-      metaFilterMode: 'OPEN',
-      whitelistNames: [],
-      banlistNames: [],
-      historicalExpectedNames: ['Ninetales (Alolan)', 'Weezing (Galarian)', 'Dewgong', 'Piloswine', 'Ledian', 'Arctibax'],
-      historicalWeightPct: 35
-    })
-  );
+  const [blindShow6Result, setBlindShow6Result] = useState<BlindShow6RosterResult | null>(null);
+
+  useEffect(() => {
+    if (siteView !== 'app' || appCombatMode !== 'show6') return;
+    const timer = setTimeout(() => {
+      if (!show6Pick3Result) {
+        setShow6Pick3Result(
+          evaluateShow6Pick3Matchup(
+            'Battle Frontier (Spectral)',
+            getDefaultShow6RosterNames('Battle Frontier (Spectral)').my6,
+            getDefaultShow6RosterNames('Battle Frontier (Spectral)').opp6
+          )
+        );
+      }
+      if (!blindShow6Result) {
+        setBlindShow6Result(
+          generateBlindShow6Roster({
+            league: 'Battle Frontier (Spectral)',
+            lockedCoreNames: [],
+            metaFilterMode: 'OPEN',
+            whitelistNames: [],
+            banlistNames: [],
+            historicalExpectedNames: ['Ninetales (Alolan)', 'Weezing (Galarian)', 'Dewgong', 'Piloswine', 'Ledian', 'Arctibax'],
+            historicalWeightPct: 35
+          })
+        );
+      }
+    }, 30);
+    return () => clearTimeout(timer);
+  }, [siteView, appCombatMode]);
 
   const handleRunShow6Pick3Optimizer = (
     overrideLeague?: LeagueType,
@@ -2757,15 +2774,19 @@ export default function App() {
 
   // Ensure all presets have current-season blended Lead/Machine/Swap BR & ABB/ABC metrics on load or when season battle logs update
   useEffect(() => {
-    setPresets((prev) =>
-      recalculateAllPresetsMetrics(
-        prev,
-        battleLogs,
-        activeSeasonBounds.startMs,
-        activeSeasonBounds.endMs
-      )
-    );
-  }, [appCombatMode, battleLogs.length, activeSeasonBounds.startMs, activeSeasonBounds.endMs]);
+    if (siteView === 'marketing') return;
+    const timer = setTimeout(() => {
+      setPresets((prev) =>
+        recalculateAllPresetsMetrics(
+          prev,
+          battleLogs,
+          activeSeasonBounds.startMs,
+          activeSeasonBounds.endMs
+        )
+      );
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [siteView, appCombatMode, battleLogs.length, activeSeasonBounds.startMs, activeSeasonBounds.endMs]);
 
   const [reparseBattlesStatus, setReparseBattlesStatus] = useState<string>(
     'Re-evaluates all logged battles with latest 2.56x dual-type & Shadow 1.2x damage + Win Quality (WAE) metrics'
@@ -3867,13 +3888,14 @@ export default function App() {
 
   // Precompute 9x9 Shield Matrix for Active Team vs Top 200 League Meta before launching/running Overlay
   const precomputed9x9State: PrecomputedTeam9x9State = useMemo(() => {
+    const metaDepth = siteView === 'app' && activeTab === 'simulator' ? 200 : 25;
     return precomputeTeam9x9ShieldMatrixAgainstMeta(
       activePreset?.pokemon || [],
       activePreset?.league || 'GREAT LEAGUE',
       tierThresholds,
-      200
+      metaDepth
     );
-  }, [activePreset, tierThresholds, pvPokeSyncStatus]);
+  }, [siteView, activeTab, activePreset, tierThresholds, lastSyncedAt]);
 
   const activeRealtime9x9Lookup = useMemo(() => {
     return getOverlayRealtime9x9Matchup(
@@ -5424,20 +5446,61 @@ export default function App() {
     const f1 = (overrideFeat1 !== undefined ? overrideFeat1 : antiMetaFeat1).trim();
     const f2 = (overrideFeat2 !== undefined ? overrideFeat2 : antiMetaFeat2).trim();
     const featuredList = [f1, f2].filter((s) => s.length > 0);
-    const res = generateAntiMetaTeamOptions(
-      targetLeague,
-      featuredList,
-      battleLogs,
-      activeSeasonBounds
-    );
-    const maxPerArch = webMembershipTier === 'pro' || webMembershipTier === 'vip' ? 5 : webMembershipTier === 'supporter' ? 2 : 1;
-    setAntiMetaResult({
-      ...res,
-      top5AbbTeams: res.top5AbbTeams.slice(0, maxPerArch),
-      top5AbcTeams: res.top5AbcTeams.slice(0, maxPerArch),
-      top5DuoTeams: (res.top5DuoTeams || []).slice(0, maxPerArch)
-    });
+    setIsGeneratingAntiMeta(true);
+    setTimeout(() => {
+      try {
+        const res = generateAntiMetaTeamOptions(
+          targetLeague,
+          featuredList,
+          battleLogs,
+          activeSeasonBounds
+        );
+        const maxPerArch = webMembershipTier === 'pro' || webMembershipTier === 'vip' ? 5 : webMembershipTier === 'supporter' ? 2 : 1;
+        setAntiMetaResult({
+          ...res,
+          top5AbbTeams: res.top5AbbTeams.slice(0, maxPerArch),
+          top5AbcTeams: res.top5AbcTeams.slice(0, maxPerArch),
+          top5DuoTeams: (res.top5DuoTeams || []).slice(0, maxPerArch)
+        });
+      } finally {
+        setIsGeneratingAntiMeta(false);
+      }
+    }, 20);
   };
+
+  useEffect(() => {
+    if (siteView !== 'app' || activeTab !== 'presets' || !showAntiMetaBuilder) return;
+    const normTarget = normalizeLeagueName(antiMetaLeague);
+    if (antiMetaResult && antiMetaResult.league === normTarget) return;
+    let cancelled = false;
+    setIsGeneratingAntiMeta(true);
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      try {
+        const featuredList = [antiMetaFeat1.trim(), antiMetaFeat2.trim()].filter((s) => s.length > 0);
+        const res = generateAntiMetaTeamOptions(
+          antiMetaLeague,
+          featuredList,
+          battleLogs,
+          activeSeasonBounds
+        );
+        if (cancelled) return;
+        const maxPerArch = webMembershipTier === 'pro' || webMembershipTier === 'vip' ? 5 : webMembershipTier === 'supporter' ? 2 : 1;
+        setAntiMetaResult({
+          ...res,
+          top5AbbTeams: res.top5AbbTeams.slice(0, maxPerArch),
+          top5AbcTeams: res.top5AbcTeams.slice(0, maxPerArch),
+          top5DuoTeams: (res.top5DuoTeams || []).slice(0, maxPerArch)
+        });
+      } finally {
+        if (!cancelled) setIsGeneratingAntiMeta(false);
+      }
+    }, 25);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [siteView, activeTab, showAntiMetaBuilder, antiMetaLeague, webMembershipTier]);
 
   const handleSelectAntiMetaTeamOption = (option: AntiMetaTeamOption) => {
     const newId = `preset-antimeta-${Date.now()}`;
@@ -5760,7 +5823,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.12 • Android Native Overlay
+                  v7.13 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -10202,15 +10265,19 @@ export default function App() {
                         ? 2
                         : 1;
                     const isProOrVipTier = webMembershipTier === 'pro' || webMembershipTier === 'vip';
-                    const rawResult =
-                      antiMetaResult && antiMetaResult.league === antiMetaLeague
-                        ? antiMetaResult
-                        : generateAntiMetaTeamOptions(
-                            antiMetaLeague,
-                            [antiMetaFeat1.trim(), antiMetaFeat2.trim()].filter(Boolean),
-                            battleLogs,
-                            activeSeasonBounds
-                          );
+                    if (!antiMetaResult || isGeneratingAntiMeta) {
+                      return (
+                        <div className="bg-slate-950/90 border border-purple-500/40 rounded-xl p-6 text-center space-y-2 animate-pulse">
+                          <div className="text-sm font-extrabold text-purple-300">
+                            ⚡ Simulating {antiMetaLeague} Top-100 Role-Weighted Meta &amp; Alternate Movesets...
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            Evaluating ABB, ABC, and Symmetric Duo-Core lineups against Top 50 Meta Threats &amp; Core Breakers
+                          </div>
+                        </div>
+                      );
+                    }
+                    const rawResult = antiMetaResult;
                     const currentResult = {
                       ...rawResult,
                       top5AbbTeams: rawResult.top5AbbTeams.slice(0, maxPerArch),
@@ -16755,12 +16822,12 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.12 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.13 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}
 
-      {/* v7.12 Membership Tiers, Unlock Key Verification & Stripe / Buy Me a Coffee Modal */}
+      {/* v7.13 Membership Tiers, Unlock Key Verification & Stripe / Buy Me a Coffee Modal */}
       {showMembershipModal && (
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
             <div className="bg-slate-900 border border-indigo-500/50 rounded-2xl max-w-3xl w-full p-5 shadow-2xl space-y-4 my-auto max-h-[92vh] overflow-y-auto">

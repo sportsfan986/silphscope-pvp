@@ -12,6 +12,8 @@
  *   node scripts/manage-keys.mjs feature --shareId r_evn6nvp6f --featuredId f_gl_debuff --highlight 118 --badge "🌟 Official Showcase"
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import dns from 'node:dns';
 
 const WORKER_URL = (
@@ -47,8 +49,34 @@ dns.lookup = function (hostname, options, callback) {
   });
 };
 
-const ADMIN_KEY =
-  process.env.SILPHSCOPE_ADMIN_KEY || 'sspvp_admin_a1b2c3d4e5f60718293a4b5c6d7e8f90';
+function loadAdminKey() {
+  const fromEnv = (
+    process.env.SILPHSCOPE_ADMIN_KEY ||
+    process.env.SILPHSCOPE_TELEMETRY_ADMIN_KEY ||
+    process.env.ADMIN_API_KEY ||
+    ''
+  ).trim();
+  if (fromEnv) return fromEnv;
+  try {
+    const envPath = path.resolve(process.cwd(), '.env.admin');
+    if (fs.existsSync(envPath)) {
+      const lines = fs.readFileSync(envPath, 'utf8').split(/\r?\n/);
+      for (const line of lines) {
+        const m = line.match(/^(?:SILPHSCOPE_ADMIN_KEY|SILPHSCOPE_TELEMETRY_ADMIN_KEY|ADMIN_API_KEY)=(.+)$/);
+        if (m && m[1]) return m[1].trim().replace(/^["']|["']$/g, '');
+      }
+    }
+  } catch {}
+  return '';
+}
+
+const ADMIN_KEY = loadAdminKey();
+if (!ADMIN_KEY) {
+  console.error(
+    'ERROR: SILPHSCOPE_ADMIN_KEY is required. Run `node scripts/setup-worker-secrets.mjs` to auto-generate and save it to `.env.admin`.'
+  );
+  process.exit(1);
+}
 
 function parseArgs(argv) {
   const args = { command: argv[2] || 'list' };
@@ -133,7 +161,7 @@ async function main() {
     return;
   }
 
-  if (cmd === 'revoke' || cmd === 'extend') {
+  if (cmd === 'revoke' || cmd === 'extend' || cmd === 'rotate') {
     const key = args.key;
     if (!key) {
       throw new Error(`Missing --key <SSPVP-...> for '${cmd}' command.`);
@@ -141,11 +169,19 @@ async function main() {
     const data = await callAdminKeys('POST', {
       action: cmd,
       key,
+      newKey: args.newKey || undefined,
       days: args.days ? Number(args.days) : 30,
       tier: args.tier || undefined,
       screenName: args.user || args.screenName || undefined,
     });
-    console.log(`\n✅ Updated Key (${cmd.toUpperCase()}):`, JSON.stringify(data.license, null, 2));
+    if (cmd === 'rotate') {
+      console.log(`\n🔄 Rotated Key (${data.oldKey} -> ${data.newKey}):`);
+      console.log(`   Old Key (Revoked): ${data.oldKey}`);
+      console.log(`   New Key (Active):  ${data.newKey}`);
+      console.log(`   Bound Trainer:     ${data.license.boundScreenName || '(unbound)'}\n`);
+    } else {
+      console.log(`\n✅ Updated Key (${cmd.toUpperCase()}):`, JSON.stringify(data.license, null, 2));
+    }
     return;
   }
 

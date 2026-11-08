@@ -21,8 +21,8 @@ android {
         // devices and enforces modern foreground-service / PendingIntent security boundaries.
         minSdk = 31
         targetSdk = 35
-        versionCode = 1712
-        versionName = "7.12"
+        versionCode = 1713
+        versionName = "7.13"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -47,7 +47,7 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             val relSigning = signingConfigs.findByName("release")
             signingConfig = when {
                 relSigning?.storeFile?.exists() == true -> relSigning

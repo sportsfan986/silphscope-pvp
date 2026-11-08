@@ -11,3 +11,18 @@
 # Keep Google ML Kit Text Recognition classes
 -keep class com.google.mlkit.** { *; }
 -dontwarn com.google.mlkit.**
+
+# Keep Gson TypeToken and reflection models
+-keep class com.google.gson.** { *; }
+-keep class * extends com.google.gson.reflect.TypeToken
+-keepclassmembers class * {
+    @com.google.gson.annotations.SerializedName <fields>;
+}
+
+# OkHttp / Okio platform warnings
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-dontwarn javax.annotation.**
+-dontwarn org.conscrypt.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.openjsse.**
