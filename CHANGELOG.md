@@ -1,4 +1,24 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.11`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.12`)
+
+---
+
+## v7.12 (2026-11-07) — Official `silphscopepvp.com` 5-Host Domain Migration, Shiny Origin Dialga Midnight Marketing Website, Persistent `@Featured` Replay Vault, `?t=` Timestamp Deep-Linking & 50% HUD Animated Battle GIFs
+*Official domain & website release (`v7.12`, `versionCode = 1712`, Cloudflare Worker `v7.1.2`) migrating all Android, Web, Cloudflare Worker, and GitHub endpoints to **`silphscopepvp.com`**, **`dvr.silphscopepvp.com`**, **`api.silphscopepvp.com`**, and **`dl.silphscopepvp.com`**, launching the **Shiny Origin Forme Dialga Midnight (`dialga_shiny_midnight`)** marketing website (`/`), visual HUD field manual (`/?view=guide`), side-by-side comparison subpage (`/?view=compare`), persistent R2 `@Featured` showcase vault (`replays/_featured/`), `?t=<seconds>` timestamp deep-linking on `/watch/:shareId`, and high-resolution 50% translucent HUD battle GIFs + comparison graphics.*
+
+- **v7.12 — Enhancement 1: 5-Host Domain & Subdomain Architecture (`cloudflare/telemetry-worker/wrangler.toml`, `worker.mjs`, `OverlayService.kt`, `GitHubCloudSync.kt`, `MainActivity.kt`, `src/App.tsx`, `scripts/ingest-telemetry.mjs`)**:
+  - Provisioned Cloudflare Custom Domains with SSL across `silphscopepvp.com`, `www.silphscopepvp.com`, `dvr.silphscopepvp.com`, `api.silphscopepvp.com`, and `dl.silphscopepvp.com`.
+  - Added `dl.silphscopepvp.com` (and `/download` / `/apk`) instant 1-click redirect (`302`) to the latest signed `.apk` asset on GitHub Releases.
+  - Updated `OverlayService.CLOUDFLARE_TELEMETRY_WORKER_URL` (`https://api.silphscopepvp.com`), `CLOUDFLARE_DVR_VAULT_URL` (`https://dvr.silphscopepvp.com`), `OFFICIAL_WEBSITE_URL` (`https://silphscopepvp.com`), `TELEMETRY_RESILIENT_DNS` in `GitHubCloudSync.kt`, `MainActivity.kt` Web Vault launcher, `src/App.tsx`, and `scripts/ingest-telemetry.mjs`.
+- **v7.12 — Enhancement 2: Shiny Origin Forme Dialga Midnight Marketing Website, Visual HUD Guide & Comparison Subpages (`src/components/MarketingWebsite.tsx`, `src/App.tsx`)**:
+  - Built `src/components/MarketingWebsite.tsx` styled in the **Shiny Origin Forme Dialga Midnight** palette (`#050C14` cosmic dark slate, `#134E4A` teal-emerald armor accents, `#F59E0B` Temporal Gold core highlights, `#67E8F9` Roar of Time cyan glow).
+  - **Hero Phone Showcase**: Features the user's **Shiny Origin Forme Dialga** firing **Roar of Time** on Zekrom (`featured_hero_shiny_dialga.gif`, `T+16.5s–21.5s` from `f_ml_closer`) with the 50% translucent HUD (`ROT 65E READY - Safe Throw 100%`, `1 LAST FAST -> THROW RoTime NOW!`, `Back: ZAC-C 22% PAL-O 15%`) and a 4-battle interactive switcher bar.
+  - **Subpages**: Added `/?view=guide` (**Visual 50% Translucent HUD Field Manual** with 6-zone breakdown, turn-pacing color states, and 5-step quickstart), `/?view=compare` (**SilphScope vs. PvPoke & GOBattleLog** side-by-side comparison), and `/?view=app` (direct entry into the 3v3 Web Simulator & Team Builder).
+- **v7.12 — Enhancement 3: High-Resolution Feature/Comparison Graphics & 50% Translucent HUD Animated Battle GIFs (`public/screenshots/`, `docs/screenshots/`)**:
+  - Generated 3 high-resolution 16:9 graphics: `elo_adaptive_anti_meta_engine.jpg` (Personal Meta + PvPoke Weighted Fusion + Community ELO Meta), `silphscope_vs_pvpoke_teambuilder.jpg`, and `silphscope_vs_gobattlelog_analytics.jpg` (highlighting `$2/mo` effective cost vs `$4.99–$10/mo` and **Free 1-Click GOBattleLog Export** in all tiers).
+  - Generated 4 real-battle 50% translucent HUD animated GIFs (`featured_hero_shiny_dialga.gif`, `featured_gl_debuff_math.gif`, `featured_ml_closer_align.gif`, `featured_ul_disguise_shield.gif`) with clickable `?t=` chapter pills.
+- **v7.12 — Enhancement 4: Persistent `@Featured` Showcase Vault (`replays/_featured/`) & `?t=` Timestamp Auto-Seek (`cloudflare/telemetry-worker/worker.mjs`, `scripts/manage-keys.mjs`)**:
+  - Added `cloneReplayToFeatured()`, `POST /v1/replays/feature`, `GET /v1/replays/featured`, and a 1-click **`🌟 Promote to Featured`** button on `dvr.silphscopepvp.com/vault` (when signed in as `@sportsfan986`) that copies any replay's `.mp4` and `_deep_trace.jsonl` into persistent R2 storage (`replays/_featured/`) and scrubs the trainer handle to `@Featured` (`f_gl_debuff`, `f_ml_closer`, `f_ul_shield`).
+  - Added `?t=<seconds>` URL query parameter auto-seek (`applyInitialUrlSeekIfNeeded()`) on `dvr.silphscopepvp.com/watch/:shareId` with `50%` default HUD transparency.
 
 ---
 

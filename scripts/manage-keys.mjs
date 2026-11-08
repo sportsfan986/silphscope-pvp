@@ -9,15 +9,16 @@
  *   node scripts/manage-keys.mjs create --tier base --days 35
  *   node scripts/manage-keys.mjs extend --key SSPVP-PRO-XXXX-XXXX --days 30
  *   node scripts/manage-keys.mjs revoke --key SSPVP-PRO-XXXX-XXXX
+ *   node scripts/manage-keys.mjs feature --shareId r_evn6nvp6f --featuredId f_gl_debuff --highlight 118 --badge "🌟 Official Showcase"
  */
 
 import dns from 'node:dns';
 
 const WORKER_URL = (
-  process.env.SILPHSCOPE_TELEMETRY_URL || 'https://silphscope-telemetry.silphscope-pvp.workers.dev'
+  process.env.SILPHSCOPE_TELEMETRY_URL || 'https://api.silphscopepvp.com'
 ).replace(/\/+$/, '');
 
-// Resilient DNS fallback for *.workers.dev on routers/ISPs that sinkhole or drop AAAA/A lookups
+// Resilient DNS fallback for *.workers.dev / silphscopepvp.com on routers/ISPs that sinkhole or drop AAAA/A lookups
 const origLookup = dns.lookup.bind(dns);
 dns.lookup = function (hostname, options, callback) {
   const cb = typeof options === 'function' ? options : callback;
@@ -30,7 +31,10 @@ dns.lookup = function (hostname, options, callback) {
       (Array.isArray(address) &&
         (address.length === 0 ||
           address.every((a) => a.address === '::' || a.address === '0.0.0.0')));
-    if (isInvalid && String(hostname).endsWith('.workers.dev')) {
+    if (
+      isInvalid &&
+      (String(hostname).endsWith('.workers.dev') || String(hostname).endsWith('silphscopepvp.com'))
+    ) {
       if (opts && opts.all) {
         return cb(null, [
           { address: '104.21.76.162', family: 4 },
@@ -145,7 +149,38 @@ async function main() {
     return;
   }
 
-  console.error(`Unknown command '${cmd}'. Supported: list, create, extend, revoke`);
+  if (cmd === 'feature') {
+    const shareId = args.shareId || args.id;
+    if (!shareId) {
+      throw new Error(`Missing --shareId <r_...> for 'feature' command.`);
+    }
+    const res = await fetch(`${WORKER_URL}/v1/admin/feature-replay`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${ADMIN_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        shareId,
+        featuredId: args.featuredId || undefined,
+        highlightSec: args.highlight ? Number(args.highlight) : 0,
+        badgeLabel: args.badge || '🌟 Official Showcase',
+        title: args.title || '',
+        communityCredit: args.credit || '',
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
+    console.log(`\n🌟 Promoted Replay to @Featured Official Showcase:`);
+    console.log(`   Source Share ID:   ${data.sourceShareId}`);
+    console.log(`   Featured Share ID: ${data.featuredId}`);
+    console.log(`   Watch URL:         ${data.shareUrl}\n`);
+    return;
+  }
+
+  console.error(`Unknown command '${cmd}'. Supported: list, create, extend, revoke, feature`);
   process.exit(1);
 }
 

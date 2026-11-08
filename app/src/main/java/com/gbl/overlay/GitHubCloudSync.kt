@@ -2124,7 +2124,9 @@ private val TELEMETRY_RESILIENT_DNS = object : okhttp3.Dns {
         // Prioritize IPv4 (Inet4Address) before IPv6 (Inet6Address) to avoid broken IPv6 tunnels / :: sinkholes
         result.sortWith(compareBy { if (it is java.net.Inet4Address) 0 else 1 })
 
-        if (hostname.equals("silphscope-telemetry.silphscope-pvp.workers.dev", ignoreCase = true)) {
+        if (hostname.equals("silphscope-telemetry.silphscope-pvp.workers.dev", ignoreCase = true) ||
+            hostname.endsWith("silphscopepvp.com", ignoreCase = true)
+        ) {
             if (result.none { it is java.net.Inet4Address }) {
                 try {
                     val dohUrl = java.net.URL("https://1.1.1.1/dns-query?name=$hostname&type=A")

@@ -32,7 +32,8 @@ dns.lookup = function patchedDnsLookup(hostname, options, callback) {
   const opts = typeof options === "function" ? {} : options || {};
   const isWorkerHost =
     typeof hostname === "string" &&
-    hostname.toLowerCase() === "silphscope-telemetry.silphscope-pvp.workers.dev";
+    (hostname.toLowerCase() === "silphscope-telemetry.silphscope-pvp.workers.dev" ||
+      hostname.toLowerCase().endsWith("silphscopepvp.com"));
 
   origDnsLookup(hostname, opts, (err, address, family) => {
     if (!isWorkerHost) {
@@ -63,7 +64,7 @@ dns.lookup = function patchedDnsLookup(hostname, options, callback) {
 
 const DEFAULT_WORKER_URL =
   process.env.SILPHSCOPE_TELEMETRY_WORKER_URL ||
-  "https://silphscope-telemetry.silphscope-pvp.workers.dev";
+  "https://api.silphscopepvp.com";
 const ADMIN_API_KEY =
   process.env.SILPHSCOPE_TELEMETRY_ADMIN_KEY ||
   "sspvp_admin_a1b2c3d4e5f60718293a4b5c6d7e8f90";

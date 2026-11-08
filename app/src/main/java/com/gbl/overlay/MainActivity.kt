@@ -2853,7 +2853,7 @@ class MainActivity : AppCompatActivity() {
                 setOnClickListener {
                     val u = OverlayService.getRequiredScreenNameStatic(prefs)
                     val k = prefs.getString(OverlayService.PREFS_KEY_REPLAY_UNLOCK_KEY, "") ?: ""
-                    openCheckoutUrl("${OverlayService.CLOUDFLARE_TELEMETRY_WORKER_URL}/vault?user=${android.net.Uri.encode(u)}&key=${android.net.Uri.encode(k)}")
+                    openCheckoutUrl("${OverlayService.CLOUDFLARE_DVR_VAULT_URL}/vault?user=${android.net.Uri.encode(u)}&key=${android.net.Uri.encode(k)}")
                 }
             }
             payRow2.addView(btnBmcShop)

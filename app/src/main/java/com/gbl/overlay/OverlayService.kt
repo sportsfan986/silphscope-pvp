@@ -93,7 +93,7 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.11"
+        const val APP_VERSION = "7.12"
         const val APP_VERSION_CODE = 1710
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -202,7 +202,10 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_IS_RANDOM_SCREEN_NAME = "gbl_is_random_screen_name"
         const val PREFS_KEY_USER_SETTINGS_UPDATED_AT = "gbl_user_settings_updated_at"
         const val DEFAULT_AUTO_UPLOAD_AI_LOGS = true
-        const val CLOUDFLARE_TELEMETRY_WORKER_URL = "https://silphscope-telemetry.silphscope-pvp.workers.dev"
+        const val CLOUDFLARE_TELEMETRY_WORKER_URL = "https://api.silphscopepvp.com"
+        const val CLOUDFLARE_DVR_VAULT_URL = "https://dvr.silphscopepvp.com"
+        const val OFFICIAL_WEBSITE_URL = "https://silphscopepvp.com"
+        const val OFFICIAL_DOWNLOAD_URL = "https://dl.silphscopepvp.com"
         const val CLOUDFLARE_CLIENT_INGEST_KEY = "sspvp_client_9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c"
         private val RESERVED_SCREEN_NAMES = setOf(
             "anonymous", "anon", "user", "player", "trainer", "test", "null", "undefined", "none", "unknown", "admin"

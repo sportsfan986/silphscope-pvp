@@ -190,9 +190,32 @@ import { HelpTab } from './components/HelpTab';
 import { MathValidatorTab } from './components/MathValidatorTab';
 import { TrashBinModals } from './components/TrashBinModals';
 import { DocumentationModals } from './components/DocumentationModals';
+import { MarketingWebsite, type MarketingSubpage } from './components/MarketingWebsite';
 export type { WebBattleLogEntry, WebAiTrainingLogRecord, GblSeasonInfo, WebAppThemePalette };
 export { WEB_APP_THEMES };
 export default function App() {
+  // Site View Router ('marketing' for Landing Page / Guide / Compare vs 'app' for Web Simulator & Team Builder)
+  const [siteView, setSiteView] = useState<'marketing' | 'app'>(() => {
+    try {
+      const path = window.location.pathname.toLowerCase();
+      const params = new URLSearchParams(window.location.search);
+      const view = (params.get('view') || '').toLowerCase();
+      if (path.endsWith('/app') || view === 'app' || view === 'simulator' || view === 'teams' || view === 'logs') {
+        return 'app';
+      }
+    } catch {}
+    return 'marketing';
+  });
+  const [marketingSubpage, setMarketingSubpage] = useState<MarketingSubpage>(() => {
+    try {
+      const path = window.location.pathname.toLowerCase();
+      const view = (new URLSearchParams(window.location.search).get('view') || '').toLowerCase();
+      if (path.endsWith('/guide') || view === 'guide') return 'guide';
+      if (path.endsWith('/compare') || view === 'compare') return 'compare';
+    } catch {}
+    return 'home';
+  });
+
   // Navigation tabs (reordered: Teams, Battle Logs, Settings, Meta, Help, Math Validator)
   const [activeTab, setActiveTab] = useState<'simulator' | 'presets' | 'battle_log' | 'settings' | 'meta' | 'help' | 'math_validator'>('simulator');
   const [validatorLeague, setValidatorLeague] = useState<LeagueType>('GREAT LEAGUE');
@@ -278,7 +301,7 @@ export default function App() {
     }
     setMembershipStatusMsg('⏳ Authenticating with SilphScope Cloud Vault...');
     try {
-      const resp = await fetch('https://silphscope-telemetry.silphscope-pvp.workers.dev/v1/auth/login', {
+      const resp = await fetch('https://api.silphscopepvp.com/v1/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -332,7 +355,7 @@ export default function App() {
       setMembershipStatusMsg('🔄 Checking GitHub authorization status...');
     }
     try {
-      const pollResp = await fetch('https://silphscope-telemetry.silphscope-pvp.workers.dev/v1/auth/github/poll', {
+      const pollResp = await fetch('https://api.silphscopepvp.com/v1/auth/github/poll', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC },
         body: JSON.stringify({
@@ -393,7 +416,7 @@ export default function App() {
     setMembershipStatusMsg('⏳ Requesting GitHub OAuth Device Code...');
     if (ghPollTimerRef.current) window.clearTimeout(ghPollTimerRef.current);
     try {
-      const resp = await fetch('https://silphscope-telemetry.silphscope-pvp.workers.dev/v1/auth/github/device-code', {
+      const resp = await fetch('https://api.silphscopepvp.com/v1/auth/github/device-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC }
       });
@@ -435,7 +458,7 @@ export default function App() {
       return;
     }
     try {
-      const resp = await fetch('https://silphscope-telemetry.silphscope-pvp.workers.dev/v1/auth/set-password', {
+      const resp = await fetch('https://api.silphscopepvp.com/v1/auth/set-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -474,7 +497,7 @@ export default function App() {
     const cleanName = webScreenName.trim();
     if (!cleanName) return;
     try {
-      const resp = await fetch('https://silphscope-telemetry.silphscope-pvp.workers.dev/v1/replays/settings', {
+      const resp = await fetch('https://api.silphscopepvp.com/v1/replays/settings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -5683,6 +5706,31 @@ export default function App() {
         </div>
       )}
 
+      {siteView === 'marketing' ? (
+        <MarketingWebsite
+          activeSubpage={marketingSubpage}
+          onSelectSubpage={(page) => {
+            setMarketingSubpage(page);
+            try {
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+              window.history.pushState({}, '', page === 'home' ? '/' : `/?view=${page}`);
+            } catch {}
+          }}
+          onLaunchWebApp={(initialTab) => {
+            if (initialTab) setActiveTab(initialTab);
+            setSiteView('app');
+            try {
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+              window.history.pushState({}, '', '/?view=app');
+            } catch {}
+          }}
+          onOpenMembershipModal={() => setShowMembershipModal(true)}
+          webScreenName={webScreenName}
+          onChangeWebScreenName={setWebScreenName}
+          webMembershipTier={webMembershipTier}
+        />
+      ) : (
+        <>
       {/* Top Application Navbar */}
       <header
         className="border-b backdrop-blur sticky top-0 z-50 px-4 py-3 transition-colors"
@@ -5712,7 +5760,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.11 • Android Native Overlay
+                  v7.12 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -5743,6 +5791,20 @@ export default function App() {
 
           {/* Navigation Tabs & Donation Button */}
           <div className="flex items-center gap-2 flex-wrap justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                setSiteView('marketing');
+                setMarketingSubpage('home');
+                try {
+                  window.history.pushState({}, '', '/');
+                } catch {}
+              }}
+              className="px-3 py-1.5 rounded-xl bg-teal-400/15 hover:bg-teal-400/25 border border-teal-400/50 text-teal-300 font-extrabold text-xs flex items-center gap-1.5 transition cursor-pointer"
+              title="Return to SilphScopePvP.com Showcase & Featured Replays"
+            >
+              <span>🏠 Home / Showcase</span>
+            </button>
             <nav className="flex items-center gap-1 bg-slate-950/70 p-1 rounded-xl border border-slate-800 text-xs font-semibold flex-wrap">
               <button
                 onClick={() => setActiveTab('simulator')}
@@ -15536,7 +15598,7 @@ export default function App() {
                                         return;
                                       }
                                       window.open(
-                                        `https://silphscope-telemetry.silphscope-pvp.workers.dev/vault?user=${encodeURIComponent(webScreenName || 'sportsfan986')}&key=${encodeURIComponent(webUnlockKey)}`,
+                                        `https://dvr.silphscopepvp.com/vault?user=${encodeURIComponent(webScreenName || 'sportsfan986')}&key=${encodeURIComponent(webUnlockKey)}`,
                                         '_blank'
                                       );
                                     }}
@@ -16683,9 +16745,23 @@ export default function App() {
           setShowOverlayQuickHelpModal={setShowOverlayQuickHelpModal}
           setActiveTab={setActiveTab}
         />
+      </main>
 
-        {/* v7.00 Membership Tiers, Unlock Key Verification & Stripe / Buy Me a Coffee Modal */}
-        {showMembershipModal && (
+      {/* Footer */}
+      <footer
+        className="border-t py-4 px-6 text-center text-xs relative z-10"
+        style={{
+          borderColor: activeTheme.borderHex,
+          color: activeTheme.textSecondaryHex
+        }}
+      >
+        SilphScope PvP v7.12 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+      </footer>
+        </>
+      )}
+
+      {/* v7.12 Membership Tiers, Unlock Key Verification & Stripe / Buy Me a Coffee Modal */}
+      {showMembershipModal && (
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
             <div className="bg-slate-900 border border-indigo-500/50 rounded-2xl max-w-3xl w-full p-5 shadow-2xl space-y-4 my-auto max-h-[92vh] overflow-y-auto">
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -16942,7 +17018,7 @@ export default function App() {
                       </button>
                     )}
                     <a
-                      href={`https://silphscope-telemetry.silphscope-pvp.workers.dev/vault${webScreenName.trim() ? `?user=${encodeURIComponent(webScreenName.trim())}` : ''}`}
+                      href={`https://dvr.silphscopepvp.com/vault${webScreenName.trim() ? `?user=${encodeURIComponent(webScreenName.trim())}` : ''}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sky-300 font-bold text-xs transition"
@@ -17018,19 +17094,6 @@ export default function App() {
             </div>
           </div>
         )}
-
-      </main>
-
-      {/* Footer */}
-      <footer
-        className="border-t py-4 px-6 text-center text-xs relative z-10"
-        style={{
-          borderColor: activeTheme.borderHex,
-          color: activeTheme.textSecondaryHex
-        }}
-      >
-        SilphScope PvP v7.11 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
-      </footer>
     </div>
   );
 }

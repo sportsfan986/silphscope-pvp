@@ -1517,6 +1517,153 @@ async function enforceUserReplayQuota(env, kv, screenName, license, indexObj, in
 }
 
 /**
+ * Clones a replay into persistent `@Featured` showcase storage (`replays/_featured/`)
+ * exempt from personal user pruning/quotas, scrubbing personal trainer names to `@Featured`
+ * (or optional `communityCredit`) and stripping internal diagnostic notes.
+ */
+async function cloneReplayToFeatured(env, kv, store, options = {}) {
+  const sourceShareId = sanitizeId(options.shareId || '');
+  if (!sourceShareId) {
+    return { ok: false, error: 'Missing source shareId' };
+  }
+  const rawLookup = await kv.get(`share_lookup/${sourceShareId}`);
+  if (!rawLookup) {
+    return { ok: false, error: `Source replay not found: ${sourceShareId}` };
+  }
+  const source = JSON.parse(rawLookup);
+  const featuredId = sanitizeId(
+    options.featuredId || `f_${sourceShareId.replace(/^[rf]_/, '')}`
+  );
+  const communityCredit = options.communityCredit
+    ? sanitizeScreenName(options.communityCredit)
+    : '';
+  const displayScreenName = communityCredit || 'Featured';
+  const badgeLabel = String(options.badgeLabel || '🌟 Official Showcase').trim();
+  const highlightSec = Number(options.highlightSec) || 0;
+  const showcaseTitle = String(options.title || source.matchupSummary || '').trim();
+
+  // 1. Copy Video to `replays/_featured/<featuredId>_video.mp4`
+  const featVideoKey = `replays/_featured/${featuredId}_video.mp4`;
+  const featTraceKey = `replays/_featured/${featuredId}_trace.jsonl`;
+  let videoBytes = Number(source.videoBytes) || 0;
+  let traceBytes = Number(source.traceBytes) || 0;
+
+  if (env.REPLAY_BUCKET) {
+    let vidBuf = null;
+    if (source.videoKey) {
+      const vidObj = await env.REPLAY_BUCKET.get(source.videoKey);
+      if (vidObj) vidBuf = await vidObj.arrayBuffer();
+    }
+    if (!vidBuf && source.fallbackKvVideoKey) {
+      vidBuf = await store.getBytes(source.fallbackKvVideoKey);
+    }
+    if (vidBuf) {
+      videoBytes = vidBuf.byteLength;
+      await env.REPLAY_BUCKET.put(featVideoKey, vidBuf, {
+        httpMetadata: { contentType: 'video/mp4' },
+        customMetadata: {
+          featuredId,
+          sourceShareId,
+          screenName: displayScreenName,
+        },
+      });
+    }
+
+    let traceText = null;
+    if (source.traceKey) {
+      const trObj = await env.REPLAY_BUCKET.get(source.traceKey);
+      if (trObj) traceText = await trObj.text();
+    }
+    if (traceText === null && source.fallbackKvTraceKey) {
+      traceText = await store.getText(source.fallbackKvTraceKey);
+    }
+    if (traceText !== null) {
+      if (source.screenName) {
+        traceText = traceText.replace(new RegExp(source.screenName, 'gi'), displayScreenName);
+      }
+      // Strip any internal diagnostic issue note from Line 0
+      const nlIdx = traceText.indexOf('\n');
+      if (nlIdx > 0) {
+        try {
+          const line0 = JSON.parse(traceText.slice(0, nlIdx));
+          delete line0.userIssueNote;
+          delete line0.uploadReason;
+          line0.screenName = displayScreenName;
+          traceText = JSON.stringify(line0) + traceText.slice(nlIdx);
+        } catch (_) {}
+      }
+      traceBytes = new TextEncoder().encode(traceText).byteLength;
+      await env.REPLAY_BUCKET.put(featTraceKey, traceText, {
+        httpMetadata: { contentType: 'application/x-ndjson; charset=utf-8' },
+        customMetadata: {
+          featuredId,
+          sourceShareId,
+          screenName: displayScreenName,
+        },
+      });
+    }
+  }
+
+  const featuredItem = {
+    ...source,
+    shareId: featuredId,
+    sourceShareId,
+    screenName: displayScreenName,
+    userTier: 'vip',
+    userTierBadge: badgeLabel,
+    userIssueNote: '',
+    diagnosticReason: '',
+    isFeatured: true,
+    isPinned: true,
+    isPublic: true,
+    hideNames: false,
+    highlightSec,
+    showcaseTitle,
+    videoKey: featVideoKey,
+    traceKey: featTraceKey,
+    videoBytes,
+    traceBytes,
+    totalBytes: videoBytes + traceBytes,
+    featuredAt: new Date().toISOString(),
+  };
+
+  await kv.put(`share_lookup/${featuredId}`, JSON.stringify(featuredItem));
+
+  const featIndex = await loadUserReplayIndex(kv, '_featured');
+  featIndex.screenName = 'Featured';
+  featIndex.settings = { publicVisibility: 'all', hideNamesPublic: false };
+  const existingIdx = (featIndex.items || []).findIndex(
+    (i) => i.shareId === featuredId || i.sourceShareId === sourceShareId
+  );
+  if (existingIdx >= 0) {
+    featIndex.items[existingIdx] = featuredItem;
+  } else {
+    featIndex.items.unshift(featuredItem);
+  }
+  await saveUserReplayIndex(kv, '_featured', featIndex);
+
+  // Also record `featuredShareId` on the source owner's replay item
+  if (source.screenName && source.screenName !== 'Featured') {
+    const ownerIndex = await loadUserReplayIndex(kv, source.screenName);
+    const ownerItem = (ownerIndex.items || []).find((i) => i.shareId === sourceShareId);
+    if (ownerItem) {
+      ownerItem.featuredShareId = featuredId;
+      await saveUserReplayIndex(kv, source.screenName, ownerIndex);
+    }
+    source.featuredShareId = featuredId;
+    await kv.put(`share_lookup/${sourceShareId}`, JSON.stringify(source));
+  }
+
+  return {
+    ok: true,
+    featuredId,
+    sourceShareId,
+    shareUrl: `https://dvr.silphscopepvp.com/watch/${featuredId}`,
+    item: featuredItem,
+  };
+}
+
+/**
  * Builds a full 3v3 team matchup string (`User1, User2, User3 vs Opp1, Opp2, Opp3 • N anomalies`)
  * by inspecting the BATTLE_DVR_SUMMARY_HEADER line (and frame trace fallback) in `deepTraceText`
  * so the full user team is always printed, not just the lead Pokémon.
@@ -1734,15 +1881,15 @@ function renderWatchSharePage(origin, shareInfo) {
   <meta name="twitter:description" content="${pageDesc}" />
   <style>
     :root {
-      --bg: #070b14;
-      --card: #0f172a;
-      --border: #1e293b;
-      --accent: #10b981;
-      --cyan: #06b6d4;
-      --amber: #f59e0b;
+      --bg: #050b16;
+      --card: #0e1b2e;
+      --border: #19304e;
+      --accent: #2dd4bf;
+      --cyan: #67e8f9;
+      --amber: #facc15;
       --rose: #f43f5e;
-      --text: #f8fafc;
-      --muted: #94a3b8;
+      --text: #ecfeff;
+      --muted: #99f6e4;
     }
     * { box-sizing: border-box; }
     body {
@@ -1928,11 +2075,12 @@ function renderWatchSharePage(origin, shareInfo) {
       ${shareInfo.isPinned ? '<span class="badge" style="background:rgba(245,158,11,0.18);color:#fbbf24;border-color:rgba(245,158,11,0.45)">⭐ Starred</span>' : ''}
     </div>
     <div class="header-actions">
-      <a class="btn-link" href="/vault?user=${encodeURIComponent(shareInfo.screenName || '')}">☁️ @${trainerDisplay}'s Vault</a>
+      <a class="btn-link" href="/vault?user=${encodeURIComponent(shareInfo.screenName || 'Featured')}">☁️ @${trainerDisplay}'s Vault</a>
       <button id="btn-privacy" onclick="togglePrivacy()">🕵️ ${hideNamesDefault ? 'Names Hidden' : 'Hide Names'}</button>
       <button id="btn-layout" onclick="toggleLayout()">📐 Side-by-Side: OFF</button>
       <button id="btn-export" onclick="exportWithHud()">💾 Export Video + HUD</button>
-      <a class="btn-link" href="https://sportsfan986.github.io/silphscope-pvp/" target="_blank" rel="noopener">🚀 Open Full Simulator</a>
+      <a class="btn-link" href="https://silphscopepvp.com/" target="_blank" rel="noopener">🌐 SilphScopePvP.com</a>
+      <a class="btn-link" href="https://dl.silphscopepvp.com" target="_blank" rel="noopener">📱 Download APK</a>
     </div>
   </header>
 
@@ -3230,7 +3378,7 @@ function renderWatchSharePage(origin, shareInfo) {
         oppCountMode: 'my_fasts',
         enable4ChargedMoves: false,
         fastDetectTurnOffset: 0,
-        overlayTransparencyPct: 12,
+        overlayTransparencyPct: 50,
         appThemeId: 'dialga_shiny_midnight',
         aiAdviceHudPosition: hudTop ? 'top' : 'bottom',
         isOverlayMinimized: false,
@@ -3432,10 +3580,22 @@ function renderWatchSharePage(origin, shareInfo) {
       document.getElementById('time-readout').textContent = dispCur.toFixed(1) + 's / ' + dispDur.toFixed(1) + 's';
       syncHudFrame();
     });
+    const urlStartSec = parseFloat(new URLSearchParams(window.location.search).get('t') || '0') || 0;
+    let initialSeekApplied = false;
+    function applyInitialUrlSeekIfNeeded() {
+      if (initialSeekApplied || urlStartSec <= 0) return;
+      if (video.readyState >= 1) {
+        initialSeekApplied = true;
+        video.currentTime = Math.max(0, urlStartSec / mp4TimeCompressionRatio);
+        syncHudFrame();
+      }
+    }
+
     video.addEventListener('loadedmetadata', () => {
       recalcMp4TimeCompression();
       const dispDur = (video.duration || 0) * mp4TimeCompressionRatio;
       document.getElementById('time-readout').textContent = '0.0s / ' + dispDur.toFixed(1) + 's';
+      applyInitialUrlSeekIfNeeded();
     });
     video.addEventListener('seeked', syncHudFrame);
 
@@ -3480,6 +3640,7 @@ function renderWatchSharePage(origin, shareInfo) {
         }
         frames = parsed;
         recalcMp4TimeCompression();
+        applyInitialUrlSeekIfNeeded();
         buildEventChips();
         syncHudFrame();
       } catch (e) {
@@ -3607,15 +3768,15 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
   <title>SilphScope PvP • Cloud DVR Replay Vault</title>
   <style>
     :root {
-      --bg: #070b14;
-      --card: #0f172a;
-      --border: #1e293b;
-      --accent: #10b981;
-      --cyan: #06b6d4;
-      --amber: #f59e0b;
+      --bg: #050b16;
+      --card: #0e1b2e;
+      --border: #19304e;
+      --accent: #2dd4bf;
+      --cyan: #67e8f9;
+      --amber: #facc15;
       --rose: #f43f5e;
-      --text: #f8fafc;
-      --muted: #94a3b8;
+      --text: #ecfeff;
+      --muted: #99f6e4;
     }
     * { box-sizing: border-box; }
     body {
@@ -3749,8 +3910,10 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       <span>🛡️ SilphScope PvP • Cloud DVR Replay Vault</span>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <a class="btn-link" href="https://sportsfan986.github.io/silphscope-pvp/" target="_blank" rel="noopener">🌐 Web Battle Simulator</a>
-      <a class="btn-link" href="https://github.com/sportsfan986/silphscope-pvp/releases" target="_blank" rel="noopener">📱 Download Android APK</a>
+      <button onclick="document.getElementById('inp-user').value='Featured';loadVault()" style="background:rgba(250,204,21,0.16);border-color:#facc15;color:#fde047">🌟 Official Featured Showcase</button>
+      <a class="btn-link" href="https://silphscopepvp.com/" target="_blank" rel="noopener">🌐 SilphScopePvP.com</a>
+      <a class="btn-link" href="https://silphscopepvp.com/?view=app" target="_blank" rel="noopener">🧮 Web Battle Simulator</a>
+      <a class="btn-link" href="https://dl.silphscopepvp.com" target="_blank" rel="noopener">📱 Download Android APK</a>
     </div>
   </header>
 
@@ -3759,8 +3922,9 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     <div class="login-card" style="justify-content:space-between">
       <div style="display:flex;gap:8px;flex:1;flex-wrap:wrap;align-items:center">
         <span style="font-size:13px;font-weight:800;color:#cbd5e1">👤 Trainer Vault:</span>
-        <input id="inp-user" type="text" placeholder="Enter Trainer ID (e.g. sportsfan986)" style="max-width:260px" onkeydown="if(event.key==='Enter')loadVault()" />
+        <input id="inp-user" type="text" placeholder="Enter Trainer ID (or Featured)" style="max-width:260px" onkeydown="if(event.key==='Enter')loadVault()" />
         <button class="primary" onclick="loadVault()">👁️ View DVR Vault</button>
+        <button onclick="document.getElementById('inp-user').value='Featured';loadVault()" style="border-color:#facc15;color:#fde047">🌟 @Featured</button>
         <button onclick="copyVaultShareUrl()" title="Copy link to this trainer's DVR page">🔗 Share Vault Page</button>
       </div>
       <div style="display:flex;gap:8px;align-items:center" id="auth-header-controls">
@@ -4289,21 +4453,62 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         const pubControl = isOwner
           ? '<button onclick="toggleVideoPublic(\\'' + item.battleId + '\\', ' + (!isPub) + ')" style="padding:7px 10px;font-size:12px;border-color:' + (isPub ? '#38bdf8' : '#334155') + ';color:' + (isPub ? '#38bdf8' : '#94a3b8') + ';background:' + (isPub ? 'rgba(56,189,248,0.12)' : '#1e293b') + '" title="' + (isOverriddenPublic ? 'Per-video setting is Private (currently overridden because Vault Visibility is set to All Videos Shared)' : 'Toggle whether this video is Public or Private (Default: Private)') + '">' + (isPub ? '🌐 Public' : (isOverriddenPublic ? '🔒 Private (All)' : '🔒 Private')) + '</button>'
           : '<button disabled style="padding:7px 10px;font-size:12px;opacity:0.85;cursor:default;border-color:' + (isPub || isOverriddenPublic ? '#38bdf8' : '#334155') + ';color:' + (isPub || isOverriddenPublic ? '#38bdf8' : '#94a3b8') + '">' + (isPub ? '🌐 Public' : (isOverriddenPublic ? '🌐 Shared (All)' : '🔒 Private')) + '</button>';
+        const isAdminOwner = isOwner && String(currentVaultData.screenName || '').toLowerCase() === 'sportsfan986';
+        const featControl = isAdminOwner
+          ? '<button onclick="promoteToFeatured(\\'' + item.shareId + '\\')" style="padding:7px 10px;font-size:12px;border-color:' + (item.featuredShareId ? '#facc15' : '#2dd4bf') + ';color:' + (item.featuredShareId ? '#fde047' : '#2dd4bf') + ';background:rgba(45,212,191,0.12)" title="Clone this battle into persistent @Featured Official Showcase storage">' + (item.featuredShareId ? '🌟 Featured (' + item.featuredShareId + ')' : '🌟 Promote to Featured') + '</button>'
+          : '';
         return '<div class="replay-card ' + (item.isPinned ? 'pinned' : '') + '">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px">' +
             '<span class="pill ' + (isWin ? 'pill-win' : 'pill-loss') + '">' + (item.result || 'BATTLE') + ' • ' + (item.league || 'GBL') + '</span>' +
             '<span style="font-size:11px;color:#94a3b8">' + mb + ' MB • ' + (item.durationSec || 0) + 's</span>' +
           '</div>' +
-          '<div style="font-weight:800;font-size:13.5px;color:#f1f5f9">' + (item.matchupSummary || item.battleId) + '</div>' +
-          '<div style="font-size:11px;color:#64748b">' + dateStr + ' • ID: ' + item.battleId + '</div>' +
+          '<div style="font-weight:800;font-size:13.5px;color:#f1f5f9">' + (item.showcaseTitle || item.matchupSummary || item.battleId) + '</div>' +
+          '<div style="font-size:11px;color:#64748b">' + dateStr + ' • ID: ' + item.battleId + (item.highlightSec ? ' • ⚡ Highlight @ ' + item.highlightSec + 's' : '') + '</div>' +
           '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;align-items:center">' +
             '<a class="btn-link" style="background:#059669;border-color:#10b981;padding:7px 10px;font-size:12px;flex:1;justify-content:center" href="' + item.shareUrl + '">▶️ Watch + HUD</a>' +
+            (item.highlightSec ? '<a class="btn-link" style="background:rgba(250,204,21,0.18);border-color:#facc15;color:#fde047;padding:7px 10px;font-size:12px" href="' + item.shareUrl + '?t=' + item.highlightSec + '" title="Jump directly to the key highlight moment">⚡ Key Moment (' + item.highlightSec + 's)</a>' : '') +
             starControl +
             pubControl +
+            featControl +
             '<button onclick="copyLink(\\'' + item.shareUrl + '\\')" style="padding:7px 10px;font-size:12px" title="Anyone with this direct link can watch this replay">🔗 Copy Link</button>' +
           '</div>' +
         '</div>';
       }).join('');
+    }
+
+    async function promoteToFeatured(shareId) {
+      const user = (currentVaultData && currentVaultData.screenName) || document.getElementById('inp-user').value.trim();
+      const key = document.getElementById('inp-key').value.trim();
+      const highlightStr = prompt('Optional highlight timestamp in seconds (e.g. 118 for T+118s, or leave blank for 0):', '0');
+      if (highlightStr === null) return;
+      const badgeLabel = prompt('Showcase badge label:', '🌟 Official Showcase') || '🌟 Official Showcase';
+      try {
+        const res = await fetch('/v1/replays/feature', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-SilphScope-Client-Key': CLIENT_KEY,
+            'X-Trainer-Screen-Name': user,
+            'X-SilphScope-Unlock-Key': key,
+            'X-Vault-Session': sessionToken
+          },
+          body: JSON.stringify({
+            shareId,
+            highlightSec: Number(highlightStr) || 0,
+            badgeLabel,
+            unlockKey: key,
+            sessionToken
+          })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          return alert(data.error || 'Failed to promote replay to @Featured.');
+        }
+        alert('🌟 Cloned to @Featured Official Showcase!\\nURL: ' + data.shareUrl);
+        loadVault();
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
     }
 
     async function togglePin(battleId, nextPinned) {
@@ -4357,7 +4562,12 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       alert('Copied Direct Share URL (viewable by anyone with the link): ' + url);
     }
 
-    if (savedUser) loadVault();
+    if (savedUser) {
+      loadVault();
+    } else {
+      document.getElementById('inp-user').value = 'Featured';
+      loadVault();
+    }
   </script>
 </body>
 </html>`;
@@ -4383,10 +4593,44 @@ export default {
 
     const store = getStorageAdapter(env);
 
-    // 0. Public Cloud DVR Replay Vault Web Portal (`GET /`, `GET /vault`, `GET /vault/:user`, `GET /u/:user`)
+    // 0a. Instant 1-Click APK Download Subdomain (`dl.silphscopepvp.com` or `/download` / `/apk`)
     if (
       request.method === 'GET' &&
-      (path === '/' ||
+      (url.hostname === 'dl.silphscopepvp.com' || path === '/download' || path === '/apk')
+    ) {
+      let apkUrl = 'https://github.com/sportsfan986/silphscope-pvp/releases/latest';
+      try {
+        const ghRes = await fetch(
+          'https://api.github.com/repos/sportsfan986/silphscope-pvp/releases/latest',
+          {
+            headers: {
+              Accept: 'application/vnd.github+json',
+              'User-Agent': 'SilphScope-PvP-Download-Redirect/7.12',
+            },
+            cf: { cacheTtl: 300, cacheEverything: true },
+          }
+        );
+        if (ghRes.ok) {
+          const release = await ghRes.json();
+          const apkAsset = (release.assets || []).find(
+            (a) => a && typeof a.name === 'string' && a.name.toLowerCase().endsWith('.apk')
+          );
+          if (apkAsset && apkAsset.browser_download_url) {
+            apkUrl = apkAsset.browser_download_url;
+          } else if (release.html_url) {
+            apkUrl = release.html_url;
+          }
+        }
+      } catch (_) {}
+      return Response.redirect(apkUrl, 302);
+    }
+
+    // 0. Public Cloud DVR Replay Vault Web Portal (`GET /` on dvr.*, or `GET /vault`, `GET /vault/:user`, `GET /u/:user`)
+    const isMainMarketingHost =
+      url.hostname === 'silphscopepvp.com' || url.hostname === 'www.silphscopepvp.com';
+    if (
+      request.method === 'GET' &&
+      ((!isMainMarketingHost && path === '/') ||
         path === '/vault' ||
         path === '/replays' ||
         path.startsWith('/vault/') ||
@@ -4402,6 +4646,37 @@ export default {
           },
         }
       );
+    }
+
+    // 0a-2. Marketing Website & Web Simulator Edge Proxy on `silphscopepvp.com` / `www.silphscopepvp.com`
+    if (
+      request.method === 'GET' &&
+      isMainMarketingHost &&
+      !path.startsWith('/v1/') &&
+      !path.startsWith('/watch/') &&
+      path !== '/overlay.html' &&
+      path !== '/health'
+    ) {
+      const cleanRelPath = path.replace(/^\/silphscope-pvp(\/|$)/, '/');
+      const targetGhUrl =
+        cleanRelPath === '/' || cleanRelPath === '/guide' || cleanRelPath === '/compare' || cleanRelPath === '/app'
+          ? 'https://sportsfan986.github.io/silphscope-pvp/index.html'
+          : `https://sportsfan986.github.io/silphscope-pvp${cleanRelPath}`;
+      const ghResp = await fetch(targetGhUrl, {
+        headers: {
+          'User-Agent': 'SilphScope-Edge-Proxy/7.12',
+          Accept: request.headers.get('Accept') || '*/*',
+        },
+        cf: { cacheTtl: cleanRelPath.startsWith('/assets/') ? 86400 : 60, cacheEverything: true },
+      });
+      const respHeaders = new Headers(ghResp.headers);
+      respHeaders.set('Access-Control-Allow-Origin', '*');
+      // Relax GitHub Pages CSP so api.silphscopepvp.com and dvr.silphscopepvp.com calls succeed
+      respHeaders.delete('Content-Security-Policy');
+      return new Response(ghResp.body, {
+        status: ghResp.status,
+        headers: respHeaders,
+      });
     }
 
     // 0b. Exact In-App HUD WebView Asset (`GET /overlay.html`)
@@ -5906,11 +6181,42 @@ export default {
       });
     }
 
-    // 8. List User's Cloud R2 Replays (`GET /v1/replays/list`) — Supports Owner Mode & Public Visitor Mode
-    if (request.method === 'GET' && path === '/v1/replays/list') {
+    // 8. List User's Cloud R2 Replays (`GET /v1/replays/list`) — Supports Owner Mode, Public Visitor Mode & `@Featured`
+    if (request.method === 'GET' && (path === '/v1/replays/list' || path === '/v1/replays/featured')) {
       const auth = verifyClientAuth(request, env);
-      const requestedUser = url.searchParams.get('user')
-        ? sanitizeScreenName(url.searchParams.get('user'))
+      const rawUserParam =
+        path === '/v1/replays/featured'
+          ? 'Featured'
+          : url.searchParams.get('user') || '';
+      const isFeaturedQuery =
+        rawUserParam.toLowerCase() === 'featured' || rawUserParam.toLowerCase() === '_featured';
+
+      if (isFeaturedQuery) {
+        const featIndex = await loadUserReplayIndex(env.TELEMETRY_KV, '_featured');
+        const featItems = featIndex.items || [];
+        return jsonResponse({
+          ok: true,
+          isOwner: false,
+          canStar: false,
+          screenName: 'Featured',
+          visibility: 'all',
+          settings: { publicVisibility: 'all', hideNamesPublic: false },
+          hiddenRollingCount: 0,
+          totalStarredCount: featItems.length,
+          totalPublicCount: featItems.length,
+          items: featItems.map((item) => ({
+            ...item,
+            isPinned: true,
+            isPublic: true,
+            shareUrl: `${url.origin}/watch/${item.shareId}`,
+            videoStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/video.mp4`,
+            traceStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/trace.jsonl`,
+          })),
+        });
+      }
+
+      const requestedUser = rawUserParam
+        ? sanitizeScreenName(rawUserParam)
         : auth.ok
         ? auth.screenName
         : sanitizeScreenName(request.headers.get('X-SilphScope-Screen-Name') || '');
@@ -6117,6 +6423,43 @@ export default {
         hideNames: Boolean(item.hideNames),
         shareUrl: `${url.origin}/watch/${item.shareId}`,
       });
+    }
+
+    // 9b. Promote a Cloud Replay to Persistent `@Featured` Showcase (`POST /v1/replays/feature`) — Strictly Admin Owner
+    if (request.method === 'POST' && path === '/v1/replays/feature') {
+      const auth = verifyClientAuth(request, env);
+      if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status);
+      const { screenName } = auth;
+
+      let body = {};
+      try {
+        body = await request.json();
+      } catch (_) {
+        return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400);
+      }
+
+      const ownerAuth = await authenticateVaultOwner(
+        request,
+        env,
+        env.TELEMETRY_KV,
+        screenName,
+        body
+      );
+      if (
+        !ownerAuth.isOwner ||
+        String(ownerAuth.screenName || screenName || '').toLowerCase() !== 'sportsfan986'
+      ) {
+        return jsonResponse(
+          { ok: false, error: 'Only the official showcase admin (@sportsfan986) can promote featured replays.' },
+          403
+        );
+      }
+
+      const result = await cloneReplayToFeatured(env, env.TELEMETRY_KV, store, body);
+      if (!result.ok) {
+        return jsonResponse(result, 400);
+      }
+      return jsonResponse(result);
     }
 
     // 10. Delete a Cloud Replay (`DELETE /v1/replays/delete`) — Strictly Owner-Only
@@ -6458,6 +6801,20 @@ export default {
         if (!key) return jsonResponse({ ok: false, error: 'Missing `key` query parameter.' }, 400);
         await store.delete(key);
         return jsonResponse({ ok: true, deleted: key });
+      }
+
+      if (request.method === 'POST' && path === '/v1/admin/feature-replay') {
+        let body = {};
+        try {
+          body = await request.json();
+        } catch (_) {
+          return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400);
+        }
+        const result = await cloneReplayToFeatured(env, env.TELEMETRY_KV, store, body);
+        if (!result.ok) {
+          return jsonResponse(result, 400);
+        }
+        return jsonResponse(result);
       }
     }
 

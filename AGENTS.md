@@ -2,8 +2,8 @@
 
 > **Target Audience**: Antigravity agents, Claude/Gemini coding assistants, and core developers maintaining or extending **SilphScope PvP**.  
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v7.11` (`versionCode = 1711`)  
-> **Primary Branches**: `main` (source code & releases) | **Telemetry & DVR Endpoint**: `https://silphscope-telemetry.silphscope-pvp.workers.dev` (Cloudflare Worker + KV/R2 + Telegram Channel `SilphScope DVR`).
+> **Current Version**: `v7.12` (`versionCode = 1712`)  
+> **Official Domains**: `https://silphscopepvp.com` (Website & Web Simulator) • `https://dvr.silphscopepvp.com` (Cloud DVR Vault & `/watch/:shareId`) • `https://api.silphscopepvp.com` (Telemetry, Auth & Webhooks API) • `https://dl.silphscopepvp.com` (1-Click APK Download).
 
 ---
 
@@ -144,10 +144,10 @@ The HUD displays a compact, high-contrast 2-line tactical recommendation banner 
   - Overlay: Tapping `REC 1` arms recording for **exactly 1 battle** (`OFF` $\to$ `ARMED` $\to$ `REC F#...`).
   - Auto-Disarm: Automatically disarms immediately upon battle stop/completion.
 - **Cloudflare R2 Replay Vault & Diagnostic Engine**:
-  - Uploads DVR `.mp4` videos and `_deep_trace.jsonl` traces to the Cloudflare Worker (`https://silphscope-telemetry.silphscope-pvp.workers.dev/v1/dvr`) backed by R2 bucket `silphscope-replays` and KV namespace `TELEMETRY_KV`.
-  - User-flagged diagnostic videos (requiring a non-blank user issue description) also mirror to the `SilphScope DVR` Telegram channel with a direct `/watch/:shareId` synchronized HUD overlay player link, issue description, and paid tier badge.
+  - Uploads DVR `.mp4` videos and `_deep_trace.jsonl` traces to the Cloudflare Worker (`https://api.silphscopepvp.com/v1/dvr` & `https://dvr.silphscopepvp.com`) backed by R2 bucket `silphscope-replays` and KV namespace `TELEMETRY_KV`.
+  - User-flagged diagnostic videos (requiring a non-blank user issue description) also mirror to the `SilphScope DVR` Telegram channel with a direct `https://dvr.silphscopepvp.com/watch/:shareId` synchronized HUD overlay player link, issue description, and paid tier badge.
 
-### 3.7. Membership Tiers, Pricing, Payment Links & Website Integration Spec (`v7.11`)
+### 3.7. Membership Tiers, Pricing, Payment Links & Website Integration Spec (`v7.12`)
 > **Shared Knowledgebase for Website & Other Chats**: When building the official SilphScope PvP marketing website, landing pages, or checkout flows in any other chat/workspace, use the exact finalized pricing, Stripe Payment Links, Buy Me a Coffee URLs, and Cloudflare Worker API endpoints below.
 
 #### 4-Tier Membership Structure & Feature Matrix
@@ -184,13 +184,23 @@ Append `?client_reference_id=<urlEncodedTrainerScreenName>` to any Stripe URL wh
 - **Shop Extra `595788` — 🏆 Legend Pro 90-Day Season Pass (`$6`)**: `https://buymeacoffee.com/silphscopepvp/e/595788`
 - **Shop Extra `595789` — 👑 VIP / Coach 90-Day Season Pass (`$10`)**: `https://buymeacoffee.com/silphscopepvp/e/595789`
 
-#### Website & Web App API Endpoints (`https://silphscope-telemetry.silphscope-pvp.workers.dev`)
-- **Pre-Checkout Unique Trainer ID Registration (`POST /v1/users/register-name`)**: Checks availability and locks `screenName` to `deviceHash` / `email` / `githubUserId`; returns `seasonPromo` (`isDay15Plus`, `introPromoEligible`, `daysRemaining`) and `paymentLinks`.
-- **Dynamic Checkout Quote (`GET/POST /v1/users/checkout-quote?screenName=<id>&email=<email>`)**: Returns `introPromoEligible` and pre-populated `recommendedLinks.supporter` (`$2`), `recommendedLinks.pro` (`$3` Intro or `$6` Season), and `recommendedLinks.vip` (`$5` Intro or `$10` Season) with `?client_reference_id=` attached.
-- **License & Tier Verification (`POST /v1/users/verify-key`)**: Accepts `{ key, screenName, email, password, githubAccessToken }` (supporting 3 sign-in methods: `Username + Token`, `Username + Password`, and `1-Click GitHub OAuth`) and returns `{ ok, active, tier, label, limits, sessionToken }`.
-- **Public & Owner Cloud DVR Replay Vault (`/vault` & `/u/:screenName`)**: Interactive browser DVR Replay Vault with 5 owner-configurable public visibility modes (`private_only`, `starred_only`, `starred_and_private`, `all`, `none`).
-- **Synchronized Web Replay Theater (`/watch/:shareId`)**: Frame-synced H.264 video + live `overlay.html` HUD replay player (`Full` / `Compact` / `Diag` / `Off` HUD modes, progressive opponent reveal, `0.25x–2x` speed, `-1F`/`+1F` frame stepping, and WebM video+HUD export).
-- **4-Tier Comparison Infographic Asset**: `docs/screenshots/silphscope_tiers_infographic.jpg` (16:9 high-resolution dark esports comparison graphic).
+#### Official Domain Architecture & API Endpoints (`silphscopepvp.com`)
+- **Marketing Website, HUD Guide, Comparison Page & Web Simulator (`https://silphscopepvp.com` / `https://www.silphscopepvp.com`)**:
+  - `/` (`?view=home`): Shiny Origin Forme Dialga Midnight (`dialga_shiny_midnight`) marketing landing page with interactive 4-battle Hero Phone (defaulting to Shiny Origin Dialga firing Roar of Time), 3 clickable `@Featured` 50% HUD battle GIF cards, ELO-Adaptive Anti-Meta + 3-Way Meta Fusion showcase, Hybrid Backline Predictor callout, Free 1-Click GOBattleLog Export highlight, and 4-Tier Membership Matrix.
+  - `/?view=guide`: Visual 50% Translucent HUD Field Manual (6-zone anatomy, color-coded turn pacing states, and 5-step quickstart).
+  - `/?view=compare`: Honest side-by-side comparison vs. PvPoke and GOBattleLog.
+  - `/?view=app`: Interactive 3v3 Matchup Simulator, Custom Team Builder, and Battle Log Dashboard.
+- **Instant 1-Click Android APK Download (`https://dl.silphscopepvp.com`)**: Automatically redirects (`302`) to the latest signed `.apk` asset on GitHub Releases.
+- **Cloud DVR Replay Vault & Replay Theater (`https://dvr.silphscopepvp.com`)**:
+  - `/vault` & `/u/:screenName`: Interactive browser DVR Replay Vault in Shiny Origin Dialga Midnight theme, defaulting to the persistent `@Featured` showcase (`replays/_featured/`) when opened without a user query, with a 1-click **`🌟 Promote to Featured`** admin button when signed in as `@sportsfan986`.
+  - `/watch/:shareId?t=<seconds>`: Frame-synced H.264 video + live 50% translucent `overlay.html` HUD replay player with `?t=` timestamp auto-seek (`f_gl_debuff?t=118`, `f_ml_closer?t=18`, `f_ml_closer?t=100`, `f_ul_shield?t=44`).
+- **Backend API, Auth & Webhooks (`https://api.silphscopepvp.com`)**:
+  - **Pre-Checkout Unique Trainer ID Registration (`POST /v1/users/register-name`)**: Checks availability and locks `screenName` to `deviceHash` / `email` / `githubUserId`; returns `seasonPromo` (`isDay15Plus`, `introPromoEligible`, `daysRemaining`) and `paymentLinks`.
+  - **Dynamic Checkout Quote (`GET/POST /v1/users/checkout-quote?screenName=<id>&email=<email>`)**: Returns `introPromoEligible` and pre-populated `recommendedLinks.supporter` (`$2`), `recommendedLinks.pro` (`$3` Intro or `$6` Season), and `recommendedLinks.vip` (`$5` Intro or `$10` Season) with `?client_reference_id=` attached.
+  - **License & Tier Verification (`POST /v1/users/verify-key`)**: Accepts `{ key, screenName, email, password, githubAccessToken }` (supporting 3 sign-in methods: `Username + Token`, `Username + Password`, and `1-Click GitHub OAuth`) and returns `{ ok, active, tier, label, limits, sessionToken }`.
+  - **Persistent Featured Replay Cloner (`POST /v1/replays/feature` & `GET /v1/replays/featured`)**: Copies any replay's `.mp4` and `_deep_trace.jsonl` into `replays/_featured/` (never auto-pruned) and scrubs personal screenName to `@Featured`.
+- **High-Resolution Graphics & Animated 50% HUD GIF Assets (`public/screenshots/` & `docs/screenshots/`)**:
+  - `silphscope_tiers_infographic.jpg`, `elo_adaptive_anti_meta_engine.jpg`, `silphscope_vs_pvpoke_teambuilder.jpg`, `silphscope_vs_gobattlelog_analytics.jpg`, `featured_hero_shiny_dialga.gif`, `featured_gl_debuff_math.gif`, `featured_ml_closer_align.gif`, `featured_ul_disguise_shield.gif`.
 
 ---
 
@@ -286,6 +296,7 @@ Append `?client_reference_id=<urlEncodedTrainerScreenName>` to any Stripe URL wh
   - **`v7.09` (Shield Decision Overlay Moved to Paid-Once / Alumni Tier & Full Tier Sync)**: Moved the **🛡️ Attack Incoming! Shield Decision Overlay** (KO & Tank/Farm Verdict Card) out of Free tier and into **🏅 Lifetime Supporter (One-Time or Alumni)**, **🏆 Legend Pro**, and **👑 VIP**.
   - **`v7.10` (Progressive Opponent Reveal & Field-Entry Banked Energy in Web & Android DVR Replays)**: Updated the Cloudflare Worker `/watch/:shareId` Web Replay Player (`worker.mjs`) and Android App DVR Video Replay (`MainActivity.kt`, `BattleDvrEngine.kt`, `OverlayService.kt`) so that only opponent Pokémon revealed on the field up to the current playback timestamp $t$ appear in the 3x3 Matchup Matrix and `MY ATTACKS` damage columns (with unrevealed slots showing `—`), while unrevealed player bench Pokémon show `-E` until they enter the field, matching real live gameplay.
   - **`v7.11` (Competitive `$2 / $3-$6 / $5-$10` Pricing Alignment Across Stripe, Buy Me a Coffee, Infographic, App, Web Simulator, Cloudflare Worker & Shared Knowledgebase)**: Updated membership pricing to **`$2` Lifetime Supporter** (one-time or Alumni), **`$3/mo` or `$3` Day 15+ First-Season Intro / `$6` 90-Day Season Pass (`$2/mo` eff.) Legend Pro**, and **`$5/mo` or `$5` Day 15+ First-Season Intro / `$10` 90-Day Season Pass (`$3.33/mo` eff.) VIP / Coach** across all 7 live Stripe Payment Links, Buy Me a Coffee Memberships/Shop/Gallery/Bio (`$1` per PokéCoin), `docs/screenshots/silphscope_tiers_infographic.jpg`, Cloudflare Worker webhooks & `/vault`, Android App, Web Simulator, `README.md`, and Section 3.7 of `ANTIGRAVITY.md` (serving as the single source of truth for other chats and the upcoming website).
+  - **`v7.12` (Official `silphscopepvp.com` 5-Host Domain Migration, Shiny Origin Dialga Midnight Marketing Website, Persistent `@Featured` Replay Vault, `?t=` Timestamp Deep-Linking & 50% HUD Animated Battle GIFs)**: Migrated all Android, Web, Cloudflare Worker, and GitHub endpoints to `silphscopepvp.com`, `dvr.silphscopepvp.com`, `api.silphscopepvp.com`, and `dl.silphscopepvp.com`. Built `src/components/MarketingWebsite.tsx` in the Shiny Origin Forme Dialga Midnight (`dialga_shiny_midnight`) palette featuring the Hero Phone with the user's Shiny Origin Dialga firing Roar of Time (`featured_hero_shiny_dialga.gif`), 3 clickable `@Featured` 50% HUD battle GIF cards (`featured_gl_debuff_math.gif`, `featured_ml_closer_align.gif`, `featured_ul_disguise_shield.gif`), 3 high-res 16:9 feature & comparison graphics (`elo_adaptive_anti_meta_engine.jpg`, `silphscope_vs_pvpoke_teambuilder.jpg`, `silphscope_vs_gobattlelog_analytics.jpg`), visual HUD field manual (`/?view=guide`), side-by-side comparison subpage (`/?view=compare`), persistent R2 `@Featured` replay cloning (`replays/_featured/`) with 1-click admin promotion, and `?t=<seconds>` auto-seek on `/watch/:shareId`.
 
 ---
 
@@ -297,8 +308,8 @@ When working on this repository inside Antigravity:
 - **Android Application (`app/src/main/java/com/gbl/overlay/`)**:
   - `MainActivity.kt`, `OverlayService.kt`, `AppModels.kt`, `TaskerIntegration.kt`, `PokemonDatabase.kt`, `GitHubCloudSync.kt`, `TeamAndMetaEngine.kt`, `Show6Engine.kt`, `PixelScannerEngine.kt`, `BattleDvrEngine.kt`.
   - Resources & HUD: `app/src/main/res/`, `app/src/main/assets/overlay.html`, and `app/build.gradle.kts`. Do **not** create duplicate mirror copies in the repository root.
-- **Web Simulator (`src/`)**:
-  - Entry & Core UI: `src/App.tsx`, `src/components/AppThemeAndModels.tsx`, `src/components/MetaTab.tsx`, `src/components/HelpTab.tsx`, `src/components/MathValidatorTab.tsx`, `src/components/TrashBinModals.tsx`, `src/components/DocumentationModals.tsx`.
+- **Web Marketing Website & Simulator (`src/`)**:
+  - Entry & Core UI: `src/App.tsx`, `src/components/MarketingWebsite.tsx`, `src/components/AppThemeAndModels.tsx`, `src/components/MetaTab.tsx`, `src/components/HelpTab.tsx`, `src/components/MathValidatorTab.tsx`, `src/components/TrashBinModals.tsx`, `src/components/DocumentationModals.tsx`.
   - Data & Math Engine: `src/data/gblData.ts` (barrel), `src/data/pokemonDb.ts`, `src/data/combatSimulator.ts`, `src/data/teamAndMetaEngine.ts`, `src/data/show6Engine.ts`, `src/data/battleQuality.ts`.
 
 ### 5.2. Default Release Workflow (GitHub Actions CI/CD First)
