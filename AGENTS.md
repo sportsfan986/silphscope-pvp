@@ -202,6 +202,48 @@ Append `?client_reference_id=<urlEncodedTrainerScreenName>` to any Stripe URL wh
 - **High-Resolution Graphics & Animated 50% HUD GIF Assets (`public/screenshots/` & `docs/screenshots/`)**:
   - `silphscope_tiers_infographic.jpg`, `elo_adaptive_anti_meta_engine.jpg`, `silphscope_vs_pvpoke_teambuilder.jpg`, `silphscope_vs_gobattlelog_analytics.jpg`, `featured_hero_shiny_dialga.gif`, `featured_gl_debuff_math.gif`, `featured_ml_closer_align.gif`, `featured_ul_disguise_shield.gif`.
 
+### 3.8. Security Architecture, Secret Management & UI Privacy Invariants (`v7.13`)
+All Android, Web Simulator, and Cloudflare Worker code must uphold the following security invariants established in the `v7.13` audit:
+
+#### 1. Cloudflare Worker & API Security (`cloudflare/telemetry-worker/worker.mjs`)
+- **Domain-Separated Cryptographic Secrets**:
+  - Never fall back to hardcoded salt strings or reuse `ADMIN_API_KEY` across cryptographic domains.
+  - Always use the dedicated Worker secrets stored via `wrangler secret put`:
+    - `ADMIN_API_KEY`: Admin Bearer endpoint authentication (`verifyAdminAuth`).
+    - `STRIPE_WEBHOOK_SECRET`: HMAC-SHA256 verification (`Stripe-Signature` with 300s timestamp replay window) on `POST /v1/webhooks/stripe`.
+    - `BMC_WEBHOOK_SECRET`: HMAC-SHA256 verification (`x-signature-sha256`) on `POST /v1/webhooks/bmc`.
+    - `SESSION_HMAC_KEY`: Signing and verifying `/vault` & Web Simulator session tokens (`createVaultSessionToken` / `verifyVaultSessionToken` with `sessionEpoch` revocation support).
+    - `LICENSE_HMAC_KEY`: Signing offline/online license payloads (`signLicensePayloadHmac`).
+    - `PASSWORD_PEPPER`: Server-side pepper for PBKDF2-HMAC-SHA256 (`100,000` iterations + 16-byte CSPRNG salt) password hashing (`hashUserPassword`).
+- **Timing-Safe Comparisons & CSPRNG**:
+  - Always compare secrets, API keys, webhook signatures, and session HMACs using `timingSafeEqualStr(a, b)`.
+  - Always generate unlock keys, share IDs, and salts with `crypto.getRandomValues()` (`randomCharsFromAlphabet`, `generateSecureSaltHex`) — never `Math.random()`.
+- **Anti-Spoofing & Ownership Verification**:
+  - Never trust client-supplied `X-GitHub-Username` or `X-GitHub-User-Id` headers unless verified server-side against `https://api.github.com/user` via `verifyGitHubTokenIdentity()`.
+  - Never expose raw GitHub OAuth `access_token` values in `/v1/auth/github/poll` responses; use short-lived server-side `pendingGhLinkToken` KV records (`gh_pending_link/*`) when linking an unlinked account.
+  - Never expose full unlock keys in unauthenticated `/v1/users/verify-key` or `/v1/webhooks/*` responses (`maskSecretKey()` masks keys in logs/notifications, and `resolveUserLicense` only returns the key when `revealFullKey` / verified ownership is established).
+- **Per-Device HMAC Ingest Tokens (`X-Device-Ingest-Token`)**:
+  - Android clients authenticate telemetry and DVR uploads using per-device HMAC tokens (`dit1_<sha256>`) minted by the Worker (`computeDeviceIngestToken`) rather than embedding static master keys in the APK.
+- **CORS, HSTS & Content-Security-Policy (`DEFAULT_CSP_HEADER`)**:
+  - Apply `buildSecurityHeaders(extraHeaders, isHtml)` (`Strict-Transport-Security`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `X-Frame-Options: SAMEORIGIN`, `Permissions-Policy`).
+  - Only attach `Content-Security-Policy` when `isHtml === true` (HTML document routes), never on raw JS/CSS/image/video asset responses.
+  - `DEFAULT_CSP_HEADER` **must** include:
+    - `connect-src`: `'self' https://api.silphscopepvp.com https://dvr.silphscopepvp.com https://silphscopepvp.com https://www.silphscopepvp.com https://*.silphscopepvp.com https://silphscope-telemetry.silphscope-pvp.workers.dev https://api.github.com https://raw.githubusercontent.com https://docs.google.com https://*.googleusercontent.com` (so PvPoke `gamemaster.json`/rankings and Google Sheets sync never fail).
+    - `frame-src` & `frame-ancestors`: `'self' https://*.silphscopepvp.com https://silphscopepvp.com` (so `/overlay.html?replay=1` embeds cleanly in `/watch/:shareId`).
+
+#### 2. Android App Security & Secret Masking (`app/src/main/java/com/gbl/overlay/`)
+- **Android Keystore AES-256-GCM Encryption at Rest**:
+  - Sensitive values stored in `SharedPreferences` (`gbl_membership_unlock_key_v700`, `gbl_sync_github_token`, `gbl_device_ingest_token_v713`) must be encrypted at rest via `OverlayService.putEncryptedPref` / `getEncryptedPref` using Android Keystore (`AES/GCM/NoPadding`, hardware-backed master key `silphscope_prefs_aes_v713` with `enc1:` ciphertext prefix).
+- **Hide Active Keys & Tokens in UI**:
+  - **Unlock Keys (`MainActivity.kt` & `src/App.tsx`)**: When a paid membership (`supporter`, `pro`, or `vip`) is verified and active, **hide** the Unlock Key input row and Checkout Email field behind a masked status badge (`🔒 Unlock Key Secured (SSPVP-••••)`) and only show an opt-in `🔄 Enter Upgrade Key` button if the user is below VIP tier (or `🔑 Enter New Key` if expired/free). Never pre-fill or display active Unlock Keys in plain text.
+  - **GitHub PAT (`MainActivity.kt`)**: When a GitHub token is saved, clear the `EditText` and hide the input row until the user explicitly taps `🔄 Change Token`.
+- **R8 Code Shrinking & Obfuscation**:
+  - Release builds (`app/build.gradle.kts`) must keep `isMinifyEnabled = true` and `isShrinkResources = true` with `@Keep` rules in `app/proguard-rules.pro` for `@JavascriptInterface` bridges (`OverlayJavascriptBridge`, `ReplayJavascriptBridge`) and serialized model classes.
+- **WebView Hardening (`OverlayService.kt` & `MainActivity.kt`)**:
+  - All `WebView` instances must disable `allowFileAccess`, `allowContentAccess`, `allowFileAccessFromFileURLs`, and `allowUniversalAccessFromFileURLs`, and restrict `shouldOverrideUrlLoading` to `file:///android_asset/` or approved `https:` origins.
+- **Tasker Integration Exception (Intentional Design)**:
+  - `TaskerOverlayActivity` and `TaskerBroadcastReceiver` (`com.gbl.overlay.ACTION_START_OVERLAY` / `ACTION_STOP_OVERLAY`) are **intentionally exported** without custom permission restrictions so third-party automation apps (Tasker, MacroDroid) can toggle the overlay. Do **not** lock or un-export Tasker components during security audits.
+
 ---
 
 ## 4. Comprehensive Chronological History of User Requests & Design Decisions
@@ -297,6 +339,7 @@ Append `?client_reference_id=<urlEncodedTrainerScreenName>` to any Stripe URL wh
   - **`v7.10` (Progressive Opponent Reveal & Field-Entry Banked Energy in Web & Android DVR Replays)**: Updated the Cloudflare Worker `/watch/:shareId` Web Replay Player (`worker.mjs`) and Android App DVR Video Replay (`MainActivity.kt`, `BattleDvrEngine.kt`, `OverlayService.kt`) so that only opponent Pokémon revealed on the field up to the current playback timestamp $t$ appear in the 3x3 Matchup Matrix and `MY ATTACKS` damage columns (with unrevealed slots showing `—`), while unrevealed player bench Pokémon show `-E` until they enter the field, matching real live gameplay.
   - **`v7.11` (Competitive `$2 / $3-$6 / $5-$10` Pricing Alignment Across Stripe, Buy Me a Coffee, Infographic, App, Web Simulator, Cloudflare Worker & Shared Knowledgebase)**: Updated membership pricing to **`$2` Lifetime Supporter** (one-time or Alumni), **`$3/mo` or `$3` Day 15+ First-Season Intro / `$6` 90-Day Season Pass (`$2/mo` eff.) Legend Pro**, and **`$5/mo` or `$5` Day 15+ First-Season Intro / `$10` 90-Day Season Pass (`$3.33/mo` eff.) VIP / Coach** across all 7 live Stripe Payment Links, Buy Me a Coffee Memberships/Shop/Gallery/Bio (`$1` per PokéCoin), `docs/screenshots/silphscope_tiers_infographic.jpg`, Cloudflare Worker webhooks & `/vault`, Android App, Web Simulator, `README.md`, and Section 3.7 of `ANTIGRAVITY.md` (serving as the single source of truth for other chats and the upcoming website).
   - **`v7.12` (Official `silphscopepvp.com` 5-Host Domain Migration, Shiny Origin Dialga Midnight Marketing Website, Persistent `@Featured` Replay Vault, `?t=` Timestamp Deep-Linking & 50% HUD Animated Battle GIFs)**: Migrated all Android, Web, Cloudflare Worker, and GitHub endpoints to `silphscopepvp.com`, `dvr.silphscopepvp.com`, `api.silphscopepvp.com`, and `dl.silphscopepvp.com`. Built `src/components/MarketingWebsite.tsx` in the Shiny Origin Forme Dialga Midnight (`dialga_shiny_midnight`) palette featuring the Hero Phone with the user's Shiny Origin Dialga firing Roar of Time (`featured_hero_shiny_dialga.gif`), 3 clickable `@Featured` 50% HUD battle GIF cards (`featured_gl_debuff_math.gif`, `featured_ml_closer_align.gif`, `featured_ul_disguise_shield.gif`), 3 high-res 16:9 feature & comparison graphics (`elo_adaptive_anti_meta_engine.jpg`, `silphscope_vs_pvpoke_teambuilder.jpg`, `silphscope_vs_gobattlelog_analytics.jpg`), visual HUD field manual (`/?view=guide`), side-by-side comparison subpage (`/?view=compare`), persistent R2 `@Featured` replay cloning (`replays/_featured/`) with 1-click admin promotion, and `?t=<seconds>` auto-seek on `/watch/:shareId`.
+  - **`v7.13` (Full Web, Worker & Android APK Security Audit Remediation, Cryptographic Secret Separation, Keystore AES-256-GCM Pref Encryption, Active Key UI Masking & R8 Shrinking)**: Audited and hardened `silphscopepvp.com`, `dvr.silphscopepvp.com`, `api.silphscopepvp.com`, `dl.silphscopepvp.com`, and the Android APK. Provisioned 6 domain-separated Cloudflare Worker secrets (`ADMIN_API_KEY`, `STRIPE_WEBHOOK_SECRET`, `BMC_WEBHOOK_SECRET`, `SESSION_HMAC_KEY`, `LICENSE_HMAC_KEY`, `PASSWORD_PEPPER`), added Stripe/BMC webhook HMAC verification + event deduplication, upgraded password hashing to PBKDF2-HMAC-SHA256 (`100k` iterations), enforced server-side GitHub identity verification and short-lived `pendingGhLinkToken` binding, rotated the Founder VIP unlock key (`SSPVP-VIP-8EPQ-MZB3-QHHX` with seamless auto-migration for bound owners), encrypted Android `SharedPreferences` secrets at rest via Android Keystore AES-256-GCM, hid active Unlock Keys and GitHub tokens in the Android and Web UI behind `🔒 Unlock Key Secured (SSPVP-••••)` / `🔄 Enter Upgrade Key`, enabled R8 minification/shrinking (reducing DEX size by 70%), and deferred heavy `App.tsx` initial simulations to keep mobile tab transitions instant.
 
 ---
 
@@ -350,3 +393,6 @@ When publishing a new release:
 - **DO NOT** commit GitHub Personal Access Tokens or API keys into any file.
 - **DO NOT** block the main UI thread in `OverlayService.kt`. All image compression, OCR, and disk/network operations must run on `dvrThread`, `ocrExecutor`, or coroutine scopes.
 - **DO NOT** remove or alter the `#btn-minimize-sword` hold-to-exit handler in `app/src/main/assets/overlay.html`, as players rely on it to safely exit the overlay without switching apps.
+- **DO NOT** use single-escaped regex backslashes (such as `/\s+/`, `/\*/g`, or `/\r?\n/`) inside JavaScript template literals (`` `...` ``) in `cloudflare/telemetry-worker/worker.mjs` (`renderWatchSharePage` / `renderVaultDashboardPage`). Inside a template literal, `/\*/g` evaluates to `/*/g` in the generated HTML, which browsers parse as a `/* ... */` block comment and break the `/watch/:shareId` HUD overlay! Always double-escape backslashes (`\\s+`, `\\*`, `\\r?\\n`) and use `safeJsonForScript()` when interpolating JSON into `<script>` blocks.
+- **DO NOT** display active Unlock Keys or saved GitHub OAuth/PAT tokens in plain text in the Android App (`MainActivity.kt`) or Web Simulator (`src/App.tsx`), and never hardcode Founder/VIP unlock keys or telemetry ingest secrets in source files (keep local admin credentials only in gitignored `.env.admin`).
+- **DO NOT** restrict or un-export `TaskerOverlayActivity` or `TaskerBroadcastReceiver` in `AndroidManifest.xml` — external Tasker automation control is an intentional feature.
