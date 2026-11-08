@@ -225,7 +225,9 @@ internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap,
         oppSlotDefStage = oppSlotDefStage.toList(),
         oppSlotConfirmedChargedMoves = (0..2).map { idx ->
             confirmedOppChargedMoves.getOrNull(idx)?.toList() ?: emptyList()
-        }
+        },
+        revealedOppSpecies = detectedOpponents.toList(),
+        userSlotEverOnField = playerSlotEverOnField.toList()
     )
 
     val canRecordNow = activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed
@@ -677,7 +679,9 @@ internal fun OverlayService.schedulePostBattleDvrAutoUploadJob(
 internal fun OverlayService.applyDeepTraceFrameForReplay(
     frame: BattleDeepTraceFrame,
     preThrowOppEnergyHint: Int = 0,
-    forceShieldDecisionActive: Boolean = false
+    forceShieldDecisionActive: Boolean = false,
+    revealedOpponentsAtFrame: List<String>? = null,
+    userSlotsEverOnFieldAtFrame: List<Boolean>? = null
 ) {
     val now = System.currentTimeMillis()
     val uIdx = frame.activeUserIdx.coerceIn(0, 2)
@@ -686,15 +690,68 @@ internal fun OverlayService.applyDeepTraceFrameForReplay(
     if (frame.activeUserSpecies.isNotBlank()) {
         activeUserPokemonName = frame.activeUserSpecies
     }
-    if (frame.activeOppSpecies.isNotBlank()) {
-        activeOpponentName = frame.activeOppSpecies
-        if (detectedOpponents.none { FormResolver.extractBaseSpecies(it).equals(FormResolver.extractBaseSpecies(frame.activeOppSpecies), ignoreCase = true) }) {
-            if (detectedOpponents.size < 3) {
-                detectedOpponents.add(frame.activeOppSpecies)
-            } else if (oIdx in detectedOpponents.indices) {
-                detectedOpponents[oIdx] = frame.activeOppSpecies
+
+    if (revealedOpponentsAtFrame != null) {
+        detectedOpponents.clear()
+        val seenBase = mutableSetOf<String>()
+        for (rawOpp in revealedOpponentsAtFrame) {
+            val isShad = rawOpp.contains("Shadow", ignoreCase = true)
+            val clean = rawOpp
+                .replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("\\s*\\(Shadow\\)", RegexOption.IGNORE_CASE), "")
+                .trim()
+            if (clean.isBlank() || clean.equals("Waiting...", ignoreCase = true) || clean.equals("Opponent", ignoreCase = true)) {
+                continue
+            }
+            val base = FormResolver.extractBaseSpecies(clean).lowercase()
+            if (isShad) {
+                manualShadowOverrides[base] = true
+            }
+            if (seenBase.add(base) && detectedOpponents.size < 3) {
+                detectedOpponents.add(clean)
             }
         }
+    }
+
+    val rawFrameOpp = frame.activeOppSpecies.trim()
+    val hasValidFrameOpp = rawFrameOpp.isNotBlank() &&
+        !rawFrameOpp.equals("Waiting...", ignoreCase = true) &&
+        !rawFrameOpp.equals("Opponent", ignoreCase = true)
+
+    if (hasValidFrameOpp) {
+        val isShad = rawFrameOpp.contains("Shadow", ignoreCase = true)
+        val cleanOpp = rawFrameOpp
+            .replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\s*\\(Shadow\\)", RegexOption.IGNORE_CASE), "")
+            .trim()
+        val base = FormResolver.extractBaseSpecies(cleanOpp).lowercase()
+        if (isShad) {
+            manualShadowOverrides[base] = true
+        }
+        val matchedDetected = detectedOpponents.firstOrNull {
+            FormResolver.extractBaseSpecies(it).equals(base, ignoreCase = true)
+        }
+        if (matchedDetected == null) {
+            if (detectedOpponents.size < 3) {
+                detectedOpponents.add(cleanOpp)
+            } else if (oIdx in detectedOpponents.indices) {
+                detectedOpponents[oIdx] = cleanOpp
+            }
+        }
+        isWaitingForOpponent = false
+        activeOpponentName = matchedDetected ?: cleanOpp
+        activeOpponentSpecies = base
+        isOpponentShadow = manualShadowOverrides[base] ?: isShad
+    } else if (detectedOpponents.isNotEmpty()) {
+        val fallbackOpp = detectedOpponents.getOrElse(oIdx.coerceIn(0, detectedOpponents.size - 1)) { detectedOpponents.first() }
+        val base = FormResolver.extractBaseSpecies(fallbackOpp).lowercase()
+        isWaitingForOpponent = false
+        activeOpponentName = fallbackOpp
+        activeOpponentSpecies = base
+        isOpponentShadow = manualShadowOverrides[base] ?: false
+    } else {
+        isWaitingForOpponent = true
+        activeOpponentName = "Waiting..."
     }
 
     for (i in 0..2) {
@@ -709,6 +766,14 @@ internal fun OverlayService.applyDeepTraceFrameForReplay(
         }
         oppSlotEnergy[i] = frame.oppSlotEnergy.getOrElse(i) {
             if (i == oIdx) frame.oppEnergy.coerceIn(0, 100) else oppSlotEnergy[i]
+        }
+        playerFaintedSlots[i] = (i != uIdx) && (playerSlotHpPct[i] <= 0)
+        oppFaintedSlots[i] = (i < detectedOpponents.size) && (i != oIdx) && (oppSlotHpPct[i] <= 0)
+        if (userSlotsEverOnFieldAtFrame != null) {
+            playerSlotEverOnField[i] = userSlotsEverOnFieldAtFrame.getOrElse(i) { i == uIdx } ||
+                i == uIdx ||
+                playerSlotEnergy[i] > 0 ||
+                playerFaintedSlots[i]
         }
         playerSlotAtkStage[i] = frame.userSlotAtkStage.getOrElse(i) {
             if (i == uIdx) frame.userAtkStage.coerceIn(-4, 4) else playerSlotAtkStage[i]

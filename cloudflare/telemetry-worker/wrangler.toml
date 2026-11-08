@@ -13,7 +13,7 @@ binding = "REPLAY_BUCKET"
 bucket_name = "silphscope-replays"
 
 [vars]
-WORKER_VERSION = "7.0.9"
+WORKER_VERSION = "7.1.0"
 TELEGRAM_NOTIFY_TELEMETRY_BATCHES = "false"
 TELEGRAM_NOTIFY_ONLY_MANUAL_DVR = "true"
 GLOBAL_MAX_R2_STORAGE_GB = "9.0"

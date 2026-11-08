@@ -1,4 +1,18 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.09`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.10`)
+
+---
+
+## v7.10 (2026-11-07) — Progressive Opponent Reveal & Field-Entry Banked Energy in Web & Android DVR Replays
+*Replay HUD parity update (`v7.10`, `versionCode = 1710`, Cloudflare Worker `v7.1.0`) ensuring that both the **Cloudflare Web Replay Theater (`/watch/:shareId`)** and the **Android In-App DVR Video Player** reveal opponent Pokémon progressively as they enter the battlefield rather than showing all 3 opponent Pokémon from the start of the video.*
+
+- **v7.10 — Fix 1: Progressive Opponent Reveal in Web Replay Player (`cloudflare/telemetry-worker/worker.mjs`)**:
+  - Added `getRevealedOppSpecsAtFrame(frameArrayIdx)` to reconstruct the exact list of opponent Pokémon seen on the field up to frame $t$ (`[0 .. frameArrayIdx]`), preserving full fast/charged move metadata and Shadow status from `summaryHeader.oppTeamSpecs`.
+  - While the opponent is still on their 1st Pokémon (or 1st + 2nd), the 3x3 Matchup Matrix renders only the revealed opponent row(s) and the `MY ATTACKS` 3-column damage header shows `—` for unrevealed opponent slots, matching live in-battle HUD behavior 1:1. Before the lead nameplate is scanned at the start of a clip, the HUD displays the `WAITING FOR OPPONENT...` state.
+- **v7.10 — Fix 2: Progressive Opponent Reveal in Android App DVR Video Replay (`MainActivity.kt`, `BattleDvrEngine.kt`, `OverlayService.kt`)**:
+  - Added `revealedOppSpecies` and `userSlotEverOnField` snapshots to `BattleDeepTraceFrame` (`_deep_trace.jsonl`) and updated `applyDeepTraceFrameForReplay` + `syncFrameAtMs` to rebuild `detectedOpponents` strictly from opponent species revealed up to the current video timestamp (supporting both forward playback and backward scrubbing), while keeping the full 3v3 post-game summary when toggled to static **📊 Matrix View**.
+- **v7.10 — Fix 3: Accurate Player Bench `-E` Field-Entry State & Line-2 Backline Prediction in Replay (`cloudflare/telemetry-worker/worker.mjs`, `MainActivity.kt`, `BattleDvrEngine.kt`)**:
+  - Reconstructed `playerSlotEverOnField` / `hasEnteredField` across `frames[0 .. frameArrayIdx]` so player bench Pokémon that have not yet entered the field display `-E` in the `OPP / MY BANKED E` matrix header instead of `0E`.
+  - Parsed `recommendedGoal` (`"subGoal | backlineText"`) in `worker.mjs` so Line 2 of the Tactical Coach displays the live backline prediction (`🔮 [ABC] Back: ...`) during replay.
 
 ---
 

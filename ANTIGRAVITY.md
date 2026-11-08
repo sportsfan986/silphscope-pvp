@@ -2,7 +2,7 @@
 
 > **Target Audience**: Antigravity agents, Claude/Gemini coding assistants, and core developers maintaining or extending **SilphScope PvP**.  
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v7.09` (`versionCode = 1709`)  
+> **Current Version**: `v7.10` (`versionCode = 1710`)  
 > **Primary Branches**: `main` (source code & releases) | **Telemetry & DVR Endpoint**: `https://silphscope-telemetry.silphscope-pvp.workers.dev` (Cloudflare Worker + KV/R2 + Telegram Channel `SilphScope DVR`).
 
 ---
@@ -237,6 +237,7 @@ The HUD displays a compact, high-contrast 2-line tactical recommendation banner 
   - **`v7.07` (VIP Tier `30 FPS Smooth` DVR + `15 FPS Storage Saver` Mode)**: Added **👑 VIP / Coach Pass** `30 FPS Smooth` hardware H.264 DVR recording by default (`544x1184 @ 30 FPS`, `900 kbps` CBR, `QP 27–38`, ~20 MB avg / $\le 30\text{ MB}$ at 240s max battle length) with an in-app **👑 VIP Battle DVR Framerate Mode** selector (`gbl_vip_dvr_fps_mode`: `🎥 30 FPS Smooth` vs `💾 15 FPS Storage Saver` at `720 kbps` CBR saving ~30% local & cloud R2 storage), while keeping combat pixel/HP/energy vision scanning on its calibrated `~67ms` cadence via lightweight intermediate `33ms` DVR frame ticks.
   - **`v7.08` (Mega Master League Giant/Flying Floating HP Bar Scanner Fix)**: Expanded player upper-battlefield HP corridor (`0.18h..0.78h`), opponent pulled-back camera X anchor (`<= 0.715w`), tall opponent row-Y baseline (`>= 0.22h`), and translucent capsule border detection over blue sprites/night sky.
   - **`v7.09` (Shield Decision Overlay Moved to Paid-Once / Alumni Tier & Full Tier Sync)**: Moved the **🛡️ Attack Incoming! Shield Decision Overlay** (KO & Tank/Farm Verdict Card) out of Free tier and into **🏅 Lifetime Supporter (`$3` one-time or Alumni)**, **🏆 Legend Pro**, and **👑 VIP**, and updated the 4-tier comparison infographic (`docs/screenshots/silphscope_tiers_infographic.jpg`), Stripe product descriptions, Buy Me a Coffee Memberships/Shop/Gallery/Bio, Web Simulator, `/vault`, and `README.md`.
+  - **`v7.10` (Progressive Opponent Reveal & Field-Entry Banked Energy in Web & Android DVR Replays)**: Updated the Cloudflare Worker `/watch/:shareId` Web Replay Player (`worker.mjs`) and Android App DVR Video Replay (`MainActivity.kt`, `BattleDvrEngine.kt`, `OverlayService.kt`) so that only opponent Pokémon revealed on the field up to the current playback timestamp $t$ appear in the 3x3 Matchup Matrix and `MY ATTACKS` damage columns (with unrevealed slots showing `—`), while unrevealed player bench Pokémon show `-E` until they enter the field, matching real live gameplay.
 
 ---
 

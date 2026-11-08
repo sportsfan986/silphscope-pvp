@@ -2058,7 +2058,10 @@ function renderWatchSharePage(origin, shareInfo) {
             }
           },
           swapActiveOpponent(name) {
-            const oSpecs = getResolvedOppSpecs();
+            const effectiveRealSec = (video.currentTime || 0) * mp4TimeCompressionRatio;
+            const curFrame = findFrameAtSec(effectiveRealSec) || frames[0];
+            const curFrameIdx = Math.max(0, frames.indexOf(curFrame));
+            const oSpecs = getRevealedOppSpecsAtFrame(curFrameIdx);
             const idx = oSpecs.findIndex(s => s.name.toLowerCase() === String(name || '').toLowerCase());
             if (idx >= 0) {
               manualOppSlotOverride = idx;
@@ -2378,99 +2381,195 @@ function renderWatchSharePage(origin, shareInfo) {
       return out;
     }
 
-    function getResolvedOppSpecs() {
+    function cleanBaseSpeciesKey(name) {
+      return String(name || '')
+        .replace(/^Shadow\s+/i, '')
+        .replace(/\s*\(Shadow\)/i, '')
+        .split('(')[0]
+        .trim()
+        .toLowerCase();
+    }
+
+    function buildSingleOppSpec(s, slotIdx, lg) {
+      const spName = String(s.species || 'Opponent')
+        .replace(/^Shadow\s+/i, '')
+        .replace(/\s*\(Shadow\)/i, '')
+        .trim() || 'Opponent';
+      const meta = lookupSpeciesMeta(spName, lg);
+      const isShad = manualOppShadowOverride !== null && slotIdx === 0
+        ? manualOppShadowOverride
+        : (s.isShadow !== undefined ? Boolean(s.isShadow) : (Boolean(s.rawNameHasShadow) || meta.isShadow));
+      const fastMove = s.inferredFastMove || meta.fastMove;
+      const fStats = lookupFastStats(fastMove, s.fastTurns || meta.fastTurns);
+      const confirmed = Array.isArray(s.confirmedChargedMoves) ? s.confirmedChargedMoves.map(m => String(m).replace(/\*/g, '').trim()).filter(Boolean) : [];
+      const candidatePoolFromSummary = Array.isArray(s.candidateChargedMoves)
+        ? s.candidateChargedMoves.map(m => String(m).replace(/\*/g, '').trim()).filter(Boolean)
+        : [];
+      const c1 = meta.c1 || confirmed[0] || 'Body Slam';
+      const c2 = (meta.c2 && meta.c2.toLowerCase() !== c1.toLowerCase())
+        ? meta.c2
+        : (confirmed[1] && confirmed[1].toLowerCase() !== c1.toLowerCase() ? confirmed[1] : 'Surf');
+      const c3 = meta.c3 || 'Outrage';
+      return {
+        slotIndex: slotIdx,
+        name: spName,
+        code: abbrPoke3(spName, isShad),
+        isShadow: isShad,
+        cp: meta.effCp,
+        fastMove,
+        fastTurns: fStats.turns,
+        fastEnergy: s.fastEnergy || fStats.energy,
+        fastStatus: s.fastMoveStatus || (s.fastMoveConfirmed ? 'confirmed' : 'default'),
+        fastConfirmed: Boolean(s.fastMoveConfirmed),
+        confirmedMoves: confirmed,
+        candidateChargedMoves: candidatePoolFromSummary,
+        c1,
+        c2,
+        c3,
+        meta
+      };
+    }
+
+    function getAllResolvedOppSpecs() {
       const lg = (summaryHeader && summaryHeader.league) || SHARE_LEAGUE;
       const rawSpecs = (summaryHeader && Array.isArray(summaryHeader.oppTeamSpecs) && summaryHeader.oppTeamSpecs.length > 0)
         ? summaryHeader.oppTeamSpecs
         : [];
       const seenNames = [];
       for (const rs of rawSpecs) {
-        if (rs && rs.species) seenNames.push(rs);
+        if (rs && rs.species) {
+          seenNames.push({
+            ...rs,
+            rawNameHasShadow: /shadow/i.test(String(rs.species))
+          });
+        }
       }
       if (seenNames.length === 0) {
         const distinct = [];
         for (const f of frames) {
-          if (f.oppActiveSpecies && !distinct.includes(f.oppActiveSpecies)) {
-            distinct.push(f.oppActiveSpecies);
+          const sp = String(f.oppActiveSpecies || '').trim();
+          if (sp && sp.toLowerCase() !== 'waiting...' && !distinct.some(d => cleanBaseSpeciesKey(d) === cleanBaseSpeciesKey(sp))) {
+            distinct.push(sp);
           }
         }
-        distinct.slice(0, 3).forEach((nm, idx) => seenNames.push({ slotIndex: idx, species: nm }));
+        distinct.slice(0, 3).forEach((nm, idx) => seenNames.push({
+          slotIndex: idx,
+          species: nm,
+          rawNameHasShadow: /shadow/i.test(nm)
+        }));
       }
-      return seenNames.slice(0, 3).map((s, i) => {
-        const spName = s.species || 'Opponent';
-        const meta = lookupSpeciesMeta(spName, lg);
-        const isShad = manualOppShadowOverride !== null && i === 0
-          ? manualOppShadowOverride
-          : (s.isShadow !== undefined ? Boolean(s.isShadow) : meta.isShadow);
-        const fastMove = s.inferredFastMove || meta.fastMove;
-        const fStats = lookupFastStats(fastMove, s.fastTurns || meta.fastTurns);
-        const confirmed = Array.isArray(s.confirmedChargedMoves) ? s.confirmedChargedMoves.map(m => String(m).replace(/\\*/g, '').trim()).filter(Boolean) : [];
-        const candidatePoolFromSummary = Array.isArray(s.candidateChargedMoves)
-          ? s.candidateChargedMoves.map(m => String(m).replace(/\\*/g, '').trim()).filter(Boolean)
-          : [];
-        const c1 = meta.c1 || confirmed[0] || 'Body Slam';
-        const c2 = (meta.c2 && meta.c2.toLowerCase() !== c1.toLowerCase())
-          ? meta.c2
-          : (confirmed[1] && confirmed[1].toLowerCase() !== c1.toLowerCase() ? confirmed[1] : 'Surf');
-        const c3 = meta.c3 || 'Outrage';
-        return {
-          slotIndex: i,
-          name: spName,
-          code: abbrPoke3(spName, isShad),
-          isShadow: isShad,
-          cp: meta.effCp,
-          fastMove,
-          fastTurns: fStats.turns,
-          fastEnergy: s.fastEnergy || fStats.energy,
-          fastStatus: s.fastMoveStatus || (s.fastMoveConfirmed ? 'confirmed' : 'default'),
-          fastConfirmed: Boolean(s.fastMoveConfirmed),
-          confirmedMoves: confirmed,
-          candidateChargedMoves: candidatePoolFromSummary,
-          c1,
-          c2,
-          c3,
-          meta
-        };
+      return seenNames.slice(0, 3).map((s, i) => buildSingleOppSpec(s, i, lg));
+    }
+
+    // v7.10: Progressive Opponent Reveal — only return opponents revealed on the field up to frameArrayIdx
+    function getRevealedOppSpecsAtFrame(frameArrayIdx) {
+      const lg = (summaryHeader && summaryHeader.league) || SHARE_LEAGUE;
+      const allSpecs = getAllResolvedOppSpecs();
+      const targetFrame = frames[frameArrayIdx];
+      const revealedRawNames = [];
+      const seenBases = new Set();
+
+      const addRevealedName = (rawNm) => {
+        const trimmed = String(rawNm || '').trim();
+        if (!trimmed || trimmed.toLowerCase() === 'waiting...' || trimmed.toLowerCase() === 'opponent') return;
+        const baseKey = cleanBaseSpeciesKey(trimmed);
+        if (!baseKey || seenBases.has(baseKey)) return;
+        seenBases.add(baseKey);
+        revealedRawNames.push(trimmed);
+      };
+
+      if (targetFrame && Array.isArray(targetFrame.revealedOppSpecies) && targetFrame.revealedOppSpecies.length > 0) {
+        for (const nm of targetFrame.revealedOppSpecies) {
+          addRevealedName(nm);
+          if (revealedRawNames.length >= 3) break;
+        }
+      } else {
+        const maxIdx = Math.max(0, Math.min(frames.length - 1, frameArrayIdx));
+        for (let k = 0; k <= maxIdx; k++) {
+          const fk = frames[k];
+          if (!fk) continue;
+          if (Array.isArray(fk.revealedOppSpecies) && fk.revealedOppSpecies.length > 0) {
+            for (const nm of fk.revealedOppSpecies) {
+              addRevealedName(nm);
+            }
+          }
+          addRevealedName(fk.oppActiveSpecies || fk.activeOppSpecies);
+          if (revealedRawNames.length >= 3) break;
+        }
+      }
+
+      return revealedRawNames.slice(0, 3).map((revName, idx) => {
+        const revBase = cleanBaseSpeciesKey(revName);
+        const matchedSpec = allSpecs.find(s =>
+          cleanBaseSpeciesKey(s.name) === revBase ||
+          s.name.toLowerCase().includes(revBase) ||
+          revBase.includes(cleanBaseSpeciesKey(s.name))
+        );
+        if (matchedSpec) {
+          const isShad = manualOppShadowOverride !== null && idx === 0
+            ? manualOppShadowOverride
+            : (matchedSpec.isShadow || /shadow/i.test(revName));
+          return {
+            ...matchedSpec,
+            slotIndex: idx,
+            isShadow: isShad,
+            code: abbrPoke3(matchedSpec.name, isShad)
+          };
+        }
+        return buildSingleOppSpec(
+          { species: revName, rawNameHasShadow: /shadow/i.test(revName) },
+          idx,
+          lg
+        );
       });
+    }
+
+    function getPlayerSlotEverOnFieldAtFrame(frameArrayIdx, currentUIdx) {
+      const targetFrame = frames[frameArrayIdx];
+      if (targetFrame && Array.isArray(targetFrame.userSlotEverOnField) && targetFrame.userSlotEverOnField.length >= 3) {
+        return [0, 1, 2].map(i => Boolean(targetFrame.userSlotEverOnField[i]) || i === currentUIdx);
+      }
+      const ever = [false, false, false];
+      ever[currentUIdx] = true;
+      const maxIdx = Math.max(0, Math.min(frames.length - 1, frameArrayIdx));
+      for (let k = 0; k <= maxIdx; k++) {
+        const fk = frames[k];
+        if (!fk) continue;
+        const uAtK = Math.max(0, Math.min(2, Number(fk.userActiveIndex ?? fk.activeUserIdx ?? 0)));
+        ever[uAtK] = true;
+        for (let i = 0; i < 3; i++) {
+          if (Array.isArray(fk.userSlotEverOnField) && fk.userSlotEverOnField[i]) ever[i] = true;
+          if (Array.isArray(fk.userSlotEnergy) && Number(fk.userSlotEnergy[i] || 0) > 0) ever[i] = true;
+          if (Array.isArray(fk.userSlotHpPct) && Number(fk.userSlotHpPct[i] ?? 100) >= 0 && Number(fk.userSlotHpPct[i] ?? 100) < 100) ever[i] = true;
+        }
+      }
+      return ever;
     }
 
     function buildReplayOverlayPayload(f) {
       const lg = (summaryHeader && summaryHeader.league) || SHARE_LEAGUE;
       const uSpecs = getResolvedUserSpecs();
-      const oSpecs = getResolvedOppSpecs();
       const frameArrayIdx = Math.max(0, frames.indexOf(f));
+      const oSpecs = getRevealedOppSpecsAtFrame(frameArrayIdx);
 
       const uIdx = manualUserSlotOverride !== null
         ? manualUserSlotOverride
         : Math.max(0, Math.min(2, Number(f.userActiveIndex ?? 0)));
+      const pEverOnField = getPlayerSlotEverOnFieldAtFrame(frameArrayIdx, uIdx);
       let oIdx = manualOppSlotOverride !== null
-        ? manualOppSlotOverride
+        ? Math.max(0, Math.min(Math.max(0, oSpecs.length - 1), manualOppSlotOverride))
         : Math.max(0, Math.min(Math.max(0, oSpecs.length - 1), Number(f.oppActiveIndex ?? 0)));
-      if (f.oppActiveSpecies && manualOppSlotOverride === null) {
-        const matchIdx = oSpecs.findIndex(o => o.name.toLowerCase().includes(f.oppActiveSpecies.toLowerCase()) || f.oppActiveSpecies.toLowerCase().includes(o.name.toLowerCase()));
+      if (f.oppActiveSpecies && manualOppSlotOverride === null && oSpecs.length > 0) {
+        const fOppBase = cleanBaseSpeciesKey(f.oppActiveSpecies);
+        const matchIdx = oSpecs.findIndex(o =>
+          cleanBaseSpeciesKey(o.name) === fOppBase ||
+          o.name.toLowerCase().includes(fOppBase) ||
+          fOppBase.includes(cleanBaseSpeciesKey(o.name))
+        );
         if (matchIdx >= 0) oIdx = matchIdx;
       }
 
       const actUser = uSpecs[uIdx] || uSpecs[0];
-      const actOpp = oSpecs[oIdx] || oSpecs[0] || {
-        slotIndex: 0,
-        name: f.oppActiveSpecies || 'Opponent',
-        code: abbrPoke3(f.oppActiveSpecies || 'OPP', false),
-        isShadow: false,
-        cp: 1500,
-        fastMove: 'Tackle',
-        fastTurns: 2,
-        fastEnergy: 8,
-        fastStatus: 'default',
-        fastConfirmed: false,
-        confirmedMoves: [],
-        candidateChargedMoves: [],
-        c1: 'Body Slam',
-        c2: 'Surf',
-        c3: 'Earthquake',
-        meta: lookupSpeciesMeta(f.oppActiveSpecies || 'Opponent', lg)
-      };
-
       const pSlotHp = [0, 1, 2].map(i => {
         const raw = (f.userSlotHpPct && f.userSlotHpPct[i] !== undefined) ? f.userSlotHpPct[i] : (i === uIdx ? f.userHpPct : 100);
         return raw >= 0 ? raw : 100;
@@ -2481,17 +2580,127 @@ function renderWatchSharePage(origin, shareInfo) {
       });
       const pSlotE = [0, 1, 2].map(i => (f.userSlotEnergy && f.userSlotEnergy[i] !== undefined) ? f.userSlotEnergy[i] : (i === uIdx ? (f.userEnergy || 0) : 0));
       const oSlotE = [0, 1, 2].map(i => (f.oppSlotEnergy && f.oppSlotEnergy[i] !== undefined) ? f.oppSlotEnergy[i] : (i === oIdx ? (f.oppEnergy || 0) : 0));
-
       const pFainted = pSlotHp.map((hp, i) => hp <= 0 && i !== uIdx);
       const oFainted = oSlotHp.map((hp, i) => hp <= 0 && i !== oIdx);
-
       const uShields = manualUserShieldsOverride !== null ? manualUserShieldsOverride : (f.userShields ?? 2);
       const oShields = manualOppShieldsOverride !== null ? manualOppShieldsOverride : (f.oppShields ?? 2);
-
       const pAtkStg = f.userSlotAtkStage || [0, 0, 0];
       const pDefStg = f.userSlotDefStage || [0, 0, 0];
       const oAtkStg = f.oppSlotAtkStage || [0, 0, 0];
       const oDefStg = f.oppSlotDefStage || [0, 0, 0];
+
+      // If no opponent has been revealed yet at this frame, emit Waiting state matching live gameplay
+      if (oSpecs.length === 0) {
+        return {
+          activeOpponent: 'Waiting...',
+          activeOpponentFastMove: 'Scanning Header...',
+          activeOpponentTurns: 0,
+          oppFastTelemetry: '200ms HP + 750ms OCR',
+          userFastTelemetry: '',
+          isOpponentShadow: false,
+          currentFormLabel: 'Base',
+          availableForms: [],
+          userActivePokemon: actUser.name,
+          activeUserSlotIndex: uIdx,
+          activeOpponentSlotIndex: 0,
+          leadMatchup: (summaryHeader && summaryHeader.leadMatchup) || 'NEUTRAL',
+          isBattleActive: true,
+          isReplayMode: true,
+          overlayTransparencyPct: 12,
+          appThemeId: 'dialga_shiny_midnight',
+          aiAdviceHudPosition: hudTop ? 'top' : 'bottom',
+          isOverlayMinimized: false,
+          scanHzMode: 10,
+          lastScanDurationMs: 12,
+          lastBattleAvgScanMs: 12,
+          lastHpScanDurationMs: 2,
+          lastBattleAvgHpScanMs: 2,
+          enableHpTracking: true,
+          enableEnergyTracking: true,
+          oppFastMoveStatus: 'unconfirmed',
+          confirmedOppChargedMoves: [],
+          myMove1Summary: '—',
+          myMove2Summary: '—',
+          throwAlignmentText: 'Waiting for Opponent spawn',
+          throwHorizonText: '—',
+          playerSwapRemainingSec: Math.max(0, Number(f.playerSwapRemainingSec ?? Math.ceil((f.userSwitchClockMs || 0) / 1000))),
+          playerSwapEndTimeMs: 0,
+          oppSwapRemainingSec: Math.max(0, Number(f.oppSwapRemainingSec ?? Math.ceil((f.oppSwitchClockMs || 0) / 1000))),
+          oppSwapEndTimeMs: 0,
+          playerPokeballs: f.userBalls ?? 3,
+          oppPokeballs: f.oppBalls ?? 3,
+          playerShields: uShields,
+          oppShields: oShields,
+          player_shields_remaining: uShields,
+          opponent_shields_remaining: oShields,
+          playerFaintedSlots: pFainted,
+          oppFaintedSlots: oFainted,
+          playerSlotHpPct: pSlotHp,
+          oppSlotHpPct: oSlotHp,
+          playerSlotEnergy: pSlotE,
+          oppSlotEnergy: oSlotE,
+          playerSlotEverOnField: pEverOnField,
+          activeUserHpPct: pSlotHp[uIdx],
+          activeOppHpPct: 100,
+          activeUserEnergy: pSlotE[uIdx] || 0,
+          activeOppEnergy: 0,
+          teamArchetype: 'ABC',
+          activeLeague: lg,
+          showTacticalRec: true,
+          showTacticalRecommendations: true,
+          tacticalRec: {
+            phase: 'WAITING',
+            archetype: 'ABC',
+            action: 'AWAITING LEAD',
+            actionLabel: '[ABC] AWAITING LEAD',
+            shieldPlan: '2S',
+            goal: '🔮 Back: Scanning opponent lead...',
+            goalText: '🔮 Back: Scanning opponent lead...',
+            line1Text: '[ABC] AWAITING LEAD · [2S]',
+            line2Text: '🔮 Back: Scanning opponent lead...',
+            backlineText: '🔮 Back: Scanning opponent lead...',
+            timingAlertLevel: 'NORMAL',
+            tone: 'neutral',
+            urgencyColor: 'sky',
+            recommendedSwapSlotIndex: -1
+          },
+          tacticalRecommendation: {
+            phase: 'WAITING',
+            archetype: 'ABC',
+            action: 'AWAITING LEAD',
+            actionLabel: '[ABC] AWAITING LEAD',
+            shieldPlan: '2S',
+            goal: '🔮 Back: Scanning opponent lead...',
+            goalText: '🔮 Back: Scanning opponent lead...',
+            line1Text: '[ABC] AWAITING LEAD · [2S]',
+            line2Text: '🔮 Back: Scanning opponent lead...',
+            backlineText: '🔮 Back: Scanning opponent lead...',
+            timingAlertLevel: 'NORMAL',
+            tone: 'neutral',
+            urgencyColor: 'sky',
+            recommendedSwapSlotIndex: -1
+          },
+          team: uSpecs.map((u, idx) => {
+            const isFnt = Boolean(pFainted[idx]);
+            const hasEnt = Boolean(pEverOnField[idx] || idx === uIdx || (pSlotE[idx] || 0) > 0 || isFnt);
+            const eLbl = isFnt ? '0E' : (hasEnt ? ((pSlotE[idx] || 0) + 'E') : '-E');
+            return {
+              initial: u.name.charAt(0).toUpperCase(),
+              code: u.code,
+              name: u.name,
+              hpPct: pSlotHp[idx],
+              energy: pSlotE[idx],
+              hasEnteredField: hasEnt,
+              bankedEnergyLabel: eLbl
+            };
+          }),
+          scannedOpponents: [],
+          oppMoveTimingRows: [],
+          myMoveTimingRows: []
+        };
+      }
+
+      const actOpp = oSpecs[oIdx] || oSpecs[0];
 
       const winsCmp = actUser.meta.effAtk >= actOpp.meta.effAtk;
       const uHpNow = Math.max(1, Math.min(100, Number(pSlotHp[uIdx] ?? 100)));
@@ -2855,7 +3064,12 @@ function renderWatchSharePage(origin, shareInfo) {
       const timingAlertLevel = oppFastsToMove === 0 ? 'IMMEDIATE_0_FAST' : oppFastsToMove === 1 ? 'BLINK_1_FAST' : oppFastsToMove === 2 ? 'WARN_2_FASTS' : 'NORMAL';
 
       const recAction = f.recommendedAction || (f.moveBannerText ? ('⚡ ' + f.moveBannerText) : 'STAY IN · PACE');
-      const recGoal = f.recommendedGoal || ('Opp ' + (cheapestOppRow ? cheapestOppRow.shortName : 'Move') + ' in ' + oppFastsToMove + 'F (' + curOppE + 'E/' + nextOppCost + 'E)');
+      const rawGoalStr = String(f.recommendedGoal || '').trim();
+      const goalParts = rawGoalStr.split(' | ').map(s => s.trim()).filter(Boolean);
+      const recSubGoal = goalParts[0] || ('Opp ' + (cheapestOppRow ? cheapestOppRow.shortName : 'Move') + ' in ' + oppFastsToMove + 'F (' + curOppE + 'E/' + nextOppCost + 'E)');
+      const recBackline = goalParts.length > 1
+        ? goalParts.slice(1).join(' | ')
+        : (rawGoalStr.startsWith('🔮') || rawGoalStr.startsWith('📋') || rawGoalStr.startsWith('🎯') ? rawGoalStr : ('🎯 ' + recSubGoal));
       const shieldPlan = uShields > 0 && cheapestOppRow && cheapestOppRow.activeDmgPct >= pSlotHp[uIdx] ? '1S (KO Risk)' : (uShields + 'S');
 
       const oppFastTelemetry = abbrMove5(actOpp.fastMove) + ' ' + actOpp.fastTurns + 't(' + (actOpp.fastTurns * 0.5).toFixed(1) + 's)/+' + actOpp.fastEnergy + 'e';
@@ -3063,7 +3277,7 @@ function renderWatchSharePage(origin, shareInfo) {
         oppSlotHpPct: oSlotHp,
         playerSlotEnergy: pSlotE,
         oppSlotEnergy: oSlotE,
-        playerSlotEverOnField: [true, true, true],
+        playerSlotEverOnField: pEverOnField,
         activeUserHpPct: pSlotHp[uIdx],
         activeOppHpPct: oSlotHp[oIdx],
         activeUserAtkStage: pAtkStg[uIdx] || 0,
@@ -3100,12 +3314,12 @@ function renderWatchSharePage(origin, shareInfo) {
           action: recAction,
           actionLabel: recAction,
           shieldPlan,
-          goal: recGoal,
-          goalText: recGoal,
-          tacticalSubGoal: recGoal,
+          goal: recBackline,
+          goalText: recBackline,
+          tacticalSubGoal: recSubGoal,
           line1Text: recAction,
-          line2Text: '🎯 ' + recGoal,
-          backlineText: '🎯 ' + recGoal,
+          line2Text: recBackline,
+          backlineText: recBackline,
           timingAlertLevel,
           swapPunishRiskPct: 25,
           tone: timingAlertLevel === 'BLINK_1_FAST' || timingAlertLevel === 'IMMEDIATE_0_FAST' ? 'shield' : 'stay',
@@ -3123,12 +3337,12 @@ function renderWatchSharePage(origin, shareInfo) {
           action: recAction,
           actionLabel: recAction,
           shieldPlan,
-          goal: recGoal,
-          goalText: recGoal,
-          tacticalSubGoal: recGoal,
+          goal: recBackline,
+          goalText: recBackline,
+          tacticalSubGoal: recSubGoal,
           line1Text: recAction,
-          line2Text: '🎯 ' + recGoal,
-          backlineText: '🎯 ' + recGoal,
+          line2Text: recBackline,
+          backlineText: recBackline,
           timingAlertLevel,
           swapPunishRiskPct: 25,
           tone: timingAlertLevel === 'BLINK_1_FAST' || timingAlertLevel === 'IMMEDIATE_0_FAST' ? 'shield' : 'stay',
@@ -3140,13 +3354,20 @@ function renderWatchSharePage(origin, shareInfo) {
           altMoveKoWarning: '',
           activeOppHpPct: oSlotHp[oIdx]
         },
-        team: uSpecs.map((u, idx) => ({
-          initial: u.name.charAt(0).toUpperCase(),
-          code: u.code,
-          name: u.name,
-          hpPct: pSlotHp[idx],
-          energy: pSlotE[idx]
-        })),
+        team: uSpecs.map((u, idx) => {
+          const isFnt = Boolean(pFainted[idx]);
+          const hasEnt = Boolean(pEverOnField[idx] || idx === uIdx || (pSlotE[idx] || 0) > 0 || isFnt);
+          const eLbl = isFnt ? '0E' : (hasEnt ? ((pSlotE[idx] || 0) + 'E') : '-E');
+          return {
+            initial: u.name.charAt(0).toUpperCase(),
+            code: u.code,
+            name: u.name,
+            hpPct: pSlotHp[idx],
+            energy: pSlotE[idx],
+            hasEnteredField: hasEnt,
+            bankedEnergyLabel: eLbl
+          };
+        }),
         scannedOpponents,
         oppMoveTimingRows,
         myMoveTimingRows

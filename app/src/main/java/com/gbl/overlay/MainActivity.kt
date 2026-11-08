@@ -2006,10 +2006,10 @@ class MainActivity : AppCompatActivity() {
                 AlertDialog.Builder(this)
                     .setTitle("🏅 Lifetime Supporter Required")
                     .setMessage(
-                        "The 🛡️ Attack Incoming! Shield Decision Overlay (Red/Orange/Yellow/Green KO & Tank/Farm Verdict Card) is unlocked permanently in the Lifetime Supporter ($3 one-time) tier — or unlocked forever automatically when you subscribe to Legend Pro or VIP even once!\n\n" +
+                        "The 🛡️ Attack Incoming! Shield Decision Overlay (Red/Orange/Yellow/Green KO & Tank/Farm Verdict Card) is unlocked permanently in the Lifetime Supporter ($2 one-time) tier — or unlocked forever automatically when you subscribe to Legend Pro or VIP even once!\n\n" +
                             "Scroll to Section 3 (Membership Tier & Replay Vault) in Settings to unlock via Stripe or Buy Me a Coffee."
                     )
-                    .setPositiveButton("💳 Unlock ($3 Supporter)") { _, _ ->
+                    .setPositiveButton("💳 Unlock ($2 Supporter)") { _, _ ->
                         val user = OverlayService.getRequiredScreenNameStatic(prefs)
                         val url = if (user.isNotEmpty()) {
                             "${OverlayService.STRIPE_URL_SUPPORTER}?client_reference_id=${android.net.Uri.encode(user)}"
@@ -2706,7 +2706,7 @@ class MainActivity : AppCompatActivity() {
             }
             val subTv = TextView(this).apply {
                 text = "1️⃣ First tap '🛡️ Step 1: Verify & Lock Unique Trainer ID' so your handle is locked to your device.\n" +
-                    "2️⃣ Upgrade via Stripe or Buy Me a Coffee: First 14 days of a GBL Season = Full Season ($10 Pro / $20 VIP). Day 15+ First-Time Promo = 1-Month Rate ($5 Pro / $10 VIP) for the entire remainder of the season! Plus any Pro/VIP pass permanently unlocks Lifetime Supporter (Alumni: 🛡️ Attack Incoming! Shield Decision Overlay + 5 Local Videos + Core 3 Leagues + Lifetime Battle Logs) forever.\n" +
+                    "2️⃣ Upgrade via Stripe or Buy Me a Coffee: First 14 days of a GBL Season = Full Season ($6 Pro / $10 VIP). Day 15+ First-Time Promo = 1-Month Rate ($3 Pro / $5 VIP) for the entire remainder of the season! Plus any Pro/VIP pass permanently unlocks Lifetime Supporter (Alumni: 🛡️ Attack Incoming! Shield Decision Overlay + 5 Local Videos + Core 3 Leagues + Lifetime Battle Logs) forever.\n" +
                     "3️⃣ One-time online verification caches an offline cryptographic token so HUD, DVR & Anti-Meta work 100% offline."
                 setTextColor(0xFF94A3B8.toInt())
                 textSize = 10.5f
@@ -2785,7 +2785,7 @@ class MainActivity : AppCompatActivity() {
             val useIntroPromo = isDay15Plus && !everPaidAlready
 
             val btnStripeSupporter = Button(this).apply {
-                text = "🏅 Supporter ($3)"
+                text = "🏅 Supporter ($2)"
                 textSize = 10f
                 isAllCaps = false
                 backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF0369A1.toInt())
@@ -2796,7 +2796,7 @@ class MainActivity : AppCompatActivity() {
                 setOnClickListener { openCheckoutUrl(OverlayService.STRIPE_URL_SUPPORTER) }
             }
             val btnStripePro = Button(this).apply {
-                text = if (useIntroPromo) "💳 Pro Season ($5 Intro!)" else "💳 Pro Season ($10)"
+                text = if (useIntroPromo) "💳 Pro Season ($3 Intro!)" else "💳 Pro Season ($6)"
                 textSize = 10f
                 isAllCaps = false
                 backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF059669.toInt())
@@ -2809,7 +2809,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             val btnStripeVip = Button(this).apply {
-                text = if (useIntroPromo) "👑 VIP Season ($10 Intro!)" else "👑 VIP Season ($20)"
+                text = if (useIntroPromo) "👑 VIP Season ($5 Intro!)" else "👑 VIP Season ($10)"
                 textSize = 10f
                 isAllCaps = false
                 backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF7C3AED.toInt())
@@ -7389,12 +7389,34 @@ class MainActivity : AppCompatActivity() {
             var vaultMeta = OverlayService.loadReplayVaultMapStatic(prefs, gson)[cleanBattleId]
             var hasDvrVideoInitial = (localMp4File != null) || (vaultMeta?.videoStreamUrl?.isNotBlank() == true)
 
+            var isVideoMode = hasDvrVideoInitial
+            var currentHudMode = "live" // "live" | "compact" | "diagnostic" | "off"
+            var isHudTop = true
+            var isShieldHudEnabled = true
+            var hudAlphaPct = 50
+            var onAsyncTraceLoadedCallback: (() -> Unit)? = null
+
             val traceFrames = mutableListOf<OverlayService.Companion.BattleDeepTraceFrame>()
+            val summaryOppTeamSpecs = mutableListOf<OverlayService.Companion.AiTelemetryOppSlotSpec>()
             fun parseTraceLines(text: String) {
                 traceFrames.clear()
+                summaryOppTeamSpecs.clear()
                 for (line in text.lineSequence()) {
                     val trimmed = line.trim()
-                    if (trimmed.isEmpty() || trimmed.startsWith("{\"recordType\":\"BATTLE_DVR_SUMMARY_HEADER\"")) continue
+                    if (trimmed.isEmpty()) continue
+                    if (trimmed.startsWith("{\"recordType\":\"BATTLE_DVR_SUMMARY_HEADER\"")) {
+                        try {
+                            val root = com.google.gson.JsonParser.parseString(trimmed).asJsonObject
+                            val summaryObj = root.getAsJsonObject("battleSummary")
+                            if (summaryObj != null) {
+                                val parsedSummary = gson.fromJson(summaryObj, OverlayService.Companion.AiTelemetryBattleRecordV510::class.java)
+                                if (parsedSummary != null && parsedSummary.oppTeamSpecs.isNotEmpty()) {
+                                    summaryOppTeamSpecs.addAll(parsedSummary.oppTeamSpecs)
+                                }
+                            }
+                        } catch (_: Exception) {}
+                        continue
+                    }
                     try {
                         val f = gson.fromJson(trimmed, OverlayService.Companion.BattleDeepTraceFrame::class.java)
                         if (f != null && f.frameIdx > 0) traceFrames.add(f)
@@ -7423,18 +7445,13 @@ class MainActivity : AppCompatActivity() {
                                 val txt = r.body?.string().orEmpty()
                                 withContext(Dispatchers.Main) {
                                     parseTraceLines(txt)
+                                    onAsyncTraceLoadedCallback?.invoke()
                                 }
                             }
                         }
                     } catch (_: Exception) {}
                 }
             }
-
-            var isVideoMode = hasDvrVideoInitial
-            var currentHudMode = "live" // "live" | "compact" | "diagnostic" | "off"
-            var isHudTop = true
-            var isShieldHudEnabled = true
-            var hudAlphaPct = 50
 
             val topToolbar = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -7616,6 +7633,52 @@ class MainActivity : AppCompatActivity() {
                 visibility = if (isVideoMode) android.view.View.GONE else android.view.View.VISIBLE
             }
 
+            fun resolveShadowDecoratedOppName(rawSpecies: String): String {
+                val clean = rawSpecies
+                    .replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "")
+                    .replace(Regex("\\s*\\(Shadow\\)", RegexOption.IGNORE_CASE), "")
+                    .trim()
+                val base = OverlayService.FormResolver.extractBaseSpecies(clean).lowercase()
+                val matchedSummary = summaryOppTeamSpecs.firstOrNull {
+                    OverlayService.FormResolver.extractBaseSpecies(it.species).equals(base, ignoreCase = true)
+                }
+                val matchedReplay = replayOpponents.firstOrNull {
+                    val c = it.replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "").replace(Regex("\\s*\\(Shadow\\)", RegexOption.IGNORE_CASE), "").trim()
+                    OverlayService.FormResolver.extractBaseSpecies(c).equals(base, ignoreCase = true)
+                }
+                val isShad = rawSpecies.contains("Shadow", ignoreCase = true) ||
+                    (matchedSummary?.isShadow == true) ||
+                    (matchedReplay?.contains("Shadow", ignoreCase = true) == true)
+                val resolvedSpecies = matchedSummary?.species
+                    ?.replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "")
+                    ?.replace(Regex("\\s*\\(Shadow\\)", RegexOption.IGNORE_CASE), "")
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                    ?: matchedReplay
+                        ?.replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "")
+                        ?.replace(Regex("\\s*\\(Shadow\\)", RegexOption.IGNORE_CASE), "")
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                    ?: clean
+                return if (isShad && !resolvedSpecies.startsWith("Shadow ", ignoreCase = true)) {
+                    "Shadow $resolvedSpecies"
+                } else {
+                    resolvedSpecies
+                }
+            }
+
+            fun restoreStaticMatrixReplayState() {
+                replayEngine.configureReplayState(
+                    preset = servicePreset,
+                    opponentsList = replayOpponents,
+                    activeOppIdx = 0,
+                    activeUserIdx = 0,
+                    oppCountModeVal = oppCountModeVal,
+                    enable4ChargedVal = enable4Val,
+                    sharedPrefs = prefs
+                )
+            }
+
             fun syncFrameAtMs(posMs: Long) {
                 if (traceFrames.isEmpty()) return
                 var lo = 0
@@ -7626,6 +7689,52 @@ class MainActivity : AppCompatActivity() {
                 }
                 val f = traceFrames[lo]
                 tvFrameClock.text = String.format(java.util.Locale.US, "F#%04d %.1fs", f.frameIdx, posMs / 1000.0)
+
+                // v7.10: Progressive Opponent Reveal & Player Field-Entry Reconstruction up to frame index `lo`
+                val revealedOppsAtFrame = mutableListOf<String>()
+                val seenBases = mutableSetOf<String>()
+                fun addRevealed(rawSp: String) {
+                    val trimmed = rawSp.trim()
+                    if (trimmed.isEmpty() || trimmed.equals("Waiting...", ignoreCase = true) || trimmed.equals("Opponent", ignoreCase = true)) return
+                    val clean = trimmed
+                        .replace(Regex("^Shadow\\s+", RegexOption.IGNORE_CASE), "")
+                        .replace(Regex("\\s*\\(Shadow\\)", RegexOption.IGNORE_CASE), "")
+                        .trim()
+                    val base = OverlayService.FormResolver.extractBaseSpecies(clean).lowercase()
+                    if (base.isNotEmpty() && seenBases.add(base) && revealedOppsAtFrame.size < 3) {
+                        revealedOppsAtFrame.add(resolveShadowDecoratedOppName(trimmed))
+                    }
+                }
+                if (f.revealedOppSpecies.isNotEmpty()) {
+                    for (nm in f.revealedOppSpecies) addRevealed(nm)
+                } else {
+                    for (k in 0..lo) {
+                        val fk = traceFrames[k]
+                        for (nm in fk.revealedOppSpecies) addRevealed(nm)
+                        addRevealed(fk.activeOppSpecies)
+                        if (revealedOppsAtFrame.size >= 3) break
+                    }
+                }
+
+                val uIdxNow = f.activeUserIdx.coerceIn(0, 2)
+                val userEverOnFieldAtFrame = if (f.userSlotEverOnField.size >= 3) {
+                    (0..2).map { idx -> f.userSlotEverOnField[idx] || idx == uIdxNow }
+                } else {
+                    val ever = BooleanArray(3)
+                    ever[uIdxNow] = true
+                    for (k in 0..lo) {
+                        val fk = traceFrames[k]
+                        val uAtK = fk.activeUserIdx.coerceIn(0, 2)
+                        ever[uAtK] = true
+                        for (idx in 0..2) {
+                            if (fk.userSlotEverOnField.getOrNull(idx) == true) ever[idx] = true
+                            if ((fk.userSlotEnergy.getOrNull(idx) ?: 0) > 0) ever[idx] = true
+                            val hpAtK = fk.userSlotHpPct.getOrNull(idx) ?: 100
+                            if (hpAtK in 0..99) ever[idx] = true
+                        }
+                    }
+                    ever.toList()
+                }
 
                 // Reconstruct opponent pre-throw energy & continuous 5s shield-decision window
                 var chargeStartIdx = lo
@@ -7658,7 +7767,9 @@ class MainActivity : AppCompatActivity() {
                 replayEngine.applyDeepTraceFrameForReplay(
                     frame = f,
                     preThrowOppEnergyHint = preThrowEnergyHint,
-                    forceShieldDecisionActive = forceShieldWindow
+                    forceShieldDecisionActive = forceShieldWindow,
+                    revealedOpponentsAtFrame = revealedOppsAtFrame,
+                    userSlotsEverOnFieldAtFrame = userEverOnFieldAtFrame
                 )
                 pushReplayStateToWeb()
                 if (currentHudMode == "diagnostic") {
@@ -7671,6 +7782,11 @@ class MainActivity : AppCompatActivity() {
                             replayWebView.evaluateJavascript("if (window.setReplayDiagnosticText) setReplayDiagnosticText($escaped);", null)
                         } catch (_: Exception) {}
                     }
+                }
+            }
+            onAsyncTraceLoadedCallback = {
+                if (isVideoMode && traceFrames.isNotEmpty()) {
+                    syncFrameAtMs(0L)
                 }
             }
 
@@ -7893,6 +8009,27 @@ class MainActivity : AppCompatActivity() {
                                 btnModeToggle.text = "📊 Matrix View"
                                 attachWebViewToActiveStage()
                                 ensureVideoSourceLoaded()
+                                val traceUrl = vaultMeta?.traceStreamUrl.orEmpty()
+                                if (traceFrames.isEmpty() && traceUrl.isNotBlank()) {
+                                    lifecycleScope.launch(Dispatchers.IO) {
+                                        try {
+                                            val client = OverlayService.buildTelemetryHttpClientStatic(15L, 30L, 20L)
+                                            client.newCall(okhttp3.Request.Builder().url(traceUrl).get().build()).execute().use { r ->
+                                                if (r.isSuccessful) {
+                                                    val txt = r.body?.string().orEmpty()
+                                                    withContext(Dispatchers.Main) {
+                                                        parseTraceLines(txt)
+                                                        if (isVideoMode && traceFrames.isNotEmpty()) {
+                                                            syncFrameAtMs(0L)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        } catch (_: Exception) {}
+                                    }
+                                } else if (traceFrames.isNotEmpty()) {
+                                    syncFrameAtMs(0L)
+                                }
                             } else {
                                 Toast.makeText(this@MainActivity, "ℹ️ No DVR video recording stored for this battle.", Toast.LENGTH_SHORT).show()
                             }
@@ -7911,6 +8048,11 @@ class MainActivity : AppCompatActivity() {
                 attachWebViewToActiveStage()
                 if (isVideoMode) {
                     ensureVideoSourceLoaded()
+                    recalcMp4TimeCompression()
+                    syncFrameAtMs((videoView.currentPosition.toFloat() * mp4TimeCompressionRatio).toLong())
+                } else {
+                    restoreStaticMatrixReplayState()
+                    pushReplayStateToWeb()
                 }
             }
 
@@ -8007,6 +8149,8 @@ class MainActivity : AppCompatActivity() {
                         btnModeToggle.text = "📊 Matrix View"
                         styleMiniBtn(btnModeToggle, 0xFF334155.toInt())
                         attachWebViewToActiveStage()
+                        restoreStaticMatrixReplayState()
+                        pushReplayStateToWeb()
                         renderBattleLogPage()
                         Toast.makeText(this, "🗑️ DVR video deleted.", Toast.LENGTH_SHORT).show()
                     }
@@ -8071,6 +8215,20 @@ class MainActivity : AppCompatActivity() {
                 currentHudMode = "live"
                 btnHudMode.text = "👁️ HUD: LIVE"
                 ensureVideoSourceLoaded()
+                if (traceFrames.isNotEmpty()) {
+                    syncFrameAtMs(0L)
+                } else {
+                    val leadOnly = replayOpponents.take(1)
+                    replayEngine.configureReplayState(
+                        preset = servicePreset,
+                        opponentsList = leadOnly,
+                        activeOppIdx = 0,
+                        activeUserIdx = 0,
+                        oppCountModeVal = oppCountModeVal,
+                        enable4ChargedVal = enable4Val,
+                        sharedPrefs = prefs
+                    )
+                }
             }
             replayWebView.postDelayed(syncTickRunnable, 120L)
 
@@ -8234,10 +8392,10 @@ class MainActivity : AppCompatActivity() {
         val showShieldHud = prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true)
         val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
         if (tier == "free") {
-            btnToggleShieldDecisionOverlay.text = "🔒 Supporter ($3)"
+            btnToggleShieldDecisionOverlay.text = "🔒 Supporter ($2)"
             btnToggleShieldDecisionOverlay.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
             btnToggleShieldDecisionOverlay.setTextColor(0xFFFBBF24.toInt())
-            textShieldDecisionOverlayDesc.text = "🏅 Paid-Once / Alumni Tier: Unlocks permanently with Lifetime Supporter ($3 once) or any Pro/VIP pass!"
+            textShieldDecisionOverlayDesc.text = "🏅 Paid-Once / Alumni Tier: Unlocks permanently with Lifetime Supporter ($2 once) or any Pro/VIP pass!"
         } else if (showShieldHud) {
             btnToggleShieldDecisionOverlay.text = "Shield HUD On"
             btnToggleShieldDecisionOverlay.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
@@ -11765,8 +11923,8 @@ class MainActivity : AppCompatActivity() {
                 .setTitle("🔒 Unlock $lg in Anti-Meta Generator")
                 .setMessage(
                     "Free tier includes Open Great League & Master League (1 team per archetype).\n\n" +
-                        "• Lifetime Supporter ($3 one-time): Unlocks 🛡️ Attack Incoming! Shield Decision Overlay + Open Ultra League + 2 teams per archetype + Unlimited Lifetime Battle Log History!\n" +
-                        "• Legend Pro ($5 Intro / $10 Season Pass): Unlocks ALL Limited/Mega/Specialty Cups, Top 5 teams per archetype, ⚡ Alternate Moveset Role Synthesis (+BR Deltas), and 50 Cloud Replay Vault slots!"
+                        "• Lifetime Supporter ($2 one-time): Unlocks 🛡️ Attack Incoming! Shield Decision Overlay + Open Ultra League + 2 teams per archetype + Unlimited Lifetime Battle Log History!\n" +
+                        "• Legend Pro ($3 Intro / $6 Season Pass): Unlocks ALL Limited/Mega/Specialty Cups, Top 5 teams per archetype, ⚡ Alternate Moveset Role Synthesis (+BR Deltas), and 50 Cloud Replay Vault slots!"
                 )
                 .setPositiveButton("💳 Unlock via Stripe") { _, _ ->
                     val url = if (normLg == "ULTRA LEAGUE") OverlayService.STRIPE_URL_SUPPORTER_3 else OverlayService.STRIPE_URL_PRO_INTRO_5
@@ -11784,7 +11942,7 @@ class MainActivity : AppCompatActivity() {
                 .setTitle("🏆 Legend Pro Required for $lg")
                 .setMessage(
                     "Lifetime Supporter includes Core 3 Open Leagues (Great, Ultra & Master League).\n\n" +
-                        "Upgrade to Legend Pro ($5 First-Season Intro / $10 Season Pass) to unlock all Limited, Retro, Mega & Battle Frontier Cups, Top 5 teams per archetype, and ⚡ Alternate Moveset Role Synthesis!"
+                        "Upgrade to Legend Pro ($3 First-Season Intro / $6 Season Pass) to unlock all Limited, Retro, Mega & Battle Frontier Cups, Top 5 teams per archetype, and ⚡ Alternate Moveset Role Synthesis!"
                 )
                 .setPositiveButton("💳 Upgrade on Stripe") { _, _ ->
                     startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(OverlayService.STRIPE_URL_PRO_INTRO_5)))
@@ -12162,8 +12320,8 @@ class MainActivity : AppCompatActivity() {
                 setTextColor(0xFFFBBF24.toInt())
             }
             val upsellBody = TextView(this).apply {
-                text = "• Lifetime Supporter ($3 one-time): Unlocks 🛡️ Attack Incoming! Shield Decision Overlay + Ultra League + Top 2 teams per archetype + Unlimited Lifetime Battle Log History!\n" +
-                    "• Legend Pro ($5 Day 15+ Intro / $10 Season Pass): Unlocks ALL Limited/Mega Cups, Top 5 teams per archetype (15+ teams), ⚡ Alternate Moveset Role Synthesis (+BR Deltas), Nemesis Builder, and 50 Cloud Replay Vault slots!"
+                text = "• Lifetime Supporter ($2 one-time): Unlocks 🛡️ Attack Incoming! Shield Decision Overlay + Ultra League + Top 2 teams per archetype + Unlimited Lifetime Battle Log History!\n" +
+                    "• Legend Pro ($3 Day 15+ Intro / $6 Season Pass): Unlocks ALL Limited/Mega Cups, Top 5 teams per archetype (15+ teams), ⚡ Alternate Moveset Role Synthesis (+BR Deltas), Nemesis Builder, and 50 Cloud Replay Vault slots!"
                 textSize = 10.5f
                 setTextColor(0xFFE2E8F0.toInt())
                 setPadding(0, (4 * density).toInt(), 0, (8 * density).toInt())
