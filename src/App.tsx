@@ -2300,8 +2300,8 @@ export default function App() {
   const [showMostLikelyOpp6FormatsBar, setShowMostLikelyOpp6FormatsBar] = useState<boolean>(true);
 
   const mostLikelyOpponent6ByFormat = useMemo(
-    () => getAllFormatsMostLikelyMetaOpponent6(),
-    [show6UsageWeightPct, bfSheetSyncStatus, pvPokeSyncStatus]
+    () => (siteView === 'app' && appCombatMode === 'show6' ? getAllFormatsMostLikelyMetaOpponent6() : []),
+    [siteView, appCombatMode, show6UsageWeightPct, bfSheetSyncStatus, pvPokeSyncStatus]
   );
 
   const refreshShow6EditorSuggestions = (roster: Show6RosterOf6Preset, slotIdx: number) => {
@@ -3888,7 +3888,19 @@ export default function App() {
 
   // Precompute 9x9 Shield Matrix for Active Team vs Top 200 League Meta before launching/running Overlay
   const precomputed9x9State: PrecomputedTeam9x9State = useMemo(() => {
-    const metaDepth = siteView === 'app' && activeTab === 'simulator' ? 200 : 25;
+    if (siteView !== 'app') {
+      return {
+        teamSignature: 'deferred',
+        league: activePreset?.league || 'GREAT LEAGUE',
+        teamNames: ['Clodsire', 'Feraligatr', 'Mandibuzz'],
+        opponentsMap: new Map(),
+        metaDepth: 0,
+        totalCellsComputed: 0,
+        elapsedMs: 0,
+        computedAt: 0
+      };
+    }
+    const metaDepth = activeTab === 'simulator' ? 120 : 12;
     return precomputeTeam9x9ShieldMatrixAgainstMeta(
       activePreset?.pokemon || [],
       activePreset?.league || 'GREAT LEAGUE',
@@ -4944,6 +4956,30 @@ export default function App() {
 
   const modalLiveEvaluation = useMemo(() => {
     const members = buildModalMembersArray();
+    if (siteView !== 'app' || !isNewPresetOpen) {
+      return {
+        orderedPokemon: members,
+        archetype: (manualArchetypeOverride || 'ABC') as TeamArchetype,
+        sharedWeaknesses: [],
+        leadAggBr: 525,
+        machineAggBr: 600,
+        safeSwapBr: 520,
+        closerSwapBr: 520,
+        closerBr: 525,
+        seasonMatchCount: 0,
+        wHistPct: 0,
+        wMetaPct: 100,
+        slotMetrics: [],
+        topMetaTargetsTotal: 50,
+        topMetaWinsCount: 35,
+        keyMetaTargetsBeaten: [],
+        keyThreats: [],
+        coreBreakers: [],
+        altMovesetSlots: [],
+        synergySummary: 'Open Team Editor to evaluate live role & meta metrics.',
+        reasonSummary: 'Open Team Editor to evaluate live role & meta metrics.'
+      };
+    }
     return evaluateOrAutoOrderTeam(
       members,
       newPresetLeague,
@@ -4954,6 +4990,8 @@ export default function App() {
       manualArchetypeOverride
     );
   }, [
+    siteView,
+    isNewPresetOpen,
     p1Name, p1Cp, p1Ivs, p1Fast, p1C1, p1C2, p1PlusLevel,
     p2Name, p2Cp, p2Ivs, p2Fast, p2C1, p2C2, p2PlusLevel,
     p3Name, p3Cp, p3Ivs, p3Fast, p3C1, p3C2, p3PlusLevel,
@@ -5823,7 +5861,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.20 • Android Native Overlay
+                  v7.21 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -16822,7 +16860,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.20 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.21 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}

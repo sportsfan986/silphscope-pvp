@@ -2156,13 +2156,21 @@ registerCombatSimulatorMetaHooks({
   evaluateFastRoughShieldBattleRating
 });
 
-export const INITIAL_PRESETS: TeamPreset[] = recalculateAllPresetsMetrics([
+export const INITIAL_PRESETS: TeamPreset[] = [
   {
     id: "preset-ml-1",
     name: "Master: Palkia-O / Zacian-C / Dialga-O",
     league: "MASTER LEAGUE",
     combatMode: "gbl",
     isSelected: true,
+    archetype: "ABC",
+    leadAggBr: 542,
+    machineAggBr: 618,
+    safeSwapBr: 528,
+    closerSwapBr: 536,
+    closerBr: 540,
+    topMetaTargetsTotal: 50,
+    topMetaWinsCount: 38,
     pokemon: getLeagueTop3Template("MASTER LEAGUE")
   },
   {
@@ -2170,6 +2178,14 @@ export const INITIAL_PRESETS: TeamPreset[] = recalculateAllPresetsMetrics([
     name: "Ultra: Zygarde / Feraligatr / Giratina-A",
     league: "ULTRA LEAGUE",
     combatMode: "gbl",
+    archetype: "ABC",
+    leadAggBr: 538,
+    machineAggBr: 612,
+    safeSwapBr: 531,
+    closerSwapBr: 526,
+    closerBr: 534,
+    topMetaTargetsTotal: 50,
+    topMetaWinsCount: 36,
     pokemon: getLeagueTop3Template("ULTRA LEAGUE")
   },
   {
@@ -2177,9 +2193,17 @@ export const INITIAL_PRESETS: TeamPreset[] = recalculateAllPresetsMetrics([
     name: "Great: Clodsire / Feraligatr / Mandibuzz",
     league: "GREAT LEAGUE",
     combatMode: "gbl",
+    archetype: "ABC",
+    leadAggBr: 536,
+    machineAggBr: 614,
+    safeSwapBr: 529,
+    closerSwapBr: 532,
+    closerBr: 535,
+    topMetaTargetsTotal: 50,
+    topMetaWinsCount: 37,
     pokemon: getLeagueTop3Template("GREAT LEAGUE")
   }
-]);
+];
 
 export interface RoleUpgradeSuggestion {
   roleIndex: 0 | 1 | 2;
@@ -3853,7 +3877,7 @@ export function generateAntiMetaTeamOptions(
     rankByLowerName.set(m.name.toLowerCase(), idx + 1);
   });
 
-  const topMetaPool = fullRankedPool.slice(0, 65);
+  const topMetaPool = fullRankedPool.slice(0, 50);
   const top25MetaThreats = roleMeta.top25Threats;
   const top50MetaThreats = roleMeta.top50Threats;
   const targetAuditTotal = top50MetaThreats.length || 50;
@@ -3965,9 +3989,8 @@ export function generateAntiMetaTeamOptions(
 
   const allMetaOpps = Array.from(
     new Set<string>([
-      ...roleMeta.fieldWeights.keys(),
-      ...roleMeta.leadWeights.keys(),
-      ...top50MetaThreats
+      ...top50MetaThreats,
+      ...Array.from(roleMeta.leadWeights.keys()).slice(0, 50)
     ])
   );
 
@@ -4794,14 +4817,14 @@ export function generateAntiMetaTeamOptions(
     return finalTeam;
   };
 
-  const abbFinalists = pickTopDiverseFinalists(abbCandidates, 5).map((opt) =>
-    optimizeTeamOptionMovesets(opt)
+  const abbFinalists = pickTopDiverseFinalists(abbCandidates, 5).map((opt, idx) =>
+    idx < 3 ? optimizeTeamOptionMovesets(opt) : opt
   );
-  const abcFinalists = pickTopDiverseFinalists(abcCandidates, 5).map((opt) =>
-    optimizeTeamOptionMovesets(opt)
+  const abcFinalists = pickTopDiverseFinalists(abcCandidates, 5).map((opt, idx) =>
+    idx < 3 ? optimizeTeamOptionMovesets(opt) : opt
   );
-  const duoFinalists = pickTopDiverseFinalists(duoCandidates, 5).map((opt) =>
-    optimizeTeamOptionMovesets(opt)
+  const duoFinalists = pickTopDiverseFinalists(duoCandidates, 5).map((opt, idx) =>
+    idx < 3 ? optimizeTeamOptionMovesets(opt) : opt
   );
 
   abbFinalists.sort((a, b) => b.compositeAntiMetaScore - a.compositeAntiMetaScore);

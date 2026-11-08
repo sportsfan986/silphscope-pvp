@@ -2399,7 +2399,7 @@ export const INITIAL_SHOW6_OPPONENT_ROSTERS_OF_6: Show6RosterOf6Preset[] = [
   }
 ];
 
-export const INITIAL_SHOW6_PRESETS_OF_3: TeamPreset[] = recalculateAllPresetsMetrics([
+export const INITIAL_SHOW6_PRESETS_OF_3: TeamPreset[] = ([
   {
     id: "show6-preset3-spectral-1",
     name: "[BF Spectral] Golisopod / Weezing (Galarian) / Cofagrigus",

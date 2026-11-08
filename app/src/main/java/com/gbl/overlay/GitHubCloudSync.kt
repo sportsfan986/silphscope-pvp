@@ -2313,16 +2313,18 @@ private val TELEMETRY_RESILIENT_DNS = object : okhttp3.Dns {
             }
             // Append verified Cloudflare anycast IPv4 edge addresses as guaranteed fallback routes
             try {
-                val cf1 = java.net.InetAddress.getByAddress(
-                    hostname,
-                    byteArrayOf(104.toByte(), 21.toByte(), 76.toByte(), 162.toByte())
-                )
-                val cf2 = java.net.InetAddress.getByAddress(
-                    hostname,
+                val edgeIps = listOf(
+                    byteArrayOf(104.toByte(), 21.toByte(), 56.toByte(), 111.toByte()),
+                    byteArrayOf(172.toByte(), 67.toByte(), 184.toByte(), 167.toByte()),
+                    byteArrayOf(104.toByte(), 21.toByte(), 76.toByte(), 162.toByte()),
                     byteArrayOf(172.toByte(), 67.toByte(), 197.toByte(), 119.toByte())
                 )
-                if (result.none { it.hostAddress == cf1.hostAddress }) result.add(cf1)
-                if (result.none { it.hostAddress == cf2.hostAddress }) result.add(cf2)
+                for (ipBytes in edgeIps) {
+                    val cfAddr = java.net.InetAddress.getByAddress(hostname, ipBytes)
+                    if (result.none { it.hostAddress == cfAddr.hostAddress }) {
+                        result.add(cfAddr)
+                    }
+                }
             } catch (_: Exception) {
             }
         }
@@ -2333,6 +2335,12 @@ private val TELEMETRY_RESILIENT_DNS = object : okhttp3.Dns {
         return result
     }
 }
+
+private val CLOUDFLARE_INGEST_BASE_URLS = listOf(
+    OverlayService.CLOUDFLARE_TELEMETRY_WORKER_URL,
+    OverlayService.CLOUDFLARE_DVR_VAULT_URL,
+    "https://silphscope-telemetry.silphscope-pvp.workers.dev"
+)
 
 internal fun OverlayService.Companion.buildTelemetryHttpClientStatic(
     connectTimeoutSec: Long = 30L,
@@ -2588,6 +2596,7 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
         var lastErrorMsg = ""
 
         for (attempt in 1..3) {
+            val baseUrl = CLOUDFLARE_INGEST_BASE_URLS.getOrElse(attempt - 1) { CLOUDFLARE_TELEMETRY_WORKER_URL }
             try {
                 val multipartBuilder = MultipartBody.Builder()
                     .setType(MultipartBody.FORM)
@@ -2606,7 +2615,7 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
                 }
                 val req = applyWorkerClientAuthHeaders(
                     Request.Builder()
-                        .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/dvr")
+                        .url("$baseUrl/v1/dvr")
                         .post(multipartBuilder.build()),
                     prefs,
                     safeUser,
@@ -2616,8 +2625,13 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
                 httpClient.newCall(req).execute().use { resp ->
                     httpCode = resp.code
                     uploadOk = resp.isSuccessful
+                    if (!uploadOk) {
+                        val errBody = try { resp.body?.string().orEmpty() } catch (_: Exception) { "" }
+                        val parsedErr = try { JsonParser.parseString(errBody).asJsonObject.get("error")?.asString.orEmpty() } catch (_: Exception) { "" }
+                        if (parsedErr.isNotBlank()) lastErrorMsg = parsedErr
+                    }
                 }
-                if (uploadOk || (httpCode in 400..499 && httpCode != 429)) {
+                if (uploadOk || (httpCode in 400..499 && httpCode != 404 && httpCode != 429)) {
                     break
                 }
             } catch (e: Exception) {
@@ -2642,7 +2656,8 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
             }
             true to "🎥 Uploaded 1-Battle Video & Deep Trace ($cleanBattleId) as @$safeUser!"
         } else if (httpCode > 0) {
-            false to "⚠️ 1-Battle DVR upload queued for retry (HTTP $httpCode)"
+            val errSuffix = if (lastErrorMsg.isNotBlank()) ": $lastErrorMsg" else ""
+            false to "⚠️ 1-Battle DVR upload queued for retry (HTTP $httpCode$errSuffix)"
         } else {
             false to "⚠️ DVR upload queued for retry (${lastErrorMsg.ifBlank { "Network error" }})"
         }
@@ -3620,10 +3635,11 @@ internal fun OverlayService.Companion.uploadPendingAiTelemetryBatchBlocking(
         var httpCode = 0
         var lastErr = ""
         for (attempt in 1..3) {
+            val baseUrl = CLOUDFLARE_INGEST_BASE_URLS.getOrElse(attempt - 1) { CLOUDFLARE_TELEMETRY_WORKER_URL }
             try {
                 val req = applyWorkerClientAuthHeaders(
                     Request.Builder()
-                        .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/telemetry")
+                        .url("$baseUrl/v1/telemetry")
                         .post(payloadJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())),
                     prefs,
                     safeUser,
@@ -3633,8 +3649,13 @@ internal fun OverlayService.Companion.uploadPendingAiTelemetryBatchBlocking(
                 httpClient.newCall(req).execute().use { resp ->
                     httpCode = resp.code
                     uploadedOk = resp.isSuccessful
+                    if (!uploadedOk) {
+                        val errBody = try { resp.body?.string().orEmpty() } catch (_: Exception) { "" }
+                        val parsedErr = try { JsonParser.parseString(errBody).asJsonObject.get("error")?.asString.orEmpty() } catch (_: Exception) { "" }
+                        if (parsedErr.isNotBlank()) lastErr = parsedErr
+                    }
                 }
-                if (uploadedOk || (httpCode in 400..499 && httpCode != 429)) {
+                if (uploadedOk || (httpCode in 400..499 && httpCode != 404 && httpCode != 429)) {
                     break
                 }
             } catch (e: Exception) {
@@ -3646,7 +3667,11 @@ internal fun OverlayService.Companion.uploadPendingAiTelemetryBatchBlocking(
         }
 
         if (!uploadedOk) {
-            val detail = if (httpCode > 0) "HTTP $httpCode" else lastErr.ifBlank { "Network error" }
+            val detail = if (httpCode > 0) {
+                if (lastErr.isNotBlank()) "HTTP $httpCode: $lastErr" else "HTTP $httpCode"
+            } else {
+                lastErr.ifBlank { "Network error" }
+            }
             return false to "Telemetry upload failed ($detail). Queued for automatic retry."
         }
 

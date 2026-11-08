@@ -1,4 +1,4 @@
-# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v7.20)
+# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v7.21)
 
 [![Official Website & Simulator](https://img.shields.io/badge/🌐%20Official%20Website%20%26%20Simulator-silphscopepvp.com-f59e0b?style=for-the-badge&logo=googlechrome&logoColor=white)](https://silphscopepvp.com)
 [![Download Latest APK](https://img.shields.io/badge/⬇️%20Download%20Latest%20APK-dl.silphscopepvp.com-10b981?style=for-the-badge&logo=android&logoColor=white)](https://dl.silphscopepvp.com)
@@ -65,7 +65,7 @@ Experience **SilphScope PvP** instantly in your web browser — completely free,
 
 ---
 
-## Advanced Analytics & Quality Metrics (v7.20)
+## Advanced Analytics & Quality Metrics (v7.21)
 
 Raw win rate in GO Battle League is heavily influenced by matchmaking alignment and blind 3v3 team-composition luck (RPS). **SilphScope PvP v3.00** separates **Matchup Luck (Blind Matchup Favorability — BMF)** from **Dynamic Execution WAE (Wins Above Expected)** so you can track both matchmaking favorability and your in-battle micro-execution skill (energy farming, fast move denial, sacrificial catches, shield discipline, and CMP timing).
 
@@ -155,13 +155,13 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## 📥 Download & Install Native Android APK (v7.20)
+## 📥 Download & Install Native Android APK (v7.21)
 
 > **✅ Note on Live HP & Energy Counting (Enabled by Default since v6.02)**:
 > **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting** are **ENABLED (ON)** by default with optimal scanner tuning (`2 samples`, `±2%` tolerance, `200ms` proactive energy lead, `+1t` fast offset, and `4.0s` swap-throw rollback). You can customize all scanner, haptics, and Always-On DVR controls in **⚙️ Settings**.
 
 1. Visit the **[Official GitHub Releases Page](https://github.com/sportsfan986/silphscope-pvp/releases)**.
-2. Download **`silphscope-pvp-v7.20.apk`** directly to your Android device.
+2. Download **`silphscope-pvp-v7.21.apk`** directly to your Android device.
 3. Tap the downloaded APK file to install (grant *"Install unknown apps"* permission if prompted).
 4. Launch **SilphScope PvP**:
    - Select, reorder, or customize your **GBL or Show 6 Team Presets**, set **Opponent Move Count Basis** (`My Fasts` vs. `Their Fasts`), adjust **Overlay Size** (`50%–100%` screen width slider) and **Background Transparency**, and configure **Synchronized Haptics** or **1-Battle DVR** in **⚙️ Settings**.

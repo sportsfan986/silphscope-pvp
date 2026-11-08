@@ -1,4 +1,20 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.20`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.21`)
+
+---
+
+## v7.21 (2026-11-08) — Multi-Host DVR/Telemetry Upload Failover, Backward-Compatible `v7.x` Ingest & Fast Mobile Web Simulator / Anti-Meta Engine
+*Cloud reliability & mobile web performance release (`v7.21`, `versionCode = 1721`) restoring live DVR and telemetry uploads across all `v7.x` builds (`v7.00`–`v7.21`), adding 3-host automatic failover with Cloudflare edge IP fallback in `GitHubCloudSync.kt`, and eliminating the mobile browser startup / Anti-Meta Team Builder hang.*
+
+- **v7.21 — Fix 1: Live DVR & Telemetry Ingest Restoration Across All `v7.x` Builds (`cloudflare/telemetry-worker/wrangler.toml`, `cloudflare/telemetry-worker/worker.mjs`)**:
+  - Re-enabled `workers_dev = true` on `silphscope-telemetry` so `https://silphscope-telemetry.silphscope-pvp.workers.dev` remains active alongside `https://api.silphscopepvp.com` and `https://dvr.silphscopepvp.com`.
+  - Updated `verifyClientAuth` in `worker.mjs` to accept both `v7.13+` (`sspvp_client_...`) and `v7.00`–`v7.12` (`ssk_client_v615_telemetry_ingest_...`) client ingest tokens across `/v1/dvr`, `/v1/telemetry`, `/v1/settings-changes`, and `/v1/replays/upload`.
+- **v7.21 — Fix 2: Multi-Host Automatic Upload Failover & Updated Cloudflare Edge IPs (`GitHubCloudSync.kt`)**:
+  - Added `CLOUDFLARE_INGEST_BASE_URLS` (`https://api.silphscopepvp.com`, `https://dvr.silphscopepvp.com`, `https://silphscope-telemetry.silphscope-pvp.workers.dev`) so `uploadBattleDvrBundleToGitHubBlocking` and `uploadPendingAiTelemetryBatchBlocking` automatically cycle across all three endpoints on retry.
+  - Updated `TELEMETRY_RESILIENT_DNS` with the primary Cloudflare edge IPs for `*.silphscopepvp.com` (`104.21.56.111`, `172.67.184.167`).
+- **v7.21 — Fix 3: Mobile Web Startup & Anti-Meta Team Builder Performance (`src/data/teamAndMetaEngine.ts`, `src/data/show6Engine.ts`, `src/App.tsx`)**:
+  - Removed synchronous module-import `recalculateAllPresetsMetrics` execution from `INITIAL_PRESETS` and `INITIAL_SHOW6_PRESETS_OF_3` so initial page load on mobile browsers renders immediately without blocking the main thread.
+  - Deferred `precomputed9x9State`, `mostLikelyOpponent6ByFormat`, and `modalLiveEvaluation` when viewing the marketing showcase or when the Team Editor modal is closed.
+  - Streamlined `generateAntiMetaTeamOptions` candidate/moveset sweeps on mobile while preserving full Top-50 Role-Weighted Meta auditing (`Beats X/50 Top Meta`, `Key Wins`, `Key Threats`, and `Core Breakers`).
 
 ---
 
