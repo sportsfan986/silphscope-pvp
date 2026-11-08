@@ -1,4 +1,17 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.06`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.07`)
+
+---
+
+## v7.07 (2026-11-07) — VIP Tier Full `30 FPS Smooth` DVR Recording + `15 FPS Storage Saver` Mode
+*DVR video quality & VIP tier release (`v7.07`, `versionCode = 1707`, Cloudflare Worker `v7.0.7`) upgrading **👑 VIP / Coach Pass** users to **full `30 FPS Smooth` (`33ms`) hardware H.264 DVR recording** by default (`544x1184 @ 30 FPS`, `900 kbps` CBR, strictly $\le 30\text{ MB}$ at the 240s PvP timeout) while keeping `15 FPS` (`720 kbps` CBR) as the standard across Free / Supporter / Legend Pro tiers and offering VIP users a 1-tap **`15 FPS Storage Saver`** toggle to save ~30% local and Cloud R2 storage.*
+
+- **v7.07 — Enhancement 1: VIP Tier Full `30 FPS Smooth` Hardware H.264 DVR + `15 FPS Storage Saver` Selector (`BattleDvrEngine.kt`, `OverlayService.kt`, `GitHubCloudSync.kt`, `MainActivity.kt`)**:
+  - **VIP `30 FPS Smooth` Default (`544x1184 @ 30 FPS`, `900 kbps` CBR, `QP 27–38`)**: VIP users now record at a true `30 FPS` (`33ms` frame cadence) by default (~20 MB for a 150s average battle; strictly $\le 30\text{ MB}$ including `_deep_trace.jsonl` at the 240s max PvP timeout).
+  - **1-Tap `15 FPS Storage Saver` Option (`gbl_vip_dvr_fps_mode`)**: Added a **👑 VIP Battle DVR Framerate Mode** selector in **Settings → Membership Tier & Replay Vault** allowing VIP users to switch between **`🎥 30 FPS Smooth (VIP Default • 900 kbps CBR)`** and **`💾 15 FPS Storage Saver (Pro Mode • 720 kbps CBR • saves ~30% local & cloud storage)`**, synced across devices via GitHub Cloud Delta Sync.
+  - **Zero-Impact Decoupled Vision Cadence (`startBattleOcrLoop`)**: During `30 FPS` VIP recording, full combat vision/pixel HP/energy scanning continues on its calibrated `~67ms` cadence while intermediate `33ms` ticks capture lightweight DVR-only frames, preserving 100% identical HP/energy debounce behavior and near-zero CPU overhead.
+- **v7.07 — Enhancement 2: Dynamic `30 FPS` / `15 FPS` Frame-Stepping (`-1F` / `+1F`) & Updated Tier Comparisons (`MainActivity.kt`, `cloudflare/telemetry-worker/worker.mjs`, `src/App.tsx`, `README.md`, `ANTIGRAVITY.md`)**:
+  - Updated `-1F` / `+1F` frame-step buttons in both the Android in-app DVR player and the `/watch/:shareId` web replay theater to dynamically compute the per-frame step interval from the trace (`~33ms` for 30 FPS VIP recordings, `~67ms` for 15 FPS recordings).
+  - Updated membership tier cards and documentation across the Android App, Web Simulator, Cloudflare `/vault`, `README.md`, and `ANTIGRAVITY.md`.
 
 ---
 

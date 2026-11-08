@@ -303,11 +303,18 @@ internal fun OverlayService.startDvrEncoderLocked(width: Int, height: Int, start
         dvrTraceFile = trace
         dvrTraceWriter = trace.bufferedWriter(Charsets.UTF_8)
 
+        val targetFps = if (isPrefsInitialized) {
+            OverlayService.getEffectiveDvrFpsForTierStatic(prefs)
+        } else {
+            15
+        }
+        val targetBitrate = if (targetFps >= 30) 900_000 else 720_000
+
         fun buildEncoderFormat(useQpBounds: Boolean): MediaFormat {
             return MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                setInteger(MediaFormat.KEY_BIT_RATE, 720_000)
-                setInteger(MediaFormat.KEY_FRAME_RATE, 15)
+                setInteger(MediaFormat.KEY_BIT_RATE, targetBitrate)
+                setInteger(MediaFormat.KEY_FRAME_RATE, targetFps)
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
                 if (useQpBounds) {
                     setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)

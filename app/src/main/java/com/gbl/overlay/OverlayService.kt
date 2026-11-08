@@ -93,7 +93,7 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.06"
+        const val APP_VERSION = "7.07"
         const val APP_VERSION_CODE = 1705
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -405,6 +405,8 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_CLAIM_EMAIL = "gbl_claim_email_v700"
         const val PREFS_KEY_VIP_LOCAL_DVR_LIMIT = "gbl_vip_local_dvr_limit"
         const val DEFAULT_VIP_LOCAL_DVR_LIMIT = 100
+        const val PREFS_KEY_VIP_DVR_FPS_MODE = "gbl_vip_dvr_fps_mode"
+        const val DEFAULT_VIP_DVR_FPS_MODE = 30 // 30 FPS Smooth (VIP Default) or 15 FPS Storage Saver
         const val PREFS_KEY_SCREEN_NAME_REGISTERED_V700 = "gbl_screen_name_registered_v700"
         const val PREFS_KEY_SYNC_GITHUB_USER_ID = "gbl_sync_github_user_id"
         const val PREFS_KEY_SYNC_PRIVATE_REPO_MIGRATED_V643 = "gbl_sync_private_repo_migrated_v643"
@@ -5323,38 +5325,73 @@ class OverlayService : LifecycleService() {
     internal fun startBattleOcrLoop() {
         if (battleLoopJob?.isActive == true) return
         battleLoopJob = lifecycleScope.launch(Dispatchers.Default) {
+            var lastFullVisionTickMs = 0L
             while (isActive) {
                 if (mediaProjection == null || isOverlayMinimized) {
                     delay(250L)
                     continue
                 }
                 val cycleStartMs = System.currentTimeMillis()
-                val actualCadenceMs = if (lastHpScanTickMs > 0L) {
-                    (cycleStartMs - lastHpScanTickMs).coerceIn(1L, 2000L)
+                val isDvrRecordingWindow = (activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed) &&
+                    (isBattleActive || hasBattleStarted) && !isWaitingForOpponent
+                val dvrTargetFps = if (isDvrRecordingWindow && isPrefsInitialized) {
+                    OverlayService.getEffectiveDvrFpsForTierStatic(prefs)
                 } else {
-                    0L
+                    15
                 }
-                lastHpScanTickMs = cycleStartMs
-                lastCaptureStartMs = cycleStartMs
-                try {
-                    captureAndProcessBattleRegions(cycleStartMs, actualCadenceMs)
-                } catch (_: Exception) {}
+                val isIntermediate30FpsDvrTick = isDvrRecordingWindow &&
+                    dvrTargetFps >= 30 &&
+                    lastFullVisionTickMs > 0L &&
+                    (cycleStartMs - lastFullVisionTickMs) < 58L
+
+                if (isIntermediate30FpsDvrTick) {
+                    try {
+                        if (cycleStartMs - lastBattleResetTimeMs >= 600L) {
+                            val dvrBmp = captureCleanScreenBitmap()
+                            if (dvrBmp != null && !dvrBmp.isRecycled) {
+                                try {
+                                    recordOneBattleDvrFrameAndTraceAsync(dvrBmp, cycleStartMs)
+                                } finally {
+                                    if (!dvrBmp.isRecycled) dvrBmp.recycle()
+                                }
+                            }
+                        }
+                    } catch (_: Exception) {}
+                } else {
+                    lastFullVisionTickMs = cycleStartMs
+                    val actualCadenceMs = if (lastHpScanTickMs > 0L) {
+                        (cycleStartMs - lastHpScanTickMs).coerceIn(1L, 2000L)
+                    } else {
+                        0L
+                    }
+                    lastHpScanTickMs = cycleStartMs
+                    lastCaptureStartMs = cycleStartMs
+                    try {
+                        captureAndProcessBattleRegions(cycleStartMs, actualCadenceMs)
+                    } catch (_: Exception) {}
+                    val nowAfterVision = System.currentTimeMillis()
+                    val visionWorkMs = (nowAfterVision - cycleStartMs).coerceAtLeast(1L)
+                    val effectiveHpLoopMs = if (actualCadenceMs in 40L..350L) {
+                        actualCadenceMs
+                    } else {
+                        (visionWorkMs + 60L).coerceAtLeast(60L)
+                    }
+                    lastHpScanDurationMs = effectiveHpLoopMs
+                    if (isBattleActive) {
+                        currentBattleHpScanDurationSumMs += effectiveHpLoopMs
+                        currentBattleHpScanCount += 1
+                        lastBattleAvgHpScanMs = (currentBattleHpScanDurationSumMs / currentBattleHpScanCount).coerceAtLeast(1L)
+                    }
+                }
                 val nowAfterHpScan = System.currentTimeMillis()
                 val pixelWorkMs = (nowAfterHpScan - cycleStartMs).coerceAtLeast(1L)
-                val targetLoopMs = if ((activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed) && (isBattleActive || hasBattleStarted) && !isWaitingForOpponent) 67L else 100L
+                val targetLoopMs = when {
+                    isDvrRecordingWindow && dvrTargetFps >= 30 -> 33L
+                    isDvrRecordingWindow -> 67L
+                    else -> 100L
+                }
                 val sleepMs = (targetLoopMs - pixelWorkMs).coerceAtLeast(5L)
-                val effectiveHpLoopMs = if (actualCadenceMs in 40L..350L) {
-                    actualCadenceMs
-                } else {
-                    (pixelWorkMs + sleepMs).coerceAtLeast(60L)
-                }
-                lastHpScanDurationMs = effectiveHpLoopMs
-                if (isBattleActive) {
-                    currentBattleHpScanDurationSumMs += effectiveHpLoopMs
-                    currentBattleHpScanCount += 1
-                    lastBattleAvgHpScanMs = (currentBattleHpScanDurationSumMs / currentBattleHpScanCount).coerceAtLeast(1L)
-                }
-                currentScanHzMode = "10HZ_HP"
+                currentScanHzMode = if (isDvrRecordingWindow && dvrTargetFps >= 30) "30FPS_VIP" else "10HZ_HP"
                 delay(sleepMs)
             }
         }

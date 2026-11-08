@@ -1578,6 +1578,7 @@ async function runOnce() {
 
     if (!REPORT_ONLY && !REPROCESS_LOCAL) {
       // 0. Sync User License Tiers from `/v1/admin/keys` & `/v1/admin/manifest`
+      if (!SYNC_ONLY) console.error("[1/5] Fetching license tiers & remote telemetry batches from Cloudflare...");
       try {
         const keysData = await adminFetchJson("/v1/admin/keys");
         const keysList = Array.isArray(keysData?.keys) ? keysData.keys : [];
@@ -1698,6 +1699,7 @@ async function runOnce() {
       }
 
       // 3. Ingest 1-Battle DVR Bundles (`recordings/<screenName>/<battleId>_video.mp4` & `_deep_trace.jsonl`)
+      if (!SYNC_ONLY) console.error("[2/5] Checking Cloudflare R2 for new 1-Battle DVR video & trace bundles...");
       const recordingObjects = await listAllObjectsByPrefix("recordings/");
       for (const obj of recordingObjects) {
         const key = obj.key;
@@ -1769,9 +1771,11 @@ async function runOnce() {
     }
 
     // 3b. Synchronize Line 0 BATTLE_DVR_SUMMARY_HEADER from all local _deep_trace.jsonl files
+    if (!SYNC_ONLY) console.error("[3/5] Synchronizing local _deep_trace.jsonl summary headers & manual issue flags...");
     syncLocalDeepTraceHeadersIntoState(state);
 
     // 4. Enrich DVR Bundles with Tier + Priority Metadata & Run Local CPU + ffmpeg Preprocessing
+    if (!SYNC_ONLY) console.error("[4/5] Running zero-token local CPU + ffmpeg preprocessing & root-cause classifier...");
     for (const bundle of Object.values(state.dvrBundles)) {
       const tier = resolveUserTier(bundle.screenName, state.userTiers);
       bundle.userTier = tier;
@@ -1910,6 +1914,7 @@ async function runOnce() {
       recentAnomalies: allAnomalies.slice(0, 25),
     };
     fs.writeFileSync(SUMMARY_FILE, JSON.stringify(summary, null, 2), "utf8");
+    console.error(`[5/5] Wrote prioritized report to ${SUMMARY_FILE} (${allAnomalies.length} anomalies across ${state.records.length} battles).`);
     console.log(JSON.stringify(summary, null, 2));
   } finally {
     releaseIngestLock();

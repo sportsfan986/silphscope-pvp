@@ -5712,7 +5712,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.06 • Android Native Overlay
+                  v7.07 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -16751,7 +16751,7 @@ export default function App() {
                   <div className="font-extrabold text-amber-300">🏆 Legend Pro Pass</div>
                   <div className="text-base font-black text-white">$5 Intro / $10 Season</div>
                   <ul className="text-[10.5px] text-slate-200 space-y-1">
-                    <li>• <strong>50 Cloud R2 Replays + 10 Pinned</strong></li>
+                    <li>• <strong>50 Cloud R2 Replays + 10 Pinned (15 FPS)</strong></li>
                     <li>• 25 Local DVR Battles (5 Sets)</li>
                     <li>• <strong>All Limited Cups + Top 5/Arch</strong></li>
                     <li>• <strong>⚡ Alt Movesets + Nemesis Sim</strong></li>
@@ -16780,10 +16780,10 @@ export default function App() {
                   <div className="font-extrabold text-purple-300">👑 VIP / Coach Pass</div>
                   <div className="text-base font-black text-white">$10 Intro / $20 Season</div>
                   <ul className="text-[10.5px] text-slate-200 space-y-1">
+                    <li>• <strong>🎥 30 FPS Smooth DVR (+ 15 FPS Saver)</strong></li>
                     <li>• <strong>150 Cloud Replays (365d) + 25 Pin</strong></li>
                     <li>• Up to 100 Local DVR Battles</li>
-                    <li>• All Pro Features + Priority</li>
-                    <li>• Includes Lifetime Supporter!</li>
+                    <li>• All Pro Features + Lifetime Supporter</li>
                   </ul>
                   <div className="space-y-1 pt-1">
                     <a
@@ -17026,7 +17026,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.06 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
+        SilphScope PvP v7.07 Overlay • Built with Kotlin, WindowManager TYPE_APPLICATION_OVERLAY, MediaProjection in-memory frame capture, Hardware H.264 1-Battle DVR, and ML Kit Text Recognition.
       </footer>
     </div>
   );

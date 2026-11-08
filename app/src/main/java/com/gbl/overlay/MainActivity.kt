@@ -2649,6 +2649,7 @@ class MainActivity : AppCompatActivity() {
     private var layoutVipLocalSliderRow: LinearLayout? = null
     private var textVipLocalSliderLabel: TextView? = null
     private var seekVipLocalSlider: SeekBar? = null
+    private var btnVipFpsMode: Button? = null
 
     private fun setupOrUpdateReplayVaultSettingsUi() {
         val parentLayout = (textOneBattleDvrStatus.parent as? LinearLayout) ?: return
@@ -2937,6 +2938,52 @@ class MainActivity : AppCompatActivity() {
             vipRow.addView(vipLabel)
             vipRow.addView(vipSeek)
 
+            fun formatVipFpsModeLabel(fps: Int): String = if (fps == 15) {
+                "💾 VIP DVR Framerate: 15 FPS Storage Saver (~14 MB/battle • saves ~30% storage)"
+            } else {
+                "🎥 VIP DVR Framerate: 30 FPS Smooth Default (~20 MB/battle • <=30 MB max)"
+            }
+            val vipFpsBtn = Button(this).apply {
+                val curFps = prefs.getInt(OverlayService.PREFS_KEY_VIP_DVR_FPS_MODE, OverlayService.DEFAULT_VIP_DVR_FPS_MODE)
+                text = formatVipFpsModeLabel(curFps)
+                textSize = 9.5f
+                isAllCaps = false
+                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF4C1D95.toInt())
+                setTextColor(0xFFF3E8FF.toInt())
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = (4 * density).toInt()
+                }
+                setOnClickListener {
+                    val options = arrayOf(
+                        "🎥 30 FPS Smooth (VIP Default • 900 kbps CBR • ~20 MB/battle, <=30 MB at 240s max)",
+                        "💾 15 FPS Storage Saver (Pro Mode • 720 kbps CBR • ~14 MB/battle, saves ~30% local & cloud storage)"
+                    )
+                    val values = intArrayOf(30, 15)
+                    val current = prefs.getInt(OverlayService.PREFS_KEY_VIP_DVR_FPS_MODE, OverlayService.DEFAULT_VIP_DVR_FPS_MODE)
+                    val checkedIdx = if (current == 15) 1 else 0
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("👑 VIP Battle DVR Framerate Mode")
+                        .setSingleChoiceItems(options, checkedIdx) { dialog, which ->
+                            val chosenFps = values.getOrElse(which) { 30 }
+                            dialog.dismiss()
+                            prefs.edit().putInt(OverlayService.PREFS_KEY_VIP_DVR_FPS_MODE, chosenFps).apply()
+                            text = formatVipFpsModeLabel(chosenFps)
+                            setupOrUpdateReplayVaultSettingsUi()
+                            Toast.makeText(
+                                this@MainActivity,
+                                if (chosenFps == 15) "💾 VIP DVR set to 15 FPS Storage Saver mode." else "🎥 VIP DVR set to 30 FPS Smooth mode.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                }
+            }
+            vipRow.addView(vipFpsBtn)
+
             val vaultOptionsRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 val padV = (3 * density).toInt()
@@ -3066,13 +3113,15 @@ class MainActivity : AppCompatActivity() {
             layoutVipLocalSliderRow = vipRow
             textVipLocalSliderLabel = vipLabel
             seekVipLocalSlider = vipSeek
+            btnVipFpsMode = vipFpsBtn
         }
 
         val tier = OverlayService.getEffectiveReplayTierStatic(prefs)
         val maxLocal = OverlayService.getMaxLocalDvrBattlesForTierStatic(prefs)
+        val effFps = OverlayService.getEffectiveDvrFpsForTierStatic(prefs)
         val tierBadge = when (tier) {
-            "vip" -> "👑 VIP / Coach Pass ($maxLocal Local Slider • 150 Cloud + 25 ⭐ Pinned • 365d • All Cups + Alt Moves)"
-            "pro" -> "🏅 Legend Pro Pass (25 Local • 50 Cloud + 10 ⭐ Pinned • 30d • All Cups + ⚡ Alt Movesets)"
+            "vip" -> "👑 VIP / Coach Pass (${effFps} FPS DVR • $maxLocal Local Slider • 150 Cloud + 25 ⭐ Pinned • 365d • All Cups + Alt Moves)"
+            "pro" -> "🏅 Legend Pro Pass (15 FPS DVR • 25 Local • 50 Cloud + 10 ⭐ Pinned • 30d • All Cups + ⚡ Alt Movesets)"
             "supporter" -> "🛡️ Lifetime Supporter / Alumni (5 Local • 365d Past Pinned Cloud • Core 3 Leagues • Lifetime Battle Logs)"
             else -> "🆓 Free / Community Tier (1 Local Video • GL & ML 1-Team Anti-Meta • Current Season + 14d Grace)"
         }
@@ -3081,6 +3130,12 @@ class MainActivity : AppCompatActivity() {
             val savedLimit = prefs.getInt(OverlayService.PREFS_KEY_VIP_LOCAL_DVR_LIMIT, OverlayService.DEFAULT_VIP_LOCAL_DVR_LIMIT).coerceIn(25, 100)
             textVipLocalSliderLabel?.text = "👑 VIP Local On-Device DVR Ring Buffer: $savedLimit Battles (25–100 Configurable)"
             seekVipLocalSlider?.progress = savedLimit - 25
+            val curFps = prefs.getInt(OverlayService.PREFS_KEY_VIP_DVR_FPS_MODE, OverlayService.DEFAULT_VIP_DVR_FPS_MODE)
+            btnVipFpsMode?.text = if (curFps == 15) {
+                "💾 VIP DVR Framerate: 15 FPS Storage Saver (~14 MB/battle • saves ~30% storage)"
+            } else {
+                "🎥 VIP DVR Framerate: 30 FPS Smooth Default (~20 MB/battle • <=30 MB max)"
+            }
         }
 
         val localDir = java.io.File(filesDir, "dvr_replays")
@@ -7709,12 +7764,21 @@ class MainActivity : AppCompatActivity() {
                     btnPlayPause.text = "⏸ Pause"
                 }
             }
+            fun resolveStepVidMs(): Int {
+                val avgFrameMs = if (traceFrames.size > 10) {
+                    val span = (traceFrames.last().videoElapsedMs - traceFrames.first().videoElapsedMs).toFloat()
+                    (span / traceFrames.size.toFloat()).coerceIn(30f, 110f)
+                } else {
+                    67f
+                }
+                return (avgFrameMs / mp4TimeCompressionRatio).toInt().coerceAtLeast(16)
+            }
             btnStepBack.setOnClickListener {
                 ensureVideoSourceLoaded()
                 videoView.pause()
                 btnPlayPause.text = "▶️ Play"
                 recalcMp4TimeCompression()
-                val stepVidMs = (67f / mp4TimeCompressionRatio).toInt().coerceAtLeast(16)
+                val stepVidMs = resolveStepVidMs()
                 val nextPos = (videoView.currentPosition - stepVidMs).coerceAtLeast(0)
                 videoView.seekTo(nextPos)
                 syncFrameAtMs((nextPos.toFloat() * mp4TimeCompressionRatio).toLong())
@@ -7724,7 +7788,7 @@ class MainActivity : AppCompatActivity() {
                 videoView.pause()
                 btnPlayPause.text = "▶️ Play"
                 recalcMp4TimeCompression()
-                val stepVidMs = (67f / mp4TimeCompressionRatio).toInt().coerceAtLeast(16)
+                val stepVidMs = resolveStepVidMs()
                 val dur = videoView.duration.takeIf { it > 0 } ?: 300_000
                 val nextPos = (videoView.currentPosition + stepVidMs).coerceAtMost(dur)
                 videoView.seekTo(nextPos)

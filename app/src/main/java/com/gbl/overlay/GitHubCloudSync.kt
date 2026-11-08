@@ -447,7 +447,9 @@ private val SYNCABLE_INT_PREF_KEYS = listOf(
     OverlayService.PREFS_KEY_GBL_META_LOG_WEIGHT_PCT,
     OverlayService.PREFS_KEY_SHOW6_META_LOG_WEIGHT_PCT,
     OverlayService.PREFS_KEY_LIMITED_STD_BLEND_PCT_GBL,
-    OverlayService.PREFS_KEY_LIMITED_STD_BLEND_PCT_SHOW6
+    OverlayService.PREFS_KEY_LIMITED_STD_BLEND_PCT_SHOW6,
+    OverlayService.PREFS_KEY_VIP_LOCAL_DVR_LIMIT,
+    OverlayService.PREFS_KEY_VIP_DVR_FPS_MODE
 )
 
 private val SYNCABLE_FLOAT_PREF_KEYS = listOf(
@@ -2609,6 +2611,16 @@ internal fun OverlayService.Companion.getMaxLocalDvrBattlesForTierStatic(prefs: 
         "pro" -> 25
         "supporter" -> 5
         else -> 1
+    }
+}
+
+internal fun OverlayService.Companion.getEffectiveDvrFpsForTierStatic(prefs: SharedPreferences): Int {
+    return if (getEffectiveReplayTierStatic(prefs) == "vip" &&
+        prefs.getInt(OverlayService.PREFS_KEY_VIP_DVR_FPS_MODE, OverlayService.DEFAULT_VIP_DVR_FPS_MODE) != 15
+    ) {
+        30
+    } else {
+        15
     }
 }
 

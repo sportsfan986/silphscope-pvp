@@ -403,7 +403,7 @@ const TIER_PRESETS = {
   },
   pro: {
     tier: 'pro',
-    label: 'Legend Pro Pass ($5/mo or $10/season • 25 Local • 50 Cloud / 10 Pinned • All Cups + Alt Moves)',
+    label: 'Legend Pro Pass ($5/mo or $10/season • 15 FPS DVR • 25 Local • 50 Cloud / 10 Pinned • All Cups + Alt Moves)',
     maxLocalBattles: 25,
     maxRollingBattles: 50,
     maxPinnedBattles: 10,
@@ -418,7 +418,7 @@ const TIER_PRESETS = {
   },
   vip: {
     tier: 'vip',
-    label: 'VIP / Coach Pass ($10/mo or $20/season • 100 Local Slider • 150 Cloud / 25 Pinned • 365d Vault)',
+    label: 'VIP / Coach Pass ($10/mo or $20/season • 30 FPS Smooth DVR (+ 15 FPS Storage Saver) • 100 Local Slider • 150 Cloud / 25 Pinned • 365d Vault)',
     maxLocalBattles: 100,
     maxRollingBattles: 150,
     maxPinnedBattles: 25,
@@ -2098,7 +2098,14 @@ function renderWatchSharePage(origin, shareInfo) {
     }
     function stepFrame(delta) {
       video.pause();
-      const stepSec = 0.067 / mp4TimeCompressionRatio;
+      let avgFrameSec = 0.067;
+      if (frames.length > 10) {
+        const spanMs = (frames[frames.length - 1].relTimeMs || 0) - (frames[0].relTimeMs || 0);
+        if (spanMs > 1000) {
+          avgFrameSec = Math.max(0.030, Math.min(0.110, (spanMs / frames.length) / 1000));
+        }
+      }
+      const stepSec = avgFrameSec / mp4TimeCompressionRatio;
       video.currentTime = Math.max(0, Math.min(video.duration || 999, video.currentTime + delta * stepSec));
       syncHudFrame();
     }

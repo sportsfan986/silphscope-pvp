@@ -35,7 +35,7 @@ Register-ScheduledTask `
     -Action $Action `
     -Trigger $Trigger `
     -Settings $Settings `
-    -Description "Pulls SilphScope PvP telemetry & 1-Battle DVR videos from Cloudflare every 5 minutes using local Node.js + ffmpeg (0 AI tokens), pre-extracts event screenshots, prunes Cloudflare storage, and enforces a 1 GB local disk cap." `
+    -Description "Pulls SilphScope PvP telemetry and 1-Battle DVR videos from Cloudflare every 5 minutes using local Node.js + ffmpeg (0 AI tokens), pre-extracts event screenshots, prunes Cloudflare storage, and enforces a 1 GB local disk cap." `
     -Force | Out-Null
 
-Write-Host "✅ Installed Windows Scheduled Task '$TaskName' (runs every 5 minutes in background, 0 AI tokens)."
+Write-Host "[OK] Installed Windows Scheduled Task '$TaskName' (runs every 5 minutes in background, 0 AI tokens)."
