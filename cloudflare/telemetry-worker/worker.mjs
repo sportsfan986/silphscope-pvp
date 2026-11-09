@@ -2322,37 +2322,82 @@ function renderWatchSharePage(origin, shareInfo) {
   <meta name="twitter:card" content="player" />
   <meta name="twitter:title" content="${pageTitle}" />
   <meta name="twitter:description" content="${pageDesc}" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #050b16;
       --card: #0e1b2e;
+      --card-alt: #081120;
       --border: #19304e;
       --accent: #2dd4bf;
+      --accent-hover: #5eead4;
       --cyan: #67e8f9;
       --amber: #facc15;
+      --amber-hover: #fde047;
       --rose: #f43f5e;
       --text: #ecfeff;
       --muted: #99f6e4;
+      --text-dim: #94a3b8;
     }
     * { box-sizing: border-box; }
+    ::selection {
+      background: rgba(45, 212, 191, 0.3);
+      color: #ecfeff;
+    }
     body {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      background-color: var(--bg);
+      background-image:
+        radial-gradient(circle at 18% 12%, rgba(45, 212, 191, 0.11) 0%, transparent 42%),
+        radial-gradient(circle at 82% 18%, rgba(250, 204, 21, 0.08) 0%, transparent 38%),
+        linear-gradient(180deg, #050B16 0%, #081120 55%, #050B16 100%);
+      background-attachment: fixed;
       color: var(--text);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
+      position: relative;
     }
+    .fixed-watermark-bg {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 0;
+      overflow: hidden;
+      opacity: 0.14;
+    }
+    .dialga-watermark-svg {
+      width: 580px;
+      height: 580px;
+      max-width: 90vw;
+      max-height: 90vh;
+    }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #050b16; }
+    ::-webkit-scrollbar-thumb { background: #19304e; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #2dd4bf; }
     header {
-      padding: 10px 16px;
-      background: rgba(15, 23, 42, 0.95);
+      padding: 10px 18px;
+      background: rgba(5, 11, 22, 0.88);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--border);
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
-      gap: 10px;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
     }
     .brand {
       display: flex;
@@ -2360,16 +2405,44 @@ function renderWatchSharePage(origin, shareInfo) {
       gap: 10px;
       font-weight: 800;
       font-size: 15px;
-      letter-spacing: 0.3px;
+      letter-spacing: -0.2px;
+    }
+    .dialga-crest-badge {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0e1b2e;
+      border: 1.5px solid #2dd4bf;
+      box-shadow: 0 0 16px rgba(45, 212, 191, 0.28);
+      flex-shrink: 0;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .dialga-crest-badge:hover {
+      transform: scale(1.06);
+      box-shadow: 0 0 22px rgba(45, 212, 191, 0.45);
     }
     .badge {
-      padding: 3px 8px;
+      padding: 3px 9px;
       border-radius: 999px;
       font-size: 11px;
-      font-weight: 700;
-      background: rgba(16, 185, 129, 0.16);
-      color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.35);
+      font-weight: 800;
+      background: rgba(45, 212, 191, 0.14);
+      color: #2dd4bf;
+      border: 1px solid rgba(45, 212, 191, 0.4);
+    }
+    .badge-league {
+      background: rgba(103, 232, 249, 0.14);
+      color: #67e8f9;
+      border-color: rgba(103, 232, 249, 0.35);
+    }
+    .badge-star {
+      background: rgba(250, 204, 21, 0.16);
+      color: #facc15;
+      border-color: rgba(250, 204, 21, 0.45);
+      box-shadow: 0 0 10px rgba(250, 204, 21, 0.2);
     }
     .header-actions {
       display: flex;
@@ -2378,11 +2451,11 @@ function renderWatchSharePage(origin, shareInfo) {
       align-items: center;
     }
     button, .btn-link {
-      background: #1e293b;
+      background: var(--card-alt);
       color: var(--text);
-      border: 1px solid #334155;
-      border-radius: 6px;
-      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 11px;
       font-size: 12px;
       font-weight: 700;
       cursor: pointer;
@@ -2391,22 +2464,39 @@ function renderWatchSharePage(origin, shareInfo) {
       align-items: center;
       gap: 5px;
       transition: all 0.15s ease;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
     }
     button:hover, .btn-link:hover {
-      background: #334155;
-      border-color: #475569;
+      background: #14253e;
+      border-color: var(--accent);
+      color: var(--accent-hover);
+      box-shadow: 0 0 10px rgba(45, 212, 191, 0.2);
     }
     button.active {
-      background: rgba(16, 185, 129, 0.22);
+      background: rgba(45, 212, 191, 0.18);
       border-color: var(--accent);
-      color: #34d399;
+      color: var(--accent);
+      box-shadow: 0 0 10px rgba(45, 212, 191, 0.25);
+    }
+    button.primary, .btn-link.primary {
+      background: var(--accent);
+      color: #042f2e;
+      border-color: var(--accent);
+      font-weight: 800;
+      box-shadow: 0 2px 10px rgba(45, 212, 191, 0.25);
+    }
+    button.primary:hover, .btn-link.primary:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+      box-shadow: 0 0 16px rgba(45, 212, 191, 0.45);
+      color: #042f2e;
     }
     main {
       flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 12px;
+      padding: 14px 12px;
       gap: 12px;
       max-width: 1200px;
       width: 100%;
@@ -2428,8 +2518,8 @@ function renderWatchSharePage(origin, shareInfo) {
       background: #000;
       border-radius: 14px;
       overflow: hidden;
-      border: 1px solid var(--border);
-      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.6);
+      border: 1.5px solid var(--border);
+      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.7), 0 0 24px rgba(45, 212, 191, 0.12);
     }
     video {
       width: 100%;
@@ -2473,13 +2563,16 @@ function renderWatchSharePage(origin, shareInfo) {
     .controls-bar {
       width: 100%;
       max-width: 860px;
-      background: var(--card);
+      background: rgba(14, 27, 46, 0.88);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 10px 12px;
+      border-radius: 12px;
+      padding: 12px 14px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(45, 212, 191, 0.08);
     }
     .control-row {
       display: flex;
@@ -2497,52 +2590,83 @@ function renderWatchSharePage(origin, shareInfo) {
     }
     .event-chip {
       font-size: 11px;
-      padding: 3px 8px;
+      padding: 3px 9px;
       border-radius: 999px;
-      background: rgba(30, 41, 59, 0.9);
-      border: 1px solid #334155;
+      background: rgba(8, 17, 32, 0.9);
+      border: 1px solid var(--border);
+      color: var(--muted);
       cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
     }
     .event-chip:hover {
-      border-color: var(--cyan);
-      color: #38bdf8;
+      border-color: var(--accent);
+      color: var(--text);
+      background: rgba(45, 212, 191, 0.2);
+      box-shadow: 0 0 8px rgba(45, 212, 191, 0.25);
     }
   </style>
 </head>
 <body>
+  <!-- Fixed Centered Shiny Origin Dialga Vector Watermark -->
+  <div class="fixed-watermark-bg" aria-hidden="true">
+    <svg viewBox="0 0 240 240" class="dialga-watermark-svg">
+      <path fill="none" stroke="#2DD4BF" stroke-width="3" d="M120,10 L196,42 L228,120 L196,198 L120,230 L44,198 L12,120 L44,42 Z" />
+      <path fill="none" stroke="#FACC15" stroke-width="4" d="M120,44 L178,76 L178,164 L120,196 L62,164 L62,76 Z" />
+      <path fill="#FACC15" d="M62,76 L22,52 L48,92 Z M178,76 L218,52 L192,92 Z M56,120 L14,120 L56,132 Z M184,120 L226,120 L184,132 Z M62,164 L26,188 L54,148 Z M178,164 L214,188 L186,148 Z" />
+      <path fill="#14B8A6" stroke="#67E8F9" stroke-width="2.5" d="M120,14 L138,48 L156,32 L144,76 L186,98 L152,134 L168,188 L142,174 L120,224 L98,174 L72,188 L88,134 L54,98 L96,76 L84,32 L102,48 Z" />
+      <path fill="#081224" stroke="#FACC15" stroke-width="3" d="M120,84 L152,120 L120,156 L88,120 Z" />
+      <path fill="#67E8F9" d="M120,96 L140,120 L120,144 L100,120 Z" />
+    </svg>
+  </div>
   <header>
     <div class="brand">
-      <span>🛡️ SilphScope PvP Replay</span>
-      <span class="badge" id="hdr-trainer">${trainerDisplay}</span>
-      <span class="badge" style="background:rgba(6,182,212,0.15);color:#38bdf8;border-color:rgba(6,182,212,0.35)">${league} • ${result}</span>
-      ${shareInfo.isPinned ? '<span class="badge" style="background:rgba(245,158,11,0.18);color:#fbbf24;border-color:rgba(245,158,11,0.45)">⭐ Starred</span>' : ''}
+      <a href="https://silphscopepvp.com" style="display:inline-flex;align-items:center;gap:12px;text-decoration:none;color:inherit" title="SilphScopePvP.com">
+        <div class="dialga-crest-badge">
+          <svg viewBox="0 0 36 36" style="width:26px;height:26px;display:block">
+            <polygon points="18,2 31,9 31,27 18,34 5,27 5,9" fill="rgba(14, 27, 46, 0.9)" stroke="#2DD4BF" stroke-width="2.2" />
+            <polygon points="18,7 26,12 26,24 18,29 10,24 10,12" fill="none" stroke="#FACC15" stroke-width="1.8" />
+            <circle cx="18" cy="18" r="3.5" fill="#FACC15" />
+          </svg>
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-weight:900;letter-spacing:-0.3px;font-size:16px;color:#fff">SilphScope <span style="color:#2dd4bf">Replay</span></span>
+            <span style="font-size:10px;font-family:'JetBrains Mono',monospace;font-weight:800;text-transform:uppercase;color:#facc15;border:1px solid rgba(250,204,21,0.45);background:rgba(250,204,21,0.12);padding:2px 7px;border-radius:999px">✨ Dialga Midnight</span>
+          </div>
+          <p style="margin:2px 0 0;font-size:11px;color:#99f6e4;font-weight:500">Real-Time 50% Translucent Android HUD • ELO-Adaptive Anti-Meta • Cloud DVR Vault</p>
+        </div>
+      </a>
+      <span class="badge" id="hdr-trainer">@${trainerDisplay}</span>
+      <span class="badge badge-league">${league} • ${result}</span>
+      ${shareInfo.isPinned ? '<span class="badge badge-star">⭐ Starred</span>' : ''}
     </div>
     <div class="header-actions">
-      <a class="btn-link" href="/vault?user=${encodeURIComponent(shareInfo.screenName || 'Featured')}">☁️ @${trainerDisplay}'s Vault</a>
+      <a class="btn-link" href="/vault?user=${encodeURIComponent(shareInfo.screenName || 'Featured')}" style="background:#081120;border-color:#19304e;color:#99f6e4">☁️ @${trainerDisplay}'s Vault</a>
       <button id="btn-flag-issue-hdr" onclick="flagOrEditCurrentIssue()" style="border-color:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? '#f59e0b' : '#b91c1c'};color:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? '#fbbf24' : '#fca5a5'};background:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'rgba(245,158,11,0.16)' : 'rgba(185,28,28,0.18)'}" title="Flag an issue on this replay or edit an existing issue report">🚩 ${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'Flagged ✓ (Edit)' : 'Flag Issue'}</button>
-      <button id="btn-unflag-issue-hdr" onclick="unflagCurrentIssue()" style="display:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'inline-flex' : 'none'};border-color:#64748b;color:#e2e8f0" title="Retract this issue report if it was sent inadvertently">↩️ Unflag Issue</button>
+      <button id="btn-unflag-issue-hdr" onclick="unflagCurrentIssue()" style="display:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'inline-flex' : 'none'};border-color:#64748b;color:#e2e8f0;background:#081120" title="Retract this issue report if it was sent inadvertently">↩️ Unflag Issue</button>
       <button id="btn-privacy" onclick="togglePrivacy()">🕵️ ${hideNamesDefault ? 'Names Hidden' : 'Hide Names'}</button>
       <button id="btn-layout" onclick="toggleLayout()">📐 Side-by-Side: OFF</button>
       <button id="btn-export" onclick="exportWithHud()">💾 Export Video + HUD</button>
-      <a class="btn-link" href="https://silphscopepvp.com/" target="_blank" rel="noopener">🌐 SilphScopePvP.com</a>
-      <a class="btn-link" href="https://dl.silphscopepvp.com" target="_blank" rel="noopener">📱 Download APK</a>
+      <a class="btn-link" href="https://silphscopepvp.com/" target="_blank" rel="noopener" style="background:rgba(45,212,191,0.1);border-color:rgba(45,212,191,0.35);color:#2dd4bf">🌐 SilphScopePvP.com</a>
+      <a class="btn-link primary" href="https://dl.silphscopepvp.com" target="_blank" rel="noopener">📱 Download APK</a>
     </div>
   </header>
 
   <main>
-    <div style="font-size:13px;font-weight:700;color:#cbd5e1;text-align:center">${matchup}</div>
-    <div id="diag-issue-banner" style="width:100%;max-width:860px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.45);border-radius:10px;padding:10px 14px;font-size:12.5px;color:#fef3c7;display:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'flex' : 'none'};flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px">
+    <div style="font-size:14px;font-weight:800;color:#ecfeff;text-align:center;letter-spacing:0.2px">${matchup}</div>
+    <div id="diag-issue-banner" style="width:100%;max-width:860px;background:rgba(250,204,21,0.12);border:1px solid rgba(250,204,21,0.45);border-radius:10px;padding:10px 14px;font-size:12.5px;color:#fef3c7;display:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'flex' : 'none'};flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;box-shadow:0 0 16px rgba(250,204,21,0.1)">
       <div id="diag-issue-text">🚩 <strong>Reported Diagnostic Issue:</strong> ${escapeHtml(shareInfo.userIssueNote || 'Flagged for diagnostic review')}</div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         ${shareInfo.userTierBadge ? `<span class="badge" style="background:rgba(168,85,247,0.2);color:#e9d5ff;border-color:rgba(168,85,247,0.45)">${escapeHtml(shareInfo.userTierBadge)}</span>` : ''}
-        <button id="btn-edit-issue" onclick="flagOrEditCurrentIssue()" style="background:rgba(245,158,11,0.2);border-color:#f59e0b;color:#fde68a;padding:4px 9px;font-size:11.5px">✏️ Edit Note</button>
-        <button id="btn-unflag-issue" onclick="unflagCurrentIssue()" style="background:rgba(30,41,59,0.95);border-color:#64748b;color:#e2e8f0;padding:4px 9px;font-size:11.5px" title="Retract this issue report if it was sent inadvertently">↩️ Unflag Issue</button>
+        <button id="btn-edit-issue" onclick="flagOrEditCurrentIssue()" style="background:rgba(250,204,21,0.2);border-color:#facc15;color:#fde047;padding:4px 9px;font-size:11.5px">✏️ Edit Note</button>
+        <button id="btn-unflag-issue" onclick="unflagCurrentIssue()" style="background:#081120;border-color:#64748b;color:#e2e8f0;padding:4px 9px;font-size:11.5px" title="Retract this issue report if it was sent inadvertently">↩️ Unflag Issue</button>
       </div>
     </div>
     <div class="stage-wrap" id="stage-wrap">
       <div class="video-box" id="video-box">
         <video id="replay-video" src="${videoUrl}" playsinline preload="metadata" crossorigin="anonymous"></video>
-        <div id="dual-energy-pill" style="position:absolute;top:4px;left:6px;z-index:25;background:rgba(15,23,42,0.92);border:1.2px solid #2dd4bf;border-radius:999px;padding:2px 9px;font-size:10.5px;font-weight:700;font-family:'Roboto Condensed',sans-serif;color:#f8fafc;white-space:nowrap;pointer-events:none;box-shadow:0 2px 6px rgba(0,0,0,0.55)">⚡ U: 0E [M:0E 90% | H:0E 75%] • O: 0E [M:0E 88% | H:0E 75%]</div>
+        <div id="dual-energy-pill" style="position:absolute;top:5px;left:6px;z-index:25;background:rgba(8,17,32,0.94);border:1.5px solid #2dd4bf;border-radius:999px;padding:2px 10px;font-size:10.5px;font-weight:800;font-family:'Roboto Condensed',sans-serif;color:#ecfeff;white-space:nowrap;pointer-events:none;box-shadow:0 4px 12px rgba(0,0,0,0.65),0 0 10px rgba(45,212,191,0.25)">⚡ U: 0E [M:0E 90% | H:0E 75%] • O: 0E [M:0E 88% | H:0E 75%]</div>
         <div class="hud-layer pos-top" id="hud-layer">
           <iframe id="hud-iframe" src="/overlay.html?replay=1" scrolling="no" title="SilphScope PvP HUD"></iframe>
         </div>
@@ -2551,8 +2675,8 @@ function renderWatchSharePage(origin, shareInfo) {
 
     <div class="controls-bar">
       <div style="display:flex;align-items:center;gap:8px;width:100%">
-        <input type="range" id="video-scrubber" min="0" max="1000" value="0" style="flex:1;accent-color:#10b981;cursor:pointer" oninput="scrubVideo(this.value)" />
-        <span id="time-readout" style="font-size:11px;font-family:monospace;color:#94a3b8;min-width:82px;text-align:right">0.0s / 0.0s</span>
+        <input type="range" id="video-scrubber" min="0" max="1000" value="0" style="flex:1;accent-color:#2dd4bf;cursor:pointer" oninput="scrubVideo(this.value)" />
+        <span id="time-readout" style="font-size:11px;font-family:monospace;font-weight:700;color:#99f6e4;min-width:82px;text-align:right">0.0s / 0.0s</span>
       </div>
       <div class="control-row">
         <div style="display:flex;gap:4px;flex-wrap:wrap">
@@ -2571,7 +2695,7 @@ function renderWatchSharePage(origin, shareInfo) {
           <button onclick="setHudMode('off')" id="mode-off">OFF</button>
           <button onclick="toggleShieldHud()" id="btn-shield-hud" class="${shareInfo.userTier && shareInfo.userTier !== 'free' ? 'active' : ''}">${shareInfo.userTier && shareInfo.userTier !== 'free' ? '🛡️ Shield: ON' : '🔒 Shield ($2 Supporter)'}</button>
           <button onclick="toggleHudPos()" id="btn-pos">⬆️ Pos: Top</button>
-          <input type="range" id="hud-opacity" min="25" max="100" value="50" style="width:65px" title="HUD Opacity (50% Default)" oninput="updateOpacity(this.value)" />
+          <input type="range" id="hud-opacity" min="25" max="100" value="50" style="width:65px;accent-color:#2dd4bf" title="HUD Opacity (50% Default)" oninput="updateOpacity(this.value)" />
         </div>
       </div>
       <div class="chips-row" id="event-chips"></div>
@@ -4498,19 +4622,20 @@ function renderWatchSharePage(origin, shareInfo) {
             const f = findFrameAtSec(video.currentTime || 0);
             if (f) {
               const y = hudTop ? 36 : 1020;
-              ctx.fillStyle = 'rgba(8, 12, 22, 0.88)';
+              ctx.fillStyle = 'rgba(5, 11, 22, 0.92)';
               ctx.fillRect(12, y, 520, 110);
-              ctx.strokeStyle = '#10b981';
+              ctx.strokeStyle = '#2dd4bf';
+              ctx.lineWidth = 2;
               ctx.strokeRect(12, y, 520, 110);
-              ctx.fillStyle = '#f8fafc';
+              ctx.fillStyle = '#ecfeff';
               ctx.font = 'bold 16px sans-serif';
               ctx.fillText((f.userActiveSpecies || 'User') + ' ' + (f.userHpPct ?? '--') + '% (' + (f.userEnergy ?? 0) + 'E)  vs  ' + (f.oppActiveSpecies || 'Opp') + ' ' + (f.oppHpPct ?? '--') + '% (' + (f.oppEnergy ?? 0) + 'E)', 24, y + 32);
-              ctx.fillStyle = '#34d399';
+              ctx.fillStyle = '#2dd4bf';
               ctx.font = 'bold 14px sans-serif';
               ctx.fillText(String(f.recommendedAction || f.moveBannerText || 'SilphScope PvP').slice(0, 62), 24, y + 66);
-              ctx.fillStyle = '#94a3b8';
+              ctx.fillStyle = '#facc15';
               ctx.font = '12px monospace';
-              ctx.fillText('F#' + String(f.frameIdx || 0).padStart(4, '0') + ' ' + ((f.relTimeMs || 0) / 1000).toFixed(1) + 's • SilphScope PvP', 24, y + 94);
+              ctx.fillText('F#' + String(f.frameIdx || 0).padStart(4, '0') + ' ' + ((f.relTimeMs || 0) / 1000).toFixed(1) + 's • ✨ Shiny Origin Dialga Replay', 24, y + 94);
             }
           }
           requestAnimationFrame(drawTick);
@@ -4535,31 +4660,81 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SilphScope PvP • Cloud DVR Replay Vault</title>
+  <title>SilphScope PvP • Shiny Origin Dialga Cloud DVR Replay Vault</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #050b16;
       --card: #0e1b2e;
+      --card-alt: #081120;
       --border: #19304e;
       --accent: #2dd4bf;
+      --accent-hover: #5eead4;
       --cyan: #67e8f9;
       --amber: #facc15;
+      --amber-hover: #fde047;
       --rose: #f43f5e;
       --text: #ecfeff;
       --muted: #99f6e4;
+      --text-dim: #94a3b8;
     }
     * { box-sizing: border-box; }
+    ::selection {
+      background: rgba(45, 212, 191, 0.3);
+      color: #ecfeff;
+    }
     body {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      background-color: var(--bg);
+      background-image:
+        radial-gradient(circle at 18% 12%, rgba(45, 212, 191, 0.11) 0%, transparent 42%),
+        radial-gradient(circle at 82% 18%, rgba(250, 204, 21, 0.08) 0%, transparent 38%),
+        linear-gradient(180deg, #050B16 0%, #081120 55%, #050B16 100%);
+      background-attachment: fixed;
       color: var(--text);
       min-height: 100vh;
+      position: relative;
     }
+    .fixed-watermark-bg {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 0;
+      overflow: hidden;
+      opacity: 0.14;
+    }
+    .dialga-watermark-svg {
+      width: 580px;
+      height: 580px;
+      max-width: 90vw;
+      max-height: 90vh;
+    }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #050b16; }
+    ::-webkit-scrollbar-thumb { background: #19304e; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #2dd4bf; }
     header {
-      padding: 14px 20px;
-      background: rgba(15, 23, 42, 0.95);
+      padding: 12px 20px;
+      background: rgba(5, 11, 22, 0.88);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .header-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      width: 100%;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
@@ -4569,149 +4744,344 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     .brand {
       display: flex;
       align-items: center;
-      gap: 10px;
-      font-weight: 800;
-      font-size: 16px;
+      gap: 12px;
     }
-    .container {
-      max-width: 1080px;
-      margin: 0 auto;
-      padding: 20px 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-    .login-card {
-      background: var(--card);
-      border: 1px solid var(--border);
+    .dialga-crest-badge {
+      width: 40px;
+      height: 40px;
       border-radius: 12px;
-      padding: 14px 16px;
       display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
       align-items: center;
+      justify-content: center;
+      background: #0e1b2e;
+      border: 1.5px solid #2dd4bf;
+      box-shadow: 0 0 18px rgba(45, 212, 191, 0.28);
+      flex-shrink: 0;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
-    input, select {
-      background: #020617;
-      color: var(--text);
-      border: 1px solid #334155;
-      border-radius: 8px;
-      padding: 9px 12px;
-      font-size: 13px;
-      flex: 1;
-      min-width: 170px;
+    .dialga-crest-badge:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 24px rgba(45, 212, 191, 0.45);
     }
-    button, .btn-link {
-      background: #1e293b;
-      color: var(--text);
-      border: 1px solid #334155;
+    .nav-pills-bar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #081120;
+      font-size: 12px;
+      font-weight: 800;
+      flex-wrap: wrap;
+    }
+    .nav-pill {
+      padding: 6px 12px;
       border-radius: 8px;
-      padding: 8px 13px;
-      font-size: 12.5px;
-      font-weight: 700;
-      cursor: pointer;
+      color: rgba(153, 246, 228, 0.85);
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+    .nav-pill:hover {
+      color: #fff;
+      background: rgba(30, 41, 59, 0.6);
+    }
+    .nav-pill-gold {
+      color: #fde047;
+      border: 1px solid rgba(250, 204, 21, 0.3);
+    }
+    .nav-pill-gold:hover {
+      background: rgba(250, 204, 21, 0.15);
+      color: #fff;
+    }
+    .btn-cta {
+      padding: 7px 14px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 800;
       text-decoration: none;
       display: inline-flex;
       align-items: center;
       gap: 6px;
       transition: all 0.15s ease;
     }
-    button.primary {
-      background: #059669;
-      border-color: #10b981;
+    .active-dvr {
+      background: rgba(14, 27, 46, 0.95);
+      border: 1.5px solid var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 14px rgba(45, 212, 191, 0.25);
     }
-    button.tab-btn {
-      background: #0f172a;
-      color: #94a3b8;
-      border: 1px solid #334155;
-      padding: 7px 12px;
-      font-size: 12px;
+    .btn-cta-download {
+      background: var(--accent);
+      color: #042f2e;
+      border: 1.5px solid var(--accent);
+      box-shadow: 0 0 16px rgba(45, 212, 191, 0.35);
+      font-weight: 900;
     }
-    button.tab-btn.active {
-      background: rgba(16, 185, 129, 0.18);
-      color: #34d399;
-      border-color: #10b981;
+    .btn-cta-download:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+      box-shadow: 0 0 20px rgba(45, 212, 191, 0.5);
     }
-    button:hover, .btn-link:hover {
-      filter: brightness(1.12);
+    .btn-cta-upgrade {
+      background: rgba(250, 204, 21, 0.16);
+      border: 1.5px solid var(--amber);
+      color: var(--amber-hover);
+      font-weight: 900;
     }
-    .stats-bar {
-      background: rgba(15, 23, 42, 0.85);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 12px 16px;
+    .btn-cta-upgrade:hover {
+      background: rgba(250, 204, 21, 0.26);
+      color: #fff;
+      box-shadow: 0 0 14px rgba(250, 204, 21, 0.3);
+    }
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px 20px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 16px;
+      position: relative;
+      z-index: 1;
+    }
+    .login-card {
+      background: rgba(14, 27, 46, 0.85);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+    input, select {
+      background: #081120;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
       font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      flex: 1;
+      min-width: 180px;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    input:focus, select:focus {
+      border-color: var(--accent);
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.25);
+    }
+    button, .btn-link {
+      background: #081120;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 9px 14px;
+      font-size: 12.5px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+    button:hover, .btn-link:hover {
+      background: #14253e;
+      border-color: var(--accent);
+      color: var(--accent-hover);
+      box-shadow: 0 0 10px rgba(45, 212, 191, 0.2);
+    }
+    button.primary, .btn-link.primary {
+      background: var(--accent);
+      color: #042f2e;
+      border-color: var(--accent);
+      font-weight: 800;
+      box-shadow: 0 2px 10px rgba(45, 212, 191, 0.25);
+    }
+    button.primary:hover, .btn-link.primary:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+      box-shadow: 0 0 16px rgba(45, 212, 191, 0.45);
+      color: #042f2e;
+    }
+    button.tab-btn {
+      background: #081120;
+      color: #94a3b8;
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      font-size: 12px;
+      border-radius: 8px;
+    }
+    button.tab-btn.active {
+      background: rgba(45, 212, 191, 0.18);
+      color: var(--accent);
+      border-color: var(--accent);
+      box-shadow: 0 0 10px rgba(45, 212, 191, 0.22);
+    }
+    .stats-bar {
+      background: rgba(14, 27, 46, 0.9);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      font-size: 13px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
     }
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
-      gap: 14px;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
     }
     .replay-card {
-      background: var(--card);
+      background: rgba(14, 27, 46, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 14px;
+      border-radius: 16px;
+      padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 12px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+      transition: all 0.2s ease;
+    }
+    .replay-card:hover {
+      border-color: var(--accent);
+      box-shadow: 0 8px 26px rgba(0, 0, 0, 0.55), 0 0 16px rgba(45, 212, 191, 0.2);
+      transform: translateY(-2px);
     }
     .replay-card.pinned {
-      border-color: rgba(245, 158, 11, 0.65);
-      box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.15);
+      border-color: rgba(250, 204, 21, 0.7);
+      box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5), 0 0 18px rgba(250, 204, 21, 0.22);
     }
     .pill {
-      padding: 2px 8px;
+      padding: 3px 10px;
       border-radius: 999px;
       font-size: 11px;
       font-weight: 800;
     }
-    .pill-win { background: rgba(16, 185, 129, 0.18); color: #34d399; }
-    .pill-loss { background: rgba(244, 63, 94, 0.18); color: #fb7185; }
-    .pill-star { background: rgba(245, 158, 11, 0.18); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+    .pill-win {
+      background: rgba(45, 212, 191, 0.18);
+      color: #2dd4bf;
+      border: 1px solid rgba(45, 212, 191, 0.4);
+    }
+    .pill-loss {
+      background: rgba(244, 63, 94, 0.18);
+      color: #fda4af;
+      border: 1px solid rgba(244, 63, 94, 0.4);
+    }
+    .pill-star {
+      background: rgba(250, 204, 21, 0.16);
+      color: #facc15;
+      border: 1px solid rgba(250, 204, 21, 0.45);
+      box-shadow: 0 0 10px rgba(250, 204, 21, 0.2);
+    }
   </style>
 </head>
 <body>
+  <!-- Fixed Centered Shiny Origin Dialga Vector Watermark -->
+  <div class="fixed-watermark-bg" aria-hidden="true">
+    <svg viewBox="0 0 240 240" class="dialga-watermark-svg">
+      <path fill="none" stroke="#2DD4BF" stroke-width="3" d="M120,10 L196,42 L228,120 L196,198 L120,230 L44,198 L12,120 L44,42 Z" />
+      <path fill="none" stroke="#FACC15" stroke-width="4" d="M120,44 L178,76 L178,164 L120,196 L62,164 L62,76 Z" />
+      <path fill="#FACC15" d="M62,76 L22,52 L48,92 Z M178,76 L218,52 L192,92 Z M56,120 L14,120 L56,132 Z M184,120 L226,120 L184,132 Z M62,164 L26,188 L54,148 Z M178,164 L214,188 L186,148 Z" />
+      <path fill="#14B8A6" stroke="#67E8F9" stroke-width="2.5" d="M120,14 L138,48 L156,32 L144,76 L186,98 L152,134 L168,188 L142,174 L120,224 L98,174 L72,188 L88,134 L54,98 L96,76 L84,32 L102,48 Z" />
+      <path fill="#081224" stroke="#FACC15" stroke-width="3" d="M120,84 L152,120 L120,156 L88,120 Z" />
+      <path fill="#67E8F9" d="M120,96 L140,120 L120,144 L100,120 Z" />
+    </svg>
+  </div>
   <header>
-    <div class="brand">
-      <span>🛡️ SilphScope PvP • Cloud DVR Replay Vault</span>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button onclick="document.getElementById('inp-user').value='Featured';loadVault()" style="background:rgba(250,204,21,0.16);border-color:#facc15;color:#fde047">🌟 Official Featured Showcase</button>
-      <a class="btn-link" href="https://silphscopepvp.com/" target="_blank" rel="noopener">🌐 SilphScopePvP.com</a>
-      <a class="btn-link" href="https://silphscopepvp.com/?view=app" target="_blank" rel="noopener">🧮 Web Battle Simulator</a>
-      <a class="btn-link" href="https://dl.silphscopepvp.com" target="_blank" rel="noopener">📱 Download Android APK</a>
+    <div class="header-inner">
+      <div class="brand">
+        <a href="https://silphscopepvp.com" style="display:inline-flex;align-items:center;gap:12px;text-decoration:none;color:inherit" title="SilphScopePvP.com">
+          <div class="dialga-crest-badge">
+            <svg viewBox="0 0 36 36" style="width:28px;height:28px;display:block">
+              <polygon points="18,2 31,9 31,27 18,34 5,27 5,9" fill="rgba(14, 27, 46, 0.9)" stroke="#2DD4BF" stroke-width="2.2" />
+              <polygon points="18,7 26,12 26,24 18,29 10,24 10,12" fill="none" stroke="#FACC15" stroke-width="1.8" />
+              <circle cx="18" cy="18" r="3.5" fill="#FACC15" />
+            </svg>
+          </div>
+          <div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-weight:900;letter-spacing:-0.4px;font-size:17px;color:#fff">SilphScope <span style="color:#2dd4bf">PvP</span></span>
+              <span style="font-size:10px;font-family:'JetBrains Mono',monospace;font-weight:800;text-transform:uppercase;color:#facc15;border:1px solid rgba(250,204,21,0.45);background:rgba(250,204,21,0.12);padding:2px 8px;border-radius:999px">v7.27 • Latest Release</span>
+            </div>
+            <p style="margin:2px 0 0;font-size:11px;color:#99f6e4;font-weight:500">Real-Time 50% Translucent Android HUD • ELO-Adaptive Anti-Meta • Cloud DVR Vault</p>
+          </div>
+        </a>
+      </div>
+
+      <!-- Center Subpage Switcher (Identical to Marketing Website) -->
+      <nav class="nav-pills-bar">
+        <a href="https://silphscopepvp.com/?view=home" class="nav-pill">🏠 Overview &amp; Featured Battles</a>
+        <a href="https://silphscopepvp.com/?view=guide" class="nav-pill">📖 How to Use Overlay</a>
+        <a href="https://silphscopepvp.com/?view=compare" class="nav-pill">⚔️ vs PvPoke &amp; GOBattleLog</a>
+        <a href="https://silphscopepvp.com/?view=app" class="nav-pill nav-pill-gold">🧮 Launch Web Simulator &amp; Team Builder</a>
+      </nav>
+
+      <!-- Right Quick Action CTAs -->
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <a href="/vault" class="btn-cta active-dvr">🎬 DVR Replay Vault</a>
+        <a href="https://dl.silphscopepvp.com" target="_blank" rel="noopener" class="btn-cta btn-cta-download">📱 Download APK</a>
+        <a href="${STRIPE_PAYMENT_LINKS.supporter}" target="_blank" rel="noopener" class="btn-cta btn-cta-upgrade">👑 Upgrade ($2+)</a>
+      </div>
     </div>
   </header>
 
   <div class="container">
+    <!-- Hero Pitch / Telemetry Strip matching Main Website -->
+    <div style="display:flex;flex-direction:column;gap:8px;padding:6px 0 4px">
+      <div style="display:inline-flex;align-items:center;gap:8px;padding:4px 14px;border-radius:999px;border:1px solid rgba(45,212,191,0.45);background:rgba(45,212,191,0.1);font-size:11px;font-weight:800;color:#2dd4bf;width:fit-content">
+        <span>⚡ ZERO-LAG ANDROID OVERLAY</span>
+        <span style="color:#64748b">•</span>
+        <span style="color:#facc15">50% TRANSLUCENT HUD</span>
+        <span style="color:#64748b">•</span>
+        <span>GBL &amp; SHOW 6</span>
+        <span style="color:#64748b">•</span>
+        <span style="color:#67e8f9">🎬 CLOUD REPLAY VAULT</span>
+      </div>
+      <h1 style="margin:4px 0 0;font-size:28px;font-weight:900;letter-spacing:-0.5px;color:#fff;line-height:1.2">
+        Master Every Turn &amp; Shield Call with <span style="background:linear-gradient(90deg,#2dd4bf 0%,#67e8f9 50%,#facc15 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Cloud DVR Replays.</span>
+      </h1>
+      <p style="margin:0;font-size:13.5px;color:#94a3b8;max-width:860px;line-height:1.5">
+        Watch frame-accurate H.264 combat recordings with live synchronized 50% translucent tactical HUD overlay, turn clocks, banked energy across all 3 opponent slots, and dynamic 9-shield matrix calculations.
+      </p>
+    </div>
     <!-- Top Bar: Public Trainer Lookup + Owner Login Toggle -->
     <div class="login-card" style="justify-content:space-between">
       <div style="display:flex;gap:8px;flex:1;flex-wrap:wrap;align-items:center">
-        <span style="font-size:13px;font-weight:800;color:#cbd5e1">👤 Trainer Vault:</span>
+        <span style="font-size:13px;font-weight:800;color:#ecfeff">👤 Trainer Vault:</span>
         <input id="inp-user" type="text" placeholder="Enter Trainer ID (or Featured)" style="max-width:260px" onkeydown="if(event.key==='Enter')loadVault()" />
         <button class="primary" onclick="loadVault()">👁️ View DVR Vault</button>
-        <button onclick="document.getElementById('inp-user').value='Featured';loadVault()" style="border-color:#facc15;color:#fde047">🌟 @Featured</button>
+        <button onclick="document.getElementById('inp-user').value='Featured';loadVault()" style="background:rgba(250,204,21,0.14);border-color:rgba(250,204,21,0.45);color:#fde047">🌟 @Featured</button>
         <button onclick="copyVaultShareUrl()" title="Copy link to this trainer's DVR page">🔗 Share Vault Page</button>
       </div>
       <div style="display:flex;gap:8px;align-items:center" id="auth-header-controls">
-        <button id="btn-toggle-login" onclick="toggleLoginPanel()" style="border-color:#38bdf8;color:#38bdf8">🔐 Owner Login</button>
+        <button id="btn-toggle-login" onclick="toggleLoginPanel()" style="border-color:#2dd4bf;color:#2dd4bf">🔐 Owner Login</button>
         <button id="btn-logout" onclick="logoutVault()" style="display:none;border-color:#f43f5e;color:#fb7185">🚪 Log Out</button>
       </div>
     </div>
 
     <!-- Collapsible Owner Login Card (3 Methods: Username/Token, Username/Password, GitHub OAuth) -->
-    <div class="login-card" id="owner-login-panel" style="display:none;flex-direction:column;align-items:stretch;gap:12px;border-color:#334155">
+    <div class="login-card" id="owner-login-panel" style="display:none;flex-direction:column;align-items:stretch;gap:12px;border-color:var(--border)">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="tab-btn active" id="tab-token" onclick="setAuthTab('token')">🔑 Username + Token</button>
           <button class="tab-btn" id="tab-password" onclick="setAuthTab('password')">🔒 Username + Password</button>
           <button class="tab-btn" id="tab-github" onclick="setAuthTab('github')">🐙 GitHub Login</button>
         </div>
-        <span style="font-size:11.5px;color:#94a3b8">Log in as the vault owner to view unstarred rolling battles, ⭐ Star/Pin battles, or change visibility.</span>
+        <span style="font-size:11.5px;color:#99f6e4">Log in as the vault owner to view unstarred rolling battles, ⭐ Star/Pin battles, or change visibility.</span>
       </div>
 
       <!-- Tab 1: Username + Token / Unlock Key -->
@@ -4731,33 +5101,33 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       <!-- Tab 3: GitHub OAuth Device Flow / Token -->
       <div id="pane-github" style="display:none;flex-direction:column;gap:10px">
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <button class="primary" style="background:#24292f;border-color:#6e7681" onclick="startGitHubDeviceLogin()">🐙 1-Click Sign In with GitHub</button>
-          <span style="font-size:12px;color:#94a3b8">or paste a GitHub token:</span>
+          <button class="primary" style="background:#24292f;border-color:#6e7681;color:#fff" onclick="startGitHubDeviceLogin()">🐙 1-Click Sign In with GitHub</button>
+          <span style="font-size:12px;color:#99f6e4">or paste a GitHub token:</span>
           <input id="inp-gh-token" type="password" placeholder="gho_... / ghp_... (optional)" style="max-width:220px" />
           <button onclick="loginWithGitHubToken()">Verify Token</button>
         </div>
-        <div id="gh-device-box" style="display:none;background:#020617;border:1px solid #38bdf8;border-radius:8px;padding:10px 14px;font-size:13px"></div>
+        <div id="gh-device-box" style="display:none;background:#081120;border:1.5px solid #2dd4bf;border-radius:8px;padding:12px 14px;font-size:13px;box-shadow:0 0 16px rgba(45,212,191,0.18)"></div>
       </div>
     </div>
 
     <!-- Set / Change Password Modal Box (Owner Only) -->
-    <div class="login-card" id="password-setup-box" style="display:none;border-color:#f59e0b;background:rgba(15,23,42,0.95)">
-      <strong style="font-size:13px;color:#fbbf24">🔒 Set / Update Password for @<span id="pw-target-user"></span>:</strong>
+    <div class="login-card" id="password-setup-box" style="display:none;border-color:#facc15;background:rgba(14,27,46,0.95);box-shadow:0 0 18px rgba(250,204,21,0.2)">
+      <strong style="font-size:13px;color:#fde047">🔒 Set / Update Password for @<span id="pw-target-user"></span>:</strong>
       <input id="inp-new-password" type="password" placeholder="New Password (min 8 characters)" style="max-width:240px" />
       <button class="primary" onclick="saveNewPassword()">💾 Save Password</button>
       <button onclick="document.getElementById('password-setup-box').style.display='none'">Cancel</button>
     </div>
 
-    <div class="login-card" style="justify-content:space-between;background:rgba(15,23,42,0.65);font-size:12px;color:#cbd5e1">
+    <div class="login-card" style="justify-content:space-between;background:rgba(14,27,46,0.85);font-size:12px;color:#ecfeff;border-color:var(--border)">
       <div>
-        <strong>⚡ Upgrade or Renew Season Pass:</strong>
-        <span style="color:#94a3b8;margin-left:6px">First 14 days of GBL Season = Full Season ($6 Pro / $10 VIP). Day 15+ First-Time Promo = 1-Month Rate ($3 Pro / $5 VIP) for the entire remainder of the season!</span>
+        <strong style="color:#facc15">⚡ Upgrade or Renew Season Pass:</strong>
+        <span style="color:#99f6e4;margin-left:6px">First 14 days of GBL Season = Full Season ($6 Pro / $10 VIP). Day 15+ First-Time Promo = 1-Month Rate ($3 Pro / $5 VIP) for the entire remainder of the season!</span>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <a class="btn-link" style="background:#0284c7;border-color:#38bdf8" href="${STRIPE_PAYMENT_LINKS.supporter}" target="_blank" rel="noopener">🏅 Supporter ($2)</a>
-        <a class="btn-link" style="background:#059669;border-color:#10b981" href="${STRIPE_PAYMENT_LINKS.pro_season}" target="_blank" rel="noopener">💳 Stripe Pro Pass</a>
-        <a class="btn-link" style="background:#7c3aed;border-color:#a78bfa" href="${STRIPE_PAYMENT_LINKS.vip_season}" target="_blank" rel="noopener">👑 Stripe VIP Pass</a>
-        <a class="btn-link" style="background:#d97706;border-color:#f59e0b" href="${BMC_LINKS.page}" target="_blank" rel="noopener">☕ Buy Me a Coffee</a>
+        <a class="btn-link" style="background:rgba(250,204,21,0.14);border-color:rgba(250,204,21,0.45);color:#fde047" href="${STRIPE_PAYMENT_LINKS.supporter}" target="_blank" rel="noopener">🏅 Supporter ($2)</a>
+        <a class="btn-link primary" href="${STRIPE_PAYMENT_LINKS.pro_season}" target="_blank" rel="noopener">💳 Stripe Pro Pass</a>
+        <a class="btn-link" style="background:rgba(168,85,247,0.2);border-color:rgba(168,85,247,0.45);color:#e9d5ff;font-weight:800" href="${STRIPE_PAYMENT_LINKS.vip_season}" target="_blank" rel="noopener">👑 Stripe VIP Pass</a>
+        <a class="btn-link" style="background:rgba(245,158,11,0.18);border-color:#f59e0b;color:#fde047;font-weight:800" href="${BMC_LINKS.page}" target="_blank" rel="noopener">☕ Buy Me a Coffee</a>
       </div>
     </div>
 
@@ -4985,13 +5355,13 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           : 'https://github.com/login/device';
         box.innerHTML =
           '<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px">' +
-            '<div>1. Copy one-time code: <strong style="font-size:16px;color:#38bdf8;letter-spacing:1px;padding:2px 8px;background:#0f172a;border-radius:6px">' + esc(data.user_code) + '</strong></div>' +
+            '<div>1. Copy one-time code: <strong style="font-size:16px;color:#2dd4bf;letter-spacing:1px;padding:3px 10px;background:#081120;border:1px solid #19304e;border-radius:6px">' + esc(data.user_code) + '</strong></div>' +
             '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-              '<a class="btn-link" style="background:#059669;border-color:#10b981" href="' + esc(safeUri) + '" target="_blank" rel="noopener">2. Open GitHub & Authorize ↗</a>' +
-              '<button onclick="pollGitHubDeviceNow(true)" style="background:#0284c7;border-color:#38bdf8;color:#fff">✅ 3. I\\'ve Authorized — Finish Sign-In</button>' +
+              '<a class="btn-link primary" href="' + esc(safeUri) + '" target="_blank" rel="noopener">2. Open GitHub & Authorize ↗</a>' +
+              '<button onclick="pollGitHubDeviceNow(true)" style="background:#081120;border-color:#2dd4bf;color:#2dd4bf;font-weight:700">✅ 3. I\\'ve Authorized — Finish Sign-In</button>' +
             '</div>' +
           '</div>' +
-          '<div style="margin-top:6px;font-size:11.5px;color:#94a3b8" id="gh-poll-status">Waiting for authorization on GitHub (auto-unlocks when you return to this tab)...</div>';
+          '<div style="margin-top:6px;font-size:11.5px;color:#99f6e4" id="gh-poll-status">Waiting for authorization on GitHub (auto-unlocks when you return to this tab)...</div>';
         try { navigator.clipboard.writeText(data.user_code); } catch (_) {}
         window.open(safeUri, '_blank', 'noopener');
 
@@ -5074,9 +5444,9 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       const email = document.getElementById('inp-email').value.trim();
       if (!user) {
         document.getElementById('replays-grid').innerHTML =
-          '<div style="color:#94a3b8;padding:24px;grid-column:1/-1;text-align:center;background:#0f172a;border:1px solid #1e293b;border-radius:12px">' +
-            '<div style="font-size:15px;font-weight:800;color:#f8fafc;margin-bottom:6px">🔍 Enter a Trainer ID above to view their Public DVR Replay Vault</div>' +
-            '<div style="font-size:12.5px;color:#94a3b8">Starred replays are viewable by anyone by default, or click <strong>🔐 Owner Login</strong> to sign in with your Token, Password, or GitHub account.</div>' +
+          '<div style="color:#99f6e4;padding:28px 20px;grid-column:1/-1;text-align:center;background:rgba(14,27,46,0.85);backdrop-filter:blur(10px);border:1px solid #19304e;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.4)">' +
+            '<div style="font-size:16px;font-weight:800;color:#ecfeff;margin-bottom:8px">🔍 Enter a Trainer ID above to view their Public DVR Replay Vault</div>' +
+            '<div style="font-size:13px;color:#99f6e4">Starred replays are viewable by anyone by default, or click <strong style="color:#2dd4bf">🔐 Owner Login</strong> to sign in with your Token, Password, or GitHub account.</div>' +
           '</div>';
         return;
       }
@@ -5085,7 +5455,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       if (email) localStorage.setItem('sspvp_vault_email', email);
 
       const grid = document.getElementById('replays-grid');
-      grid.innerHTML = '<div style="color:#94a3b8;padding:20px">Loading Cloud Replay Vault for @' + esc(user) + '...</div>';
+      grid.innerHTML = '<div style="color:#99f6e4;padding:20px;font-weight:700">Loading Cloud Replay Vault for @' + esc(user) + '...</div>';
 
       try {
         const res = await fetch('/v1/replays/list?user=' + encodeURIComponent(user), {
@@ -5102,7 +5472,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           document.getElementById('stats-bar').style.display = 'none';
           document.getElementById('filter-bar').style.display = 'none';
           document.getElementById('owner-login-panel').style.display = 'flex';
-          grid.innerHTML = '<div style="color:#fb7185;padding:20px;grid-column:1/-1;background:#0f172a;border:1px solid #334155;border-radius:12px">' + esc(data.error || 'Failed to load vault') + '</div>';
+          grid.innerHTML = '<div style="color:#fda4af;padding:20px;grid-column:1/-1;background:rgba(14,27,46,0.85);border:1px solid rgba(244,63,94,0.45);border-radius:12px">' + esc(data.error || 'Failed to load vault') + '</div>';
           return;
         }
 
@@ -5124,26 +5494,26 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
 
         if (isOwner) {
           const ghBadge = data.githubUsername
-            ? '<span style="color:#34d399;font-size:12px">🐙 GitHub: @' + esc(data.githubUsername) + '</span>'
+            ? '<span style="color:#2dd4bf;font-size:12px;font-weight:700">🐙 GitHub: @' + esc(data.githubUsername) + '</span>'
             : '<button onclick="toggleLoginPanel();setAuthTab(\\'github\\')" style="padding:4px 9px;font-size:11.5px">🐙 Link GitHub</button>';
           const pwBtn = '<button onclick="openPasswordSetup()" style="padding:4px 9px;font-size:11.5px">' + (data.hasPassword ? '🔒 Change Password' : '🔒 Set Password') + '</button>';
 
           sb.innerHTML =
             '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">' +
-              '<div><strong>👤 @' + esc(data.screenName) + ' (Owner)</strong> • <span style="color:#38bdf8;font-weight:700">' + esc(lim.label || (data.tier || 'FREE').toUpperCase()) + '</span></div>' +
-              '<div style="color:#cbd5e1">☁️ Storage: <strong>' + esc(usg.usedMb || 0) + ' MB</strong> / ' + esc(lim.maxStorageMb || 0) + ' MB • Rolling: <strong>' + esc(usg.rollingCount || 0) + '/' + esc(lim.maxRollingBattles || 0) + '</strong> • ⭐ Starred: <strong>' + esc(usg.pinnedCount || 0) + '/' + esc(lim.maxPinnedBattles || 0) + '</strong> • 🌐 Public: <strong>' + esc(usg.publicCount || 0) + '</strong></div>' +
+              '<div><strong>👤 @' + esc(data.screenName) + ' (Owner)</strong> • <span style="color:#2dd4bf;font-weight:800">' + esc(lim.label || (data.tier || 'FREE').toUpperCase()) + '</span></div>' +
+              '<div style="color:#ecfeff">☁️ Storage: <strong style="color:#2dd4bf">' + esc(usg.usedMb || 0) + ' MB</strong> / ' + esc(lim.maxStorageMb || 0) + ' MB • Rolling: <strong style="color:#2dd4bf">' + esc(usg.rollingCount || 0) + '/' + esc(lim.maxRollingBattles || 0) + '</strong> • ⭐ Starred: <strong style="color:#fde047">' + esc(usg.pinnedCount || 0) + '/' + esc(lim.maxPinnedBattles || 0) + '</strong> • 🌐 Public: <strong style="color:#67e8f9">' + esc(usg.publicCount || 0) + '</strong></div>' +
             '</div>' +
-            '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-top:8px;border-top:1px solid #1e293b">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-top:10px;border-top:1px solid #19304e">' +
               '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
-                '<span style="font-size:12px;color:#94a3b8;font-weight:700">🌐 Public Vault Visibility:</span>' +
-                '<select onchange="updateVaultVisibility(this.value)" style="min-width:265px;padding:5px 10px;font-size:12px">' +
+                '<span style="font-size:12px;color:#99f6e4;font-weight:700">🌐 Public Vault Visibility:</span>' +
+                '<select onchange="updateVaultVisibility(this.value)" style="min-width:265px;padding:6px 10px;font-size:12px">' +
                   '<option value="public_only"' + (vis === 'public_only' ? ' selected' : '') + '>🔒 Private (Only shows ones manually made public)</option>' +
                   '<option value="starred_only"' + (vis === 'starred_only' ? ' selected' : '') + '>⭐ Starred only</option>' +
                   '<option value="starred_and_public"' + (vis === 'starred_and_public' || vis === 'starred_and_private' ? ' selected' : '') + '>⭐+🌐 Starred + Private (Starred or manually made public)</option>' +
                   '<option value="all"' + (vis === 'all' ? ' selected' : '') + '>🌐 All videos shared (Overrides per-video private)</option>' +
                   '<option value="none"' + (vis === 'none' || vis === 'private' ? ' selected' : '') + '>🚫 No videos shared without login</option>' +
                 '</select>' +
-                '<span style="font-size:11px;color:#64748b">(All videos default to 🔒 Private unless toggled 🌐 Public or overridden)</span>' +
+                '<span style="font-size:11px;color:#94a3b8">(All videos default to 🔒 Private unless toggled 🌐 Public or overridden)</span>' +
               '</div>' +
               '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' + pwBtn + ghBadge + '</div>' +
             '</div>';
@@ -5161,14 +5531,14 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
             : '';
           sb.innerHTML =
             '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">' +
-              '<div><strong>👤 @' + esc(data.screenName) + '</strong> • <span style="color:#fbbf24;font-weight:700">' + visLabel + '</span>' + hiddenNote + '</div>' +
-              '<button onclick="toggleLoginPanel()" style="padding:5px 10px;font-size:11.5px;border-color:#38bdf8;color:#38bdf8">🔐 Are you @' + esc(data.screenName) + '? Log In to Manage & Star</button>' +
+              '<div><strong>👤 @' + esc(data.screenName) + '</strong> • <span style="color:#fde047;font-weight:800">' + visLabel + '</span>' + hiddenNote + '</div>' +
+              '<button onclick="toggleLoginPanel()" style="padding:6px 12px;font-size:12px;border-color:#2dd4bf;color:#2dd4bf">🔐 Are you @' + esc(data.screenName) + '? Log In to Manage & Star</button>' +
             '</div>';
         }
 
         renderReplayGrid();
       } catch (e) {
-        grid.innerHTML = '<div style="color:#fb7185;padding:20px">Error: ' + esc(e.message) + '</div>';
+        grid.innerHTML = '<div style="color:#fda4af;padding:20px;background:rgba(14,27,46,0.85);border:1px solid rgba(244,63,94,0.45);border-radius:12px">Error: ' + esc(e.message) + '</div>';
       }
     }
 
@@ -5219,7 +5589,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         const emptyMsg = !isOwner
           ? 'No public replays published by @' + esc(currentVaultData.screenName) + ' under their current visibility filter. If this is your vault, click 🔐 Owner Login above to view all private battles and toggle 🌐 Public or ⭐ Star!'
           : 'No replays found in this filter view.';
-        grid.innerHTML = '<div style="color:#94a3b8;padding:20px;grid-column:1/-1">' + emptyMsg + '</div>';
+        grid.innerHTML = '<div style="color:#99f6e4;padding:24px;grid-column:1/-1;background:rgba(14,27,46,0.85);border:1px solid #19304e;border-radius:12px;text-align:center">' + emptyMsg + '</div>';
         return;
       }
 
@@ -5235,45 +5605,45 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         const safeShareUrlJs = escJsArg(item.shareUrl || ('/watch/' + encodeURIComponent(item.shareId || '')));
         const highlightSecNum = Number(item.highlightSec) || 0;
         const starControl = isOwner
-          ? '<button onclick="togglePin(\\'' + safeBattleIdJs + '\\', ' + (!item.isPinned) + ')" style="padding:7px 10px;font-size:12px;border-color:' + (item.isPinned ? '#f59e0b' : '#334155') + ';color:' + (item.isPinned ? '#fbbf24' : '#e2e8f0') + '" title="Starred replays are kept for 365 days">' + (item.isPinned ? '⭐ Starred' : '☆ Star') + '</button>'
-          : '<button disabled style="padding:7px 10px;font-size:12px;opacity:0.85;cursor:default;border-color:' + (item.isPinned ? '#f59e0b' : '#334155') + ';color:' + (item.isPinned ? '#fbbf24' : '#94a3b8') + '">' + (item.isPinned ? '⭐ Starred' : '☆ Star') + '</button>';
+          ? '<button onclick="togglePin(\\'' + safeBattleIdJs + '\\', ' + (!item.isPinned) + ')" style="padding:7px 10px;font-size:12px;border-color:' + (item.isPinned ? '#facc15' : '#19304e') + ';color:' + (item.isPinned ? '#fde047' : '#ecfeff') + ';background:' + (item.isPinned ? 'rgba(250,204,21,0.18)' : '#081120') + ';box-shadow:' + (item.isPinned ? '0 0 10px rgba(250,204,21,0.2)' : 'none') + '" title="Starred replays are kept for 365 days">' + (item.isPinned ? '⭐ Starred' : '☆ Star') + '</button>'
+          : '<button disabled style="padding:7px 10px;font-size:12px;opacity:0.85;cursor:default;border-color:' + (item.isPinned ? '#facc15' : '#19304e') + ';color:' + (item.isPinned ? '#fde047' : '#94a3b8') + ';background:' + (item.isPinned ? 'rgba(250,204,21,0.18)' : '#081120') + '">' + (item.isPinned ? '⭐ Starred' : '☆ Star') + '</button>';
         const pubControl = isOwner
-          ? '<button onclick="toggleVideoPublic(\\'' + safeBattleIdJs + '\\', ' + (!isPub) + ')" style="padding:7px 10px;font-size:12px;border-color:' + (isPub ? '#38bdf8' : '#334155') + ';color:' + (isPub ? '#38bdf8' : '#94a3b8') + ';background:' + (isPub ? 'rgba(56,189,248,0.12)' : '#1e293b') + '" title="' + (isOverriddenPublic ? 'Per-video setting is Private (currently overridden because Vault Visibility is set to All Videos Shared)' : 'Toggle whether this video is Public or Private (Default: Private)') + '">' + (isPub ? '🌐 Public' : (isOverriddenPublic ? '🔒 Private (All)' : '🔒 Private')) + '</button>'
-          : '<button disabled style="padding:7px 10px;font-size:12px;opacity:0.85;cursor:default;border-color:' + (isPub || isOverriddenPublic ? '#38bdf8' : '#334155') + ';color:' + (isPub || isOverriddenPublic ? '#38bdf8' : '#94a3b8') + '">' + (isPub ? '🌐 Public' : (isOverriddenPublic ? '🌐 Shared (All)' : '🔒 Private')) + '</button>';
+          ? '<button onclick="toggleVideoPublic(\\'' + safeBattleIdJs + '\\', ' + (!isPub) + ')" style="padding:7px 10px;font-size:12px;border-color:' + (isPub ? '#67e8f9' : '#19304e') + ';color:' + (isPub ? '#67e8f9' : '#94a3b8') + ';background:' + (isPub ? 'rgba(103,232,249,0.14)' : '#081120') + '" title="' + (isOverriddenPublic ? 'Per-video setting is Private (currently overridden because Vault Visibility is set to All Videos Shared)' : 'Toggle whether this video is Public or Private (Default: Private)') + '">' + (isPub ? '🌐 Public' : (isOverriddenPublic ? '🔒 Private (All)' : '🔒 Private')) + '</button>'
+          : '<button disabled style="padding:7px 10px;font-size:12px;opacity:0.85;cursor:default;border-color:' + (isPub || isOverriddenPublic ? '#67e8f9' : '#19304e') + ';color:' + (isPub || isOverriddenPublic ? '#67e8f9' : '#94a3b8') + ';background:' + (isPub || isOverriddenPublic ? 'rgba(103,232,249,0.14)' : '#081120') + '">' + (isPub ? '🌐 Public' : (isOverriddenPublic ? '🌐 Shared (All)' : '🔒 Private')) + '</button>';
         const isAdminOwner = isOwner && String(currentVaultData.screenName || '').toLowerCase() === 'sportsfan986';
         const featControl = isAdminOwner
-          ? '<button onclick="promoteToFeatured(\\'' + safeShareIdJs + '\\')" style="padding:7px 10px;font-size:12px;border-color:' + (item.featuredShareId ? '#facc15' : '#2dd4bf') + ';color:' + (item.featuredShareId ? '#fde047' : '#2dd4bf') + ';background:rgba(45,212,191,0.12)" title="Clone this battle into persistent @Featured Official Showcase storage">' + (item.featuredShareId ? '🌟 Featured (' + esc(item.featuredShareId) + ')' : '🌟 Promote to Featured') + '</button>'
+          ? '<button onclick="promoteToFeatured(\\'' + safeShareIdJs + '\\')" style="padding:7px 10px;font-size:12px;border-color:' + (item.featuredShareId ? '#facc15' : '#2dd4bf') + ';color:' + (item.featuredShareId ? '#fde047' : '#2dd4bf') + ';background:' + (item.featuredShareId ? 'rgba(250,204,21,0.18)' : 'rgba(45,212,191,0.14)') + '" title="Clone this battle into persistent @Featured Official Showcase storage">' + (item.featuredShareId ? '🌟 Featured (' + esc(item.featuredShareId) + ')' : '🌟 Promote to Featured') + '</button>'
           : '';
         const isItemFlagged = Boolean(item.manuallyFlagged || item.userIssueNote);
         const safeIssueNoteJs = escJsArg(item.userIssueNote || '');
         const safeLeagueJs = escJsArg(item.league || 'GBL');
         const safeMatchupJs = escJsArg(item.matchupSummary || '');
         const issueBannerHtml = isItemFlagged
-          ? '<div style="background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.45);border-radius:8px;padding:6px 9px;font-size:11.5px;color:#fef3c7;display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">' +
+          ? '<div style="background:rgba(250,204,21,0.14);border:1px solid rgba(250,204,21,0.45);border-radius:8px;padding:6px 9px;font-size:11.5px;color:#fef3c7;display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">' +
               '<span>🚩 <strong>Reported Issue:</strong> ' + esc(item.userIssueNote || 'Flagged for diagnostic review') + '</span>' +
-              '<button onclick="unflagVaultReplay(\\'' + safeBattleIdJs + '\\', \\'' + safeShareIdJs + '\\')" style="padding:3px 7px;font-size:11px;background:#1e293b;border-color:#64748b;color:#e2e8f0" title="Retract this issue report">↩️ Unflag</button>' +
+              '<button onclick="unflagVaultReplay(\\'' + safeBattleIdJs + '\\', \\'' + safeShareIdJs + '\\')" style="padding:3px 7px;font-size:11px;background:#081120;border-color:#64748b;color:#e2e8f0" title="Retract this issue report">↩️ Unflag</button>' +
             '</div>'
           : '';
         const flagControls =
-          '<button onclick="flagVaultReplay(\\'' + safeBattleIdJs + '\\', \\'' + safeShareIdJs + '\\', \\'' + safeIssueNoteJs + '\\', \\'' + safeLeagueJs + '\\', \\'' + safeMatchupJs + '\\')" style="padding:7px 10px;font-size:12px;border-color:' + (isItemFlagged ? '#f59e0b' : '#b91c1c') + ';color:' + (isItemFlagged ? '#fbbf24' : '#fca5a5') + ';background:' + (isItemFlagged ? 'rgba(245,158,11,0.14)' : 'rgba(185,28,28,0.16)') + '" title="Flag an issue on this replay or edit existing issue note">' + (isItemFlagged ? '🚩 Flagged ✓' : '🚩 Flag Issue') + '</button>' +
+          '<button onclick="flagVaultReplay(\\'' + safeBattleIdJs + '\\', \\'' + safeShareIdJs + '\\', \\'' + safeIssueNoteJs + '\\', \\'' + safeLeagueJs + '\\', \\'' + safeMatchupJs + '\\')" style="padding:7px 10px;font-size:12px;border-color:' + (isItemFlagged ? '#facc15' : '#b91c1c') + ';color:' + (isItemFlagged ? '#fde047' : '#fca5a5') + ';background:' + (isItemFlagged ? 'rgba(250,204,21,0.14)' : 'rgba(185,28,28,0.16)') + '" title="Flag an issue on this replay or edit existing issue note">' + (isItemFlagged ? '🚩 Flagged ✓' : '🚩 Flag Issue') + '</button>' +
           (isItemFlagged
-            ? '<button onclick="unflagVaultReplay(\\'' + safeBattleIdJs + '\\', \\'' + safeShareIdJs + '\\')" style="padding:7px 10px;font-size:12px;border-color:#64748b;color:#e2e8f0;background:#1e293b" title="Unflag and retract this issue report">↩️ Unflag Issue</button>'
+            ? '<button onclick="unflagVaultReplay(\\'' + safeBattleIdJs + '\\', \\'' + safeShareIdJs + '\\')" style="padding:7px 10px;font-size:12px;border-color:#64748b;color:#e2e8f0;background:#081120" title="Unflag and retract this issue report">↩️ Unflag Issue</button>'
             : '');
         return '<div class="replay-card ' + (item.isPinned ? 'pinned' : '') + '">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px">' +
             '<span class="pill ' + (isWin ? 'pill-win' : 'pill-loss') + '">' + esc(item.result || 'BATTLE') + ' • ' + esc(item.league || 'GBL') + '</span>' +
-            '<span style="font-size:11px;color:#94a3b8">' + esc(mb) + ' MB • ' + esc(Number(item.durationSec) || 0) + 's</span>' +
+            '<span style="font-size:11px;color:#99f6e4">' + esc(mb) + ' MB • ' + esc(Number(item.durationSec) || 0) + 's</span>' +
           '</div>' +
-          '<div style="font-weight:800;font-size:13.5px;color:#f1f5f9">' + esc(item.showcaseTitle || item.matchupSummary || item.battleId) + '</div>' +
-          '<div style="font-size:11px;color:#64748b">' + esc(dateStr) + ' • ID: ' + esc(item.battleId) + (highlightSecNum ? ' • ⚡ Highlight @ ' + highlightSecNum + 's' : '') + '</div>' +
+          '<div style="font-weight:800;font-size:14px;color:#ecfeff">' + esc(item.showcaseTitle || item.matchupSummary || item.battleId) + '</div>' +
+          '<div style="font-size:11px;color:#94a3b8">' + esc(dateStr) + ' • ID: ' + esc(item.battleId) + (highlightSecNum ? ' • <span style="color:#fde047">⚡ Highlight @ ' + highlightSecNum + 's</span>' : '') + '</div>' +
           issueBannerHtml +
           '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;align-items:center">' +
-            '<a class="btn-link" style="background:#059669;border-color:#10b981;padding:7px 10px;font-size:12px;flex:1;justify-content:center" href="' + safeShareUrl + '">▶️ Watch + HUD</a>' +
-            (highlightSecNum ? '<a class="btn-link" style="background:rgba(250,204,21,0.18);border-color:#facc15;color:#fde047;padding:7px 10px;font-size:12px" href="' + safeShareUrl + '?t=' + highlightSecNum + '" title="Jump directly to the key highlight moment">⚡ Key Moment (' + highlightSecNum + 's)</a>' : '') +
+            '<a class="btn-link primary" style="padding:7px 11px;font-size:12px;flex:1;justify-content:center" href="' + safeShareUrl + '">▶️ Watch + HUD</a>' +
+            (highlightSecNum ? '<a class="btn-link" style="background:rgba(250,204,21,0.16);border-color:#facc15;color:#fde047;padding:7px 10px;font-size:12px" href="' + safeShareUrl + '?t=' + highlightSecNum + '" title="Jump directly to the key highlight moment">⚡ Key Moment (' + highlightSecNum + 's)</a>' : '') +
             starControl +
             pubControl +
             featControl +
-            '<button onclick="copyLink(\\'' + safeShareUrlJs + '\\')" style="padding:7px 10px;font-size:12px" title="Anyone with this direct link can watch this replay">🔗 Copy Link</button>' +
+            '<button onclick="copyLink(\\'' + safeShareUrlJs + '\\')" style="padding:7px 10px;font-size:12px;background:#081120;border-color:#19304e;color:#ecfeff" title="Anyone with this direct link can watch this replay">🔗 Copy Link</button>' +
             flagControls +
           '</div>' +
         '</div>';
@@ -8804,7 +9174,140 @@ export default {
       const rawLookup = await env.TELEMETRY_KV.get(`share_lookup/${shareId}`);
       if (!rawLookup) {
         return new Response(
-          `<!DOCTYPE html><html><body style="background:#070b14;color:#f8fafc;font-family:sans-serif;padding:40px;text-align:center"><h2>🛡️ SilphScope PvP Replay Expired or Not Found</h2><p>This replay link (<code>${escapeHtml(shareId)}</code>) has expired or was removed by the trainer.</p></body></html>`,
+          `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SilphScope PvP • Replay Expired or Not Found</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #050b16;
+      background-image:
+        radial-gradient(circle at 18% 12%, rgba(45, 212, 191, 0.11) 0%, transparent 42%),
+        radial-gradient(circle at 82% 18%, rgba(250, 204, 21, 0.08) 0%, transparent 38%),
+        linear-gradient(180deg, #050b16 0%, #081120 55%, #050b16 100%);
+      color: #ecfeff;
+      box-sizing: border-box;
+    }
+    .card {
+      background: #0e1b2e;
+      border: 1px solid #19304e;
+      border-radius: 16px;
+      padding: 36px 28px;
+      max-width: 520px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 24px rgba(45, 212, 191, 0.12);
+    }
+    .badge-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #081120;
+      border: 1.5px solid #2dd4bf;
+      box-shadow: 0 0 18px rgba(45, 212, 191, 0.3);
+      margin-bottom: 16px;
+    }
+    h2 {
+      margin: 0 0 10px;
+      font-size: 20px;
+      font-weight: 900;
+      color: #fff;
+    }
+    h2 span { color: #2dd4bf; }
+    p {
+      margin: 0 0 22px;
+      font-size: 13.5px;
+      color: #99f6e4;
+      line-height: 1.5;
+    }
+    code {
+      font-family: monospace;
+      color: #facc15;
+      background: #081120;
+      padding: 2px 7px;
+      border-radius: 6px;
+      border: 1px solid #19304e;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    a.btn {
+      text-decoration: none;
+      padding: 9px 16px;
+      border-radius: 8px;
+      font-weight: 800;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    a.btn-primary {
+      background: #2dd4bf;
+      color: #042f2e;
+      border: 1px solid #2dd4bf;
+      box-shadow: 0 2px 10px rgba(45, 212, 191, 0.25);
+    }
+    a.btn-primary:hover {
+      background: #5eead4;
+      box-shadow: 0 0 16px rgba(45, 212, 191, 0.45);
+    }
+    a.btn-secondary {
+      background: #081120;
+      color: #ecfeff;
+      border: 1px solid #19304e;
+    }
+    a.btn-secondary:hover {
+      background: #14253e;
+      border-color: #2dd4bf;
+      color: #5eead4;
+    }
+  </style>
+</head>
+<body>
+  <!-- Fixed Centered Shiny Origin Dialga Vector Watermark -->
+  <div class="fixed-watermark-bg" aria-hidden="true">
+    <svg viewBox="0 0 240 240" class="dialga-watermark-svg">
+      <path fill="none" stroke="#2DD4BF" stroke-width="3" d="M120,10 L196,42 L228,120 L196,198 L120,230 L44,198 L12,120 L44,42 Z" />
+      <path fill="none" stroke="#FACC15" stroke-width="4" d="M120,44 L178,76 L178,164 L120,196 L62,164 L62,76 Z" />
+      <path fill="#FACC15" d="M62,76 L22,52 L48,92 Z M178,76 L218,52 L192,92 Z M56,120 L14,120 L56,132 Z M184,120 L226,120 L184,132 Z M62,164 L26,188 L54,148 Z M178,164 L214,188 L186,148 Z" />
+      <path fill="#14B8A6" stroke="#67E8F9" stroke-width="2.5" d="M120,14 L138,48 L156,32 L144,76 L186,98 L152,134 L168,188 L142,174 L120,224 L98,174 L72,188 L88,134 L54,98 L96,76 L84,32 L102,48 Z" />
+      <path fill="#081224" stroke="#FACC15" stroke-width="3" d="M120,84 L152,120 L120,156 L88,120 Z" />
+      <path fill="#67E8F9" d="M120,96 L140,120 L120,144 L100,120 Z" />
+    </svg>
+  </div>
+  <div class="card">
+    <div class="badge-icon">
+      <svg viewBox="0 0 36 36" style="width:32px;height:32px;display:block">
+        <polygon points="18,2 31,9 31,27 18,34 5,27 5,9" fill="rgba(14, 27, 46, 0.9)" stroke="#2DD4BF" stroke-width="2.2" />
+        <polygon points="18,7 26,12 26,24 18,29 10,24 10,12" fill="none" stroke="#FACC15" stroke-width="1.8" />
+        <circle cx="18" cy="18" r="3.5" fill="#FACC15" />
+      </svg>
+    </div>
+    <h2>SilphScope <span>PvP Replay</span></h2>
+    <p>This replay link (<code>${escapeHtml(shareId)}</code>) has expired or was removed by the trainer.</p>
+    <div class="actions">
+      <a class="btn btn-primary" href="/vault">☁️ Open DVR Replay Vault</a>
+      <a class="btn btn-secondary" href="https://silphscopepvp.com">🌐 SilphScopePvP.com</a>
+    </div>
+  </div>
+</body>
+</html>`,
           {
             status: 404,
             headers: buildSecurityHeaders({ 'Content-Type': 'text/html; charset=utf-8' }, true),
