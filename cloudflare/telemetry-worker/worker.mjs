@@ -8256,8 +8256,8 @@ export default {
         if (!htmlText) {
           return jsonResponse({ ok: false, error: 'Missing `html` or `text` field.' }, 400);
         }
-        await sendTelegramMessage(env, htmlText);
-        return jsonResponse({ ok: true });
+        const tgRes = await sendTelegramMessage(env, htmlText);
+        return jsonResponse({ ok: Boolean(tgRes.ok), telegram: tgRes });
       }
 
       if (request.method === 'POST' && path === '/v1/admin/tuning-config') {
