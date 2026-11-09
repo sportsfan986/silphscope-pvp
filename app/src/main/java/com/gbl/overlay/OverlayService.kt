@@ -14117,7 +14117,7 @@ class OverlayService : LifecycleService() {
         }
         val capturedBugReportNote = stoppedBattleBugReportNote
         selectHighestPriorityPostBattleQuestion(
-            leagueName = currentLeagueName,
+            leagueName = league,
             hadHpPromoShieldCall = hadHpPromotedShieldCallInBattle,
             timelineEvents = finalTimelineEvents,
             anomalies = detectedAnomalies

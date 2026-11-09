@@ -969,6 +969,66 @@ async function main() {
     }
   }
 
+  // 5b. GitHub Actions APK Build & Published Release Asset Health Audit (0 AI Tokens)
+  let githubReleaseHealth = {
+    expectedTag: `v${currentVersion}`,
+    releasePublished: false,
+    apkAssetName: null,
+    apkAssetSizeMb: 0,
+    latestApkBuildConclusion: "unknown",
+    latestApkBuildUrl: null,
+  };
+  try {
+    const runsRes = await fetch(
+      "https://api.github.com/repos/sportsfan986/silphscope-pvp/actions/runs?per_page=10",
+      { headers: { "User-Agent": "SilphScope-Nightly-Audit/1.0" } }
+    );
+    if (runsRes.ok) {
+      const runsData = await runsRes.json();
+      const apkRun = (runsData.workflow_runs || []).find((r) => r.name === "Build Android APK");
+      if (apkRun) {
+        githubReleaseHealth.latestApkBuildConclusion = apkRun.conclusion || apkRun.status || "unknown";
+        githubReleaseHealth.latestApkBuildUrl = apkRun.html_url || null;
+      }
+    }
+    const relRes = await fetch(
+      `https://api.github.com/repos/sportsfan986/silphscope-pvp/releases/tags/v${currentVersion}`,
+      { headers: { "User-Agent": "SilphScope-Nightly-Audit/1.0" } }
+    );
+    if (relRes.ok) {
+      const relData = await relRes.json();
+      const apkAsset = (relData.assets || []).find((a) => String(a.name || "").endsWith(".apk"));
+      if (apkAsset) {
+        githubReleaseHealth.releasePublished = true;
+        githubReleaseHealth.apkAssetName = apkAsset.name;
+        githubReleaseHealth.apkAssetSizeMb = Number(((apkAsset.size || 0) / (1024 * 1024)).toFixed(2));
+      }
+    }
+    if (
+      githubReleaseHealth.latestApkBuildConclusion === "failure" ||
+      (!githubReleaseHealth.releasePublished && githubReleaseHealth.latestApkBuildConclusion === "completed")
+    ) {
+      openActionItems.unshift({
+        priorityBucket: "P0_CI_BUILD_FAILURE",
+        compositePriorityScore: 5000,
+        userTier: "VIP",
+        screenName: "sportsfan986",
+        battleId: `github-release-v${currentVersion}`,
+        appVersion: currentVersion,
+        league: "CI/CD Release Pipeline",
+        type: "UNPUBLISHED_GITHUB_APK_BUILD",
+        tSec: 0,
+        detail: `GitHub Actions 'Build Android APK' for v${currentVersion} has conclusion='${githubReleaseHealth.latestApkBuildConclusion}' (releasePublished=${githubReleaseHealth.releasePublished}). URL: ${githubReleaseHealth.latestApkBuildUrl || "N/A"}`,
+        retroactiveAudit: {
+          status: "OPEN_NEEDS_FIX",
+          resolvedInVersion: null,
+          verificationMethod: "GitHub Actions & Release Asset API Check",
+          explanation: `v${currentVersion} APK was not published to GitHub Releases.`,
+        },
+      });
+    }
+  } catch {}
+
   // Check for late-arriving P1 / P2 / HIGH issues since `--check-delta-since`
   let lateArrivals = [];
   if (CHECK_DELTA_SINCE) {
@@ -1261,6 +1321,7 @@ async function main() {
     generatedAt: new Date().toISOString(),
     startedAt: startedAtIso,
     currentRepoVersion: `v${currentVersion}`,
+    githubReleaseHealth,
     referenceLatestIngestIso: new Date(latestIngestMs).toISOString(),
     modelRoutingPolicy,
     aiAutoTunedSettingsRecommendation,
@@ -1287,7 +1348,7 @@ async function main() {
   const mdLines = [
     `# 📌 SilphScope PvP — Morning Telemetry Audit & Action Plan (\`${new Date().toISOString().slice(0, 10)}\`)`,
     ``,
-    `> **Audit Started**: \`${startedAtIso}\` • **Latest Repo Release**: \`v${currentVersion}\` • **Zero-Token Local Engine**: \`scripts/nightly-telemetry-audit.mjs\``,
+    `> **Audit Started**: \`${startedAtIso}\` • **Latest Repo Release**: \`v${currentVersion}\` (\`${githubReleaseHealth.releasePublished ? `Published: ${githubReleaseHealth.apkAssetName} (${githubReleaseHealth.apkAssetSizeMb} MB)` : `CI Status: ${githubReleaseHealth.latestApkBuildConclusion}`}\`) • **Zero-Token Local Engine**: \`scripts/nightly-telemetry-audit.mjs\``,
     ``,
     `## 1. User Telemetry Submission Summary (Past 24h / Past 7d / All-Time)`,
     ``,
