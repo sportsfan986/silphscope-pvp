@@ -7578,24 +7578,35 @@ class OverlayService : LifecycleService() {
                 }
 
                 // Accumulate fast-move damage dealt by this opponent for the Non-Standard Opponent Fast Move Detector (1E)
-                // and v7.15 Dual-Source HP-Drop Opponent Energy Quantizer (E_opp,hp & C_hp)
+                // and v7.15/v7.25 Dual-Source HP-Drop Opponent Energy Quantizer (E_opp,hp & C_hp) with minimum cadence gate & drift clamp
                 if (realUserDrop in 1..25 && (hasBattleStarted || realUserDrop >= 2) && canAccumulateFastEnergy && !isCameraZoomUpwardYShift) {
                     oppCumulativeFastDmgPct[activeOppIdx] = (oppCumulativeFastDmgPct[activeOppIdx] + realUserDrop).coerceIn(0, 300)
                     val safeOppExactDmg = oppExactDmgPct.coerceAtLeast(0.8)
                     val totalAccUserDrop = realUserDrop.toDouble() + oppSlotHpDmgRemainder[activeOppIdx]
                     val rawSteps = (totalAccUserDrop / safeOppExactDmg).roundToInt().coerceIn(0, 3)
-                    val quantizedSteps = when {
+                    val rawQuantizedSteps = when {
                         rawSteps >= 1 && kotlin.math.abs(totalAccUserDrop - rawSteps * safeOppExactDmg) <= max(1.6, safeOppExactDmg * 0.45) -> rawSteps
                         realUserDrop >= max(2, (safeOppExactDmg * 0.65).roundToInt()) -> 1
                         else -> 0
                     }
+                    val expectedIntervalMs = (oppFastTurnsForStats * 500L).coerceAtLeast(500L)
+                    val prevStepMs = oppSlotLastHpStepMs[activeOppIdx]
+                    val elapsedSincePrevHpStepMs = if (prevStepMs > 0L) (nowMs - prevStepMs).coerceAtLeast(0L) else Long.MAX_VALUE
+                    val minHpStepIntervalMs = (expectedIntervalMs - 250L).coerceAtLeast(350L)
+                    val maxAllowedStepsByCadence = when {
+                        elapsedSincePrevHpStepMs < minHpStepIntervalMs -> 0
+                        elapsedSincePrevHpStepMs < expectedIntervalMs * 2L - 300L -> 1
+                        else -> 2
+                    }
+                    val quantizedSteps = min(rawQuantizedSteps, maxAllowedStepsByCadence)
                     if (quantizedSteps > 0) {
                         oppSlotHpDmgRemainder[activeOppIdx] = (totalAccUserDrop - quantizedSteps * safeOppExactDmg).coerceIn(-1.5, 2.5)
-                        val prevHpE = max(oppSlotEnergyHp[activeOppIdx], oppSlotEnergyMeter[activeOppIdx].coerceAtMost(oppSlotEnergy[activeOppIdx]))
-                        oppSlotEnergyHp[activeOppIdx] = (prevHpE + quantizedSteps * oppFastEnergyForStats).coerceIn(0, 100)
-                        val expectedIntervalMs = (oppFastTurnsForStats * 500L).coerceAtLeast(500L)
-                        val prevStepMs = oppSlotLastHpStepMs[activeOppIdx]
-                        val isPhaseAligned = prevStepMs <= 0L || kotlin.math.abs((nowMs - prevStepMs) - expectedIntervalMs * quantizedSteps) <= 450L
+                        val baseMeterE = oppSlotEnergyMeter[activeOppIdx].coerceAtMost(oppSlotEnergy[activeOppIdx]).coerceIn(0, 100)
+                        val prevHpE = max(oppSlotEnergyHp[activeOppIdx], baseMeterE)
+                        // v7.25: Clamp HP-derived opponent energy so it never drifts more than +1 fast move above the meter baseline
+                        val maxAllowedHpE = (baseMeterE + oppFastEnergyForStats).coerceIn(0, 100)
+                        oppSlotEnergyHp[activeOppIdx] = (prevHpE + quantizedSteps * oppFastEnergyForStats).coerceIn(0, maxAllowedHpE)
+                        val isPhaseAligned = prevStepMs <= 0L || kotlin.math.abs(elapsedSincePrevHpStepMs - expectedIntervalMs * quantizedSteps) <= 450L
                         oppSlotLastHpStepMs[activeOppIdx] = nowMs
                         oppSlotConsecutiveAlignedHpSteps[activeOppIdx] = if (isPhaseAligned) {
                             (oppSlotConsecutiveAlignedHpSteps[activeOppIdx] + quantizedSteps).coerceAtMost(8)
@@ -7607,7 +7618,7 @@ class OverlayService : LifecycleService() {
                         val fitScore = (1.0 - (fitErr / max(1.8, safeOppExactDmg * 0.60))).coerceIn(0.2, 1.0)
                         val alignBonus = if (oppSlotConsecutiveAlignedHpSteps[activeOppIdx] >= 2) 10 else 0
                         oppSlotConfHp[activeOppIdx] = (58 + (snrScore * 18.0).roundToInt() + (fitScore * 14.0).roundToInt() + alignBonus).coerceIn(45, 98)
-                    } else {
+                    } else if (rawQuantizedSteps == 0) {
                         oppSlotHpDmgRemainder[activeOppIdx] = totalAccUserDrop.coerceIn(0.0, safeOppExactDmg * 0.95)
                     }
                 }
@@ -8480,7 +8491,8 @@ class OverlayService : LifecycleService() {
                                 phasePlayerTurns = 0
                             }
 
-                            // v3.88 Requirement #1 & #5 + v3.96 Single-Step Cap: Convert player energy gain to turns while decoupling micro-adjustments
+                            // v3.88 Requirement #1 & #5 + v3.96 Single-Step Cap + v7.25 Post-Cutscene Pre-Throw Circle Catch-Up Decoupling:
+                            // Convert player energy gain to turns while decoupling micro-adjustments and pre-cutscene unsynced player circle steps
                             val confirmedMovesSoFar = confirmedPhasePlayerTurns / userFastTurnsForStats
                             val expectedEnergyAtConfirmedTurns = (phaseStartPlayerEnergy + confirmedMovesSoFar * userFastEnergyForStats).coerceIn(0, 100)
                             val uncreditedEnergyGain = measuredEnergy - expectedEnergyAtConfirmedTurns
@@ -8488,7 +8500,24 @@ class OverlayService : LifecycleService() {
 
                             if (uncreditedEnergyGain >= microAdjustThreshold) {
                                 val rawNewMoves = (uncreditedEnergyGain.toDouble() / userFastEnergyForStats.toDouble()).roundToInt().coerceAtLeast(1)
-                                val newMoves = if (curE > 0) rawNewMoves.coerceIn(1, 2) else rawNewMoves.coerceIn(1, 4)
+                                val rawCappedMoves = if (curE > 0) rawNewMoves.coerceIn(1, 2) else rawNewMoves.coerceIn(1, 4)
+                                val phaseAnchorMs = maxOf(lastChargedAttackLoggedMs, lastOppSwitchTimeMs, lastPlayerSwitchTimeMs, battleClockAnchorMs)
+                                val elapsedInPhaseMs = if (phaseAnchorMs > 0L) (nowMs - phaseAnchorMs).coerceAtLeast(0L) else Long.MAX_VALUE
+                                val maxPhysicalTotalPlayerMovesInPhase = if (phaseAnchorMs > 0L && elapsedInPhaseMs <= 6000L) {
+                                    ((elapsedInPhaseMs + 450L) / userMoveDurationMs.coerceAtLeast(500L)).toInt().coerceAtLeast(1)
+                                } else {
+                                    99
+                                }
+                                val maxNewMovesForPhaseTurns = (maxPhysicalTotalPlayerMovesInPhase - confirmedMovesSoFar).coerceAtLeast(0)
+                                val newMoves = min(rawCappedMoves, maxNewMovesForPhaseTurns)
+                                // Any circle energy above what could physically have been generated since the current phase started
+                                // was generated BEFORE the cutscene/switch; shift `phaseStartPlayerEnergy` so player energy is accurate
+                                // without crediting phantom post-cutscene turns to the opponent!
+                                val creditedEnergyByNewMoves = newMoves * userFastEnergyForStats
+                                val preCutsceneCatchupEnergy = (measuredEnergy - (expectedEnergyAtConfirmedTurns + creditedEnergyByNewMoves)).coerceAtLeast(0)
+                                if (preCutsceneCatchupEnergy > 0) {
+                                    phaseStartPlayerEnergy = (phaseStartPlayerEnergy + preCutsceneCatchupEnergy).coerceIn(0, 100)
+                                }
                                 val addedTurns = newMoves * userFastTurnsForStats
                                 val alreadyProactivelyAddedTurns = if (proactiveStepPending && proactiveStepSlotIdx == activeUserIdx) {
                                     proactiveStepAddedTurns
@@ -8504,9 +8533,11 @@ class OverlayService : LifecycleService() {
                                 if (battleTurnIndex < confirmedPhasePlayerTurns) {
                                     battleTurnIndex = confirmedPhasePlayerTurns
                                 }
-                                lastConfirmedPlayerFastMoveMs = nowMs
-                                playerLastFastCreditedAtMs[activeUserIdx] = nowMs
-                                playerAutoIncrementAnchorMs[activeUserIdx] = nowMs
+                                if (newMoves > 0) {
+                                    lastConfirmedPlayerFastMoveMs = nowMs
+                                    playerLastFastCreditedAtMs[activeUserIdx] = nowMs
+                                    playerAutoIncrementAnchorMs[activeUserIdx] = nowMs
+                                }
                                 userFastMovesCreditedThisFrame = newMoves
                                 observedPlayerChargeBarStep = true
                             } else if (kotlin.math.abs(deltaFromCurrent) < microAdjustThreshold || deltaFromCurrent < 0) {
@@ -8939,13 +8970,15 @@ class OverlayService : LifecycleService() {
 
             if (phasePlayerTurns > 0) {
                 val rawCompletedOppMovesInPhase = phasePlayerTurns / oppFastTurnsForStats
-                // v7.24: Cap opponent fast moves credited in the current phase after a recent opponent switch or faint replacement
-                // (`lastOppSwitchTimeMs`) to the physical elapsed time since that opponent entered the field, preventing a post-KO
-                // player circle resync from crediting multi-second catch-up bursts (e.g. +24E / 3x Shadow Claw in 0.76s) to a replacement Pokemon!
-                val totalCompletedOppMovesInPhase = if (lastOppSwitchTimeMs > 0L && (nowMs - lastOppSwitchTimeMs) in 0L..5000L) {
-                    val elapsedSinceOppEntryMs = (nowMs - lastOppSwitchTimeMs).coerceAtLeast(0L)
-                    val maxPhysicalMovesSinceEntry = ((elapsedSinceOppEntryMs + 350L) / (oppFastTurnsForStats * 500L)).toInt().coerceAtLeast(0)
-                    min(rawCompletedOppMovesInPhase, maxPhysicalMovesSinceEntry)
+                // v7.24 / v7.25: Cap opponent fast moves credited in the current phase to the physical elapsed combat time
+                // since the start of the current combat phase (`phaseStartAnchorMs`: last charged attack reconciliation,
+                // opponent switch/faint entry, or player switch). This prevents post-cutscene or post-KO player circle
+                // catch-up resyncs from crediting multi-second phantom fast-move bursts (e.g. +27E/+36E in 1.1s) to the opponent!
+                val phaseStartAnchorMs = maxOf(lastChargedAttackLoggedMs, lastOppSwitchTimeMs, lastPlayerSwitchTimeMs, battleClockAnchorMs)
+                val totalCompletedOppMovesInPhase = if (phaseStartAnchorMs > 0L && (nowMs - phaseStartAnchorMs) in 0L..8000L) {
+                    val elapsedInPhaseMs = (nowMs - phaseStartAnchorMs).coerceAtLeast(0L)
+                    val maxPhysicalMovesInPhase = ((elapsedInPhaseMs + 350L) / (oppFastTurnsForStats * 500L)).toInt().coerceAtLeast(0)
+                    min(rawCompletedOppMovesInPhase, maxPhysicalMovesInPhase)
                 } else {
                     rawCompletedOppMovesInPhase
                 }
@@ -9487,6 +9520,7 @@ class OverlayService : LifecycleService() {
                 val rawPreFloorOppE = oppSlotEnergy[throwerOppIdx].coerceIn(0, 100)
                 pendingChargedAttackRawPreFloorOppEnergy = rawPreFloorOppE
                 lastOppChargeRawPreFloorEnergySnapshot = rawPreFloorOppE
+                val preMissingMeterOppE = oppSlotEnergyMeter[throwerOppIdx].coerceAtMost(rawPreFloorOppE).coerceIn(0, 100)
                 val activeSubTurnWindowMs = (userFastTurnsForStats * 500L + 350L).coerceAtLeast(850L)
                 val effectivePlayerTurnsAtOppThrow = if (lastConfirmedPlayerFastMoveMs > 0L &&
                     (nowMs - lastConfirmedPlayerFastMoveMs) in 1L..activeSubTurnWindowMs
@@ -9496,8 +9530,20 @@ class OverlayService : LifecycleService() {
                     confirmedPhasePlayerTurns
                 }
                 val maxTurnBeforeNextPlayerSample = max(effectivePlayerTurnsAtOppThrow, phaseOppTurns)
+                val phaseStartAnchorAtThrowMs = maxOf(
+                    if (lastChargedAttackLoggedMs < nowMs) lastChargedAttackLoggedMs else 0L,
+                    lastOppSwitchTimeMs,
+                    lastPlayerSwitchTimeMs,
+                    battleClockAnchorMs
+                )
+                val maxPhysicalOppMovesInPhaseAtThrow = if (phaseStartAnchorAtThrowMs > 0L && (nowMs - phaseStartAnchorAtThrowMs) in 0L..8000L) {
+                    (((nowMs - phaseStartAnchorAtThrowMs).coerceAtLeast(0L) + 450L) / (oppFastTurnsForStats * 500L)).toInt().coerceAtLeast(0)
+                } else {
+                    99
+                }
                 if (maxTurnBeforeNextPlayerSample > 0) {
-                    val maxOptimalOppMoves = ceil(maxTurnBeforeNextPlayerSample.toDouble() / oppFastTurnsForStats.toDouble()).toInt()
+                    val rawMaxOptimalOppMoves = ceil(maxTurnBeforeNextPlayerSample.toDouble() / oppFastTurnsForStats.toDouble()).toInt()
+                    val maxOptimalOppMoves = min(rawMaxOptimalOppMoves, maxPhysicalOppMovesInPhaseAtThrow)
                     val creditedOppSoFar = phaseOppTurns / oppFastTurnsForStats
                     val missingFullOppMoves = (maxOptimalOppMoves - creditedOppSoFar).coerceAtLeast(0)
                     if (missingFullOppMoves > 0) {
@@ -9512,16 +9558,22 @@ class OverlayService : LifecycleService() {
                     oppSlotTurnsOnField[throwerOppIdx] = (oppSlotTurnsOnField[throwerOppIdx] + neededOppMoves * oppFastTurnsForStats).coerceAtLeast(0)
                     oppSlotEnergyMeter[throwerOppIdx] = oppSlotEnergy[throwerOppIdx]
                 }
-                // v7.15 A1 Shield Call Overlay Policy: Promote immediately to max(E_meter, E_hp) whenever C_hp >= 55%
-                if (oppSlotEnergyHp[throwerOppIdx] > oppSlotEnergy[throwerOppIdx] && oppSlotConfHp[throwerOppIdx] >= 55) {
+                // v7.15 / v7.25 A1 Shield Call Overlay Policy: Promote by at most +1 snuck fast move (`[+1F HP]`) above the pre-roundup meter baseline
+                // only when the HP step occurred in the current combat phase (`oppSlotLastHpStepMs > lastOppChargedAttackLoggedMs`) and never double-count with `missingFullOppMoves`!
+                val lastNonCmpChargeLoggedMs = if (lastChargedAttackLoggedMs < nowMs) lastChargedAttackLoggedMs else lastOppChargedAttackLoggedMs
+                val hpStepIsFromCurrentPhase = oppSlotLastHpStepMs[throwerOppIdx] > lastNonCmpChargeLoggedMs &&
+                    oppSlotLastHpStepMs[throwerOppIdx] > lastOppSwitchTimeMs
+                val maxSingleSnuckPromoE = (preMissingMeterOppE + oppFastEnergyForStats).coerceIn(0, 100)
+                val cappedHpTargetE = min(oppSlotEnergyHp[throwerOppIdx], maxSingleSnuckPromoE)
+                if (hpStepIsFromCurrentPhase && cappedHpTargetE > oppSlotEnergy[throwerOppIdx] && oppSlotConfHp[throwerOppIdx] >= 55) {
                     val baseMeterE = oppSlotEnergy[throwerOppIdx]
-                    val promotedE = oppSlotEnergyHp[throwerOppIdx].coerceIn(baseMeterE, 100)
-                    val fastStepsAdded = max(1, ((promotedE - baseMeterE + oppFastEnergyForStats - 1) / oppFastEnergyForStats).coerceIn(1, 3))
+                    val promotedE = cappedHpTargetE.coerceIn(baseMeterE, 100)
+                    val fastStepsAdded = max(1, ((promotedE - baseMeterE + oppFastEnergyForStats - 1) / oppFastEnergyForStats).coerceIn(1, 1))
                     oppSlotEnergy[throwerOppIdx] = promotedE
                     oppSlotHpPromoBadge[throwerOppIdx] = "[+${fastStepsAdded}F HP]"
                     hadHpPromotedShieldCallInBattle = true
                     lastEnergyMutationSource = "SHIELD_CALL_HP_PROMO"
-                } else if (oppSlotEnergyHp[throwerOppIdx] < oppSlotEnergy[throwerOppIdx]) {
+                } else {
                     oppSlotEnergyHp[throwerOppIdx] = oppSlotEnergy[throwerOppIdx]
                 }
                 pendingChargedAttackActor = "opp"
@@ -10815,18 +10867,29 @@ class OverlayService : LifecycleService() {
                 userSlotHpDmgRemainder[attackerUserIdx] = 0.0
                 playerSlotEnergyAnchor[attackerUserIdx] = computedResidualEnergy
 
-                // v7.15: Post-Player-Charged-Move HP Audit -> Detect Snuck Opponent Fast Move During User Throw!
+                // v7.15 / v7.25: Post-Player-Charged-Move HP Audit -> Detect Snuck Opponent Fast Move During User Throw!
+                // If no snuck fast move occurred across the player's throw, re-anchor `oppSlotEnergyHp` and `oppSlotEnergyMeter`
+                // to `oppSlotEnergy` so stale pre-cutscene HP energy cannot survive across the cutscene and falsely promote the opponent's next throw!
                 val preThrowUserHpRef = pendingChargedAttackPreUserHp.coerceIn(1, 100)
                 val postThrowUserHpNow = playerSlotHpPct[activeUserIdx].coerceIn(1, 100)
                 val userHpDropAcrossOwnThrow = (preThrowUserHpRef - postThrowUserHpNow).coerceAtLeast(0)
                 val minSnuckFastHpDrop = max(2, (oppExactDmgPct * 0.65).roundToInt())
                 if (userHpDropAcrossOwnThrow in minSnuckFastHpDrop..22 && activeOppIdx in 0..2 && !oppFaintedSlots[activeOppIdx]) {
-                    oppSlotEnergyHp[activeOppIdx] = (max(oppSlotEnergyHp[activeOppIdx], oppSlotEnergy[activeOppIdx]) + oppFastEnergyForStats).coerceIn(0, 100)
+                    val baseOppE = oppSlotEnergyMeter[activeOppIdx].coerceAtMost(oppSlotEnergy[activeOppIdx]).coerceIn(0, 100)
+                    oppSlotEnergyHp[activeOppIdx] = (baseOppE + oppFastEnergyForStats).coerceIn(0, 100)
                     oppSlotEnergy[activeOppIdx] = oppSlotEnergyHp[activeOppIdx]
                     oppSlotEnergyMeter[activeOppIdx] = oppSlotEnergy[activeOppIdx]
                     oppSlotConfHp[activeOppIdx] = max(oppSlotConfHp[activeOppIdx], 90)
                     oppSlotHpPromoBadge[activeOppIdx] = "★HP"
                     lastEnergyMutationSource = "POST_USER_THROW_HP_SNUCK"
+                } else if (activeOppIdx in 0..2) {
+                    oppSlotEnergyHp[activeOppIdx] = oppSlotEnergy[activeOppIdx].coerceIn(0, 100)
+                    oppSlotEnergyMeter[activeOppIdx] = oppSlotEnergy[activeOppIdx].coerceIn(0, 100)
+                    oppSlotHpDmgRemainder[activeOppIdx] = 0.0
+                    oppSlotConsecutiveAlignedHpSteps[activeOppIdx] = 0
+                    if (oppSlotHpPromoBadge[activeOppIdx] == "★HP") {
+                        oppSlotHpPromoBadge[activeOppIdx] = ""
+                    }
                 }
                 nearCeilingStepStartMs[attackerUserIdx] = 0L
                 playerSlotCeilingLatched100[attackerUserIdx] = false

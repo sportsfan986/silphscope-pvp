@@ -629,19 +629,20 @@ function evaluateRetroactiveResolution(anomalyOrBundle, record, state, currentVe
     };
   }
 
-  // 3b. Check v7.24 Swap-and-Immediate-Throw Raw Pre-Floor Energy Restoration & Post-KO Re-Entry Turn Cap (`log-1794174324740-267`)
+  // 3b. Check v7.24 / v7.25 Swap-and-Immediate-Throw Raw Pre-Floor Energy Restoration, Post-Cutscene Circle Catch-Up Decoupling & HP Cadence/Promo Clamps (`log-1794174324740-267` & `log-1794193824203-433`)
   if (
-    recVerNum <= 723 &&
-    curVerNum >= 724 &&
-    (/feraligatr|feraligator|too\s+much\s+energy|finish\s+with\s+60e/i.test(note) ||
-      String(anomalyOrBundle.battleId || record?.id || "") === "log-1794174324740-267")
+    recVerNum <= 724 &&
+    curVerNum >= 725 &&
+    (/feraligatr|feraligator|too\s+much\s+energy|finish\s+with\s+60e|energy\s+seemed\s+high|tink|virizion/i.test(note) ||
+      String(anomalyOrBundle.battleId || record?.id || "") === "log-1794174324740-267" ||
+      String(anomalyOrBundle.battleId || record?.id || "") === "log-1794193824203-433")
   ) {
     return {
       status: "RESOLVED_BY_LATEST_RELEASE",
-      resolvedInVersion: "v7.24",
-      verificationMethod: "Deep-Trace Swap-Throw Pre-Floor Rollback + Post-KO Re-Entry Cap Replay",
+      resolvedInVersion: "v7.25",
+      verificationMethod: "Deep-Trace Phase-Elapsed Turn Cap + HP Cadence/Promo Clamp Replay",
       explanation:
-        "Resolved in v7.24: Snapshots raw pre-cutscene opponent energy before Attack incoming! provisional flooring (restoring 8E instead of 40E on swap-throw rollback) and caps post-KO replacement re-entry fast moves to physical elapsed field time (eliminating +24E re-entry burst; Feraligatr finishes at 4E instead of 60E).",
+        "Resolved in v7.24–v7.25: (1) Snapshots raw pre-cutscene opponent energy before Attack incoming! provisional flooring (restoring 8E instead of 40E on swap-throw rollback); (2) Caps post-cutscene/post-switch opponent fast moves (`totalCompletedOppMovesInPhase`) and player circle catch-up turns to physical elapsed phase time (eliminating +24E/+27E/+36E post-cutscene bursts on Feraligatr, Virizion & Tinkaton); (3) Enforces a minimum cadence gate and +1F drift clamp on HP-derived opponent energy (`oppSlotEnergyHp`), re-anchors across player charged moves, and caps `SHIELD_CALL_HP_PROMO` to at most +1F without double-counting `missingFullOppMoves`.",
     };
   }
 

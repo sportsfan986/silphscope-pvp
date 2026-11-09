@@ -1,4 +1,18 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.24`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.25`)
+
+---
+
+## v7.25 (2026-11-08) — Post-Cutscene Circle Catch-Up Decoupling, Universal Phase-Elapsed Turn Cap & HP Energy Drift / Shield-Call Promo Clamps
+*Live Android APK & Nightly Audit release (`v7.25`, `versionCode = 1725`) resolving all over-tracked opponent energy failure modes in `log-1794174324740-267` (Closer Feraligatr `60E` via `+28E [+3F HP]` promo) and `log-1794193824203-433` (Virizion `+36E` and Tinkaton `+27E` post-cutscene circle catch-up bursts).*
+
+- **v7.25 — Fix 1: Universal Phase-Elapsed Turn Cap (`Section 1D`) & Post-Cutscene Player Circle Catch-Up Decoupling (`Section 1C`)**:
+  - Extended the Section 1D physical elapsed-time turn cap (`totalCompletedOppMovesInPhase`) from only `lastOppSwitchTimeMs` to the universal start of the current combat phase (`phaseStartAnchorMs = maxOf(lastChargedAttackLoggedMs, lastOppSwitchTimeMs, lastPlayerSwitchTimeMs, battleClockAnchorMs)`).
+  - Updated Section 1C so when a player's charge circle resyncs right after a charged move cutscene or switch (`elapsedInPhaseMs <= 6000L`), any circle energy above what could physically have been generated since `phaseAnchorMs` (`preCutsceneCatchupEnergy`) shifts `phaseStartPlayerEnergy` instead of inflating `confirmedPhasePlayerTurns` and crediting phantom post-cutscene `makeupOppMoves` (`+36E` on Virizion after 1st Leaf Blade and `+27E` on Tinkaton after 2nd Bulldoze eliminated).
+- **v7.25 — Fix 2: Minimum Cadence Gate, `+1F` Drift Clamp & Post-Player-Throw Re-Anchoring on HP-Derived Energy (`Section 1A` & `Section 4`)**:
+  - Enforced a minimum cadence gate (`(expectedIntervalMs - 250L).coerceAtLeast(350L)`) on `oppSlotLastHpStepMs` in Section 1A and clamped `oppSlotEnergyHp[activeOppIdx]` to at most `+1` fast move (`baseMeterE + oppFastEnergyForStats`) above the meter baseline, preventing rapid multi-frame HP drops from ratcheting `oppSlotEnergyHp` up to `100E`.
+  - Re-anchored `oppSlotEnergyHp[activeOppIdx]` and `oppSlotEnergyMeter[activeOppIdx]` to `oppSlotEnergy[activeOppIdx]` after every player charged move in Section 4 (unless a snuck fast move across the player's throw is explicitly detected), preventing stale pre-cutscene `oppSlotEnergyHp` values from surviving across a player charged move.
+- **v7.25 — Fix 3: Single-Fast-Move Cap (`[+1F HP]`) & No Double-Counting on `SHIELD_CALL_HP_PROMO` (`Section 2`)**:
+  - Capped `SHIELD_CALL_HP_PROMO` in Section 2 to at most `+1` fast move above the pre-roundup meter baseline (`preMissingMeterOppE + oppFastEnergyForStats`) so `missingFullOppMoves` and `SHIELD_CALL_HP_PROMO` can never double-count the same in-flight turn or promote by `+2F`/`+3F` (`+28E` on closer Feraligatr eliminated), and required the HP step to have occurred in the current combat phase (`oppSlotLastHpStepMs > lastNonCmpChargeLoggedMs`).
 
 ---
 
