@@ -173,21 +173,21 @@ function getStorageAdapter(env) {
         return new Response(obj.body, { status: 200, headers });
       },
       async list({ prefix = '', cursor = undefined, limit = 500 } = {}) {
-        const listed = await bucket.list({
-          prefix,
-          cursor,
-          limit,
-          include: ['customMetadata'],
-        });
+        const opts = { limit: Math.min(Number(limit) || 500, 1000) };
+        if (prefix) opts.prefix = prefix;
+        if (cursor) opts.cursor = cursor;
+        opts.include = ['customMetadata'];
+        const listed = await bucket.list(opts);
+        const objs = Array.isArray(listed?.objects) ? listed.objects : [];
         return {
-          objects: listed.objects.map((o) => ({
+          objects: objs.map((o) => ({
             key: o.key,
             size: o.size,
             uploaded: o.uploaded,
             customMetadata: o.customMetadata || {},
           })),
-          truncated: listed.truncated,
-          cursor: listed.truncated ? listed.cursor : null,
+          truncated: Boolean(listed?.truncated),
+          cursor: listed?.truncated ? (listed?.cursor || null) : null,
         };
       },
       async delete(key) {
@@ -321,18 +321,22 @@ function getStorageAdapter(env) {
         return new Response(stream, { status: 200, headers });
       },
       async list({ prefix = '', cursor = undefined, limit = 500 } = {}) {
-        const listed = await kv.list({ prefix, cursor, limit });
+        const opts = { limit: Math.min(Number(limit) || 500, 1000) };
+        if (prefix) opts.prefix = prefix;
+        if (cursor) opts.cursor = cursor;
+        const listed = await kv.list(opts);
+        const keys = Array.isArray(listed?.keys) ? listed.keys : [];
         return {
-          objects: listed.keys
-            .filter((k) => !k.name.includes('.__part'))
+          objects: keys
+            .filter((k) => k && k.name && !k.name.includes('.__part'))
             .map((k) => ({
               key: k.name,
               size: Number((k.metadata && k.metadata.size) || 0),
               uploaded: (k.metadata && k.metadata.uploadedAt) || null,
               customMetadata: k.metadata || {},
             })),
-          truncated: !listed.list_complete,
-          cursor: !listed.list_complete ? listed.cursor : null,
+          truncated: !Boolean(listed?.list_complete),
+          cursor: !Boolean(listed?.list_complete) ? (listed?.cursor || null) : null,
         };
       },
       async delete(key) {
@@ -9535,14 +9539,22 @@ export default {
       }
 
       if (request.method === 'GET' && path === '/v1/admin/list') {
-        const prefix = url.searchParams.get('prefix') || '';
-        const cursor = url.searchParams.get('cursor') || undefined;
-        const limit = Math.min(Number(url.searchParams.get('limit')) || 500, 1000);
-        const listed = await store.list({ prefix, cursor, limit });
-        return jsonResponse({
-          ok: true,
-          ...listed,
-        });
+        try {
+          const prefix = url.searchParams.get('prefix') || '';
+          const cursor = url.searchParams.get('cursor') || undefined;
+          const limit = Math.min(Number(url.searchParams.get('limit')) || 500, 1000);
+          const listed = await store.list({ prefix, cursor, limit });
+          return jsonResponse({
+            ok: true,
+            ...listed,
+          });
+        } catch (err) {
+          return jsonResponse({
+            ok: false,
+            error: err.message || String(err),
+            stack: err.stack || null,
+          }, 500);
+        }
       }
 
       if (request.method === 'GET' && path === '/v1/admin/object') {

@@ -605,19 +605,69 @@ async function adminDeleteObject(key) {
   return res.ok;
 }
 
+let cachedManifest = null;
+async function getManifestFallback() {
+  if (cachedManifest) return cachedManifest;
+  try {
+    const res = await adminFetchJson("/v1/admin/manifest");
+    if (res && typeof res === "object") {
+      cachedManifest = res;
+      return cachedManifest;
+    }
+  } catch (err) {
+    console.warn("[MANIFEST-FALLBACK] Could not fetch manifest:", err.message);
+  }
+  return null;
+}
+
 async function listAllObjectsByPrefix(prefix) {
   const all = [];
   let cursor = null;
-  do {
-    const q = new URLSearchParams({ prefix, limit: "500" });
-    if (cursor) q.set("cursor", cursor);
-    const page = await adminFetchJson(`/v1/admin/list?${q.toString()}`);
-    if (Array.isArray(page.objects)) {
-      all.push(...page.objects);
+  try {
+    do {
+      const q = new URLSearchParams({ prefix, limit: "500" });
+      if (cursor) q.set("cursor", cursor);
+      const page = await adminFetchJson(`/v1/admin/list?${q.toString()}`);
+      if (Array.isArray(page.objects)) {
+        all.push(...page.objects);
+      }
+      cursor = page.truncated ? page.cursor : null;
+    } while (cursor);
+    return all;
+  } catch (err) {
+    console.warn(`[INGEST] /v1/admin/list?prefix=${prefix} failed (${err.message}). Falling back to /v1/admin/manifest...`);
+    const manifest = await getManifestFallback();
+    if (!manifest) return [];
+    if (prefix.startsWith("batches/")) {
+      return (manifest.recentBatches || []).map((b) => ({
+        key: b.key,
+        size: 0,
+        uploaded: b.uploadedAt,
+      }));
     }
-    cursor = page.truncated ? page.cursor : null;
-  } while (cursor);
-  return all;
+    if (prefix.startsWith("recordings/")) {
+      const recObjs = [];
+      for (const r of manifest.recentDvr || []) {
+        if (r.traceKey) recObjs.push({ key: r.traceKey, size: 0, uploaded: r.uploadedAt });
+        if (r.videoKey) recObjs.push({ key: r.videoKey, size: r.videoBytes || 0, uploaded: r.uploadedAt });
+      }
+      return recObjs;
+    }
+    if (prefix.startsWith("users/")) {
+      const userObjs = [];
+      for (const b of manifest.recentBatches || []) {
+        if (b.screenName && b.batchId) {
+          userObjs.push({
+            key: `users/${b.screenName}/batches/${b.batchId}.jsonl`,
+            size: 0,
+            uploaded: b.uploadedAt,
+          });
+        }
+      }
+      return userObjs;
+    }
+    return [];
+  }
 }
 
 // ============================================================================
@@ -1515,7 +1565,7 @@ function syncLocalDeepTraceHeadersIntoState(state) {
       const videoPath = path.join(userDir, `${battleId}_video.mp4`);
       try {
         const fd = fs.openSync(tracePath, "r");
-        const buf = Buffer.alloc(65536);
+        const buf = Buffer.alloc(1024 * 1024); // 1 MB buffer to accommodate large line 0 base64 thumbnails
         const bytesRead = fs.readSync(fd, buf, 0, buf.length, 0);
         fs.closeSync(fd);
         const firstLine = buf.toString("utf8", 0, bytesRead).split(/\r?\n/)[0] || "";
