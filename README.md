@@ -1,4 +1,4 @@
-# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v7.23)
+# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v7.24)
 
 [![Official Website & Simulator](https://img.shields.io/badge/🌐%20Official%20Website%20%26%20Simulator-silphscopepvp.com-f59e0b?style=for-the-badge&logo=googlechrome&logoColor=white)](https://silphscopepvp.com)
 [![Download Latest APK](https://img.shields.io/badge/⬇️%20Download%20Latest%20APK-dl.silphscopepvp.com-10b981?style=for-the-badge&logo=android&logoColor=white)](https://dl.silphscopepvp.com)

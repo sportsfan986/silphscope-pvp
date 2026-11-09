@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.23"
-        const val APP_VERSION_CODE = 1723
+        const val APP_VERSION = "7.24"
+        const val APP_VERSION_CODE = 1724
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -308,6 +308,18 @@ class OverlayService : LifecycleService() {
                 options = listOf(
                     DynamicSurveyOption("UNDERCOUNTED", "⬇️ Under"),
                     DynamicSurveyOption("ACCURATE", "✅ Spot-On"),
+                    DynamicSurveyOption("OVERCOUNTED", "⬆️ Over")
+                )
+            ),
+            DynamicSurveyQuestion(
+                id = "swap_throw_reentry_energy_v724",
+                priority = 96,
+                trigger = "charged_move_thrown",
+                prompt = "🔄 Bench Swap / Closer Energy (v7.24 Fix):",
+                shortLabel = "Closer Energy",
+                options = listOf(
+                    DynamicSurveyOption("UNDERCOUNTED", "⬇️ Under"),
+                    DynamicSurveyOption("EXACT_MATCH", "✅ Exact"),
                     DynamicSurveyOption("OVERCOUNTED", "⬆️ Over")
                 )
             ),
@@ -2808,6 +2820,8 @@ class OverlayService : LifecycleService() {
     internal var lastUserChargePreEnergySnapshot: Int = 0
     internal var lastUserChargeDeductedEnergySnapshot: Int = 0
     internal var lastOppChargeDeductedEnergySnapshot: Int = 0
+    internal var pendingChargedAttackRawPreFloorOppEnergy: Int = -1
+    internal var lastOppChargeRawPreFloorEnergySnapshot: Int = -1
     internal var lastMicroCorrectionTimeMs: Long = 0L
     internal var missingBottomCirclesWithOppHpFrames: Int = 0
     internal val CALIBRATION_REQUIRED_CYCLES: Int = 6
@@ -6661,9 +6675,19 @@ class OverlayService : LifecycleService() {
                     if (pendingChargedAttackActor == "opp" && resolvedOppSlotIdx in 0..2) {
                         if (pendingChargedAttackOppSlotIdx in 0..2 && resolvedOppSlotIdx != pendingChargedAttackOppSlotIdx) {
                             val oldSlot = pendingChargedAttackOppSlotIdx
-                            if (pendingChargedAttackDeductedEnergy > 0) {
-                                oppSlotEnergy[oldSlot] = (oppSlotEnergy[oldSlot] + pendingChargedAttackDeductedEnergy).coerceIn(0, 100)
+                            // v7.24: Restore oldSlot's true pre-cutscene energy (`pendingChargedAttackRawPreFloorOppEnergy`)
+                            // rather than refunding the provisional floor (e.g. Feraligatr 8E floored to 40E on Tinkaton's swap-throw)!
+                            val restoredOldE = if (pendingChargedAttackRawPreFloorOppEnergy in 0..100) {
+                                pendingChargedAttackRawPreFloorOppEnergy
+                            } else {
+                                (oppSlotEnergy[oldSlot] + pendingChargedAttackDeductedEnergy.coerceAtLeast(0)).coerceIn(0, 100)
                             }
+                            oppSlotEnergy[oldSlot] = restoredOldE
+                            oppSlotEnergyMeter[oldSlot] = restoredOldE
+                            oppSlotEnergyHp[oldSlot] = restoredOldE
+                            val newRawPreFloor = oppSlotEnergy[resolvedOppSlotIdx].coerceIn(0, 100)
+                            pendingChargedAttackRawPreFloorOppEnergy = newRawPreFloor
+                            lastOppChargeRawPreFloorEnergySnapshot = newRawPreFloor
                             val newPreE = max(oppSlotEnergy[resolvedOppSlotIdx], bannerMoveCost).coerceIn(bannerMoveCost, 100)
                             pendingChargedAttackPreOppEnergy = newPreE
                             oppSlotEnergy[resolvedOppSlotIdx] = (newPreE - bannerMoveCost).coerceIn(0, 100)
@@ -6765,10 +6789,18 @@ class OverlayService : LifecycleService() {
                         // refund the old slot and deduct from resolvedOppSlotIdx!
                         if (lastOppChargedAttackerSlotIdx in 0..2 && lastOppChargedAttackerSlotIdx != resolvedOppSlotIdx && lastOppChargeDeductedEnergySnapshot > 0) {
                             val oldIdx = lastOppChargedAttackerSlotIdx
-                            oppSlotEnergy[oldIdx] = (oppSlotEnergy[oldIdx] + lastOppChargeDeductedEnergySnapshot).coerceIn(0, 100)
+                            val restoredOldE = if (lastOppChargeRawPreFloorEnergySnapshot in 0..100) {
+                                lastOppChargeRawPreFloorEnergySnapshot
+                            } else {
+                                (oppSlotEnergy[oldIdx] + lastOppChargeDeductedEnergySnapshot).coerceIn(0, 100)
+                            }
+                            oppSlotEnergy[oldIdx] = restoredOldE
+                            oppSlotEnergyMeter[oldIdx] = restoredOldE
+                            oppSlotEnergyHp[oldIdx] = restoredOldE
                             if (lastOppChargeHpInferredMoveName.isNotEmpty()) {
                                 confirmedOppChargedMoves[oldIdx].remove(lastOppChargeHpInferredMoveName)
                             }
+                            lastOppChargeRawPreFloorEnergySnapshot = oppSlotEnergy[resolvedOppSlotIdx].coerceIn(0, 100)
                             val newPreE = max(oppSlotEnergy[resolvedOppSlotIdx], trueCost).coerceIn(trueCost, 100)
                             oppSlotEnergy[resolvedOppSlotIdx] = (newPreE - trueCost).coerceIn(0, 100)
                             lastOppChargeDeductedEnergySnapshot = trueCost
@@ -8257,19 +8289,24 @@ class OverlayService : LifecycleService() {
                         }
                     }
 
-                    // v6.23: If post-throw circle debouncing was delayed by HUD slide-in past 1 full fast-move duration
-                    // and the circle fill is already >= 28%, expire `awaitingPostUserChargeCircleSync` so Section 1C
-                    // processes the newly accumulated post-throw fast moves instead of locking energy back to the residual!
+                    // v6.23 / v7.24: If post-throw circle debouncing was delayed by HUD slide-in past 1 full fast-move duration,
+                    // only expire `awaitingPostUserChargeCircleSync` when no opponent KO/switch intervened since the throw
+                    // and the circle fill exceeds the expected residual fill by at least 1 fast move (+14%), preventing a
+                    // post-KO replacement entry (e.g. Go, Feraligatr!) from converting post-throw residual energy into phantom opponent fast moves!
+                    val expectedPostResidualE = (lastUserChargePreEnergySnapshot - lastUserChargeDeductedEnergySnapshot).coerceIn(0, 100)
+                    val expectedSlowestResidualFill = if (slowestMoveCost > 0) ((expectedPostResidualE * 100) / slowestMoveCost).coerceIn(0, 100) else 0
+                    val noOppSwitchSinceUserThrow = lastOppSwitchTimeMs <= lastUserChargedAttackLoggedMs
                     if (awaitingPostUserChargeCircleSync &&
+                        noOppSwitchSinceUserThrow &&
                         lastUserChargedAttackLoggedMs > 0L &&
                         (nowMs - lastUserChargedAttackLoggedMs) > (userMoveDurationMs + 250L) &&
-                        debouncedFillPct >= 28
+                        debouncedFillPct >= max(28, expectedSlowestResidualFill + 14)
                     ) {
                         awaitingPostUserChargeCircleSync = false
                     }
 
-                    // Post-Throw Circle Verification & Round Resync (v5.12: BANNER_OCR Move Lock + Zero Post-Cutscene Turn Inflation):
-                    if (awaitingPostUserChargeCircleSync && debouncedFillPct in 0..300) {
+                    // Post-Throw Circle Verification & Round Resync (v5.12 / v7.24: BANNER_OCR Move Lock + Either-Circle Trigger + Zero Post-Cutscene Turn Inflation):
+                    if (awaitingPostUserChargeCircleSync && (debouncedFillPct in 0..300 || debouncedFasterPct in 0..300)) {
                         rollbackPendingProactiveStep(markAnchorRolledBack = false)
                         proactiveRolledBackAnchorMs = 0L
                         awaitingPostUserChargeCircleSync = false
@@ -8901,7 +8938,17 @@ class OverlayService : LifecycleService() {
             }
 
             if (phasePlayerTurns > 0) {
-                val totalCompletedOppMovesInPhase = phasePlayerTurns / oppFastTurnsForStats
+                val rawCompletedOppMovesInPhase = phasePlayerTurns / oppFastTurnsForStats
+                // v7.24: Cap opponent fast moves credited in the current phase after a recent opponent switch or faint replacement
+                // (`lastOppSwitchTimeMs`) to the physical elapsed time since that opponent entered the field, preventing a post-KO
+                // player circle resync from crediting multi-second catch-up bursts (e.g. +24E / 3x Shadow Claw in 0.76s) to a replacement Pokemon!
+                val totalCompletedOppMovesInPhase = if (lastOppSwitchTimeMs > 0L && (nowMs - lastOppSwitchTimeMs) in 0L..5000L) {
+                    val elapsedSinceOppEntryMs = (nowMs - lastOppSwitchTimeMs).coerceAtLeast(0L)
+                    val maxPhysicalMovesSinceEntry = ((elapsedSinceOppEntryMs + 350L) / (oppFastTurnsForStats * 500L)).toInt().coerceAtLeast(0)
+                    min(rawCompletedOppMovesInPhase, maxPhysicalMovesSinceEntry)
+                } else {
+                    rawCompletedOppMovesInPhase
+                }
                 val alreadyCreditedOppMovesInPhase = phaseOppTurns / oppFastTurnsForStats
                 val makeupOppMoves = (totalCompletedOppMovesInPhase - alreadyCreditedOppMovesInPhase).coerceAtLeast(0)
 
@@ -9434,6 +9481,12 @@ class OverlayService : LifecycleService() {
                 proactiveRolledBackAnchorMs = 0L
                 pendingChargedAttackHudThumbB64 = captureCompactHudStripWebpBase64()
                 val throwerOppIdx = activeOppIdx.coerceIn(0, 2)
+                // v7.24: Snapshot raw pre-cutscene opponent slot energy BEFORE applying missingFullOppMoves or cheapestOppEnergy floor,
+                // so if Layer 1/2 Swap-and-Immediate-Throw Rollback reveals a newly switched opponent threw the move,
+                // the prior slot is restored to its true pre-cutscene energy (e.g. 8E) instead of the provisional floor (40E)!
+                val rawPreFloorOppE = oppSlotEnergy[throwerOppIdx].coerceIn(0, 100)
+                pendingChargedAttackRawPreFloorOppEnergy = rawPreFloorOppE
+                lastOppChargeRawPreFloorEnergySnapshot = rawPreFloorOppE
                 val activeSubTurnWindowMs = (userFastTurnsForStats * 500L + 350L).coerceAtLeast(850L)
                 val effectivePlayerTurnsAtOppThrow = if (lastConfirmedPlayerFastMoveMs > 0L &&
                     (nowMs - lastConfirmedPlayerFastMoveMs) in 1L..activeSubTurnWindowMs
@@ -9966,10 +10019,21 @@ class OverlayService : LifecycleService() {
                 val attackerCheapestOppEnergy = attackerOppMoveEnergyMap.values.minOrNull() ?: 45
 
                 val alreadyDeducted = pendingChargedAttackDeductedEnergy.coerceAtLeast(0)
-                // v6.02: If mid-banner OCR or swap detection changed `attackerOppSlotIdx` away from `pendingChargedAttackOppSlotIdx`,
-                // refund the provisional deduction back to `pendingChargedAttackOppSlotIdx` before deducting from `attackerOppSlotIdx`!
-                if (pendingChargedAttackOppSlotIdx in 0..2 && attackerOppSlotIdx != pendingChargedAttackOppSlotIdx && alreadyDeducted > 0) {
-                    oppSlotEnergy[pendingChargedAttackOppSlotIdx] = (oppSlotEnergy[pendingChargedAttackOppSlotIdx] + alreadyDeducted).coerceIn(0, 100)
+                // v6.02 / v7.24: If mid-banner OCR or swap detection changed `attackerOppSlotIdx` away from `pendingChargedAttackOppSlotIdx`,
+                // restore `pendingChargedAttackOppSlotIdx` to its true pre-cutscene energy (`pendingChargedAttackRawPreFloorOppEnergy`) before deducting from `attackerOppSlotIdx`!
+                if (pendingChargedAttackOppSlotIdx in 0..2 && attackerOppSlotIdx != pendingChargedAttackOppSlotIdx) {
+                    val oldSlot = pendingChargedAttackOppSlotIdx
+                    val restoredOldE = if (pendingChargedAttackRawPreFloorOppEnergy in 0..100) {
+                        pendingChargedAttackRawPreFloorOppEnergy
+                    } else {
+                        (oppSlotEnergy[oldSlot] + alreadyDeducted).coerceIn(0, 100)
+                    }
+                    oppSlotEnergy[oldSlot] = restoredOldE
+                    oppSlotEnergyMeter[oldSlot] = restoredOldE
+                    oppSlotEnergyHp[oldSlot] = restoredOldE
+                    val newRawPreFloor = oppSlotEnergy[attackerOppSlotIdx].coerceIn(0, 100)
+                    pendingChargedAttackRawPreFloorOppEnergy = newRawPreFloor
+                    lastOppChargeRawPreFloorEnergySnapshot = newRawPreFloor
                     pendingChargedAttackPreOppEnergy = max(oppSlotEnergy[attackerOppSlotIdx], attackerCheapestOppEnergy).coerceIn(attackerCheapestOppEnergy, 100)
                     pendingChargedAttackDeductedEnergy = 0
                 }
@@ -12172,16 +12236,22 @@ class OverlayService : LifecycleService() {
             val newImprovesHpFit = !wasShielded && existingErr >= 12 && newErr + 6 <= existingErr
             val moveBelongsToNewSlot = newMatchingBannerMove != null && ev.moveResolutionSource != "BANNER_OCR"
             if (oldHadDeficit || newImprovesHpFit || moveBelongsToNewSlot || ev.moveResolutionSource == "DEFAULT_FALLBACK") {
-                // Refund old slot energy & unlock move if it was inferred via HP delta
-                val refundedE = lastOppChargeDeductedEnergySnapshot.coerceAtLeast(ev.requiredMoveEnergy ?: 0)
-                if (refundedE > 0) {
-                    oppSlotEnergy[prevSlotIdx] = (oppSlotEnergy[prevSlotIdx] + refundedE).coerceIn(0, 100)
+                // Refund old slot energy to its true pre-cutscene energy & unlock move if it was inferred via HP delta
+                val restoredOldE = if (lastOppChargeRawPreFloorEnergySnapshot in 0..100) {
+                    lastOppChargeRawPreFloorEnergySnapshot
+                } else {
+                    val refundedE = lastOppChargeDeductedEnergySnapshot.coerceAtLeast(ev.requiredMoveEnergy ?: 0)
+                    (oppSlotEnergy[prevSlotIdx] + refundedE).coerceIn(0, 100)
                 }
+                oppSlotEnergy[prevSlotIdx] = restoredOldE
+                oppSlotEnergyMeter[prevSlotIdx] = restoredOldE
+                oppSlotEnergyHp[prevSlotIdx] = restoredOldE
                 if (existingMove != null && ev.moveResolutionSource != "BANNER_OCR") {
                     confirmedOppChargedMoves[prevSlotIdx].remove(existingMove)
                 }
                 val mStats = OverlayService.resolveChargedMoveStatsStatic(candidateNewMove, newOppMeta.types.firstOrNull() ?: "normal")
                 val trueCost = (mStats.energyCost.takeIf { it > 0 } ?: MOVE_ENERGY_COST[candidateNewMove] ?: 45).coerceIn(35, 100)
+                lastOppChargeRawPreFloorEnergySnapshot = oppSlotEnergy[newSlotIdx].coerceIn(0, 100)
                 val newPreE = max(oppSlotEnergy[newSlotIdx], trueCost).coerceIn(trueCost, 100)
                 oppSlotEnergy[newSlotIdx] = (newPreE - trueCost).coerceIn(0, 100)
                 confirmedOppChargedMoves[newSlotIdx].add(candidateNewMove)
@@ -13494,6 +13564,8 @@ class OverlayService : LifecycleService() {
         lastUserChargePreEnergySnapshot = 0
         lastUserChargeDeductedEnergySnapshot = 0
         lastOppChargeDeductedEnergySnapshot = 0
+        pendingChargedAttackRawPreFloorOppEnergy = -1
+        lastOppChargeRawPreFloorEnergySnapshot = -1
         sampledOppHasPendingDmg = false
         sampledPlayerHasPendingDmg = false
         sampledOppPendingDmgPct = 0

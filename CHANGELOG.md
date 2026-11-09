@@ -1,4 +1,18 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.23`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.24`)
+
+---
+
+## v7.24 (2026-11-08) — Swap-and-Immediate-Throw Pre-Floor Energy Restoration, Post-KO Re-Entry Turn Cap & Auto-Retiring Survey Verification
+*Live Android APK & Nightly Audit release (`v7.24`, `versionCode = 1724`) resolving the closer Feraligatr `60E` phantom energy bug (`log-1794174324740-267`) where an opponent swapping out at low energy (`8E`) into an immediate bench throw refunded the provisional minimum-cost floor (`40E`) instead of true pre-cutscene energy (`8E`), and clamping post-KO replacement re-entry fast-move catch-up to physical elapsed field time.*
+
+- **v7.24 — Fix 1: True Pre-Cutscene Energy Restoration on Swap-and-Immediate-Throw Rollback (`OverlayService.kt`)**:
+  - Snapshots `pendingChargedAttackRawPreFloorOppEnergy` and `lastOppChargeRawPreFloorEnergySnapshot` (`oppSlotEnergy[throwerOppIdx]`) **before** `Attack incoming!` applies `missingFullOppMoves` or floors the slot up to `cheapestOppEnergy` (`40E`).
+  - When Layer 1 Banner OCR (`"<NewPokemon> used <Move>!"`) or Layer 2 Post-Throw Nameplate Rollback (`tryRollbackRecentSwapAndImmediateThrow`) transfers the throw to the newly switched-in opponent, the prior slot (`oldSlot` / `prevSlotIdx`) is restored to its true pre-cutscene energy (`8E`) instead of refunding the `40E` provisional floor (`+32E` phantom bench energy eliminated).
+- **v7.24 — Fix 2: Post-KO Replacement Re-Entry Physical Turn Cap & Either-Circle Post-Throw Sync (`OverlayService.kt`)**:
+  - Updated Section 1D (`makeupOppMoves`) so within `5000ms` of an opponent switch or faint replacement (`lastOppSwitchTimeMs`), `totalCompletedOppMovesInPhase` is capped by `((elapsedSinceOppEntryMs + 350L) / (oppFastTurnsForStats * 500L))`, preventing a post-KO player circle resync from crediting multi-second catch-up bursts (`+24E` / `3x Shadow Claw` in `0.76s`) to a newly entered replacement Pokémon.
+  - Updated `awaitingPostUserChargeCircleSync` to trigger as soon as either debounced circle (`debouncedFillPct` or `debouncedFasterPct`) is ready and never force-expire across an intervening opponent faint/switch (`lastOppSwitchTimeMs > lastUserChargedAttackLoggedMs`).
+- **v7.24 — Feature 3: `swap_throw_reentry_energy_v724` Survey Poll & `>= 10` Positive Confirmation Auto-Retirement (`scripts/nightly-telemetry-audit.mjs`)**:
+  - Added `swap_throw_reentry_energy_v724` (`priority: 96`, *"🔄 Bench Swap / Closer Energy (v7.24 Fix):"*) to the daily post-battle question pool and added automatic retirement once any fix-verification poll accumulates `>= 10` positive taps with `0` negative taps.
 
 ---
 

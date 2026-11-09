@@ -629,6 +629,22 @@ function evaluateRetroactiveResolution(anomalyOrBundle, record, state, currentVe
     };
   }
 
+  // 3b. Check v7.24 Swap-and-Immediate-Throw Raw Pre-Floor Energy Restoration & Post-KO Re-Entry Turn Cap (`log-1794174324740-267`)
+  if (
+    recVerNum <= 723 &&
+    curVerNum >= 724 &&
+    (/feraligatr|feraligator|too\s+much\s+energy|finish\s+with\s+60e/i.test(note) ||
+      String(anomalyOrBundle.battleId || record?.id || "") === "log-1794174324740-267")
+  ) {
+    return {
+      status: "RESOLVED_BY_LATEST_RELEASE",
+      resolvedInVersion: "v7.24",
+      verificationMethod: "Deep-Trace Swap-Throw Pre-Floor Rollback + Post-KO Re-Entry Cap Replay",
+      explanation:
+        "Resolved in v7.24: Snapshots raw pre-cutscene opponent energy before Attack incoming! provisional flooring (restoring 8E instead of 40E on swap-throw rollback) and caps post-KO replacement re-entry fast moves to physical elapsed field time (eliminating +24E re-entry burst; Feraligatr finishes at 4E instead of 60E).",
+    };
+  }
+
   // 4. Check benign 1-turn cadence boundary or circle-shrink false positives
   if (
     diagCat === "ONE_FAST_MOVE_TURN_BOUNDARY_VARIANCE" ||
@@ -1121,16 +1137,32 @@ async function main() {
 
   // Build Daily Prioritized Post-Battle Survey Question Pool (pushed to APKs via `/v1/tuning-config`)
   // Automatically includes verification questions for recent high-priority fixes and any open anomalies!
-  const dailySurveyQuestionPool = [
+  const candidateQuestions = [
     {
       id: "shield_energy",
       priority: 100,
       trigger: "hp_promoted_shield_call",
       prompt: "🛡️ HP Shield Call Energy:",
       shortLabel: "Shield Energy",
+      positiveVal: "ACCURATE",
+      retireAfterPositiveCount: 0, // Core standing tuning poll
       options: [
         { val: "UNDERCOUNTED", label: "⬇️ Under" },
         { val: "ACCURATE", label: "✅ Spot-On" },
+        { val: "OVERCOUNTED", label: "⬆️ Over" },
+      ],
+    },
+    {
+      id: "swap_throw_reentry_energy_v724",
+      priority: 96,
+      trigger: "charged_move_thrown",
+      prompt: "🔄 Bench Swap / Closer Energy (v7.24 Fix):",
+      shortLabel: "Closer Energy",
+      positiveVal: "EXACT_MATCH",
+      retireAfterPositiveCount: 10,
+      options: [
+        { val: "UNDERCOUNTED", label: "⬇️ Under" },
+        { val: "EXACT_MATCH", label: "✅ Exact" },
         { val: "OVERCOUNTED", label: "⬆️ Over" },
       ],
     },
@@ -1140,6 +1172,8 @@ async function main() {
       trigger: "master_league",
       prompt: "🦖 Master League HP Bars (v7.08 Fix):",
       shortLabel: "MML HP Fix",
+      positiveVal: "LOCKED_CLEAN",
+      retireAfterPositiveCount: 10,
       options: [
         { val: "MISSED_BARS", label: "⚠️ Missed" },
         { val: "LOCKED_CLEAN", label: "✅ Locked" },
@@ -1152,6 +1186,8 @@ async function main() {
       trigger: "charged_move_thrown",
       prompt: "⚡ Pre-Throw Energy Sync (v7.20 Fix):",
       shortLabel: "Throw Energy",
+      positiveVal: "EXACT_MATCH",
+      retireAfterPositiveCount: 10,
       options: [
         { val: "UNDER_BY_1F", label: "⬇️ -1 Fast" },
         { val: "EXACT_MATCH", label: "✅ Exact" },
@@ -1161,9 +1197,12 @@ async function main() {
     {
       id: "haptic_timing",
       priority: 50,
+      priorityFloor: true,
       trigger: "always",
       prompt: "📳 Haptic Timing ({leadMs}ms):",
       shortLabel: "Haptic Lead",
+      positiveVal: "IDEAL",
+      retireAfterPositiveCount: 0, // Core standing tuning poll
       options: [
         { val: "TOO_EARLY", label: "⏪ Early" },
         { val: "IDEAL", label: "✅ Ideal" },
@@ -1171,6 +1210,19 @@ async function main() {
       ],
     },
   ];
+
+  // Auto-retire fix-verification questions once they accumulate >= 10 positive confirmations with 0 negative taps
+  const dailySurveyQuestionPool = candidateQuestions
+    .filter((q) => {
+      if (!q.retireAfterPositiveCount || q.retireAfterPositiveCount <= 0) return true;
+      const tally = customQuestionTallies[q.id];
+      if (!tally) return true;
+      const posCount = Number(tally[q.positiveVal] || 0);
+      const totalCount = Object.values(tally).reduce((acc, v) => acc + Number(v || 0), 0);
+      const negCount = totalCount - posCount;
+      return !(posCount >= q.retireAfterPositiveCount && negCount === 0);
+    })
+    .map(({ positiveVal, retireAfterPositiveCount, priorityFloor, ...cleanQ }) => cleanQ);
 
   // Dynamically inject high-priority verification questions for any open action items
   for (const openItem of openActionItems.slice(0, 2)) {
