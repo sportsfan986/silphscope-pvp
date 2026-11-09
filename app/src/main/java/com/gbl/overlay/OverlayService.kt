@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.26"
-        const val APP_VERSION_CODE = 1726
+        const val APP_VERSION = "7.27"
+        const val APP_VERSION_CODE = 1727
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -1564,6 +1564,8 @@ class OverlayService : LifecycleService() {
             val isPinned: Boolean = false,
             val isPublic: Boolean = false,
             val hideNames: Boolean = false,
+            val manuallyFlagged: Boolean = false,
+            val userIssueNote: String = "",
             val uploadedAtMs: Long = 0L
         )
 
@@ -3529,6 +3531,7 @@ class OverlayService : LifecycleService() {
     internal var lastLoggedBattleHasDvr: Boolean = false
     internal var lastLoggedBattleDvrDeleted: Boolean = false
     internal var lastLoggedBattleDvrBugReported: Boolean = false
+    internal var lastLoggedBattleBugReportNote: String = ""
     internal var lastLoggedBattleDvrUploadStatus: String = "" // "PENDING" | "UPLOADING" | "UPLOADED" | "DELETED" | "DISCARDED_SHORT" | "WIFI_WAIT"
     internal var lastLoggedBattleSummaryRecord: AiTelemetryBattleRecordV510? = null
     internal var pendingPostBattleDvrUploadJob: Job? = null
@@ -14358,6 +14361,7 @@ class OverlayService : LifecycleService() {
             else -> "DISCARDED_SHORT"
         }
         val capturedBugReportNote = stoppedBattleBugReportNote
+        lastLoggedBattleBugReportNote = capturedBugReportNote
         selectHighestPriorityPostBattleQuestion(
             leagueName = league,
             hadHpPromoShieldCall = hadHpPromotedShieldCallInBattle,
@@ -14728,6 +14732,47 @@ class OverlayService : LifecycleService() {
         showPostBattleBugReportDialogFromOverlay(targetId)
     }
 
+    fun unflagLastBattleDvrBugReportFromOverlay(battleId: String) {
+        val targetId = battleId.ifBlank { lastLoggedBattleId }
+        dismissPostBattleBugReportDialogOverlay()
+        if (targetId.isBlank()) {
+            stoppedBattleFlagBugReport = false
+            stoppedBattleBugReportNote = ""
+            recalculateAndPushBattleData()
+            showBattleToast("⚪ Cleared Post-Battle Bug Report Flag")
+            return
+        }
+        pendingPostBattleDvrUploadJob?.cancel()
+        pendingPostBattleDvrUploadJob = null
+        lastLoggedBattleTimeMs = System.currentTimeMillis()
+        lastLoggedBattleDvrBugReported = false
+        lastLoggedBattleBugReportNote = ""
+        val sumRec = lastLoggedBattleSummaryRecord
+        if (sumRec != null) {
+            val cleanedAnoms = sumRec.anomalies.filter { it.type != "USER_MANUAL_ISSUE_REPORT" }
+            lastLoggedBattleSummaryRecord = sumRec.copy(
+                anomalies = cleanedAnoms,
+                anomalyCount = cleanedAnoms.size,
+                hasHighSeverityAnomaly = cleanedAnoms.any { it.severity == "HIGH" }
+            )
+        }
+        recalculateAndPushBattleData()
+        showBattleToast("⚪ Unflagging Issue Report...")
+        dvrUploadScope.launch {
+            val (_, msg) = OverlayService.unflagDvrIssueReportBlocking(
+                filesDir = filesDir,
+                cacheDir = cacheDir,
+                prefs = prefs,
+                gson = gson,
+                battleId = targetId
+            )
+            withContext(Dispatchers.Main) {
+                recalculateAndPushBattleData()
+                showBattleToast(msg)
+            }
+        }
+    }
+
     internal fun dismissPostBattleBugReportDialogOverlay() {
         val existing = bugReportDialogOverlayView ?: return
         bugReportDialogOverlayView = null
@@ -14745,6 +14790,7 @@ class OverlayService : LifecycleService() {
             dismissPostBattleBugReportDialogOverlay()
             val density = resources.displayMetrics.density
             val isStoppedPreLog = targetId.isBlank()
+            val isAlreadyFlagged = if (isStoppedPreLog) stoppedBattleFlagBugReport else lastLoggedBattleDvrBugReported
 
             val backdrop = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -14767,7 +14813,7 @@ class OverlayService : LifecycleService() {
             }
 
             val titleTv = TextView(this).apply {
-                text = "🚩 Submit DVR Issue Report"
+                text = if (isAlreadyFlagged) "🚩 Edit or Unflag Issue Report" else "🚩 Submit DVR Issue Report"
                 setTextColor(Color.parseColor("#FDE68A"))
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
                 setTypeface(typeface, Typeface.BOLD)
@@ -14775,7 +14821,9 @@ class OverlayService : LifecycleService() {
             card.addView(titleTv)
 
             val subTv = TextView(this).apply {
-                text = if (isStoppedPreLog) {
+                text = if (isAlreadyFlagged) {
+                    "This battle is flagged for diagnostic review. Tap '⚪ Unflag Report' to retract it if sent inadvertently, or update the note below."
+                } else if (isStoppedPreLog) {
                     "Describe the issue with this battle. It will be uploaded with the DVR when you log WIN or LOSS, or tap Cancel Report."
                 } else {
                     "Describe what happened in this battle recording, or tap Cancel Report to close without flagging."
@@ -14802,8 +14850,9 @@ class OverlayService : LifecycleService() {
                     setColor(Color.parseColor("#1E293B"))
                     setStroke((1f * density).toInt().coerceAtLeast(1), Color.parseColor("#334155"))
                 }
-                if (isStoppedPreLog && stoppedBattleBugReportNote.isNotBlank()) {
-                    setText(stoppedBattleBugReportNote)
+                val existingNote = if (isStoppedPreLog) stoppedBattleBugReportNote else lastLoggedBattleBugReportNote
+                if (existingNote.isNotBlank()) {
+                    setText(existingNote)
                     setSelection(text.length)
                 }
             }
@@ -14822,8 +14871,8 @@ class OverlayService : LifecycleService() {
             }
 
             val cancelBtn = TextView(this).apply {
-                text = "Cancel Report"
-                setTextColor(Color.parseColor("#CBD5E1"))
+                text = if (isAlreadyFlagged) "⚪ Unflag Report" else "Cancel Report"
+                setTextColor(if (isAlreadyFlagged) Color.parseColor("#FCA5A5") else Color.parseColor("#CBD5E1"))
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
                 setTypeface(typeface, Typeface.BOLD)
                 gravity = Gravity.CENTER
@@ -14834,10 +14883,14 @@ class OverlayService : LifecycleService() {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = 8f * density
                     setColor(Color.parseColor("#1E293B"))
-                    setStroke((1f * density).toInt().coerceAtLeast(1), Color.parseColor("#475569"))
+                    setStroke((1f * density).toInt().coerceAtLeast(1), if (isAlreadyFlagged) Color.parseColor("#EF4444") else Color.parseColor("#475569"))
                 }
                 setOnClickListener {
                     dismissPostBattleBugReportDialogOverlay()
+                    if (isAlreadyFlagged) {
+                        unflagLastBattleDvrBugReportFromOverlay(targetId)
+                        return@setOnClickListener
+                    }
                     if (isStoppedPreLog) {
                         val wasFlagged = stoppedBattleFlagBugReport
                         stoppedBattleFlagBugReport = false
@@ -14851,6 +14904,7 @@ class OverlayService : LifecycleService() {
                     } else {
                         lastLoggedBattleTimeMs = System.currentTimeMillis()
                         lastLoggedBattleDvrBugReported = false
+                        lastLoggedBattleBugReportNote = ""
                         val sumRec = lastLoggedBattleSummaryRecord
                         if (targetId == lastLoggedBattleId &&
                             lastLoggedBattleHasDvr &&
@@ -14873,7 +14927,7 @@ class OverlayService : LifecycleService() {
             }
 
             val submitBtn = TextView(this).apply {
-                text = if (isStoppedPreLog) "🚩 Flag Report" else "🚀 Submit Report"
+                text = if (isStoppedPreLog) "🚩 Flag Report" else (if (isAlreadyFlagged) "🚀 Update Report" else "🚀 Submit Report")
                 setTextColor(Color.parseColor("#FEF3C7"))
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
                 setTypeface(typeface, Typeface.BOLD)
@@ -14980,12 +15034,13 @@ class OverlayService : LifecycleService() {
         }
         pendingPostBattleDvrUploadJob?.cancel()
         pendingPostBattleDvrUploadJob = null
+        val resolvedNote = userNote.trim()
         lastLoggedBattleTimeMs = System.currentTimeMillis()
         lastLoggedBattleDvrBugReported = true
+        lastLoggedBattleBugReportNote = resolvedNote
         lastLoggedBattleDvrUploadStatus = "UPLOADING"
         recalculateAndPushBattleData()
         showBattleToast("🚩 Flagged Bug Report — Uploading Battle Video & Deep Trace...")
-        val resolvedNote = userNote.trim()
         dvrUploadScope.launch {
             val sumRec = lastLoggedBattleSummaryRecord
             val (ok, msg) = OverlayService.submitManualDvrIssueReportBlocking(
@@ -18326,6 +18381,13 @@ class OverlayService : LifecycleService() {
         fun flagLastBattleBugReport(battleId: String) {
             Handler(Looper.getMainLooper()).post {
                 this@OverlayService.flagLastBattleDvrBugReportFromOverlay(battleId)
+            }
+        }
+
+        @JavascriptInterface
+        fun unflagLastBattleBugReport(battleId: String) {
+            Handler(Looper.getMainLooper()).post {
+                this@OverlayService.unflagLastBattleDvrBugReportFromOverlay(battleId)
             }
         }
 

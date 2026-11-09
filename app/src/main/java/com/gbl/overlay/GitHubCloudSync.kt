@@ -2688,6 +2688,15 @@ internal fun OverlayService.Companion.uploadBattleDvrBundleToGitHubBlocking(
                 .putString(PREFS_KEY_LAST_DVR_UPLOAD_PATH, videoRepoPath)
                 .putInt(PREFS_KEY_TOTAL_DVR_UPLOADED_COUNT, prevCount + 1)
                 .apply()
+            val prevMap = loadReplayVaultMapStatic(prefs, gson)
+            val prevEntry = prevMap[cleanBattleId]
+            if (prevEntry != null || wasExplicitlyFlagged) {
+                prevMap[cleanBattleId] = (prevEntry ?: OverlayService.Companion.ReplayVaultEntryMeta(battleId = cleanBattleId)).copy(
+                    manuallyFlagged = wasExplicitlyFlagged,
+                    userIssueNote = if (wasExplicitlyFlagged) cleanNote else ""
+                )
+                saveReplayVaultMapStatic(prefs, gson, prevMap)
+            }
             if (deleteFilesOnSuccess) {
                 try { mp4File.delete() } catch (_: Exception) {}
                 try { traceFile.delete() } catch (_: Exception) {}
@@ -3251,6 +3260,8 @@ internal fun OverlayService.Companion.syncCloudReplayListBlocking(
                 val bId = obj.get("battleId")?.asString.orEmpty()
                 val sId = obj.get("shareId")?.asString.orEmpty()
                 if (bId.isBlank() || sId.isBlank()) continue
+                val issueNoteStr = obj.get("userIssueNote")?.takeIf { !it.isJsonNull }?.asString?.trim().orEmpty()
+                val isFlaggedBool = (obj.get("manuallyFlagged")?.takeIf { !it.isJsonNull }?.asBoolean ?: false) || issueNoteStr.isNotEmpty()
                 map[bId] = OverlayService.Companion.ReplayVaultEntryMeta(
                     battleId = bId,
                     shareId = sId,
@@ -3260,6 +3271,8 @@ internal fun OverlayService.Companion.syncCloudReplayListBlocking(
                     isPinned = obj.get("isPinned")?.asBoolean ?: false,
                     isPublic = obj.get("isPublic")?.asBoolean ?: false,
                     hideNames = obj.get("hideNames")?.asBoolean ?: false,
+                    manuallyFlagged = isFlaggedBool,
+                    userIssueNote = issueNoteStr,
                     uploadedAtMs = System.currentTimeMillis()
                 )
             }
@@ -3371,6 +3384,8 @@ internal fun OverlayService.Companion.uploadBattleReplayToR2VaultIfUnlockedBlock
                         val root = JsonParser.parseString(bodyStr).asJsonObject
                         val shareId = root.get("shareId")?.asString.orEmpty()
                         val shareUrl = root.get("shareUrl")?.asString ?: "${OverlayService.CLOUDFLARE_DVR_VAULT_URL}/watch/$shareId"
+                        val map = loadReplayVaultMapStatic(prefs, gson)
+                        val prevEntry = map[cleanBattleId]
                         val entry = OverlayService.Companion.ReplayVaultEntryMeta(
                             battleId = cleanBattleId,
                             shareId = shareId,
@@ -3380,9 +3395,10 @@ internal fun OverlayService.Companion.uploadBattleReplayToR2VaultIfUnlockedBlock
                             isPinned = root.get("isPinned")?.asBoolean ?: isPinned,
                             isPublic = root.get("isPublic")?.asBoolean ?: false,
                             hideNames = false,
+                            manuallyFlagged = prevEntry?.manuallyFlagged ?: false,
+                            userIssueNote = prevEntry?.userIssueNote.orEmpty(),
                             uploadedAtMs = System.currentTimeMillis()
                         )
-                        val map = loadReplayVaultMapStatic(prefs, gson)
                         map[cleanBattleId] = entry
                         saveReplayVaultMapStatic(prefs, gson, map)
                         return Triple(true, "☁️ Saved to Cloud Replay Vault ($cleanBattleId)", entry)
@@ -3616,6 +3632,130 @@ internal fun OverlayService.Companion.submitManualDvrIssueReportBlocking(
         uploadReason = "Manual Replay Issue Report",
         wasExplicitlyFlagged = userIssueNote.trim().isNotEmpty()
     )
+}
+
+internal fun OverlayService.Companion.unflagDvrIssueReportBlocking(
+    filesDir: File,
+    cacheDir: File,
+    prefs: SharedPreferences,
+    gson: Gson,
+    battleId: String
+): Pair<Boolean, String> {
+    val cleanId = battleId.replace(Regex("[^a-zA-Z0-9_-]"), "")
+    if (cleanId.isBlank()) {
+        return false to "⚠️ Invalid battle ID."
+    }
+
+    val devHash = getDeviceTelemetryHashStatic(prefs)
+    val safeUser = getRequiredScreenNameStatic(prefs).ifBlank { "trainer_$devHash" }
+        .replace(Regex("[^a-zA-Z0-9_-]"), "").take(24)
+
+    // 1. Strip manual flag & USER_MANUAL_ISSUE_REPORT anomaly from local & cached deep_trace.jsonl files
+    val candidateTraceFiles = listOf(
+        File(File(filesDir, "dvr_replays"), "${cleanId}_deep_trace.jsonl"),
+        File(cacheDir, "${cleanId}_deep_trace.jsonl"),
+        File(cacheDir, "issue_${cleanId}_deep_trace.jsonl")
+    )
+    for (tf in candidateTraceFiles) {
+        if (!tf.exists()) continue
+        try {
+            val text = tf.readText(Charsets.UTF_8)
+            if (text.startsWith("{\"recordType\":\"BATTLE_DVR_SUMMARY_HEADER\"")) {
+                val nlIdx = text.indexOf('\n')
+                val firstLine = if (nlIdx >= 0) text.substring(0, nlIdx) else text
+                val rest = if (nlIdx >= 0) text.substring(nlIdx) else "\n"
+                val obj = JsonParser.parseString(firstLine).asJsonObject
+                obj.addProperty("manuallyFlagged", false)
+                obj.addProperty("userIssueNote", "")
+                obj.addProperty("uploadReason", "Unflagged by User")
+                if (obj.has("battleSummary") && obj.get("battleSummary").isJsonObject) {
+                    val sumObj = obj.getAsJsonObject("battleSummary")
+                    val parsedSum = gson.fromJson(sumObj, AiTelemetryBattleRecordV510::class.java)
+                    if (parsedSum != null) {
+                        val cleanedAnoms = parsedSum.anomalies.filter { it.type != "USER_MANUAL_ISSUE_REPORT" }
+                        val updatedSum = parsedSum.copy(
+                            anomalies = cleanedAnoms,
+                            anomalyCount = cleanedAnoms.size,
+                            hasHighSeverityAnomaly = cleanedAnoms.any { it.severity == "HIGH" }
+                        )
+                        obj.add("battleSummary", JsonParser.parseString(gson.toJson(updatedSum)))
+                    }
+                }
+                tf.writeText(gson.toJson(obj) + rest, Charsets.UTF_8)
+            }
+        } catch (_: Exception) {}
+    }
+
+    // 2. Strip USER_MANUAL_ISSUE_REPORT from pending AI telemetry queue in SharedPreferences
+    try {
+        val pendingQueue = loadPendingAiTelemetryLogsStatic(prefs, gson).toMutableList()
+        var changed = false
+        for (i in pendingQueue.indices) {
+            val rec = pendingQueue[i]
+            if (rec.battleId.replace(Regex("[^a-zA-Z0-9_-]"), "") == cleanId &&
+                rec.anomalies.any { it.type == "USER_MANUAL_ISSUE_REPORT" }
+            ) {
+                val cleanedAnoms = rec.anomalies.filter { it.type != "USER_MANUAL_ISSUE_REPORT" }
+                pendingQueue[i] = rec.copy(
+                    anomalies = cleanedAnoms,
+                    anomalyCount = cleanedAnoms.size,
+                    hasHighSeverityAnomaly = cleanedAnoms.any { it.severity == "HIGH" }
+                )
+                changed = true
+            }
+        }
+        if (changed) {
+            prefs.edit()
+                .putString(OverlayService.PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(pendingQueue.takeLast(200)))
+                .apply()
+        }
+    } catch (_: Exception) {}
+
+    // 3. Clear manuallyFlagged & userIssueNote in local ReplayVaultMap and notify Cloudflare Telemetry Worker (`POST /v1/dvr/unflag`)
+    val vaultMap = try { loadReplayVaultMapStatic(prefs, gson) } catch (_: Exception) { mutableMapOf() }
+    val vaultMeta = vaultMap[cleanId]
+    if (vaultMeta != null && (vaultMeta.manuallyFlagged || vaultMeta.userIssueNote.isNotEmpty())) {
+        vaultMap[cleanId] = vaultMeta.copy(manuallyFlagged = false, userIssueNote = "")
+        saveReplayVaultMapStatic(prefs, gson, vaultMap)
+    }
+    val shareId = vaultMeta?.shareId.orEmpty()
+    val unlockKey = getEffectiveReplayUnlockKey(prefs)
+    val payloadJson = gson.toJson(
+        mapOf(
+            "battleId" to cleanId,
+            "shareId" to shareId,
+            "screenName" to safeUser,
+            "deviceHash" to devHash,
+            "unlockKey" to unlockKey
+        )
+    )
+    val httpClient = buildTelemetryHttpClientStatic(15L, 25L, 20L)
+    var remoteOk = false
+    for (attempt in 1..2) {
+        val baseUrl = CLOUDFLARE_INGEST_BASE_URLS.getOrElse(attempt - 1) { CLOUDFLARE_TELEMETRY_WORKER_URL }
+        try {
+            val req = applyWorkerClientAuthHeaders(
+                Request.Builder()
+                    .url("$baseUrl/v1/dvr/unflag")
+                    .post(payloadJson.toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())),
+                prefs,
+                safeUser,
+                devHash
+            ).build()
+            httpClient.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    remoteOk = true
+                }
+            }
+            if (remoteOk) break
+        } catch (_: Exception) {}
+    }
+
+    return if (remoteOk) {
+        true to "⚪ Issue report unflagged & retracted."
+    } else {
+        true to "⚪ Issue report unflagged locally (offline)."
+    }
 }
 
 /**

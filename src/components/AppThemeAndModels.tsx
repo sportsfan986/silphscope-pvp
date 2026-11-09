@@ -166,6 +166,8 @@ export interface WebBattleLogEntry {
   recommendationsIssuedCount?: number | null;
   recommendationsFollowedCount?: number | null;
   deviceId?: string;
+  issueFlagged?: boolean;
+  issueNote?: string;
   updatedAt?: number;
 }
 

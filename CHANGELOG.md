@@ -1,4 +1,17 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.26`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.27`)
+
+---
+
+## v7.27 (2026-11-09) — 1-Tap Issue Report Flagging & Unflagging Across App/Vault/Web + 2-Row Replay Toolbar
+*Live Android APK, Cloudflare Worker & Web Simulator release (`v7.27`, `versionCode = 1727`) adding 1-tap diagnostic issue report retraction (`↩️ Unflag Issue`) across the Android app, floating HUD, Cloud DVR Replay Vault, Web Replay Theater, and React Web App, and refactoring the in-app Battle Replay dialog toolbar into a responsive 2-row layout so action buttons never clip off-screen on phone form factors.*
+
+- **v7.27 — Feature 1: 2-Row In-App Replay Toolbar & Persistent Issue Flag Metadata (`MainActivity.kt`, `OverlayService.kt`, `GitHubCloudSync.kt`)**:
+  - Split `topToolbar` in the Android `Battle Replay & DVR Vault` modal into two responsive rows (`Row 1`: `[📊 Matrix View] [☆ Star] [🔒 Private] [🔗 Copy Link]`; `Row 2`: `[🚩 Report Issue / 🚩 Flagged ✓] [↩️ Unflag Issue] ... [🗑️ Delete]`) so `[🚩 Report Issue]` never wraps or clips off the right screen edge on phone displays.
+  - Added `manuallyFlagged` and `userIssueNote` to `ReplayVaultEntryMeta` and `unflagDvrIssueReportBlocking(...)` so battles can be unflagged even after local `_deep_trace.jsonl` files have been uploaded and purged from device storage.
+  - Updated `#btn-auto-flag-bug` and `#btn-stopped-flag-bug` in `overlay.html` to toggle to `↩️ Unflag Bug` when a battle has been flagged, allowing immediate 1-tap retraction from the post-battle HUD banner.
+- **v7.27 — Feature 2: Web Replay Theater, Cloud DVR Vault & React Web App Flag / Unflag Controls (`cloudflare/telemetry-worker/worker.mjs`, `src/App.tsx`, `scripts/ingest-telemetry.mjs`)**:
+  - Added `POST /v1/dvr/flag` and `POST /v1/dvr/unflag` to `cloudflare/telemetry-worker/worker.mjs` to update or strip `manuallyFlagged`, `userIssueNote`, and `USER_MANUAL_ISSUE_REPORT` across KV, R2 (`replays/` & `recordings/`), `replay_index`, `share_lookup`, and `manifest.recentDvr`.
+  - Added `🚩 Flag Issue` / `🚩 Flagged ✓` and `↩️ Unflag Issue` buttons to every replay card on `/vault`, the top header bar and diagnostic banner on `/watch/:shareId`, and each logged battle row & Post-Game Interactive Overlay Replay modal in `src/App.tsx`.
 
 ---
 

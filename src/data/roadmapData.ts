@@ -23,18 +23,18 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
-    version: 'v7.20 – v7.26',
-    codename: 'Dual-Source Precision & Hands-Free Auto-Start DVR',
+    version: 'v7.20 – v7.27',
+    codename: 'Dual-Source Precision, Hands-Free DVR & Issue Flagging/Unflagging',
     badge: 'CURRENT',
     date: 'Nov 2026',
-    summary: 'Hands-free auto-start battle DVR on intro countdown across all tiers, symmetric dual-source energy auditing, swap-and-throw pre-floor energy restoration, and 10 FPS sub-second debouncing.',
+    summary: 'Hands-free auto-start battle DVR on intro countdown across all tiers, 1-tap issue report flagging & unflagging across App/Vault/Web, symmetric dual-source energy auditing, and swap-and-throw pre-floor energy restoration.',
     icon: '⚡',
     accentColor: '#2DD4BF',
     highlights: [
       'Auto-Start Battle DVR (Hands-Free on "3... 2... 1... BATTLE!" countdown for all tiers)',
+      '1-Tap Issue Flagging & Unflagging across Android App, Cloud DVR Vault, and Web Replay Theater',
       'Dual-Source Energy Tracking (E_meter vs. E_hp) with asymmetric shield-call promo',
       'Swap-and-Immediate-Throw rollback restoring true pre-cutscene energy',
-      'Two-stage compensated predictive GUI & haptic lead time for safe turn alignment',
       'Dynamic over-the-air daily battle survey question pool & AI settings sync',
     ]
   },
@@ -214,6 +214,21 @@ export const ACTIVE_ROADMAP_ITEMS: RoadmapItem[] = [
       '1-Click "Save to Built Roster" from the Multi-IV Matrix Evaluator',
       'Team Preset integration: attach actual owned IVs to custom team slots',
       'Cloud Delta Sync across multiple devices via GitHub private vault'
+    ]
+  },
+  {
+    id: 'dual-device-calibration-lab',
+    title: 'Dual-Device Symmetrical Practice Lab (Ground-Truth Energy Calibration)',
+    badge: 'LAB & CALIBRATION',
+    status: 'In Design',
+    statusColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
+    category: 'Lab & Diagnostics',
+    icon: '🧪',
+    description: 'Sync two test accounts in direct friend battles to cross-validate Phone A tracked opponent energy against Phone B actual player meter, refining millisecond turn pacing and snuck fast-move attribution.',
+    keyGoals: [
+      'Paired QR / 4-digit calibration room linking two testing devices simultaneously',
+      'Frame-by-frame ground truth comparison: Tracked Opponent E vs. Actual User E',
+      'Automated delta reporting for snuck moves, catch-up latency, and debounce tuning'
     ]
   }
 ];

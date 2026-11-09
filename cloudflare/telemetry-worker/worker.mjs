@@ -2519,6 +2519,8 @@ function renderWatchSharePage(origin, shareInfo) {
     </div>
     <div class="header-actions">
       <a class="btn-link" href="/vault?user=${encodeURIComponent(shareInfo.screenName || 'Featured')}">☁️ @${trainerDisplay}'s Vault</a>
+      <button id="btn-flag-issue-hdr" onclick="flagOrEditCurrentIssue()" style="border-color:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? '#f59e0b' : '#b91c1c'};color:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? '#fbbf24' : '#fca5a5'};background:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'rgba(245,158,11,0.16)' : 'rgba(185,28,28,0.18)'}" title="Flag an issue on this replay or edit an existing issue report">🚩 ${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'Flagged ✓ (Edit)' : 'Flag Issue'}</button>
+      <button id="btn-unflag-issue-hdr" onclick="unflagCurrentIssue()" style="display:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'inline-flex' : 'none'};border-color:#64748b;color:#e2e8f0" title="Retract this issue report if it was sent inadvertently">↩️ Unflag Issue</button>
       <button id="btn-privacy" onclick="togglePrivacy()">🕵️ ${hideNamesDefault ? 'Names Hidden' : 'Hide Names'}</button>
       <button id="btn-layout" onclick="toggleLayout()">📐 Side-by-Side: OFF</button>
       <button id="btn-export" onclick="exportWithHud()">💾 Export Video + HUD</button>
@@ -2529,14 +2531,14 @@ function renderWatchSharePage(origin, shareInfo) {
 
   <main>
     <div style="font-size:13px;font-weight:700;color:#cbd5e1;text-align:center">${matchup}</div>
-    ${
-      shareInfo.userIssueNote
-        ? `<div style="width:100%;max-width:860px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.45);border-radius:10px;padding:10px 14px;font-size:12.5px;color:#fef3c7;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px">
-            <div>🚩 <strong>Reported Diagnostic Issue:</strong> ${escapeHtml(shareInfo.userIssueNote)}</div>
-            ${shareInfo.userTierBadge ? `<span class="badge" style="background:rgba(168,85,247,0.2);color:#e9d5ff;border-color:rgba(168,85,247,0.45)">${escapeHtml(shareInfo.userTierBadge)}</span>` : ''}
-          </div>`
-        : ''
-    }
+    <div id="diag-issue-banner" style="width:100%;max-width:860px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.45);border-radius:10px;padding:10px 14px;font-size:12.5px;color:#fef3c7;display:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'flex' : 'none'};flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px">
+      <div id="diag-issue-text">🚩 <strong>Reported Diagnostic Issue:</strong> ${escapeHtml(shareInfo.userIssueNote || 'Flagged for diagnostic review')}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        ${shareInfo.userTierBadge ? `<span class="badge" style="background:rgba(168,85,247,0.2);color:#e9d5ff;border-color:rgba(168,85,247,0.45)">${escapeHtml(shareInfo.userTierBadge)}</span>` : ''}
+        <button id="btn-edit-issue" onclick="flagOrEditCurrentIssue()" style="background:rgba(245,158,11,0.2);border-color:#f59e0b;color:#fde68a;padding:4px 9px;font-size:11.5px">✏️ Edit Note</button>
+        <button id="btn-unflag-issue" onclick="unflagCurrentIssue()" style="background:rgba(30,41,59,0.95);border-color:#64748b;color:#e2e8f0;padding:4px 9px;font-size:11.5px" title="Retract this issue report if it was sent inadvertently">↩️ Unflag Issue</button>
+      </div>
+    </div>
     <div class="stage-wrap" id="stage-wrap">
       <div class="video-box" id="video-box">
         <video id="replay-video" src="${videoUrl}" playsinline preload="metadata" crossorigin="anonymous"></video>
@@ -2578,11 +2580,15 @@ function renderWatchSharePage(origin, shareInfo) {
 
   <script>
     const TRACE_URL = ${safeJsonForScript(traceUrl)};
+    const SHARE_ID = ${safeJsonForScript(shareInfo.shareId || '')};
+    const SHARE_BATTLE_ID = ${safeJsonForScript(shareInfo.battleId || '')};
     const PVP_DB = ${safeJsonForScript(COMPACT_PVP_DB)};
     const SHARE_LEAGUE = ${safeJsonForScript(shareInfo.league || 'GREAT LEAGUE')};
     const SHARE_MATCHUP = ${safeJsonForScript(shareInfo.matchup || '')};
     const SHARE_USER_TIER = ${safeJsonForScript(shareInfo.userTier || 'pro')};
     const IS_SHIELD_HUD_UNLOCKED = SHARE_USER_TIER !== 'free';
+    let currentIssueNote = ${safeJsonForScript(shareInfo.userIssueNote || '')};
+    let isIssueFlagged = ${safeJsonForScript(Boolean(shareInfo.userIssueNote || shareInfo.manuallyFlagged))};
     let hideNames = ${safeJsonForScript(hideNamesDefault)};
     const rawTrainerName = ${safeJsonForScript(shareInfo.screenName || 'Trainer')};
     let frames = [];
@@ -2767,6 +2773,176 @@ function renderWatchSharePage(origin, shareInfo) {
       }
       document.getElementById('btn-layout').textContent = sideBySide ? '📐 Side-by-Side: ON' : '📐 Side-by-Side: OFF';
       setTimeout(syncHudFrame, 60);
+    }
+
+    function refreshWatchIssueBannerUi() {
+      const hdrFlagBtn = document.getElementById('btn-flag-issue-hdr');
+      const hdrUnflagBtn = document.getElementById('btn-unflag-issue-hdr');
+      const banner = document.getElementById('diag-issue-banner');
+      const textEl = document.getElementById('diag-issue-text');
+      if (hdrFlagBtn) {
+        hdrFlagBtn.textContent = isIssueFlagged ? '🚩 Flagged ✓ (Edit)' : '🚩 Flag Issue';
+        hdrFlagBtn.style.borderColor = isIssueFlagged ? '#f59e0b' : '#b91c1c';
+        hdrFlagBtn.style.color = isIssueFlagged ? '#fbbf24' : '#fca5a5';
+        hdrFlagBtn.style.background = isIssueFlagged ? 'rgba(245,158,11,0.16)' : 'rgba(185,28,28,0.18)';
+      }
+      if (hdrUnflagBtn) {
+        hdrUnflagBtn.style.display = isIssueFlagged ? 'inline-flex' : 'none';
+      }
+      if (banner) {
+        if (isIssueFlagged) {
+          banner.style.display = 'flex';
+          banner.style.background = 'rgba(245,158,11,0.12)';
+          banner.style.borderColor = 'rgba(245,158,11,0.45)';
+          banner.style.color = '#fef3c7';
+          if (textEl) {
+            textEl.innerHTML = '🚩 <strong>Reported Diagnostic Issue:</strong> ' + escapeHtmlText(currentIssueNote || 'Flagged for diagnostic review');
+          }
+        } else {
+          banner.style.display = 'none';
+        }
+      }
+    }
+
+    function escapeHtmlText(s) {
+      return String(s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    async function flagOrEditCurrentIssue() {
+      const note = prompt(
+        '🚩 Flag / Update Issue Report for this Battle:\\nDescribe what went wrong (e.g. HP jump, wrong move count, OCR misread):',
+        currentIssueNote || ''
+      );
+      if (note === null) return;
+      const cleanNote = note.trim();
+      if (!cleanNote) {
+        if (isIssueFlagged && confirm('You left the description blank. Would you like to unflag & retract this issue report instead?')) {
+          return unflagCurrentIssue();
+        }
+        alert('Please enter a brief description of the issue to flag this battle.');
+        return;
+      }
+      const hdrFlagBtn = document.getElementById('btn-flag-issue-hdr');
+      if (hdrFlagBtn) {
+        hdrFlagBtn.disabled = true;
+        hdrFlagBtn.textContent = '⏳ Flagging...';
+      }
+      try {
+        let sess = '';
+        let savedKey = '';
+        let devId = '';
+        try {
+          sess = localStorage.getItem('sspvp_vault_session') || '';
+          savedKey = localStorage.getItem('sspvp_vault_key') || '';
+          devId = localStorage.getItem('silphscope_device_id') || 'web_replay_client';
+        } catch (_) {}
+        const res = await fetch('/v1/dvr/flag', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-SilphScope-Client-Key': 'ssk_client_v615_telemetry_ingest_9f8a7b6c5d4e3f2a1b0c',
+            'X-Trainer-Screen-Name': rawTrainerName,
+            'X-Device-Hash': devId,
+            ...(sess ? { 'X-Vault-Session': sess } : {}),
+            ...(savedKey ? { 'X-SilphScope-Unlock-Key': savedKey } : {})
+          },
+          body: JSON.stringify({
+            shareId: SHARE_ID,
+            battleId: SHARE_BATTLE_ID,
+            screenName: rawTrainerName,
+            userIssueNote: cleanNote,
+            league: SHARE_LEAGUE,
+            matchupSummary: SHARE_MATCHUP,
+            deviceHash: devId,
+            sessionToken: sess,
+            unlockKey: savedKey
+          })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || ('HTTP ' + res.status));
+        }
+        currentIssueNote = cleanNote;
+        isIssueFlagged = true;
+        if (hdrFlagBtn) hdrFlagBtn.disabled = false;
+        refreshWatchIssueBannerUi();
+      } catch (e) {
+        alert('Could not flag issue report: ' + e.message);
+        if (hdrFlagBtn) hdrFlagBtn.disabled = false;
+        refreshWatchIssueBannerUi();
+      }
+    }
+
+    async function unflagCurrentIssue() {
+      if (!confirm('Unflag and retract this issue report?')) return;
+      const btn = document.getElementById('btn-unflag-issue');
+      const hdrUnflagBtn = document.getElementById('btn-unflag-issue-hdr');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Unflagging...';
+      }
+      if (hdrUnflagBtn) {
+        hdrUnflagBtn.disabled = true;
+        hdrUnflagBtn.textContent = '⏳ Unflagging...';
+      }
+      try {
+        let sess = '';
+        let savedKey = '';
+        let devId = '';
+        try {
+          sess = localStorage.getItem('sspvp_vault_session') || '';
+          savedKey = localStorage.getItem('sspvp_vault_key') || '';
+          devId = localStorage.getItem('silphscope_device_id') || 'web_replay_client';
+        } catch (_) {}
+        const res = await fetch('/v1/dvr/unflag', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-SilphScope-Client-Key': 'ssk_client_v615_telemetry_ingest_9f8a7b6c5d4e3f2a1b0c',
+            'X-Trainer-Screen-Name': rawTrainerName,
+            'X-Device-Hash': devId,
+            ...(sess ? { 'X-Vault-Session': sess } : {}),
+            ...(savedKey ? { 'X-SilphScope-Unlock-Key': savedKey } : {})
+          },
+          body: JSON.stringify({
+            shareId: SHARE_ID,
+            battleId: SHARE_BATTLE_ID,
+            screenName: rawTrainerName,
+            deviceHash: devId,
+            sessionToken: sess,
+            unlockKey: savedKey
+          })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || ('HTTP ' + res.status));
+        }
+        isIssueFlagged = false;
+        currentIssueNote = '';
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '↩️ Unflag Issue';
+        }
+        if (hdrUnflagBtn) {
+          hdrUnflagBtn.disabled = false;
+          hdrUnflagBtn.textContent = '↩️ Unflag Issue';
+        }
+        refreshWatchIssueBannerUi();
+      } catch (e) {
+        alert('Could not unflag issue report: ' + e.message);
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '↩️ Unflag Issue';
+        }
+        if (hdrUnflagBtn) {
+          hdrUnflagBtn.disabled = false;
+          hdrUnflagBtn.textContent = '↩️ Unflag Issue';
+        }
+      }
     }
 
     function abbrPoke3(name, isShadow) {
@@ -5068,6 +5244,21 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         const featControl = isAdminOwner
           ? '<button onclick="promoteToFeatured(\\'' + safeShareIdJs + '\\')" style="padding:7px 10px;font-size:12px;border-color:' + (item.featuredShareId ? '#facc15' : '#2dd4bf') + ';color:' + (item.featuredShareId ? '#fde047' : '#2dd4bf') + ';background:rgba(45,212,191,0.12)" title="Clone this battle into persistent @Featured Official Showcase storage">' + (item.featuredShareId ? '🌟 Featured (' + esc(item.featuredShareId) + ')' : '🌟 Promote to Featured') + '</button>'
           : '';
+        const isItemFlagged = Boolean(item.manuallyFlagged || item.userIssueNote);
+        const safeIssueNoteJs = escJsArg(item.userIssueNote || '');
+        const safeLeagueJs = escJsArg(item.league || 'GBL');
+        const safeMatchupJs = escJsArg(item.matchupSummary || '');
+        const issueBannerHtml = isItemFlagged
+          ? '<div style="background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.45);border-radius:8px;padding:6px 9px;font-size:11.5px;color:#fef3c7;display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">' +
+              '<span>🚩 <strong>Reported Issue:</strong> ' + esc(item.userIssueNote || 'Flagged for diagnostic review') + '</span>' +
+              '<button onclick="unflagVaultReplay(\\'' + safeBattleIdJs + '\\', \\'' + safeShareIdJs + '\\')" style="padding:3px 7px;font-size:11px;background:#1e293b;border-color:#64748b;color:#e2e8f0" title="Retract this issue report">↩️ Unflag</button>' +
+            '</div>'
+          : '';
+        const flagControls =
+          '<button onclick="flagVaultReplay(\\'' + safeBattleIdJs + '\\', \\'' + safeShareIdJs + '\\', \\'' + safeIssueNoteJs + '\\', \\'' + safeLeagueJs + '\\', \\'' + safeMatchupJs + '\\')" style="padding:7px 10px;font-size:12px;border-color:' + (isItemFlagged ? '#f59e0b' : '#b91c1c') + ';color:' + (isItemFlagged ? '#fbbf24' : '#fca5a5') + ';background:' + (isItemFlagged ? 'rgba(245,158,11,0.14)' : 'rgba(185,28,28,0.16)') + '" title="Flag an issue on this replay or edit existing issue note">' + (isItemFlagged ? '🚩 Flagged ✓' : '🚩 Flag Issue') + '</button>' +
+          (isItemFlagged
+            ? '<button onclick="unflagVaultReplay(\\'' + safeBattleIdJs + '\\', \\'' + safeShareIdJs + '\\')" style="padding:7px 10px;font-size:12px;border-color:#64748b;color:#e2e8f0;background:#1e293b" title="Unflag and retract this issue report">↩️ Unflag Issue</button>'
+            : '');
         return '<div class="replay-card ' + (item.isPinned ? 'pinned' : '') + '">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px">' +
             '<span class="pill ' + (isWin ? 'pill-win' : 'pill-loss') + '">' + esc(item.result || 'BATTLE') + ' • ' + esc(item.league || 'GBL') + '</span>' +
@@ -5075,6 +5266,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           '</div>' +
           '<div style="font-weight:800;font-size:13.5px;color:#f1f5f9">' + esc(item.showcaseTitle || item.matchupSummary || item.battleId) + '</div>' +
           '<div style="font-size:11px;color:#64748b">' + esc(dateStr) + ' • ID: ' + esc(item.battleId) + (highlightSecNum ? ' • ⚡ Highlight @ ' + highlightSecNum + 's' : '') + '</div>' +
+          issueBannerHtml +
           '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;align-items:center">' +
             '<a class="btn-link" style="background:#059669;border-color:#10b981;padding:7px 10px;font-size:12px;flex:1;justify-content:center" href="' + safeShareUrl + '">▶️ Watch + HUD</a>' +
             (highlightSecNum ? '<a class="btn-link" style="background:rgba(250,204,21,0.18);border-color:#facc15;color:#fde047;padding:7px 10px;font-size:12px" href="' + safeShareUrl + '?t=' + highlightSecNum + '" title="Jump directly to the key highlight moment">⚡ Key Moment (' + highlightSecNum + 's)</a>' : '') +
@@ -5082,6 +5274,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
             pubControl +
             featControl +
             '<button onclick="copyLink(\\'' + safeShareUrlJs + '\\')" style="padding:7px 10px;font-size:12px" title="Anyone with this direct link can watch this replay">🔗 Copy Link</button>' +
+            flagControls +
           '</div>' +
         '</div>';
       }).join('');
@@ -5171,6 +5364,98 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     function copyLink(url) {
       navigator.clipboard.writeText(url);
       alert('Copied Direct Share URL (viewable by anyone with the link): ' + url);
+    }
+
+    async function flagVaultReplay(battleId, shareId, existingNote, league, matchupSummary) {
+      const user = (currentVaultData && currentVaultData.screenName) || document.getElementById('inp-user').value.trim();
+      const key = document.getElementById('inp-key').value.trim();
+      const email = document.getElementById('inp-email').value.trim();
+      const note = prompt(
+        '🚩 Flag / Update Issue Report for Battle ' + battleId + ':\\nDescribe what went wrong (e.g. HP jump, wrong move count, OCR misread):',
+        existingNote || ''
+      );
+      if (note === null) return;
+      const cleanNote = note.trim();
+      if (!cleanNote) {
+        if (existingNote && confirm('You left the description blank. Would you like to unflag & retract this issue report instead?')) {
+          return unflagVaultReplay(battleId, shareId);
+        }
+        return alert('Please enter a brief description of the issue to flag this replay.');
+      }
+      try {
+        let devId = '';
+        try { devId = localStorage.getItem('silphscope_device_id') || 'web_vault_client'; } catch (_) {}
+        const res = await fetch('/v1/dvr/flag', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-SilphScope-Client-Key': CLIENT_KEY,
+            'X-Trainer-Screen-Name': user,
+            'X-SilphScope-Unlock-Key': key,
+            'X-Vault-Session': sessionToken,
+            'X-Claim-Email': email,
+            'X-Device-Hash': devId
+          },
+          body: JSON.stringify({
+            battleId,
+            shareId,
+            screenName: user,
+            userIssueNote: cleanNote,
+            league: league || 'GBL',
+            matchupSummary: matchupSummary || '',
+            unlockKey: key,
+            sessionToken,
+            claimEmail: email,
+            deviceHash: devId
+          })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          return alert(data.error || 'Failed to flag replay issue.');
+        }
+        loadVault();
+      } catch (e) {
+        alert('Error flagging issue: ' + e.message);
+      }
+    }
+
+    async function unflagVaultReplay(battleId, shareId) {
+      if (!confirm('Unflag and retract this issue report for Battle ' + battleId + '?')) return;
+      const user = (currentVaultData && currentVaultData.screenName) || document.getElementById('inp-user').value.trim();
+      const key = document.getElementById('inp-key').value.trim();
+      const email = document.getElementById('inp-email').value.trim();
+      try {
+        let devId = '';
+        try { devId = localStorage.getItem('silphscope_device_id') || 'web_vault_client'; } catch (_) {}
+        const res = await fetch('/v1/dvr/unflag', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-SilphScope-Client-Key': CLIENT_KEY,
+            'X-Trainer-Screen-Name': user,
+            'X-SilphScope-Unlock-Key': key,
+            'X-Vault-Session': sessionToken,
+            'X-Claim-Email': email,
+            'X-Device-Hash': devId
+          },
+          body: JSON.stringify({
+            battleId,
+            shareId,
+            screenName: user,
+            unlockKey: key,
+            sessionToken,
+            claimEmail: email,
+            deviceHash: devId
+          })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          return alert(data.error || 'Failed to unflag replay issue.');
+        }
+        loadVault();
+      } catch (e) {
+        alert('Error unflagging issue: ' + e.message);
+      }
     }
 
     if (savedUser) {
@@ -6047,6 +6332,547 @@ export default {
             error: 'Internal server error processing DVR bundle.',
           },
           500
+        );
+      }
+    }
+
+    // 4a-bis. Flag or Update an Issue Report on an Existing DVR / Battle (`POST /v1/dvr/flag`)
+    if (request.method === 'POST' && path === '/v1/dvr/flag') {
+      const auth = await verifyClientAuth(request, env, true, true);
+      if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status, request, true);
+
+      let body = {};
+      try {
+        body = await request.json();
+      } catch (_) {
+        return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400, request, true);
+      }
+
+      const rawTargetId = sanitizeId(body.battleId || '', '');
+      const rawShareId = sanitizeId(body.shareId || '', '');
+      if (!rawTargetId && !rawShareId) {
+        return jsonResponse({ ok: false, error: 'Missing battleId or shareId' }, 400, request, true);
+      }
+
+      const cleanIssueNote = String(body.userIssueNote || body.issueNote || '')
+        .trim()
+        .slice(0, 600);
+      if (!cleanIssueNote) {
+        return jsonResponse({ ok: false, error: 'Please provide a brief issue description (userIssueNote).' }, 400, request, true);
+      }
+
+      let lookupItem = null;
+      if (rawShareId && env.TELEMETRY_KV) {
+        try {
+          const rawLookup = await env.TELEMETRY_KV.get(`share_lookup/${rawShareId}`, { type: 'text' });
+          if (rawLookup) lookupItem = JSON.parse(rawLookup);
+        } catch (_) {}
+      }
+
+      let screenName = sanitizeScreenName(
+        body.screenName ||
+          auth.screenName ||
+          (lookupItem && lookupItem.screenName) ||
+          ''
+      );
+      if (!screenName) {
+        return jsonResponse({ ok: false, error: 'Valid screenName is required.' }, 400, request, true);
+      }
+
+      const ownerAuth = await authenticateVaultOwner(
+        request,
+        env,
+        env.TELEMETRY_KV,
+        screenName,
+        body
+      );
+      const hasDevTokenOrHash = Boolean(
+        auth.isValidDeviceToken ||
+          (body.deviceHash && String(body.deviceHash).length >= 8) ||
+          (body.deviceId && String(body.deviceId).length >= 8) ||
+          (request.headers.get('X-Device-Hash') && request.headers.get('X-Device-Hash').trim().length >= 8)
+      );
+      if (!ownerAuth.isOwner && !hasDevTokenOrHash && !verifyAdminAuth(request, env).ok) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: 'Sign in to your Replay Vault (or flag from your SilphScope app/web session) to report an issue on this battle.',
+          },
+          403,
+          request,
+          true
+        );
+      }
+
+      if (ownerAuth.screenName) {
+        screenName = ownerAuth.screenName;
+      }
+
+      const battleId = rawTargetId || (lookupItem && lookupItem.battleId) || `web_${Date.now()}`;
+      const league = String(body.league || (lookupItem && lookupItem.league) || 'GBL').slice(0, 48);
+      const result = String(body.result || (lookupItem && lookupItem.result) || '').slice(0, 16);
+      const matchupSummary = String(body.matchupSummary || (lookupItem && lookupItem.matchupSummary) || '').slice(0, 140);
+      const nowIso = new Date().toISOString();
+
+      try {
+        const applyFlagToTraceText = (txt) => {
+          if (!txt || typeof txt !== 'string') return txt;
+          const nlIdx = txt.indexOf('\n');
+          const firstLine = (nlIdx >= 0 ? txt.slice(0, nlIdx) : txt).trim();
+          if (!firstLine.startsWith('{"recordType":"BATTLE_DVR_SUMMARY_HEADER"')) return txt;
+          try {
+            const headerObj = JSON.parse(firstLine);
+            headerObj.manuallyFlagged = true;
+            headerObj.wasExplicitlyFlagged = true;
+            headerObj.userIssueNote = cleanIssueNote;
+            headerObj.uploadReason = 'Manual Web/App Issue Report';
+            if (!headerObj.battleSummary || typeof headerObj.battleSummary !== 'object') {
+              headerObj.battleSummary = {};
+            }
+            const bs = headerObj.battleSummary;
+            if (!Array.isArray(bs.anomalies)) bs.anomalies = [];
+            bs.anomalies = bs.anomalies.filter(
+              (a) => a && a.type !== 'USER_MANUAL_ISSUE_REPORT' && a.code !== 'USER_MANUAL_ISSUE_REPORT'
+            );
+            bs.anomalies.unshift({
+              type: 'USER_MANUAL_ISSUE_REPORT',
+              code: 'USER_MANUAL_ISSUE_REPORT',
+              severity: 'HIGH',
+              detail: `User reported issue: ${cleanIssueNote}`,
+              userIssueNote: cleanIssueNote,
+            });
+            bs.anomalyCount = bs.anomalies.length;
+            bs.hasHighSeverityAnomaly = true;
+            const rest = nlIdx >= 0 ? txt.slice(nlIdx) : '\n';
+            return JSON.stringify(headerObj) + rest;
+          } catch (_) {
+            return txt;
+          }
+        };
+
+        let updatedTrace = false;
+        if (battleId) {
+          const traceKey = `recordings/${screenName}/${battleId}_deep_trace.jsonl`;
+          const existingTrace = await store.getText(traceKey);
+          if (existingTrace !== null) {
+            const flaggedTrace = applyFlagToTraceText(existingTrace);
+            await store.put(traceKey, flaggedTrace, {
+              contentType: 'application/x-ndjson',
+              metadata: {
+                screenName,
+                battleId,
+                manuallyFlagged: 'true',
+                userIssueNote: cleanIssueNote,
+                uploadReason: 'Manual Web/App Issue Report',
+                uploadedAt: nowIso,
+              },
+            });
+            updatedTrace = true;
+          } else {
+            // Create a synthetic summary header trace if none existed yet (e.g. web-only battle log flag)
+            const synthHeader = {
+              recordType: 'BATTLE_DVR_SUMMARY_HEADER',
+              battleId,
+              screenName,
+              league,
+              result,
+              matchupSummary,
+              manuallyFlagged: true,
+              wasExplicitlyFlagged: true,
+              userIssueNote: cleanIssueNote,
+              uploadReason: 'Manual Web/App Issue Report',
+              uploadedAt: nowIso,
+              battleSummary: {
+                anomalyCount: 1,
+                hasHighSeverityAnomaly: true,
+                anomalies: [
+                  {
+                    type: 'USER_MANUAL_ISSUE_REPORT',
+                    code: 'USER_MANUAL_ISSUE_REPORT',
+                    severity: 'HIGH',
+                    detail: `User reported issue: ${cleanIssueNote}`,
+                    userIssueNote: cleanIssueNote,
+                  },
+                ],
+              },
+            };
+            await store.put(traceKey, JSON.stringify(synthHeader) + '\n', {
+              contentType: 'application/x-ndjson',
+              metadata: {
+                screenName,
+                battleId,
+                manuallyFlagged: 'true',
+                userIssueNote: cleanIssueNote,
+                uploadReason: 'Manual Web/App Issue Report',
+                uploadedAt: nowIso,
+              },
+            });
+            updatedTrace = true;
+          }
+
+          if (env.REPLAY_BUCKET) {
+            for (const r2Key of [
+              `replays/${screenName}/${battleId}_deep_trace.jsonl`,
+              `recordings/${screenName}/${battleId}_deep_trace.jsonl`,
+            ]) {
+              try {
+                const r2Obj = await env.REPLAY_BUCKET.get(r2Key);
+                if (r2Obj) {
+                  const r2Txt = await r2Obj.text();
+                  const flaggedR2 = applyFlagToTraceText(r2Txt);
+                  await env.REPLAY_BUCKET.put(r2Key, flaggedR2, {
+                    httpMetadata: { contentType: 'application/x-ndjson' },
+                    customMetadata: {
+                      ...(r2Obj.customMetadata || {}),
+                      screenName,
+                      battleId,
+                      manuallyFlagged: 'true',
+                      userIssueNote: cleanIssueNote,
+                    },
+                  });
+                }
+              } catch (_) {}
+            }
+          }
+        }
+
+        let resolvedShareId = rawShareId || (lookupItem && lookupItem.shareId) || '';
+        if (env.TELEMETRY_KV) {
+          const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, screenName);
+          let indexChanged = false;
+          for (const it of indexObj.items || []) {
+            if ((battleId && it.battleId === battleId) || (rawShareId && it.shareId === rawShareId)) {
+              it.userIssueNote = cleanIssueNote;
+              it.manuallyFlagged = true;
+              it.updatedAt = nowIso;
+              if (!resolvedShareId && it.shareId) resolvedShareId = it.shareId;
+              indexChanged = true;
+            }
+          }
+          if (indexChanged) {
+            await saveUserReplayIndex(env.TELEMETRY_KV, screenName, indexObj);
+          }
+          if (resolvedShareId) {
+            try {
+              const rawShare = await env.TELEMETRY_KV.get(`share_lookup/${resolvedShareId}`, { type: 'text' });
+              if (rawShare) {
+                const shareObj = JSON.parse(rawShare);
+                shareObj.userIssueNote = cleanIssueNote;
+                shareObj.manuallyFlagged = true;
+                shareObj.updatedAt = nowIso;
+                await env.TELEMETRY_KV.put(`share_lookup/${resolvedShareId}`, JSON.stringify(shareObj));
+              }
+            } catch (_) {}
+          }
+        }
+
+        const watchUrl = resolvedShareId ? `https://dvr.silphscopepvp.com/watch/${resolvedShareId}` : '';
+        ctx.waitUntil(
+          (async () => {
+            try {
+              await updateManifest(store, (m) => {
+                if (!Array.isArray(m.recentDvr)) m.recentDvr = [];
+                let found = false;
+                for (const d of m.recentDvr) {
+                  if (
+                    d &&
+                    ((battleId && d.battleId === battleId && d.screenName === screenName) ||
+                      (resolvedShareId && d.shareId === resolvedShareId))
+                  ) {
+                    d.manuallyFlagged = true;
+                    d.userIssueNote = cleanIssueNote;
+                    d.uploadReason = 'Manual Web/App Issue Report';
+                    found = true;
+                  }
+                }
+                if (!found) {
+                  m.recentDvr.unshift({
+                    battleId,
+                    screenName,
+                    shareId: resolvedShareId,
+                    watchUrl,
+                    traceKey: `recordings/${screenName}/${battleId}_deep_trace.jsonl`,
+                    league,
+                    result,
+                    matchupSummary,
+                    uploadedAt: nowIso,
+                    manuallyFlagged: true,
+                    userIssueNote: cleanIssueNote,
+                    uploadReason: 'Manual Web/App Issue Report',
+                  });
+                  if (m.recentDvr.length > 250) m.recentDvr.length = 250;
+                }
+              });
+            } catch (e) {
+              console.error('Manifest flag update error:', e);
+            }
+            try {
+              await sendTelegramMessage(
+                env,
+                `🚩 <b>SilphScope Issue Report Flagged (Web/Vault)</b>\n` +
+                  `👤 <b>Trainer:</b> <code>@${escapeHtml(screenName)}</code>\n` +
+                  `📝 <b>Issue Description:</b> <b>${escapeHtml(cleanIssueNote)}</b>\n` +
+                  (watchUrl ? `▶️ <b>Watch Video + HUD Overlay:</b>\n${escapeHtml(watchUrl)}\n` : '') +
+                  (league ? `🏆 <b>League:</b> ${escapeHtml(league)} ${result ? `(${escapeHtml(result)})` : ''}\n` : '') +
+                  (matchupSummary ? `⚔️ <b>Matchup:</b> ${escapeHtml(matchupSummary)}\n` : '') +
+                  `🆔 <b>Battle:</b> <code>${escapeHtml(battleId)}</code>`
+              );
+            } catch (_) {}
+          })()
+        );
+
+        return jsonResponse(
+          {
+            ok: true,
+            flagged: true,
+            screenName,
+            battleId,
+            shareId: resolvedShareId,
+            userIssueNote: cleanIssueNote,
+            updatedTrace,
+          },
+          200,
+          request,
+          true
+        );
+      } catch (err) {
+        console.error('POST /v1/dvr/flag error:', err);
+        return jsonResponse(
+          { ok: false, error: 'Failed to flag DVR issue report.' },
+          500,
+          request,
+          true
+        );
+      }
+    }
+
+    // 4b. Unflag / Retract an Inadvertently Sent DVR Issue Report (`POST /v1/dvr/unflag`)
+    if (request.method === 'POST' && path === '/v1/dvr/unflag') {
+      const auth = await verifyClientAuth(request, env, true, true);
+      if (!auth.ok) return jsonResponse({ ok: false, error: auth.error }, auth.status, request, true);
+
+      let body = {};
+      try {
+        body = await request.json();
+      } catch (_) {
+        return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400, request, true);
+      }
+
+      const rawTargetId = sanitizeId(body.battleId || '', '');
+      const rawShareId = sanitizeId(body.shareId || '', '');
+      if (!rawTargetId && !rawShareId) {
+        return jsonResponse({ ok: false, error: 'Missing battleId or shareId' }, 400, request, true);
+      }
+
+      let lookupItem = null;
+      if (rawShareId && env.TELEMETRY_KV) {
+        try {
+          const rawLookup = await env.TELEMETRY_KV.get(`share_lookup/${rawShareId}`, { type: 'text' });
+          if (rawLookup) lookupItem = JSON.parse(rawLookup);
+        } catch (_) {}
+      }
+
+      let screenName = sanitizeScreenName(
+        body.screenName ||
+          auth.screenName ||
+          (lookupItem && lookupItem.screenName) ||
+          ''
+      );
+      if (!screenName) {
+        return jsonResponse({ ok: false, error: 'Valid screenName is required.' }, 400, request, true);
+      }
+
+      const ownerAuth = await authenticateVaultOwner(
+        request,
+        env,
+        env.TELEMETRY_KV,
+        screenName,
+        body
+      );
+      // Allow either verified vault owner OR the device that authenticated via X-SilphScope-Client-Key / X-Device-Ingest-Token
+      const hasDevTokenOrHash = Boolean(
+        auth.isValidDeviceToken ||
+          (body.deviceHash && String(body.deviceHash).length >= 8) ||
+          (body.deviceId && String(body.deviceId).length >= 8) ||
+          (request.headers.get('X-Device-Hash') && request.headers.get('X-Device-Hash').trim().length >= 8)
+      );
+      if (!ownerAuth.isOwner && !hasDevTokenOrHash && !verifyAdminAuth(request, env).ok) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: 'Sign in to your Replay Vault (or unflag from your SilphScope Android app) to retract this issue report.',
+          },
+          403,
+          request,
+          true
+        );
+      }
+
+      if (ownerAuth.screenName) {
+        screenName = ownerAuth.screenName;
+      }
+
+      const battleId = rawTargetId || (lookupItem && lookupItem.battleId) || '';
+      const nowIso = new Date().toISOString();
+
+      try {
+        // Helper to strip manual flag & USER_MANUAL_ISSUE_REPORT anomaly from Line 0 of deep_trace.jsonl
+        const stripFlagFromTraceText = (txt) => {
+          if (!txt || typeof txt !== 'string') return txt;
+          const nlIdx = txt.indexOf('\n');
+          const firstLine = (nlIdx >= 0 ? txt.slice(0, nlIdx) : txt).trim();
+          if (!firstLine.startsWith('{"recordType":"BATTLE_DVR_SUMMARY_HEADER"')) return txt;
+          try {
+            const headerObj = JSON.parse(firstLine);
+            headerObj.manuallyFlagged = false;
+            headerObj.wasExplicitlyFlagged = false;
+            headerObj.userIssueNote = '';
+            headerObj.uploadReason = 'Unflagged by User';
+            if (headerObj.battleSummary && typeof headerObj.battleSummary === 'object') {
+              const bs = headerObj.battleSummary;
+              if (Array.isArray(bs.anomalies)) {
+                bs.anomalies = bs.anomalies.filter(
+                  (a) => a && a.type !== 'USER_MANUAL_ISSUE_REPORT' && a.code !== 'USER_MANUAL_ISSUE_REPORT'
+                );
+                bs.anomalyCount = bs.anomalies.length;
+                bs.hasHighSeverityAnomaly = bs.anomalies.some((a) => a && a.severity === 'HIGH');
+              }
+            }
+            const rest = nlIdx >= 0 ? txt.slice(nlIdx) : '\n';
+            return JSON.stringify(headerObj) + rest;
+          } catch (_) {
+            return txt;
+          }
+        };
+
+        let updatedTrace = false;
+        if (battleId) {
+          const traceKey = `recordings/${screenName}/${battleId}_deep_trace.jsonl`;
+          const existingTrace = await store.getText(traceKey);
+          if (existingTrace !== null) {
+            const cleanedTrace = stripFlagFromTraceText(existingTrace);
+            await store.put(traceKey, cleanedTrace, {
+              contentType: 'application/x-ndjson',
+              metadata: {
+                screenName,
+                battleId,
+                manuallyFlagged: 'false',
+                userIssueNote: '',
+                uploadReason: 'Unflagged by User',
+                uploadedAt: nowIso,
+              },
+            });
+            updatedTrace = true;
+          }
+
+          if (env.REPLAY_BUCKET) {
+            for (const r2Key of [
+              `replays/${screenName}/${battleId}_deep_trace.jsonl`,
+              `recordings/${screenName}/${battleId}_deep_trace.jsonl`,
+            ]) {
+              try {
+                const r2Obj = await env.REPLAY_BUCKET.get(r2Key);
+                if (r2Obj) {
+                  const r2Txt = await r2Obj.text();
+                  const cleanedR2 = stripFlagFromTraceText(r2Txt);
+                  await env.REPLAY_BUCKET.put(r2Key, cleanedR2, {
+                    httpMetadata: { contentType: 'application/x-ndjson' },
+                    customMetadata: {
+                      ...(r2Obj.customMetadata || {}),
+                      screenName,
+                      battleId,
+                      manuallyFlagged: 'false',
+                      userIssueNote: '',
+                    },
+                  });
+                }
+              } catch (_) {}
+            }
+          }
+        }
+
+        let resolvedShareId = rawShareId || (lookupItem && lookupItem.shareId) || '';
+        if (env.TELEMETRY_KV) {
+          const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, screenName);
+          let indexChanged = false;
+          for (const it of indexObj.items || []) {
+            if ((battleId && it.battleId === battleId) || (rawShareId && it.shareId === rawShareId)) {
+              it.userIssueNote = '';
+              it.manuallyFlagged = false;
+              it.updatedAt = nowIso;
+              if (!resolvedShareId && it.shareId) resolvedShareId = it.shareId;
+              indexChanged = true;
+            }
+          }
+          if (indexChanged) {
+            await saveUserReplayIndex(env.TELEMETRY_KV, screenName, indexObj);
+          }
+          if (resolvedShareId) {
+            try {
+              const rawShare = await env.TELEMETRY_KV.get(`share_lookup/${resolvedShareId}`, { type: 'text' });
+              if (rawShare) {
+                const shareObj = JSON.parse(rawShare);
+                shareObj.userIssueNote = '';
+                shareObj.manuallyFlagged = false;
+                shareObj.updatedAt = nowIso;
+                await env.TELEMETRY_KV.put(`share_lookup/${resolvedShareId}`, JSON.stringify(shareObj));
+              }
+            } catch (_) {}
+          }
+        }
+
+        ctx.waitUntil(
+          (async () => {
+            try {
+              await updateManifest(store, (m) => {
+                if (!Array.isArray(m.recentDvr)) return;
+                for (const d of m.recentDvr) {
+                  if (
+                    d &&
+                    ((battleId && d.battleId === battleId && d.screenName === screenName) ||
+                      (resolvedShareId && d.shareId === resolvedShareId))
+                  ) {
+                    d.manuallyFlagged = false;
+                    d.userIssueNote = '';
+                    d.uploadReason = 'Unflagged by User';
+                  }
+                }
+              });
+            } catch (e) {
+              console.error('Manifest unflag update error:', e);
+            }
+            try {
+              await sendTelegramMessage(
+                env,
+                `⚪ <b>Issue Report Unflagged (Retracted by Trainer)</b>\n` +
+                  `👤 <b>Trainer:</b> <code>@${escapeHtml(screenName)}</code>\n` +
+                  (battleId ? `🆔 <b>Battle:</b> <code>${escapeHtml(battleId)}</code>\n` : '') +
+                  `📝 <i>User unflagged this report as sent inadvertently.</i>`
+              );
+            } catch (_) {}
+          })()
+        );
+
+        return jsonResponse(
+          {
+            ok: true,
+            unflagged: true,
+            screenName,
+            battleId,
+            shareId: resolvedShareId,
+            updatedTrace,
+          },
+          200,
+          request,
+          true
+        );
+      } catch (err) {
+        console.error('POST /v1/dvr/unflag error:', err);
+        return jsonResponse(
+          { ok: false, error: 'Failed to unflag DVR issue report.' },
+          500,
+          request,
+          true
         );
       }
     }

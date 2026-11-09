@@ -1538,8 +1538,17 @@ function syncLocalDeepTraceHeadersIntoState(state) {
         if (fs.existsSync(videoPath)) {
           bundle.videoPath = videoPath;
         }
-        if (isManual) bundle.manuallyFlagged = true;
-        if (issueNote) bundle.userIssueNote = issueNote;
+        const isExplicitlyUnflagged =
+          header.manuallyFlagged === false &&
+          !issueNote &&
+          String(header.uploadReason || "").toLowerCase().includes("unflagged");
+        if (isManual) {
+          bundle.manuallyFlagged = true;
+          bundle.userIssueNote = issueNote;
+        } else if (isExplicitlyUnflagged) {
+          bundle.manuallyFlagged = false;
+          bundle.userIssueNote = "";
+        }
         if (header.uploadReason) bundle.uploadReason = header.uploadReason;
         state.dvrBundles[battleId] = bundle;
 
@@ -1551,7 +1560,13 @@ function syncLocalDeepTraceHeadersIntoState(state) {
             manuallyFlagged: Boolean(bundle.manuallyFlagged),
             userIssueNote: bundle.userIssueNote || "",
           };
-          if (
+          if (isExplicitlyUnflagged && Array.isArray(summaryRec.anomalies)) {
+            summaryRec.anomalies = summaryRec.anomalies.filter(
+              (a) => a && a.type !== "USER_MANUAL_ISSUE_REPORT" && a.code !== "USER_MANUAL_ISSUE_REPORT"
+            );
+            summaryRec.anomalyCount = summaryRec.anomalies.length;
+            summaryRec.hasHighSeverityAnomaly = summaryRec.anomalies.some((a) => a && a.severity === "HIGH");
+          } else if (
             summaryRec.manuallyFlagged &&
             Array.isArray(summaryRec.anomalies) &&
             !summaryRec.anomalies.some((a) => a && (a.type === "USER_MANUAL_ISSUE_REPORT" || a.code === "USER_MANUAL_ISSUE_REPORT"))
@@ -1573,7 +1588,12 @@ function syncLocalDeepTraceHeadersIntoState(state) {
             summaryRec.hasHighSeverityAnomaly = true;
           }
           const existingRec = byBattleId.get(battleId);
-          if (!existingRec || summaryRec.manuallyFlagged || (summaryRec.anomalies?.length || 0) >= (existingRec.anomalies?.length || 0)) {
+          if (
+            !existingRec ||
+            isExplicitlyUnflagged ||
+            summaryRec.manuallyFlagged ||
+            (summaryRec.anomalies?.length || 0) >= (existingRec.anomalies?.length || 0)
+          ) {
             byBattleId.set(battleId, { ...(existingRec || {}), ...summaryRec });
           }
         }
@@ -1750,11 +1770,16 @@ async function runOnce() {
           obj.customMetadata?.manuallyFlagged === true ||
           Boolean(obj.customMetadata?.userIssueNote && String(obj.customMetadata.userIssueNote).trim() !== "");
         const remoteIssueNote = String(obj.customMetadata?.userIssueNote || "").trim();
-        const isNewManualFlagUpgrade =
+        const remoteExplicitlyUnflagged =
+          (obj.customMetadata?.manuallyFlagged === "false" || obj.customMetadata?.manuallyFlagged === false) &&
+          !remoteIssueNote &&
+          String(obj.customMetadata?.uploadReason || "").toLowerCase().includes("unflagged");
+        const isManualFlagStateChanged =
           (remoteManuallyFlagged && !existingBundle?.manuallyFlagged) ||
-          (remoteIssueNote && remoteIssueNote !== (existingBundle?.userIssueNote || ""));
+          (remoteIssueNote && remoteIssueNote !== (existingBundle?.userIssueNote || "")) ||
+          (remoteExplicitlyUnflagged && Boolean(existingBundle?.manuallyFlagged));
 
-        if (state.ingestedKeys[key] && fs.existsSync(localFilePath) && !isNewManualFlagUpgrade) {
+        if (state.ingestedKeys[key] && fs.existsSync(localFilePath) && !isManualFlagStateChanged) {
           if (PRUNE_REMOTE && (await adminDeleteObject(key))) prunedRemoteKeys++;
           continue;
         }
@@ -1782,8 +1807,13 @@ async function runOnce() {
         bundle.userTier = resolvedTier;
         if (isVideo) bundle.videoPath = localFilePath;
         if (isTrace) bundle.tracePath = localFilePath;
-        if (remoteManuallyFlagged) bundle.manuallyFlagged = true;
-        if (remoteIssueNote) bundle.userIssueNote = remoteIssueNote;
+        if (remoteManuallyFlagged) {
+          bundle.manuallyFlagged = true;
+          bundle.userIssueNote = remoteIssueNote;
+        } else if (remoteExplicitlyUnflagged) {
+          bundle.manuallyFlagged = false;
+          bundle.userIssueNote = "";
+        }
         if (obj.customMetadata?.uploadReason) bundle.uploadReason = obj.customMetadata.uploadReason;
         state.dvrBundles[battleId] = bundle;
 

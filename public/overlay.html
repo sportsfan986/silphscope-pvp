@@ -2941,10 +2941,35 @@
             setTimeout(notifyHeight, 25);
         }
 
+        function unflagLastBattleBugReport(explicitBattleId) {
+            const bId = explicitBattleId !== undefined
+                ? explicitBattleId
+                : ((battleData.autoLoggedBanner && battleData.autoLoggedBanner.battleId) ? battleData.autoLoggedBanner.battleId : "");
+            if (window.AndroidOverlay && window.AndroidOverlay.unflagLastBattleBugReport) {
+                window.AndroidOverlay.unflagLastBattleBugReport(bId);
+                return;
+            }
+            if (battleData.autoLoggedBanner && bId) {
+                battleData.autoLoggedBanner.dvrBugReported = false;
+            } else {
+                battleData.stoppedBattleFlagBugReport = false;
+            }
+            render();
+            setTimeout(notifyHeight, 25);
+        }
+
         function flagLastBattleBugReport(explicitBattleId) {
             const bId = explicitBattleId !== undefined
                 ? explicitBattleId
                 : ((battleData.autoLoggedBanner && battleData.autoLoggedBanner.battleId) ? battleData.autoLoggedBanner.battleId : "");
+            if (bId && battleData.autoLoggedBanner && battleData.autoLoggedBanner.dvrBugReported) {
+                unflagLastBattleBugReport(bId);
+                return;
+            }
+            if (!bId && battleData.stoppedBattleFlagBugReport) {
+                unflagLastBattleBugReport("");
+                return;
+            }
             if (window.AndroidOverlay && window.AndroidOverlay.flagLastBattleBugReport) {
                 window.AndroidOverlay.flagLastBattleBugReport(bId);
                 return;
@@ -3377,7 +3402,8 @@
                     if (delBtnEl) delBtnEl.classList.remove("hidden");
                     if (bugBtnEl) {
                         bugBtnEl.classList.remove("hidden");
-                        bugBtnEl.textContent = battleData.stoppedBattleFlagBugReport ? "🚩 Bug Flagged ✓" : "🚩 Bug Report";
+                        bugBtnEl.textContent = battleData.stoppedBattleFlagBugReport ? "↩️ Unflag Bug" : "🚩 Bug Report";
+                        bugBtnEl.title = battleData.stoppedBattleFlagBugReport ? "Unflag this post-battle bug report" : "Flag this battle recording as a bug report";
                     }
                     if (stTextEl) {
                         stTextEl.textContent = battleData.stoppedBattleFlagBugReport
@@ -3435,8 +3461,10 @@
                                     dvrStEl.style.color = "#fde047";
                                 }
                                 if (dvrBugBtn) {
-                                    dvrBugBtn.textContent = "🚩 Sent ✓";
-                                    dvrBugBtn.disabled = true;
+                                    dvrBugBtn.classList.remove("hidden");
+                                    dvrBugBtn.textContent = "↩️ Unflag Bug";
+                                    dvrBugBtn.title = "Unflag and retract this issue report if sent inadvertently";
+                                    dvrBugBtn.disabled = false;
                                 }
                                 if (dvrDelBtn) dvrDelBtn.classList.add("hidden");
                             } else {

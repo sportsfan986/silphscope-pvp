@@ -7614,6 +7614,13 @@ class MainActivity : AppCompatActivity() {
 
             val traceFrames = mutableListOf<OverlayService.Companion.BattleDeepTraceFrame>()
             val summaryOppTeamSpecs = mutableListOf<OverlayService.Companion.AiTelemetryOppSlotSpec>()
+            var isIssueFlagged = vaultMeta?.manuallyFlagged == true ||
+                vaultMeta?.userIssueNote?.isNotBlank() == true ||
+                pendingTelemetry?.anomalies?.any { it.type == "USER_MANUAL_ISSUE_REPORT" } == true
+            var currentIssueNote = vaultMeta?.userIssueNote?.takeIf { it.isNotBlank() }
+                ?: pendingTelemetry?.anomalies?.firstOrNull { it.type == "USER_MANUAL_ISSUE_REPORT" }?.detail?.removePrefix("User-flagged DVR issue report:")?.trim()
+                ?: ""
+            var refreshIssueBtnStyle: (() -> Unit)? = null
             fun parseTraceLines(text: String) {
                 traceFrames.clear()
                 summaryOppTeamSpecs.clear()
@@ -7623,11 +7630,20 @@ class MainActivity : AppCompatActivity() {
                     if (trimmed.startsWith("{\"recordType\":\"BATTLE_DVR_SUMMARY_HEADER\"")) {
                         try {
                             val root = com.google.gson.JsonParser.parseString(trimmed).asJsonObject
+                            val mf = root.get("manuallyFlagged")?.takeIf { !it.isJsonNull }?.asBoolean == true
+                            val note = root.get("userIssueNote")?.takeIf { !it.isJsonNull }?.asString?.trim().orEmpty()
+                            isIssueFlagged = mf || note.isNotEmpty()
+                            currentIssueNote = note
                             val summaryObj = root.getAsJsonObject("battleSummary")
                             if (summaryObj != null) {
                                 val parsedSummary = gson.fromJson(summaryObj, OverlayService.Companion.AiTelemetryBattleRecordV510::class.java)
-                                if (parsedSummary != null && parsedSummary.oppTeamSpecs.isNotEmpty()) {
-                                    summaryOppTeamSpecs.addAll(parsedSummary.oppTeamSpecs)
+                                if (parsedSummary != null) {
+                                    if (parsedSummary.oppTeamSpecs.isNotEmpty()) {
+                                        summaryOppTeamSpecs.addAll(parsedSummary.oppTeamSpecs)
+                                    }
+                                    if (!isIssueFlagged && parsedSummary.anomalies.any { it.type == "USER_MANUAL_ISSUE_REPORT" }) {
+                                        isIssueFlagged = true
+                                    }
                                 }
                             }
                         } catch (_: Exception) {}
@@ -7661,6 +7677,7 @@ class MainActivity : AppCompatActivity() {
                                 val txt = r.body?.string().orEmpty()
                                 withContext(Dispatchers.Main) {
                                     parseTraceLines(txt)
+                                    refreshIssueBtnStyle?.invoke()
                                     onAsyncTraceLoadedCallback?.invoke()
                                 }
                             }
@@ -7670,9 +7687,17 @@ class MainActivity : AppCompatActivity() {
             }
 
             val topToolbar = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, 0, 0, (6 * density).toInt())
+            }
+            val topToolbarRow1 = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = android.view.Gravity.CENTER_VERTICAL
-                setPadding(0, 0, 0, (6 * density).toInt())
+            }
+            val topToolbarRow2 = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(0, (5 * density).toInt(), 0, 0)
             }
 
             fun styleMiniBtn(btn: TextView, bgHex: Int, fgHex: Int = 0xFFF8FAFC.toInt()) {
@@ -7680,6 +7705,7 @@ class MainActivity : AppCompatActivity() {
                 val pV = (5 * density).toInt()
                 btn.setPadding(pH, pV, pH, pV)
                 btn.textSize = 10.5f
+                btn.setSingleLine(true)
                 btn.setTextColor(fgHex)
                 btn.setTypeface(btn.typeface, android.graphics.Typeface.BOLD)
                 btn.background = android.graphics.drawable.GradientDrawable().apply {
@@ -7707,23 +7733,37 @@ class MainActivity : AppCompatActivity() {
                 styleMiniBtn(this, 0xFF0284C7.toInt())
             }
             val btnReportIssue = TextView(this).apply {
-                text = "🚩 Report Issue"
-                styleMiniBtn(this, 0xFFBE123C.toInt())
+                text = if (isIssueFlagged) "🚩 Flagged ✓" else "🚩 Report Issue"
+                styleMiniBtn(this, if (isIssueFlagged) 0xFFD97706.toInt() else 0xFFBE123C.toInt())
             }
+            val btnUnflagIssue = TextView(this).apply {
+                text = "↩️ Unflag Issue"
+                styleMiniBtn(this, 0xFF334155.toInt(), 0xFFFCA5A5.toInt())
+            }
+            refreshIssueBtnStyle = {
+                btnReportIssue.text = if (isIssueFlagged) "🚩 Flagged ✓" else "🚩 Report Issue"
+                styleMiniBtn(btnReportIssue, if (isIssueFlagged) 0xFFD97706.toInt() else 0xFFBE123C.toInt())
+                styleMiniBtn(btnUnflagIssue, if (isIssueFlagged) 0xFF7F1D1D.toInt() else 0xFF334155.toInt(), if (isIssueFlagged) 0xFFFECACA.toInt() else 0xFFCBD5E1.toInt())
+            }
+            refreshIssueBtnStyle?.invoke()
             val btnDeleteDvr = TextView(this).apply {
                 text = "🗑️ Delete"
                 styleMiniBtn(this, 0xFF475569.toInt())
                 visibility = if (hasDvrVideoInitial) android.view.View.VISIBLE else android.view.View.GONE
             }
 
-            val spacer = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            topToolbar.addView(btnModeToggle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
-            topToolbar.addView(btnPinToggle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
-            topToolbar.addView(btnPublicToggle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
-            topToolbar.addView(btnShareLink, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
-            topToolbar.addView(android.view.View(this), spacer)
-            topToolbar.addView(btnDeleteDvr, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
-            topToolbar.addView(btnReportIssue)
+            topToolbarRow1.addView(btnModeToggle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
+            topToolbarRow1.addView(btnPinToggle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
+            topToolbarRow1.addView(btnPublicToggle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
+            topToolbarRow1.addView(btnShareLink, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+            topToolbarRow2.addView(btnReportIssue, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
+            topToolbarRow2.addView(btnUnflagIssue, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = (5 * density).toInt() })
+            topToolbarRow2.addView(android.view.View(this), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            topToolbarRow2.addView(btnDeleteDvr, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+            topToolbar.addView(topToolbarRow1)
+            topToolbar.addView(topToolbarRow2)
 
             val videoStageWrap = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -8433,12 +8473,22 @@ class MainActivity : AppCompatActivity() {
                     textSize = 12f
                     val p = (12 * density).toInt()
                     setPadding(p, p, p, p)
+                    if (currentIssueNote.isNotBlank()) {
+                        setText(currentIssueNote)
+                        setSelection(text.length)
+                    }
                 }
-                val issueDialog = AlertDialog.Builder(this)
-                    .setTitle("🚩 Submit DVR Issue Report")
-                    .setMessage("Uploads this battle's DVR video, frame-synced deep trace JSONL, and your note to SilphScope Diagnostics (Telegram):")
+                val builder = AlertDialog.Builder(this)
+                    .setTitle(if (isIssueFlagged) "🚩 Edit or Unflag DVR Issue Report" else "🚩 Submit DVR Issue Report")
+                    .setMessage(
+                        if (isIssueFlagged) {
+                            "This battle is flagged for diagnostic review. Tap '⚪ Unflag Report' to retract it if sent inadvertently, or update your note below:"
+                        } else {
+                            "Uploads this battle's DVR video, frame-synced deep trace JSONL, and your note to SilphScope Diagnostics (Telegram):"
+                        }
+                    )
                     .setView(noteInput)
-                    .setPositiveButton("🚀 Upload Report") { _, _ ->
+                    .setPositiveButton(if (isIssueFlagged) "🚀 Update Report" else "🚀 Upload Report") { _, _ ->
                         val note = noteInput.text?.toString()?.trim().orEmpty()
                         if (note.isBlank()) {
                             Toast.makeText(
@@ -8448,6 +8498,9 @@ class MainActivity : AppCompatActivity() {
                             ).show()
                             return@setPositiveButton
                         }
+                        isIssueFlagged = true
+                        currentIssueNote = note
+                        refreshIssueBtnStyle?.invoke()
                         Toast.makeText(this, "🚩 Uploading DVR Video & Issue Report...", Toast.LENGTH_SHORT).show()
                         lifecycleScope.launch(Dispatchers.IO) {
                             val (ok, msg) = OverlayService.submitManualDvrIssueReportBlocking(
@@ -8467,9 +8520,54 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     }
+                    .setNeutralButton("⚪ Unflag Report") { _, _ ->
+                        isIssueFlagged = false
+                        currentIssueNote = ""
+                        refreshIssueBtnStyle?.invoke()
+                        Toast.makeText(this, "⚪ Unflagging Issue Report...", Toast.LENGTH_SHORT).show()
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            val (_, msg) = OverlayService.unflagDvrIssueReportBlocking(
+                                filesDir = filesDir,
+                                cacheDir = cacheDir,
+                                prefs = prefs,
+                                gson = gson,
+                                battleId = cleanBattleId
+                            )
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                    .setNegativeButton("Cancel", null)
+                val issueDialog = builder.show()
+                styleThemedAlertDialog(issueDialog)
+            }
+
+            btnUnflagIssue.setOnClickListener {
+                val unflagDialog = AlertDialog.Builder(this)
+                    .setTitle("↩️ Unflag Issue Report?")
+                    .setMessage("Retract and clear any diagnostic issue report sent for this battle ($cleanBattleId)?")
+                    .setPositiveButton("⚪ Unflag Report") { _, _ ->
+                        isIssueFlagged = false
+                        currentIssueNote = ""
+                        refreshIssueBtnStyle?.invoke()
+                        Toast.makeText(this, "⚪ Unflagging Issue Report...", Toast.LENGTH_SHORT).show()
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            val (_, msg) = OverlayService.unflagDvrIssueReportBlocking(
+                                filesDir = filesDir,
+                                cacheDir = cacheDir,
+                                prefs = prefs,
+                                gson = gson,
+                                battleId = cleanBattleId
+                            )
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
                     .setNegativeButton("Cancel", null)
                     .show()
-                styleThemedAlertDialog(issueDialog)
+                styleThemedAlertDialog(unflagDialog)
             }
 
             dialogContainer.addView(topToolbar)

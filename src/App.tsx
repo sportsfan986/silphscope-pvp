@@ -1570,6 +1570,103 @@ export default function App() {
     });
   };
 
+  const handleFlagBattleLogIssue = async (entry: WebBattleLogEntry) => {
+    const cleanName = (webScreenName || '').trim() || 'Trainer';
+    const note = window.prompt(
+      `🚩 Flag / Update Issue Report for Battle (${entry.result} vs ${entry.opponents.join(' / ') || 'Opponent'}):\nDescribe what went wrong (e.g. HP jump, wrong move count, OCR misread):`,
+      entry.issueNote || ''
+    );
+    if (note === null) return;
+    const cleanNote = note.trim();
+    if (!cleanNote) {
+      if (
+        entry.issueFlagged &&
+        window.confirm('You left the description blank. Would you like to unflag & retract this issue report instead?')
+      ) {
+        await handleUnflagBattleLogIssue(entry);
+        return;
+      }
+      window.alert('Please enter a brief description of the issue to flag this battle.');
+      return;
+    }
+    const now = Date.now();
+    const updatedLogs = battleLogs.map((b) =>
+      b.id === entry.id
+        ? { ...b, issueFlagged: true, issueNote: cleanNote, updatedAt: now }
+        : b
+    );
+    saveBattleLogsToStorage(updatedLogs);
+    if (replayLogEntry && replayLogEntry.id === entry.id) {
+      setReplayLogEntry({ ...replayLogEntry, issueFlagged: true, issueNote: cleanNote, updatedAt: now });
+    }
+    const matchupSummary = `${(entry.userPokemon || []).join(' / ')} vs ${(entry.opponents || []).join(' / ')}`;
+    try {
+      await fetch('https://api.silphscopepvp.com/v1/dvr/flag', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC,
+          'X-Trainer-Screen-Name': cleanName,
+          'X-Device-Hash': deviceId,
+          ...(webSessionToken ? { 'X-Vault-Session': webSessionToken } : {}),
+          ...(webUnlockKey.trim() ? { 'X-SilphScope-Unlock-Key': webUnlockKey.trim().toUpperCase() } : {})
+        },
+        body: JSON.stringify({
+          battleId: entry.id,
+          screenName: cleanName,
+          userIssueNote: cleanNote,
+          league: entry.league,
+          result: entry.result,
+          matchupSummary,
+          deviceHash: deviceId,
+          sessionToken: webSessionToken,
+          unlockKey: webUnlockKey.trim().toUpperCase()
+        })
+      });
+    } catch {}
+    setStartBattleToast(`🚩 Issue Report Flagged: "${cleanNote}"`);
+    setTimeout(() => setStartBattleToast(null), 2800);
+  };
+
+  const handleUnflagBattleLogIssue = async (entry: WebBattleLogEntry) => {
+    if (!window.confirm(`Unflag and retract the issue report for this battle (${entry.result} vs ${entry.opponents.join(' / ') || 'Opponent'})?`)) {
+      return;
+    }
+    const cleanName = (webScreenName || '').trim() || 'Trainer';
+    const now = Date.now();
+    const updatedLogs = battleLogs.map((b) =>
+      b.id === entry.id
+        ? { ...b, issueFlagged: false, issueNote: '', updatedAt: now }
+        : b
+    );
+    saveBattleLogsToStorage(updatedLogs);
+    if (replayLogEntry && replayLogEntry.id === entry.id) {
+      setReplayLogEntry({ ...replayLogEntry, issueFlagged: false, issueNote: '', updatedAt: now });
+    }
+    try {
+      await fetch('https://api.silphscopepvp.com/v1/dvr/unflag', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC,
+          'X-Trainer-Screen-Name': cleanName,
+          'X-Device-Hash': deviceId,
+          ...(webSessionToken ? { 'X-Vault-Session': webSessionToken } : {}),
+          ...(webUnlockKey.trim() ? { 'X-SilphScope-Unlock-Key': webUnlockKey.trim().toUpperCase() } : {})
+        },
+        body: JSON.stringify({
+          battleId: entry.id,
+          screenName: cleanName,
+          deviceHash: deviceId,
+          sessionToken: webSessionToken,
+          unlockKey: webUnlockKey.trim().toUpperCase()
+        })
+      });
+    } catch {}
+    setStartBattleToast('⚪ Issue report unflagged & retracted.');
+    setTimeout(() => setStartBattleToast(null), 2600);
+  };
+
   const handleClearBattleLogs = () => {
     if (battleLogs.length === 0) return;
     const clearedCopy = [...battleLogs];
@@ -5861,7 +5958,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.26 • Android Native Overlay
+                  v7.27 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -15673,11 +15770,16 @@ export default function App() {
                                     <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-sky-300">
                                       🔄 1st Swap: {entry.firstSwapActor || 'NONE'} • Switch Adv: {entry.switchAdvantage || 'NEUTRAL'}
                                     </span>
+                                    {(entry.issueFlagged || entry.issueNote) && (
+                                      <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-400/50 text-amber-200 font-bold">
+                                        🚩 Issue: {entry.issueNote || 'Flagged for diagnostic review'}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
 
                                 <div
-                                  className="flex items-center gap-1.5 shrink-0"
+                                  className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <button
@@ -15737,6 +15839,26 @@ export default function App() {
                                     title='Branch this battle into the Interactive Overlay Simulator ("What-If" Mode — Pro / VIP)'
                                   >
                                     🌿 What-If Sim
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleFlagBattleLogIssue(entry)}
+                                    className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] border transition ${
+                                      entry.issueFlagged
+                                        ? 'bg-amber-500/25 hover:bg-amber-500/40 border-amber-400 text-amber-200'
+                                        : 'bg-red-600/20 hover:bg-red-600/35 border-red-400/50 text-red-200'
+                                    }`}
+                                    title="Flag an issue on this battle or edit existing issue note"
+                                  >
+                                    {entry.issueFlagged ? '🚩 Flagged ✓' : '🚩 Flag Issue'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUnflagBattleLogIssue(entry)}
+                                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 font-bold text-[11px] transition"
+                                    title="Unflag & retract an inadvertently sent issue report for this battle"
+                                  >
+                                    ↩️ Unflag
                                   </button>
                                   <button
                                     type="button"
@@ -16019,7 +16141,7 @@ export default function App() {
                           {renderThemeOverlayIcon(activeTheme.id, 260)}
                         </div>
                       )}
-                      <div className="relative z-10 flex items-center justify-between border-b border-slate-800 pb-2.5">
+                      <div className="relative z-10 flex items-center justify-between border-b border-slate-800 pb-2.5 gap-2 flex-wrap">
                         <div>
                           <h3 className="font-bold text-sm text-white flex items-center gap-2">
                             <span>🔍 Post-Game Interactive Overlay Replay</span>
@@ -16037,13 +16159,49 @@ export default function App() {
                             Tap any of your 3 Pokémon or any of the 3 opponents (#1, #2, #3) below to inspect shield scenarios, move counts &amp; swap options!
                           </p>
                         </div>
-                        <button
-                          onClick={() => setReplayLogEntry(null)}
-                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold"
-                        >
-                          ✕ Close
-                        </button>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => handleFlagBattleLogIssue(replayLogEntry)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition ${
+                              replayLogEntry.issueFlagged
+                                ? 'bg-amber-500/25 hover:bg-amber-500/40 border-amber-400 text-amber-200'
+                                : 'bg-red-600/25 hover:bg-red-600/40 border-red-400/60 text-red-200'
+                            }`}
+                            title="Flag an issue on this battle or edit existing issue note"
+                          >
+                            {replayLogEntry.issueFlagged ? '🚩 Flagged ✓' : '🚩 Report Issue'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUnflagBattleLogIssue(replayLogEntry)}
+                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs font-bold transition"
+                            title="Unflag & retract an inadvertently sent issue report"
+                          >
+                            ↩️ Unflag Issue
+                          </button>
+                          <button
+                            onClick={() => setReplayLogEntry(null)}
+                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold"
+                          >
+                            ✕ Close
+                          </button>
+                        </div>
                       </div>
+                      {(replayLogEntry.issueFlagged || replayLogEntry.issueNote) && (
+                        <div className="relative z-10 px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-400/50 text-amber-200 text-xs flex items-center justify-between gap-2 flex-wrap">
+                          <span>
+                            🚩 <strong>Reported Issue:</strong> {replayLogEntry.issueNote || 'Flagged for diagnostic review'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleUnflagBattleLogIssue(replayLogEntry)}
+                            className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-600 text-slate-200 text-[11px] font-bold"
+                          >
+                            ↩️ Unflag
+                          </button>
+                        </div>
+                      )}
 
                       {/* Interactive Overlay HUD Replica */}
                       <div
@@ -16860,7 +17018,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.26 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.27 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}
