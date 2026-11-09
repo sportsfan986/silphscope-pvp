@@ -82,10 +82,12 @@ import kotlin.math.roundToInt
 import com.gbl.overlay.OverlayService.*
 import com.gbl.overlay.OverlayService.Companion.APP_VERSION
 import com.gbl.overlay.OverlayService.Companion.activeAlwaysOnDvrEnabled
+import com.gbl.overlay.OverlayService.Companion.activeDvrRecordingMode
 import com.gbl.overlay.OverlayService.Companion.activeOneBattleDvrArmed
 import com.gbl.overlay.OverlayService.Companion.activeOneBattleDvrFrames
 import com.gbl.overlay.OverlayService.Companion.activeOneBattleDvrRecording
 import com.gbl.overlay.OverlayService.Companion.activeShowOneBattleDvrBtn
+import com.gbl.overlay.OverlayService.Companion.isBattleIntroCountdownActive
 import com.gbl.overlay.OverlayService.Companion.AiTelemetryBattleRecordV510
 import com.gbl.overlay.OverlayService.Companion.BattleDeepTraceFrame
 import com.gbl.overlay.OverlayService.Companion.FormResolver
@@ -108,17 +110,25 @@ internal fun OverlayService.toggleArmOneBattleDvrFromOverlay() {
         recalculateAndPushBattleData()
         return
     }
-    if (!activeShowOneBattleDvrBtn) {
+    if (!activeShowOneBattleDvrBtn && activeDvrRecordingMode != OverlayService.DVR_MODE_VIP_AUTO && !activeOneBattleDvrRecording) {
         showBattleToast("Enable '1-Battle DVR Button' in App Settings first.")
         return
     }
     val nextArmed = !activeOneBattleDvrArmed
     activeOneBattleDvrArmed = nextArmed
     prefs.edit().putBoolean(PREFS_KEY_ARM_ONE_BATTLE_DVR, nextArmed).apply()
-    if (nextArmed) {
-        showBattleToast("🚩 Flagged Battle for Diagnostic Video & Deep Trace Upload")
+    if (activeOneBattleDvrRecording) {
+        if (nextArmed) {
+            showBattleToast("🚩 Flagged Battle for Diagnostic Video & Deep Trace Upload")
+        } else {
+            showBattleToast("⚪ Cleared Manual Diagnostic Flag (Battle DVR still recording)")
+        }
     } else {
-        showBattleToast("⚪ Cleared Manual Diagnostic Flag (Local Auto-DVR still active)")
+        if (nextArmed) {
+            showBattleToast("🎥 DVR Armed for 1 Battle (Starts on Countdown)")
+        } else {
+            showBattleToast("⚪ DVR Disarmed")
+        }
     }
     recalculateAndPushBattleData()
 }
@@ -215,6 +225,7 @@ internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap,
         isCutsceneActive = pendingChargedAttackActor.isNotEmpty() || (sampledLeftChargeBtnFillPct == -1 && sampledRightChargeBtnFillPct == -1),
         pendingChargeActor = pendingChargedAttackActor,
         isTopCountdownActive = isTopCountdownCircleActive,
+        isIntroCountdownActive = isBattleIntroCountdownActive,
         playerSwapRemainingSec = pSwapRem,
         oppSwapRemainingSec = oSwapRem,
         ocrOppTopText = cachedOcrOppLines.joinToString(" | ") { it.text },

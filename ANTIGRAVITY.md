@@ -2,7 +2,7 @@
 
 > **Target Audience**: Antigravity agents, Claude/Gemini coding assistants, and core developers maintaining or extending **SilphScope PvP**.  
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v7.25` (`versionCode = 1725`)  
+> **Current Version**: `v7.26` (`versionCode = 1726`)  
 > **Official Domains**: `https://silphscopepvp.com` (Website & Web Simulator) • `https://dvr.silphscopepvp.com` (Cloud DVR Vault & `/watch/:shareId`) • `https://api.silphscopepvp.com` (Telemetry, Auth & Webhooks API) • `https://dl.silphscopepvp.com` (1-Click APK Download).
 
 ---

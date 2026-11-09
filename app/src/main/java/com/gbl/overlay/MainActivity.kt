@@ -1590,11 +1590,18 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnToggleShowOneBattleDvr.setOnClickListener {
-            val current = prefs.getBoolean(OverlayService.PREFS_KEY_ALWAYS_ON_DVR_ENABLED, OverlayService.DEFAULT_ALWAYS_ON_DVR_ENABLED)
-            val next = !current
+            val currentMode = OverlayService.getEffectiveDvrModeStatic(prefs)
+
+            val nextMode = when (currentMode) {
+                OverlayService.DVR_MODE_VIP_AUTO -> OverlayService.DVR_MODE_MANUAL
+                OverlayService.DVR_MODE_MANUAL -> OverlayService.DVR_MODE_OFF
+                else -> OverlayService.DVR_MODE_VIP_AUTO
+            }
+
             prefs.edit()
-                .putBoolean(OverlayService.PREFS_KEY_ALWAYS_ON_DVR_ENABLED, next)
-                .putBoolean(OverlayService.PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, false)
+                .putString(OverlayService.PREFS_KEY_DVR_RECORDING_MODE, nextMode)
+                .putBoolean(OverlayService.PREFS_KEY_ALWAYS_ON_DVR_ENABLED, nextMode == OverlayService.DVR_MODE_VIP_AUTO)
+                .putBoolean(OverlayService.PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, nextMode == OverlayService.DVR_MODE_MANUAL)
                 .apply()
             OverlayService.syncTierThresholdsFromPrefs(prefs)
             updateAiTelemetryStatusUi()
@@ -1604,10 +1611,13 @@ class MainActivity : AppCompatActivity() {
                 }
                 startService(updateIntent)
             }
-            val msg = if (next) {
-                "🎥 Always-On Battle DVR enabled! Actual battles (≥10s) are automatically recorded for Replay & Post-Battle Bug Reports."
-            } else {
-                "⚪ Always-On Battle DVR disabled in Settings."
+            val msg = when (nextMode) {
+                OverlayService.DVR_MODE_VIP_AUTO ->
+                    "🎥 Auto-Start DVR Enabled (Hands-Free)! Battles auto-record on '3... 2... 1... BATTLE!' countdown."
+                OverlayService.DVR_MODE_MANUAL ->
+                    "🔘 DVR Manual Mode: 'REC 1' button visible on floating HUD. Tap before match to record."
+                else ->
+                    "⚪ Battle DVR Disabled in Settings."
             }
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
@@ -2641,7 +2651,7 @@ class MainActivity : AppCompatActivity() {
             "$statePrefix • Debounce Profile: $profileSig ($pendingSettingsChanges pending changes) • Pending queue: $pendingBattles battles ($pendingAnomalies anomalies) • Total uploaded & purged: $totalUploaded • Last upload: $lastStr"
 
         if (::btnToggleShowOneBattleDvr.isInitialized && ::btnArmOneBattleDvrNow.isInitialized && ::textOneBattleDvrStatus.isInitialized) {
-            val alwaysOnDvr = prefs.getBoolean(OverlayService.PREFS_KEY_ALWAYS_ON_DVR_ENABLED, OverlayService.DEFAULT_ALWAYS_ON_DVR_ENABLED)
+            val dvrMode = OverlayService.getEffectiveDvrModeStatic(prefs)
             val allowMobileUpload = prefs.getBoolean(
                 OverlayService.PREFS_KEY_ALLOW_MOBILE_DATA_DVR_UPLOAD,
                 OverlayService.DEFAULT_ALLOW_MOBILE_DATA_DVR_UPLOAD
@@ -2651,14 +2661,22 @@ class MainActivity : AppCompatActivity() {
             val lastDvrPath = prefs.getString(OverlayService.PREFS_KEY_LAST_DVR_UPLOAD_PATH, "") ?: ""
             val lastDvrStr = if (lastDvrAt > 0L) timeFmt.format(java.util.Date(lastDvrAt)) else "Never"
 
-            if (alwaysOnDvr) {
-                btnToggleShowOneBattleDvr.text = "🎥 Always-On Battle DVR: ON"
-                btnToggleShowOneBattleDvr.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF059669.toInt())
-                btnToggleShowOneBattleDvr.setTextColor(0xFFFFFFFF.toInt())
-            } else {
-                btnToggleShowOneBattleDvr.text = "⚪ Always-On Battle DVR: OFF"
-                btnToggleShowOneBattleDvr.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF334155.toInt())
-                btnToggleShowOneBattleDvr.setTextColor(0xFFF8FAFC.toInt())
+            when (dvrMode) {
+                OverlayService.DVR_MODE_VIP_AUTO -> {
+                    btnToggleShowOneBattleDvr.text = "🎥 Auto-Start DVR: ON (Hands-Free)"
+                    btnToggleShowOneBattleDvr.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF059669.toInt())
+                    btnToggleShowOneBattleDvr.setTextColor(0xFFFFFFFF.toInt())
+                }
+                OverlayService.DVR_MODE_MANUAL -> {
+                    btnToggleShowOneBattleDvr.text = "🔘 Battle DVR: Manual 1-Tap Button"
+                    btnToggleShowOneBattleDvr.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF0284C7.toInt())
+                    btnToggleShowOneBattleDvr.setTextColor(0xFFFFFFFF.toInt())
+                }
+                else -> {
+                    btnToggleShowOneBattleDvr.text = "⚪ Battle DVR: OFF"
+                    btnToggleShowOneBattleDvr.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF334155.toInt())
+                    btnToggleShowOneBattleDvr.setTextColor(0xFFF8FAFC.toInt())
+                }
             }
 
             if (allowMobileUpload) {
@@ -2671,10 +2689,10 @@ class MainActivity : AppCompatActivity() {
                 btnArmOneBattleDvrNow.setTextColor(0xFFF8FAFC.toInt())
             }
 
-            val dvrStateLabel = if (alwaysOnDvr) {
-                "🟢 Always-On DVR Active (Discards <10s & non-battles • Post-Battle Delete/Bug Prompt)"
-            } else {
-                "⚪ Always-On DVR Disabled"
+            val dvrStateLabel = when (dvrMode) {
+                OverlayService.DVR_MODE_VIP_AUTO -> "🟢 Auto-Start DVR Active (Hands-Free on '3... 2... 1... BATTLE!' • Discards <10s non-battles • Post-Battle Delete/Bug Prompt)"
+                OverlayService.DVR_MODE_MANUAL -> "🔘 Manual 1-Tap DVR Active (Tap 'REC 1' in HUD before battle)"
+                else -> "⚪ Battle DVR Disabled"
             }
             val netLabel = if (allowMobileUpload) "Wi-Fi + Mobile Data (Opted-In)" else "Wi-Fi Only (Default)"
             val pendingDvrCount = OverlayService.countPendingCachedDvrBundlesStatic(cacheDir)
@@ -2685,6 +2703,60 @@ class MainActivity : AppCompatActivity() {
 
             setupOrUpdateReplayVaultSettingsUi()
         }
+    }
+
+    private fun openCheckoutUrl(baseUrl: String) {
+        val user = OverlayService.getRequiredScreenNameStatic(prefs)
+        val fullUrl = if (baseUrl.contains("buy.stripe.com") && user.isNotEmpty()) {
+            "$baseUrl?client_reference_id=${android.net.Uri.encode(user)}"
+        } else {
+            baseUrl
+        }
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(fullUrl)))
+        } catch (_: Exception) {
+            Toast.makeText(this, "Could not open browser for checkout link", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showVipAutoDvrUpgradePromptDialog() {
+        val useIntroPromo = OverlayService.isSeasonPassIntroPromoEligibleStatic(prefs)
+        val vipUrl = if (useIntroPromo) OverlayService.STRIPE_URL_VIP_INTRO else OverlayService.STRIPE_URL_VIP_SEASON
+        val priceTag = if (useIntroPromo) "$5 First-Season Intro Promo" else "$10 GBL Season Pass ($3.33/mo)"
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("👑 VIP Hands-Free Auto-Start DVR")
+            .setMessage(
+                "Never miss recording a critical match again!\n\n" +
+                "👑 VIP / Coach Pass automatically detects the '3... 2... 1... BATTLE!' countdown screen and starts the zero-overhead hardware H.264 DVR hands-free.\n\n" +
+                "• Zero screen taps before battle\n" +
+                "• 30 FPS Smooth Hardware H.264 Video\n" +
+                "• 25–100 Local Ring Buffer slider\n" +
+                "• 150 Cloud R2 Replays (365d retention)\n" +
+                "• Full Nemesis Analyzer & Priority Support\n\n" +
+                "Available now for $priceTag."
+            )
+            .setPositiveButton("👑 Upgrade to VIP") { _, _ ->
+                openCheckoutUrl(vipUrl)
+            }
+            .setNegativeButton("Use Manual 1-Tap Button") { _, _ ->
+                prefs.edit()
+                    .putString(OverlayService.PREFS_KEY_DVR_RECORDING_MODE, OverlayService.DVR_MODE_MANUAL)
+                    .putBoolean(OverlayService.PREFS_KEY_ALWAYS_ON_DVR_ENABLED, false)
+                    .putBoolean(OverlayService.PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN, true)
+                    .apply()
+                OverlayService.syncTierThresholdsFromPrefs(prefs)
+                updateAiTelemetryStatusUi()
+                if (isOverlayRunning) {
+                    val updateIntent = Intent(this, OverlayService::class.java).apply {
+                        action = OverlayService.ACTION_UPDATE_SETTINGS
+                    }
+                    startService(updateIntent)
+                }
+                Toast.makeText(this, "🔘 DVR Manual Mode: 'REC 1' button visible on floating HUD.", Toast.LENGTH_SHORT).show()
+            }
+            .setNeutralButton("Cancel", null)
+            .show()
     }
 
     private var replayVaultSettingsBox: LinearLayout? = null
@@ -3258,7 +3330,7 @@ class MainActivity : AppCompatActivity() {
         val maxLocal = OverlayService.getMaxLocalDvrBattlesForTierStatic(prefs)
         val effFps = OverlayService.getEffectiveDvrFpsForTierStatic(prefs)
         val tierBadge = when (tier) {
-            "vip" -> "👑 VIP / Coach Pass Active (${effFps} FPS DVR • 🛡️ Shield HUD • $maxLocal Local Slider • 150 Cloud + 25 ⭐ Pinned • 365d • All Cups + Alt Moves)"
+            "vip" -> "👑 VIP / Coach Pass Active (🎥 Auto-Start Hands-Free • ${effFps} FPS DVR • 🛡️ Shield HUD • $maxLocal Local Slider • 150 Cloud + 25 ⭐ Pinned • 365d • All Cups + Alt Moves)"
             "pro" -> "🏅 Legend Pro Pass Active (15 FPS DVR • 🛡️ Shield HUD • 25 Local • 50 Cloud + 10 ⭐ Pinned • 30d • All Cups + ⚡ Alt Movesets)"
             "supporter" -> "🛡️ Lifetime Supporter / Alumni Active (🛡️ Shield Decision HUD • 5 Local (15 FPS) • 365d Past Pinned Cloud • Core 3 Leagues • Lifetime Battle Logs)"
             else -> "🆓 Free / Community Tier (1 Local Video (15 FPS) • GL & ML 1-Team Anti-Meta • Current Season + 14d Grace)"

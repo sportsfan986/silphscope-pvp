@@ -1,4 +1,18 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.25`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.26`)
+
+---
+
+## v7.26 (2026-11-09) — Auto-Start Battle DVR (Hands-Free Intro Countdown Detection) & 3-Way Recording Mode
+*Live Android APK & Web Simulator release (`v7.26`, `versionCode = 1726`) introducing universal hands-free Auto-Start Battle DVR on confirmed `"3... 2... 1... BATTLE!"` intro countdown detection across all membership tiers (for diagnostic issue recording and replay capture), 3-way DVR recording mode configuration, and opening battle entrance capture.*
+
+- **v7.26 — Feature 1: Multi-Modal Battle Intro Countdown Detector (`OverlayService.kt`, `BattleDvrEngine.kt`)**:
+  - Added `checkAndTriggerBattleIntroCountdown(...)` combining pixel-dimmed charge circle detection (`isCountdownDimmedState`), central-banner ML Kit OCR countdown tokens (`"3"`, `"2"`, `"1"`, `"BATTLE!"`, `"GO!"`, `"VS"`), and opening 3v3 Pokéball indicator lock with a 2-frame debounce (`1` frame when both dimmed circles and OCR token agree).
+  - Expanded `isDvrRecordingWindow` to `((isBattleActive && !isWaitingForOpponent) || isBattleIntroCountdownActive)` so the hardware H.264 encoder and `_deep_trace.jsonl` capture the full opening entrance and lead reveal from Frame #1.
+  - Added `isIntroCountdownActive: Boolean = false` to `BattleDeepTraceFrame`.
+- **v7.26 — Feature 2: Universal Hands-Free Auto-Start DVR & 3-Way Mode Selector (`OverlayService.kt`, `MainActivity.kt`, `overlay.html`, `GitHubCloudSync.kt`)**:
+  - Enabled **🎥 Auto-Start DVR: ON (Hands-Free)** (`DVR_MODE_VIP_AUTO`) by default across **all tiers** so diagnostic video and frame-trace recording is always active without requiring manual pre-battle taps.
+  - Added 3-way DVR mode cycling in **⚙️ Settings** (`🎥 Auto-Start DVR: ON (Hands-Free)` $\to$ `🔘 Battle DVR: Manual 1-Tap Button` $\to$ `⚪ Battle DVR: OFF`) synced via `PREFS_KEY_DVR_RECORDING_MODE`.
+  - Updated the floating HUD `#btn-dvr-rec-one` indicator to display live `🔴 REC F#...` frame counters during active recording and allow 1-tap mid-battle diagnostic bug flagging while preserving the 12-second post-battle delete/review window.
 
 ---
 

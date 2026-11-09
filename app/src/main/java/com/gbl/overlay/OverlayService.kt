@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.24"
-        const val APP_VERSION_CODE = 1724
+        const val APP_VERSION = "7.26"
+        const val APP_VERSION_CODE = 1726
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -516,7 +516,7 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS = "gbl_haptic_charge_timing_fasts"
         const val DEFAULT_HAPTIC_CHARGE_TIMING_FASTS = 1 // 1 or 2 fast moves
 
-        // v6.07 / v6.42 / v6.43: Always-On Battle DVR, Mobile Data Upload Opt-In, Replay Vault & Deep Logger Constants
+        // v6.07 / v6.42 / v6.43 / v7.26: Always-On Battle DVR, Mobile Data Upload Opt-In, Replay Vault & Deep Logger Constants
         const val PREFS_KEY_ALWAYS_ON_DVR_ENABLED = "gbl_always_on_dvr_enabled_v643"
         const val DEFAULT_ALWAYS_ON_DVR_ENABLED = true
         const val PREFS_KEY_ALLOW_MOBILE_DATA_DVR_UPLOAD = "gbl_allow_mobile_data_dvr_upload"
@@ -524,6 +524,11 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_SHOW_ONE_BATTLE_DVR_BTN = "gbl_show_one_battle_dvr_btn"
         const val DEFAULT_SHOW_ONE_BATTLE_DVR_BTN = false
         const val PREFS_KEY_ARM_ONE_BATTLE_DVR = "gbl_arm_one_battle_dvr"
+        const val PREFS_KEY_DVR_RECORDING_MODE = "gbl_dvr_recording_mode_v725"
+        const val DVR_MODE_OFF = "off"
+        const val DVR_MODE_VIP_AUTO = "vip_auto"
+        const val DVR_MODE_MANUAL = "manual"
+        const val DEFAULT_DVR_RECORDING_MODE = DVR_MODE_VIP_AUTO
         const val PREFS_KEY_LAST_DVR_UPLOAD_MS = "gbl_last_dvr_upload_ms"
         const val PREFS_KEY_LAST_DVR_UPLOAD_PATH = "gbl_last_dvr_upload_path"
         const val PREFS_KEY_TOTAL_DVR_UPLOADED_COUNT = "gbl_total_dvr_uploaded_count"
@@ -591,6 +596,42 @@ class OverlayService : LifecycleService() {
         @Volatile var activeOneBattleDvrArmed: Boolean = false
         @Volatile var activeOneBattleDvrRecording: Boolean = false
         @Volatile var activeOneBattleDvrFrames: Int = 0
+        @Volatile var activeDvrRecordingMode: String = DEFAULT_DVR_RECORDING_MODE
+        @Volatile var isBattleIntroCountdownActive: Boolean = false
+
+        fun getEffectiveDvrModeStatic(prefs: SharedPreferences): String {
+            val raw = prefs.getString(PREFS_KEY_DVR_RECORDING_MODE, null)?.trim()?.lowercase()
+            if (!raw.isNullOrEmpty()) {
+                return when (raw) {
+                    DVR_MODE_OFF -> DVR_MODE_OFF
+                    DVR_MODE_MANUAL -> DVR_MODE_MANUAL
+                    else -> DVR_MODE_VIP_AUTO
+                }
+            }
+            // Seamless migration from legacy v6.43 boolean setting (Auto-Start DVR enabled by default across all tiers for diagnostic recording):
+            val legacyAlwaysOn = prefs.getBoolean(PREFS_KEY_ALWAYS_ON_DVR_ENABLED, DEFAULT_ALWAYS_ON_DVR_ENABLED)
+            return if (legacyAlwaysOn) DVR_MODE_VIP_AUTO else DVR_MODE_OFF
+        }
+
+        fun isVipAutoDvrEligibleStatic(@Suppress("UNUSED_PARAMETER") prefs: SharedPreferences): Boolean {
+            return true
+        }
+
+        fun isSeasonPassIntroPromoEligibleStatic(prefs: SharedPreferences): Boolean {
+            val nowMs = System.currentTimeMillis()
+            val yr = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).get(java.util.Calendar.YEAR)
+            val seasonStarts = listOf(
+                java.time.ZonedDateTime.of(yr - 1, 12, 1, 21, 0, 0, 0, java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
+                java.time.ZonedDateTime.of(yr, 3, 1, 21, 0, 0, 0, java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
+                java.time.ZonedDateTime.of(yr, 6, 1, 21, 0, 0, 0, java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
+                java.time.ZonedDateTime.of(yr, 9, 1, 21, 0, 0, 0, java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
+                java.time.ZonedDateTime.of(yr, 12, 1, 21, 0, 0, 0, java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+            )
+            val curSeasonStart = seasonStarts.lastOrNull { it <= nowMs } ?: seasonStarts.first()
+            val isDay15Plus = ((nowMs - curSeasonStart) / 86400000L) >= 14L
+            val everPaidAlready = prefs.getBoolean(PREFS_KEY_REPLAY_EVER_PAID, false)
+            return isDay15Plus && !everPaidAlready
+        }
 
         @Suppress("DEPRECATION")
         fun triggerSingleHapticPulseStatic(context: Context) {
@@ -762,9 +803,10 @@ class OverlayService : LifecycleService() {
             activeHapticOppSwapWarnSec = prefs.getInt(PREFS_KEY_HAPTIC_OPP_SWAP_WARN_SEC, DEFAULT_HAPTIC_OPP_SWAP_WARN_SEC).coerceIn(2, 10)
             activeHapticOppChargeWarnEnabled = prefs.getBoolean(PREFS_KEY_HAPTIC_OPP_CHARGE_WARN_ENABLED, DEFAULT_HAPTIC_OPP_CHARGE_WARN_ENABLED)
             activeHapticChargeTimingFasts = prefs.getInt(PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS, DEFAULT_HAPTIC_CHARGE_TIMING_FASTS).coerceIn(1, 2)
-            activeAlwaysOnDvrEnabled = prefs.getBoolean(PREFS_KEY_ALWAYS_ON_DVR_ENABLED, DEFAULT_ALWAYS_ON_DVR_ENABLED)
+            activeDvrRecordingMode = getEffectiveDvrModeStatic(prefs)
+            activeAlwaysOnDvrEnabled = (activeDvrRecordingMode == DVR_MODE_VIP_AUTO)
+            activeShowOneBattleDvrBtn = (activeDvrRecordingMode == DVR_MODE_MANUAL)
             activeAllowMobileDataDvrUpload = prefs.getBoolean(PREFS_KEY_ALLOW_MOBILE_DATA_DVR_UPLOAD, DEFAULT_ALLOW_MOBILE_DATA_DVR_UPLOAD)
-            activeShowOneBattleDvrBtn = false
             activeOneBattleDvrArmed = prefs.getBoolean(PREFS_KEY_ARM_ONE_BATTLE_DVR, false)
             loadCachedBattleFrontierUsageAndCores(prefs)
             refreshCachedGblStandardLeagueLogsStatic(prefs)
@@ -1484,6 +1526,7 @@ class OverlayService : LifecycleService() {
             val isCutsceneActive: Boolean = false,
             val pendingChargeActor: String = "",
             val isTopCountdownActive: Boolean = false,
+            val isIntroCountdownActive: Boolean = false,
             val playerSwapRemainingSec: Int = 0,
             val oppSwapRemainingSec: Int = 0,
             val ocrOppTopText: String = "",
@@ -3086,6 +3129,98 @@ class OverlayService : LifecycleService() {
 
     internal var pllValidatedThisShieldDelay = false
     internal var observedPlayerChargeBarStep = false
+
+    // v7.26: VIP Auto-Start Battle DVR "3... 2... 1... BATTLE!" Intro Countdown State
+    internal var introCountdownConfirmFrames: Int = 0
+    internal var introCountdownMissingFrames: Int = 0
+    internal var introCountdownStartMs: Long = 0L
+
+    /**
+     * v7.26: Multi-modal detector for Pokémon GO's "3... 2... 1... BATTLE!" intro countdown screen.
+     * Evaluates dimmed charge button prescan probes, ML Kit center-banner digits/words,
+     * and opening 3v3 Pokeball indicators. When confirmed, automatically arms the hardware H.264
+     * DVR for VIP subscribers (zero screen taps required).
+     */
+    internal fun checkAndTriggerBattleIntroCountdown(
+        oppLines: List<Text.Line> = cachedOcrOppLines,
+        playerTopLines: List<Text.Line> = cachedOcrPlayerTopLines,
+        midBannerLines: List<Text.Line> = cachedOcrMidBannerLines
+    ) {
+        if (!isWaitingForOpponent && hasBattleStarted) {
+            if (isBattleIntroCountdownActive) {
+                isBattleIntroCountdownActive = false
+                introCountdownConfirmFrames = 0
+                introCountdownMissingFrames = 0
+            }
+            return
+        }
+
+        if (isBattleMenuScreen(oppLines, playerTopLines, emptyList())) {
+            introCountdownConfirmFrames = 0
+            introCountdownMissingFrames++
+            if (introCountdownMissingFrames >= 4) {
+                isBattleIntroCountdownActive = false
+            }
+            return
+        }
+
+        // 1. Pixel dimmed charge circles (Pokémon GO dims the entire screen by ~50% during 3-2-1 countdown)
+        val hasDimmedCircles = isCountdownDimmedState
+
+        // 2. OCR countdown / battle intro banner in central battlefield region
+        val allIntroLines = midBannerLines + oppLines + playerTopLines
+        val hasOcrCountdownToken = allIntroLines.any { line ->
+            val text = line.text.trim().lowercase()
+            text == "3" || text == "2" || text == "1" ||
+                text == "battle!" || text == "battle" || text == "go!" ||
+                text.contains("3...") || text.contains("2...") || text.contains("1...") ||
+                text.startsWith("vs") || text.endsWith("vs") || text == "vs" || text == "versus"
+        }
+
+        // 3. Opening 3v3 Pokeball indicators locked with full health
+        val hasFullOpeningBalls = (sampledPlayerBalls == 3 && sampledOppBalls == 3) &&
+            (sampledPlayerHpPct in 1..100 || sampledOppHpPct in 1..100)
+
+        val hasCandidateIntro = hasDimmedCircles || (hasOcrCountdownToken && (hasFullOpeningBalls || sampledPlayerHpPct in 1..100))
+
+        val now = System.currentTimeMillis()
+        if (hasCandidateIntro) {
+            introCountdownConfirmFrames++
+            introCountdownMissingFrames = 0
+            // Immediate trigger if both dimmed circles & OCR token match, or 2-frame debounce otherwise
+            val isConfirmed = (hasDimmedCircles && hasOcrCountdownToken) || introCountdownConfirmFrames >= 2
+            if (isConfirmed && !isBattleIntroCountdownActive) {
+                isBattleIntroCountdownActive = true
+                introCountdownStartMs = now
+                if (!isBattleActive) {
+                    isBattleActive = true
+                }
+
+                // Auto-Start DVR is active for all tiers when enabled (or if manually armed for 1 battle)
+                val isAutoDvr = activeAlwaysOnDvrEnabled || (activeDvrRecordingMode == DVR_MODE_VIP_AUTO)
+                val shouldAutoRecord = isAutoDvr || activeOneBattleDvrArmed
+
+                if (shouldAutoRecord) {
+                    if (isAutoDvr) {
+                        showBattleToast("🎥 Auto-Start DVR: Recording Battle (Hands-Free)")
+                    } else {
+                        showBattleToast("🎥 1-Battle DVR: Recording Battle")
+                    }
+                    recalculateAndPushBattleData()
+                }
+            }
+        } else {
+            introCountdownConfirmFrames = 0
+            introCountdownMissingFrames++
+            if (isBattleIntroCountdownActive) {
+                val elapsedIntroMs = (now - introCountdownStartMs).coerceAtLeast(0L)
+                if (elapsedIntroMs > 6000L || (!isWaitingForOpponent && hasBattleStarted) || introCountdownMissingFrames >= 8) {
+                    isBattleIntroCountdownActive = false
+                    introCountdownMissingFrames = 0
+                }
+            }
+        }
+    }
 
     /**
      * v4.00/v4.01: Snaps raw pixel-measured player energy to the nearest valid fast-move turn increment
@@ -5596,7 +5731,7 @@ class OverlayService : LifecycleService() {
                 }
                 val cycleStartMs = System.currentTimeMillis()
                 val isDvrRecordingWindow = (activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed) &&
-                    (isBattleActive || hasBattleStarted) && !isWaitingForOpponent
+                    ((isBattleActive && !isWaitingForOpponent) || isBattleIntroCountdownActive)
                 val dvrTargetFps = if (isDvrRecordingWindow && isPrefsInitialized) {
                     OverlayService.getEffectiveDvrFpsForTierStatic(prefs)
                 } else {
@@ -5862,9 +5997,14 @@ class OverlayService : LifecycleService() {
                     cachedOcrPlayerMoveLines,
                     cachedOcrMidBannerLines
                 )
+                checkAndTriggerBattleIntroCountdown(
+                    oppLines = cachedOcrOppLines,
+                    playerTopLines = cachedOcrPlayerTopLines,
+                    midBannerLines = cachedOcrMidBannerLines
+                )
             }
             if ((activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed) &&
-                (isBattleActive || hasBattleStarted) && !isWaitingForOpponent
+                ((isBattleActive && !isWaitingForOpponent) || isBattleIntroCountdownActive)
             ) {
                 recordOneBattleDvrFrameAndTraceAsync(screen, currentFrameTimestampMs)
             }
@@ -6053,6 +6193,11 @@ class OverlayService : LifecycleService() {
                                         playerTopLines,
                                         playerMoveLines,
                                         midBannerLines
+                                    )
+                                    checkAndTriggerBattleIntroCountdown(
+                                        oppLines = oppLines,
+                                        playerTopLines = playerTopLines,
+                                        midBannerLines = midBannerLines
                                     )
                                     // v6.40: Spatial ML Kit OCR Buff/Debuff Callout Parser & Mimikyu Swap-In Reminder Guard
                                     val movesTopYForCallout = ocrOppZoneH + gap + ocrPlayerZoneH + gap
@@ -13405,6 +13550,10 @@ class OverlayService : LifecycleService() {
         // Phase 2: Reset Clock Anchor (t_0) & Timeline Event Logger
         battleClockAnchorMs = 0L
         battleTimelineEvents.clear()
+        isBattleIntroCountdownActive = false
+        introCountdownConfirmFrames = 0
+        introCountdownMissingFrames = 0
+        introCountdownStartMs = 0L
 
         // v2.34: Reset Swap Clocks, Shields, Pokéball Faint state & post-switch verification state
         playerSwapEndTimeMs = 0L
@@ -13700,6 +13849,10 @@ class OverlayService : LifecycleService() {
         topCountdownCircleConfirmFrames = 0
         topCountdownCircleMissingFrames = 0
         isTopCountdownCircleActive = false
+        isBattleIntroCountdownActive = false
+        introCountdownConfirmFrames = 0
+        introCountdownMissingFrames = 0
+        introCountdownStartMs = 0L
         shieldOverlayShowConfirmFrames = 0
         lastShieldOverlayConfirmFrameMs = 0L
         sampledTopRightNameplateVisible = false
@@ -13804,6 +13957,10 @@ class OverlayService : LifecycleService() {
         topCountdownCircleConfirmFrames = 0
         topCountdownCircleMissingFrames = 0
         isTopCountdownCircleActive = false
+        isBattleIntroCountdownActive = false
+        introCountdownConfirmFrames = 0
+        introCountdownMissingFrames = 0
+        introCountdownStartMs = 0L
         sampledTopRightNameplateVisible = false
         isPostFaintSwitchPromptActive = false
         pendingChargedAttackActor = ""
@@ -15897,8 +16054,10 @@ class OverlayService : LifecycleService() {
                 "oppSwapEndTimeMs" to oppSwapEndTimeMs,
                 "hapticOppSwapWarnSec" to activeHapticOppSwapWarnSec,
                 "hapticChargeTimingFasts" to activeHapticChargeTimingFasts,
-                "showOneBattleDvrBtn" to activeShowOneBattleDvrBtn,
+                "showOneBattleDvrBtn" to ((activeDvrRecordingMode == DVR_MODE_MANUAL) || activeOneBattleDvrRecording || (activeDvrRecordingMode == DVR_MODE_VIP_AUTO && activeOneBattleDvrArmed)),
                 "alwaysOnDvrEnabled" to activeAlwaysOnDvrEnabled,
+                "dvrRecordingMode" to activeDvrRecordingMode,
+                "isBattleIntroCountdownActive" to isBattleIntroCountdownActive,
                 "isOneBattleDvrArmed" to activeOneBattleDvrArmed,
                 "isOneBattleDvrRecording" to activeOneBattleDvrRecording,
                 "oneBattleDvrFrames" to activeOneBattleDvrFrames,
@@ -17688,8 +17847,10 @@ class OverlayService : LifecycleService() {
             "oppSwapEndTimeMs" to oppSwapEndTimeMs,
             "hapticOppSwapWarnSec" to activeHapticOppSwapWarnSec,
             "hapticChargeTimingFasts" to activeHapticChargeTimingFasts,
-            "showOneBattleDvrBtn" to false,
+            "showOneBattleDvrBtn" to ((activeDvrRecordingMode == DVR_MODE_MANUAL) || activeOneBattleDvrRecording || (activeDvrRecordingMode == DVR_MODE_VIP_AUTO && activeOneBattleDvrArmed)),
             "isAlwaysOnDvrEnabled" to activeAlwaysOnDvrEnabled,
+            "dvrRecordingMode" to activeDvrRecordingMode,
+            "isBattleIntroCountdownActive" to isBattleIntroCountdownActive,
             "isOneBattleDvrArmed" to activeOneBattleDvrArmed,
             "isOneBattleDvrRecording" to activeOneBattleDvrRecording,
             "oneBattleDvrFrames" to activeOneBattleDvrFrames,

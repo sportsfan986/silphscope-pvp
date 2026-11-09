@@ -408,6 +408,7 @@ private val SYNCABLE_STRING_PREF_KEYS = listOf(
     OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER,
     OverlayService.PREFS_KEY_REPLAY_LICENSE_JSON,
     OverlayService.PREFS_KEY_REPLAY_VAULT_MAP_JSON,
+    OverlayService.PREFS_KEY_DVR_RECORDING_MODE,
     "opp_count_mode",
     "app_combat_mode"
 )

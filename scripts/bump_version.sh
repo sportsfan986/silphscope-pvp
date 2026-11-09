@@ -42,4 +42,8 @@ sed -i "s/(v[0-9]\+\.[0-9]\+)/(v${NEW_NUM})/g" README.md
 sed -i "s/silphscope-pvp-v[0-9]\+\.[0-9]\+\.apk/silphscope-pvp-${NEW_TAG}.apk/g" README.md
 sed -i "s/\*\*Current Version\*\*: \`v[0-9]\+\.[0-9]\+\` (\`versionCode = [0-9]\+\`)/\*\*Current Version\*\*: \`${NEW_TAG}\` (\`versionCode = ${VERSION_CODE}\`)/g" ANTIGRAVITY.md
 
+# 5. Marketing Website header badge & direct download button release label
+sed -i "s/v[0-9]\+\.[0-9]\+ • Latest Release/${NEW_TAG} • Latest Release/g" src/components/MarketingWebsite.tsx
+sed -i "s/Instant 1-Click Direct Release (v[0-9]\+\.[0-9]\+)/Instant 1-Click Direct Release (${NEW_TAG})/g" src/components/MarketingWebsite.tsx
+
 echo "Updated version to ${NEW_TAG} (versionCode=${VERSION_CODE}, versionName=${NEW_NUM}) across all targets."

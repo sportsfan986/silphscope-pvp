@@ -3719,6 +3719,7 @@
                     dvrBtnEl.classList.remove("hidden");
                     const isRec = !!battleData.isOneBattleDvrRecording;
                     const isArmed = !!battleData.isOneBattleDvrArmed;
+                    const isVipAuto = (battleData.dvrRecordingMode === "vip_auto");
                     const recFrames = Number(battleData.oneBattleDvrFrames || 0);
                     dvrBtnEl.classList.toggle("recording", isRec);
                     dvrBtnEl.classList.toggle("armed", !isRec && isArmed);
@@ -3726,6 +3727,8 @@
                         dvrBtnEl.innerHTML = `<span class="btn-row-top">🔴 REC</span><span class="btn-row-sub">F#${recFrames}</span>`;
                     } else if (isArmed) {
                         dvrBtnEl.innerHTML = `<span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">ARMED</span>`;
+                    } else if (isVipAuto) {
+                        dvrBtnEl.innerHTML = `<span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">AUTO</span>`;
                     } else {
                         dvrBtnEl.innerHTML = `<span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">OFF</span>`;
                     }

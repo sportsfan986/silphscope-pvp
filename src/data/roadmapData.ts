@@ -13,7 +13,7 @@ export interface RoadmapItem {
   id: string;
   title: string;
   badge: string;
-  status: 'In Design' | 'Planned' | 'Researching';
+  status: 'Completed' | 'In Progress' | 'In Design' | 'Planned' | 'Researching';
   statusColor: string;
   category: string;
   description: string;
@@ -23,14 +23,15 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
-    version: 'v7.20 – v7.25',
-    codename: 'Dual-Source Precision & Zero-Drift Turn Engine',
+    version: 'v7.20 – v7.26',
+    codename: 'Dual-Source Precision & Hands-Free Auto-Start DVR',
     badge: 'CURRENT',
     date: 'Nov 2026',
-    summary: 'Symmetric dual-source energy auditing (Circle meter vs. HP-drop physics), swap-and-throw pre-floor energy restoration, and 10 FPS sub-second debouncing.',
+    summary: 'Hands-free auto-start battle DVR on intro countdown across all tiers, symmetric dual-source energy auditing, swap-and-throw pre-floor energy restoration, and 10 FPS sub-second debouncing.',
     icon: '⚡',
     accentColor: '#2DD4BF',
     highlights: [
+      'Auto-Start Battle DVR (Hands-Free on "3... 2... 1... BATTLE!" countdown for all tiers)',
       'Dual-Source Energy Tracking (E_meter vs. E_hp) with asymmetric shield-call promo',
       'Swap-and-Immediate-Throw rollback restoring true pre-cutscene energy',
       'Two-stage compensated predictive GUI & haptic lead time for safe turn alignment',
@@ -111,21 +112,6 @@ export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
 
 export const ACTIVE_ROADMAP_ITEMS: RoadmapItem[] = [
   {
-    id: 'auto-arm-dvr-vip',
-    title: 'VIP Auto-Start Battle DVR (Hands-Free Recording)',
-    badge: 'AUTOMATION & CLOUD',
-    status: 'Planned',
-    statusColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
-    category: 'DVR / Telemetry',
-    icon: '🎥',
-    description: 'Never miss recording a critical match: automatically arms the 1-Battle hardware H.264 DVR as soon as the battle intro countdown is detected for VIP subscribers.',
-    keyGoals: [
-      'Zero-tap battle DVR trigger on confirmed "3... 2... 1... BATTLE!" screen detection',
-      'Configurable in Settings: Off, VIP Auto-Arm, or Manual 1-Tap Overlay Button',
-      'Auto-disarms and commits MP4 to local ring buffer on match end'
-    ]
-  },
-  {
     id: 'shadow-detect',
     title: 'Shadow Pokémon State Detection',
     badge: 'VISION PIPELINE',
@@ -198,6 +184,36 @@ export const ACTIVE_ROADMAP_ITEMS: RoadmapItem[] = [
       'Zero-clutter primary mobile screen while companion laptop displays full HUD',
       'Real-time practice partner & coach spectator view with live turn clocks',
       'Streamer OBS browser dock integration without covering phone display'
+    ]
+  },
+  {
+    id: 'iv-checker-matrix',
+    title: 'Multi-IV Matrix Evaluator & Breakpoint Analyzer',
+    badge: 'META SIMULATOR',
+    status: 'In Design',
+    statusColor: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
+    category: 'Analytics & Team Builder',
+    icon: '⚖️',
+    description: 'Multi-select league comparison (GL, UL, ML) evaluating candidate IV spreads side-by-side against the Top 100 meta, outputting W/L records, net flip matchups, and key Fast Move breakpoints/bulkpoints.',
+    keyGoals: [
+      'Multi-IV candidate input comparing stat-product vs. attack-weight vs. bulk spreads',
+      'Top 100 synthetic meta win/loss/tie record comparison across shield scenarios',
+      'Automated Fast Move breakpoint (+1 dmg) & bulkpoint (-1 dmg taken) delta highlighting'
+    ]
+  },
+  {
+    id: 'built-pokemon-roster-ivs',
+    title: 'Built Pokémon IV Storage & Roster Integration',
+    badge: 'TEAM BUILDER & SYNC',
+    status: 'In Design',
+    statusColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
+    category: 'Analytics & Team Builder',
+    icon: '📦',
+    description: 'Save exact built IV spreads (Atk/Def/Sta + Level) from the IV checker or team builder into a personal roster, feeding true CMP ties and precise damage intake into all team sims.',
+    keyGoals: [
+      '1-Click "Save to Built Roster" from the Multi-IV Matrix Evaluator',
+      'Team Preset integration: attach actual owned IVs to custom team slots',
+      'Cloud Delta Sync across multiple devices via GitHub private vault'
     ]
   }
 ];
