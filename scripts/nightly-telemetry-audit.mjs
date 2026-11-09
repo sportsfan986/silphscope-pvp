@@ -1237,6 +1237,34 @@ async function main() {
   // Automatically includes verification questions for recent high-priority fixes and any open anomalies!
   const candidateQuestions = [
     {
+      id: "tink_virizion_energy_v725",
+      priority: 110,
+      trigger: "charged_move_thrown",
+      prompt: "⚡ Fast Move Energy (Tinkaton/Virizion v7.25 Fix):",
+      shortLabel: "Low-Dmg Fast Energy",
+      positiveVal: "EXACT_MATCH",
+      retireAfterPositiveCount: 10,
+      options: [
+        { val: "UNDERCOUNTED", label: "⬇️ Under" },
+        { val: "EXACT_MATCH", label: "✅ Exact" },
+        { val: "OVERCOUNTED", label: "⬆️ Over" },
+      ],
+    },
+    {
+      id: "swap_throw_reentry_energy_v724",
+      priority: 105, // Promoted above issue 1 (shield_energy) per user instruction
+      trigger: "charged_move_thrown",
+      prompt: "🔄 Bench Swap / Closer Energy (v7.24 Fix):",
+      shortLabel: "Closer Energy",
+      positiveVal: "EXACT_MATCH",
+      retireAfterPositiveCount: 10,
+      options: [
+        { val: "UNDERCOUNTED", label: "⬇️ Under" },
+        { val: "EXACT_MATCH", label: "✅ Exact" },
+        { val: "OVERCOUNTED", label: "⬆️ Over" },
+      ],
+    },
+    {
       id: "shield_energy",
       priority: 100,
       trigger: "hp_promoted_shield_call",
@@ -1247,20 +1275,6 @@ async function main() {
       options: [
         { val: "UNDERCOUNTED", label: "⬇️ Under" },
         { val: "ACCURATE", label: "✅ Spot-On" },
-        { val: "OVERCOUNTED", label: "⬆️ Over" },
-      ],
-    },
-    {
-      id: "swap_throw_reentry_energy_v724",
-      priority: 96,
-      trigger: "charged_move_thrown",
-      prompt: "🔄 Bench Swap / Closer Energy (v7.24 Fix):",
-      shortLabel: "Closer Energy",
-      positiveVal: "EXACT_MATCH",
-      retireAfterPositiveCount: 10,
-      options: [
-        { val: "UNDERCOUNTED", label: "⬇️ Under" },
-        { val: "EXACT_MATCH", label: "✅ Exact" },
         { val: "OVERCOUNTED", label: "⬆️ Over" },
       ],
     },
