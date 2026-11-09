@@ -67,6 +67,11 @@ function buildDynamicPrompt(digest) {
   const stage3Count = modelPolicy.stage3ProAndVipCriticalTier?.queuedTodayCount ?? 0;
   const lateCount = digest?.totals?.lateArrivalsCount ?? 0;
 
+  const unreleased = digest?.unreleasedCommitsAudit;
+  const unreleasedText = unreleased?.hasUnreleasedCommits
+    ? `6. UNRELEASED COMMITS DETECTED ON MAIN: There are ${unreleased.unreleasedCommitsCount} unreleased commit(s) ahead of ${unreleased.latestReleaseTag} (including ${unreleased.commits.map((c) => `[${c.hash}] ${c.subject}`).slice(0, 3).join("; ")}). You MUST ask the user directly via ask_question whether they want to build and release ${unreleased.suggestedNextVersion} today, and include this release decision in morning_telemetry_action_plan.md with RequestFeedback: true.`
+    : `6. NO UNRELEASED COMMITS: Main is in sync with latest release tag ${unreleased?.latestReleaseTag || "HEAD"}.`;
+
   return [
     `[5-STAGE MODEL & EFFORT BUDGET PYRAMID: Stage 3 (Argon Medium Pro/VIP) = ${stage3Count} | Stage 2 (Argon Low Supporter/Free, Cap X=${stage2Cap}/day) = ${stage2Count} | Late 5:00–5:52 AM Arrivals = ${lateCount}]`,
     `STRICT TOKEN-MINIMIZATION & EFFORT TIERING PROTOCOL:`,
@@ -75,6 +80,7 @@ function buildDynamicPrompt(digest) {
     `3. STAGE 2 (Argon Low — Supporter Forever Tier & Free High/Manual Issues, Capped at X=${stage2Cap}/day): Process at most ${stage2Cap} unresolved Supporter/Free issues from \`stage2SupporterAndFreeHighTier.items\` using concise, low-effort triage.`,
     `4. STAGE 3 (Argon Medium — Pro & VIP Critical / Manually Reported Issues): For any unresolved Pro/VIP issues in \`stage3ProVipMediumQueue\`, perform focused medium-effort root-cause diagnosis using the pre-sliced audit summary.`,
     `5. STAGE 4 (1x Final High-Level Thinking Synthesis on Cached Data Only): Read \`P:/AntiGravity/SilphScope PvP/.aistudio/telemetry_cache/morning_briefing.md\` and \`nightly_audit_digest.json\`, perform ONE single high-level synthesis pass over the cached digest (< 8 KB text), and update the interactive artifact \`morning_telemetry_action_plan.md\` (\`UserFacing: true, RequestFeedback: true\`) with the 24h/7d Trainer Summary, Version Regression Matrix, 7-Day Retroactive Fix Proof, and interactive Q&A options for 6:00 AM review.`,
+    unreleasedText,
   ].join("\n");
 }
 

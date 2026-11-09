@@ -771,8 +771,13 @@ async function main() {
   const startedAtIso = new Date().toISOString();
   const currentVersion = getCurrentRepoVersion();
 
-  // 1. Run `ingest-telemetry.mjs --prune-remote` first unless `--skip-sync`
+  // 1. Sync latest git main, remote tags, and run `ingest-telemetry.mjs --prune-remote` unless `--skip-sync`
   if (!SKIP_SYNC) {
+    try {
+      console.error("[0/4] Syncing latest git main and remote release tags...");
+      spawnSync("git", ["pull", "--ff-only", "origin", "main"], { cwd: ROOT_DIR, stdio: "ignore", windowsHide: true });
+      spawnSync("git", ["fetch", "--tags"], { cwd: ROOT_DIR, stdio: "ignore", windowsHide: true });
+    } catch (_) {}
     console.error("[1/4] Syncing latest Cloudflare telemetry & running local preprocessor...");
     const ingestScript = path.resolve(ROOT_DIR, "scripts", "ingest-telemetry.mjs");
     spawnSync(process.execPath, [ingestScript, "--prune-remote"], {
@@ -1066,6 +1071,62 @@ async function main() {
       });
     }
   } catch {}
+
+  // 5c. Audit Unreleased Commits Ahead of Latest Published Release Tag (0 AI Tokens)
+  let unreleasedCommitsAudit = {
+    hasUnreleasedCommits: false,
+    unreleasedCommitsCount: 0,
+    latestReleaseTag: `v${currentVersion}`,
+    suggestedNextVersion: null,
+    commits: [],
+  };
+  try {
+    const tagListRes = spawnSync("git", ["tag", "-l", "v7*"], { cwd: ROOT_DIR, encoding: "utf8", windowsHide: true });
+    const allTags = (tagListRes.stdout || "").split(/\r?\n/).map((t) => t.trim()).filter(Boolean);
+    const sortedTags = allTags.sort((a, b) => parseVersionNum(b) - parseVersionNum(a));
+    const highestTag = sortedTags[0] || `v${currentVersion}`;
+    unreleasedCommitsAudit.latestReleaseTag = highestTag;
+
+    const baseVerStr = highestTag.replace(/^v/i, "");
+    const [majStr, minStr] = baseVerStr.split(".");
+    const nextMin = (parseInt(minStr || "0", 10) + 1).toString().padStart(2, "0");
+    unreleasedCommitsAudit.suggestedNextVersion = `v${majStr || "7"}.${nextMin}`;
+
+    const logRes = spawnSync("git", ["log", `${highestTag}..HEAD`, "--pretty=format:%h|%an|%s|%cI"], {
+      cwd: ROOT_DIR,
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    const logLines = (logRes.stdout || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (logLines.length > 0) {
+      unreleasedCommitsAudit.hasUnreleasedCommits = true;
+      unreleasedCommitsAudit.unreleasedCommitsCount = logLines.length;
+      unreleasedCommitsAudit.commits = logLines.map((line) => {
+        const [hash, author, subject, date] = line.split("|");
+        return { hash: hash || "", author: author || "", subject: subject || "", date: date || "" };
+      });
+      openActionItems.push({
+        priorityBucket: "P1_UNRELEASED_COMMITS",
+        compositePriorityScore: 4500,
+        userTier: "VIP",
+        screenName: "sportsfan986",
+        battleId: `unreleased-commits-${unreleasedCommitsAudit.suggestedNextVersion}`,
+        appVersion: currentVersion,
+        league: "Release Management",
+        type: "UNRELEASED_COMMITS_ON_MAIN",
+        tSec: 0,
+        detail: `${unreleasedCommitsAudit.unreleasedCommitsCount} unreleased commit(s) on main ahead of ${unreleasedCommitsAudit.latestReleaseTag}. Ready to release ${unreleasedCommitsAudit.suggestedNextVersion}?`,
+        retroactiveAudit: {
+          status: "ACTION_REQUIRED_USER_DECISION",
+          resolvedInVersion: null,
+          verificationMethod: "Git Tag Diff (HEAD vs Latest Release)",
+          explanation: `Main branch has ${unreleasedCommitsAudit.unreleasedCommitsCount} unreleased commit(s): ${unreleasedCommitsAudit.commits.map((c) => `[${c.hash}] ${c.subject}`).join("; ")}`,
+        },
+      });
+    }
+  } catch (err) {
+    console.warn("[UNRELEASED-AUDIT] Could not audit unreleased commits:", err.message || err);
+  }
 
   // Check for late-arriving P1 / P2 / HIGH issues since `--check-delta-since`
   let lateArrivals = [];
@@ -1373,6 +1434,7 @@ async function main() {
     generatedAt: new Date().toISOString(),
     startedAt: startedAtIso,
     currentRepoVersion: `v${currentVersion}`,
+    unreleasedCommitsAudit,
     githubReleaseHealth,
     referenceLatestIngestIso: new Date(latestIngestMs).toISOString(),
     modelRoutingPolicy,
@@ -1453,6 +1515,23 @@ async function main() {
     mdLines.push(``);
   }
 
+  if (unreleasedCommitsAudit.hasUnreleasedCommits) {
+    mdLines.push(
+      `## 🚀 Unreleased Commits Ahead of Release Tag (\`${unreleasedCommitsAudit.latestReleaseTag}\`)`,
+      ``,
+      `There are **${unreleasedCommitsAudit.unreleasedCommitsCount}** unreleased commit(s) on \`main\` ready for publication. Suggested next release: **\`${unreleasedCommitsAudit.suggestedNextVersion}\`**.`,
+      ``,
+      `| Hash | Author | Commit Message | Date |`,
+      `| :---: | :--- | :--- | :--- |`,
+      ...unreleasedCommitsAudit.commits.map(
+        (c) => `| \`${c.hash}\` | ${c.author} | ${c.subject} | \`${c.date.slice(0, 10)}\` |`
+      ),
+      ``,
+      `> ❓ **Release Decision**: Would you like to build and publish **\`${unreleasedCommitsAudit.suggestedNextVersion}\`** today?`,
+      ``
+    );
+  }
+
   if (openActionItems.length > 0) {
     mdLines.push(
       `## 4. Prioritized Open Action Plan (\`P1 Paid Manual > P2 Free Manual > P3 Paid Auto > P4 Free Auto\`)`,
@@ -1494,9 +1573,14 @@ async function main() {
             .join("\n")
         : "• None";
 
+    const unreleasedTg = unreleasedCommitsAudit.hasUnreleasedCommits
+      ? `🚀 <b>Unreleased Commits:</b> <code>${unreleasedCommitsAudit.unreleasedCommitsCount} commit(s) ahead of ${unreleasedCommitsAudit.latestReleaseTag}</code> ➔ Ready for <b>${unreleasedCommitsAudit.suggestedNextVersion}</b>\n\n`
+      : "";
+
     const tgHtml =
       `🌅 <b>SilphScope PvP — 6:00 AM Daily Telemetry Audit Ready!</b>\n` +
       `📦 <b>Latest Release:</b> <code>v${currentVersion}</code>\n` +
+      unreleasedTg +
       `👥 <b>Active Trainers (${trainerTable.length}):</b>\n${trainerLines}\n\n` +
       `🚩 <b>7-Day Flagged Issue Verification:</b>\n${manualLines}\n\n` +
       `📊 <b>Retroactive 7-Day Anomaly Status:</b>\n` +
