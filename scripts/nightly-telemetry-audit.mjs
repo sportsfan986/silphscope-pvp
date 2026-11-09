@@ -1215,7 +1215,7 @@ async function main() {
   const dailySurveyQuestionPool = candidateQuestions
     .filter((q) => {
       if (!q.retireAfterPositiveCount || q.retireAfterPositiveCount <= 0) return true;
-      const tally = customQuestionTallies[q.id];
+      const tally = (postBattleTuningFeedbackSummary.customQuestions || {})[q.id];
       if (!tally) return true;
       const posCount = Number(tally[q.positiveVal] || 0);
       const totalCount = Object.values(tally).reduce((acc, v) => acc + Number(v || 0), 0);
