@@ -1397,8 +1397,15 @@ async function main() {
     })
     .map(({ positiveVal, retireAfterPositiveCount, priorityFloor, ...cleanQ }) => cleanQ);
 
-  // Dynamically inject high-priority verification questions for any open action items
-  for (const openItem of openActionItems.slice(0, 2)) {
+  // Dynamically inject high-priority verification questions for any open combat anomalies (filter out devops/release items)
+  const combatActionItems = openActionItems.filter(
+    (item) =>
+      item.battleId &&
+      String(item.battleId).startsWith("log-") &&
+      item.type !== "UNRELEASED_COMMITS_ON_MAIN" &&
+      item.type !== "UNPUBLISHED_GITHUB_APK_BUILD"
+  );
+  for (const openItem of combatActionItems.slice(0, 2)) {
     const cleanId = `issue_${String(openItem.type || "check").toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 18)}`;
     if (!dailySurveyQuestionPool.some((q) => q.id === cleanId)) {
       const isMaster = /master/i.test(String(openItem.league || ""));
