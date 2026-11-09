@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { VersionRoadmapInfographic } from './VersionRoadmapInfographic';
 
 export type MarketingSubpage = 'home' | 'guide' | 'compare';
 
@@ -1151,6 +1152,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               </div>
             </div>
           </section>
+
+          {/* 6. VERSION EVOLUTION HISTORY & FUTURE ROADMAP INFOGRAPHIC */}
+          <VersionRoadmapInfographic />
         </main>
       )}
 

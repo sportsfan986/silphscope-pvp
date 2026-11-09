@@ -4444,17 +4444,20 @@ class OverlayService : LifecycleService() {
         }
 
         val cheapestCost = allMoveRows.minOfOrNull { it.energyCost } ?: 35
-        // A1 Shield Call Overlay Policy: Promote to max(E_meter, E_hp) whenever C_hp >= 55% and append [+NF HP] badge
+        // A1 Shield Call Overlay Policy: Promote by at most +1 snuck fast move (`[+1F HP]`) above meter baseline
+        // Require C_hp >= 80 for low-damage fast moves (< 2.5% per turn) or >= 60 otherwise
         val hpTrackedOppE = oppSlotEnergyHp.getOrElse(clampedOppIdx) { 0 }.coerceIn(0, 100)
         val hpTrackedOppConf = oppSlotConfHp.getOrElse(clampedOppIdx) { 75 }.coerceIn(0, 100)
         val meterTrackedOppE = oppSlotEnergyMeter.getOrElse(clampedOppIdx) { preThrowOppEnergy }.coerceIn(0, 100)
         val basePreThrowE = max(preThrowOppEnergy, meterTrackedOppE)
-        val promotedByHpNow = hpTrackedOppConf >= 55 && hpTrackedOppE > basePreThrowE
-        val effectiveBankedE = max(if (promotedByHpNow) hpTrackedOppE else basePreThrowE, cheapestCost).coerceIn(0, 100)
+        val oppFastEnergyNow = OverlayService.resolveFastEnergyStatic(oppFastMoveName, oppFastTurns).coerceAtLeast(2)
+        val minReqHpConf = if (oppFastTurns > 0 && oppFastEnergyNow > 0 && (cheapestCost / oppFastEnergyNow) >= 5) 80 else 60
+        val maxSnuckCappedHpE = (basePreThrowE + oppFastEnergyNow).coerceIn(0, 100)
+        val effectiveHpE = min(hpTrackedOppE, maxSnuckCappedHpE)
+        val promotedByHpNow = hpTrackedOppConf >= minReqHpConf && effectiveHpE > basePreThrowE
+        val effectiveBankedE = max(if (promotedByHpNow) effectiveHpE else basePreThrowE, cheapestCost).coerceIn(0, 100)
         if (promotedByHpNow) {
-            val oppFastEnergyNow = OverlayService.resolveFastEnergyStatic(oppFastMoveName, oppFastTurns).coerceAtLeast(2)
-            val stepsAdded = max(1, ((hpTrackedOppE - basePreThrowE + oppFastEnergyNow - 1) / oppFastEnergyNow).coerceIn(1, 3))
-            oppSlotHpPromoBadge[clampedOppIdx] = "[+${stepsAdded}F HP]"
+            oppSlotHpPromoBadge[clampedOppIdx] = "[+1F HP]"
         }
         val hpPromoBadgeText = oppSlotHpPromoBadge.getOrElse(clampedOppIdx) { "" }.let {
             if (it.startsWith("[+")) " $it" else ""
@@ -7583,10 +7586,11 @@ class OverlayService : LifecycleService() {
                     oppCumulativeFastDmgPct[activeOppIdx] = (oppCumulativeFastDmgPct[activeOppIdx] + realUserDrop).coerceIn(0, 300)
                     val safeOppExactDmg = oppExactDmgPct.coerceAtLeast(0.8)
                     val totalAccUserDrop = realUserDrop.toDouble() + oppSlotHpDmgRemainder[activeOppIdx]
-                    val rawSteps = (totalAccUserDrop / safeOppExactDmg).roundToInt().coerceIn(0, 3)
+                    val maxStepsFromDrop = if (safeOppExactDmg < 2.5) 1 else 2
+                    val rawSteps = (totalAccUserDrop / safeOppExactDmg).roundToInt().coerceIn(0, maxStepsFromDrop)
                     val rawQuantizedSteps = when {
-                        rawSteps >= 1 && kotlin.math.abs(totalAccUserDrop - rawSteps * safeOppExactDmg) <= max(1.6, safeOppExactDmg * 0.45) -> rawSteps
-                        realUserDrop >= max(2, (safeOppExactDmg * 0.65).roundToInt()) -> 1
+                        rawSteps >= 1 && kotlin.math.abs(totalAccUserDrop - rawSteps * safeOppExactDmg) <= max(1.2, safeOppExactDmg * 0.35) -> rawSteps
+                        realUserDrop >= max(2, (safeOppExactDmg * 0.70).roundToInt()) -> 1
                         else -> 0
                     }
                     val expectedIntervalMs = (oppFastTurnsForStats * 500L).coerceAtLeast(500L)
@@ -7595,12 +7599,12 @@ class OverlayService : LifecycleService() {
                     val minHpStepIntervalMs = (expectedIntervalMs - 250L).coerceAtLeast(350L)
                     val maxAllowedStepsByCadence = when {
                         elapsedSincePrevHpStepMs < minHpStepIntervalMs -> 0
-                        elapsedSincePrevHpStepMs < expectedIntervalMs * 2L - 300L -> 1
+                        elapsedSincePrevHpStepMs < expectedIntervalMs * 2L - 300L || safeOppExactDmg < 2.5 -> 1
                         else -> 2
                     }
                     val quantizedSteps = min(rawQuantizedSteps, maxAllowedStepsByCadence)
                     if (quantizedSteps > 0) {
-                        oppSlotHpDmgRemainder[activeOppIdx] = (totalAccUserDrop - quantizedSteps * safeOppExactDmg).coerceIn(-1.5, 2.5)
+                        oppSlotHpDmgRemainder[activeOppIdx] = (totalAccUserDrop - quantizedSteps * safeOppExactDmg).coerceIn(-1.0, 2.0)
                         val baseMeterE = oppSlotEnergyMeter[activeOppIdx].coerceAtMost(oppSlotEnergy[activeOppIdx]).coerceIn(0, 100)
                         val prevHpE = max(oppSlotEnergyHp[activeOppIdx], baseMeterE)
                         // v7.25: Clamp HP-derived opponent energy so it never drifts more than +1 fast move above the meter baseline
@@ -9053,7 +9057,7 @@ class OverlayService : LifecycleService() {
                     lastEnergyMutationSource = "HP_DROP_FAST_SYNC"
                     hpChanged = true
                 }
-            } else if (oppSlotHpPromoBadge[activeOppIdx] == "★HP" && meterOppE >= oppSlotEnergy[activeOppIdx]) {
+            } else if (oppSlotHpPromoBadge[activeOppIdx].isNotEmpty() && meterOppE >= oppSlotEnergy[activeOppIdx]) {
                 oppSlotHpPromoBadge[activeOppIdx] = ""
             }
         }
@@ -9565,12 +9569,13 @@ class OverlayService : LifecycleService() {
                     oppSlotLastHpStepMs[throwerOppIdx] > lastOppSwitchTimeMs
                 val maxSingleSnuckPromoE = (preMissingMeterOppE + oppFastEnergyForStats).coerceIn(0, 100)
                 val cappedHpTargetE = min(oppSlotEnergyHp[throwerOppIdx], maxSingleSnuckPromoE)
-                if (hpStepIsFromCurrentPhase && cappedHpTargetE > oppSlotEnergy[throwerOppIdx] && oppSlotConfHp[throwerOppIdx] >= 55) {
+                val oppFastTurnsThrower = oppFastTurnsForStats.coerceIn(1, 5)
+                val minShieldReqHpConf = if (oppFastTurnsThrower <= 2 && oppFastEnergyForStats >= 8) 75 else 60
+                if (hpStepIsFromCurrentPhase && cappedHpTargetE > oppSlotEnergy[throwerOppIdx] && oppSlotConfHp[throwerOppIdx] >= minShieldReqHpConf) {
                     val baseMeterE = oppSlotEnergy[throwerOppIdx]
                     val promotedE = cappedHpTargetE.coerceIn(baseMeterE, 100)
-                    val fastStepsAdded = max(1, ((promotedE - baseMeterE + oppFastEnergyForStats - 1) / oppFastEnergyForStats).coerceIn(1, 1))
                     oppSlotEnergy[throwerOppIdx] = promotedE
-                    oppSlotHpPromoBadge[throwerOppIdx] = "[+${fastStepsAdded}F HP]"
+                    oppSlotHpPromoBadge[throwerOppIdx] = "[+1F HP]"
                     hadHpPromotedShieldCallInBattle = true
                     lastEnergyMutationSource = "SHIELD_CALL_HP_PROMO"
                 } else {
@@ -11647,6 +11652,11 @@ class OverlayService : LifecycleService() {
                             }
                         }
                         if (newOppSlotIdx in 0..2) {
+                            oppSlotHpPromoBadge[newOppSlotIdx] = ""
+                            oppSlotEnergyMeter[newOppSlotIdx] = oppSlotEnergy[newOppSlotIdx]
+                            oppSlotEnergyHp[newOppSlotIdx] = oppSlotEnergy[newOppSlotIdx]
+                            oppSlotHpDmgRemainder[newOppSlotIdx] = 0.0
+                            oppSlotConsecutiveAlignedHpSteps[newOppSlotIdx] = 0
                             oppSlotCurrentMoveTurns[newOppSlotIdx] = 0
                             oppLastFastCreditedAtMs[newOppSlotIdx] = 0L
                             oppCreditedByOptimalTimerAtMs[newOppSlotIdx] = 0L
@@ -11667,6 +11677,13 @@ class OverlayService : LifecycleService() {
                                     oppSlotEnergy[newOppSlotIdx] = (oppSlotEnergy[newOppSlotIdx] + missedFasts * newFastEnergy).coerceIn(0, 100)
                                     oppSlotTurnsOnField[newOppSlotIdx] = (oppSlotTurnsOnField[newOppSlotIdx] + missedFasts * newFastTurns).coerceAtLeast(0)
                                 }
+                            }
+                            if (newOppSlotIdx in 0..2) {
+                                oppSlotEnergyMeter[newOppSlotIdx] = oppSlotEnergy[newOppSlotIdx]
+                                oppSlotEnergyHp[newOppSlotIdx] = oppSlotEnergy[newOppSlotIdx]
+                                oppSlotHpPromoBadge[newOppSlotIdx] = ""
+                                oppSlotHpDmgRemainder[newOppSlotIdx] = 0.0
+                                oppSlotConsecutiveAlignedHpSteps[newOppSlotIdx] = 0
                             }
                         }
                         postUserChargedMissingOppHpFrames = 0
@@ -11764,6 +11781,11 @@ class OverlayService : LifecycleService() {
                             oppSlotHpConfirmFrames[newOppSlotIdx] = 1
                         }
                         if (newOppSlotIdx in 0..2) {
+                            oppSlotHpPromoBadge[newOppSlotIdx] = ""
+                            oppSlotEnergyMeter[newOppSlotIdx] = oppSlotEnergy[newOppSlotIdx]
+                            oppSlotEnergyHp[newOppSlotIdx] = oppSlotEnergy[newOppSlotIdx]
+                            oppSlotHpDmgRemainder[newOppSlotIdx] = 0.0
+                            oppSlotConsecutiveAlignedHpSteps[newOppSlotIdx] = 0
                             oppSlotCurrentMoveTurns[newOppSlotIdx] = 0
                             oppLastFastCreditedAtMs[newOppSlotIdx] = 0L
                             oppCreditedByOptimalTimerAtMs[newOppSlotIdx] = 0L
@@ -17517,12 +17539,14 @@ class OverlayService : LifecycleService() {
             }
             val hpOppENow = oppSlotEnergyHp.getOrElse(activeOppSlotSafe) { 0 }.coerceIn(0, 100)
             val hpOppConfNow = oppSlotConfHp.getOrElse(activeOppSlotSafe) { 75 }.coerceIn(0, 100)
-            val promotedByHpHud = hpOppConfNow >= 55 && hpOppENow > rawPreE
-            val effBankedE = max(if (promotedByHpHud) hpOppENow else rawPreE, minCost).coerceIn(0, 100)
-            if (promotedByHpHud && oppSlotHpPromoBadge[activeOppSlotSafe].isBlank()) {
-                val oppFastENow = OverlayService.resolveFastEnergyStatic(oppFastMoveName, oppFastTurns).coerceAtLeast(2)
-                val steps = max(1, ((hpOppENow - rawPreE + oppFastENow - 1) / oppFastENow).coerceIn(1, 3))
-                oppSlotHpPromoBadge[activeOppSlotSafe] = "[+${steps}F HP]"
+            val oppFastENow = OverlayService.resolveFastEnergyStatic(oppFastMoveName, oppFastTurns).coerceAtLeast(2)
+            val maxHudSnuckE = (rawPreE + oppFastENow).coerceIn(0, 100)
+            val cappedHudHpE = min(hpOppENow, maxHudSnuckE)
+            val minHudHpConf = if (oppFastTurns <= 2 && oppFastENow >= 8) 75 else 60
+            val promotedByHpHud = hpOppConfNow >= minHudHpConf && cappedHudHpE > rawPreE
+            val effBankedE = max(if (promotedByHpHud) cappedHudHpE else rawPreE, minCost).coerceIn(0, 100)
+            if (promotedByHpHud && (oppSlotHpPromoBadge[activeOppSlotSafe].isBlank() || oppSlotHpPromoBadge[activeOppSlotSafe] == "★HP")) {
+                oppSlotHpPromoBadge[activeOppSlotSafe] = "[+1F HP]"
             }
             val hpPromoBadgeHud = oppSlotHpPromoBadge.getOrElse(activeOppSlotSafe) { "" }.let {
                 if (it.startsWith("[+")) " $it" else ""
