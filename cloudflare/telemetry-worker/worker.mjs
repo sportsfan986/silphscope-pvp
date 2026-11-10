@@ -143,8 +143,8 @@ function maskSecretKey(rawKey) {
  * Unified storage adapter supporting Cloudflare R2 (`TELEMETRY_BUCKET`) or Workers KV (`TELEMETRY_KV`).
  */
 function getStorageAdapter(env) {
-  if (env.TELEMETRY_BUCKET) {
-    const bucket = env.TELEMETRY_BUCKET;
+  const bucket = env.REPLAY_BUCKET || env.TELEMETRY_BUCKET;
+  if (bucket) {
     return {
       backend: 'r2',
       async put(key, value, { contentType = 'application/octet-stream', metadata = {} } = {}) {
@@ -349,7 +349,7 @@ function getStorageAdapter(env) {
     };
   }
 
-  throw new Error('Neither TELEMETRY_BUCKET (R2) nor TELEMETRY_KV (KV) is bound.');
+  throw new Error('Neither REPLAY_BUCKET/TELEMETRY_BUCKET (R2) nor TELEMETRY_KV (KV) is bound.');
 }
 
 async function computeDeviceIngestToken(env, deviceHash) {
@@ -877,6 +877,25 @@ async function loadLicenseByKey(kv, rawKey) {
   }
 }
 
+async function updateLicensesManifest(kv, newOrUpdatedLic) {
+  if (!kv || !newOrUpdatedLic || !newOrUpdatedLic.key) return;
+  try {
+    const raw = await kv.get('licenses_manifest.json', { type: 'text' });
+    let list = [];
+    if (raw) {
+      try { list = JSON.parse(raw); } catch (_) {}
+    }
+    if (!Array.isArray(list)) list = [];
+    const idx = list.findIndex((k) => k && k.key === newOrUpdatedLic.key);
+    if (idx >= 0) {
+      list[idx] = newOrUpdatedLic;
+    } else {
+      list.push(newOrUpdatedLic);
+    }
+    await kv.put('licenses_manifest.json', JSON.stringify(list, null, 2));
+  } catch (_) {}
+}
+
 async function saveLicenseRecord(kv, lic) {
   if (!kv || !lic || !lic.key) return;
   const cleanKey = String(lic.key).trim().toUpperCase();
@@ -898,6 +917,7 @@ async function saveLicenseRecord(kv, lic) {
       await kv.put(`email_license/${cleanEmail}`, cleanKey);
     }
   }
+  await updateLicensesManifest(kv, lic);
 }
 
 const GITHUB_OAUTH_CLIENT_ID = '178c6fc778ccc68e1d6a';
@@ -5137,7 +5157,12 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     const params = new URLSearchParams(window.location.search);
     const pathParts = window.location.pathname.split('/').filter(Boolean);
     const pathUser = (pathParts[0] === 'u' || pathParts[0] === 'vault') && pathParts[1] ? decodeURIComponent(pathParts[1]) : '';
-    const savedUser = params.get('user') || pathUser || localStorage.getItem('sspvp_vault_user') || '';
+    const storedVaultUser = (localStorage.getItem('sspvp_vault_user') || '').trim();
+    const storedWebUser = (localStorage.getItem('gbl_web_screen_name_v700') || '').trim();
+    const loggedInUser = (storedVaultUser && storedVaultUser.toLowerCase() !== 'featured')
+      ? storedVaultUser
+      : (storedWebUser && storedWebUser.toLowerCase() !== 'featured' ? storedWebUser : '');
+    const savedUser = params.get('user') || pathUser || loggedInUser || '';
     const savedKey = params.get('key') || localStorage.getItem('sspvp_vault_key') || '';
     const savedEmail = params.get('email') || localStorage.getItem('sspvp_vault_email') || '';
     let sessionToken = localStorage.getItem('sspvp_vault_session') || '';
@@ -5813,10 +5838,17 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     }
 
     if (savedUser) {
+      document.getElementById('inp-user').value = savedUser;
       loadVault();
     } else {
       document.getElementById('inp-user').value = 'Featured';
       loadVault();
+    }
+
+    if (params.get('auth') === 'github' || params.get('login') === 'github') {
+      toggleLoginPanel();
+      setAuthTab('github');
+      startGitHubDeviceLogin();
     }
   </script>
 </body>
@@ -6153,7 +6185,7 @@ self.addEventListener('fetch', (e) => {
         return jsonResponse({
           ok: true,
           service: 'silphscope-telemetry-worker',
-          version: env.WORKER_VERSION || '7.1.3',
+          version: env.WORKER_VERSION || '7.1.4',
           timestamp: new Date().toISOString(),
         });
       }
@@ -6162,7 +6194,7 @@ self.addEventListener('fetch', (e) => {
       return jsonResponse({
         ok: true,
         service: 'silphscope-telemetry-worker',
-        version: env.WORKER_VERSION || '7.1.3',
+        version: env.WORKER_VERSION || '7.1.4',
         storageBackend: store.backend,
         r2ReplayBucketBound: Boolean(env.REPLAY_BUCKET),
         r2GlobalUsedMb: Number((r2Stats.totalBytes / (1024 * 1024)).toFixed(2)),
@@ -8448,6 +8480,40 @@ self.addEventListener('fetch', (e) => {
       );
     }
 
+    // 7d-0. GitHub OAuth Start Route (`GET /v1/auth/github/start`)
+    if ((request.method === 'GET' || request.method === 'HEAD') && path === '/v1/auth/github/start') {
+      const originHost = url.hostname;
+      const targetUrl = (originHost === 'dvr.silphscopepvp.com')
+        ? 'https://dvr.silphscopepvp.com/vault?auth=github'
+        : 'https://silphscopepvp.com/?view=vault&auth=github';
+
+      const accept = request.headers.get('Accept') || '';
+      if (accept.includes('application/json')) {
+        return jsonResponse(
+          {
+            ok: true,
+            authUrl: targetUrl,
+            deviceAuthUrl: 'https://github.com/login/device',
+            clientId: GITHUB_OAUTH_CLIENT_ID,
+          },
+          200,
+          request,
+          true
+        );
+      }
+
+      return new Response(null, {
+        status: 302,
+        headers: buildSecurityHeaders(
+          {
+            Location: targetUrl,
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+          },
+          true
+        ),
+      });
+    }
+
     // 7d. GitHub OAuth Device Flow Proxy (`POST /v1/auth/github/device-code` & `POST /v1/auth/github/poll`)
     if (request.method === 'POST' && path === '/v1/auth/github/device-code') {
       const rl = await checkAndIncrementRateLimit(
@@ -9413,15 +9479,28 @@ self.addEventListener('fetch', (e) => {
       if (!adminAuth.ok) return jsonResponse({ ok: false, error: adminAuth.error }, adminAuth.status);
 
       if (request.method === 'GET' && path === '/v1/admin/keys') {
-        const listed = await env.TELEMETRY_KV.list({ prefix: 'licenses/' });
-        const keys = [];
-        for (const k of listed.keys || []) {
-          const raw = await env.TELEMETRY_KV.get(k.name);
-          if (raw) {
-            try {
-              keys.push(JSON.parse(raw));
-            } catch (_) {}
+        let keys = null;
+        try {
+          const cachedRaw = await env.TELEMETRY_KV.get('licenses_manifest.json', { type: 'text' });
+          if (cachedRaw) {
+            keys = JSON.parse(cachedRaw);
           }
+        } catch (_) {}
+
+        if (!Array.isArray(keys)) {
+          const listed = await env.TELEMETRY_KV.list({ prefix: 'licenses/' });
+          keys = [];
+          for (const k of listed.keys || []) {
+            const raw = await env.TELEMETRY_KV.get(k.name);
+            if (raw) {
+              try {
+                keys.push(JSON.parse(raw));
+              } catch (_) {}
+            }
+          }
+          try {
+            await env.TELEMETRY_KV.put('licenses_manifest.json', JSON.stringify(keys, null, 2));
+          } catch (_) {}
         }
         const globalR2 = await getGlobalR2Stats(env.TELEMETRY_KV);
         return jsonResponse({

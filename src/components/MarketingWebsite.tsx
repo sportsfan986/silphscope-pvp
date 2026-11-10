@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { VersionRoadmapInfographic } from './VersionRoadmapInfographic';
 
 export type MarketingSubpage = 'vault' | 'home' | 'live' | 'guide' | 'compare';
@@ -228,48 +228,104 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
     }
   };
 
-  // DVR Replay Vault State
+  // DVR Replay Vault State (Defaults to Logged-In User)
   const [vaultUser, setVaultUser] = useState<string>(() => {
     try {
-      return (new URLSearchParams(window.location.search).get('user') || webScreenName || 'Featured').trim();
+      const urlUser = new URLSearchParams(window.location.search).get('user');
+      if (urlUser && urlUser.trim()) return urlUser.trim();
+      const storedVaultUser = (localStorage.getItem('sspvp_vault_user') || '').trim();
+      if (storedVaultUser && storedVaultUser.toLowerCase() !== 'featured') {
+        return storedVaultUser;
+      }
+      const storedWebUser = (localStorage.getItem('gbl_web_screen_name_v700') || '').trim();
+      if (storedWebUser && storedWebUser.toLowerCase() !== 'featured') {
+        return storedWebUser;
+      }
+      if (webScreenName && webScreenName.trim() && webScreenName.toLowerCase() !== 'featured') {
+        return webScreenName.trim();
+      }
+      return 'Featured';
     } catch {
       return 'Featured';
     }
   });
   const [vaultInputUser, setVaultInputUser] = useState<string>(vaultUser);
-  const [vaultFilter, setVaultFilter] = useState<'all' | 'starred' | 'public'>('all');
+  const [isVaultOwner, setIsVaultOwner] = useState<boolean>(() => {
+    try {
+      return Boolean(localStorage.getItem('sspvp_vault_session'));
+    } catch {
+      return false;
+    }
+  });
+  const [vaultFilter, setVaultFilter] = useState<'all' | 'starred' | 'public' | 'private'>('all');
   const [vaultReplays, setVaultReplays] = useState<DvrReplayItem[]>(CANONICAL_FEATURED_REPLAYS);
   const [loadingVault, setLoadingVault] = useState<boolean>(false);
-  const [vaultStats, setVaultStats] = useState<{ total: number; starred: number; public: number }>({
+  const [vaultStats, setVaultStats] = useState<{ total: number; starred: number; public: number; private: number }>({
     total: 3,
     starred: 3,
-    public: 3
+    public: 3,
+    private: 0
   });
   const [selectedWatchReplay, setSelectedWatchReplay] = useState<DvrReplayItem | null>(null);
   const [ownerLoginOpen, setOwnerLoginOpen] = useState<boolean>(false);
-  const [authTab, setAuthTab] = useState<'token' | 'password' | 'github'>('token');
-  const [authKey, setAuthKey] = useState<string>('');
+  const [authTab, setAuthTab] = useState<'token' | 'password' | 'github'>('github');
+  const [authKey, setAuthKey] = useState<string>(() => {
+    try { return localStorage.getItem('gbl_web_unlock_key_v700') || ''; } catch { return ''; }
+  });
   const [authPassword, setAuthPassword] = useState<string>('');
-  const [authEmail, setAuthEmail] = useState<string>('');
+  const [authEmail, setAuthEmail] = useState<string>(() => {
+    try { return localStorage.getItem('gbl_web_claim_email_v700') || ''; } catch { return ''; }
+  });
+  const [authErrorMsg, setAuthErrorMsg] = useState<string>('');
+  const [authLoading, setAuthLoading] = useState<boolean>(false);
+
+  // GitHub Device Login State in Modal
+  const [ghDeviceCodeInfo, setGhDeviceCodeInfo] = useState<{
+    device_code: string;
+    user_code: string;
+    verification_uri: string;
+  } | null>(null);
+  const [ghPollStatus, setGhPollStatus] = useState<string>('');
+  const ghModalTimerRef = useRef<number | null>(null);
+  const lastGhModalPollRef = useRef<number>(0);
 
   const fetchVaultReplays = async (userToFetch: string) => {
     const user = (userToFetch || 'Featured').trim();
     setLoadingVault(true);
+    const sessionToken = localStorage.getItem('sspvp_vault_session') || '';
+    const unlockKey = localStorage.getItem('gbl_web_unlock_key_v700') || '';
+    const claimEmail = localStorage.getItem('gbl_web_claim_email_v700') || '';
     try {
       const res = await fetch(`https://dvr.silphscopepvp.com/v1/replays/list?user=${encodeURIComponent(user)}`, {
         headers: {
           'X-SilphScope-Client-Key': 'ssk_client_v615_telemetry_ingest_9f8a7b6c5d4e3f2a1b0c',
-          'X-Trainer-Screen-Name': user
+          'X-Trainer-Screen-Name': user,
+          'X-Vault-Session': sessionToken,
+          'X-SilphScope-Unlock-Key': unlockKey,
+          'X-Claim-Email': claimEmail
         }
       });
       const data = await res.json();
       if (data && data.ok && Array.isArray(data.items)) {
+        const ownerState = Boolean(data.isOwner);
+        setIsVaultOwner(ownerState);
         setVaultReplays(data.items.length > 0 ? data.items : []);
+        const totalStarred = data.totalStarredCount ?? data.items.filter((i: any) => i.isPinned).length;
+        const totalPublic = data.totalPublicCount ?? data.items.filter((i: any) => i.isPublic).length;
+        const totalPrivate = data.items.filter((i: any) => !i.isPublic).length;
         setVaultStats({
           total: data.items.length,
-          starred: data.totalStarredCount ?? data.items.filter((i: any) => i.isPinned).length,
-          public: data.totalPublicCount ?? data.items.filter((i: any) => i.isPublic).length
+          starred: totalStarred,
+          public: totalPublic,
+          private: totalPrivate
         });
+        if (data.sessionToken) {
+          localStorage.setItem('sspvp_vault_session', data.sessionToken);
+        }
+        if (ownerState && data.screenName) {
+          localStorage.setItem('sspvp_vault_user', data.screenName);
+          localStorage.setItem('gbl_web_screen_name_v700', data.screenName);
+        }
       } else {
         if (user.toLowerCase() === 'featured') {
           setVaultReplays(CANONICAL_FEATURED_REPLAYS);
@@ -286,11 +342,220 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
     }
   };
 
+  const startGitHubLoginInModal = async () => {
+    setAuthErrorMsg('');
+    setAuthLoading(true);
+    setGhPollStatus('Requesting GitHub authorization code...');
+    if (ghModalTimerRef.current) window.clearTimeout(ghModalTimerRef.current);
+    try {
+      const res = await fetch('https://api.silphscopepvp.com/v1/auth/github/device-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-SilphScope-Client-Key': 'ssk_client_v615_telemetry_ingest_9f8a7b6c5d4e3f2a1b0c'
+        }
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setAuthErrorMsg(data?.error || 'Failed to start GitHub login.');
+        setAuthLoading(false);
+        return;
+      }
+      setGhDeviceCodeInfo({
+        device_code: data.device_code,
+        user_code: data.user_code,
+        verification_uri: data.verification_uri || 'https://github.com/login/device'
+      });
+      try {
+        await navigator.clipboard.writeText(data.user_code);
+      } catch {}
+      window.open(data.verification_uri || 'https://github.com/login/device', '_blank', 'noopener');
+      setGhPollStatus(`Code ${data.user_code} copied! Approve on GitHub (auto-completes when you return)...`);
+
+      const pollDelayMs = (Math.max(5, Number(data.interval) || 5) + 1.5) * 1000;
+      lastGhModalPollRef.current = Date.now();
+      ghModalTimerRef.current = window.setTimeout(
+        () => pollGitHubModalNow(data.device_code, false, pollDelayMs),
+        pollDelayMs
+      );
+    } catch (e: any) {
+      setAuthErrorMsg('Error contacting GitHub auth service: ' + (e?.message || 'offline'));
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const pollGitHubModalNow = async (deviceCode: string, isManual = false, delayMs = 6500) => {
+    if (!deviceCode) return;
+    const now = Date.now();
+    if (!isManual && now - lastGhModalPollRef.current < 5000) return;
+    lastGhModalPollRef.current = now;
+    if (isManual) {
+      setGhPollStatus('Checking GitHub authorization status...');
+    }
+    try {
+      const res = await fetch('https://api.silphscopepvp.com/v1/auth/github/poll', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-SilphScope-Client-Key': 'ssk_client_v615_telemetry_ingest_9f8a7b6c5d4e3f2a1b0c'
+        },
+        body: JSON.stringify({
+          device_code: deviceCode,
+          screenName: vaultUser.toLowerCase() !== 'featured' ? vaultUser : ''
+        })
+      });
+      const data = await res.json();
+      if (data.status === 'pending') {
+        const nextDelay = data.slowDown || data.interval
+          ? (Math.max(10, Number(data.interval) || 10) + 2) * 1000
+          : delayMs;
+        if (isManual) {
+          setGhPollStatus('Waiting for authorization on GitHub. Make sure you clicked Authorize in the GitHub tab, wait 5s, and tap Finish Sign-In.');
+        }
+        if (ghModalTimerRef.current) window.clearTimeout(ghModalTimerRef.current);
+        ghModalTimerRef.current = window.setTimeout(
+          () => pollGitHubModalNow(deviceCode, false, nextDelay),
+          nextDelay
+        );
+        return;
+      }
+      if (ghModalTimerRef.current) window.clearTimeout(ghModalTimerRef.current);
+      ghModalTimerRef.current = null;
+      setGhDeviceCodeInfo(null);
+
+      if (data.ok && data.sessionToken) {
+        localStorage.setItem('sspvp_vault_session', data.sessionToken);
+        const resolvedName = (data.screenName || vaultUser || '').trim();
+        if (resolvedName && resolvedName.toLowerCase() !== 'featured') {
+          localStorage.setItem('sspvp_vault_user', resolvedName);
+          localStorage.setItem('gbl_web_screen_name_v700', resolvedName);
+          setVaultUser(resolvedName);
+          setVaultInputUser(resolvedName);
+          onChangeWebScreenName(resolvedName);
+        }
+        setIsVaultOwner(true);
+        setOwnerLoginOpen(false);
+        copyToClipboard('Logged in via GitHub', 'GitHub Sign-In');
+        fetchVaultReplays(resolvedName || vaultUser);
+      } else {
+        setAuthErrorMsg(data.error || 'GitHub login did not match an active account.');
+      }
+    } catch {
+      if (ghModalTimerRef.current) window.clearTimeout(ghModalTimerRef.current);
+      ghModalTimerRef.current = window.setTimeout(
+        () => pollGitHubModalNow(deviceCode, false, delayMs),
+        delayMs
+      );
+    }
+  };
+
+  const handleTokenLogin = async () => {
+    if (!authKey.trim()) return;
+    setAuthLoading(true);
+    setAuthErrorMsg('');
+    try {
+      const res = await fetch('https://api.silphscopepvp.com/v1/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-SilphScope-Client-Key': 'ssk_client_v615_telemetry_ingest_9f8a7b6c5d4e3f2a1b0c',
+          'X-Trainer-Screen-Name': vaultUser || 'trainer'
+        },
+        body: JSON.stringify({
+          unlockKey: authKey.trim().toUpperCase(),
+          claimEmail: authEmail.trim().toLowerCase(),
+          screenName: vaultUser.toLowerCase() !== 'featured' ? vaultUser : ''
+        })
+      });
+      const data = await res.json();
+      if (data && data.ok) {
+        if (data.sessionToken) localStorage.setItem('sspvp_vault_session', data.sessionToken);
+        localStorage.setItem('gbl_web_unlock_key_v700', authKey.trim().toUpperCase());
+        const resolvedName = (data.screenName || vaultUser || '').trim();
+        if (resolvedName && resolvedName.toLowerCase() !== 'featured') {
+          localStorage.setItem('sspvp_vault_user', resolvedName);
+          localStorage.setItem('gbl_web_screen_name_v700', resolvedName);
+          setVaultUser(resolvedName);
+          setVaultInputUser(resolvedName);
+          onChangeWebScreenName(resolvedName);
+        }
+        setIsVaultOwner(true);
+        setOwnerLoginOpen(false);
+        fetchVaultReplays(resolvedName || vaultUser);
+      } else {
+        setAuthErrorMsg(data?.error || 'Invalid Unlock Key or Checkout Email.');
+      }
+    } catch (e: any) {
+      setAuthErrorMsg('Login error: ' + (e?.message || 'offline'));
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handlePasswordLogin = async () => {
+    if (!authPassword.trim()) return;
+    setAuthLoading(true);
+    setAuthErrorMsg('');
+    const userToLogin = (vaultInputUser || vaultUser || authEmail).trim();
+    try {
+      const res = await fetch('https://api.silphscopepvp.com/v1/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-SilphScope-Client-Key': 'ssk_client_v615_telemetry_ingest_9f8a7b6c5d4e3f2a1b0c',
+          'X-Trainer-Screen-Name': userToLogin || 'trainer'
+        },
+        body: JSON.stringify({
+          screenName: userToLogin,
+          password: authPassword.trim()
+        })
+      });
+      const data = await res.json();
+      if (data && data.ok) {
+        if (data.sessionToken) localStorage.setItem('sspvp_vault_session', data.sessionToken);
+        const resolvedName = (data.screenName || userToLogin || '').trim();
+        if (resolvedName && resolvedName.toLowerCase() !== 'featured') {
+          localStorage.setItem('sspvp_vault_user', resolvedName);
+          localStorage.setItem('gbl_web_screen_name_v700', resolvedName);
+          setVaultUser(resolvedName);
+          setVaultInputUser(resolvedName);
+          onChangeWebScreenName(resolvedName);
+        }
+        setIsVaultOwner(true);
+        setOwnerLoginOpen(false);
+        fetchVaultReplays(resolvedName || vaultUser);
+      } else {
+        setAuthErrorMsg(data?.error || 'Invalid username or password.');
+      }
+    } catch (e: any) {
+      setAuthErrorMsg('Login error: ' + (e?.message || 'offline'));
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (activeSubpage === 'vault') {
       fetchVaultReplays(vaultUser);
     }
   }, [activeSubpage, vaultUser]);
+
+  useEffect(() => {
+    if (webScreenName && webScreenName.trim() && webScreenName.toLowerCase() !== 'featured') {
+      if (vaultUser === 'Featured') {
+        setVaultUser(webScreenName.trim());
+        setVaultInputUser(webScreenName.trim());
+        fetchVaultReplays(webScreenName.trim());
+      }
+    }
+  }, [webScreenName]);
+
+  useEffect(() => {
+    return () => {
+      if (ghModalTimerRef.current) window.clearTimeout(ghModalTimerRef.current);
+    };
+  }, []);
 
   // Live View Simulation & Stream State
   const [streamCode, setStreamCode] = useState<string>('SSPVP-LIVE-9042');
@@ -1712,6 +1977,24 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   <span>⭐</span>
                   <span>@Featured</span>
                 </button>
+                {(webScreenName || localStorage.getItem('sspvp_vault_user') || localStorage.getItem('gbl_web_screen_name_v700')) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const myName = (webScreenName || localStorage.getItem('sspvp_vault_user') || localStorage.getItem('gbl_web_screen_name_v700') || '').trim();
+                      if (myName && myName.toLowerCase() !== 'featured') {
+                        setVaultInputUser(myName);
+                        setVaultUser(myName);
+                        fetchVaultReplays(myName);
+                      }
+                    }}
+                    className="px-3 py-2 rounded-xl font-extrabold text-xs border border-teal-400/40 bg-teal-950/40 text-teal-300 hover:text-white transition cursor-pointer flex items-center gap-1 flex-shrink-0"
+                    title="Switch to your personal DVR Replay Vault"
+                  >
+                    <span>👤</span>
+                    <span>My Vault</span>
+                  </button>
+                )}
               </div>
 
               {/* Share & Owner Action Buttons */}
@@ -1730,35 +2013,66 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   <span>📋</span>
                   <span>Share</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setOwnerLoginOpen(true)}
-                  className="px-2.5 py-2 rounded-lg font-bold text-xs border transition hover:border-amber-400 text-amber-300 cursor-pointer flex items-center gap-1"
-                  style={{ backgroundColor: '#081120', borderColor: 'rgba(250, 204, 21, 0.35)' }}
-                >
-                  <span>🔐</span>
-                  <span>Owner Login</span>
-                </button>
+                {isVaultOwner ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      localStorage.removeItem('sspvp_vault_session');
+                      localStorage.removeItem('sspvp_vault_user');
+                      setIsVaultOwner(false);
+                      setVaultUser('Featured');
+                      setVaultInputUser('Featured');
+                      fetchVaultReplays('Featured');
+                    }}
+                    className="px-2.5 py-2 rounded-lg font-bold text-xs border border-rose-500/40 bg-rose-950/40 text-rose-300 hover:text-white transition cursor-pointer flex items-center gap-1"
+                    title="Sign out of owner session"
+                  >
+                    <span>🚪</span>
+                    <span>Log Out</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setOwnerLoginOpen(true)}
+                    className="px-2.5 py-2 rounded-lg font-bold text-xs border transition hover:border-amber-400 text-amber-300 cursor-pointer flex items-center gap-1"
+                    style={{ backgroundColor: '#081120', borderColor: 'rgba(250, 204, 21, 0.35)' }}
+                  >
+                    <span>🔐</span>
+                    <span>Owner Login</span>
+                  </button>
+                )}
               </div>
             </div>
 
             {/* Vault Summary & Filter Tabs */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-800/80">
-              <div className="flex items-center gap-2 text-xs font-mono text-slate-300">
+              <div className="flex items-center gap-2 text-xs font-mono text-slate-300 flex-wrap">
                 <span className="font-bold text-teal-300">@{vaultUser}</span>
+                {isVaultOwner && vaultUser.toLowerCase() !== 'featured' && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase bg-teal-400/20 text-teal-300 border border-teal-400/40">
+                    👑 Owner
+                  </span>
+                )}
                 <span>•</span>
                 <span className="text-amber-300">⭐ {vaultStats.starred} Starred</span>
                 <span>•</span>
                 <span className="text-cyan-300">🌐 {vaultStats.public} Public</span>
+                {isVaultOwner && (
+                  <>
+                    <span>•</span>
+                    <span className="text-slate-400">🔒 {vaultStats.private} Private</span>
+                  </>
+                )}
               </div>
 
               {/* Filter Pills */}
-              <div className="flex items-center gap-1.5">
-                {(['all', 'starred', 'public'] as const).map((filter) => {
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {(isVaultOwner ? (['all', 'starred', 'public', 'private'] as const) : (['all', 'starred', 'public'] as const)).map((filter) => {
                   const labels = {
-                    all: `All Shared (${vaultStats.total})`,
+                    all: `All (${vaultStats.total})`,
                     starred: `⭐ Starred (${vaultStats.starred})`,
-                    public: `🌐 Public (${vaultStats.public})`
+                    public: `🌐 Public (${vaultStats.public})`,
+                    private: `🔒 Private (${vaultStats.private})`
                   };
                   const active = vaultFilter === filter;
                   return (
@@ -1766,7 +2080,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       key={filter}
                       type="button"
                       onClick={() => setVaultFilter(filter)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
                         active
                           ? 'bg-teal-400 text-slate-950 font-black shadow'
                           : 'bg-[#081120] text-slate-300 hover:text-white border border-[#19304E]'
@@ -1792,6 +2106,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 const filtered = vaultReplays.filter((item) => {
                   if (vaultFilter === 'starred') return item.isPinned;
                   if (vaultFilter === 'public') return item.isPublic;
+                  if (vaultFilter === 'private') return !item.isPublic;
                   return true;
                 });
 
@@ -2559,21 +2874,28 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   type="text"
                   value={authKey}
                   onChange={(e) => setAuthKey(e.target.value)}
-                  placeholder="ssk_license_pro_..."
+                  placeholder="Enter SSPVP Unlock Key (SSPVP-PRO-...)"
                   className="w-full px-3 py-2.5 rounded-xl font-mono text-xs bg-[#081120] border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
                 />
+                <input
+                  type="email"
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  placeholder="Or Checkout Email (optional claim)"
+                  className="w-full px-3 py-2 rounded-xl text-xs bg-[#081120] border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                />
+                {authErrorMsg && (
+                  <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/40 text-rose-300 text-xs font-semibold">
+                    ⚠️ {authErrorMsg}
+                  </div>
+                )}
                 <button
                   type="button"
-                  onClick={() => {
-                    if (authKey.trim()) {
-                      localStorage.setItem('gbl_web_unlock_key_v700', authKey.trim());
-                      setOwnerLoginOpen(false);
-                      copyToClipboard(authKey.trim(), 'License key saved');
-                    }
-                  }}
-                  className="w-full py-2.5 rounded-xl bg-amber-400 text-slate-950 font-black text-xs hover:bg-amber-300 transition cursor-pointer"
+                  disabled={authLoading}
+                  onClick={handleTokenLogin}
+                  className="w-full py-2.5 rounded-xl bg-amber-400 text-slate-950 font-black text-xs hover:bg-amber-300 transition cursor-pointer disabled:opacity-50"
                 >
-                  Unlock Vault
+                  {authLoading ? 'Verifying Token...' : 'Unlock Vault'}
                 </button>
               </div>
             )}
@@ -2581,42 +2903,102 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             {authTab === 'password' && (
               <div className="space-y-3">
                 <input
-                  type="email"
+                  type="text"
                   value={authEmail}
                   onChange={(e) => setAuthEmail(e.target.value)}
-                  placeholder="Trainer Email"
+                  placeholder="Trainer Screen Name or Email"
                   className="w-full px-3 py-2 rounded-xl text-xs bg-[#081120] border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
                 />
                 <input
                   type="password"
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handlePasswordLogin();
+                  }}
                   placeholder="Vault Password"
                   className="w-full px-3 py-2 rounded-xl text-xs bg-[#081120] border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
                 />
+                {authErrorMsg && (
+                  <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/40 text-rose-300 text-xs font-semibold">
+                    ⚠️ {authErrorMsg}
+                  </div>
+                )}
                 <button
                   type="button"
-                  onClick={() => {
-                    setOwnerLoginOpen(false);
-                  }}
-                  className="w-full py-2.5 rounded-xl bg-amber-400 text-slate-950 font-black text-xs hover:bg-amber-300 transition cursor-pointer"
+                  disabled={authLoading}
+                  onClick={handlePasswordLogin}
+                  className="w-full py-2.5 rounded-xl bg-amber-400 text-slate-950 font-black text-xs hover:bg-amber-300 transition cursor-pointer disabled:opacity-50"
                 >
-                  Log In
+                  {authLoading ? 'Signing In...' : 'Log In with Password'}
                 </button>
               </div>
             )}
 
             {authTab === 'github' && (
-              <div className="space-y-3 text-center py-2">
-                <p className="text-xs text-slate-400">
-                  Authorize with GitHub to sync battle logs and unlock your cloud replay storage.
+              <div className="space-y-3.5 py-1">
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Sign in with your GitHub account to manage private replays, ⭐ Star battles, and unlock elevated diagnostic telemetry.
                 </p>
-                <a
-                  href="https://dvr.silphscopepvp.com/v1/auth/github/start"
-                  className="block w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold text-xs border border-teal-400/40 transition"
-                >
-                  Connect with GitHub ↗
-                </a>
+
+                {authErrorMsg && (
+                  <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/40 text-rose-300 text-xs font-semibold">
+                    ⚠️ {authErrorMsg}
+                  </div>
+                )}
+
+                {ghDeviceCodeInfo ? (
+                  <div className="p-3.5 rounded-2xl bg-[#081120] border border-teal-400/50 space-y-3 shadow-lg">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-xs font-bold text-slate-300">1. One-Time Code:</span>
+                      <strong className="font-mono text-base text-teal-300 tracking-widest px-3 py-1 bg-[#0E1B2E] border border-teal-400/40 rounded-lg">
+                        {ghDeviceCodeInfo.user_code}
+                      </strong>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <a
+                        href={ghDeviceCodeInfo.verification_uri}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-2 px-3 rounded-xl bg-teal-400 text-slate-950 font-black text-xs text-center hover:bg-teal-300 transition shadow"
+                      >
+                        2. Authorize on GitHub ↗
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => pollGitHubModalNow(ghDeviceCodeInfo.device_code, true)}
+                        className="py-2 px-3 rounded-xl bg-[#0E1B2E] text-teal-300 font-bold text-xs border border-teal-400/40 hover:bg-teal-950/50 transition cursor-pointer"
+                      >
+                        ✅ Finish Sign-In
+                      </button>
+                    </div>
+                    <div className="text-[11px] text-teal-200/80 font-medium">
+                      {ghPollStatus || 'Waiting for authorization on GitHub... (auto-completes when you return)'}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    <button
+                      type="button"
+                      disabled={authLoading}
+                      onClick={startGitHubLoginInModal}
+                      className="w-full py-3 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-slate-950 font-black text-xs transition cursor-pointer shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      <span>🐙</span>
+                      <span>{authLoading ? 'Connecting to GitHub...' : '1-Click Sign In with GitHub'}</span>
+                    </button>
+                    <div className="text-center">
+                      <a
+                        href="https://dvr.silphscopepvp.com/v1/auth/github/start"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] text-slate-400 hover:text-teal-300 underline transition"
+                      >
+                        Or open GitHub Auth Window ↗
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
