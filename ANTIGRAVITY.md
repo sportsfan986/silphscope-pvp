@@ -2,7 +2,7 @@
 
 > **Target Audience**: Antigravity agents, Claude/Gemini coding assistants, and core developers maintaining or extending **SilphScope PvP**.  
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v7.28` (`versionCode = 1728`)  
+> **Current Version**: `v7.29` (`versionCode = 1729`)  
 > **Official Domains**: `https://silphscopepvp.com` (Website & Web Simulator) • `https://dvr.silphscopepvp.com` (Cloud DVR Vault & `/watch/:shareId`) • `https://api.silphscopepvp.com` (Telemetry, Auth & Webhooks API) • `https://dl.silphscopepvp.com` (1-Click APK Download).
 
 ---
@@ -350,3 +350,9 @@ When publishing a new release:
 - **DO NOT** commit GitHub Personal Access Tokens or API keys into any file.
 - **DO NOT** block the main UI thread in `OverlayService.kt`. All image compression, OCR, and disk/network operations must run on `dvrThread`, `ocrExecutor`, or coroutine scopes.
 - **DO NOT** remove or alter the `#btn-minimize-sword` hold-to-exit handler in `app/src/main/assets/overlay.html`, as players rely on it to safely exit the overlay without switching apps.
+
+### 5.5. Interactive Planning, User Control & Model Selection
+1. **Interactive Options & Feedback First**: Never silently implement features, refactor, or cut releases without explicit user approval. Always present clear multiple-choice options (`ask_question`) or structured plans with `RequestFeedback: true` (which activates the "Proceed" button in the Antigravity UI).
+2. **New Chat Model Selection (MANDATORY)**: Whenever the user requests to implement or refine a feature in a new chat (or when spinning up a dedicated standalone chat for a feature), **ALWAYS ask the user which model they want to use in the new chat first** (e.g. `Gemini 4 Argon`, `Gemini 2.5 Pro`, `Gemini 2.5 Flash`, etc.) before launching the chat, and before preparing or implementing any plan.
+3. **No Debug Builds (MANDATORY)**: Never run `./gradlew assembleDebug` or build/generate debug APKs locally or in CI/CD. The user explicitly does not need or want debug builds going forward. Rely on fast local web verification (`npm run build`) and Kotlin syntax compilation checks (`./gradlew compileReleaseKotlin --dry-run` or similar non-packaging checks if needed), leaving APK packaging exclusively to official GitHub Actions release builds (`android.yml`).
+4. **Planned Build Model Default (MANDATORY — Gemini 4 Argon Medium)**: For any planned build, version bump, release preparation, or complex implementation task, always use **Gemini 4 Argon (Medium)** as the default model. Never execute planned release builds on lightweight or flash models unless specifically instructed by the user for read-only inspection.

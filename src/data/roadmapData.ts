@@ -23,7 +23,7 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
-    version: 'v7.20 – v7.28',
+    version: 'v7.20 – v7.29',
     codename: 'Dual-Source Precision, Hands-Free DVR & Issue Flagging/Unflagging',
     badge: 'CURRENT',
     date: 'Nov 2026',

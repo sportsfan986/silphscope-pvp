@@ -201,6 +201,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnHapticCharge1F: Button
     private lateinit var btnHapticCharge2F: Button
     private lateinit var btnTestHapticCharge: Button
+    private lateinit var switchHapticWarn2F: Switch
+    private lateinit var btnTestHapticWarn2F: Button
+    private lateinit var switchHapticCatchTriple: Switch
+    private lateinit var btnTestHapticCatchTriple: Button
+    private lateinit var btnCatchSensStrict: Button
+    private lateinit var btnCatchSensAll: Button
+    private lateinit var btnIntensityShort: Button
+    private lateinit var btnIntensityNormal: Button
+    private lateinit var btnIntensityLong: Button
     private lateinit var textLeadWonWinrate: TextView
     private lateinit var textLeadLostRecovery: TextView
     private lateinit var textSafeSwapMvp: TextView
@@ -1369,22 +1378,37 @@ class MainActivity : AppCompatActivity() {
         btnHapticCharge1F = findViewById(R.id.btn_haptic_charge_1f)
         btnHapticCharge2F = findViewById(R.id.btn_haptic_charge_2f)
         btnTestHapticCharge = findViewById(R.id.btn_test_haptic_charge)
+        switchHapticWarn2F = findViewById(R.id.switch_haptic_warn_2f)
+        btnTestHapticWarn2F = findViewById(R.id.btn_test_haptic_warn_2f)
+        switchHapticCatchTriple = findViewById(R.id.switch_haptic_catch_triple)
+        btnTestHapticCatchTriple = findViewById(R.id.btn_test_haptic_catch_triple)
+        btnCatchSensStrict = findViewById(R.id.btn_catch_sens_strict)
+        btnCatchSensAll = findViewById(R.id.btn_catch_sens_all)
+        btnIntensityShort = findViewById(R.id.btn_intensity_short)
+        btnIntensityNormal = findViewById(R.id.btn_intensity_normal)
+        btnIntensityLong = findViewById(R.id.btn_intensity_long)
         textLeadWonWinrate = findViewById(R.id.text_lead_won_winrate)
         textLeadLostRecovery = findViewById(R.id.text_lead_lost_recovery)
         textSafeSwapMvp = findViewById(R.id.text_safe_swap_mvp)
 
-        // v6.06: Initialize Haptics & Tactical Vibration Alert Controls
+        // v6.06 / v7.29: Initialize Haptics & 4-Tier Tactical Vibration Alert Controls
         val masterHapticOn = prefs.getBoolean(OverlayService.PREFS_KEY_HAPTIC_MASTER_ENABLED, OverlayService.DEFAULT_HAPTIC_MASTER_ENABLED)
         val oppSwapHapticOn = prefs.getBoolean(OverlayService.PREFS_KEY_HAPTIC_OPP_SWAP_ENABLED, OverlayService.DEFAULT_HAPTIC_OPP_SWAP_ENABLED)
         val oppSwapWarnSec = prefs.getInt(OverlayService.PREFS_KEY_HAPTIC_OPP_SWAP_WARN_SEC, OverlayService.DEFAULT_HAPTIC_OPP_SWAP_WARN_SEC).coerceIn(2, 10)
         val oppChargeHapticOn = prefs.getBoolean(OverlayService.PREFS_KEY_HAPTIC_OPP_CHARGE_WARN_ENABLED, OverlayService.DEFAULT_HAPTIC_OPP_CHARGE_WARN_ENABLED)
         val chargeTimingFasts = prefs.getInt(OverlayService.PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS, OverlayService.DEFAULT_HAPTIC_CHARGE_TIMING_FASTS).coerceIn(1, 2)
+        val warn2fHapticOn = prefs.getBoolean(OverlayService.PREFS_KEY_HAPTIC_WARN_2F_ENABLED, OverlayService.DEFAULT_HAPTIC_WARN_2F_ENABLED)
+        val catchTripleHapticOn = prefs.getBoolean(OverlayService.PREFS_KEY_HAPTIC_CATCH_TRIPLE_ENABLED, OverlayService.DEFAULT_HAPTIC_CATCH_TRIPLE_ENABLED)
+        var catchSensitivity = prefs.getString(OverlayService.PREFS_KEY_HAPTIC_CATCH_SENSITIVITY, OverlayService.DEFAULT_HAPTIC_CATCH_SENSITIVITY) ?: OverlayService.DEFAULT_HAPTIC_CATCH_SENSITIVITY
+        var hapticIntensity = prefs.getString(OverlayService.PREFS_KEY_HAPTIC_INTENSITY, OverlayService.DEFAULT_HAPTIC_INTENSITY) ?: OverlayService.DEFAULT_HAPTIC_INTENSITY
 
         switchHapticMaster.isChecked = masterHapticOn
         switchHapticOppSwap.isChecked = oppSwapHapticOn
         seekbarHapticOppSwapSec.progress = (oppSwapWarnSec - 2).coerceIn(0, 8)
         textHapticOppSwapSecVal.text = if (oppSwapWarnSec == 5) "≤ 5s (Default)" else "≤ ${oppSwapWarnSec}s"
         switchHapticOppCharge.isChecked = oppChargeHapticOn
+        switchHapticWarn2F.isChecked = warn2fHapticOn
+        switchHapticCatchTriple.isChecked = catchTripleHapticOn
 
         fun updateHapticChargeLeadButtonsUi(fasts: Int) {
             val is1F = fasts <= 1
@@ -1398,6 +1422,38 @@ class MainActivity : AppCompatActivity() {
             btnHapticCharge2F.setTextColor(if (!is1F) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
         }
         updateHapticChargeLeadButtonsUi(chargeTimingFasts)
+
+        fun updateCatchSensButtonsUi(sens: String) {
+            val isStrict = sens == "STRICT"
+            btnCatchSensStrict.backgroundTintList = android.content.res.ColorStateList.valueOf(
+                if (isStrict) 0xFFE11D48.toInt() else 0xFF334155.toInt()
+            )
+            btnCatchSensStrict.setTextColor(if (isStrict) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
+            btnCatchSensAll.backgroundTintList = android.content.res.ColorStateList.valueOf(
+                if (!isStrict) 0xFFE11D48.toInt() else 0xFF334155.toInt()
+            )
+            btnCatchSensAll.setTextColor(if (!isStrict) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
+        }
+        updateCatchSensButtonsUi(catchSensitivity)
+
+        fun updateIntensityButtonsUi(intensity: String) {
+            val isShort = intensity == "SHORT"
+            val isNormal = intensity == "NORMAL"
+            val isLong = intensity == "LONG"
+            btnIntensityShort.backgroundTintList = android.content.res.ColorStateList.valueOf(
+                if (isShort) 0xFFE11D48.toInt() else 0xFF334155.toInt()
+            )
+            btnIntensityShort.setTextColor(if (isShort) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
+            btnIntensityNormal.backgroundTintList = android.content.res.ColorStateList.valueOf(
+                if (isNormal) 0xFFE11D48.toInt() else 0xFF334155.toInt()
+            )
+            btnIntensityNormal.setTextColor(if (isNormal) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
+            btnIntensityLong.backgroundTintList = android.content.res.ColorStateList.valueOf(
+                if (isLong) 0xFFE11D48.toInt() else 0xFF334155.toInt()
+            )
+            btnIntensityLong.setTextColor(if (isLong) 0xFFFFFFFF.toInt() else 0xFFCBD5E1.toInt())
+        }
+        updateIntensityButtonsUi(hapticIntensity)
 
         fun pushHapticSettingsToOverlay() {
             OverlayService.syncTierThresholdsFromPrefs(prefs)
@@ -1430,8 +1486,8 @@ class MainActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
         btnTestHapticSwap.setOnClickListener {
-            OverlayService.triggerSingleHapticPulseStatic(this)
-            Toast.makeText(this, "📳 80ms Single Pulse (Swap Clock Alert)", Toast.LENGTH_SHORT).show()
+            OverlayService.triggerUnlockBuzzHapticStatic(this)
+            Toast.makeText(this, "📳 Smooth 220ms Unlock Buzz (Swap Clock Alert)", Toast.LENGTH_SHORT).show()
         }
         switchHapticOppCharge.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(OverlayService.PREFS_KEY_HAPTIC_OPP_CHARGE_WARN_ENABLED, isChecked).apply()
@@ -1449,7 +1505,53 @@ class MainActivity : AppCompatActivity() {
         }
         btnTestHapticCharge.setOnClickListener {
             OverlayService.triggerDoubleHapticPulseStatic(this)
-            Toast.makeText(this, "📳📳 80ms Double Pulse (Charged Move Alert)", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "📳📳 Double Pulse (Move Imminent Alert)", Toast.LENGTH_SHORT).show()
+        }
+        switchHapticWarn2F.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean(OverlayService.PREFS_KEY_HAPTIC_WARN_2F_ENABLED, isChecked).apply()
+            pushHapticSettingsToOverlay()
+        }
+        btnTestHapticWarn2F.setOnClickListener {
+            OverlayService.triggerSingleHapticPulseStatic(this)
+            Toast.makeText(this, "📳 Single Pulse (2 Fast Moves Warning)", Toast.LENGTH_SHORT).show()
+        }
+        switchHapticCatchTriple.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean(OverlayService.PREFS_KEY_HAPTIC_CATCH_TRIPLE_ENABLED, isChecked).apply()
+            pushHapticSettingsToOverlay()
+        }
+        btnTestHapticCatchTriple.setOnClickListener {
+            OverlayService.triggerTripleHapticPulseStatic(this)
+            Toast.makeText(this, "🚨📳📳📳 Triple Pulse (Urgent Catch Window)", Toast.LENGTH_SHORT).show()
+        }
+        btnCatchSensStrict.setOnClickListener {
+            catchSensitivity = "STRICT"
+            prefs.edit().putString(OverlayService.PREFS_KEY_HAPTIC_CATCH_SENSITIVITY, "STRICT").apply()
+            updateCatchSensButtonsUi("STRICT")
+            pushHapticSettingsToOverlay()
+        }
+        btnCatchSensAll.setOnClickListener {
+            catchSensitivity = "ALL"
+            prefs.edit().putString(OverlayService.PREFS_KEY_HAPTIC_CATCH_SENSITIVITY, "ALL").apply()
+            updateCatchSensButtonsUi("ALL")
+            pushHapticSettingsToOverlay()
+        }
+        btnIntensityShort.setOnClickListener {
+            hapticIntensity = "SHORT"
+            prefs.edit().putString(OverlayService.PREFS_KEY_HAPTIC_INTENSITY, "SHORT").apply()
+            updateIntensityButtonsUi("SHORT")
+            pushHapticSettingsToOverlay()
+        }
+        btnIntensityNormal.setOnClickListener {
+            hapticIntensity = "NORMAL"
+            prefs.edit().putString(OverlayService.PREFS_KEY_HAPTIC_INTENSITY, "NORMAL").apply()
+            updateIntensityButtonsUi("NORMAL")
+            pushHapticSettingsToOverlay()
+        }
+        btnIntensityLong.setOnClickListener {
+            hapticIntensity = "LONG"
+            prefs.edit().putString(OverlayService.PREFS_KEY_HAPTIC_INTENSITY, "LONG").apply()
+            updateIntensityButtonsUi("LONG")
+            pushHapticSettingsToOverlay()
         }
         val switchPostBattleTuning = findViewById<android.widget.Switch>(R.id.switch_post_battle_tuning_feedback)
         if (switchPostBattleTuning != null) {

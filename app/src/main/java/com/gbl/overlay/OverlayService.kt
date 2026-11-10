@@ -93,7 +93,7 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.28"
+        const val APP_VERSION = "7.29"
         const val APP_VERSION_CODE = 1727
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -504,7 +504,7 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_SHIELD_CHIP_TOLERANCE_PCT = "gbl_shield_chip_tolerance_pct"
         const val DEFAULT_SHIELD_CHIP_TOLERANCE_PCT = 10 // 6 | 10 (Default) | 14
 
-        // v6.06: Haptics & Tactical Vibration Alerts (Synchronized with Swap Clock & Charged Move Blink Indicators)
+        // v6.06 / v7.29: Haptics & Tactical Vibration Alerts (4-Tier: Single 2F, Double Move, Triple Catch, Smooth Unlock Buzz)
         const val PREFS_KEY_HAPTIC_MASTER_ENABLED = "gbl_haptic_master_enabled"
         const val DEFAULT_HAPTIC_MASTER_ENABLED = true
         const val PREFS_KEY_HAPTIC_OPP_SWAP_ENABLED = "gbl_haptic_opp_swap_enabled"
@@ -515,6 +515,14 @@ class OverlayService : LifecycleService() {
         const val DEFAULT_HAPTIC_OPP_CHARGE_WARN_ENABLED = true
         const val PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS = "gbl_haptic_charge_timing_fasts"
         const val DEFAULT_HAPTIC_CHARGE_TIMING_FASTS = 1 // 1 or 2 fast moves
+        const val PREFS_KEY_HAPTIC_WARN_2F_ENABLED = "gbl_haptic_warn_2f_enabled"
+        const val DEFAULT_HAPTIC_WARN_2F_ENABLED = true
+        const val PREFS_KEY_HAPTIC_CATCH_TRIPLE_ENABLED = "gbl_haptic_catch_triple_enabled"
+        const val DEFAULT_HAPTIC_CATCH_TRIPLE_ENABLED = true
+        const val PREFS_KEY_HAPTIC_CATCH_SENSITIVITY = "gbl_haptic_catch_sensitivity"
+        const val DEFAULT_HAPTIC_CATCH_SENSITIVITY = "STRICT" // "STRICT" | "ALL"
+        const val PREFS_KEY_HAPTIC_INTENSITY = "gbl_haptic_intensity"
+        const val DEFAULT_HAPTIC_INTENSITY = "NORMAL" // "SHORT" | "NORMAL" | "LONG"
 
         // v6.07 / v6.42 / v6.43 / v7.26: Always-On Battle DVR, Mobile Data Upload Opt-In, Replay Vault & Deep Logger Constants
         const val PREFS_KEY_ALWAYS_ON_DVR_ENABLED = "gbl_always_on_dvr_enabled_v643"
@@ -633,6 +641,14 @@ class OverlayService : LifecycleService() {
             return isDay15Plus && !everPaidAlready
         }
 
+        fun getHapticPulseDurationStatic(baseMs: Long): Long {
+            return when (activeHapticIntensity) {
+                "SHORT" -> (baseMs * 0.65).toLong().coerceAtLeast(30L)
+                "LONG" -> (baseMs * 1.4).toLong()
+                else -> baseMs
+            }
+        }
+
         @Suppress("DEPRECATION")
         fun triggerSingleHapticPulseStatic(context: Context) {
             try {
@@ -643,10 +659,11 @@ class OverlayService : LifecycleService() {
                     context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
                 } ?: return
                 if (!vibrator.hasVibrator()) return
+                val dur = getHapticPulseDurationStatic(80L)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator.vibrate(android.os.VibrationEffect.createOneShot(80L, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                    vibrator.vibrate(android.os.VibrationEffect.createOneShot(dur, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
                 } else {
-                    vibrator.vibrate(80L)
+                    vibrator.vibrate(dur)
                 }
             } catch (_: Exception) {}
         }
@@ -661,7 +678,9 @@ class OverlayService : LifecycleService() {
                     context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
                 } ?: return
                 if (!vibrator.hasVibrator()) return
-                val timings = longArrayOf(0L, 80L, 80L, 80L)
+                val dur = getHapticPulseDurationStatic(80L)
+                val gap = getHapticPulseDurationStatic(60L)
+                val timings = longArrayOf(0L, dur, gap, dur)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     val amplitudes = intArrayOf(0, 255, 0, 255)
                     vibrator.vibrate(android.os.VibrationEffect.createWaveform(timings, amplitudes, -1))
@@ -670,6 +689,58 @@ class OverlayService : LifecycleService() {
                 }
             } catch (_: Exception) {}
         }
+
+        @Suppress("DEPRECATION")
+        fun triggerTripleHapticPulseStatic(context: Context) {
+            try {
+                val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
+                    vm?.defaultVibrator
+                } else {
+                    context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+                } ?: return
+                if (!vibrator.hasVibrator()) return
+                val dur = getHapticPulseDurationStatic(80L)
+                val gap = getHapticPulseDurationStatic(50L)
+                val finalDur = getHapticPulseDurationStatic(120L)
+                val timings = longArrayOf(0L, dur, gap, dur, gap, finalDur)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val amplitudes = intArrayOf(0, 255, 0, 255, 0, 255)
+                    vibrator.vibrate(android.os.VibrationEffect.createWaveform(timings, amplitudes, -1))
+                } else {
+                    vibrator.vibrate(timings, -1)
+                }
+            } catch (_: Exception) {}
+        }
+
+        @Suppress("DEPRECATION")
+        fun triggerUnlockBuzzHapticStatic(context: Context) {
+            try {
+                val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
+                    vm?.defaultVibrator
+                } else {
+                    context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+                } ?: return
+                if (!vibrator.hasVibrator()) return
+                val dur = getHapticPulseDurationStatic(220L)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(android.os.VibrationEffect.createOneShot(dur, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                } else {
+                    vibrator.vibrate(dur)
+                }
+            } catch (_: Exception) {}
+        }
+
+        @Volatile var activeHapticMasterEnabled: Boolean = DEFAULT_HAPTIC_MASTER_ENABLED
+        @Volatile var activeHapticOppSwapEnabled: Boolean = DEFAULT_HAPTIC_OPP_SWAP_ENABLED
+        @Volatile var activeHapticOppSwapWarnSec: Int = DEFAULT_HAPTIC_OPP_SWAP_WARN_SEC
+        @Volatile var activeHapticOppChargeWarnEnabled: Boolean = DEFAULT_HAPTIC_OPP_CHARGE_WARN_ENABLED
+        @Volatile var activeHapticChargeTimingFasts: Int = DEFAULT_HAPTIC_CHARGE_TIMING_FASTS
+        @Volatile var activeHapticWarn2fEnabled: Boolean = DEFAULT_HAPTIC_WARN_2F_ENABLED
+        @Volatile var activeHapticCatchTripleEnabled: Boolean = DEFAULT_HAPTIC_CATCH_TRIPLE_ENABLED
+        @Volatile var activeHapticCatchSensitivity: String = DEFAULT_HAPTIC_CATCH_SENSITIVITY
+        @Volatile var activeHapticIntensity: String = DEFAULT_HAPTIC_INTENSITY
 
         @Volatile var activeTierSwMin: Int = DEFAULT_TIER_SW_MIN
         @Volatile var activeTierWMin: Int = DEFAULT_TIER_W_MIN
@@ -803,6 +874,10 @@ class OverlayService : LifecycleService() {
             activeHapticOppSwapWarnSec = prefs.getInt(PREFS_KEY_HAPTIC_OPP_SWAP_WARN_SEC, DEFAULT_HAPTIC_OPP_SWAP_WARN_SEC).coerceIn(2, 10)
             activeHapticOppChargeWarnEnabled = prefs.getBoolean(PREFS_KEY_HAPTIC_OPP_CHARGE_WARN_ENABLED, DEFAULT_HAPTIC_OPP_CHARGE_WARN_ENABLED)
             activeHapticChargeTimingFasts = prefs.getInt(PREFS_KEY_HAPTIC_CHARGE_TIMING_FASTS, DEFAULT_HAPTIC_CHARGE_TIMING_FASTS).coerceIn(1, 2)
+            activeHapticWarn2fEnabled = prefs.getBoolean(PREFS_KEY_HAPTIC_WARN_2F_ENABLED, DEFAULT_HAPTIC_WARN_2F_ENABLED)
+            activeHapticCatchTripleEnabled = prefs.getBoolean(PREFS_KEY_HAPTIC_CATCH_TRIPLE_ENABLED, DEFAULT_HAPTIC_CATCH_TRIPLE_ENABLED)
+            activeHapticCatchSensitivity = prefs.getString(PREFS_KEY_HAPTIC_CATCH_SENSITIVITY, DEFAULT_HAPTIC_CATCH_SENSITIVITY) ?: DEFAULT_HAPTIC_CATCH_SENSITIVITY
+            activeHapticIntensity = prefs.getString(PREFS_KEY_HAPTIC_INTENSITY, DEFAULT_HAPTIC_INTENSITY) ?: DEFAULT_HAPTIC_INTENSITY
             activeDvrRecordingMode = getEffectiveDvrModeStatic(prefs)
             activeAlwaysOnDvrEnabled = (activeDvrRecordingMode == DVR_MODE_VIP_AUTO)
             activeShowOneBattleDvrBtn = (activeDvrRecordingMode == DVR_MODE_MANUAL)
@@ -13472,6 +13547,8 @@ class OverlayService : LifecycleService() {
      */
     @Volatile internal var lastSwapHapticAlertEpochMs: Long = 0L
     @Volatile internal var lastChargeWarnHapticKey: String = ""
+    @Volatile internal var lastChargeWarnHapticFiredWallMs: Long = 0L
+    @Volatile internal var lastChargeWarnHapticFiredOppTurns: Int = -1
     @Volatile internal var hadHpPromotedShieldCallInBattle: Boolean = false
     @Volatile internal var lastLoggedBattleTuningQuestionType: String = "haptic_timing"
     @Volatile internal var lastLoggedBattleTuningQuestionPrompt: String = ""
@@ -13581,6 +13658,8 @@ class OverlayService : LifecycleService() {
         oppSwapEndTimeMs = 0L
         lastSwapHapticAlertEpochMs = 0L
         lastChargeWarnHapticKey = ""
+        lastChargeWarnHapticFiredWallMs = 0L
+        lastChargeWarnHapticFiredOppTurns = -1
         playerPokeballCount = 3
         oppPokeballCount = 3
         playerShieldsRemaining = 2
@@ -17317,6 +17396,25 @@ class OverlayService : LifecycleService() {
         var bestCatchBenchCode = ""
         if (canPlayerSwap && aliveBenchIndices.isNotEmpty() && !isPostFaintSwitchPromptActive) {
             val nextMoveTeamDmgs = (oppCheapestMoveRow?.get("teamDamages") as? List<*>)
+            val activeIncomingDmgPct = (oppCheapestMoveRow?.get("activeDmgPct") as? Int) ?: maxOppMoveDmgPct
+            val activeResultantEndHp = (activeUserHp - activeIncomingDmgPct).coerceAtLeast(0)
+            val postHitHpForChipCheck = (confirmedUserHp - activeIncomingDmgPct).coerceAtLeast(0)
+            val oppFastsSurvivedForChip = if (postHitHpForChipCheck <= 1) {
+                0
+            } else {
+                kotlin.math.floor((postHitHpForChipCheck - 1).toDouble() / oppFastExactDmgPct).toInt().coerceAtLeast(0)
+            }
+            val turnsSurvivedForChip = oppFastsSurvivedForChip * oppFastTurns
+            val chipPreventsNextMove = (activeUserEnergy >= 15 || myFastsNeededForNextMove in 1..4) &&
+                (myFastsNeededForNextMove > 0) &&
+                (turnsSurvivedForChip < myFastsNeededForNextMove * userFastTurns)
+
+            val isSignificantDamageToActive = if (activeHapticCatchSensitivity == "ALL") {
+                true
+            } else {
+                activeIncomingDmgPct >= 35 || activeResultantEndHp <= 25 || chipPreventsNextMove
+            }
+
             var bestCatchScore = -999
             for (bIdx in aliveBenchIndices) {
                 val bHp = playerSlotHpPct[bIdx].coerceIn(1, 100)
@@ -17324,10 +17422,22 @@ class OverlayService : LifecycleService() {
                 val dmgEntry = nextMoveTeamDmgs?.getOrNull(bIdx) as? Map<*, *>
                 val bDmgPct = (dmgEntry?.get("dmgPct") as? Int) ?: 40
                 val bEff = (dmgEntry?.get("eff") as? Double) ?: 1.0
-                val isResistedTankCatch = bHp > bDmgPct + 15 && (bEff <= 0.72 || bDmgPct <= 26) && (maxOppMoveDmgPct >= activeUserHp - 15 || oppNextMoveCost <= 50)
-                val isSacrificialLowHpCatch = bHp in 1..20 && activeUserHp >= 40 && maxOppMoveDmgPct >= 35
-                if (isResistedTankCatch || isSacrificialLowHpCatch) {
-                    val catchScore = if (isSacrificialLowHpCatch) 90 else (75 - bDmgPct)
+                val benchResultantEndHp = (bHp - bDmgPct).coerceAtLeast(0)
+
+                // v7.29 Refined Catch Eligibility:
+                // 1. Tank Catch: Bench takes strictly less damage than active, bench resultant end HP >= 50%, and neutral/resisted
+                val isTankCatch = isSignificantDamageToActive &&
+                    (bDmgPct < activeIncomingDmgPct) &&
+                    (benchResultantEndHp >= 50) &&
+                    (bEff <= 1.0 && bDmgPct <= 30)
+
+                // 2. Sacrificial Catch: Low remaining HP bench teammate (<= 15% HP) acts as sacrificial shield for healthy active (>= 35% HP)
+                val isSacrificialCatch = isSignificantDamageToActive &&
+                    (bHp <= 15) &&
+                    (activeUserHp >= 35)
+
+                if (isTankCatch || isSacrificialCatch) {
+                    val catchScore = if (isSacrificialCatch) 95 else (80 - bDmgPct + (benchResultantEndHp / 4))
                     if (catchScore > bestCatchScore) {
                         bestCatchScore = catchScore
                         bestCatchBenchIdx = bIdx
@@ -17695,27 +17805,72 @@ class OverlayService : LifecycleService() {
             "candidateScores" to candidateScoreMap
         )
 
-        // v6.06: Synchronized Haptic Alerts for Opponent Swap Clock (< warnSec) & Opponent 1-Fast-From-Charged-Move Blink
+        // v6.06 / v7.29: 4-Tier Synchronized Tactile Haptics
+        // 1. Swap Clock Alert -> Smooth Unlock Buzz (220ms sustained)
+        // 2. Urgent Catch Window -> 🚨 Obnoxious Triple Pulse (80ms-50ms-80ms-50ms-120ms)
+        // 3. Move Imminent / Throw Window -> Double Pulse (80ms-60ms-80ms)
+        // 4. 2 Fast Moves Cadence Warning -> Single Pulse (80ms)
         if (isBattleActive && !isReplayMode && !isWaitingForOpponent) {
             if (oppSwitchValidityLatched && oppSwapEndTimeMs > nowMs && oppSwapRemainingSec in 1..activeHapticOppSwapWarnSec) {
                 if (lastSwapHapticAlertEpochMs != oppSwapEndTimeMs) {
                     lastSwapHapticAlertEpochMs = oppSwapEndTimeMs
                     if (activeHapticMasterEnabled && activeHapticOppSwapEnabled) {
-                        triggerSingleHapticPulseStatic(this@OverlayService)
+                        triggerUnlockBuzzHapticStatic(this@OverlayService)
                     }
                 }
             }
-            if ((timingAlertLevel == "BLINK_1_FAST" && isWithinPredictiveHapticActionWindow) || timingAlertLevel == "IMMEDIATE_0_FAST") {
-                val oppThrowsCount = battleTimelineEvents.count { it.type == "CHARGED_ATTACK" && it.actor == "opp" }
-                val chargeCycleKey = "$activeOppSlotSafe:${oppNextMoveName}:$oppThrowsCount"
+
+            val isCatchRecommendation = recAction.contains("CATCH") && bestCatchBenchIdx in 0..2
+            val isUrgentCatchAlert = isCatchRecommendation &&
+                ((timingAlertLevel == "BLINK_1_FAST" && isWithinPredictiveHapticActionWindow) || timingAlertLevel == "IMMEDIATE_0_FAST")
+            val isMoveImminentAlert = !isCatchRecommendation &&
+                ((timingAlertLevel == "BLINK_1_FAST" && isWithinPredictiveHapticActionWindow) || timingAlertLevel == "IMMEDIATE_0_FAST")
+            val is2FastWarningAlert = timingAlertLevel == "WARN_2_FASTS" && safeMyFastsBeforeOppMove == 2
+
+            val oppThrowsCount = battleTimelineEvents.count { it.type == "CHARGED_ATTACK" && it.actor == "opp" }
+            val curOppTurns = oppSlotTurnsOnField.getOrElse(activeOppSlotSafe) { 0 }
+
+            if (isUrgentCatchAlert) {
+                val catchCycleKey = "catch:$activeOppSlotSafe:$bestCatchBenchIdx:$oppThrowsCount"
+                if (lastChargeWarnHapticKey != catchCycleKey) {
+                    lastChargeWarnHapticKey = catchCycleKey
+                    lastChargeWarnHapticFiredWallMs = nowMs
+                    lastChargeWarnHapticFiredOppTurns = curOppTurns
+                    if (activeHapticMasterEnabled && activeHapticCatchTripleEnabled) {
+                        triggerTripleHapticPulseStatic(this@OverlayService)
+                    }
+                }
+            } else if (isMoveImminentAlert) {
+                val chargeCycleKey = "move:$activeOppSlotSafe:$oppNextMoveName:$oppThrowsCount"
                 if (lastChargeWarnHapticKey != chargeCycleKey) {
                     lastChargeWarnHapticKey = chargeCycleKey
+                    lastChargeWarnHapticFiredWallMs = nowMs
+                    lastChargeWarnHapticFiredOppTurns = curOppTurns
                     if (activeHapticMasterEnabled && activeHapticOppChargeWarnEnabled) {
                         triggerDoubleHapticPulseStatic(this@OverlayService)
                     }
                 }
-            } else if (rawSafeMyFastsBeforeOppMove > activeHapticChargeTimingFasts + 1) {
-                lastChargeWarnHapticKey = ""
+            } else if (is2FastWarningAlert) {
+                val warn2fCycleKey = "warn2f:$activeOppSlotSafe:$oppNextMoveName:$oppThrowsCount"
+                if (lastChargeWarnHapticKey != warn2fCycleKey) {
+                    lastChargeWarnHapticKey = warn2fCycleKey
+                    lastChargeWarnHapticFiredWallMs = nowMs
+                    lastChargeWarnHapticFiredOppTurns = curOppTurns
+                    if (activeHapticMasterEnabled && activeHapticWarn2fEnabled) {
+                        triggerSingleHapticPulseStatic(this@OverlayService)
+                    }
+                }
+            } else {
+                val curOppTurns = oppSlotTurnsOnField.getOrElse(activeOppSlotSafe) { 0 }
+                // v7.29: Clear warning key if user has ample fasts remaining OR if opponent over-farmed past their window
+                // (e.g. at least 1 fast move completed after the alert window without throwing) so it re-arms for subsequent windows!
+                val hasOverfarmedTurnPassed = lastChargeWarnHapticKey.isNotEmpty() &&
+                    lastChargeWarnHapticFiredOppTurns >= 0 &&
+                    curOppTurns > lastChargeWarnHapticFiredOppTurns &&
+                    (nowMs - lastChargeWarnHapticFiredWallMs) >= (oppFastTurns * 500L)
+                if (rawSafeMyFastsBeforeOppMove > activeHapticChargeTimingFasts + 1 || hasOverfarmedTurnPassed) {
+                    lastChargeWarnHapticKey = ""
+                }
             }
         }
 
@@ -18453,7 +18608,7 @@ class OverlayService : LifecycleService() {
                 if (lastSwapHapticAlertEpochMs != swapEndTimeMs) {
                     lastSwapHapticAlertEpochMs = swapEndTimeMs
                     if (activeHapticMasterEnabled && activeHapticOppSwapEnabled) {
-                        triggerSingleHapticPulseStatic(this@OverlayService)
+                        triggerUnlockBuzzHapticStatic(this@OverlayService)
                     }
                 }
             }

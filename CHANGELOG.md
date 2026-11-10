@@ -1,4 +1,25 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.28`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.29`)
+
+---
+
+## v7.29 (2026-11-10) — Tactical Catch Significance Gate, 4-Tier Tactile Haptics Architecture & Debug Target Elimination
+*Live Android APK & Web Simulator release (`v7.29`, `versionCode = 1729`) eliminating premature and false bench catch tactical recommendations on trivial opponent chip attacks, introducing a complete 4-tier tactile haptic vibration system (Single 2F, Double Move, Triple Urgent Catch, Smooth 220ms Unlock Buzz) with in-app test controls, re-arming move warning vibrations on multi-window cadence, and permanently deprecating debug build targets from all release CI/CD and local build routines.*
+
+- **v7.29 — Feature 1: Refined Tactical Catch Damage Significance & Bench Eligibility Gate (`OverlayService.kt`)**:
+  - Gated tactical bench catch recommendations (`isTankCatch` and `isSacrificialCatch`) behind composite active threat criteria: incoming move deals $\ge 35\%$ absolute damage, OR leaves active Pokémon at $\le 25\%$ resultant end HP, OR post-hit fast move chip prevents active from getting off its next charged attack (when active has $\ge 15$E or within 4 fast moves).
+  - Enforced strict bench qualification: for Tank Catches, bench must take strictly less damage than active ($bDmgPct < activeDmgPct$), maintain $\ge 50\%$ resultant end HP ($bHp - bDmgPct \ge 50$), and take neutral/resisted damage ($\le 1.0\times$ and $\le 30\%$); for Sacrificial Catches, low-health bench teammates ($\le 15\%$ HP) absorb significant incoming nukes to preserve healthy active Pokémon ($\ge 35\%$ HP).
+- **v7.29 — Feature 2: 4-Tier Tactile Haptic Vibration Hierarchy & Live Test Controls (`OverlayService.kt`, `MainActivity.kt`, `activity_main.xml`)**:
+  - Implemented 4 distinct tactile vibration patterns:
+    - **🟢 Single Pulse (`80ms`)**: 2 Fast Moves Warning (`WARN_2_FASTS`) cadence cue.
+    - **🟡 Double Pulse (`80ms-60ms-80ms`)**: Opponent Move Imminent / Throw Window (`BLINK_1_FAST` / `IMMEDIATE_0_FAST`).
+    - **🔴 Triple Pulse (`80ms-50ms-80ms-50ms-120ms`)**: 🚨 Urgent Tactical Catch Alert when damage significance is met and a bench catch is ready.
+    - **⏱️ Smooth Unlock Buzz (`220ms sustained`)**: Opponent Switch Clock expiring alert, feeling like an unlatching lock and completely distinct from fast-move clicks.
+  - Added Settings UI controls: independent toggles for all 4 patterns, Catch Sensitivity selector (`Strict` vs `All Catches`), Vibration Intensity selector (`Short` 50ms / `Normal` 80ms / `Long` 110ms), and 4 interactive `[Test]` buttons.
+- **v7.29 — Fix 3: Over-Farm Haptic Re-Arming On Multi-Window Cadence (`OverlayService.kt`)**:
+  - Added physical cadence tracking for move-imminent haptic pulses (`lastChargeWarnHapticFiredWallMs` and `lastChargeWarnHapticFiredOppTurns`).
+  - Automatically resets `lastChargeWarnHapticKey = ""` when an opponent over-farms past their throw window without throwing (`curOppTurns > lastChargeWarnHapticFiredOppTurns && (nowMs - lastChargeWarnHapticFiredWallMs) >= (oppFastTurns * 500L)`), ensuring that double/triple pulse haptic alerts reliably re-arm for subsequent windows instead of freezing in a single-shot state.
+- **v7.29 — Policy & Architecture: Debug Build Elimination (`AGENTS.md`, `.github/workflows/android.yml`)**:
+  - Deprecated and removed all debug build targets (`assembleDebug`) from GitHub Actions CI/CD workflows and developer build scripts, enforcing signed release APK outputs exclusively (`assembleRelease`) across all environments.
 
 ---
 

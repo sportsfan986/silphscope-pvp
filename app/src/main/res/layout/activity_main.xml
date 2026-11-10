@@ -2034,7 +2034,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Opponent Swap Clock Alert (80ms Single Pulse)"
+                                android:text="Opp Swap Clock Alert (Unlock Buzz)"
                                 android:textColor="#e2e8f0"
                                 android:textSize="11.5sp"
                                 android:textStyle="bold" />
@@ -2042,7 +2042,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Tied to #sky-opp-swap-clock warning blink threshold"
+                                android:text="Smooth 220ms sustained vibration when switch lock unlatches"
                                 android:textColor="#94a3b8"
                                 android:textSize="9.5sp" />
                         </LinearLayout>
@@ -2053,7 +2053,7 @@
                             android:layout_height="30dp"
                             android:minWidth="0dp"
                             android:paddingHorizontal="8dp"
-                            android:text="Test 1x"
+                            android:text="Test Buzz"
                             android:textSize="9.5sp"
                             android:backgroundTint="#334155"
                             android:textColor="#38bdf8"
@@ -2102,7 +2102,7 @@
                         android:thumbTint="#fbbf24" />
                 </LinearLayout>
 
-                <!-- 2. Opponent Charged Move Warning (1 Fast Away Double Pulse + Synchronized Blink) -->
+                <!-- 2. Opponent Charged Move Alert (Double Pulse) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -2125,7 +2125,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Opp Charged Move Alert (80ms Double Pulse)"
+                                android:text="Move Imminent Alert (Double Pulse)"
                                 android:textColor="#e2e8f0"
                                 android:textSize="11.5sp"
                                 android:textStyle="bold" />
@@ -2133,7 +2133,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Tied to Tactical Recommendation blinking throw/catch warning"
+                                android:text="Double pulse when opp reaches move / throw pacing"
                                 android:textColor="#94a3b8"
                                 android:textSize="9.5sp" />
                         </LinearLayout>
@@ -2195,6 +2195,207 @@
                             android:backgroundTint="#334155"
                             android:textColor="#cbd5e1" />
                     </LinearLayout>
+                </LinearLayout>
+
+                <!-- 3. 2 Fast Moves Cadence Warning (Single Pulse) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="#1e293b"
+                    android:padding="8dp"
+                    android:layout_marginTop="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="2 Fast Moves Warning (Single Pulse)"
+                            android:textColor="#e2e8f0"
+                            android:textSize="11.5sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Discrete 80ms single pulse cadence cue at 2 fasts away"
+                            android:textColor="#94a3b8"
+                            android:textSize="9.5sp" />
+                    </LinearLayout>
+
+                    <Button
+                        android:id="@+id/btn_test_haptic_warn_2f"
+                        android:layout_width="wrap_content"
+                        android:layout_height="30dp"
+                        android:minWidth="0dp"
+                        android:paddingHorizontal="8dp"
+                        android:text="Test 1x"
+                        android:textSize="9.5sp"
+                        android:backgroundTint="#334155"
+                        android:textColor="#38bdf8"
+                        android:layout_marginEnd="6dp" />
+
+                    <Switch
+                        android:id="@+id/switch_haptic_warn_2f"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+
+                <!-- 4. Urgent Tactical Catch Alert (Triple Pulse) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:background="#1e293b"
+                    android:padding="8dp"
+                    android:layout_marginTop="6dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="🚨 Urgent Catch Window (Triple Pulse)"
+                                android:textColor="#f43f5e"
+                                android:textSize="11.5sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Triple pulse on significant attack + bench catch ready"
+                                android:textColor="#94a3b8"
+                                android:textSize="9.5sp" />
+                        </LinearLayout>
+
+                        <Button
+                            android:id="@+id/btn_test_haptic_catch_triple"
+                            android:layout_width="wrap_content"
+                            android:layout_height="30dp"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="8dp"
+                            android:text="Test 3x"
+                            android:textSize="9.5sp"
+                            android:backgroundTint="#334155"
+                            android:textColor="#f43f5e"
+                            android:layout_marginEnd="6dp" />
+
+                        <Switch
+                            android:id="@+id/switch_haptic_catch_triple"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:checked="true" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="6dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Catch Sensitivity:"
+                            android:textColor="#cbd5e1"
+                            android:textSize="10.5sp" />
+
+                        <Button
+                            android:id="@+id/btn_catch_sens_strict"
+                            android:layout_width="wrap_content"
+                            android:layout_height="32dp"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="10dp"
+                            android:text="Strict (Dmg/End HP)"
+                            android:textSize="10sp"
+                            android:backgroundTint="#e11d48"
+                            android:textColor="#ffffff"
+                            android:layout_marginEnd="4dp" />
+
+                        <Button
+                            android:id="@+id/btn_catch_sens_all"
+                            android:layout_width="wrap_content"
+                            android:layout_height="32dp"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="10dp"
+                            android:text="All Catches"
+                            android:textSize="10sp"
+                            android:backgroundTint="#334155"
+                            android:textColor="#cbd5e1" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- 5. Vibration Intensity / Duration -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="#1e293b"
+                    android:padding="8dp"
+                    android:layout_marginTop="6dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Vibration Intensity:"
+                        android:textColor="#cbd5e1"
+                        android:textSize="10.5sp" />
+
+                    <Button
+                        android:id="@+id/btn_intensity_short"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:minWidth="0dp"
+                        android:paddingHorizontal="8dp"
+                        android:text="Short"
+                        android:textSize="10sp"
+                        android:backgroundTint="#334155"
+                        android:textColor="#cbd5e1"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_intensity_normal"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:minWidth="0dp"
+                        android:paddingHorizontal="8dp"
+                        android:text="Normal"
+                        android:textSize="10sp"
+                        android:backgroundTint="#e11d48"
+                        android:textColor="#ffffff"
+                        android:layout_marginEnd="4dp" />
+
+                    <Button
+                        android:id="@+id/btn_intensity_long"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:minWidth="0dp"
+                        android:paddingHorizontal="8dp"
+                        android:text="Long"
+                        android:textSize="10sp"
+                        android:backgroundTint="#334155"
+                        android:textColor="#cbd5e1" />
                 </LinearLayout>
 
                 <!-- 3. Post-Battle 1-Tap Tuning Feedback Micro-Poll (Default ON for @sportsfan986, OFF for others) -->
