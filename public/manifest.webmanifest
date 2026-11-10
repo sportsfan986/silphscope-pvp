@@ -44,9 +44,9 @@
       "icons": [{ "src": "/pwa-icon-192.svg", "sizes": "192x192" }]
     },
     {
-      "name": "Live View (Secondary HUD)",
+      "name": "Live View (Coming Soon)",
       "short_name": "Live View",
-      "description": "Stream live combat telemetry to your tablet or iPhone",
+      "description": "Upcoming: Stream live combat telemetry to your tablet or iPhone",
       "url": "/?view=live",
       "icons": [{ "src": "/pwa-icon-192.svg", "sizes": "192x192" }]
     },

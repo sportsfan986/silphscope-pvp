@@ -5049,7 +5049,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       <nav class="nav-pills-bar">
         <a href="/vault" class="nav-pill active-pill">🎬 DVR Vault</a>
         <a href="https://silphscopepvp.com/?view=home" class="nav-pill">🏠 Overview &amp; Featured Battles</a>
-        <a href="https://silphscopepvp.com/?view=live" class="nav-pill">📡 Live View (Beta)</a>
+        <a href="https://silphscopepvp.com/?view=live" class="nav-pill">📡 Live View (Coming Soon)</a>
         <a href="https://silphscopepvp.com/?view=guide" class="nav-pill">📖 How to Use Overlay</a>
         <a href="https://silphscopepvp.com/?view=compare" class="nav-pill">⚔️ vs PvPoke &amp; GOBattleLog</a>
         <a href="https://silphscopepvp.com/?view=app" class="nav-pill nav-pill-gold">🧮 Launch Web Simulator &amp; Team Builder</a>
@@ -6005,7 +6005,7 @@ export default {
         ],
         shortcuts: [
           { name: 'Cloud DVR Vault', short_name: 'DVR Vault', description: 'Watch battle recordings with frame-accurate 50% HUD overlay', url: '/?view=vault', icons: [{ src: '/pwa-icon-192.svg', sizes: '192x192' }] },
-          { name: 'Live View (Secondary HUD)', short_name: 'Live View', description: 'Stream live combat telemetry to your tablet or iPhone', url: '/?view=live', icons: [{ src: '/pwa-icon-192.svg', sizes: '192x192' }] },
+          { name: 'Live View (Coming Soon)', short_name: 'Live View', description: 'Upcoming: Stream live combat telemetry to your tablet or iPhone', url: '/?view=live', icons: [{ src: '/pwa-icon-192.svg', sizes: '192x192' }] },
           { name: 'Web Battle Simulator', short_name: 'Simulator', description: '3v3 Pokémon GO PvP Battle Simulator & Team Builder', url: '/?view=app', icons: [{ src: '/pwa-icon-192.svg', sizes: '192x192' }] }
         ]
       };

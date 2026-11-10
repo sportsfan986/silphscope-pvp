@@ -434,7 +434,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   : 'text-cyan-200/80 hover:text-white hover:bg-slate-800/60'
               }`}
             >
-              📡 Live View (Beta)
+              📡 Live View (Coming Soon)
             </button>
             <button
               type="button"
@@ -1686,7 +1686,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
                 >
                   <span>📡</span>
-                  <span>Live View (Beta)</span>
+                  <span>Live View (Coming Soon)</span>
                 </button>
               </div>
             </div>
@@ -2049,7 +2049,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-cyan-500/40 text-cyan-300 font-bold text-xs transition cursor-pointer flex items-center gap-1.5"
             >
               <span>📡</span>
-              <span>Live View Secondary Screen (Beta)</span>
+              <span>Live View (Coming Soon)</span>
             </button>
             <button
               type="button"
@@ -2071,7 +2071,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
         </main>
       )}
 
-      {/* SUBPAGE: LIVE VIEW (BETA) - SECONDARY SCREEN BATTLE HUD */}
+      {/* SUBPAGE: LIVE VIEW (COMING SOON) - SECONDARY SCREEN BATTLE HUD */}
       {activeSubpage === 'live' && (
         <main className="flex-1 max-w-7xl mx-auto px-4 py-8 w-full space-y-8 animate-fadeIn">
           {/* Header Strip */}
@@ -2079,9 +2079,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase border border-cyan-400/40 bg-cyan-400/10 text-cyan-300">
               <span>📡 DUAL-SCREEN BATTLE HUD</span>
               <span className="text-slate-500">•</span>
-              <span className="text-teal-300">ZERO-LAG STREAM</span>
+              <span className="text-amber-300 font-extrabold px-2 py-0.5 rounded-full bg-amber-400/20 border border-amber-400/40">
+                COMING SOON
+              </span>
               <span className="text-slate-500">•</span>
-              <span className="text-amber-300">IPAD &amp; IPHONE READY</span>
+              <span className="text-teal-300">IPAD &amp; IPHONE READY</span>
             </div>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-tight">
               SilphScope Live View{' '}
@@ -2092,11 +2094,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   WebkitTextFillColor: 'transparent'
                 }}
               >
-                (Secondary Screen HUD).
+                (Coming Soon).
               </span>
             </h1>
             <p className="text-sm sm:text-base text-slate-300 max-w-3xl leading-relaxed">
-              Stream live combat telemetry from your Android battle phone directly to your iPad, iPhone, Mac, PC, or secondary tablet over zero-lag WebSocket. Enjoy the complete 50% translucent tactical HUD on your desk without running any overlay on your phone.
+              Upcoming feature in active development: Stream live combat telemetry from your Android battle phone directly to your iPad, iPhone, Mac, PC, or secondary tablet over zero-lag WebSocket. Test the interactive preview below to see how the secondary HUD will look on your desk!
             </p>
           </div>
 
@@ -2136,7 +2138,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div>
                 <div className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">
-                  Live Broadcast Session
+                  Upcoming Feature Preview • Live Stream Simulation
                 </div>
                 <div className="flex items-center gap-3 mt-1">
                   <span className="font-mono text-xl sm:text-2xl font-black text-teal-300 tracking-wider">
@@ -2148,14 +2150,14 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                         ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse'
                         : isSimulatingLive
                         ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                        : 'bg-slate-800 text-amber-300 border-amber-400/40'
                     }`}
                   >
                     {isLiveConnected
                       ? '🟢 Connected to Host (11ms)'
                       : isSimulatingLive
-                      ? `🟡 Simulating Battle (Turn ${simTurn})`
-                      : '⚪ Waiting for Host'}
+                      ? `🟡 Interactive Preview Active (Turn ${simTurn})`
+                      : '⏳ Coming Soon • Interactive Preview'}
                   </span>
                 </div>
               </div>
@@ -2171,7 +2173,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   }`}
                 >
                   <span>⚡</span>
-                  <span>{isSimulatingLive ? 'Pause Live Demo' : 'Run Live Combat Demo'}</span>
+                  <span>{isSimulatingLive ? 'Pause Interactive Demo' : '▶️ Test Live View Simulation'}</span>
                 </button>
                 <button
                   type="button"

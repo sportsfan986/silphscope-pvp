@@ -188,16 +188,17 @@ export const ACTIVE_ROADMAP_ITEMS: RoadmapItem[] = [
   },
   {
     id: 'iv-checker-matrix',
-    title: 'Multi-IV Matrix Evaluator & Breakpoint Analyzer',
+    title: 'Multi-IV Matrix Evaluator, Breakpoint Analyzer & 3-Field Numeric Input',
     badge: 'META SIMULATOR',
     status: 'In Design',
     statusColor: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
     category: 'Analytics & Team Builder',
     icon: '⚖️',
-    description: 'Multi-select league comparison (GL, UL, ML) evaluating candidate IV spreads side-by-side against the Top 100 meta, outputting W/L records, net flip matchups, and key Fast Move breakpoints/bulkpoints.',
+    description: 'Multi-select league comparison (GL, UL, ML) evaluating candidate IV spreads side-by-side against the Top 100 meta with real-time auto-CP recalculation, 3 numeric IV fields (Atk/Def/Sta) or dropdown pickers, W/L delta records, and Fast Move breakpoint/bulkpoint highlighting.',
     keyGoals: [
-      'Multi-IV candidate input comparing stat-product vs. attack-weight vs. bulk spreads',
-      'Top 100 synthetic meta win/loss/tie record comparison across shield scenarios',
+      'Universal 3-box numeric IV inputs [Atk][Def][Sta] with optional 0–15 dropdown selector',
+      'Real-time automatic CP and Level recomputation upon IV adjustment',
+      'Top 100 synthetic meta win/loss/tie record comparison & net flip matchups',
       'Automated Fast Move breakpoint (+1 dmg) & bulkpoint (-1 dmg taken) delta highlighting'
     ]
   },
@@ -229,6 +230,21 @@ export const ACTIVE_ROADMAP_ITEMS: RoadmapItem[] = [
       'Paired QR / 4-digit calibration room linking two testing devices simultaneously',
       'Frame-by-frame ground truth comparison: Tracked Opponent E vs. Actual User E',
       'Automated delta reporting for snuck moves, catch-up latency, and debounce tuning'
+    ]
+  },
+  {
+    id: 'in-app-apk-update-checker',
+    title: 'In-App APK Update Notifications, Changelog Summary & Direct Download',
+    badge: 'ANDROID NATIVE',
+    status: 'In Design',
+    statusColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+    category: 'HUD / Combat Engine',
+    icon: '📲',
+    description: 'Automated in-app alert inside MainActivity notifying players when a newer APK is available, displaying high-level release notes and a 1-tap download link to dl.silphscopepvp.com.',
+    keyGoals: [
+      'Remote version check against GitHub Releases / Cloudflare API on startup',
+      'Dismissible update card with bulleted highlights of fixes and new features',
+      '1-tap direct APK download and install trigger via dl.silphscopepvp.com'
     ]
   }
 ];

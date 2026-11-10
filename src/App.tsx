@@ -6054,9 +6054,9 @@ export default function App() {
                 } catch {}
               }}
               className="px-2.5 py-1.5 rounded-xl hover:bg-cyan-950/60 border border-cyan-500/40 text-cyan-300 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
-              title="Open Live View Secondary Screen HUD"
+              title="Preview Live View Secondary Screen HUD (Coming Soon)"
             >
-              <span>📡 Live View</span>
+              <span>📡 Live View (Coming Soon)</span>
             </button>
             <nav className="flex items-center gap-1 bg-slate-950/70 p-1 rounded-xl border border-slate-800 text-xs font-semibold flex-wrap">
               <button
