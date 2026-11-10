@@ -17400,7 +17400,7 @@ class OverlayService : LifecycleService() {
                 kotlin.math.floor((postHitHpForChipCheck - 1).toDouble() / oppFastExactDmgPct).toInt().coerceAtLeast(0)
             }
             val turnsSurvivedForChip = oppFastsSurvivedForChip * oppFastTurns
-            val chipPreventsNextMove = (activeUserEnergy >= 15 || myFastsNeededForNextMove in 1..4) &&
+            val chipPreventsNextMove = (activeUserEnergyNow >= 15 || myFastsNeededForNextMove in 1..4) &&
                 (myFastsNeededForNextMove > 0) &&
                 (turnsSurvivedForChip < myFastsNeededForNextMove * userFastTurns)
 
