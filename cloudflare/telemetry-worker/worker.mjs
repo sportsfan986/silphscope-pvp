@@ -1101,6 +1101,34 @@ async function verifyGitHubTokenIdentity(githubToken) {
   }
 }
 
+async function loadLicenseByGitHubFallback(kv, githubUsername, githubUserId) {
+  if (!kv) return null;
+  const cleanLogin = String(githubUsername || '').trim();
+  const cleanId = String(githubUserId || '').trim();
+  try {
+    const rawManifest = await kv.get('licenses_manifest.json', { type: 'text' });
+    if (rawManifest) {
+      const list = JSON.parse(rawManifest);
+      if (Array.isArray(list)) {
+        const matchedLic = list.find(
+          (k) =>
+            k &&
+            !k.revoked &&
+            ((cleanId && k.boundGitHubUserId && String(k.boundGitHubUserId) === cleanId) ||
+              (cleanLogin &&
+                k.boundGitHubUsername &&
+                String(k.boundGitHubUsername).toLowerCase() === cleanLogin.toLowerCase()))
+        );
+        if (matchedLic) {
+          await saveLicenseRecord(kv, matchedLic);
+          return matchedLic;
+        }
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
 async function resolveScreenNameFromGitHub(kv, githubUsername, githubUserId, preferredScreenName = '') {
   const cleanLogin = String(githubUsername || '').trim();
   const cleanId = String(githubUserId || '').trim();
@@ -1204,6 +1232,9 @@ async function resolveUserLicense(
       if (ghMappedKey) {
         lic = await loadLicenseByKey(kv, ghMappedKey);
       }
+    }
+    if (!lic && isServerVerifiedGh && (cleanGhId || cleanGhUser)) {
+      lic = await loadLicenseByGitHubFallback(kv, cleanGhUser, cleanGhId);
     }
     if (!lic && cleanEmail) {
       const emailMappedKey = await kv.get(`email_license/${cleanEmail}`, { type: 'text' });
@@ -1642,7 +1673,10 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
         (kv && (await kv.get(`user_license/${screenName}`, { type: 'text' }))) ||
         (kv && (await kv.get(`user_license/${screenName.toLowerCase()}`, { type: 'text' }))) ||
         '';
-      const lic = mappedKey ? await loadLicenseByKey(kv, mappedKey) : null;
+      let lic = mappedKey ? await loadLicenseByKey(kv, mappedKey) : null;
+      if (!lic) {
+        lic = await loadLicenseByGitHubFallback(kv, verifiedGh.githubUsername, verifiedGh.githubUserId);
+      }
       const chk = await checkScreenNameRegistration(kv, screenName, '', verifiedGh.githubUserId);
 
       // Strictly require explicit prior GitHub ID/username binding (or an unclaimed brand-new free account);
@@ -2342,7 +2376,7 @@ async function resolveUserPaidTierSummary(kv, screenName) {
   return { tier: 'free', badge: '🆓 Free Tier', key: '', expiresAt: null };
 }
 
-function renderWatchSharePage(origin, shareInfo) {
+function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
   const shareId = escapeHtml(shareInfo.shareId || '');
   const hideNamesDefault = Boolean(shareInfo.hideNames);
   const trainerDisplay = hideNamesDefault ? 'Trainer' : escapeHtml(shareInfo.screenName || 'Trainer');
@@ -2353,12 +2387,13 @@ function renderWatchSharePage(origin, shareInfo) {
   const traceUrl = `${origin}/v1/replays/stream/${encodeURIComponent(shareInfo.shareId)}/trace.jsonl`;
   const pageTitle = `SilphScope PvP Replay • ${matchup}`;
   const pageDesc = `${trainerDisplay} • ${league} (${result}) — Watch with interactive Live HUD, 3x3 Matrix, Move Pacing & Frame-Step Controls.`;
+  const vaultReturnHref = `/vault${shareInfo.screenName && String(shareInfo.screenName).toLowerCase() !== 'featured' ? '?user=' + encodeURIComponent(shareInfo.screenName) : ''}`;
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
   <title>${pageTitle}</title>
   <meta property="og:type" content="video.other" />
   <meta property="og:title" content="${pageTitle}" />
@@ -2398,184 +2433,117 @@ function renderWatchSharePage(origin, shareInfo) {
       --text-dim: #94a3b8;
     }
     * { box-sizing: border-box; }
-    ::selection {
-      background: rgba(45, 212, 191, 0.3);
-      color: #ecfeff;
-    }
-    body {
+    html, body {
       margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100vh;
+      height: 100dvh;
+      max-height: 100dvh;
+      overflow: hidden;
       font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-      background-color: var(--bg);
-      background-image:
-        radial-gradient(circle at 18% 12%, rgba(45, 212, 191, 0.11) 0%, transparent 42%),
-        radial-gradient(circle at 82% 18%, rgba(250, 204, 21, 0.08) 0%, transparent 38%),
-        linear-gradient(180deg, #050B16 0%, #081120 55%, #050B16 100%);
-      background-attachment: fixed;
+      background-color: #02060d;
       color: var(--text);
-      min-height: 100vh;
       display: flex;
       flex-direction: column;
       position: relative;
+      user-select: none;
     }
-    .fixed-watermark-bg {
+    .close-theater-x {
       position: fixed;
-      inset: 0;
-      pointer-events: none;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 0;
-      overflow: hidden;
-      opacity: 0.14;
-    }
-    .dialga-watermark-svg {
-      width: 580px;
-      height: 580px;
-      max-width: 90vw;
-      max-height: 90vh;
-    }
-    ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-track { background: #050b16; }
-    ::-webkit-scrollbar-thumb { background: #19304e; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #2dd4bf; }
-    header {
-      padding: 10px 18px;
-      background: rgba(5, 11, 22, 0.88);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      position: sticky;
-      top: 0;
-      z-index: 50;
-    }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-weight: 800;
-      font-size: 15px;
-      letter-spacing: -0.2px;
-    }
-    .dialga-crest-badge {
+      top: max(10px, env(safe-area-inset-top, 10px));
+      right: 12px;
+      z-index: 90;
       width: 36px;
       height: 36px;
-      border-radius: 10px;
-      display: flex;
+      border-radius: 12px;
+      background: rgba(8, 17, 32, 0.9);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1.5px solid #2dd4bf;
+      color: #99f6e4;
+      font-size: 15px;
+      font-weight: 900;
+      display: ${isEmbed ? 'none' : 'inline-flex'};
       align-items: center;
       justify-content: center;
+      cursor: pointer;
+      text-decoration: none;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.85), 0 0 14px rgba(45, 212, 191, 0.35);
+      transition: all 0.15s ease;
+    }
+    .close-theater-x:hover {
       background: #0e1b2e;
-      border: 1.5px solid #2dd4bf;
-      box-shadow: 0 0 16px rgba(45, 212, 191, 0.28);
-      flex-shrink: 0;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-    .dialga-crest-badge:hover {
-      transform: scale(1.06);
-      box-shadow: 0 0 22px rgba(45, 212, 191, 0.45);
-    }
-    .badge {
-      padding: 3px 9px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 800;
-      background: rgba(45, 212, 191, 0.14);
-      color: #2dd4bf;
-      border: 1px solid rgba(45, 212, 191, 0.4);
-    }
-    .badge-league {
-      background: rgba(103, 232, 249, 0.14);
-      color: #67e8f9;
-      border-color: rgba(103, 232, 249, 0.35);
-    }
-    .badge-star {
-      background: rgba(250, 204, 21, 0.16);
-      color: #facc15;
-      border-color: rgba(250, 204, 21, 0.45);
-      box-shadow: 0 0 10px rgba(250, 204, 21, 0.2);
-    }
-    .header-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      align-items: center;
+      color: #ffffff;
+      border-color: #5eead4;
+      transform: scale(1.04);
     }
     button, .btn-link {
       background: var(--card-alt);
       color: var(--text);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 6px 11px;
-      font-size: 12px;
+      border-radius: 7px;
+      padding: 4px 8px;
+      font-size: 11px;
       font-weight: 700;
       cursor: pointer;
       text-decoration: none;
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
       transition: all 0.15s ease;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+      white-space: nowrap;
+      flex-shrink: 0;
     }
     button:hover, .btn-link:hover {
       background: #14253e;
       border-color: var(--accent);
       color: var(--accent-hover);
-      box-shadow: 0 0 10px rgba(45, 212, 191, 0.2);
     }
     button.active {
       background: rgba(45, 212, 191, 0.18);
       border-color: var(--accent);
       color: var(--accent);
-      box-shadow: 0 0 10px rgba(45, 212, 191, 0.25);
-    }
-    button.primary, .btn-link.primary {
-      background: var(--accent);
-      color: #042f2e;
-      border-color: var(--accent);
-      font-weight: 800;
-      box-shadow: 0 2px 10px rgba(45, 212, 191, 0.25);
-    }
-    button.primary:hover, .btn-link.primary:hover {
-      background: var(--accent-hover);
-      border-color: var(--accent-hover);
-      box-shadow: 0 0 16px rgba(45, 212, 191, 0.45);
-      color: #042f2e;
     }
     main {
       flex: 1;
+      min-height: 0;
+      width: 100%;
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 14px 12px;
-      gap: 12px;
-      max-width: 1200px;
-      width: 100%;
-      margin: 0 auto;
+      justify-content: space-between;
+      padding: 4px 6px max(4px, env(safe-area-inset-bottom, 4px));
+      gap: 4px;
+      overflow: hidden;
     }
     .stage-wrap {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
       display: flex;
       flex-direction: row;
-      align-items: flex-start;
+      align-items: center;
       justify-content: center;
-      gap: 16px;
-      width: 100%;
-      flex-wrap: wrap;
+      gap: 10px;
+      overflow: hidden;
     }
     .video-box {
       position: relative;
-      width: min(100%, 420px);
+      height: 100%;
+      max-height: 100%;
+      width: auto;
+      max-width: 100%;
       aspect-ratio: 544 / 1184;
       background: #000;
-      border-radius: 14px;
+      border-radius: 10px;
       overflow: hidden;
-      border: 1.5px solid var(--border);
-      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.7), 0 0 24px rgba(45, 212, 191, 0.12);
+      border: 1px solid rgba(45, 212, 191, 0.22);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     video {
       width: 100%;
@@ -2585,9 +2553,9 @@ function renderWatchSharePage(origin, shareInfo) {
     }
     .hud-layer {
       position: absolute;
-      left: 3px;
-      right: 3px;
-      bottom: 14px;
+      left: 2px;
+      right: 2px;
+      bottom: 10px;
       background: transparent;
       border: none;
       padding: 0;
@@ -2602,7 +2570,7 @@ function renderWatchSharePage(origin, shareInfo) {
     }
     .hud-layer iframe {
       width: 100%;
-      height: 360px;
+      height: 340px;
       border: none;
       background: transparent;
       display: block;
@@ -2610,119 +2578,99 @@ function renderWatchSharePage(origin, shareInfo) {
     }
     .stage-wrap.side-by-side .hud-layer {
       position: static;
-      width: min(100%, 420px);
+      width: min(46vw, 380px);
       background: transparent;
       border: none;
       padding: 0;
-      align-self: flex-start;
+      align-self: center;
     }
     .controls-bar {
+      flex-shrink: 0;
       width: 100%;
-      max-width: 860px;
-      background: rgba(14, 27, 46, 0.88);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
+      max-width: 780px;
+      background: rgba(10, 19, 34, 0.94);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px 14px;
+      border-radius: 10px;
+      padding: 5px 8px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(45, 212, 191, 0.08);
+      gap: 4px;
+      z-index: 30;
     }
     .control-row {
       display: flex;
-      flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
-      gap: 6px;
+      gap: 4px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .control-row::-webkit-scrollbar { display: none; }
+    .tools-drawer {
+      display: none;
+      flex-direction: column;
+      gap: 5px;
+      padding-top: 4px;
+      border-top: 1px solid rgba(25, 48, 78, 0.85);
+    }
+    .tools-drawer.open {
+      display: flex;
     }
     .chips-row {
       display: flex;
-      flex-wrap: wrap;
-      gap: 5px;
-      max-height: 88px;
-      overflow-y: auto;
+      flex-wrap: nowrap;
+      gap: 4px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      scrollbar-width: none;
     }
+    .chips-row::-webkit-scrollbar { display: none; }
     .event-chip {
-      font-size: 11px;
-      padding: 3px 9px;
+      font-size: 10.5px;
+      padding: 2px 8px;
       border-radius: 999px;
-      background: rgba(8, 17, 32, 0.9);
+      background: rgba(8, 17, 32, 0.92);
       border: 1px solid var(--border);
       color: var(--muted);
       cursor: pointer;
-      transition: all 0.15s ease;
       white-space: nowrap;
+      flex-shrink: 0;
     }
     .event-chip:hover {
       border-color: var(--accent);
       color: var(--text);
       background: rgba(45, 212, 191, 0.2);
-      box-shadow: 0 0 8px rgba(45, 212, 191, 0.25);
     }
   </style>
 </head>
 <body>
-  <!-- Fixed Centered Shiny Origin Dialga Vector Watermark -->
-  <div class="fixed-watermark-bg" aria-hidden="true">
-    <svg viewBox="0 0 240 240" class="dialga-watermark-svg">
-      <path fill="none" stroke="#2DD4BF" stroke-width="3" d="M120,10 L196,42 L228,120 L196,198 L120,230 L44,198 L12,120 L44,42 Z" />
-      <path fill="none" stroke="#FACC15" stroke-width="4" d="M120,44 L178,76 L178,164 L120,196 L62,164 L62,76 Z" />
-      <path fill="#FACC15" d="M62,76 L22,52 L48,92 Z M178,76 L218,52 L192,92 Z M56,120 L14,120 L56,132 Z M184,120 L226,120 L184,132 Z M62,164 L26,188 L54,148 Z M178,164 L214,188 L186,148 Z" />
-      <path fill="#14B8A6" stroke="#67E8F9" stroke-width="2.5" d="M120,14 L138,48 L156,32 L144,76 L186,98 L152,134 L168,188 L142,174 L120,224 L98,174 L72,188 L88,134 L54,98 L96,76 L84,32 L102,48 Z" />
-      <path fill="#081224" stroke="#FACC15" stroke-width="3" d="M120,84 L152,120 L120,156 L88,120 Z" />
-      <path fill="#67E8F9" d="M120,96 L140,120 L120,144 L100,120 Z" />
-    </svg>
-  </div>
-  <header>
-    <div class="brand">
-      <a href="https://silphscopepvp.com" style="display:inline-flex;align-items:center;gap:12px;text-decoration:none;color:inherit" title="SilphScopePvP.com">
-        <div class="dialga-crest-badge">
-          <svg viewBox="0 0 36 36" style="width:26px;height:26px;display:block">
-            <polygon points="18,2 31,9 31,27 18,34 5,27 5,9" fill="rgba(14, 27, 46, 0.9)" stroke="#2DD4BF" stroke-width="2.2" />
-            <polygon points="18,7 26,12 26,24 18,29 10,24 10,12" fill="none" stroke="#FACC15" stroke-width="1.8" />
-            <circle cx="18" cy="18" r="3.5" fill="#FACC15" />
-          </svg>
-        </div>
-        <div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-weight:900;letter-spacing:-0.3px;font-size:16px;color:#fff">SilphScope <span style="color:#2dd4bf">Replay</span></span>
-            <span style="font-size:10px;font-family:'JetBrains Mono',monospace;font-weight:800;text-transform:uppercase;color:#facc15;border:1px solid rgba(250,204,21,0.45);background:rgba(250,204,21,0.12);padding:2px 7px;border-radius:999px">✨ Dialga Midnight</span>
-          </div>
-          <p style="margin:2px 0 0;font-size:11px;color:#99f6e4;font-weight:500">Real-Time 50% Translucent Android HUD • ELO-Adaptive Anti-Meta • Cloud DVR Vault</p>
-        </div>
-      </a>
-      <span class="badge" id="hdr-trainer">@${trainerDisplay}</span>
-      <span class="badge badge-league">${league} • ${result}</span>
-      ${shareInfo.isPinned ? '<span class="badge badge-star">⭐ Starred</span>' : ''}
-    </div>
-    <div class="header-actions">
-      <a class="btn-link" href="/vault?user=${encodeURIComponent(shareInfo.screenName || 'Featured')}" style="background:#081120;border-color:#19304e;color:#99f6e4">☁️ @${trainerDisplay}'s Vault</a>
-      <button id="btn-flag-issue-hdr" onclick="flagOrEditCurrentIssue()" style="border-color:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? '#f59e0b' : '#b91c1c'};color:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? '#fbbf24' : '#fca5a5'};background:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'rgba(245,158,11,0.16)' : 'rgba(185,28,28,0.18)'}" title="Flag an issue on this replay or edit an existing issue report">🚩 ${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'Flagged ✓ (Edit)' : 'Flag Issue'}</button>
-      <button id="btn-unflag-issue-hdr" onclick="unflagCurrentIssue()" style="display:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'inline-flex' : 'none'};border-color:#64748b;color:#e2e8f0;background:#081120" title="Retract this issue report if it was sent inadvertently">↩️ Unflag Issue</button>
-      <button id="btn-privacy" onclick="togglePrivacy()">🕵️ ${hideNamesDefault ? 'Names Hidden' : 'Hide Names'}</button>
-      <button id="btn-layout" onclick="toggleLayout()">📐 Side-by-Side: OFF</button>
-      <button id="btn-export" onclick="exportWithHud()">💾 Export Video + HUD</button>
-      <a class="btn-link" href="https://silphscopepvp.com/?view=vault" style="background:rgba(45,212,191,0.1);border-color:rgba(45,212,191,0.35);color:#2dd4bf">🌐 SilphScopePvP.com</a>
-      <a class="btn-link primary" href="https://dl.silphscopepvp.com" target="_blank" rel="noopener">📱 Download APK</a>
-    </div>
-  </header>
+  <!-- Bordered 'X' Close Button (Standalone /watch/:shareId returns to DVR Vault) -->
+  <button
+    type="button"
+    class="close-theater-x"
+    onclick="closeReplayTheater()"
+    title="Close Replay & Return to Vault"
+    aria-label="Close Replay"
+  >✕</button>
+
+  <!-- Hidden legacy spans so JS helpers never null-ref -->
+  <span id="hdr-trainer" style="display:none">@${trainerDisplay}</span>
 
   <main>
-    <div style="font-size:14px;font-weight:800;color:#ecfeff;text-align:center;letter-spacing:0.2px">${matchup}</div>
-    <div id="diag-issue-banner" style="width:100%;max-width:860px;background:rgba(250,204,21,0.12);border:1px solid rgba(250,204,21,0.45);border-radius:10px;padding:10px 14px;font-size:12.5px;color:#fef3c7;display:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'flex' : 'none'};flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;box-shadow:0 0 16px rgba(250,204,21,0.1)">
-      <div id="diag-issue-text">🚩 <strong>Reported Diagnostic Issue:</strong> ${escapeHtml(shareInfo.userIssueNote || 'Flagged for diagnostic review')}</div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        ${shareInfo.userTierBadge ? `<span class="badge" style="background:rgba(168,85,247,0.2);color:#e9d5ff;border-color:rgba(168,85,247,0.45)">${escapeHtml(shareInfo.userTierBadge)}</span>` : ''}
-        <button id="btn-edit-issue" onclick="flagOrEditCurrentIssue()" style="background:rgba(250,204,21,0.2);border-color:#facc15;color:#fde047;padding:4px 9px;font-size:11.5px">✏️ Edit Note</button>
-        <button id="btn-unflag-issue" onclick="unflagCurrentIssue()" style="background:#081120;border-color:#64748b;color:#e2e8f0;padding:4px 9px;font-size:11.5px" title="Retract this issue report if it was sent inadvertently">↩️ Unflag Issue</button>
+    <div id="diag-issue-banner" style="flex-shrink:0;width:100%;max-width:780px;background:rgba(250,204,21,0.12);border:1px solid rgba(250,204,21,0.45);border-radius:8px;padding:4px 10px;font-size:11px;color:#fef3c7;display:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'flex' : 'none'};flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px">
+      <div id="diag-issue-text">🚩 <strong>Issue:</strong> ${escapeHtml(shareInfo.userIssueNote || 'Flagged for diagnostic review')}</div>
+      <div style="display:flex;align-items:center;gap:5px">
+        <button id="btn-edit-issue" onclick="flagOrEditCurrentIssue()" style="padding:2px 7px;font-size:10.5px;border-color:#facc15;color:#fde047">✏️ Edit</button>
+        <button id="btn-unflag-issue" onclick="unflagCurrentIssue()" style="padding:2px 7px;font-size:10.5px">↩️ Unflag</button>
       </div>
     </div>
+
     <div class="stage-wrap" id="stage-wrap">
       <div class="video-box" id="video-box">
-        <video id="replay-video" src="${videoUrl}" playsinline preload="metadata" crossorigin="anonymous"></video>
-        <div id="dual-energy-pill" style="position:absolute;top:5px;left:6px;z-index:25;background:rgba(8,17,32,0.94);border:1.5px solid #2dd4bf;border-radius:999px;padding:2px 10px;font-size:10.5px;font-weight:800;font-family:'Roboto Condensed',sans-serif;color:#ecfeff;white-space:nowrap;pointer-events:none;box-shadow:0 4px 12px rgba(0,0,0,0.65),0 0 10px rgba(45,212,191,0.25)">⚡ U: 0E [M:0E 90% | H:0E 75%] • O: 0E [M:0E 88% | H:0E 75%]</div>
+        <video id="replay-video" src="${videoUrl}" playsinline preload="metadata" crossorigin="anonymous" onclick="togglePlay()"></video>
+        <div id="dual-energy-pill" style="position:absolute;top:4px;left:5px;z-index:25;background:rgba(8,17,32,0.92);border:1px solid #2dd4bf;border-radius:999px;padding:1.5px 8px;font-size:9.5px;font-weight:800;font-family:'Roboto Condensed',sans-serif;color:#ecfeff;white-space:nowrap;pointer-events:none;max-width:calc(100% - 10px);overflow:hidden;text-overflow:ellipsis">⚡ U: 0E • O: 0E</div>
         <div class="hud-layer pos-top" id="hud-layer">
           <iframe id="hud-iframe" src="/overlay.html?replay=1" scrolling="no" title="SilphScope PvP HUD"></iframe>
         </div>
@@ -2730,35 +2678,75 @@ function renderWatchSharePage(origin, shareInfo) {
     </div>
 
     <div class="controls-bar">
-      <div style="display:flex;align-items:center;gap:8px;width:100%">
-        <input type="range" id="video-scrubber" min="0" max="1000" value="0" style="flex:1;accent-color:#2dd4bf;cursor:pointer" oninput="scrubVideo(this.value)" />
-        <span id="time-readout" style="font-size:11px;font-family:monospace;font-weight:700;color:#99f6e4;min-width:82px;text-align:right">0.0s / 0.0s</span>
+      <div style="display:flex;align-items:center;gap:6px;width:100%">
+        <input type="range" id="video-scrubber" min="0" max="1000" value="0" style="flex:1;height:16px;accent-color:#2dd4bf;cursor:pointer;margin:0" oninput="scrubVideo(this.value)" />
+        <span id="time-readout" style="font-size:10.5px;font-family:monospace;font-weight:700;color:#99f6e4;min-width:74px;text-align:right">0.0s / 0.0s</span>
       </div>
       <div class="control-row">
-        <div style="display:flex;gap:4px;flex-wrap:wrap">
-          <button onclick="stepFrame(-1)">⏮ -1F</button>
+        <div style="display:flex;gap:3px;align-items:center">
+          <button onclick="stepFrame(-1)" title="Previous Frame">⏮</button>
           <button onclick="togglePlay()" id="btn-play">▶️ Play</button>
-          <button onclick="stepFrame(1)">⏭ +1F</button>
-          <button onclick="setSpeed(0.25)" id="spd-025">0.25x</button>
+          <button onclick="stepFrame(1)" title="Next Frame">⏭</button>
           <button onclick="setSpeed(0.5)" id="spd-05">0.5x</button>
           <button onclick="setSpeed(1)" id="spd-1" class="active">1x</button>
           <button onclick="setSpeed(2)" id="spd-2">2x</button>
         </div>
-        <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
-          <button onclick="setHudMode('live')" id="mode-live" class="active">👁️ HUD: LIVE</button>
-          <button onclick="setHudMode('compact')" id="mode-compact">COMPACT</button>
-          <button onclick="setHudMode('diag')" id="mode-diag">DIAG</button>
-          <button onclick="setHudMode('off')" id="mode-off">OFF</button>
-          <button onclick="toggleShieldHud()" id="btn-shield-hud" class="${shareInfo.userTier && shareInfo.userTier !== 'free' ? 'active' : ''}">${shareInfo.userTier && shareInfo.userTier !== 'free' ? '🛡️ Shield: ON' : '🔒 Shield ($2 Supporter)'}</button>
-          <button onclick="toggleHudPos()" id="btn-pos">⬆️ Pos: Top</button>
-          <input type="range" id="hud-opacity" min="25" max="100" value="50" style="width:65px;accent-color:#2dd4bf" title="HUD Opacity (50% Default)" oninput="updateOpacity(this.value)" />
+        <div style="display:flex;gap:3px;align-items:center">
+          <button onclick="setHudMode(hudMode === 'off' ? 'live' : 'off')" id="mode-live" class="active">👁️ HUD</button>
+          <button onclick="toggleHudPos()" id="btn-pos" title="Move HUD Top/Bottom">⬆️ Top</button>
+          <button onclick="toggleToolsDrawer()" id="btn-tools-toggle" title="More HUD, Jump & Diagnostic Options">⚙️ Tools</button>
         </div>
       </div>
-      <div class="chips-row" id="event-chips"></div>
+      <div class="tools-drawer" id="tools-drawer">
+        <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+          <div style="display:flex;gap:3px;flex-wrap:wrap;align-items:center">
+            <button onclick="setSpeed(0.25)" id="spd-025">0.25x</button>
+            <button onclick="setHudMode('compact')" id="mode-compact">COMPACT</button>
+            <button onclick="setHudMode('diag')" id="mode-diag">DIAG</button>
+            <button onclick="setHudMode('off')" id="mode-off">HUD OFF</button>
+            <button onclick="toggleShieldHud()" id="btn-shield-hud" class="${shareInfo.userTier && shareInfo.userTier !== 'free' ? 'active' : ''}">${shareInfo.userTier && shareInfo.userTier !== 'free' ? '🛡️ Shield' : '🔒 Shield'}</button>
+            <button id="btn-layout" onclick="toggleLayout()">📐 Side-by-Side: OFF</button>
+          </div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+            <input type="range" id="hud-opacity" min="25" max="100" value="50" style="width:58px;accent-color:#2dd4bf" title="HUD Opacity (50% Default)" oninput="updateOpacity(this.value)" />
+            <button id="btn-privacy" onclick="togglePrivacy()">🕵️ ${hideNamesDefault ? 'Hidden' : 'Names'}</button>
+            <button id="btn-flag-issue-hdr" onclick="flagOrEditCurrentIssue()" style="border-color:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? '#f59e0b' : '#b91c1c'};color:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? '#fbbf24' : '#fca5a5'}">🚩 ${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'Flagged ✓' : 'Flag'}</button>
+            <button id="btn-unflag-issue-hdr" onclick="unflagCurrentIssue()" style="display:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'inline-flex' : 'none'}">↩️ Unflag</button>
+            <button id="btn-export" onclick="exportWithHud()">💾 Export</button>
+          </div>
+        </div>
+        <div class="chips-row" id="event-chips"></div>
+      </div>
     </div>
   </main>
 
   <script>
+    const VAULT_RETURN_HREF = ${safeJsonForScript(vaultReturnHref)};
+    function closeReplayTheater() {
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'SSPVP_CLOSE_REPLAY' }, '*');
+          return;
+        }
+      } catch (_) {}
+      try {
+        if (document.referrer && new URL(document.referrer).hostname.endsWith('silphscopepvp.com')) {
+          window.history.back();
+          return;
+        }
+      } catch (_) {}
+      window.location.href = VAULT_RETURN_HREF || '/vault';
+    }
+    function toggleToolsDrawer() {
+      const d = document.getElementById('tools-drawer');
+      const b = document.getElementById('btn-tools-toggle');
+      if (!d) return;
+      const open = d.classList.toggle('open');
+      if (b) b.classList.toggle('active', open);
+    }
+    window.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') closeReplayTheater();
+    });
     const TRACE_URL = ${safeJsonForScript(traceUrl)};
     const SHARE_ID = ${safeJsonForScript(shareInfo.shareId || '')};
     const SHARE_BATTLE_ID = ${safeJsonForScript(shareInfo.battleId || '')};
@@ -2900,14 +2888,14 @@ function renderWatchSharePage(origin, shareInfo) {
     function setSpeed(s) {
       selectedSpeed = s;
       updateEffectivePlaybackRate();
-      ['025','05','1','2'].forEach(k => document.getElementById('spd-' + k).classList.remove('active'));
+      ['025','05','1','2'].forEach(k => { const b = document.getElementById('spd-' + k); if (b) b.classList.remove('active'); });
       const id = s === 0.25 ? '025' : s === 0.5 ? '05' : String(s);
       const el = document.getElementById('spd-' + id);
       if (el) el.classList.add('active');
     }
     function setHudMode(m) {
       hudMode = m;
-      ['live','compact','diag','off'].forEach(k => document.getElementById('mode-' + k).classList.toggle('active', k === m));
+      ['live','compact','diag','off'].forEach(k => { const b = document.getElementById('mode-' + k); if (b) b.classList.toggle('active', k === m || (k === 'live' && m !== 'off')); });
       hudLayer.style.display = m === 'off' ? 'none' : 'block';
       syncHudFrame();
     }
@@ -2932,7 +2920,7 @@ function renderWatchSharePage(origin, shareInfo) {
     function toggleHudPos() {
       hudTop = !hudTop;
       hudLayer.classList.toggle('pos-top', hudTop);
-      document.getElementById('btn-pos').textContent = hudTop ? '⬆️ Pos: Top' : '⬇️ Pos: Bottom';
+      document.getElementById('btn-pos').textContent = hudTop ? '⬆️ Top' : '⬇️ Bot';
     }
     function updateOpacity(val) {
       hudLayer.style.opacity = (Number(val) / 100).toFixed(2);
@@ -5356,12 +5344,35 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       }
     }
 
+    function copyCodeSync(text) {
+      try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).catch(() => {}); } catch (_) {}
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch (_) {}
+    }
+
     async function pollGitHubDeviceNow(isManualClick) {
       if (!activeGhDeviceCode) return;
-      const now = Date.now();
-      if (!isManualClick && now - lastGhPollMs < 5200) return;
-      lastGhPollMs = now;
       const statusEl = document.getElementById('gh-poll-status');
+      const now = Date.now();
+      const elapsed = now - lastGhPollMs;
+      if (lastGhPollMs > 0 && elapsed < 5300) {
+        const waitMs = Math.max(400, 5350 - elapsed);
+        if (statusEl && isManualClick) {
+          statusEl.textContent = '⏳ Verifying with GitHub in ' + Math.ceil(waitMs / 1000) + 's (auto-completing)...';
+        }
+        if (ghPollTimer) clearTimeout(ghPollTimer);
+        ghPollTimer = setTimeout(() => pollGitHubDeviceNow(isManualClick), waitMs);
+        return;
+      }
+      lastGhPollMs = now;
       if (statusEl && isManualClick) {
         statusEl.textContent = '🔄 Checking GitHub authorization status...';
       }
@@ -5380,15 +5391,18 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         });
         const pollData = await pollRes.json();
         if (pollData.status === 'pending') {
-          if (pollData.slowDown || pollData.interval) {
-            ghPollDelayMs = (Math.max(10, Number(pollData.interval) || 10) + 2) * 1000;
-          }
-          if (statusEl && isManualClick) {
-            statusEl.textContent = '⏳ Still waiting for authorization on GitHub. Make sure you clicked "Authorize" in the GitHub tab, then wait 5s and click Finish Sign-In again.';
+          const nextWaitMs = Number(pollData.cooldownMs) || ((Math.max(5, Number(pollData.interval) || 5) + 0.5) * 1000);
+          ghPollDelayMs = nextWaitMs;
+          if (statusEl) {
+            if (pollData.throttled) {
+              statusEl.textContent = '⏳ Verifying with GitHub in ' + Math.ceil(nextWaitMs / 1000) + 's...';
+            } else if (isManualClick) {
+              statusEl.textContent = '⏳ GitHub has not confirmed the code yet. Make sure you pasted the 8-character code on github.com/login/device AND tapped the green Authorize button (auto-checking every ' + Math.round(nextWaitMs / 1000) + 's)...';
+            }
           }
           if (activeGhDeviceCode) {
             if (ghPollTimer) clearTimeout(ghPollTimer);
-            ghPollTimer = setTimeout(() => pollGitHubDeviceNow(false), ghPollDelayMs);
+            ghPollTimer = setTimeout(() => pollGitHubDeviceNow(Boolean(pollData.throttled && isManualClick)), nextWaitMs);
           }
           return;
         }
@@ -5472,19 +5486,20 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           }));
         } catch (_) {}
         ghPollDelayMs = (Math.max(5, Number(data.interval) || 5) + 1.5) * 1000;
-        lastGhPollMs = Date.now();
+        lastGhPollMs = 0;
         const safeUri = /^https:\\/\\/github\\.com\\//i.test(String(data.verification_uri || ''))
           ? data.verification_uri
           : 'https://github.com/login/device';
+        const safeCodeJs = escJsArg(data.user_code || '');
         box.innerHTML =
           '<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px">' +
-            '<div>1. Copy one-time code: <strong style="font-size:16px;color:#2dd4bf;letter-spacing:1px;padding:3px 10px;background:#081120;border:1px solid #19304e;border-radius:6px">' + esc(data.user_code) + '</strong></div>' +
+            '<div onclick="copyCodeSync(\'' + safeCodeJs + '\');document.getElementById(\'gh-poll-status\').textContent=\'📋 Copied code ' + esc(data.user_code) + '! Paste it on GitHub & tap Authorize.\'" style="cursor:pointer" title="Tap to copy code">1. Tap to copy code: <strong style="font-size:16px;color:#2dd4bf;letter-spacing:1px;padding:3px 10px;background:#081120;border:1px solid #2dd4bf;border-radius:6px">' + esc(data.user_code) + ' 📋</strong></div>' +
             '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-              '<a class="btn-link primary" href="' + esc(safeUri) + '" target="_blank" rel="noopener">2. Open GitHub & Authorize ↗</a>' +
-              '<button onclick="pollGitHubDeviceNow(true)" style="background:#081120;border-color:#2dd4bf;color:#2dd4bf;font-weight:700">✅ 3. I\\'ve Authorized — Finish Sign-In</button>' +
+              '<a class="btn-link primary" onclick="copyCodeSync(\'' + safeCodeJs + '\')" href="' + esc(safeUri) + '" target="_blank" rel="noopener">2. Copy & Authorize on GitHub ↗</a>' +
+              '<button onclick="pollGitHubDeviceNow(true)" style="background:#081120;border-color:#2dd4bf;color:#2dd4bf;font-weight:700">✅ Finish Sign-In</button>' +
             '</div>' +
           '</div>' +
-          '<div style="margin-top:6px;font-size:11.5px;color:#99f6e4" id="gh-poll-status">Waiting for authorization on GitHub (auto-unlocks when you return to this tab)...</div>';
+          '<div style="margin-top:6px;font-size:11.5px;color:#99f6e4" id="gh-poll-status">Tap "2. Copy & Authorize on GitHub ↗", paste code ' + esc(data.user_code) + ', and click Authorize (auto-completes when you return)...</div>';
         try { navigator.clipboard.writeText(data.user_code); } catch (_) {}
         window.open(safeUri, '_blank', 'noopener');
 
@@ -5765,8 +5780,8 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           '<div style="font-size:11px;color:#94a3b8">' + esc(dateStr) + ' • ID: ' + esc(item.battleId) + (highlightSecNum ? ' • <span style="color:#fde047">⚡ Highlight @ ' + highlightSecNum + 's</span>' : '') + '</div>' +
           issueBannerHtml +
           '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;align-items:center">' +
-            '<a class="btn-link primary" style="padding:7px 11px;font-size:12px;flex:1;justify-content:center" href="' + safeShareUrl + '">▶️ Watch + HUD</a>' +
-            (highlightSecNum ? '<a class="btn-link" style="background:rgba(250,204,21,0.16);border-color:#facc15;color:#fde047;padding:7px 10px;font-size:12px" href="' + safeShareUrl + '?t=' + highlightSecNum + '" title="Jump directly to the key highlight moment">⚡ Key Moment (' + highlightSecNum + 's)</a>' : '') +
+            '<button class="primary" style="padding:7px 11px;font-size:12px;flex:1;justify-content:center" onclick="openFullScreenReplay(\'' + safeShareIdJs + '\', 0)">▶️ Watch + HUD</button>' +
+            (highlightSecNum ? '<button style="background:rgba(250,204,21,0.16);border-color:#facc15;color:#fde047;padding:7px 10px;font-size:12px" onclick="openFullScreenReplay(\'' + safeShareIdJs + '\', ' + highlightSecNum + ')" title="Jump directly to the key highlight moment">⚡ Key Moment (' + highlightSecNum + 's)</button>' : '') +
             starControl +
             pubControl +
             featControl +
@@ -5955,6 +5970,37 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       }
     }
 
+    function openFullScreenReplay(shareId, startSec) {
+      if (!shareId) return;
+      let modal = document.getElementById('vault-fs-replay-modal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'vault-fs-replay-modal';
+        modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#02060d;display:flex;flex-direction:column;overflow:hidden;';
+        modal.innerHTML =
+          '<button type="button" onclick="closeFullScreenReplay()" title="Close Replay" aria-label="Close Replay" style="position:fixed;top:max(10px,env(safe-area-inset-top,10px));right:12px;z-index:10001;width:36px;height:36px;border-radius:12px;background:rgba(8,17,32,0.9);border:1.5px solid #2dd4bf;color:#99f6e4;font-size:15px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.85),0 0 14px rgba(45,212,191,0.35)">✕</button>' +
+          '<iframe id="vault-fs-replay-iframe" style="width:100%;height:100%;flex:1;border:none;display:block;background:#000" allow="fullscreen"></iframe>';
+        document.body.appendChild(modal);
+      }
+      const iframe = document.getElementById('vault-fs-replay-iframe');
+      iframe.src = '/watch/' + encodeURIComponent(shareId) + '?embed=1' + (startSec > 0 ? '&t=' + Number(startSec) : '');
+      modal.style.display = 'flex';
+      document.body.style.overflow = 'hidden';
+    }
+    function closeFullScreenReplay() {
+      const modal = document.getElementById('vault-fs-replay-modal');
+      const iframe = document.getElementById('vault-fs-replay-iframe');
+      if (iframe) iframe.src = 'about:blank';
+      if (modal) modal.style.display = 'none';
+      document.body.style.overflow = '';
+    }
+    window.addEventListener('message', (ev) => {
+      if (ev && ev.data && ev.data.type === 'SSPVP_CLOSE_REPLAY') closeFullScreenReplay();
+    });
+    window.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') closeFullScreenReplay();
+    });
+
     if (savedUser) {
       document.getElementById('inp-user').value = savedUser;
       loadVault();
@@ -6131,8 +6177,8 @@ export default {
     }
 
     if (isGetOrHead && path === '/sw.js') {
-      const swCode = `// SilphScope DVR PWA Service Worker (v7.31)
-const CACHE_NAME = 'silphscope-dvr-pwa-v731';
+      const swCode = `// SilphScope DVR PWA Service Worker (v7.32)
+const CACHE_NAME = 'silphscope-dvr-pwa-v732';
 const STATIC_ASSETS = ['/', '/index.html', '/manifest.json', '/manifest.webmanifest', '/favicon.svg', '/pwa-icon-192.svg', '/pwa-icon-512.svg', '/overlay.html'];
 self.addEventListener('install', (e) => { self.skipWaiting(); e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(STATIC_ASSETS).catch(() => {}))); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((keys) => Promise.all(keys.map((k) => k !== CACHE_NAME && caches.delete(k)))).then(() => self.clients.claim())); });
@@ -6308,7 +6354,7 @@ self.addEventListener('fetch', (e) => {
         return jsonResponse({
           ok: true,
           service: 'silphscope-telemetry-worker',
-          version: env.WORKER_VERSION || '7.1.5',
+          version: env.WORKER_VERSION || '7.1.6',
           timestamp: new Date().toISOString(),
         });
       }
@@ -6317,7 +6363,7 @@ self.addEventListener('fetch', (e) => {
       return jsonResponse({
         ok: true,
         service: 'silphscope-telemetry-worker',
-        version: env.WORKER_VERSION || '7.1.5',
+        version: env.WORKER_VERSION || '7.1.6',
         storageBackend: store.backend,
         r2ReplayBucketBound: Boolean(env.REPLAY_BUCKET),
         r2GlobalUsedMb: Number((r2Stats.totalBytes / (1024 * 1024)).toFixed(2)),
@@ -8732,13 +8778,84 @@ self.addEventListener('fetch', (e) => {
       if (!deviceCode) {
         return jsonResponse({ ok: false, error: 'Missing device_code' }, 400, request, true);
       }
+      const dcHashHex = (await computeHmacSha256Hex('sspvp_gh_device_poll_v1', deviceCode)).slice(0, 32);
+      const dcDoneKey = `gh_device_done/${dcHashHex}`;
+      const dcStateKey = `gh_device_state/${dcHashHex}`;
+
+      // 1. If a concurrent/prior request already exchanged this device_code within the last 180s, return cached session immediately!
+      if (env.TELEMETRY_KV) {
+        try {
+          const cachedDoneRaw = await env.TELEMETRY_KV.get(dcDoneKey, { type: 'text' });
+          if (cachedDoneRaw) {
+            const cachedPayload = JSON.parse(cachedDoneRaw);
+            const cachedResp = jsonResponse(cachedPayload, 200, request, true);
+            if (cachedPayload.screenName && cachedPayload.sessionToken) {
+              cachedResp.headers.append(
+                'Set-Cookie',
+                `sspvp_vault_user=${encodeURIComponent(cachedPayload.screenName)}; Domain=.silphscopepvp.com; Path=/; Max-Age=31536000; SameSite=Lax; Secure`
+              );
+              cachedResp.headers.append(
+                'Set-Cookie',
+                `sspvp_vault_session=${encodeURIComponent(cachedPayload.sessionToken)}; Domain=.silphscopepvp.com; Path=/; Max-Age=31536000; SameSite=Lax; Secure`
+              );
+            }
+            return cachedResp;
+          }
+        } catch (_) {}
+      }
+
+      // 2. Enforce GitHub's strict per-device_code minimum interval BEFORE hitting GitHub so rapid taps / focus events NEVER trigger GitHub's +5s slow_down penalty!
+      let pollState = { lastPollMs: 0, intervalSec: 5 };
+      if (env.TELEMETRY_KV) {
+        try {
+          const rawState = await env.TELEMETRY_KV.get(dcStateKey, { type: 'text' });
+          if (rawState) {
+            const parsedState = JSON.parse(rawState);
+            if (parsedState && typeof parsedState === 'object') {
+              pollState = {
+                lastPollMs: Number(parsedState.lastPollMs) || 0,
+                intervalSec: Math.max(5, Number(parsedState.intervalSec) || 5),
+              };
+            }
+          }
+        } catch (_) {}
+      }
+      const nowPollMs = Date.now();
+      const minGapMs = pollState.intervalSec * 1000 + 350;
+      const elapsedSinceLastMs = nowPollMs - pollState.lastPollMs;
+      if (pollState.lastPollMs > 0 && elapsedSinceLastMs >= 0 && elapsedSinceLastMs < minGapMs) {
+        const cooldownMs = Math.max(400, minGapMs - elapsedSinceLastMs);
+        return jsonResponse(
+          {
+            ok: true,
+            status: 'pending',
+            throttled: true,
+            cooldownMs,
+            interval: pollState.intervalSec,
+          },
+          200,
+          request,
+          true
+        );
+      }
+
+      if (env.TELEMETRY_KV) {
+        try {
+          await env.TELEMETRY_KV.put(
+            dcStateKey,
+            JSON.stringify({ lastPollMs: nowPollMs, intervalSec: pollState.intervalSec }),
+            { expirationTtl: 900 }
+          );
+        } catch (_) {}
+      }
+
       try {
         const ghRes = await fetch('https://github.com/login/oauth/access_token', {
           method: 'POST',
           headers: {
             Accept: 'application/json',
             'Content-Type': 'application/x-www-form-urlencoded',
-            'User-Agent': 'SilphScope-PvP-Worker/7.13',
+            'User-Agent': 'SilphScope-PvP-Worker/7.16',
           },
           body:
             `client_id=${encodeURIComponent(GITHUB_OAUTH_CLIENT_ID)}` +
@@ -8747,20 +8864,32 @@ self.addEventListener('fetch', (e) => {
         });
         const ghData = await ghRes.json();
         if (ghData.error === 'authorization_pending') {
+          const nextInt = Math.max(pollState.intervalSec, Number(ghData.interval) || 5);
           return jsonResponse(
-            { ok: true, status: 'pending', interval: Number(ghData.interval) || 5 },
+            { ok: true, status: 'pending', interval: nextInt, cooldownMs: nextInt * 1000 + 350 },
             200,
             request,
             true
           );
         }
         if (ghData.error === 'slow_down') {
+          const nextInt = Math.max(pollState.intervalSec + 5, Number(ghData.interval) || 10);
+          if (env.TELEMETRY_KV) {
+            try {
+              await env.TELEMETRY_KV.put(
+                dcStateKey,
+                JSON.stringify({ lastPollMs: Date.now(), intervalSec: nextInt }),
+                { expirationTtl: 900 }
+              );
+            } catch (_) {}
+          }
           return jsonResponse(
             {
               ok: true,
               status: 'pending',
               slowDown: true,
-              interval: Number(ghData.interval) || 10,
+              interval: nextInt,
+              cooldownMs: nextInt * 1000 + 450,
             },
             200,
             request,
@@ -8768,6 +8897,15 @@ self.addEventListener('fetch', (e) => {
           );
         }
         if (!ghData.access_token) {
+          if (env.TELEMETRY_KV && ghData.error === 'bad_verification_code') {
+            try {
+              const raceCachedRaw = await env.TELEMETRY_KV.get(dcDoneKey, { type: 'text' });
+              if (raceCachedRaw) {
+                const racePayload = JSON.parse(raceCachedRaw);
+                return jsonResponse(racePayload, 200, request, true);
+              }
+            } catch (_) {}
+          }
           return jsonResponse(
             {
               ok: false,
@@ -8854,26 +8992,29 @@ self.addEventListener('fetch', (e) => {
         }
 
         const licInfo = ownerAuth.licenseInfo || { ...TIER_PRESETS.free, active: false };
-        const ghPollResp = jsonResponse(
-          {
-            ok: true,
-            status: 'authorized',
-            isOwner: true,
-            screenName: ownerAuth.screenName,
-            githubUsername: ghUser.githubUsername,
-            githubUserId: ghUser.githubUserId,
-            sessionToken: ownerAuth.sessionToken,
-            tier: licInfo.tier || 'free',
-            active: Boolean(licInfo.active),
-            everPaid: Boolean(licInfo.everPaid),
-            signature: licInfo.signature || '',
-            license: licInfo,
-            limits: licInfo,
-          },
-          200,
-          request,
-          true
-        );
+        const authorizedPayload = {
+          ok: true,
+          status: 'authorized',
+          isOwner: true,
+          screenName: ownerAuth.screenName,
+          githubUsername: ghUser.githubUsername,
+          githubUserId: ghUser.githubUserId,
+          sessionToken: ownerAuth.sessionToken,
+          tier: licInfo.tier || 'free',
+          active: Boolean(licInfo.active),
+          everPaid: Boolean(licInfo.everPaid),
+          signature: licInfo.signature || '',
+          license: licInfo,
+          limits: licInfo,
+        };
+        if (env.TELEMETRY_KV) {
+          try {
+            await env.TELEMETRY_KV.put(dcDoneKey, JSON.stringify(authorizedPayload), {
+              expirationTtl: 180,
+            });
+          } catch (_) {}
+        }
+        const ghPollResp = jsonResponse(authorizedPayload, 200, request, true);
         if (ownerAuth.screenName && ownerAuth.sessionToken) {
           ghPollResp.headers.append(
             'Set-Cookie',
@@ -9606,7 +9747,8 @@ self.addEventListener('fetch', (e) => {
           if (!shareInfo.userTierBadge) shareInfo.userTierBadge = tierSum.badge;
         } catch (_) {}
       }
-      return new Response(renderWatchSharePage(url.origin, shareInfo), {
+      const isEmbedView = url.searchParams.get('embed') === '1';
+      return new Response(renderWatchSharePage(url.origin, shareInfo, isEmbedView), {
         status: 200,
         headers: buildSecurityHeaders(
           {

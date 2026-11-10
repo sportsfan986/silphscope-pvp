@@ -370,9 +370,32 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
     return null;
   });
   const [ghPollStatus, setGhPollStatus] = useState<string>('');
+  const [ghPollingNow, setGhPollingNow] = useState<boolean>(false);
+  const [ghCodeCopied, setGhCodeCopied] = useState<boolean>(false);
   const ghModalTimerRef = useRef<number | null>(null);
   const lastGhModalPollRef = useRef<number>(0);
+  const ghPollInFlightRef = useRef<boolean>(false);
   const pendingGhLinkTokenRef = useRef<string>('');
+
+  const copyTextSyncWithFallback = (text: string) => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).catch(() => {});
+      }
+    } catch {}
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      ta.style.pointerEvents = 'none';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch {}
+  };
 
   const fetchVaultReplays = async (userToFetch: string) => {
     const user = (userToFetch || 'Featured').trim();
@@ -429,10 +452,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
     }
   };
 
-  const startGitHubLoginInModal = async () => {
+  const startGitHubLoginInModal = async (openTabImmediately = false) => {
     setAuthErrorMsg('');
     setAuthLoading(true);
-    setGhPollStatus('Requesting GitHub authorization code...');
+    setGhCodeCopied(false);
+    setGhPollStatus('Generating your GitHub one-time code...');
     if (ghModalTimerRef.current) window.clearTimeout(ghModalTimerRef.current);
     try {
       const res = await fetch('https://api.silphscopepvp.com/v1/auth/github/device-code', {
@@ -464,14 +488,20 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
       try {
         localStorage.setItem('sspvp_pending_gh_device', JSON.stringify(pendingObj));
       } catch {}
-      try {
-        await navigator.clipboard.writeText(data.user_code);
-      } catch {}
-      window.open(verUri, '_blank', 'noopener');
-      setGhPollStatus(`Code ${data.user_code} copied! Approve on GitHub (auto-completes when you return)...`);
+      copyTextSyncWithFallback(data.user_code);
+      if (openTabImmediately) {
+        window.open(verUri, '_blank', 'noopener');
+        setGhPollStatus(
+          `Paste code ${data.user_code} on GitHub & tap the green Authorize button (auto-completes when you return).`
+        );
+      } else {
+        setGhPollStatus(
+          `Tap "Copy Code & Authorize on GitHub ↗", paste ${data.user_code}, and tap the green Authorize button.`
+        );
+      }
 
-      const pollDelayMs = (Math.max(5, Number(data.interval) || 5) + 1.5) * 1000;
-      lastGhModalPollRef.current = Date.now();
+      const pollDelayMs = (Math.max(5, Number(data.interval) || 5) + 0.6) * 1000;
+      lastGhModalPollRef.current = 0;
       ghModalTimerRef.current = window.setTimeout(
         () => pollGitHubModalNow(data.device_code, false, pollDelayMs),
         pollDelayMs
@@ -483,13 +513,34 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
     }
   };
 
-  const pollGitHubModalNow = async (deviceCode: string, isManual = false, delayMs = 6500) => {
+  const pollGitHubModalNow = async (deviceCode: string, isManual = false, delayMs = 5600) => {
     if (!deviceCode) return;
+    if (ghPollInFlightRef.current) {
+      if (isManual) {
+        setGhPollStatus('🔄 Checking GitHub authorization status...');
+      }
+      return;
+    }
     const now = Date.now();
-    if (!isManual && now - lastGhModalPollRef.current < 4500) return;
+    const elapsed = now - lastGhModalPollRef.current;
+    if (lastGhModalPollRef.current > 0 && elapsed < 5300) {
+      const waitMs = Math.max(400, 5350 - elapsed);
+      if (isManual) {
+        setGhPollingNow(true);
+        setGhPollStatus(`⏳ Verifying with GitHub in ${Math.ceil(waitMs / 1000)}s (auto-completing)...`);
+      }
+      if (ghModalTimerRef.current) window.clearTimeout(ghModalTimerRef.current);
+      ghModalTimerRef.current = window.setTimeout(
+        () => pollGitHubModalNow(deviceCode, isManual, delayMs),
+        waitMs
+      );
+      return;
+    }
     lastGhModalPollRef.current = now;
+    ghPollInFlightRef.current = true;
     if (isManual) {
-      setGhPollStatus('Checking GitHub authorization status...');
+      setGhPollingNow(true);
+      setGhPollStatus('🔄 Checking GitHub authorization status...');
     }
     try {
       const candidateUser =
@@ -512,19 +563,31 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
       });
       const data = await res.json();
       if (data.status === 'pending') {
-        const nextDelay = data.slowDown || data.interval
-          ? (Math.max(10, Number(data.interval) || 10) + 2) * 1000
-          : delayMs;
-        if (isManual) {
-          setGhPollStatus('Waiting for authorization on GitHub. Make sure you clicked Authorize in the GitHub tab, wait 5s, and tap Finish Sign-In.');
+        const nextDelay =
+          Number(data.cooldownMs) ||
+          (data.slowDown || data.interval
+            ? (Math.max(5, Number(data.interval) || 5) + 0.6) * 1000
+            : delayMs);
+        if (data.throttled) {
+          if (isManual) {
+            setGhPollStatus(`⏳ Verifying with GitHub in ${Math.ceil(nextDelay / 1000)}s...`);
+          }
+        } else {
+          setGhPollingNow(false);
+          if (isManual) {
+            setGhPollStatus(
+              `⏳ GitHub hasn't confirmed code ${ghDeviceCodeInfo?.user_code || ''} yet. Make sure you pasted the code on github.com/login/device AND tapped the green "Authorize" button (auto-checking every ${Math.round(nextDelay / 1000)}s).`
+            );
+          }
         }
         if (ghModalTimerRef.current) window.clearTimeout(ghModalTimerRef.current);
         ghModalTimerRef.current = window.setTimeout(
-          () => pollGitHubModalNow(deviceCode, false, nextDelay),
+          () => pollGitHubModalNow(deviceCode, Boolean(data.throttled && isManual), nextDelay),
           nextDelay
         );
         return;
       }
+      setGhPollingNow(false);
       if (ghModalTimerRef.current) window.clearTimeout(ghModalTimerRef.current);
       ghModalTimerRef.current = null;
       setGhDeviceCodeInfo(null);
@@ -562,11 +625,14 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
         setAuthErrorMsg(data.error || 'GitHub login did not match an active account.');
       }
     } catch {
+      setGhPollingNow(false);
       if (ghModalTimerRef.current) window.clearTimeout(ghModalTimerRef.current);
       ghModalTimerRef.current = window.setTimeout(
         () => pollGitHubModalNow(deviceCode, false, delayMs),
         delayMs
       );
+    } finally {
+      ghPollInFlightRef.current = false;
     }
   };
 
@@ -717,6 +783,33 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
     };
   }, [ghDeviceCodeInfo?.device_code]);
 
+  // Pre-fetch GitHub one-time device code immediately when Owner Login opens on the GitHub tab
+  useEffect(() => {
+    if (ownerLoginOpen && authTab === 'github' && !ghDeviceCodeInfo && !authLoading) {
+      startGitHubLoginInModal(false);
+    }
+  }, [ownerLoginOpen, authTab]);
+
+  // Close full-screen replay theater via Escape key or iframe postMessage
+  useEffect(() => {
+    if (!selectedWatchReplay) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSelectedWatchReplay(null);
+    };
+    const onMsg = (e: MessageEvent) => {
+      if (e?.data?.type === 'SSPVP_CLOSE_REPLAY') setSelectedWatchReplay(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('message', onMsg);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('message', onMsg);
+    };
+  }, [selectedWatchReplay]);
+
   // Auto-restore cached session or handle ?auth=github URL query on launch
   useEffect(() => {
     try {
@@ -724,7 +817,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
       if (params.get('auth') === 'github' || params.get('login') === 'github') {
         setOwnerLoginOpen(true);
         setAuthTab('github');
-        startGitHubLoginInModal();
+        startGitHubLoginInModal(false);
         params.delete('auth');
         params.delete('login');
         const cleanQuery = params.toString();
@@ -2964,94 +3057,33 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
         </main>
       )}
 
-      {/* IN-PAGE REPLAY THEATER MODAL (ZERO TAB OPENING!) */}
+      {/* FULL-SCREEN REPLAY THEATER OVERLAY (ZERO BANNERS, FULL-SCREEN BATTLE + BORDERED 'X' RETURN BUTTON) */}
       {selectedWatchReplay && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fadeIn">
-          <div
-            className="w-full max-w-5xl rounded-3xl border-2 flex flex-col overflow-hidden shadow-2xl"
+        <div className="fixed inset-0 z-50 bg-[#02060d] animate-fadeIn flex flex-col overflow-hidden">
+          {/* Floating Top-Right Bordered 'X' Close Button -> Returns to Main DVR Screen */}
+          <button
+            type="button"
+            onClick={() => setSelectedWatchReplay(null)}
+            className="fixed top-3 right-3 z-[60] w-9 h-9 rounded-xl bg-[#081120]/90 hover:bg-[#0E1B2E] text-teal-200 hover:text-white flex items-center justify-center font-black text-sm cursor-pointer transition shadow-2xl backdrop-blur-md"
             style={{
-              backgroundColor: '#081120',
-              borderColor: '#2DD4BF',
-              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(45, 212, 191, 0.25)',
-              maxHeight: '94vh'
+              border: '1.5px solid #2DD4BF',
+              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.85), 0 0 14px rgba(45, 212, 191, 0.35)'
             }}
+            title="Close Replay & Return to Vault"
+            aria-label="Close Replay"
           >
-            {/* Modal Header */}
-            <div className="p-3.5 sm:p-4 bg-[#0E1B2E] border-b border-slate-800 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5 overflow-hidden">
-                <span
-                  className={`px-2.5 py-0.5 rounded-full text-xs font-black border flex-shrink-0 ${
-                    selectedWatchReplay.result?.toUpperCase().includes('WIN')
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                      : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                  }`}
-                >
-                  {selectedWatchReplay.result || 'BATTLE'}
-                </span>
-                <span className="font-extrabold text-xs sm:text-sm text-white truncate">
-                  {selectedWatchReplay.matchupSummary}
-                </span>
-                <span className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[11px] font-mono bg-cyan-400/15 text-cyan-300 border border-cyan-400/30 flex-shrink-0">
-                  {selectedWatchReplay.league}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedWatchReplay(null)}
-                className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center font-black text-sm flex-shrink-0 cursor-pointer transition"
-                title="Close Replay Player"
-              >
-                ✕
-              </button>
-            </div>
+            ✕
+          </button>
 
-            {/* Embedded Replay Stage */}
-            <div className="flex-1 bg-black min-h-[480px] sm:min-h-[580px] relative">
-              <iframe
-                src={`https://dvr.silphscopepvp.com/watch/${selectedWatchReplay.shareId}?embed=1${
-                  selectedWatchReplay.highlightSec ? `&t=${selectedWatchReplay.highlightSec}` : ''
-                }`}
-                title="SilphScope Replay Theater"
-                className="w-full h-full border-none absolute inset-0"
-                allow="fullscreen"
-              ></iframe>
-            </div>
-
-            {/* Modal Footer Controls */}
-            <div className="p-3 bg-[#0E1B2E] border-t border-slate-800 flex items-center justify-between gap-3 flex-wrap text-xs">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    copyToClipboard(
-                      selectedWatchReplay.shareUrl ||
-                        `https://dvr.silphscopepvp.com/watch/${selectedWatchReplay.shareId}`,
-                      'Replay link'
-                    )
-                  }
-                  className="px-3 py-1.5 rounded-lg bg-[#081120] text-teal-300 border border-teal-400/40 hover:bg-teal-400/10 font-bold transition cursor-pointer flex items-center gap-1.5"
-                >
-                  <span>📋</span>
-                  <span>Copy Replay Link</span>
-                </button>
-                {selectedWatchReplay.highlightSec && (
-                  <span className="text-slate-400 font-mono text-[11px] hidden sm:inline">
-                    🎯 Highlight loaded at {selectedWatchReplay.highlightSec}s
-                  </span>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedWatchReplay(null)}
-                  className="px-4 py-1.5 rounded-lg bg-teal-400 text-slate-950 font-black hover:bg-teal-300 transition cursor-pointer shadow"
-                >
-                  ✕ Close Theater
-                </button>
-              </div>
-            </div>
-          </div>
+          {/* Full-Screen Replay Stage */}
+          <iframe
+            src={`https://dvr.silphscopepvp.com/watch/${selectedWatchReplay.shareId}?embed=1${
+              selectedWatchReplay.highlightSec ? `&t=${selectedWatchReplay.highlightSec}` : ''
+            }`}
+            title="SilphScope Replay Theater"
+            className="w-full h-full flex-1 border-none block bg-black"
+            allow="fullscreen"
+          ></iframe>
         </div>
       )}
 
@@ -3286,30 +3318,64 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 {ghDeviceCodeInfo ? (
                   <div className="p-3.5 rounded-2xl bg-[#081120] border border-teal-400/50 space-y-3 shadow-lg">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span className="text-xs font-bold text-slate-300">1. One-Time Code:</span>
-                      <strong className="font-mono text-base text-teal-300 tracking-widest px-3 py-1 bg-[#0E1B2E] border border-teal-400/40 rounded-lg">
-                        {ghDeviceCodeInfo.user_code}
-                      </strong>
+                      <span className="text-xs font-bold text-slate-300">1. Tap to Copy Code:</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          copyTextSyncWithFallback(ghDeviceCodeInfo.user_code);
+                          setGhCodeCopied(true);
+                          setGhPollStatus(
+                            `📋 Copied ${ghDeviceCodeInfo.user_code}! Now tap "2. Authorize on GitHub ↗", paste the code, and tap Authorize.`
+                          );
+                        }}
+                        className="font-mono text-base font-black text-teal-300 tracking-widest px-3 py-1 bg-[#0E1B2E] hover:bg-teal-950/60 border border-teal-400/60 rounded-lg cursor-pointer transition flex items-center gap-1.5"
+                        title="Tap to copy code to clipboard"
+                      >
+                        <span>{ghDeviceCodeInfo.user_code}</span>
+                        <span className="text-xs font-sans font-bold text-teal-200">
+                          {ghCodeCopied ? '✓ Copied' : '📋'}
+                        </span>
+                      </button>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <a
                         href={ghDeviceCodeInfo.verification_uri}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex-1 py-2 px-3 rounded-xl bg-teal-400 text-slate-950 font-black text-xs text-center hover:bg-teal-300 transition shadow"
+                        onClick={() => {
+                          copyTextSyncWithFallback(ghDeviceCodeInfo.user_code);
+                          setGhCodeCopied(true);
+                          setGhPollStatus(
+                            `📋 Code ${ghDeviceCodeInfo.user_code} copied! Paste it on GitHub & tap the green Authorize button.`
+                          );
+                        }}
+                        className="flex-1 py-2.5 px-3 rounded-xl bg-teal-400 text-slate-950 font-black text-xs text-center hover:bg-teal-300 transition shadow"
                       >
-                        2. Authorize on GitHub ↗
+                        2. Copy &amp; Authorize on GitHub ↗
                       </a>
                       <button
                         type="button"
+                        disabled={ghPollingNow}
                         onClick={() => pollGitHubModalNow(ghDeviceCodeInfo.device_code, true)}
-                        className="py-2 px-3 rounded-xl bg-[#0E1B2E] text-teal-300 font-bold text-xs border border-teal-400/40 hover:bg-teal-950/50 transition cursor-pointer"
+                        className="py-2.5 px-3 rounded-xl bg-[#0E1B2E] text-teal-300 font-bold text-xs border border-teal-400/50 hover:bg-teal-950/50 transition cursor-pointer disabled:opacity-70"
                       >
-                        ✅ Finish Sign-In
+                        {ghPollingNow ? '🔄 Checking...' : '✅ Finish Sign-In'}
                       </button>
                     </div>
-                    <div className="text-[11px] text-teal-200/80 font-medium">
-                      {ghPollStatus || 'Waiting for authorization on GitHub... (auto-completes when you return)'}
+                    <div className="text-[11px] text-teal-200/90 font-medium leading-relaxed">
+                      {ghPollStatus ||
+                        `Tap "2. Copy & Authorize on GitHub ↗", paste code ${ghDeviceCodeInfo.user_code}, and tap Authorize (auto-completes when you return).`}
+                    </div>
+                    <div className="pt-1 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
+                      <span className="text-slate-400">Code expired or need a new one?</span>
+                      <button
+                        type="button"
+                        disabled={authLoading}
+                        onClick={() => startGitHubLoginInModal(false)}
+                        className="text-teal-300 hover:text-teal-200 font-bold underline cursor-pointer disabled:opacity-50"
+                      >
+                        🔄 Generate Fresh Code
+                      </button>
                     </div>
                   </div>
                 ) : (
@@ -3317,21 +3383,12 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     <button
                       type="button"
                       disabled={authLoading}
-                      onClick={startGitHubLoginInModal}
+                      onClick={() => startGitHubLoginInModal(true)}
                       className="w-full py-3 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-slate-950 font-black text-xs transition cursor-pointer shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                       <span>🐙</span>
-                      <span>{authLoading ? 'Connecting to GitHub...' : '1-Click Sign In with GitHub'}</span>
+                      <span>{authLoading ? 'Generating GitHub Code...' : 'Sign In with GitHub'}</span>
                     </button>
-                    <div className="text-center">
-                      <button
-                        type="button"
-                        onClick={startGitHubLoginInModal}
-                        className="text-[11px] text-slate-400 hover:text-teal-300 underline transition cursor-pointer"
-                      >
-                        Or generate a fresh GitHub Device Code ↗
-                      </button>
-                    </div>
                   </div>
                 )}
               </div>

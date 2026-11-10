@@ -399,10 +399,22 @@ export default function App() {
     }
   };
 
-  const pollWebGitHubDeviceNow = async (deviceCode: string, isManualClick = false, delayMs = 6500) => {
+  const pollWebGitHubDeviceNow = async (deviceCode: string, isManualClick = false, delayMs = 5600) => {
     if (!deviceCode) return;
     const now = Date.now();
-    if (!isManualClick && now - lastGhPollMsRef.current < 5200) return;
+    const elapsed = now - lastGhPollMsRef.current;
+    if (lastGhPollMsRef.current > 0 && elapsed < 5300) {
+      const waitMs = Math.max(400, 5350 - elapsed);
+      if (isManualClick) {
+        setMembershipStatusMsg(`⏳ Verifying with GitHub in ${Math.ceil(waitMs / 1000)}s (auto-completing)...`);
+      }
+      if (ghPollTimerRef.current) window.clearTimeout(ghPollTimerRef.current);
+      ghPollTimerRef.current = window.setTimeout(
+        () => pollWebGitHubDeviceNow(deviceCode, isManualClick, delayMs),
+        waitMs
+      );
+      return;
+    }
     lastGhPollMsRef.current = now;
     if (isManualClick) {
       setMembershipStatusMsg('🔄 Checking GitHub authorization status...');
@@ -420,17 +432,22 @@ export default function App() {
       const pollData = await pollResp.json();
       if (pollData.status === 'pending') {
         const nextDelay =
-          pollData.slowDown || pollData.interval
-            ? (Math.max(10, Number(pollData.interval) || 10) + 2) * 1000
-            : delayMs;
-        if (isManualClick) {
+          Number(pollData.cooldownMs) ||
+          (pollData.slowDown || pollData.interval
+            ? (Math.max(5, Number(pollData.interval) || 5) + 0.6) * 1000
+            : delayMs);
+        if (pollData.throttled) {
+          if (isManualClick) {
+            setMembershipStatusMsg(`⏳ Verifying with GitHub in ${Math.ceil(nextDelay / 1000)}s...`);
+          }
+        } else if (isManualClick) {
           setMembershipStatusMsg(
-            '⏳ Still waiting for GitHub authorization. Click "Authorize" in the GitHub tab, wait 5s, and click Finish Sign-In again.'
+            `⏳ GitHub hasn't confirmed the code yet. Paste the code on github.com/login/device & tap Authorize (auto-checking every ${Math.round(nextDelay / 1000)}s).`
           );
         }
         if (ghPollTimerRef.current) window.clearTimeout(ghPollTimerRef.current);
         ghPollTimerRef.current = window.setTimeout(
-          () => pollWebGitHubDeviceNow(deviceCode, false, nextDelay),
+          () => pollWebGitHubDeviceNow(deviceCode, Boolean(pollData.throttled && isManualClick), nextDelay),
           nextDelay
         );
         return;
@@ -501,8 +518,8 @@ export default function App() {
         `🐙 Enter code ${data.user_code} on GitHub (copied to clipboard). Auto-unlocks when you return!`
       );
 
-      const initialDelayMs = (Math.max(5, Number(data.interval) || 5) + 1.5) * 1000;
-      lastGhPollMsRef.current = Date.now();
+      const initialDelayMs = (Math.max(5, Number(data.interval) || 5) + 0.6) * 1000;
+      lastGhPollMsRef.current = 0;
       ghPollTimerRef.current = window.setTimeout(
         () => pollWebGitHubDeviceNow(data.device_code, false, initialDelayMs),
         initialDelayMs
