@@ -5983,6 +5983,95 @@ export default {
 
     // 0a. Instant 1-Click APK Download Subdomain (`dl.silphscopepvp.com` or `/download` / `/apk`)
     const isGetOrHead = request.method === 'GET' || request.method === 'HEAD';
+
+    // 0a-pwa. Instant PWA Manifest, Service Worker & App Icons (SilphScope DVR)
+    if (isGetOrHead && (path === '/manifest.json' || path === '/manifest.webmanifest')) {
+      const manifestObj = {
+        name: 'SilphScope DVR',
+        short_name: 'SilphScope DVR',
+        description: 'Frame-Synced Cloud DVR Replay Vault, 50% Translucent HUD & Live View Secondary Screen for Pokémon GO PvP.',
+        start_url: '/?view=vault',
+        scope: '/',
+        display: 'standalone',
+        background_color: '#050B16',
+        theme_color: '#050B16',
+        orientation: 'any',
+        categories: ['games', 'utilities', 'entertainment'],
+        icons: [
+          { src: '/pwa-icon-192.svg', sizes: '192x192', type: 'image/svg+xml', purpose: 'any' },
+          { src: '/pwa-icon-512.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
+          { src: '/pwa-icon-512.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'maskable' },
+          { src: '/favicon.svg', sizes: '108x108', type: 'image/svg+xml', purpose: 'any' }
+        ],
+        shortcuts: [
+          { name: 'Cloud DVR Vault', short_name: 'DVR Vault', description: 'Watch battle recordings with frame-accurate 50% HUD overlay', url: '/?view=vault', icons: [{ src: '/pwa-icon-192.svg', sizes: '192x192' }] },
+          { name: 'Live View (Secondary HUD)', short_name: 'Live View', description: 'Stream live combat telemetry to your tablet or iPhone', url: '/?view=live', icons: [{ src: '/pwa-icon-192.svg', sizes: '192x192' }] },
+          { name: 'Web Battle Simulator', short_name: 'Simulator', description: '3v3 Pokémon GO PvP Battle Simulator & Team Builder', url: '/?view=app', icons: [{ src: '/pwa-icon-192.svg', sizes: '192x192' }] }
+        ]
+      };
+      return new Response(JSON.stringify(manifestObj, null, 2), {
+        status: 200,
+        headers: buildSecurityHeaders({
+          'Content-Type': 'application/manifest+json; charset=utf-8',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'public, max-age=3600',
+        }),
+      });
+    }
+
+    if (isGetOrHead && path === '/sw.js') {
+      const swCode = `// SilphScope DVR PWA Service Worker (v7.29)
+const CACHE_NAME = 'silphscope-dvr-pwa-v729';
+const STATIC_ASSETS = ['/', '/index.html', '/manifest.json', '/manifest.webmanifest', '/favicon.svg', '/pwa-icon-192.svg', '/pwa-icon-512.svg', '/overlay.html'];
+self.addEventListener('install', (e) => { self.skipWaiting(); e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(STATIC_ASSETS).catch(() => {}))); });
+self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((keys) => Promise.all(keys.map((k) => k !== CACHE_NAME && caches.delete(k)))).then(() => self.clients.claim())); });
+self.addEventListener('fetch', (e) => {
+  const u = new URL(e.request.url);
+  if (u.pathname.startsWith('/v1/') || u.pathname.startsWith('/api') || u.hostname.includes('stripe.com') || e.request.headers.has('range') || e.request.method !== 'GET') return;
+  if (e.request.mode === 'navigate') { e.respondWith(fetch(e.request).catch(() => caches.match('/index.html') || caches.match('/'))); return; }
+  e.respondWith(caches.match(e.request).then((cached) => cached || fetch(e.request).then((res) => { if (res && res.status === 200 && res.type === 'basic') { const cl = res.clone(); caches.open(CACHE_NAME).then((c) => c.put(e.request, cl)); } return res; })));
+});`;
+      return new Response(swCode, {
+        status: 200,
+        headers: buildSecurityHeaders({
+          'Content-Type': 'application/javascript; charset=utf-8',
+          'Service-Worker-Allowed': '/',
+          'Cache-Control': 'public, max-age=3600',
+        }),
+      });
+    }
+
+    if (isGetOrHead && (path === '/pwa-icon-192.svg' || path === '/pwa-icon-512.svg')) {
+      const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <radialGradient id="dialgaBgGlow" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#19304E" />
+      <stop offset="65%" stop-color="#0E1B2E" />
+      <stop offset="100%" stop-color="#050B16" />
+    </radialGradient>
+    <filter id="dialgaTealGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <rect width="192" height="192" rx="42" fill="url(#dialgaBgGlow)" />
+  <rect width="190" height="190" x="1" y="1" rx="41" fill="none" stroke="#2DD4BF" stroke-width="2" stroke-opacity="0.35" />
+  <g transform="translate(96, 96) scale(4.4) translate(-18, -18)" filter="url(#dialgaTealGlow)">
+    <polygon points="18,2 31,9 31,27 18,34 5,27 5,9" fill="rgba(14, 27, 46, 0.95)" stroke="#2DD4BF" stroke-width="2.2" stroke-linejoin="round" />
+    <polygon points="18,7 26,12 26,24 18,29 10,24 10,12" fill="none" stroke="#FACC15" stroke-width="1.8" stroke-linejoin="round" />
+    <circle cx="18" cy="18" r="3.5" fill="#FACC15" />
+    <circle cx="18" cy="18" r="1.8" fill="#FFFBEB" />
+  </g>
+</svg>`;
+      return new Response(svgIcon, {
+        status: 200,
+        headers: buildSecurityHeaders({
+          'Content-Type': 'image/svg+xml',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'public, max-age=86400',
+        }),
+      });
+    }
     if (
       isGetOrHead &&
       (url.hostname === 'dl.silphscopepvp.com' || path === '/download' || path === '/apk')
