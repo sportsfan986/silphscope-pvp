@@ -1,8 +1,9 @@
-// SilphScope PvP PWA Service Worker (v7.28)
-const CACHE_NAME = 'silphscope-pwa-v728';
+// SilphScope DVR PWA Service Worker (v7.31)
+const CACHE_NAME = 'silphscope-dvr-pwa-v731';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
+  '/manifest.json',
   '/manifest.webmanifest',
   '/favicon.svg',
   '/pwa-icon-192.svg',
@@ -50,30 +51,34 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first with Cache fallback for HTML navigations
+  // Always force fresh network fetch (no-cache) for HTML navigations so PWA updates take effect immediately
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match('/index.html') || caches.match('/'))
+      fetch(event.request, { cache: 'no-cache' })
+        .then((res) => {
+          if (res && res.status === 200) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put('/index.html', clone)).catch(() => {});
+          }
+          return res;
+        })
+        .catch(() => caches.match('/index.html') || caches.match('/'))
     );
     return;
   }
 
-  // Stale-While-Revalidate for icons and static scripts/styles
+  // Network-first for icons/assets with offline cache fallback
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      const fetchPromise = fetch(event.request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-            const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseClone);
-            });
-          }
-          return networkResponse;
-        })
-        .catch(() => cachedResponse);
-
-      return cachedResponse || fetchPromise;
-    })
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseClone);
+          }).catch(() => {});
+        }
+        return networkResponse;
+      })
+      .catch(() => caches.match(event.request))
   );
 });

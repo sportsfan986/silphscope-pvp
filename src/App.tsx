@@ -259,7 +259,20 @@ export default function App() {
   });
   const [webScreenName, setWebScreenName] = useState<string>(() => {
     try {
-      return localStorage.getItem('gbl_web_screen_name_v700') || '';
+      const savedWeb = (localStorage.getItem('gbl_web_screen_name_v700') || '').trim();
+      if (savedWeb && savedWeb.toLowerCase() !== 'featured') return savedWeb;
+      const savedVault = (localStorage.getItem('sspvp_vault_user') || '').trim();
+      if (savedVault && savedVault.toLowerCase() !== 'featured') return savedVault;
+      const m = document.cookie.match(/(?:^|;\s*)sspvp_vault_user=([^;]*)/);
+      if (m && m[1]) {
+        const cookieUser = decodeURIComponent(m[1]).trim();
+        if (cookieUser && cookieUser.toLowerCase() !== 'featured') {
+          localStorage.setItem('gbl_web_screen_name_v700', cookieUser);
+          localStorage.setItem('sspvp_vault_user', cookieUser);
+          return cookieUser;
+        }
+      }
+      return '';
     } catch {
       return '';
     }
@@ -353,10 +366,21 @@ export default function App() {
         if (data.screenName) setWebScreenName(data.screenName);
         localStorage.setItem('gbl_web_membership_tier_v700', t);
         localStorage.setItem('gbl_web_screen_name_v700', data.screenName || cleanName);
+        localStorage.setItem('sspvp_vault_user', data.screenName || cleanName);
         if (data.sessionToken) {
           setWebSessionToken(data.sessionToken);
           localStorage.setItem('sspvp_vault_session', data.sessionToken);
         }
+        try {
+          const dom = window.location.hostname.endsWith('silphscopepvp.com') ? '; domain=.silphscopepvp.com' : '';
+          const sec = window.location.protocol === 'https:' ? '; Secure' : '';
+          if (data.screenName || cleanName) {
+            document.cookie = `sspvp_vault_user=${encodeURIComponent(data.screenName || cleanName)}; path=/; max-age=31536000; SameSite=Lax${dom}${sec}`;
+          }
+          if (data.sessionToken) {
+            document.cookie = `sspvp_vault_session=${encodeURIComponent(data.sessionToken)}; path=/; max-age=31536000; SameSite=Lax${dom}${sec}`;
+          }
+        } catch {}
         if (cleanKey) {
           setWebUnlockKey(cleanKey);
           localStorage.setItem('gbl_web_unlock_key_v700', cleanKey);
@@ -422,7 +446,16 @@ export default function App() {
         setWebSessionToken(pollData.sessionToken);
         localStorage.setItem('gbl_web_membership_tier_v700', t);
         localStorage.setItem('gbl_web_screen_name_v700', pollData.screenName || webScreenName);
+        localStorage.setItem('sspvp_vault_user', pollData.screenName || webScreenName);
         localStorage.setItem('sspvp_vault_session', pollData.sessionToken);
+        try {
+          const dom = window.location.hostname.endsWith('silphscopepvp.com') ? '; domain=.silphscopepvp.com' : '';
+          const sec = window.location.protocol === 'https:' ? '; Secure' : '';
+          if (pollData.screenName || webScreenName) {
+            document.cookie = `sspvp_vault_user=${encodeURIComponent(pollData.screenName || webScreenName)}; path=/; max-age=31536000; SameSite=Lax${dom}${sec}`;
+          }
+          document.cookie = `sspvp_vault_session=${encodeURIComponent(pollData.sessionToken)}; path=/; max-age=31536000; SameSite=Lax${dom}${sec}`;
+        } catch {}
         setMembershipStatusMsg(
           `✅ Signed in via GitHub (@${pollData.githubUsername}) -> Trainer @${pollData.screenName} (${t.toUpperCase()})!`
         );

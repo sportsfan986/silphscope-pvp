@@ -1003,7 +1003,7 @@ async function saveUserAuthRecord(kv, screenName, authObj) {
   }
 }
 
-async function createVaultSessionToken(env, screenName, tier = 'free', ttlDays = 14, sessionEpoch = 1) {
+async function createVaultSessionToken(env, screenName, tier = 'free', ttlDays = 365, sessionEpoch = 1) {
   const cleanName = sanitizeScreenName(screenName);
   const cleanTier = String(tier || 'free').toLowerCase();
   const epoch = Math.max(1, Number(sessionEpoch) || 1);
@@ -1125,6 +1125,31 @@ async function resolveScreenNameFromGitHub(kv, githubUsername, githubUserId, pre
     const mappedByLogin = await kv.get(`gh_user_map/${cleanLogin.toLowerCase()}`, { type: 'text' });
     if (mappedByLogin) return mappedByLogin;
   }
+
+  // Fallback scan of licenses_manifest.json if secondary KV index keys were missing or out of sync, and self-heal them!
+  try {
+    const rawManifest = await kv.get('licenses_manifest.json', { type: 'text' });
+    if (rawManifest) {
+      const list = JSON.parse(rawManifest);
+      if (Array.isArray(list)) {
+        const matchedLic = list.find(
+          (k) =>
+            k &&
+            !k.revoked &&
+            k.boundScreenName &&
+            ((cleanId && k.boundGitHubUserId && String(k.boundGitHubUserId) === cleanId) ||
+              (cleanLogin &&
+                k.boundGitHubUsername &&
+                String(k.boundGitHubUsername).toLowerCase() === cleanLogin.toLowerCase()))
+        );
+        if (matchedLic) {
+          await saveLicenseRecord(kv, matchedLic);
+          return matchedLic.boundScreenName;
+        }
+      }
+    }
+  } catch (_) {}
+
   return cleanPref || sanitizeScreenName(cleanLogin);
 }
 
@@ -1668,7 +1693,7 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
           env,
           resolvedUser,
           licInfo.tier || 'free',
-          14,
+          365,
           updatedAuth.sessionEpoch || 1
         );
         return {
@@ -1699,7 +1724,7 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
         env,
         screenName,
         licInfo.tier || 'vip',
-        14,
+        365,
         (authRec && authRec.sessionEpoch) || 1
       );
       return {
@@ -1738,7 +1763,7 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
         env,
         resolvedUser,
         licInfo.tier,
-        14,
+        365,
         authRec.sessionEpoch || 1
       );
       return {
@@ -1816,7 +1841,7 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
       env,
       resolvedUser,
       licInfo.tier || 'free',
-      14,
+      365,
       authRec.sessionEpoch || 1
     );
     return {
@@ -2346,13 +2371,13 @@ function renderWatchSharePage(origin, shareInfo) {
   <meta name="twitter:card" content="player" />
   <meta name="twitter:title" content="${pageTitle}" />
   <meta name="twitter:description" content="${pageDesc}" />
-  <link rel="manifest" href="https://silphscopepvp.com/manifest.webmanifest" />
+  <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#050B16" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="SilphScope DVR" />
   <meta name="application-name" content="SilphScope DVR" />
-  <link rel="apple-touch-icon" href="https://silphscopepvp.com/pwa-icon-192.svg" />
+  <link rel="apple-touch-icon" href="/pwa-icon-192.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
@@ -4692,13 +4717,20 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SilphScope DVR • Shiny Origin Dialga Cloud Replay Vault</title>
-  <link rel="manifest" href="https://silphscopepvp.com/manifest.webmanifest" />
+  <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#050B16" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="SilphScope DVR" />
   <meta name="application-name" content="SilphScope DVR" />
-  <link rel="apple-touch-icon" href="https://silphscopepvp.com/pwa-icon-192.svg" />
+  <link rel="apple-touch-icon" href="/pwa-icon-192.svg" />
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((r) => r.update().catch(() => {})).catch(() => {});
+      });
+    }
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
@@ -5154,18 +5186,68 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       return esc(String(s == null ? '' : s).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, "\\\\'"));
     }
 
+    function readSharedCookie(name) {
+      try {
+        const m = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
+        return m && m[1] ? decodeURIComponent(m[1]).trim() : '';
+      } catch (_) { return ''; }
+    }
+    function writeSharedCookies(user, sess) {
+      try {
+        const dom = window.location.hostname.endsWith('silphscopepvp.com') ? '; domain=.silphscopepvp.com' : '';
+        const sec = window.location.protocol === 'https:' ? '; Secure' : '';
+        if (user && user.toLowerCase() !== 'featured') {
+          document.cookie = 'sspvp_vault_user=' + encodeURIComponent(user) + '; path=/; max-age=31536000; SameSite=Lax' + dom + sec;
+        }
+        if (sess) {
+          document.cookie = 'sspvp_vault_session=' + encodeURIComponent(sess) + '; path=/; max-age=31536000; SameSite=Lax' + dom + sec;
+        }
+      } catch (_) {}
+    }
+    function clearSharedCookies() {
+      try {
+        const dom = window.location.hostname.endsWith('silphscopepvp.com') ? '; domain=.silphscopepvp.com' : '';
+        const sec = window.location.protocol === 'https:' ? '; Secure' : '';
+        document.cookie = 'sspvp_vault_user=; path=/; max-age=0; SameSite=Lax' + dom + sec;
+        document.cookie = 'sspvp_vault_session=; path=/; max-age=0; SameSite=Lax' + dom + sec;
+        document.cookie = 'sspvp_vault_user=; path=/; max-age=0; SameSite=Lax' + sec;
+        document.cookie = 'sspvp_vault_session=; path=/; max-age=0; SameSite=Lax' + sec;
+      } catch (_) {}
+    }
+    function userFromSession(tok) {
+      try {
+        if (!tok) return '';
+        const pts = String(tok).trim().split('.');
+        if ((pts.length === 4 || pts.length === 5) && pts[0] && (Number(pts[2]) || 0) > Date.now()) {
+          if (pts[0].toLowerCase() !== 'featured' && pts[0].toLowerCase() !== 'anonymous') return pts[0];
+        }
+      } catch (_) {}
+      return '';
+    }
+
     const params = new URLSearchParams(window.location.search);
     const pathParts = window.location.pathname.split('/').filter(Boolean);
     const pathUser = (pathParts[0] === 'u' || pathParts[0] === 'vault') && pathParts[1] ? decodeURIComponent(pathParts[1]) : '';
+    let sessionToken = (localStorage.getItem('sspvp_vault_session') || readSharedCookie('sspvp_vault_session') || '').trim();
+    if (sessionToken && !localStorage.getItem('sspvp_vault_session')) {
+      try { localStorage.setItem('sspvp_vault_session', sessionToken); } catch (_) {}
+    }
     const storedVaultUser = (localStorage.getItem('sspvp_vault_user') || '').trim();
     const storedWebUser = (localStorage.getItem('gbl_web_screen_name_v700') || '').trim();
-    const loggedInUser = (storedVaultUser && storedVaultUser.toLowerCase() !== 'featured')
-      ? storedVaultUser
-      : (storedWebUser && storedWebUser.toLowerCase() !== 'featured' ? storedWebUser : '');
+    const cookieVaultUser = readSharedCookie('sspvp_vault_user');
+    const sessionVaultUser = userFromSession(sessionToken);
+    const loggedInUser = [storedVaultUser, storedWebUser, cookieVaultUser, sessionVaultUser].find(
+      (u) => u && u.toLowerCase() !== 'featured'
+    ) || '';
+    if (loggedInUser) {
+      try {
+        localStorage.setItem('sspvp_vault_user', loggedInUser);
+        localStorage.setItem('gbl_web_screen_name_v700', loggedInUser);
+      } catch (_) {}
+    }
     const savedUser = params.get('user') || pathUser || loggedInUser || '';
     const savedKey = params.get('key') || localStorage.getItem('sspvp_vault_key') || '';
     const savedEmail = params.get('email') || localStorage.getItem('sspvp_vault_email') || '';
-    let sessionToken = localStorage.getItem('sspvp_vault_session') || '';
     let pendingGhLinkToken = '';
     let currentVaultData = null;
     let currentFilter = 'all'; // 'all' | 'starred'
@@ -5197,7 +5279,11 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       sessionToken = '';
       pendingGhLinkToken = '';
       localStorage.removeItem('sspvp_vault_session');
+      localStorage.removeItem('sspvp_vault_user');
       localStorage.removeItem('sspvp_vault_key');
+      localStorage.removeItem('sspvp_pending_gh_device');
+      clearSharedCookies();
+      document.getElementById('inp-user').value = 'Featured';
       document.getElementById('inp-key').value = '';
       document.getElementById('inp-password').value = '';
       document.getElementById('btn-logout').style.display = 'none';
@@ -5258,6 +5344,8 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         if (data.screenName) {
           document.getElementById('inp-user').value = data.screenName;
           localStorage.setItem('sspvp_vault_user', data.screenName);
+          localStorage.setItem('gbl_web_screen_name_v700', data.screenName);
+          writeSharedCookies(data.screenName, sessionToken);
         }
         if (payload.unlockKey) localStorage.setItem('sspvp_vault_key', payload.unlockKey);
         if (payload.claimEmail) localStorage.setItem('sspvp_vault_email', payload.claimEmail);
@@ -5278,7 +5366,8 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         statusEl.textContent = '🔄 Checking GitHub authorization status...';
       }
       try {
-        const prefUser = document.getElementById('inp-user').value.trim();
+        const rawPrefUser = document.getElementById('inp-user').value.trim();
+        const prefUser = rawPrefUser.toLowerCase() === 'featured' ? '' : rawPrefUser;
         const key = document.getElementById('inp-key').value.trim();
         const pollRes = await fetch('/v1/auth/github/poll', {
           method: 'POST',
@@ -5306,6 +5395,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         if (ghPollTimer) clearTimeout(ghPollTimer);
         ghPollTimer = null;
         activeGhDeviceCode = '';
+        try { localStorage.removeItem('sspvp_pending_gh_device'); } catch (_) {}
         const box = document.getElementById('gh-device-box');
         if (pollData.pendingGhLinkToken) {
           pendingGhLinkToken = pollData.pendingGhLinkToken;
@@ -5316,6 +5406,8 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           if (pollData.screenName) {
             document.getElementById('inp-user').value = pollData.screenName;
             localStorage.setItem('sspvp_vault_user', pollData.screenName);
+            localStorage.setItem('gbl_web_screen_name_v700', pollData.screenName);
+            writeSharedCookies(pollData.screenName, sessionToken);
           }
           if (box) box.style.display = 'none';
           document.getElementById('owner-login-panel').style.display = 'none';
@@ -5331,14 +5423,28 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       }
     }
 
-    window.addEventListener('focus', () => {
-      if (activeGhDeviceCode) {
-        const elapsed = Date.now() - lastGhPollMs;
-        const waitMs = Math.max(400, 5500 - elapsed);
-        if (ghPollTimer) clearTimeout(ghPollTimer);
-        ghPollTimer = setTimeout(() => pollGitHubDeviceNow(false), waitMs);
+    function resumePendingGhPoll() {
+      if (document.visibilityState && document.visibilityState !== 'visible') return;
+      if (!activeGhDeviceCode) {
+        try {
+          const raw = localStorage.getItem('sspvp_pending_gh_device');
+          if (raw) {
+            const p = JSON.parse(raw);
+            if (p && p.device_code && p.expiresAt > Date.now()) {
+              activeGhDeviceCode = p.device_code;
+            } else {
+              localStorage.removeItem('sspvp_pending_gh_device');
+            }
+          }
+        } catch (_) {}
       }
-    });
+      if (activeGhDeviceCode) {
+        if (ghPollTimer) clearTimeout(ghPollTimer);
+        ghPollTimer = setTimeout(() => pollGitHubDeviceNow(true), 350);
+      }
+    }
+    window.addEventListener('focus', resumePendingGhPoll);
+    document.addEventListener('visibilitychange', resumePendingGhPoll);
 
     async function startGitHubDeviceLogin() {
       const box = document.getElementById('gh-device-box');
@@ -5357,6 +5463,14 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           return;
         }
         activeGhDeviceCode = data.device_code;
+        try {
+          localStorage.setItem('sspvp_pending_gh_device', JSON.stringify({
+            device_code: data.device_code,
+            user_code: data.user_code,
+            verification_uri: data.verification_uri || 'https://github.com/login/device',
+            expiresAt: Date.now() + (Number(data.expires_in) || 900) * 1000
+          }));
+        } catch (_) {}
         ghPollDelayMs = (Math.max(5, Number(data.interval) || 5) + 1.5) * 1000;
         lastGhPollMs = Date.now();
         const safeUri = /^https:\\/\\/github\\.com\\//i.test(String(data.verification_uri || ''))
@@ -5459,7 +5573,6 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           '</div>';
         return;
       }
-      localStorage.setItem('sspvp_vault_user', user);
       if (key) localStorage.setItem('sspvp_vault_key', key);
       if (email) localStorage.setItem('sspvp_vault_email', email);
 
@@ -5492,6 +5605,11 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         }
 
         const isOwner = Boolean(data.isOwner);
+        if (isOwner && data.screenName && data.screenName.toLowerCase() !== 'featured') {
+          localStorage.setItem('sspvp_vault_user', data.screenName);
+          localStorage.setItem('gbl_web_screen_name_v700', data.screenName);
+          writeSharedCookies(data.screenName, sessionToken);
+        }
         document.getElementById('btn-logout').style.display = isOwner ? 'inline-flex' : 'none';
         document.getElementById('btn-toggle-login').textContent = isOwner ? '⚙️ Account / Login' : '🔐 Owner Login';
 
@@ -5849,6 +5967,8 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       toggleLoginPanel();
       setAuthTab('github');
       startGitHubDeviceLogin();
+    } else {
+      resumePendingGhPoll();
     }
   </script>
 </body>
@@ -6011,23 +6131,23 @@ export default {
     }
 
     if (isGetOrHead && path === '/sw.js') {
-      const swCode = `// SilphScope DVR PWA Service Worker (v7.30)
-const CACHE_NAME = 'silphscope-dvr-pwa-v730';
+      const swCode = `// SilphScope DVR PWA Service Worker (v7.31)
+const CACHE_NAME = 'silphscope-dvr-pwa-v731';
 const STATIC_ASSETS = ['/', '/index.html', '/manifest.json', '/manifest.webmanifest', '/favicon.svg', '/pwa-icon-192.svg', '/pwa-icon-512.svg', '/overlay.html'];
 self.addEventListener('install', (e) => { self.skipWaiting(); e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(STATIC_ASSETS).catch(() => {}))); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((keys) => Promise.all(keys.map((k) => k !== CACHE_NAME && caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', (e) => {
   const u = new URL(e.request.url);
-  if (u.pathname.startsWith('/v1/') || u.pathname.startsWith('/api') || u.hostname.includes('stripe.com') || e.request.headers.has('range') || e.request.method !== 'GET') return;
-  if (e.request.mode === 'navigate') { e.respondWith(fetch(e.request).catch(() => caches.match('/index.html') || caches.match('/'))); return; }
-  e.respondWith(caches.match(e.request).then((cached) => cached || fetch(e.request).then((res) => { if (res && res.status === 200 && res.type === 'basic') { const cl = res.clone(); caches.open(CACHE_NAME).then((c) => c.put(e.request, cl)); } return res; })));
+  if (u.pathname.startsWith('/v1/') || u.pathname.startsWith('/api') || u.hostname.includes('stripe.com') || u.hostname.includes('buymeacoffee.com') || e.request.headers.has('range') || e.request.method !== 'GET') return;
+  if (e.request.mode === 'navigate') { e.respondWith(fetch(e.request, { cache: 'no-cache' }).then((res) => { if (res && res.status === 200) { const cl = res.clone(); caches.open(CACHE_NAME).then((c) => c.put('/index.html', cl)).catch(() => {}); } return res; }).catch(() => caches.match('/index.html') || caches.match('/'))); return; }
+  e.respondWith(fetch(e.request).then((res) => { if (res && res.status === 200 && res.type === 'basic') { const cl = res.clone(); caches.open(CACHE_NAME).then((c) => c.put(e.request, cl)).catch(() => {}); } return res; }).catch(() => caches.match(e.request)));
 });`;
       return new Response(swCode, {
         status: 200,
         headers: buildSecurityHeaders({
           'Content-Type': 'application/javascript; charset=utf-8',
           'Service-Worker-Allowed': '/',
-          'Cache-Control': 'public, max-age=3600',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
         }),
       });
     }
@@ -6154,7 +6274,10 @@ self.addEventListener('fetch', (e) => {
       const respHeaders = new Headers(ghResp.headers);
       respHeaders.set('Access-Control-Allow-Origin', resolveAllowedCorsOrigin(request, true));
       respHeaders.set('Vary', 'Origin');
-      const secHeaders = buildSecurityHeaders({}, isHtmlRoute);
+      const secHeaders = buildSecurityHeaders(
+        isHtmlRoute ? { 'Cache-Control': 'no-cache, must-revalidate' } : {},
+        isHtmlRoute
+      );
       for (const [hk, hv] of Object.entries(secHeaders)) {
         respHeaders.set(hk, hv);
       }
@@ -6185,7 +6308,7 @@ self.addEventListener('fetch', (e) => {
         return jsonResponse({
           ok: true,
           service: 'silphscope-telemetry-worker',
-          version: env.WORKER_VERSION || '7.1.4',
+          version: env.WORKER_VERSION || '7.1.5',
           timestamp: new Date().toISOString(),
         });
       }
@@ -6194,7 +6317,7 @@ self.addEventListener('fetch', (e) => {
       return jsonResponse({
         ok: true,
         service: 'silphscope-telemetry-worker',
-        version: env.WORKER_VERSION || '7.1.4',
+        version: env.WORKER_VERSION || '7.1.5',
         storageBackend: store.backend,
         r2ReplayBucketBound: Boolean(env.REPLAY_BUCKET),
         r2GlobalUsedMb: Number((r2Stats.totalBytes / (1024 * 1024)).toFixed(2)),
@@ -8336,7 +8459,7 @@ self.addEventListener('fetch', (e) => {
       const authRec = ownerAuth.authRecord || (await loadUserAuthRecord(env.TELEMETRY_KV, resolvedName));
       const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, resolvedName);
 
-      return jsonResponse(
+      const loginResp = jsonResponse(
         {
           ok: true,
           isOwner: true,
@@ -8358,6 +8481,17 @@ self.addEventListener('fetch', (e) => {
         request,
         true
       );
+      if (resolvedName && ownerAuth.sessionToken) {
+        loginResp.headers.append(
+          'Set-Cookie',
+          `sspvp_vault_user=${encodeURIComponent(resolvedName)}; Domain=.silphscopepvp.com; Path=/; Max-Age=31536000; SameSite=Lax; Secure`
+        );
+        loginResp.headers.append(
+          'Set-Cookie',
+          `sspvp_vault_session=${encodeURIComponent(ownerAuth.sessionToken)}; Domain=.silphscopepvp.com; Path=/; Max-Age=31536000; SameSite=Lax; Secure`
+        );
+      }
+      return loginResp;
     }
 
     // 7c. Set or Update User Password (`POST /v1/auth/set-password`)
@@ -8720,7 +8854,7 @@ self.addEventListener('fetch', (e) => {
         }
 
         const licInfo = ownerAuth.licenseInfo || { ...TIER_PRESETS.free, active: false };
-        return jsonResponse(
+        const ghPollResp = jsonResponse(
           {
             ok: true,
             status: 'authorized',
@@ -8740,6 +8874,17 @@ self.addEventListener('fetch', (e) => {
           request,
           true
         );
+        if (ownerAuth.screenName && ownerAuth.sessionToken) {
+          ghPollResp.headers.append(
+            'Set-Cookie',
+            `sspvp_vault_user=${encodeURIComponent(ownerAuth.screenName)}; Domain=.silphscopepvp.com; Path=/; Max-Age=31536000; SameSite=Lax; Secure`
+          );
+          ghPollResp.headers.append(
+            'Set-Cookie',
+            `sspvp_vault_session=${encodeURIComponent(ownerAuth.sessionToken)}; Domain=.silphscopepvp.com; Path=/; Max-Age=31536000; SameSite=Lax; Secure`
+          );
+        }
+        return ghPollResp;
       } catch (e) {
         return jsonResponse(
           { ok: false, status: 'error', error: 'GitHub OAuth verification failed.' },

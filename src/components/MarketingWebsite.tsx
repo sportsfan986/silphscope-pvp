@@ -228,6 +228,56 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
     }
   };
 
+  // Cross-subdomain cookie helpers (.silphscopepvp.com) so silphscopepvp.com & dvr.silphscopepvp.com share cached login
+  const readSharedVaultCookie = (name: string): string => {
+    try {
+      const match = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
+      return match && match[1] ? decodeURIComponent(match[1]).trim() : '';
+    } catch {
+      return '';
+    }
+  };
+
+  const writeSharedVaultCookies = (user: string, session: string) => {
+    try {
+      const isSilphDomain = window.location.hostname.endsWith('silphscopepvp.com');
+      const domainAttr = isSilphDomain ? '; domain=.silphscopepvp.com' : '';
+      const secureAttr = window.location.protocol === 'https:' ? '; Secure' : '';
+      if (user && user.toLowerCase() !== 'featured') {
+        document.cookie = `sspvp_vault_user=${encodeURIComponent(user)}; path=/; max-age=31536000; SameSite=Lax${domainAttr}${secureAttr}`;
+      }
+      if (session) {
+        document.cookie = `sspvp_vault_session=${encodeURIComponent(session)}; path=/; max-age=31536000; SameSite=Lax${domainAttr}${secureAttr}`;
+      }
+    } catch {}
+  };
+
+  const clearSharedVaultCookies = () => {
+    try {
+      const isSilphDomain = window.location.hostname.endsWith('silphscopepvp.com');
+      const domainAttr = isSilphDomain ? '; domain=.silphscopepvp.com' : '';
+      const secureAttr = window.location.protocol === 'https:' ? '; Secure' : '';
+      document.cookie = `sspvp_vault_user=; path=/; max-age=0; SameSite=Lax${domainAttr}${secureAttr}`;
+      document.cookie = `sspvp_vault_session=; path=/; max-age=0; SameSite=Lax${domainAttr}${secureAttr}`;
+      document.cookie = `sspvp_vault_user=; path=/; max-age=0; SameSite=Lax${secureAttr}`;
+      document.cookie = `sspvp_vault_session=; path=/; max-age=0; SameSite=Lax${secureAttr}`;
+    } catch {}
+  };
+
+  const extractScreenNameFromSessionToken = (token: string): string => {
+    try {
+      if (!token) return '';
+      const parts = token.trim().split('.');
+      if ((parts.length === 4 || parts.length === 5) && parts[0]) {
+        const expiresMs = Number(parts[2]) || 0;
+        if (expiresMs > Date.now() && parts[0].toLowerCase() !== 'featured' && parts[0].toLowerCase() !== 'anonymous') {
+          return parts[0];
+        }
+      }
+    } catch {}
+    return '';
+  };
+
   // DVR Replay Vault State (Defaults to Logged-In User)
   const [vaultUser, setVaultUser] = useState<string>(() => {
     try {
@@ -241,6 +291,20 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
       if (storedWebUser && storedWebUser.toLowerCase() !== 'featured') {
         return storedWebUser;
       }
+      const cookieUser = readSharedVaultCookie('sspvp_vault_user');
+      if (cookieUser && cookieUser.toLowerCase() !== 'featured') {
+        localStorage.setItem('sspvp_vault_user', cookieUser);
+        localStorage.setItem('gbl_web_screen_name_v700', cookieUser);
+        return cookieUser;
+      }
+      const cachedSession = (localStorage.getItem('sspvp_vault_session') || readSharedVaultCookie('sspvp_vault_session')).trim();
+      const tokenUser = extractScreenNameFromSessionToken(cachedSession);
+      if (tokenUser) {
+        localStorage.setItem('sspvp_vault_user', tokenUser);
+        localStorage.setItem('gbl_web_screen_name_v700', tokenUser);
+        if (cachedSession) localStorage.setItem('sspvp_vault_session', cachedSession);
+        return tokenUser;
+      }
       if (webScreenName && webScreenName.trim() && webScreenName.toLowerCase() !== 'featured') {
         return webScreenName.trim();
       }
@@ -252,7 +316,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
   const [vaultInputUser, setVaultInputUser] = useState<string>(vaultUser);
   const [isVaultOwner, setIsVaultOwner] = useState<boolean>(() => {
     try {
-      return Boolean(localStorage.getItem('sspvp_vault_session'));
+      const sess = localStorage.getItem('sspvp_vault_session') || readSharedVaultCookie('sspvp_vault_session');
+      if (sess && !localStorage.getItem('sspvp_vault_session')) {
+        localStorage.setItem('sspvp_vault_session', sess);
+      }
+      return Boolean(sess);
     } catch {
       return false;
     }
@@ -279,20 +347,37 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
   const [authErrorMsg, setAuthErrorMsg] = useState<string>('');
   const [authLoading, setAuthLoading] = useState<boolean>(false);
 
-  // GitHub Device Login State in Modal
+  // GitHub Device Login State in Modal (persisted in localStorage so mobile PWA suspend/resume completes login)
   const [ghDeviceCodeInfo, setGhDeviceCodeInfo] = useState<{
     device_code: string;
     user_code: string;
     verification_uri: string;
-  } | null>(null);
+  } | null>(() => {
+    try {
+      const raw = localStorage.getItem('sspvp_pending_gh_device');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.device_code && parsed.expiresAt > Date.now()) {
+          return {
+            device_code: parsed.device_code,
+            user_code: parsed.user_code,
+            verification_uri: parsed.verification_uri || 'https://github.com/login/device'
+          };
+        }
+        localStorage.removeItem('sspvp_pending_gh_device');
+      }
+    } catch {}
+    return null;
+  });
   const [ghPollStatus, setGhPollStatus] = useState<string>('');
   const ghModalTimerRef = useRef<number | null>(null);
   const lastGhModalPollRef = useRef<number>(0);
+  const pendingGhLinkTokenRef = useRef<string>('');
 
   const fetchVaultReplays = async (userToFetch: string) => {
     const user = (userToFetch || 'Featured').trim();
     setLoadingVault(true);
-    const sessionToken = localStorage.getItem('sspvp_vault_session') || '';
+    const sessionToken = localStorage.getItem('sspvp_vault_session') || readSharedVaultCookie('sspvp_vault_session') || '';
     const unlockKey = localStorage.getItem('gbl_web_unlock_key_v700') || '';
     const claimEmail = localStorage.getItem('gbl_web_claim_email_v700') || '';
     try {
@@ -319,12 +404,14 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           public: totalPublic,
           private: totalPrivate
         });
+        const activeSess = data.sessionToken || sessionToken;
         if (data.sessionToken) {
           localStorage.setItem('sspvp_vault_session', data.sessionToken);
         }
         if (ownerState && data.screenName) {
           localStorage.setItem('sspvp_vault_user', data.screenName);
           localStorage.setItem('gbl_web_screen_name_v700', data.screenName);
+          writeSharedVaultCookies(data.screenName, activeSess);
         }
       } else {
         if (user.toLowerCase() === 'featured') {
@@ -361,15 +448,26 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
         setAuthLoading(false);
         return;
       }
+      const verUri = data.verification_uri || 'https://github.com/login/device';
+      const expiresMs = Date.now() + (Number(data.expires_in) || 900) * 1000;
+      const pendingObj = {
+        device_code: data.device_code,
+        user_code: data.user_code,
+        verification_uri: verUri,
+        expiresAt: expiresMs
+      };
       setGhDeviceCodeInfo({
         device_code: data.device_code,
         user_code: data.user_code,
-        verification_uri: data.verification_uri || 'https://github.com/login/device'
+        verification_uri: verUri
       });
+      try {
+        localStorage.setItem('sspvp_pending_gh_device', JSON.stringify(pendingObj));
+      } catch {}
       try {
         await navigator.clipboard.writeText(data.user_code);
       } catch {}
-      window.open(data.verification_uri || 'https://github.com/login/device', '_blank', 'noopener');
+      window.open(verUri, '_blank', 'noopener');
       setGhPollStatus(`Code ${data.user_code} copied! Approve on GitHub (auto-completes when you return)...`);
 
       const pollDelayMs = (Math.max(5, Number(data.interval) || 5) + 1.5) * 1000;
@@ -388,12 +486,18 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
   const pollGitHubModalNow = async (deviceCode: string, isManual = false, delayMs = 6500) => {
     if (!deviceCode) return;
     const now = Date.now();
-    if (!isManual && now - lastGhModalPollRef.current < 5000) return;
+    if (!isManual && now - lastGhModalPollRef.current < 4500) return;
     lastGhModalPollRef.current = now;
     if (isManual) {
       setGhPollStatus('Checking GitHub authorization status...');
     }
     try {
+      const candidateUser =
+        vaultInputUser && vaultInputUser.toLowerCase() !== 'featured'
+          ? vaultInputUser.trim()
+          : vaultUser.toLowerCase() !== 'featured'
+          ? vaultUser.trim()
+          : '';
       const res = await fetch('https://api.silphscopepvp.com/v1/auth/github/poll', {
         method: 'POST',
         headers: {
@@ -402,7 +506,8 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
         },
         body: JSON.stringify({
           device_code: deviceCode,
-          screenName: vaultUser.toLowerCase() !== 'featured' ? vaultUser : ''
+          screenName: candidateUser,
+          unlockKey: authKey.trim().toUpperCase()
         })
       });
       const data = await res.json();
@@ -423,13 +528,25 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
       if (ghModalTimerRef.current) window.clearTimeout(ghModalTimerRef.current);
       ghModalTimerRef.current = null;
       setGhDeviceCodeInfo(null);
+      try {
+        localStorage.removeItem('sspvp_pending_gh_device');
+      } catch {}
+
+      if (data.pendingGhLinkToken) {
+        pendingGhLinkTokenRef.current = String(data.pendingGhLinkToken);
+      }
 
       if (data.ok && data.sessionToken) {
+        pendingGhLinkTokenRef.current = '';
         localStorage.setItem('sspvp_vault_session', data.sessionToken);
-        const resolvedName = (data.screenName || vaultUser || '').trim();
+        if (data.githubUsername) {
+          localStorage.setItem('sspvp_github_username', data.githubUsername);
+        }
+        const resolvedName = (data.screenName || data.githubUsername || candidateUser || '').trim();
         if (resolvedName && resolvedName.toLowerCase() !== 'featured') {
           localStorage.setItem('sspvp_vault_user', resolvedName);
           localStorage.setItem('gbl_web_screen_name_v700', resolvedName);
+          writeSharedVaultCookies(resolvedName, data.sessionToken);
           setVaultUser(resolvedName);
           setVaultInputUser(resolvedName);
           onChangeWebScreenName(resolvedName);
@@ -439,6 +556,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
         copyToClipboard('Logged in via GitHub', 'GitHub Sign-In');
         fetchVaultReplays(resolvedName || vaultUser);
       } else {
+        if (data.pendingGhLinkToken) {
+          setAuthTab('token');
+        }
         setAuthErrorMsg(data.error || 'GitHub login did not match an active account.');
       }
     } catch {
@@ -451,31 +571,41 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
   };
 
   const handleTokenLogin = async () => {
-    if (!authKey.trim()) return;
+    if (!authKey.trim() && !authEmail.trim()) return;
     setAuthLoading(true);
     setAuthErrorMsg('');
+    const candidateUser =
+      vaultInputUser && vaultInputUser.toLowerCase() !== 'featured'
+        ? vaultInputUser.trim()
+        : vaultUser.toLowerCase() !== 'featured'
+        ? vaultUser.trim()
+        : '';
     try {
       const res = await fetch('https://api.silphscopepvp.com/v1/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-SilphScope-Client-Key': 'ssk_client_v615_telemetry_ingest_9f8a7b6c5d4e3f2a1b0c',
-          'X-Trainer-Screen-Name': vaultUser || 'trainer'
+          'X-Trainer-Screen-Name': candidateUser || 'trainer'
         },
         body: JSON.stringify({
           unlockKey: authKey.trim().toUpperCase(),
           claimEmail: authEmail.trim().toLowerCase(),
-          screenName: vaultUser.toLowerCase() !== 'featured' ? vaultUser : ''
+          screenName: candidateUser,
+          pendingGhLinkToken: pendingGhLinkTokenRef.current || ''
         })
       });
       const data = await res.json();
       if (data && data.ok) {
+        pendingGhLinkTokenRef.current = '';
         if (data.sessionToken) localStorage.setItem('sspvp_vault_session', data.sessionToken);
-        localStorage.setItem('gbl_web_unlock_key_v700', authKey.trim().toUpperCase());
-        const resolvedName = (data.screenName || vaultUser || '').trim();
+        if (authKey.trim()) localStorage.setItem('gbl_web_unlock_key_v700', authKey.trim().toUpperCase());
+        if (authEmail.trim()) localStorage.setItem('gbl_web_claim_email_v700', authEmail.trim().toLowerCase());
+        const resolvedName = (data.screenName || candidateUser || '').trim();
         if (resolvedName && resolvedName.toLowerCase() !== 'featured') {
           localStorage.setItem('sspvp_vault_user', resolvedName);
           localStorage.setItem('gbl_web_screen_name_v700', resolvedName);
+          writeSharedVaultCookies(resolvedName, data.sessionToken || '');
           setVaultUser(resolvedName);
           setVaultInputUser(resolvedName);
           onChangeWebScreenName(resolvedName);
@@ -497,7 +627,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
     if (!authPassword.trim()) return;
     setAuthLoading(true);
     setAuthErrorMsg('');
-    const userToLogin = (vaultInputUser || vaultUser || authEmail).trim();
+    const userToLogin = (
+      authEmail.trim() ||
+      (vaultInputUser.toLowerCase() !== 'featured' ? vaultInputUser.trim() : '') ||
+      (vaultUser.toLowerCase() !== 'featured' ? vaultUser.trim() : '')
+    ).trim();
     try {
       const res = await fetch('https://api.silphscopepvp.com/v1/auth/login', {
         method: 'POST',
@@ -508,16 +642,19 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
         },
         body: JSON.stringify({
           screenName: userToLogin,
-          password: authPassword.trim()
+          password: authPassword.trim(),
+          pendingGhLinkToken: pendingGhLinkTokenRef.current || ''
         })
       });
       const data = await res.json();
       if (data && data.ok) {
+        pendingGhLinkTokenRef.current = '';
         if (data.sessionToken) localStorage.setItem('sspvp_vault_session', data.sessionToken);
         const resolvedName = (data.screenName || userToLogin || '').trim();
         if (resolvedName && resolvedName.toLowerCase() !== 'featured') {
           localStorage.setItem('sspvp_vault_user', resolvedName);
           localStorage.setItem('gbl_web_screen_name_v700', resolvedName);
+          writeSharedVaultCookies(resolvedName, data.sessionToken || '');
           setVaultUser(resolvedName);
           setVaultInputUser(resolvedName);
           onChangeWebScreenName(resolvedName);
@@ -534,6 +671,109 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
       setAuthLoading(false);
     }
   };
+
+  // Resume GitHub Device Flow polling immediately when returning from GitHub browser tab to standalone PWA!
+  useEffect(() => {
+    const checkAndResumePendingGitHubAuth = () => {
+      if (document.visibilityState && document.visibilityState !== 'visible') return;
+      let code = ghDeviceCodeInfo?.device_code || '';
+      if (!code) {
+        try {
+          const raw = localStorage.getItem('sspvp_pending_gh_device');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.device_code && parsed.expiresAt > Date.now()) {
+              code = parsed.device_code;
+              setGhDeviceCodeInfo({
+                device_code: parsed.device_code,
+                user_code: parsed.user_code,
+                verification_uri: parsed.verification_uri || 'https://github.com/login/device'
+              });
+            } else {
+              localStorage.removeItem('sspvp_pending_gh_device');
+            }
+          }
+        } catch {}
+      }
+      if (code) {
+        if (ghModalTimerRef.current) window.clearTimeout(ghModalTimerRef.current);
+        ghModalTimerRef.current = window.setTimeout(() => {
+          pollGitHubModalNow(code, true);
+        }, 350);
+      }
+    };
+
+    window.addEventListener('focus', checkAndResumePendingGitHubAuth);
+    document.addEventListener('visibilitychange', checkAndResumePendingGitHubAuth);
+    // Also trigger once on mount if a pending device code was saved right before PWA was suspended
+    if (ghDeviceCodeInfo?.device_code) {
+      setOwnerLoginOpen(true);
+      setAuthTab('github');
+      checkAndResumePendingGitHubAuth();
+    }
+    return () => {
+      window.removeEventListener('focus', checkAndResumePendingGitHubAuth);
+      document.removeEventListener('visibilitychange', checkAndResumePendingGitHubAuth);
+    };
+  }, [ghDeviceCodeInfo?.device_code]);
+
+  // Auto-restore cached session or handle ?auth=github URL query on launch
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('auth') === 'github' || params.get('login') === 'github') {
+        setOwnerLoginOpen(true);
+        setAuthTab('github');
+        startGitHubLoginInModal();
+        params.delete('auth');
+        params.delete('login');
+        const cleanQuery = params.toString();
+        window.history.replaceState({}, '', window.location.pathname + (cleanQuery ? `?${cleanQuery}` : ''));
+        return;
+      }
+
+      // If user has a cached session or GitHub sync token, verify & auto-default vaultUser to their account
+      const sess = (localStorage.getItem('sspvp_vault_session') || readSharedVaultCookie('sspvp_vault_session') || '').trim();
+      const syncGhTok = (localStorage.getItem('gbl_sync_github_token') || '').trim();
+      if ((sess || syncGhTok) && !params.get('user')) {
+        const tokenUser = extractScreenNameFromSessionToken(sess);
+        if (tokenUser && vaultUser.toLowerCase() === 'featured') {
+          localStorage.setItem('sspvp_vault_user', tokenUser);
+          localStorage.setItem('gbl_web_screen_name_v700', tokenUser);
+          setVaultUser(tokenUser);
+          setVaultInputUser(tokenUser);
+          onChangeWebScreenName(tokenUser);
+        } else if (!tokenUser && (sess || syncGhTok)) {
+          fetch('https://api.silphscopepvp.com/v1/auth/login', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-SilphScope-Client-Key': 'ssk_client_v615_telemetry_ingest_9f8a7b6c5d4e3f2a1b0c',
+              'X-Vault-Session': sess
+            },
+            body: JSON.stringify({
+              sessionToken: sess,
+              githubToken: syncGhTok
+            })
+          })
+            .then((r) => r.json())
+            .then((d) => {
+              if (d && d.ok && d.screenName && d.screenName.toLowerCase() !== 'featured') {
+                if (d.sessionToken) localStorage.setItem('sspvp_vault_session', d.sessionToken);
+                localStorage.setItem('sspvp_vault_user', d.screenName);
+                localStorage.setItem('gbl_web_screen_name_v700', d.screenName);
+                writeSharedVaultCookies(d.screenName, d.sessionToken || sess);
+                setIsVaultOwner(true);
+                setVaultUser(d.screenName);
+                setVaultInputUser(d.screenName);
+                onChangeWebScreenName(d.screenName);
+              }
+            })
+            .catch(() => {});
+        }
+      }
+    } catch {}
+  }, []);
 
   useEffect(() => {
     if (activeSubpage === 'vault') {
@@ -2113,6 +2353,8 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     onClick={() => {
                       localStorage.removeItem('sspvp_vault_session');
                       localStorage.removeItem('sspvp_vault_user');
+                      localStorage.removeItem('sspvp_pending_gh_device');
+                      clearSharedVaultCookies();
                       setIsVaultOwner(false);
                       setVaultUser('Featured');
                       setVaultInputUser('Featured');
@@ -3082,14 +3324,13 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       <span>{authLoading ? 'Connecting to GitHub...' : '1-Click Sign In with GitHub'}</span>
                     </button>
                     <div className="text-center">
-                      <a
-                        href="https://dvr.silphscopepvp.com/v1/auth/github/start"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[11px] text-slate-400 hover:text-teal-300 underline transition"
+                      <button
+                        type="button"
+                        onClick={startGitHubLoginInModal}
+                        className="text-[11px] text-slate-400 hover:text-teal-300 underline transition cursor-pointer"
                       >
-                        Or open GitHub Auth Window ↗
-                      </a>
+                        Or generate a fresh GitHub Device Code ↗
+                      </button>
                     </div>
                   </div>
                 )}
