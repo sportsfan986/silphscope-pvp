@@ -1,4 +1,18 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.27`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.28`)
+
+---
+
+## v7.28 (2026-11-09) — Continuous Inter-Battle Auto-Start Vision Loop, Clean Match State Initialization & Manual Swap Latency Energy Catch-Up
+*Live Android APK & Web Simulator release (`v7.28`, `versionCode = 1728`) resolving auto-start failures between consecutive battles when tuning feedback is unsubmitted, eliminating compact HUD layout offsets on hands-free start, fixing opponent shield desyncs on unshielded minimal-damage charged moves, and adding physical-cadence fast-move catch-up for manual opponent swaps with OCR recognition latency (Tinkaton).*
+
+- **v7.28 — Fix 1: Continuous Inter-Battle Auto-Start Vision Loop & Clean Match State Initialization (`OverlayService.kt`)**:
+  - Prevented `stopBattleOcrLoop()` from terminating the background OCR vision loop when `stopCurrentBattle()` or `logBattleResultFromOverlay()` complete if Auto-Start DVR (`DVR_MODE_VIP_AUTO`) or Always-On DVR is active, keeping the 750ms intro countdown detector running in standby between battles.
+  - Replaced the direct `isBattleActive = true` flag set in `checkAndTriggerBattleIntroCountdown(...)` with a full invocation of `startNewBattle()`, guaranteeing that `lastLoggedBattleId` is cleared (instantly dismissing the post-battle feedback prompt and previous win/loss banner), residual HP/energy are reset to 100%/0E, previous opponents are purged, and the HUD layout starts clean in both Full and Compact modes.
+  - Ensured `restoreOverlayFromBubble()` resumes the OCR loop whenever `mediaProjection != null`, regardless of active combat state.
+- **v7.28 — Fix 2: Manual Opponent Swap Latency Energy Catch-Up (`OverlayService.kt`)**:
+  - Added physical elapsed-time fast move credit in `handleOpponentSwitch` for manual opponent swaps (matching the existing post-KO replacement catch-up), computing `missedFasts = (swapElapsedMs / (newFastTurns * 500L)).toInt().coerceIn(0, 4)` from the physical midpoint swap start (`swapStartMs`) to OCR nameplate confirmation (`currentFrameTimestampMs`), eliminating Tinkaton/Fairy Wind undercounting.
+- **v7.28 — Fix 3: Opponent Shield Desync Resolution on Minimal Damage & Heavy Moves (`OverlayService.kt`)**:
+  - Refactored `updateLiveHpAndChargedAttackState` to remove the restrictive `hpDelta in 4..oppShieldChipCap` check in favor of `isOppChipShielded`, ensuring that when an opponent shields a charged attack and takes 0..3% damage (or when visual icon drop OCR misses the frame), `oppShieldsRemaining` is reliably decremented.
 
 ---
 

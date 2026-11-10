@@ -93,7 +93,7 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.27"
+        const val APP_VERSION = "7.28"
         const val APP_VERSION_CODE = 1727
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
@@ -3194,8 +3194,10 @@ class OverlayService : LifecycleService() {
             if (isConfirmed && !isBattleIntroCountdownActive) {
                 isBattleIntroCountdownActive = true
                 introCountdownStartMs = now
-                if (!isBattleActive) {
-                    isBattleActive = true
+                if (!isBattleActive || !hasBattleStarted) {
+                    startNewBattle()
+                    isBattleIntroCountdownActive = true
+                    introCountdownStartMs = now
                 }
 
                 // Auto-Start DVR is active for all tiers when enabled (or if manually armed for 1 battle)
@@ -5183,7 +5185,7 @@ class OverlayService : LifecycleService() {
             "if (window.setLiveHudMode) setLiveHudMode('full'); if (window.setOverlayMinimizedState) setOverlayMinimizedState(false); if (window.setOverlayScalePct) setOverlayScalePct($overlayScalePct);",
             null
         )
-        if (mediaProjection != null && isBattleActive) {
+        if (mediaProjection != null) {
             startBattleOcrLoop()
         }
         recalculateAndPushBattleData()
@@ -10879,7 +10881,7 @@ class OverlayService : LifecycleService() {
                     }
                 }
                 var didAutoDecrOppShield = false
-                if (((isOppChipShielded && hpDelta in 4..oppShieldChipCap) || (oppBlockedByBanner && !shieldDropped)) && !oppDisguiseBusted && oppShieldsRemaining > 0 && (nowMs - lastOppShieldDecrementWallMs) >= 6500L) {
+                if ((isOppChipShielded || (oppBlockedByBanner && !shieldDropped)) && !oppDisguiseBusted && oppShieldsRemaining > 0 && (nowMs - lastOppShieldDecrementWallMs) >= 6500L) {
                     val nextShields = (oppShieldsRemaining - 1).coerceIn(0, 2)
                     val shieldNum = (2 - nextShields).coerceIn(1, 2)
                     val formattedDef = formatOpponentNameWithShadow(defenderOppRawName)
@@ -11942,6 +11944,22 @@ class OverlayService : LifecycleService() {
                             playerLastFastCreditedAtMs.fill(0L)
                             playerAutoIncrementAnchorMs.fill(0L)
                             playerLastSelfCorrectionAtMs.fill(0L)
+
+                            // v7.28: If nameplate OCR for the incoming manual swap (e.g. Tinkaton) arrived with detection latency,
+                            // credit the fast moves executed between the physical midpoint swap start (`swapStartMs`) and now!
+                            if (swapStartMs > 0L && currentFrameTimestampMs > swapStartMs && oppSlotEnergy[newOppSlotIdx] == 0) {
+                                val swapElapsedMs = (currentFrameTimestampMs - swapStartMs).coerceIn(0L, 5000L)
+                                val newFastName = detectedOppFastMoveOverride[newOppSlotIdx]?.takeIf { it.isNotBlank() } ?: matched.defaultFastMove
+                                val newFastTurns = OverlayService.resolveFastTurnsStatic(newFastName, matched.fastTurns).coerceIn(1, 5)
+                                val newFastEnergy = OverlayService.resolveFastEnergyStatic(newFastName, newFastTurns).coerceIn(2, 20)
+                                val missedFasts = (swapElapsedMs / (newFastTurns * 500L)).toInt().coerceIn(0, 4)
+                                if (missedFasts > 0) {
+                                    oppSlotEnergy[newOppSlotIdx] = (missedFasts * newFastEnergy).coerceIn(0, 100)
+                                    oppSlotTurnsOnField[newOppSlotIdx] = (missedFasts * newFastTurns).coerceAtLeast(0)
+                                    oppSlotEnergyMeter[newOppSlotIdx] = oppSlotEnergy[newOppSlotIdx]
+                                    oppSlotEnergyHp[newOppSlotIdx] = oppSlotEnergy[newOppSlotIdx]
+                                }
+                            }
                         }
                         postUserChargedMissingOppHpFrames = 0
                         rollbackPendingProactiveStep(markAnchorRolledBack = false)
@@ -13974,7 +13992,14 @@ class OverlayService : LifecycleService() {
         lastRecommendedAction = ""
         lastRecommendedGoal = ""
         lastRecommendedSwapSlotIdx = -1
-        stopBattleOcrLoop()
+        val shouldKeepLoopForAutoStart = activeAlwaysOnDvrEnabled ||
+            (activeDvrRecordingMode == DVR_MODE_VIP_AUTO) ||
+            activeOneBattleDvrArmed
+        if (!shouldKeepLoopForAutoStart) {
+            stopBattleOcrLoop()
+        } else {
+            startBattleOcrLoop()
+        }
         recalculateAndPushBattleData()
         showBattleToast("🛑 Battle Stopped — Log Win/Loss or Start Next")
     }
@@ -14413,7 +14438,14 @@ class OverlayService : LifecycleService() {
         isOpponentShadow = false
         availableOpponentForms = emptyList()
         currentFormIndex = 0
-        stopBattleOcrLoop()
+        val shouldKeepLoopForAutoStart = activeAlwaysOnDvrEnabled ||
+            (activeDvrRecordingMode == DVR_MODE_VIP_AUTO) ||
+            activeOneBattleDvrArmed
+        if (!shouldKeepLoopForAutoStart) {
+            stopBattleOcrLoop()
+        } else {
+            startBattleOcrLoop()
+        }
         recalculateAndPushBattleData()
         Handler(Looper.getMainLooper()).post {
             overlayView?.evaluateJavascript(
