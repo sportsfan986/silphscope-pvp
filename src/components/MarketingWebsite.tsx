@@ -378,7 +378,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-black text-base sm:text-lg tracking-tight text-white">
-                    SilphScope <span style={{ color: '#2DD4BF' }}>PvP</span>
+                    SilphScope <span style={{ color: '#2DD4BF' }}>{activeSubpage === 'vault' ? 'DVR' : 'PvP'}</span>
                   </span>
                   <span
                     className="text-[10px] font-mono font-extrabold uppercase px-2 py-0.5 rounded-full border"
@@ -392,129 +392,173 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   </span>
                 </div>
                 <p className="text-[11px] hidden sm:block" style={{ color: '#99F6E4' }}>
-                  Real-Time 50% Translucent Android HUD • ELO-Adaptive Anti-Meta • Cloud DVR Vault
+                  {activeSubpage === 'vault'
+                    ? 'Cloud Replay Vault • Frame-Synced Video & HUD Overlay'
+                    : 'Real-Time 50% Translucent Android HUD • ELO-Adaptive Anti-Meta • Cloud DVR Vault'}
                 </p>
               </div>
             </button>
           </div>
 
-          {/* Center Subpage Switcher */}
-          <nav
-            className="flex items-center gap-1 p-1 rounded-xl border text-xs font-extrabold flex-wrap"
-            style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
-          >
-            <button
-              type="button"
-              onClick={() => onSelectSubpage('vault')}
-              className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                activeSubpage === 'vault'
-                  ? 'bg-teal-400 text-slate-950 shadow-md font-black'
-                  : 'text-teal-200/80 hover:text-white hover:bg-slate-800/60'
-              }`}
-            >
-              🎬 DVR Vault
-            </button>
-            <button
-              type="button"
-              onClick={() => onSelectSubpage('home')}
-              className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                activeSubpage === 'home'
-                  ? 'bg-teal-400 text-slate-950 shadow-md font-black'
-                  : 'text-teal-200/80 hover:text-white hover:bg-slate-800/60'
-              }`}
-            >
-              🏠 Overview &amp; Features
-            </button>
-            <button
-              type="button"
-              onClick={() => onSelectSubpage('live')}
-              className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                activeSubpage === 'live'
-                  ? 'bg-cyan-400 text-slate-950 shadow-md font-black'
-                  : 'text-cyan-200/80 hover:text-white hover:bg-slate-800/60'
-              }`}
-            >
-              📡 Live View (Coming Soon)
-            </button>
-            <button
-              type="button"
-              onClick={() => onSelectSubpage('guide')}
-              className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                activeSubpage === 'guide'
-                  ? 'bg-teal-400 text-slate-950 shadow-md font-black'
-                  : 'text-teal-200/80 hover:text-white hover:bg-slate-800/60'
-              }`}
-            >
-              📖 How to Use Overlay
-            </button>
-            <button
-              type="button"
-              onClick={() => onSelectSubpage('compare')}
-              className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                activeSubpage === 'compare'
-                  ? 'bg-teal-400 text-slate-950 shadow-md font-black'
-                  : 'text-teal-200/80 hover:text-white hover:bg-slate-800/60'
-              }`}
-            >
-              ⚔️ vs PvPoke &amp; GOBattleLog
-            </button>
-            <button
-              type="button"
-              onClick={() => onLaunchWebApp('simulator')}
-              className="px-3 py-1.5 rounded-lg text-amber-300 hover:bg-amber-400/15 border border-amber-400/30 transition cursor-pointer font-black"
-            >
-              🧮 Launch Web Simulator &amp; Team Builder
-            </button>
-          </nav>
+          {/* DVR Vault Subpage Streamlined Banner: ONLY links to Main Site, Download APK, Live View */}
+          {activeSubpage === 'vault' ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => onSelectSubpage('home')}
+                className="px-3.5 py-1.5 rounded-xl font-extrabold text-xs border border-teal-500/40 bg-teal-950/40 text-teal-300 hover:text-white hover:bg-teal-900/50 transition cursor-pointer flex items-center gap-1.5 shadow"
+              >
+                <span>🏠</span>
+                <span>Main Site</span>
+              </button>
+              <a
+                href="https://dl.silphscopepvp.com"
+                className="px-3.5 py-1.5 rounded-xl font-black text-xs transition flex items-center gap-1.5 shadow-md hover:brightness-110"
+                style={{
+                  backgroundColor: '#2DD4BF',
+                  color: '#042F2E',
+                  boxShadow: '0 0 14px rgba(45, 212, 191, 0.3)'
+                }}
+              >
+                <span>📱</span>
+                <span>Download APK</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => onSelectSubpage('live')}
+                className="px-3.5 py-1.5 rounded-xl font-bold text-xs border border-cyan-500/40 bg-cyan-950/40 text-cyan-300 hover:text-white hover:bg-cyan-900/50 transition cursor-pointer flex items-center gap-1.5 shadow"
+              >
+                <span>📡</span>
+                <span>Live View</span>
+              </button>
+              {!isStandalone && (
+                <button
+                  type="button"
+                  onClick={handleInstallClick}
+                  className="px-3 py-1.5 rounded-xl font-bold text-xs border border-slate-700 bg-[#081120] text-slate-300 hover:text-teal-300 transition cursor-pointer flex items-center gap-1"
+                >
+                  <span>📲</span>
+                  <span className="hidden sm:inline">Install App</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            /* Other Subpages: keep full switcher as is */
+            <>
+              <nav
+                className="flex items-center gap-1 p-1 rounded-xl border text-xs font-extrabold flex-wrap"
+                style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
+              >
+                <button
+                  type="button"
+                  onClick={() => onSelectSubpage('vault')}
+                  className="px-3 py-1.5 rounded-lg transition cursor-pointer text-teal-200/80 hover:text-white hover:bg-slate-800/60"
+                >
+                  🎬 DVR Vault
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSelectSubpage('home')}
+                  className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                    activeSubpage === 'home'
+                      ? 'bg-teal-400 text-slate-950 shadow-md font-black'
+                      : 'text-teal-200/80 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  🏠 Overview &amp; Features
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSelectSubpage('live')}
+                  className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                    activeSubpage === 'live'
+                      ? 'bg-cyan-400 text-slate-950 shadow-md font-black'
+                      : 'text-cyan-200/80 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  📡 Live View (Coming Soon)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSelectSubpage('guide')}
+                  className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                    activeSubpage === 'guide'
+                      ? 'bg-teal-400 text-slate-950 shadow-md font-black'
+                      : 'text-teal-200/80 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  📖 How to Use Overlay
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSelectSubpage('compare')}
+                  className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                    activeSubpage === 'compare'
+                      ? 'bg-teal-400 text-slate-950 shadow-md font-black'
+                      : 'text-teal-200/80 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  ⚔️ vs PvPoke &amp; GOBattleLog
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onLaunchWebApp('simulator')}
+                  className="px-3 py-1.5 rounded-lg text-amber-300 hover:bg-amber-400/15 border border-amber-400/30 transition cursor-pointer font-black"
+                >
+                  🧮 Launch Web Simulator &amp; Team Builder
+                </button>
+              </nav>
 
-          {/* Right Quick Action CTAs */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={handleInstallClick}
-              className="px-3 py-1.5 rounded-xl font-black text-xs border transition flex items-center gap-1.5 hover:brightness-110 cursor-pointer shadow"
-              style={{
-                backgroundColor: 'rgba(14, 27, 46, 0.95)',
-                borderColor: '#2DD4BF',
-                color: '#2DD4BF'
-              }}
-              title="Install SilphScope DVR as a standalone PWA on Android, iOS Safari, or Desktop"
-            >
-              <span>📲</span>
-              <span>Install App</span>
-            </button>
-            <a
-              href="https://dl.silphscopepvp.com"
-              className="px-3.5 py-1.5 rounded-xl font-black text-xs transition flex items-center gap-1.5 shadow-lg hover:brightness-110"
-              style={{
-                backgroundColor: '#2DD4BF',
-                color: '#042F2E',
-                boxShadow: '0 0 16px rgba(45, 212, 191, 0.35)'
-              }}
-            >
-              <span>📱 Download APK</span>
-            </a>
-            <button
-              type="button"
-              onClick={onOpenMembershipModal}
-              className="px-3 py-1.5 rounded-xl font-black text-xs border transition flex items-center gap-1.5 cursor-pointer hover:brightness-110"
-              style={{
-                backgroundColor: 'rgba(250, 204, 21, 0.16)',
-                borderColor: '#FACC15',
-                color: '#FDE047'
-              }}
-            >
-              <span>
-                {webMembershipTier === 'vip'
-                  ? '👑 VIP Active'
-                  : webMembershipTier === 'pro'
-                  ? '🏆 Pro Active'
-                  : webMembershipTier === 'supporter'
-                  ? '🏅 Supporter'
-                  : '👑 Upgrade ($2+)'}
-              </span>
-            </button>
-          </div>
+              {/* Right Quick Action CTAs */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleInstallClick}
+                  className="px-3 py-1.5 rounded-xl font-black text-xs border transition flex items-center gap-1.5 hover:brightness-110 cursor-pointer shadow"
+                  style={{
+                    backgroundColor: 'rgba(14, 27, 46, 0.95)',
+                    borderColor: '#2DD4BF',
+                    color: '#2DD4BF'
+                  }}
+                  title="Install SilphScope DVR as a standalone PWA on Android, iOS Safari, or Desktop"
+                >
+                  <span>📲</span>
+                  <span>Install App</span>
+                </button>
+                <a
+                  href="https://dl.silphscopepvp.com"
+                  className="px-3.5 py-1.5 rounded-xl font-black text-xs transition flex items-center gap-1.5 shadow-lg hover:brightness-110"
+                  style={{
+                    backgroundColor: '#2DD4BF',
+                    color: '#042F2E',
+                    boxShadow: '0 0 16px rgba(45, 212, 191, 0.35)'
+                  }}
+                >
+                  <span>📱 Download APK</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={onOpenMembershipModal}
+                  className="px-3 py-1.5 rounded-xl font-black text-xs border transition flex items-center gap-1.5 cursor-pointer hover:brightness-110"
+                  style={{
+                    backgroundColor: 'rgba(250, 204, 21, 0.16)',
+                    borderColor: '#FACC15',
+                    color: '#FDE047'
+                  }}
+                >
+                  <span>
+                    {webMembershipTier === 'vip'
+                      ? '👑 VIP Active'
+                      : webMembershipTier === 'pro'
+                      ? '🏆 Pro Active'
+                      : webMembershipTier === 'supporter'
+                      ? '🏅 Supporter'
+                      : '👑 Upgrade ($2+)'}
+                  </span>
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </header>
 
@@ -1600,98 +1644,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
 
       {/* SUBPAGE: CLOUD DVR REPLAY VAULT (DEFAULT VIEW ON LAUNCH) */}
       {activeSubpage === 'vault' && (
-        <main className="flex-1 max-w-7xl mx-auto px-4 py-8 w-full space-y-8 animate-fadeIn">
-          {/* Hero Pitch Strip */}
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase border border-teal-400/40 bg-teal-400/10 text-teal-300">
-              <span>⚡ ZERO-LAG ANDROID OVERLAY</span>
-              <span className="text-slate-500">•</span>
-              <span className="text-amber-300">50% TRANSLUCENT HUD</span>
-              <span className="text-slate-500">•</span>
-              <span>GBL &amp; SHOW 6</span>
-              <span className="text-slate-500">•</span>
-              <span className="text-cyan-300">🎬 CLOUD REPLAY VAULT</span>
-            </div>
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-tight">
-              Master Every Turn &amp; Shield Call with{' '}
-              <span
-                style={{
-                  background: 'linear-gradient(90deg, #2DD4BF 0%, #67E8F9 50%, #FACC15 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent'
-                }}
-              >
-                Cloud DVR Replays.
-              </span>
-            </h1>
-            <p className="text-sm sm:text-base text-slate-300 max-w-3xl leading-relaxed">
-              Watch full battle recordings with the frame-synchronized 50% translucent in-game HUD overlay, live 3x3 matchup matrix, move pacing alerts, and 0.5s turn clocks. Analyze shield calls, export to GOBattleLog, or stream live battle telemetry.
-            </p>
-          </div>
-
-          {/* PWA / Add to Home Screen Callout Card (Branded: SilphScope DVR) */}
-          {!isStandalone && (
-            <div
-              className="p-5 rounded-2xl border shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition hover:border-teal-400/60"
-              style={{
-                backgroundColor: 'rgba(14, 27, 46, 0.85)',
-                borderColor: '#19304E',
-                boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4), 0 0 20px rgba(45, 212, 191, 0.08)'
-              }}
-            >
-              <div className="flex items-start sm:items-center gap-3.5">
-                <div
-                  className="w-12 h-12 rounded-xl flex items-center justify-center border shadow-md flex-shrink-0"
-                  style={{ backgroundColor: '#081120', borderColor: '#2DD4BF' }}
-                >
-                  <svg viewBox="0 0 36 36" className="w-8 h-8">
-                    <polygon points="18,2 31,9 31,27 18,34 5,27 5,9" fill="rgba(14, 27, 46, 0.9)" stroke="#2DD4BF" strokeWidth="2.2" />
-                    <polygon points="18,7 26,12 26,24 18,29 10,24 10,12" fill="none" stroke="#FACC15" strokeWidth="1.8" />
-                    <circle cx="18" cy="18" r="3.5" fill="#FACC15" />
-                  </svg>
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-black text-sm sm:text-base text-white">
-                      📲 Install SilphScope DVR on iPhone, iPad &amp; Android
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-teal-400/20 text-teal-300 border border-teal-400/40">
-                      SilphScope DVR PWA
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-300 mt-0.5 max-w-2xl leading-relaxed">
-                    Watch battle replays in full screen and stream live battle telemetry with zero browser address bars. Works on iOS Safari, iPadOS, Android Chrome, and Desktop.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2.5 w-full md:w-auto flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={handleInstallClick}
-                  className="px-4 py-2.5 rounded-xl font-black text-xs border shadow transition hover:scale-105 cursor-pointer flex items-center gap-2"
-                  style={{
-                    backgroundColor: '#2DD4BF',
-                    borderColor: '#2DD4BF',
-                    color: '#042F2E',
-                    boxShadow: '0 4px 15px rgba(45, 212, 191, 0.3)'
-                  }}
-                >
-                  <span>📲</span>
-                  <span>Install SilphScope DVR</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onSelectSubpage('live')}
-                  className="px-3.5 py-2.5 rounded-xl font-bold text-xs border shadow transition hover:border-cyan-400 text-cyan-300 cursor-pointer flex items-center gap-1.5"
-                  style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
-                >
-                  <span>📡</span>
-                  <span>Live View (Coming Soon)</span>
-                </button>
-              </div>
-            </div>
-          )}
-
+        <main className="flex-1 max-w-7xl mx-auto px-4 py-4 w-full space-y-4 animate-fadeIn">
           {/* Copied Feedback Toast */}
           {copiedMsg && (
             <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl bg-teal-400 text-slate-950 font-black text-xs shadow-2xl flex items-center gap-2 border border-teal-300 animate-bounce">
@@ -1700,16 +1653,16 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             </div>
           )}
 
-          {/* Search, Trainer Selector & Cloud Controls */}
+          {/* Search, Trainer Selector & Filter Bar (Compact & Sleek) */}
           <div
-            className="p-5 rounded-2xl border shadow-xl space-y-4"
+            className="p-3.5 sm:p-4 rounded-2xl border shadow-xl space-y-3"
             style={{
               backgroundColor: '#0E1B2E',
               borderColor: '#19304E',
               boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4)'
             }}
           >
-            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
               {/* Trainer Input Bar */}
               <div className="flex items-center gap-2 flex-1">
                 <div className="relative flex-1">
@@ -1727,7 +1680,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       }
                     }}
                     placeholder="Enter Trainer Screen Name or @Featured"
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl font-mono font-bold text-xs border text-white placeholder-slate-500 focus:outline-none focus:border-teal-400 transition"
+                    className="w-full pl-9 pr-3 py-2 rounded-xl font-mono font-bold text-xs border text-white placeholder-slate-500 focus:outline-none focus:border-teal-400 transition"
                     style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
                   />
                 </div>
@@ -1737,11 +1690,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     setVaultUser(vaultInputUser);
                     fetchVaultReplays(vaultInputUser);
                   }}
-                  className="px-4 py-2.5 rounded-xl font-extrabold text-xs border transition hover:border-teal-400 text-white cursor-pointer flex items-center gap-1.5 flex-shrink-0"
+                  className="px-3.5 py-2 rounded-xl font-extrabold text-xs border transition hover:border-teal-400 text-white cursor-pointer flex items-center gap-1.5 flex-shrink-0"
                   style={{ backgroundColor: '#081120', borderColor: '#2DD4BF' }}
                 >
                   <span>🔍</span>
-                  <span>View Vault</span>
+                  <span>View</span>
                 </button>
                 <button
                   type="button"
@@ -1750,7 +1703,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     setVaultUser('Featured');
                     fetchVaultReplays('Featured');
                   }}
-                  className="px-3.5 py-2.5 rounded-xl font-extrabold text-xs border transition hover:border-amber-400 text-amber-300 cursor-pointer flex items-center gap-1.5 flex-shrink-0"
+                  className="px-3 py-2 rounded-xl font-extrabold text-xs border transition hover:border-amber-400 text-amber-300 cursor-pointer flex items-center gap-1 flex-shrink-0"
                   style={{
                     backgroundColor: 'rgba(250, 204, 21, 0.12)',
                     borderColor: 'rgba(250, 204, 21, 0.45)'
@@ -1762,7 +1715,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               </div>
 
               {/* Share & Owner Action Buttons */}
-              <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <button
                   type="button"
                   onClick={() =>
@@ -1771,16 +1724,16 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       'Vault URL'
                     )
                   }
-                  className="px-3 py-2 rounded-lg font-bold text-xs border transition hover:border-slate-500 text-slate-300 cursor-pointer flex items-center gap-1"
+                  className="px-2.5 py-2 rounded-lg font-bold text-xs border transition hover:border-slate-500 text-slate-300 cursor-pointer flex items-center gap-1"
                   style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
                 >
                   <span>📋</span>
-                  <span>Share Vault</span>
+                  <span>Share</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setOwnerLoginOpen(true)}
-                  className="px-3 py-2 rounded-lg font-bold text-xs border transition hover:border-amber-400 text-amber-300 cursor-pointer flex items-center gap-1"
+                  className="px-2.5 py-2 rounded-lg font-bold text-xs border transition hover:border-amber-400 text-amber-300 cursor-pointer flex items-center gap-1"
                   style={{ backgroundColor: '#081120', borderColor: 'rgba(250, 204, 21, 0.35)' }}
                 >
                   <span>🔐</span>
@@ -1789,47 +1742,8 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               </div>
             </div>
 
-            {/* Season Promo / Upgrade Strip */}
-            <div
-              className="p-3.5 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
-              style={{
-                backgroundColor: 'rgba(250, 204, 21, 0.08)',
-                borderColor: 'rgba(250, 204, 21, 0.3)'
-              }}
-            >
-              <div className="text-amber-200 leading-snug">
-                <strong className="text-amber-300">⚡ Upgrade or Renew Season Pass:</strong> First 14 days of GBL Season = Full Season ($6 Pro / $10 VIP). Day 15+ First-Time Promo = 1-Month Rate ($3 Pro / $5 VIP) for the entire remainder of the season!
-              </div>
-              <div className="flex items-center gap-1.5 flex-wrap flex-shrink-0">
-                <a
-                  href={stripeSupporterUrl}
-                  className="px-2.5 py-1 rounded-lg font-bold text-[11px] border border-amber-400/50 bg-amber-400/20 text-amber-300 hover:bg-amber-400/30 transition"
-                >
-                  🏅 Supporter ($2)
-                </a>
-                <a
-                  href={stripeProSeasonUrl}
-                  className="px-2.5 py-1 rounded-lg font-bold text-[11px] border border-teal-400/50 bg-teal-400/20 text-teal-300 hover:bg-teal-400/30 transition"
-                >
-                  🏆 Stripe Pro Pass
-                </a>
-                <a
-                  href={stripeVipSeasonUrl}
-                  className="px-2.5 py-1 rounded-lg font-bold text-[11px] border border-purple-400/50 bg-purple-400/20 text-purple-200 hover:bg-purple-400/30 transition"
-                >
-                  👑 Stripe VIP Pass
-                </a>
-                <a
-                  href="https://buymeacoffee.com/silphscopepvp"
-                  className="px-2.5 py-1 rounded-lg font-bold text-[11px] border border-orange-400/50 bg-orange-400/20 text-orange-300 hover:bg-orange-400/30 transition"
-                >
-                  ☕ Buy Me a Coffee
-                </a>
-              </div>
-            </div>
-
             {/* Vault Summary & Filter Tabs */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1 border-t border-slate-800/80">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-800/80">
               <div className="flex items-center gap-2 text-xs font-mono text-slate-300">
                 <span className="font-bold text-teal-300">@{vaultUser}</span>
                 <span>•</span>

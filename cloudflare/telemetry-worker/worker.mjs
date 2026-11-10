@@ -5037,60 +5037,32 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           </div>
           <div>
             <div style="display:flex;align-items:center;gap:8px">
-              <span style="font-weight:900;letter-spacing:-0.4px;font-size:17px;color:#fff">SilphScope <span style="color:#2dd4bf">PvP</span></span>
-              <span style="font-size:10px;font-family:'JetBrains Mono',monospace;font-weight:800;text-transform:uppercase;color:#facc15;border:1px solid rgba(250,204,21,0.45);background:rgba(250,204,21,0.12);padding:2px 8px;border-radius:999px">v7.29 • Latest Release</span>
+              <span style="font-weight:900;letter-spacing:-0.4px;font-size:17px;color:#fff">SilphScope <span style="color:#2dd4bf">DVR</span></span>
+              <span style="font-size:10px;font-family:'JetBrains Mono',monospace;font-weight:800;text-transform:uppercase;color:#facc15;border:1px solid rgba(250,204,21,0.45);background:rgba(250,204,21,0.12);padding:2px 8px;border-radius:999px">v7.29</span>
             </div>
-            <p style="margin:2px 0 0;font-size:11px;color:#99f6e4;font-weight:500">Real-Time 50% Translucent Android HUD • ELO-Adaptive Anti-Meta • Cloud DVR Vault</p>
+            <p style="margin:2px 0 0;font-size:11px;color:#99f6e4;font-weight:500">Cloud Replay Vault</p>
           </div>
         </a>
       </div>
 
-      <!-- Center Subpage Switcher (Seamless Same-Tab Navigation) -->
-      <nav class="nav-pills-bar">
-        <a href="/vault" class="nav-pill active-pill">🎬 DVR Vault</a>
-        <a href="https://silphscopepvp.com/?view=home" class="nav-pill">🏠 Overview &amp; Featured Battles</a>
-        <a href="https://silphscopepvp.com/?view=live" class="nav-pill">📡 Live View (Coming Soon)</a>
-        <a href="https://silphscopepvp.com/?view=guide" class="nav-pill">📖 How to Use Overlay</a>
-        <a href="https://silphscopepvp.com/?view=compare" class="nav-pill">⚔️ vs PvPoke &amp; GOBattleLog</a>
-        <a href="https://silphscopepvp.com/?view=app" class="nav-pill nav-pill-gold">🧮 Launch Web Simulator &amp; Team Builder</a>
-      </nav>
-
-      <!-- Right Quick Action CTAs -->
+      <!-- DVR Top Banner: ONLY links to Main Site, Download APK, Live View -->
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <a href="https://silphscopepvp.com/?view=vault" class="btn-cta active-dvr">📲 SilphScope DVR PWA</a>
+        <a href="https://silphscopepvp.com/?view=home" class="btn-cta" style="background:#081120;border:1px solid #19304e;color:#99f6e4">🏠 Main Site</a>
         <a href="https://dl.silphscopepvp.com" class="btn-cta btn-cta-download">📱 Download APK</a>
-        <a href="${STRIPE_PAYMENT_LINKS.supporter}" class="btn-cta btn-cta-upgrade">👑 Upgrade ($2+)</a>
+        <a href="https://silphscopepvp.com/?view=live" class="btn-cta" style="background:#081120;border:1px solid rgba(6,182,212,0.4);color:#67e8f9">📡 Live View</a>
       </div>
     </div>
   </header>
 
-  <div class="container">
-    <!-- Hero Pitch / Telemetry Strip matching Main Website -->
-    <div style="display:flex;flex-direction:column;gap:8px;padding:6px 0 4px">
-      <div style="display:inline-flex;align-items:center;gap:8px;padding:4px 14px;border-radius:999px;border:1px solid rgba(45,212,191,0.45);background:rgba(45,212,191,0.1);font-size:11px;font-weight:800;color:#2dd4bf;width:fit-content">
-        <span>⚡ ZERO-LAG ANDROID OVERLAY</span>
-        <span style="color:#64748b">•</span>
-        <span style="color:#facc15">50% TRANSLUCENT HUD</span>
-        <span style="color:#64748b">•</span>
-        <span>GBL &amp; SHOW 6</span>
-        <span style="color:#64748b">•</span>
-        <span style="color:#67e8f9">🎬 CLOUD REPLAY VAULT</span>
-      </div>
-      <h1 style="margin:4px 0 0;font-size:28px;font-weight:900;letter-spacing:-0.5px;color:#fff;line-height:1.2">
-        Master Every Turn &amp; Shield Call with <span style="background:linear-gradient(90deg,#2dd4bf 0%,#67e8f9 50%,#facc15 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Cloud DVR Replays.</span>
-      </h1>
-      <p style="margin:0;font-size:13.5px;color:#94a3b8;max-width:860px;line-height:1.5">
-        Watch frame-accurate H.264 combat recordings with live synchronized 50% translucent tactical HUD overlay, turn clocks, banked energy across all 3 opponent slots, and dynamic 9-shield matrix calculations.
-      </p>
-    </div>
+  <div class="container" style="padding:14px 20px;gap:12px">
     <!-- Top Bar: Public Trainer Lookup + Owner Login Toggle -->
-    <div class="login-card" style="justify-content:space-between">
+    <div class="login-card" style="justify-content:space-between;padding:12px 16px;gap:10px">
       <div style="display:flex;gap:8px;flex:1;flex-wrap:wrap;align-items:center">
-        <span style="font-size:13px;font-weight:800;color:#ecfeff">👤 Trainer Vault:</span>
-        <input id="inp-user" type="text" placeholder="Enter Trainer ID (or Featured)" style="max-width:260px" onkeydown="if(event.key==='Enter')loadVault()" />
-        <button class="primary" onclick="loadVault()">👁️ View DVR Vault</button>
-        <button onclick="document.getElementById('inp-user').value='Featured';loadVault()" style="background:rgba(250,204,21,0.14);border-color:rgba(250,204,21,0.45);color:#fde047">🌟 @Featured</button>
-        <button onclick="copyVaultShareUrl()" title="Copy link to this trainer's DVR page">🔗 Share Vault Page</button>
+        <span style="font-size:13px;font-weight:800;color:#ecfeff">👤 Trainer:</span>
+        <input id="inp-user" type="text" placeholder="Enter Trainer ID (or Featured)" style="max-width:240px;padding:8px 12px;font-size:12px" onkeydown="if(event.key==='Enter')loadVault()" />
+        <button class="primary" onclick="loadVault()" style="padding:8px 14px;font-size:12px">👁️ View</button>
+        <button onclick="document.getElementById('inp-user').value='Featured';loadVault()" style="background:rgba(250,204,21,0.14);border-color:rgba(250,204,21,0.45);color:#fde047;padding:8px 12px;font-size:12px">🌟 @Featured</button>
+        <button onclick="copyVaultShareUrl()" title="Copy link to this trainer's DVR page" style="padding:8px 12px;font-size:12px">🔗 Share</button>
       </div>
       <div style="display:flex;gap:8px;align-items:center" id="auth-header-controls">
         <button id="btn-toggle-login" onclick="toggleLoginPanel()" style="border-color:#2dd4bf;color:#2dd4bf">🔐 Owner Login</button>
@@ -5141,19 +5113,6 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       <input id="inp-new-password" type="password" placeholder="New Password (min 8 characters)" style="max-width:240px" />
       <button class="primary" onclick="saveNewPassword()">💾 Save Password</button>
       <button onclick="document.getElementById('password-setup-box').style.display='none'">Cancel</button>
-    </div>
-
-    <div class="login-card" style="justify-content:space-between;background:rgba(14,27,46,0.85);font-size:12px;color:#ecfeff;border-color:var(--border)">
-      <div>
-        <strong style="color:#facc15">⚡ Upgrade or Renew Season Pass:</strong>
-        <span style="color:#99f6e4;margin-left:6px">First 14 days of GBL Season = Full Season ($6 Pro / $10 VIP). Day 15+ First-Time Promo = 1-Month Rate ($3 Pro / $5 VIP) for the entire remainder of the season!</span>
-      </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <a class="btn-link" style="background:rgba(250,204,21,0.14);border-color:rgba(250,204,21,0.45);color:#fde047" href="${STRIPE_PAYMENT_LINKS.supporter}" target="_blank" rel="noopener">🏅 Supporter ($2)</a>
-        <a class="btn-link primary" href="${STRIPE_PAYMENT_LINKS.pro_season}" target="_blank" rel="noopener">💳 Stripe Pro Pass</a>
-        <a class="btn-link" style="background:rgba(168,85,247,0.2);border-color:rgba(168,85,247,0.45);color:#e9d5ff;font-weight:800" href="${STRIPE_PAYMENT_LINKS.vip_season}" target="_blank" rel="noopener">👑 Stripe VIP Pass</a>
-        <a class="btn-link" style="background:rgba(245,158,11,0.18);border-color:#f59e0b;color:#fde047;font-weight:800" href="${BMC_LINKS.page}" target="_blank" rel="noopener">☕ Buy Me a Coffee</a>
-      </div>
     </div>
 
     <div class="stats-bar" id="stats-bar" style="display:none"></div>
