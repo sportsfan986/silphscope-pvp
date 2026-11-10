@@ -12,16 +12,6 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
     inputs:
-      build_target:
-        description: 'Build Target'
-        required: true
-        default: 'release'
-        type: choice
-        options:
-          - release
-          - debug
-          - both
-
       workflow_version:
         description: 'Optional release version override (e.g. v6.21)'
         required: false
@@ -158,25 +148,12 @@ jobs:
             "$APKSIGNER" verify --verbose --print-certs --min-sdk-version 31 "$OUT_APK"
           fi
 
-      - name: Build Debug APK
-        if: github.event.inputs.build_target == 'debug' || github.event.inputs.build_target == 'both'
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
-
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: silphscope-pvp-release-apk
           path: app/build/outputs/apk/release/named/silphscope-pvp-*.apk
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Upload Debug APK Artifact
-        uses: actions/upload-artifact@v4
-        if: always() && (github.event.inputs.build_target == 'debug' || github.event.inputs.build_target == 'both')
-        with:
-          name: silphscope-pvp-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: ignore
           retention-days: 14
 
