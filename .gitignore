@@ -15,4 +15,5 @@ keystore.properties
 *.keystore
 *.jks
 *.lineage
+.wrangler/
 

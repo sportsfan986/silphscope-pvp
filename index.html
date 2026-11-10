@@ -4,18 +4,47 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' blob: https:; frame-src 'self' https://*.silphscopepvp.com https://silphscopepvp.com; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://docs.google.com https://*.googleusercontent.com https://silphscope-telemetry.silphscope-pvp.workers.dev https://*.silphscopepvp.com https://silphscopepvp.com; base-uri 'self'; form-action 'self';"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https:; media-src 'self' blob: https:; frame-src 'self' https://*.silphscopepvp.com https://silphscopepvp.com; worker-src 'self' blob:; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://docs.google.com https://*.googleusercontent.com https://silphscope-telemetry.silphscope-pvp.workers.dev https://*.silphscopepvp.com https://silphscopepvp.com; base-uri 'self'; form-action 'self';"
     />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>SilphScope PvP — Real-Time 50% Translucent HUD, ELO-Adaptive Anti-Meta & Cloud DVR Vault for Pokémon GO PvP</title>
     <meta name="description" content="Real-Time 50% Translucent Battle HUD, ELO-Adaptive Anti-Meta Team Builder, Live Buff/Debuff Damage Math, Shield Call Overlay & Cloud DVR Replay Vault for Pokémon GO PvP." />
+    
+    <!-- PWA & Mobile Web App Meta Tags (iOS & Android) -->
+    <meta name="theme-color" content="#050B16" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="SilphScope DVR" />
+    <meta name="application-name" content="SilphScope DVR" />
+    <link rel="apple-touch-icon" href="/pwa-icon-192.svg" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/pwa-icon-192.svg" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/pwa-icon-512.svg" />
+
+    <!-- Google Fonts Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- Open Graph & Social Cards -->
     <meta property="og:title" content="SilphScope PvP — Official Website, HUD & Cloud DVR Replay Vault" />
     <meta property="og:description" content="Real-Time 50% Translucent Battle HUD, ELO-Adaptive Anti-Meta Team Builder, Live Buff/Debuff Damage Math, Shield Call Overlay & Cloud DVR Replay Vault for Pokémon GO PvP." />
     <meta property="og:url" content="https://silphscopepvp.com" />
     <meta property="og:image" content="https://silphscopepvp.com/screenshots/elo_adaptive_anti_meta_engine.jpg" />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- Service Worker Registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch((err) => {
+            console.log('[PWA] Service worker registration note:', err);
+          });
+        });
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

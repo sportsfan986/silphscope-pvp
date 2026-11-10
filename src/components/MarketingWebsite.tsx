@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { VersionRoadmapInfographic } from './VersionRoadmapInfographic';
 
-export type MarketingSubpage = 'home' | 'guide' | 'compare';
+export type MarketingSubpage = 'vault' | 'home' | 'live' | 'guide' | 'compare';
 
 export interface MarketingWebsiteProps {
   activeSubpage: MarketingSubpage;
@@ -12,6 +12,81 @@ export interface MarketingWebsiteProps {
   onChangeWebScreenName: (name: string) => void;
   webMembershipTier: 'free' | 'supporter' | 'pro' | 'vip';
 }
+
+export interface DvrReplayItem {
+  shareId: string;
+  battleId?: string;
+  screenName?: string;
+  league: string;
+  result: 'WIN' | 'LOSS' | string;
+  matchupSummary: string;
+  durationSec: number;
+  videoBytes: number;
+  isPinned?: boolean;
+  isPublic?: boolean;
+  userTierBadge?: string;
+  userIssueNote?: string;
+  diagnosticReason?: string;
+  highlightSec?: number;
+  videoStreamUrl?: string;
+  traceStreamUrl?: string;
+  shareUrl?: string;
+  createdAt?: string;
+}
+
+const CANONICAL_FEATURED_REPLAYS: DvrReplayItem[] = [
+  {
+    shareId: 'f_ml_closer',
+    battleId: 'log-1794105062689-388',
+    screenName: 'Featured',
+    league: 'Mega Master League (10000)',
+    result: 'WIN',
+    matchupSummary: 'Dialga (Origin), Lugia, Kyogre (Primal) vs Zekrom, Kyogre (Primal), Dialga (Origin) • 4 anomalies',
+    durationSec: 191,
+    videoBytes: 12655475,
+    isPinned: true,
+    isPublic: true,
+    userTierBadge: '🌟 Official Showcase • Shiny Dialga & Closer Swap',
+    highlightSec: 100,
+    videoStreamUrl: 'https://dvr.silphscopepvp.com/v1/replays/stream/f_ml_closer/video.mp4',
+    traceStreamUrl: 'https://dvr.silphscopepvp.com/v1/replays/stream/f_ml_closer/trace.jsonl',
+    shareUrl: 'https://dvr.silphscopepvp.com/watch/f_ml_closer'
+  },
+  {
+    shareId: 'f_ul_shield',
+    battleId: 'log-1794012768340-568',
+    screenName: 'Featured',
+    league: 'Mega Ultra League (2500)',
+    result: 'WIN',
+    matchupSummary: 'Tinkaton, Mimikyu, Swampert vs Greninja, Giratina (Altered), Mewtwo (Armored) • 3 anomalies',
+    durationSec: 182,
+    videoBytes: 27582434,
+    isPinned: true,
+    isPublic: true,
+    userTierBadge: '🌟 Official Showcase • Shield Call & Backline Predictor',
+    highlightSec: 44,
+    videoStreamUrl: 'https://dvr.silphscopepvp.com/v1/replays/stream/f_ul_shield/video.mp4',
+    traceStreamUrl: 'https://dvr.silphscopepvp.com/v1/replays/stream/f_ul_shield/trace.jsonl',
+    shareUrl: 'https://dvr.silphscopepvp.com/watch/f_ul_shield'
+  },
+  {
+    shareId: 'f_gl_debuff',
+    battleId: 'log-1794105418391-578',
+    screenName: 'Featured',
+    league: 'GREAT LEAGUE',
+    result: 'WIN',
+    matchupSummary: 'Kanto Ninetales, Fearow, Shadow Pidgeot vs Milotic, Corviknight, Shadow Drifblim',
+    durationSec: 288,
+    videoBytes: 18613976,
+    isPinned: true,
+    isPublic: true,
+    userTierBadge: '🌟 Official Showcase • Debuff Math',
+    highlightSec: 118,
+    videoStreamUrl: 'https://dvr.silphscopepvp.com/v1/replays/stream/f_gl_debuff/video.mp4',
+    traceStreamUrl: 'https://dvr.silphscopepvp.com/v1/replays/stream/f_gl_debuff/trace.jsonl',
+    shareUrl: 'https://dvr.silphscopepvp.com/watch/f_gl_debuff'
+  }
+];
 
 interface HeroShowcaseSlide {
   id: string;
@@ -110,6 +185,139 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
   const [heroShowStaticPoster, setHeroShowStaticPoster] = useState<boolean>(false);
   const activeHero = HERO_SLIDES[selectedHeroIdx] || HERO_SLIDES[0];
 
+  // PWA (Progressive Web App) Install Hook & Detection (Branded as SilphScope DVR)
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [showInstallModal, setShowInstallModal] = useState<boolean>(false);
+  const [isIos] = useState<boolean>(() => {
+    try {
+      return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+    } catch {
+      return false;
+    }
+  });
+  const [isStandalone] = useState<boolean>(() => {
+    try {
+      return window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true;
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const handleBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (installPrompt) {
+      try {
+        installPrompt.prompt();
+        const choice = await installPrompt.userChoice;
+        if (choice.outcome === 'accepted') {
+          setInstallPrompt(null);
+        }
+      } catch {
+        setShowInstallModal(true);
+      }
+    } else {
+      setShowInstallModal(true);
+    }
+  };
+
+  // DVR Replay Vault State
+  const [vaultUser, setVaultUser] = useState<string>(() => {
+    try {
+      return (new URLSearchParams(window.location.search).get('user') || webScreenName || 'Featured').trim();
+    } catch {
+      return 'Featured';
+    }
+  });
+  const [vaultInputUser, setVaultInputUser] = useState<string>(vaultUser);
+  const [vaultFilter, setVaultFilter] = useState<'all' | 'starred' | 'public'>('all');
+  const [vaultReplays, setVaultReplays] = useState<DvrReplayItem[]>(CANONICAL_FEATURED_REPLAYS);
+  const [loadingVault, setLoadingVault] = useState<boolean>(false);
+  const [vaultStats, setVaultStats] = useState<{ total: number; starred: number; public: number }>({
+    total: 3,
+    starred: 3,
+    public: 3
+  });
+  const [selectedWatchReplay, setSelectedWatchReplay] = useState<DvrReplayItem | null>(null);
+  const [ownerLoginOpen, setOwnerLoginOpen] = useState<boolean>(false);
+  const [authTab, setAuthTab] = useState<'token' | 'password' | 'github'>('token');
+  const [authKey, setAuthKey] = useState<string>('');
+  const [authPassword, setAuthPassword] = useState<string>('');
+  const [authEmail, setAuthEmail] = useState<string>('');
+
+  const fetchVaultReplays = async (userToFetch: string) => {
+    const user = (userToFetch || 'Featured').trim();
+    setLoadingVault(true);
+    try {
+      const res = await fetch(`https://dvr.silphscopepvp.com/v1/replays/list?user=${encodeURIComponent(user)}`, {
+        headers: {
+          'X-SilphScope-Client-Key': 'ssk_client_v615_telemetry_ingest_9f8a7b6c5d4e3f2a1b0c',
+          'X-Trainer-Screen-Name': user
+        }
+      });
+      const data = await res.json();
+      if (data && data.ok && Array.isArray(data.items)) {
+        setVaultReplays(data.items.length > 0 ? data.items : []);
+        setVaultStats({
+          total: data.items.length,
+          starred: data.totalStarredCount ?? data.items.filter((i: any) => i.isPinned).length,
+          public: data.totalPublicCount ?? data.items.filter((i: any) => i.isPublic).length
+        });
+      } else {
+        if (user.toLowerCase() === 'featured') {
+          setVaultReplays(CANONICAL_FEATURED_REPLAYS);
+        } else {
+          setVaultReplays([]);
+        }
+      }
+    } catch {
+      if (user.toLowerCase() === 'featured') {
+        setVaultReplays(CANONICAL_FEATURED_REPLAYS);
+      }
+    } finally {
+      setLoadingVault(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSubpage === 'vault') {
+      fetchVaultReplays(vaultUser);
+    }
+  }, [activeSubpage, vaultUser]);
+
+  // Live View Simulation & Stream State
+  const [streamCode, setStreamCode] = useState<string>('SSPVP-LIVE-9042');
+  const [isLiveConnected, setIsLiveConnected] = useState<boolean>(false);
+  const [isSimulatingLive, setIsSimulatingLive] = useState<boolean>(false);
+  const [simTurn, setSimTurn] = useState<number>(0);
+
+  useEffect(() => {
+    if (!isSimulatingLive) return;
+    const interval = setInterval(() => {
+      setSimTurn((t) => (t + 1) % 40);
+    }, 500);
+    return () => clearInterval(interval);
+  }, [isSimulatingLive]);
+
+  const [copiedMsg, setCopiedMsg] = useState<string>('');
+  const copyToClipboard = (text: string, label: string = 'Link') => {
+    try {
+      navigator.clipboard.writeText(text);
+      setCopiedMsg(`${label} copied to clipboard!`);
+      setTimeout(() => setCopiedMsg(''), 2500);
+    } catch {
+      setCopiedMsg(`${label} copied!`);
+      setTimeout(() => setCopiedMsg(''), 2500);
+    }
+  };
+
   const encodedRef = encodeURIComponent((webScreenName || '').trim() || 'trainer');
   const stripeSupporterUrl = `https://buy.stripe.com/4gM3cwf3r8JG7XLamm1Jm07?client_reference_id=${encodedRef}`;
   const stripeProSeasonUrl = `https://buy.stripe.com/8x2aEY8F33pma5TgKK1Jm08?client_reference_id=${encodedRef}`;
@@ -140,7 +348,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => onSelectSubpage('home')}
+              onClick={() => onSelectSubpage('vault')}
               className="flex items-center gap-2.5 text-left group cursor-pointer"
             >
               <div
@@ -197,21 +405,43 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           >
             <button
               type="button"
-              onClick={() => onSelectSubpage('home')}
+              onClick={() => onSelectSubpage('vault')}
               className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                activeSubpage === 'home'
-                  ? 'bg-teal-400 text-slate-950 shadow-md'
+                activeSubpage === 'vault'
+                  ? 'bg-teal-400 text-slate-950 shadow-md font-black'
                   : 'text-teal-200/80 hover:text-white hover:bg-slate-800/60'
               }`}
             >
-              🏠 Overview &amp; Featured Battles
+              🎬 DVR Vault
+            </button>
+            <button
+              type="button"
+              onClick={() => onSelectSubpage('home')}
+              className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                activeSubpage === 'home'
+                  ? 'bg-teal-400 text-slate-950 shadow-md font-black'
+                  : 'text-teal-200/80 hover:text-white hover:bg-slate-800/60'
+              }`}
+            >
+              🏠 Overview &amp; Features
+            </button>
+            <button
+              type="button"
+              onClick={() => onSelectSubpage('live')}
+              className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                activeSubpage === 'live'
+                  ? 'bg-cyan-400 text-slate-950 shadow-md font-black'
+                  : 'text-cyan-200/80 hover:text-white hover:bg-slate-800/60'
+              }`}
+            >
+              📡 Live View (Beta)
             </button>
             <button
               type="button"
               onClick={() => onSelectSubpage('guide')}
               className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
                 activeSubpage === 'guide'
-                  ? 'bg-teal-400 text-slate-950 shadow-md'
+                  ? 'bg-teal-400 text-slate-950 shadow-md font-black'
                   : 'text-teal-200/80 hover:text-white hover:bg-slate-800/60'
               }`}
             >
@@ -222,7 +452,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               onClick={() => onSelectSubpage('compare')}
               className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
                 activeSubpage === 'compare'
-                  ? 'bg-teal-400 text-slate-950 shadow-md'
+                  ? 'bg-teal-400 text-slate-950 shadow-md font-black'
                   : 'text-teal-200/80 hover:text-white hover:bg-slate-800/60'
               }`}
             >
@@ -231,7 +461,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             <button
               type="button"
               onClick={() => onLaunchWebApp('simulator')}
-              className="px-3 py-1.5 rounded-lg text-amber-300 hover:bg-amber-400/15 border border-amber-400/30 transition cursor-pointer"
+              className="px-3 py-1.5 rounded-lg text-amber-300 hover:bg-amber-400/15 border border-amber-400/30 transition cursor-pointer font-black"
             >
               🧮 Launch Web Simulator &amp; Team Builder
             </button>
@@ -239,19 +469,20 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
 
           {/* Right Quick Action CTAs */}
           <div className="flex items-center gap-2 flex-wrap">
-            <a
-              href="https://dvr.silphscopepvp.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-3 py-1.5 rounded-xl font-extrabold text-xs border transition flex items-center gap-1.5 hover:brightness-110"
+            <button
+              type="button"
+              onClick={handleInstallClick}
+              className="px-3 py-1.5 rounded-xl font-black text-xs border transition flex items-center gap-1.5 hover:brightness-110 cursor-pointer shadow"
               style={{
-                backgroundColor: 'rgba(14, 27, 46, 0.9)',
+                backgroundColor: 'rgba(14, 27, 46, 0.95)',
                 borderColor: '#2DD4BF',
                 color: '#2DD4BF'
               }}
+              title="Install SilphScope DVR as a standalone PWA on Android, iOS Safari, or Desktop"
             >
-              <span>🎬 DVR Replay Vault</span>
-            </a>
+              <span>📲</span>
+              <span>Install App</span>
+            </button>
             <a
               href="https://dl.silphscopepvp.com"
               className="px-3.5 py-1.5 rounded-xl font-black text-xs transition flex items-center gap-1.5 shadow-lg hover:brightness-110"
@@ -348,11 +579,10 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   <span className="text-lg font-black">↓</span>
                 </a>
 
-                <a
-                  href="https://dvr.silphscopepvp.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-3.5 rounded-2xl font-black text-sm flex items-center justify-between border shadow-xl transition hover:scale-[1.01]"
+                <button
+                  type="button"
+                  onClick={() => onSelectSubpage('vault')}
+                  className="p-3.5 rounded-2xl font-black text-sm flex items-center justify-between border shadow-xl transition hover:scale-[1.01] cursor-pointer text-left"
                   style={{
                     backgroundColor: '#0E1B2E',
                     borderColor: '#2DD4BF',
@@ -370,8 +600,8 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       </div>
                     </div>
                   </div>
-                  <span className="text-teal-300">↗</span>
-                </a>
+                  <span className="text-teal-300">→</span>
+                </button>
 
                 <button
                   type="button"
@@ -552,12 +782,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
               >
                 <div>
-                  <a
-                    href="https://dvr.silphscopepvp.com/watch/f_gl_debuff"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block relative group overflow-hidden bg-slate-950"
-                    title="Click to watch full battle from 0:00 in the Synchronized HUD Replay Theater"
+                  <button
+                    type="button"
+                    onClick={() => setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_gl_debuff') || CANONICAL_FEATURED_REPLAYS[2])}
+                    className="block relative group overflow-hidden bg-slate-950 w-full text-left cursor-pointer"
+                    title="Click to watch full battle in the Synchronized HUD Replay Theater"
                   >
                     <img
                       src={`${import.meta.env.BASE_URL}screenshots/featured_gl_debuff_math.gif`}
@@ -575,7 +804,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                         WIN • Great League
                       </span>
                     </div>
-                  </a>
+                  </button>
 
                   <div className="p-4 space-y-2">
                     <h3 className="font-black text-base text-white">
@@ -588,22 +817,20 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 </div>
 
                 <div className="px-4 pb-4 pt-2 border-t border-slate-800/80 flex flex-wrap gap-1.5">
-                  <a
-                    href="https://dvr.silphscopepvp.com/watch/f_gl_debuff"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold text-[11px] border border-teal-400/30"
+                  <button
+                    type="button"
+                    onClick={() => setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_gl_debuff') || CANONICAL_FEATURED_REPLAYS[2])}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold text-[11px] border border-teal-400/30 cursor-pointer"
                   >
                     ▶️ Start (0:00)
-                  </a>
-                  <a
-                    href="https://dvr.silphscopepvp.com/watch/f_gl_debuff?t=118"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-extrabold text-[11px] border border-amber-400/50"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedWatchReplay({ ...(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_gl_debuff') || CANONICAL_FEATURED_REPLAYS[2]), highlightSec: 118 })}
+                    className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-extrabold text-[11px] border border-amber-400/50 cursor-pointer"
                   >
                     ⚡ Jump to Debuff &amp; Shield Call (1:58)
-                  </a>
+                  </button>
                 </div>
               </div>
 
@@ -613,12 +840,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
               >
                 <div>
-                  <a
-                    href="https://dvr.silphscopepvp.com/watch/f_ml_closer"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block relative group overflow-hidden bg-slate-950"
-                    title="Click to watch full battle from 0:00 in the Synchronized HUD Replay Theater"
+                  <button
+                    type="button"
+                    onClick={() => setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ml_closer') || CANONICAL_FEATURED_REPLAYS[0])}
+                    className="block relative group overflow-hidden bg-slate-950 w-full text-left cursor-pointer"
+                    title="Click to watch full battle in the Synchronized HUD Replay Theater"
                   >
                     <img
                       src={`${import.meta.env.BASE_URL}screenshots/featured_ml_closer_align.gif`}
@@ -636,7 +862,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                         WIN • Mega Master
                       </span>
                     </div>
-                  </a>
+                  </button>
 
                   <div className="p-4 space-y-2">
                     <h3 className="font-black text-base text-white">
@@ -649,30 +875,27 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 </div>
 
                 <div className="px-4 pb-4 pt-2 border-t border-slate-800/80 flex flex-wrap gap-1.5">
-                  <a
-                    href="https://dvr.silphscopepvp.com/watch/f_ml_closer"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold text-[11px] border border-teal-400/30"
+                  <button
+                    type="button"
+                    onClick={() => setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ml_closer') || CANONICAL_FEATURED_REPLAYS[0])}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold text-[11px] border border-teal-400/30 cursor-pointer"
                   >
                     ▶️ Start (0:00)
-                  </a>
-                  <a
-                    href="https://dvr.silphscopepvp.com/watch/f_ml_closer?t=18"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-2.5 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-200 font-extrabold text-[11px] border border-teal-400/50"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedWatchReplay({ ...(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ml_closer') || CANONICAL_FEATURED_REPLAYS[0]), highlightSec: 18 })}
+                    className="px-2.5 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-200 font-extrabold text-[11px] border border-teal-400/50 cursor-pointer"
                   >
                     ✨ Shiny Dialga RoTime (0:18)
-                  </a>
-                  <a
-                    href="https://dvr.silphscopepvp.com/watch/f_ml_closer?t=100"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-extrabold text-[11px] border border-amber-400/50"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedWatchReplay({ ...(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ml_closer') || CANONICAL_FEATURED_REPLAYS[0]), highlightSec: 100 })}
+                    className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-extrabold text-[11px] border border-amber-400/50 cursor-pointer"
                   >
                     🔄 Closer Swap (1:40)
-                  </a>
+                  </button>
                 </div>
               </div>
 
@@ -682,12 +905,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
               >
                 <div>
-                  <a
-                    href="https://dvr.silphscopepvp.com/watch/f_ul_shield"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block relative group overflow-hidden bg-slate-950"
-                    title="Click to watch full battle from 0:00 in the Synchronized HUD Replay Theater"
+                  <button
+                    type="button"
+                    onClick={() => setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_shield') || CANONICAL_FEATURED_REPLAYS[1])}
+                    className="block relative group overflow-hidden bg-slate-950 w-full text-left cursor-pointer"
+                    title="Click to watch full battle in the Synchronized HUD Replay Theater"
                   >
                     <img
                       src={`${import.meta.env.BASE_URL}screenshots/featured_ul_disguise_shield.gif`}
@@ -705,7 +927,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                         WIN • Mega Ultra
                       </span>
                     </div>
-                  </a>
+                  </button>
 
                   <div className="p-4 space-y-2">
                     <h3 className="font-black text-base text-white">
@@ -718,22 +940,20 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 </div>
 
                 <div className="px-4 pb-4 pt-2 border-t border-slate-800/80 flex flex-wrap gap-1.5">
-                  <a
-                    href="https://dvr.silphscopepvp.com/watch/f_ul_shield"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold text-[11px] border border-teal-400/30"
+                  <button
+                    type="button"
+                    onClick={() => setSelectedWatchReplay(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_shield') || CANONICAL_FEATURED_REPLAYS[1])}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold text-[11px] border border-teal-400/30 cursor-pointer"
                   >
                     ▶️ Start (0:00)
-                  </a>
-                  <a
-                    href="https://dvr.silphscopepvp.com/watch/f_ul_shield?t=44"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-extrabold text-[11px] border border-amber-400/50"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedWatchReplay({ ...(CANONICAL_FEATURED_REPLAYS.find(r => r.shareId === 'f_ul_shield') || CANONICAL_FEATURED_REPLAYS[1]), highlightSec: 44 })}
+                    className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-extrabold text-[11px] border border-amber-400/50 cursor-pointer"
                   >
                     🛡️ Jump to Shield &amp; Predictor (0:44)
-                  </a>
+                  </button>
                 </div>
               </div>
             </div>
@@ -1376,6 +1596,1115 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             </table>
           </div>
         </main>
+      )}
+
+      {/* SUBPAGE: CLOUD DVR REPLAY VAULT (DEFAULT VIEW ON LAUNCH) */}
+      {activeSubpage === 'vault' && (
+        <main className="flex-1 max-w-7xl mx-auto px-4 py-8 w-full space-y-8 animate-fadeIn">
+          {/* Hero Pitch Strip */}
+          <div className="space-y-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase border border-teal-400/40 bg-teal-400/10 text-teal-300">
+              <span>⚡ ZERO-LAG ANDROID OVERLAY</span>
+              <span className="text-slate-500">•</span>
+              <span className="text-amber-300">50% TRANSLUCENT HUD</span>
+              <span className="text-slate-500">•</span>
+              <span>GBL &amp; SHOW 6</span>
+              <span className="text-slate-500">•</span>
+              <span className="text-cyan-300">🎬 CLOUD REPLAY VAULT</span>
+            </div>
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-tight">
+              Master Every Turn &amp; Shield Call with{' '}
+              <span
+                style={{
+                  background: 'linear-gradient(90deg, #2DD4BF 0%, #67E8F9 50%, #FACC15 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent'
+                }}
+              >
+                Cloud DVR Replays.
+              </span>
+            </h1>
+            <p className="text-sm sm:text-base text-slate-300 max-w-3xl leading-relaxed">
+              Watch full battle recordings with the frame-synchronized 50% translucent in-game HUD overlay, live 3x3 matchup matrix, move pacing alerts, and 0.5s turn clocks. Analyze shield calls, export to GOBattleLog, or stream live battle telemetry.
+            </p>
+          </div>
+
+          {/* PWA / Add to Home Screen Callout Card (Branded: SilphScope DVR) */}
+          {!isStandalone && (
+            <div
+              className="p-5 rounded-2xl border shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition hover:border-teal-400/60"
+              style={{
+                backgroundColor: 'rgba(14, 27, 46, 0.85)',
+                borderColor: '#19304E',
+                boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4), 0 0 20px rgba(45, 212, 191, 0.08)'
+              }}
+            >
+              <div className="flex items-start sm:items-center gap-3.5">
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center border shadow-md flex-shrink-0"
+                  style={{ backgroundColor: '#081120', borderColor: '#2DD4BF' }}
+                >
+                  <svg viewBox="0 0 36 36" className="w-8 h-8">
+                    <polygon points="18,2 31,9 31,27 18,34 5,27 5,9" fill="rgba(14, 27, 46, 0.9)" stroke="#2DD4BF" strokeWidth="2.2" />
+                    <polygon points="18,7 26,12 26,24 18,29 10,24 10,12" fill="none" stroke="#FACC15" strokeWidth="1.8" />
+                    <circle cx="18" cy="18" r="3.5" fill="#FACC15" />
+                  </svg>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-sm sm:text-base text-white">
+                      📲 Install SilphScope DVR on iPhone, iPad &amp; Android
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-teal-400/20 text-teal-300 border border-teal-400/40">
+                      SilphScope DVR PWA
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-0.5 max-w-2xl leading-relaxed">
+                    Watch battle replays in full screen and stream live battle telemetry with zero browser address bars. Works on iOS Safari, iPadOS, Android Chrome, and Desktop.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2.5 w-full md:w-auto flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={handleInstallClick}
+                  className="px-4 py-2.5 rounded-xl font-black text-xs border shadow transition hover:scale-105 cursor-pointer flex items-center gap-2"
+                  style={{
+                    backgroundColor: '#2DD4BF',
+                    borderColor: '#2DD4BF',
+                    color: '#042F2E',
+                    boxShadow: '0 4px 15px rgba(45, 212, 191, 0.3)'
+                  }}
+                >
+                  <span>📲</span>
+                  <span>Install SilphScope DVR</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSelectSubpage('live')}
+                  className="px-3.5 py-2.5 rounded-xl font-bold text-xs border shadow transition hover:border-cyan-400 text-cyan-300 cursor-pointer flex items-center gap-1.5"
+                  style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
+                >
+                  <span>📡</span>
+                  <span>Live View (Beta)</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Copied Feedback Toast */}
+          {copiedMsg && (
+            <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl bg-teal-400 text-slate-950 font-black text-xs shadow-2xl flex items-center gap-2 border border-teal-300 animate-bounce">
+              <span>✓</span>
+              <span>{copiedMsg}</span>
+            </div>
+          )}
+
+          {/* Search, Trainer Selector & Cloud Controls */}
+          <div
+            className="p-5 rounded-2xl border shadow-xl space-y-4"
+            style={{
+              backgroundColor: '#0E1B2E',
+              borderColor: '#19304E',
+              boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4)'
+            }}
+          >
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+              {/* Trainer Input Bar */}
+              <div className="flex items-center gap-2 flex-1">
+                <div className="relative flex-1">
+                  <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-slate-400 text-xs font-mono">
+                    👤
+                  </span>
+                  <input
+                    type="text"
+                    value={vaultInputUser}
+                    onChange={(e) => setVaultInputUser(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        setVaultUser(vaultInputUser);
+                        fetchVaultReplays(vaultInputUser);
+                      }
+                    }}
+                    placeholder="Enter Trainer Screen Name or @Featured"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl font-mono font-bold text-xs border text-white placeholder-slate-500 focus:outline-none focus:border-teal-400 transition"
+                    style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVaultUser(vaultInputUser);
+                    fetchVaultReplays(vaultInputUser);
+                  }}
+                  className="px-4 py-2.5 rounded-xl font-extrabold text-xs border transition hover:border-teal-400 text-white cursor-pointer flex items-center gap-1.5 flex-shrink-0"
+                  style={{ backgroundColor: '#081120', borderColor: '#2DD4BF' }}
+                >
+                  <span>🔍</span>
+                  <span>View Vault</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVaultInputUser('Featured');
+                    setVaultUser('Featured');
+                    fetchVaultReplays('Featured');
+                  }}
+                  className="px-3.5 py-2.5 rounded-xl font-extrabold text-xs border transition hover:border-amber-400 text-amber-300 cursor-pointer flex items-center gap-1.5 flex-shrink-0"
+                  style={{
+                    backgroundColor: 'rgba(250, 204, 21, 0.12)',
+                    borderColor: 'rgba(250, 204, 21, 0.45)'
+                  }}
+                >
+                  <span>⭐</span>
+                  <span>@Featured</span>
+                </button>
+              </div>
+
+              {/* Share & Owner Action Buttons */}
+              <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() =>
+                    copyToClipboard(
+                      `https://dvr.silphscopepvp.com/vault?user=${encodeURIComponent(vaultUser)}`,
+                      'Vault URL'
+                    )
+                  }
+                  className="px-3 py-2 rounded-lg font-bold text-xs border transition hover:border-slate-500 text-slate-300 cursor-pointer flex items-center gap-1"
+                  style={{ backgroundColor: '#081120', borderColor: '#19304E' }}
+                >
+                  <span>📋</span>
+                  <span>Share Vault</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOwnerLoginOpen(true)}
+                  className="px-3 py-2 rounded-lg font-bold text-xs border transition hover:border-amber-400 text-amber-300 cursor-pointer flex items-center gap-1"
+                  style={{ backgroundColor: '#081120', borderColor: 'rgba(250, 204, 21, 0.35)' }}
+                >
+                  <span>🔐</span>
+                  <span>Owner Login</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Season Promo / Upgrade Strip */}
+            <div
+              className="p-3.5 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
+              style={{
+                backgroundColor: 'rgba(250, 204, 21, 0.08)',
+                borderColor: 'rgba(250, 204, 21, 0.3)'
+              }}
+            >
+              <div className="text-amber-200 leading-snug">
+                <strong className="text-amber-300">⚡ Upgrade or Renew Season Pass:</strong> First 14 days of GBL Season = Full Season ($6 Pro / $10 VIP). Day 15+ First-Time Promo = 1-Month Rate ($3 Pro / $5 VIP) for the entire remainder of the season!
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap flex-shrink-0">
+                <a
+                  href={stripeSupporterUrl}
+                  className="px-2.5 py-1 rounded-lg font-bold text-[11px] border border-amber-400/50 bg-amber-400/20 text-amber-300 hover:bg-amber-400/30 transition"
+                >
+                  🏅 Supporter ($2)
+                </a>
+                <a
+                  href={stripeProSeasonUrl}
+                  className="px-2.5 py-1 rounded-lg font-bold text-[11px] border border-teal-400/50 bg-teal-400/20 text-teal-300 hover:bg-teal-400/30 transition"
+                >
+                  🏆 Stripe Pro Pass
+                </a>
+                <a
+                  href={stripeVipSeasonUrl}
+                  className="px-2.5 py-1 rounded-lg font-bold text-[11px] border border-purple-400/50 bg-purple-400/20 text-purple-200 hover:bg-purple-400/30 transition"
+                >
+                  👑 Stripe VIP Pass
+                </a>
+                <a
+                  href="https://buymeacoffee.com/silphscopepvp"
+                  className="px-2.5 py-1 rounded-lg font-bold text-[11px] border border-orange-400/50 bg-orange-400/20 text-orange-300 hover:bg-orange-400/30 transition"
+                >
+                  ☕ Buy Me a Coffee
+                </a>
+              </div>
+            </div>
+
+            {/* Vault Summary & Filter Tabs */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1 border-t border-slate-800/80">
+              <div className="flex items-center gap-2 text-xs font-mono text-slate-300">
+                <span className="font-bold text-teal-300">@{vaultUser}</span>
+                <span>•</span>
+                <span className="text-amber-300">⭐ {vaultStats.starred} Starred</span>
+                <span>•</span>
+                <span className="text-cyan-300">🌐 {vaultStats.public} Public</span>
+              </div>
+
+              {/* Filter Pills */}
+              <div className="flex items-center gap-1.5">
+                {(['all', 'starred', 'public'] as const).map((filter) => {
+                  const labels = {
+                    all: `All Shared (${vaultStats.total})`,
+                    starred: `⭐ Starred (${vaultStats.starred})`,
+                    public: `🌐 Public (${vaultStats.public})`
+                  };
+                  const active = vaultFilter === filter;
+                  return (
+                    <button
+                      key={filter}
+                      type="button"
+                      onClick={() => setVaultFilter(filter)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        active
+                          ? 'bg-teal-400 text-slate-950 font-black shadow'
+                          : 'bg-[#081120] text-slate-300 hover:text-white border border-[#19304E]'
+                      }`}
+                    >
+                      {labels[filter]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Replays Grid */}
+          {loadingVault ? (
+            <div className="p-12 text-center rounded-2xl border border-slate-800 bg-[#0E1B2E] space-y-3">
+              <div className="inline-block w-8 h-8 border-3 border-teal-400 border-t-transparent rounded-full animate-spin"></div>
+              <div className="text-sm font-bold text-teal-300">Fetching DVR Replays for @{vaultUser}...</div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {(() => {
+                const filtered = vaultReplays.filter((item) => {
+                  if (vaultFilter === 'starred') return item.isPinned;
+                  if (vaultFilter === 'public') return item.isPublic;
+                  return true;
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="p-12 text-center rounded-2xl border border-slate-800 bg-[#0E1B2E] space-y-3">
+                      <div className="text-3xl">🎬</div>
+                      <div className="text-base font-bold text-white">No replays found in this view</div>
+                      <p className="text-xs text-slate-400 max-w-md mx-auto">
+                        Record battles in the SilphScope Android App with 1-Battle DVR to stream and store your battle traces here.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setVaultInputUser('Featured');
+                          setVaultUser('Featured');
+                          fetchVaultReplays('Featured');
+                        }}
+                        className="px-4 py-2 rounded-xl bg-teal-400 text-slate-950 font-black text-xs hover:bg-teal-300 transition"
+                      >
+                        Browse @Featured Showcase Battles
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {filtered.map((item) => {
+                      const isWin = item.result?.toUpperCase().includes('WIN');
+                      const mbSize = ((item.videoBytes || 0) / (1024 * 1024)).toFixed(1);
+                      return (
+                        <div
+                          key={item.shareId}
+                          className="rounded-2xl border p-4.5 flex flex-col justify-between gap-4 transition hover:border-teal-400/50 hover:shadow-xl"
+                          style={{
+                            backgroundColor: '#0E1B2E',
+                            borderColor: item.isPinned ? '#2DD4BF' : '#19304E',
+                            boxShadow: item.isPinned ? '0 0 16px rgba(45, 212, 191, 0.12)' : 'none'
+                          }}
+                        >
+                          {/* Card Header */}
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`px-2.5 py-0.5 rounded-full text-xs font-black border ${
+                                    isWin
+                                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                      : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                                  }`}
+                                >
+                                  {item.result || 'BATTLE'}
+                                </span>
+                                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/35">
+                                  {item.league}
+                                </span>
+                              </div>
+                              <span className="text-[11px] font-mono font-bold text-slate-400">
+                                {mbSize} MB • {item.durationSec}s
+                              </span>
+                            </div>
+
+                            {/* Matchup Summary */}
+                            <div className="text-sm font-extrabold text-white leading-snug">
+                              {item.matchupSummary}
+                            </div>
+
+                            {/* Badges / Diagnostics */}
+                            <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                              <span className="font-mono text-slate-400">
+                                @{item.screenName || vaultUser}
+                              </span>
+                              {item.isPinned && (
+                                <span className="px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/40 font-bold">
+                                  ⭐ Starred
+                                </span>
+                              )}
+                              {item.isPublic && (
+                                <span className="px-2 py-0.5 rounded-full bg-teal-400/15 text-teal-300 border border-teal-400/30 font-bold">
+                                  🌐 Public
+                                </span>
+                              )}
+                              {item.userTierBadge && (
+                                <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-200 border border-purple-500/40 font-semibold">
+                                  {item.userTierBadge}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Diagnostic Issue Warning */}
+                            {item.userIssueNote && (
+                              <div className="p-2.5 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-200 text-xs flex items-center gap-2">
+                                <span>🚩</span>
+                                <span>
+                                  <strong>Reported Issue:</strong> {item.userIssueNote}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Card Actions */}
+                          <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-800/80 flex-wrap">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedWatchReplay(item)}
+                                className="px-3.5 py-1.5 rounded-xl font-black text-xs border shadow transition hover:scale-105 cursor-pointer flex items-center gap-1.5"
+                                style={{
+                                  backgroundColor: '#2DD4BF',
+                                  borderColor: '#2DD4BF',
+                                  color: '#042F2E',
+                                  boxShadow: '0 2px 10px rgba(45, 212, 191, 0.3)'
+                                }}
+                              >
+                                <span>▶️</span>
+                                <span>Watch + HUD</span>
+                              </button>
+                              {item.highlightSec && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedWatchReplay(item)}
+                                  className="px-2.5 py-1.5 rounded-xl font-bold text-xs bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 border border-amber-400/40 transition cursor-pointer"
+                                >
+                                  🎯 Highlight ({item.highlightSec}s)
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  copyToClipboard(
+                                    item.shareUrl || `https://dvr.silphscopepvp.com/watch/${item.shareId}`,
+                                    'Replay link'
+                                  )
+                                }
+                                className="px-2.5 py-1.5 rounded-lg font-bold text-[11px] bg-[#081120] text-slate-300 hover:text-white border border-[#19304E] transition cursor-pointer flex items-center gap-1"
+                                title="Copy direct replay link"
+                              >
+                                <span>📋</span>
+                                <span>Copy Link</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* Quick Subpage Transition Hub */}
+          <div className="pt-6 border-t border-slate-800 flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => onSelectSubpage('home')}
+              className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-teal-300 font-bold text-xs transition cursor-pointer flex items-center gap-1.5"
+            >
+              <span>🏠</span>
+              <span>Overview &amp; Features</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onSelectSubpage('live')}
+              className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-cyan-500/40 text-cyan-300 font-bold text-xs transition cursor-pointer flex items-center gap-1.5"
+            >
+              <span>📡</span>
+              <span>Live View Secondary Screen (Beta)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onSelectSubpage('guide')}
+              className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 font-bold text-xs transition cursor-pointer flex items-center gap-1.5"
+            >
+              <span>📖</span>
+              <span>How to Use HUD</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onLaunchWebApp('presets')}
+              className="px-4 py-2 rounded-xl bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/40 text-amber-300 font-black text-xs transition cursor-pointer flex items-center gap-1.5"
+            >
+              <span>🧮</span>
+              <span>Launch Web Simulator</span>
+            </button>
+          </div>
+        </main>
+      )}
+
+      {/* SUBPAGE: LIVE VIEW (BETA) - SECONDARY SCREEN BATTLE HUD */}
+      {activeSubpage === 'live' && (
+        <main className="flex-1 max-w-7xl mx-auto px-4 py-8 w-full space-y-8 animate-fadeIn">
+          {/* Header Strip */}
+          <div className="space-y-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-black tracking-wider uppercase border border-cyan-400/40 bg-cyan-400/10 text-cyan-300">
+              <span>📡 DUAL-SCREEN BATTLE HUD</span>
+              <span className="text-slate-500">•</span>
+              <span className="text-teal-300">ZERO-LAG STREAM</span>
+              <span className="text-slate-500">•</span>
+              <span className="text-amber-300">IPAD &amp; IPHONE READY</span>
+            </div>
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-tight">
+              SilphScope Live View{' '}
+              <span
+                style={{
+                  background: 'linear-gradient(90deg, #67E8F9 0%, #2DD4BF 50%, #FACC15 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent'
+                }}
+              >
+                (Secondary Screen HUD).
+              </span>
+            </h1>
+            <p className="text-sm sm:text-base text-slate-300 max-w-3xl leading-relaxed">
+              Stream live combat telemetry from your Android battle phone directly to your iPad, iPhone, Mac, PC, or secondary tablet over zero-lag WebSocket. Enjoy the complete 50% translucent tactical HUD on your desk without running any overlay on your phone.
+            </p>
+          </div>
+
+          {/* iPad / iPhone PWA Callout */}
+          <div
+            className="p-5 rounded-2xl border shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+            style={{
+              backgroundColor: 'rgba(14, 27, 46, 0.85)',
+              borderColor: '#19304E'
+            }}
+          >
+            <div className="flex items-start sm:items-center gap-3">
+              <span className="text-3xl">📱</span>
+              <div>
+                <div className="font-black text-sm text-white">
+                  Pro Setup for iPad &amp; iPhone Users
+                </div>
+                <div className="text-xs text-slate-300 mt-0.5">
+                  Tap <strong>Share (⎋)</strong> &rarr; <strong>Add to Home Screen (⊞)</strong> in Safari to install <strong>SilphScope DVR</strong> and dock this HUD edge-to-edge on your tablet stand with zero URL bars.
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleInstallClick}
+              className="px-3.5 py-2 rounded-xl font-bold text-xs bg-teal-400 text-slate-950 hover:bg-teal-300 transition flex-shrink-0 cursor-pointer shadow"
+            >
+              📲 Install SilphScope DVR
+            </button>
+          </div>
+
+          {/* Connection & Live Simulation Card */}
+          <div
+            className="p-6 rounded-2xl border shadow-xl space-y-4"
+            style={{ backgroundColor: '#0E1B2E', borderColor: '#19304E' }}
+          >
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div>
+                <div className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">
+                  Live Broadcast Session
+                </div>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="font-mono text-xl sm:text-2xl font-black text-teal-300 tracking-wider">
+                    {streamCode}
+                  </span>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-xs font-black border ${
+                      isLiveConnected
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse'
+                        : isSimulatingLive
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    {isLiveConnected
+                      ? '🟢 Connected to Host (11ms)'
+                      : isSimulatingLive
+                      ? `🟡 Simulating Battle (Turn ${simTurn})`
+                      : '⚪ Waiting for Host'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setIsSimulatingLive(!isSimulatingLive)}
+                  className={`px-4 py-2.5 rounded-xl font-black text-xs border transition cursor-pointer flex items-center gap-2 ${
+                    isSimulatingLive
+                      ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-lg'
+                      : 'bg-slate-800 text-amber-300 border-amber-400/40 hover:bg-slate-700'
+                  }`}
+                >
+                  <span>⚡</span>
+                  <span>{isSimulatingLive ? 'Pause Live Demo' : 'Run Live Combat Demo'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsLiveConnected(!isLiveConnected)}
+                  className="px-4 py-2.5 rounded-xl font-bold text-xs bg-teal-400/20 text-teal-300 border border-teal-400/40 hover:bg-teal-400/30 transition cursor-pointer"
+                >
+                  {isLiveConnected ? 'Disconnect' : 'Connect Android Host'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Interactive Simulated Live Tactical HUD Stage */}
+          <div
+            className="rounded-3xl border-2 overflow-hidden shadow-2xl relative"
+            style={{
+              borderColor: '#2DD4BF',
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.7), 0 0 30px rgba(45, 212, 191, 0.15)'
+            }}
+          >
+            {/* Arena Top Bar */}
+            <div className="p-3 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between text-xs font-mono font-bold">
+              <div className="flex items-center gap-2 text-teal-300">
+                <span className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-ping"></span>
+                <span>SILPHSCOPE SECONDARY HUD • 50% TRANSLUCENT GLASS</span>
+              </div>
+              <div className="text-slate-400">
+                Turn {simTurn} • {(simTurn * 0.5).toFixed(1)}s • 1 Turn = 0.5s
+              </div>
+            </div>
+
+            {/* Stadium Visual Stage */}
+            <div
+              className="p-6 relative min-h-[460px] flex flex-col justify-between"
+              style={{
+                background:
+                  'radial-gradient(circle at 50% 30%, rgba(45, 212, 191, 0.15) 0%, transparent 60%), linear-gradient(180deg, #050B16 0%, #0A1728 50%, #050B16 100%)'
+              }}
+            >
+              {/* Top Mirrored HUD Header */}
+              <div
+                className="p-4 rounded-2xl border backdrop-blur-md transition-all shadow-xl"
+                style={{
+                  backgroundColor: 'rgba(8, 17, 32, 0.65)',
+                  borderColor: 'rgba(45, 212, 191, 0.4)'
+                }}
+              >
+                <div className="grid grid-cols-12 gap-3 items-center">
+                  {/* User Active Pokémon Slot */}
+                  <div className="col-span-5 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="font-black text-white flex items-center gap-1.5">
+                        <span>✨ Dialga (Origin)</span>
+                        <span className="font-mono text-teal-300 text-[11px]">CP 1489</span>
+                      </div>
+                      <span className="font-mono font-extrabold text-teal-300">
+                        {Math.max(15, 100 - simTurn * 2)}%
+                      </span>
+                    </div>
+                    {/* HP Bar */}
+                    <div className="w-full h-3 rounded-full bg-slate-900 overflow-hidden border border-slate-700">
+                      <div
+                        className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-300"
+                        style={{ width: `${Math.max(15, 100 - simTurn * 2)}%` }}
+                      ></div>
+                    </div>
+                    {/* Energy Bar & Shields */}
+                    <div className="flex items-center justify-between text-[11px] font-mono">
+                      <span className="text-amber-300 font-extrabold">
+                        ⚡ {Math.min(100, (simTurn * 5) % 100)}E / 65E (RoTime)
+                      </span>
+                      <span className="text-cyan-300">🛡️ 🛡️</span>
+                    </div>
+                  </div>
+
+                  {/* Center Matchup Scale */}
+                  <div className="col-span-2 text-center">
+                    <div className="font-black text-sm text-teal-300">VS</div>
+                    <div className="text-[10px] font-mono text-slate-400">R: 584</div>
+                  </div>
+
+                  {/* Opponent Active Pokémon Slot */}
+                  <div className="col-span-5 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-mono font-extrabold text-amber-300">
+                        {Math.max(20, 95 - simTurn * 1.8)}%
+                      </span>
+                      <div className="font-black text-white flex items-center gap-1.5">
+                        <span className="font-mono text-slate-400 text-[11px]">CP 1494</span>
+                        <span>Clodsire</span>
+                      </div>
+                    </div>
+                    {/* HP Bar */}
+                    <div className="w-full h-3 rounded-full bg-slate-900 overflow-hidden border border-slate-700">
+                      <div
+                        className="h-full bg-gradient-to-r from-amber-400 to-rose-500 transition-all duration-300"
+                        style={{ width: `${Math.max(20, 95 - simTurn * 1.8)}%` }}
+                      ></div>
+                    </div>
+                    {/* Energy Bar & Shields */}
+                    <div className="flex items-center justify-between text-[11px] font-mono">
+                      <span className="text-cyan-300">🛡️ 🛡️</span>
+                      <span className="text-rose-400 font-extrabold">
+                        ⚡ {Math.min(100, ((simTurn + 8) * 4) % 100)}E / 55E (Earthquake)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4-Pillar AI Tactical Recommendations Banner */}
+              <div
+                className="my-6 p-4 rounded-2xl border backdrop-blur-md space-y-2"
+                style={{
+                  backgroundColor: 'rgba(8, 17, 32, 0.75)',
+                  borderColor: 'rgba(250, 204, 21, 0.45)',
+                  boxShadow: '0 0 20px rgba(250, 204, 21, 0.1)'
+                }}
+              >
+                <div className="flex items-center justify-between text-xs font-black">
+                  <div className="flex items-center gap-2 text-amber-300">
+                    <span className="animate-pulse">⚠️</span>
+                    <span>PILLAR 3 MOVE PACING: BLINK_1_FAST</span>
+                  </div>
+                  <span className="text-slate-400 font-mono text-[11px]">Sneak Window: SAFE (1T mon)</span>
+                </div>
+                <div className="text-xs text-white leading-relaxed font-semibold">
+                  Opponent reaches <strong>Earthquake (55E)</strong> in 1 fast move. Throw <strong>Roar of Time (65E) NOW</strong> to secure CMP advantage before window closes.
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-800 text-[11px] font-mono">
+                  <div className="text-teal-300">
+                    🛡️ <strong>Pillar 4 Verdict:</strong> SHIELD! Unshielded deals 84% (KO). Shielded deals 1 HP.
+                  </div>
+                  <div className="text-cyan-300 sm:text-right">
+                    🔮 <strong>Pillar 1 Backline:</strong> Feraligatr 54% • Mandibuzz 31% • Drapion 15%
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Asymmetric 9-Shield Matrix Mini-HUD */}
+              <div
+                className="p-3.5 rounded-2xl border backdrop-blur-md flex flex-col sm:flex-row items-center justify-between gap-3 text-xs"
+                style={{
+                  backgroundColor: 'rgba(8, 17, 32, 0.65)',
+                  borderColor: 'rgba(45, 212, 191, 0.3)'
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-teal-300">Asymmetric 9-Shield Rating:</span>
+                  <span className="px-2 py-0.5 rounded-md bg-teal-400/20 text-teal-300 font-mono font-black">
+                    584 (Favorable)
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 font-mono text-[11px] text-slate-300">
+                  <span>0S: 512</span>
+                  <span>1S: 584</span>
+                  <span>2S: 620</span>
+                  <span className="text-amber-300 font-bold">Safe-Swap: Tinkaton (+14% win)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 3-Step Setup Instructions */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[
+              {
+                step: '1',
+                title: 'Enable Relay on Android',
+                desc: 'Open SilphScope Settings on your Android phone and toggle "Live View Webcast Relay" ON. Note your broadcast pairing code.'
+              },
+              {
+                step: '2',
+                title: 'Open or Install SilphScope DVR',
+                desc: 'Open silphscopepvp.com/?view=live on Safari or Chrome, tap Share -> Add to Home Screen to dock SilphScope DVR on your desk stand.'
+              },
+              {
+                step: '3',
+                title: 'Zero Latency Combat Math',
+                desc: 'Enjoy live turn pacing, shield survival verdict, and backline prediction on your secondary screen while playing!'
+              }
+            ].map((s) => (
+              <div
+                key={s.step}
+                className="p-5 rounded-2xl border bg-[#0E1B2E] border-[#19304E] space-y-2"
+              >
+                <div className="w-7 h-7 rounded-lg bg-teal-400/20 border border-teal-400/40 text-teal-300 font-black text-xs flex items-center justify-center">
+                  {s.step}
+                </div>
+                <h3 className="font-black text-sm text-white">{s.title}</h3>
+                <p className="text-xs text-slate-300 leading-relaxed">{s.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Quick Subpage Transition Hub */}
+          <div className="pt-6 border-t border-slate-800 flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => onSelectSubpage('vault')}
+              className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-teal-500/40 text-teal-300 font-black text-xs transition cursor-pointer flex items-center gap-1.5"
+            >
+              <span>🎬</span>
+              <span>Back to DVR Vault</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onSelectSubpage('home')}
+              className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 font-bold text-xs transition cursor-pointer flex items-center gap-1.5"
+            >
+              <span>🏠</span>
+              <span>Feature Overview</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onLaunchWebApp('presets')}
+              className="px-4 py-2 rounded-xl bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/40 text-amber-300 font-black text-xs transition cursor-pointer flex items-center gap-1.5"
+            >
+              <span>🧮</span>
+              <span>Web Battle Simulator</span>
+            </button>
+          </div>
+        </main>
+      )}
+
+      {/* IN-PAGE REPLAY THEATER MODAL (ZERO TAB OPENING!) */}
+      {selectedWatchReplay && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fadeIn">
+          <div
+            className="w-full max-w-5xl rounded-3xl border-2 flex flex-col overflow-hidden shadow-2xl"
+            style={{
+              backgroundColor: '#081120',
+              borderColor: '#2DD4BF',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(45, 212, 191, 0.25)',
+              maxHeight: '94vh'
+            }}
+          >
+            {/* Modal Header */}
+            <div className="p-3.5 sm:p-4 bg-[#0E1B2E] border-b border-slate-800 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 overflow-hidden">
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-xs font-black border flex-shrink-0 ${
+                    selectedWatchReplay.result?.toUpperCase().includes('WIN')
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                  }`}
+                >
+                  {selectedWatchReplay.result || 'BATTLE'}
+                </span>
+                <span className="font-extrabold text-xs sm:text-sm text-white truncate">
+                  {selectedWatchReplay.matchupSummary}
+                </span>
+                <span className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[11px] font-mono bg-cyan-400/15 text-cyan-300 border border-cyan-400/30 flex-shrink-0">
+                  {selectedWatchReplay.league}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedWatchReplay(null)}
+                className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center font-black text-sm flex-shrink-0 cursor-pointer transition"
+                title="Close Replay Player"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Embedded Replay Stage */}
+            <div className="flex-1 bg-black min-h-[480px] sm:min-h-[580px] relative">
+              <iframe
+                src={`https://dvr.silphscopepvp.com/watch/${selectedWatchReplay.shareId}?embed=1${
+                  selectedWatchReplay.highlightSec ? `&t=${selectedWatchReplay.highlightSec}` : ''
+                }`}
+                title="SilphScope Replay Theater"
+                className="w-full h-full border-none absolute inset-0"
+                allow="fullscreen"
+              ></iframe>
+            </div>
+
+            {/* Modal Footer Controls */}
+            <div className="p-3 bg-[#0E1B2E] border-t border-slate-800 flex items-center justify-between gap-3 flex-wrap text-xs">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    copyToClipboard(
+                      selectedWatchReplay.shareUrl ||
+                        `https://dvr.silphscopepvp.com/watch/${selectedWatchReplay.shareId}`,
+                      'Replay link'
+                    )
+                  }
+                  className="px-3 py-1.5 rounded-lg bg-[#081120] text-teal-300 border border-teal-400/40 hover:bg-teal-400/10 font-bold transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>📋</span>
+                  <span>Copy Replay Link</span>
+                </button>
+                {selectedWatchReplay.highlightSec && (
+                  <span className="text-slate-400 font-mono text-[11px] hidden sm:inline">
+                    🎯 Highlight loaded at {selectedWatchReplay.highlightSec}s
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedWatchReplay(null)}
+                  className="px-4 py-1.5 rounded-lg bg-teal-400 text-slate-950 font-black hover:bg-teal-300 transition cursor-pointer shadow"
+                >
+                  ✕ Close Theater
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PWA INSTALLATION / ADD TO HOME SCREEN MODAL (BRANDED: SILPHSCOPE DVR) */}
+      {showInstallModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fadeIn">
+          <div
+            className="w-full max-w-lg rounded-3xl border-2 p-6 space-y-5 shadow-2xl relative"
+            style={{
+              backgroundColor: '#0E1B2E',
+              borderColor: '#2DD4BF',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(45, 212, 191, 0.25)'
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center border shadow-md"
+                  style={{ backgroundColor: '#081120', borderColor: '#2DD4BF' }}
+                >
+                  <svg viewBox="0 0 36 36" className="w-7 h-7">
+                    <polygon points="18,2 31,9 31,27 18,34 5,27 5,9" fill="rgba(14, 27, 46, 0.9)" stroke="#2DD4BF" strokeWidth="2.2" />
+                    <polygon points="18,7 26,12 26,24 18,29 10,24 10,12" fill="none" stroke="#FACC15" strokeWidth="1.8" />
+                    <circle cx="18" cy="18" r="3.5" fill="#FACC15" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-white">Install SilphScope DVR</h3>
+                  <p className="text-xs text-slate-300">Full-Screen DVR Vault &amp; Secondary Screen HUD</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowInstallModal(false)}
+                className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Platform Instructions */}
+            <div className="space-y-3 text-xs leading-relaxed text-slate-200">
+              {isIos ? (
+                <div className="p-4 rounded-2xl bg-[#081120] border border-cyan-500/40 space-y-3">
+                  <div className="font-black text-cyan-300 text-sm flex items-center gap-1.5">
+                    <span>🍎</span>
+                    <span>iPhone &amp; iPad Safari Instructions:</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-2 text-slate-300">
+                    <li>
+                      Tap the <strong>Share</strong> button <span className="font-mono text-cyan-300">⎋</span> at the bottom of Safari (or top bar on iPad).
+                    </li>
+                    <li>
+                      Scroll down and tap <strong className="text-white">&ldquo;Add to Home Screen&rdquo;</strong> <span className="font-mono text-cyan-300">⊞</span>.
+                    </li>
+                    <li>
+                      Confirm the name <strong className="text-teal-300">&ldquo;SilphScope DVR&rdquo;</strong> and tap <strong className="text-teal-300">&ldquo;Add&rdquo;</strong> in the top-right corner.
+                    </li>
+                  </ol>
+                  <p className="text-[11px] text-slate-400 pt-1 border-t border-slate-800">
+                    <strong>SilphScope DVR</strong> will appear on your Home Screen with the Shiny Origin Dialga icon, launching directly into the DVR Vault and Live HUD with zero browser bars.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-[#081120] border border-teal-500/40 space-y-3">
+                  <div className="font-black text-teal-300 text-sm flex items-center gap-1.5">
+                    <span>🤖</span>
+                    <span>Android &amp; Desktop Chrome Instructions:</span>
+                  </div>
+                  {installPrompt ? (
+                    <button
+                      type="button"
+                      onClick={handleInstallClick}
+                      className="w-full py-3 rounded-xl bg-teal-400 text-slate-950 font-black text-sm hover:bg-teal-300 transition shadow-lg cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <span>📲</span>
+                      <span>Click to Install SilphScope DVR Directly</span>
+                    </button>
+                  ) : (
+                    <ol className="list-decimal list-inside space-y-2 text-slate-300">
+                      <li>
+                        Tap the browser menu <strong className="text-white">⋮</strong> in the top-right corner.
+                      </li>
+                      <li>
+                        Tap <strong className="text-white">&ldquo;Install SilphScope DVR&rdquo;</strong> or <strong className="text-white">&ldquo;Add to Home screen&rdquo;</strong>.
+                      </li>
+                      <li>
+                        Confirm to enjoy full-screen offline-cached battle replays and Live HUD!
+                      </li>
+                    </ol>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowInstallModal(false)}
+              className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* OWNER LOGIN MODAL */}
+      {ownerLoginOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fadeIn">
+          <div
+            className="w-full max-w-md rounded-3xl border-2 p-6 space-y-4 shadow-2xl relative"
+            style={{
+              backgroundColor: '#0E1B2E',
+              borderColor: '#FACC15',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(250, 204, 21, 0.2)'
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🔐</span>
+                <h3 className="font-black text-base text-white">Cloud DVR Vault Login</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOwnerLoginOpen(false)}
+                className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Log in with your license key, password, or GitHub account to star replays, manage private battles, and access elevated diagnostic traces.
+            </p>
+
+            <div className="flex rounded-xl bg-[#081120] p-1 border border-slate-800 text-xs font-bold">
+              {(['token', 'password', 'github'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setAuthTab(tab)}
+                  className={`flex-1 py-1.5 rounded-lg transition capitalize ${
+                    authTab === tab
+                      ? 'bg-amber-400 text-slate-950 font-black'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {tab === 'token' ? 'License Key' : tab}
+                </button>
+              ))}
+            </div>
+
+            {authTab === 'token' && (
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={authKey}
+                  onChange={(e) => setAuthKey(e.target.value)}
+                  placeholder="ssk_license_pro_..."
+                  className="w-full px-3 py-2.5 rounded-xl font-mono text-xs bg-[#081120] border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (authKey.trim()) {
+                      localStorage.setItem('gbl_web_unlock_key_v700', authKey.trim());
+                      setOwnerLoginOpen(false);
+                      copyToClipboard(authKey.trim(), 'License key saved');
+                    }
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-amber-400 text-slate-950 font-black text-xs hover:bg-amber-300 transition cursor-pointer"
+                >
+                  Unlock Vault
+                </button>
+              </div>
+            )}
+
+            {authTab === 'password' && (
+              <div className="space-y-3">
+                <input
+                  type="email"
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  placeholder="Trainer Email"
+                  className="w-full px-3 py-2 rounded-xl text-xs bg-[#081120] border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                />
+                <input
+                  type="password"
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  placeholder="Vault Password"
+                  className="w-full px-3 py-2 rounded-xl text-xs bg-[#081120] border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOwnerLoginOpen(false);
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-amber-400 text-slate-950 font-black text-xs hover:bg-amber-300 transition cursor-pointer"
+                >
+                  Log In
+                </button>
+              </div>
+            )}
+
+            {authTab === 'github' && (
+              <div className="space-y-3 text-center py-2">
+                <p className="text-xs text-slate-400">
+                  Authorize with GitHub to sync battle logs and unlock your cloud replay storage.
+                </p>
+                <a
+                  href="https://dvr.silphscopepvp.com/v1/auth/github/start"
+                  className="block w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold text-xs border border-teal-400/40 transition"
+                >
+                  Connect with GitHub ↗
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Footer */}

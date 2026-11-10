@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="dialgaBgGlow512" cx="50%" cy="38%" r="65%">
+      <stop offset="0%" stop-color="#19304E" />
+      <stop offset="60%" stop-color="#0E1B2E" />
+      <stop offset="100%" stop-color="#050B16" />
+    </radialGradient>
+    <radialGradient id="astralGoldGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FEF08A" />
+      <stop offset="50%" stop-color="#FACC15" />
+      <stop offset="100%" stop-color="#CA8A04" />
+    </radialGradient>
+    <filter id="dialgaTealGlow512" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="14" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <!-- App Icon Base -->
+  <rect width="512" height="512" rx="112" fill="url(#dialgaBgGlow512)" />
+  <rect width="506" height="506" x="3" y="3" rx="109" fill="none" stroke="#2DD4BF" stroke-width="4" stroke-opacity="0.4" />
+  
+  <!-- Temporal Hexagonal Star Ambient Rays -->
+  <circle cx="256" cy="256" r="190" fill="none" stroke="#2DD4BF" stroke-width="1.5" stroke-dasharray="8 12" stroke-opacity="0.25" />
+  <circle cx="256" cy="256" r="130" fill="none" stroke="#FACC15" stroke-width="1.5" stroke-dasharray="6 8" stroke-opacity="0.2" />
+
+  <!-- Origin Hexagon Crest -->
+  <g transform="translate(256, 256) scale(11.8) translate(-18, -18)" filter="url(#dialgaTealGlow512)">
+    <polygon
+      points="18,2 31,9 31,27 18,34 5,27 5,9"
+      fill="rgba(14, 27, 46, 0.95)"
+      stroke="#2DD4BF"
+      stroke-width="2.2"
+      stroke-linejoin="round"
+    />
+    <!-- Inner Astral Gold Hexagon Ring -->
+    <polygon
+      points="18,7 26,12 26,24 18,29 10,24 10,12"
+      fill="none"
+      stroke="url(#astralGoldGlow)"
+      stroke-width="1.8"
+      stroke-linejoin="round"
+    />
+    <!-- Origin Core Jewel -->
+    <circle cx="18" cy="18" r="3.5" fill="#FACC15" />
+    <circle cx="18" cy="18" r="1.6" fill="#FFFBEB" />
+  </g>
+</svg>

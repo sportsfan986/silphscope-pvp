@@ -212,9 +212,35 @@ export default function App() {
       const view = (new URLSearchParams(window.location.search).get('view') || '').toLowerCase();
       if (path.endsWith('/guide') || view === 'guide') return 'guide';
       if (path.endsWith('/compare') || view === 'compare') return 'compare';
+      if (path.endsWith('/home') || view === 'home') return 'home';
+      if (path.endsWith('/live') || view === 'live') return 'live';
+      if (path.endsWith('/vault') || view === 'vault') return 'vault';
     } catch {}
-    return 'home';
+    // Default view on launch is Cloud DVR Replay Vault
+    return 'vault';
   });
+
+  // Browser History & Popstate listener for seamless in-tab back/forward navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const view = (params.get('view') || '').toLowerCase();
+        if (view === 'app' || view === 'simulator') {
+          setSiteView('app');
+        } else {
+          setSiteView('marketing');
+          if (view === 'home') setMarketingSubpage('home');
+          else if (view === 'guide') setMarketingSubpage('guide');
+          else if (view === 'compare') setMarketingSubpage('compare');
+          else if (view === 'live') setMarketingSubpage('live');
+          else setMarketingSubpage('vault');
+        }
+      } catch {}
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Navigation tabs (reordered: Teams, Battle Logs, Settings, Meta, Help, Math Validator)
   const [activeTab, setActiveTab] = useState<'simulator' | 'presets' | 'battle_log' | 'settings' | 'meta' | 'help' | 'math_validator'>('simulator');
@@ -5911,7 +5937,8 @@ export default function App() {
             setMarketingSubpage(page);
             try {
               window.scrollTo({ top: 0, behavior: 'smooth' });
-              window.history.pushState({}, '', page === 'home' ? '/' : `/?view=${page}`);
+              const targetUrl = page === 'vault' ? '/' : `/?view=${page}`;
+              window.history.pushState({}, '', targetUrl);
             } catch {}
           }}
           onLaunchWebApp={(initialTab) => {
@@ -5987,21 +6014,49 @@ export default function App() {
             </div>
           </div>
 
-          {/* Navigation Tabs & Donation Button */}
+          {/* Navigation Tabs & In-Tab Return Buttons */}
           <div className="flex items-center gap-2 flex-wrap justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                setSiteView('marketing');
+                setMarketingSubpage('vault');
+                try {
+                  window.history.pushState({}, '', '/');
+                } catch {}
+              }}
+              className="px-3 py-1.5 rounded-xl bg-teal-400/20 hover:bg-teal-400/30 border border-teal-400 text-teal-300 font-extrabold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-[0_0_12px_rgba(45,212,191,0.25)]"
+              title="Return to Cloud DVR Replay Vault"
+            >
+              <span>🎬 DVR Vault</span>
+            </button>
             <button
               type="button"
               onClick={() => {
                 setSiteView('marketing');
                 setMarketingSubpage('home');
                 try {
-                  window.history.pushState({}, '', '/');
+                  window.history.pushState({}, '', '/?view=home');
                 } catch {}
               }}
-              className="px-3 py-1.5 rounded-xl bg-teal-400/15 hover:bg-teal-400/25 border border-teal-400/50 text-teal-300 font-extrabold text-xs flex items-center gap-1.5 transition cursor-pointer"
-              title="Return to SilphScopePvP.com Showcase & Featured Replays"
+              className="px-2.5 py-1.5 rounded-xl hover:bg-slate-800/60 border border-slate-700/60 text-slate-300 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+              title="Return to SilphScope Overview & Pitch"
             >
-              <span>🏠 Home / Showcase</span>
+              <span>🏠 Overview</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSiteView('marketing');
+                setMarketingSubpage('live');
+                try {
+                  window.history.pushState({}, '', '/?view=live');
+                } catch {}
+              }}
+              className="px-2.5 py-1.5 rounded-xl hover:bg-cyan-950/60 border border-cyan-500/40 text-cyan-300 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+              title="Open Live View Secondary Screen HUD"
+            >
+              <span>📡 Live View</span>
             </button>
             <nav className="flex items-center gap-1 bg-slate-950/70 p-1 rounded-xl border border-slate-800 text-xs font-semibold flex-wrap">
               <button

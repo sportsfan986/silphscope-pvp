@@ -2326,6 +2326,13 @@ function renderWatchSharePage(origin, shareInfo) {
   <meta name="twitter:card" content="player" />
   <meta name="twitter:title" content="${pageTitle}" />
   <meta name="twitter:description" content="${pageDesc}" />
+  <link rel="manifest" href="https://silphscopepvp.com/manifest.webmanifest" />
+  <meta name="theme-color" content="#050B16" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="SilphScope DVR" />
+  <meta name="application-name" content="SilphScope DVR" />
+  <link rel="apple-touch-icon" href="https://silphscopepvp.com/pwa-icon-192.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
@@ -2652,7 +2659,7 @@ function renderWatchSharePage(origin, shareInfo) {
       <button id="btn-privacy" onclick="togglePrivacy()">🕵️ ${hideNamesDefault ? 'Names Hidden' : 'Hide Names'}</button>
       <button id="btn-layout" onclick="toggleLayout()">📐 Side-by-Side: OFF</button>
       <button id="btn-export" onclick="exportWithHud()">💾 Export Video + HUD</button>
-      <a class="btn-link" href="https://silphscopepvp.com/" target="_blank" rel="noopener" style="background:rgba(45,212,191,0.1);border-color:rgba(45,212,191,0.35);color:#2dd4bf">🌐 SilphScopePvP.com</a>
+      <a class="btn-link" href="https://silphscopepvp.com/?view=vault" style="background:rgba(45,212,191,0.1);border-color:rgba(45,212,191,0.35);color:#2dd4bf">🌐 SilphScopePvP.com</a>
       <a class="btn-link primary" href="https://dl.silphscopepvp.com" target="_blank" rel="noopener">📱 Download APK</a>
     </div>
   </header>
@@ -4664,7 +4671,14 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SilphScope PvP • Shiny Origin Dialga Cloud DVR Replay Vault</title>
+  <title>SilphScope DVR • Shiny Origin Dialga Cloud Replay Vault</title>
+  <link rel="manifest" href="https://silphscopepvp.com/manifest.webmanifest" />
+  <meta name="theme-color" content="#050B16" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="SilphScope DVR" />
+  <meta name="application-name" content="SilphScope DVR" />
+  <link rel="apple-touch-icon" href="https://silphscopepvp.com/pwa-icon-192.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
@@ -4789,6 +4803,11 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     .nav-pill:hover {
       color: #fff;
       background: rgba(30, 41, 59, 0.6);
+    }
+    .nav-pill.active-pill {
+      background: var(--accent);
+      color: #042f2e;
+      font-weight: 900;
     }
     .nav-pill-gold {
       color: #fde047;
@@ -5019,16 +5038,18 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           <div>
             <div style="display:flex;align-items:center;gap:8px">
               <span style="font-weight:900;letter-spacing:-0.4px;font-size:17px;color:#fff">SilphScope <span style="color:#2dd4bf">PvP</span></span>
-              <span style="font-size:10px;font-family:'JetBrains Mono',monospace;font-weight:800;text-transform:uppercase;color:#facc15;border:1px solid rgba(250,204,21,0.45);background:rgba(250,204,21,0.12);padding:2px 8px;border-radius:999px">v7.27 • Latest Release</span>
+              <span style="font-size:10px;font-family:'JetBrains Mono',monospace;font-weight:800;text-transform:uppercase;color:#facc15;border:1px solid rgba(250,204,21,0.45);background:rgba(250,204,21,0.12);padding:2px 8px;border-radius:999px">v7.29 • Latest Release</span>
             </div>
             <p style="margin:2px 0 0;font-size:11px;color:#99f6e4;font-weight:500">Real-Time 50% Translucent Android HUD • ELO-Adaptive Anti-Meta • Cloud DVR Vault</p>
           </div>
         </a>
       </div>
 
-      <!-- Center Subpage Switcher (Identical to Marketing Website) -->
+      <!-- Center Subpage Switcher (Seamless Same-Tab Navigation) -->
       <nav class="nav-pills-bar">
+        <a href="/vault" class="nav-pill active-pill">🎬 DVR Vault</a>
         <a href="https://silphscopepvp.com/?view=home" class="nav-pill">🏠 Overview &amp; Featured Battles</a>
+        <a href="https://silphscopepvp.com/?view=live" class="nav-pill">📡 Live View (Beta)</a>
         <a href="https://silphscopepvp.com/?view=guide" class="nav-pill">📖 How to Use Overlay</a>
         <a href="https://silphscopepvp.com/?view=compare" class="nav-pill">⚔️ vs PvPoke &amp; GOBattleLog</a>
         <a href="https://silphscopepvp.com/?view=app" class="nav-pill nav-pill-gold">🧮 Launch Web Simulator &amp; Team Builder</a>
@@ -5036,9 +5057,9 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
 
       <!-- Right Quick Action CTAs -->
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <a href="/vault" class="btn-cta active-dvr">🎬 DVR Replay Vault</a>
-        <a href="https://dl.silphscopepvp.com" target="_blank" rel="noopener" class="btn-cta btn-cta-download">📱 Download APK</a>
-        <a href="${STRIPE_PAYMENT_LINKS.supporter}" target="_blank" rel="noopener" class="btn-cta btn-cta-upgrade">👑 Upgrade ($2+)</a>
+        <a href="https://silphscopepvp.com/?view=vault" class="btn-cta active-dvr">📲 SilphScope DVR PWA</a>
+        <a href="https://dl.silphscopepvp.com" class="btn-cta btn-cta-download">📱 Download APK</a>
+        <a href="${STRIPE_PAYMENT_LINKS.supporter}" class="btn-cta btn-cta-upgrade">👑 Upgrade ($2+)</a>
       </div>
     </div>
   </header>
