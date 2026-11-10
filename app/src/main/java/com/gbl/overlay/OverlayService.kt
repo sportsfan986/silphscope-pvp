@@ -732,11 +732,6 @@ class OverlayService : LifecycleService() {
             } catch (_: Exception) {}
         }
 
-        @Volatile var activeHapticMasterEnabled: Boolean = DEFAULT_HAPTIC_MASTER_ENABLED
-        @Volatile var activeHapticOppSwapEnabled: Boolean = DEFAULT_HAPTIC_OPP_SWAP_ENABLED
-        @Volatile var activeHapticOppSwapWarnSec: Int = DEFAULT_HAPTIC_OPP_SWAP_WARN_SEC
-        @Volatile var activeHapticOppChargeWarnEnabled: Boolean = DEFAULT_HAPTIC_OPP_CHARGE_WARN_ENABLED
-        @Volatile var activeHapticChargeTimingFasts: Int = DEFAULT_HAPTIC_CHARGE_TIMING_FASTS
         @Volatile var activeHapticWarn2fEnabled: Boolean = DEFAULT_HAPTIC_WARN_2F_ENABLED
         @Volatile var activeHapticCatchTripleEnabled: Boolean = DEFAULT_HAPTIC_CATCH_TRIPLE_ENABLED
         @Volatile var activeHapticCatchSensitivity: String = DEFAULT_HAPTIC_CATCH_SENSITIVITY
