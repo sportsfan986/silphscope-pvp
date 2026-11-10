@@ -653,7 +653,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       backgroundColor: 'rgba(250, 204, 21, 0.12)'
                     }}
                   >
-                    v7.29 • Latest Release
+                    v7.30 • Latest Release
                   </span>
                 </div>
                 <p className="text-[11px] hidden sm:block" style={{ color: '#99F6E4' }}>
@@ -882,7 +882,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     <span className="text-2xl">📱</span>
                     <div className="text-left">
                       <div className="text-sm font-black leading-tight">Download Android APK</div>
-                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.29)</div>
+                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.30)</div>
                     </div>
                   </div>
                   <span className="text-lg font-black">↓</span>
@@ -1443,6 +1443,89 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             </div>
           </section>
 
+          {/* TOURNAMENT COMPLIANCE: COMPETITIVE LOG-ONLY STEALTH MODE (100% Free Across All Tiers!) */}
+          <section
+            className="rounded-3xl p-6 sm:p-8 border relative overflow-hidden space-y-5"
+            style={{
+              background: 'linear-gradient(135deg, rgba(6, 78, 59, 0.45) 0%, rgba(14, 27, 46, 0.95) 60%, rgba(15, 118, 110, 0.35) 100%)',
+              borderColor: '#10B981',
+              boxShadow: '0 10px 35px rgba(16, 185, 129, 0.15)'
+            }}
+          >
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+              <div className="space-y-3 max-w-3xl">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 font-mono text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
+                    <span>🔕</span>
+                    <span>Play! Pokémon &amp; Show 6 Tournament Compliance</span>
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-teal-400/10 border border-teal-400/30 text-teal-300 text-[11px] font-bold">
+                    ✅ 100% Free Across All Tiers
+                  </span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black text-white">
+                  Competitive Log-Only Stealth Mode <span className="text-emerald-400 font-mono text-lg font-bold">(v7.30)</span>
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                  Competing in official <strong>Play! Pokémon Regionals &amp; International Championships</strong> or grassroots <strong>Show 6 / Battle Frontier</strong> tournaments? SilphScope is engineered to comply 100% with strict tournament &amp; referee regulations. In <strong>Competitive Mode: Log-Only</strong>, the overlay is completely invisible (<code className="text-emerald-300 font-mono">View.GONE</code>), haptic vibrations are silenced, and zero turn alerts or floating toasts display during live play.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 text-xs text-slate-200">
+                  <div className="flex items-start gap-2.5 bg-slate-950/60 p-3.5 rounded-2xl border border-emerald-500/20">
+                    <span className="text-xl text-emerald-400 shrink-0">⚡</span>
+                    <div className="space-y-1">
+                      <strong className="text-white block font-bold">Headless Background Vision &amp; Hardware DVR</strong>
+                      <p className="text-slate-300 leading-relaxed">
+                        Silently captures OCR nameplates, pixel HP%, energy pacing, and scaled hardware H.264 DVR + <code className="text-teal-300 font-mono text-[11px]">_deep_trace.jsonl</code> with zero screen impact and under 0.5% CPU load.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2.5 bg-slate-950/60 p-3.5 rounded-2xl border border-emerald-500/20">
+                    <span className="text-xl text-emerald-400 shrink-0">📊</span>
+                    <div className="space-y-1">
+                      <strong className="text-white block font-bold">Automatic Logging &amp; Between-Round VOD Review</strong>
+                      <p className="text-slate-300 leading-relaxed">
+                        Matches commit automatically to your Battle Log and sync to your private cloud vault for between-round coaching, matchup review, and VOD analysis without touching your phone mid-set.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-[11.5px] text-emerald-200/90 font-medium">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+                    <span><strong>Single-Tap Emblem:</strong> Strictly alternates <code className="text-white font-mono bg-slate-900/80 px-1 py-0.5 rounded">Full HUD ↔ Compact HUD</code></span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+                    <span><strong>2.0s Press-and-Hold:</strong> Toggles Log-Only Stealth Mode on/off</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+                    <span><strong>Post-Battle Summary:</strong> 1-Tap <code className="text-white font-mono bg-slate-900/80 px-1 py-0.5 rounded">📊 Battle Log</code> shortcut button</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row lg:flex-col gap-3 shrink-0 justify-center">
+                <button
+                  type="button"
+                  onClick={() => onSelectSubpage('guide')}
+                  className="px-4 py-3 rounded-2xl font-black text-xs bg-emerald-400 hover:bg-emerald-300 text-slate-950 transition shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>📖 Visual Field Manual</span>
+                  <span>→</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSelectSubpage('compare')}
+                  className="px-4 py-3 rounded-2xl font-bold text-xs bg-slate-900/80 hover:bg-slate-800 text-emerald-300 border border-emerald-500/40 transition flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>⚔️ Feature Matrix</span>
+                  <span>→</span>
+                </button>
+              </div>
+            </div>
+          </section>
+
           {/* 5. 4-TIER MEMBERSHIP MATRIX & PRIORITY SUPPORT QUEUE */}
           <section
             id="pricing"
@@ -1743,7 +1826,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 {
                   step: 'Row 1 • Mirrored Live Header',
                   badge: '[CP, HP%, E, 🛡️] | [🛡️, E, HP%, CP]',
-                  desc: 'Displays your active Pokémon on the left and the opponent on the right. Tap the top-left Origin Dialga crest once to switch from Full HUD -> Compact HUD -> Minimized Bubble (pauses OCR). Hold the crest for 2 seconds to stop the overlay and open your Battle Log. Live buff/debuff stage badges (e.g., A-2, D+1, BUST) appear automatically whenever stat-stage moves fire.'
+                  desc: 'Displays your active Pokémon on the left and the opponent on the right. Single-tapping the top-left Origin Dialga crest strictly alternates between Full HUD <-> Compact HUD, while holding the crest for 2.0 seconds activates or deactivates Log-Only Stealth Mode. After combat finishes, the Post-Battle Summary includes a 1-tap 📊 Battle Log shortcut button to stop the overlay and jump straight to your logs. Live buff/debuff stage badges (e.g., A-2, D+1, BUST) appear automatically whenever stat-stage moves fire.'
                 },
                 {
                   step: 'Row 2 • Active Matchup & Synchronized Swap Timers',
@@ -1769,6 +1852,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   step: '1-Battle Hardware DVR (REC 1) & Post-Battle Flagging',
                   badge: 'Zero-Lag 544×1184 H.264 + Frame Trace',
                   desc: 'Enable "Show 1-Battle DVR Button" in Settings or Always-On DVR. After any battle, tap 🚩 Flag Issue to upload the synchronized video + frame trace to dvr.silphscopepvp.com and share a /watch/:shareId link!'
+                },
+                {
+                  step: 'Tournament Compliance • Competitive Log-Only Stealth Mode',
+                  badge: '100% Invisible HUD • 0 Haptics • Headless Auto-Log & DVR',
+                  desc: 'Fully compliant with strict Play! Pokémon and Show 6 tournament & referee guidelines. When activated (via Settings or 2.0s crest hold), all floating HUD elements are completely hidden (View.GONE) and haptic vibrations are silenced during live matches. SilphScope continues running headless vision, OCR, and hardware H.264 DVR + _deep_trace.jsonl in the background, automatically logging full 3v3 teams and syncing post-match for between-round coaching, matchup review, and VOD analysis.'
                 }
               ].map((item) => (
                 <div
@@ -1886,6 +1974,12 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     '✅ 15/30 FPS DVR + dvr.silphscopepvp.com',
                     '❌ None',
                     '❌ None'
+                  ],
+                  [
+                    'Tournament-Compliant Log-Only Stealth Mode (0 HUD / 0 Haptics + Headless DVR & Auto-Log)',
+                    '✅ Built-In & Free Across All Tiers',
+                    '—',
+                    '—'
                   ],
                   [
                     'Cost',

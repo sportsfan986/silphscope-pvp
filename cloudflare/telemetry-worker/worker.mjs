@@ -5058,7 +5058,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           <div>
             <div style="display:flex;align-items:center;gap:8px">
               <span style="font-weight:900;letter-spacing:-0.4px;font-size:17px;color:#fff">SilphScope <span style="color:#2dd4bf">DVR</span></span>
-              <span style="font-size:10px;font-family:'JetBrains Mono',monospace;font-weight:800;text-transform:uppercase;color:#facc15;border:1px solid rgba(250,204,21,0.45);background:rgba(250,204,21,0.12);padding:2px 8px;border-radius:999px">v7.29</span>
+              <span style="font-size:10px;font-family:'JetBrains Mono',monospace;font-weight:800;text-transform:uppercase;color:#facc15;border:1px solid rgba(250,204,21,0.45);background:rgba(250,204,21,0.12);padding:2px 8px;border-radius:999px">v7.30</span>
             </div>
             <p style="margin:2px 0 0;font-size:11px;color:#99f6e4;font-weight:500">Cloud Replay Vault</p>
           </div>
@@ -6011,8 +6011,8 @@ export default {
     }
 
     if (isGetOrHead && path === '/sw.js') {
-      const swCode = `// SilphScope DVR PWA Service Worker (v7.29)
-const CACHE_NAME = 'silphscope-dvr-pwa-v729';
+      const swCode = `// SilphScope DVR PWA Service Worker (v7.30)
+const CACHE_NAME = 'silphscope-dvr-pwa-v730';
 const STATIC_ASSETS = ['/', '/index.html', '/manifest.json', '/manifest.webmanifest', '/favicon.svg', '/pwa-icon-192.svg', '/pwa-icon-512.svg', '/overlay.html'];
 self.addEventListener('install', (e) => { self.skipWaiting(); e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(STATIC_ASSETS).catch(() => {}))); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((keys) => Promise.all(keys.map((k) => k !== CACHE_NAME && caches.delete(k)))).then(() => self.clients.claim())); });

@@ -23,9 +23,24 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.30',
+    codename: 'Log-Only Tournament Stealth Mode & 2-State HUD Emblem Redesign',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Tournament-compliant Log-Only Stealth Mode for official Play! Pokémon and Show 6 play with 100% invisible HUD and silenced haptics, seamless headless background DVR and auto-logging, simplified 2-state HUD emblem toggle, and 1-tap post-battle Battle Log navigation.',
+    icon: '🔕',
+    accentColor: '#10B981',
+    highlights: [
+      'Log-Only Stealth Mode for official Play! Pokémon & Show 6 tournament compliance',
+      '100% invisible overlay (View.GONE) and zero haptic vibrations or alerts during live play',
+      'Headless background vision, pixel HP/energy tracking, and hardware H.264 DVR + _deep_trace.jsonl',
+      'Redesigned HUD Emblem: Single-tap strictly alternates Full HUD ↔ Compact HUD; 2.0s hold toggles Log-Only Stealth Mode',
+      'Post-Battle Summary 1-Tap "📊 Battle Log" button to stop overlay and open battle history'
+    ]
+  },
+  {
     version: 'v7.20 – v7.29',
     codename: 'Dual-Source Precision, Hands-Free DVR & Issue Flagging/Unflagging',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Hands-free auto-start battle DVR on intro countdown across all tiers, 1-tap issue report flagging & unflagging across App/Vault/Web, symmetric dual-source energy auditing, and swap-and-throw pre-floor energy restoration.',
     icon: '⚡',
@@ -154,21 +169,6 @@ export const ACTIVE_ROADMAP_ITEMS: RoadmapItem[] = [
       'Dynamic ELO bracket moveset weighting (actual ladder vs. paper PvPoke)',
       'Spice Badge highlight in Battle Log cards (zero clutter if standard)',
       'Adaptive shield bait vs. nuke probability matrices in the live HUD'
-    ]
-  },
-  {
-    id: 'log-only-competitive',
-    title: 'Log-Only Stealth Mode for Official Play',
-    badge: 'TOURNAMENT INTEGRITY',
-    status: 'In Design',
-    statusColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-    category: 'HUD / Compliance',
-    icon: '🔕',
-    description: 'Comply with official Play! Pokémon tournament rules: completely hides on-screen overlay and suppresses vibration cues while maintaining headless battle recording and automated logging.',
-    keyGoals: [
-      '100% invisible HUD overlay (View.GONE) and silenced haptics',
-      'Headless background vision, OCR, and hardware DVR encoding',
-      'Automatic post-match battle log & deep trace generation without manual keying'
     ]
   },
   {

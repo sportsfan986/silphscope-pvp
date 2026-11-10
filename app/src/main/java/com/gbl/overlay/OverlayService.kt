@@ -93,13 +93,15 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.29"
-        const val APP_VERSION_CODE = 1727
+        const val APP_VERSION = "7.30"
+        const val APP_VERSION_CODE = 1730
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
         const val ACTION_MINIMIZE_OVERLAY = "com.gbl.overlay.ACTION_MINIMIZE_OVERLAY"
         const val ACTION_RESTORE_OVERLAY = "com.gbl.overlay.ACTION_RESTORE_OVERLAY"
+        const val ACTION_TOGGLE_STEALTH_MODE = "com.gbl.overlay.ACTION_TOGGLE_STEALTH_MODE"
+        const val ACTION_EXIT_STEALTH_MODE = "com.gbl.overlay.ACTION_EXIT_STEALTH_MODE"
         const val ACTION_OPEN_BATTLE_LOG = "com.gbl.overlay.ACTION_OPEN_BATTLE_LOG"
         const val ACTION_SHORT_START = "com.gbl.overlay.START"
         const val ACTION_SHORT_STOP = "com.gbl.overlay.STOP"
@@ -143,6 +145,7 @@ class OverlayService : LifecycleService() {
         const val EXTRA_AI_ADVICE_HUD_POSITION = "extra_ai_advice_hud_position"
         const val EXTRA_OVERLAY_HUD_MODE = "extra_overlay_hud_mode"
         const val EXTRA_COMPACT_HUD_SHOW_MATRIX = "extra_compact_hud_show_matrix"
+        const val EXTRA_LOG_ONLY_STEALTH_MODE = "extra_log_only_stealth_mode"
         const val EXTRA_SWAP_THROW_ROLLBACK_WINDOW_MS = "extra_swap_throw_rollback_window_ms"
         const val EXTRA_ALT_FAST_DETECT_STRICTNESS = "extra_alt_fast_detect_strictness"
         const val EXTRA_SHIELD_CHIP_TOLERANCE_PCT = "extra_shield_chip_tolerance_pct"
@@ -157,6 +160,8 @@ class OverlayService : LifecycleService() {
         const val DEFAULT_OVERLAY_HUD_MODE = "full" // "full" (default) | "compact"
         const val PREFS_KEY_COMPACT_HUD_SHOW_MATRIX = "gbl_compact_hud_show_matrix"
         const val DEFAULT_COMPACT_HUD_SHOW_MATRIX = false
+        const val PREFS_KEY_LOG_ONLY_STEALTH_MODE = "gbl_log_only_stealth_mode"
+        const val DEFAULT_LOG_ONLY_STEALTH_MODE = false
         const val PREFS_KEY_ENABLE_HP_TRACKING = "enable_hp_tracking"
         const val DEFAULT_ENABLE_HP_TRACKING = true
         const val PREFS_KEY_ENABLE_ENERGY_TRACKING = "enable_energy_tracking"
@@ -651,6 +656,7 @@ class OverlayService : LifecycleService() {
 
         @Suppress("DEPRECATION")
         fun triggerSingleHapticPulseStatic(context: Context) {
+            if (activeLogOnlyStealthMode) return
             try {
                 val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
@@ -670,6 +676,7 @@ class OverlayService : LifecycleService() {
 
         @Suppress("DEPRECATION")
         fun triggerDoubleHapticPulseStatic(context: Context) {
+            if (activeLogOnlyStealthMode) return
             try {
                 val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
@@ -692,6 +699,7 @@ class OverlayService : LifecycleService() {
 
         @Suppress("DEPRECATION")
         fun triggerTripleHapticPulseStatic(context: Context) {
+            if (activeLogOnlyStealthMode) return
             try {
                 val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
@@ -715,6 +723,7 @@ class OverlayService : LifecycleService() {
 
         @Suppress("DEPRECATION")
         fun triggerUnlockBuzzHapticStatic(context: Context) {
+            if (activeLogOnlyStealthMode) return
             try {
                 val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
@@ -732,6 +741,7 @@ class OverlayService : LifecycleService() {
             } catch (_: Exception) {}
         }
 
+        @Volatile var activeLogOnlyStealthMode: Boolean = DEFAULT_LOG_ONLY_STEALTH_MODE
         @Volatile var activeHapticWarn2fEnabled: Boolean = DEFAULT_HAPTIC_WARN_2F_ENABLED
         @Volatile var activeHapticCatchTripleEnabled: Boolean = DEFAULT_HAPTIC_CATCH_TRIPLE_ENABLED
         @Volatile var activeHapticCatchSensitivity: String = DEFAULT_HAPTIC_CATCH_SENSITIVITY
@@ -864,6 +874,7 @@ class OverlayService : LifecycleService() {
             activeLimitedStdDecayGbl = prefs.getFloat(PREFS_KEY_LIMITED_STD_DECAY_GBL, DEFAULT_LIMITED_STD_DECAY_GBL).coerceIn(0.01f, 0.30f)
             activeLimitedStdDecayShow6 = prefs.getFloat(PREFS_KEY_LIMITED_STD_DECAY_SHOW6, DEFAULT_LIMITED_STD_DECAY_SHOW6).coerceIn(0.01f, 0.30f)
             activeShow6UsageWeightPct = prefs.getInt(PREFS_KEY_SHOW6_USAGE_WEIGHT_PCT, DEFAULT_SHOW6_USAGE_WEIGHT_PCT).coerceIn(0, 100)
+            activeLogOnlyStealthMode = prefs.getBoolean(PREFS_KEY_LOG_ONLY_STEALTH_MODE, DEFAULT_LOG_ONLY_STEALTH_MODE)
             activeHapticMasterEnabled = prefs.getBoolean(PREFS_KEY_HAPTIC_MASTER_ENABLED, DEFAULT_HAPTIC_MASTER_ENABLED)
             activeHapticOppSwapEnabled = prefs.getBoolean(PREFS_KEY_HAPTIC_OPP_SWAP_ENABLED, DEFAULT_HAPTIC_OPP_SWAP_ENABLED)
             activeHapticOppSwapWarnSec = prefs.getInt(PREFS_KEY_HAPTIC_OPP_SWAP_WARN_SEC, DEFAULT_HAPTIC_OPP_SWAP_WARN_SEC).coerceIn(2, 10)
@@ -2645,6 +2656,7 @@ class OverlayService : LifecycleService() {
     internal var overlayScalePct = 78
     internal var overlayTransparencyPct = 50
     internal var appThemeId = "dialga_shiny_midnight"
+    internal var isLogOnlyStealthMode = false
     internal var isOverlayMinimized = false
     internal var lastMinimizeTimestampMs: Long = 0L
     internal var cachedScreenBitmap: Bitmap? = null
@@ -3270,8 +3282,8 @@ class OverlayService : LifecycleService() {
                     introCountdownStartMs = now
                 }
 
-                // Auto-Start DVR is active for all tiers when enabled (or if manually armed for 1 battle)
-                val isAutoDvr = activeAlwaysOnDvrEnabled || (activeDvrRecordingMode == DVR_MODE_VIP_AUTO)
+                // Auto-Start DVR is active for all tiers when enabled, in Log-Only Stealth Mode, or if manually armed for 1 battle
+                val isAutoDvr = activeAlwaysOnDvrEnabled || (activeDvrRecordingMode == DVR_MODE_VIP_AUTO) || isLogOnlyStealthMode
                 val shouldAutoRecord = isAutoDvr || activeOneBattleDvrArmed
 
                 if (shouldAutoRecord) {
@@ -4213,11 +4225,12 @@ class OverlayService : LifecycleService() {
     }
 
     internal fun showBattleToast(message: String, duration: Int = Toast.LENGTH_SHORT) {
-        if (disableBattleToasts) return
+        if (disableBattleToasts || isLogOnlyStealthMode || activeLogOnlyStealthMode) return
         showStatusBarToast(message, duration)
     }
 
     internal fun showStatusBarToast(message: String, duration: Int = Toast.LENGTH_SHORT) {
+        if (isLogOnlyStealthMode || activeLogOnlyStealthMode) return
         mainToastHandler.post {
             try {
                 val density = resources.displayMetrics.density
@@ -4992,6 +5005,14 @@ class OverlayService : LifecycleService() {
         var initialTouchX = 0f
         var initialTouchY = 0f
         var isDraggingTouch = false
+        val stealthHoldHandler = Handler(Looper.getMainLooper())
+        var stealthHoldFired = false
+        val stealthExitRunnable = Runnable {
+            if (isLogOnlyStealthMode && !isDraggingTouch) {
+                stealthHoldFired = true
+                setLogOnlyStealthMode(false)
+            }
+        }
 
         val topZone = View(this).apply {
             setBackgroundColor(Color.TRANSPARENT)
@@ -5003,19 +5024,30 @@ class OverlayService : LifecycleService() {
                         initialTouchX = event.rawX
                         initialTouchY = event.rawY
                         isDraggingTouch = false
-                        dispatchOffsetTouchToWebView(event, 0f, 0f)
+                        stealthHoldFired = false
+                        stealthHoldHandler.removeCallbacks(stealthExitRunnable)
+                        if (isLogOnlyStealthMode) {
+                            stealthHoldHandler.postDelayed(stealthExitRunnable, 2000L)
+                        } else {
+                            dispatchOffsetTouchToWebView(event, 0f, 0f)
+                        }
                         true
                     }
                     MotionEvent.ACTION_MOVE -> {
                         val deltaX = (event.rawX - initialTouchX).toInt()
                         val deltaY = (event.rawY - initialTouchY).toInt()
                         if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
+                            stealthHoldHandler.removeCallbacks(stealthExitRunnable)
+                            if (isLogOnlyStealthMode) {
+                                isDraggingTouch = true
+                                return@setOnTouchListener true
+                            }
                             if (!isDraggingTouch) {
                                 isDraggingTouch = true
                                 dispatchOffsetTouchToWebView(event, 0f, 0f, MotionEvent.ACTION_CANCEL)
                             }
                             val minYOffset = -(12 * density).toInt()
-                            val maxYOffset = if (isOverlayMinimized) screenHeight - (56 * density).toInt() else screenHeight - 200
+                            val maxYOffset = screenHeight - 200
                             val rootLp = this@OverlayService.layoutParams
                             rootLp.x = max(0, min(initialX + deltaX, max(0, screenWidth - rootLp.width)))
                             rootLp.y = max(minYOffset, min(initialY + deltaY, max(0, maxYOffset)))
@@ -5025,14 +5057,18 @@ class OverlayService : LifecycleService() {
                             syncOverlayTouchZonesLayout()
                             true
                         } else {
-                            if (!isDraggingTouch) {
+                            if (!isDraggingTouch && !isLogOnlyStealthMode) {
                                 dispatchOffsetTouchToWebView(event, 0f, 0f)
                             }
                             true
                         }
                     }
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        if (isDraggingTouch) {
+                        stealthHoldHandler.removeCallbacks(stealthExitRunnable)
+                        if (isLogOnlyStealthMode || stealthHoldFired) {
+                            isDraggingTouch = false
+                            stealthHoldFired = false
+                        } else if (isDraggingTouch) {
                             isDraggingTouch = false
                         } else {
                             dispatchOffsetTouchToWebView(event, 0f, 0f)
@@ -5040,7 +5076,7 @@ class OverlayService : LifecycleService() {
                         true
                     }
                     else -> {
-                        if (!isDraggingTouch) {
+                        if (!isDraggingTouch && !isLogOnlyStealthMode) {
                             dispatchOffsetTouchToWebView(event, 0f, 0f)
                         }
                         true
@@ -5100,12 +5136,13 @@ class OverlayService : LifecycleService() {
         val topView = topTouchZoneView
         val topParams = topTouchZoneParams
         if (topView != null && topParams != null) {
+            val stealthLogoPx = (32 * density).toInt()
             topParams.gravity = layoutParams.gravity
             topParams.x = layoutParams.x
             topParams.y = layoutParams.y
-            topParams.width = layoutParams.width
+            topParams.width = if (isLogOnlyStealthMode) stealthLogoPx else layoutParams.width
             topParams.height = when {
-                isOverlayMinimized -> layoutParams.height
+                isLogOnlyStealthMode -> stealthLogoPx
                 currentLayoutMode != "option1" -> {
                     if (layoutParams.height > 0) layoutParams.height else (64 * density).toInt()
                 }
@@ -5119,7 +5156,7 @@ class OverlayService : LifecycleService() {
             } catch (_: Exception) {}
         }
 
-        val showSubHeaderZones = !isOverlayMinimized && currentLayoutMode == "option1"
+        val showSubHeaderZones = !isLogOnlyStealthMode && currentLayoutMode == "option1"
 
         fun updateSubZone(view: View?, params: WindowManager.LayoutParams?, rectPx: Rect) {
             if (view == null || params == null) return
@@ -5158,15 +5195,13 @@ class OverlayService : LifecycleService() {
     internal fun applyOverlayScale(scalePct: Int) {
         overlayScalePct = scalePct.coerceIn(50, 100)
         if (!::layoutParams.isInitialized) return
-        if (!isOverlayMinimized) {
-            val targetWidth = (screenWidth * (overlayScalePct / 100f)).toInt()
-            layoutParams.width = targetWidth
-            layoutParams.x = max(0, min(layoutParams.x, max(0, screenWidth - targetWidth)))
-        }
+        val targetWidth = (screenWidth * (overlayScalePct / 100f)).toInt()
+        layoutParams.width = targetWidth
+        layoutParams.x = max(0, min(layoutParams.x, max(0, screenWidth - targetWidth)))
         Handler(Looper.getMainLooper()).post {
             try {
                 if (overlayView != null) {
-                    if (!isOverlayMinimized) {
+                    if (!isLogOnlyStealthMode) {
                         windowManager.updateViewLayout(overlayView, layoutParams)
                     }
                     syncOverlayTouchZonesLayout()
@@ -5206,61 +5241,59 @@ class OverlayService : LifecycleService() {
         battleLoopJob = null
     }
 
-    internal fun minimizeOverlayToBubble() {
-        if (isOverlayMinimized) return
-        isOverlayMinimized = true
-        lastMinimizeTimestampMs = System.currentTimeMillis()
-        stopBattleOcrLoop()
-        overlayView?.evaluateJavascript("if (window.setOverlayMinimizedState) setOverlayMinimizedState(true);", null)
-        val density = resources.displayMetrics.density
-        val bubbleSize = (48 * density).toInt()
-        if (::layoutParams.isInitialized) {
-            layoutParams.width = bubbleSize
-            layoutParams.height = bubbleSize
-            layoutParams.x = max(0, min(layoutParams.x, max(0, screenWidth - bubbleSize)))
-            layoutParams.y = max(0, min(layoutParams.y, max(0, screenHeight - bubbleSize - 24)))
-            try {
-                if (overlayView != null) {
-                    windowManager.updateViewLayout(overlayView, layoutParams)
-                }
-            } catch (_: Exception) {}
-            syncOverlayTouchZonesLayout()
-        }
-        startForegroundNotification()
-        showStatusBarToast("Overlay minimized (OCR paused). Tap bubble to resume.", Toast.LENGTH_SHORT)
+    internal fun toggleLogOnlyStealthMode() {
+        setLogOnlyStealthMode(!isLogOnlyStealthMode)
     }
 
-    internal fun restoreOverlayFromBubble() {
-        if (!isOverlayMinimized) return
-        if (System.currentTimeMillis() - lastMinimizeTimestampMs < 400L) return
+    internal fun setLogOnlyStealthMode(enabled: Boolean, persist: Boolean = true) {
+        val wasStealth = isLogOnlyStealthMode
+        isLogOnlyStealthMode = enabled
+        activeLogOnlyStealthMode = enabled
         isOverlayMinimized = false
-        overlayHudMode = "full"
-        activeOverlayHudMode = "full"
-        if (::prefs.isInitialized) {
-            prefs.edit().putString(PREFS_KEY_OVERLAY_HUD_MODE, "full").apply()
+        lastMinimizeTimestampMs = System.currentTimeMillis()
+        if (persist && ::prefs.isInitialized) {
+            prefs.edit().putBoolean(PREFS_KEY_LOG_ONLY_STEALTH_MODE, enabled).apply()
         }
-        if (::layoutParams.isInitialized) {
-            val targetWidth = (screenWidth * (overlayScalePct.coerceIn(50, 100) / 100f)).toInt()
-            layoutParams.width = targetWidth
-            layoutParams.height = WindowManager.LayoutParams.WRAP_CONTENT
-            layoutParams.x = max(0, min(layoutParams.x, max(0, screenWidth - targetWidth)))
+        notifyRunningStateChanged()
+
+        if (enabled) {
+            mainToastHandler.removeCallbacks(hideStatusToastRunnable)
             try {
-                if (overlayView != null) {
-                    windowManager.updateViewLayout(overlayView, layoutParams)
-                }
+                statusToastView?.visibility = View.GONE
+            } catch (_: Exception) {}
+            dismissPostBattleBugReportDialogOverlay()
+            try {
+                overlayView?.visibility = View.GONE
             } catch (_: Exception) {}
             syncOverlayTouchZonesLayout()
+            if (mediaProjection != null && battleLoopJob?.isActive != true) {
+                startBattleOcrLoop()
+            }
+            startForegroundNotification()
+        } else {
+            if (::layoutParams.isInitialized) {
+                val targetWidth = (screenWidth * (overlayScalePct.coerceIn(50, 100) / 100f)).toInt()
+                layoutParams.width = targetWidth
+                layoutParams.height = WindowManager.LayoutParams.WRAP_CONTENT
+                layoutParams.x = max(0, min(layoutParams.x, max(0, screenWidth - targetWidth)))
+                try {
+                    overlayView?.visibility = View.VISIBLE
+                    if (overlayView != null) {
+                        windowManager.updateViewLayout(overlayView, layoutParams)
+                    }
+                } catch (_: Exception) {}
+                syncOverlayTouchZonesLayout()
+            }
+            overlayView?.evaluateJavascript(
+                "if (window.setLiveHudMode) setLiveHudMode('$overlayHudMode'); if (window.setOverlayScalePct) setOverlayScalePct($overlayScalePct);",
+                null
+            )
+            recalculateAndPushBattleData()
+            startForegroundNotification()
+            if (wasStealth) {
+                showStatusBarToast("✓ Log-Only Stealth Mode OFF — HUD Restored", Toast.LENGTH_SHORT)
+            }
         }
-        overlayView?.evaluateJavascript(
-            "if (window.setLiveHudMode) setLiveHudMode('full'); if (window.setOverlayMinimizedState) setOverlayMinimizedState(false); if (window.setOverlayScalePct) setOverlayScalePct($overlayScalePct);",
-            null
-        )
-        if (mediaProjection != null) {
-            startBattleOcrLoop()
-        }
-        recalculateAndPushBattleData()
-        startForegroundNotification()
-        showStatusBarToast("✓ Overlay restored & OCR resumed", Toast.LENGTH_SHORT)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -5271,9 +5304,6 @@ class OverlayService : LifecycleService() {
             ACTION_START_OVERLAY, ACTION_SHORT_START -> {
                 isInstanceRunning = true
                 notifyRunningStateChanged()
-                if (isOverlayMinimized) {
-                    restoreOverlayFromBubble()
-                }
                 isOverlayMinimized = false
 
                 val resultCode = intent?.getIntExtra(EXTRA_RESULT_CODE, 0) ?: 0
@@ -5390,6 +5420,11 @@ class OverlayService : LifecycleService() {
                     prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, DEFAULT_COMPACT_HUD_SHOW_MATRIX)
                 }
                 overlayView?.evaluateJavascript("if (window.setLiveHudMode) setLiveHudMode('$overlayHudMode'); if (window.setCompactHudShowMatrix) setCompactHudShowMatrix($compactHudShowMatrix);", null)
+                val startStealthMode = if (intent?.hasExtra(EXTRA_LOG_ONLY_STEALTH_MODE) == true) {
+                    intent.getBooleanExtra(EXTRA_LOG_ONLY_STEALTH_MODE, DEFAULT_LOG_ONLY_STEALTH_MODE)
+                } else {
+                    prefs.getBoolean(PREFS_KEY_LOG_ONLY_STEALTH_MODE, DEFAULT_LOG_ONLY_STEALTH_MODE)
+                }
                 syncTierThresholdsFromPrefs(prefs)
 
                 val requestedTeamName = intent?.getStringExtra(EXTRA_TEAM_NAME)
@@ -5429,6 +5464,7 @@ class OverlayService : LifecycleService() {
                 } else if (mediaProjection != null) {
                     startBattleOcrLoop()
                 }
+                setLogOnlyStealthMode(startStealthMode, persist = false)
                 recalculateAndPushBattleData()
             }
             ACTION_UPDATE_PRESET -> {
@@ -5524,7 +5560,15 @@ class OverlayService : LifecycleService() {
                     compactHudShowMatrix = prefs.getBoolean(PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, compactHudShowMatrix)
                 }
                 overlayView?.evaluateJavascript("if (window.setLiveHudMode) setLiveHudMode('$overlayHudMode'); if (window.setCompactHudShowMatrix) setCompactHudShowMatrix($compactHudShowMatrix);", null)
+                val updatedStealthMode = if (intent?.hasExtra(EXTRA_LOG_ONLY_STEALTH_MODE) == true) {
+                    intent.getBooleanExtra(EXTRA_LOG_ONLY_STEALTH_MODE, DEFAULT_LOG_ONLY_STEALTH_MODE)
+                } else {
+                    prefs.getBoolean(PREFS_KEY_LOG_ONLY_STEALTH_MODE, isLogOnlyStealthMode)
+                }
                 syncTierThresholdsFromPrefs(prefs)
+                if (updatedStealthMode != isLogOnlyStealthMode) {
+                    setLogOnlyStealthMode(updatedStealthMode, persist = false)
+                }
                 val updatedScalePct = intent?.getIntExtra(
                     EXTRA_OVERLAY_SCALE_PCT,
                     prefs.getInt("overlay_scale_pct", overlayScalePct)
@@ -5546,20 +5590,18 @@ class OverlayService : LifecycleService() {
             }
             ACTION_START_BATTLE -> startNewBattle()
             ACTION_TOGGLE_LAYOUT -> toggleLayoutMode()
-            ACTION_MINIMIZE_OVERLAY -> minimizeOverlayToBubble()
-            ACTION_RESTORE_OVERLAY -> restoreOverlayFromBubble()
+            ACTION_TOGGLE_STEALTH_MODE -> toggleLogOnlyStealthMode()
+            ACTION_EXIT_STEALTH_MODE -> setLogOnlyStealthMode(false)
+            ACTION_MINIMIZE_OVERLAY -> setLogOnlyStealthMode(true)
+            ACTION_RESTORE_OVERLAY -> setLogOnlyStealthMode(false)
             ACTION_TOGGLE_OVERLAY, ACTION_SHORT_TOGGLE -> {
-                if (isOverlayMinimized) {
-                    restoreOverlayFromBubble()
-                } else {
-                    isInstanceRunning = false
-                    hasActiveMediaProjection = false
-                    notifyRunningStateChanged()
-                    if (::prefs.isInitialized) {
-                        OverlayService.triggerAutoUploadOnOverlayStopAsync(prefs, gson)
-                    }
-                    stopSelf()
+                isInstanceRunning = false
+                hasActiveMediaProjection = false
+                notifyRunningStateChanged()
+                if (::prefs.isInitialized) {
+                    OverlayService.triggerAutoUploadOnOverlayStopAsync(prefs, gson)
                 }
+                stopSelf()
             }
             ACTION_STOP_OVERLAY, ACTION_SHORT_STOP -> {
                 isInstanceRunning = false
@@ -5584,19 +5626,35 @@ class OverlayService : LifecycleService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val statusText = if (isOverlayMinimized) {
-            "Overlay minimized (OCR paused) — Tap bubble to resume"
+        val titleText = if (isLogOnlyStealthMode) {
+            "SilphScope PvP — Log-Only Stealth Mode"
+        } else {
+            "SilphScope PvP Overlay Active"
+        }
+        val statusText = if (isLogOnlyStealthMode) {
+            "HUD hidden & haptics muted • Headless OCR & DVR active"
         } else {
             "Live OCR monitoring opponent & player switches..."
         }
 
-        val notification: Notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("SilphScope PvP Overlay Active")
+        val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+            .setContentTitle(titleText)
             .setContentText(statusText)
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop Overlay", pendingIntent)
-            .build()
+
+        if (isLogOnlyStealthMode) {
+            val exitStealthIntent = Intent(this, OverlayService::class.java).apply {
+                action = ACTION_EXIT_STEALTH_MODE
+            }
+            val exitStealthPendingIntent = PendingIntent.getService(
+                this, 1, exitStealthIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            builder.addAction(android.R.drawable.ic_menu_view, "Exit Stealth", exitStealthPendingIntent)
+        }
+        builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop Overlay", pendingIntent)
+        val notification: Notification = builder.build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
@@ -5800,12 +5858,12 @@ class OverlayService : LifecycleService() {
         battleLoopJob = lifecycleScope.launch(Dispatchers.Default) {
             var lastFullVisionTickMs = 0L
             while (isActive) {
-                if (mediaProjection == null || isOverlayMinimized) {
+                if (mediaProjection == null) {
                     delay(250L)
                     continue
                 }
                 val cycleStartMs = System.currentTimeMillis()
-                val isDvrRecordingWindow = (activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed) &&
+                val isDvrRecordingWindow = (activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed || isLogOnlyStealthMode) &&
                     ((isBattleActive && !isWaitingForOpponent) || isBattleIntroCountdownActive)
                 val dvrTargetFps = if (isDvrRecordingWindow && isPrefsInitialized) {
                     OverlayService.getEffectiveDvrFpsForTierStatic(prefs)
@@ -5919,7 +5977,7 @@ class OverlayService : LifecycleService() {
             (w * 0.980f).toInt().coerceIn(1, w),
             (h * 0.50f).toInt().coerceIn(1, h)
         )
-        val playerHpBottomFrac = if (isShieldDecisionOverlayVisible) 0.72f else 0.78f
+        val playerHpBottomFrac = if (isShieldDecisionOverlayVisible && !isLogOnlyStealthMode) 0.72f else 0.78f
         val playerHpCorridorRect = Rect(
             (w * 0.010f).toInt().coerceIn(0, w - 1),
             (h * 0.18f).toInt().coerceIn(0, h - 1),
@@ -6078,7 +6136,7 @@ class OverlayService : LifecycleService() {
                     midBannerLines = cachedOcrMidBannerLines
                 )
             }
-            if ((activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed) &&
+            if ((activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed || isLogOnlyStealthMode) &&
                 ((isBattleActive && !isWaitingForOpponent) || isBattleIntroCountdownActive)
             ) {
                 recordOneBattleDvrFrameAndTraceAsync(screen, currentFrameTimestampMs)
@@ -14068,7 +14126,8 @@ class OverlayService : LifecycleService() {
         lastRecommendedSwapSlotIdx = -1
         val shouldKeepLoopForAutoStart = activeAlwaysOnDvrEnabled ||
             (activeDvrRecordingMode == DVR_MODE_VIP_AUTO) ||
-            activeOneBattleDvrArmed
+            activeOneBattleDvrArmed ||
+            isLogOnlyStealthMode
         if (!shouldKeepLoopForAutoStart) {
             stopBattleOcrLoop()
         } else {
@@ -14514,7 +14573,8 @@ class OverlayService : LifecycleService() {
         currentFormIndex = 0
         val shouldKeepLoopForAutoStart = activeAlwaysOnDvrEnabled ||
             (activeDvrRecordingMode == DVR_MODE_VIP_AUTO) ||
-            activeOneBattleDvrArmed
+            activeOneBattleDvrArmed ||
+            isLogOnlyStealthMode
         if (!shouldKeepLoopForAutoStart) {
             stopBattleOcrLoop()
         } else {
@@ -16194,7 +16254,8 @@ class OverlayService : LifecycleService() {
                 "isReplayMode" to isReplayMode,
                 "overlayTransparencyPct" to overlayTransparencyPct,
                 "appThemeId" to appThemeId,
-                "isOverlayMinimized" to isOverlayMinimized,
+                "isLogOnlyStealthMode" to isLogOnlyStealthMode,
+                "isOverlayMinimized" to false,
                 "scanHzMode" to currentScanHzMode,
                 "lastScanDurationMs" to effectiveWaitingScanMs,
                 "lastBattleAvgScanMs" to lastBattleAvgScanMs,
@@ -18060,7 +18121,8 @@ class OverlayService : LifecycleService() {
             "compactHudShowMatrix" to compactHudShowMatrix,
             "activeLeague" to activeLeague,
             "activeTeamName" to (currentPreset?.name ?: ""),
-            "isOverlayMinimized" to isOverlayMinimized,
+            "isLogOnlyStealthMode" to isLogOnlyStealthMode,
+            "isOverlayMinimized" to false,
             "maxHorizonTurns" to maxHorizonTurns,
             "isOpponentShadow" to isOpponentShadow,
             "currentFormLabel" to oppMeta.formLabel,
@@ -18624,16 +18686,30 @@ class OverlayService : LifecycleService() {
         }
 
         @JavascriptInterface
+        fun toggleLogOnlyStealthMode() {
+            Handler(Looper.getMainLooper()).post {
+                this@OverlayService.toggleLogOnlyStealthMode()
+            }
+        }
+
+        @JavascriptInterface
+        fun setLogOnlyStealthMode(enabled: Boolean) {
+            Handler(Looper.getMainLooper()).post {
+                this@OverlayService.setLogOnlyStealthMode(enabled)
+            }
+        }
+
+        @JavascriptInterface
         fun minimizeOverlay() {
             Handler(Looper.getMainLooper()).post {
-                minimizeOverlayToBubble()
+                this@OverlayService.setLogOnlyStealthMode(true)
             }
         }
 
         @JavascriptInterface
         fun restoreOverlay() {
             Handler(Looper.getMainLooper()).post {
-                restoreOverlayFromBubble()
+                this@OverlayService.setLogOnlyStealthMode(false)
             }
         }
 
@@ -18648,9 +18724,9 @@ class OverlayService : LifecycleService() {
                 }
                 recalculateAndPushBattleData()
                 if (normalized == "compact") {
-                    showStatusBarToast("📐 Compact HUD (Tap emblem again to minimize)", Toast.LENGTH_SHORT)
+                    showStatusBarToast("📐 Compact HUD (Tap emblem for Full HUD • Hold 2s for Stealth)", Toast.LENGTH_SHORT)
                 } else {
-                    showStatusBarToast("📐 Full HUD restored", Toast.LENGTH_SHORT)
+                    showStatusBarToast("📐 Full HUD (Tap emblem for Compact HUD • Hold 2s for Stealth)", Toast.LENGTH_SHORT)
                 }
             }
         }
@@ -18741,7 +18817,7 @@ class OverlayService : LifecycleService() {
         @JavascriptInterface
         fun updateContentHeight(heightDp: Int) {
             Handler(Looper.getMainLooper()).post {
-                if (isOverlayMinimized || currentLayoutMode != "option1") return@post
+                if (isLogOnlyStealthMode || currentLayoutMode != "option1") return@post
                 val density = resources.displayMetrics.density
                 val targetHeight = (heightDp * density).toInt()
                 if (layoutParams.height < 0 || Math.abs(layoutParams.height - targetHeight) > 1) {
@@ -18768,7 +18844,7 @@ class OverlayService : LifecycleService() {
             myHdrHDp: Int
         ) {
             Handler(Looper.getMainLooper()).post {
-                if (isOverlayMinimized || currentLayoutMode != "option1") return@post
+                if (isLogOnlyStealthMode || currentLayoutMode != "option1") return@post
                 val density = resources.displayMetrics.density
                 val targetHeight = (totalHeightDp * density).toInt()
                 if (targetHeight > 0 && (layoutParams.height < 0 || Math.abs(layoutParams.height - targetHeight) > 1)) {

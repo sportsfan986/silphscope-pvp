@@ -309,7 +309,7 @@ export function DocumentationModals({
                       <strong>Select or Switch Teams (Main App):</strong> Choose your active team preset in the main app&apos;s <strong>⚔️ Teams</strong> page before or between sets. To switch teams, return to the main app and select another preset (it pushes immediately to the running overlay).
                     </li>
                     <li>
-                      <strong>Launch, Drag &amp; Minimize (Theme Emblem Icon):</strong> Tap <strong>Start Battle Overlay</strong> to launch the HUD. Drag the header bar to reposition it anywhere. Tap the theme emblem icon in the top-left between matches to collapse the HUD into a tiny floating bubble and pause OCR scanning.
+                      <strong>Launch, Drag &amp; HUD Emblem Controls (v7.30):</strong> Tap <strong>Start Battle Overlay</strong> to launch the HUD. Drag the header bar to reposition it anywhere. Single-tap the top-left theme emblem to alternate between <code>Full HUD ↔ Compact HUD</code>. Press and hold the emblem for <code>2.0s</code> to toggle <strong>Log-Only Stealth Mode</strong> (100% invisible HUD &amp; silenced haptics with headless auto-logging &amp; DVR for official Play! Pokémon tournament play). In the post-battle summary, tap the <strong>📊 Battle Log</strong> shortcut button to stop the overlay and open Battle Logs.
                     </li>
                     <li>
                       <strong>Interactive Header Shield Counters (🛡️ You &amp; 🛡️ Opp):</strong> Tap either shield icon in the overlay header to cycle remaining shields (<code>2→1→0→2</code>) mid-battle. Instantly recalculates the 9-scenario PvPoke matrix rating and adjusts all combat threat thresholds in real-time.

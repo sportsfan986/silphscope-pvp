@@ -75,6 +75,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textAiAdviceHudPosDesc: TextView
     private lateinit var btnToggleOverlayHudMode: Button
     private lateinit var textOverlayHudModeDesc: TextView
+    private lateinit var btnToggleLogOnlyStealthMode: Button
+    private lateinit var textLogOnlyStealthModeDesc: TextView
     private lateinit var btnToggleCompactHudMatrix: Button
     private lateinit var textCompactHudMatrixDesc: TextView
     private lateinit var btnToggleShieldDecisionOverlay: Button
@@ -616,8 +618,13 @@ class MainActivity : AppCompatActivity() {
                 btnToggleOverlay.text = "Stop Battle Overlay"
                 btnToggleOverlay.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
                 btnToggleOverlay.setTextColor(0xFFFFFFFF.toInt())
-                statusText.text = "Status: $modeLabel Overlay Active"
-                statusText.setTextColor(theme.secondaryAccentColor)
+                if (OverlayService.activeLogOnlyStealthMode) {
+                    statusText.text = "Status: $modeLabel Log-Only Stealth Active"
+                    statusText.setTextColor(0xFFF59E0B.toInt())
+                } else {
+                    statusText.text = "Status: $modeLabel Overlay Active"
+                    statusText.setTextColor(theme.secondaryAccentColor)
+                }
             } else {
                 btnToggleOverlay.text = "Start Battle Overlay"
                 btnToggleOverlay.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
@@ -625,6 +632,10 @@ class MainActivity : AppCompatActivity() {
                 statusText.text = "Status: $modeLabel Idle"
                 statusText.setTextColor(if (show6) 0xFFFBBF24.toInt() else theme.accentColor)
             }
+        }
+        if (::prefs.isInitialized) {
+            if (::btnToggleOverlayHudMode.isInitialized) updateOverlayHudModeUi()
+            if (::btnToggleLogOnlyStealthMode.isInitialized) updateLogOnlyStealthModeUi()
         }
     }
 
@@ -1197,6 +1208,7 @@ class MainActivity : AppCompatActivity() {
         if (::btnToggleTacticalRec.isInitialized) updateTacticalRecUi()
         if (::btnCycleAiAdviceHudPos.isInitialized) updateAiAdviceHudPosUi()
         if (::btnToggleOverlayHudMode.isInitialized) updateOverlayHudModeUi()
+        if (::btnToggleLogOnlyStealthMode.isInitialized) updateLogOnlyStealthModeUi()
         if (::btnToggleCompactHudMatrix.isInitialized) updateCompactHudMatrixUi()
         if (::btnToggleShieldDecisionOverlay.isInitialized) updateShieldDecisionOverlayUi()
         if (::btnToggleHpTracking.isInitialized) updateHpTrackingUi()
@@ -1250,6 +1262,8 @@ class MainActivity : AppCompatActivity() {
         textAiAdviceHudPosDesc = findViewById(R.id.text_ai_advice_hud_pos_desc)
         btnToggleOverlayHudMode = findViewById(R.id.btn_toggle_overlay_hud_mode)
         textOverlayHudModeDesc = findViewById(R.id.text_overlay_hud_mode_desc)
+        btnToggleLogOnlyStealthMode = findViewById(R.id.btn_toggle_log_only_stealth_mode)
+        textLogOnlyStealthModeDesc = findViewById(R.id.text_log_only_stealth_mode_desc)
         btnToggleCompactHudMatrix = findViewById(R.id.btn_toggle_compact_hud_matrix)
         textCompactHudMatrixDesc = findViewById(R.id.text_compact_hud_matrix_desc)
         btnToggleShieldDecisionOverlay = findViewById(R.id.btn_toggle_shield_decision_overlay)
@@ -1619,6 +1633,7 @@ class MainActivity : AppCompatActivity() {
         updateTacticalRecUi()
         updateAiAdviceHudPosUi()
         updateOverlayHudModeUi()
+        updateLogOnlyStealthModeUi()
         updateCompactHudMatrixUi()
         updateShieldDecisionOverlayUi()
         updateHpTrackingUi()
@@ -2099,6 +2114,26 @@ class MainActivity : AppCompatActivity() {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
                     action = OverlayService.ACTION_UPDATE_SETTINGS
                     putExtra(OverlayService.EXTRA_OVERLAY_HUD_MODE, nextMode)
+                }
+                startService(updateIntent)
+            }
+        }
+
+        btnToggleLogOnlyStealthMode.setOnClickListener {
+            val currentStealth = prefs.getBoolean(
+                OverlayService.PREFS_KEY_LOG_ONLY_STEALTH_MODE,
+                OverlayService.DEFAULT_LOG_ONLY_STEALTH_MODE
+            )
+            val nextStealth = !currentStealth
+            prefs.edit().putBoolean(OverlayService.PREFS_KEY_LOG_ONLY_STEALTH_MODE, nextStealth).apply()
+            OverlayService.syncTierThresholdsFromPrefs(prefs)
+            updateLogOnlyStealthModeUi()
+            syncOverlayRunningUiState()
+
+            if (isOverlayRunning) {
+                val updateIntent = Intent(this, OverlayService::class.java).apply {
+                    action = OverlayService.ACTION_UPDATE_SETTINGS
+                    putExtra(OverlayService.EXTRA_LOG_ONLY_STEALTH_MODE, nextStealth)
                 }
                 startService(updateIntent)
             }
@@ -8823,12 +8858,32 @@ class MainActivity : AppCompatActivity() {
             btnToggleOverlayHudMode.text = "Compact HUD"
             btnToggleOverlayHudMode.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryAccentColor)
             btnToggleOverlayHudMode.setTextColor(0xFFFFFFFF.toInt())
-            textOverlayHudModeDesc.text = "Active: Compact HUD (Header + 2-Line Coach + Shield Card; Toolbar shown when idle, hidden in battle • Tap emblem to minimize)"
+            textOverlayHudModeDesc.text = "Active: Compact HUD (Header + 2-Line Coach + Shield Card • Tap emblem for Full HUD • Hold 2s for Stealth)"
         } else {
             btnToggleOverlayHudMode.text = "Full HUD (Def)"
             btnToggleOverlayHudMode.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
             btnToggleOverlayHudMode.setTextColor(0xFFFFFFFF.toInt())
-            textOverlayHudModeDesc.text = "Default: Full HUD • Tap top-left emblem to cycle Full → Compact → Minimized"
+            textOverlayHudModeDesc.text = "Default: Full HUD • Tap emblem to alternate Full ↔ Compact • Hold 2s for Log-Only Stealth"
+        }
+    }
+
+    private fun updateLogOnlyStealthModeUi() {
+        if (!::btnToggleLogOnlyStealthMode.isInitialized) return
+        val stealthActive = prefs.getBoolean(
+            OverlayService.PREFS_KEY_LOG_ONLY_STEALTH_MODE,
+            OverlayService.DEFAULT_LOG_ONLY_STEALTH_MODE
+        )
+        val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
+        if (stealthActive) {
+            btnToggleLogOnlyStealthMode.text = "Stealth ON"
+            btnToggleLogOnlyStealthMode.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFD97706.toInt())
+            btnToggleLogOnlyStealthMode.setTextColor(0xFFFFFFFF.toInt())
+            textLogOnlyStealthModeDesc.text = "Active: HUD completely hidden & haptics/toasts suppressed • Headless OCR, DVR & auto-logging ON (Hold emblem spot 2s or tap Notification to exit)"
+        } else {
+            btnToggleLogOnlyStealthMode.text = "HUD Active (Def)"
+            btnToggleLogOnlyStealthMode.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+            btnToggleLogOnlyStealthMode.setTextColor(theme.primaryTextColor)
+            textLogOnlyStealthModeDesc.text = "Default: Live HUD On • Enable or hold emblem 2s to hide HUD & suppress haptics while recording Battle Logs & DVR"
         }
     }
 
@@ -9228,6 +9283,10 @@ class MainActivity : AppCompatActivity() {
             putExtra(
                 OverlayService.EXTRA_OVERLAY_HUD_MODE,
                 prefs.getString(OverlayService.PREFS_KEY_OVERLAY_HUD_MODE, OverlayService.DEFAULT_OVERLAY_HUD_MODE)
+            )
+            putExtra(
+                OverlayService.EXTRA_LOG_ONLY_STEALTH_MODE,
+                prefs.getBoolean(OverlayService.PREFS_KEY_LOG_ONLY_STEALTH_MODE, OverlayService.DEFAULT_LOG_ONLY_STEALTH_MODE)
             )
             putExtra(
                 OverlayService.EXTRA_COMPACT_HUD_SHOW_MATRIX,

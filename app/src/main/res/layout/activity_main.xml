@@ -2701,7 +2701,7 @@
                         android:id="@+id/text_overlay_hud_mode_desc"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Default: Full HUD • Tap top-left emblem to cycle Full → Compact → Minimized"
+                        android:text="Default: Full HUD • Tap top-left emblem to switch Full ↔ Compact • Hold 2s for Log-Only Stealth Mode"
                         android:textColor="#94a3b8"
                         android:textSize="10sp" />
                 </LinearLayout>
@@ -2714,6 +2714,53 @@
                     android:textSize="10.5sp"
                     android:textStyle="bold"
                     android:backgroundTint="#0284c7"
+                    android:textColor="#ffffff" />
+            </LinearLayout>
+
+            <!-- v7.30: Competitive Mode: Log-Only Stealth Mode (Default OFF) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp"
+                android:paddingTop="8dp"
+                android:background="#0f172a"
+                android:paddingHorizontal="10dp"
+                android:paddingBottom="8dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:paddingEnd="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🔕 Competitive Mode: Log-Only"
+                        android:textColor="#10b981"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/text_log_only_stealth_mode_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Default: Off • Hides HUD completely &amp; mutes all haptics/alerts while running headless OCR, DVR &amp; auto-logging (or hold HUD emblem 2s)"
+                        android:textColor="#94a3b8"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_toggle_log_only_stealth_mode"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:text="Stealth Off (Def)"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#334155"
                     android:textColor="#ffffff" />
             </LinearLayout>
 
@@ -5474,7 +5521,7 @@
                     android:lineSpacingExtra="2dp"
                     android:textColor="#e2e8f0"
                     android:textSize="11sp"
-                    android:text="• Step 1 — Select or Switch Your Team in the Main App: On the ⚔️ Teams tab, tap 'Select' on any team preset to make it active (or tap '+ New Team' to build a Great, Ultra, Master, or Mega Master League trio with auto-filled PvPoke recommended moves and IV/CP scaling). To switch to a different 3-Pokémon Team Preset, return to the ⚔️ Teams tab in the main app and tap 'Select' on the new team.\n• Step 2 — Launch the Overlay: Tap 'Start Battle Overlay' at the top of the app. Grant 'Display over other apps' and 'Screen Capture' (used strictly in-memory for live ML Kit OCR — zero screenshots are ever written to disk).\n• Step 3 — Reposition or Minimize ('⚔️' Button): Drag anywhere on the overlay to position it on screen. Between battles or while walking/catching Pokémon, tap the '⚔️' button in the top-left of the overlay header to collapse it into a compact floating app-icon bubble and pause OCR scanning. Tap the floating bubble to restore the full HUD and resume OCR.\n• Step 4 — Start Battle ('⚔️ Start Battle'): When a GBL match begins, tap '⚔️ Start Battle' in the overlay toolbar. This clears the previous opponent lineup, resets both 50s swap timers to 0s, resets shields (2v2) and Pokéballs (3v3), anchors the battle timeline clock (t=0s), starts OCR scanning, and switches the button to '🛑 Stop Battle'.\n• Step 5 — In-Battle Toolbar Controls ('Shadow', 'Form', &amp; Your 3 Active Pokémon Chips):\n  - 'Shadow: OFF / ON': Tap in the overlay toolbar to toggle the Shadow modifier (+20% ATK / -16.7% DEF) for the active opponent if OCR missed the purple aura.\n  - 'Form: [Form]': Automatically enables when the scanned opponent species has multiple regional/alternate forms (e.g. Alolan, Galarian, Origin, Crowned) — tap to cycle forms.\n  - Your 3 Active Pokémon Chips: On the right side of the overlay toolbar, 3 compact buttons show your 3 Pokémon on the active team. OCR automatically detects which of your 3 Pokémon is on the field, or you can tap any of the 3 chips to manually set your active on-field Pokémon.\n• Step 6 — Stop &amp; Log ('🛑 Stop Battle'): When the match ends, tap '🛑 Stop Battle'. OCR pauses and the post-battle log bar opens inside the overlay: tap 'Lead: Fav / Neu / Neg ▾' to verify or cycle the lead matchup, then tap '🏆 Win' or '💀 Loss' (or '✕ Skip')." />
+                    android:text="• Step 1 — Select or Switch Your Team in the Main App: On the ⚔️ Teams tab, tap 'Select' on any team preset to make it active (or tap '+ New Team' to build a Great, Ultra, Master, or Mega Master League trio with auto-filled PvPoke recommended moves and IV/CP scaling). To switch to a different 3-Pokémon Team Preset, return to the ⚔️ Teams tab in the main app and tap 'Select' on the new team.\n• Step 2 — Launch the Overlay: Tap 'Start Battle Overlay' at the top of the app. Grant 'Display over other apps' and 'Screen Capture' (used strictly in-memory for live ML Kit OCR — zero screenshots are ever written to disk).\n• Step 3 — Reposition, Compact HUD &amp; Log-Only Stealth Mode (Top-Left Emblem): Drag the header to position the overlay anywhere on screen. Tap the top-left emblem once to strictly alternate between Full HUD ↔ Compact HUD. Hold the emblem for 2.0 seconds to activate or deactivate Competitive Log-Only Stealth Mode (100% invisible HUD &amp; silenced haptics with headless OCR, DVR &amp; auto-logging for official tournament play).\n• Step 4 — Start Battle ('⚔️ Start Battle'): When a GBL match begins, tap '⚔️ Start Battle' in the overlay toolbar (or let hands-free countdown auto-start begin automatically). This clears the previous opponent lineup, resets both 50s swap timers to 0s, resets shields (2v2) and Pokéballs (3v3), anchors the battle timeline clock (t=0s), starts OCR scanning, and switches the button to '🛑 Stop Battle'.\n• Step 5 — In-Battle Toolbar Controls ('Shadow', 'Form', &amp; Your 3 Active Pokémon Chips):\n  - 'Shadow: OFF / ON': Tap in the overlay toolbar to toggle the Shadow modifier (+20% ATK / -16.7% DEF) for the active opponent if OCR missed the purple aura.\n  - 'Form: [Form]': Automatically enables when the scanned opponent species has multiple regional/alternate forms (e.g. Alolan, Galarian, Origin, Crowned) — tap to cycle forms.\n  - Your 3 Active Pokémon Chips: On the right side of the overlay toolbar, 3 compact buttons show your 3 Pokémon on the active team. OCR automatically detects which of your 3 Pokémon is on the field, or you can tap any of the 3 chips to manually set your active on-field Pokémon.\n• Step 6 — Post-Battle Summary &amp; Go to Battle Log: When the match ends, SilphScope auto-logs the battle (or tap '🛑 Stop Battle' to log Win/Loss manually). Tap '📊 Battle Log' in the post-battle summary bar anytime to stop the overlay and jump directly to your Battle Logs." />
             </LinearLayout>
 
             <!-- 2. The 3v3 Shield Matrix -->

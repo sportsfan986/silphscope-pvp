@@ -1,4 +1,22 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.29`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.30`)
+
+---
+
+## v7.30 (2026-11-10) — Competitive Log-Only Stealth Mode, HUD Logo Interaction Redesign & Post-Battle Log Navigation
+*Live Android APK & Web Simulator release (`v7.30`, `versionCode = 1730`) shipping tournament-compliant Competitive Log-Only Stealth Mode for Play! Pokémon & Show 6 tournaments, streamlining the HUD emblem toggle to strictly alternate Full ↔ Compact HUD on tap and toggle Stealth Mode on a 2.0s hold, and adding a dedicated Go to Battle Log button in the post-battle summary.*
+
+- **v7.30 — Feature 1: Competitive Mode: Log-Only Stealth Mode (`OverlayService.kt`, `MainActivity.kt`, `activity_main.xml`)**:
+  - Added **🔕 Competitive Mode: Log-Only** (`gbl_log_only_stealth_mode`) in Settings and via a `2.0s` press-and-hold on the HUD emblem (`#btn-minimize-sword`).
+  - Completely hides the floating HUD (`overlayView.visibility = View.GONE`), status-bar toasts (`showBattleToast` / `showStatusBarToast`), and suppresses all 4 tactile haptic vibration patterns (`triggerSingleHapticPulseStatic`, `triggerDoubleHapticPulseStatic`, `triggerTripleHapticPulseStatic`, `triggerUnlockBuzzHapticStatic`) for zero live mid-battle assistance in regulated tournaments.
+  - Keeps the single-pass `MediaProjection` vision loop, ML Kit OCR, pixel HP/energy tracking, and hardware H.264 DVR running headlessly in the background; automatically commits completed matches to the Battle Log, writes `_deep_trace.jsonl` + `_video.mp4`, and executes cloud delta sync as normal.
+  - Provides three instant ways to exit Stealth Mode: `2.0s` hold on the transparent `32dp × 32dp` emblem spot, **Exit Stealth** action on the Foreground Service notification, or the **Competitive Mode: Log-Only** toggle in Settings.
+- **v7.30 — Feature 2: HUD Logo Interaction Redesign & Post-Battle Summary Navigation (`overlay.html`, `public/overlay.html`, `src/App.tsx`)**:
+  - Removed the legacy Minimized (Sword Bubble) state (`#minimized-bubble`) from the overlay emblem toggle.
+  - Single-tapping `#btn-minimize-sword` now strictly alternates between **Full HUD** and **Compact HUD** only.
+  - Replaced the legacy `2.0s` press-and-hold stop-and-open-log shortcut on `#btn-minimize-sword` with `2.0s` hold to activate/deactivate **Log-Only Stealth Mode**, and added a dedicated **`📊 Battle Log`** button directly inside the post-battle summary (`#auto-logged-banner` and `#start-battle-menu`).
+- **v7.30 — Website, Field Manual & Roadmap Synchronization (`MarketingWebsite.tsx`, `DocumentationModals.tsx`, `roadmapData.ts`)**:
+  - Highlighted **Competitive Mode: Log-Only** for tournament compliance across the landing page, Field Manual (`/?view=guide`), and competitor comparison matrix (`/?view=compare`).
+  - Graduated `log-only-competitive` from `ACTIVE_ROADMAP_ITEMS` into `VERSION_EVOLUTION_HISTORY` (`v7.30`).
 
 ---
 

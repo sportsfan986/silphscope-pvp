@@ -2,7 +2,7 @@
 
 > **Target Audience**: Antigravity agents, Claude/Gemini coding assistants, and core developers maintaining or extending **SilphScope PvP**.  
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v7.29` (`versionCode = 1729`)  
+> **Current Version**: `v7.30` (`versionCode = 1730`)  
 > **Official Domains**: `https://silphscopepvp.com` (Website & Web Simulator) • `https://dvr.silphscopepvp.com` (Cloud DVR Vault & `/watch/:shareId`) • `https://api.silphscopepvp.com` (Telemetry, Auth & Webhooks API) • `https://dl.silphscopepvp.com` (1-Click APK Download).
 
 ---
@@ -350,7 +350,7 @@ When publishing a new release:
 - **DO NOT** attempt to create a second `VirtualDisplay` from `MediaProjection`.
 - **DO NOT** commit GitHub Personal Access Tokens or API keys into any file.
 - **DO NOT** block the main UI thread in `OverlayService.kt`. All image compression, OCR, and disk/network operations must run on `dvrThread`, `ocrExecutor`, or coroutine scopes.
-- **DO NOT** remove or alter the `#btn-minimize-sword` hold-to-exit handler in `app/src/main/assets/overlay.html`, as players rely on it to safely exit the overlay without switching apps.
+- **DO NOT** remove or break the `#btn-minimize-sword` single-tap (`Full HUD` ↔ `Compact HUD`) and 2.0s hold (`Log-Only Stealth Mode` toggle) handlers in `app/src/main/assets/overlay.html`, or the `📊 Battle Log` button in the post-battle summary (`#auto-logged-banner` / `#start-battle-menu`).
 
 ### 5.5. Interactive Planning, User Control & Model Selection
 1. **Interactive Options & Feedback First**: Never silently implement features, refactor, or cut releases without explicit user approval. Always present clear multiple-choice options (`ask_question`) or structured plans with `RequestFeedback: true` (which activates the "Proceed" button in the Antigravity UI).

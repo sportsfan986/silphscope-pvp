@@ -1520,44 +1520,10 @@
 </head>
 <body>
 
-    <!-- MINIMIZED FLOATING APP-ICON BUBBLE (Pauses OCR while minimized, Tap to restore & resume OCR) -->
-    <div id="minimized-bubble" class="minimized-bubble hidden" onclick="restoreFromBubble()" title="Tap to restore overlay & resume OCR">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
-            <defs>
-                <linearGradient id="bubbleShieldBorder" x1="28" y1="23" x2="80" y2="85" gradientUnits="userSpaceOnUse">
-                    <stop offset="0%" stop-color="#38BDF8" />
-                    <stop offset="55%" stop-color="#2563EB" />
-                    <stop offset="100%" stop-color="#1D4ED8" />
-                </linearGradient>
-            </defs>
-            <circle cx="54" cy="54" r="46" fill="#0D131F" />
-            <circle cx="54" cy="54" r="42" fill="none" stroke="#23324B" stroke-width="1.5" stroke-dasharray="3 3" />
-            <polygon points="54,21 82,34.5 82,64.5 54,86.5 26,64.5 26,34.5" fill="#101827" stroke="url(#bubbleShieldBorder)" stroke-width="3.2" stroke-linejoin="round" />
-            <path d="M49.5,30.5 L58.5,39.5 M58.5,30.5 L49.5,39.5" stroke="#F59E0B" stroke-width="2.6" stroke-linecap="round" />
-            <circle cx="54" cy="35" r="1.6" fill="#FBBF24" />
-            <circle cx="45" cy="45.5" r="3.3" fill="#22C55E" />
-            <circle cx="54" cy="45.5" r="3.3" fill="#22C55E" />
-            <circle cx="63" cy="45.5" r="3.3" fill="#EF4444" />
-            <circle cx="45" cy="53.5" r="3.3" fill="#22C55E" />
-            <circle cx="54" cy="53.5" r="3.3" fill="#EF4444" />
-            <circle cx="63" cy="53.5" r="3.3" fill="#EF4444" />
-            <circle cx="45" cy="61.5" r="3.3" fill="#38BDF8" />
-            <circle cx="54" cy="61.5" r="3.3" fill="#475569" />
-            <circle cx="63" cy="61.5" r="3.3" fill="#475569" />
-            <line x1="35" y1="74" x2="73" y2="74" stroke="#475569" stroke-width="1.8" />
-            <circle cx="35" cy="74" r="3.3" fill="#0284C7" stroke="#38BDF8" stroke-width="1.1" />
-            <circle cx="44.5" cy="74" r="3.3" fill="#EA580C" stroke="#FB923C" stroke-width="1.1" />
-            <circle cx="54" cy="74" r="3.3" fill="#0284C7" stroke="#38BDF8" stroke-width="1.1" />
-            <circle cx="63.5" cy="74" r="4.2" fill="#DC2626" stroke="#FCA5A5" stroke-width="1.3" />
-            <circle cx="63.5" cy="74" r="1.6" fill="#FFFFFF" />
-            <circle cx="73" cy="74" r="3.3" fill="#064E3B" stroke="#FBBF24" stroke-width="1.2" />
-        </svg>
-    </div>
-
     <!-- OPTION 1: Top-Left Sky Trench (Transparent, Full-Width Header, 3-Column Threat Matrices) -->
     <div id="mode-sky-trench" class="glass-panel">
         <div id="overlay-watermark-bg" class="overlay-watermark-bg hidden"></div>
-        <!-- Header v6.40: Minimize/Pause OCR Icon, OCR:hp/ocr ms badge (colorized when active, grey when inactive), Mirrored [Stat, HP, E, Shield] | [Shield, E, HP, Stat] -->
+        <!-- Header v7.30: HUD Emblem (Tap: Full <-> Compact HUD, Hold 2s: Log-Only Stealth Mode), OCR:hp/ocr ms badge, Mirrored [Stat, HP, E, Shield] | [Shield, E, HP, Stat] -->
         <div class="header-row">
             <button id="btn-minimize-sword" type="button" class="sword-minimize-btn"
                 onpointerdown="startMinimizeHold(event)"
@@ -1565,7 +1531,7 @@
                 onpointercancel="cancelMinimizeHold(event)"
                 onclick="handleMinimizeSwordClick(event)"
                 oncontextmenu="event.preventDefault(); return false;"
-                title="Tap: Minimize & pause OCR • Hold 2s: Stop overlay & open Battle Log">⚔️</button>
+                title="Tap: Switch between Full ↔ Compact HUD • Hold 2s: Toggle Log-Only Stealth Mode">⚔️</button>
             <span id="sky-ocr-ms-badge" class="header-ocr-ms-badge ocr-inactive" title="Pixel HP scan loop & ML Kit OCR update rates in milliseconds">OCR:---/---ms</span>
             <div class="header-badges-cluster">
                 <div class="header-side-group">
@@ -1617,13 +1583,16 @@
 
         <!-- In-Overlay Post-Stop Log Result Action Bar -->
         <div id="start-battle-menu" class="start-battle-menu hidden" style="flex-direction:column; align-items:stretch; gap:3px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:3px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:3px; flex-wrap:wrap;">
                 <div style="display:flex; gap:2.5px; align-items:center;">
                     <button id="btn-lead-matchup" class="menu-btn menu-btn-lead-neu" onclick="cycleLeadMatchup()" title="Tap to cycle Lead Matchup: Favorable / Neutral / Negative">
                         Lead: Neu
                     </button>
                     <button id="btn-ignore-telemetry-toggle" class="menu-btn menu-btn-ignore-ai" onclick="toggleIgnoreTelemetryNextLog()" title="Skip AI anomaly telemetry for this battle (e.g. PoGO Auto-Catcher text in OCR region) while keeping Win/Loss record">
                         🚫 No AI Log
+                    </button>
+                    <button class="menu-btn menu-btn-lead-neu" onclick="stopOverlayAndGoToBattleLog()" title="Stop overlay and open Battle Log">
+                        📊 Battle Log
                     </button>
                 </div>
                 <div style="display:flex; gap:2.5px; align-items:center;">
@@ -1651,11 +1620,14 @@
             </div>
         </div>
 
-        <!-- v6.03 / v6.43: Post-Battle Auto-Logged / Quick Edit, DVR Delete Prompt & Bug Report Bar -->
+        <!-- v6.03 / v6.43 / v7.30: Post-Battle Auto-Logged / Quick Edit, Go to Battle Log, DVR Delete Prompt & Bug Report Bar -->
         <div id="auto-logged-banner" class="start-battle-menu hidden" style="flex-direction:column; align-items:stretch; gap:3px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:3px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:3px; flex-wrap:wrap;">
                 <span id="auto-logged-status-text" style="font-size:8px; font-weight:800; color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">⚡ Logged WIN</span>
-                <div style="display:flex; gap:2.5px; align-items:center; flex-shrink:0;">
+                <div style="display:flex; gap:2.5px; align-items:center; flex-wrap:wrap;">
+                    <button class="menu-btn menu-btn-win" onclick="stopOverlayAndGoToBattleLog()" title="Stop overlay and open Battle Log">
+                        📊 Battle Log
+                    </button>
                     <button class="menu-btn menu-btn-lead-neu" onclick="flipAutoLoggedResult()" title="Flip logged result between WIN and LOSS">
                         🔄 Flip W/L
                     </button>
@@ -2096,11 +2068,9 @@
         let currentZoomFactor = 1.0;
         const BASE_DESIGN_WIDTH = 300.0;
         let lastValidViewportWidth = BASE_DESIGN_WIDTH;
-        let isMinimized = false;
         let lastMinimizeTransitionMs = 0;
 
         function applyProportionalScale() {
-            if (isMinimized) return;
             try {
                 const rawViewportW = document.documentElement.clientWidth || window.innerWidth || BASE_DESIGN_WIDTH;
                 if (rawViewportW >= 120) {
@@ -2124,7 +2094,6 @@
         }
 
         function setOverlayScalePct(scalePct) {
-            if (isMinimized) return;
             applyProportionalScale();
             notifyHeight();
         }
@@ -2241,57 +2210,10 @@
                 if (myShortEl) myShortEl.style.color = t.accentHex;
                 const minBtn = document.getElementById("btn-minimize-sword");
                 if (minBtn) minBtn.innerHTML = getOverlayThemeIconSvg(activeOverlayThemeId, 13);
-                const bubbleEl = document.getElementById("minimized-bubble");
-                if (bubbleEl) bubbleEl.innerHTML = getOverlayThemeIconSvg(activeOverlayThemeId, 34);
                 refreshOverlayWatermarkUi();
                 updateBattleButtonUi();
             } catch (e) {}
         };
-
-        function setOverlayMinimizedState(minimized) {
-            const nextMin = !!minimized;
-            if (nextMin && !isMinimized) {
-                lastMinimizeTransitionMs = Date.now();
-            }
-            isMinimized = nextMin;
-            const bubbleEl = document.getElementById("minimized-bubble");
-            const skyEl = document.getElementById("mode-sky-trench");
-            const horizEl = document.getElementById("mode-horizon-belt");
-            if (isMinimized) {
-                if (skyEl) skyEl.classList.add("hidden");
-                if (horizEl) horizEl.classList.add("hidden");
-                if (bubbleEl) {
-                    bubbleEl.classList.remove("hidden");
-                    bubbleEl.style.pointerEvents = "none";
-                    setTimeout(function() {
-                        if (isMinimized && bubbleEl) {
-                            bubbleEl.style.pointerEvents = "auto";
-                        }
-                    }, 380);
-                }
-            } else {
-                if (bubbleEl) {
-                    bubbleEl.classList.add("hidden");
-                    bubbleEl.style.pointerEvents = "auto";
-                }
-                if (currentMode === "option2") {
-                    if (skyEl) skyEl.classList.add("hidden");
-                    if (horizEl) horizEl.classList.remove("hidden");
-                } else {
-                    if (horizEl) horizEl.classList.add("hidden");
-                    if (skyEl) skyEl.classList.remove("hidden");
-                }
-                applyProportionalScale();
-                setTimeout(function() {
-                    applyProportionalScale();
-                    notifyHeight();
-                }, 50);
-                setTimeout(function() {
-                    applyProportionalScale();
-                    notifyHeight();
-                }, 160);
-            }
-        }
 
         let minimizeHoldTimer = null;
         let minimizeLongPressTriggered = false;
@@ -2305,6 +2227,18 @@
             } else if (window.parent && window.parent !== window) {
                 try {
                     window.parent.postMessage({ type: "SILPH_STOP_OVERLAY_OPEN_BATTLE_LOG" }, "*");
+                } catch (e) {}
+            }
+        }
+
+        function toggleLogOnlyStealthModeFromLogo() {
+            const minBtn = document.getElementById("btn-minimize-sword");
+            if (minBtn) minBtn.classList.remove("holding");
+            if (window.AndroidOverlay && window.AndroidOverlay.toggleLogOnlyStealthMode) {
+                window.AndroidOverlay.toggleLogOnlyStealthMode();
+            } else if (window.parent && window.parent !== window) {
+                try {
+                    window.parent.postMessage({ type: "SILPH_TOGGLE_LOG_ONLY_STEALTH_MODE" }, "*");
                 } catch (e) {}
             }
         }
@@ -2325,9 +2259,9 @@
             const minBtn = document.getElementById("btn-minimize-sword");
             if (!minBtn) return;
             if (window.liveHudMode === "compact") {
-                minBtn.title = "Compact HUD Active • Tap: Minimize & pause OCR • Hold 2s: Stop overlay & open Battle Log";
+                minBtn.title = "Compact HUD Active • Tap: Switch to Full HUD • Hold 2s: Activate Log-Only Stealth Mode";
             } else {
-                minBtn.title = "Full HUD Active • Tap: Switch to Compact HUD • Hold 2s: Stop overlay & open Battle Log";
+                minBtn.title = "Full HUD Active • Tap: Switch to Compact HUD • Hold 2s: Activate Log-Only Stealth Mode";
             }
         }
 
@@ -2361,20 +2295,16 @@
             }
         }
 
-        function cycleHudModeOrMinimize() {
-            if (window.liveHudMode !== "compact") {
-                lastMinimizeTransitionMs = Date.now();
-                window.setLiveHudMode("compact");
-                if (window.AndroidOverlay && window.AndroidOverlay.setOverlayHudMode) {
-                    window.AndroidOverlay.setOverlayHudMode("compact");
-                }
-            } else {
-                minimizeToBubble();
+        function toggleHudFullCompact() {
+            lastMinimizeTransitionMs = Date.now();
+            const nextMode = window.liveHudMode === "compact" ? "full" : "compact";
+            window.setLiveHudMode(nextMode);
+            if (window.AndroidOverlay && window.AndroidOverlay.setOverlayHudMode) {
+                window.AndroidOverlay.setOverlayHudMode(nextMode);
             }
         }
 
         function startMinimizeHold(e) {
-            if (isMinimized) return;
             if (e && e.button !== undefined && e.button !== 0) return;
             minimizePointerActive = true;
             minimizeLongPressTriggered = false;
@@ -2385,10 +2315,10 @@
             }
             minimizeHoldTimer = setTimeout(function() {
                 minimizeHoldTimer = null;
-                if (!isMinimized && minimizePointerActive) {
+                if (minimizePointerActive) {
                     minimizeLongPressTriggered = true;
                     minimizePointerActive = false;
-                    stopOverlayAndGoToBattleLog();
+                    toggleLogOnlyStealthModeFromLogo();
                 }
             }, 2000);
         }
@@ -2406,8 +2336,8 @@
             }
             if (!minimizePointerActive) return;
             minimizePointerActive = false;
-            if (!minimizeLongPressTriggered && !isMinimized) {
-                cycleHudModeOrMinimize();
+            if (!minimizeLongPressTriggered) {
+                toggleHudFullCompact();
             }
             minimizeLongPressTriggered = false;
         }
@@ -2417,14 +2347,14 @@
                 e.preventDefault();
                 e.stopPropagation();
             }
-            if (isMinimized || minimizeLongPressTriggered) return;
-            if (Date.now() - lastMinimizeTransitionMs < 380) return;
+            if (minimizeLongPressTriggered) return;
+            if (Date.now() - lastMinimizeTransitionMs < 320) return;
             minimizePointerActive = false;
             if (minimizeHoldTimer) {
                 clearTimeout(minimizeHoldTimer);
                 minimizeHoldTimer = null;
             }
-            cycleHudModeOrMinimize();
+            toggleHudFullCompact();
         }
 
         function cancelMinimizeHold(e) {
@@ -2438,30 +2368,8 @@
             minimizeLongPressTriggered = false;
         }
 
-        function minimizeToBubble() {
-            lastMinimizeTransitionMs = Date.now();
-            setOverlayMinimizedState(true);
-            if (window.AndroidOverlay && window.AndroidOverlay.minimizeOverlay) {
-                window.AndroidOverlay.minimizeOverlay();
-            }
-        }
-
-        function restoreFromBubble() {
-            if (Date.now() - lastMinimizeTransitionMs < 420) return;
-            window.liveHudMode = "full";
-            if (battleData) {
-                battleData.overlayHudMode = "full";
-            }
-            updateMinimizeSwordButtonTooltip();
-            setOverlayMinimizedState(false);
-            if (window.AndroidOverlay && window.AndroidOverlay.restoreOverlay) {
-                window.AndroidOverlay.restoreOverlay();
-            }
-        }
-
         function setLayoutMode(mode) {
             currentMode = mode;
-            if (isMinimized) return;
             const skyEl = document.getElementById("mode-sky-trench");
             const horizEl = document.getElementById("mode-horizon-belt");
 
@@ -2519,7 +2427,6 @@
         }
 
         function notifyHeight() {
-            if (isMinimized) return;
             try {
                 applyProportionalScale();
                 const el = document.getElementById(currentMode === "option1" ? "mode-sky-trench" : "mode-horizon-belt");
@@ -3234,9 +3141,6 @@
                 }
                 if (data.compactHudShowMatrix !== undefined) {
                     window.compactHudShowMatrix = !!data.compactHudShowMatrix;
-                }
-                if (data.isOverlayMinimized !== undefined && data.isOverlayMinimized !== isMinimized) {
-                    setOverlayMinimizedState(data.isOverlayMinimized);
                 }
                 render();
             } catch (e) {

@@ -685,9 +685,9 @@ export default function App() {
   const [antiMetaResult, setAntiMetaResult] = useState<AntiMetaTeamBuilderResult | null>(null);
   const [isGeneratingAntiMeta, setIsGeneratingAntiMeta] = useState<boolean>(false);
 
-  // Floating Overlay Visibility & Minimized Bubble State
+  // Floating Overlay Visibility & Competitive Log-Only Stealth Mode State
   const [isOverlayVisible, setIsOverlayVisible] = useState(true);
-  const [isOverlayMinimized, setIsOverlayMinimized] = useState(false);
+  const [isLogOnlyStealthMode, setIsLogOnlyStealthMode] = useState(false);
 
   // PvPoke Gamemaster + League Rankings Sync State
   const [isSyncingPvPoke, setIsSyncingPvPoke] = useState(false);
@@ -1739,8 +1739,8 @@ export default function App() {
     if (Math.abs(deltaX) > 6 || Math.abs(deltaY) > 6) {
       setDidMoveDuringDrag(true);
     }
-    const maxX = isOverlayMinimized ? 330 : 110;
-    const maxY = isOverlayMinimized ? 700 : 440;
+    const maxX = 110;
+    const maxY = 440;
     const newX = Math.max(0, Math.min(dragStart.initialOverlayX + deltaX, maxX));
     const newY = Math.max(22, Math.min(dragStart.initialOverlayY + deltaY, maxY));
     setOverlayPos({ x: newX, y: newY });
@@ -5985,7 +5985,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.29 • Android Native Overlay
+                  v7.30 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -6223,7 +6223,7 @@ export default function App() {
                     tierThresholds,
                     200
                   );
-                  setIsOverlayMinimized(false);
+                  setIsLogOnlyStealthMode(false);
                   recalculateAllPresetsWithSeasonMeta(presets, battleLogs);
                 }
                 setIsOverlayVisible(nextVisible);
@@ -6274,17 +6274,23 @@ export default function App() {
             {/* Left: Phone Screen Canvas with Floating HUD */}
             <div className="lg:col-span-7 flex flex-col items-center">
               <div className="w-full flex items-center justify-between mb-3 px-1 text-xs">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold text-slate-300">Overlay HUD:</span>
                   <button
                     type="button"
-                    onClick={() => handleSetOverlayHudMode(overlayHudMode === 'compact' ? 'full' : 'compact')}
+                    onClick={() => {
+                      if (isLogOnlyStealthMode) {
+                        setIsLogOnlyStealthMode(false);
+                      } else {
+                        handleSetOverlayHudMode(overlayHudMode === 'compact' ? 'full' : 'compact');
+                      }
+                    }}
                     className={`px-2.5 py-1 rounded-lg text-xs font-extrabold border transition flex items-center gap-1.5 ${
                       overlayHudMode === 'compact'
                         ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50 hover:bg-emerald-500/30'
                         : 'bg-sky-500/20 text-sky-300 border-sky-400/40 hover:bg-sky-500/30'
                     }`}
-                    title="Click to toggle between Full HUD and Compact HUD (or tap the top-left emblem on the overlay to cycle Full → Compact → Minimized)"
+                    title="Click to toggle between Full HUD and Compact HUD (or tap the top-left emblem on the overlay)"
                   >
                     <span>{overlayHudMode === 'compact' ? '⚡ Compact HUD' : '📐 Full HUD'}</span>
                     {overlayHudMode === 'compact' && (
@@ -6292,6 +6298,18 @@ export default function App() {
                         ({compactHudShowMatrix ? '3×3 Matrix ON' : '3×3 Matrix OFF'})
                       </span>
                     )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsLogOnlyStealthMode((prev) => !prev)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-extrabold border transition flex items-center gap-1 ${
+                      isLogOnlyStealthMode
+                        ? 'bg-amber-500/25 text-amber-200 border-amber-400/70 hover:bg-amber-500/35'
+                        : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'
+                    }`}
+                    title="Competitive Mode: Log-Only — Hides HUD completely & suppresses haptics while recording Battle Logs & DVR (or hold overlay emblem 2.0s)"
+                  >
+                    <span>{isLogOnlyStealthMode ? '🔕 Stealth ON (Exit)' : '🔕 Log-Only Stealth'}</span>
                   </button>
                 </div>
 
@@ -6493,37 +6511,50 @@ export default function App() {
                   </div>
 
                   {/* =========================================================================
-                      FLOATING OVERLAY OPTION 1: Top-Left Sky Trench OR Minimized App-Icon Bubble
+                      FLOATING OVERLAY: Full / Compact HUD OR Invisible Log-Only Stealth Mode
                      ========================================================================= */}
-                  {isOverlayVisible && isOverlayMinimized && (
+                  {isOverlayVisible && isLogOnlyStealthMode && (
                     <div
-                      onMouseDown={onDragStart}
-                      onTouchStart={onDragStart}
-                      onClick={() => {
-                        if (!didMoveDuringDrag) {
-                          setIsOverlayMinimized(false);
-                          handleSetOverlayHudMode('full');
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        minimizeHoldTriggeredRef.current = false;
+                        if (minimizeHoldTimerRef.current) {
+                          window.clearTimeout(minimizeHoldTimerRef.current);
                         }
+                        minimizeHoldTimerRef.current = window.setTimeout(() => {
+                          minimizeHoldTriggeredRef.current = true;
+                          setIsLogOnlyStealthMode(false);
+                          setStartBattleToast('👁️ Exited Log-Only Stealth Mode • Live HUD restored');
+                          setTimeout(() => setStartBattleToast(null), 2200);
+                        }, 2000);
                       }}
-                      title="Drag bubble anywhere • Tap to restore Full HUD & resume 1 Hz OCR"
+                      onPointerUp={(e) => {
+                        e.stopPropagation();
+                        if (minimizeHoldTimerRef.current) {
+                          window.clearTimeout(minimizeHoldTimerRef.current);
+                          minimizeHoldTimerRef.current = null;
+                        }
+                        minimizeHoldTriggeredRef.current = false;
+                      }}
+                      onPointerCancel={() => {
+                        if (minimizeHoldTimerRef.current) {
+                          window.clearTimeout(minimizeHoldTimerRef.current);
+                          minimizeHoldTimerRef.current = null;
+                        }
+                        minimizeHoldTriggeredRef.current = false;
+                      }}
+                      title="Log-Only Stealth Mode Active (Invisible on Android • Hold this 32×32 emblem spot for 2.0s to exit Stealth Mode)"
                       style={{
                         top: `${overlayPos.y}px`,
-                        left: `${overlayPos.x}px`,
-                        borderColor: `rgb(${activeTheme.overlayHeaderRgb})`,
-                        boxShadow: `0 4px 16px rgba(0,0,0,0.85), 0 0 10px rgba(${activeTheme.overlayHeaderRgb}, 0.55)`
+                        left: `${overlayPos.x}px`
                       }}
-                      className={`absolute z-30 w-12 h-12 rounded-full bg-slate-950 border-2 flex items-center justify-center cursor-pointer active:scale-95 transition-transform ${
-                        isDragging ? 'ring-2 ring-amber-400' : ''
-                      }`}
+                      className="absolute z-30 w-8 h-8 rounded cursor-pointer border border-dashed border-amber-400/25 hover:border-amber-400/70 flex items-center justify-center transition"
                     >
-                      {renderThemeOverlayIcon(activeTheme.id, 28)}
-                      <span className="absolute -bottom-2 px-1 py-0.2 rounded bg-amber-500 text-slate-950 font-black text-[7px] uppercase tracking-tighter shadow">
-                        OCR Paused
-                      </span>
+                      <span className="sr-only">Hold 2s to exit Log-Only Stealth Mode</span>
                     </div>
                   )}
 
-                  {isOverlayVisible && !isOverlayMinimized && (
+                  {isOverlayVisible && !isLogOnlyStealthMode && (
                     <div 
                       className={`absolute z-30 rounded-lg p-1.5 shadow-lg transition-all ${
                         isDragging ? 'ring-2 ring-amber-400' : ''
@@ -6543,7 +6574,7 @@ export default function App() {
                         textShadow: '0 1px 2px rgba(0, 0, 0, 0.98), 0 0 4px rgba(0, 0, 0, 0.95)'
                       }}
                     >
-                      {/* v6.03 Header row: Transparent background + Minimize/Pause OCR icon + OCR:101/495ms badge (colorized when active, grey when inactive) + Mirrored [CP, HP, Energy, Shield] | [Shield, Energy, HP, CP] */}
+                      {/* v7.30 Header row: Emblem (Tap: Full <-> Compact • Hold 2s: Log-Only Stealth) + OCR:101/495ms badge + Mirrored [CP, HP, Energy, Shield] | [Shield, Energy, HP, CP] */}
                       <div
                         className="flex items-center justify-between gap-1 px-0.5 py-0.5 mb-0.5"
                       >
@@ -6558,10 +6589,7 @@ export default function App() {
                               }
                               minimizeHoldTimerRef.current = window.setTimeout(() => {
                                 minimizeHoldTriggeredRef.current = true;
-                                setIsOverlayVisible(false);
-                                setActiveTab('battle_log');
-                                setStartBattleToast('🛑 Overlay stopped (2s hold) • Opened Battle Log');
-                                setTimeout(() => setStartBattleToast(null), 2200);
+                                setIsLogOnlyStealthMode(true);
                               }, 2000);
                             }}
                             onPointerUp={(e) => {
@@ -6571,11 +6599,7 @@ export default function App() {
                                 minimizeHoldTimerRef.current = null;
                               }
                               if (!minimizeHoldTriggeredRef.current) {
-                                if (overlayHudMode === 'full') {
-                                  handleSetOverlayHudMode('compact');
-                                } else {
-                                  setIsOverlayMinimized(true);
-                                }
+                                handleSetOverlayHudMode(overlayHudMode === 'compact' ? 'full' : 'compact');
                               }
                               minimizeHoldTriggeredRef.current = false;
                             }}
@@ -6591,7 +6615,7 @@ export default function App() {
                               backgroundColor: `rgba(${activeTheme.overlayHeaderRgb}, 0.28)`,
                               borderColor: `rgba(${activeTheme.overlayHeaderRgb}, 0.75)`
                             }}
-                            title="Tap: Cycle Full → Compact → Minimize (Pause OCR) • Hold 2s: Stop overlay & go to Battle Log"
+                            title="Tap: Alternate Full ↔ Compact HUD • Hold 2.0s: Activate Log-Only Stealth Mode"
                           >
                             {renderThemeOverlayIcon(activeTheme.id, 13)}
                           </button>
@@ -7226,6 +7250,18 @@ export default function App() {
                               className="px-1.5 py-0.5 rounded font-extrabold bg-red-600/45 hover:bg-red-500/60 border border-red-300 text-red-100"
                             >
                               💀 Loss
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowStartBattleMenu(false);
+                                setIsOverlayVisible(false);
+                                setActiveTab('battle_log');
+                              }}
+                              className="px-1.5 py-0.5 rounded font-extrabold bg-sky-600/35 hover:bg-sky-500/50 border border-sky-400/75 text-sky-100"
+                              title="Stop overlay and open Battle Log"
+                            >
+                              📊 Battle Log
                             </button>
                             <button
                               type="button"
@@ -13433,7 +13469,7 @@ export default function App() {
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                <strong>Compact HUD</strong> shows only the Mirrored Header, 2-Line AI Tactical Coach, Shield Decision Card (on incoming charged attack), and Post-Battle Log. Tapping the top-left emblem on the overlay cycles <strong>Full → Compact → Minimized</strong>. In idle (<code>Waiting...</code>) state, both Full and Compact HUDs display your selected League, Team Name, and 3 Team Pokémon, and Compact HUD auto-hides the action toolbar once battle begins.
+                <strong>Compact HUD</strong> shows only the Mirrored Header, 2-Line AI Tactical Coach, Shield Decision Card (on incoming charged attack), and Post-Battle Log. Tapping the top-left emblem on the overlay strictly alternates <strong>Full ↔ Compact HUD</strong>, while holding the emblem for <strong>2.0s</strong> activates <strong>Log-Only Stealth Mode</strong>. In idle (<code>Waiting...</code>) state, both Full and Compact HUDs display your selected League, Team Name, and 3 Team Pokémon, and Compact HUD auto-hides the action toolbar once battle begins.
               </p>
               <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
                 <button
@@ -13458,6 +13494,41 @@ export default function App() {
                 >
                   ⚡ Compact HUD
                 </button>
+              </div>
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-300">🔕 Competitive Mode: Log-Only</span>
+                  <span className="text-[10px] font-mono text-amber-300">
+                    {isLogOnlyStealthMode ? 'Stealth ON (HUD Hidden • Haptics Off)' : 'HUD Active (Default)'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Tournament-compliant stealth logging: completely hides the floating HUD and suppresses all haptics &amp; toasts while running OCR, DVR, deep trace <code>.jsonl</code>, and auto-logging headlessly in the background.
+                </p>
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsLogOnlyStealthMode(false)}
+                    className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                      !isLogOnlyStealthMode
+                        ? 'bg-slate-800 border border-slate-600 text-slate-200'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    👁️ Live HUD On (Default)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsLogOnlyStealthMode(true)}
+                    className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                      isLogOnlyStealthMode
+                        ? 'bg-amber-500/25 border border-amber-400/70 text-amber-200'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    🔕 Log-Only Stealth ON
+                  </button>
+                </div>
               </div>
               <div className="space-y-1.5 pt-1">
                 <div className="flex items-center justify-between text-xs">
@@ -17073,7 +17144,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.29 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.30 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}
