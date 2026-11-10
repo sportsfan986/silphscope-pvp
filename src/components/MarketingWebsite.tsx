@@ -20,10 +20,15 @@ export interface DvrReplayItem {
   league: string;
   result: 'WIN' | 'LOSS' | string;
   matchupSummary: string;
+  showcaseTitle?: string;
   durationSec: number;
   videoBytes: number;
+  totalBytes?: number;
   isPinned?: boolean;
   isPublic?: boolean;
+  hideNames?: boolean;
+  featuredShareId?: string;
+  manuallyFlagged?: boolean;
   userTierBadge?: string;
   userIssueNote?: string;
   diagnosticReason?: string;
@@ -334,7 +339,18 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
     public: 3,
     private: 0
   });
+  const [vaultVisibility, setVaultVisibility] = useState<string>('public_only');
+  const [vaultUsageInfo, setVaultUsageInfo] = useState<{
+    usedMb: number;
+    maxStorageMb: number;
+    rollingCount: number;
+    maxRollingBattles: number;
+    pinnedCount: number;
+    maxPinnedBattles: number;
+  } | null>(null);
+  const [vaultActionBusyId, setVaultActionBusyId] = useState<string>('');
   const [selectedWatchReplay, setSelectedWatchReplay] = useState<DvrReplayItem | null>(null);
+  const [selectedWatchSeekSec, setSelectedWatchSeekSec] = useState<number>(0);
   const [ownerLoginOpen, setOwnerLoginOpen] = useState<boolean>(false);
   const [authTab, setAuthTab] = useState<'token' | 'password' | 'github'>('github');
   const [authKey, setAuthKey] = useState<string>(() => {
@@ -427,6 +443,21 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           public: totalPublic,
           private: totalPrivate
         });
+        if (data.settings?.publicVisibility || data.visibility) {
+          setVaultVisibility(String(data.settings?.publicVisibility || data.visibility || 'public_only'));
+        }
+        if (ownerState && data.usage) {
+          setVaultUsageInfo({
+            usedMb: Number(data.usage.usedMb) || 0,
+            maxStorageMb: Number(data.limits?.maxStorageMb) || 2048,
+            rollingCount: Number(data.usage.rollingCount) || 0,
+            maxRollingBattles: Number(data.limits?.maxRollingBattles) || 50,
+            pinnedCount: Number(data.usage.pinnedCount) || 0,
+            maxPinnedBattles: Number(data.limits?.maxPinnedBattles) || 10
+          });
+        } else {
+          setVaultUsageInfo(null);
+        }
         const activeSess = data.sessionToken || sessionToken;
         if (data.sessionToken) {
           localStorage.setItem('sspvp_vault_session', data.sessionToken);
@@ -437,6 +468,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           writeSharedVaultCookies(data.screenName, activeSess);
         }
       } else {
+        setVaultUsageInfo(null);
         if (user.toLowerCase() === 'featured') {
           setVaultReplays(CANONICAL_FEATURED_REPLAYS);
         } else {
@@ -449,6 +481,315 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
       }
     } finally {
       setLoadingVault(false);
+    }
+  };
+
+  const recalcVaultStatsFromItems = (items: DvrReplayItem[]) => {
+    setVaultStats({
+      total: items.length,
+      starred: items.filter((i) => Boolean(i.isPinned)).length,
+      public: items.filter((i) => Boolean(i.isPublic)).length,
+      private: items.filter((i) => !i.isPublic).length
+    });
+  };
+
+  const buildVaultAuthPayload = () => {
+    const sessionToken = localStorage.getItem('sspvp_vault_session') || readSharedVaultCookie('sspvp_vault_session') || '';
+    const unlockKey = localStorage.getItem('gbl_web_unlock_key_v700') || '';
+    const claimEmail = localStorage.getItem('gbl_web_claim_email_v700') || '';
+    const activeOwner = (vaultUser || localStorage.getItem('sspvp_vault_user') || '').trim();
+    return {
+      activeOwner,
+      sessionToken,
+      unlockKey,
+      claimEmail,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-SilphScope-Client-Key': 'ssk_client_v615_telemetry_ingest_9f8a7b6c5d4e3f2a1b0c',
+        'X-Trainer-Screen-Name': activeOwner,
+        'X-Vault-Session': sessionToken,
+        'X-SilphScope-Unlock-Key': unlockKey,
+        'X-Claim-Email': claimEmail
+      }
+    };
+  };
+
+  const handleUpdateVaultVisibility = async (nextVis: string) => {
+    const prevVis = vaultVisibility;
+    setVaultVisibility(nextVis);
+    const auth = buildVaultAuthPayload();
+    try {
+      const res = await fetch('https://dvr.silphscopepvp.com/v1/replays/settings', {
+        method: 'POST',
+        headers: auth.headers,
+        body: JSON.stringify({
+          publicVisibility: nextVis,
+          sessionToken: auth.sessionToken,
+          unlockKey: auth.unlockKey,
+          claimEmail: auth.claimEmail
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        setVaultVisibility(prevVis);
+        alert(data?.error || 'Could not update vault visibility.');
+        return;
+      }
+      setCopiedMsg('Vault privacy setting updated!');
+      setTimeout(() => setCopiedMsg(''), 2400);
+    } catch (e: any) {
+      setVaultVisibility(prevVis);
+      alert('Error updating visibility: ' + (e?.message || 'offline'));
+    }
+  };
+
+  const handleToggleStarReplay = async (item: DvrReplayItem) => {
+    const nextPinned = !Boolean(item.isPinned);
+    const auth = buildVaultAuthPayload();
+    setVaultActionBusyId(item.shareId);
+    // Optimistic update
+    const updated = vaultReplays.map((r) => (r.shareId === item.shareId ? { ...r, isPinned: nextPinned } : r));
+    setVaultReplays(updated);
+    recalcVaultStatsFromItems(updated);
+    try {
+      const res = await fetch('https://dvr.silphscopepvp.com/v1/replays/pin', {
+        method: 'POST',
+        headers: auth.headers,
+        body: JSON.stringify({
+          battleId: item.battleId || '',
+          shareId: item.shareId,
+          isPinned: nextPinned,
+          sessionToken: auth.sessionToken,
+          unlockKey: auth.unlockKey,
+          claimEmail: auth.claimEmail
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        fetchVaultReplays(vaultUser);
+        alert(data?.error || 'Failed to star/unstar replay.');
+        return;
+      }
+      setCopiedMsg(nextPinned ? '⭐ Starred replay (kept 365 days)!' : 'Removed star from replay');
+      setTimeout(() => setCopiedMsg(''), 2200);
+    } catch (e: any) {
+      fetchVaultReplays(vaultUser);
+      alert('Error updating star: ' + (e?.message || 'offline'));
+    } finally {
+      setVaultActionBusyId('');
+    }
+  };
+
+  const handleTogglePublicReplay = async (item: DvrReplayItem) => {
+    const nextPublic = !Boolean(item.isPublic);
+    const auth = buildVaultAuthPayload();
+    setVaultActionBusyId(item.shareId);
+    const updated = vaultReplays.map((r) => (r.shareId === item.shareId ? { ...r, isPublic: nextPublic } : r));
+    setVaultReplays(updated);
+    recalcVaultStatsFromItems(updated);
+    try {
+      const res = await fetch('https://dvr.silphscopepvp.com/v1/replays/pin', {
+        method: 'POST',
+        headers: auth.headers,
+        body: JSON.stringify({
+          battleId: item.battleId || '',
+          shareId: item.shareId,
+          isPublic: nextPublic,
+          sessionToken: auth.sessionToken,
+          unlockKey: auth.unlockKey,
+          claimEmail: auth.claimEmail
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        fetchVaultReplays(vaultUser);
+        alert(data?.error || 'Failed to change public/private status.');
+        return;
+      }
+      setCopiedMsg(nextPublic ? '🌐 Replay marked Public!' : '🔒 Replay marked Private!');
+      setTimeout(() => setCopiedMsg(''), 2200);
+    } catch (e: any) {
+      fetchVaultReplays(vaultUser);
+      alert('Error updating privacy: ' + (e?.message || 'offline'));
+    } finally {
+      setVaultActionBusyId('');
+    }
+  };
+
+  const handleShareReplay = async (item: DvrReplayItem) => {
+    const url = item.shareUrl || `https://dvr.silphscopepvp.com/watch/${item.shareId}`;
+    const title = `SilphScope DVR • ${item.matchupSummary || item.league}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, text: title, url });
+        return;
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
+    }
+    copyToClipboard(url, 'Replay link');
+  };
+
+  const handlePromoteToFeatured = async (item: DvrReplayItem) => {
+    const highlightStr = window.prompt(
+      'Optional highlight timestamp in seconds (e.g. 44 for T+44s, or leave 0):',
+      String(item.highlightSec || 0)
+    );
+    if (highlightStr === null) return;
+    const badgeLabel =
+      window.prompt('Showcase badge label:', '🌟 Official Showcase') || '🌟 Official Showcase';
+    const auth = buildVaultAuthPayload();
+    setVaultActionBusyId(item.shareId);
+    try {
+      const res = await fetch('https://dvr.silphscopepvp.com/v1/replays/feature', {
+        method: 'POST',
+        headers: auth.headers,
+        body: JSON.stringify({
+          shareId: item.shareId,
+          highlightSec: Number(highlightStr) || 0,
+          badgeLabel,
+          sessionToken: auth.sessionToken,
+          unlockKey: auth.unlockKey
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        alert(data?.error || 'Failed to promote replay to @Featured.');
+        return;
+      }
+      setCopiedMsg('🌟 Promoted to @Featured Showcase!');
+      setTimeout(() => setCopiedMsg(''), 3000);
+      fetchVaultReplays(vaultUser);
+    } catch (e: any) {
+      alert('Error promoting replay: ' + (e?.message || 'offline'));
+    } finally {
+      setVaultActionBusyId('');
+    }
+  };
+
+  const handleFlagReplay = async (item: DvrReplayItem, unflag = false) => {
+    const auth = buildVaultAuthPayload();
+    let devId = 'web_vault_client';
+    try {
+      devId = localStorage.getItem('silphscope_device_id') || 'web_vault_client';
+    } catch {}
+
+    if (unflag) {
+      if (!window.confirm(`Unflag and retract the issue report on ${item.battleId || item.shareId}?`)) return;
+      setVaultActionBusyId(item.shareId);
+      try {
+        const res = await fetch('https://dvr.silphscopepvp.com/v1/dvr/unflag', {
+          method: 'POST',
+          headers: { ...auth.headers, 'X-Device-Hash': devId },
+          body: JSON.stringify({
+            battleId: item.battleId || '',
+            shareId: item.shareId,
+            screenName: auth.activeOwner,
+            sessionToken: auth.sessionToken,
+            unlockKey: auth.unlockKey,
+            claimEmail: auth.claimEmail,
+            deviceHash: devId
+          })
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.ok) {
+          alert(data?.error || 'Failed to unflag replay.');
+          return;
+        }
+        setCopiedMsg('↩️ Issue report retracted');
+        setTimeout(() => setCopiedMsg(''), 2200);
+        fetchVaultReplays(vaultUser);
+      } catch (e: any) {
+        alert('Error unflagging issue: ' + (e?.message || 'offline'));
+      } finally {
+        setVaultActionBusyId('');
+      }
+      return;
+    }
+
+    const note = window.prompt(
+      `🚩 Flag / Update Issue Report for ${item.battleId || item.shareId}:\nDescribe what went wrong (e.g. HP jump, wrong move count, OCR misread):`,
+      item.userIssueNote || ''
+    );
+    if (note === null) return;
+    const cleanNote = note.trim();
+    if (!cleanNote) {
+      if (item.userIssueNote && window.confirm('Description left blank — unflag & retract this issue report instead?')) {
+        handleFlagReplay(item, true);
+      }
+      return;
+    }
+
+    setVaultActionBusyId(item.shareId);
+    try {
+      const res = await fetch('https://dvr.silphscopepvp.com/v1/dvr/flag', {
+        method: 'POST',
+        headers: { ...auth.headers, 'X-Device-Hash': devId },
+        body: JSON.stringify({
+          battleId: item.battleId || '',
+          shareId: item.shareId,
+          screenName: auth.activeOwner,
+          userIssueNote: cleanNote,
+          league: item.league || 'GBL',
+          matchupSummary: item.matchupSummary || '',
+          sessionToken: auth.sessionToken,
+          unlockKey: auth.unlockKey,
+          claimEmail: auth.claimEmail,
+          deviceHash: devId
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        alert(data?.error || 'Failed to flag replay issue.');
+        return;
+      }
+      setCopiedMsg('🚩 Replay flagged for diagnostic review!');
+      setTimeout(() => setCopiedMsg(''), 2400);
+      fetchVaultReplays(vaultUser);
+    } catch (e: any) {
+      alert('Error flagging issue: ' + (e?.message || 'offline'));
+    } finally {
+      setVaultActionBusyId('');
+    }
+  };
+
+  const handleDeleteReplay = async (item: DvrReplayItem) => {
+    if (
+      !window.confirm(
+        `🗑️ Permanently delete "${item.matchupSummary || item.shareId}" from your Cloud DVR Vault? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    const auth = buildVaultAuthPayload();
+    setVaultActionBusyId(item.shareId);
+    try {
+      const qs = `battleId=${encodeURIComponent(item.battleId || '')}&shareId=${encodeURIComponent(item.shareId)}`;
+      const res = await fetch(`https://dvr.silphscopepvp.com/v1/replays/delete?${qs}`, {
+        method: 'POST',
+        headers: auth.headers,
+        body: JSON.stringify({
+          battleId: item.battleId || '',
+          shareId: item.shareId,
+          sessionToken: auth.sessionToken,
+          unlockKey: auth.unlockKey,
+          claimEmail: auth.claimEmail
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        alert(data?.error || 'Failed to delete replay.');
+        return;
+      }
+      const remaining = vaultReplays.filter((r) => r.shareId !== item.shareId);
+      setVaultReplays(remaining);
+      recalcVaultStatsFromItems(remaining);
+      setCopiedMsg('🗑️ Replay deleted from Cloud Vault');
+      setTimeout(() => setCopiedMsg(''), 2400);
+    } catch (e: any) {
+      alert('Error deleting replay: ' + (e?.message || 'offline'));
+    } finally {
+      setVaultActionBusyId('');
     }
   };
 
@@ -2521,6 +2862,41 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 })}
               </div>
             </div>
+
+            {/* Owner Vault Privacy & Storage Quota Bar */}
+            {isVaultOwner && vaultUser.toLowerCase() !== 'featured' && (
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2 border-t border-slate-800/70 text-[11px]">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-slate-300 whitespace-nowrap">🌐 Vault Privacy:</span>
+                  <select
+                    value={vaultVisibility}
+                    onChange={(e) => handleUpdateVaultVisibility(e.target.value)}
+                    className="px-2.5 py-1 rounded-lg bg-[#081120] border border-[#19304E] text-teal-200 font-bold text-[11px] focus:outline-none focus:border-teal-400 cursor-pointer"
+                  >
+                    <option value="public_only">🔒 Private (Only Public Videos Shared)</option>
+                    <option value="starred_only">⭐ Only Starred Shared</option>
+                    <option value="starred_and_public">⭐+🌐 Starred + Public Shared</option>
+                    <option value="all">🌐 All Videos Shared Publicly</option>
+                    <option value="none">🚫 No Videos Without Login</option>
+                  </select>
+                </div>
+                {vaultUsageInfo && (
+                  <div className="font-mono text-slate-400 flex items-center gap-2 flex-wrap">
+                    <span>
+                      ☁️ {vaultUsageInfo.usedMb.toFixed(1)}/{vaultUsageInfo.maxStorageMb} MB
+                    </span>
+                    <span>•</span>
+                    <span>
+                      Rolling {vaultUsageInfo.rollingCount}/{vaultUsageInfo.maxRollingBattles}
+                    </span>
+                    <span>•</span>
+                    <span className="text-amber-300">
+                      ⭐ {vaultUsageInfo.pinnedCount}/{vaultUsageInfo.maxPinnedBattles}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Replays Grid */}
@@ -2566,7 +2942,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {filtered.map((item) => {
                       const isWin = item.result?.toUpperCase().includes('WIN');
-                      const mbSize = ((item.videoBytes || 0) / (1024 * 1024)).toFixed(1);
+                      const mbSize = (((item.totalBytes || item.videoBytes || 0)) / (1024 * 1024)).toFixed(1);
+                      const canManageItem = isVaultOwner && vaultUser.toLowerCase() !== 'featured';
+                      const isAdminOwner = canManageItem && vaultUser.toLowerCase() === 'sportsfan986';
+                      const isItemFlagged = Boolean(item.manuallyFlagged || item.userIssueNote);
+                      const isBusy = vaultActionBusyId === item.shareId;
                       return (
                         <div
                           key={item.shareId}
@@ -2601,7 +2981,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
 
                             {/* Matchup Summary */}
                             <div className="text-sm font-extrabold text-white leading-snug">
-                              {item.matchupSummary}
+                              {item.showcaseTitle || item.matchupSummary}
                             </div>
 
                             {/* Badges / Diagnostics */}
@@ -2614,9 +2994,18 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                                   ⭐ Starred
                                 </span>
                               )}
-                              {item.isPublic && (
+                              {item.isPublic ? (
                                 <span className="px-2 py-0.5 rounded-full bg-teal-400/15 text-teal-300 border border-teal-400/30 font-bold">
                                   🌐 Public
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full bg-slate-800/80 text-slate-400 border border-slate-700/70 font-bold">
+                                  🔒 Private
+                                </span>
+                              )}
+                              {item.featuredShareId && (
+                                <span className="px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-200 border border-amber-400/40 font-bold">
+                                  🌟 Featured ({item.featuredShareId})
                                 </span>
                               )}
                               {item.userTierBadge && (
@@ -2627,60 +3016,179 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                             </div>
 
                             {/* Diagnostic Issue Warning */}
-                            {item.userIssueNote && (
-                              <div className="p-2.5 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-200 text-xs flex items-center gap-2">
-                                <span>🚩</span>
-                                <span>
-                                  <strong>Reported Issue:</strong> {item.userIssueNote}
-                                </span>
+                            {isItemFlagged && (
+                              <div className="p-2.5 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-200 text-xs flex items-center justify-between gap-2 flex-wrap">
+                                <div className="flex items-center gap-2">
+                                  <span>🚩</span>
+                                  <span>
+                                    <strong>Reported Issue:</strong>{' '}
+                                    {item.userIssueNote || 'Flagged for diagnostic review'}
+                                  </span>
+                                </div>
+                                {canManageItem && (
+                                  <button
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={() => handleFlagReplay(item, true)}
+                                    className="px-2 py-0.5 rounded-lg bg-[#081120] border border-slate-600 text-slate-200 hover:text-white font-bold text-[10.5px] cursor-pointer"
+                                    title="Retract this issue report"
+                                  >
+                                    ↩️ Unflag
+                                  </button>
+                                )}
                               </div>
                             )}
                           </div>
 
                           {/* Card Actions */}
-                          <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-800/80 flex-wrap">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <button
-                                type="button"
-                                onClick={() => setSelectedWatchReplay(item)}
-                                className="px-3.5 py-1.5 rounded-xl font-black text-xs border shadow transition hover:scale-105 cursor-pointer flex items-center gap-1.5"
-                                style={{
-                                  backgroundColor: '#2DD4BF',
-                                  borderColor: '#2DD4BF',
-                                  color: '#042F2E',
-                                  boxShadow: '0 2px 10px rgba(45, 212, 191, 0.3)'
-                                }}
-                              >
-                                <span>▶️</span>
-                                <span>Watch + HUD</span>
-                              </button>
-                              {item.highlightSec && (
+                          <div className="flex flex-col gap-2 pt-3 border-t border-slate-800/80">
+                            {/* Primary Watch & Share Row */}
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <button
                                   type="button"
-                                  onClick={() => setSelectedWatchReplay(item)}
-                                  className="px-2.5 py-1.5 rounded-xl font-bold text-xs bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 border border-amber-400/40 transition cursor-pointer"
+                                  onClick={() => {
+                                    setSelectedWatchSeekSec(0);
+                                    setSelectedWatchReplay(item);
+                                  }}
+                                  className="px-3.5 py-1.5 rounded-xl font-black text-xs border shadow transition hover:scale-105 cursor-pointer flex items-center gap-1.5"
+                                  style={{
+                                    backgroundColor: '#2DD4BF',
+                                    borderColor: '#2DD4BF',
+                                    color: '#042F2E',
+                                    boxShadow: '0 2px 10px rgba(45, 212, 191, 0.3)'
+                                  }}
                                 >
-                                  🎯 Highlight ({item.highlightSec}s)
+                                  <span>▶️</span>
+                                  <span>Watch + HUD</span>
                                 </button>
-                              )}
+                                {item.highlightSec ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedWatchSeekSec(Number(item.highlightSec) || 0);
+                                      setSelectedWatchReplay(item);
+                                    }}
+                                    className="px-2.5 py-1.5 rounded-xl font-bold text-xs bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 border border-amber-400/40 transition cursor-pointer"
+                                  >
+                                    🎯 Highlight ({item.highlightSec}s)
+                                  </button>
+                                ) : null}
+                              </div>
+
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() => handleShareReplay(item)}
+                                  className="px-2.5 py-1.5 rounded-lg font-bold text-[11px] bg-[#081120] text-teal-300 hover:text-white border border-teal-400/40 transition cursor-pointer flex items-center gap-1"
+                                  title="Share replay via native mobile Share sheet or copy link"
+                                >
+                                  <span>📤</span>
+                                  <span>Share</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    copyToClipboard(
+                                      item.shareUrl || `https://dvr.silphscopepvp.com/watch/${item.shareId}`,
+                                      'Replay link'
+                                    )
+                                  }
+                                  className="px-2.5 py-1.5 rounded-lg font-bold text-[11px] bg-[#081120] text-slate-300 hover:text-white border border-[#19304E] transition cursor-pointer flex items-center gap-1"
+                                  title="Copy direct replay link"
+                                >
+                                  <span>📋</span>
+                                  <span>Copy</span>
+                                </button>
+                              </div>
                             </div>
 
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  copyToClipboard(
-                                    item.shareUrl || `https://dvr.silphscopepvp.com/watch/${item.shareId}`,
-                                    'Replay link'
-                                  )
-                                }
-                                className="px-2.5 py-1.5 rounded-lg font-bold text-[11px] bg-[#081120] text-slate-300 hover:text-white border border-[#19304E] transition cursor-pointer flex items-center gap-1"
-                                title="Copy direct replay link"
-                              >
-                                <span>📋</span>
-                                <span>Copy Link</span>
-                              </button>
-                            </div>
+                            {/* Owner & Admin Management Controls Row */}
+                            {canManageItem && (
+                              <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-slate-800/60 flex-wrap">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {/* Star / Unstar */}
+                                  <button
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={() => handleToggleStarReplay(item)}
+                                    className={`px-2.5 py-1 rounded-lg font-bold text-[11px] border transition cursor-pointer flex items-center gap-1 ${
+                                      item.isPinned
+                                        ? 'bg-amber-400/20 text-amber-300 border-amber-400/50'
+                                        : 'bg-[#081120] text-slate-300 hover:text-amber-200 border-[#19304E]'
+                                    }`}
+                                    title="Starred replays are pinned and retained for 365 days"
+                                  >
+                                    <span>{item.isPinned ? '⭐' : '☆'}</span>
+                                    <span>{item.isPinned ? 'Starred' : 'Star'}</span>
+                                  </button>
+
+                                  {/* Public / Private Toggle */}
+                                  <button
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={() => handleTogglePublicReplay(item)}
+                                    className={`px-2.5 py-1 rounded-lg font-bold text-[11px] border transition cursor-pointer flex items-center gap-1 ${
+                                      item.isPublic
+                                        ? 'bg-cyan-500/20 text-cyan-200 border-cyan-400/50'
+                                        : 'bg-[#081120] text-slate-300 hover:text-cyan-200 border-[#19304E]'
+                                    }`}
+                                    title="Toggle whether this replay is Public or Private"
+                                  >
+                                    <span>{item.isPublic ? '🌐' : '🔒'}</span>
+                                    <span>{item.isPublic ? 'Public' : 'Private'}</span>
+                                  </button>
+
+                                  {/* Flag / Edit Issue */}
+                                  <button
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={() => handleFlagReplay(item, false)}
+                                    className={`px-2.5 py-1 rounded-lg font-bold text-[11px] border transition cursor-pointer flex items-center gap-1 ${
+                                      isItemFlagged
+                                        ? 'bg-amber-400/15 text-amber-300 border-amber-400/45'
+                                        : 'bg-[#081120] text-rose-300 hover:text-rose-200 border-rose-800/60'
+                                    }`}
+                                    title="Flag an issue on this replay for diagnostic analysis"
+                                  >
+                                    <span>🚩</span>
+                                    <span>{isItemFlagged ? 'Flagged ✓' : 'Flag'}</span>
+                                  </button>
+
+                                  {/* Admin-Only Promote to @Featured */}
+                                  {isAdminOwner && (
+                                    <button
+                                      type="button"
+                                      disabled={isBusy}
+                                      onClick={() => handlePromoteToFeatured(item)}
+                                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] border transition cursor-pointer flex items-center gap-1 ${
+                                        item.featuredShareId
+                                          ? 'bg-amber-400/20 text-amber-200 border-amber-400/50'
+                                          : 'bg-teal-500/15 text-teal-300 hover:bg-teal-500/25 border-teal-400/50'
+                                      }`}
+                                      title="Admin Only (@sportsfan986): Clone this battle to @Featured Showcase"
+                                    >
+                                      <span>🌟</span>
+                                      <span>
+                                        {item.featuredShareId ? 'Featured ✓' : 'Promote to Featured'}
+                                      </span>
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Delete Replay */}
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={() => handleDeleteReplay(item)}
+                                  className="px-2.5 py-1 rounded-lg font-bold text-[11px] bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-white border border-rose-500/45 transition cursor-pointer flex items-center gap-1"
+                                  title="Permanently delete this replay from your Cloud DVR Vault"
+                                >
+                                  <span>🗑️</span>
+                                  <span>Delete</span>
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -3078,7 +3586,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           {/* Full-Screen Replay Stage */}
           <iframe
             src={`https://dvr.silphscopepvp.com/watch/${selectedWatchReplay.shareId}?embed=1${
-              selectedWatchReplay.highlightSec ? `&t=${selectedWatchReplay.highlightSec}` : ''
+              selectedWatchSeekSec > 0 ? `&t=${selectedWatchSeekSec}` : ''
             }`}
             title="SilphScope Replay Theater"
             className="w-full h-full flex-1 border-none block bg-black"

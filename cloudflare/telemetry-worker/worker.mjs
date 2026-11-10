@@ -2619,29 +2619,52 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       display: flex;
     }
     .chips-row {
-      display: flex;
+      display: none;
       flex-wrap: nowrap;
+      align-items: center;
       gap: 4px;
       overflow-x: auto;
-      padding-bottom: 2px;
+      padding: 1px 0 2px;
       scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    .chips-row.has-events {
+      display: flex;
     }
     .chips-row::-webkit-scrollbar { display: none; }
+    .chips-label {
+      font-size: 9.5px;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: #5eead4;
+      white-space: nowrap;
+      flex-shrink: 0;
+      padding-right: 2px;
+    }
     .event-chip {
-      font-size: 10.5px;
-      padding: 2px 8px;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
       border-radius: 999px;
-      background: rgba(8, 17, 32, 0.92);
+      background: rgba(8, 17, 32, 0.94);
       border: 1px solid var(--border);
-      color: var(--muted);
+      color: #cbd5e1;
       cursor: pointer;
       white-space: nowrap;
       flex-shrink: 0;
+      transition: border-color 0.15s, background 0.15s, color 0.15s;
     }
-    .event-chip:hover {
+    .event-chip.chip-charge { border-color: rgba(45, 212, 191, 0.42); color: #99f6e4; }
+    .event-chip.chip-swap { border-color: rgba(56, 189, 248, 0.42); color: #bae6fd; }
+    .event-chip.chip-shield { border-color: rgba(168, 85, 247, 0.45); color: #e9d5ff; }
+    .event-chip.chip-faint { border-color: rgba(244, 63, 94, 0.45); color: #fecdd3; }
+    .event-chip.chip-anomaly { border-color: rgba(250, 204, 21, 0.5); color: #fef08a; }
+    .event-chip:hover, .event-chip.active-chip {
       border-color: var(--accent);
-      color: var(--text);
-      background: rgba(45, 212, 191, 0.2);
+      color: #ffffff;
+      background: rgba(45, 212, 191, 0.28);
+      box-shadow: 0 0 8px rgba(45, 212, 191, 0.28);
     }
   </style>
 </head>
@@ -2694,9 +2717,11 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
         <div style="display:flex;gap:3px;align-items:center">
           <button onclick="setHudMode(hudMode === 'off' ? 'live' : 'off')" id="mode-live" class="active">👁️ HUD</button>
           <button onclick="toggleHudPos()" id="btn-pos" title="Move HUD Top/Bottom">⬆️ Top</button>
+          <button onclick="shareCurrentReplayMoment()" id="btn-share-moment" title="Share Replay Link">📤 Share</button>
           <button onclick="toggleToolsDrawer()" id="btn-tools-toggle" title="More HUD, Jump & Diagnostic Options">⚙️ Tools</button>
         </div>
       </div>
+      <div class="chips-row" id="event-chips"></div>
       <div class="tools-drawer" id="tools-drawer">
         <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;justify-content:space-between">
           <div style="display:flex;gap:3px;flex-wrap:wrap;align-items:center">
@@ -2715,7 +2740,6 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
             <button id="btn-export" onclick="exportWithHud()">💾 Export</button>
           </div>
         </div>
-        <div class="chips-row" id="event-chips"></div>
       </div>
     </div>
   </main>
@@ -4499,6 +4523,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       } catch (e) {
         console.error('syncHudFrame error:', e);
       }
+      updateActiveEventChip(effectiveRealSec);
     }
 
     function scrubVideo(val) {
@@ -4586,49 +4611,247 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       }
     }
 
-    function buildEventChips() {
-      const container = document.getElementById('event-chips');
-      container.innerHTML = '';
-      if (summaryHeader && Array.isArray(summaryHeader.timelineEvents) && summaryHeader.timelineEvents.length > 0) {
-        for (const ev of summaryHeader.timelineEvents) {
-          const sec = Number(ev.t) || 0;
-          const jumpSec = Math.max(0, sec - 2.0);
-          const typeStr = String(ev.type || '');
-          const icon = typeStr.includes('CHARGE') ? '⚡' : typeStr.includes('SWAP') ? '🔄' : (typeStr.includes('FAINT') || typeStr.includes('KO')) ? '💀' : '📌';
-          const detail = ev.inferredMoveName || ev.pokemonIn || ev.pokemonFainted || ev.activePokemon || ev.move || ev.species || typeStr;
-          const label = icon + ' ' + sec.toFixed(1) + 's ' + String(ev.actor || '').toUpperCase() + ': ' + detail;
-          addChip(container, label, jumpSec);
-        }
+    function shareCurrentReplayMoment() {
+      const curRealSec = Math.round((video.currentTime || 0) * mp4TimeCompressionRatio);
+      const baseUrl = window.location.origin + '/watch/' + encodeURIComponent(SHARE_ID || '');
+      const shareUrl = curRealSec >= 3 ? (baseUrl + '?t=' + curRealSec) : baseUrl;
+      const shareTitle = 'SilphScope DVR • ' + (SHARE_MATCHUP || SHARE_LEAGUE || 'Battle Replay');
+      if (navigator.share) {
+        navigator.share({ title: shareTitle, text: shareTitle, url: shareUrl }).catch(() => {});
         return;
       }
-      let prevU = '', prevO = '', prevBanner = '';
-      for (const f of frames) {
-        const sec = (f.relTimeMs || 0) / 1000;
-        const jumpSec = Math.max(0, sec - 2.0);
-        if (f.moveBannerText && f.moveBannerText !== prevBanner) {
-          prevBanner = f.moveBannerText;
-          addChip(container, '⚡ ' + sec.toFixed(1) + 's ' + f.moveBannerText.slice(0, 26), jumpSec);
+      try {
+        navigator.clipboard.writeText(shareUrl);
+        const btn = document.getElementById('btn-share-moment');
+        if (btn) {
+          const orig = btn.textContent;
+          btn.textContent = '✅ Copied';
+          setTimeout(() => { btn.textContent = orig; }, 1800);
         }
-        if (f.userActiveSpecies && prevU && f.userActiveSpecies !== prevU) {
-          addChip(container, '🔄 ' + sec.toFixed(1) + 's U→' + f.userActiveSpecies, jumpSec);
-        }
-        if (f.oppActiveSpecies && prevO && f.oppActiveSpecies !== prevO) {
-          addChip(container, '🔄 ' + sec.toFixed(1) + 's O→' + f.oppActiveSpecies, jumpSec);
-        }
-        if (f.userActiveSpecies) prevU = f.userActiveSpecies;
-        if (f.oppActiveSpecies) prevO = f.oppActiveSpecies;
+      } catch (_) {
+        prompt('Copy Replay Link:', shareUrl);
       }
     }
 
-    function addChip(container, label, jumpSec) {
+    let renderedEventChipList = [];
+    function updateActiveEventChip(curSec) {
+      if (!renderedEventChipList.length) return;
+      let activeIdx = -1;
+      for (let i = 0; i < renderedEventChipList.length; i++) {
+        if (curSec + 0.6 >= renderedEventChipList[i].eventSec) {
+          activeIdx = i;
+        } else {
+          break;
+        }
+      }
+      for (let i = 0; i < renderedEventChipList.length; i++) {
+        const el = renderedEventChipList[i].el;
+        const shouldActive = i === activeIdx && Math.abs(curSec - renderedEventChipList[i].eventSec) <= 4.5;
+        if (shouldActive && !el.classList.contains('active-chip')) {
+          el.classList.add('active-chip');
+          try { el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }); } catch (_) {}
+        } else if (!shouldActive && el.classList.contains('active-chip')) {
+          el.classList.remove('active-chip');
+        }
+      }
+    }
+
+    function shortActorTag(actor) {
+      const a = String(actor || '').toUpperCase();
+      if (a === 'USER' || a === 'U' || a === 'PLAYER') return 'U';
+      if (a === 'OPP' || a === 'OPPONENT' || a === 'O') return 'O';
+      return a ? a.slice(0, 3) : '';
+    }
+
+    function buildEventChips() {
+      const container = document.getElementById('event-chips');
+      if (!container) return;
+      container.innerHTML = '';
+      renderedEventChipList = [];
+      const collected = [];
+
+      function hasNearbyEvent(kind, actorTag, sec, windowSec) {
+        return collected.some(e =>
+          e.kind === kind &&
+          (!actorTag || !e.actor || e.actor === actorTag) &&
+          Math.abs(e.sec - sec) <= windowSec
+        );
+      }
+
+      // 1. Structured timelineEvents from BATTLE_DVR_SUMMARY_HEADER
+      if (summaryHeader && Array.isArray(summaryHeader.timelineEvents)) {
+        for (const ev of summaryHeader.timelineEvents) {
+          const sec = Number(ev.t) || 0;
+          const typeStr = String(ev.type || '').toUpperCase();
+          const actor = shortActorTag(ev.actor);
+          if (typeStr.includes('CHARGE')) {
+            const mv = ev.inferredMoveName || ev.move || 'Charged Move';
+            const shTag = ev.shielded ? ' 🛡️' : '';
+            collected.push({
+              sec,
+              kind: 'charge',
+              actor,
+              label: '⚡ ' + sec.toFixed(1) + 's ' + (actor ? actor + ': ' : '') + mv + shTag
+            });
+          } else if (typeStr.includes('SHIELD')) {
+            if (!hasNearbyEvent('charge', '', sec, 2.5)) {
+              collected.push({
+                sec,
+                kind: 'shield',
+                actor,
+                label: '🛡️ ' + sec.toFixed(1) + 's ' + (actor || '') + ' Shield'
+              });
+            }
+          } else if (typeStr.includes('SWAP') || typeStr.includes('SWITCH')) {
+            const pokeIn = ev.pokemonIn || ev.activePokemon || ev.species || 'Swap';
+            collected.push({
+              sec,
+              kind: 'swap',
+              actor,
+              label: '🔄 ' + sec.toFixed(1) + 's ' + (actor ? actor + '→' : '→') + pokeIn
+            });
+          } else if (typeStr.includes('FAINT') || typeStr.includes('KO')) {
+            const pokeKo = ev.pokemonFainted || ev.activePokemon || ev.species || 'KO';
+            collected.push({
+              sec,
+              kind: 'faint',
+              actor,
+              label: '💀 ' + sec.toFixed(1) + 's ' + (actor ? actor + ': ' : '') + pokeKo
+            });
+          } else {
+            const detail = ev.inferredMoveName || ev.pokemonIn || ev.pokemonFainted || ev.activePokemon || typeStr;
+            collected.push({
+              sec,
+              kind: 'other',
+              actor,
+              label: '📌 ' + sec.toFixed(1) + 's ' + (actor ? actor + ': ' : '') + detail
+            });
+          }
+        }
+      }
+
+      // 2. Anomalies from BATTLE_DVR_SUMMARY_HEADER
+      if (summaryHeader && Array.isArray(summaryHeader.anomalies)) {
+        for (const an of summaryHeader.anomalies) {
+          const sec = Number(an.t ?? (an.elapsedMs ? an.elapsedMs / 1000 : 0)) || 0;
+          if (sec <= 0) continue;
+          const desc = String(an.move || an.type || an.reason || 'Anomaly').slice(0, 22);
+          if (!hasNearbyEvent('anomaly', '', sec, 2.0)) {
+            collected.push({
+              sec,
+              kind: 'anomaly',
+              actor: shortActorTag(an.actor || ''),
+              label: '⚠️ ' + sec.toFixed(1) + 's ' + desc
+            });
+          }
+        }
+      }
+
+      // 3. Frame-derived swaps, move banners & shield drops (fills gaps when timelineEvents was partial or absent)
+      let prevU = '', prevO = '', prevBanner = '';
+      let prevUShields = null, prevOShields = null;
+      let lastBannerSec = -10, lastUSwapSec = -10, lastOSwapSec = -10;
+      for (const f of frames) {
+        const sec = (f.relTimeMs || 0) / 1000;
+        const banner = String(f.moveBannerText || '').replace(/\\s+/g, ' ').trim();
+        if (banner && banner.length >= 4 && banner !== prevBanner && (sec - lastBannerSec) > 2.5) {
+          prevBanner = banner;
+          lastBannerSec = sec;
+          if (!hasNearbyEvent('charge', '', sec, 3.2)) {
+            const usedMatch = banner.match(/used\\s+([^!]+)/i);
+            const shortBanner = usedMatch ? usedMatch[1].trim() : banner.slice(0, 24);
+            collected.push({
+              sec,
+              kind: 'charge',
+              actor: '',
+              label: '⚡ ' + sec.toFixed(1) + 's ' + shortBanner
+            });
+          }
+        }
+        const curU = String(f.userActiveSpecies || '').trim();
+        if (curU && prevU && curU !== prevU && (sec - lastUSwapSec) > 2.0) {
+          lastUSwapSec = sec;
+          if (!hasNearbyEvent('swap', 'U', sec, 3.0) && !hasNearbyEvent('faint', 'U', sec, 3.0)) {
+            collected.push({
+              sec,
+              kind: 'swap',
+              actor: 'U',
+              label: '🔄 ' + sec.toFixed(1) + 's U→' + curU
+            });
+          }
+        }
+        const curO = String(f.oppActiveSpecies || '').trim();
+        if (curO && prevO && curO !== prevO && (sec - lastOSwapSec) > 2.0) {
+          lastOSwapSec = sec;
+          if (!hasNearbyEvent('swap', 'O', sec, 3.0) && !hasNearbyEvent('faint', 'O', sec, 3.0)) {
+            collected.push({
+              sec,
+              kind: 'swap',
+              actor: 'O',
+              label: '🔄 ' + sec.toFixed(1) + 's O→' + curO
+            });
+          }
+        }
+        if (typeof f.userShields === 'number') {
+          if (prevUShields !== null && f.userShields < prevUShields && f.userShields >= 0) {
+            if (!hasNearbyEvent('shield', 'U', sec, 3.0) && !hasNearbyEvent('charge', '', sec, 2.5)) {
+              collected.push({
+                sec,
+                kind: 'shield',
+                actor: 'U',
+                label: '🛡️ ' + sec.toFixed(1) + 's U Shield'
+              });
+            }
+          }
+          prevUShields = f.userShields;
+        }
+        if (typeof f.oppShields === 'number') {
+          if (prevOShields !== null && f.oppShields < prevOShields && f.oppShields >= 0) {
+            if (!hasNearbyEvent('shield', 'O', sec, 3.0) && !hasNearbyEvent('charge', '', sec, 2.5)) {
+              collected.push({
+                sec,
+                kind: 'shield',
+                actor: 'O',
+                label: '🛡️ ' + sec.toFixed(1) + 's O Shield'
+              });
+            }
+          }
+          prevOShields = f.oppShields;
+        }
+        if (curU) prevU = curU;
+        if (curO) prevO = curO;
+      }
+
+      collected.sort((a, b) => a.sec - b.sec);
+
+      if (collected.length === 0) {
+        container.classList.remove('has-events');
+        return;
+      }
+
+      container.classList.add('has-events');
+      const hdr = document.createElement('span');
+      hdr.className = 'chips-label';
+      hdr.textContent = '⏭ Events:';
+      container.appendChild(hdr);
+
+      for (const item of collected) {
+        const jumpSec = Math.max(0, item.sec - 1.5);
+        addChip(container, item.label, jumpSec, item.sec, item.kind);
+      }
+    }
+
+    function addChip(container, label, jumpSec, eventSec = 0, kind = 'other') {
       const chip = document.createElement('span');
-      chip.className = 'event-chip';
+      chip.className = 'event-chip chip-' + kind;
       chip.textContent = label;
+      chip.title = 'Jump to ' + jumpSec.toFixed(1) + 's';
       chip.onclick = () => {
         video.currentTime = jumpSec / mp4TimeCompressionRatio;
         syncHudFrame();
       };
       container.appendChild(chip);
+      renderedEventChipList.push({ el: chip, eventSec: eventSec || jumpSec });
     }
 
     async function exportWithHud() {
@@ -5785,8 +6008,10 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
             starControl +
             pubControl +
             featControl +
-            '<button onclick="copyLink(\\'' + safeShareUrlJs + '\\')" style="padding:7px 10px;font-size:12px;background:#081120;border-color:#19304e;color:#ecfeff" title="Anyone with this direct link can watch this replay">🔗 Copy Link</button>' +
+            '<button onclick="shareReplayLink(\\'' + safeShareUrlJs + '\\', \\'' + safeMatchupJs + '\\')" style="padding:7px 10px;font-size:12px;background:#081120;border-color:#2dd4bf;color:#99f6e4" title="Share or copy direct replay link">📤 Share</button>' +
+            '<button onclick="copyLink(\\'' + safeShareUrlJs + '\\')" style="padding:7px 10px;font-size:12px;background:#081120;border-color:#19304e;color:#ecfeff" title="Anyone with this direct link can watch this replay">📋 Copy Link</button>' +
             flagControls +
+            (isOwner ? '<button onclick="deleteVaultReplay(\\'' + safeBattleIdJs + '\\', \\'' + safeShareIdJs + '\\')" style="padding:7px 10px;font-size:12px;background:rgba(190,18,60,0.16);border-color:#f43f5e;color:#fda4af" title="Permanently delete this replay from your Cloud DVR Vault">🗑️ Delete</button>' : '') +
           '</div>' +
         '</div>';
       }).join('');
@@ -5874,8 +6099,53 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     }
 
     function copyLink(url) {
-      navigator.clipboard.writeText(url);
-      alert('Copied Direct Share URL (viewable by anyone with the link): ' + url);
+      const fullUrl = url.startsWith('http') ? url : (window.location.origin + url);
+      navigator.clipboard.writeText(fullUrl);
+      alert('Copied Direct Share URL (viewable by anyone with the link): ' + fullUrl);
+    }
+
+    function shareReplayLink(url, matchupTitle) {
+      const fullUrl = url.startsWith('http') ? url : (window.location.origin + url);
+      const title = 'SilphScope DVR • ' + (matchupTitle || 'Battle Replay');
+      if (navigator.share) {
+        navigator.share({ title, text: title, url: fullUrl }).catch(() => {});
+        return;
+      }
+      copyLink(fullUrl);
+    }
+
+    async function deleteVaultReplay(battleId, shareId) {
+      if (!confirm('🗑️ Permanently delete this replay from your Cloud DVR Vault? This cannot be undone.')) return;
+      const user = (currentVaultData && currentVaultData.screenName) || document.getElementById('inp-user').value.trim();
+      const key = document.getElementById('inp-key').value.trim();
+      const email = document.getElementById('inp-email').value.trim();
+      try {
+        const res = await fetch('/v1/replays/delete?battleId=' + encodeURIComponent(battleId || '') + '&shareId=' + encodeURIComponent(shareId || ''), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-SilphScope-Client-Key': CLIENT_KEY,
+            'X-Trainer-Screen-Name': user,
+            'X-SilphScope-Unlock-Key': key,
+            'X-Vault-Session': sessionToken,
+            'X-Claim-Email': email
+          },
+          body: JSON.stringify({
+            battleId,
+            shareId,
+            unlockKey: key,
+            sessionToken,
+            claimEmail: email
+          })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          return alert(data.error || 'Failed to delete replay.');
+        }
+        loadVault();
+      } catch (e) {
+        alert('Error deleting replay: ' + e.message);
+      }
     }
 
     async function flagVaultReplay(battleId, shareId, existingNote, league, matchupSummary) {
@@ -6177,8 +6447,8 @@ export default {
     }
 
     if (isGetOrHead && path === '/sw.js') {
-      const swCode = `// SilphScope DVR PWA Service Worker (v7.32)
-const CACHE_NAME = 'silphscope-dvr-pwa-v732';
+      const swCode = `// SilphScope DVR PWA Service Worker (v7.33)
+const CACHE_NAME = 'silphscope-dvr-pwa-v733';
 const STATIC_ASSETS = ['/', '/index.html', '/manifest.json', '/manifest.webmanifest', '/favicon.svg', '/pwa-icon-192.svg', '/pwa-icon-512.svg', '/overlay.html'];
 self.addEventListener('install', (e) => { self.skipWaiting(); e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(STATIC_ASSETS).catch(() => {}))); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((keys) => Promise.all(keys.map((k) => k !== CACHE_NAME && caches.delete(k)))).then(() => self.clients.claim())); });
@@ -9423,8 +9693,8 @@ self.addEventListener('fetch', (e) => {
       return jsonResponse(result, 200, request, true);
     }
 
-    // 10. Delete a Cloud Replay (`DELETE /v1/replays/delete`) — Strictly Owner-Only
-    if (request.method === 'DELETE' && path === '/v1/replays/delete') {
+    // 10. Delete a Cloud Replay (`DELETE` or `POST /v1/replays/delete`) — Strictly Owner-Only
+    if ((request.method === 'DELETE' || request.method === 'POST') && path === '/v1/replays/delete') {
       const providedKey = (
         request.headers.get('X-SilphScope-Client-Key') ||
         request.headers.get('X-Device-Ingest-Token') ||
@@ -9437,11 +9707,20 @@ self.addEventListener('fetch', (e) => {
         screenName = auth.screenName;
       }
 
+      let body = {};
+      try {
+        const ct = request.headers.get('content-type') || '';
+        if (ct.includes('application/json') || request.method === 'POST') {
+          body = await request.json();
+        }
+      } catch (_) {}
+
       const ownerAuth = await authenticateVaultOwner(
         request,
         env,
         env.TELEMETRY_KV,
-        screenName
+        screenName,
+        body
       );
       if (!ownerAuth.isOwner) {
         return jsonResponse(
@@ -9453,8 +9732,8 @@ self.addEventListener('fetch', (e) => {
       }
 
       const resolvedName = ownerAuth.screenName || screenName;
-      const targetBattleId = url.searchParams.get('battleId') || '';
-      const targetShareId = url.searchParams.get('shareId') || '';
+      const targetBattleId = String(url.searchParams.get('battleId') || body.battleId || '').trim();
+      const targetShareId = String(url.searchParams.get('shareId') || body.shareId || '').trim();
       const indexObj = await loadUserReplayIndex(env.TELEMETRY_KV, resolvedName);
       const idx = (indexObj.items || []).findIndex(
         (i) =>
