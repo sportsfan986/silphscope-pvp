@@ -3679,6 +3679,18 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
             <button id="btn-unflag-issue-hdr" onclick="unflagCurrentIssue()" style="display:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'inline-flex' : 'none'}">↩️ Unflag</button>
             <button id="btn-export" onclick="exportWithHud()">💾 Export</button>
           </div>
+          <div id="compact-customizer-bar" style="display:none;flex-wrap:wrap;align-items:center;gap:4px;padding:5px 6px;margin-top:4px;background:rgba(8,17,32,0.88);border:1px solid rgba(45,212,191,0.32);border-radius:7px">
+            <span style="font-size:9.5px;font-weight:800;color:#2dd4bf;margin-right:2px">🧩 Compact:</span>
+            <button type="button" id="cmp-pre-minimal" onclick="applyReplayCompactPreset('minimal')" style="font-size:9.5px;padding:2px 6px">Minimal</button>
+            <button type="button" id="cmp-pre-moves" onclick="applyReplayCompactPreset('coach_moves')" style="font-size:9.5px;padding:2px 6px">Coach+Opp</button>
+            <button type="button" id="cmp-pre-full" onclick="applyReplayCompactPreset('full_lite')" style="font-size:9.5px;padding:2px 6px">Full-Lite</button>
+            <span style="color:#475569;font-size:10px">|</span>
+            <button type="button" id="cmp-chip-opp" onclick="toggleReplayCompactChip('showOppAttacks')" style="font-size:9.5px;padding:2px 6px">⚔️ Opp</button>
+            <button type="button" id="cmp-chip-my" onclick="toggleReplayCompactChip('showMyAttacks')" style="font-size:9.5px;padding:2px 6px">⚡ Mine</button>
+            <button type="button" id="cmp-chip-coach" onclick="toggleReplayCompactChip('showCoach')" style="font-size:9.5px;padding:2px 6px">🧠 Coach</button>
+            <button type="button" id="cmp-chip-matrix" onclick="toggleReplayCompactChip('showMatrix')" style="font-size:9.5px;padding:2px 6px">📊 Matrix</button>
+            <button type="button" id="cmp-chip-pacing" onclick="toggleReplayCompactChip('showPacing')" style="font-size:9.5px;padding:2px 6px">⏱️ Pacing</button>
+          </div>
           <div class="timeline-section" id="timeline-section">
             <div class="chips-header">
               <span id="chips-count-label">⏭ Key Events Timeline</span>
@@ -3749,6 +3761,24 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
     let sideBySide = false;
     let selectedSpeed = 1;
     let mp4TimeCompressionRatio = 1.0;
+    let compactHudConfig = {
+      showOppAttacks: false,
+      showMyAttacks: false,
+      showCoach: true,
+      showMatrix: false,
+      showPacing: true,
+      toolbarMode: 'auto'
+    };
+    try {
+      const savedCmp = JSON.parse(localStorage.getItem('sspvp_compact_hud_cfg') || 'null');
+      if (savedCmp && typeof savedCmp === 'object') {
+        if (savedCmp.showOppAttacks !== undefined) compactHudConfig.showOppAttacks = !!savedCmp.showOppAttacks;
+        if (savedCmp.showMyAttacks !== undefined) compactHudConfig.showMyAttacks = !!savedCmp.showMyAttacks;
+        if (savedCmp.showCoach !== undefined) compactHudConfig.showCoach = !!savedCmp.showCoach;
+        if (savedCmp.showMatrix !== undefined) compactHudConfig.showMatrix = !!savedCmp.showMatrix;
+        if (savedCmp.showPacing !== undefined) compactHudConfig.showPacing = !!savedCmp.showPacing;
+      }
+    } catch (_) {}
 
     function updateEffectivePlaybackRate() {
       const rate = Math.max(0.1, Math.min(4.0, selectedSpeed / mp4TimeCompressionRatio));
@@ -3875,10 +3905,60 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       const el = document.getElementById('spd-' + id);
       if (el) el.classList.add('active');
     }
+    function refreshCompactCustomizerUi() {
+      const bar = document.getElementById('compact-customizer-bar');
+      if (bar) bar.style.display = hudMode === 'compact' ? 'flex' : 'none';
+      const c = compactHudConfig;
+      const chipMap = [
+        ['cmp-chip-opp', c.showOppAttacks],
+        ['cmp-chip-my', c.showMyAttacks],
+        ['cmp-chip-coach', c.showCoach],
+        ['cmp-chip-matrix', c.showMatrix],
+        ['cmp-chip-pacing', c.showPacing]
+      ];
+      chipMap.forEach(([id, on]) => {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle('active', !!on);
+      });
+      const isMinimal = !c.showOppAttacks && !c.showMyAttacks && c.showCoach && !c.showMatrix && c.showPacing;
+      const isCoachMoves = c.showOppAttacks && !c.showMyAttacks && c.showCoach && !c.showMatrix && c.showPacing;
+      const isFullLite = c.showOppAttacks && c.showMyAttacks && c.showCoach && c.showMatrix && c.showPacing;
+      const pMin = document.getElementById('cmp-pre-minimal');
+      const pMov = document.getElementById('cmp-pre-moves');
+      const pFul = document.getElementById('cmp-pre-full');
+      if (pMin) pMin.classList.toggle('active', isMinimal);
+      if (pMov) pMov.classList.toggle('active', isCoachMoves);
+      if (pFul) pFul.classList.toggle('active', isFullLite);
+    }
+    function persistAndPushCompactHudConfig() {
+      try { localStorage.setItem('sspvp_compact_hud_cfg', JSON.stringify(compactHudConfig)); } catch (_) {}
+      refreshCompactCustomizerUi();
+      try {
+        if (hudIframe.contentWindow && typeof hudIframe.contentWindow.setCompactHudConfig === 'function') {
+          hudIframe.contentWindow.setCompactHudConfig(compactHudConfig);
+        }
+      } catch (_) {}
+      syncHudFrame();
+    }
+    function toggleReplayCompactChip(key) {
+      compactHudConfig[key] = !compactHudConfig[key];
+      persistAndPushCompactHudConfig();
+    }
+    function applyReplayCompactPreset(preset) {
+      if (preset === 'coach_moves') {
+        compactHudConfig = { showOppAttacks: true, showMyAttacks: false, showCoach: true, showMatrix: false, showPacing: true, toolbarMode: 'auto' };
+      } else if (preset === 'full_lite') {
+        compactHudConfig = { showOppAttacks: true, showMyAttacks: true, showCoach: true, showMatrix: true, showPacing: true, toolbarMode: 'auto' };
+      } else {
+        compactHudConfig = { showOppAttacks: false, showMyAttacks: false, showCoach: true, showMatrix: false, showPacing: true, toolbarMode: 'auto' };
+      }
+      persistAndPushCompactHudConfig();
+    }
     function setHudMode(m) {
       hudMode = m;
       ['live','compact','diag','off'].forEach(k => { const b = document.getElementById('mode-' + k); if (b) b.classList.toggle('active', k === m); });
       hudLayer.style.display = m === 'off' ? 'none' : 'block';
+      refreshCompactCustomizerUi();
       syncHudFrame();
     }
     function toggleShieldHud() {
@@ -5454,6 +5534,9 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
         }
         if (typeof win.setReplayShieldOverlayEnabled === 'function') {
           win.setReplayShieldOverlayEnabled(showShieldHud);
+        }
+        if (typeof win.setCompactHudConfig === 'function') {
+          win.setCompactHudConfig(compactHudConfig);
         }
         win.updateBattleData(payload);
         if (typeof win.setReplayHudMode === 'function') {

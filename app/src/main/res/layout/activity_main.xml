@@ -2764,51 +2764,198 @@
                     android:textColor="#ffffff" />
             </LinearLayout>
 
-            <!-- 3x3 Matchup Matrix Visibility in Compact HUD Mode (Default Hidden) -->
+            <!-- v7.32: Modular Compact HUD Customizer (3 Quick Presets + 6 Multi-Select Element Chips) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
+                android:orientation="vertical"
                 android:layout_marginTop="8dp"
                 android:paddingTop="8dp"
                 android:background="#0f172a"
                 android:paddingHorizontal="10dp"
-                android:paddingBottom="8dp">
+                android:paddingBottom="10dp">
 
-                <LinearLayout
-                    android:layout_width="0dp"
+                <TextView
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:paddingEnd="8dp">
+                    android:text="🧩 Modular Compact HUD Customizer"
+                    android:textColor="#34d399"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="📊 3x3 Matchup Matrix in Compact HUD"
-                        android:textColor="#34d399"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/text_compact_hud_matrix_desc"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="Preset: Minimal (Def) • Header + 2-Line Coach + Move Pacing + Auto Toolbar"
+                    android:textColor="#94a3b8"
+                    android:textSize="10sp" />
 
-                    <TextView
-                        android:id="@+id/text_compact_hud_matrix_desc"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Default: Hidden in Compact HUD (Header + 2-Line Coach + Shield Card only)"
-                        android:textColor="#94a3b8"
-                        android:textSize="10sp" />
+                <!-- 1-Tap Presets Row -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="6dp">
+
+                    <Button
+                        android:id="@+id/btn_compact_preset_minimal"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:paddingHorizontal="4dp"
+                        android:text="Minimal (Def)"
+                        android:textAllCaps="false"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#0d9488"
+                        android:textColor="#ffffff" />
+
+                    <Button
+                        android:id="@+id/btn_compact_preset_coach_moves"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:paddingHorizontal="4dp"
+                        android:text="Coach + Opp"
+                        android:textAllCaps="false"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#ffffff" />
+
+                    <Button
+                        android:id="@+id/btn_compact_preset_full_lite"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:paddingHorizontal="4dp"
+                        android:text="Full-Lite"
+                        android:textAllCaps="false"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#ffffff" />
                 </LinearLayout>
 
-                <Button
-                    android:id="@+id/btn_toggle_compact_hud_matrix"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:text="Matrix Off (Def)"
-                    android:textSize="10.5sp"
-                    android:textStyle="bold"
-                    android:backgroundTint="#334155"
-                    android:textColor="#ffffff" />
+                <!-- 6 Independent Element Chips Row 1: Opp Attacks | My Attacks | 2-Line Coach -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="6dp">
+
+                    <Button
+                        android:id="@+id/btn_compact_chip_opp_attacks"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:paddingHorizontal="3dp"
+                        android:text="⚔️ Opp: OFF"
+                        android:textAllCaps="false"
+                        android:textSize="9.8sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#ffffff" />
+
+                    <Button
+                        android:id="@+id/btn_compact_chip_my_attacks"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:paddingHorizontal="3dp"
+                        android:text="⚡ Mine: OFF"
+                        android:textAllCaps="false"
+                        android:textSize="9.8sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#ffffff" />
+
+                    <Button
+                        android:id="@+id/btn_compact_chip_coach"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:paddingHorizontal="3dp"
+                        android:text="🧠 Coach: ON"
+                        android:textAllCaps="false"
+                        android:textSize="9.8sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#0d9488"
+                        android:textColor="#ffffff" />
+                </LinearLayout>
+
+                <!-- 6 Independent Element Chips Row 2: 3x3 Matrix | Move Pacing | DVR / Action Bar -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="4dp">
+
+                    <Button
+                        android:id="@+id/btn_toggle_compact_hud_matrix"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:paddingHorizontal="3dp"
+                        android:text="📊 Matrix: OFF"
+                        android:textAllCaps="false"
+                        android:textSize="9.8sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#334155"
+                        android:textColor="#ffffff" />
+
+                    <Button
+                        android:id="@+id/btn_compact_chip_pacing"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:paddingHorizontal="3dp"
+                        android:text="⏱️ Pacing: ON"
+                        android:textAllCaps="false"
+                        android:textSize="9.8sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#0d9488"
+                        android:textColor="#ffffff" />
+
+                    <Button
+                        android:id="@+id/btn_compact_chip_toolbar"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:paddingHorizontal="3dp"
+                        android:text="🎥 Bar: Auto"
+                        android:textAllCaps="false"
+                        android:textSize="9.8sp"
+                        android:textStyle="bold"
+                        android:backgroundTint="#0d9488"
+                        android:textColor="#ffffff" />
+                </LinearLayout>
             </LinearLayout>
 
             <!-- v4.00: Attack Incoming! Shield Decision Overlay Setting (Default ON) -->

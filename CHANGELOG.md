@@ -1,4 +1,20 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.31`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.32`)
+
+---
+
+## v7.32 (2026-11-11) — Modular Compact HUD Customizer, CMP-Tie Post-Charge HP Commit Precision, DVR Timeline Pruning & Retroactive Telemetry Classifier
+*Live Android APK, Cloudflare Worker & Web Simulator release (`v7.32`, `versionCode = 1732`) introducing the Modular Compact HUD Customizer across Live Overlay, In-App/Web DVR Replay Theater, and Cloudflare D1 Multi-Device Sync, fixing 1-frame CMP-tie post-charge HP commits during upward camera-zoom shifts, pruning post-battle DVR timeline noise, and updating the local nightly telemetry retroactive classifier.*
+
+- **v7.32 — Feature 1: Modular Compact HUD Customizer (`overlay.html`, `OverlayService.kt`, `MainActivity.kt`, `activity_main.xml`, `GitHubCloudSync.kt`, `worker.mjs`)**:
+  - Replaced the single Compact Matrix toggle in Settings with **🧩 Modular Compact HUD Customizer** featuring **3 1-Tap Presets** (`Minimal (Def)`, `Coach + Opp`, `Full-Lite`) and **6 Independent Multi-Select Element Chips** (`⚔️ Opp Attacks`, `⚡ My Attacks`, `🧠 2-Line Coach`, `📊 3x3 Matrix`, `⏱️ Move Pacing`, and `🎥 DVR / Action Bar: Auto / On / Off`).
+  - Added a mirrored 1-line **Compact Move Pacing Strip** (`#sky-compact-pacing-strip`: live Player/Opponent Swap Clocks + CMP badges) in Compact HUD whenever `Move Pacing` is enabled and either attack table is hidden, while suppressing tactical border blink animations when `Move Pacing` is turned off.
+  - Broadcasts changes immediately to the live floating `WebView` (`setCompactHudConfig`) with zero service restart, injects into In-App & Web DVR Replay Theater (`/watch/:shareId`), and syncs all 6 preferences across devices via **Cloudflare D1 Multi-Device Vault Sync**.
+- **v7.32 — Fix 1: CMP-Tie 1-Frame Post-Charge HP Commit Precision (`OverlayService.kt` — `log-1794376642078-231`)**:
+  - Fixed an edge case where an unshielded charged move (e.g. Mimikyu Shadow Sneak dropping Virizion `42% -> 9%`) immediately followed by an opponent CMP-tie `Attack incoming!` prompt left `oppHpRowY` camera-zoom shifted after `pendingChargedAttackActor` cleared on the 1-frame transition, holding committed HP frozen during the shield prompt.
+  - Post-charge HP drops (`>= 8%` corroborated by `>= 3` consecutive frames within `3.5s` of charged move completion) now bypass `isPreCutsceneZoomOppDip` / `isPreCutsceneZoomUserDip` symmetrically on both sides and reconcile timeline `CHARGED_ATTACK` events across intervening CMP throws (`12.0s` window).
+- **v7.32 — Fix 2: Post-Battle DVR Timeline Pruning, Web/PWA Auth Cleanup & Nightly Audit Classifier (`worker.mjs`, `HelpTab.tsx`, `MarketingWebsite.tsx`, `scripts/nightly-telemetry-audit.mjs`)**:
+  - Bundled commit `f9a5fb3`: prunes redundant post-battle timeline events in DVR Replay Theater and removes legacy GitHub login UI across Web & PWA in favor of Vault Passwords.
+  - Extended `evaluateRetroactiveResolution()` in `scripts/nightly-telemetry-audit.mjs` through `v7.28`–`v7.32` and aligned model-routing metadata to the **Carbon 5-Tier** hierarchy.
 
 ---
 

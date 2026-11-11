@@ -23,9 +23,24 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.32',
+    codename: 'Modular Compact HUD Customizer, CMP-Tie HP Precision & Clean Replay Timelines',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Modular Compact HUD Customizer with 3 quick presets and 6 independent multi-select element chips synced across Live Overlay, DVR Replay Theater, and Cloudflare D1 Vaults, CMP-tie 1-frame post-charge HP commit precision, and pruned post-battle DVR timelines.',
+    icon: '🧩',
+    accentColor: '#2DD4BF',
+    highlights: [
+      'Modular Compact HUD Customizer: 3 quick presets (Minimal, Coach + Opp, Full-Lite) + 6 independent element chips',
+      'Independently show/hide Opp Attacks, My Attacks, 2-Line Coach, 3x3 Matrix, Move Pacing strip, and DVR/Action Bar',
+      'Instant live WebView updates without restarting the overlay + synced across devices via Cloudflare D1 Vault Sync',
+      'CMP-Tie 1-Frame Post-Charge HP Commit Fix ensuring accurate opponent HP during immediate CMP Attack incoming! prompts',
+      'Pruned post-battle DVR timeline events and streamlined Vault Password web/PWA authentication'
+    ]
+  },
+  {
     version: 'v7.31',
     codename: 'Cloudflare D1 Multi-Device Vault Sync & Global Meta Analytics',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Zero-GitHub multi-device cloud delta synchronization on Cloudflare D1 for Battle Logs, Team Presets, and App Settings with passwordless initial migration, salted PBKDF2 Vault Password security, and structured SQL meta analytics.',
     icon: '☁️',

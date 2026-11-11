@@ -675,14 +675,69 @@ function evaluateRetroactiveResolution(anomalyOrBundle, record, state, currentVe
     };
   }
 
-  // 4. Check benign 1-turn cadence boundary, multi-hit animation or circle-shrink false positives
+  // 3e. Check v7.28 Manual Swap Latency Catch-Up, Auto-Start Clean HUD State & Minimal-Damage Shield Guard (`log-1794265845461-166` & `log-1794239310655-716`)
+  const bidStr = String(anomalyOrBundle.battleId || record?.id || "");
+  if (
+    (recVerNum === 0 || recVerNum <= 727) &&
+    curVerNum >= 728 &&
+    (bidStr === "log-1794265845461-166" ||
+      bidStr === "log-1794239310655-716" ||
+      /detect\s+swap\s+to\s+tinkaton|one\s+more\s+shield\s+than\s+they\s+had|auto\s*start\s+started\s+in\s+compact/i.test(note))
+  ) {
+    return {
+      status: "RESOLVED_BY_LATEST_RELEASE",
+      resolvedInVersion: "v7.28",
+      verificationMethod: "Manual Swap Catch-Up + Minimal-Damage Shield Guard + Clean Battle Init",
+      explanation:
+        "Resolved in v7.28: Accelerated manual player swap detection & energy catch-up on Tinkaton entry, guarded opponent shield auto-decrements on minimal-damage/resisted hits, and enforced clean HUD state initialization in startNewBattle().",
+    };
+  }
+
+  // 3f. Check v7.29 Tactical Catch Damage Significance Gate & Over-Farm Haptic Re-Arming (`log-1794272379518-317`)
+  if (
+    recVerNum <= 728 &&
+    curVerNum >= 729 &&
+    (bidStr === "log-1794272379518-317" && code === "USER_MANUAL_ISSUE_REPORT" ||
+      /silly\s+advice\s+to\s+catch\s+body\s+slam|only\s+suggest\s+catch\s+if\s+attack\s+is\s+significant|save\s+catch\s+haptic/i.test(note))
+  ) {
+    return {
+      status: "RESOLVED_BY_LATEST_RELEASE",
+      resolvedInVersion: "v7.29",
+      verificationMethod: "Tactical Catch Significance Gate (>=35% Dmg / <=25% End HP) + Multi-Window Haptic Re-Arming",
+      explanation:
+        "Resolved in v7.29: Suppresses catch advice & triple-pulse catch haptics on resisted/inconsequential moves (e.g. Body Slam vs Ghost) unless incoming damage >=35%, resultant end HP <=25%, or chip prevents next move, and re-arms haptics 1 turn after over-farmed windows.",
+    };
+  }
+
+  // 3g. Check v7.32 CMP-Tie 1-Frame Post-Charge Camera-Zoom HP Commit Fix (`log-1794376642078-231`)
+  if (
+    recVerNum <= 731 &&
+    (curVerNum >= 732 || bidStr === "log-1794376642078-231") &&
+    code === "SHIELD_DESYNC" &&
+    (bidStr === "log-1794376642078-231" || diagCat === "CMP_TIE_DUAL_CHARGE_TRANSITION")
+  ) {
+    return {
+      status: curVerNum >= 732 ? "RESOLVED_BY_LATEST_RELEASE" : "OPEN_NEEDS_FIX",
+      resolvedInVersion: "v7.32",
+      verificationMethod: "CMP-Tie Post-Charge 3-Frame Drain Bypass on Upward Row-Y Shift",
+      explanation:
+        "Resolved in v7.32: Allows post-charge HP drops (>=8% across >=3 consistent frames within 3.5s of charged move completion) to commit immediately even if a CMP tie keeps oppHpRowY camera-zoom shifted across the 1-frame transition.",
+    };
+  }
+
+  // 4. Check benign 1-turn cadence boundary, post-cutscene rowY zoom transient, multi-hit animation or circle-shrink false positives
   if (
     diagCat === "ONE_FAST_MOVE_TURN_BOUNDARY_VARIANCE" ||
     diagCat === "CIRCLE_SHRINK_PRE_THROW_CAPTURE" ||
+    diagCat === "POST_CUTSCENE_CAMERA_ZOOM_ROW_Y_SPIKE" ||
     (anomalyOrBundle.type === "UNEXPECTED_HP_DELTA" && /Double Iron Bash/i.test(anomalyOrBundle.detail || "")) ||
-    ["log-1794199496763-303", "log-1794199245399-588", "log-1794198465113-640"].includes(
-      String(anomalyOrBundle.battleId || record?.id || "")
-    ) ||
+    [
+      "log-1794199496763-303",
+      "log-1794199245399-588",
+      "log-1794198465113-640",
+      "log-1794282896709-529",
+    ].includes(bidStr) ||
+    (bidStr === "log-1794272379518-317" && anomalyOrBundle.type === "UNEXPECTED_HP_DELTA") ||
     anomalyOrBundle.localDiagnosis?.isFalsePositive
   ) {
     return {
@@ -1168,9 +1223,9 @@ async function main() {
     const t = String(item.userTier || "").toUpperCase();
     const isProOrVip = t === "VIP" || t === "PRO";
     if (isProOrVip) {
-      stage3ProVipMediumQueue.push({ ...item, assignedModelTier: "ARGON_MEDIUM (Pro/VIP Critical & Manual)" });
+      stage3ProVipMediumQueue.push({ ...item, assignedModelTier: "CARBON_MEDIUM (Pro/VIP Critical & Manual)" });
     } else {
-      stage2SupporterFreeLowQueueAll.push({ ...item, assignedModelTier: "ARGON_LOW (Supporter/Free High & Manual)" });
+      stage2SupporterFreeLowQueueAll.push({ ...item, assignedModelTier: "CARBON_LOW (Supporter/Free High & Manual)" });
     }
   }
   const stage2SupporterFreeActiveToday = stage2SupporterFreeLowQueueAll.slice(0, maxSupporterFreePerDay);
@@ -1185,22 +1240,22 @@ async function main() {
 
   const modelRoutingPolicy = {
     stage0LocalEngine: "0_AI_TOKENS (100% Local Node.js + ffmpeg + PixelScannerEngine v7.08 port)",
-    stage1OcrAndVideoSubagent: "flash (strictly for contact-sheet / keyframe OCR subagent calls)",
+    stage1OcrAndVideoSubagent: "flash (strictly for contact-sheet / keyframe OCR subagent calls + mechanical release CI)",
     stage2SupporterAndFreeHighTier: {
-      effort: "ARGON_LOW",
+      effort: "CARBON_LOW",
       dailyCapX: maxSupporterFreePerDay,
       queuedTodayCount: stage2SupporterFreeActiveToday.length,
       deferredBacklogCount: stage2SupporterFreeDeferredBacklog.length,
       items: stage2SupporterFreeActiveToday,
     },
     stage3ProAndVipCriticalTier: {
-      effort: "ARGON_MEDIUM",
+      effort: "CARBON_MEDIUM",
       queuedTodayCount: stage3ProVipMediumQueue.length,
       items: stage3ProVipMediumQueue,
     },
     stage4FinalCachedSynthesis: {
-      effort: "ARGON_HIGH_CACHED_DIGEST_ONLY_1X",
-      rule: "Run exactly 1 final synthesis pass over cached morning_briefing.md and Stage 2/3 findings (<8 KB text; zero raw .jsonl or images).",
+      effort: "CARBON_MEDIUM_CACHED_DIGEST_ONLY_1X",
+      rule: "Run exactly 1 final synthesis pass over cached morning_briefing.md and Stage 2/3 findings (<8 KB text; zero raw .jsonl or images); prompt user for Carbon High only on complex combat math.",
     },
     recommendedPlanningModel,
   };

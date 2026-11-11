@@ -79,6 +79,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textLogOnlyStealthModeDesc: TextView
     private lateinit var btnToggleCompactHudMatrix: Button
     private lateinit var textCompactHudMatrixDesc: TextView
+    private lateinit var btnCompactPresetMinimal: Button
+    private lateinit var btnCompactPresetCoachMoves: Button
+    private lateinit var btnCompactPresetFullLite: Button
+    private lateinit var btnCompactChipOppAttacks: Button
+    private lateinit var btnCompactChipMyAttacks: Button
+    private lateinit var btnCompactChipCoach: Button
+    private lateinit var btnCompactChipPacing: Button
+    private lateinit var btnCompactChipToolbar: Button
     private lateinit var btnToggleShieldDecisionOverlay: Button
     private lateinit var textShieldDecisionOverlayDesc: TextView
     private lateinit var btnToggleHpTracking: Button
@@ -1265,6 +1273,14 @@ class MainActivity : AppCompatActivity() {
         textLogOnlyStealthModeDesc = findViewById(R.id.text_log_only_stealth_mode_desc)
         btnToggleCompactHudMatrix = findViewById(R.id.btn_toggle_compact_hud_matrix)
         textCompactHudMatrixDesc = findViewById(R.id.text_compact_hud_matrix_desc)
+        btnCompactPresetMinimal = findViewById(R.id.btn_compact_preset_minimal)
+        btnCompactPresetCoachMoves = findViewById(R.id.btn_compact_preset_coach_moves)
+        btnCompactPresetFullLite = findViewById(R.id.btn_compact_preset_full_lite)
+        btnCompactChipOppAttacks = findViewById(R.id.btn_compact_chip_opp_attacks)
+        btnCompactChipMyAttacks = findViewById(R.id.btn_compact_chip_my_attacks)
+        btnCompactChipCoach = findViewById(R.id.btn_compact_chip_coach)
+        btnCompactChipPacing = findViewById(R.id.btn_compact_chip_pacing)
+        btnCompactChipToolbar = findViewById(R.id.btn_compact_chip_toolbar)
         btnToggleShieldDecisionOverlay = findViewById(R.id.btn_toggle_shield_decision_overlay)
         textShieldDecisionOverlayDesc = findViewById(R.id.text_shield_decision_overlay_desc)
         btnToggleHpTracking = findViewById(R.id.btn_toggle_hp_tracking)
@@ -2129,23 +2145,112 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        btnToggleCompactHudMatrix.setOnClickListener {
-            val currentShow = prefs.getBoolean(
-                OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX,
-                OverlayService.DEFAULT_COMPACT_HUD_SHOW_MATRIX
-            )
-            val nextShow = !currentShow
-            prefs.edit().putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, nextShow).apply()
+        fun commitAndBroadcastCompactHudPrefs(mutator: SharedPreferences.Editor.() -> Unit) {
+            val ed = prefs.edit()
+            ed.mutator()
+            ed.putLong(OverlayService.PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
+            ed.apply()
             OverlayService.syncTierThresholdsFromPrefs(prefs)
             updateCompactHudMatrixUi()
 
             if (isOverlayRunning) {
                 val updateIntent = Intent(this, OverlayService::class.java).apply {
                     action = OverlayService.ACTION_UPDATE_SETTINGS
-                    putExtra(OverlayService.EXTRA_COMPACT_HUD_SHOW_MATRIX, nextShow)
+                    putExtra(
+                        OverlayService.EXTRA_COMPACT_HUD_SHOW_MATRIX,
+                        prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, OverlayService.DEFAULT_COMPACT_HUD_SHOW_MATRIX)
+                    )
+                    putExtra(
+                        OverlayService.EXTRA_COMPACT_HUD_SHOW_OPP_ATTACKS,
+                        prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS, OverlayService.DEFAULT_COMPACT_HUD_SHOW_OPP_ATTACKS)
+                    )
+                    putExtra(
+                        OverlayService.EXTRA_COMPACT_HUD_SHOW_MY_ATTACKS,
+                        prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS, OverlayService.DEFAULT_COMPACT_HUD_SHOW_MY_ATTACKS)
+                    )
+                    putExtra(
+                        OverlayService.EXTRA_COMPACT_HUD_SHOW_COACH,
+                        prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH, OverlayService.DEFAULT_COMPACT_HUD_SHOW_COACH)
+                    )
+                    putExtra(
+                        OverlayService.EXTRA_COMPACT_HUD_SHOW_PACING,
+                        prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_PACING, OverlayService.DEFAULT_COMPACT_HUD_SHOW_PACING)
+                    )
+                    putExtra(
+                        OverlayService.EXTRA_COMPACT_HUD_TOOLBAR_MODE,
+                        prefs.getString(OverlayService.PREFS_KEY_COMPACT_HUD_TOOLBAR_MODE, OverlayService.DEFAULT_COMPACT_HUD_TOOLBAR_MODE)
+                    )
                 }
                 startService(updateIntent)
             }
+        }
+
+        btnCompactPresetMinimal.setOnClickListener {
+            commitAndBroadcastCompactHudPrefs {
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS, false)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS, false)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH, true)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, false)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_PACING, true)
+                putString(OverlayService.PREFS_KEY_COMPACT_HUD_TOOLBAR_MODE, "auto")
+            }
+        }
+
+        btnCompactPresetCoachMoves.setOnClickListener {
+            commitAndBroadcastCompactHudPrefs {
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS, true)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS, false)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH, true)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, false)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_PACING, true)
+                putString(OverlayService.PREFS_KEY_COMPACT_HUD_TOOLBAR_MODE, "auto")
+            }
+        }
+
+        btnCompactPresetFullLite.setOnClickListener {
+            commitAndBroadcastCompactHudPrefs {
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS, true)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS, true)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH, true)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, true)
+                putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_PACING, true)
+                putString(OverlayService.PREFS_KEY_COMPACT_HUD_TOOLBAR_MODE, "auto")
+            }
+        }
+
+        btnCompactChipOppAttacks.setOnClickListener {
+            val cur = prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS, OverlayService.DEFAULT_COMPACT_HUD_SHOW_OPP_ATTACKS)
+            commitAndBroadcastCompactHudPrefs { putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS, !cur) }
+        }
+
+        btnCompactChipMyAttacks.setOnClickListener {
+            val cur = prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS, OverlayService.DEFAULT_COMPACT_HUD_SHOW_MY_ATTACKS)
+            commitAndBroadcastCompactHudPrefs { putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS, !cur) }
+        }
+
+        btnCompactChipCoach.setOnClickListener {
+            val cur = prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH, OverlayService.DEFAULT_COMPACT_HUD_SHOW_COACH)
+            commitAndBroadcastCompactHudPrefs { putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH, !cur) }
+        }
+
+        btnToggleCompactHudMatrix.setOnClickListener {
+            val cur = prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, OverlayService.DEFAULT_COMPACT_HUD_SHOW_MATRIX)
+            commitAndBroadcastCompactHudPrefs { putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, !cur) }
+        }
+
+        btnCompactChipPacing.setOnClickListener {
+            val cur = prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_PACING, OverlayService.DEFAULT_COMPACT_HUD_SHOW_PACING)
+            commitAndBroadcastCompactHudPrefs { putBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_PACING, !cur) }
+        }
+
+        btnCompactChipToolbar.setOnClickListener {
+            val cur = (prefs.getString(OverlayService.PREFS_KEY_COMPACT_HUD_TOOLBAR_MODE, OverlayService.DEFAULT_COMPACT_HUD_TOOLBAR_MODE) ?: "auto").lowercase()
+            val next = when (cur) {
+                "auto" -> "always"
+                "always" -> "hidden"
+                else -> "auto"
+            }
+            commitAndBroadcastCompactHudPrefs { putString(OverlayService.PREFS_KEY_COMPACT_HUD_TOOLBAR_MODE, next) }
         }
 
         btnToggleShieldDecisionOverlay.setOnClickListener {
@@ -8465,7 +8570,8 @@ class MainActivity : AppCompatActivity() {
                                 OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX,
                                 OverlayService.DEFAULT_COMPACT_HUD_SHOW_MATRIX
                             )
-                            replayWebView.evaluateJavascript("if (window.setCompactHudShowMatrix) setCompactHudShowMatrix($showMatrixInCompact);", null)
+                            val cmpJson = OverlayService.buildCompactHudConfigJsonStatic(prefs)
+                            replayWebView.evaluateJavascript("if (window.setCompactHudShowMatrix) setCompactHudShowMatrix($showMatrixInCompact); if (window.setCompactHudConfig) setCompactHudConfig($cmpJson);", null)
                             replayWebView.evaluateJavascript("if (window.setReplayHudMode) setReplayHudMode('$currentHudMode');", null)
                             replayWebView.evaluateJavascript("if (window.setReplayShieldOverlayEnabled) setReplayShieldOverlayEnabled($isShieldHudEnabled);", null)
                         } catch (_: Exception) {}
@@ -8628,7 +8734,8 @@ class MainActivity : AppCompatActivity() {
                 val nextIdx = (hudModes.indexOf(currentHudMode) + 1) % hudModes.size
                 currentHudMode = hudModes[nextIdx]
                 btnHudMode.text = "👁️ HUD: ${currentHudMode.uppercase()}"
-                replayWebView.evaluateJavascript("if (window.setReplayHudMode) setReplayHudMode('$currentHudMode');", null)
+                val cmpJson = OverlayService.buildCompactHudConfigJsonStatic(prefs)
+                replayWebView.evaluateJavascript("if (window.setCompactHudConfig) setCompactHudConfig($cmpJson); if (window.setReplayHudMode) setReplayHudMode('$currentHudMode');", null)
                 syncFrameAtMs(videoView.currentPosition.toLong())
             }
             btnShieldHud.setOnClickListener {
@@ -9101,22 +9208,93 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateCompactHudMatrixUi() {
         if (!::btnToggleCompactHudMatrix.isInitialized) return
+        val showOpp = prefs.getBoolean(
+            OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS,
+            OverlayService.DEFAULT_COMPACT_HUD_SHOW_OPP_ATTACKS
+        )
+        val showMy = prefs.getBoolean(
+            OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS,
+            OverlayService.DEFAULT_COMPACT_HUD_SHOW_MY_ATTACKS
+        )
+        val showCoach = prefs.getBoolean(
+            OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH,
+            OverlayService.DEFAULT_COMPACT_HUD_SHOW_COACH
+        )
         val showMatrix = prefs.getBoolean(
             OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX,
             OverlayService.DEFAULT_COMPACT_HUD_SHOW_MATRIX
         )
+        val showPacing = prefs.getBoolean(
+            OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_PACING,
+            OverlayService.DEFAULT_COMPACT_HUD_SHOW_PACING
+        )
+        val tbMode = (prefs.getString(
+            OverlayService.PREFS_KEY_COMPACT_HUD_TOOLBAR_MODE,
+            OverlayService.DEFAULT_COMPACT_HUD_TOOLBAR_MODE
+        ) ?: "auto").lowercase().let { if (it == "always" || it == "hidden") it else "auto" }
+
         val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
-        if (showMatrix) {
-            btnToggleCompactHudMatrix.text = "Matrix On"
-            btnToggleCompactHudMatrix.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-            btnToggleCompactHudMatrix.setTextColor(0xFFFFFFFF.toInt())
-            textCompactHudMatrixDesc.text = "Active: 3x3 Matchup Matrix is shown in Compact HUD once opponents are scanned"
-        } else {
-            btnToggleCompactHudMatrix.text = "Matrix Off (Def)"
-            btnToggleCompactHudMatrix.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
-            btnToggleCompactHudMatrix.setTextColor(theme.primaryTextColor)
-            textCompactHudMatrixDesc.text = "Default: Hidden in Compact HUD (Header + 2-Line Coach + Shield Card only)"
+        fun styleChipBtn(btn: Button, active: Boolean, label: String) {
+            btn.text = label
+            if (active) {
+                btn.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+                btn.setTextColor(0xFFFFFFFF.toInt())
+            } else {
+                btn.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+                btn.setTextColor(theme.primaryTextColor)
+            }
         }
+
+        if (::btnCompactChipOppAttacks.isInitialized) {
+            styleChipBtn(btnCompactChipOppAttacks, showOpp, if (showOpp) "⚔️ Opp: ON" else "⚔️ Opp: OFF")
+        }
+        if (::btnCompactChipMyAttacks.isInitialized) {
+            styleChipBtn(btnCompactChipMyAttacks, showMy, if (showMy) "⚡ Mine: ON" else "⚡ Mine: OFF")
+        }
+        if (::btnCompactChipCoach.isInitialized) {
+            styleChipBtn(btnCompactChipCoach, showCoach, if (showCoach) "🧠 Coach: ON" else "🧠 Coach: OFF")
+        }
+        styleChipBtn(btnToggleCompactHudMatrix, showMatrix, if (showMatrix) "📊 Matrix: ON" else "📊 Matrix: OFF")
+        if (::btnCompactChipPacing.isInitialized) {
+            styleChipBtn(btnCompactChipPacing, showPacing, if (showPacing) "⏱️ Pacing: ON" else "⏱️ Pacing: OFF")
+        }
+        if (::btnCompactChipToolbar.isInitialized) {
+            val tbLabel = when (tbMode) {
+                "always" -> "🎥 Bar: On"
+                "hidden" -> "🎥 Bar: Off"
+                else -> "🎥 Bar: Auto"
+            }
+            styleChipBtn(btnCompactChipToolbar, tbMode != "hidden", tbLabel)
+        }
+
+        val isMinimal = !showOpp && !showMy && showCoach && !showMatrix && showPacing && tbMode == "auto"
+        val isCoachMoves = showOpp && !showMy && showCoach && !showMatrix && showPacing && tbMode == "auto"
+        val isFullLite = showOpp && showMy && showCoach && showMatrix && showPacing && tbMode == "auto"
+
+        if (::btnCompactPresetMinimal.isInitialized) {
+            styleChipBtn(btnCompactPresetMinimal, isMinimal, "Minimal (Def)")
+        }
+        if (::btnCompactPresetCoachMoves.isInitialized) {
+            styleChipBtn(btnCompactPresetCoachMoves, isCoachMoves, "Coach + Opp")
+        }
+        if (::btnCompactPresetFullLite.isInitialized) {
+            styleChipBtn(btnCompactPresetFullLite, isFullLite, "Full-Lite")
+        }
+
+        val presetName = when {
+            isMinimal -> "Minimal (Def)"
+            isCoachMoves -> "Coach + Opp Moves"
+            isFullLite -> "Tactical Full-Lite"
+            else -> "✨ Custom"
+        }
+        val activeParts = mutableListOf("Header")
+        if (showOpp) activeParts.add("Opp Moves")
+        if (showMy) activeParts.add("My Moves")
+        if (showCoach) activeParts.add("2-Line Coach")
+        if (showMatrix) activeParts.add("3x3 Matrix")
+        if (showPacing) activeParts.add("Pacing")
+        activeParts.add(when (tbMode) { "always" -> "Toolbar Always"; "hidden" -> "Toolbar Hidden"; else -> "Auto Toolbar" })
+        textCompactHudMatrixDesc.text = "Preset: $presetName • ${activeParts.joinToString(" + ")}"
     }
 
     private fun updateShieldDecisionOverlayUi() {
@@ -9503,6 +9681,26 @@ class MainActivity : AppCompatActivity() {
             putExtra(
                 OverlayService.EXTRA_COMPACT_HUD_SHOW_MATRIX,
                 prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MATRIX, OverlayService.DEFAULT_COMPACT_HUD_SHOW_MATRIX)
+            )
+            putExtra(
+                OverlayService.EXTRA_COMPACT_HUD_SHOW_OPP_ATTACKS,
+                prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_OPP_ATTACKS, OverlayService.DEFAULT_COMPACT_HUD_SHOW_OPP_ATTACKS)
+            )
+            putExtra(
+                OverlayService.EXTRA_COMPACT_HUD_SHOW_MY_ATTACKS,
+                prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_MY_ATTACKS, OverlayService.DEFAULT_COMPACT_HUD_SHOW_MY_ATTACKS)
+            )
+            putExtra(
+                OverlayService.EXTRA_COMPACT_HUD_SHOW_COACH,
+                prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_COACH, OverlayService.DEFAULT_COMPACT_HUD_SHOW_COACH)
+            )
+            putExtra(
+                OverlayService.EXTRA_COMPACT_HUD_SHOW_PACING,
+                prefs.getBoolean(OverlayService.PREFS_KEY_COMPACT_HUD_SHOW_PACING, OverlayService.DEFAULT_COMPACT_HUD_SHOW_PACING)
+            )
+            putExtra(
+                OverlayService.EXTRA_COMPACT_HUD_TOOLBAR_MODE,
+                prefs.getString(OverlayService.PREFS_KEY_COMPACT_HUD_TOOLBAR_MODE, OverlayService.DEFAULT_COMPACT_HUD_TOOLBAR_MODE)
             )
             putExtra(OverlayService.EXTRA_SHOW_SHIELD_DECISION_OVERLAY, prefs.getBoolean(PREFS_KEY_SHOW_SHIELD_DECISION_OVERLAY, true))
             putExtra(OverlayService.EXTRA_ENABLE_HP_TRACKING, prefs.getBoolean(PREFS_KEY_ENABLE_HP_TRACKING, OverlayService.DEFAULT_ENABLE_HP_TRACKING))

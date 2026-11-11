@@ -1513,6 +1513,17 @@
             font-weight: 900;
         }
 
+        .compact-pacing-strip {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 4px;
+            padding: 1.5px 4px;
+            border-radius: 5px;
+            background: rgba(8, 15, 28, 0.58);
+            border: 1px solid rgba(var(--panel-border-rgb, 45, 212, 191), 0.24);
+        }
+
         .hidden {
             display: none !important;
         }
@@ -1551,6 +1562,18 @@
                     <span id="sky-opp-hp-pill" class="hp-slot-pill hp-high hidden" title="Opponent Active Pokémon Live HP%">100%</span>
                     <span id="sky-opp-stat-pill" class="stat-slot-pill hidden" title="Opponent Active Pokémon Stat Stages"></span>
                 </div>
+            </div>
+        </div>
+
+        <!-- v7.32: Mirrored Compact Move Pacing Strip (Swap Clocks + CMP Badges when Attack Tables are hidden in Compact HUD) -->
+        <div id="sky-compact-pacing-strip" class="compact-pacing-strip hidden">
+            <div style="display:flex; align-items:center; gap:3px;">
+                <span class="swap-clock-badge player-swap-badge" id="sky-compact-player-swap" title="Player Switch/Swap Cooldown Timer">Swap: 0s</span>
+                <span id="sky-compact-my-cmp" class="cmp-pill" title="Your Charged Move Priority (CMP)">CMP—</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:3px;">
+                <span id="sky-compact-opp-cmp" class="cmp-pill" title="Opponent Charged Move Priority (CMP)">CMP—</span>
+                <span class="swap-clock-badge opp-swap-badge" id="sky-compact-opp-swap" title="Opponent Switch/Swap Cooldown Timer">Swap: 0s</span>
             </div>
         </div>
 
@@ -1663,7 +1686,7 @@
         <div class="matrix-container hidden" id="sky-matrix-body"></div>
 
         <!-- Opponent Attacks (Segmented Bars + 3-Column Team Damage Matrix with Vertical Active Highlight) -->
-        <div class="timing-rows-container">
+        <div class="timing-rows-container" id="sky-opp-attacks-container">
             <div class="section-header-grid">
                 <div class="section-header-left">
                     <div class="section-header-line1">
@@ -1690,7 +1713,7 @@
         </div>
 
         <!-- My Attacks (Zero-Sneak Segmented Bar + 3-Column Scanned Opponent Damage Matrix) -->
-        <div class="timing-rows-container">
+        <div class="timing-rows-container" id="sky-my-attacks-container">
             <div class="section-header-grid">
                 <div class="section-header-left">
                     <div class="section-header-line1">
@@ -2254,6 +2277,34 @@
 
         window.liveHudMode = "full";
         window.compactHudShowMatrix = false;
+        window.compactHudConfig = {
+            showOppAttacks: false,
+            showMyAttacks: false,
+            showCoach: true,
+            showMatrix: false,
+            showPacing: true,
+            toolbarMode: "auto"
+        };
+
+        function applyCompactHudConfigFields(rawCfg) {
+            if (!rawCfg || typeof rawCfg !== "object") return;
+            if (rawCfg.showOppAttacks !== undefined) window.compactHudConfig.showOppAttacks = !!rawCfg.showOppAttacks;
+            if (rawCfg.showMyAttacks !== undefined) window.compactHudConfig.showMyAttacks = !!rawCfg.showMyAttacks;
+            if (rawCfg.showCoach !== undefined) window.compactHudConfig.showCoach = !!rawCfg.showCoach;
+            if (rawCfg.showMatrix !== undefined) {
+                window.compactHudConfig.showMatrix = !!rawCfg.showMatrix;
+                window.compactHudShowMatrix = !!rawCfg.showMatrix;
+            }
+            if (rawCfg.showPacing !== undefined) window.compactHudConfig.showPacing = !!rawCfg.showPacing;
+            if (rawCfg.toolbarMode !== undefined) {
+                const tm = String(rawCfg.toolbarMode || "auto").toLowerCase();
+                window.compactHudConfig.toolbarMode = (tm === "always" || tm === "hidden") ? tm : "auto";
+            }
+            if (battleData) {
+                battleData.compactHudShowMatrix = window.compactHudConfig.showMatrix;
+                battleData.compactHudConfig = Object.assign({}, window.compactHudConfig);
+            }
+        }
 
         function updateMinimizeSwordButtonTooltip() {
             const minBtn = document.getElementById("btn-minimize-sword");
@@ -2277,9 +2328,19 @@
 
         window.setCompactHudShowMatrix = function(show) {
             window.compactHudShowMatrix = !!show;
+            window.compactHudConfig.showMatrix = !!show;
             if (battleData) {
                 battleData.compactHudShowMatrix = !!show;
+                battleData.compactHudConfig = Object.assign({}, window.compactHudConfig);
             }
+            render();
+        };
+
+        window.setCompactHudConfig = function(cfgOrJson) {
+            try {
+                const parsed = typeof cfgOrJson === "string" ? JSON.parse(cfgOrJson) : cfgOrJson;
+                applyCompactHudConfigFields(parsed);
+            } catch (e) {}
             render();
         };
 
@@ -2613,8 +2674,12 @@
 
             const oppClockEl = document.getElementById("sky-opp-swap-clock");
             const playerClockEl = document.getElementById("sky-player-swap-clock");
+            const compactOppClockEl = document.getElementById("sky-compact-opp-swap");
+            const compactPlayerClockEl = document.getElementById("sky-compact-player-swap");
             updateSwapClockBadge(oppClockEl, "Swap", oppSec, true, oppLatched);
             updateSwapClockBadge(playerClockEl, "Swap", playerSec, false, playerLatched);
+            updateSwapClockBadge(compactOppClockEl, "Swap", oppSec, true, oppLatched);
+            updateSwapClockBadge(compactPlayerClockEl, "Swap", playerSec, false, playerLatched);
         }
 
         setInterval(refreshSwapClocks, 250);
@@ -3141,6 +3206,10 @@
                 }
                 if (data.compactHudShowMatrix !== undefined) {
                     window.compactHudShowMatrix = !!data.compactHudShowMatrix;
+                    window.compactHudConfig.showMatrix = !!data.compactHudShowMatrix;
+                }
+                if (data.compactHudConfig && typeof data.compactHudConfig === "object") {
+                    applyCompactHudConfigFields(data.compactHudConfig);
                 }
                 render();
             } catch (e) {
@@ -3780,6 +3849,22 @@
                     myCmpBadgeEl.className = "cmp-pill " + (winsCmp ? "win" : "loss");
                     myCmpBadgeEl.title = winsCmp ? "Your Pokémon wins CMP tie" : "Your Pokémon loses CMP tie";
                 }
+                const compactOppCmpEl = document.getElementById("sky-compact-opp-cmp");
+                const compactMyCmpEl = document.getElementById("sky-compact-my-cmp");
+                if (compactOppCmpEl) {
+                    compactOppCmpEl.innerHTML = oppWinsCmp
+                        ? 'CMP<span class="cmp-mark">✓</span>'
+                        : 'CMP<span class="cmp-mark">✗</span>';
+                    compactOppCmpEl.className = "cmp-pill " + (oppWinsCmp ? "win" : "loss");
+                    compactOppCmpEl.title = oppWinsCmp ? "Opponent wins CMP tie" : "Opponent loses CMP tie";
+                }
+                if (compactMyCmpEl) {
+                    compactMyCmpEl.innerHTML = winsCmp
+                        ? 'CMP<span class="cmp-mark">✓</span>'
+                        : 'CMP<span class="cmp-mark">✗</span>';
+                    compactMyCmpEl.className = "cmp-pill " + (winsCmp ? "win" : "loss");
+                    compactMyCmpEl.title = winsCmp ? "Your Pokémon wins CMP tie" : "Your Pokémon loses CMP tie";
+                }
 
                 // v6.00: Render 2-Line 4-Pillar AI Tactical Coach + Backline Prediction & Throw/Catch Timing Blink
                 try {
@@ -3851,13 +3936,17 @@
 
                     if (recRowEl) {
                         if (showRec && line1Display) {
+                            const effHudNow = isReplay ? (window.replayHudMode || "live") : (window.liveHudMode || "full");
+                            const allowPacingBlink = (effHudNow !== "compact") || (window.compactHudConfig && window.compactHudConfig.showPacing !== false);
                             let timingCls = "";
-                            if (timingAlertLevel === "IMMEDIATE_0_FAST") {
-                                timingCls = " timing-immediate-0";
-                            } else if (timingAlertLevel === "BLINK_1_FAST") {
-                                timingCls = " timing-blink-1";
-                            } else if (timingAlertLevel === "WARN_2_FASTS") {
-                                timingCls = " timing-warn-2";
+                            if (allowPacingBlink) {
+                                if (timingAlertLevel === "IMMEDIATE_0_FAST") {
+                                    timingCls = " timing-immediate-0";
+                                } else if (timingAlertLevel === "BLINK_1_FAST") {
+                                    timingCls = " timing-blink-1";
+                                } else if (timingAlertLevel === "WARN_2_FASTS") {
+                                    timingCls = " timing-warn-2";
+                                }
                             }
                             recRowEl.className = `tactical-rec-row rec-${urg}${timingCls}`;
                             const actEl = document.getElementById("sky-rec-action");
@@ -4362,7 +4451,11 @@
         function applyActiveHudModeVisibility(isWaitingState, isReplay) {
             const rootPanel = document.getElementById("mode-sky-trench");
             const toolbars = document.querySelectorAll(".action-toolbar");
-            const timingContainers = document.querySelectorAll(".timing-rows-container");
+            const oppAttacksEl = document.getElementById("sky-opp-attacks-container");
+            const myAttacksEl = document.getElementById("sky-my-attacks-container");
+            const recTopSlot = document.getElementById("sky-tactical-rec-top-slot");
+            const recBotSlot = document.getElementById("sky-tactical-rec-bottom-slot");
+            const pacingStripEl = document.getElementById("sky-compact-pacing-strip");
             const matrixEl = document.getElementById("sky-matrix-body");
             const diagRow = document.getElementById("sky-replay-diag-row");
 
@@ -4376,22 +4469,65 @@
 
             const isCompact = (effectiveMode === "compact");
             const isDiag = (effectiveMode === "diagnostic");
-            const hideTimingTables = (isCompact || isDiag);
+            const cfg = window.compactHudConfig || {
+                showOppAttacks: false,
+                showMyAttacks: false,
+                showCoach: true,
+                showMatrix: !!window.compactHudShowMatrix,
+                showPacing: true,
+                toolbarMode: "auto"
+            };
+            const isBattleActive = !!(battleData && battleData.isBattleActive);
 
-            // In Live Compact mode, show .action-toolbar when idle (Waiting... and battle not active), auto-hide during active combat.
-            // In Replay Compact/Diagnostic mode, hide .action-toolbar.
-            const hideToolbar = isReplay
-                ? (isCompact || isDiag)
-                : (isCompact && (!isWaitingState || isBattleActive));
+            // 1. DVR / Action Toolbar visibility
+            let hideToolbar = false;
+            if (isDiag) {
+                hideToolbar = true;
+            } else if (isCompact) {
+                if (isReplay) {
+                    hideToolbar = (cfg.toolbarMode !== "always");
+                } else if (cfg.toolbarMode === "always") {
+                    hideToolbar = false;
+                } else if (cfg.toolbarMode === "hidden") {
+                    hideToolbar = true;
+                } else {
+                    hideToolbar = (!isWaitingState || isBattleActive);
+                }
+            }
             toolbars.forEach(el => { el.style.display = hideToolbar ? "none" : ""; });
-            timingContainers.forEach(el => { el.style.display = hideTimingTables ? "none" : ""; });
 
+            // 2. Opponent Attacks & Player Attacks tables
+            if (oppAttacksEl) {
+                oppAttacksEl.style.display = isDiag ? "none" : (isCompact ? (cfg.showOppAttacks ? "" : "none") : "");
+            }
+            if (myAttacksEl) {
+                myAttacksEl.style.display = isDiag ? "none" : (isCompact ? (cfg.showMyAttacks ? "" : "none") : "");
+            }
+
+            // 3. 2-Line AI Tactical Coach slots
+            const hideCoach = isDiag || (isCompact && !cfg.showCoach);
+            if (recTopSlot) recTopSlot.style.display = hideCoach ? "none" : "";
+            if (recBotSlot) recBotSlot.style.display = hideCoach ? "none" : "";
+
+            // 4. Move Pacing Strip & Attack-Header Swap/CMP Badges
+            const showPacingInCompact = (cfg.showPacing !== false);
+            if (pacingStripEl) {
+                const needStandalonePacingStrip = isCompact && !isWaitingState && showPacingInCompact && (!cfg.showOppAttacks || !cfg.showMyAttacks);
+                if (needStandalonePacingStrip) pacingStripEl.classList.remove("hidden");
+                else pacingStripEl.classList.add("hidden");
+            }
+            const atkHeaderPacingBadges = document.querySelectorAll("#sky-opp-attacks-container .cmp-pill, #sky-opp-attacks-container .swap-clock-badge, #sky-my-attacks-container .cmp-pill, #sky-my-attacks-container .swap-clock-badge");
+            atkHeaderPacingBadges.forEach(el => {
+                el.style.display = (isCompact && !showPacingInCompact) ? "none" : "";
+            });
+
+            // 5. 3x3 Matchup Matrix
             if (matrixEl) {
                 const hasOpps = !isWaitingState && battleData && Array.isArray(battleData.scannedOpponents) && battleData.scannedOpponents.length > 0;
                 if (!hasOpps || isDiag) {
                     matrixEl.classList.add("hidden");
                 } else if (isCompact) {
-                    if (window.compactHudShowMatrix) {
+                    if (cfg.showMatrix || window.compactHudShowMatrix) {
                         matrixEl.classList.remove("hidden");
                     } else {
                         matrixEl.classList.add("hidden");
