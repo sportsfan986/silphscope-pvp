@@ -23,9 +23,24 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.31',
+    codename: 'Cloudflare D1 Multi-Device Vault Sync & Global Meta Analytics',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Zero-GitHub multi-device cloud delta synchronization on Cloudflare D1 for Battle Logs, Team Presets, and App Settings with passwordless initial migration, salted PBKDF2 Vault Password security, and structured SQL meta analytics.',
+    icon: '☁️',
+    accentColor: '#38BDF8',
+    highlights: [
+      'Cloudflare D1 Delta Sync (/v1/sync/vault) replacing GitHub Gist/Repo sync with zero GitHub token required',
+      'Seamless passwordless initial vault migration + in-app prompt to lock vault with a PBKDF2-SHA256 password',
+      'Hardware Keystore AES-256-GCM session token protection across Android and Web Simulator',
+      'Incremental cursor-based row sync staying well inside Cloudflare Free Tier limits (0 KV sync writes)',
+      'Structured D1 battle_logs columns powering future userbase-wide league & ELO meta analytics'
+    ]
+  },
+  {
     version: 'v7.30',
     codename: 'Log-Only Tournament Stealth Mode & 2-State HUD Emblem Redesign',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Tournament-compliant Log-Only Stealth Mode for official Play! Pokémon and Show 6 play with 100% invisible HUD and silenced haptics, seamless headless background DVR and auto-logging, simplified 2-state HUD emblem toggle, and 1-tap post-battle Battle Log navigation.',
     icon: '🔕',
@@ -214,7 +229,7 @@ export const ACTIVE_ROADMAP_ITEMS: RoadmapItem[] = [
     keyGoals: [
       '1-Click "Save to Built Roster" from the Multi-IV Matrix Evaluator',
       'Team Preset integration: attach actual owned IVs to custom team slots',
-      'Cloud Delta Sync across multiple devices via GitHub private vault'
+      'Cloud Delta Sync across multiple devices via Cloudflare D1 Vault'
     ]
   },
   {
@@ -245,6 +260,21 @@ export const ACTIVE_ROADMAP_ITEMS: RoadmapItem[] = [
       'Remote version check against GitHub Releases / Cloudflare API on startup',
       'Dismissible update card with bulleted highlights of fixes and new features',
       '1-tap direct APK download and install trigger via dl.silphscopepvp.com'
+    ]
+  },
+  {
+    id: 'cross-platform-theme-persistence',
+    title: 'Unified Cross-Platform Theme Persistence (Shiny Dialga Default + User Sync)',
+    badge: 'DESIGN & SYNC',
+    status: 'In Design',
+    statusColor: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
+    category: 'Analytics & Team Builder',
+    icon: '🎨',
+    description: 'Ensure Shiny Origin Dialga Midnight remains the default aesthetic everywhere, while persisting custom chosen themes across the Marketing Website, Web Simulator, and personal Cloud Vault for logged-in users.',
+    keyGoals: [
+      'Shiny Origin Dialga Midnight invariant default for first load & anonymous sessions',
+      'Dynamic CSS theme variables applied consistently across Marketing site & Simulator',
+      'User theme preference synced across devices via Cloudflare profile metadata & GitHub vault'
     ]
   }
 ];

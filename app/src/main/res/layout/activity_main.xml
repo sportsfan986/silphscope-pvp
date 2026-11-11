@@ -3955,7 +3955,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="☁️ Multi-Device Auto Delta Sync (Battle Logs, Teams &amp; Settings)"
+                    android:text="☁️ SilphScope Cloud Vault Sync (Battle Logs, Teams &amp; Settings)"
                     android:textColor="#38bdf8"
                     android:textSize="12sp"
                     android:textStyle="bold" />
@@ -3963,7 +3963,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Optional: Sign in with GitHub strictly to sync your Battle Logs, Teams, and App Settings between your own devices. (Telemetry &amp; DVR uploads use Cloudflare automatically and do NOT use GitHub.)"
+                    android:text="Automatically backs up &amp; syncs your Battle Logs, Teams, and App Settings via Cloudflare D1 (no GitHub account required). Set a Vault Password below to lock your vault and enable multi-device &amp; Web Simulator sync."
                     android:textColor="#94a3b8"
                     android:textSize="10sp"
                     android:layout_marginTop="2dp" />
@@ -3973,10 +3973,10 @@
                     android:layout_width="match_parent"
                     android:layout_height="38dp"
                     android:layout_marginTop="6dp"
-                    android:text="🔑 Login with GitHub (Generate Sync Token)"
+                    android:text="🔐 Set Vault Password to Secure Cloud Sync"
                     android:textSize="11sp"
                     android:textStyle="bold"
-                    android:backgroundTint="#10b981"
+                    android:backgroundTint="#d97706"
                     android:textColor="#ffffff" />
 
                 <EditText
@@ -3986,12 +3986,13 @@
                     android:layout_marginTop="6dp"
                     android:background="#1e293b"
                     android:paddingHorizontal="8dp"
-                    android:hint="GitHub OAuth / Personal Access Token (Auto-filled on Login)"
+                    android:hint="Legacy Sync Token (Retired)"
                     android:textColor="#f8fafc"
                     android:textColorHint="#64748b"
                     android:textSize="11sp"
                     android:inputType="textPassword"
-                    android:singleLine="true" />
+                    android:singleLine="true"
+                    android:visibility="gone" />
 
                 <EditText
                     android:id="@+id/edit_sync_gist_id"
@@ -4000,11 +4001,12 @@
                     android:layout_marginTop="4dp"
                     android:background="#1e293b"
                     android:paddingHorizontal="8dp"
-                    android:hint="Optional Gist ID Override (Auto-discovered per user account)"
+                    android:hint="Legacy Vault ID (Retired)"
                     android:textColor="#f8fafc"
                     android:textColorHint="#64748b"
                     android:textSize="11sp"
-                    android:singleLine="true" />
+                    android:singleLine="true"
+                    android:visibility="gone" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -4017,7 +4019,7 @@
                         android:layout_width="0dp"
                         android:layout_height="36dp"
                         android:layout_weight="1"
-                        android:text="☁️ Sync Devices Now"
+                        android:text="☁️ Sync Cloud Vault Now"
                         android:textSize="11sp"
                         android:backgroundTint="#0284c7"
                         android:textColor="#ffffff"
@@ -4037,7 +4039,7 @@
                     android:id="@+id/text_sync_status"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Sync Status: Not signed in (Local storage active)"
+                    android:text="☁️ Cloud Vault Sync ready"
                     android:textColor="#94a3b8"
                     android:textSize="10sp"
                     android:layout_marginTop="4dp" />

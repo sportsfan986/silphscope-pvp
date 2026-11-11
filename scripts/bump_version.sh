@@ -31,6 +31,7 @@ sed -i "s/versionName = \"[^\"]*\"/versionName = \"${NEW_NUM}\"/g" app/build.gra
 
 # 2. Kotlin single source of truth constant
 sed -i "s/const val APP_VERSION = \"[^\"]*\"/const val APP_VERSION = \"${NEW_NUM}\"/g" app/src/main/java/com/gbl/overlay/OverlayService.kt
+sed -i "s/const val APP_VERSION_CODE = [0-9]\+/const val APP_VERSION_CODE = ${VERSION_CODE}/g" app/src/main/java/com/gbl/overlay/OverlayService.kt
 
 # 3. Web package.json & App.tsx
 sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"${NEW_NUM}.0\"/g" package.json
@@ -40,7 +41,12 @@ sed -i "s/SilphScope PvP v[0-9]\+\.[0-9]\+ Overlay/SilphScope PvP ${NEW_TAG} Ove
 # 4. Documentation headers
 sed -i "s/(v[0-9]\+\.[0-9]\+)/(v${NEW_NUM})/g" README.md
 sed -i "s/silphscope-pvp-v[0-9]\+\.[0-9]\+\.apk/silphscope-pvp-${NEW_TAG}.apk/g" README.md
-sed -i "s/\*\*Current Version\*\*: \`v[0-9]\+\.[0-9]\+\` (\`versionCode = [0-9]\+\`)/\*\*Current Version\*\*: \`${NEW_TAG}\` (\`versionCode = ${VERSION_CODE}\`)/g" ANTIGRAVITY.md
+if [ -f ANTIGRAVITY.md ]; then
+  sed -i "s/\*\*Current Version\*\*: \`v[0-9]\+\.[0-9]\+\` (\`versionCode = [0-9]\+\`)/\*\*Current Version\*\*: \`${NEW_TAG}\` (\`versionCode = ${VERSION_CODE}\`)/g" ANTIGRAVITY.md
+fi
+if [ -f AGENTS.md ]; then
+  sed -i "s/\*\*Current Version\*\*: \`v[0-9]\+\.[0-9]\+\` (\`versionCode = [0-9]\+\`)/\*\*Current Version\*\*: \`${NEW_TAG}\` (\`versionCode = ${VERSION_CODE}\`)/g" AGENTS.md
+fi
 
 # 5. Marketing Website header badge & direct download button release label
 sed -i "s/v[0-9]\+\.[0-9]\+ • Latest Release/${NEW_TAG} • Latest Release/g" src/components/MarketingWebsite.tsx

@@ -352,7 +352,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
   const [selectedWatchReplay, setSelectedWatchReplay] = useState<DvrReplayItem | null>(null);
   const [selectedWatchSeekSec, setSelectedWatchSeekSec] = useState<number>(0);
   const [ownerLoginOpen, setOwnerLoginOpen] = useState<boolean>(false);
-  const [authTab, setAuthTab] = useState<'token' | 'password' | 'github'>('github');
+  const [authTab, setAuthTab] = useState<'token' | 'password' | 'github'>('password');
   const [authKey, setAuthKey] = useState<string>(() => {
     try { return localStorage.getItem('gbl_web_unlock_key_v700') || ''; } catch { return ''; }
   });
@@ -1327,7 +1327,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       backgroundColor: 'rgba(250, 204, 21, 0.12)'
                     }}
                   >
-                    v7.30 • Latest Release
+                    v7.31 • Latest Release
                   </span>
                 </div>
                 <p className="text-[11px] hidden sm:block" style={{ color: '#99F6E4' }}>
@@ -1556,7 +1556,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     <span className="text-2xl">📱</span>
                     <div className="text-left">
                       <div className="text-sm font-black leading-tight">Download Android APK</div>
-                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.30)</div>
+                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.31)</div>
                     </div>
                   </div>
                   <span className="text-lg font-black">↓</span>

@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.30"
-        const val APP_VERSION_CODE = 1730
+        const val APP_VERSION = "7.31"
+        const val APP_VERSION_CODE = 1731
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -560,6 +560,15 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_SCREEN_NAME_REGISTERED_V700 = "gbl_screen_name_registered_v700"
         const val PREFS_KEY_SYNC_GITHUB_USER_ID = "gbl_sync_github_user_id"
         const val PREFS_KEY_SYNC_PRIVATE_REPO_MIGRATED_V643 = "gbl_sync_private_repo_migrated_v643"
+        const val PREFS_KEY_VAULT_SESSION_TOKEN = "gbl_vault_session_token_v731"
+        const val PREFS_KEY_VAULT_HAS_PASSWORD = "gbl_vault_has_password_v731"
+        const val PREFS_KEY_VAULT_REQUIRES_PASSWORD = "gbl_vault_requires_password_v731"
+        const val PREFS_KEY_VAULT_PW_PROMPT_SNOOZED_UNTIL = "gbl_vault_pw_prompt_snoozed_until_v731"
+        const val PREFS_KEY_D1_VAULT_MIGRATED_V731 = "gbl_d1_vault_migrated_v731"
+        const val PREFS_KEY_CLOUD_SYNC_CURSOR_MS = "gbl_cloud_sync_cursor_ms_v731"
+        const val PREFS_KEY_CLOUD_LAST_PUSHED_MS = "gbl_cloud_last_pushed_ms_v731"
+        const val PREFS_KEY_CLOUD_LAST_PUSHED_SETTINGS_MS = "gbl_cloud_last_pushed_settings_ms_v731"
+        const val PREFS_KEY_CLOUD_LAST_PUSHED_TOMBSTONES_SIG = "gbl_cloud_last_pushed_tombstones_sig_v731"
 
         // v7.10: Stripe & Buy Me a Coffee Official Checkout Links ($2 Supporter / $3-$6 Pro / $5-$10 VIP)
         const val STRIPE_URL_SUPPORTER = "https://buy.stripe.com/4gM3cwf3r8JG7XLamm1Jm07"
@@ -4213,7 +4222,7 @@ class OverlayService : LifecycleService() {
         startBattleOcrLoop()
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val (ok, _) = OverlayService.syncWithGitHubGistBlocking(prefs, gson)
+                val (ok, _) = OverlayService.syncWithCloudflareVaultBlocking(prefs, gson)
                 if (ok) {
                     withContext(Dispatchers.Main) {
                         setupDefaultPresetsIfNeeded()
@@ -14596,10 +14605,10 @@ class OverlayService : LifecycleService() {
             showBattleToast("$autoPrefix$normalizedResult ($leadShort)$aiNote • ${formattedOpponents.joinToString(", ").ifEmpty { "No opponents" }}")
         }
 
-        // Always trigger background 2-device delta sync after logging a battle
+        // Always trigger background Cloudflare D1 delta sync after logging a battle
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                OverlayService.syncWithGitHubGistBlocking(prefs, gson)
+                OverlayService.syncWithCloudflareVaultBlocking(prefs, gson)
             } catch (_: Exception) {}
         }
     }

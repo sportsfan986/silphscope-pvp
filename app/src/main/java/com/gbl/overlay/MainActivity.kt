@@ -220,6 +220,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnRandomTrainerScreenName: Button
     private lateinit var textTrainerScreenNameStatus: TextView
     private var activeScreenNamePromptDialog: AlertDialog? = null
+    private var activeVaultPasswordPromptDialog: AlertDialog? = null
+    private var debouncedCloudSyncJob: kotlinx.coroutines.Job? = null
+    private var lastResumeCloudSyncMs: Long = 0L
     private var currentActivePage: String = "teams"
     private var isUpdatingThemeSpinner = false
     private var selectedMetaTabScope: String = "SEASON"
@@ -447,9 +450,6 @@ class MainActivity : AppCompatActivity() {
     private val PREFS_KEY_DELETED_TEAMS_TRASH: String
         get() = if (isShow6CombatMode()) OverlayService.PREFS_KEY_SHOW6_DELETED_TEAMS_TRASH else OverlayService.PREFS_KEY_DELETED_TEAMS_TRASH
     private val PREFS_KEY_GBL_SEASONS_JSON = OverlayService.PREFS_KEY_GBL_SEASONS_JSON
-    private val PREFS_KEY_SYNC_GITHUB_TOKEN = OverlayService.PREFS_KEY_SYNC_GITHUB_TOKEN
-    private val PREFS_KEY_SYNC_GITHUB_USERNAME = OverlayService.PREFS_KEY_SYNC_GITHUB_USERNAME
-    private val PREFS_KEY_SYNC_GIST_ID = OverlayService.PREFS_KEY_SYNC_GIST_ID
     private val PREFS_KEY_SYNC_LAST_AT = OverlayService.PREFS_KEY_SYNC_LAST_AT
     private val SCRAPEDDUCK_EVENTS_URL = "https://raw.githubusercontent.com/bigfoott/ScrapedDuck/data/events.min.json"
     private val DONATION_URL = "https://buymeacoffee.com/silphscopepvp"
@@ -566,9 +566,8 @@ class MainActivity : AppCompatActivity() {
             renderBattleLogPage()
             updateTrainerScreenNameUi()
             updateSyncStatusUi()
-            checkPendingGitHubDeviceLoginOnResume()
-            // Automatically pull & reconcile deltas from the other device on every app open / resume
-            triggerTwoDeviceCloudSync(silent = true)
+            // Automatically pull & reconcile deltas from SilphScope Cloudflare D1 Vault on app open / resume
+            triggerTwoDeviceCloudSync(silent = true, isResumeCheck = true)
             retryPendingDvrBundlesInBackground()
             // v5.10: Once-daily AI & Anomaly telemetry upload check on app launch/resume
             OverlayService.triggerAutoUploadOnAppLaunchAsync(prefs, gson) { _, _ ->
@@ -1653,19 +1652,19 @@ class MainActivity : AppCompatActivity() {
             assignRandomTrainerDebugId()
         }
 
-        editSyncGithubToken.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-        editSyncGithubToken.setText("")
-        editSyncGistId.setText(prefs.getString(PREFS_KEY_SYNC_GIST_ID, "") ?: "")
+        editSyncGithubToken.visibility = android.view.View.GONE
+        editSyncGistId.visibility = android.view.View.GONE
         updateSyncStatusUi()
 
         btnGithubLoginSettings.setOnClickListener {
-            handleGitHubLoginButtonTap()
+            handleCloudVaultSecurityButtonTap()
         }
 
         btnSyncDevicesSettings.setOnClickListener {
-            saveSyncCredentialsFromInputs()
-            if (OverlayService.getEffectiveSyncToken(prefs).isEmpty()) {
-                startGitHubOAuthDeviceFlow()
+            if (!OverlayService.hasValidScreenNameStatic(prefs)) {
+                ensureRequiredScreenNameOrPrompt()
+            } else if (prefs.getBoolean(OverlayService.PREFS_KEY_VAULT_REQUIRES_PASSWORD, false)) {
+                showSignInToExistingVaultDialog()
             } else {
                 triggerTwoDeviceCloudSync(silent = false)
             }
@@ -1940,19 +1939,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnSyncBattleLog.setOnClickListener {
-            saveSyncCredentialsFromInputs()
-            if (OverlayService.getEffectiveSyncToken(prefs).isEmpty()) {
-                AlertDialog.Builder(this)
-                    .setTitle("☁️ Multi-Device Cloud Sync")
-                    .setMessage("Sign in with your GitHub account once on each phone to automatically sync your Battle Logs and Team Presets across all your devices.")
-                    .setPositiveButton("🔑 Login with GitHub") { _, _ ->
-                        startGitHubOAuthDeviceFlow()
-                    }
-                    .setNeutralButton("📦 Manual Sync Bundle") { _, _ ->
-                        showSyncBundleDialog()
-                    }
-                    .setNegativeButton("Cancel", null)
-                    .show()
+            if (!OverlayService.hasValidScreenNameStatic(prefs)) {
+                ensureRequiredScreenNameOrPrompt()
+            } else if (prefs.getBoolean(OverlayService.PREFS_KEY_VAULT_REQUIRES_PASSWORD, false)) {
+                showSignInToExistingVaultDialog()
             } else {
                 triggerTwoDeviceCloudSync(silent = false)
             }
@@ -2481,20 +2471,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun saveSyncCredentialsFromInputs() {
-        val tok = editSyncGithubToken.text.toString().trim()
-        val gist = editSyncGistId.text.toString().trim()
-        val oldTok = OverlayService.getEffectiveSyncToken(prefs)
-        val editor = prefs.edit().putString(PREFS_KEY_SYNC_GIST_ID, gist)
-        if (tok.isNotEmpty() && tok != oldTok) {
-            editor.putString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")
-        }
-        editor.apply()
-        if (tok.isNotEmpty()) {
-            OverlayService.setEffectiveSyncToken(prefs, tok)
-            editSyncGithubToken.setText("")
-        }
-        updateSyncStatusUi()
+    private fun resetCloudSyncCursorsForChangedScreenName(prevName: String, nextName: String) {
+        if (prevName.equals(nextName, ignoreCase = true)) return
+        OverlayService.setVaultSessionTokenStatic(prefs, "")
+        prefs.edit()
+            .putBoolean(OverlayService.PREFS_KEY_VAULT_HAS_PASSWORD, false)
+            .putBoolean(OverlayService.PREFS_KEY_VAULT_REQUIRES_PASSWORD, false)
+            .putLong(OverlayService.PREFS_KEY_VAULT_PW_PROMPT_SNOOZED_UNTIL, 0L)
+            .putLong(OverlayService.PREFS_KEY_CLOUD_SYNC_CURSOR_MS, 0L)
+            .putLong(OverlayService.PREFS_KEY_CLOUD_LAST_PUSHED_MS, 0L)
+            .putLong(OverlayService.PREFS_KEY_CLOUD_LAST_PUSHED_SETTINGS_MS, 0L)
+            .putString(OverlayService.PREFS_KEY_CLOUD_LAST_PUSHED_TOMBSTONES_SIG, "")
+            .apply()
     }
 
     private fun updateTrainerScreenNameUi() {
@@ -2534,6 +2522,7 @@ class MainActivity : AppCompatActivity() {
             ).show()
             return
         }
+        val prevScreenName = OverlayService.getRequiredScreenNameStatic(prefs)
         val isRandomFmt = OverlayService.isRandomScreenNameFormatStatic(sanitized)
         val editor = prefs.edit()
             .putString(OverlayService.PREFS_KEY_USER_SCREEN_NAME, sanitized)
@@ -2544,9 +2533,13 @@ class MainActivity : AppCompatActivity() {
             editor.putBoolean(OverlayService.PREFS_KEY_ARM_ONE_BATTLE_DVR, false)
         }
         editor.apply()
+        resetCloudSyncCursorsForChangedScreenName(prevScreenName, sanitized)
         OverlayService.syncTierThresholdsFromPrefs(prefs)
         updateTrainerScreenNameUi()
         updateSyncStatusUi()
+        if (!isRandomFmt) {
+            triggerTwoDeviceCloudSync(silent = true)
+        }
         if (isOverlayRunning) {
             val updateIntent = Intent(this, OverlayService::class.java).apply {
                 action = OverlayService.ACTION_UPDATE_SETTINGS
@@ -2630,15 +2623,18 @@ class MainActivity : AppCompatActivity() {
                     input.error = "Enter a non-random custom ID (3–24 chars)"
                     return@setOnClickListener
                 }
+                val prevId = OverlayService.getRequiredScreenNameStatic(prefs)
                 prefs.edit()
                     .putString(OverlayService.PREFS_KEY_USER_SCREEN_NAME, candidate)
                     .putBoolean(OverlayService.PREFS_KEY_IS_RANDOM_SCREEN_NAME, false)
                     .putLong(OverlayService.PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
                     .apply()
+                resetCloudSyncCursorsForChangedScreenName(prevId, candidate)
                 OverlayService.syncTierThresholdsFromPrefs(prefs)
                 updateTrainerScreenNameUi()
                 updateSyncStatusUi()
                 dialog.dismiss()
+                triggerTwoDeviceCloudSync(silent = true)
                 Toast.makeText(
                     this,
                     "✅ Custom ID saved ($candidate)! You can now enable or arm 1-Battle DVR video logging.",
@@ -2698,18 +2694,23 @@ class MainActivity : AppCompatActivity() {
                     input.error = "Enter 3–24 characters (A-Z, 0-9, _ or -)"
                     return@setOnClickListener
                 }
+                val prevId = OverlayService.getRequiredScreenNameStatic(prefs)
                 val isRandomFmt = OverlayService.isRandomScreenNameFormatStatic(candidate)
                 prefs.edit()
                     .putString(OverlayService.PREFS_KEY_USER_SCREEN_NAME, candidate)
                     .putBoolean(OverlayService.PREFS_KEY_IS_RANDOM_SCREEN_NAME, isRandomFmt)
                     .putLong(OverlayService.PREFS_KEY_USER_SETTINGS_UPDATED_AT, System.currentTimeMillis())
                     .apply()
+                resetCloudSyncCursorsForChangedScreenName(prevId, candidate)
                 OverlayService.syncTierThresholdsFromPrefs(prefs)
                 updateTrainerScreenNameUi()
                 updateSyncStatusUi()
                 dialog.dismiss()
                 activeScreenNamePromptDialog = null
                 Toast.makeText(this, "✅ Welcome, $candidate!", Toast.LENGTH_SHORT).show()
+                if (!isRandomFmt) {
+                    triggerTwoDeviceCloudSync(silent = true)
+                }
             }
             val neutralBtn = dialog.getButton(AlertDialog.BUTTON_NEUTRAL)
             neutralBtn.setOnClickListener {
@@ -2723,31 +2724,58 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateSyncStatusUi() {
-        val token = OverlayService.getEffectiveSyncToken(prefs)
-        val username = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty()
+        val screenName = OverlayService.getRequiredScreenNameStatic(prefs)
+        val hasValidId = OverlayService.hasValidScreenNameStatic(prefs)
+        val isCustomId = OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs)
+        val hasPassword = prefs.getBoolean(OverlayService.PREFS_KEY_VAULT_HAS_PASSWORD, false)
+        val requiresPassword = prefs.getBoolean(OverlayService.PREFS_KEY_VAULT_REQUIRES_PASSWORD, false)
+        val hasSession = OverlayService.getVaultSessionTokenStatic(prefs).isNotBlank()
         val lastAt = prefs.getLong(PREFS_KEY_SYNC_LAST_AT, 0L)
-        val gistId = prefs.getString(PREFS_KEY_SYNC_GIST_ID, "")?.trim().orEmpty()
         val timeFmt = java.text.SimpleDateFormat("MMM d, h:mm a", java.util.Locale.US)
-        val lastStr = if (lastAt > 0L) timeFmt.format(java.util.Date(lastAt)) else "Never"
+        val lastStr = if (lastAt > 0L) timeFmt.format(java.util.Date(lastAt)) else "Pending"
+
+        editSyncGithubToken.setText("")
+        editSyncGithubToken.visibility = android.view.View.GONE
+        editSyncGistId.visibility = android.view.View.GONE
 
         val theme = if (::prefs.isInitialized) getActiveAppTheme() else APP_THEME_COLLECTION.first()
-        if (token.isNotEmpty()) {
-            val userLabel = if (username.isNotEmpty()) "@$username" else "GitHub Account"
-            btnGithubLoginSettings.text = "✅ Connected: $userLabel (Tap to Manage / Sign Out)"
-            btnGithubLoginSettings.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-            btnGithubLoginSettings.setTextColor(0xFFFFFFFF.toInt())
-            val vaultShort = if (gistId.isNotEmpty()) "Gist: ${gistId.take(8)}…" else "Account Vault ($userLabel)"
-            textSyncStatus.text = "🟢 Auto-Sync Active ($userLabel) • Last: $lastStr • $vaultShort • Logs: ${loadBattleLogs().size} • Teams: ${loadPresets().size} • Settings Synced"
-            editSyncGithubToken.setText("")
-            editSyncGithubToken.visibility = android.view.View.GONE
-            editSyncGistId.visibility = android.view.View.GONE
-        } else {
-            btnGithubLoginSettings.text = "🔑 Login with GitHub (Optional Multi-Device Sync)"
-            btnGithubLoginSettings.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
-            btnGithubLoginSettings.setTextColor(0xFFFFFFFF.toInt())
-            textSyncStatus.text = "⚪ Not signed in (Local-only) • Optional: Sign in with GitHub to sync Battle Logs, Teams & Settings across your devices"
-            editSyncGithubToken.visibility = android.view.View.VISIBLE
-            editSyncGistId.visibility = android.view.View.VISIBLE
+        when {
+            !hasValidId -> {
+                btnGithubLoginSettings.text = "👤 Choose Custom Trainer ID for Cloud Vault Sync"
+                btnGithubLoginSettings.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
+                btnGithubLoginSettings.setTextColor(0xFFFFFFFF.toInt())
+                textSyncStatus.text = "⚪ Choose a custom Trainer ID above to activate SilphScope Cloudflare D1 Vault Sync across devices"
+            }
+            requiresPassword -> {
+                btnGithubLoginSettings.text = "🔑 Sign In with Vault Password (@$screenName)"
+                btnGithubLoginSettings.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFFD97706.toInt())
+                btnGithubLoginSettings.setTextColor(0xFFFFFFFF.toInt())
+                textSyncStatus.text = "🔒 @$screenName's Cloud Vault is password-protected • Tap above to enter your Vault Password and sync devices"
+            }
+            hasPassword && hasSession -> {
+                btnGithubLoginSettings.text = "🔒 Cloud Vault Secured: @$screenName (Tap to Manage)"
+                btnGithubLoginSettings.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+                btnGithubLoginSettings.setTextColor(0xFFFFFFFF.toInt())
+                textSyncStatus.text = "🟢 Cloudflare D1 Delta Sync Active (@$screenName) • Password Protected • Last: $lastStr • Logs: ${loadBattleLogs().size} • Teams: ${loadPresets().size}"
+            }
+            hasPassword -> {
+                btnGithubLoginSettings.text = "🔑 Unlock Secured Cloud Vault (@$screenName)"
+                btnGithubLoginSettings.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF0284C7.toInt())
+                btnGithubLoginSettings.setTextColor(0xFFFFFFFF.toInt())
+                textSyncStatus.text = "🔒 Cloud Vault Protected (@$screenName) • Tap above to sign in with your Vault Password on this device • Last: $lastStr"
+            }
+            isCustomId -> {
+                btnGithubLoginSettings.text = "🔐 Set Vault Password to Secure Cloud Sync (@$screenName)"
+                btnGithubLoginSettings.backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF0284C7.toInt())
+                btnGithubLoginSettings.setTextColor(0xFFFFFFFF.toInt())
+                textSyncStatus.text = "☁️ Cloudflare D1 Auto-Sync Active (@$screenName • Last: $lastStr • Logs: ${loadBattleLogs().size} • Teams: ${loadPresets().size}) • ⚠️ Tap above to set a Vault Password!"
+            }
+            else -> {
+                btnGithubLoginSettings.text = "🔐 Set Custom ID & Vault Password for Multi-Device Sync"
+                btnGithubLoginSettings.backgroundTintList = android.content.res.ColorStateList.valueOf(theme.secondaryButtonColor)
+                btnGithubLoginSettings.setTextColor(0xFFFFFFFF.toInt())
+                textSyncStatus.text = "🎲 Using Random ID ($screenName) • Set a custom Trainer ID & Vault Password (or tap to sign in to an existing vault) to sync across devices"
+            }
         }
         updateAiTelemetryStatusUi()
     }
@@ -3167,9 +3195,9 @@ class MainActivity : AppCompatActivity() {
                     lifecycleScope.launch(Dispatchers.IO) {
                         val effectiveKey = entered.ifEmpty { OverlayService.getEffectiveReplayUnlockKey(prefs) }
                         val (ok, msg) = OverlayService.verifyReplayUnlockKeyBlocking(prefs, gson, effectiveKey, enteredEmail)
-                        if (OverlayService.getEffectiveSyncToken(prefs).isNotEmpty()) {
+                        if (OverlayService.hasValidScreenNameStatic(prefs)) {
                             try {
-                                OverlayService.syncWithGitHubGistBlocking(prefs, gson)
+                                OverlayService.syncWithCloudflareVaultBlocking(prefs, gson)
                             } catch (_: Exception) {}
                         }
                         OverlayService.enforceLocalDvrReplaysQuotaStatic(filesDir, prefs, gson)
@@ -3325,49 +3353,14 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             val btnVaultPassword = Button(this).apply {
-                text = "🔒 Web Password / Login"
+                text = "🔒 Vault Password / Login"
                 textSize = 9.5f
                 isAllCaps = false
                 backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF1E293B.toInt())
                 setTextColor(0xFF38BDF8.toInt())
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 setOnClickListener {
-                    val pwEdit = EditText(this@MainActivity).apply {
-                        hint = "Enter Password (min 6 characters)"
-                        inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-                    }
-                    AlertDialog.Builder(this@MainActivity)
-                        .setTitle("🔒 Vault & Simulator Web Password")
-                        .setMessage("Set a password for your Trainer ID so you can sign in on /vault or the Web Simulator with Username + Password, or sign in with an existing password:")
-                        .setView(pwEdit)
-                        .setPositiveButton("💾 Set / Save Password") { _, _ ->
-                            val pw = pwEdit.text?.toString()?.trim().orEmpty()
-                            if (pw.length < 6) {
-                                Toast.makeText(this@MainActivity, "Password must be at least 6 characters.", Toast.LENGTH_SHORT).show()
-                                return@setPositiveButton
-                            }
-                            lifecycleScope.launch(Dispatchers.IO) {
-                                val (_, msg) = OverlayService.setOrLoginVaultPasswordBlocking(prefs, gson, pw, true)
-                                withContext(Dispatchers.Main) {
-                                    if (!isFinishing) Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        }
-                        .setNeutralButton("🔓 Login with Password") { _, _ ->
-                            val pw = pwEdit.text?.toString()?.trim().orEmpty()
-                            if (pw.isEmpty()) return@setNeutralButton
-                            lifecycleScope.launch(Dispatchers.IO) {
-                                val (_, msg) = OverlayService.setOrLoginVaultPasswordBlocking(prefs, gson, pw, false)
-                                withContext(Dispatchers.Main) {
-                                    if (!isFinishing) {
-                                        setupOrUpdateReplayVaultSettingsUi()
-                                        Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-                                    }
-                                }
-                            }
-                        }
-                        .setNegativeButton("Cancel", null)
-                        .show()
+                    handleCloudVaultSecurityButtonTap()
                 }
             }
             vaultOptionsRow.addView(btnVaultVisibility)
@@ -3491,14 +3484,14 @@ class MainActivity : AppCompatActivity() {
         val vaultMap = OverlayService.loadReplayVaultMapStatic(prefs, gson)
         val cloudCount = vaultMap.values.count { it.shareId.isNotBlank() }
         val pinnedCount = vaultMap.values.count { it.isPinned }
-        val ghToken = OverlayService.getEffectiveSyncToken(prefs)
-        val ghUsername = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty()
-        val syncSecurityLine = if (ghToken.isNotEmpty() && ghUsername.isNotEmpty()) {
-            "🔒 Key Security: Hidden & AES-256-GCM Encrypted (Android Keystore + @$ghUsername's Private GitHub Vault)"
+        val vaultScreenName = OverlayService.getRequiredScreenNameStatic(prefs)
+        val hasVaultPw = prefs.getBoolean(OverlayService.PREFS_KEY_VAULT_HAS_PASSWORD, false)
+        val syncSecurityLine = if (hasVaultPw && vaultScreenName.isNotBlank()) {
+            "🔒 Key & Vault Security: AES-256-GCM Hardware Keystore + Password-Secured Cloudflare D1 Vault (@$vaultScreenName)"
         } else if (hasActiveMembership) {
-            "🔒 Key Security: Hidden & AES-256-GCM Encrypted in Android Hardware Keystore"
+            "🔒 Key Security: Hidden & AES-256-GCM Encrypted in Android Hardware Keystore (Set Vault Password above for multi-device login)"
         } else {
-            "📴 Offline-Ready: Verified tier is cached locally on-device (Sign in with GitHub above for multi-device sync)"
+            "📴 Offline-Ready: Verified tier is cached locally on-device (Set a Vault Password above to lock multi-device Cloud Sync)"
         }
         textReplayVaultStatus?.text = String.format(
             java.util.Locale.US,
@@ -3622,218 +3615,406 @@ class MainActivity : AppCompatActivity() {
         updateAiTelemetryStatusUi()
     }
 
-    private fun handleGitHubLoginButtonTap() {
-        val token = OverlayService.getEffectiveSyncToken(prefs)
-        val username = prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty()
-        if (token.isNotEmpty()) {
-            val userDisplay = if (username.isNotEmpty()) "@$username" else "your GitHub account"
-            AlertDialog.Builder(this)
-                .setTitle("☁️ GitHub Cloud Sync ($userDisplay)")
-                .setMessage("Your device is signed in to $userDisplay and automatically syncs Battle Logs, Teams & App Settings across your devices.")
-                .setPositiveButton("☁️ Sync Now") { _, _ ->
-                    triggerTwoDeviceCloudSync(silent = false)
-                }
-                .setNeutralButton("🔑 Switch Account / Re-Login") { _, _ ->
-                    startGitHubOAuthDeviceFlow()
-                }
-                .setNegativeButton("🔓 Sign Out") { _, _ ->
-                    prefs.edit()
-                        .remove(PREFS_KEY_SYNC_GITHUB_TOKEN)
-                        .remove(PREFS_KEY_SYNC_GITHUB_USERNAME)
-                        .remove(OverlayService.PREFS_KEY_SYNC_GITHUB_USER_ID)
-                        .remove(PREFS_KEY_SYNC_GIST_ID)
-                        .apply()
-                    editSyncGithubToken.setText("")
-                    editSyncGistId.setText("")
-                    updateSyncStatusUi()
-                    setupOrUpdateReplayVaultSettingsUi()
-                    Toast.makeText(this, "Signed out of GitHub Cloud Sync", Toast.LENGTH_SHORT).show()
-                }
-                .show()
-        } else {
-            startGitHubOAuthDeviceFlow()
+    private fun handleCloudVaultSecurityButtonTap() {
+        if (!OverlayService.hasValidScreenNameStatic(prefs)) {
+            ensureRequiredScreenNameOrPrompt()
+            return
         }
-    }
+        val screenName = OverlayService.getRequiredScreenNameStatic(prefs)
+        val isCustomId = OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs)
+        val hasPassword = prefs.getBoolean(OverlayService.PREFS_KEY_VAULT_HAS_PASSWORD, false)
+        val requiresPassword = prefs.getBoolean(OverlayService.PREFS_KEY_VAULT_REQUIRES_PASSWORD, false)
+        val hasSession = OverlayService.getVaultSessionTokenStatic(prefs).isNotBlank()
 
-    private fun startGitHubOAuthDeviceFlow() {
-        btnGithubLoginSettings.isEnabled = false
-        btnGithubLoginSettings.text = "⏳ Requesting GitHub Login Code..."
-        lifecycleScope.launch(Dispatchers.IO) {
-            val codeResult = OverlayService.requestGitHubDeviceCodeBlocking()
-            withContext(Dispatchers.Main) {
-                btnGithubLoginSettings.isEnabled = true
-                updateSyncStatusUi()
-                codeResult.onFailure { err ->
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Could not start GitHub Login: ${err.localizedMessage ?: "Network error"}",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }.onSuccess { deviceResp ->
-                    showGitHubDeviceVerificationDialog(deviceResp)
-                }
+        when {
+            requiresPassword -> {
+                showSignInToExistingVaultDialog(screenName)
+            }
+            hasPassword && hasSession -> {
+                val options = arrayOf(
+                    "☁️ Sync Battle Logs, Teams & Settings Now",
+                    "🔑 Change Vault Password",
+                    "🔄 Sign In to Another Trainer Vault",
+                    "🔓 Lock / Sign Out Vault Session on This Device"
+                )
+                AlertDialog.Builder(this)
+                    .setTitle("🔒 Cloud Vault Secured (@$screenName)")
+                    .setItems(options) { _, which ->
+                        when (which) {
+                            0 -> triggerTwoDeviceCloudSync(silent = false)
+                            1 -> showSetOrChangeVaultPasswordDialog(isChangingExisting = true, isAutoPrompt = false)
+                            2 -> showSignInToExistingVaultDialog("")
+                            3 -> {
+                                OverlayService.setVaultSessionTokenStatic(prefs, "")
+                                updateSyncStatusUi()
+                                setupOrUpdateReplayVaultSettingsUi()
+                                Toast.makeText(
+                                    this,
+                                    "🔓 Signed out of @$screenName Vault session on this device.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    }
+                    .setNegativeButton("Close", null)
+                    .show()
+            }
+            hasPassword -> {
+                showSignInToExistingVaultDialog(screenName)
+            }
+            !isCustomId -> {
+                AlertDialog.Builder(this)
+                    .setTitle("☁️ Multi-Device Cloud Vault Sync")
+                    .setMessage(
+                        "You are currently using a random ID ($screenName).\n\n" +
+                        "• Already have a Vault on another device? Tap 'Sign In to Existing Vault'.\n" +
+                        "• Setting up a new Vault? Choose a custom Trainer ID first, then set your Vault Password."
+                    )
+                    .setPositiveButton("🔑 Sign In to Existing Vault") { _, _ ->
+                        showSignInToExistingVaultDialog("")
+                    }
+                    .setNeutralButton("✏️ Set Custom ID") { _, _ ->
+                        promptCustomIdForVideoLogging()
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+            else -> {
+                showSetOrChangeVaultPasswordDialog(isChangingExisting = false, isAutoPrompt = false)
             }
         }
     }
 
-    private fun checkPendingGitHubDeviceLoginOnResume() {
-        if (OverlayService.getEffectiveSyncToken(prefs).isNotEmpty()) return
-        val pendingCode = prefs.getString("pending_github_device_code", "")?.trim().orEmpty()
-        val expiresAt = prefs.getLong("pending_github_device_expires_at", 0L)
-        if (pendingCode.isEmpty() || System.currentTimeMillis() > expiresAt) return
+    private fun showSetOrChangeVaultPasswordDialog(
+        isChangingExisting: Boolean,
+        isAutoPrompt: Boolean = false
+    ) {
+        if (isFinishing) return
+        activeVaultPasswordPromptDialog?.dismiss()
 
-        lifecycleScope.launch(Dispatchers.IO) {
-            val (status, tokenOrErr, username) = OverlayService.pollGitHubDeviceTokenOnceBlocking(pendingCode)
-            if (status == "SUCCESS" && tokenOrErr.isNotEmpty()) {
-                OverlayService.setEffectiveSyncToken(prefs, tokenOrErr)
-                prefs.edit()
-                    .remove("pending_github_device_code")
-                    .remove("pending_github_device_expires_at")
-                    .putString(PREFS_KEY_SYNC_GITHUB_USERNAME, username)
-                    .apply()
-                withContext(Dispatchers.Main) {
-                    editSyncGithubToken.setText("")
-                    updateSyncStatusUi()
-                    val userTag = if (username.isNotEmpty()) "@$username" else "GitHub"
-                    Toast.makeText(
-                        this@MainActivity,
-                        "✅ Signed in as $userTag! Syncing devices...",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    triggerTwoDeviceCloudSync(silent = false)
-                }
-            }
+        val screenName = OverlayService.getRequiredScreenNameStatic(prefs)
+        val density = resources.displayMetrics.density
+        val pad = (16 * density).toInt()
+        val innerPad = (11 * density).toInt()
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
         }
-    }
 
-    private fun showGitHubDeviceVerificationDialog(deviceResp: OverlayService.Companion.GitHubDeviceCodeResponse) {
-        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        cm.setPrimaryClip(android.content.ClipData.newPlainText("GitHub Device Code", deviceResp.userCode))
-        Toast.makeText(this, "Code ${deviceResp.userCode} copied to clipboard!", Toast.LENGTH_LONG).show()
-
-        val deadlineMs = System.currentTimeMillis() + (deviceResp.expiresIn * 1000L)
-        prefs.edit()
-            .putString("pending_github_device_code", deviceResp.deviceCode)
-            .putLong("pending_github_device_expires_at", deadlineMs)
-            .apply()
-
-        var isPollingActive = true
-        val statusLabel = TextView(this).apply {
-            text = "Your 8-character GitHub Login Code:\n\n" +
-                "   👉  ${deviceResp.userCode}  👈\n" +
-                "   (Already copied to your clipboard!)\n\n" +
-                "1. Tap \"🌐 Open GitHub Login\" below.\n" +
-                "2. Paste ${deviceResp.userCode} on GitHub and tap Authorize.\n" +
-                "3. Switch back to SilphScope PvP — your token is saved automatically!\n\n" +
-                "⏳ Waiting for GitHub authorization..."
+        val currentPwInput = EditText(this).apply {
+            hint = "Current Vault Password"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
             setTextColor(0xFFF8FAFC.toInt())
+            setHintTextColor(0xFF94A3B8.toInt())
             setBackgroundColor(0xFF0F172A.toInt())
-            textSize = 13f
-            val pad = (16 * resources.displayMetrics.density).toInt()
-            setPadding(pad, pad, pad, pad)
+            setPadding(innerPad, innerPad, innerPad, innerPad)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = (8 * density).toInt()
+            }
         }
 
-        applyCurrentAppThemeToSubtree(statusLabel)
+        val newPwInput = EditText(this).apply {
+            hint = if (isChangingExisting) "New Vault Password (8–128 chars)" else "Create Vault Password (8–128 chars)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+            setTextColor(0xFFF8FAFC.toInt())
+            setHintTextColor(0xFF94A3B8.toInt())
+            setBackgroundColor(0xFF0F172A.toInt())
+            setPadding(innerPad, innerPad, innerPad, innerPad)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = (8 * density).toInt()
+            }
+        }
+
+        val confirmPwInput = EditText(this).apply {
+            hint = "Confirm Vault Password"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+            setTextColor(0xFFF8FAFC.toInt())
+            setHintTextColor(0xFF94A3B8.toInt())
+            setBackgroundColor(0xFF0F172A.toInt())
+            setPadding(innerPad, innerPad, innerPad, innerPad)
+        }
+
+        val helperTv = TextView(this).apply {
+            text = "Stored as a salted PBKDF2-SHA256 hash on Cloudflare. Use this same Trainer ID + Password to sync additional phones/tablets, /vault replays, and the Web Simulator."
+            textSize = 11f
+            setTextColor(0xFF94A3B8.toInt())
+            setPadding(0, (8 * density).toInt(), 0, 0)
+        }
+
+        if (isChangingExisting) {
+            container.addView(currentPwInput)
+        }
+        container.addView(newPwInput)
+        container.addView(confirmPwInput)
+        container.addView(helperTv)
+
+        val titleStr = when {
+            isChangingExisting -> "🔑 Change Vault Password (@$screenName)"
+            isAutoPrompt -> "🔐 Secure Your Cloud Sync Vault (@$screenName)"
+            else -> "🔐 Set Vault Password (@$screenName)"
+        }
+        val messageStr = if (isChangingExisting) {
+            "Enter your current password and choose a new Vault Password (8–128 characters) for @$screenName:"
+        } else {
+            "Your Battle Logs, Teams & Settings for @$screenName sync automatically via SilphScope Cloud (Cloudflare D1) — no GitHub account required.\n\nSet a Vault Password (8–128 characters) to lock your vault against unauthorized access:"
+        }
+
+        val builder = AlertDialog.Builder(this)
+            .setTitle(titleStr)
+            .setMessage(messageStr)
+            .setView(container)
+            .setPositiveButton("🔐 Save Password", null)
+            .setNegativeButton(if (isAutoPrompt) "Remind Me Later" else "Cancel") { _, _ ->
+                if (isAutoPrompt) {
+                    prefs.edit()
+                        .putLong(
+                            OverlayService.PREFS_KEY_VAULT_PW_PROMPT_SNOOZED_UNTIL,
+                            System.currentTimeMillis() + 86_400_000L
+                        )
+                        .apply()
+                }
+            }
+
+        if (!isChangingExisting) {
+            builder.setNeutralButton("🔑 Sign In Existing", null)
+        }
+
+        val dialog = builder.create()
+        dialog.setOnDismissListener {
+            if (activeVaultPasswordPromptDialog === dialog) {
+                activeVaultPasswordPromptDialog = null
+            }
+        }
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setOnClickListener {
+                val curPw = currentPwInput.text?.toString()?.trim().orEmpty()
+                val newPw = newPwInput.text?.toString()?.trim().orEmpty()
+                val confirmPw = confirmPwInput.text?.toString()?.trim().orEmpty()
+                if (isChangingExisting && curPw.isEmpty() && OverlayService.getEffectiveReplayUnlockKey(prefs).isBlank()) {
+                    currentPwInput.error = "Enter your current password"
+                    return@setOnClickListener
+                }
+                if (newPw.length < 8 || newPw.length > 128) {
+                    newPwInput.error = "Password must be 8–128 characters"
+                    return@setOnClickListener
+                }
+                if (newPw != confirmPw) {
+                    confirmPwInput.error = "Passwords do not match"
+                    return@setOnClickListener
+                }
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = false
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val (ok, msg) = OverlayService.setOrLoginVaultPasswordBlocking(
+                        prefs = prefs,
+                        gson = gson,
+                        passwordInput = newPw,
+                        isSettingNewPassword = true,
+                        currentPassword = curPw,
+                        targetScreenName = screenName
+                    )
+                    withContext(Dispatchers.Main) {
+                        if (!isFinishing) {
+                            dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = true
+                            updateSyncStatusUi()
+                            setupOrUpdateReplayVaultSettingsUi()
+                            Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                            if (ok) {
+                                dialog.dismiss()
+                                triggerTwoDeviceCloudSync(silent = true)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!isChangingExisting) {
+                dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener {
+                    dialog.dismiss()
+                    showSignInToExistingVaultDialog(screenName)
+                }
+            }
+        }
+
+        activeVaultPasswordPromptDialog = dialog
+        dialog.show()
+    }
+
+    private fun showSignInToExistingVaultDialog(prefillScreenName: String = "") {
+        if (isFinishing) return
+        activeVaultPasswordPromptDialog?.dismiss()
+
+        val density = resources.displayMetrics.density
+        val pad = (16 * density).toInt()
+        val innerPad = (11 * density).toInt()
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+        }
+
+        val initialUser = prefillScreenName.ifBlank {
+            val cur = OverlayService.getRequiredScreenNameStatic(prefs)
+            if (OverlayService.isRandomDebugIdStatic(prefs)) "" else cur
+        }
+
+        val userEdit = EditText(this).apply {
+            hint = "Trainer ID (e.g. sportsfan986)"
+            setText(initialUser)
+            setSingleLine(true)
+            setTextColor(0xFFF8FAFC.toInt())
+            setHintTextColor(0xFF94A3B8.toInt())
+            setBackgroundColor(0xFF0F172A.toInt())
+            setPadding(innerPad, innerPad, innerPad, innerPad)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = (8 * density).toInt()
+            }
+        }
+
+        val pwEdit = EditText(this).apply {
+            hint = "Vault Password"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+            setTextColor(0xFFF8FAFC.toInt())
+            setHintTextColor(0xFF94A3B8.toInt())
+            setBackgroundColor(0xFF0F172A.toInt())
+            setPadding(innerPad, innerPad, innerPad, innerPad)
+        }
+
+        container.addView(userEdit)
+        container.addView(pwEdit)
 
         val dialog = AlertDialog.Builder(this)
-            .setTitle("🔑 Code: ${deviceResp.userCode}")
-            .setView(statusLabel)
-            .setPositiveButton("🌐 Open GitHub Login", null)
-            .setNeutralButton("📋 Copy Code", null)
-            .setNegativeButton("Close") { _, _ ->
-                isPollingActive = false
-            }
-            .setOnDismissListener {
-                isPollingActive = false
-            }
+            .setTitle("🔑 Sign In to SilphScope Cloud Vault")
+            .setMessage("Enter your Trainer ID and Vault Password to unlock and sync your Battle Logs, Teams, Membership Tier & Settings on this device:")
+            .setView(container)
+            .setPositiveButton("🔓 Sign In & Sync", null)
+            .setNegativeButton("Cancel", null)
             .create()
 
-        dialog.show()
-
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-            cm.setPrimaryClip(android.content.ClipData.newPlainText("GitHub Device Code", deviceResp.userCode))
-            Toast.makeText(this, "Code ${deviceResp.userCode} copied! Paste it on GitHub.", Toast.LENGTH_LONG).show()
-            try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(deviceResp.verificationUri)))
-            } catch (_: Exception) {
-                Toast.makeText(this, "Open ${deviceResp.verificationUri} in your browser", Toast.LENGTH_LONG).show()
+        dialog.setOnDismissListener {
+            if (activeVaultPasswordPromptDialog === dialog) {
+                activeVaultPasswordPromptDialog = null
             }
         }
 
-        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
-            cm.setPrimaryClip(android.content.ClipData.newPlainText("GitHub Device Code", deviceResp.userCode))
-            Toast.makeText(this, "Copied ${deviceResp.userCode}!", Toast.LENGTH_SHORT).show()
-        }
-
-        // Poll GitHub OAuth endpoint in background until user authorizes
-        lifecycleScope.launch(Dispatchers.IO) {
-            var pollIntervalMs = (deviceResp.interval.coerceAtLeast(5)) * 1000L
-            while (isPollingActive && System.currentTimeMillis() < deadlineMs) {
-                kotlinx.coroutines.delay(pollIntervalMs)
-                if (!isPollingActive) break
-                val (status, tokenOrErr, username) = OverlayService.pollGitHubDeviceTokenOnceBlocking(deviceResp.deviceCode)
-                when (status) {
-                    "SUCCESS" -> {
-                        isPollingActive = false
-                        OverlayService.setEffectiveSyncToken(prefs, tokenOrErr)
-                        prefs.edit()
-                            .remove("pending_github_device_code")
-                            .remove("pending_github_device_expires_at")
-                            .putString(PREFS_KEY_SYNC_GITHUB_USERNAME, username)
-                            .apply()
-                        withContext(Dispatchers.Main) {
-                            editSyncGithubToken.setText("")
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setOnClickListener {
+                val targetUser = OverlayService.sanitizeScreenNameStatic(userEdit.text?.toString().orEmpty())
+                val pw = pwEdit.text?.toString()?.trim().orEmpty()
+                if (!OverlayService.isValidScreenNameStatic(targetUser)) {
+                    userEdit.error = "Enter a valid Trainer ID (3–24 chars)"
+                    return@setOnClickListener
+                }
+                if (pw.isEmpty()) {
+                    pwEdit.error = "Enter your Vault Password"
+                    return@setOnClickListener
+                }
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = false
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val (ok, msg) = OverlayService.setOrLoginVaultPasswordBlocking(
+                        prefs = prefs,
+                        gson = gson,
+                        passwordInput = pw,
+                        isSettingNewPassword = false,
+                        targetScreenName = targetUser
+                    )
+                    withContext(Dispatchers.Main) {
+                        if (!isFinishing) {
+                            dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = true
+                            OverlayService.syncTierThresholdsFromPrefs(prefs)
+                            updateTrainerScreenNameUi()
                             updateSyncStatusUi()
-                            if (dialog.isShowing) dialog.dismiss()
-                            val userTag = if (username.isNotEmpty()) "@$username" else "GitHub"
-                            Toast.makeText(
-                                this@MainActivity,
-                                "✅ Signed in as $userTag! Syncing devices...",
-                                Toast.LENGTH_LONG
-                            ).show()
-                            triggerTwoDeviceCloudSync(silent = false)
+                            setupOrUpdateReplayVaultSettingsUi()
+                            Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                            if (ok) {
+                                dialog.dismiss()
+                                triggerTwoDeviceCloudSync(silent = false)
+                            }
                         }
-                        break
-                    }
-                    "SLOW_DOWN" -> {
-                        pollIntervalMs += 5000L
-                    }
-                    "ERROR" -> {
-                        isPollingActive = false
-                        withContext(Dispatchers.Main) {
-                            statusLabel.text = "❌ GitHub Login failed: $tokenOrErr"
-                        }
-                        break
                     }
                 }
             }
         }
+
+        activeVaultPasswordPromptDialog = dialog
+        dialog.show()
     }
 
-    private fun triggerTwoDeviceCloudSync(silent: Boolean) {
-        val tok = OverlayService.getEffectiveSyncToken(prefs)
-        if (tok.isEmpty()) {
+    private fun maybePromptVaultPasswordSecurity() {
+        if (isFinishing || !::prefs.isInitialized) return
+        if (!OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs)) return
+        if (prefs.getBoolean(OverlayService.PREFS_KEY_VAULT_HAS_PASSWORD, false)) return
+        if (prefs.getBoolean(OverlayService.PREFS_KEY_VAULT_REQUIRES_PASSWORD, false)) return
+        if (activeScreenNamePromptDialog?.isShowing == true) return
+        if (activeVaultPasswordPromptDialog?.isShowing == true) return
+        val snoozedUntil = prefs.getLong(OverlayService.PREFS_KEY_VAULT_PW_PROMPT_SNOOZED_UNTIL, 0L)
+        if (System.currentTimeMillis() < snoozedUntil) return
+
+        showSetOrChangeVaultPasswordDialog(isChangingExisting = false, isAutoPrompt = true)
+    }
+
+    private fun triggerTwoDeviceCloudSync(silent: Boolean, isResumeCheck: Boolean = false) {
+        if (!OverlayService.hasValidScreenNameStatic(prefs)) {
             if (!silent) {
-                Toast.makeText(this, "Tap '🔑 Login with GitHub' in Settings to enable auto-sync", Toast.LENGTH_LONG).show()
+                ensureRequiredScreenNameOrPrompt()
             }
             return
         }
+        if (prefs.getBoolean(OverlayService.PREFS_KEY_VAULT_REQUIRES_PASSWORD, false) &&
+            OverlayService.getVaultSessionTokenStatic(prefs).isBlank()
+        ) {
+            updateSyncStatusUi()
+            if (!silent) {
+                showSignInToExistingVaultDialog(OverlayService.getRequiredScreenNameStatic(prefs))
+            }
+            return
+        }
+
+        val migratedAlready = prefs.getBoolean(OverlayService.PREFS_KEY_D1_VAULT_MIGRATED_V731, false)
+        if (isResumeCheck && migratedAlready) {
+            val now = System.currentTimeMillis()
+            if (now - lastResumeCloudSyncMs < 45_000L) {
+                return
+            }
+            lastResumeCloudSyncMs = now
+        } else if (isResumeCheck) {
+            lastResumeCloudSyncMs = System.currentTimeMillis()
+        }
+
         if (!silent) {
-            textSyncStatus.text = "☁️ Reconciling deltas with your GitHub cloud vault..."
+            debouncedCloudSyncJob?.cancel()
+            textSyncStatus.text = "☁️ Syncing deltas with SilphScope Cloudflare D1 Vault..."
             btnSyncDevicesSettings.isEnabled = false
             btnSyncBattleLog.isEnabled = false
         }
-        lifecycleScope.launch(Dispatchers.IO) {
-            // Also flush any queued DVR bundles & pending AI telemetry logs when syncing Battle Log
+
+        val executeSyncBlock: suspend () -> Unit = {
+            if (silent && !isResumeCheck) {
+                kotlinx.coroutines.delay(2500L)
+            }
             var recoveredDvrCount = 0
             try {
-                if (OverlayService.countPendingCachedDvrBundlesStatic(cacheDir) > 0 &&
+                if (!silent &&
+                    OverlayService.countPendingCachedDvrBundlesStatic(cacheDir) > 0 &&
                     OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs)
                 ) {
                     val (dCount, _) = OverlayService.retryPendingCachedDvrBundlesBlocking(cacheDir, prefs, gson)
                     recoveredDvrCount = dCount
                 }
-                if (OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson).isNotEmpty()) {
+                if (!silent && OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson).isNotEmpty()) {
                     OverlayService.uploadPendingAiTelemetryBatchBlocking(
                         prefs = prefs,
                         gson = gson,
@@ -3842,11 +4023,16 @@ class MainActivity : AppCompatActivity() {
                     )
                 }
             } catch (_: Exception) {}
-            val (ok, msg) = OverlayService.syncWithGitHubGistBlocking(prefs, gson)
+
+            val (ok, msg) = OverlayService.syncWithCloudflareVaultBlocking(
+                prefs = prefs,
+                gson = gson,
+                forceFullPull = !silent
+            )
             withContext(Dispatchers.Main) {
+                if (isFinishing) return@withContext
                 btnSyncDevicesSettings.isEnabled = true
                 btnSyncBattleLog.isEnabled = true
-                editSyncGistId.setText(prefs.getString(PREFS_KEY_SYNC_GIST_ID, "") ?: "")
                 updateTrainerScreenNameUi()
                 ensureRequiredScreenNameOrPrompt()
                 updateSyncStatusUi()
@@ -3856,12 +4042,38 @@ class MainActivity : AppCompatActivity() {
                 refreshPresetsUi()
                 setupBattleLogFilters()
                 renderBattleLogPage()
+
                 val dvrNote = if (recoveredDvrCount > 0) " • 🎥 Uploaded $recoveredDvrCount queued DVR video(s)" else ""
-                if (!silent) {
+                if (prefs.getBoolean(OverlayService.PREFS_KEY_VAULT_REQUIRES_PASSWORD, false)) {
+                    if (!silent || isResumeCheck) {
+                        if (activeVaultPasswordPromptDialog?.isShowing != true) {
+                            showSignInToExistingVaultDialog(OverlayService.getRequiredScreenNameStatic(prefs))
+                        }
+                    }
+                } else if (!silent) {
                     Toast.makeText(this@MainActivity, "$msg$dvrNote", Toast.LENGTH_LONG).show()
-                } else if (ok && (!msg.contains("+0 from other devices") || !msg.contains("+0 updated") || recoveredDvrCount > 0)) {
-                    Toast.makeText(this@MainActivity, "☁️ Auto-synced on open: $msg$dvrNote", Toast.LENGTH_SHORT).show()
+                    if (ok) {
+                        maybePromptVaultPasswordSecurity()
+                    }
+                } else if (ok) {
+                    if (!msg.contains("+0 new logs, +0 teams") || recoveredDvrCount > 0) {
+                        Toast.makeText(this@MainActivity, "$msg$dvrNote", Toast.LENGTH_SHORT).show()
+                    }
+                    if (isResumeCheck) {
+                        maybePromptVaultPasswordSecurity()
+                    }
                 }
+            }
+        }
+
+        if (silent && !isResumeCheck) {
+            debouncedCloudSyncJob?.cancel()
+            debouncedCloudSyncJob = lifecycleScope.launch(Dispatchers.IO) {
+                executeSyncBlock()
+            }
+        } else {
+            lifecycleScope.launch(Dispatchers.IO) {
+                executeSyncBlock()
             }
         }
     }

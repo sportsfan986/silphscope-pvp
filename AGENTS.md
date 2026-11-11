@@ -2,7 +2,7 @@
 
 > **Target Audience**: Antigravity agents, Claude/Gemini coding assistants, and core developers maintaining or extending **SilphScope PvP**.  
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v7.30` (`versionCode = 1730`)  
+> **Current Version**: `v7.31` (`versionCode = 1731`)  
 > **Official Domains**: `https://silphscopepvp.com` (Website & Web Simulator) • `https://dvr.silphscopepvp.com` (Cloud DVR Vault & `/watch/:shareId`) • `https://api.silphscopepvp.com` (Telemetry, Auth & Webhooks API) • `https://dl.silphscopepvp.com` (1-Click APK Download).
 
 ---
@@ -15,7 +15,7 @@
 1. **Real-Time Combat Math**: Compute exact charged-move damage percentages, shield-dependent PvPoke battle ratings, fast-move turn pacing, and sneak-prevention timing without disrupting player focus.
 2. **Zero Game Impact**: Achieve zero latency overhead, zero Pokémon GO game frame drops, and <0.5% CPU overhead through in-memory frame processing, single-pass virtual display projection, and hardware H.264 offloading.
 3. **Objective Skill Analytics**: Separate blind team-composition matchmaking luck (Blind Matchup Favorability / BMF) from in-battle micro-execution skill (Wins Above Expected / WAE) and lead-loss recovery performance.
-4. **Data Privacy & Open Telemetry**: Transmit zero private data or telemetry to third-party tracking services. All cloud delta synchronization and diagnostic recordings upload exclusively to the user's private GitHub vault or the dedicated `ai-telemetry-logs` branch.
+4. **Data Privacy & Open Telemetry**: Transmit zero private data or telemetry to third-party tracking services. All multi-device delta synchronization (Battle Logs, Team Presets, and App Settings) and diagnostic recordings run directly on SilphScope's Cloudflare D1 (`silphscope-sync-db`) and R2 (`silphscope-replays`) vaults protected by PBKDF2-HMAC-SHA256 Vault Passwords and Android Hardware Keystore encryption.
 
 ---
 
@@ -58,7 +58,7 @@
 │  ┌───────────────────────────────────────────────────┐                 │               │
 │  │       MainActivity.kt (Settings & Battle Log)     │                 │               │
 │  │  • Teams Manager, Anti-Meta Builder & Meta Tab    │                 │               │
-│  │  • Multi-Device GitHub Cloud Delta Sync           │                 │               │
+│  │  • Multi-Device Cloudflare D1 Vault Delta Sync    │                 │               │
 │  │  • Lead-Loss Recovery Rate & Safe-Swap MVP        │                 │               │
 │  │  • Haptics Tuning Sliders & DVR Master Switch     │                 │               │
 │  └──────────────────────────┬────────────────────────┘                 │               │
@@ -66,11 +66,11 @@
                               │                                          │
                               ▼                                          ▼
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                              GitHub Cloud Services & CI/CD                             │
+│                       Cloudflare Edge (D1 + R2 + KV) & GitHub CI/CD                    │
 │                                                                                        │
-│   • main Branch: Source code, Web Simulator (GitHub Pages), and Release APK builds     │
-│   • ai-telemetry-logs Branch: Anomaly telemetry batches, deep traces, and DVR MP4s     │
-│   • GitHub Gist / Repo API: Private N-device delta sync vault (Teams + Battle Logs)     │
+│   • Cloudflare D1 (silphscope-sync-db): Battle Logs, Teams, Settings & Global Meta SQL │
+│   • Cloudflare R2 (silphscope-replays): DVR MP4 Replays & _deep_trace.jsonl Vault      │
+│   • GitHub Actions (main): Web Simulator (GitHub Pages) & Signed Release APK Builds    │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -156,7 +156,7 @@ The HUD displays a compact, high-contrast 2-line tactical recommendation banner 
 | **Price & Billing** | **$0 Forever** | **$2 One-Time** *(or Free forever after any Pro/VIP sub)* | **$3/mo** or **$3 First-Season Intro** / **$6 per 90d GBL Season** (`$2/mo` eff.) | **$5/mo** or **$5 First-Season Intro** / **$10 per 90d GBL Season** (`$3.33/mo` eff.) |
 | **Live In-Game HUD, 9-Shield Matrix & Haptics** | ✅ **100% Free** | ✅ **100% Free** | ✅ **100% Free** | ✅ **100% Free** |
 | **🛡️ Attack Incoming! Shield Decision Overlay** | — | ✅ **Unlocked Forever** | ✅ **Unlocked Forever** | ✅ **Unlocked Forever** |
-| **Battle Log History & Multi-Device GitHub Sync** | Current Season (+14d grace) | **Unlimited Lifetime** | **Unlimited Lifetime** | **Unlimited Lifetime** |
+| **Battle Log History & Multi-Device Cloudflare D1 Sync** | Current Season (+14d grace) | **Unlimited Lifetime** | **Unlimited Lifetime** | **Unlimited Lifetime** |
 | **Local On-Device DVR Ring Buffer** | **1 Battle** | **5 Battles** | **25 Battles (5 Sets)** | **25–100 Battles (Slider)** |
 | **Hardware H.264 DVR Video Framerate** | 15 FPS (`720 kbps`) | 15 FPS (`720 kbps`) | **15 FPS (`720 kbps` • ~14 MB)** | **🎥 30 FPS Smooth (`900 kbps` • <=30 MB max) + 💾 15 FPS Storage Saver** |
 | **Cloud R2 Video & Frame Trace Vault** | — | Keeps Pinned 365d | **50 Rolling (30d) + 10 Pinned (365d) • 2 GB** | **150 Rolling (365d) + 25 Pinned (365d) • 4 GB** |
@@ -198,6 +198,8 @@ Append `?client_reference_id=<urlEncodedTrainerScreenName>` to any Stripe URL wh
   - **Pre-Checkout Unique Trainer ID Registration (`POST /v1/users/register-name`)**: Checks availability and locks `screenName` to `deviceHash` / `email` / `githubUserId`; returns `seasonPromo` (`isDay15Plus`, `introPromoEligible`, `daysRemaining`) and `paymentLinks`.
   - **Dynamic Checkout Quote (`GET/POST /v1/users/checkout-quote?screenName=<id>&email=<email>`)**: Returns `introPromoEligible` and pre-populated `recommendedLinks.supporter` (`$2`), `recommendedLinks.pro` (`$3` Intro or `$6` Season), and `recommendedLinks.vip` (`$5` Intro or `$10` Season) with `?client_reference_id=` attached.
   - **License & Tier Verification (`POST /v1/users/verify-key`)**: Accepts `{ key, screenName, email, password, githubAccessToken }` (supporting 3 sign-in methods: `Username + Token`, `Username + Password`, and `1-Click GitHub OAuth`) and returns `{ ok, active, tier, label, limits, sessionToken }`.
+  - **Multi-Device Cloudflare D1 Vault Sync (`GET/POST/PUT /v1/sync/vault`)**: Incremental cursor-based (`sinceServerMs`) delta synchronization of `battle_logs`, `team_presets`, `user_vault_state` (`settings_json`, `deleted_log_ids_json`, `deleted_team_ids_json`) in D1 (`silphscope-sync-db`) with 0 KV writes, passwordless initial device migration, and PBKDF2-HMAC-SHA256 Vault Password + `X-Vault-Session` protection.
+  - **Userbase-Wide Meta Admin API & CLI (`GET /v1/admin/meta-summary`, `GET /v1/admin/battle-logs`, `POST /v1/admin/sync/import`)**: Admin Bearer-protected SQL aggregation and paginated JSONL export across all users' structured `battle_logs` columns (`league`, `elo_band`, `opp_lead`, `opp_p2`, `opp_p3`, `my_lead`, `my_p2`, `my_p3`, `result`, `bmf`, `wae`), invoked locally via `npm run meta:summary` and `npm run meta:dump` (`scripts/query-global-meta.mjs`).
   - **Persistent Featured Replay Cloner (`POST /v1/replays/feature` & `GET /v1/replays/featured`)**: Copies any replay's `.mp4` and `_deep_trace.jsonl` into `replays/_featured/` (never auto-pruned) and scrubs personal screenName to `@Featured`.
 - **High-Resolution Graphics & Animated 50% HUD GIF Assets (`public/screenshots/` & `docs/screenshots/`)**:
   - `silphscope_tiers_infographic.jpg`, `elo_adaptive_anti_meta_engine.jpg`, `silphscope_vs_pvpoke_teambuilder.jpg`, `silphscope_vs_gobattlelog_analytics.jpg`, `featured_hero_shiny_dialga.gif`, `featured_gl_debuff_math.gif`, `featured_ml_closer_align.gif`, `featured_ul_disguise_shield.gif`.
@@ -341,6 +343,7 @@ All Android, Web Simulator, and Cloudflare Worker code must uphold the following
   - **`v7.12` (Official `silphscopepvp.com` 5-Host Domain Migration, Shiny Origin Dialga Midnight Marketing Website, Persistent `@Featured` Replay Vault, `?t=` Timestamp Deep-Linking & 50% HUD Animated Battle GIFs)**: Migrated all Android, Web, Cloudflare Worker, and GitHub endpoints to `silphscopepvp.com`, `dvr.silphscopepvp.com`, `api.silphscopepvp.com`, and `dl.silphscopepvp.com`. Built `src/components/MarketingWebsite.tsx` in the Shiny Origin Forme Dialga Midnight (`dialga_shiny_midnight`) palette featuring the Hero Phone with the user's Shiny Origin Dialga firing Roar of Time (`featured_hero_shiny_dialga.gif`), 3 clickable `@Featured` 50% HUD battle GIF cards (`featured_gl_debuff_math.gif`, `featured_ml_closer_align.gif`, `featured_ul_disguise_shield.gif`), 3 high-res 16:9 feature & comparison graphics (`elo_adaptive_anti_meta_engine.jpg`, `silphscope_vs_pvpoke_teambuilder.jpg`, `silphscope_vs_gobattlelog_analytics.jpg`), visual HUD field manual (`/?view=guide`), side-by-side comparison subpage (`/?view=compare`), persistent R2 `@Featured` replay cloning (`replays/_featured/`) with 1-click admin promotion, and `?t=<seconds>` auto-seek on `/watch/:shareId`.
   - **`v7.13` (Full Web, Worker & Android APK Security Audit Remediation, Cryptographic Secret Separation, Keystore AES-256-GCM Pref Encryption, Active Key UI Masking & R8 Shrinking)**: Audited and hardened `silphscopepvp.com`, `dvr.silphscopepvp.com`, `api.silphscopepvp.com`, `dl.silphscopepvp.com`, and the Android APK. Provisioned 6 domain-separated Cloudflare Worker secrets (`ADMIN_API_KEY`, `STRIPE_WEBHOOK_SECRET`, `BMC_WEBHOOK_SECRET`, `SESSION_HMAC_KEY`, `LICENSE_HMAC_KEY`, `PASSWORD_PEPPER`), added Stripe/BMC webhook HMAC verification + event deduplication, upgraded password hashing to PBKDF2-HMAC-SHA256 (`100k` iterations), enforced server-side GitHub identity verification and short-lived `pendingGhLinkToken` binding, rotated the Founder VIP unlock key (`SSPVP-VIP-8EPQ-MZB3-QHHX` with seamless auto-migration for bound owners), encrypted Android `SharedPreferences` secrets at rest via Android Keystore AES-256-GCM, hid active Unlock Keys and GitHub tokens in the Android and Web UI behind `🔒 Unlock Key Secured (SSPVP-••••)` / `🔄 Enter Upgrade Key`, enabled R8 minification/shrinking (reducing DEX size by 70%), and deferred heavy `App.tsx` initial simulations to keep mobile tab transitions instant.
   - **`v7.26` (Universal Auto-Start Battle DVR Hands-Free Recording, 3-Way Mode Configuration & Intro Screen Detection)**: Added zero-tap hands-free battle recording across all tiers (for diagnostic issue recording and replay capture) on confirmed "3... 2... 1... BATTLE!" screen detection (multi-modal: pixel dimmed charge circles + ML Kit center-banner digits/words + 3v3 ball indicator lock), introduced 3-way DVR mode setting (`Auto-Start Hands-Free`, `Manual 1-Tap Overlay Button`, `Off`), integrated `isIntroCountdownActive` into `BattleDeepTraceFrame`, expanded recording window to capture opening entrances, and updated the floating HUD with real-time `🔴 REC F#...` / `🎥 DVR: AUTO` status badges.
+  - **`v7.31` (Cloudflare D1 Multi-Device Vault Sync, Passwordless Migration, Vault Password Security & Global Meta SQL Analytics)**: Migrated multi-device Battle Log, Team Preset, and App Settings delta synchronization off GitHub (`<username>/silphscope-private-vault` & Secret Gists) onto Cloudflare D1 (`silphscope-sync-db`, `GET/POST/PUT /v1/sync/vault`) with zero KV sync writes and incremental `sinceServerMs` row cursors staying well inside Cloudflare Free Tier limits. Completed passwordless server-side migrations for `@sportsfan986` (`358` logs, `9` teams) and `@this2guy1` (`52` logs, `5` teams) plus automatic passwordless on-device migration on upgrade, retired GitHub OAuth/PAT sync from the Android App and Web Simulator, added an in-app prompt to lock vaults with a salted PBKDF2-HMAC-SHA256 Vault Password (`8–128` chars) + Keystore-encrypted `X-Vault-Session`, and added structured SQL meta columns + Admin CLI (`npm run meta:summary`, `npm run meta:dump`) for userbase-wide league and ELO meta analytics.
 
 ---
 

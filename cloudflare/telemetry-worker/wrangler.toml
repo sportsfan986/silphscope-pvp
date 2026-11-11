@@ -21,8 +21,14 @@ id = "e50fe893fefe428b871c9b667ac3edc2"
 binding = "REPLAY_BUCKET"
 bucket_name = "silphscope-replays"
 
+# Dedicated Cloudflare D1 Serverless SQLite Database for Multi-Device Battle Logs, Teams, Settings & Global Meta (5 GB free, 5M reads/day, 100k writes/day):
+[[d1_databases]]
+binding = "SYNC_DB"
+database_name = "silphscope-sync-db"
+database_id = "6588eb30-92b3-41d8-bc42-107b7ccfa305"
+
 [vars]
-WORKER_VERSION = "7.1.8"
+WORKER_VERSION = "7.3.1"
 TELEGRAM_NOTIFY_TELEMETRY_BATCHES = "false"
 TELEGRAM_NOTIFY_ONLY_MANUAL_DVR = "true"
 GLOBAL_MAX_R2_STORAGE_GB = "9.0"

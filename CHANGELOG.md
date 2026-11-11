@@ -1,4 +1,19 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.30`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.31`)
+
+---
+
+## v7.31 (2026-11-10) — Cloudflare D1 Multi-Device Vault Sync, Passwordless Migration, Vault Password Security & Global Meta SQL Analytics
+*Live Android APK, Cloudflare Worker & Web Simulator release (`v7.31`, `versionCode = 1731`) moving multi-device Battle Log, Team Preset, and App Settings delta synchronization off GitHub onto Cloudflare D1 (`silphscope-sync-db`), performing passwordless initial migrations, retiring GitHub OAuth/PAT sync in favor of PBKDF2-SHA256 Vault Password security, and adding structured SQL userbase-wide meta analytics.*
+
+- **v7.31 — Feature 1: Cloudflare D1 Multi-Device Delta Sync Engine (`schema.sql`, `wrangler.toml`, `worker.mjs`)**:
+  - Provisioned Cloudflare D1 database **`silphscope-sync-db`** (`user_vault_state`, `battle_logs`, `team_presets` + composite `idx_battle_logs_user_updated`, `idx_battle_logs_meta`, `idx_battle_logs_opp_lead`, and `idx_team_presets_user_updated` indexes) and implemented `GET/POST/PUT /v1/sync/vault` on `api.silphscopepvp.com`.
+  - Uses incremental `sinceServerMs` delta cursors, server-side secret-key sanitization (`sanitizeSyncSettingsJson`), and zero Cloudflare KV writes during sync to stay comfortably inside Cloudflare Free Tier limits (`5 GB` D1 storage, `5M` row reads/day, `100k` row writes/day).
+- **v7.31 — Feature 2: Passwordless Initial Migration & Salted PBKDF2 Vault Password Lock (`GitHubCloudSync.kt`, `MainActivity.kt`, `OverlayService.kt`, `activity_main.xml`, `src/App.tsx`)**:
+  - Completed passwordless D1 vault migrations for existing trainers (`@sportsfan986`, `@this2guy1`, `@blueheyjay`) and added automatic passwordless first-sync migration on Android and Web (performing a one-time read-only pull of any legacy GitHub vault if present, pushing to D1, and permanently purging stored GitHub sync tokens).
+  - Retired GitHub OAuth Device Flow & PAT sync from Android Settings and the Web Simulator; replaced with **SilphScope Cloud Vault Sync** and an automatic post-migration prompt to set an `8–128` character **Vault Password** (`POST /v1/auth/set-password`, PBKDF2-HMAC-SHA256 `100k` iterations) with Android Hardware Keystore AES-256-GCM encrypted `X-Vault-Session` persistence.
+- **v7.31 — Feature 3: Structured Userbase-Wide Meta SQL Columns & Admin CLI (`worker.mjs`, `scripts/query-global-meta.mjs`, `package.json`)**:
+  - Extracted indexed structured columns on every synced battle (`league`, `combat_mode`, `season_id`, `result`, `elo`, `elo_band`, `my_lead`, `my_p2`, `my_p3`, `opp_lead`, `opp_p2`, `opp_p3`, `bmf`, `wae`, `duration_sec`) alongside lossless `raw_json`.
+  - Added Admin Bearer-authenticated endpoints (`GET /v1/admin/meta-summary`, `GET /v1/admin/battle-logs`, `POST /v1/admin/sync/import`) and local CLI commands (`npm run meta:summary`, `npm run meta:dump`) to aggregate global league/ELO usage and export full cross-user battle logs to `.aistudio/global_meta_logs.jsonl`.
 
 ---
 

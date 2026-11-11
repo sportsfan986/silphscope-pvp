@@ -979,12 +979,36 @@ async function verifyUserPassword(env, password, salt, storedHash) {
   return { valid: false, needsUpgrade: false };
 }
 
+const USER_AUTH_MEM_CACHE = new Map();
+const SYNC_MEM_RATE_LIMIT = new Map();
+
+function checkMemoryRateLimit(bucketName, subjectKey, maxHits = 90, windowSec = 600) {
+  const now = Date.now();
+  const slot = Math.floor(now / (windowSec * 1000));
+  const k = `${bucketName}:${String(subjectKey || 'anon').toLowerCase().slice(0, 80)}:${slot}`;
+  if (SYNC_MEM_RATE_LIMIT.size > 4000) {
+    SYNC_MEM_RATE_LIMIT.clear();
+  }
+  const count = (SYNC_MEM_RATE_LIMIT.get(k) || 0) + 1;
+  SYNC_MEM_RATE_LIMIT.set(k, count);
+  return { allowed: count <= maxHits, remaining: Math.max(0, maxHits - count) };
+}
+
 async function loadUserAuthRecord(kv, screenName) {
   if (!kv || !screenName) return null;
   const clean = sanitizeScreenName(screenName).toLowerCase();
+  if (!clean) return null;
+  const now = Date.now();
+  const cached = USER_AUTH_MEM_CACHE.get(clean);
+  if (cached && cached.expiresAt > now) {
+    return cached.value ? { ...cached.value } : null;
+  }
   try {
     const raw = await kv.get(`user_auth/${clean}`, { type: 'text' });
-    if (raw) return JSON.parse(raw);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (USER_AUTH_MEM_CACHE.size > 2000) USER_AUTH_MEM_CACHE.clear();
+    USER_AUTH_MEM_CACHE.set(clean, { value: parsed, expiresAt: now + 60000 });
+    return parsed ? { ...parsed } : null;
   } catch (_) {}
   return null;
 }
@@ -995,6 +1019,10 @@ async function saveUserAuthRecord(kv, screenName, authObj) {
   authObj.screenName = clean;
   authObj.updatedAt = new Date().toISOString();
   await kv.put(`user_auth/${clean.toLowerCase()}`, JSON.stringify(authObj, null, 2));
+  USER_AUTH_MEM_CACHE.set(clean.toLowerCase(), {
+    value: { ...authObj },
+    expiresAt: Date.now() + 60000,
+  });
   if (authObj.githubUsername) {
     await kv.put(`gh_user_map/${String(authObj.githubUsername).toLowerCase()}`, clean);
   }
@@ -1948,6 +1976,810 @@ async function authenticateVaultOwner(request, env, kv, targetScreenName, body =
   }
 
   return { isOwner: false, screenName };
+}
+
+// =============================================================================
+// Cloudflare D1 Multi-Device Vault Sync & Userbase-Wide Meta Engine (v7.31)
+// =============================================================================
+
+function computeGblSeasonId(timestampMs = Date.now()) {
+  const ts = Number(timestampMs) || Date.now();
+  const d = new Date(ts);
+  const y = d.getUTCFullYear();
+  // Anchor boundaries (Dec 1, Mar 1, Jun 1, Sep 1 at 21:00 UTC)
+  const decPrev = Date.UTC(y - 1, 11, 1, 21, 0, 0);
+  const marCur = Date.UTC(y, 2, 1, 21, 0, 0);
+  const junCur = Date.UTC(y, 5, 1, 21, 0, 0);
+  const sepCur = Date.UTC(y, 8, 1, 21, 0, 0);
+  const decCur = Date.UTC(y, 11, 1, 21, 0, 0);
+
+  if (ts >= decCur) return `${y + 1}_S1`;
+  if (ts >= sepCur) return `${y}_S4`;
+  if (ts >= junCur) return `${y}_S3`;
+  if (ts >= marCur) return `${y}_S2`;
+  if (ts >= decPrev) return `${y}_S1`;
+  return `${y}_S0`;
+}
+
+const FORBIDDEN_VAULT_SETTING_SUBSTRINGS = [
+  'unlock_key',
+  'github_token',
+  'device_ingest_token',
+  'vault_session',
+];
+
+function sanitizeVaultSettingsForD1(rawSettings) {
+  if (!rawSettings || typeof rawSettings !== 'object') return {};
+  const clean = {};
+  for (const [k, v] of Object.entries(rawSettings)) {
+    if (typeof k !== 'string' || k.length > 120) continue;
+    const lowerK = k.toLowerCase();
+    if (FORBIDDEN_VAULT_SETTING_SUBSTRINGS.some((sub) => lowerK.includes(sub))) continue;
+    const strVal = v === null || v === undefined ? '' : String(v);
+    if (
+      strVal.startsWith('ENC_GCM_V1:') ||
+      strVal.startsWith('KS_GCM_V1:') ||
+      strVal.startsWith('enc1:') ||
+      strVal.length > 16384
+    ) {
+      continue;
+    }
+    clean[k] = strVal;
+  }
+  return clean;
+}
+
+function cleanPokemonSpeciesName(raw) {
+  if (!raw || typeof raw !== 'string') return '';
+  return raw.trim().slice(0, 64);
+}
+
+async function authenticateD1SyncCaller(request, env, kv, targetScreenName, body = {}) {
+  const screenName = sanitizeScreenName(
+    targetScreenName ||
+      body.screenName ||
+      request.headers.get('X-Trainer-Screen-Name') ||
+      ''
+  );
+  if (!screenName) {
+    return {
+      ok: false,
+      status: 400,
+      error: 'Valid Trainer ID (3-24 characters) is required for Cloud Vault Sync.',
+    };
+  }
+
+  const devHash = String(
+    body.deviceHash || body.deviceId || request.headers.get('X-Device-Hash') || ''
+  ).trim();
+  const isValidNonWebDevice = devHash.length >= 8 && !devHash.toLowerCase().startsWith('web-');
+  const isInitialMigration = Boolean(body && body.isInitialMigration);
+
+  const authRec = await loadUserAuthRecord(kv, screenName);
+  const hasPassword = Boolean(authRec && authRec.passwordHash);
+
+  const ownerAuth = await authenticateVaultOwner(request, env, kv, screenName, body);
+  if (ownerAuth.isOwner) {
+    // Once a Vault Password is set, require session / password / unlock_key / admin_key for normal sync,
+    // EXCEPT allow one-time initial device migration from the already-registered primary hardware device (`perform migrations without the password`).
+    if (
+      hasPassword &&
+      ownerAuth.authMethod === 'bound_device' &&
+      !isInitialMigration
+    ) {
+      return {
+        ok: false,
+        status: 403,
+        screenName,
+        hasPassword: true,
+        requiresPassword: true,
+        error: `Cloud Vault '@${screenName}' is secured with a password. Sign in once with your Vault Password on this device to continue syncing.`,
+      };
+    }
+
+    const resolvedName = ownerAuth.screenName || screenName;
+    const licInfo =
+      ownerAuth.licenseInfo ||
+      (await resolveUserLicense(env, kv, resolvedName, '', '', '', devHash, '', {
+        revealFullKey: false,
+      }));
+    return {
+      ok: true,
+      screenName: resolvedName,
+      authMethod: ownerAuth.authMethod,
+      sessionToken: ownerAuth.sessionToken || '',
+      hasPassword,
+      promptSetPassword: !hasPassword && !/^id_[a-z0-9]{4,}$/i.test(resolvedName),
+      licenseInfo: licInfo,
+      isPaidOrAlumni: Boolean(
+        licInfo && (licInfo.active || licInfo.everPaid || (licInfo.tier && licInfo.tier !== 'free'))
+      ),
+    };
+  }
+
+  // Passwordless Migration & Primary Device Auto-Binding when `hasPassword === false`:
+  if (!hasPassword && isValidNonWebDevice && kv) {
+    const clientAuth = await verifyClientAuth(request, env, true, false);
+    if (clientAuth.ok) {
+      const chk = await checkScreenNameRegistration(kv, screenName, devHash, '');
+      if (chk.available && (!chk.record || chk.ownedByCaller)) {
+        if (!chk.record) {
+          const nowIso = new Date().toISOString();
+          await kv.put(
+            `registered_user/${screenName.toLowerCase()}`,
+            JSON.stringify({
+              screenName,
+              deviceHash: devHash,
+              registeredAt: nowIso,
+              updatedAt: nowIso,
+            })
+          );
+        }
+        const licInfo = await resolveUserLicense(env, kv, screenName, '', '', '', devHash, '', {
+          revealFullKey: false,
+        });
+        return {
+          ok: true,
+          screenName,
+          authMethod: 'primary_device_passwordless',
+          sessionToken: '',
+          hasPassword: false,
+          promptSetPassword: !/^id_[a-z0-9]{4,}$/i.test(screenName),
+          licenseInfo: licInfo,
+          isPaidOrAlumni: Boolean(
+            licInfo && (licInfo.active || licInfo.everPaid || (licInfo.tier && licInfo.tier !== 'free'))
+          ),
+        };
+      }
+      return {
+        ok: false,
+        status: 403,
+        screenName,
+        hasPassword: false,
+        requiresPassword: false,
+        error: `Trainer ID '@${screenName}' belongs to another registered device. Set a Vault Password on your primary device first, then sign in with your password here.`,
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    status: 403,
+    screenName,
+    hasPassword,
+    requiresPassword: hasPassword,
+    error: hasPassword
+      ? ownerAuth.error || `Enter the Vault Password for '@${screenName}' to sync across devices.`
+      : ownerAuth.error || `Set a Vault Password on your primary '@${screenName}' phone first to sync on additional devices or Web.`,
+  };
+}
+
+async function upsertVaultBatchIntoD1(
+  db,
+  screenName,
+  {
+    settingsMap = null,
+    settingsUpdatedAt = 0,
+    battleLogs = [],
+    teamPresets = [],
+    deletedLogIds = [],
+    deletedTeamIds = [],
+    source = 'app_sync',
+    migratedFromGithub = false,
+  } = {}
+) {
+  if (!db) throw new Error('SYNC_DB (Cloudflare D1) is not bound.');
+  const cleanUser = sanitizeScreenName(screenName);
+  if (!cleanUser) throw new Error('Invalid screenName');
+
+  const nowMs = Date.now();
+  const incomingLogs = Array.isArray(battleLogs) ? battleLogs : [];
+  const incomingTeams = Array.isArray(teamPresets) ? teamPresets : [];
+  const incomingDelLogs = Array.isArray(deletedLogIds) ? deletedLogIds : [];
+  const incomingDelTeams = Array.isArray(deletedTeamIds) ? deletedTeamIds : [];
+  const cleanIncomingSettings =
+    settingsMap && typeof settingsMap === 'object' ? sanitizeVaultSettingsForD1(settingsMap) : null;
+  const hasSettingsIncoming =
+    cleanIncomingSettings !== null && Object.keys(cleanIncomingSettings).length > 0;
+
+  const hasAnyWrites =
+    hasSettingsIncoming ||
+    incomingLogs.length > 0 ||
+    incomingTeams.length > 0 ||
+    incomingDelLogs.length > 0 ||
+    incomingDelTeams.length > 0 ||
+    migratedFromGithub;
+
+  if (!hasAnyWrites) {
+    return { wroteAnything: false, serverUpdatedMs: 0, logsUpserted: 0, teamsUpserted: 0 };
+  }
+
+  const existingState = await db
+    .prepare(
+      'SELECT settings_json, settings_updated_at, migrated_from_github, migrated_at_ms FROM user_vault_state WHERE screen_name = ?1'
+    )
+    .bind(cleanUser)
+    .first();
+
+  let mergedSettingsObj = {};
+  let mergedSettingsUpdAt = Number(existingState?.settings_updated_at) || 0;
+  if (existingState?.settings_json) {
+    try {
+      mergedSettingsObj = sanitizeVaultSettingsForD1(JSON.parse(existingState.settings_json));
+    } catch (_) {}
+  }
+
+  if (hasSettingsIncoming) {
+    const incUpd = Number(settingsUpdatedAt) || 0;
+    if (incUpd >= mergedSettingsUpdAt || Object.keys(mergedSettingsObj).length === 0) {
+      mergedSettingsObj = { ...mergedSettingsObj, ...cleanIncomingSettings };
+      mergedSettingsUpdAt = Math.max(incUpd, mergedSettingsUpdAt, 1);
+    } else {
+      mergedSettingsObj = { ...cleanIncomingSettings, ...mergedSettingsObj };
+    }
+  }
+
+  const migFlag = migratedFromGithub || Number(existingState?.migrated_from_github) === 1 ? 1 : 0;
+  const migAt =
+    Number(existingState?.migrated_at_ms) > 0
+      ? Number(existingState.migrated_at_ms)
+      : migratedFromGithub
+      ? nowMs
+      : 0;
+
+  const statements = [];
+
+  // 1. Upsert battle logs
+  const delLogSet = new Set(
+    incomingDelLogs.map((id) => String(id || '').trim()).filter((id) => id.length > 0 && id.length <= 128)
+  );
+  const seenLogIds = new Set();
+  let logsUpserted = 0;
+
+  const logUpsertSql = `
+    INSERT INTO battle_logs (
+      screen_name, log_id, season_id, league, combat_mode, result, lead_matchup,
+      user_lead, user_back1, user_back2, opp_lead, opp_back1, opp_back2,
+      first_swap_actor, switch_advantage, bmf_score, exec_wae,
+      timestamp_ms, updated_at, server_updated_ms, deleted, source, payload_json
+    ) VALUES (
+      ?1, ?2, ?3, ?4, ?5, ?6, ?7,
+      ?8, ?9, ?10, ?11, ?12, ?13,
+      ?14, ?15, ?16, ?17,
+      ?18, ?19, ?20, ?21, ?22, ?23
+    )
+    ON CONFLICT(screen_name, log_id) DO UPDATE SET
+      season_id = excluded.season_id,
+      league = excluded.league,
+      combat_mode = excluded.combat_mode,
+      result = excluded.result,
+      lead_matchup = excluded.lead_matchup,
+      user_lead = excluded.user_lead,
+      user_back1 = excluded.user_back1,
+      user_back2 = excluded.user_back2,
+      opp_lead = excluded.opp_lead,
+      opp_back1 = excluded.opp_back1,
+      opp_back2 = excluded.opp_back2,
+      first_swap_actor = excluded.first_swap_actor,
+      switch_advantage = excluded.switch_advantage,
+      bmf_score = excluded.bmf_score,
+      exec_wae = excluded.exec_wae,
+      timestamp_ms = excluded.timestamp_ms,
+      updated_at = excluded.updated_at,
+      server_updated_ms = excluded.server_updated_ms,
+      deleted = excluded.deleted,
+      source = excluded.source,
+      payload_json = CASE WHEN excluded.deleted = 1 AND battle_logs.payload_json != '' THEN battle_logs.payload_json ELSE excluded.payload_json END
+    WHERE excluded.updated_at >= battle_logs.updated_at OR (excluded.deleted = 1 AND battle_logs.deleted = 0)
+  `;
+
+  for (const rawLog of incomingLogs) {
+    if (!rawLog || typeof rawLog !== 'object') continue;
+    const logId = String(rawLog.id || '').trim();
+    if (!logId || logId.length > 128 || seenLogIds.has(logId)) continue;
+    seenLogIds.add(logId);
+
+    const isDel = delLogSet.has(logId) || Boolean(rawLog.deleted) ? 1 : 0;
+    const tsMs = Math.max(1, Number(rawLog.timestampMs) || nowMs);
+    const updMs = Math.max(tsMs, Number(rawLog.updatedAt) || tsMs);
+    const seasonId = computeGblSeasonId(tsMs);
+    const league = String(rawLog.league || 'GREAT LEAGUE').trim().toUpperCase().slice(0, 64);
+    const combatMode =
+      rawLog.combatMode === 'show6' || league.includes('SHOW 6') ? 'show6' : 'gbl';
+    const result = String(rawLog.result || 'WIN').trim().toUpperCase().slice(0, 16);
+    const leadMatchup = String(rawLog.leadMatchup || 'NEUTRAL').trim().toUpperCase().slice(0, 24);
+    const uPokes = Array.isArray(rawLog.userPokemon) ? rawLog.userPokemon : [];
+    const oPokes = Array.isArray(rawLog.opponents) ? rawLog.opponents : [];
+    const firstSwap = String(rawLog.firstSwapActor || '').trim().toUpperCase().slice(0, 16);
+    const switchAdv = String(rawLog.switchAdvantage || '').trim().toUpperCase().slice(0, 16);
+    const bmf = rawLog.bmfScore !== null && rawLog.bmfScore !== undefined && Number.isFinite(Number(rawLog.bmfScore))
+      ? Number(rawLog.bmfScore)
+      : null;
+    const wae = rawLog.execWae !== null && rawLog.execWae !== undefined && Number.isFinite(Number(rawLog.execWae))
+      ? Number(rawLog.execWae)
+      : null;
+    const payloadStr = JSON.stringify(rawLog);
+    if (payloadStr.length > 131072) continue;
+
+    statements.push(
+      db.prepare(logUpsertSql).bind(
+        cleanUser,
+        logId,
+        seasonId,
+        league,
+        combatMode,
+        result,
+        leadMatchup,
+        cleanPokemonSpeciesName(uPokes[0]),
+        cleanPokemonSpeciesName(uPokes[1]),
+        cleanPokemonSpeciesName(uPokes[2]),
+        cleanPokemonSpeciesName(oPokes[0]),
+        cleanPokemonSpeciesName(oPokes[1]),
+        cleanPokemonSpeciesName(oPokes[2]),
+        firstSwap,
+        switchAdv,
+        bmf,
+        wae,
+        tsMs,
+        updMs,
+        nowMs,
+        isDel,
+        String(source || 'app_sync').slice(0, 32),
+        payloadStr
+      )
+    );
+    logsUpserted++;
+  }
+
+  for (const delId of delLogSet) {
+    if (seenLogIds.has(delId)) continue;
+    seenLogIds.add(delId);
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO battle_logs (
+            screen_name, log_id, season_id, league, combat_mode, result, lead_matchup,
+            timestamp_ms, updated_at, server_updated_ms, deleted, source, payload_json
+          ) VALUES (?1, ?2, ?3, 'GREAT LEAGUE', 'gbl', 'LOSS', 'NEUTRAL', ?4, ?4, ?4, 1, ?5, ?6)
+          ON CONFLICT(screen_name, log_id) DO UPDATE SET
+            deleted = 1,
+            updated_at = MAX(battle_logs.updated_at, excluded.updated_at),
+            server_updated_ms = excluded.server_updated_ms`
+        )
+        .bind(
+          cleanUser,
+          delId,
+          computeGblSeasonId(nowMs),
+          nowMs,
+          String(source || 'app_sync').slice(0, 32),
+          JSON.stringify({ id: delId, deleted: true })
+        )
+    );
+  }
+
+  // 2. Upsert team presets
+  const delTeamSet = new Set(
+    incomingDelTeams.map((id) => String(id || '').trim()).filter((id) => id.length > 0 && id.length <= 128)
+  );
+  const seenTeamIds = new Set();
+  let teamsUpserted = 0;
+
+  const teamUpsertSql = `
+    INSERT INTO team_presets (
+      screen_name, team_id, name, league, combat_mode, archetype,
+      sort_order, updated_at, server_updated_ms, deleted, payload_json
+    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+    ON CONFLICT(screen_name, team_id) DO UPDATE SET
+      name = excluded.name,
+      league = excluded.league,
+      combat_mode = excluded.combat_mode,
+      archetype = excluded.archetype,
+      sort_order = excluded.sort_order,
+      updated_at = excluded.updated_at,
+      server_updated_ms = excluded.server_updated_ms,
+      deleted = excluded.deleted,
+      payload_json = CASE WHEN excluded.deleted = 1 AND team_presets.payload_json != '' THEN team_presets.payload_json ELSE excluded.payload_json END
+    WHERE excluded.updated_at >= team_presets.updated_at OR (excluded.deleted = 1 AND team_presets.deleted = 0)
+  `;
+
+  for (let idx = 0; idx < incomingTeams.length; idx++) {
+    const rawTeam = incomingTeams[idx];
+    if (!rawTeam || typeof rawTeam !== 'object') continue;
+    const teamId = String(rawTeam.id || '').trim();
+    if (!teamId || teamId.length > 128 || seenTeamIds.has(teamId)) continue;
+    seenTeamIds.add(teamId);
+
+    const isDel = delTeamSet.has(teamId) || Boolean(rawTeam.deleted) ? 1 : 0;
+    const updMs = Math.max(1, Number(rawTeam.updatedAt) || nowMs);
+    const name = String(rawTeam.name || '').trim().slice(0, 80);
+    const league = String(rawTeam.league || 'GREAT LEAGUE').trim().toUpperCase().slice(0, 64);
+    const combatMode = rawTeam.combatMode === 'show6' ? 'show6' : 'gbl';
+    const archetype = String(rawTeam.archetype || 'ABC').trim().slice(0, 24);
+    const payloadStr = JSON.stringify(rawTeam);
+    if (payloadStr.length > 65536) continue;
+
+    statements.push(
+      db.prepare(teamUpsertSql).bind(
+        cleanUser,
+        teamId,
+        name,
+        league,
+        combatMode,
+        archetype,
+        idx,
+        updMs,
+        nowMs,
+        isDel,
+        payloadStr
+      )
+    );
+    teamsUpserted++;
+  }
+
+  for (const delTid of delTeamSet) {
+    if (seenTeamIds.has(delTid)) continue;
+    seenTeamIds.add(delTid);
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO team_presets (
+            screen_name, team_id, name, league, combat_mode, archetype,
+            sort_order, updated_at, server_updated_ms, deleted, payload_json
+          ) VALUES (?1, ?2, '', 'GREAT LEAGUE', 'gbl', 'ABC', 999, ?3, ?3, 1, ?4)
+          ON CONFLICT(screen_name, team_id) DO UPDATE SET
+            deleted = 1,
+            updated_at = MAX(team_presets.updated_at, excluded.updated_at),
+            server_updated_ms = excluded.server_updated_ms`
+        )
+        .bind(cleanUser, delTid, nowMs, JSON.stringify({ id: delTid, deleted: true }))
+    );
+  }
+
+  // Execute statements in safe D1 chunks of 60
+  const CHUNK_SIZE = 60;
+  for (let i = 0; i < statements.length; i += CHUNK_SIZE) {
+    await db.batch(statements.slice(i, i + CHUNK_SIZE));
+  }
+
+  // Update user_vault_state summary + server_updated_ms
+  const countsRow = await db
+    .prepare(
+      `SELECT
+        (SELECT COUNT(*) FROM battle_logs WHERE screen_name = ?1 AND deleted = 0) AS activeLogs,
+        (SELECT COUNT(*) FROM team_presets WHERE screen_name = ?1 AND deleted = 0) AS activeTeams`
+    )
+    .bind(cleanUser)
+    .first();
+
+  const totalActiveLogs = Number(countsRow?.activeLogs) || 0;
+  const totalActiveTeams = Number(countsRow?.activeTeams) || 0;
+
+  await db
+    .prepare(
+      `INSERT INTO user_vault_state (
+        screen_name, display_screen_name, settings_json, settings_updated_at,
+        migrated_from_github, migrated_at_ms, server_updated_ms, total_active_logs, total_active_teams
+      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+      ON CONFLICT(screen_name) DO UPDATE SET
+        display_screen_name = excluded.display_screen_name,
+        settings_json = excluded.settings_json,
+        settings_updated_at = excluded.settings_updated_at,
+        migrated_from_github = MAX(user_vault_state.migrated_from_github, excluded.migrated_from_github),
+        migrated_at_ms = CASE WHEN user_vault_state.migrated_at_ms > 0 THEN user_vault_state.migrated_at_ms ELSE excluded.migrated_at_ms END,
+        server_updated_ms = excluded.server_updated_ms,
+        total_active_logs = excluded.total_active_logs,
+        total_active_teams = excluded.total_active_teams`
+    )
+    .bind(
+      cleanUser,
+      cleanUser,
+      JSON.stringify(mergedSettingsObj),
+      mergedSettingsUpdAt,
+      migFlag,
+      migAt,
+      nowMs,
+      totalActiveLogs,
+      totalActiveTeams
+    )
+    .run();
+
+  return {
+    wroteAnything: true,
+    serverUpdatedMs: nowMs,
+    logsUpserted,
+    teamsUpserted,
+    totalActiveLogs,
+    totalActiveTeams,
+  };
+}
+
+async function pullVaultDeltasFromD1(
+  db,
+  screenName,
+  { sinceServerMs = 0, isPaidOrAlumni = false } = {}
+) {
+  if (!db) throw new Error('SYNC_DB (Cloudflare D1) is not bound.');
+  const cleanUser = sanitizeScreenName(screenName);
+  const sinceMs = Math.max(0, Number(sinceServerMs) || 0);
+
+  // 1-Row Short-Circuit Check on user_vault_state (1 row read out of 5M/day when caught up!)
+  const stateRow = await db
+    .prepare(
+      `SELECT display_screen_name, settings_json, settings_updated_at, migrated_from_github,
+              server_updated_ms, total_active_logs, total_active_teams
+       FROM user_vault_state WHERE screen_name = ?1`
+    )
+    .bind(cleanUser)
+    .first();
+
+  if (!stateRow) {
+    return {
+      shortCircuited: true,
+      serverSyncMs: 0,
+      settings: {},
+      settingsUpdatedAt: 0,
+      migratedFromGithub: false,
+      totalActiveLogs: 0,
+      totalActiveTeams: 0,
+      upsertedLogs: [],
+      deletedLogIds: [],
+      upsertedTeams: [],
+      deletedTeamIds: [],
+    };
+  }
+
+  const serverUpdatedMs = Number(stateRow.server_updated_ms) || 0;
+  if (sinceMs > 0 && serverUpdatedMs <= sinceMs) {
+    return {
+      shortCircuited: true,
+      serverSyncMs: serverUpdatedMs,
+      settings: null,
+      settingsUpdatedAt: Number(stateRow.settings_updated_at) || 0,
+      migratedFromGithub: Number(stateRow.migrated_from_github) === 1,
+      totalActiveLogs: Number(stateRow.total_active_logs) || 0,
+      totalActiveTeams: Number(stateRow.total_active_teams) || 0,
+      upsertedLogs: [],
+      deletedLogIds: [],
+      upsertedTeams: [],
+      deletedTeamIds: [],
+    };
+  }
+
+  let parsedSettings = {};
+  if (stateRow.settings_json) {
+    try {
+      parsedSettings = sanitizeVaultSettingsForD1(JSON.parse(stateRow.settings_json));
+    } catch (_) {}
+  }
+
+  // Free Tier vs Paid/Alumni retention window (Free = Current Season + 14d grace; Paid/Alumni = Unlimited Lifetime)
+  const minTimestampMs = isPaidOrAlumni
+    ? 0
+    : Math.max(0, getActiveGblSeasonWindow().startMs - 14 * 86400000);
+
+  const logsQuery = isPaidOrAlumni
+    ? db
+        .prepare(
+          `SELECT log_id, deleted, payload_json
+           FROM battle_logs
+           WHERE screen_name = ?1 AND server_updated_ms > ?2
+           ORDER BY timestamp_ms DESC
+           LIMIT 5000`
+        )
+        .bind(cleanUser, sinceMs)
+    : db
+        .prepare(
+          `SELECT log_id, deleted, payload_json
+           FROM battle_logs
+           WHERE screen_name = ?1 AND server_updated_ms > ?2
+             AND (deleted = 1 OR timestamp_ms >= ?3)
+           ORDER BY timestamp_ms DESC
+           LIMIT 2000`
+        )
+        .bind(cleanUser, sinceMs, minTimestampMs);
+
+  const teamsQuery = db
+    .prepare(
+      `SELECT team_id, deleted, payload_json
+       FROM team_presets
+       WHERE screen_name = ?1 AND server_updated_ms > ?2
+       ORDER BY sort_order ASC, updated_at DESC
+       LIMIT 500`
+    )
+    .bind(cleanUser, sinceMs);
+
+  const [logsRes, teamsRes] = await db.batch([logsQuery, teamsQuery]);
+
+  const upsertedLogs = [];
+  const deletedLogIds = [];
+  for (const r of logsRes?.results || []) {
+    if (Number(r.deleted) === 1) {
+      deletedLogIds.push(r.log_id);
+    } else if (r.payload_json) {
+      try {
+        upsertedLogs.push(JSON.parse(r.payload_json));
+      } catch (_) {}
+    }
+  }
+
+  const upsertedTeams = [];
+  const deletedTeamIds = [];
+  for (const r of teamsRes?.results || []) {
+    if (Number(r.deleted) === 1) {
+      deletedTeamIds.push(r.team_id);
+    } else if (r.payload_json) {
+      try {
+        upsertedTeams.push(JSON.parse(r.payload_json));
+      } catch (_) {}
+    }
+  }
+
+  return {
+    shortCircuited: false,
+    serverSyncMs: serverUpdatedMs,
+    settings: parsedSettings,
+    settingsUpdatedAt: Number(stateRow.settings_updated_at) || 0,
+    migratedFromGithub: Number(stateRow.migrated_from_github) === 1,
+    totalActiveLogs: Number(stateRow.total_active_logs) || 0,
+    totalActiveTeams: Number(stateRow.total_active_teams) || 0,
+    upsertedLogs,
+    deletedLogIds,
+    upsertedTeams,
+    deletedTeamIds,
+  };
+}
+
+async function queryGlobalMetaSummaryFromD1(
+  db,
+  { league = '', seasonId = '', combatMode = '', sinceDays = 0, topLimit = 40 } = {}
+) {
+  if (!db) throw new Error('SYNC_DB (Cloudflare D1) is not bound.');
+  const conditions = ['deleted = 0'];
+  const binds = [];
+
+  if (league) {
+    binds.push(String(league).trim().toUpperCase());
+    conditions.push(`league = ?${binds.length}`);
+  }
+  if (seasonId) {
+    binds.push(String(seasonId).trim());
+    conditions.push(`season_id = ?${binds.length}`);
+  }
+  if (combatMode) {
+    binds.push(String(combatMode).trim().toLowerCase());
+    conditions.push(`combat_mode = ?${binds.length}`);
+  }
+  if (Number(sinceDays) > 0) {
+    const cutoff = Date.now() - Number(sinceDays) * 86400000;
+    binds.push(cutoff);
+    conditions.push(`timestamp_ms >= ?${binds.length}`);
+  }
+
+  const whereClause = conditions.join(' AND ');
+  const lim = Math.min(Math.max(5, Number(topLimit) || 40), 150);
+
+  const qTotals = db
+    .prepare(
+      `SELECT
+        COUNT(*) AS totalBattles,
+        COUNT(DISTINCT screen_name) AS uniqueTrainers,
+        MIN(timestamp_ms) AS earliestBattleMs,
+        MAX(timestamp_ms) AS latestBattleMs,
+        ROUND(AVG(CASE WHEN result = 'WIN' THEN 100.0 ELSE 0.0 END), 2) AS avgUserWinRatePct,
+        ROUND(AVG(bmf_score), 3) AS avgBmfScore,
+        ROUND(AVG(exec_wae), 3) AS avgExecWae
+       FROM battle_logs
+       WHERE ${whereClause}`
+    )
+    .bind(...binds);
+
+  const qByLeague = db
+    .prepare(
+      `SELECT league, season_id AS seasonId, COUNT(*) AS battles, COUNT(DISTINCT screen_name) AS trainers
+       FROM battle_logs
+       WHERE ${whereClause}
+       GROUP BY league, season_id
+       ORDER BY battles DESC`
+    )
+    .bind(...binds);
+
+  const qOppLeads = db
+    .prepare(
+      `SELECT
+        opp_lead AS species,
+        COUNT(*) AS count,
+        SUM(CASE WHEN result = 'LOSS' THEN 1 ELSE 0 END) AS oppWins,
+        SUM(CASE WHEN result = 'WIN' THEN 1 ELSE 0 END) AS userWins
+       FROM battle_logs
+       WHERE ${whereClause} AND opp_lead != ''
+       GROUP BY opp_lead
+       ORDER BY count DESC
+       LIMIT ${lim}`
+    )
+    .bind(...binds);
+
+  const qOppOverall = db
+    .prepare(
+      `WITH slots AS (
+        SELECT opp_lead AS species, result FROM battle_logs WHERE ${whereClause} AND opp_lead != ''
+        UNION ALL
+        SELECT opp_back1 AS species, result FROM battle_logs WHERE ${whereClause} AND opp_back1 != ''
+        UNION ALL
+        SELECT opp_back2 AS species, result FROM battle_logs WHERE ${whereClause} AND opp_back2 != ''
+      )
+      SELECT
+        species,
+        COUNT(*) AS appearances,
+        SUM(CASE WHEN result = 'LOSS' THEN 1 ELSE 0 END) AS oppWins
+      FROM slots
+      GROUP BY species
+      ORDER BY appearances DESC
+      LIMIT ${lim}`
+    )
+    .bind(...binds, ...binds, ...binds);
+
+  const qOppCores = db
+    .prepare(
+      `WITH cores AS (
+        SELECT opp_lead AS leadSpecies, opp_back1 AS backSpecies FROM battle_logs WHERE ${whereClause} AND opp_lead != '' AND opp_back1 != ''
+        UNION ALL
+        SELECT opp_lead AS leadSpecies, opp_back2 AS backSpecies FROM battle_logs WHERE ${whereClause} AND opp_lead != '' AND opp_back2 != ''
+      )
+      SELECT leadSpecies, backSpecies, COUNT(*) AS count
+      FROM cores
+      GROUP BY leadSpecies, backSpecies
+      ORDER BY count DESC
+      LIMIT ${lim}`
+    )
+    .bind(...binds, ...binds);
+
+  const qTrainers = db
+    .prepare(
+      `SELECT screen_name AS screenName, total_active_logs AS activeLogs, total_active_teams AS activeTeams,
+              migrated_from_github AS migratedFromGithub, server_updated_ms AS lastSyncedMs
+       FROM user_vault_state
+       ORDER BY total_active_logs DESC`
+    );
+
+  const [resTotals, resLeagues, resLeads, resOverall, resCores, resTrainers] = await db.batch([
+    qTotals,
+    qByLeague,
+    qOppLeads,
+    qOppOverall,
+    qOppCores,
+    qTrainers,
+  ]);
+
+  const totals = (resTotals?.results && resTotals.results[0]) || {
+    totalBattles: 0,
+    uniqueTrainers: 0,
+  };
+  const totalBattlesNum = Math.max(1, Number(totals.totalBattles) || 0);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    filters: { league: league || 'ALL', seasonId: seasonId || 'ALL', combatMode: combatMode || 'ALL', sinceDays: Number(sinceDays) || 0 },
+    totals,
+    trainers: resTrainers?.results || [],
+    byLeagueAndSeason: resLeagues?.results || [],
+    opponentLeads: (resLeads?.results || []).map((r) => ({
+      species: r.species,
+      count: Number(r.count) || 0,
+      usagePct: Number((((Number(r.count) || 0) * 100) / totalBattlesNum).toFixed(2)),
+      oppWinRatePct: Number(
+        (((Number(r.oppWins) || 0) * 100) / Math.max(1, Number(r.count) || 1)).toFixed(1)
+      ),
+    })),
+    opponentOverallUsage: (resOverall?.results || []).map((r) => ({
+      species: r.species,
+      appearances: Number(r.appearances) || 0,
+      teamPresencePct: Number((((Number(r.appearances) || 0) * 100) / totalBattlesNum).toFixed(2)),
+      oppWinRatePct: Number(
+        (((Number(r.oppWins) || 0) * 100) / Math.max(1, Number(r.appearances) || 1)).toFixed(1)
+      ),
+    })),
+    empiricalLeadBacklineCores: resCores?.results || [],
+  };
 }
 
 async function deleteReplayObjects(env, kv, item) {
@@ -6529,9 +7361,9 @@ export default {
         headers: buildSecurityHeaders({
           'Access-Control-Allow-Origin': resolveAllowedCorsOrigin(request, !isPublicStreamOrAsset),
           Vary: 'Origin',
-          'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
           'Access-Control-Allow-Headers':
-            'Content-Type, Authorization, X-SilphScope-Client-Key, X-Trainer-Screen-Name, X-SilphScope-Unlock-Key, X-Vault-Session, X-Vault-Password, X-GitHub-Token, X-Device-Hash, X-Claim-Email, X-GitHub-Username, X-GitHub-User-Id, Range',
+            'Content-Type, Authorization, X-SilphScope-Client-Key, X-Trainer-Screen-Name, X-SilphScope-Unlock-Key, X-Vault-Session, X-Vault-Password, X-GitHub-Token, X-Device-Hash, X-Device-Ingest-Token, X-Claim-Email, X-GitHub-Username, X-GitHub-User-Id, Range',
           'Access-Control-Expose-Headers': 'Content-Range, Accept-Ranges, Content-Length',
         }),
       });
@@ -9010,9 +9842,24 @@ self.addEventListener('fetch', (e) => {
       if (ownerAuth.isOwner) {
         authorizedToSet = true;
       } else if (!existingAuth || !existingAuth.passwordHash) {
-        // Only allow first-time password creation without ownerAuth if caller proves ownership via previously registered non-web deviceHash
+        // Allow first-time password creation without prior password if caller proves ownership via registered or brand-new unclaimed non-web deviceHash
+        const isValidNonWebDev = devHash.length >= 8 && !devHash.toLowerCase().startsWith('web-');
         const chk = await checkScreenNameRegistration(env.TELEMETRY_KV, targetName, devHash, '');
         if (chk.ownedByCaller) {
+          authorizedToSet = true;
+        } else if (chk.available && !chk.record && isValidNonWebDev && providedKey) {
+          const nowIso = new Date().toISOString();
+          if (env.TELEMETRY_KV) {
+            await env.TELEMETRY_KV.put(
+              `registered_user/${targetName.toLowerCase()}`,
+              JSON.stringify({
+                screenName: targetName,
+                deviceHash: devHash,
+                registeredAt: nowIso,
+                updatedAt: nowIso,
+              })
+            );
+          }
           authorizedToSet = true;
         }
       }
@@ -9022,7 +9869,7 @@ self.addEventListener('fetch', (e) => {
           {
             ok: false,
             error:
-              'Authenticate with your Unlock Key, GitHub account, or current password before setting or changing your password.',
+              'Authenticate from your registered primary phone, Unlock Key, or current password before setting or changing your Vault Password.',
           },
           403,
           request,
@@ -9046,9 +9893,10 @@ self.addEventListener('fetch', (e) => {
         env,
         targetName,
         tier,
+        365,
         updatedAuth.sessionEpoch
       );
-      return jsonResponse(
+      const setPwResp = jsonResponse(
         {
           ok: true,
           screenName: targetName,
@@ -9059,6 +9907,191 @@ self.addEventListener('fetch', (e) => {
         request,
         true
       );
+      setPwResp.headers.append(
+        'Set-Cookie',
+        `sspvp_vault_user=${encodeURIComponent(targetName)}; Domain=.silphscopepvp.com; Path=/; Max-Age=31536000; SameSite=Lax; Secure`
+      );
+      setPwResp.headers.append(
+        'Set-Cookie',
+        `sspvp_vault_session=${encodeURIComponent(sessionToken)}; Domain=.silphscopepvp.com; Path=/; Max-Age=31536000; SameSite=Lax; Secure`
+      );
+      return setPwResp;
+    }
+
+    // 7c-sync. Cloudflare D1 Multi-Device Vault Delta Sync (`GET / POST / PUT /v1/sync/vault`)
+    if (
+      (request.method === 'GET' || request.method === 'POST' || request.method === 'PUT') &&
+      path === '/v1/sync/vault'
+    ) {
+      if (!env.SYNC_DB) {
+        return jsonResponse(
+          { ok: false, error: 'SYNC_DB (Cloudflare D1) is not configured on this Worker.' },
+          500,
+          request,
+          true
+        );
+      }
+
+      let body = {};
+      if (request.method === 'POST' || request.method === 'PUT') {
+        try {
+          const rawText = await request.text();
+          if (rawText.length > 8 * 1024 * 1024) {
+            return jsonResponse(
+              { ok: false, error: 'Sync payload exceeds 8 MB safety limit.' },
+              413,
+              request,
+              true
+            );
+          }
+          body = rawText ? JSON.parse(rawText) : {};
+        } catch (_) {
+          return jsonResponse({ ok: false, error: 'Invalid JSON sync payload.' }, 400, request, true);
+        }
+      }
+
+      // Also check sspvp_vault_session cookie if X-Vault-Session header was omitted (Web Simulator convenience)
+      if (!body.sessionToken && !request.headers.get('X-Vault-Session')) {
+        const cookieHdr = request.headers.get('Cookie') || '';
+        const m = cookieHdr.match(/(?:^|;\s*)sspvp_vault_session=([^;]+)/);
+        if (m && m[1]) {
+          try {
+            body.sessionToken = decodeURIComponent(m[1].trim());
+          } catch (_) {}
+        }
+      }
+
+      const targetName = sanitizeScreenName(
+        body.screenName ||
+          url.searchParams.get('user') ||
+          url.searchParams.get('screenName') ||
+          request.headers.get('X-Trainer-Screen-Name') ||
+          ''
+      );
+
+      // Zero-KV-write in-memory rate limit (protects 1,000/day KV write quota!)
+      const memRl = checkMemoryRateLimit(
+        'd1_vault_sync',
+        `${getClientIp(request)}_${targetName || 'anon'}`,
+        120,
+        600
+      );
+      if (!memRl.allowed) {
+        return jsonResponse(
+          { ok: false, error: 'Sync rate limit reached. Please wait a minute before syncing again.' },
+          429,
+          request,
+          true
+        );
+      }
+
+      const syncAuth = await authenticateD1SyncCaller(
+        request,
+        env,
+        env.TELEMETRY_KV,
+        targetName,
+        body
+      );
+      if (!syncAuth.ok) {
+        return jsonResponse(
+          {
+            ok: false,
+            screenName: syncAuth.screenName || targetName,
+            hasPassword: Boolean(syncAuth.hasPassword),
+            requiresPassword: Boolean(syncAuth.requiresPassword),
+            error: syncAuth.error,
+          },
+          syncAuth.status || 403,
+          request,
+          true
+        );
+      }
+
+      const resolvedName = syncAuth.screenName;
+      const sinceServerMs = Math.max(
+        0,
+        Number(
+          body.sinceServerMs ??
+            url.searchParams.get('sinceServerMs') ??
+            url.searchParams.get('since') ??
+            0
+        ) || 0
+      );
+
+      try {
+        let writeStats = {
+          wroteAnything: false,
+          logsUpserted: 0,
+          teamsUpserted: 0,
+          serverUpdatedMs: 0,
+        };
+        if (request.method === 'POST' || request.method === 'PUT') {
+          writeStats = await upsertVaultBatchIntoD1(env.SYNC_DB, resolvedName, {
+            settingsMap: body.userSettings || body.settings || null,
+            settingsUpdatedAt: Number(body.settingsUpdatedAt) || 0,
+            battleLogs: body.battleLogs || [],
+            teamPresets: body.teamPresets || [],
+            deletedLogIds: body.deletedLogIds || [],
+            deletedTeamIds: body.deletedTeamIds || [],
+            source: body.isInitialMigration ? 'device_migration' : String(body.source || 'app_sync'),
+            migratedFromGithub: Boolean(body.migratedFromGithub || body.isInitialMigration),
+          });
+        }
+
+        const pulled = await pullVaultDeltasFromD1(env.SYNC_DB, resolvedName, {
+          sinceServerMs,
+          isPaidOrAlumni: syncAuth.isPaidOrAlumni,
+        });
+
+        const devHashHdr = String(
+          body.deviceHash || request.headers.get('X-Device-Hash') || ''
+        ).trim();
+        const deviceIngestToken =
+          devHashHdr.length >= 8 && !devHashHdr.toLowerCase().startsWith('web-')
+            ? await computeDeviceIngestToken(env, devHashHdr)
+            : '';
+
+        const licInfo = syncAuth.licenseInfo || { ...TIER_PRESETS.free, active: false };
+        return jsonResponse(
+          {
+            ok: true,
+            screenName: resolvedName,
+            authMethod: syncAuth.authMethod,
+            hasPassword: Boolean(syncAuth.hasPassword),
+            promptSetPassword: Boolean(syncAuth.promptSetPassword),
+            sessionToken: syncAuth.sessionToken || '',
+            deviceIngestToken,
+            tier: licInfo.tier || 'free',
+            active: Boolean(licInfo.active),
+            everPaid: Boolean(licInfo.everPaid),
+            signature: licInfo.signature || '',
+            license: licInfo,
+            serverSyncMs: Math.max(pulled.serverSyncMs || 0, writeStats.serverUpdatedMs || 0),
+            shortCircuited: Boolean(pulled.shortCircuited && !writeStats.wroteAnything),
+            totalActiveLogs: pulled.totalActiveLogs,
+            totalActiveTeams: pulled.totalActiveTeams,
+            pushedLogsCount: writeStats.logsUpserted || 0,
+            pushedTeamsCount: writeStats.teamsUpserted || 0,
+            userSettings: pulled.settings,
+            settingsUpdatedAt: pulled.settingsUpdatedAt,
+            battleLogs: pulled.upsertedLogs,
+            deletedLogIds: pulled.deletedLogIds,
+            teamPresets: pulled.upsertedTeams,
+            deletedTeamIds: pulled.deletedTeamIds,
+          },
+          200,
+          request,
+          true
+        );
+      } catch (err) {
+        console.error('D1 /v1/sync/vault error:', err);
+        return jsonResponse(
+          { ok: false, error: `Cloud Vault sync error: ${err.message || String(err)}` },
+          500,
+          request,
+          true
+        );
+      }
     }
 
     // 7d-0. GitHub OAuth Start Route (`GET /v1/auth/github/start`)
@@ -10463,6 +11496,145 @@ self.addEventListener('fetch', (e) => {
           await env.TELEMETRY_KV.put('daily_tuning_config/latest', JSON.stringify(payload));
         }
         return jsonResponse({ ok: true, saved: payload });
+      }
+
+      // Admin D1 Passwordless User Vault Migration (`POST /v1/admin/sync/import`)
+      if (request.method === 'POST' && path === '/v1/admin/sync/import') {
+        if (!env.SYNC_DB) {
+          return jsonResponse({ ok: false, error: 'SYNC_DB is not bound.' }, 500);
+        }
+        let body = {};
+        try {
+          body = await request.json();
+        } catch (_) {
+          return jsonResponse({ ok: false, error: 'Invalid JSON body' }, 400);
+        }
+        const targetUser = sanitizeScreenName(body.screenName || '');
+        if (!targetUser) {
+          return jsonResponse({ ok: false, error: 'Missing valid screenName' }, 400);
+        }
+        const res = await upsertVaultBatchIntoD1(env.SYNC_DB, targetUser, {
+          settingsMap: body.userSettings || body.settings || null,
+          settingsUpdatedAt: Number(body.settingsUpdatedAt) || 0,
+          battleLogs: body.battleLogs || [],
+          teamPresets: body.teamPresets || [],
+          deletedLogIds: body.deletedLogIds || [],
+          deletedTeamIds: body.deletedTeamIds || [],
+          source: String(body.source || 'admin_migration'),
+          migratedFromGithub: Boolean(body.migratedFromGithub ?? true),
+        });
+        return jsonResponse({ ok: true, screenName: targetUser, ...res });
+      }
+
+      // Admin Userbase-Wide Meta Analytics Summary (`GET /v1/admin/meta-summary`)
+      if (request.method === 'GET' && path === '/v1/admin/meta-summary') {
+        if (!env.SYNC_DB) {
+          return jsonResponse({ ok: false, error: 'SYNC_DB is not bound.' }, 500);
+        }
+        const summary = await queryGlobalMetaSummaryFromD1(env.SYNC_DB, {
+          league: url.searchParams.get('league') || '',
+          seasonId: url.searchParams.get('seasonId') || '',
+          combatMode: url.searchParams.get('combatMode') || '',
+          sinceDays: Number(url.searchParams.get('sinceDays') || 0),
+          topLimit: Number(url.searchParams.get('limit') || 40),
+        });
+        return jsonResponse({ ok: true, ...summary });
+      }
+
+      // Admin Userbase-Wide Raw / Incremental Battle Logs Export (`GET /v1/admin/battle-logs`)
+      if (request.method === 'GET' && path === '/v1/admin/battle-logs') {
+        if (!env.SYNC_DB) {
+          return jsonResponse({ ok: false, error: 'SYNC_DB is not bound.' }, 500);
+        }
+        const filterUser = url.searchParams.get('user')
+          ? sanitizeScreenName(url.searchParams.get('user'))
+          : '';
+        const filterLeague = (url.searchParams.get('league') || '').trim().toUpperCase();
+        const filterSeason = (url.searchParams.get('seasonId') || '').trim();
+        const sinceMs = Math.max(0, Number(url.searchParams.get('sinceMs') || 0) || 0);
+        const limit = Math.min(Math.max(1, Number(url.searchParams.get('limit') || 500) || 500), 2000);
+        const offset = Math.max(0, Number(url.searchParams.get('offset') || 0) || 0);
+        const includePayload = url.searchParams.get('includePayload') !== '0';
+        const anonymize = url.searchParams.get('anonymize') === '1';
+
+        const conds = ['deleted = 0'];
+        const binds = [];
+        if (filterUser) {
+          binds.push(filterUser);
+          conds.push(`screen_name = ?${binds.length}`);
+        }
+        if (filterLeague) {
+          binds.push(filterLeague);
+          conds.push(`league = ?${binds.length}`);
+        }
+        if (filterSeason) {
+          binds.push(filterSeason);
+          conds.push(`season_id = ?${binds.length}`);
+        }
+        if (sinceMs > 0) {
+          binds.push(sinceMs);
+          conds.push(`server_updated_ms > ?${binds.length}`);
+        }
+
+        const cols = includePayload
+          ? `screen_name, log_id, season_id, league, combat_mode, result, lead_matchup,
+             user_lead, user_back1, user_back2, opp_lead, opp_back1, opp_back2,
+             first_swap_actor, switch_advantage, bmf_score, exec_wae,
+             timestamp_ms, updated_at, server_updated_ms, source, payload_json`
+          : `screen_name, log_id, season_id, league, combat_mode, result, lead_matchup,
+             user_lead, user_back1, user_back2, opp_lead, opp_back1, opp_back2,
+             first_swap_actor, switch_advantage, bmf_score, exec_wae,
+             timestamp_ms, updated_at, server_updated_ms, source`;
+
+        const sql = `SELECT ${cols} FROM battle_logs
+                     WHERE ${conds.join(' AND ')}
+                     ORDER BY server_updated_ms ASC, timestamp_ms ASC
+                     LIMIT ${limit} OFFSET ${offset}`;
+
+        const rowsRes = await env.SYNC_DB.prepare(sql).bind(...binds).all();
+        const rows = rowsRes?.results || [];
+        let maxServerUpdatedMs = sinceMs;
+        const logs = rows.map((r) => {
+          if (Number(r.server_updated_ms) > maxServerUpdatedMs) {
+            maxServerUpdatedMs = Number(r.server_updated_ms);
+          }
+          let parsedPayload = undefined;
+          if (includePayload && r.payload_json) {
+            try {
+              parsedPayload = JSON.parse(r.payload_json);
+            } catch (_) {}
+          }
+          return {
+            screenName: anonymize ? undefined : r.screen_name,
+            logId: r.log_id,
+            seasonId: r.season_id,
+            league: r.league,
+            combatMode: r.combat_mode,
+            result: r.result,
+            leadMatchup: r.lead_matchup,
+            userTeam: [r.user_lead, r.user_back1, r.user_back2].filter(Boolean),
+            opponents: [r.opp_lead, r.opp_back1, r.opp_back2].filter(Boolean),
+            firstSwapActor: r.first_swap_actor,
+            switchAdvantage: r.switch_advantage,
+            bmfScore: r.bmf_score,
+            execWae: r.exec_wae,
+            timestampMs: r.timestamp_ms,
+            updatedAt: r.updated_at,
+            serverUpdatedMs: r.server_updated_ms,
+            source: r.source,
+            ...(includePayload ? { payload: parsedPayload } : {}),
+          };
+        });
+
+        return jsonResponse({
+          ok: true,
+          count: logs.length,
+          limit,
+          offset,
+          nextSinceMs: maxServerUpdatedMs,
+          hasMore: logs.length === limit,
+          logs,
+        });
       }
     }
 

@@ -1448,10 +1448,10 @@ export default function App() {
   const [helpMetricGuideTopic, setHelpMetricGuideTopic] = useState<'wae' | 'bmf' | 'badges'>('wae');
   const [showOverlayQuickHelpModal, setShowOverlayQuickHelpModal] = useState<boolean>(false);
 
-  // Two-Device Cloud & Delta Sync States
-  const [githubGistToken, setGithubGistToken] = useState<string>(() => localStorage.getItem('gbl_sync_github_token') || '');
-  const [githubGistId, setGithubGistId] = useState<string>(() => localStorage.getItem('gbl_sync_github_gist_id') || '');
-  const [lastCloudSyncStatus, setLastCloudSyncStatus] = useState<string>(() => localStorage.getItem('gbl_last_cloud_sync_ts') || 'Ready for 2-device delta sync');
+  // Multi-Device Cloudflare D1 Vault & Delta Sync States (v7.31)
+  const [vaultSyncPasswordInput, setVaultSyncPasswordInput] = useState<string>('');
+  const [vaultSyncHasPassword, setVaultSyncHasPassword] = useState<boolean>(() => localStorage.getItem('gbl_d1_vault_has_pw_v1') === '1');
+  const [lastCloudSyncStatus, setLastCloudSyncStatus] = useState<string>(() => localStorage.getItem('gbl_last_cloud_sync_ts') || 'Ready for Cloudflare D1 delta sync');
   const [isSyncingCloud, setIsSyncingCloud] = useState<boolean>(false);
   const [showImportBundleModal, setShowImportBundleModal] = useState<boolean>(false);
   const [importBundleText, setImportBundleText] = useState<string>('');
@@ -6035,7 +6035,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.30 • Android Native Overlay
+                  v7.31 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -14143,60 +14143,51 @@ export default function App() {
             </div>
 
             {/* ===================================================================
-                CARD 3: MULTI-DEVICE CLOUD & DELTA SYNC
+                CARD 3: MULTI-DEVICE CLOUDFLARE D1 VAULT & DELTA SYNC (v7.31)
                =================================================================== */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <div>
                   <span className="text-sm font-bold text-white block">
-                    ☁️ Multi-Device Auto Delta Sync (Teams + Battle Logs)
+                    ☁️ SilphScope Cloud Vault Sync (Battle Logs &amp; Teams)
                   </span>
                   <span className="text-xs text-slate-400">
-                    Sign in with GitHub once on each device. Each user&apos;s logs sync privately to their own GitHub account across unlimited devices.
+                    Sync Battle Logs &amp; Team Presets across Android and Web via Cloudflare D1 — no GitHub account or token required. Secure your vault with an 8+ character Vault Password.
                   </span>
                 </div>
-                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                  Per-User Vault
+                <span className="text-[10px] font-mono text-sky-300 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20 shrink-0">
+                  {webSessionToken ? '🔒 Vault Unlocked' : vaultSyncHasPassword ? '🔑 Password Protected' : '☁️ Cloudflare D1'}
                 </span>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <a
-                  href="https://github.com/settings/tokens/new?description=SilphScope+PvP+Cloud+Sync&scopes=gist"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-lg shadow-emerald-600/20"
-                >
-                  🔑 Login with GitHub (Generate Sync Token)
-                </a>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <input
-                  type="password"
-                  value={githubGistToken}
-                  onChange={(e) => {
-                    setGithubGistToken(e.target.value);
-                    try {
-                      localStorage.setItem('gbl_sync_github_token', e.target.value);
-                    } catch {}
-                  }}
-                  placeholder="GitHub OAuth / Personal Access Token (Auto-filled on Android Login)"
-                  className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500"
-                />
-                <input
                   type="text"
-                  value={githubGistId}
+                  value={webScreenName}
                   onChange={(e) => {
-                    setGithubGistId(e.target.value);
+                    const clean = e.target.value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24);
+                    setWebScreenName(clean);
                     try {
-                      localStorage.setItem('gbl_sync_github_gist_id', e.target.value);
+                      localStorage.setItem('gbl_web_screen_name_v700', clean);
                     } catch {}
                   }}
-                  placeholder="Optional Gist Vault ID (Auto-discovered per user account)"
+                  placeholder="Trainer ID (e.g. sportsfan986)"
                   className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 font-mono"
                 />
+                <input
+                  type="password"
+                  value={vaultSyncPasswordInput}
+                  onChange={(e) => setVaultSyncPasswordInput(e.target.value)}
+                  placeholder="Vault Password (8–128 chars to sign in or lock vault)"
+                  className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500"
+                />
               </div>
+
+              {!vaultSyncHasPassword && webScreenName.trim().length >= 3 && (
+                <div className="text-[11px] bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2 text-amber-200">
+                  🔐 <strong>Secure Your Cloud Vault:</strong> Initial migrations work without a password, then enter an 8–128 character password above and click <strong>Set Vault Password</strong> to lock @{webScreenName.trim()}.
+                </div>
+              )}
 
               <div className="text-[11px] font-mono text-emerald-400">
                 Status: {lastCloudSyncStatus}
@@ -14207,109 +14198,200 @@ export default function App() {
                   type="button"
                   disabled={isSyncingCloud}
                   onClick={async () => {
-                    const tok = githubGistToken.trim();
-                    if (!tok) {
-                      alert('Tap "🔑 Login with GitHub" above to generate a token, or use Export/Import Bundle.');
+                    const cleanName = webScreenName.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24);
+                    if (cleanName.length < 3) {
+                      setLastCloudSyncStatus('⚠️ Enter your custom Trainer ID (3–24 chars) above first.');
                       return;
                     }
                     setIsSyncingCloud(true);
-                    setLastCloudSyncStatus('Reconciling deltas with GitHub Gist...');
+                    setLastCloudSyncStatus(`Syncing @${cleanName} deltas with Cloudflare D1 Vault...`);
                     try {
+                      let activeSession = webSessionToken;
+                      const pwCandidate = vaultSyncPasswordInput.trim();
+                      if (!activeSession && pwCandidate) {
+                        const loginResp = await fetch('https://api.silphscopepvp.com/v1/auth/login', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC,
+                            'X-Trainer-Screen-Name': cleanName
+                          },
+                          body: JSON.stringify({
+                            screenName: cleanName,
+                            password: pwCandidate,
+                            deviceHash: deviceId || `web-${cleanName}`
+                          })
+                        });
+                        const loginJson = await loginResp.json().catch(() => ({}));
+                        if (loginResp.ok && loginJson?.ok && loginJson.sessionToken) {
+                          activeSession = String(loginJson.sessionToken);
+                          setWebSessionToken(activeSession);
+                          setVaultSyncPasswordInput('');
+                          setVaultSyncHasPassword(true);
+                          try {
+                            localStorage.setItem('sspvp_vault_session', activeSession);
+                            localStorage.setItem('sspvp_vault_user', loginJson.screenName || cleanName);
+                            localStorage.setItem('gbl_d1_vault_has_pw_v1', '1');
+                          } catch {}
+                        }
+                      }
+
                       let mergedLogs = [...battleLogs];
                       let mergedPresets = [...presets];
-                      let mergedTombstones = new Set<string>(deletedLogIds);
-                      let activeGistId = githubGistId.trim();
+                      const mergedTombstones = new Set<string>(deletedLogIds);
 
-                      if (activeGistId) {
-                        const getRes = await fetch(`https://api.github.com/gists/${activeGistId}`, {
-                          headers: {
-                            Authorization: `Bearer ${tok}`,
-                            Accept: 'application/vnd.github+json'
+                      // One-time read-only legacy GitHub Gist import if present in localStorage
+                      const legacyGhTok = (localStorage.getItem('gbl_sync_github_token') || '').trim();
+                      const legacyGistId = (localStorage.getItem('gbl_sync_github_gist_id') || '').trim();
+                      const alreadyMigrated = localStorage.getItem('gbl_d1_vault_migrated_v1') === '1';
+                      if (!alreadyMigrated && legacyGhTok && legacyGistId) {
+                        try {
+                          const getRes = await fetch(`https://api.github.com/gists/${legacyGistId}`, {
+                            headers: {
+                              Authorization: `Bearer ${legacyGhTok}`,
+                              Accept: 'application/vnd.github+json'
+                            }
+                          });
+                          if (getRes.ok) {
+                            const gistJson = await getRes.json();
+                            const content = gistJson?.files?.['gbl_delta_sync_v2.json']?.content;
+                            if (content) {
+                              const remote = JSON.parse(content);
+                              if (Array.isArray(remote.deletedLogIds)) {
+                                remote.deletedLogIds.forEach((id: string) => mergedTombstones.add(id));
+                              }
+                              if (Array.isArray(remote.battleLogs)) {
+                                const logMap = new Map<string, WebBattleLogEntry>();
+                                mergedLogs.forEach((l) => {
+                                  if (!mergedTombstones.has(l.id)) logMap.set(l.id, l);
+                                });
+                                remote.battleLogs.forEach((r: WebBattleLogEntry) => {
+                                  if (!r?.id || mergedTombstones.has(r.id)) return;
+                                  const existing = logMap.get(r.id);
+                                  if (!existing || (r.updatedAt || r.timestampMs) > (existing.updatedAt || existing.timestampMs)) {
+                                    logMap.set(r.id, r);
+                                  }
+                                });
+                                mergedLogs = Array.from(logMap.values()).sort((a, b) => b.timestampMs - a.timestampMs);
+                              }
+                              if (Array.isArray(remote.teamPresets)) {
+                                const pMap = new Map<string, TeamPreset>();
+                                mergedPresets.forEach((p) => pMap.set(p.id, p));
+                                remote.teamPresets.forEach((rp: TeamPreset) => {
+                                  if (rp?.id) pMap.set(rp.id, rp);
+                                });
+                                mergedPresets = Array.from(pMap.values());
+                              }
+                            }
                           }
-                        });
-                        if (getRes.ok) {
-                          const gistJson = await getRes.json();
-                          const content = gistJson?.files?.['gbl_delta_sync_v2.json']?.content;
-                          if (content) {
-                            const remote = JSON.parse(content);
-                            if (Array.isArray(remote.deletedLogIds)) {
-                              remote.deletedLogIds.forEach((id: string) => mergedTombstones.add(id));
-                            }
-                            if (Array.isArray(remote.battleLogs)) {
-                              const logMap = new Map<string, WebBattleLogEntry>();
-                              mergedLogs.forEach((l) => {
-                                if (!mergedTombstones.has(l.id)) logMap.set(l.id, l);
-                              });
-                              remote.battleLogs.forEach((r: WebBattleLogEntry) => {
-                                if (!r?.id || mergedTombstones.has(r.id)) return;
-                                const existing = logMap.get(r.id);
-                                if (!existing || (r.updatedAt || r.timestampMs) > (existing.updatedAt || existing.timestampMs)) {
-                                  logMap.set(r.id, r);
-                                }
-                              });
-                              mergedLogs = Array.from(logMap.values()).sort((a, b) => b.timestampMs - a.timestampMs);
-                            }
-                            if (Array.isArray(remote.teamPresets)) {
-                              const pMap = new Map<string, TeamPreset>();
-                              mergedPresets.forEach((p) => pMap.set(p.id, p));
-                              remote.teamPresets.forEach((rp: TeamPreset) => {
-                                if (rp?.id) pMap.set(rp.id, rp);
-                              });
-                              mergedPresets = Array.from(pMap.values());
-                            }
-                          }
-                        }
+                        } catch {}
                       }
 
-                      saveBattleLogsToStorage(mergedLogs);
-                      setPresets(mergedPresets);
-                      const tombArr = Array.from(mergedTombstones);
-                      setDeletedLogIds(tombArr);
-                      localStorage.setItem('gbl_deleted_log_ids_v1', JSON.stringify(tombArr));
+                      const savedUserForCursor = localStorage.getItem('gbl_d1_sync_cursor_user_v1') || '';
+                      const sinceServerMs =
+                        savedUserForCursor.toLowerCase() === cleanName.toLowerCase()
+                          ? Number(localStorage.getItem('gbl_d1_sync_cursor_ms_v1') || '0') || 0
+                          : 0;
 
-                      const bundleStr = JSON.stringify(
-                        {
-                          schemaVersion: 2,
-                          exportedAt: Date.now(),
-                          deviceId,
-                          teamPresets: mergedPresets,
-                          battleLogs: mergedLogs,
-                          deletedLogIds: tombArr
-                        },
-                        null,
-                        2
-                      );
+                      const headers: Record<string, string> = {
+                        'Content-Type': 'application/json',
+                        'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC,
+                        'X-Trainer-Screen-Name': cleanName,
+                        'X-Device-Hash': deviceId || `web-${cleanName}`
+                      };
+                      if (activeSession) headers['X-Vault-Session'] = activeSession;
+                      if (webUnlockKey.trim()) headers['X-SilphScope-Unlock-Key'] = webUnlockKey.trim().toUpperCase();
 
-                      const url = activeGistId
-                        ? `https://api.github.com/gists/${activeGistId}`
-                        : 'https://api.github.com/gists';
-                      const upRes = await fetch(url, {
-                        method: activeGistId ? 'PATCH' : 'POST',
-                        headers: {
-                          Authorization: `Bearer ${tok}`,
-                          Accept: 'application/vnd.github+json',
-                          'Content-Type': 'application/json'
-                        },
+                      const syncRes = await fetch('https://api.silphscopepvp.com/v1/sync/vault', {
+                        method: 'POST',
+                        headers,
                         body: JSON.stringify({
-                          description: 'SilphScope PvP v3.10 Multi-Device Delta Sync Vault',
-                          public: false,
-                          files: {
-                            'gbl_delta_sync_v2.json': { content: bundleStr }
-                          }
+                          screenName: cleanName,
+                          deviceHash: deviceId || `web-${cleanName}`,
+                          sessionToken: activeSession,
+                          unlockKey: webUnlockKey.trim().toUpperCase(),
+                          sinceServerMs,
+                          battleLogs: sinceServerMs === 0 ? mergedLogs : mergedLogs.slice(0, 200),
+                          teamPresets: mergedPresets,
+                          deletedLogIds: Array.from(mergedTombstones)
                         })
                       });
-                      if (upRes.ok) {
-                        const upJson = await upRes.json();
-                        if (upJson.id) {
-                          setGithubGistId(upJson.id);
-                          localStorage.setItem('gbl_sync_github_gist_id', upJson.id);
-                        }
-                        const ts = `${new Date().toLocaleTimeString()} • ${mergedLogs.length} battles, ${mergedPresets.length} teams`;
-                        setLastCloudSyncStatus(`Synced ${ts}`);
-                        localStorage.setItem('gbl_last_cloud_sync_ts', `Synced ${ts}`);
-                      } else {
-                        setLastCloudSyncStatus(`Sync HTTP ${upRes.status}`);
+
+                      const syncJson = await syncRes.json().catch(() => ({}));
+                      if (syncRes.status === 401 || syncJson?.requiresPassword) {
+                        setVaultSyncHasPassword(true);
+                        try {
+                          localStorage.setItem('gbl_d1_vault_has_pw_v1', '1');
+                        } catch {}
+                        setLastCloudSyncStatus(
+                          `🔒 @${cleanName}'s Cloud Vault is password-protected. Enter your Vault Password above and click Sync Now.`
+                        );
+                        return;
                       }
+                      if (!syncRes.ok || !syncJson?.ok) {
+                        setLastCloudSyncStatus(`⚠️ Sync failed: ${syncJson?.error || `HTTP ${syncRes.status}`}`);
+                        return;
+                      }
+
+                      if (Array.isArray(syncJson.deletedLogIds)) {
+                        syncJson.deletedLogIds.forEach((id: string) => mergedTombstones.add(id));
+                      }
+                      const deletedTeamSet = new Set<string>(
+                        Array.isArray(syncJson.deletedTeamIds) ? syncJson.deletedTeamIds : []
+                      );
+
+                      const finalLogMap = new Map<string, WebBattleLogEntry>();
+                      mergedLogs.forEach((l) => {
+                        if (l?.id && !mergedTombstones.has(l.id)) finalLogMap.set(l.id, l);
+                      });
+                      if (Array.isArray(syncJson.battleLogs)) {
+                        syncJson.battleLogs.forEach((r: WebBattleLogEntry) => {
+                          if (!r?.id || mergedTombstones.has(r.id)) return;
+                          const existing = finalLogMap.get(r.id);
+                          if (!existing || (r.updatedAt || r.timestampMs || 0) >= (existing.updatedAt || existing.timestampMs || 0)) {
+                            finalLogMap.set(r.id, r);
+                          }
+                        });
+                      }
+                      const finalLogs = Array.from(finalLogMap.values()).sort((a, b) => b.timestampMs - a.timestampMs);
+
+                      const finalPresetMap = new Map<string, TeamPreset>();
+                      mergedPresets.forEach((p) => {
+                        if (p?.id && !deletedTeamSet.has(p.id)) finalPresetMap.set(p.id, p);
+                      });
+                      if (Array.isArray(syncJson.teamPresets)) {
+                        syncJson.teamPresets.forEach((rp: TeamPreset) => {
+                          if (rp?.id && !deletedTeamSet.has(rp.id)) {
+                            finalPresetMap.set(rp.id, rp);
+                          }
+                        });
+                      }
+                      const finalPresets = Array.from(finalPresetMap.values());
+
+                      saveBattleLogsToStorage(finalLogs);
+                      setPresets(finalPresets);
+                      const tombArr = Array.from(mergedTombstones);
+                      setDeletedLogIds(tombArr);
+
+                      const hasPwNow = Boolean(syncJson.hasPassword);
+                      setVaultSyncHasPassword(hasPwNow);
+                      try {
+                        localStorage.setItem('gbl_deleted_log_ids_v1', JSON.stringify(tombArr));
+                        localStorage.setItem('gbl_d1_vault_migrated_v1', '1');
+                        localStorage.setItem('gbl_d1_vault_has_pw_v1', hasPwNow ? '1' : '0');
+                        localStorage.removeItem('gbl_sync_github_token');
+                        localStorage.removeItem('gbl_sync_github_gist_id');
+                        if (syncJson.serverSyncMs) {
+                          localStorage.setItem('gbl_d1_sync_cursor_ms_v1', String(syncJson.serverSyncMs));
+                          localStorage.setItem('gbl_d1_sync_cursor_user_v1', cleanName);
+                        }
+                      } catch {}
+
+                      const ts = `${new Date().toLocaleTimeString()} • @${cleanName}: ${finalLogs.length} battles, ${finalPresets.length} teams${hasPwNow ? ' (🔒 Secured)' : ' (⚠️ Set Vault Password above)'}`;
+                      setLastCloudSyncStatus(`Synced ${ts}`);
+                      try {
+                        localStorage.setItem('gbl_last_cloud_sync_ts', `Synced ${ts}`);
+                      } catch {}
                     } catch (err: any) {
                       setLastCloudSyncStatus(`Sync error: ${err?.message || 'failed'}`);
                     } finally {
@@ -14319,6 +14401,90 @@ export default function App() {
                   className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition"
                 >
                   {isSyncingCloud ? 'Syncing...' : '🔄 Sync Now'}
+                </button>
+                <button
+                  type="button"
+                  disabled={isSyncingCloud}
+                  onClick={async () => {
+                    const cleanName = webScreenName.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24);
+                    const pw = vaultSyncPasswordInput.trim();
+                    if (cleanName.length < 3) {
+                      setLastCloudSyncStatus('⚠️ Enter your Trainer ID (3–24 chars) first.');
+                      return;
+                    }
+                    if (pw.length < 8 || pw.length > 128) {
+                      setLastCloudSyncStatus('⚠️ Enter an 8–128 character password above to lock or unlock your vault.');
+                      return;
+                    }
+                    setIsSyncingCloud(true);
+                    try {
+                      if (vaultSyncHasPassword && !webSessionToken) {
+                        const loginResp = await fetch('https://api.silphscopepvp.com/v1/auth/login', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC,
+                            'X-Trainer-Screen-Name': cleanName
+                          },
+                          body: JSON.stringify({
+                            screenName: cleanName,
+                            password: pw,
+                            deviceHash: deviceId || `web-${cleanName}`
+                          })
+                        });
+                        const loginData = await loginResp.json().catch(() => ({}));
+                        if (loginResp.ok && loginData?.ok && loginData.sessionToken) {
+                          setWebSessionToken(loginData.sessionToken);
+                          setVaultSyncPasswordInput('');
+                          setVaultSyncHasPassword(true);
+                          localStorage.setItem('sspvp_vault_session', loginData.sessionToken);
+                          localStorage.setItem('sspvp_vault_user', loginData.screenName || cleanName);
+                          localStorage.setItem('gbl_d1_vault_has_pw_v1', '1');
+                          setLastCloudSyncStatus(`✅ Signed in to @${cleanName} Cloud Vault! Click Sync Now to pull/push deltas.`);
+                          return;
+                        }
+                      }
+                      const setResp = await fetch('https://api.silphscopepvp.com/v1/auth/set-password', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'X-SilphScope-Client-Key': CLIENT_INGEST_KEY_PUBLIC,
+                          'X-Trainer-Screen-Name': cleanName,
+                          'X-Device-Hash': deviceId || `web-${cleanName}`,
+                          'X-Vault-Session': webSessionToken,
+                          'X-SilphScope-Unlock-Key': webUnlockKey.trim().toUpperCase()
+                        },
+                        body: JSON.stringify({
+                          screenName: cleanName,
+                          newPassword: pw,
+                          deviceHash: deviceId || `web-${cleanName}`,
+                          sessionToken: webSessionToken,
+                          unlockKey: webUnlockKey.trim().toUpperCase()
+                        })
+                      });
+                      const setData = await setResp.json().catch(() => ({}));
+                      if (setResp.ok && setData?.ok) {
+                        if (setData.sessionToken) {
+                          setWebSessionToken(setData.sessionToken);
+                          localStorage.setItem('sspvp_vault_session', setData.sessionToken);
+                        }
+                        localStorage.setItem('sspvp_vault_user', cleanName);
+                        localStorage.setItem('gbl_d1_vault_has_pw_v1', '1');
+                        setVaultSyncHasPassword(true);
+                        setVaultSyncPasswordInput('');
+                        setLastCloudSyncStatus(`🔐 Vault Password saved! @${cleanName}'s Cloudflare D1 Vault is now locked & protected.`);
+                      } else {
+                        setLastCloudSyncStatus(`⚠️ ${setData?.error || 'Could not set password (if already set, sign in first).'}`);
+                      }
+                    } catch (err: any) {
+                      setLastCloudSyncStatus(`⚠️ Error: ${err?.message || 'network error'}`);
+                    } finally {
+                      setIsSyncingCloud(false);
+                    }
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition"
+                >
+                  {vaultSyncHasPassword && !webSessionToken ? '🔑 Sign In with Password' : '🔐 Set Vault Password'}
                 </button>
                 <button
                   type="button"
@@ -17194,7 +17360,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.30 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.31 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}
