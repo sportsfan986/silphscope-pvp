@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { VersionRoadmapInfographic } from './VersionRoadmapInfographic';
 
 export type MarketingSubpage = 'vault' | 'home' | 'live' | 'guide' | 'compare';
@@ -352,7 +352,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
   const [selectedWatchReplay, setSelectedWatchReplay] = useState<DvrReplayItem | null>(null);
   const [selectedWatchSeekSec, setSelectedWatchSeekSec] = useState<number>(0);
   const [ownerLoginOpen, setOwnerLoginOpen] = useState<boolean>(false);
-  const [authTab, setAuthTab] = useState<'token' | 'password' | 'github'>('password');
+  const [authTab, setAuthTab] = useState<'token' | 'password'>('password');
   const [authKey, setAuthKey] = useState<string>(() => {
     try { return localStorage.getItem('gbl_web_unlock_key_v700') || ''; } catch { return ''; }
   });
@@ -362,56 +362,6 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
   });
   const [authErrorMsg, setAuthErrorMsg] = useState<string>('');
   const [authLoading, setAuthLoading] = useState<boolean>(false);
-
-  // GitHub Device Login State in Modal (persisted in localStorage so mobile PWA suspend/resume completes login)
-  const [ghDeviceCodeInfo, setGhDeviceCodeInfo] = useState<{
-    device_code: string;
-    user_code: string;
-    verification_uri: string;
-  } | null>(() => {
-    try {
-      const raw = localStorage.getItem('sspvp_pending_gh_device');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && parsed.device_code && parsed.expiresAt > Date.now()) {
-          return {
-            device_code: parsed.device_code,
-            user_code: parsed.user_code,
-            verification_uri: parsed.verification_uri || 'https://github.com/login/device'
-          };
-        }
-        localStorage.removeItem('sspvp_pending_gh_device');
-      }
-    } catch {}
-    return null;
-  });
-  const [ghPollStatus, setGhPollStatus] = useState<string>('');
-  const [ghPollingNow, setGhPollingNow] = useState<boolean>(false);
-  const [ghCodeCopied, setGhCodeCopied] = useState<boolean>(false);
-  const ghModalTimerRef = useRef<number | null>(null);
-  const lastGhModalPollRef = useRef<number>(0);
-  const ghPollInFlightRef = useRef<boolean>(false);
-  const pendingGhLinkTokenRef = useRef<string>('');
-
-  const copyTextSyncWithFallback = (text: string) => {
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).catch(() => {});
-      }
-    } catch {}
-    try {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      ta.style.pointerEvents = 'none';
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-    } catch {}
-  };
 
   const fetchVaultReplays = async (userToFetch: string) => {
     const user = (userToFetch || 'Featured').trim();
@@ -793,190 +743,6 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
     }
   };
 
-  const startGitHubLoginInModal = async (openTabImmediately = false) => {
-    setAuthErrorMsg('');
-    setAuthLoading(true);
-    setGhCodeCopied(false);
-    setGhPollStatus('Generating your GitHub one-time code...');
-    if (ghModalTimerRef.current) window.clearTimeout(ghModalTimerRef.current);
-    try {
-      const res = await fetch('https://api.silphscopepvp.com/v1/auth/github/device-code', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-SilphScope-Client-Key': 'ssk_client_v615_telemetry_ingest_9f8a7b6c5d4e3f2a1b0c'
-        }
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        setAuthErrorMsg(data?.error || 'Failed to start GitHub login.');
-        setAuthLoading(false);
-        return;
-      }
-      const verUri = data.verification_uri || 'https://github.com/login/device';
-      const expiresMs = Date.now() + (Number(data.expires_in) || 900) * 1000;
-      const pendingObj = {
-        device_code: data.device_code,
-        user_code: data.user_code,
-        verification_uri: verUri,
-        expiresAt: expiresMs
-      };
-      setGhDeviceCodeInfo({
-        device_code: data.device_code,
-        user_code: data.user_code,
-        verification_uri: verUri
-      });
-      try {
-        localStorage.setItem('sspvp_pending_gh_device', JSON.stringify(pendingObj));
-      } catch {}
-      copyTextSyncWithFallback(data.user_code);
-      if (openTabImmediately) {
-        window.open(verUri, '_blank', 'noopener');
-        setGhPollStatus(
-          `Paste code ${data.user_code} on GitHub & tap the green Authorize button (auto-completes when you return).`
-        );
-      } else {
-        setGhPollStatus(
-          `Tap "Copy Code & Authorize on GitHub ↗", paste ${data.user_code}, and tap the green Authorize button.`
-        );
-      }
-
-      const pollDelayMs = (Math.max(5, Number(data.interval) || 5) + 0.6) * 1000;
-      lastGhModalPollRef.current = 0;
-      ghModalTimerRef.current = window.setTimeout(
-        () => pollGitHubModalNow(data.device_code, false, pollDelayMs),
-        pollDelayMs
-      );
-    } catch (e: any) {
-      setAuthErrorMsg('Error contacting GitHub auth service: ' + (e?.message || 'offline'));
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  const pollGitHubModalNow = async (deviceCode: string, isManual = false, delayMs = 5600) => {
-    if (!deviceCode) return;
-    if (ghPollInFlightRef.current) {
-      if (isManual) {
-        setGhPollStatus('🔄 Checking GitHub authorization status...');
-      }
-      return;
-    }
-    const now = Date.now();
-    const elapsed = now - lastGhModalPollRef.current;
-    if (lastGhModalPollRef.current > 0 && elapsed < 5300) {
-      const waitMs = Math.max(400, 5350 - elapsed);
-      if (isManual) {
-        setGhPollingNow(true);
-        setGhPollStatus(`⏳ Verifying with GitHub in ${Math.ceil(waitMs / 1000)}s (auto-completing)...`);
-      }
-      if (ghModalTimerRef.current) window.clearTimeout(ghModalTimerRef.current);
-      ghModalTimerRef.current = window.setTimeout(
-        () => pollGitHubModalNow(deviceCode, isManual, delayMs),
-        waitMs
-      );
-      return;
-    }
-    lastGhModalPollRef.current = now;
-    ghPollInFlightRef.current = true;
-    if (isManual) {
-      setGhPollingNow(true);
-      setGhPollStatus('🔄 Checking GitHub authorization status...');
-    }
-    try {
-      const candidateUser =
-        vaultInputUser && vaultInputUser.toLowerCase() !== 'featured'
-          ? vaultInputUser.trim()
-          : vaultUser.toLowerCase() !== 'featured'
-          ? vaultUser.trim()
-          : '';
-      const res = await fetch('https://api.silphscopepvp.com/v1/auth/github/poll', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-SilphScope-Client-Key': 'ssk_client_v615_telemetry_ingest_9f8a7b6c5d4e3f2a1b0c'
-        },
-        body: JSON.stringify({
-          device_code: deviceCode,
-          screenName: candidateUser,
-          unlockKey: authKey.trim().toUpperCase()
-        })
-      });
-      const data = await res.json();
-      if (data.status === 'pending') {
-        const nextDelay =
-          Number(data.cooldownMs) ||
-          (data.slowDown || data.interval
-            ? (Math.max(5, Number(data.interval) || 5) + 0.6) * 1000
-            : delayMs);
-        if (data.throttled) {
-          if (isManual) {
-            setGhPollStatus(`⏳ Verifying with GitHub in ${Math.ceil(nextDelay / 1000)}s...`);
-          }
-        } else {
-          setGhPollingNow(false);
-          if (isManual) {
-            setGhPollStatus(
-              `⏳ GitHub hasn't confirmed code ${ghDeviceCodeInfo?.user_code || ''} yet. Make sure you pasted the code on github.com/login/device AND tapped the green "Authorize" button (auto-checking every ${Math.round(nextDelay / 1000)}s).`
-            );
-          }
-        }
-        if (ghModalTimerRef.current) window.clearTimeout(ghModalTimerRef.current);
-        ghModalTimerRef.current = window.setTimeout(
-          () => pollGitHubModalNow(deviceCode, Boolean(data.throttled && isManual), nextDelay),
-          nextDelay
-        );
-        return;
-      }
-      setGhPollingNow(false);
-      if (ghModalTimerRef.current) window.clearTimeout(ghModalTimerRef.current);
-      ghModalTimerRef.current = null;
-      setGhDeviceCodeInfo(null);
-      try {
-        localStorage.removeItem('sspvp_pending_gh_device');
-      } catch {}
-
-      if (data.pendingGhLinkToken) {
-        pendingGhLinkTokenRef.current = String(data.pendingGhLinkToken);
-      }
-
-      if (data.ok && data.sessionToken) {
-        pendingGhLinkTokenRef.current = '';
-        localStorage.setItem('sspvp_vault_session', data.sessionToken);
-        if (data.githubUsername) {
-          localStorage.setItem('sspvp_github_username', data.githubUsername);
-        }
-        const resolvedName = (data.screenName || data.githubUsername || candidateUser || '').trim();
-        if (resolvedName && resolvedName.toLowerCase() !== 'featured') {
-          localStorage.setItem('sspvp_vault_user', resolvedName);
-          localStorage.setItem('gbl_web_screen_name_v700', resolvedName);
-          writeSharedVaultCookies(resolvedName, data.sessionToken);
-          setVaultUser(resolvedName);
-          setVaultInputUser(resolvedName);
-          onChangeWebScreenName(resolvedName);
-        }
-        setIsVaultOwner(true);
-        setOwnerLoginOpen(false);
-        copyToClipboard('Logged in via GitHub', 'GitHub Sign-In');
-        fetchVaultReplays(resolvedName || vaultUser);
-      } else {
-        if (data.pendingGhLinkToken) {
-          setAuthTab('token');
-        }
-        setAuthErrorMsg(data.error || 'GitHub login did not match an active account.');
-      }
-    } catch {
-      setGhPollingNow(false);
-      if (ghModalTimerRef.current) window.clearTimeout(ghModalTimerRef.current);
-      ghModalTimerRef.current = window.setTimeout(
-        () => pollGitHubModalNow(deviceCode, false, delayMs),
-        delayMs
-      );
-    } finally {
-      ghPollInFlightRef.current = false;
-    }
-  };
-
   const handleTokenLogin = async () => {
     if (!authKey.trim() && !authEmail.trim()) return;
     setAuthLoading(true);
@@ -998,13 +764,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
         body: JSON.stringify({
           unlockKey: authKey.trim().toUpperCase(),
           claimEmail: authEmail.trim().toLowerCase(),
-          screenName: candidateUser,
-          pendingGhLinkToken: pendingGhLinkTokenRef.current || ''
+          screenName: candidateUser
         })
       });
       const data = await res.json();
       if (data && data.ok) {
-        pendingGhLinkTokenRef.current = '';
         if (data.sessionToken) localStorage.setItem('sspvp_vault_session', data.sessionToken);
         if (authKey.trim()) localStorage.setItem('gbl_web_unlock_key_v700', authKey.trim().toUpperCase());
         if (authEmail.trim()) localStorage.setItem('gbl_web_claim_email_v700', authEmail.trim().toLowerCase());
@@ -1049,13 +813,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
         },
         body: JSON.stringify({
           screenName: userToLogin,
-          password: authPassword.trim(),
-          pendingGhLinkToken: pendingGhLinkTokenRef.current || ''
+          password: authPassword.trim()
         })
       });
       const data = await res.json();
       if (data && data.ok) {
-        pendingGhLinkTokenRef.current = '';
         if (data.sessionToken) localStorage.setItem('sspvp_vault_session', data.sessionToken);
         const resolvedName = (data.screenName || userToLogin || '').trim();
         if (resolvedName && resolvedName.toLowerCase() !== 'featured') {
@@ -1079,58 +841,6 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
     }
   };
 
-  // Resume GitHub Device Flow polling immediately when returning from GitHub browser tab to standalone PWA!
-  useEffect(() => {
-    const checkAndResumePendingGitHubAuth = () => {
-      if (document.visibilityState && document.visibilityState !== 'visible') return;
-      let code = ghDeviceCodeInfo?.device_code || '';
-      if (!code) {
-        try {
-          const raw = localStorage.getItem('sspvp_pending_gh_device');
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (parsed && parsed.device_code && parsed.expiresAt > Date.now()) {
-              code = parsed.device_code;
-              setGhDeviceCodeInfo({
-                device_code: parsed.device_code,
-                user_code: parsed.user_code,
-                verification_uri: parsed.verification_uri || 'https://github.com/login/device'
-              });
-            } else {
-              localStorage.removeItem('sspvp_pending_gh_device');
-            }
-          }
-        } catch {}
-      }
-      if (code) {
-        if (ghModalTimerRef.current) window.clearTimeout(ghModalTimerRef.current);
-        ghModalTimerRef.current = window.setTimeout(() => {
-          pollGitHubModalNow(code, true);
-        }, 350);
-      }
-    };
-
-    window.addEventListener('focus', checkAndResumePendingGitHubAuth);
-    document.addEventListener('visibilitychange', checkAndResumePendingGitHubAuth);
-    // Also trigger once on mount if a pending device code was saved right before PWA was suspended
-    if (ghDeviceCodeInfo?.device_code) {
-      setOwnerLoginOpen(true);
-      setAuthTab('github');
-      checkAndResumePendingGitHubAuth();
-    }
-    return () => {
-      window.removeEventListener('focus', checkAndResumePendingGitHubAuth);
-      document.removeEventListener('visibilitychange', checkAndResumePendingGitHubAuth);
-    };
-  }, [ghDeviceCodeInfo?.device_code]);
-
-  // Pre-fetch GitHub one-time device code immediately when Owner Login opens on the GitHub tab
-  useEffect(() => {
-    if (ownerLoginOpen && authTab === 'github' && !ghDeviceCodeInfo && !authLoading) {
-      startGitHubLoginInModal(false);
-    }
-  }, [ownerLoginOpen, authTab]);
-
   // Close full-screen replay theater via Escape key or iframe postMessage
   useEffect(() => {
     if (!selectedWatchReplay) return;
@@ -1151,25 +861,13 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
     };
   }, [selectedWatchReplay]);
 
-  // Auto-restore cached session or handle ?auth=github URL query on launch
+  // Auto-restore cached session on launch
   useEffect(() => {
     try {
+      localStorage.removeItem('sspvp_pending_gh_device');
       const params = new URLSearchParams(window.location.search);
-      if (params.get('auth') === 'github' || params.get('login') === 'github') {
-        setOwnerLoginOpen(true);
-        setAuthTab('github');
-        startGitHubLoginInModal(false);
-        params.delete('auth');
-        params.delete('login');
-        const cleanQuery = params.toString();
-        window.history.replaceState({}, '', window.location.pathname + (cleanQuery ? `?${cleanQuery}` : ''));
-        return;
-      }
-
-      // If user has a cached session or GitHub sync token, verify & auto-default vaultUser to their account
       const sess = (localStorage.getItem('sspvp_vault_session') || readSharedVaultCookie('sspvp_vault_session') || '').trim();
-      const syncGhTok = (localStorage.getItem('gbl_sync_github_token') || '').trim();
-      if ((sess || syncGhTok) && !params.get('user')) {
+      if (sess && !params.get('user')) {
         const tokenUser = extractScreenNameFromSessionToken(sess);
         if (tokenUser && vaultUser.toLowerCase() === 'featured') {
           localStorage.setItem('sspvp_vault_user', tokenUser);
@@ -1177,7 +875,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           setVaultUser(tokenUser);
           setVaultInputUser(tokenUser);
           onChangeWebScreenName(tokenUser);
-        } else if (!tokenUser && (sess || syncGhTok)) {
+        } else if (!tokenUser) {
           fetch('https://api.silphscopepvp.com/v1/auth/login', {
             method: 'POST',
             headers: {
@@ -1186,8 +884,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
               'X-Vault-Session': sess
             },
             body: JSON.stringify({
-              sessionToken: sess,
-              githubToken: syncGhTok
+              sessionToken: sess
             })
           })
             .then((r) => r.json())
@@ -1224,12 +921,6 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
       }
     }
   }, [webScreenName]);
-
-  useEffect(() => {
-    return () => {
-      if (ghModalTimerRef.current) window.clearTimeout(ghModalTimerRef.current);
-    };
-  }, []);
 
   // Live View Simulation & Stream State
   const [streamCode, setStreamCode] = useState<string>('SSPVP-LIVE-9042');
@@ -3724,11 +3415,11 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              Log in with your license key, password, or GitHub account to star replays, manage private battles, and access elevated diagnostic traces.
+              Log in with your license key or vault password to star replays, manage private battles, and access elevated diagnostic traces.
             </p>
 
             <div className="flex rounded-xl bg-[#081120] p-1 border border-slate-800 text-xs font-bold">
-              {(['token', 'password', 'github'] as const).map((tab) => (
+              {(['token', 'password'] as const).map((tab) => (
                 <button
                   key={tab}
                   type="button"
@@ -3739,7 +3430,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  {tab === 'token' ? 'License Key' : tab}
+                  {tab === 'token' ? 'License Key' : 'Password'}
                 </button>
               ))}
             </div>
@@ -3808,97 +3499,6 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                 >
                   {authLoading ? 'Signing In...' : 'Log In with Password'}
                 </button>
-              </div>
-            )}
-
-            {authTab === 'github' && (
-              <div className="space-y-3.5 py-1">
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  Sign in with your GitHub account to manage private replays, ⭐ Star battles, and unlock elevated diagnostic telemetry.
-                </p>
-
-                {authErrorMsg && (
-                  <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/40 text-rose-300 text-xs font-semibold">
-                    ⚠️ {authErrorMsg}
-                  </div>
-                )}
-
-                {ghDeviceCodeInfo ? (
-                  <div className="p-3.5 rounded-2xl bg-[#081120] border border-teal-400/50 space-y-3 shadow-lg">
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span className="text-xs font-bold text-slate-300">1. Tap to Copy Code:</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          copyTextSyncWithFallback(ghDeviceCodeInfo.user_code);
-                          setGhCodeCopied(true);
-                          setGhPollStatus(
-                            `📋 Copied ${ghDeviceCodeInfo.user_code}! Now tap "2. Authorize on GitHub ↗", paste the code, and tap Authorize.`
-                          );
-                        }}
-                        className="font-mono text-base font-black text-teal-300 tracking-widest px-3 py-1 bg-[#0E1B2E] hover:bg-teal-950/60 border border-teal-400/60 rounded-lg cursor-pointer transition flex items-center gap-1.5"
-                        title="Tap to copy code to clipboard"
-                      >
-                        <span>{ghDeviceCodeInfo.user_code}</span>
-                        <span className="text-xs font-sans font-bold text-teal-200">
-                          {ghCodeCopied ? '✓ Copied' : '📋'}
-                        </span>
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <a
-                        href={ghDeviceCodeInfo.verification_uri}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => {
-                          copyTextSyncWithFallback(ghDeviceCodeInfo.user_code);
-                          setGhCodeCopied(true);
-                          setGhPollStatus(
-                            `📋 Code ${ghDeviceCodeInfo.user_code} copied! Paste it on GitHub & tap the green Authorize button.`
-                          );
-                        }}
-                        className="flex-1 py-2.5 px-3 rounded-xl bg-teal-400 text-slate-950 font-black text-xs text-center hover:bg-teal-300 transition shadow"
-                      >
-                        2. Copy &amp; Authorize on GitHub ↗
-                      </a>
-                      <button
-                        type="button"
-                        disabled={ghPollingNow}
-                        onClick={() => pollGitHubModalNow(ghDeviceCodeInfo.device_code, true)}
-                        className="py-2.5 px-3 rounded-xl bg-[#0E1B2E] text-teal-300 font-bold text-xs border border-teal-400/50 hover:bg-teal-950/50 transition cursor-pointer disabled:opacity-70"
-                      >
-                        {ghPollingNow ? '🔄 Checking...' : '✅ Finish Sign-In'}
-                      </button>
-                    </div>
-                    <div className="text-[11px] text-teal-200/90 font-medium leading-relaxed">
-                      {ghPollStatus ||
-                        `Tap "2. Copy & Authorize on GitHub ↗", paste code ${ghDeviceCodeInfo.user_code}, and tap Authorize (auto-completes when you return).`}
-                    </div>
-                    <div className="pt-1 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
-                      <span className="text-slate-400">Code expired or need a new one?</span>
-                      <button
-                        type="button"
-                        disabled={authLoading}
-                        onClick={() => startGitHubLoginInModal(false)}
-                        className="text-teal-300 hover:text-teal-200 font-bold underline cursor-pointer disabled:opacity-50"
-                      >
-                        🔄 Generate Fresh Code
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-2.5">
-                    <button
-                      type="button"
-                      disabled={authLoading}
-                      onClick={() => startGitHubLoginInModal(true)}
-                      className="w-full py-3 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-slate-950 font-black text-xs transition cursor-pointer shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
-                    >
-                      <span>🐙</span>
-                      <span>{authLoading ? 'Generating GitHub Code...' : 'Sign In with GitHub'}</span>
-                    </button>
-                  </div>
-                )}
               </div>
             )}
           </div>

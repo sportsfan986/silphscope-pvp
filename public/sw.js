@@ -1,5 +1,5 @@
-// SilphScope DVR PWA Service Worker (v7.34)
-const CACHE_NAME = 'silphscope-dvr-pwa-v734';
+// SilphScope DVR PWA Service Worker (v7.35)
+const CACHE_NAME = 'silphscope-dvr-pwa-v735';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

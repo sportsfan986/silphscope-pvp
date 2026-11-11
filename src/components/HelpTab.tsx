@@ -238,7 +238,7 @@ export function HelpTab({ setActiveTab, setShowOverlayQuickHelpModal, setShowHel
               </h3>
               <ul className="list-disc list-inside space-y-1.5">
                 <li>
-                  <strong className="text-white">2-Device GitHub Cloud Delta Sync:</strong> Sign in once per phone under <strong>⚙️ Settings → Multi-Device Cloud Sync</strong>. Your Team Presets and Battle Logs automatically reconcile across devices on app open and after every logged battle.
+                  <strong className="text-white">Multi-Device Cloudflare D1 Vault Sync:</strong> Sign in with your Trainer ID and Vault Password (or License Key) under <strong>⚙️ Settings → Multi-Device Cloud Sync</strong>. Your Team Presets, App Settings, and Battle Logs automatically reconcile across devices on app open and after every logged battle.
                 </li>
                 <li>
                   <strong className="text-white">Trash Bin &amp; Instant Undo:</strong> Deleted teams or battles move to the <strong>🗑️ Trash Bin</strong> with an instant <strong>♻️ UNDO</strong> toast so nothing is ever lost by accident.

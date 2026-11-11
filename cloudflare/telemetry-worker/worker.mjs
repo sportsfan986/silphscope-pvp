@@ -3734,6 +3734,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
     const PVP_DB = ${safeJsonForScript(COMPACT_PVP_DB)};
     const SHARE_LEAGUE = ${safeJsonForScript(shareInfo.league || 'GREAT LEAGUE')};
     const SHARE_MATCHUP = ${safeJsonForScript(shareInfo.matchup || '')};
+    const SHARE_DURATION_SEC = Number(${safeJsonForScript(Number(shareInfo.durationSec) || 0)}) || 0;
     const SHARE_USER_TIER = ${safeJsonForScript(shareInfo.userTier || 'pro')};
     const IS_SHIELD_HUD_UNLOCKED = SHARE_USER_TIER !== 'free';
     let currentIssueNote = ${safeJsonForScript(shareInfo.userIssueNote || '')};
@@ -5511,10 +5512,64 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       }
     }
 
+    function getEffectiveBattleEndSec() {
+      const candidates = [];
+      const vDur = Number(video && video.duration) || 0;
+      if (vDur > 1 && Number.isFinite(vDur)) {
+        candidates.push(vDur * mp4TimeCompressionRatio);
+      }
+      const sumDur = Number(
+        summaryHeader && (summaryHeader.durationSec ?? summaryHeader.battleDurationSec ?? summaryHeader.elapsedSec)
+      ) || 0;
+      if (sumDur > 3 && sumDur < 600) {
+        candidates.push(sumDur);
+      }
+      if (SHARE_DURATION_SEC > 3 && SHARE_DURATION_SEC < 600) {
+        candidates.push(SHARE_DURATION_SEC);
+      }
+      if (summaryHeader && Array.isArray(summaryHeader.timelineEvents)) {
+        let uKoCount = 0;
+        let oKoCount = 0;
+        for (const ev of summaryHeader.timelineEvents) {
+          const sec = Number(ev && ev.t);
+          if (!Number.isFinite(sec) || sec <= 0 || sec > 600) continue;
+          const tStr = String((ev && ev.type) || '').toUpperCase();
+          if (tStr.includes('BATTLE_END') || tStr.includes('MATCH_END')) {
+            candidates.push(sec + 0.25);
+            break;
+          }
+          if (tStr.includes('FAINT') || tStr.includes('KO')) {
+            const act = String((ev && ev.actor) || '').toUpperCase();
+            if (act === 'USER' || act === 'U' || act === 'PLAYER') uKoCount++;
+            else if (act === 'OPP' || act === 'OPPONENT' || act === 'O') oKoCount++;
+            if (uKoCount >= 3 || oKoCount >= 3) {
+              candidates.push(sec + 0.35);
+              break;
+            }
+          }
+        }
+      }
+      for (const f of frames) {
+        const sec = (Number(f.relTimeMs) || 0) / 1000;
+        if (sec <= 3 || sec > 600) continue;
+        const bTxt = String((f.moveBannerText || '') + ' ' + (f.ocrMidBannerText || '')).trim();
+        if (/\\b(you win|good effort)\\b/i.test(bTxt)) {
+          candidates.push(sec);
+          break;
+        }
+      }
+      if (candidates.length === 0 && frames.length > 1) {
+        const lastSec = (Number(frames[frames.length - 1].relTimeMs) || 0) / 1000;
+        if (lastSec > 0 && lastSec < 600) candidates.push(lastSec);
+      }
+      return candidates.length > 0 ? Math.min(...candidates) : 450;
+    }
+
     video.addEventListener('loadedmetadata', () => {
       recalcMp4TimeCompression();
       const dispDur = (video.duration || 0) * mp4TimeCompressionRatio;
       document.getElementById('time-readout').textContent = '0.0s / ' + dispDur.toFixed(1) + 's';
+      buildEventChips();
       applyInitialUrlSeekIfNeeded();
     });
     video.addEventListener('seeked', syncHudFrame);
@@ -5528,14 +5583,16 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
         }
         const text = await res.text();
         const lines = text.split(/\\r?\\n/).map(l => l.trim()).filter(Boolean);
-        const parsed = [];
+        const rawFrames = [];
         for (const line of lines) {
           try {
             const obj = JSON.parse(line);
             if (obj.recordType === 'BATTLE_DVR_SUMMARY_HEADER') {
               summaryHeader = obj.battleSummary || null;
             } else if (typeof obj.frameIdx === 'number') {
-              obj.relTimeMs = obj.videoElapsedMs ?? obj.relTimeMs ?? 0;
+              const relMs = Number(obj.videoElapsedMs ?? obj.relTimeMs ?? 0);
+              if (!Number.isFinite(relMs) || relMs < 0 || relMs > 600000) continue;
+              obj.relTimeMs = relMs;
               obj.userActiveSpecies = obj.activeUserSpecies || obj.userActiveSpecies || '';
               obj.oppActiveSpecies = obj.activeOppSpecies || obj.oppActiveSpecies || '';
               obj.userHpPct = obj.committedUserHpPct ?? obj.userHpPct ?? -1;
@@ -5548,9 +5605,36 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
               obj.ocrTopRightText = obj.ocrOppTopText || obj.ocrTopRightText || '';
               obj.userSwitchClockMs = (obj.playerSwapRemainingSec || 0) * 1000;
               obj.oppSwitchClockMs = (obj.oppSwapRemainingSec || 0) * 1000;
-              parsed.push(obj);
+              rawFrames.push(obj);
             }
           } catch (_) {}
+        }
+        const sumCeilSec = Number(
+          summaryHeader && (summaryHeader.durationSec ?? summaryHeader.battleDurationSec ?? summaryHeader.elapsedSec)
+        ) || 0;
+        const shareCeilSec = SHARE_DURATION_SEC > 3 && SHARE_DURATION_SEC < 600 ? SHARE_DURATION_SEC : 0;
+        const knownEndSec = (sumCeilSec > 3 && sumCeilSec < 600)
+          ? (shareCeilSec > 0 ? Math.min(sumCeilSec, shareCeilSec) : sumCeilSec)
+          : shareCeilSec;
+        const maxFrameMs = knownEndSec > 3 ? (knownEndSec + 1.5) * 1000 : 600000;
+        let parsed = [];
+        let prevAcceptedMs = -1;
+        let combatStarted = false;
+        for (const f of rawFrames) {
+          if (f.relTimeMs > maxFrameMs) break;
+          if (prevAcceptedMs > 10000 && f.relTimeMs < prevAcceptedMs - 5000) break;
+          if (f.isBattleActive === true || f.relTimeMs > 3000) combatStarted = true;
+          if (combatStarted && f.isBattleActive === false) break;
+          const bTxt = String(f.moveBannerText || '');
+          if (f.relTimeMs > 5000 && /\\b(you win|good effort)\\b/i.test(bTxt)) {
+            parsed.push(f);
+            break;
+          }
+          parsed.push(f);
+          prevAcceptedMs = f.relTimeMs;
+        }
+        if (parsed.length === 0 && rawFrames.length > 0) {
+          parsed = rawFrames;
         }
         if (parsed.length > 1) {
           const spanMs = (parsed[parsed.length - 1].relTimeMs || 0) - (parsed[0].relTimeMs || 0);
@@ -5629,6 +5713,11 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       container.innerHTML = '';
       renderedEventChipList = [];
       const collected = [];
+      const battleEndSec = getEffectiveBattleEndSec();
+
+      function isWithinBattle(sec) {
+        return Number.isFinite(sec) && sec >= 0 && sec <= 450 && sec <= battleEndSec;
+      }
 
       function hasNearbyEvent(kind, actorTag, sec, windowSec) {
         return collected.some(e =>
@@ -5640,9 +5729,13 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
 
       // 1. Structured timelineEvents from BATTLE_DVR_SUMMARY_HEADER
       if (summaryHeader && Array.isArray(summaryHeader.timelineEvents)) {
+        let uKoSeen = 0;
+        let oKoSeen = 0;
         for (const ev of summaryHeader.timelineEvents) {
-          const sec = Number(ev.t) || 0;
+          const sec = Number(ev.t);
+          if (!isWithinBattle(sec)) continue;
           const typeStr = String(ev.type || '').toUpperCase();
+          if (typeStr.includes('BATTLE_END') || typeStr.includes('MATCH_END')) break;
           const actor = shortActorTag(ev.actor);
           if (typeStr.includes('CHARGE')) {
             const mv = ev.inferredMoveName || ev.move || 'Charged Move';
@@ -5678,6 +5771,9 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
               actor,
               label: '💀 ' + sec.toFixed(1) + 's ' + (actor ? actor + ': ' : '') + pokeKo
             });
+            if (actor === 'U') uKoSeen++;
+            else if (actor === 'O') oKoSeen++;
+            if (uKoSeen >= 3 || oKoSeen >= 3) break;
           } else {
             const detail = ev.inferredMoveName || ev.pokemonIn || ev.pokemonFainted || ev.activePokemon || typeStr;
             collected.push({
@@ -5694,7 +5790,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       if (summaryHeader && Array.isArray(summaryHeader.anomalies)) {
         for (const an of summaryHeader.anomalies) {
           const sec = Number(an.t ?? (an.elapsedMs ? an.elapsedMs / 1000 : 0)) || 0;
-          if (sec <= 0) continue;
+          if (sec <= 0 || !isWithinBattle(sec)) continue;
           const desc = String(an.move || an.type || an.reason || 'Anomaly').slice(0, 22);
           if (!hasNearbyEvent('anomaly', '', sec, 2.0)) {
             collected.push({
@@ -5712,14 +5808,19 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       let prevUShields = null, prevOShields = null;
       let lastBannerSec = -10, lastUSwapSec = -10, lastOSwapSec = -10;
       for (const f of frames) {
-        const sec = (f.relTimeMs || 0) / 1000;
+        const sec = (Number(f.relTimeMs) || 0) / 1000;
+        if (!isWithinBattle(sec)) {
+          if (sec > battleEndSec) break;
+          continue;
+        }
         const banner = String(f.moveBannerText || '').replace(/\\s+/g, ' ').trim();
-        if (banner && banner.length >= 4 && banner !== prevBanner && (sec - lastBannerSec) > 2.5) {
+        if (sec > 5 && /\\b(you win|good effort)\\b/i.test(banner)) break;
+        const usedMatch = banner ? banner.match(/used\\s+([^!|]+)/i) : null;
+        if (usedMatch && usedMatch[1] && banner !== prevBanner && (sec - lastBannerSec) > 2.5) {
           prevBanner = banner;
           lastBannerSec = sec;
-          if (!hasNearbyEvent('charge', '', sec, 3.2)) {
-            const usedMatch = banner.match(/used\\s+([^!]+)/i);
-            const shortBanner = usedMatch ? usedMatch[1].trim() : banner.slice(0, 24);
+          const shortBanner = usedMatch[1].trim().slice(0, 26);
+          if (shortBanner && !hasNearbyEvent('charge', '', sec, 3.2)) {
             collected.push({
               sec,
               kind: 'charge',
@@ -6296,13 +6397,12 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       </div>
     </div>
 
-    <!-- Collapsible Owner Login Card (3 Methods: Username/Token, Username/Password, GitHub OAuth) -->
+    <!-- Collapsible Owner Login Card (2 Methods: Username/Token, Username/Password) -->
     <div class="login-card" id="owner-login-panel" style="display:none;flex-direction:column;align-items:stretch;gap:12px;border-color:var(--border)">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="tab-btn active" id="tab-token" onclick="setAuthTab('token')">🔑 Username + Token</button>
           <button class="tab-btn" id="tab-password" onclick="setAuthTab('password')">🔒 Username + Password</button>
-          <button class="tab-btn" id="tab-github" onclick="setAuthTab('github')">🐙 GitHub Login</button>
         </div>
         <span style="font-size:11.5px;color:#99f6e4">Log in as the vault owner to view unstarred rolling battles, ⭐ Star/Pin battles, or change visibility.</span>
       </div>
@@ -6318,18 +6418,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       <div id="pane-password" style="display:none;gap:8px;flex-wrap:wrap;align-items:center">
         <input id="inp-password" type="password" placeholder="Vault Password for this Trainer ID" onkeydown="if(event.key==='Enter')loginWithPassword()" />
         <button class="primary" onclick="loginWithPassword()">🔓 Sign In with Password</button>
-        <span style="font-size:11px;color:#94a3b8;width:100%">Tip: First log in with your Unlock Key or GitHub (or use the Android App Settings) to set your password.</span>
-      </div>
-
-      <!-- Tab 3: GitHub OAuth Device Flow / Token -->
-      <div id="pane-github" style="display:none;flex-direction:column;gap:10px">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <button class="primary" style="background:#24292f;border-color:#6e7681;color:#fff" onclick="startGitHubDeviceLogin()">🐙 1-Click Sign In with GitHub</button>
-          <span style="font-size:12px;color:#99f6e4">or paste a GitHub token:</span>
-          <input id="inp-gh-token" type="password" placeholder="gho_... / ghp_... (optional)" style="max-width:220px" />
-          <button onclick="loginWithGitHubToken()">Verify Token</button>
-        </div>
-        <div id="gh-device-box" style="display:none;background:#081120;border:1.5px solid #2dd4bf;border-radius:8px;padding:12px 14px;font-size:13px;box-shadow:0 0 16px rgba(45,212,191,0.18)"></div>
+        <span style="font-size:11px;color:#94a3b8;width:100%">Tip: First log in with your Unlock Key (or use the Android App Settings) to set your password.</span>
       </div>
     </div>
 
@@ -6422,16 +6511,14 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     const savedUser = params.get('user') || pathUser || loggedInUser || '';
     const savedKey = params.get('key') || localStorage.getItem('sspvp_vault_key') || '';
     const savedEmail = params.get('email') || localStorage.getItem('sspvp_vault_email') || '';
-    let pendingGhLinkToken = '';
     let currentVaultData = null;
     let currentFilter = 'all'; // 'all' | 'starred'
-    let ghPollTimer = null;
-    let activeGhDeviceCode = '';
-    let ghPollDelayMs = 6500;
-    let lastGhPollMs = 0;
 
-    // Clean up any legacy stored GitHub OAuth token from localStorage
-    try { localStorage.removeItem('sspvp_github_token'); } catch (_) {}
+    // Clean up any legacy stored GitHub OAuth state from localStorage
+    try {
+      localStorage.removeItem('sspvp_github_token');
+      localStorage.removeItem('sspvp_pending_gh_device');
+    } catch (_) {}
 
     document.getElementById('inp-user').value = savedUser;
     document.getElementById('inp-key').value = savedKey;
@@ -6443,7 +6530,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     }
 
     function setAuthTab(tab) {
-      ['token', 'password', 'github'].forEach(t => {
+      ['token', 'password'].forEach(t => {
         document.getElementById('tab-' + t).classList.toggle('active', t === tab);
         document.getElementById('pane-' + t).style.display = t === tab ? 'flex' : 'none';
       });
@@ -6451,7 +6538,6 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
 
     function logoutVault() {
       sessionToken = '';
-      pendingGhLinkToken = '';
       localStorage.removeItem('sspvp_vault_session');
       localStorage.removeItem('sspvp_vault_user');
       localStorage.removeItem('sspvp_vault_key');
@@ -6478,7 +6564,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       const email = document.getElementById('inp-email').value.trim();
       if (!user) return alert('Enter your Trainer ID first.');
       if (!key && !email) return alert('Enter your Unlock Key (or Checkout Email).');
-      await performOwnerLogin({ screenName: user, unlockKey: key, claimEmail: email, pendingGhLinkToken });
+      await performOwnerLogin({ screenName: user, unlockKey: key, claimEmail: email });
     }
 
     async function loginWithPassword() {
@@ -6486,15 +6572,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       const password = document.getElementById('inp-password').value.trim();
       if (!user) return alert('Enter your Trainer ID first.');
       if (!password) return alert('Enter your Password.');
-      await performOwnerLogin({ screenName: user, password, pendingGhLinkToken });
-    }
-
-    async function loginWithGitHubToken() {
-      const user = document.getElementById('inp-user').value.trim();
-      const githubToken = document.getElementById('inp-gh-token').value.trim();
-      if (!githubToken && !pendingGhLinkToken) return alert('Paste a GitHub token or click 1-Click Sign In with GitHub.');
-      const key = document.getElementById('inp-key').value.trim();
-      await performOwnerLogin({ screenName: user, githubToken, pendingGhLinkToken, unlockKey: key });
+      await performOwnerLogin({ screenName: user, password });
     }
 
     async function performOwnerLogin(payload) {
@@ -6527,171 +6605,6 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         await loadVault();
       } catch (e) {
         alert('Login error: ' + e.message);
-      }
-    }
-
-    function copyCodeSync(text) {
-      try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).catch(() => {}); } catch (_) {}
-      try {
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-      } catch (_) {}
-    }
-
-    async function pollGitHubDeviceNow(isManualClick) {
-      if (!activeGhDeviceCode) return;
-      const statusEl = document.getElementById('gh-poll-status');
-      const now = Date.now();
-      const elapsed = now - lastGhPollMs;
-      if (lastGhPollMs > 0 && elapsed < 5300) {
-        const waitMs = Math.max(400, 5350 - elapsed);
-        if (statusEl && isManualClick) {
-          statusEl.textContent = '⏳ Verifying with GitHub in ' + Math.ceil(waitMs / 1000) + 's (auto-completing)...';
-        }
-        if (ghPollTimer) clearTimeout(ghPollTimer);
-        ghPollTimer = setTimeout(() => pollGitHubDeviceNow(isManualClick), waitMs);
-        return;
-      }
-      lastGhPollMs = now;
-      if (statusEl && isManualClick) {
-        statusEl.textContent = '🔄 Checking GitHub authorization status...';
-      }
-      try {
-        const rawPrefUser = document.getElementById('inp-user').value.trim();
-        const prefUser = rawPrefUser.toLowerCase() === 'featured' ? '' : rawPrefUser;
-        const key = document.getElementById('inp-key').value.trim();
-        const pollRes = await fetch('/v1/auth/github/poll', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-SilphScope-Client-Key': CLIENT_KEY },
-          body: JSON.stringify({
-            device_code: activeGhDeviceCode,
-            screenName: prefUser,
-            unlockKey: key
-          })
-        });
-        const pollData = await pollRes.json();
-        if (pollData.status === 'pending') {
-          const nextWaitMs = Number(pollData.cooldownMs) || ((Math.max(5, Number(pollData.interval) || 5) + 0.5) * 1000);
-          ghPollDelayMs = nextWaitMs;
-          if (statusEl) {
-            if (pollData.throttled) {
-              statusEl.textContent = '⏳ Verifying with GitHub in ' + Math.ceil(nextWaitMs / 1000) + 's...';
-            } else if (isManualClick) {
-              statusEl.textContent = '⏳ GitHub has not confirmed the code yet. Make sure you pasted the 8-character code on github.com/login/device AND tapped the green Authorize button (auto-checking every ' + Math.round(nextWaitMs / 1000) + 's)...';
-            }
-          }
-          if (activeGhDeviceCode) {
-            if (ghPollTimer) clearTimeout(ghPollTimer);
-            ghPollTimer = setTimeout(() => pollGitHubDeviceNow(Boolean(pollData.throttled && isManualClick)), nextWaitMs);
-          }
-          return;
-        }
-        if (ghPollTimer) clearTimeout(ghPollTimer);
-        ghPollTimer = null;
-        activeGhDeviceCode = '';
-        try { localStorage.removeItem('sspvp_pending_gh_device'); } catch (_) {}
-        const box = document.getElementById('gh-device-box');
-        if (pollData.pendingGhLinkToken) {
-          pendingGhLinkToken = pollData.pendingGhLinkToken;
-        }
-        if (pollData.ok && pollData.sessionToken) {
-          sessionToken = pollData.sessionToken;
-          localStorage.setItem('sspvp_vault_session', sessionToken);
-          if (pollData.screenName) {
-            document.getElementById('inp-user').value = pollData.screenName;
-            localStorage.setItem('sspvp_vault_user', pollData.screenName);
-            localStorage.setItem('gbl_web_screen_name_v700', pollData.screenName);
-            writeSharedCookies(pollData.screenName, sessionToken);
-          }
-          if (box) box.style.display = 'none';
-          document.getElementById('owner-login-panel').style.display = 'none';
-          await loadVault();
-        } else if (box) {
-          box.innerHTML = '<span style="color:#fb7185">' + esc(pollData.error || 'GitHub login did not match an account.') + '</span>';
-        }
-      } catch (_) {
-        if (activeGhDeviceCode) {
-          if (ghPollTimer) clearTimeout(ghPollTimer);
-          ghPollTimer = setTimeout(() => pollGitHubDeviceNow(false), ghPollDelayMs);
-        }
-      }
-    }
-
-    function resumePendingGhPoll() {
-      if (document.visibilityState && document.visibilityState !== 'visible') return;
-      if (!activeGhDeviceCode) {
-        try {
-          const raw = localStorage.getItem('sspvp_pending_gh_device');
-          if (raw) {
-            const p = JSON.parse(raw);
-            if (p && p.device_code && p.expiresAt > Date.now()) {
-              activeGhDeviceCode = p.device_code;
-            } else {
-              localStorage.removeItem('sspvp_pending_gh_device');
-            }
-          }
-        } catch (_) {}
-      }
-      if (activeGhDeviceCode) {
-        if (ghPollTimer) clearTimeout(ghPollTimer);
-        ghPollTimer = setTimeout(() => pollGitHubDeviceNow(true), 350);
-      }
-    }
-    window.addEventListener('focus', resumePendingGhPoll);
-    document.addEventListener('visibilitychange', resumePendingGhPoll);
-
-    async function startGitHubDeviceLogin() {
-      const box = document.getElementById('gh-device-box');
-      box.style.display = 'block';
-      box.textContent = '⏳ Requesting GitHub Device Code...';
-      if (ghPollTimer) clearTimeout(ghPollTimer);
-      activeGhDeviceCode = '';
-      try {
-        const res = await fetch('/v1/auth/github/device-code', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-SilphScope-Client-Key': CLIENT_KEY }
-        });
-        const data = await res.json();
-        if (!res.ok || !data.ok) {
-          box.innerHTML = '<span style="color:#fb7185">' + esc(data.error || 'Failed to start GitHub login.') + '</span>';
-          return;
-        }
-        activeGhDeviceCode = data.device_code;
-        try {
-          localStorage.setItem('sspvp_pending_gh_device', JSON.stringify({
-            device_code: data.device_code,
-            user_code: data.user_code,
-            verification_uri: data.verification_uri || 'https://github.com/login/device',
-            expiresAt: Date.now() + (Number(data.expires_in) || 900) * 1000
-          }));
-        } catch (_) {}
-        ghPollDelayMs = (Math.max(5, Number(data.interval) || 5) + 1.5) * 1000;
-        lastGhPollMs = 0;
-        const safeUri = /^https:\\/\\/github\\.com\\//i.test(String(data.verification_uri || ''))
-          ? data.verification_uri
-          : 'https://github.com/login/device';
-        const safeCodeJs = escJsArg(data.user_code || '');
-        box.innerHTML =
-          '<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px">' +
-            '<div onclick="copyCodeSync(\'' + safeCodeJs + '\');document.getElementById(\'gh-poll-status\').textContent=\'📋 Copied code ' + esc(data.user_code) + '! Paste it on GitHub & tap Authorize.\'" style="cursor:pointer" title="Tap to copy code">1. Tap to copy code: <strong style="font-size:16px;color:#2dd4bf;letter-spacing:1px;padding:3px 10px;background:#081120;border:1px solid #2dd4bf;border-radius:6px">' + esc(data.user_code) + ' 📋</strong></div>' +
-            '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-              '<a class="btn-link primary" onclick="copyCodeSync(\'' + safeCodeJs + '\')" href="' + esc(safeUri) + '" target="_blank" rel="noopener">2. Copy & Authorize on GitHub ↗</a>' +
-              '<button onclick="pollGitHubDeviceNow(true)" style="background:#081120;border-color:#2dd4bf;color:#2dd4bf;font-weight:700">✅ Finish Sign-In</button>' +
-            '</div>' +
-          '</div>' +
-          '<div style="margin-top:6px;font-size:11.5px;color:#99f6e4" id="gh-poll-status">Tap "2. Copy & Authorize on GitHub ↗", paste code ' + esc(data.user_code) + ', and click Authorize (auto-completes when you return)...</div>';
-        try { navigator.clipboard.writeText(data.user_code); } catch (_) {}
-        window.open(safeUri, '_blank', 'noopener');
-
-        ghPollTimer = setTimeout(() => pollGitHubDeviceNow(false), ghPollDelayMs);
-      } catch (e) {
-        box.innerHTML = '<span style="color:#fb7185">Error: ' + esc(e.message) + '</span>';
       }
     }
 
@@ -6770,7 +6683,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         document.getElementById('replays-grid').innerHTML =
           '<div style="color:#99f6e4;padding:28px 20px;grid-column:1/-1;text-align:center;background:rgba(14,27,46,0.85);backdrop-filter:blur(10px);border:1px solid #19304e;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.4)">' +
             '<div style="font-size:16px;font-weight:800;color:#ecfeff;margin-bottom:8px">🔍 Enter a Trainer ID above to view their Public DVR Replay Vault</div>' +
-            '<div style="font-size:13px;color:#99f6e4">Starred replays are viewable by anyone by default, or click <strong style="color:#2dd4bf">🔐 Owner Login</strong> to sign in with your Token, Password, or GitHub account.</div>' +
+            '<div style="font-size:13px;color:#99f6e4">Starred replays are viewable by anyone by default, or click <strong style="color:#2dd4bf">🔐 Owner Login</strong> to sign in with your Unlock Key or Password.</div>' +
           '</div>';
         return;
       }
@@ -6821,9 +6734,6 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         const vis = (data.settings && data.settings.publicVisibility) || data.visibility || 'public_only';
 
         if (isOwner) {
-          const ghBadge = data.githubUsername
-            ? '<span style="color:#2dd4bf;font-size:12px;font-weight:700">🐙 GitHub: @' + esc(data.githubUsername) + '</span>'
-            : '<button onclick="toggleLoginPanel();setAuthTab(\\'github\\')" style="padding:4px 9px;font-size:11.5px">🐙 Link GitHub</button>';
           const pwBtn = '<button onclick="openPasswordSetup()" style="padding:4px 9px;font-size:11.5px">' + (data.hasPassword ? '🔒 Change Password' : '🔒 Set Password') + '</button>';
 
           sb.innerHTML =
@@ -6843,7 +6753,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
                 '</select>' +
                 '<span style="font-size:11px;color:#94a3b8">(All videos default to 🔒 Private unless toggled 🌐 Public or overridden)</span>' +
               '</div>' +
-              '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' + pwBtn + ghBadge + '</div>' +
+              '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' + pwBtn + '</div>' +
             '</div>';
         } else {
           const visLabel =
@@ -7411,7 +7321,7 @@ export default {
 
     if (isGetOrHead && path === '/sw.js') {
       const swCode = `// SilphScope DVR PWA Service Worker (v7.34)
-const CACHE_NAME = 'silphscope-dvr-pwa-v734';
+const CACHE_NAME = 'silphscope-dvr-pwa-v735';
 const STATIC_ASSETS = ['/', '/index.html', '/manifest.json', '/manifest.webmanifest', '/favicon.svg', '/pwa-icon-192.svg', '/pwa-icon-512.svg', '/overlay.html'];
 self.addEventListener('install', (e) => { self.skipWaiting(); e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(STATIC_ASSETS).catch(() => {}))); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((keys) => Promise.all(keys.map((k) => k !== CACHE_NAME && caches.delete(k)))).then(() => self.clients.claim())); });
