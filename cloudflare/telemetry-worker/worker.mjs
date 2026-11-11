@@ -2518,6 +2518,17 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       gap: 4px;
       overflow: hidden;
     }
+    .theater-workspace {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      overflow: hidden;
+    }
     .stage-wrap {
       flex: 1;
       min-height: 0;
@@ -2587,8 +2598,8 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
     .controls-bar {
       flex-shrink: 0;
       width: 100%;
-      max-width: 780px;
-      background: rgba(10, 19, 34, 0.94);
+      max-width: 680px;
+      background: rgba(10, 19, 34, 0.96);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       border: 1px solid var(--border);
@@ -2598,61 +2609,111 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       flex-direction: column;
       gap: 4px;
       z-index: 30;
+      overflow: hidden;
     }
     .control-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 4px;
-      overflow-x: auto;
-      scrollbar-width: none;
+      width: 100%;
+      flex-wrap: nowrap;
+      overflow: hidden;
     }
-    .control-row::-webkit-scrollbar { display: none; }
+    .playback-btns {
+      display: flex;
+      gap: 3px;
+      align-items: center;
+      flex-shrink: 1;
+      min-width: 0;
+    }
+    .playback-btns button {
+      padding: 4px 6px;
+      font-size: 10.5px;
+    }
+    .drawer-toggle-btn {
+      padding: 4px 7px;
+      font-size: 10.5px;
+      font-weight: 800;
+      border-color: rgba(45, 212, 191, 0.5);
+      color: #99f6e4;
+      background: rgba(8, 17, 32, 0.95);
+    }
+    @media (max-width: 390px) {
+      .playback-btns { gap: 2px; }
+      .playback-btns button { padding: 3.5px 5px; font-size: 10px; }
+      .drawer-toggle-btn { padding: 3.5px 6px; font-size: 10px; }
+    }
+    /* Mobile/Portrait Drawer: expands smoothly to 18dvh (within 10-20% vertical screen height),
+       automatically shrinking .stage-wrap video above it with vertical-only scrolling inside! */
     .tools-drawer {
       display: none;
       flex-direction: column;
-      gap: 5px;
-      padding-top: 4px;
-      border-top: 1px solid rgba(25, 48, 78, 0.85);
+      gap: 6px;
+      padding-top: 5px;
+      border-top: 1px solid rgba(25, 48, 78, 0.9);
+      max-height: 18dvh;
+      min-height: 11dvh;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+      scrollbar-color: #2dd4bf rgba(8, 17, 32, 0.6);
     }
     .tools-drawer.open {
       display: flex;
     }
-    .chips-row {
-      display: none;
-      flex-wrap: nowrap;
+    .tools-group {
+      display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: 4px;
-      overflow-x: auto;
-      padding: 1px 0 2px;
-      scrollbar-width: none;
-      -webkit-overflow-scrolling: touch;
+      width: 100%;
     }
-    .chips-row.has-events {
+    .tools-group button {
+      padding: 3.5px 7px;
+      font-size: 10.5px;
+    }
+    .timeline-section {
       display: flex;
+      flex-direction: column;
+      gap: 4px;
+      width: 100%;
+      padding-top: 4px;
+      border-top: 1px dashed rgba(25, 48, 78, 0.85);
     }
-    .chips-row::-webkit-scrollbar { display: none; }
-    .chips-label {
-      font-size: 9.5px;
+    .chips-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10px;
       font-weight: 800;
       letter-spacing: 0.03em;
       text-transform: uppercase;
       color: #5eead4;
-      white-space: nowrap;
-      flex-shrink: 0;
-      padding-right: 2px;
+    }
+    .chips-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      width: 100%;
+      overflow-x: hidden;
+      padding-bottom: 2px;
     }
     .event-chip {
       font-size: 10px;
       font-weight: 700;
-      padding: 2px 7px;
+      padding: 2.5px 7px;
       border-radius: 999px;
       background: rgba(8, 17, 32, 0.94);
       border: 1px solid var(--border);
       color: #cbd5e1;
       cursor: pointer;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
       white-space: nowrap;
-      flex-shrink: 0;
       transition: border-color 0.15s, background 0.15s, color 0.15s;
     }
     .event-chip.chip-charge { border-color: rgba(45, 212, 191, 0.42); color: #99f6e4; }
@@ -2665,6 +2726,55 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       color: #ffffff;
       background: rgba(45, 212, 191, 0.28);
       box-shadow: 0 0 8px rgba(45, 212, 191, 0.28);
+    }
+    /* Desktop / Wide Landscape Aspect Ratios: Video stays ~98dvh tall on the left,
+       and Playback + Tools + Multi-line Timeline dock into a spacious right sidebar! */
+    @media (min-width: 900px) and (min-aspect-ratio: 11/10) {
+      main {
+        padding: 10px 56px 10px 16px;
+      }
+      .theater-workspace {
+        flex-direction: row;
+        align-items: stretch;
+        justify-content: center;
+        gap: 16px;
+        max-width: 1360px;
+      }
+      .stage-wrap {
+        flex: 0 1 auto;
+        width: auto;
+        height: 100%;
+      }
+      .controls-bar {
+        width: 370px;
+        max-width: 40vw;
+        height: 100%;
+        max-height: 100%;
+        padding: 12px;
+        gap: 10px;
+        display: flex;
+        flex-direction: column;
+      }
+      .drawer-toggle-btn {
+        display: none !important;
+      }
+      .tools-drawer {
+        display: flex !important;
+        flex: 1;
+        min-height: 0;
+        max-height: none;
+        overflow-y: auto;
+        padding-top: 10px;
+        gap: 10px;
+      }
+      .timeline-section {
+        flex: 1;
+        padding-top: 8px;
+      }
+      .event-chip {
+        font-size: 11px;
+        padding: 3.5px 9px;
+      }
     }
   </style>
 </head>
@@ -2682,7 +2792,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
   <span id="hdr-trainer" style="display:none">@${trainerDisplay}</span>
 
   <main>
-    <div id="diag-issue-banner" style="flex-shrink:0;width:100%;max-width:780px;background:rgba(250,204,21,0.12);border:1px solid rgba(250,204,21,0.45);border-radius:8px;padding:4px 10px;font-size:11px;color:#fef3c7;display:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'flex' : 'none'};flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px">
+    <div id="diag-issue-banner" style="flex-shrink:0;width:100%;max-width:960px;background:rgba(250,204,21,0.12);border:1px solid rgba(250,204,21,0.45);border-radius:8px;padding:4px 10px;font-size:11px;color:#fef3c7;display:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'flex' : 'none'};flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px">
       <div id="diag-issue-text">🚩 <strong>Issue:</strong> ${escapeHtml(shareInfo.userIssueNote || 'Flagged for diagnostic review')}</div>
       <div style="display:flex;align-items:center;gap:5px">
         <button id="btn-edit-issue" onclick="flagOrEditCurrentIssue()" style="padding:2px 7px;font-size:10.5px;border-color:#facc15;color:#fde047">✏️ Edit</button>
@@ -2690,54 +2800,59 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       </div>
     </div>
 
-    <div class="stage-wrap" id="stage-wrap">
-      <div class="video-box" id="video-box">
-        <video id="replay-video" src="${videoUrl}" playsinline preload="metadata" crossorigin="anonymous" onclick="togglePlay()"></video>
-        <div id="dual-energy-pill" style="position:absolute;top:4px;left:5px;z-index:25;background:rgba(8,17,32,0.92);border:1px solid #2dd4bf;border-radius:999px;padding:1.5px 8px;font-size:9.5px;font-weight:800;font-family:'Roboto Condensed',sans-serif;color:#ecfeff;white-space:nowrap;pointer-events:none;max-width:calc(100% - 10px);overflow:hidden;text-overflow:ellipsis">⚡ U: 0E • O: 0E</div>
-        <div class="hud-layer pos-top" id="hud-layer">
-          <iframe id="hud-iframe" src="/overlay.html?replay=1" scrolling="no" title="SilphScope PvP HUD"></iframe>
+    <div class="theater-workspace">
+      <div class="stage-wrap" id="stage-wrap">
+        <div class="video-box" id="video-box">
+          <video id="replay-video" src="${videoUrl}" playsinline preload="metadata" crossorigin="anonymous" onclick="togglePlay()"></video>
+          <div id="dual-energy-pill" style="position:absolute;top:4px;left:5px;z-index:25;background:rgba(8,17,32,0.92);border:1px solid #2dd4bf;border-radius:999px;padding:1.5px 8px;font-size:9.5px;font-weight:800;font-family:'Roboto Condensed',sans-serif;color:#ecfeff;white-space:nowrap;pointer-events:none;max-width:calc(100% - 10px);overflow:hidden;text-overflow:ellipsis">⚡ U: 0E • O: 0E</div>
+          <div class="hud-layer pos-top" id="hud-layer">
+            <iframe id="hud-iframe" src="/overlay.html?replay=1" scrolling="no" title="SilphScope PvP HUD"></iframe>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="controls-bar">
-      <div style="display:flex;align-items:center;gap:6px;width:100%">
-        <input type="range" id="video-scrubber" min="0" max="1000" value="0" style="flex:1;height:16px;accent-color:#2dd4bf;cursor:pointer;margin:0" oninput="scrubVideo(this.value)" />
-        <span id="time-readout" style="font-size:10.5px;font-family:monospace;font-weight:700;color:#99f6e4;min-width:74px;text-align:right">0.0s / 0.0s</span>
-      </div>
-      <div class="control-row">
-        <div style="display:flex;gap:3px;align-items:center">
-          <button onclick="stepFrame(-1)" title="Previous Frame">⏮</button>
-          <button onclick="togglePlay()" id="btn-play">▶️ Play</button>
-          <button onclick="stepFrame(1)" title="Next Frame">⏭</button>
-          <button onclick="setSpeed(0.5)" id="spd-05">0.5x</button>
-          <button onclick="setSpeed(1)" id="spd-1" class="active">1x</button>
-          <button onclick="setSpeed(2)" id="spd-2">2x</button>
+      <div class="controls-bar">
+        <div style="display:flex;align-items:center;gap:6px;width:100%">
+          <input type="range" id="video-scrubber" min="0" max="1000" value="0" style="flex:1;height:16px;accent-color:#2dd4bf;cursor:pointer;margin:0" oninput="scrubVideo(this.value)" />
+          <span id="time-readout" style="font-size:10.5px;font-family:monospace;font-weight:700;color:#99f6e4;min-width:74px;text-align:right">0.0s / 0.0s</span>
         </div>
-        <div style="display:flex;gap:3px;align-items:center">
-          <button onclick="setHudMode(hudMode === 'off' ? 'live' : 'off')" id="mode-live" class="active">👁️ HUD</button>
-          <button onclick="toggleHudPos()" id="btn-pos" title="Move HUD Top/Bottom">⬆️ Top</button>
-          <button onclick="shareCurrentReplayMoment()" id="btn-share-moment" title="Share Replay Link">📤 Share</button>
-          <button onclick="toggleToolsDrawer()" id="btn-tools-toggle" title="More HUD, Jump & Diagnostic Options">⚙️ Tools</button>
+        <div class="control-row">
+          <div class="playback-btns">
+            <button onclick="stepFrame(-1)" title="Previous Frame">⏮</button>
+            <button onclick="togglePlay()" id="btn-play">▶️ Play</button>
+            <button onclick="stepFrame(1)" title="Next Frame">⏭</button>
+            <button onclick="setSpeed(0.5)" id="spd-05">0.5x</button>
+            <button onclick="setSpeed(1)" id="spd-1" class="active">1x</button>
+            <button onclick="setSpeed(2)" id="spd-2">2x</button>
+          </div>
+          <button onclick="toggleToolsDrawer()" id="btn-tools-toggle" class="drawer-toggle-btn" title="Expand Tools & Key Events Timeline">⚙️ Tools/Timeline ▾</button>
         </div>
-      </div>
-      <div class="chips-row" id="event-chips"></div>
-      <div class="tools-drawer" id="tools-drawer">
-        <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;justify-content:space-between">
-          <div style="display:flex;gap:3px;flex-wrap:wrap;align-items:center">
-            <button onclick="setSpeed(0.25)" id="spd-025">0.25x</button>
+        <div class="tools-drawer" id="tools-drawer">
+          <div class="tools-group">
+            <button onclick="setHudMode('live')" id="mode-live" class="active">👁️ HUD</button>
             <button onclick="setHudMode('compact')" id="mode-compact">COMPACT</button>
             <button onclick="setHudMode('diag')" id="mode-diag">DIAG</button>
             <button onclick="setHudMode('off')" id="mode-off">HUD OFF</button>
+            <button onclick="toggleHudPos()" id="btn-pos" title="Move HUD Top/Bottom">⬆️ Top</button>
+            <button onclick="setSpeed(0.25)" id="spd-025">0.25x</button>
             <button onclick="toggleShieldHud()" id="btn-shield-hud" class="${shareInfo.userTier && shareInfo.userTier !== 'free' ? 'active' : ''}">${shareInfo.userTier && shareInfo.userTier !== 'free' ? '🛡️ Shield' : '🔒 Shield'}</button>
             <button id="btn-layout" onclick="toggleLayout()">📐 Side-by-Side: OFF</button>
-          </div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
-            <input type="range" id="hud-opacity" min="25" max="100" value="50" style="width:58px;accent-color:#2dd4bf" title="HUD Opacity (50% Default)" oninput="updateOpacity(this.value)" />
+            <div style="display:inline-flex;align-items:center;gap:4px;background:rgba(8,17,32,0.85);border:1px solid var(--border);border-radius:7px;padding:2px 6px">
+              <span style="font-size:9.5px;color:var(--muted);font-weight:700">HUD</span>
+              <input type="range" id="hud-opacity" min="25" max="100" value="50" style="width:52px;height:12px;accent-color:#2dd4bf;margin:0" title="HUD Opacity (50% Default)" oninput="updateOpacity(this.value)" />
+            </div>
             <button id="btn-privacy" onclick="togglePrivacy()">🕵️ ${hideNamesDefault ? 'Hidden' : 'Names'}</button>
+            <button onclick="shareCurrentReplayMoment()" id="btn-share-moment" title="Share Replay Link">📤 Share</button>
             <button id="btn-flag-issue-hdr" onclick="flagOrEditCurrentIssue()" style="border-color:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? '#f59e0b' : '#b91c1c'};color:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? '#fbbf24' : '#fca5a5'}">🚩 ${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'Flagged ✓' : 'Flag'}</button>
             <button id="btn-unflag-issue-hdr" onclick="unflagCurrentIssue()" style="display:${shareInfo.userIssueNote || shareInfo.manuallyFlagged ? 'inline-flex' : 'none'}">↩️ Unflag</button>
             <button id="btn-export" onclick="exportWithHud()">💾 Export</button>
+          </div>
+          <div class="timeline-section" id="timeline-section">
+            <div class="chips-header">
+              <span id="chips-count-label">⏭ Key Events Timeline</span>
+              <span style="font-size:9px;color:#94a3b8;text-transform:none;font-weight:600">Tap event to jump</span>
+            </div>
+            <div class="chips-row" id="event-chips"></div>
           </div>
         </div>
       </div>
@@ -2761,12 +2876,22 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       } catch (_) {}
       window.location.href = VAULT_RETURN_HREF || '/vault';
     }
+    let totalTimelineEventCount = 0;
+    function updateToolsToggleLabel() {
+      const d = document.getElementById('tools-drawer');
+      const b = document.getElementById('btn-tools-toggle');
+      if (!b) return;
+      const isOpen = Boolean(d && d.classList.contains('open'));
+      const cntSuffix = totalTimelineEventCount > 0 ? (' (' + totalTimelineEventCount + ')') : '';
+      b.textContent = '⚙️ Tools/Timeline' + cntSuffix + (isOpen ? ' ▴' : ' ▾');
+    }
     function toggleToolsDrawer() {
       const d = document.getElementById('tools-drawer');
       const b = document.getElementById('btn-tools-toggle');
       if (!d) return;
       const open = d.classList.toggle('open');
       if (b) b.classList.toggle('active', open);
+      updateToolsToggleLabel();
     }
     window.addEventListener('keydown', (ev) => {
       if (ev.key === 'Escape') closeReplayTheater();
@@ -2919,7 +3044,7 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
     }
     function setHudMode(m) {
       hudMode = m;
-      ['live','compact','diag','off'].forEach(k => { const b = document.getElementById('mode-' + k); if (b) b.classList.toggle('active', k === m || (k === 'live' && m !== 'off')); });
+      ['live','compact','diag','off'].forEach(k => { const b = document.getElementById('mode-' + k); if (b) b.classList.toggle('active', k === m); });
       hudLayer.style.display = m === 'off' ? 'none' : 'block';
       syncHudFrame();
     }
@@ -4649,7 +4774,10 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
         const shouldActive = i === activeIdx && Math.abs(curSec - renderedEventChipList[i].eventSec) <= 4.5;
         if (shouldActive && !el.classList.contains('active-chip')) {
           el.classList.add('active-chip');
-          try { el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }); } catch (_) {}
+          const drawerEl = document.getElementById('tools-drawer');
+          if (drawerEl && getComputedStyle(drawerEl).display !== 'none') {
+            try { el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (_) {}
+          }
         } else if (!shouldActive && el.classList.contains('active-chip')) {
           el.classList.remove('active-chip');
         }
@@ -4823,17 +4951,20 @@ function renderWatchSharePage(origin, shareInfo, isEmbed = false) {
       }
 
       collected.sort((a, b) => a.sec - b.sec);
-
-      if (collected.length === 0) {
-        container.classList.remove('has-events');
-        return;
+      totalTimelineEventCount = collected.length;
+      updateToolsToggleLabel();
+      const hdrLabel = document.getElementById('chips-count-label');
+      if (hdrLabel) {
+        hdrLabel.textContent = collected.length > 0 ? ('⏭ Key Events Timeline (' + collected.length + ')') : '⏭ Key Events Timeline';
       }
 
-      container.classList.add('has-events');
-      const hdr = document.createElement('span');
-      hdr.className = 'chips-label';
-      hdr.textContent = '⏭ Events:';
-      container.appendChild(hdr);
+      if (collected.length === 0) {
+        const emptySpan = document.createElement('span');
+        emptySpan.style.cssText = 'font-size:10.5px;color:#64748b;padding:2px 0;';
+        emptySpan.textContent = 'No discrete charged-move or swap events recorded in this trace.';
+        container.appendChild(emptySpan);
+        return;
+      }
 
       for (const item of collected) {
         const jumpSec = Math.max(0, item.sec - 1.5);
@@ -6447,8 +6578,8 @@ export default {
     }
 
     if (isGetOrHead && path === '/sw.js') {
-      const swCode = `// SilphScope DVR PWA Service Worker (v7.33)
-const CACHE_NAME = 'silphscope-dvr-pwa-v733';
+      const swCode = `// SilphScope DVR PWA Service Worker (v7.34)
+const CACHE_NAME = 'silphscope-dvr-pwa-v734';
 const STATIC_ASSETS = ['/', '/index.html', '/manifest.json', '/manifest.webmanifest', '/favicon.svg', '/pwa-icon-192.svg', '/pwa-icon-512.svg', '/overlay.html'];
 self.addEventListener('install', (e) => { self.skipWaiting(); e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(STATIC_ASSETS).catch(() => {}))); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((keys) => Promise.all(keys.map((k) => k !== CACHE_NAME && caches.delete(k)))).then(() => self.clients.claim())); });
