@@ -6674,6 +6674,17 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     const savedEmail = params.get('email') || localStorage.getItem('sspvp_vault_email') || '';
     let currentVaultData = null;
     let currentFilter = 'all'; // 'all' | 'starred'
+    let leagueFilter = 'all'; // 'all' | 'great' | 'ultra' | 'master' | 'cups'
+    let cupFilter = 'all'; // 'all' or a specific cup name (when leagueFilter === 'cups')
+    function leagueKey(item) {
+      const lg = String((item && item.league) || '').toUpperCase();
+      if (lg.indexOf('GREAT') === 0) return 'great';
+      if (lg.indexOf('ULTRA') === 0) return 'ultra';
+      if (lg.indexOf('MASTER') === 0 && lg.indexOf('CUP') < 0) return 'master';
+      return 'cups';
+    }
+    function setLeagueFilter(f) { leagueFilter = f; cupFilter = 'all'; renderReplayGrid(); }
+    function setCupFilter(c) { cupFilter = c; renderReplayGrid(); }
 
     // Clean up any legacy stored GitHub OAuth state from localStorage
     try {
@@ -7033,13 +7044,44 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         filterBar.style.display = 'none';
       }
 
+      const lgCounts = { great: 0, ultra: 0, master: 0, cups: 0 };
+      const cupNames = [];
+      allItems.forEach(i => {
+        const k = leagueKey(i);
+        lgCounts[k]++;
+        if (k === 'cups') {
+          const nm = String(i.league || 'GBL');
+          if (cupNames.indexOf(nm) < 0) cupNames.push(nm);
+        }
+      });
+      cupNames.sort();
+      if (allItems.length) {
+        const lgBtn = (k, label) => '<button class="tab-btn ' + (leagueFilter === k ? 'active' : '') + '" onclick="setLeagueFilter(\\'' + k + '\\')">' + label + '</button>';
+        let lgHtml = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;width:100%">' +
+          lgBtn('all', '🏆 All Leagues') +
+          lgBtn('great', 'Great (' + lgCounts.great + ')') +
+          lgBtn('ultra', 'Ultra (' + lgCounts.ultra + ')') +
+          lgBtn('master', 'Master (' + lgCounts.master + ')') +
+          lgBtn('cups', 'Cups (' + lgCounts.cups + ')');
+        if (leagueFilter === 'cups') {
+          lgHtml += '<select onchange="setCupFilter(this.value)" style="padding:6px 10px;font-size:12px"><option value="all"' + (cupFilter === 'all' ? ' selected' : '') + '>All Cups</option>' +
+            cupNames.map(n => '<option value="' + esc(n) + '"' + (cupFilter === n ? ' selected' : '') + '>' + esc(n) + '</option>').join('') + '</select>';
+        }
+        lgHtml += '</div>';
+        if (filterBar.style.display === 'none') { filterBar.style.display = 'flex'; filterBar.innerHTML = ''; }
+        filterBar.innerHTML += lgHtml;
+      }
+
       let items = allItems;
+      if (leagueFilter !== 'all') {
+        items = items.filter(i => leagueKey(i) === leagueFilter && (leagueFilter !== 'cups' || cupFilter === 'all' || String(i.league || 'GBL') === cupFilter));
+      }
       if (currentFilter === 'starred') {
-        items = starredItems;
+        items = items.filter(i => i.isPinned);
       } else if (currentFilter === 'public') {
-        items = publicItems;
+        items = items.filter(i => i.isPublic);
       } else if (currentFilter === 'private' && isOwner) {
-        items = privateItems;
+        items = items.filter(i => !i.isPublic);
       }
 
       if (!items.length) {
@@ -7053,7 +7095,7 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       grid.innerHTML = items.map(item => {
         const isWin = String(item.result || '').toUpperCase().includes('WIN');
         const mb = ((item.totalBytes || item.videoBytes || 0) / (1024 * 1024)).toFixed(1);
-        const dateStr = item.createdAt ? new Date(item.createdAt).toLocaleString() : '';
+        const dateRaw = item.createdAt || item.uploadedAt; const dateStr = dateRaw ? new Date(dateRaw).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '';
         const isPub = Boolean(item.isPublic);
         const isOverriddenPublic = !isPub && vis === 'all';
         const safeBattleIdJs = escJsArg(item.battleId);
