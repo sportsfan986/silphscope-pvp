@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.32"
-        const val APP_VERSION_CODE = 1732
+        const val APP_VERSION = "7.33"
+        const val APP_VERSION_CODE = 1733
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -584,6 +584,9 @@ class OverlayService : LifecycleService() {
         const val PREFS_KEY_CLOUD_LAST_PUSHED_MS = "gbl_cloud_last_pushed_ms_v731"
         const val PREFS_KEY_CLOUD_LAST_PUSHED_SETTINGS_MS = "gbl_cloud_last_pushed_settings_ms_v731"
         const val PREFS_KEY_CLOUD_LAST_PUSHED_TOMBSTONES_SIG = "gbl_cloud_last_pushed_tombstones_sig_v731"
+        const val PREFS_KEY_REPLAY_LIST_SYNC_CURSOR_MS = "gbl_replay_list_sync_cursor_ms_v733"
+        const val PREFS_KEY_REPLAY_LIST_SYNC_USER = "gbl_replay_list_sync_user_v733"
+        const val PREFS_KEY_LAST_LICENSE_BG_VERIFY_MS = "gbl_last_license_bg_verify_ms_v733"
 
         // v7.10: Stripe & Buy Me a Coffee Official Checkout Links ($2 Supporter / $3-$6 Pro / $5-$10 VIP)
         const val STRIPE_URL_SUPPORTER = "https://buy.stripe.com/4gM3cwf3r8JG7XLamm1Jm07"
@@ -4314,7 +4317,7 @@ class OverlayService : LifecycleService() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 val (ok, _) = OverlayService.syncWithCloudflareVaultBlocking(prefs, gson)
-                if (ok) {
+                if (ok && lastCloudVaultSyncMutatedLocally) {
                     withContext(Dispatchers.Main) {
                         setupDefaultPresetsIfNeeded()
                         loadInitialDataIntoOverlay()

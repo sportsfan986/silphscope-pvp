@@ -472,6 +472,14 @@ class MainActivity : AppCompatActivity() {
     )
 
     private var isBattleLogMultiSelectMode: Boolean = false
+    private var skipInitialResumeRedundantUiRebuild: Boolean = false
+
+    private fun refreshPresetsAndBattleLogsIfVisible() {
+        setupBattleLogFilters()
+        if (currentActivePage == "battle_log") {
+            renderBattleLogPage()
+        }
+    }
     private val selectedBattleLogIds = LinkedHashSet<String>()
 
     // Android 13+ Notification permission launcher
@@ -538,22 +546,16 @@ class MainActivity : AppCompatActivity() {
         ensureDefaultSeasons()
         refreshPresetsUi()
         setupBattleLogFilters()
-        renderBattleLogPage()
         checkGamemasterCache()
         fetchSeasonsFromScrapedDuck()
         syncOverlayRunningUiState()
         handleIncomingNavigationAndTaskerIntent(intent)
+        if (currentActivePage == "battle_log") {
+            renderBattleLogPage()
+        }
         OverlayService.runV510AiTelemetryMigrationAndWipeStatic(prefs)
         ensureRequiredScreenNameOrPrompt()
-        retryPendingDvrBundlesInBackground()
-        OverlayService.triggerAutoUploadOnAppLaunchAsync(prefs, gson) { _, _ ->
-            runOnUiThread {
-                if (!isFinishing && ::prefs.isInitialized) {
-                    updateAiTelemetryStatusUi()
-                    renderBattleLogPage()
-                }
-            }
-        }
+        skipInitialResumeRedundantUiRebuild = true
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -568,10 +570,13 @@ class MainActivity : AppCompatActivity() {
             syncOverlayRunningUiState()
         }
         if (::prefs.isInitialized) {
+            val isColdLaunchResume = skipInitialResumeRedundantUiRebuild
+            skipInitialResumeRedundantUiRebuild = false
             ensureRequiredScreenNameOrPrompt()
             syncOverlayRunningUiState()
-            setupBattleLogFilters()
-            renderBattleLogPage()
+            if (!isColdLaunchResume) {
+                refreshPresetsAndBattleLogsIfVisible()
+            }
             updateTrainerScreenNameUi()
             updateSyncStatusUi()
             // Automatically pull & reconcile deltas from SilphScope Cloudflare D1 Vault on app open / resume
@@ -2892,9 +2897,7 @@ class MainActivity : AppCompatActivity() {
             OverlayService.DEFAULT_AUTO_UPLOAD_AI_LOGS
         )
         val screenName = OverlayService.getRequiredScreenNameStatic(prefs).ifEmpty { "Unset" }
-        val pendingLogs = OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson)
-        val pendingBattles = pendingLogs.size
-        val pendingAnomalies = pendingLogs.sumOf { it.anomalies.size }
+        val (pendingBattles, pendingAnomalies) = OverlayService.getPendingAiTelemetryCountsFastStatic(prefs, gson)
         val pendingSettingsChanges = OverlayService.loadPendingSettingsChangesStatic(prefs, gson).size
         val profileSig = OverlayService.computeDebounceSettingsProfileSignatureStatic(prefs)
         val lastAt = prefs.getLong(OverlayService.PREFS_KEY_LAST_AI_TELEMETRY_UPLOAD_MS, 0L)
@@ -3583,9 +3586,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val localDir = java.io.File(filesDir, "dvr_replays")
-        val localCount = localDir.listFiles { f -> f.isFile && f.name.endsWith("_video.mp4") }?.size ?: 0
-        val localMb = (localDir.listFiles()?.sumOf { it.length() } ?: 0L).toDouble() / (1024.0 * 1024.0)
+        refreshLocalDvrStatsAsyncIfStale()
+        val localCount = cachedLocalDvrCount
+        val localMb = cachedLocalDvrMb
         val vaultMap = OverlayService.loadReplayVaultMapStatic(prefs, gson)
         val cloudCount = vaultMap.values.count { it.shareId.isNotBlank() }
         val pinnedCount = vaultMap.values.count { it.isPinned }
@@ -3611,25 +3614,66 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    @Volatile private var cachedLocalDvrCount: Int = 0
+    @Volatile private var cachedLocalDvrMb: Double = 0.0
+    @Volatile private var cachedLocalDvrStatsUpdatedAtMs: Long = 0L
+    @Volatile private var isRefreshingLocalDvrStats: Boolean = false
+
+    private fun refreshLocalDvrStatsAsyncIfStale(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && cachedLocalDvrStatsUpdatedAtMs > 0L && now - cachedLocalDvrStatsUpdatedAtMs < 10_000L) return
+        if (isRefreshingLocalDvrStats) return
+        isRefreshingLocalDvrStats = true
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val localDir = java.io.File(filesDir, "dvr_replays")
+                val files = localDir.listFiles() ?: emptyArray()
+                val newCount = files.count { f -> f.isFile && f.name.endsWith("_video.mp4") }
+                val newMb = files.sumOf { it.length() }.toDouble() / (1024.0 * 1024.0)
+                val changed = cachedLocalDvrStatsUpdatedAtMs == 0L ||
+                    newCount != cachedLocalDvrCount ||
+                    kotlin.math.abs(newMb - cachedLocalDvrMb) >= 0.05
+                cachedLocalDvrCount = newCount
+                cachedLocalDvrMb = newMb
+                cachedLocalDvrStatsUpdatedAtMs = System.currentTimeMillis()
+                if (changed) {
+                    withContext(Dispatchers.Main) {
+                        if (!isFinishing && ::prefs.isInitialized) {
+                            setupOrUpdateReplayVaultSettingsUi()
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+            } finally {
+                isRefreshingLocalDvrStats = false
+            }
+        }
+    }
+
     private fun retryPendingDvrBundlesInBackground() {
         if (!OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs)) return
         lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                OverlayService.verifyReplayUnlockKeyBlocking(prefs, gson)
-                withContext(Dispatchers.Main) {
-                    if (!isFinishing && ::prefs.isInitialized) {
-                        setupOrUpdateReplayVaultSettingsUi()
+            val lastVerifyMs = prefs.getLong(OverlayService.PREFS_KEY_LAST_LICENSE_BG_VERIFY_MS, 0L)
+            if (System.currentTimeMillis() - lastVerifyMs >= 15 * 60_000L) {
+                try {
+                    OverlayService.verifyReplayUnlockKeyBlocking(prefs, gson)
+                    withContext(Dispatchers.Main) {
+                        if (!isFinishing && ::prefs.isInitialized) {
+                            setupOrUpdateReplayVaultSettingsUi()
+                        }
                     }
-                }
-            } catch (_: Exception) {}
+                } catch (_: Exception) {}
+            }
 
             val pendingDvrCount = OverlayService.countPendingCachedDvrBundlesStatic(cacheDir)
             if (pendingDvrCount <= 0) return@launch
             val (uploadedDvrCount, _) = OverlayService.retryPendingCachedDvrBundlesBlocking(cacheDir, prefs, gson)
             if (uploadedDvrCount > 0) {
+                cachedLocalDvrStatsUpdatedAtMs = 0L
                 withContext(Dispatchers.Main) {
                     if (!isFinishing && ::prefs.isInitialized) {
                         updateAiTelemetryStatusUi()
+                        setupOrUpdateReplayVaultSettingsUi()
                         Toast.makeText(
                             this@MainActivity,
                             "🎥 Recovered & uploaded $uploadedDvrCount queued 1-Battle DVR video(s)!",
@@ -3737,7 +3781,8 @@ class MainActivity : AppCompatActivity() {
             }
             hasPassword && hasSession -> {
                 val options = arrayOf(
-                    "☁️ Sync Battle Logs, Teams & Settings Now",
+                    "☁️ Sync Battle Logs, Teams & Settings Now (Delta)",
+                    "🔁 Force Full Vault Resync (Troubleshooting)",
                     "🔑 Change Vault Password",
                     "🔄 Sign In to Another Trainer Vault",
                     "🔓 Lock / Sign Out Vault Session on This Device"
@@ -3746,10 +3791,11 @@ class MainActivity : AppCompatActivity() {
                     .setTitle("🔒 Cloud Vault Secured (@$screenName)")
                     .setItems(options) { _, which ->
                         when (which) {
-                            0 -> triggerTwoDeviceCloudSync(silent = false)
-                            1 -> showSetOrChangeVaultPasswordDialog(isChangingExisting = true, isAutoPrompt = false)
-                            2 -> showSignInToExistingVaultDialog("")
-                            3 -> {
+                            0 -> triggerTwoDeviceCloudSync(silent = false, forceFullPull = false)
+                            1 -> triggerTwoDeviceCloudSync(silent = false, forceFullPull = true)
+                            2 -> showSetOrChangeVaultPasswordDialog(isChangingExisting = true, isAutoPrompt = false)
+                            3 -> showSignInToExistingVaultDialog("")
+                            4 -> {
                                 OverlayService.setVaultSessionTokenStatic(prefs, "")
                                 updateSyncStatusUi()
                                 setupOrUpdateReplayVaultSettingsUi()
@@ -4071,7 +4117,11 @@ class MainActivity : AppCompatActivity() {
         showSetOrChangeVaultPasswordDialog(isChangingExisting = false, isAutoPrompt = true)
     }
 
-    private fun triggerTwoDeviceCloudSync(silent: Boolean, isResumeCheck: Boolean = false) {
+    private fun triggerTwoDeviceCloudSync(
+        silent: Boolean,
+        isResumeCheck: Boolean = false,
+        forceFullPull: Boolean = false
+    ) {
         if (!OverlayService.hasValidScreenNameStatic(prefs)) {
             if (!silent) {
                 ensureRequiredScreenNameOrPrompt()
@@ -4101,7 +4151,11 @@ class MainActivity : AppCompatActivity() {
 
         if (!silent) {
             debouncedCloudSyncJob?.cancel()
-            textSyncStatus.text = "☁️ Syncing deltas with SilphScope Cloudflare D1 Vault..."
+            textSyncStatus.text = if (forceFullPull) {
+                "☁️ Performing full resync with SilphScope Cloudflare D1 Vault..."
+            } else {
+                "☁️ Syncing deltas with SilphScope Cloudflare D1 Vault..."
+            }
             btnSyncDevicesSettings.isEnabled = false
             btnSyncBattleLog.isEnabled = false
         }
@@ -4119,7 +4173,7 @@ class MainActivity : AppCompatActivity() {
                     val (dCount, _) = OverlayService.retryPendingCachedDvrBundlesBlocking(cacheDir, prefs, gson)
                     recoveredDvrCount = dCount
                 }
-                if (!silent && OverlayService.loadPendingAiTelemetryLogsStatic(prefs, gson).isNotEmpty()) {
+                if (!silent && OverlayService.getPendingAiTelemetryCountsFastStatic(prefs, gson).first > 0) {
                     OverlayService.uploadPendingAiTelemetryBatchBlocking(
                         prefs = prefs,
                         gson = gson,
@@ -4132,8 +4186,10 @@ class MainActivity : AppCompatActivity() {
             val (ok, msg) = OverlayService.syncWithCloudflareVaultBlocking(
                 prefs = prefs,
                 gson = gson,
-                forceFullPull = !silent
+                forceFullPull = forceFullPull,
+                forceFullPush = forceFullPull
             )
+            val mutated = lastCloudVaultSyncMutatedLocally || forceFullPull
             withContext(Dispatchers.Main) {
                 if (isFinishing) return@withContext
                 btnSyncDevicesSettings.isEnabled = true
@@ -4143,10 +4199,11 @@ class MainActivity : AppCompatActivity() {
                 updateSyncStatusUi()
                 updateAiTelemetryStatusUi()
                 setupOrUpdateReplayVaultSettingsUi()
-                applyCurrentAppTheme(notifyOverlay = true)
-                refreshPresetsUi()
-                setupBattleLogFilters()
-                renderBattleLogPage()
+                if (mutated) {
+                    applyCurrentAppTheme(notifyOverlay = true)
+                    refreshPresetsUi()
+                    refreshPresetsAndBattleLogsIfVisible()
+                }
 
                 val dvrNote = if (recoveredDvrCount > 0) " • 🎥 Uploaded $recoveredDvrCount queued DVR video(s)" else ""
                 if (prefs.getBoolean(OverlayService.PREFS_KEY_VAULT_REQUIRES_PASSWORD, false)) {
@@ -4161,7 +4218,8 @@ class MainActivity : AppCompatActivity() {
                         maybePromptVaultPasswordSecurity()
                     }
                 } else if (ok) {
-                    if (!msg.contains("+0 new logs, +0 teams") || recoveredDvrCount > 0) {
+                    val isZeroDeltaMsg = msg.contains("+0 from other devices") && msg.contains("+0 updated")
+                    if (!isZeroDeltaMsg || recoveredDvrCount > 0) {
                         Toast.makeText(this@MainActivity, "$msg$dvrNote", Toast.LENGTH_SHORT).show()
                     }
                     if (isResumeCheck) {
@@ -4397,8 +4455,8 @@ class MainActivity : AppCompatActivity() {
      */
     private fun runV511LeagueRemapAndCleanup() {
         try {
-            if (!prefs.getBoolean(OverlayService.PREFS_KEY_V511_LEAGUE_REMAP_DONE, false)) {
-                prefs.edit().putBoolean(OverlayService.PREFS_KEY_V511_LEAGUE_REMAP_DONE, true).apply()
+            if (prefs.getBoolean(OverlayService.PREFS_KEY_V511_LEAGUE_REMAP_DONE, false)) {
+                return
             }
 
             val presetType = object : TypeToken<List<TeamPreset>>() {}.type
@@ -4488,23 +4546,53 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
+
+            prefs.edit().putBoolean(OverlayService.PREFS_KEY_V511_LEAGUE_REMAP_DONE, true).apply()
         } catch (_: Exception) {}
     }
 
+    @Volatile private var cachedBattleLogsPrefKey: String? = null
+    @Volatile private var cachedBattleLogsRawRef: String? = null
+    @Volatile private var cachedDeletedLogIdsRawRef: String? = null
+    @Volatile private var cachedBattleLogsIsShow6: Boolean = false
+    @Volatile private var cachedBattleLogsList: List<BattleLogEntry> = emptyList()
+
     private fun loadBattleLogs(): List<BattleLogEntry> {
-        val raw = prefs.getString(PREFS_KEY_BATTLE_LOGS, null) ?: return emptyList()
+        val logKey = PREFS_KEY_BATTLE_LOGS
+        val raw = prefs.getString(logKey, null)
+        if (raw.isNullOrBlank()) {
+            cachedBattleLogsPrefKey = logKey
+            cachedBattleLogsRawRef = raw
+            cachedBattleLogsList = emptyList()
+            return emptyList()
+        }
+        val delKey = PREFS_KEY_DELETED_LOG_IDS
+        val delRaw = prefs.getString(delKey, null)
         val isShow6 = isShow6CombatMode()
+        if (logKey == cachedBattleLogsPrefKey &&
+            raw === cachedBattleLogsRawRef &&
+            delRaw === cachedDeletedLogIdsRawRef &&
+            isShow6 == cachedBattleLogsIsShow6
+        ) {
+            return cachedBattleLogsList
+        }
         return try {
             val type = object : TypeToken<List<BattleLogEntry>>() {}.type
             val parsed: List<BattleLogEntry> = gson.fromJson<List<BattleLogEntry>>(raw, type) ?: emptyList()
             val deleted = loadDeletedLogIds().toSet()
-            parsed
+            val result = parsed
                 .filter { it.id !in deleted }
                 .map { b ->
                     val remappedLg = OverlayService.remapLegacyLeagueForModeStatic(b.league, isShow6)
                     if (remappedLg != b.league) b.copy(league = remappedLg) else b
                 }
                 .sortedByDescending { it.timestampMs }
+            cachedBattleLogsPrefKey = logKey
+            cachedBattleLogsRawRef = raw
+            cachedDeletedLogIdsRawRef = delRaw
+            cachedBattleLogsIsShow6 = isShow6
+            cachedBattleLogsList = result
+            result
         } catch (_: Exception) {
             emptyList()
         }
@@ -4513,12 +4601,22 @@ class MainActivity : AppCompatActivity() {
     private fun saveBattleLogs(logs: List<BattleLogEntry>) {
         // Ensure Main Battle Logs remain compact (timelineEvents stored exclusively in 7-day AI Training Logs)
         val isShow6 = isShow6CombatMode()
+        val logKey = PREFS_KEY_BATTLE_LOGS
+        val delKey = PREFS_KEY_DELETED_LOG_IDS
         val compact = logs.map { b ->
             val remappedLg = OverlayService.remapLegacyLeagueForModeStatic(b.league, isShow6)
             val base = if (remappedLg != b.league) b.copy(league = remappedLg) else b
             if (base.timelineEvents.isEmpty()) base else base.copy(timelineEvents = emptyList())
         }.sortedByDescending { it.timestampMs }
-        prefs.edit().putString(PREFS_KEY_BATTLE_LOGS, gson.toJson(compact)).apply()
+        val jsonStr = gson.toJson(compact)
+        prefs.edit().putString(logKey, jsonStr).apply()
+        val delRaw = prefs.getString(delKey, null)
+        val deleted = loadDeletedLogIds().toSet()
+        cachedBattleLogsPrefKey = logKey
+        cachedBattleLogsRawRef = jsonStr
+        cachedDeletedLogIdsRawRef = delRaw
+        cachedBattleLogsIsShow6 = isShow6
+        cachedBattleLogsList = if (deleted.isEmpty()) compact else compact.filter { it.id !in deleted }
     }
 
     private fun showReassignSelectedBattlesLeagueDialog(targetIds: Set<String>) {

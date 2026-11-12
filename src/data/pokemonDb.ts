@@ -1061,6 +1061,7 @@ export interface TeamPreset {
   altMovesetSlots?: AntiMetaAltMovesetInfo[];
   synergySummary?: string;
   metricsUpdatedAt?: number;
+  updatedAt?: number;
 }
 
 // Type effectiveness table for Pokémon GO PvP (1.6x SE, 0.625x NVE, 0.390625x Immune)

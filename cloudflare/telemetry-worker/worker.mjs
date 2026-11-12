@@ -2191,16 +2191,25 @@ async function upsertVaultBatchIntoD1(
     migratedFromGithub;
 
   if (!hasAnyWrites) {
-    return { wroteAnything: false, serverUpdatedMs: 0, logsUpserted: 0, teamsUpserted: 0 };
+    return {
+      wroteAnything: false,
+      prevServerUpdatedMs: 0,
+      serverUpdatedMs: 0,
+      logsUpserted: 0,
+      teamsUpserted: 0,
+      pushedLogIds: [],
+      pushedTeamIds: [],
+    };
   }
 
   const existingState = await db
     .prepare(
-      'SELECT settings_json, settings_updated_at, migrated_from_github, migrated_at_ms FROM user_vault_state WHERE screen_name = ?1'
+      'SELECT settings_json, settings_updated_at, migrated_from_github, migrated_at_ms, server_updated_ms FROM user_vault_state WHERE screen_name = ?1'
     )
     .bind(cleanUser)
     .first();
 
+  const prevServerUpdatedMs = Number(existingState?.server_updated_ms) || 0;
   let mergedSettingsObj = {};
   let mergedSettingsUpdAt = Number(existingState?.settings_updated_at) || 0;
   if (existingState?.settings_json) {
@@ -2270,7 +2279,9 @@ async function upsertVaultBatchIntoD1(
       deleted = excluded.deleted,
       source = excluded.source,
       payload_json = CASE WHEN excluded.deleted = 1 AND battle_logs.payload_json != '' THEN battle_logs.payload_json ELSE excluded.payload_json END
-    WHERE excluded.updated_at >= battle_logs.updated_at OR (excluded.deleted = 1 AND battle_logs.deleted = 0)
+    WHERE excluded.updated_at > battle_logs.updated_at
+       OR excluded.deleted != battle_logs.deleted
+       OR (excluded.updated_at = battle_logs.updated_at AND excluded.deleted = 0 AND excluded.payload_json != battle_logs.payload_json)
   `;
 
   for (const rawLog of incomingLogs) {
@@ -2344,7 +2355,8 @@ async function upsertVaultBatchIntoD1(
           ON CONFLICT(screen_name, log_id) DO UPDATE SET
             deleted = 1,
             updated_at = MAX(battle_logs.updated_at, excluded.updated_at),
-            server_updated_ms = excluded.server_updated_ms`
+            server_updated_ms = excluded.server_updated_ms
+          WHERE battle_logs.deleted = 0`
         )
         .bind(
           cleanUser,
@@ -2379,7 +2391,10 @@ async function upsertVaultBatchIntoD1(
       server_updated_ms = excluded.server_updated_ms,
       deleted = excluded.deleted,
       payload_json = CASE WHEN excluded.deleted = 1 AND team_presets.payload_json != '' THEN team_presets.payload_json ELSE excluded.payload_json END
-    WHERE excluded.updated_at >= team_presets.updated_at OR (excluded.deleted = 1 AND team_presets.deleted = 0)
+    WHERE excluded.updated_at > team_presets.updated_at
+       OR excluded.deleted != team_presets.deleted
+       OR excluded.sort_order != team_presets.sort_order
+       OR (excluded.updated_at = team_presets.updated_at AND excluded.deleted = 0 AND excluded.payload_json != team_presets.payload_json)
   `;
 
   for (let idx = 0; idx < incomingTeams.length; idx++) {
@@ -2429,7 +2444,8 @@ async function upsertVaultBatchIntoD1(
           ON CONFLICT(screen_name, team_id) DO UPDATE SET
             deleted = 1,
             updated_at = MAX(team_presets.updated_at, excluded.updated_at),
-            server_updated_ms = excluded.server_updated_ms`
+            server_updated_ms = excluded.server_updated_ms
+          WHERE team_presets.deleted = 0`
         )
         .bind(cleanUser, delTid, nowMs, JSON.stringify({ id: delTid, deleted: true }))
     );
@@ -2485,18 +2501,30 @@ async function upsertVaultBatchIntoD1(
 
   return {
     wroteAnything: true,
+    prevServerUpdatedMs,
     serverUpdatedMs: nowMs,
     logsUpserted,
     teamsUpserted,
     totalActiveLogs,
     totalActiveTeams,
+    pushedLogIds: Array.from(seenLogIds),
+    pushedTeamIds: Array.from(seenTeamIds),
+    pushedSettings: hasSettingsIncoming,
   };
 }
 
 async function pullVaultDeltasFromD1(
   db,
   screenName,
-  { sinceServerMs = 0, isPaidOrAlumni = false } = {}
+  {
+    sinceServerMs = 0,
+    isPaidOrAlumni = false,
+    prevServerUpdatedMs = 0,
+    writeServerUpdatedMs = 0,
+    pushedLogIds = [],
+    pushedTeamIds = [],
+    pushedSettings = false,
+  } = {}
 ) {
   if (!db) throw new Error('SYNC_DB (Cloudflare D1) is not bound.');
   const cleanUser = sanitizeScreenName(screenName);
@@ -2529,7 +2557,15 @@ async function pullVaultDeltasFromD1(
   }
 
   const serverUpdatedMs = Number(stateRow.server_updated_ms) || 0;
-  if (sinceMs > 0 && serverUpdatedMs <= sinceMs) {
+  // Short-circuit when either:
+  // 1) Vault hasn't changed since client's cursor (`serverUpdatedMs <= sinceMs`), OR
+  // 2) Client pushed deltas in this request (`writeServerUpdatedMs > 0`) AND no other device had modified the vault
+  //    before this push (`prevServerUpdatedMs <= sinceMs`) — avoids echoing the client's own upload back down!
+  if (
+    sinceMs > 0 &&
+    (serverUpdatedMs <= sinceMs ||
+      (writeServerUpdatedMs > 0 && prevServerUpdatedMs <= sinceMs))
+  ) {
     return {
       shortCircuited: true,
       serverSyncMs: serverUpdatedMs,
@@ -2545,11 +2581,14 @@ async function pullVaultDeltasFromD1(
     };
   }
 
-  let parsedSettings = {};
-  if (stateRow.settings_json) {
+  let parsedSettings = null;
+  const stateSettingsUpdAt = Number(stateRow.settings_updated_at) || 0;
+  if (stateRow.settings_json && (!pushedSettings || sinceMs === 0 || stateSettingsUpdAt > sinceMs)) {
     try {
       parsedSettings = sanitizeVaultSettingsForD1(JSON.parse(stateRow.settings_json));
-    } catch (_) {}
+    } catch (_) {
+      parsedSettings = {};
+    }
   }
 
   // Free Tier vs Paid/Alumni retention window (Free = Current Season + 14d grace; Paid/Alumni = Unlimited Lifetime)
@@ -2560,7 +2599,7 @@ async function pullVaultDeltasFromD1(
   const logsQuery = isPaidOrAlumni
     ? db
         .prepare(
-          `SELECT log_id, deleted, payload_json
+          `SELECT log_id, deleted, server_updated_ms, payload_json
            FROM battle_logs
            WHERE screen_name = ?1 AND server_updated_ms > ?2
            ORDER BY timestamp_ms DESC
@@ -2569,7 +2608,7 @@ async function pullVaultDeltasFromD1(
         .bind(cleanUser, sinceMs)
     : db
         .prepare(
-          `SELECT log_id, deleted, payload_json
+          `SELECT log_id, deleted, server_updated_ms, payload_json
            FROM battle_logs
            WHERE screen_name = ?1 AND server_updated_ms > ?2
              AND (deleted = 1 OR timestamp_ms >= ?3)
@@ -2580,7 +2619,7 @@ async function pullVaultDeltasFromD1(
 
   const teamsQuery = db
     .prepare(
-      `SELECT team_id, deleted, payload_json
+      `SELECT team_id, deleted, server_updated_ms, payload_json
        FROM team_presets
        WHERE screen_name = ?1 AND server_updated_ms > ?2
        ORDER BY sort_order ASC, updated_at DESC
@@ -2590,9 +2629,20 @@ async function pullVaultDeltasFromD1(
 
   const [logsRes, teamsRes] = await db.batch([logsQuery, teamsQuery]);
 
+  const pushedLogSet = new Set(Array.isArray(pushedLogIds) ? pushedLogIds : []);
+  const pushedTeamSet = new Set(Array.isArray(pushedTeamIds) ? pushedTeamIds : []);
+
   const upsertedLogs = [];
   const deletedLogIds = [];
   for (const r of logsRes?.results || []) {
+    if (
+      sinceMs > 0 &&
+      writeServerUpdatedMs > 0 &&
+      Number(r.server_updated_ms) === writeServerUpdatedMs &&
+      pushedLogSet.has(r.log_id)
+    ) {
+      continue;
+    }
     if (Number(r.deleted) === 1) {
       deletedLogIds.push(r.log_id);
     } else if (r.payload_json) {
@@ -2605,6 +2655,14 @@ async function pullVaultDeltasFromD1(
   const upsertedTeams = [];
   const deletedTeamIds = [];
   for (const r of teamsRes?.results || []) {
+    if (
+      sinceMs > 0 &&
+      writeServerUpdatedMs > 0 &&
+      Number(r.server_updated_ms) === writeServerUpdatedMs &&
+      pushedTeamSet.has(r.team_id)
+    ) {
+      continue;
+    }
     if (Number(r.deleted) === 1) {
       deletedTeamIds.push(r.team_id);
     } else if (r.payload_json) {
@@ -2618,7 +2676,7 @@ async function pullVaultDeltasFromD1(
     shortCircuited: false,
     serverSyncMs: serverUpdatedMs,
     settings: parsedSettings,
-    settingsUpdatedAt: Number(stateRow.settings_updated_at) || 0,
+    settingsUpdatedAt: stateSettingsUpdAt,
     migratedFromGithub: Number(stateRow.migrated_from_github) === 1,
     totalActiveLogs: Number(stateRow.total_active_logs) || 0,
     totalActiveTeams: Number(stateRow.total_active_teams) || 0,
@@ -2812,6 +2870,19 @@ async function enforceUserReplayQuota(env, kv, screenName, license, indexObj, in
   const maxStorageBytes = Math.max(0, Number(license.maxStorageMb ?? 0)) * 1024 * 1024;
   const maxRolling = Math.max(0, Number(license.maxRollingBattles ?? 0));
 
+  let mutated = false;
+  const deletedList = Array.isArray(indexObj.deletedReplays) ? [...indexObj.deletedReplays] : [];
+  const recordEviction = (item) => {
+    mutated = true;
+    if (item && (item.shareId || item.battleId)) {
+      deletedList.push({
+        shareId: item.shareId || '',
+        battleId: item.battleId || '',
+        deletedAtMs: nowMs,
+      });
+    }
+  };
+
   const kept = [];
   // 1. Prune expired items (pinned items use maxPinnedRetentionMs = 365d for Alumni/Pro/VIP; unpinned use maxRetentionMs)
   for (const item of indexObj.items) {
@@ -2821,6 +2892,7 @@ async function enforceUserReplayQuota(env, kv, screenName, license, indexObj, in
       : maxRetentionMs <= 0 || nowMs - uploadedMs > maxRetentionMs;
     if (isExpired) {
       await deleteReplayObjects(env, kv, item);
+      recordEviction(item);
     } else {
       kept.push(item);
     }
@@ -2839,6 +2911,7 @@ async function enforceUserReplayQuota(env, kv, screenName, license, indexObj, in
       rollingSeen++;
       if (rollingSeen > maxRolling) {
         await deleteReplayObjects(env, kv, item);
+        recordEviction(item);
       } else {
         afterCount.push(item);
       }
@@ -2862,11 +2935,16 @@ async function enforceUserReplayQuota(env, kv, screenName, license, indexObj, in
     if (oldestUnpinnedIdx === -1) break; // Only pinned items remain
     const [evicted] = afterCount.splice(oldestUnpinnedIdx, 1);
     const freed = await deleteReplayObjects(env, kv, evicted);
+    recordEviction(evicted);
     currentBytes = Math.max(0, currentBytes - freed);
   }
 
   indexObj.items = afterCount;
+  if (mutated) {
+    indexObj.deletedReplays = deletedList.slice(-150);
+  }
   return {
+    mutated,
     usedBytes: currentBytes,
     usedMb: Number((currentBytes / (1024 * 1024)).toFixed(2)),
     rollingCount: afterCount.filter((i) => !i.isPinned).length,
@@ -6758,6 +6836,62 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       }
     }
 
+    function renderVaultHeaderAndGrid(data) {
+      currentVaultData = data;
+      const isOwner = Boolean(data.isOwner);
+      document.getElementById('btn-logout').style.display = isOwner ? 'inline-flex' : 'none';
+      document.getElementById('btn-toggle-login').textContent = isOwner ? '⚙️ Account / Login' : '🔐 Owner Login';
+
+      const sb = document.getElementById('stats-bar');
+      sb.style.display = 'flex';
+      const lim = data.limits || {};
+      const usg = data.usage || {};
+      const vis = (data.settings && data.settings.publicVisibility) || data.visibility || 'public_only';
+
+      if (isOwner) {
+        const pwBtn = '<button onclick="openPasswordSetup()" style="padding:4px 9px;font-size:11.5px">' + (data.hasPassword ? '🔒 Change Password' : '🔒 Set Password') + '</button>';
+
+        sb.innerHTML =
+          '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">' +
+            '<div><strong>👤 @' + esc(data.screenName) + ' (Owner)</strong> • <span style="color:#2dd4bf;font-weight:800">' + esc(lim.label || (data.tier || 'FREE').toUpperCase()) + '</span></div>' +
+            '<div style="color:#ecfeff">☁️ Storage: <strong style="color:#2dd4bf">' + esc(usg.usedMb || 0) + ' MB</strong> / ' + esc(lim.maxStorageMb || 0) + ' MB • Rolling: <strong style="color:#2dd4bf">' + esc(usg.rollingCount || 0) + '/' + esc(lim.maxRollingBattles || 0) + '</strong> • ⭐ Starred: <strong style="color:#fde047">' + esc(usg.pinnedCount || 0) + '/' + esc(lim.maxPinnedBattles || 0) + '</strong> • 🌐 Public: <strong style="color:#67e8f9">' + esc(usg.publicCount || 0) + '</strong></div>' +
+          '</div>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-top:10px;border-top:1px solid #19304e">' +
+            '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+              '<span style="font-size:12px;color:#99f6e4;font-weight:700">🌐 Public Vault Visibility:</span>' +
+              '<select onchange="updateVaultVisibility(this.value)" style="min-width:265px;padding:6px 10px;font-size:12px">' +
+                '<option value="public_only"' + (vis === 'public_only' ? ' selected' : '') + '>🔒 Private (Only shows ones manually made public)</option>' +
+                '<option value="starred_only"' + (vis === 'starred_only' ? ' selected' : '') + '>⭐ Starred only</option>' +
+                '<option value="starred_and_public"' + (vis === 'starred_and_public' || vis === 'starred_and_private' ? ' selected' : '') + '>⭐+🌐 Starred + Private (Starred or manually made public)</option>' +
+                '<option value="all"' + (vis === 'all' ? ' selected' : '') + '>🌐 All videos shared (Overrides per-video private)</option>' +
+                '<option value="none"' + (vis === 'none' || vis === 'private' ? ' selected' : '') + '>🚫 No videos shared without login</option>' +
+              '</select>' +
+              '<span style="font-size:11px;color:#94a3b8">(All videos default to 🔒 Private unless toggled 🌐 Public or overridden)</span>' +
+            '</div>' +
+            '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' + pwBtn + '</div>' +
+          '</div>';
+      } else {
+        const visLabel =
+          vis === 'all'
+            ? '🌐 Public Vault (All Videos Shared)'
+            : vis === 'starred_only'
+            ? '⭐ Public Vault (Starred Only)'
+            : vis === 'starred_and_public'
+            ? '⭐+🌐 Public Vault (Starred + Public Videos)'
+            : '🔒 Public Vault (Manually Shared Public Videos Only)';
+        const hiddenNote = (vis !== 'all' && data.hiddenRollingCount > 0)
+          ? ' • <span style="color:#94a3b8">' + esc(data.hiddenRollingCount) + ' private battle(s) hidden (Owner-only)</span>'
+          : '';
+        sb.innerHTML =
+          '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">' +
+            '<div><strong>👤 @' + esc(data.screenName) + '</strong> • <span style="color:#fde047;font-weight:800">' + visLabel + '</span>' + hiddenNote + '</div>' +
+            '<button onclick="toggleLoginPanel()" style="padding:6px 12px;font-size:12px;border-color:#2dd4bf;color:#2dd4bf">🔐 Are you @' + esc(data.screenName) + '? Log In to Manage & Star</button>' +
+          '</div>';
+      }
+
+      renderReplayGrid();
+    }
+
     async function loadVault() {
       const user = document.getElementById('inp-user').value.trim();
       const key = document.getElementById('inp-key').value.trim();
@@ -6774,10 +6908,34 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       if (email) localStorage.setItem('sspvp_vault_email', email);
 
       const grid = document.getElementById('replays-grid');
-      grid.innerHTML = '<div style="color:#99f6e4;padding:20px;font-weight:700">Loading Cloud Replay Vault for @' + esc(user) + '...</div>';
+      const cacheKey = 'sspvp_dvr_vault_cache_v2_' + user.toLowerCase();
+      let cachedVault = null;
+      try {
+        const rawCache = localStorage.getItem(cacheKey);
+        if (rawCache) {
+          cachedVault = JSON.parse(rawCache);
+          if (cachedVault && Array.isArray(cachedVault.items)) {
+            renderVaultHeaderAndGrid(cachedVault);
+          }
+        }
+      } catch (_) {}
+
+      if (!cachedVault || !Array.isArray(cachedVault.items)) {
+        grid.innerHTML = '<div style="color:#99f6e4;padding:20px;font-weight:700">Loading Cloud Replay Vault for @' + esc(user) + '...</div>';
+      }
 
       try {
-        const res = await fetch('/v1/replays/list?user=' + encodeURIComponent(user), {
+        const wantOwnerNow = Boolean(sessionToken || key);
+        const canUseDelta =
+          cachedVault &&
+          Array.isArray(cachedVault.items) &&
+          Number(cachedVault.updatedAtMs) > 0 &&
+          Boolean(cachedVault.isOwner) === wantOwnerNow;
+        const qs = canUseDelta
+          ? '?user=' + encodeURIComponent(user) + '&since=' + encodeURIComponent(String(cachedVault.updatedAtMs)) + '&delta=1'
+          : '?user=' + encodeURIComponent(user);
+
+        const res = await fetch('/v1/replays/list' + qs, {
           headers: {
             'X-SilphScope-Client-Key': CLIENT_KEY,
             'X-Trainer-Screen-Name': user,
@@ -6795,71 +6953,49 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
           return;
         }
 
-        currentVaultData = data;
-        if (data.sessionToken) {
-          sessionToken = data.sessionToken;
+        let mergedItems = data.items || [];
+        if (data.unchanged && cachedVault && Array.isArray(cachedVault.items)) {
+          mergedItems = cachedVault.items;
+        } else if (data.delta && cachedVault && Array.isArray(cachedVault.items)) {
+          const delShareSet = new Set(Array.isArray(data.deletedShareIds) ? data.deletedShareIds : []);
+          const delBattleSet = new Set(Array.isArray(data.deletedBattleIds) ? data.deletedBattleIds : []);
+          const activeShareSet = Array.isArray(data.activeShareIds) ? new Set(data.activeShareIds) : null;
+          const byShare = new Map();
+          for (const prev of cachedVault.items) {
+            if (!prev || !prev.shareId) continue;
+            if (delShareSet.has(prev.shareId) || (prev.battleId && delBattleSet.has(prev.battleId))) continue;
+            if (activeShareSet && !activeShareSet.has(prev.shareId)) continue;
+            byShare.set(prev.shareId, prev);
+          }
+          for (const up of (data.upsertedItems || [])) {
+            if (up && up.shareId) byShare.set(up.shareId, up);
+          }
+          mergedItems = Array.from(byShare.values()).sort(
+            (a, b) => new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime()
+          );
+        }
+
+        const fullData = Object.assign({}, data, { items: mergedItems, unchanged: false, delta: false });
+        if (fullData.sessionToken) {
+          sessionToken = fullData.sessionToken;
           localStorage.setItem('sspvp_vault_session', sessionToken);
         }
 
-        const isOwner = Boolean(data.isOwner);
-        if (isOwner && data.screenName && data.screenName.toLowerCase() !== 'featured') {
-          localStorage.setItem('sspvp_vault_user', data.screenName);
-          localStorage.setItem('gbl_web_screen_name_v700', data.screenName);
-          writeSharedCookies(data.screenName, sessionToken);
+        const isOwner = Boolean(fullData.isOwner);
+        if (isOwner && fullData.screenName && fullData.screenName.toLowerCase() !== 'featured') {
+          localStorage.setItem('sspvp_vault_user', fullData.screenName);
+          localStorage.setItem('gbl_web_screen_name_v700', fullData.screenName);
+          writeSharedCookies(fullData.screenName, sessionToken);
         }
-        document.getElementById('btn-logout').style.display = isOwner ? 'inline-flex' : 'none';
-        document.getElementById('btn-toggle-login').textContent = isOwner ? '⚙️ Account / Login' : '🔐 Owner Login';
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(fullData));
+        } catch (_) {}
 
-        const sb = document.getElementById('stats-bar');
-        sb.style.display = 'flex';
-        const lim = data.limits || {};
-        const usg = data.usage || {};
-        const vis = (data.settings && data.settings.publicVisibility) || data.visibility || 'public_only';
-
-        if (isOwner) {
-          const pwBtn = '<button onclick="openPasswordSetup()" style="padding:4px 9px;font-size:11.5px">' + (data.hasPassword ? '🔒 Change Password' : '🔒 Set Password') + '</button>';
-
-          sb.innerHTML =
-            '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">' +
-              '<div><strong>👤 @' + esc(data.screenName) + ' (Owner)</strong> • <span style="color:#2dd4bf;font-weight:800">' + esc(lim.label || (data.tier || 'FREE').toUpperCase()) + '</span></div>' +
-              '<div style="color:#ecfeff">☁️ Storage: <strong style="color:#2dd4bf">' + esc(usg.usedMb || 0) + ' MB</strong> / ' + esc(lim.maxStorageMb || 0) + ' MB • Rolling: <strong style="color:#2dd4bf">' + esc(usg.rollingCount || 0) + '/' + esc(lim.maxRollingBattles || 0) + '</strong> • ⭐ Starred: <strong style="color:#fde047">' + esc(usg.pinnedCount || 0) + '/' + esc(lim.maxPinnedBattles || 0) + '</strong> • 🌐 Public: <strong style="color:#67e8f9">' + esc(usg.publicCount || 0) + '</strong></div>' +
-            '</div>' +
-            '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-top:10px;border-top:1px solid #19304e">' +
-              '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
-                '<span style="font-size:12px;color:#99f6e4;font-weight:700">🌐 Public Vault Visibility:</span>' +
-                '<select onchange="updateVaultVisibility(this.value)" style="min-width:265px;padding:6px 10px;font-size:12px">' +
-                  '<option value="public_only"' + (vis === 'public_only' ? ' selected' : '') + '>🔒 Private (Only shows ones manually made public)</option>' +
-                  '<option value="starred_only"' + (vis === 'starred_only' ? ' selected' : '') + '>⭐ Starred only</option>' +
-                  '<option value="starred_and_public"' + (vis === 'starred_and_public' || vis === 'starred_and_private' ? ' selected' : '') + '>⭐+🌐 Starred + Private (Starred or manually made public)</option>' +
-                  '<option value="all"' + (vis === 'all' ? ' selected' : '') + '>🌐 All videos shared (Overrides per-video private)</option>' +
-                  '<option value="none"' + (vis === 'none' || vis === 'private' ? ' selected' : '') + '>🚫 No videos shared without login</option>' +
-                '</select>' +
-                '<span style="font-size:11px;color:#94a3b8">(All videos default to 🔒 Private unless toggled 🌐 Public or overridden)</span>' +
-              '</div>' +
-              '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' + pwBtn + '</div>' +
-            '</div>';
-        } else {
-          const visLabel =
-            vis === 'all'
-              ? '🌐 Public Vault (All Videos Shared)'
-              : vis === 'starred_only'
-              ? '⭐ Public Vault (Starred Only)'
-              : vis === 'starred_and_public'
-              ? '⭐+🌐 Public Vault (Starred + Public Videos)'
-              : '🔒 Public Vault (Manually Shared Public Videos Only)';
-          const hiddenNote = (vis !== 'all' && data.hiddenRollingCount > 0)
-            ? ' • <span style="color:#94a3b8">' + esc(data.hiddenRollingCount) + ' private battle(s) hidden (Owner-only)</span>'
-            : '';
-          sb.innerHTML =
-            '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">' +
-              '<div><strong>👤 @' + esc(data.screenName) + '</strong> • <span style="color:#fde047;font-weight:800">' + visLabel + '</span>' + hiddenNote + '</div>' +
-              '<button onclick="toggleLoginPanel()" style="padding:6px 12px;font-size:12px;border-color:#2dd4bf;color:#2dd4bf">🔐 Are you @' + esc(data.screenName) + '? Log In to Manage & Star</button>' +
-            '</div>';
-        }
-
-        renderReplayGrid();
+        renderVaultHeaderAndGrid(fullData);
       } catch (e) {
-        grid.innerHTML = '<div style="color:#fda4af;padding:20px;background:rgba(14,27,46,0.85);border:1px solid rgba(244,63,94,0.45);border-radius:12px">Error: ' + esc(e.message) + '</div>';
+        if (!cachedVault) {
+          grid.innerHTML = '<div style="color:#fda4af;padding:20px;background:rgba(14,27,46,0.85);border:1px solid rgba(244,63,94,0.45);border-radius:12px">Error: ' + esc(e.message) + '</div>';
+        }
       }
     }
 
@@ -10014,9 +10150,13 @@ self.addEventListener('fetch', (e) => {
       try {
         let writeStats = {
           wroteAnything: false,
+          prevServerUpdatedMs: 0,
           logsUpserted: 0,
           teamsUpserted: 0,
           serverUpdatedMs: 0,
+          pushedLogIds: [],
+          pushedTeamIds: [],
+          pushedSettings: false,
         };
         if (request.method === 'POST' || request.method === 'PUT') {
           writeStats = await upsertVaultBatchIntoD1(env.SYNC_DB, resolvedName, {
@@ -10034,6 +10174,11 @@ self.addEventListener('fetch', (e) => {
         const pulled = await pullVaultDeltasFromD1(env.SYNC_DB, resolvedName, {
           sinceServerMs,
           isPaidOrAlumni: syncAuth.isPaidOrAlumni,
+          prevServerUpdatedMs: writeStats.prevServerUpdatedMs || 0,
+          writeServerUpdatedMs: writeStats.wroteAnything ? writeStats.serverUpdatedMs || 0 : 0,
+          pushedLogIds: writeStats.pushedLogIds || [],
+          pushedTeamIds: writeStats.pushedTeamIds || [],
+          pushedSettings: Boolean(writeStats.pushedSettings),
         });
 
         const devHashHdr = String(
@@ -10569,6 +10714,37 @@ self.addEventListener('fetch', (e) => {
         return jsonResponse({ ok: false, error: 'Please specify a Trainer ID.' }, 400, request, true);
       }
 
+      const rawSinceParam = (url.searchParams.get('since') || '').trim();
+      const sinceMs = rawSinceParam
+        ? /^\d+$/.test(rawSinceParam)
+          ? Math.max(0, Number(rawSinceParam) || 0)
+          : Math.max(0, Date.parse(rawSinceParam) || 0)
+        : 0;
+      const wantDelta =
+        url.searchParams.get('delta') === '1' || url.searchParams.get('delta') === 'true';
+
+      const formatReplayItemForClient = (item) => ({
+        ...item,
+        isPinned: Boolean(item.isPinned),
+        isPublic: Boolean(item.isPublic),
+        shareUrl: `${url.origin}/watch/${item.shareId}`,
+        videoStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/video.mp4`,
+        traceStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/trace.jsonl`,
+      });
+
+      const computeIndexUpdatedMs = (idxObj) => {
+        let maxMs = idxObj && idxObj.updatedAt ? Date.parse(idxObj.updatedAt) || 0 : 0;
+        for (const it of idxObj?.items || []) {
+          const t = Date.parse(it.updatedAt || it.uploadedAt || '') || 0;
+          if (t > maxMs) maxMs = t;
+        }
+        for (const d of idxObj?.deletedReplays || []) {
+          const t = Number(d.deletedAtMs) || 0;
+          if (t > maxMs) maxMs = t;
+        }
+        return maxMs;
+      };
+
       const ownerAuth = await authenticateVaultOwner(
         request,
         env,
@@ -10590,6 +10766,7 @@ self.addEventListener('fetch', (e) => {
               indexObj
             )
           : {
+              mutated: false,
               usedBytes: (indexObj.items || []).reduce((s, i) => s + (Number(i.totalBytes) || 0), 0),
               usedMb: Number(
                 (
@@ -10604,35 +10781,78 @@ self.addEventListener('fetch', (e) => {
           ...baseUsage,
           publicCount: (indexObj.items || []).filter((i) => Boolean(i.isPublic)).length,
         };
-        await saveUserReplayIndex(env.TELEMETRY_KV, resolvedName, indexObj);
+        if (baseUsage.mutated) {
+          await saveUserReplayIndex(env.TELEMETRY_KV, resolvedName, indexObj);
+        }
 
+        const indexUpdatedMs = computeIndexUpdatedMs(indexObj);
         const devHashHdr = (request.headers.get('X-Device-Hash') || '').trim();
         const deviceIngestToken = devHashHdr ? await computeDeviceIngestToken(env, devHashHdr) : '';
+        const allItems = indexObj.items || [];
+
+        const baseOwnerResp = {
+          ok: true,
+          isOwner: true,
+          canStar: true,
+          screenName: resolvedName,
+          sessionToken: ownerAuth.sessionToken,
+          deviceIngestToken,
+          tier: licenseInfo.tier || 'free',
+          active: Boolean(licenseInfo.active),
+          hasPassword: Boolean(authRec && authRec.passwordHash),
+          githubUsername:
+            (authRec && authRec.githubUsername) || licenseInfo.boundGitHubUsername || '',
+          settings: indexObj.settings,
+          visibility: indexObj.settings.publicVisibility,
+          limits: licenseInfo,
+          usage,
+          updatedAt: indexObj.updatedAt || (indexUpdatedMs > 0 ? new Date(indexUpdatedMs).toISOString() : ''),
+          updatedAtMs: indexUpdatedMs,
+          totalCount: allItems.length,
+          totalStarredCount: allItems.filter((i) => Boolean(i.isPinned)).length,
+          totalPublicCount: usage.publicCount,
+        };
+
+        if (sinceMs > 0 && (indexUpdatedMs === 0 || indexUpdatedMs <= sinceMs) && !baseUsage.mutated) {
+          return jsonResponse(
+            {
+              ...baseOwnerResp,
+              unchanged: true,
+              items: [],
+            },
+            200,
+            request,
+            true
+          );
+        }
+
+        if (wantDelta && sinceMs > 0) {
+          const upsertedItems = allItems
+            .filter((it) => (Date.parse(it.updatedAt || it.uploadedAt || '') || 0) > sinceMs)
+            .map(formatReplayItemForClient);
+          const recentDeleted = (indexObj.deletedReplays || []).filter(
+            (d) => (Number(d.deletedAtMs) || 0) > sinceMs
+          );
+          return jsonResponse(
+            {
+              ...baseOwnerResp,
+              delta: true,
+              upsertedItems,
+              deletedShareIds: recentDeleted.map((d) => d.shareId).filter(Boolean),
+              deletedBattleIds: recentDeleted.map((d) => d.battleId).filter(Boolean),
+              activeShareIds: allItems.map((i) => i.shareId).filter(Boolean),
+              items: [],
+            },
+            200,
+            request,
+            true
+          );
+        }
+
         return jsonResponse(
           {
-            ok: true,
-            isOwner: true,
-            canStar: true,
-            screenName: resolvedName,
-            sessionToken: ownerAuth.sessionToken,
-            deviceIngestToken,
-            tier: licenseInfo.tier || 'free',
-            active: Boolean(licenseInfo.active),
-            hasPassword: Boolean(authRec && authRec.passwordHash),
-            githubUsername:
-              (authRec && authRec.githubUsername) || licenseInfo.boundGitHubUsername || '',
-            settings: indexObj.settings,
-            visibility: indexObj.settings.publicVisibility,
-            limits: licenseInfo,
-            usage,
-            items: (indexObj.items || []).map((item) => ({
-              ...item,
-              isPinned: Boolean(item.isPinned),
-              isPublic: Boolean(item.isPublic),
-              shareUrl: `${url.origin}/watch/${item.shareId}`,
-              videoStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/video.mp4`,
-              traceStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/trace.jsonl`,
-            })),
+            ...baseOwnerResp,
+            items: allItems.map(formatReplayItemForClient),
           },
           200,
           request,
@@ -10657,6 +10877,7 @@ self.addEventListener('fetch', (e) => {
         );
       }
 
+      const indexUpdatedMs = computeIndexUpdatedMs(indexObj);
       const allItems = indexObj.items || [];
       const starredItems = allItems.filter((i) => Boolean(i.isPinned));
       const publicItems = allItems.filter((i) => Boolean(i.isPublic));
@@ -10672,25 +10893,56 @@ self.addEventListener('fetch', (e) => {
       }
       const hiddenRollingCount = Math.max(0, allItems.length - visibleItems.length);
 
+      const basePublicResp = {
+        ok: true,
+        isOwner: false,
+        canStar: false,
+        screenName: indexObj.screenName || requestedUser,
+        visibility: vis,
+        settings: indexObj.settings,
+        hiddenRollingCount,
+        totalCount: visibleItems.length,
+        totalStarredCount: starredItems.length,
+        totalPublicCount: publicItems.length,
+        updatedAt: indexObj.updatedAt || (indexUpdatedMs > 0 ? new Date(indexUpdatedMs).toISOString() : ''),
+        updatedAtMs: indexUpdatedMs,
+      };
+
+      if (sinceMs > 0 && (indexUpdatedMs === 0 || indexUpdatedMs <= sinceMs)) {
+        return jsonResponse(
+          {
+            ...basePublicResp,
+            unchanged: true,
+            items: [],
+          },
+          200,
+          request,
+          true
+        );
+      }
+
+      if (wantDelta && sinceMs > 0) {
+        const upsertedItems = visibleItems
+          .filter((it) => (Date.parse(it.updatedAt || it.uploadedAt || '') || 0) > sinceMs)
+          .map(formatReplayItemForClient);
+        return jsonResponse(
+          {
+            ...basePublicResp,
+            delta: true,
+            upsertedItems,
+            activeShareIds: visibleItems.map((i) => i.shareId).filter(Boolean),
+            items: [],
+          },
+          200,
+          request,
+          true
+        );
+      }
+
       return jsonResponse(
         {
-          ok: true,
-          isOwner: false,
-          canStar: false,
-          screenName: indexObj.screenName || requestedUser,
-          visibility: vis,
-          settings: indexObj.settings,
-          hiddenRollingCount,
-          totalStarredCount: starredItems.length,
-          totalPublicCount: publicItems.length,
-          items: visibleItems.map((item) => ({
-            ...item,
-            isPinned: Boolean(item.isPinned),
-            isPublic: Boolean(item.isPublic),
-            shareUrl: `${url.origin}/watch/${item.shareId}`,
-            videoStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/video.mp4`,
-            traceStreamUrl: `${url.origin}/v1/replays/stream/${item.shareId}/trace.jsonl`,
-          })),
+          ...basePublicResp,
+          items: visibleItems.map(formatReplayItemForClient),
         },
         200,
         request,
@@ -10901,6 +11153,13 @@ self.addEventListener('fetch', (e) => {
         return jsonResponse({ ok: false, error: 'Replay not found.' }, 404, request, true);
       }
       const [removed] = indexObj.items.splice(idx, 1);
+      const delArr = Array.isArray(indexObj.deletedReplays) ? [...indexObj.deletedReplays] : [];
+      delArr.push({
+        shareId: removed.shareId || '',
+        battleId: removed.battleId || '',
+        deletedAtMs: Date.now(),
+      });
+      indexObj.deletedReplays = delArr.slice(-150);
       await deleteReplayObjects(env, env.TELEMETRY_KV, removed);
       await saveUserReplayIndex(env.TELEMETRY_KV, resolvedName, indexObj);
 

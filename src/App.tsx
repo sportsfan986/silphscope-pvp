@@ -6035,7 +6035,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.32 • Android Native Overlay
+                  v7.33 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -14288,10 +14288,64 @@ export default function App() {
                       }
 
                       const savedUserForCursor = localStorage.getItem('gbl_d1_sync_cursor_user_v1') || '';
-                      const sinceServerMs =
-                        savedUserForCursor.toLowerCase() === cleanName.toLowerCase()
-                          ? Number(localStorage.getItem('gbl_d1_sync_cursor_ms_v1') || '0') || 0
+                      const isSameCursorUser = savedUserForCursor.toLowerCase() === cleanName.toLowerCase();
+                      const rawCursorMs = isSameCursorUser
+                        ? Number(localStorage.getItem('gbl_d1_sync_cursor_ms_v1') || '0') || 0
+                        : 0;
+                      // If local storage was cleared while cursor remained, reset pull cursor to 0 to recover full history
+                      const sinceServerMs = mergedLogs.length === 0 && rawCursorMs > 0 ? 0 : rawCursorMs;
+                      const lastPushedMs =
+                        isSameCursorUser && alreadyMigrated
+                          ? Number(localStorage.getItem('gbl_d1_last_pushed_ms_v1') || '0') || 0
                           : 0;
+                      const tombSig = Array.from(mergedTombstones).sort().join(',');
+                      const prevTombSig = isSameCursorUser
+                        ? localStorage.getItem('gbl_d1_last_pushed_tombstones_sig_v1') || ''
+                        : '';
+                      const tombstonesChanged =
+                        !alreadyMigrated || (tombSig !== prevTombSig && mergedTombstones.size > 0);
+
+                      const pushStartedAtMs = Date.now();
+                      const teamSigKey = `gbl_d1_last_pushed_teams_sig_v1_${appCombatMode}`;
+                      let prevTeamSigs: Record<string, string> = {};
+                      if (isSameCursorUser && alreadyMigrated) {
+                        try {
+                          prevTeamSigs = JSON.parse(localStorage.getItem(teamSigKey) || '{}') || {};
+                        } catch {
+                          prevTeamSigs = {};
+                        }
+                      }
+                      const computeTeamSig = (p: TeamPreset) =>
+                        JSON.stringify({
+                          id: p.id,
+                          name: p.name,
+                          league: p.league,
+                          archetype: p.archetype || '',
+                          pokemon: (p.pokemon || []).map((m) => ({
+                            name: m.name,
+                            cp: m.cp || 0,
+                            fastMove: m.fastMove || '',
+                            chargedMove1: m.chargedMove1 || '',
+                            chargedMove2: m.chargedMove2 || '',
+                            ivs: m.ivs || ''
+                          }))
+                        });
+
+                      const logsToPush = !alreadyMigrated || lastPushedMs === 0
+                        ? mergedLogs
+                        : mergedLogs.filter(
+                            (l) => Math.max(Number(l.updatedAt) || 0, Number(l.timestampMs) || 0) > lastPushedMs
+                          );
+                      const teamsToPush = (!alreadyMigrated || lastPushedMs === 0
+                        ? mergedPresets
+                        : mergedPresets.filter(
+                            (p) => (Number(p.updatedAt) || 0) > lastPushedMs || prevTeamSigs[p.id] !== computeTeamSig(p)
+                          )
+                      ).map((p) => ({
+                        ...p,
+                        updatedAt: Math.max(Number(p.updatedAt) || 0, pushStartedAtMs)
+                      }));
+                      const delLogsToPush = tombstonesChanged ? Array.from(mergedTombstones) : [];
 
                       const headers: Record<string, string> = {
                         'Content-Type': 'application/json',
@@ -14311,9 +14365,10 @@ export default function App() {
                           sessionToken: activeSession,
                           unlockKey: webUnlockKey.trim().toUpperCase(),
                           sinceServerMs,
-                          battleLogs: sinceServerMs === 0 ? mergedLogs : mergedLogs.slice(0, 200),
-                          teamPresets: mergedPresets,
-                          deletedLogIds: Array.from(mergedTombstones)
+                          isInitialMigration: !alreadyMigrated,
+                          battleLogs: logsToPush,
+                          teamPresets: teamsToPush,
+                          deletedLogIds: delLogsToPush
                         })
                       });
 
@@ -14333,52 +14388,92 @@ export default function App() {
                         return;
                       }
 
-                      if (Array.isArray(syncJson.deletedLogIds)) {
-                        syncJson.deletedLogIds.forEach((id: string) => mergedTombstones.add(id));
-                      }
-                      const deletedTeamSet = new Set<string>(
-                        Array.isArray(syncJson.deletedTeamIds) ? syncJson.deletedTeamIds : []
-                      );
+                      const remoteUpsertedLogs: WebBattleLogEntry[] = Array.isArray(syncJson.battleLogs)
+                        ? syncJson.battleLogs
+                        : [];
+                      const remoteDeletedLogs: string[] = Array.isArray(syncJson.deletedLogIds)
+                        ? syncJson.deletedLogIds
+                        : [];
+                      const remoteUpsertedTeams: TeamPreset[] = Array.isArray(syncJson.teamPresets)
+                        ? syncJson.teamPresets
+                        : [];
+                      const remoteDeletedTeams: string[] = Array.isArray(syncJson.deletedTeamIds)
+                        ? syncJson.deletedTeamIds
+                        : [];
 
-                      const finalLogMap = new Map<string, WebBattleLogEntry>();
-                      mergedLogs.forEach((l) => {
-                        if (l?.id && !mergedTombstones.has(l.id)) finalLogMap.set(l.id, l);
-                      });
-                      if (Array.isArray(syncJson.battleLogs)) {
-                        syncJson.battleLogs.forEach((r: WebBattleLogEntry) => {
+                      let pulledLogsDeltaCount = 0;
+                      let pulledTeamsDeltaCount = 0;
+                      const logsMutated =
+                        !alreadyMigrated || remoteUpsertedLogs.length > 0 || remoteDeletedLogs.length > 0;
+                      const teamsMutated =
+                        !alreadyMigrated || remoteUpsertedTeams.length > 0 || remoteDeletedTeams.length > 0;
+
+                      remoteDeletedLogs.forEach((id: string) => mergedTombstones.add(id));
+                      const deletedTeamSet = new Set<string>(remoteDeletedTeams);
+
+                      let finalLogs = mergedLogs;
+                      if (logsMutated) {
+                        const finalLogMap = new Map<string, WebBattleLogEntry>();
+                        mergedLogs.forEach((l) => {
+                          if (l?.id && !mergedTombstones.has(l.id)) finalLogMap.set(l.id, l);
+                        });
+                        remoteUpsertedLogs.forEach((r: WebBattleLogEntry) => {
                           if (!r?.id || mergedTombstones.has(r.id)) return;
                           const existing = finalLogMap.get(r.id);
-                          if (!existing || (r.updatedAt || r.timestampMs || 0) >= (existing.updatedAt || existing.timestampMs || 0)) {
+                          if (
+                            !existing ||
+                            (r.updatedAt || r.timestampMs || 0) > (existing.updatedAt || existing.timestampMs || 0)
+                          ) {
                             finalLogMap.set(r.id, r);
+                            pulledLogsDeltaCount++;
                           }
                         });
+                        finalLogs = Array.from(finalLogMap.values()).sort((a, b) => b.timestampMs - a.timestampMs);
+                        saveBattleLogsToStorage(finalLogs);
                       }
-                      const finalLogs = Array.from(finalLogMap.values()).sort((a, b) => b.timestampMs - a.timestampMs);
 
-                      const finalPresetMap = new Map<string, TeamPreset>();
-                      mergedPresets.forEach((p) => {
-                        if (p?.id && !deletedTeamSet.has(p.id)) finalPresetMap.set(p.id, p);
-                      });
-                      if (Array.isArray(syncJson.teamPresets)) {
-                        syncJson.teamPresets.forEach((rp: TeamPreset) => {
+                      let finalPresets = mergedPresets;
+                      if (teamsMutated) {
+                        const finalPresetMap = new Map<string, TeamPreset>();
+                        mergedPresets.forEach((p) => {
+                          if (p?.id && !deletedTeamSet.has(p.id)) finalPresetMap.set(p.id, p);
+                        });
+                        remoteUpsertedTeams.forEach((rp: TeamPreset) => {
                           if (rp?.id && !deletedTeamSet.has(rp.id)) {
-                            finalPresetMap.set(rp.id, rp);
+                            const prev = finalPresetMap.get(rp.id);
+                            if (!prev || (rp.updatedAt || 0) > (prev.updatedAt || 0)) {
+                              finalPresetMap.set(rp.id, rp);
+                              pulledTeamsDeltaCount++;
+                            }
                           }
                         });
+                        finalPresets = Array.from(finalPresetMap.values());
+                        setPresets(finalPresets);
                       }
-                      const finalPresets = Array.from(finalPresetMap.values());
 
-                      saveBattleLogsToStorage(finalLogs);
-                      setPresets(finalPresets);
                       const tombArr = Array.from(mergedTombstones);
-                      setDeletedLogIds(tombArr);
+                      if (logsMutated || tombstonesChanged) {
+                        setDeletedLogIds(tombArr);
+                      }
 
                       const hasPwNow = Boolean(syncJson.hasPassword);
                       setVaultSyncHasPassword(hasPwNow);
                       try {
-                        localStorage.setItem('gbl_deleted_log_ids_v1', JSON.stringify(tombArr));
+                        if (logsMutated || tombstonesChanged) {
+                          localStorage.setItem('gbl_deleted_log_ids_v1', JSON.stringify(tombArr));
+                        }
+                        const nextTeamSigs: Record<string, string> = {};
+                        finalPresets.forEach((p) => {
+                          if (p?.id) nextTeamSigs[p.id] = computeTeamSig(p);
+                        });
+                        localStorage.setItem(teamSigKey, JSON.stringify(nextTeamSigs));
                         localStorage.setItem('gbl_d1_vault_migrated_v1', '1');
                         localStorage.setItem('gbl_d1_vault_has_pw_v1', hasPwNow ? '1' : '0');
+                        localStorage.setItem('gbl_d1_last_pushed_ms_v1', String(pushStartedAtMs));
+                        localStorage.setItem(
+                          'gbl_d1_last_pushed_tombstones_sig_v1',
+                          tombArr.slice().sort().join(',')
+                        );
                         localStorage.removeItem('gbl_sync_github_token');
                         localStorage.removeItem('gbl_sync_github_gist_id');
                         if (syncJson.serverSyncMs) {
@@ -14387,10 +14482,10 @@ export default function App() {
                         }
                       } catch {}
 
-                      const ts = `${new Date().toLocaleTimeString()} • @${cleanName}: ${finalLogs.length} battles, ${finalPresets.length} teams${hasPwNow ? ' (🔒 Secured)' : ' (⚠️ Set Vault Password above)'}`;
-                      setLastCloudSyncStatus(`Synced ${ts}`);
+                      const ts = `${new Date().toLocaleTimeString()} • @${cleanName}: ${finalLogs.length} battles (+${pulledLogsDeltaCount} pulled, ${logsToPush.length} pushed), ${finalPresets.length} teams (+${pulledTeamsDeltaCount} pulled)${hasPwNow ? ' (🔒 Secured)' : ' (⚠️ Set Vault Password above)'}`;
+                      setLastCloudSyncStatus(`Delta Synced ${ts}`);
                       try {
-                        localStorage.setItem('gbl_last_cloud_sync_ts', `Synced ${ts}`);
+                        localStorage.setItem('gbl_last_cloud_sync_ts', `Delta Synced ${ts}`);
                       } catch {}
                     } catch (err: any) {
                       setLastCloudSyncStatus(`Sync error: ${err?.message || 'failed'}`);
@@ -17360,7 +17455,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.32 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.33 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}

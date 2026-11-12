@@ -23,9 +23,24 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.33',
+    codename: 'True O(Δ) Cloud Vault & DVR Delta Sync + Instant Cold-Start Launch',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'End-to-end O(Δ) delta synchronization across Cloudflare D1 Vaults and Cloud R2 DVR Replay Vaults with zero-echo D1 short-circuiting, instant local cache hydration, and Main-thread cold-start optimizations.',
+    icon: '⚡',
+    accentColor: '#2DD4BF',
+    highlights: [
+      'True O(Δ) Cloudflare D1 Vault push & pull across Android and Web Simulator with zero-echo D1 short-circuiting',
+      'Manual syncs run fast delta syncs by default with a dedicated Force Full Vault Resync troubleshooting option',
+      'Cloud R2 DVR Replay Vault delta API (?since=...&delta=1) + instant local cache hydration on Android & Web',
+      'Eliminated read-path Cloudflare KV writes on /v1/replays/list unless quota pruning evicted expired items',
+      'Instant Android cold-start & resume via self-invalidating Battle Log/Telemetry caches and off-thread DVR stats'
+    ]
+  },
+  {
     version: 'v7.32',
     codename: 'Modular Compact HUD Customizer, CMP-Tie HP Precision & Clean Replay Timelines',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Modular Compact HUD Customizer with 3 quick presets and 6 independent multi-select element chips synced across Live Overlay, DVR Replay Theater, and Cloudflare D1 Vaults, CMP-tie 1-frame post-charge HP commit precision, and pruned post-battle DVR timelines.',
     icon: '🧩',

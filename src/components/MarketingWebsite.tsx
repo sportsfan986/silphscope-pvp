@@ -363,14 +363,68 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
   const [authErrorMsg, setAuthErrorMsg] = useState<string>('');
   const [authLoading, setAuthLoading] = useState<boolean>(false);
 
-  const fetchVaultReplays = async (userToFetch: string) => {
+  const fetchVaultReplays = async (userToFetch: string, forceFull = false) => {
     const user = (userToFetch || 'Featured').trim();
-    setLoadingVault(true);
+    const isFeat = user.toLowerCase() === 'featured' || user.toLowerCase() === '_featured';
     const sessionToken = localStorage.getItem('sspvp_vault_session') || readSharedVaultCookie('sspvp_vault_session') || '';
     const unlockKey = localStorage.getItem('gbl_web_unlock_key_v700') || '';
     const claimEmail = localStorage.getItem('gbl_web_claim_email_v700') || '';
+
+    const cacheKey = `sspvp_dvr_vault_cache_v2_${user.toLowerCase()}`;
+    let cachedPayload: any = null;
+    if (!isFeat) {
+      try {
+        const rawCached = localStorage.getItem(cacheKey);
+        if (rawCached) {
+          cachedPayload = JSON.parse(rawCached);
+        }
+      } catch {}
+    }
+
+    if (cachedPayload && Array.isArray(cachedPayload.items)) {
+      const cachedOwner = Boolean(cachedPayload.isOwner);
+      setIsVaultOwner(cachedOwner);
+      setVaultReplays(cachedPayload.items);
+      const cStarred = cachedPayload.totalStarredCount ?? cachedPayload.items.filter((i: any) => i.isPinned).length;
+      const cPublic = cachedPayload.totalPublicCount ?? cachedPayload.items.filter((i: any) => i.isPublic).length;
+      const cPrivate = cachedPayload.items.filter((i: any) => !i.isPublic).length;
+      setVaultStats({
+        total: cachedPayload.items.length,
+        starred: cStarred,
+        public: cPublic,
+        private: cPrivate
+      });
+      if (cachedPayload.settings?.publicVisibility || cachedPayload.visibility) {
+        setVaultVisibility(String(cachedPayload.settings?.publicVisibility || cachedPayload.visibility || 'public_only'));
+      }
+      if (cachedOwner && cachedPayload.usage) {
+        setVaultUsageInfo({
+          usedMb: Number(cachedPayload.usage.usedMb) || 0,
+          maxStorageMb: Number(cachedPayload.limits?.maxStorageMb) || 2048,
+          rollingCount: Number(cachedPayload.usage.rollingCount) || 0,
+          maxRollingBattles: Number(cachedPayload.limits?.maxRollingBattles) || 50,
+          pinnedCount: Number(cachedPayload.usage.pinnedCount) || 0,
+          maxPinnedBattles: Number(cachedPayload.limits?.maxPinnedBattles) || 10
+        });
+      }
+    } else {
+      setLoadingVault(true);
+    }
+
     try {
-      const res = await fetch(`https://dvr.silphscopepvp.com/v1/replays/list?user=${encodeURIComponent(user)}`, {
+      const wantOwnerNow = Boolean(sessionToken || unlockKey);
+      const canUseDelta =
+        !forceFull &&
+        !isFeat &&
+        cachedPayload &&
+        Array.isArray(cachedPayload.items) &&
+        Number(cachedPayload.updatedAtMs) > 0 &&
+        Boolean(cachedPayload.isOwner) === wantOwnerNow;
+      const qs = canUseDelta
+        ? `user=${encodeURIComponent(user)}&since=${encodeURIComponent(String(cachedPayload.updatedAtMs))}&delta=1`
+        : `user=${encodeURIComponent(user)}`;
+
+      const res = await fetch(`https://dvr.silphscopepvp.com/v1/replays/list?${qs}`, {
         headers: {
           'X-SilphScope-Client-Key': 'ssk_client_v615_telemetry_ingest_9f8a7b6c5d4e3f2a1b0c',
           'X-Trainer-Screen-Name': user,
@@ -380,15 +434,37 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
         }
       });
       const data = await res.json();
-      if (data && data.ok && Array.isArray(data.items)) {
+      if (data && data.ok) {
         const ownerState = Boolean(data.isOwner);
+        let mergedItems: DvrReplayItem[] = Array.isArray(data.items) ? data.items : [];
+        if (data.unchanged && cachedPayload && Array.isArray(cachedPayload.items)) {
+          mergedItems = cachedPayload.items;
+        } else if (data.delta && cachedPayload && Array.isArray(cachedPayload.items)) {
+          const delShareSet = new Set<string>(Array.isArray(data.deletedShareIds) ? data.deletedShareIds : []);
+          const delBattleSet = new Set<string>(Array.isArray(data.deletedBattleIds) ? data.deletedBattleIds : []);
+          const activeShareSet = Array.isArray(data.activeShareIds) ? new Set<string>(data.activeShareIds) : null;
+          const byShare = new Map<string, DvrReplayItem>();
+          for (const prev of cachedPayload.items) {
+            if (!prev?.shareId) continue;
+            if (delShareSet.has(prev.shareId) || (prev.battleId && delBattleSet.has(prev.battleId))) continue;
+            if (activeShareSet && !activeShareSet.has(prev.shareId)) continue;
+            byShare.set(prev.shareId, prev);
+          }
+          for (const up of Array.isArray(data.upsertedItems) ? data.upsertedItems : []) {
+            if (up?.shareId) byShare.set(up.shareId, up);
+          }
+          mergedItems = Array.from(byShare.values()).sort(
+            (a: any, b: any) => new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime()
+          );
+        }
+
         setIsVaultOwner(ownerState);
-        setVaultReplays(data.items.length > 0 ? data.items : []);
-        const totalStarred = data.totalStarredCount ?? data.items.filter((i: any) => i.isPinned).length;
-        const totalPublic = data.totalPublicCount ?? data.items.filter((i: any) => i.isPublic).length;
-        const totalPrivate = data.items.filter((i: any) => !i.isPublic).length;
+        setVaultReplays(mergedItems.length > 0 ? mergedItems : []);
+        const totalStarred = data.totalStarredCount ?? mergedItems.filter((i: any) => i.isPinned).length;
+        const totalPublic = data.totalPublicCount ?? mergedItems.filter((i: any) => i.isPublic).length;
+        const totalPrivate = mergedItems.filter((i: any) => !i.isPublic).length;
         setVaultStats({
-          total: data.items.length,
+          total: mergedItems.length,
           starred: totalStarred,
           public: totalPublic,
           private: totalPrivate
@@ -417,11 +493,24 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
           localStorage.setItem('gbl_web_screen_name_v700', data.screenName);
           writeSharedVaultCookies(data.screenName, activeSess);
         }
+        if (!isFeat) {
+          try {
+            localStorage.setItem(
+              cacheKey,
+              JSON.stringify({
+                ...data,
+                items: mergedItems,
+                unchanged: false,
+                delta: false
+              })
+            );
+          } catch {}
+        }
       } else {
         setVaultUsageInfo(null);
         if (user.toLowerCase() === 'featured') {
           setVaultReplays(CANONICAL_FEATURED_REPLAYS);
-        } else {
+        } else if (!cachedPayload) {
           setVaultReplays([]);
         }
       }
@@ -917,7 +1006,6 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
       if (vaultUser === 'Featured') {
         setVaultUser(webScreenName.trim());
         setVaultInputUser(webScreenName.trim());
-        fetchVaultReplays(webScreenName.trim());
       }
     }
   }, [webScreenName]);
@@ -1018,7 +1106,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       backgroundColor: 'rgba(250, 204, 21, 0.12)'
                     }}
                   >
-                    v7.32 • Latest Release
+                    v7.33 • Latest Release
                   </span>
                 </div>
                 <p className="text-[11px] hidden sm:block" style={{ color: '#99F6E4' }}>
@@ -1247,7 +1335,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     <span className="text-2xl">📱</span>
                     <div className="text-left">
                       <div className="text-sm font-black leading-tight">Download Android APK</div>
-                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.32)</div>
+                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.33)</div>
                     </div>
                   </div>
                   <span className="text-lg font-black">↓</span>

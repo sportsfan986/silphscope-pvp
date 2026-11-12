@@ -928,118 +928,160 @@ private fun pullLegacyGitHubVaultReadOnlyOnce(
     }
 }
 
+private data class AppliedVaultDeltaStats(
+    val totalLogs: Int,
+    val totalTeams: Int,
+    val newOrUpdatedLogs: Int,
+    val newOrUpdatedTeams: Int,
+    val deletedLogIdsList: List<String>,
+    val deletedTeamIdsList: List<String>,
+    val mutatedLocally: Boolean
+)
+
+@Volatile
+internal var lastCloudVaultSyncMutatedLocally: Boolean = false
+
 private fun applyCloudflareVaultDeltasLocally(
     prefs: SharedPreferences,
     gson: Gson,
+    localPayload: SyncVaultPayload,
     remoteUpsertedLogs: List<SyncBattleLogRecord>,
     remoteDeletedLogIds: List<String>,
     remoteUpsertedTeams: List<SyncTeamPresetRecord>,
     remoteDeletedTeamIds: List<String>,
     remoteSettings: Map<String, String>?,
     remoteSettingsUpdatedAt: Long
-): Triple<Int, Int, Int> {
-    val logsType = object : TypeToken<List<SyncBattleLogRecord>>() {}.type
-    val teamsType = object : TypeToken<List<SyncTeamPresetRecord>>() {}.type
-    val strListType = object : TypeToken<List<String>>() {}.type
-
-    val localLogs: List<SyncBattleLogRecord> = try {
-        gson.fromJson(prefs.getString(PREFS_KEY_BATTLE_LOGS, "[]"), logsType) ?: emptyList()
-    } catch (_: Exception) { emptyList() }
-    val localTeams: List<SyncTeamPresetRecord> = try {
-        gson.fromJson(prefs.getString(PREFS_KEY_PERSISTENT_TEAMS, "[]"), teamsType) ?: emptyList()
-    } catch (_: Exception) { emptyList() }
-    val localDelLogs: MutableSet<String> = try {
-        (gson.fromJson<List<String>>(prefs.getString(PREFS_KEY_DELETED_LOG_IDS, "[]"), strListType) ?: emptyList()).toMutableSet()
-    } catch (_: Exception) { mutableSetOf() }
-    val localDelTeams: MutableSet<String> = try {
-        (gson.fromJson<List<String>>(prefs.getString(PREFS_KEY_DELETED_TEAM_IDS, "[]"), strListType) ?: emptyList()).toMutableSet()
-    } catch (_: Exception) { mutableSetOf() }
+): AppliedVaultDeltaStats {
+    val localDelLogs = localPayload.deletedLogIds.toMutableSet()
+    val localDelTeams = localPayload.deletedTeamIds.toMutableSet()
 
     var newOrUpdatedLogs = 0
-    val logMap = LinkedHashMap<String, SyncBattleLogRecord>()
-    for (l in localLogs) {
-        if (l.id.isNotBlank() && l.id !in localDelLogs) {
-            logMap[l.id] = l
+    var logsMutated = false
+    var delLogsMutated = false
+    val finalLogsCount: Int
+
+    if (remoteUpsertedLogs.isEmpty() && remoteDeletedLogIds.isEmpty()) {
+        finalLogsCount = localPayload.battleLogs.count { it.id.isNotBlank() && it.id !in localDelLogs }
+    } else {
+        val logMap = LinkedHashMap<String, SyncBattleLogRecord>(localPayload.battleLogs.size + remoteUpsertedLogs.size)
+        for (l in localPayload.battleLogs) {
+            if (l.id.isNotBlank() && l.id !in localDelLogs) {
+                logMap[l.id] = l
+            }
         }
-    }
-    for (delId in remoteDeletedLogIds) {
-        if (delId.isNotBlank()) {
-            localDelLogs.add(delId)
-            logMap.remove(delId)
+        for (delId in remoteDeletedLogIds) {
+            if (delId.isNotBlank()) {
+                if (localDelLogs.add(delId)) delLogsMutated = true
+                if (logMap.remove(delId) != null) logsMutated = true
+            }
         }
-    }
-    for (r in remoteUpsertedLogs) {
-        if (r.id.isBlank()) continue
-        localDelLogs.remove(r.id)
-        val existing = logMap[r.id]
-        if (existing == null) {
-            logMap[r.id] = r
-            newOrUpdatedLogs++
-        } else {
-            val lUpd = if (existing.updatedAt > 0L) existing.updatedAt else existing.timestampMs
-            val rUpd = if (r.updatedAt > 0L) r.updatedAt else r.timestampMs
-            if (rUpd > lUpd) {
+        for (r in remoteUpsertedLogs) {
+            if (r.id.isBlank()) continue
+            if (localDelLogs.remove(r.id)) delLogsMutated = true
+            val existing = logMap[r.id]
+            if (existing == null) {
                 logMap[r.id] = r
                 newOrUpdatedLogs++
+                logsMutated = true
+            } else {
+                val lUpd = if (existing.updatedAt > 0L) existing.updatedAt else existing.timestampMs
+                val rUpd = if (r.updatedAt > 0L) r.updatedAt else r.timestampMs
+                if (rUpd > lUpd) {
+                    logMap[r.id] = r
+                    newOrUpdatedLogs++
+                    logsMutated = true
+                }
             }
         }
+        if (logsMutated) {
+            val mergedLogs = logMap.values.sortedByDescending { it.timestampMs }
+            finalLogsCount = mergedLogs.size
+            prefs.edit().putString(PREFS_KEY_BATTLE_LOGS, gson.toJson(mergedLogs)).apply()
+        } else {
+            finalLogsCount = logMap.size
+        }
     }
-    val mergedLogs = logMap.values.sortedByDescending { it.timestampMs }
 
     var newOrUpdatedTeams = 0
-    val teamMap = LinkedHashMap<String, SyncTeamPresetRecord>()
-    for (t in localTeams) {
-        if (t.id.isNotBlank() && t.id !in localDelTeams) {
-            teamMap[t.id] = t
-        }
-    }
-    for (delTid in remoteDeletedTeamIds) {
-        if (delTid.isNotBlank()) {
-            localDelTeams.add(delTid)
-            teamMap.remove(delTid)
-        }
-    }
-    for (r in remoteUpsertedTeams) {
-        if (r.id.isBlank()) continue
-        localDelTeams.remove(r.id)
-        val existing = teamMap[r.id]
-        if (existing == null) {
-            teamMap[r.id] = r
-            newOrUpdatedTeams++
-        } else {
-            val lUpd = if (existing.updatedAt > 0L) existing.updatedAt else 1L
-            val rUpd = if (r.updatedAt > 0L) r.updatedAt else 1L
-            if (rUpd > lUpd) {
-                teamMap[r.id] = r
-                newOrUpdatedTeams++
+    var teamsMutated = false
+    var delTeamsMutated = false
+    val finalTeamsCount: Int
+
+    if (remoteUpsertedTeams.isEmpty() && remoteDeletedTeamIds.isEmpty()) {
+        finalTeamsCount = localPayload.teamPresets.count { it.id.isNotBlank() && it.id !in localDelTeams }
+    } else {
+        val teamMap = LinkedHashMap<String, SyncTeamPresetRecord>(localPayload.teamPresets.size + remoteUpsertedTeams.size)
+        for (t in localPayload.teamPresets) {
+            if (t.id.isNotBlank() && t.id !in localDelTeams) {
+                teamMap[t.id] = t
             }
         }
+        for (delTid in remoteDeletedTeamIds) {
+            if (delTid.isNotBlank()) {
+                if (localDelTeams.add(delTid)) delTeamsMutated = true
+                if (teamMap.remove(delTid) != null) teamsMutated = true
+            }
+        }
+        for (r in remoteUpsertedTeams) {
+            if (r.id.isBlank()) continue
+            if (localDelTeams.remove(r.id)) delTeamsMutated = true
+            val existing = teamMap[r.id]
+            if (existing == null) {
+                teamMap[r.id] = r
+                newOrUpdatedTeams++
+                teamsMutated = true
+            } else {
+                val lUpd = if (existing.updatedAt > 0L) existing.updatedAt else 1L
+                val rUpd = if (r.updatedAt > 0L) r.updatedAt else 1L
+                if (rUpd > lUpd) {
+                    teamMap[r.id] = r
+                    newOrUpdatedTeams++
+                    teamsMutated = true
+                }
+            }
+        }
+        val mergedTeams = teamMap.values.toList()
+        finalTeamsCount = mergedTeams.size
+        if (teamsMutated && mergedTeams.isNotEmpty()) {
+            prefs.edit().putString(PREFS_KEY_PERSISTENT_TEAMS, gson.toJson(mergedTeams)).apply()
+        }
     }
-    val mergedTeams = teamMap.values.toList()
 
-    val editor = prefs.edit()
-        .putString(PREFS_KEY_BATTLE_LOGS, gson.toJson(mergedLogs))
-        .putString(PREFS_KEY_DELETED_LOG_IDS, gson.toJson(localDelLogs.toList()))
-        .putString(PREFS_KEY_DELETED_TEAM_IDS, gson.toJson(localDelTeams.toList()))
-        .putLong(PREFS_KEY_SYNC_LAST_AT, System.currentTimeMillis())
-    if (mergedTeams.isNotEmpty()) {
-        editor.putString(PREFS_KEY_PERSISTENT_TEAMS, gson.toJson(mergedTeams))
+    val delLogsList = if (delLogsMutated) localDelLogs.toList() else localPayload.deletedLogIds
+    val delTeamsList = if (delTeamsMutated) localDelTeams.toList() else localPayload.deletedTeamIds
+
+    if (delLogsMutated || delTeamsMutated) {
+        val tombEditor = prefs.edit()
+        if (delLogsMutated) tombEditor.putString(PREFS_KEY_DELETED_LOG_IDS, gson.toJson(delLogsList))
+        if (delTeamsMutated) tombEditor.putString(PREFS_KEY_DELETED_TEAM_IDS, gson.toJson(delTeamsList))
+        tombEditor.apply()
     }
-    editor.apply()
 
+    var settingsMutated = false
     val localSettingsUpdAt = prefs.getLong(PREFS_KEY_USER_SETTINGS_UPDATED_AT, 0L)
-    if (!remoteSettings.isNullOrEmpty() && (remoteSettingsUpdatedAt >= localSettingsUpdAt || localSettingsUpdAt == 0L)) {
+    if (!remoteSettings.isNullOrEmpty() && (localSettingsUpdAt == 0L || remoteSettingsUpdatedAt > localSettingsUpdAt)) {
         OverlayService.applySyncedSettingsMapStatic(prefs, remoteSettings, remoteSettingsUpdatedAt)
+        settingsMutated = true
     }
 
-    return Triple(mergedLogs.size, newOrUpdatedLogs, newOrUpdatedTeams)
+    return AppliedVaultDeltaStats(
+        totalLogs = finalLogsCount,
+        totalTeams = finalTeamsCount,
+        newOrUpdatedLogs = newOrUpdatedLogs,
+        newOrUpdatedTeams = newOrUpdatedTeams,
+        deletedLogIdsList = delLogsList,
+        deletedTeamIdsList = delTeamsList,
+        mutatedLocally = logsMutated || teamsMutated || settingsMutated
+    )
 }
 
 internal fun OverlayService.Companion.syncWithCloudflareVaultBlocking(
     prefs: SharedPreferences,
     gson: Gson,
-    forceFullPull: Boolean = false
+    forceFullPull: Boolean = false,
+    forceFullPush: Boolean = false
 ): Pair<Boolean, String> {
+    lastCloudVaultSyncMutatedLocally = false
     val rawName = getRequiredScreenNameStatic(prefs)
     val safeUser = sanitizeScreenNameStatic(rawName)
     if (!isValidScreenNameStatic(safeUser)) {
@@ -1058,38 +1100,44 @@ internal fun OverlayService.Companion.syncWithCloudflareVaultBlocking(
 
     val isInitialMigration = !alreadyMigrated
     val localPayload = buildLocalSyncVaultPayload(prefs, gson, isGitHubAuthenticatedSync = false)
-    val cursorMs = if (isInitialMigration || forceFullPull) 0L else prefs.getLong(OverlayService.PREFS_KEY_CLOUD_SYNC_CURSOR_MS, 0L)
-    val lastPushedMs = if (isInitialMigration || forceFullPull) 0L else prefs.getLong(OverlayService.PREFS_KEY_CLOUD_LAST_PUSHED_MS, 0L)
-    val lastPushedSettingsMs = if (isInitialMigration || forceFullPull) 0L else prefs.getLong(OverlayService.PREFS_KEY_CLOUD_LAST_PUSHED_SETTINGS_MS, 0L)
+    val savedCursorMs = prefs.getLong(OverlayService.PREFS_KEY_CLOUD_SYNC_CURSOR_MS, 0L)
+    // Auto-recover full history from Cloud if local battle logs were cleared while a cursor was cached
+    val cursorMs = if (isInitialMigration || forceFullPull || (localPayload.battleLogs.isEmpty() && savedCursorMs > 0L)) {
+        0L
+    } else {
+        savedCursorMs
+    }
+    val lastPushedMs = if (isInitialMigration || forceFullPush) 0L else prefs.getLong(OverlayService.PREFS_KEY_CLOUD_LAST_PUSHED_MS, 0L)
+    val lastPushedSettingsMs = if (isInitialMigration || forceFullPush) 0L else prefs.getLong(OverlayService.PREFS_KEY_CLOUD_LAST_PUSHED_SETTINGS_MS, 0L)
 
     val tombstonesSig = (
         localPayload.deletedLogIds.sorted().joinToString(",") + "|" +
             localPayload.deletedTeamIds.sorted().joinToString(",")
         ).hashCode().toString()
     val prevTombstonesSig = prefs.getString(OverlayService.PREFS_KEY_CLOUD_LAST_PUSHED_TOMBSTONES_SIG, "") ?: ""
-    val tombstonesChanged = isInitialMigration || forceFullPull ||
+    val tombstonesChanged = isInitialMigration || forceFullPush ||
         (tombstonesSig != prevTombstonesSig && (localPayload.deletedLogIds.isNotEmpty() || localPayload.deletedTeamIds.isNotEmpty()))
 
-    val logsToPush = if (isInitialMigration) {
+    val logsToPush = if (isInitialMigration || forceFullPush) {
         localPayload.battleLogs
     } else {
         localPayload.battleLogs.filter { max(it.updatedAt, it.timestampMs) > lastPushedMs }
     }
-    val teamsToPush = if (isInitialMigration) {
+    val teamsToPush = if (isInitialMigration || forceFullPush) {
         localPayload.teamPresets
     } else {
         localPayload.teamPresets.filter { it.updatedAt > lastPushedMs }
     }
     val delLogsToPush = if (tombstonesChanged) localPayload.deletedLogIds else emptyList()
     val delTeamsToPush = if (tombstonesChanged) localPayload.deletedTeamIds else emptyList()
-    val shouldPushSettings = isInitialMigration ||
+    val shouldPushSettings = isInitialMigration || forceFullPush ||
         (localPayload.settingsUpdatedAt > lastPushedSettingsMs && localPayload.userSettings.isNotEmpty())
 
     val pushStartedAtMs = System.currentTimeMillis()
     val devHash = getDeviceTelemetryHashStatic(prefs)
     val unlockKey = getEffectiveReplayUnlockKey(prefs)
     val vaultSession = getVaultSessionTokenStatic(prefs)
-    val httpClient = buildTelemetryHttpClientStatic(20L, 45L, 35L)
+    val httpClient = buildTelemetryHttpClientStatic(15L, 30L, 25L)
 
     return try {
         val reqMap = LinkedHashMap<String, Any?>()
@@ -1199,9 +1247,10 @@ internal fun OverlayService.Companion.syncWithCloudflareVaultBlocking(
             } catch (_: Exception) { null }
             val pulledSettingsUpdAt = rObj.get("settingsUpdatedAt")?.takeIf { !it.isJsonNull }?.asLong ?: 0L
 
-            val (totalLogs, newLogsCount, newTeamsCount) = applyCloudflareVaultDeltasLocally(
+            val applied = applyCloudflareVaultDeltasLocally(
                 prefs = prefs,
                 gson = gson,
+                localPayload = localPayload,
                 remoteUpsertedLogs = upsertedLogs,
                 remoteDeletedLogIds = deletedLogs,
                 remoteUpsertedTeams = upsertedTeams,
@@ -1209,11 +1258,11 @@ internal fun OverlayService.Companion.syncWithCloudflareVaultBlocking(
                 remoteSettings = pulledSettings,
                 remoteSettingsUpdatedAt = pulledSettingsUpdAt
             )
+            lastCloudVaultSyncMutatedLocally = applied.mutatedLocally
 
-            val afterVault = buildLocalSyncVaultPayload(prefs, gson, isGitHubAuthenticatedSync = false)
             val updatedTombstonesSig = (
-                afterVault.deletedLogIds.sorted().joinToString(",") + "|" +
-                    afterVault.deletedTeamIds.sorted().joinToString(",")
+                applied.deletedLogIdsList.sorted().joinToString(",") + "|" +
+                    applied.deletedTeamIdsList.sorted().joinToString(",")
                 ).hashCode().toString()
 
             val stateEditor = prefs.edit()
@@ -1246,7 +1295,7 @@ internal fun OverlayService.Companion.syncWithCloudflareVaultBlocking(
             stateEditor.apply()
 
             val pwBadge = if (hasPassword) "🔒 Password-Secured" else "⚠️ Set Vault Password in Settings"
-            true to "Synced (@$safeUser Cloud Vault)! ($totalLogs battles, +$newLogsCount from other devices · ${afterVault.teamPresets.size} teams, +$newTeamsCount updated · $pwBadge)"
+            true to "Delta Synced (@$safeUser)! (${applied.totalLogs} battles, +${applied.newOrUpdatedLogs} from other devices, ${logsToPush.size} pushed · ${applied.totalTeams} teams, +${applied.newOrUpdatedTeams} updated · $pwBadge)"
         }
     } catch (e: Exception) {
         false to "Cloud sync failed: ${e.localizedMessage ?: "Network error"}"
@@ -1539,12 +1588,46 @@ internal fun OverlayService.Companion.runV510AiTelemetryMigrationAndWipeStatic(p
     editor.apply()
 }
 
+@Volatile
+private var cachedPendingAiRawRef: String? = null
+@Volatile
+private var cachedPendingAiBattlesCount: Int = 0
+@Volatile
+private var cachedPendingAiAnomaliesCount: Int = 0
+
+internal fun OverlayService.Companion.getPendingAiTelemetryCountsFastStatic(
+    prefs: SharedPreferences,
+    gson: Gson
+): Pair<Int, Int> {
+    val raw = prefs.getString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, null)
+    if (raw.isNullOrBlank() || raw == "[]") {
+        cachedPendingAiRawRef = raw
+        cachedPendingAiBattlesCount = 0
+        cachedPendingAiAnomaliesCount = 0
+        return 0 to 0
+    }
+    if (raw === cachedPendingAiRawRef) {
+        return cachedPendingAiBattlesCount to cachedPendingAiAnomaliesCount
+    }
+    val parsed = loadPendingAiTelemetryLogsStatic(prefs, gson)
+    val bCount = parsed.size
+    val aCount = parsed.sumOf { it.anomalies.size }
+    cachedPendingAiRawRef = raw
+    cachedPendingAiBattlesCount = bCount
+    cachedPendingAiAnomaliesCount = aCount
+    return bCount to aCount
+}
+
 internal fun OverlayService.Companion.loadPendingAiTelemetryLogsStatic(prefs: SharedPreferences, gson: Gson): List<AiTelemetryBattleRecordV510> {
     val raw = prefs.getString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, null) ?: return emptyList()
     return try {
         val type = object : TypeToken<List<AiTelemetryBattleRecordV510>>() {}.type
         val parsed: List<AiTelemetryBattleRecordV510> = gson.fromJson(raw, type) ?: emptyList()
-        parsed.distinctBy { it.battleId }.sortedBy { it.timestampMs }
+        val deduped = parsed.distinctBy { it.battleId }.sortedBy { it.timestampMs }
+        cachedPendingAiRawRef = raw
+        cachedPendingAiBattlesCount = deduped.size
+        cachedPendingAiAnomaliesCount = deduped.sumOf { it.anomalies.size }
+        deduped
     } catch (_: Exception) {
         emptyList()
     }
@@ -1556,7 +1639,11 @@ internal fun OverlayService.Companion.savePendingAiTelemetryLogsStatic(
     logs: List<AiTelemetryBattleRecordV510>
 ) {
     val capped = logs.distinctBy { it.battleId }.sortedBy { it.timestampMs }.takeLast(200)
-    prefs.edit().putString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, gson.toJson(capped)).apply()
+    val jsonStr = gson.toJson(capped)
+    cachedPendingAiRawRef = jsonStr
+    cachedPendingAiBattlesCount = capped.size
+    cachedPendingAiAnomaliesCount = capped.sumOf { it.anomalies.size }
+    prefs.edit().putString(PREFS_KEY_PENDING_AI_TELEMETRY_V510, jsonStr).apply()
 }
 
 /**
@@ -2789,17 +2876,34 @@ internal fun OverlayService.Companion.prependDvrSummaryHeaderIfNeededStatic(
     } catch (_: Exception) {}
 }
 
+@Volatile
+private var cachedReplayVaultMapRawRef: String? = null
+@Volatile
+private var cachedReplayVaultMapSnapshot: Map<String, OverlayService.Companion.ReplayVaultEntryMeta> = emptyMap()
+
 internal fun OverlayService.Companion.loadReplayVaultMapStatic(
     prefs: SharedPreferences,
     gson: Gson
 ): MutableMap<String, OverlayService.Companion.ReplayVaultEntryMeta> {
-    val raw = prefs.getString(OverlayService.PREFS_KEY_REPLAY_VAULT_MAP_JSON, null)?.trim().orEmpty()
-    if (raw.isEmpty()) return mutableMapOf()
+    val rawPref = prefs.getString(OverlayService.PREFS_KEY_REPLAY_VAULT_MAP_JSON, null)
+    if (rawPref.isNullOrBlank() || rawPref == "{}") {
+        cachedReplayVaultMapRawRef = rawPref
+        cachedReplayVaultMapSnapshot = emptyMap()
+        return LinkedHashMap()
+    }
+    if (rawPref === cachedReplayVaultMapRawRef) {
+        return LinkedHashMap(cachedReplayVaultMapSnapshot)
+    }
+    val raw = rawPref.trim()
+    if (raw.isEmpty()) return LinkedHashMap()
     return try {
         val type = object : TypeToken<MutableMap<String, OverlayService.Companion.ReplayVaultEntryMeta>>() {}.type
-        gson.fromJson<MutableMap<String, OverlayService.Companion.ReplayVaultEntryMeta>>(raw, type) ?: mutableMapOf()
+        val parsed = gson.fromJson<MutableMap<String, OverlayService.Companion.ReplayVaultEntryMeta>>(raw, type) ?: LinkedHashMap()
+        cachedReplayVaultMapRawRef = rawPref
+        cachedReplayVaultMapSnapshot = LinkedHashMap(parsed)
+        parsed
     } catch (_: Exception) {
-        mutableMapOf()
+        LinkedHashMap()
     }
 }
 
@@ -2808,7 +2912,10 @@ internal fun OverlayService.Companion.saveReplayVaultMapStatic(
     gson: Gson,
     map: Map<String, OverlayService.Companion.ReplayVaultEntryMeta>
 ) {
-    prefs.edit().putString(OverlayService.PREFS_KEY_REPLAY_VAULT_MAP_JSON, gson.toJson(map)).apply()
+    val jsonStr = gson.toJson(map)
+    cachedReplayVaultMapRawRef = jsonStr
+    cachedReplayVaultMapSnapshot = LinkedHashMap(map)
+    prefs.edit().putString(OverlayService.PREFS_KEY_REPLAY_VAULT_MAP_JSON, jsonStr).apply()
 }
 
 internal fun OverlayService.Companion.getEffectiveReplayTierStatic(prefs: SharedPreferences): String {
@@ -3067,6 +3174,7 @@ internal fun OverlayService.Companion.verifyReplayUnlockKeyBlocking(
                 .putString(OverlayService.PREFS_KEY_REPLAY_EXPIRES_AT, expiresAt)
                 .putString(OverlayService.PREFS_KEY_REPLAY_OFFLINE_SIG, sig)
                 .putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_JSON, bodyStr)
+                .putLong(OverlayService.PREFS_KEY_LAST_LICENSE_BG_VERIFY_MS, System.currentTimeMillis())
             if (emailToUse.isNotEmpty()) {
                 editor.putString(OverlayService.PREFS_KEY_CLAIM_EMAIL, emailToUse)
             }
@@ -3270,7 +3378,8 @@ internal fun OverlayService.Companion.updateVaultVisibilitySettingBlocking(
 
 internal fun OverlayService.Companion.syncCloudReplayListBlocking(
     prefs: SharedPreferences,
-    gson: Gson
+    gson: Gson,
+    forceFullPull: Boolean = false
 ): Pair<Boolean, String> {
     return try {
         val devHash = getDeviceTelemetryHashStatic(prefs)
@@ -3280,10 +3389,25 @@ internal fun OverlayService.Companion.syncCloudReplayListBlocking(
         val ghToken = getEffectiveSyncToken(prefs)
         val ghUser = if (ghToken.isNotEmpty()) prefs.getString(PREFS_KEY_SYNC_GITHUB_USERNAME, "")?.trim().orEmpty() else ""
         val ghId = if (ghToken.isNotEmpty()) prefs.getString(OverlayService.PREFS_KEY_SYNC_GITHUB_USER_ID, "")?.trim().orEmpty() else ""
+        val existingMap = loadReplayVaultMapStatic(prefs, gson)
+        val savedReplayUser = prefs.getString(OverlayService.PREFS_KEY_REPLAY_LIST_SYNC_USER, "") ?: ""
+        val savedReplayCursorMs = if (!forceFullPull &&
+            savedReplayUser.equals(safeUser, ignoreCase = true) &&
+            existingMap.isNotEmpty()
+        ) {
+            prefs.getLong(OverlayService.PREFS_KEY_REPLAY_LIST_SYNC_CURSOR_MS, 0L)
+        } else {
+            0L
+        }
+        val listUrl = if (savedReplayCursorMs > 0L) {
+            "$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/list?since=$savedReplayCursorMs&delta=1"
+        } else {
+            "$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/list"
+        }
         val httpClient = buildTelemetryHttpClientStatic(15L, 25L, 20L)
         val reqBuilder = applyWorkerClientAuthHeaders(
             Request.Builder()
-                .url("$CLOUDFLARE_TELEMETRY_WORKER_URL/v1/replays/list")
+                .url(listUrl)
                 .get()
                 .header("X-SilphScope-Unlock-Key", unlockKey),
             prefs,
@@ -3307,14 +3431,39 @@ internal fun OverlayService.Companion.syncCloudReplayListBlocking(
             }
             val tier = root.get("tier")?.asString?.lowercase() ?: "free"
             val active = root.get("active")?.asBoolean ?: false
-            if (active) {
-                prefs.edit()
-                    .putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, tier)
-                    .putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_JSON, bodyStr)
-                    .apply()
+            val updatedAtMs = root.get("updatedAtMs")?.takeIf { !it.isJsonNull }?.asLong ?: 0L
+            val metaEditor = prefs.edit()
+                .putString(OverlayService.PREFS_KEY_REPLAY_LIST_SYNC_USER, safeUser)
+            if (updatedAtMs > 0L) {
+                metaEditor.putLong(OverlayService.PREFS_KEY_REPLAY_LIST_SYNC_CURSOR_MS, updatedAtMs)
             }
-            val itemsArr = root.getAsJsonArray("items") ?: JsonArray()
-            val map = loadReplayVaultMapStatic(prefs, gson)
+            if (active) {
+                metaEditor.putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, tier)
+            }
+            metaEditor.apply()
+
+            if (root.get("unchanged")?.takeIf { !it.isJsonNull }?.asBoolean == true) {
+                return true to "Cloud replays up to date (${existingMap.size} cached)"
+            }
+
+            val isDelta = root.get("delta")?.takeIf { !it.isJsonNull }?.asBoolean == true
+            val map = if (isDelta) existingMap else LinkedHashMap()
+
+            if (isDelta) {
+                root.getAsJsonArray("deletedBattleIds")?.forEach { el ->
+                    val bId = el?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                    if (bId.isNotBlank()) map.remove(bId)
+                }
+                val activeShares = root.getAsJsonArray("activeShareIds")?.mapNotNull { el ->
+                    el?.takeIf { !it.isJsonNull }?.asString?.takeIf { it.isNotBlank() }
+                }?.toSet()
+                if (activeShares != null) {
+                    val toRemove = map.entries.filter { (_, v) -> v.shareId.isNotBlank() && v.shareId !in activeShares }.map { it.key }
+                    for (k in toRemove) map.remove(k)
+                }
+            }
+
+            val itemsArr = (if (isDelta) root.getAsJsonArray("upsertedItems") else root.getAsJsonArray("items")) ?: JsonArray()
             for (el in itemsArr) {
                 if (!el.isJsonObject) continue
                 val obj = el.asJsonObject
@@ -3338,7 +3487,11 @@ internal fun OverlayService.Companion.syncCloudReplayListBlocking(
                 )
             }
             saveReplayVaultMapStatic(prefs, gson, map)
-            true to "Synced ${itemsArr.size()} cloud replays"
+            true to if (isDelta) {
+                "Delta synced +${itemsArr.size()} cloud replays (${map.size} total)"
+            } else {
+                "Synced ${itemsArr.size()} cloud replays"
+            }
         }
     } catch (e: Exception) {
         false to (e.localizedMessage ?: "Sync error")

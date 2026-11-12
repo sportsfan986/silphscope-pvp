@@ -1,4 +1,20 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.32`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.33`)
+
+---
+
+## v7.33 (2026-11-11) — True O(Δ) Vault & DVR Replay Delta Sync, Zero-Echo D1 Short-Circuit & Instant Cold-Start Launch
+*Live Android APK, Cloudflare Worker & Web Simulator release (`v7.33`, `versionCode = 1733`) upgrading Cloudflare D1 Multi-Device Vault Sync and Cloud R2 DVR Replay Vault listing to true end-to-end $O(\Delta)$ delta sync with zero-echo D1 short-circuiting, instant local cache hydration, and Main-thread startup optimizations.*
+
+- **v7.33 — Feature 1: End-to-End O(Δ) Cloudflare D1 Vault Sync (`worker.mjs`, `GitHubCloudSync.kt`, `MainActivity.kt`, `OverlayService.kt`, `src/App.tsx`, `src/data/pokemonDb.ts`)**:
+  - Updated manual sync on Android (`triggerTwoDeviceCloudSync`) to execute fast cursor-based delta syncs instead of resetting push/pull cursors to `0`, while adding an explicit **`🔁 Force Full Vault Resync (Troubleshooting)`** action in Cloud Vault Security settings.
+  - Replaced Web Simulator's 200-log/all-teams push with cursor- and signature-tracked delta pushes (`gbl_d1_last_pushed_ms_v1`, tombstone signatures, and per-team content signatures), and tightened SQLite `ON CONFLICT DO UPDATE` in `upsertVaultBatchIntoD1` from `>=` to strict `>` (or payload/tombstone mutation) so unchanged rows never bump `server_updated_ms`.
+  - Added server-side zero-echo filtering and `0`-query D1 short-circuiting in `pullVaultDeltasFromD1` when no other device wrote since `sinceServerMs`, plus `0`-allocation local merge short-circuiting (`lastCloudVaultSyncMutatedLocally`) on Android so `MainActivity` and `OverlayService` skip redundant JSON re-serialization and UI/WebView rebuilds on `0`-delta syncs.
+- **v7.33 — Feature 2: Cloud R2 DVR Replay Vault Delta Sync & Instant Cache Hydration (`worker.mjs`, `GitHubCloudSync.kt`, `MainActivity.kt`, `src/components/MarketingWebsite.tsx`)**:
+  - Added `?since=<ms>&delta=1` support and tombstone tracking (`deletedReplays`) to `GET /v1/replays/list`, returning `unchanged: true` in $O(1)$ when unmodified and eliminating KV writes (`saveUserReplayIndex`) on read requests unless quota pruning evicted expired items.
+  - Hydrates DVR Replay Vault views immediately from local cache across Android (`syncCloudReplayListBlocking`), `silphscopepvp.com`, and `dvr.silphscopepvp.com/vault`, and throttles background license/replay checks on app resume to once per 15 minutes.
+- **v7.33 — Fix 1: Android Cold-Start & Resume Main-Thread Bottlenecks (`MainActivity.kt`, `GitHubCloudSync.kt`)**:
+  - Fixed a missing early `return` in `runV511LeagueRemapAndCleanup()` that caused all GBL logs, Show 6 logs, teams, and rosters to be deserialized via Gson on the Main UI Thread on every cold start.
+  - Added self-invalidating in-memory reference caches for `loadBattleLogs()`, `getPendingAiTelemetryCountsFastStatic()`, and `loadReplayVaultMapStatic()`, moved local `dvr_replays` directory size scanning off the UI thread (`refreshLocalDvrStatsAsyncIfStale`), and deduplicated startup `onCreate` vs. initial `onResume` passes.
 
 ---
 
