@@ -23,9 +23,24 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.35',
+    codename: 'Decoupled 30 FPS VIP & 15 FPS Standard Hardware DVR Ticker',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Decoupled GBLBattleDvrThread from the 100ms vision loop with fractional postAtTime pacing and locked 30 FPS Smooth (900 kbps CBR) VIP DVR, eliminating VFR stutter and hardening tier persistence.',
+    icon: '🎥',
+    accentColor: '#A855F7',
+    highlights: [
+      'Decoupled GBLBattleDvrThread operating on dedicated drift-free fractional postAtTime pacing',
+      'True constant-frame-rate 30.0 FPS VIP DVR (900 kbps CBR) and 15.0 FPS Standard DVR (720 kbps CBR)',
+      'Single-pass MediaProjection captureLock with dedicated reusableVisionScreenBitmap & dvrScaledBitmap',
+      'Locked VIP / Coach Pass DVR strictly to 30 FPS Smooth, removing legacy 15 FPS toggle and auto-resetting prefs',
+      'Hardened Cloud Vault and Replay List tier persistence checks across sync sessions'
+    ]
+  },
+  {
     version: 'v7.34',
     codename: 'Older-Phone CPU & Memory Engine + Species-Clause Backline Predictor',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Zero-allocation active-battle vision & OCR packing, 2-stage floating HP row-lock corridor windowing, WebView GPU compositor relief, and Species-Clause consolidated semi-dynamic backline predictions — keeping exact 100ms/67ms/33ms scan cadences and native resolution.',
     icon: '🚀',

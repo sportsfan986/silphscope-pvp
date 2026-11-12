@@ -1106,7 +1106,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                       backgroundColor: 'rgba(250, 204, 21, 0.12)'
                     }}
                   >
-                    v7.34 • Latest Release
+                    v7.35 • Latest Release
                   </span>
                 </div>
                 <p className="text-[11px] hidden sm:block" style={{ color: '#99F6E4' }}>
@@ -1335,7 +1335,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     <span className="text-2xl">📱</span>
                     <div className="text-left">
                       <div className="text-sm font-black leading-tight">Download Android APK</div>
-                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.34)</div>
+                      <div className="text-[11px] font-bold opacity-85">Instant 1-Click Direct Release (v7.35)</div>
                     </div>
                   </div>
                   <span className="text-lg font-black">↓</span>
@@ -2179,7 +2179,7 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                     🎉 Day 15+ First-Season Intro: $5 for Remainder of Season!
                   </div>
                   <ul className="text-xs text-slate-300 space-y-1.5">
-                    <li>🎥 <strong>30 FPS Smooth Hardware DVR</strong> (+ 15 FPS Saver toggle)</li>
+                    <li>🎥 <strong>30 FPS Smooth Hardware DVR</strong> (Decoupled 900 kbps CBR)</li>
                     <li>☁️ <strong>150 Rolling (365d) + 25 Starred Replays (4 GB R2)</strong></li>
                     <li>📱 <strong>Up to 100 Local On-Device DVR Battles (Slider)</strong></li>
                     <li>🚨 <strong>P1 Highest-Priority Direct Telegram Diagnostic Queue</strong></li>

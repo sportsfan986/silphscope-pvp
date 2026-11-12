@@ -2,7 +2,7 @@
 
 > **Target Audience**: Antigravity agents, Claude/Gemini coding assistants, and core developers maintaining or extending **SilphScope PvP**.  
 > **Repository**: `https://github.com/sportsfan986/silphscope-pvp`  
-> **Current Version**: `v7.34` (`versionCode = 1734`)  
+> **Current Version**: `v7.35` (`versionCode = 1735`)  
 > **Official Domains**: `https://silphscopepvp.com` (Website & Web Simulator) • `https://dvr.silphscopepvp.com` (Cloud DVR Vault & `/watch/:shareId`) • `https://api.silphscopepvp.com` (Telemetry, Auth & Webhooks API) • `https://dl.silphscopepvp.com` (1-Click APK Download).
 
 ---
@@ -134,10 +134,9 @@ The HUD displays a compact, high-contrast 2-line tactical recommendation banner 
 ### 3.6. 1-Battle Full-Screen H.264 DVR + Deep Frame Trace
 - **Zero-Impact Hardware Encoding**:
   - Uses `MediaCodec.createEncoderByType("video/avc")` configured at $544 \times 1184$, baseline profile:
-    - **Free / Supporter / Legend Pro**: $15\text{ fps}$, $720\text{ kbps}$ CBR (`QP 27–38`), ~14 MB per battle.
-    - **VIP / Coach Pass (`30 FPS Smooth` Default)**: $30\text{ fps}$, $900\text{ kbps}$ CBR (`QP 27–38`), ~20 MB avg / strictly $\le 30\text{ MB}$ at 240s max battle length (with a 1-tap `15 FPS Storage Saver` toggle).
-  - Feeds scaled frames onto `MediaCodec.createInputSurface()` from the background `GBLBattleDvrThread`.
-  - Runs at `Process.THREAD_PRIORITY_BACKGROUND`, offloading all compression to the hardware DSP with $< 0.5\%$ CPU load.
+    - **Free / Supporter / Legend Pro**: True $15\text{ fps}$ (`66.67ms` drift-free `postAtTime`), $720\text{ kbps}$ CBR (`QP 27–38`), ~14 MB per battle.
+    - **VIP / Coach Pass (`30 FPS Smooth`)**: Locked to true $30\text{ fps}$ (`33.33ms` drift-free `postAtTime`), $900\text{ kbps}$ CBR (`QP 27–38`), ~20 MB avg / strictly $\le 30\text{ MB}$ at 240s max battle length.
+  - Feeds scaled frames onto `MediaCodec.createInputSurface()` from the decoupled `GBLBattleDvrThread` (`Process.THREAD_PRIORITY_DEFAULT`), completely independent of the 10 Hz (`100ms`) vision loop while sharing the single 1-pass `ImageReader` under `captureLock` (`< 0.5%` CPU load).
 - **Burned-In Watermark**: Draws a high-contrast top banner onto the video frame (`F#0042 T+14.35s U:88%(88%)/35E O:23%(23%)/7E`) ensuring that every frame in the video matches the timestamp and frame index in the companion `_deep_trace.jsonl` exactly.
 - **Arming Flow**:
   - Setting: `Show 1-Battle DVR Button in Overlay` enables/disables the `REC 1` HUD button.
@@ -158,7 +157,7 @@ The HUD displays a compact, high-contrast 2-line tactical recommendation banner 
 | **🛡️ Attack Incoming! Shield Decision Overlay** | — | ✅ **Unlocked Forever** | ✅ **Unlocked Forever** | ✅ **Unlocked Forever** |
 | **Battle Log History & Multi-Device Cloudflare D1 Sync** | Current Season (+14d grace) | **Unlimited Lifetime** | **Unlimited Lifetime** | **Unlimited Lifetime** |
 | **Local On-Device DVR Ring Buffer** | **1 Battle** | **5 Battles** | **25 Battles (5 Sets)** | **25–100 Battles (Slider)** |
-| **Hardware H.264 DVR Video Framerate** | 15 FPS (`720 kbps`) | 15 FPS (`720 kbps`) | **15 FPS (`720 kbps` • ~14 MB)** | **🎥 30 FPS Smooth (`900 kbps` • <=30 MB max) + 💾 15 FPS Storage Saver** |
+| **Hardware H.264 DVR Video Framerate** | 15 FPS (`720 kbps`) | 15 FPS (`720 kbps`) | **15 FPS (`720 kbps` • ~14 MB)** | **🎥 30 FPS Smooth (`900 kbps` • <=30 MB max)** |
 | **Cloud R2 Video & Frame Trace Vault** | — | Keeps Pinned 365d | **50 Rolling (30d) + 10 Pinned (365d) • 2 GB** | **150 Rolling (365d) + 25 Pinned (365d) • 4 GB** |
 | **Anti-Meta Team Generator Leagues** | Great & Master League | **Core 3 (GL + UL + ML)** | **All Leagues + Limited/Mega/Specialty Cups** | **All Leagues + Limited/Mega/Specialty Cups** |
 | **Anti-Meta Teams & ⚡ Alt Moveset Synthesis** | 1 / Archetype (Std Moves) | 2 / Archetype (Std Moves) | **Top 5 / Arch (15+ Teams) + ⚡ Alt Movesets** | **Top 5 / Arch (15+ Teams) + ⚡ Alt Movesets** |
@@ -345,6 +344,7 @@ All Android, Web Simulator, and Cloudflare Worker code must uphold the following
   - **`v7.26` (Universal Auto-Start Battle DVR Hands-Free Recording, 3-Way Mode Configuration & Intro Screen Detection)**: Added zero-tap hands-free battle recording across all tiers (for diagnostic issue recording and replay capture) on confirmed "3... 2... 1... BATTLE!" screen detection (multi-modal: pixel dimmed charge circles + ML Kit center-banner digits/words + 3v3 ball indicator lock), introduced 3-way DVR mode setting (`Auto-Start Hands-Free`, `Manual 1-Tap Overlay Button`, `Off`), integrated `isIntroCountdownActive` into `BattleDeepTraceFrame`, expanded recording window to capture opening entrances, and updated the floating HUD with real-time `🔴 REC F#...` / `🎥 DVR: AUTO` status badges.
   - **`v7.31` (Cloudflare D1 Multi-Device Vault Sync, Passwordless Migration, Vault Password Security & Global Meta SQL Analytics)**: Migrated multi-device Battle Log, Team Preset, and App Settings delta synchronization off GitHub (`<username>/silphscope-private-vault` & Secret Gists) onto Cloudflare D1 (`silphscope-sync-db`, `GET/POST/PUT /v1/sync/vault`) with zero KV sync writes and incremental `sinceServerMs` row cursors staying well inside Cloudflare Free Tier limits. Completed passwordless server-side migrations for `@sportsfan986` (`358` logs, `9` teams) and `@this2guy1` (`52` logs, `5` teams) plus automatic passwordless on-device migration on upgrade, retired GitHub OAuth/PAT sync from the Android App and Web Simulator, added an in-app prompt to lock vaults with a salted PBKDF2-HMAC-SHA256 Vault Password (`8–128` chars) + Keystore-encrypted `X-Vault-Session`, and added structured SQL meta columns + Admin CLI (`npm run meta:summary`, `npm run meta:dump`) for userbase-wide league and ELO meta analytics.
   - **`v7.34` (Older-Phone CPU & Memory Optimization Engine, Species-Clause Backline Predictor Hardening & Daily Semi-Dynamic Audit)**: Eliminated active-battle `Bitmap.createBitmap` churn via reusable capture/OCR/DVR frame buffers (`reusableScreenBitmap`, `reusableOcrCompositeBitmap`, `dvrScaledBitmap`), added 2-stage Floating HP Row-Lock corridor windowing (`±14px` fast lock with instant same-tick full-corridor fallback), removed floating `WebView` `backdrop-filter: blur(...)` over live 60 FPS video, coalesced WebView IPC pushes, consolidated Pokédex family priors in `predictOpponentBacklineStatic` to prevent Species-Clause duplicate pairs while preserving semi-dynamic blending (`wHist <= 65%`, `wMeta >= 35%` + live weakness `coverageBoost` + mid-battle `🔮 Back:` -> `🔮 3rd:` & swap risk updates), and added `backlinePredictorAudit` to `scripts/nightly-telemetry-audit.mjs`.
+  - **`v7.35` (Decoupled 30 FPS VIP & 15 FPS Standard Hardware DVR Ticker & Locked 30 FPS VIP)**: Decoupled `GBLBattleDvrThread` (`Process.THREAD_PRIORITY_DEFAULT`, drift-free `Handler.postAtTime` fractional pacing) from the `100ms` (10 Hz) `battleLoopJob` vision/OCR coroutine while sharing the single 1-pass `MediaProjection` / triple-buffered `ImageReader` (`captureLock` with dedicated `reusableVisionScreenBitmap` + `dvrScaledBitmap` and cached-tail `_deep_trace.jsonl` serialization), delivering constant 30.0 FPS video for VIP and constant 15.0 FPS video for Free / Supporter / Legend Pro with zero VFR stutter, locked VIP DVR strictly to 30 FPS Smooth (`900 kbps` CBR, `QP 27–38`), and hardened tier persistence across sync/replay listing.
 
 ---
 

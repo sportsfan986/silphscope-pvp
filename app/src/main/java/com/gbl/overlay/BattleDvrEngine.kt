@@ -131,9 +131,11 @@ internal fun OverlayService.toggleArmOneBattleDvrFromOverlay() {
         }
     }
     recalculateAndPushBattleData()
+    if (nextArmed && ((isBattleActive && !isWaitingForOpponent) || isBattleIntroCountdownActive)) {
+        ensureDvrFrameTickerRunning()
+    }
 }
 
-private val dvrFrameInFlight = AtomicBoolean(false)
 private val dvrBannerBgPaint by lazy {
     Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.argb(145, 9, 13, 22)
@@ -155,34 +157,7 @@ private val dvrBannerTextPaint by lazy {
     }
 }
 
-internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap, nowMs: Long) {
-    val handler = dvrHandler ?: return
-    if (screen.isRecycled) return
-    if (!dvrFrameInFlight.compareAndSet(false, true)) return
-    val targetW = 544
-    val targetH = (((screen.height.toFloat() / screen.width.toFloat()) * targetW.toFloat()).toInt() / 16 * 16).coerceIn(640, 1440)
-    val scaledBmp = try {
-        var reusable = dvrScaledBitmap
-        if (reusable == null || reusable.isRecycled || reusable.width != targetW || reusable.height != targetH) {
-            reusable?.let { if (!it.isRecycled) it.recycle() }
-            reusable = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
-            dvrScaledBitmap = reusable
-            dvrScaledCanvas = Canvas(reusable)
-        }
-        val scCanvas = dvrScaledCanvas ?: Canvas(reusable).also { dvrScaledCanvas = it }
-        dvrScaleSrcRect.set(0, 0, screen.width, screen.height)
-        dvrScaleDstRect.set(0, 0, targetW, targetH)
-        scCanvas.drawBitmap(screen, dvrScaleSrcRect, dvrScaleDstRect, dvrScaleFilterPaint)
-        reusable
-    } catch (_: Exception) {
-        null
-    }
-    if (scaledBmp == null) {
-        dvrFrameInFlight.set(false)
-        return
-    }
-    lastDvrEncodedFrameSeq = capturedFrameSeq
-
+internal fun OverlayService.buildDvrTraceSnapshot(nowMs: Long): BattleDeepTraceFrame {
     val uIdx = (currentPreset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) } ?: 0).coerceIn(0, 2)
     val activeOppBase = FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
     val oIdx = if (detectedOpponents.isNotEmpty()) {
@@ -195,7 +170,7 @@ internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap,
     val pSwapRem = if (playerSwapEndTimeMs > nowMs) ceil((playerSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
     val oSwapRem = if (oppSwapEndTimeMs > nowMs) ceil((oppSwapEndTimeMs - nowMs) / 1000.0).toInt() else 0
 
-    val draftTrace = BattleDeepTraceFrame(
+    return BattleDeepTraceFrame(
         frameIdx = 0,
         timestampMs = nowMs,
         videoElapsedMs = 0L,
@@ -261,62 +236,142 @@ internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap,
         revealedOppSpecies = detectedOpponents.toList(),
         userSlotEverOnField = playerSlotEverOnField.toList()
     )
+}
 
-    val canRecordNow = activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed
+internal fun OverlayService.ensureDvrFrameTickerRunning() {
+    val handler = dvrHandler ?: return
+    if (isDvrTickerScheduled) return
+    val inBattleWindow = ((isBattleActive && !isWaitingForOpponent) || isBattleIntroCountdownActive) && mediaProjection != null
+    val canRecordNow = inBattleWindow && (activeOneBattleDvrRecording || activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed)
+    if (!canRecordNow) return
+    isDvrTickerScheduled = true
+    handler.post(dvrFrameTickRunnable)
+}
 
-    handler.post {
-        try {
-            if (!canRecordNow) {
-                return@post
-            }
-            if (!activeOneBattleDvrRecording) {
-                startDvrEncoderLocked(targetW, targetH, nowMs)
-            }
-            if (!activeOneBattleDvrRecording) {
-                return@post
-            }
-            dvrFrameCount++
-            activeOneBattleDvrFrames = dvrFrameCount
-            val vidElapsed = (nowMs - dvrRecordingStartMs).coerceAtLeast(0L)
-            val finalTrace = draftTrace.copy(
-                frameIdx = dvrFrameCount,
-                videoElapsedMs = vidElapsed
-            )
+internal fun OverlayService.stopDvrFrameTickerLocked() {
+    isDvrTickerScheduled = false
+    dvrTickerAnchorUptimeMs = 0L
+    dvrTickerStepIndex = 0L
+    lastSerializedTraceSnapRef = null
+    cachedSerializedTraceJsonTail = ""
+    dvrHandler?.removeCallbacks(dvrFrameTickRunnable)
+}
 
-            val surf = dvrInputSurface
-            if (surf != null && !scaledBmp.isRecycled) {
-                val canvas = try {
-                    surf.lockHardwareCanvas()
-                } catch (_: Exception) {
-                    surf.lockCanvas(null)
-                }
-                try {
-                    canvas.drawBitmap(scaledBmp, 0f, 0f, null)
-                    // v6.41: Minimal top-left corner frame-index pill (`#0042`) for clean Telegram playback;
-                    // full telemetry HUD banner is burned back into diagnostic keyframes/contact sheets locally via FFmpeg.
-                    val stamp = String.format(
-                        java.util.Locale.US,
-                        "#%04d",
-                        finalTrace.frameIdx
-                    )
-                    val bannerRect = RectF(4f, 2f, 46f, 16f)
-                    canvas.drawRoundRect(bannerRect, 3.5f, 3.5f, dvrBannerBgPaint)
-                    canvas.drawRoundRect(bannerRect, 3.5f, 3.5f, dvrBannerBorderPaint)
-                    canvas.drawText(stamp, 7.5f, 12.5f, dvrBannerTextPaint)
-                } finally {
-                    surf.unlockCanvasAndPost(canvas)
-                }
-                drainDvrEncoderLocked(endOfStream = false)
-            }
-            dvrTraceWriter?.write(gson.toJson(finalTrace) + "\n")
-            if (dvrFrameCount % 10 == 0) {
-                dvrTraceWriter?.flush()
-            }
-        } catch (_: Exception) {
-        } finally {
-            dvrFrameInFlight.set(false)
-        }
+internal fun OverlayService.runDvrFrameTickOnHandler() {
+    val handler = dvrHandler
+    val inBattleWindow = ((isBattleActive && !isWaitingForOpponent) || isBattleIntroCountdownActive) && mediaProjection != null
+    val canRecordNow = inBattleWindow && (activeOneBattleDvrRecording || activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed)
+    if (handler == null || !canRecordNow) {
+        stopDvrFrameTickerLocked()
+        return
     }
+
+    val nowMs = System.currentTimeMillis()
+    if (nowMs - lastBattleResetTimeMs < 600L) {
+        dvrTickerAnchorUptimeMs = 0L
+        dvrTickerStepIndex = 0L
+        isDvrTickerScheduled = true
+        handler.postDelayed(dvrFrameTickRunnable, 50L)
+        return
+    }
+
+    val scaledBmp = captureScaledDvrFrameBitmap(544)
+    if (scaledBmp == null || scaledBmp.isRecycled) {
+        isDvrTickerScheduled = true
+        handler.postDelayed(dvrFrameTickRunnable, 16L)
+        return
+    }
+
+    try {
+        if (!activeOneBattleDvrRecording) {
+            startDvrEncoderLocked(scaledBmp.width, scaledBmp.height, nowMs)
+        }
+        if (!activeOneBattleDvrRecording) {
+            stopDvrFrameTickerLocked()
+            return
+        }
+        if (dvrTickerAnchorUptimeMs <= 0L) {
+            dvrTickerAnchorUptimeMs = android.os.SystemClock.uptimeMillis()
+            dvrTickerStepIndex = 0L
+        }
+
+        val frameNowMs = System.currentTimeMillis()
+        dvrFrameCount++
+        activeOneBattleDvrFrames = dvrFrameCount
+        val vidElapsed = (frameNowMs - dvrRecordingStartMs).coerceAtLeast(0L)
+
+        val surf = dvrInputSurface
+        if (surf != null && !scaledBmp.isRecycled) {
+            val canvas = try {
+                surf.lockHardwareCanvas()
+            } catch (_: Exception) {
+                surf.lockCanvas(null)
+            }
+            try {
+                canvas.drawBitmap(scaledBmp, 0f, 0f, null)
+                // v6.41: Minimal top-left corner frame-index pill (`#0042`) for clean Telegram playback;
+                // full telemetry HUD banner is burned back into diagnostic keyframes/contact sheets locally via FFmpeg.
+                val stamp = String.format(
+                    java.util.Locale.US,
+                    "#%04d",
+                    dvrFrameCount
+                )
+                val bannerRect = RectF(4f, 2f, 46f, 16f)
+                canvas.drawRoundRect(bannerRect, 3.5f, 3.5f, dvrBannerBgPaint)
+                canvas.drawRoundRect(bannerRect, 3.5f, 3.5f, dvrBannerBorderPaint)
+                canvas.drawText(stamp, 7.5f, 12.5f, dvrBannerTextPaint)
+            } finally {
+                surf.unlockCanvasAndPost(canvas)
+            }
+            drainDvrEncoderLocked(endOfStream = false)
+        }
+
+        val snap = latestDvrTraceSnapshot ?: BattleDeepTraceFrame(timestampMs = frameNowMs)
+        if (snap !== lastSerializedTraceSnapRef || cachedSerializedTraceJsonTail.isEmpty()) {
+            val fullJson = gson.toJson(snap)
+            val markerIdx = fullJson.indexOf("\"rawUserHpPct\":")
+            cachedSerializedTraceJsonTail = if (markerIdx > 0) fullJson.substring(markerIdx) else ""
+            lastSerializedTraceSnapRef = snap
+        }
+        val liveBattleElapsed = if (battleClockAnchorMs > 0L) {
+            (frameNowMs - battleClockAnchorMs).coerceAtLeast(0L)
+        } else {
+            snap.battleElapsedMs
+        }
+        val traceLine = if (cachedSerializedTraceJsonTail.isNotEmpty()) {
+            "{\"frameIdx\":$dvrFrameCount,\"timestampMs\":$frameNowMs,\"videoElapsedMs\":$vidElapsed,\"battleElapsedMs\":$liveBattleElapsed,$cachedSerializedTraceJsonTail\n"
+        } else {
+            gson.toJson(
+                snap.copy(
+                    frameIdx = dvrFrameCount,
+                    timestampMs = frameNowMs,
+                    videoElapsedMs = vidElapsed,
+                    battleElapsedMs = liveBattleElapsed
+                )
+            ) + "\n"
+        }
+        dvrTraceWriter?.write(traceLine)
+        val flushEvery = dvrActiveTargetFps.coerceIn(15, 30)
+        if (dvrFrameCount % flushEvery == 0) {
+            dvrTraceWriter?.flush()
+        }
+    } catch (_: Exception) {
+    }
+
+    val fps = dvrActiveTargetFps.coerceIn(15, 30)
+    dvrTickerStepIndex++
+    val idealNextUptime = dvrTickerAnchorUptimeMs + (dvrTickerStepIndex * 1000L) / fps
+    val afterWorkUptime = android.os.SystemClock.uptimeMillis()
+    val nextUptime = if (idealNextUptime > afterWorkUptime) {
+        idealNextUptime
+    } else {
+        val nextTarget = afterWorkUptime + (1000L / fps).coerceAtLeast(16L)
+        dvrTickerAnchorUptimeMs = nextTarget
+        dvrTickerStepIndex = 0L
+        nextTarget
+    }
+    isDvrTickerScheduled = true
+    handler.postAtTime(dvrFrameTickRunnable, nextUptime)
 }
 
 internal fun OverlayService.startDvrEncoderLocked(width: Int, height: Int, startMs: Long) {
@@ -337,6 +392,7 @@ internal fun OverlayService.startDvrEncoderLocked(width: Int, height: Int, start
         } else {
             15
         }
+        dvrActiveTargetFps = targetFps
         val targetBitrate = if (targetFps >= 30) 900_000 else 720_000
 
         fun buildEncoderFormat(useQpBounds: Boolean): MediaFormat {
@@ -379,6 +435,10 @@ internal fun OverlayService.startDvrEncoderLocked(width: Int, height: Int, start
         dvrRecordingStartMs = startMs
         dvrFrameCount = 0
         activeOneBattleDvrFrames = 0
+        dvrTickerAnchorUptimeMs = android.os.SystemClock.uptimeMillis()
+        dvrTickerStepIndex = 0L
+        lastSerializedTraceSnapRef = null
+        cachedSerializedTraceJsonTail = ""
         activeOneBattleDvrRecording = true
     } catch (_: Exception) {
         releaseDvrResourcesLocked(deleteFiles = true)
@@ -433,6 +493,8 @@ internal fun OverlayService.releaseDvrResourcesLocked(deleteFiles: Boolean) {
     activeOneBattleDvrFrames = 0
     dvrFrameCount = 0
     dvrRecordingStartMs = 0L
+    lastSerializedTraceSnapRef = null
+    cachedSerializedTraceJsonTail = ""
     try {
         dvrTraceWriter?.flush()
         dvrTraceWriter?.close()
@@ -479,7 +541,9 @@ internal fun OverlayService.abortOneBattleDvrAsync(disarm: Boolean) {
             prefs.edit().putBoolean(PREFS_KEY_ARM_ONE_BATTLE_DVR, false).apply()
         }
     }
+    stopDvrFrameTickerLocked()
     dvrHandler?.post {
+        stopDvrFrameTickerLocked()
         releaseDvrResourcesLocked(deleteFiles = true)
     }
 }
@@ -494,8 +558,10 @@ internal fun OverlayService.finalizeAndUploadOneBattleDvrAsync(
     if (isPrefsInitialized) {
         prefs.edit().putBoolean(PREFS_KEY_ARM_ONE_BATTLE_DVR, false).apply()
     }
+    stopDvrFrameTickerLocked()
     val handler = dvrHandler ?: return
     handler.post {
+        stopDvrFrameTickerLocked()
         val capturedFrames = dvrFrameCount
         val videoSpanMs = if (dvrRecordingStartMs > 0L) (System.currentTimeMillis() - dvrRecordingStartMs).coerceAtLeast(0L) else 0L
         val battleDurSec = summaryRecord.battleDurationSec ?: 0.0

@@ -1,4 +1,12 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.34`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.35`)
+
+---
+
+## [v7.35] - 2026-11-12
+*Live Android APK, Web Simulator & Cloudflare Edge release (`v7.35`, `versionCode = 1735`) decoupling the hardware H.264 DVR encoder thread from the vision coroutine loop and strictly locking VIP Battle DVR to constant 30 FPS Smooth.*
+
+- **Locked 30 FPS Smooth VIP DVR**: Locked VIP / Coach Pass Battle DVR strictly to **30 FPS Smooth (`900 kbps` CBR, `QP 27–38`)**, removed the `15 FPS Storage Saver` toggle, auto-reset any legacy `15 FPS` preference to `30 FPS`, and hardened Cloud Vault / Replay List tier persistence (`PREFS_KEY_REPLAY_EVER_PAID` + session/signature checks) so VIP devices never fall back to 15 FPS.
+- **Decoupled Hardware DVR & 10 Hz Vision Pipeline**: Decoupled `GBLBattleDvrThread` (`Process.THREAD_PRIORITY_DEFAULT`, drift-free `Handler.postAtTime` fractional pacing) from the `100ms` (10 Hz) `battleLoopJob` vision/OCR coroutine while sharing the single 1-pass `MediaProjection` / triple-buffered `ImageReader` (`captureLock` with dedicated `reusableVisionScreenBitmap` + `dvrScaledBitmap` and cached-tail `_deep_trace.jsonl` serialization). Delivers true, constant-frame-rate **30.0 FPS** video for VIP and true **15.0 FPS** (`66.67ms`) video for Free / Supporter / Legend Pro with zero VFR stutter during OCR/vision ticks.
 
 ---
 

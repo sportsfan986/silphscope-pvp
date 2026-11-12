@@ -1,4 +1,4 @@
-# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v7.34)
+# SilphScope PvP — Real-Time 3x3 Matchup Matrix, Damage Calculations, Turn Pacing HUD & Battle Log Overlay for Pokémon GO PvP (v7.35)
 
 [![Official Website & Simulator](https://img.shields.io/badge/🌐%20Official%20Website%20%26%20Simulator-silphscopepvp.com-f59e0b?style=for-the-badge&logo=googlechrome&logoColor=white)](https://silphscopepvp.com)
 [![Download Latest APK](https://img.shields.io/badge/⬇️%20Download%20Latest%20APK-dl.silphscopepvp.com-10b981?style=for-the-badge&logo=android&logoColor=white)](https://dl.silphscopepvp.com)
@@ -28,7 +28,7 @@ The **real-time floating HUD overlay, 9-shield matrix, fast-move turn pacing, an
 | **🛡️ Attack Incoming! Shield Decision Overlay** | — | ✅ **Unlocked Forever** | ✅ **Unlocked Forever** | ✅ **Unlocked Forever** |
 | **Battle Log History & Multi-Device Sync** | Current Season (+14d grace) | **Unlimited Lifetime** | **Unlimited Lifetime** | **Unlimited Lifetime** |
 | **Local On-Device DVR Ring Buffer** | **1 Battle** | **5 Battles** | **25 Battles (5 Sets)** | **25–100 Battles (Slider)** |
-| **Hardware H.264 DVR Video Framerate** | 15 FPS (`720 kbps`) | 15 FPS (`720 kbps`) | **15 FPS (`720 kbps` • ~14 MB)** | **🎥 30 FPS Smooth (`900 kbps` • <=30 MB max) + 💾 15 FPS Storage Saver** |
+| **Hardware H.264 DVR Video Framerate** | 15 FPS (`720 kbps`) | 15 FPS (`720 kbps`) | **15 FPS (`720 kbps` • ~14 MB)** | **🎥 30 FPS Smooth (`900 kbps` • <=30 MB max)** |
 | **Cloud R2 Video & Frame Trace Vault** | — | Keeps Pinned 365d | **50 Rolling + 10 Pinned** | **150 Rolling (365d) + 25 Pinned** |
 | **Anti-Meta Team Generator Leagues** | Great & Master League | **Core 3 (GL + UL + ML)** | **All Leagues + Limited/Mega Cups** | **All Leagues + Limited/Mega Cups** |
 | **Anti-Meta Teams & ⚡ Alt Moveset Synthesis** | 1 / Archetype (Std Moves) | 2 / Archetype (Std Moves) | **Top 5 / Arch + ⚡ Alt Movesets** | **Top 5 / Arch + ⚡ Alt Movesets** |
@@ -65,7 +65,7 @@ Experience **SilphScope PvP** instantly in your web browser — completely free,
 
 ---
 
-## Advanced Analytics & Quality Metrics (v7.34)
+## Advanced Analytics & Quality Metrics (v7.35)
 
 Raw win rate in GO Battle League is heavily influenced by matchmaking alignment and blind 3v3 team-composition luck (RPS). **SilphScope PvP v3.00** separates **Matchup Luck (Blind Matchup Favorability — BMF)** from **Dynamic Execution WAE (Wins Above Expected)** so you can track both matchmaking favorability and your in-battle micro-execution skill (energy farming, fast move denial, sacrificial catches, shield discipline, and CMP timing).
 
@@ -155,13 +155,13 @@ If **SilphScope PvP** helps you count fast moves, win CMP ties, and climb Elo in
 
 ---
 
-## 📥 Download & Install Native Android APK (v7.34)
+## 📥 Download & Install Native Android APK (v7.35)
 
 > **✅ Note on Live HP & Energy Counting (Enabled by Default since v6.02)**:
 > **❤️ Live HP Bar Tracking** and **⚡ Live Energy & Fast-Move Counting** are **ENABLED (ON)** by default with optimal scanner tuning (`2 samples`, `±2%` tolerance, `200ms` proactive energy lead, `+1t` fast offset, and `4.0s` swap-throw rollback). You can customize all scanner, haptics, and Always-On DVR controls in **⚙️ Settings**.
 
 1. Visit the **[Official GitHub Releases Page](https://github.com/sportsfan986/silphscope-pvp/releases)**.
-2. Download **`silphscope-pvp-v7.34.apk`** directly to your Android device.
+2. Download **`silphscope-pvp-v7.35.apk`** directly to your Android device.
 3. Tap the downloaded APK file to install (grant *"Install unknown apps"* permission if prompted).
 4. Launch **SilphScope PvP**:
    - Select, reorder, or customize your **GBL or Show 6 Team Presets**, set **Opponent Move Count Basis** (`My Fasts` vs. `Their Fasts`), adjust **Overlay Size** (`50%–100%` screen width slider) and **Background Transparency**, and configure **Synchronized Haptics**, **Competitive Mode: Log-Only**, or **1-Battle DVR** in **⚙️ Settings**.

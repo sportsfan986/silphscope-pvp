@@ -6035,7 +6035,7 @@ export default function App() {
                     backgroundColor: `${activeTheme.accentHex}1A`
                   }}
                 >
-                  v7.34 • Android Native Overlay
+                  v7.35 • Android Native Overlay
                 </span>
                 {/* Main Banner Active Mode Emblem & Badge (GBL Shield vs Battle Frontier Star Emblem) */}
                 <button
@@ -17455,7 +17455,7 @@ export default function App() {
           color: activeTheme.textSecondaryHex
         }}
       >
-        SilphScope PvP v7.34 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
+        SilphScope PvP v7.35 Overlay • <a href="https://silphscopepvp.com" className="underline">silphscopepvp.com</a> • <a href="https://dvr.silphscopepvp.com" className="underline">dvr.silphscopepvp.com</a> • <a href="https://dl.silphscopepvp.com" className="underline">dl.silphscopepvp.com</a>
       </footer>
         </>
       )}
@@ -17559,7 +17559,7 @@ export default function App() {
                   <div className="font-extrabold text-purple-300">👑 VIP / Coach Pass</div>
                   <div className="text-base font-black text-white">$5 Intro / $10 Season</div>
                   <ul className="text-[10.5px] text-slate-200 space-y-1">
-                    <li>• <strong>🎥 30 FPS Smooth DVR (+ 15 FPS Saver)</strong></li>
+                    <li>• <strong>🎥 30 FPS Smooth DVR (900 kbps CBR)</strong></li>
                     <li>• <strong>150 Cloud Replays (365d) + 25 Pin</strong></li>
                     <li>• Up to 100 Local DVR Battles (Slider)</li>
                     <li>• <strong>🛡️ Shield HUD + All Pro &amp; Alumni Perks</strong></li>

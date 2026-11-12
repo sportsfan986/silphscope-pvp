@@ -441,6 +441,7 @@ private val SYNCABLE_BOOLEAN_PREF_KEYS = listOf(
     OverlayService.PREFS_KEY_ALWAYS_ON_DVR_ENABLED,
     OverlayService.PREFS_KEY_ALLOW_MOBILE_DATA_DVR_UPLOAD,
     OverlayService.PREFS_KEY_IS_RANDOM_SCREEN_NAME,
+    OverlayService.PREFS_KEY_REPLAY_EVER_PAID,
     PREFS_KEY_AUTO_UPLOAD_AI_LOGS
 )
 
@@ -460,8 +461,7 @@ private val SYNCABLE_INT_PREF_KEYS = listOf(
     OverlayService.PREFS_KEY_SHOW6_META_LOG_WEIGHT_PCT,
     OverlayService.PREFS_KEY_LIMITED_STD_BLEND_PCT_GBL,
     OverlayService.PREFS_KEY_LIMITED_STD_BLEND_PCT_SHOW6,
-    OverlayService.PREFS_KEY_VIP_LOCAL_DVR_LIMIT,
-    OverlayService.PREFS_KEY_VIP_DVR_FPS_MODE
+    OverlayService.PREFS_KEY_VIP_LOCAL_DVR_LIMIT
 )
 
 private val SYNCABLE_FLOAT_PREF_KEYS = listOf(
@@ -2922,10 +2922,12 @@ internal fun OverlayService.Companion.getEffectiveReplayTierStatic(prefs: Shared
     val unlockKey = getEffectiveReplayUnlockKey(prefs)
     val rawTier = (prefs.getString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, "free") ?: "free").lowercase()
     val everPaid = prefs.getBoolean(OverlayService.PREFS_KEY_REPLAY_EVER_PAID, false)
+    val offlineSig = prefs.getString(OverlayService.PREFS_KEY_REPLAY_OFFLINE_SIG, "")?.trim().orEmpty()
+    val vaultSession = getVaultSessionTokenStatic(prefs)
     val expiresAtStr = prefs.getString(OverlayService.PREFS_KEY_REPLAY_EXPIRES_AT, "")?.trim().orEmpty()
 
-    // Anti-Spoofing: If no unlock key and never verified via key/claim, default to free
-    if (unlockKey.isEmpty() && !everPaid && rawTier != "free") {
+    // Anti-Spoofing: If no unlock key, offline sig, or authenticated vault session and never verified via key/claim, default to free
+    if (unlockKey.isEmpty() && !everPaid && offlineSig.isEmpty() && vaultSession.isEmpty() && rawTier != "free") {
         return "free"
     }
 
@@ -2957,13 +2959,12 @@ internal fun OverlayService.Companion.getMaxLocalDvrBattlesForTierStatic(prefs: 
 }
 
 internal fun OverlayService.Companion.getEffectiveDvrFpsForTierStatic(prefs: SharedPreferences): Int {
-    return if (getEffectiveReplayTierStatic(prefs) == "vip" &&
-        prefs.getInt(OverlayService.PREFS_KEY_VIP_DVR_FPS_MODE, OverlayService.DEFAULT_VIP_DVR_FPS_MODE) != 15
+    if (prefs.contains(OverlayService.PREFS_KEY_VIP_DVR_FPS_MODE) &&
+        prefs.getInt(OverlayService.PREFS_KEY_VIP_DVR_FPS_MODE, OverlayService.DEFAULT_VIP_DVR_FPS_MODE) != 30
     ) {
-        30
-    } else {
-        15
+        prefs.edit().putInt(OverlayService.PREFS_KEY_VIP_DVR_FPS_MODE, 30).apply()
     }
+    return if (getEffectiveReplayTierStatic(prefs) == "vip") 30 else 15
 }
 
 internal fun OverlayService.Companion.enforceLocalDvrReplaysQuotaStatic(
@@ -3439,6 +3440,9 @@ internal fun OverlayService.Companion.syncCloudReplayListBlocking(
             }
             if (active) {
                 metaEditor.putString(OverlayService.PREFS_KEY_REPLAY_LICENSE_TIER, tier)
+                if (tier != "free") {
+                    metaEditor.putBoolean(OverlayService.PREFS_KEY_REPLAY_EVER_PAID, true)
+                }
             }
             metaEditor.apply()
 

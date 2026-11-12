@@ -3049,7 +3049,7 @@ class MainActivity : AppCompatActivity() {
     private var layoutVipLocalSliderRow: LinearLayout? = null
     private var textVipLocalSliderLabel: TextView? = null
     private var seekVipLocalSlider: SeekBar? = null
-    private var btnVipFpsMode: Button? = null
+    private var textVipFpsModeInfo: TextView? = null
 
     private fun setupOrUpdateReplayVaultSettingsUi() {
         val parentLayout = (textOneBattleDvrStatus.parent as? LinearLayout) ?: return
@@ -3364,51 +3364,29 @@ class MainActivity : AppCompatActivity() {
             vipRow.addView(vipLabel)
             vipRow.addView(vipSeek)
 
-            fun formatVipFpsModeLabel(fps: Int): String = if (fps == 15) {
-                "💾 VIP DVR Framerate: 15 FPS Storage Saver (~14 MB/battle • saves ~30% storage)"
-            } else {
-                "🎥 VIP DVR Framerate: 30 FPS Smooth Default (~20 MB/battle • <=30 MB max)"
+            if (prefs.contains(OverlayService.PREFS_KEY_VIP_DVR_FPS_MODE) &&
+                prefs.getInt(OverlayService.PREFS_KEY_VIP_DVR_FPS_MODE, 30) != 30
+            ) {
+                prefs.edit().putInt(OverlayService.PREFS_KEY_VIP_DVR_FPS_MODE, 30).apply()
             }
-            val vipFpsBtn = Button(this).apply {
-                val curFps = prefs.getInt(OverlayService.PREFS_KEY_VIP_DVR_FPS_MODE, OverlayService.DEFAULT_VIP_DVR_FPS_MODE)
-                text = formatVipFpsModeLabel(curFps)
+            val vipFpsInfoTv = TextView(this).apply {
+                text = "🎥 VIP DVR Framerate: 30 FPS Smooth (900 kbps CBR • Decoupled Hardware Encoder)"
                 textSize = 9.5f
-                isAllCaps = false
-                backgroundTintList = android.content.res.ColorStateList.valueOf(0xFF4C1D95.toInt())
-                setTextColor(0xFFF3E8FF.toInt())
+                setTextColor(0xFFE9D5FF.toInt())
+                setPadding((8 * density).toInt(), (5 * density).toInt(), (8 * density).toInt(), (5 * density).toInt())
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(0xFF3B0764.toInt())
+                    cornerRadius = 6f * density
+                    setStroke((1 * density).toInt(), 0xFF7E22CE.toInt())
+                }
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply {
                     topMargin = (4 * density).toInt()
                 }
-                setOnClickListener {
-                    val options = arrayOf(
-                        "🎥 30 FPS Smooth (VIP Default • 900 kbps CBR • ~20 MB/battle, <=30 MB at 240s max)",
-                        "💾 15 FPS Storage Saver (Pro Mode • 720 kbps CBR • ~14 MB/battle, saves ~30% local & cloud storage)"
-                    )
-                    val values = intArrayOf(30, 15)
-                    val current = prefs.getInt(OverlayService.PREFS_KEY_VIP_DVR_FPS_MODE, OverlayService.DEFAULT_VIP_DVR_FPS_MODE)
-                    val checkedIdx = if (current == 15) 1 else 0
-                    AlertDialog.Builder(this@MainActivity)
-                        .setTitle("👑 VIP Battle DVR Framerate Mode")
-                        .setSingleChoiceItems(options, checkedIdx) { dialog, which ->
-                            val chosenFps = values.getOrElse(which) { 30 }
-                            dialog.dismiss()
-                            prefs.edit().putInt(OverlayService.PREFS_KEY_VIP_DVR_FPS_MODE, chosenFps).apply()
-                            text = formatVipFpsModeLabel(chosenFps)
-                            setupOrUpdateReplayVaultSettingsUi()
-                            Toast.makeText(
-                                this@MainActivity,
-                                if (chosenFps == 15) "💾 VIP DVR set to 15 FPS Storage Saver mode." else "🎥 VIP DVR set to 30 FPS Smooth mode.",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                        .setNegativeButton("Cancel", null)
-                        .show()
-                }
             }
-            vipRow.addView(vipFpsBtn)
+            vipRow.addView(vipFpsInfoTv)
 
             val vaultOptionsRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -3513,7 +3491,7 @@ class MainActivity : AppCompatActivity() {
             layoutVipLocalSliderRow = vipRow
             textVipLocalSliderLabel = vipLabel
             seekVipLocalSlider = vipSeek
-            btnVipFpsMode = vipFpsBtn
+            textVipFpsModeInfo = vipFpsInfoTv
         }
 
         val tier = OverlayService.getEffectiveReplayTierStatic(prefs)
@@ -3578,12 +3556,7 @@ class MainActivity : AppCompatActivity() {
             val savedLimit = prefs.getInt(OverlayService.PREFS_KEY_VIP_LOCAL_DVR_LIMIT, OverlayService.DEFAULT_VIP_LOCAL_DVR_LIMIT).coerceIn(25, 100)
             textVipLocalSliderLabel?.text = "👑 VIP Local On-Device DVR Ring Buffer: $savedLimit Battles (25–100 Configurable)"
             seekVipLocalSlider?.progress = savedLimit - 25
-            val curFps = prefs.getInt(OverlayService.PREFS_KEY_VIP_DVR_FPS_MODE, OverlayService.DEFAULT_VIP_DVR_FPS_MODE)
-            btnVipFpsMode?.text = if (curFps == 15) {
-                "💾 VIP DVR Framerate: 15 FPS Storage Saver (~14 MB/battle • saves ~30% storage)"
-            } else {
-                "🎥 VIP DVR Framerate: 30 FPS Smooth Default (~20 MB/battle • <=30 MB max)"
-            }
+            textVipFpsModeInfo?.text = "🎥 VIP DVR Framerate: 30 FPS Smooth (900 kbps CBR • ~20 MB/battle, <=30 MB max)"
         }
 
         refreshLocalDvrStatsAsyncIfStale()

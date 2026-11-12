@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.34"
-        const val APP_VERSION_CODE = 1734
+        const val APP_VERSION = "7.35"
+        const val APP_VERSION_CODE = 1735
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -2713,8 +2713,8 @@ class OverlayService : LifecycleService() {
     internal val detectedOpponents = mutableListOf<String>()
     internal val manualFormOverrides = mutableMapOf<String, String>()
     internal val manualShadowOverrides = mutableMapOf<String, Boolean>()
-    internal var isWaitingForOpponent = true
-    internal var isBattleActive = false
+    @Volatile internal var isWaitingForOpponent = true
+    @Volatile internal var isBattleActive = false
     internal var manualLeadMatchupOverride: String? = null
     internal var currentLeadMatchup: String = "NEUTRAL"
     internal var lastClearedOpponentsSnapshot: List<String> = emptyList()
@@ -2805,6 +2805,9 @@ class OverlayService : LifecycleService() {
     internal var cachedScreenBitmap: Bitmap? = null
     internal var reusableStrideBitmap: Bitmap? = null
     internal var reusableCleanCanvas: Canvas? = null
+    internal var reusableVisionScreenBitmap: Bitmap? = null
+    internal var reusableVisionCanvas: Canvas? = null
+    internal var lastVisionCopiedFrameSeq: Long = -1L
     internal val reusableSrcCopyPaint = Paint().apply {
         xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SRC)
     }
@@ -2820,6 +2823,14 @@ class OverlayService : LifecycleService() {
     internal val dvrScaleSrcRect = Rect()
     internal val dvrScaleDstRect = Rect()
     internal val captureLock = Any()
+    @Volatile internal var latestDvrTraceSnapshot: BattleDeepTraceFrame? = null
+    @Volatile internal var isDvrTickerScheduled: Boolean = false
+    internal var dvrActiveTargetFps: Int = 15
+    internal var dvrTickerAnchorUptimeMs: Long = 0L
+    internal var dvrTickerStepIndex: Long = 0L
+    internal var lastSerializedTraceSnapRef: BattleDeepTraceFrame? = null
+    internal var cachedSerializedTraceJsonTail: String = ""
+    internal val dvrFrameTickRunnable = Runnable { runDvrFrameTickOnHandler() }
 
     // Reusable 10Hz vision scratch buffers & 2-stage HP Row-Lock corridor state (accessed on battleLoopJob)
     internal var visionScratchPixels: IntArray = IntArray(0)
@@ -3838,7 +3849,7 @@ class OverlayService : LifecycleService() {
     }
 
     // Phase 2: Battle Clock Synchronization (t0) & Live Timeline Event Logger
-    internal var battleClockAnchorMs: Long = 0L
+    @Volatile internal var battleClockAnchorMs: Long = 0L
     internal val battleTimelineEvents = mutableListOf<BattleTimelineEvent>()
     internal var lastClearedTimelineEventsSnapshot: List<BattleTimelineEvent> = emptyList()
     internal var lastClearedBattleDurationSec: Double? = null
@@ -4475,7 +4486,7 @@ class OverlayService : LifecycleService() {
 
         imageReaderThread = HandlerThread("GBLImageReaderThread").apply { start() }
         imageReaderHandler = Handler(imageReaderThread!!.looper)
-        dvrThread = HandlerThread("GBLBattleDvrThread", Process.THREAD_PRIORITY_BACKGROUND).apply { start() }
+        dvrThread = HandlerThread("GBLBattleDvrThread", Process.THREAD_PRIORITY_DEFAULT).apply { start() }
         dvrHandler = Handler(dvrThread!!.looper)
 
         createNotificationChannel()
@@ -6078,7 +6089,7 @@ class OverlayService : LifecycleService() {
                 }
             }, Handler(Looper.getMainLooper()))
 
-            imageReader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
+            imageReader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 3)
             virtualDisplay = mediaProjection?.createVirtualDisplay(
                 "GBLScreenCapture",
                 screenWidth,
@@ -6094,57 +6105,108 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    internal fun captureCleanScreenBitmap(): Bitmap? {
+    private fun refreshCapturedScreenLocked(): Bitmap? {
         val reader = imageReader ?: return null
-        synchronized(captureLock) {
-            return try {
-                val image = reader.acquireLatestImage() ?: reader.acquireNextImage()
-                if (image != null) {
-                    try {
-                        val plane = image.planes[0]
-                        val buffer = plane.buffer
-                        buffer.rewind()
-                        val pixelStride = plane.pixelStride
-                        val rowStride = plane.rowStride
-                        val rowPadding = rowStride - pixelStride * screenWidth
+        return try {
+            val image = reader.acquireLatestImage() ?: reader.acquireNextImage()
+            if (image != null) {
+                try {
+                    val plane = image.planes[0]
+                    val buffer = plane.buffer
+                    buffer.rewind()
+                    val pixelStride = plane.pixelStride
+                    val rowStride = plane.rowStride
+                    val rowPadding = rowStride - pixelStride * screenWidth
 
-                        var clean = cachedScreenBitmap
-                        if (clean == null || clean.isRecycled || clean.width != screenWidth || clean.height != screenHeight) {
-                            clean?.let { if (!it.isRecycled) it.recycle() }
-                            clean = Bitmap.createBitmap(screenWidth, screenHeight, Bitmap.Config.ARGB_8888)
-                            cachedScreenBitmap = clean
-                            reusableCleanCanvas = Canvas(clean)
-                        }
-
-                        if (rowPadding == 0) {
-                            clean.copyPixelsFromBuffer(buffer)
-                        } else {
-                            val strideW = screenWidth + rowPadding / pixelStride
-                            var strideBmp = reusableStrideBitmap
-                            if (strideBmp == null || strideBmp.isRecycled || strideBmp.width != strideW || strideBmp.height != screenHeight) {
-                                strideBmp?.let { if (!it.isRecycled) it.recycle() }
-                                strideBmp = Bitmap.createBitmap(strideW, screenHeight, Bitmap.Config.ARGB_8888)
-                                reusableStrideBitmap = strideBmp
-                            }
-                            strideBmp.copyPixelsFromBuffer(buffer)
-                            val cCanvas = reusableCleanCanvas ?: Canvas(clean).also { reusableCleanCanvas = it }
-                            reusableCaptureSrcRect.set(0, 0, screenWidth, screenHeight)
-                            reusableCaptureDstRect.set(0, 0, screenWidth, screenHeight)
-                            cCanvas.drawBitmap(strideBmp, reusableCaptureSrcRect, reusableCaptureDstRect, reusableSrcCopyPaint)
-                        }
-
-                        capturedFrameSeq++
-                        hasValidCachedFrame = true
-                        clean
-                    } finally {
-                        image.close()
+                    var clean = cachedScreenBitmap
+                    if (clean == null || clean.isRecycled || clean.width != screenWidth || clean.height != screenHeight) {
+                        clean?.let { if (!it.isRecycled) it.recycle() }
+                        clean = Bitmap.createBitmap(screenWidth, screenHeight, Bitmap.Config.ARGB_8888)
+                        cachedScreenBitmap = clean
+                        reusableCleanCanvas = Canvas(clean)
                     }
-                } else {
-                    val existing = cachedScreenBitmap
-                    if (hasValidCachedFrame && existing != null && !existing.isRecycled) existing else null
+
+                    if (rowPadding == 0) {
+                        clean.copyPixelsFromBuffer(buffer)
+                    } else {
+                        val strideW = screenWidth + rowPadding / pixelStride
+                        var strideBmp = reusableStrideBitmap
+                        if (strideBmp == null || strideBmp.isRecycled || strideBmp.width != strideW || strideBmp.height != screenHeight) {
+                            strideBmp?.let { if (!it.isRecycled) it.recycle() }
+                            strideBmp = Bitmap.createBitmap(strideW, screenHeight, Bitmap.Config.ARGB_8888)
+                            reusableStrideBitmap = strideBmp
+                        }
+                        strideBmp.copyPixelsFromBuffer(buffer)
+                        val cCanvas = reusableCleanCanvas ?: Canvas(clean).also { reusableCleanCanvas = it }
+                        reusableCaptureSrcRect.set(0, 0, screenWidth, screenHeight)
+                        reusableCaptureDstRect.set(0, 0, screenWidth, screenHeight)
+                        cCanvas.drawBitmap(strideBmp, reusableCaptureSrcRect, reusableCaptureDstRect, reusableSrcCopyPaint)
+                    }
+
+                    capturedFrameSeq++
+                    hasValidCachedFrame = true
+                    clean
+                } finally {
+                    image.close()
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
+            } else {
+                val existing = cachedScreenBitmap
+                if (hasValidCachedFrame && existing != null && !existing.isRecycled) existing else null
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    internal fun captureVisionScreenBitmap(): Pair<Bitmap, Long>? {
+        synchronized(captureLock) {
+            val clean = refreshCapturedScreenLocked() ?: return null
+            val w = clean.width
+            val h = clean.height
+            var visBmp = reusableVisionScreenBitmap
+            if (visBmp == null || visBmp.isRecycled || visBmp.width != w || visBmp.height != h) {
+                visBmp?.let { if (!it.isRecycled) it.recycle() }
+                visBmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                reusableVisionScreenBitmap = visBmp
+                reusableVisionCanvas = Canvas(visBmp)
+                lastVisionCopiedFrameSeq = -1L
+            }
+            if (capturedFrameSeq != lastVisionCopiedFrameSeq) {
+                val vCanvas = reusableVisionCanvas ?: Canvas(visBmp).also { reusableVisionCanvas = it }
+                vCanvas.drawBitmap(clean, 0f, 0f, reusableSrcCopyPaint)
+                lastVisionCopiedFrameSeq = capturedFrameSeq
+            }
+            return visBmp to capturedFrameSeq
+        }
+    }
+
+    internal fun captureCleanScreenBitmap(): Bitmap? {
+        return captureVisionScreenBitmap()?.first
+    }
+
+    internal fun captureScaledDvrFrameBitmap(targetW: Int = 544): Bitmap? {
+        synchronized(captureLock) {
+            val clean = refreshCapturedScreenLocked() ?: return null
+            val targetH = (((clean.height.toFloat() / clean.width.toFloat()) * targetW.toFloat()).toInt() / 16 * 16).coerceIn(640, 1440)
+            return try {
+                var reusable = dvrScaledBitmap
+                if (reusable == null || reusable.isRecycled || reusable.width != targetW || reusable.height != targetH) {
+                    reusable?.let { if (!it.isRecycled) it.recycle() }
+                    reusable = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+                    dvrScaledBitmap = reusable
+                    dvrScaledCanvas = Canvas(reusable)
+                    lastDvrEncodedFrameSeq = -1L
+                }
+                if (capturedFrameSeq != lastDvrEncodedFrameSeq) {
+                    val scCanvas = dvrScaledCanvas ?: Canvas(reusable).also { dvrScaledCanvas = it }
+                    dvrScaleSrcRect.set(0, 0, clean.width, clean.height)
+                    dvrScaleDstRect.set(0, 0, targetW, targetH)
+                    scCanvas.drawBitmap(clean, dvrScaleSrcRect, dvrScaleDstRect, dvrScaleFilterPaint)
+                    lastDvrEncodedFrameSeq = capturedFrameSeq
+                }
+                reusable
+            } catch (_: Exception) {
                 null
             }
         }
@@ -6176,69 +6238,53 @@ class OverlayService : LifecycleService() {
     internal fun startBattleOcrLoop() {
         if (battleLoopJob?.isActive == true) return
         battleLoopJob = lifecycleScope.launch(Dispatchers.Default) {
-            var lastFullVisionTickMs = 0L
             while (isActive) {
                 if (mediaProjection == null) {
                     delay(250L)
                     continue
                 }
                 val cycleStartMs = System.currentTimeMillis()
-                val isDvrRecordingWindow = (activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed || isLogOnlyStealthMode) &&
+                val isDvrRecordingWindow = (activeOneBattleDvrRecording || activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed) &&
                     ((isBattleActive && !isWaitingForOpponent) || isBattleIntroCountdownActive)
+                if (isDvrRecordingWindow) {
+                    ensureDvrFrameTickerRunning()
+                }
                 val dvrTargetFps = if (isDvrRecordingWindow && isPrefsInitialized) {
                     OverlayService.getEffectiveDvrFpsForTierStatic(prefs)
                 } else {
                     15
                 }
-                val isIntermediate30FpsDvrTick = isDvrRecordingWindow &&
-                    dvrTargetFps >= 30 &&
-                    lastFullVisionTickMs > 0L &&
-                    (cycleStartMs - lastFullVisionTickMs) < 58L
 
-                if (isIntermediate30FpsDvrTick) {
-                    try {
-                        if (cycleStartMs - lastBattleResetTimeMs >= 600L) {
-                            val dvrBmp = captureCleanScreenBitmap()
-                            if (dvrBmp != null && !dvrBmp.isRecycled && capturedFrameSeq != lastDvrEncodedFrameSeq) {
-                                recordOneBattleDvrFrameAndTraceAsync(dvrBmp, cycleStartMs)
-                            }
-                        }
-                    } catch (_: Exception) {}
+                val actualCadenceMs = if (lastHpScanTickMs > 0L) {
+                    (cycleStartMs - lastHpScanTickMs).coerceIn(1L, 2000L)
                 } else {
-                    lastFullVisionTickMs = cycleStartMs
-                    val actualCadenceMs = if (lastHpScanTickMs > 0L) {
-                        (cycleStartMs - lastHpScanTickMs).coerceIn(1L, 2000L)
-                    } else {
-                        0L
-                    }
-                    lastHpScanTickMs = cycleStartMs
-                    lastCaptureStartMs = cycleStartMs
-                    try {
-                        captureAndProcessBattleRegions(cycleStartMs, actualCadenceMs)
-                    } catch (_: Exception) {}
-                    val nowAfterVision = System.currentTimeMillis()
-                    val visionWorkMs = (nowAfterVision - cycleStartMs).coerceAtLeast(1L)
-                    val effectiveHpLoopMs = if (actualCadenceMs in 40L..350L) {
-                        actualCadenceMs
-                    } else {
-                        (visionWorkMs + 60L).coerceAtLeast(60L)
-                    }
-                    lastHpScanDurationMs = effectiveHpLoopMs
-                    if (isBattleActive) {
-                        currentBattleHpScanDurationSumMs += effectiveHpLoopMs
-                        currentBattleHpScanCount += 1
-                        lastBattleAvgHpScanMs = (currentBattleHpScanDurationSumMs / currentBattleHpScanCount).coerceAtLeast(1L)
-                    }
+                    0L
                 }
-                val nowAfterHpScan = System.currentTimeMillis()
-                val pixelWorkMs = (nowAfterHpScan - cycleStartMs).coerceAtLeast(1L)
-                val targetLoopMs = when {
-                    isDvrRecordingWindow && dvrTargetFps >= 30 -> 33L
-                    isDvrRecordingWindow -> 67L
-                    else -> 100L
+                lastHpScanTickMs = cycleStartMs
+                lastCaptureStartMs = cycleStartMs
+                try {
+                    captureAndProcessBattleRegions(cycleStartMs, actualCadenceMs)
+                } catch (_: Exception) {}
+                val nowAfterVision = System.currentTimeMillis()
+                val visionWorkMs = (nowAfterVision - cycleStartMs).coerceAtLeast(1L)
+                val effectiveHpLoopMs = if (actualCadenceMs in 40L..350L) {
+                    actualCadenceMs
+                } else {
+                    (visionWorkMs + 60L).coerceAtLeast(60L)
                 }
-                val sleepMs = (targetLoopMs - pixelWorkMs).coerceAtLeast(5L)
-                currentScanHzMode = if (isDvrRecordingWindow && dvrTargetFps >= 30) "30FPS_VIP" else "10HZ_HP"
+                lastHpScanDurationMs = effectiveHpLoopMs
+                if (isBattleActive) {
+                    currentBattleHpScanDurationSumMs += effectiveHpLoopMs
+                    currentBattleHpScanCount += 1
+                    lastBattleAvgHpScanMs = (currentBattleHpScanDurationSumMs / currentBattleHpScanCount).coerceAtLeast(1L)
+                }
+
+                val sleepMs = (100L - visionWorkMs).coerceAtLeast(5L)
+                currentScanHzMode = when {
+                    isDvrRecordingWindow && dvrTargetFps >= 30 -> "10HZ_VIS+30FPS_DVR"
+                    isDvrRecordingWindow -> "10HZ_VIS+15FPS_DVR"
+                    else -> "10HZ_HP"
+                }
                 delay(sleepMs)
             }
         }
@@ -6248,7 +6294,7 @@ class OverlayService : LifecycleService() {
         val frameEpoch = battleResetEpoch
         if (System.currentTimeMillis() - lastBattleResetTimeMs < 600L) return
 
-        val screen = captureCleanScreenBitmap() ?: return
+        val (screen, visionFrameSeq) = captureVisionScreenBitmap() ?: return
         if (screen.isRecycled) return
         if (frameEpoch != battleResetEpoch) {
             return
@@ -6258,12 +6304,12 @@ class OverlayService : LifecycleService() {
         if (isIdleStandbyWindow &&
             introCountdownConfirmFrames == 0 &&
             !isCountdownDimmedState &&
-            capturedFrameSeq == lastIdleProcessedFrameSeq
+            visionFrameSeq == lastIdleProcessedFrameSeq
         ) {
             return
         }
         if (isIdleStandbyWindow) {
-            lastIdleProcessedFrameSeq = capturedFrameSeq
+            lastIdleProcessedFrameSeq = visionFrameSeq
         }
 
         val w = screen.width
@@ -6586,10 +6632,11 @@ class OverlayService : LifecycleService() {
                     }
                 }
             }
-            if ((activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed || isLogOnlyStealthMode) &&
+            if ((activeOneBattleDvrRecording || activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed) &&
                 ((isBattleActive && !isWaitingForOpponent) || isBattleIntroCountdownActive)
             ) {
-                recordOneBattleDvrFrameAndTraceAsync(screen, currentFrameTimestampMs)
+                latestDvrTraceSnapshot = buildDvrTraceSnapshot(currentFrameTimestampMs)
+                ensureDvrFrameTickerRunning()
             }
         } finally {
             activeFrameScreenBitmap = null
@@ -18915,29 +18962,36 @@ class OverlayService : LifecycleService() {
         try {
             val dvrH = dvrHandler
             val dvrT = dvrThread
+            isDvrTickerScheduled = false
+            latestDvrTraceSnapshot = null
             dvrHandler = null
             dvrThread = null
             if (dvrH != null) {
+                dvrH.removeCallbacks(dvrFrameTickRunnable)
                 dvrH.post {
                     try {
                         releaseDvrResourcesLocked(deleteFiles = true)
                     } catch (_: Exception) {}
-                    try {
-                        dvrScaledCanvas = null
-                        dvrScaledBitmap?.let { if (!it.isRecycled) it.recycle() }
-                        dvrScaledBitmap = null
-                    } catch (_: Exception) {}
+                    synchronized(captureLock) {
+                        try {
+                            dvrScaledCanvas = null
+                            dvrScaledBitmap?.let { if (!it.isRecycled) it.recycle() }
+                            dvrScaledBitmap = null
+                        } catch (_: Exception) {}
+                    }
                     try {
                         dvrT?.quitSafely()
                     } catch (_: Exception) {}
                 }
             } else {
                 releaseDvrResourcesLocked(deleteFiles = true)
-                try {
-                    dvrScaledCanvas = null
-                    dvrScaledBitmap?.let { if (!it.isRecycled) it.recycle() }
-                    dvrScaledBitmap = null
-                } catch (_: Exception) {}
+                synchronized(captureLock) {
+                    try {
+                        dvrScaledCanvas = null
+                        dvrScaledBitmap?.let { if (!it.isRecycled) it.recycle() }
+                        dvrScaledBitmap = null
+                    } catch (_: Exception) {}
+                }
                 dvrT?.quitSafely()
             }
             virtualDisplay?.release()
@@ -18953,6 +19007,9 @@ class OverlayService : LifecycleService() {
                 cachedScreenBitmap = null
                 reusableStrideBitmap?.let { if (!it.isRecycled) it.recycle() }
                 reusableStrideBitmap = null
+                reusableVisionCanvas = null
+                reusableVisionScreenBitmap?.let { if (!it.isRecycled) it.recycle() }
+                reusableVisionScreenBitmap = null
             }
             imageReaderThread?.quitSafely()
             imageReaderThread = null
