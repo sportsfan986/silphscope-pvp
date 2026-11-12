@@ -40,12 +40,52 @@ export interface DvrReplayItem {
   uploadedAt?: string;
 }
 
-function dvrLeagueKey(league?: string): 'great' | 'ultra' | 'master' | 'cups' {
-  const lg = String(league || '').toUpperCase();
-  if (lg.startsWith('GREAT')) return 'great';
-  if (lg.startsWith('ULTRA')) return 'ultra';
-  if (lg.startsWith('MASTER') && !lg.includes('CUP')) return 'master';
-  return 'cups';
+type DvrCpTier = 'ALL' | 'GREAT' | 'ULTRA' | 'MASTER';
+
+function resolveDvrCpTier(rawLeague?: string): 'GREAT' | 'ULTRA' | 'MASTER' {
+  const upper = String(rawLeague || '').trim().toUpperCase();
+  if (!upper) return 'GREAT';
+  if (upper.includes('(10000)') || upper.includes('MASTER') || upper === 'BATTLE FRONTIER (MASTER)') {
+    return 'MASTER';
+  }
+  if (upper.includes('(2500)') || upper.includes('ULTRA') || upper.includes('CAULDRON')) {
+    return 'ULTRA';
+  }
+  return 'GREAT';
+}
+
+function formatDvrCupLabel(leagueKey: string, cpTier: DvrCpTier): string {
+  const u = leagueKey.trim().toUpperCase();
+  if (cpTier !== 'ALL' && (u === 'GREAT LEAGUE' || u === 'ULTRA LEAGUE' || u === 'MASTER LEAGUE')) {
+    return 'Open / Standard';
+  }
+  if (cpTier !== 'ALL' && u.includes('MEGA')) {
+    return `Mega (${leagueKey})`;
+  }
+  return leagueKey;
+}
+
+function sortDvrCupsWithinTier(cups: string[]): string[] {
+  const rank = (lg: string) => {
+    const u = lg.trim().toUpperCase();
+    if (u === 'GREAT LEAGUE' || u === 'ULTRA LEAGUE' || u === 'MASTER LEAGUE') return 0;
+    if (u.includes('MEGA')) return 1;
+    return 2;
+  };
+  return Array.from(new Set(cups)).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+}
+
+function formatDvrLocalDateTime(raw?: string): string {
+  if (!raw) return '';
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  });
 }
 
 const CANONICAL_FEATURED_REPLAYS: DvrReplayItem[] = [
@@ -339,9 +379,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
       return false;
     }
   });
-  const [vaultLeague, setVaultLeague] = useState<'all' | 'great' | 'ultra' | 'master' | 'cups'>('all');
-  const [vaultCup, setVaultCup] = useState<string>('all');
   const [vaultFilter, setVaultFilter] = useState<'all' | 'starred' | 'public' | 'private'>('all');
+  const [vaultCpTier, setVaultCpTier] = useState<DvrCpTier>('ALL');
+  const [vaultCupFilter, setVaultCupFilter] = useState<string>('ALL');
   const [vaultReplays, setVaultReplays] = useState<DvrReplayItem[]>(CANONICAL_FEATURED_REPLAYS);
   const [loadingVault, setLoadingVault] = useState<boolean>(false);
   const [vaultStats, setVaultStats] = useState<{ total: number; starred: number; public: number; private: number }>({
@@ -2651,41 +2691,85 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                   );
                 })}
               </div>
-              {/* League Filter Pills */}
-              <div className="w-full flex items-center gap-1.5 flex-wrap">
-                {(['all', 'great', 'ultra', 'master', 'cups'] as const).map((lg) => {
-                  const counts = { great: 0, ultra: 0, master: 0, cups: 0 } as Record<string, number>;
-                  vaultReplays.forEach((r) => { counts[dvrLeagueKey(r.league)]++; });
-                  const label = lg === 'all' ? 'All Leagues' : lg === 'cups' ? `Cups (${counts.cups})` : `${lg[0].toUpperCase()}${lg.slice(1)} (${counts[lg]})`;
-                  return (
-                    <button
-                      key={lg}
-                      type="button"
-                      onClick={() => { setVaultLeague(lg); setVaultCup('all'); }}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                        vaultLeague === lg
-                          ? 'bg-cyan-400 text-slate-950 font-black shadow'
-                          : 'bg-[#081120] text-slate-300 hover:text-white border border-[#19304E]'
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-                {vaultLeague === 'cups' && (
-                  <select
-                    value={vaultCup}
-                    onChange={(e) => setVaultCup(e.target.value)}
-                    className="px-2 py-1 rounded-lg text-xs font-bold bg-[#081120] text-slate-200 border border-[#19304E]"
-                  >
-                    <option value="all">All Cups</option>
-                    {Array.from(new Set(vaultReplays.filter((r) => dvrLeagueKey(r.league) === 'cups').map((r) => r.league))).sort().map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
             </div>
+
+            {/* Tiered League (CP) & Cup Filters (Matches Android Battle Logs) */}
+            {vaultReplays.length > 0 && (() => {
+              const tierCounts = {
+                ALL: vaultReplays.length,
+                GREAT: vaultReplays.filter((r) => resolveDvrCpTier(r.league) === 'GREAT').length,
+                ULTRA: vaultReplays.filter((r) => resolveDvrCpTier(r.league) === 'ULTRA').length,
+                MASTER: vaultReplays.filter((r) => resolveDvrCpTier(r.league) === 'MASTER').length
+              };
+              const tierScopedReplays =
+                vaultCpTier === 'ALL'
+                  ? vaultReplays
+                  : vaultReplays.filter((r) => resolveDvrCpTier(r.league) === vaultCpTier);
+              const availableCups = sortDvrCupsWithinTier(
+                tierScopedReplays.map((r) => String(r.league || '').trim()).filter(Boolean)
+              );
+              const tierAllLabel =
+                vaultCpTier === 'ALL'
+                  ? `All Cups (${tierScopedReplays.length})`
+                  : vaultCpTier === 'GREAT'
+                    ? `All Great Cups (${tierScopedReplays.length})`
+                    : vaultCpTier === 'ULTRA'
+                      ? `All Ultra Cups (${tierScopedReplays.length})`
+                      : `All Master Cups (${tierScopedReplays.length})`;
+              const tierButtons: Array<{ key: DvrCpTier; label: string }> = [
+                { key: 'ALL', label: `All CP (${tierCounts.ALL})` },
+                { key: 'GREAT', label: `Great ≤1500 (${tierCounts.GREAT})` },
+                { key: 'ULTRA', label: `Ultra 2500 (${tierCounts.ULTRA})` },
+                { key: 'MASTER', label: `Master 10000 (${tierCounts.MASTER})` }
+              ];
+              return (
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2 border-t border-slate-800/70">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] font-bold text-slate-400 mr-1">🏆 League:</span>
+                    {tierButtons.map((tb) => {
+                      const active = vaultCpTier === tb.key;
+                      return (
+                        <button
+                          key={tb.key}
+                          type="button"
+                          onClick={() => {
+                            setVaultCpTier(tb.key);
+                            setVaultCupFilter('ALL');
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                            active
+                              ? 'bg-cyan-400 text-slate-950 font-black shadow'
+                              : 'bg-[#081120] text-slate-300 hover:text-white border border-[#19304E]'
+                          }`}
+                        >
+                          {tb.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold text-slate-400 whitespace-nowrap">🏅 Cup:</span>
+                    <select
+                      value={availableCups.some((c) => c.toUpperCase() === vaultCupFilter.toUpperCase()) ? vaultCupFilter : 'ALL'}
+                      onChange={(e) => setVaultCupFilter(e.target.value)}
+                      className="px-2.5 py-1 rounded-lg bg-[#081120] border border-[#19304E] text-cyan-200 font-bold text-xs focus:outline-none focus:border-cyan-400 cursor-pointer"
+                    >
+                      <option value="ALL">{tierAllLabel}</option>
+                      {availableCups.map((cup) => {
+                        const count = tierScopedReplays.filter(
+                          (r) => String(r.league || '').trim().toUpperCase() === cup.toUpperCase()
+                        ).length;
+                        return (
+                          <option key={cup} value={cup}>
+                            {formatDvrCupLabel(cup, vaultCpTier)} ({count})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Owner Vault Privacy & Storage Quota Bar */}
             {isVaultOwner && vaultUser.toLowerCase() !== 'featured' && (
@@ -2733,9 +2817,14 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
             <div className="space-y-4">
               {(() => {
                 const filtered = vaultReplays.filter((item) => {
-                  if (vaultLeague !== 'all') {
-                    if (dvrLeagueKey(item.league) !== vaultLeague) return false;
-                    if (vaultLeague === 'cups' && vaultCup !== 'all' && item.league !== vaultCup) return false;
+                  if (vaultCpTier !== 'ALL' && resolveDvrCpTier(item.league) !== vaultCpTier) {
+                    return false;
+                  }
+                  if (
+                    vaultCupFilter !== 'ALL' &&
+                    String(item.league || '').trim().toUpperCase() !== vaultCupFilter.trim().toUpperCase()
+                  ) {
+                    return false;
                   }
                   if (vaultFilter === 'starred') return item.isPinned;
                   if (vaultFilter === 'public') return item.isPublic;
@@ -2817,9 +2906,9 @@ export const MarketingWebsite: React.FC<MarketingWebsiteProps> = ({
                               <span className="font-mono text-slate-400">
                                 @{item.screenName || vaultUser}
                               </span>
-                              {(item.createdAt || item.uploadedAt) && (
+                              {formatDvrLocalDateTime(item.createdAt || item.uploadedAt) && (
                                 <span className="font-mono text-slate-400">
-                                  {new Date((item.createdAt || item.uploadedAt) as string).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                                  • 🕒 {formatDvrLocalDateTime(item.createdAt || item.uploadedAt)}
                                 </span>
                               )}
                               {item.isPinned && (

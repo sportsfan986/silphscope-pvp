@@ -6674,16 +6674,22 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
     const savedEmail = params.get('email') || localStorage.getItem('sspvp_vault_email') || '';
     let currentVaultData = null;
     let currentFilter = 'all'; // 'all' | 'starred'
-    let leagueFilter = 'all'; // 'all' | 'great' | 'ultra' | 'master' | 'cups'
-    let cupFilter = 'all'; // 'all' or a specific cup name (when leagueFilter === 'cups')
-    function leagueKey(item) {
-      const lg = String((item && item.league) || '').toUpperCase();
-      if (lg.indexOf('GREAT') === 0) return 'great';
-      if (lg.indexOf('ULTRA') === 0) return 'ultra';
-      if (lg.indexOf('MASTER') === 0 && lg.indexOf('CUP') < 0) return 'master';
-      return 'cups';
+    let cpTierFilter = 'ALL'; // 'ALL' | 'GREAT' | 'ULTRA' | 'MASTER'
+    let cupFilter = 'ALL'; // 'ALL' | specific cup string
+    function resolveCpTier(rawLeague) {
+      const upper = String(rawLeague || '').trim().toUpperCase();
+      if (!upper) return 'GREAT';
+      if (upper.indexOf('(10000)') >= 0 || upper.indexOf('MASTER') >= 0 || upper === 'BATTLE FRONTIER (MASTER)') return 'MASTER';
+      if (upper.indexOf('(2500)') >= 0 || upper.indexOf('ULTRA') >= 0 || upper.indexOf('CAULDRON') >= 0) return 'ULTRA';
+      return 'GREAT';
     }
-    function setLeagueFilter(f) { leagueFilter = f; cupFilter = 'all'; renderReplayGrid(); }
+    function formatCupLabel(lg, tier) {
+      const u = String(lg || '').trim().toUpperCase();
+      if (tier !== 'ALL' && (u === 'GREAT LEAGUE' || u === 'ULTRA LEAGUE' || u === 'MASTER LEAGUE')) return 'Open / Standard';
+      if (tier !== 'ALL' && u.indexOf('MEGA') >= 0) return 'Mega (' + lg + ')';
+      return lg;
+    }
+    function setCpTierFilter(t) { cpTierFilter = t; cupFilter = 'ALL'; renderReplayGrid(); }
     function setCupFilter(c) { cupFilter = c; renderReplayGrid(); }
 
     // Clean up any legacy stored GitHub OAuth state from localStorage
@@ -7044,37 +7050,60 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
         filterBar.style.display = 'none';
       }
 
-      const lgCounts = { great: 0, ultra: 0, master: 0, cups: 0 };
-      const cupNames = [];
-      allItems.forEach(i => {
-        const k = leagueKey(i);
-        lgCounts[k]++;
-        if (k === 'cups') {
-          const nm = String(i.league || 'GBL');
-          if (cupNames.indexOf(nm) < 0) cupNames.push(nm);
-        }
-      });
-      cupNames.sort();
       if (allItems.length) {
-        const lgBtn = (k, label) => '<button class="tab-btn ' + (leagueFilter === k ? 'active' : '') + '" onclick="setLeagueFilter(\\'' + k + '\\')">' + label + '</button>';
-        let lgHtml = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;width:100%">' +
-          lgBtn('all', '🏆 All Leagues') +
-          lgBtn('great', 'Great (' + lgCounts.great + ')') +
-          lgBtn('ultra', 'Ultra (' + lgCounts.ultra + ')') +
-          lgBtn('master', 'Master (' + lgCounts.master + ')') +
-          lgBtn('cups', 'Cups (' + lgCounts.cups + ')');
-        if (leagueFilter === 'cups') {
-          lgHtml += '<select onchange="setCupFilter(this.value)" style="padding:6px 10px;font-size:12px"><option value="all"' + (cupFilter === 'all' ? ' selected' : '') + '>All Cups</option>' +
-            cupNames.map(n => '<option value="' + esc(n) + '"' + (cupFilter === n ? ' selected' : '') + '>' + esc(n) + '</option>').join('') + '</select>';
-        }
-        lgHtml += '</div>';
+        const tierCounts = {
+          ALL: allItems.length,
+          GREAT: allItems.filter(i => resolveCpTier(i.league) === 'GREAT').length,
+          ULTRA: allItems.filter(i => resolveCpTier(i.league) === 'ULTRA').length,
+          MASTER: allItems.filter(i => resolveCpTier(i.league) === 'MASTER').length
+        };
+        const tierScoped = cpTierFilter === 'ALL' ? allItems : allItems.filter(i => resolveCpTier(i.league) === cpTierFilter);
+        const cupRank = (lg) => {
+          const u = String(lg || '').trim().toUpperCase();
+          if (u === 'GREAT LEAGUE' || u === 'ULTRA LEAGUE' || u === 'MASTER LEAGUE') return 0;
+          if (u.indexOf('MEGA') >= 0) return 1;
+          return 2;
+        };
+        const cupNames = Array.from(new Set(tierScoped.map(i => String(i.league || '').trim()).filter(Boolean)))
+          .sort((a, b) => cupRank(a) - cupRank(b) || a.localeCompare(b));
+        const tierAllLabel = cpTierFilter === 'ALL'
+          ? 'All Cups (' + tierScoped.length + ')'
+          : cpTierFilter === 'GREAT'
+            ? 'All Great Cups (' + tierScoped.length + ')'
+            : cpTierFilter === 'ULTRA'
+              ? 'All Ultra Cups (' + tierScoped.length + ')'
+              : 'All Master Cups (' + tierScoped.length + ')';
+        const tierBtn = (k, lbl) => '<button class="tab-btn ' + (cpTierFilter === k ? 'active' : '') + '" onclick="setCpTierFilter(\\'' + k + '\\')">' + lbl + '</button>';
+        const activeCup = cupNames.some(c => c.toUpperCase() === cupFilter.toUpperCase()) ? cupFilter : 'ALL';
+        const cupOptions = '<option value="ALL"' + (activeCup === 'ALL' ? ' selected' : '') + '>' + esc(tierAllLabel) + '</option>' +
+          cupNames.map(c => {
+            const cnt = tierScoped.filter(i => String(i.league || '').trim().toUpperCase() === c.toUpperCase()).length;
+            return '<option value="' + esc(c) + '"' + (activeCup.toUpperCase() === c.toUpperCase() ? ' selected' : '') + '>' + esc(formatCupLabel(c, cpTierFilter) + ' (' + cnt + ')') + '</option>';
+          }).join('');
+        const tierHtml =
+          '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:space-between;width:100%;padding-top:6px;border-top:1px solid #19304e">' +
+            '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' +
+              '<span style="font-size:11px;color:#94a3b8;font-weight:700">🏆 League:</span>' +
+              tierBtn('ALL', 'All CP (' + tierCounts.ALL + ')') +
+              tierBtn('GREAT', 'Great ≤1500 (' + tierCounts.GREAT + ')') +
+              tierBtn('ULTRA', 'Ultra 2500 (' + tierCounts.ULTRA + ')') +
+              tierBtn('MASTER', 'Master 10000 (' + tierCounts.MASTER + ')') +
+            '</div>' +
+            '<div style="display:flex;gap:6px;align-items:center">' +
+              '<span style="font-size:11px;color:#94a3b8;font-weight:700">🏅 Cup:</span>' +
+              '<select onchange="setCupFilter(this.value)" style="padding:6px 10px;font-size:12px">' + cupOptions + '</select>' +
+            '</div>' +
+          '</div>';
         if (filterBar.style.display === 'none') { filterBar.style.display = 'flex'; filterBar.innerHTML = ''; }
-        filterBar.innerHTML += lgHtml;
+        filterBar.innerHTML += tierHtml;
       }
 
       let items = allItems;
-      if (leagueFilter !== 'all') {
-        items = items.filter(i => leagueKey(i) === leagueFilter && (leagueFilter !== 'cups' || cupFilter === 'all' || String(i.league || 'GBL') === cupFilter));
+      if (cpTierFilter !== 'ALL') {
+        items = items.filter(i => resolveCpTier(i.league) === cpTierFilter);
+      }
+      if (cupFilter !== 'ALL') {
+        items = items.filter(i => String(i.league || '').trim().toUpperCase() === cupFilter.trim().toUpperCase());
       }
       if (currentFilter === 'starred') {
         items = items.filter(i => i.isPinned);
@@ -7095,7 +7124,8 @@ function renderVaultDashboardPage(origin, clientIngestKey) {
       grid.innerHTML = items.map(item => {
         const isWin = String(item.result || '').toUpperCase().includes('WIN');
         const mb = ((item.totalBytes || item.videoBytes || 0) / (1024 * 1024)).toFixed(1);
-        const dateRaw = item.createdAt || item.uploadedAt; const dateStr = dateRaw ? new Date(dateRaw).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '';
+        const dateRaw = item.createdAt || item.uploadedAt;
+        const dateStr = dateRaw ? new Date(dateRaw).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
         const isPub = Boolean(item.isPublic);
         const isOverriddenPublic = !isPub && vis === 'all';
         const safeBattleIdJs = escJsArg(item.battleId);
