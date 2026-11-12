@@ -711,8 +711,9 @@ internal fun OverlayService.schedulePostBattleDvrAutoUploadJob(
         }
 
         // Auto-upload to Cloud R2 Replay Vault if user has an active Unlock Key (Base / Pro / VIP)
+        var vaultOk = false
         try {
-            val (vaultOk, vaultMsg, _) = OverlayService.uploadBattleReplayToR2VaultIfUnlockedBlocking(
+            val (vOk, vaultMsg, _) = OverlayService.uploadBattleReplayToR2VaultIfUnlockedBlocking(
                 prefs = prefs,
                 gson = gson,
                 battleId = battleId,
@@ -720,10 +721,20 @@ internal fun OverlayService.schedulePostBattleDvrAutoUploadJob(
                 mp4File = localMp4,
                 traceFile = localTrace
             )
-            if (vaultOk && toastMsg == null) {
+            vaultOk = vOk
+            if (vOk && toastMsg == null) {
+                toastMsg = vaultMsg
+            } else if (!vOk && toastMsg == null && (OverlayService.getEffectiveReplayTierStatic(prefs) == "pro" || OverlayService.getEffectiveReplayTierStatic(prefs) == "vip")) {
                 toastMsg = vaultMsg
             }
         } catch (_: Exception) {}
+
+        if (!vaultOk && (OverlayService.getEffectiveReplayTierStatic(prefs) == "pro" || OverlayService.getEffectiveReplayTierStatic(prefs) == "vip")) {
+            try {
+                if (localMp4.exists()) localMp4.copyTo(File(cacheDir, "${cleanId}_video.mp4"), overwrite = true)
+                if (localTrace.exists()) localTrace.copyTo(File(cacheDir, "${cleanId}_deep_trace.jsonl"), overwrite = true)
+            } catch (_: Exception) {}
+        }
 
         try {
             OverlayService.uploadPendingAiTelemetryBatchBlocking(
@@ -736,7 +747,7 @@ internal fun OverlayService.schedulePostBattleDvrAutoUploadJob(
 
         withContext(Dispatchers.Main) {
             if (lastLoggedBattleId == battleId && !lastLoggedBattleDvrDeleted) {
-                lastLoggedBattleDvrUploadStatus = "UPLOADED"
+                lastLoggedBattleDvrUploadStatus = if (vaultOk || shouldUploadDiag) "UPLOADED" else "LOCAL_ONLY"
                 recalculateAndPushBattleData()
             }
             if (!toastMsg.isNullOrBlank()) {

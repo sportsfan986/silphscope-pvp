@@ -2590,19 +2590,26 @@ internal fun OverlayService.Companion.retryPendingCachedDvrBundlesBlocking(
         )
         lastMsg = msg
         if (ok) {
-            try {
-                uploadBattleReplayToR2VaultIfUnlockedBlocking(
-                    prefs = prefs,
-                    gson = gson,
-                    battleId = summaryRecord.battleId,
-                    summaryRecord = summaryRecord,
-                    mp4File = mp4File,
-                    traceFile = traceFile
-                )
-            } catch (_: Exception) {}
-            try { mp4File.delete() } catch (_: Exception) {}
-            try { traceFile.delete() } catch (_: Exception) {}
-            uploadedCount++
+            val tier = getEffectiveReplayTierStatic(prefs)
+            var vaultOk = (tier == "free" || tier == "supporter")
+            if (!vaultOk) {
+                try {
+                    val (vOk, _, _) = uploadBattleReplayToR2VaultIfUnlockedBlocking(
+                        prefs = prefs,
+                        gson = gson,
+                        battleId = summaryRecord.battleId,
+                        summaryRecord = summaryRecord,
+                        mp4File = mp4File,
+                        traceFile = traceFile
+                    )
+                    vaultOk = vOk
+                } catch (_: Exception) {}
+            }
+            if (vaultOk) {
+                try { mp4File.delete() } catch (_: Exception) {}
+                try { traceFile.delete() } catch (_: Exception) {}
+                uploadedCount++
+            }
         }
     }
     return uploadedCount to lastMsg
@@ -3585,11 +3592,15 @@ internal fun OverlayService.Companion.uploadBattleReplayToR2VaultIfUnlockedBlock
                     }
                     .build()
 
+                val vaultSession = getVaultSessionTokenStatic(prefs)
                 val req = applyWorkerClientAuthHeaders(
                     Request.Builder()
                         .url("$baseUrl/v1/replays/upload")
                         .post(multipart)
-                        .header("X-SilphScope-Unlock-Key", unlockKey),
+                        .header("X-SilphScope-Unlock-Key", unlockKey)
+                        .apply {
+                            if (vaultSession.isNotBlank()) header("X-Vault-Session", vaultSession)
+                        },
                     prefs,
                     safeUser,
                     devHash
@@ -3644,6 +3655,76 @@ internal fun OverlayService.Companion.uploadBattleReplayToR2VaultIfUnlockedBlock
     } catch (e: Exception) {
         Triple(false, "⚠️ Vault upload error: ${e.localizedMessage ?: "Network error"}", null)
     }
+}
+
+internal fun OverlayService.Companion.retryUnuploadedLocalDvrReplaysBlocking(
+    filesDir: File,
+    prefs: SharedPreferences,
+    gson: Gson,
+    battleLogs: List<BattleLogEntry> = emptyList()
+): Int {
+    val tier = getEffectiveReplayTierStatic(prefs)
+    if (tier == "free" || tier == "supporter") return 0
+    if (!isDvrUploadAllowedOnCurrentNetworkStatic(prefs)) return 0
+    val replaysDir = File(filesDir, "dvr_replays")
+    if (!replaysDir.exists()) return 0
+    val mp4Files = (replaysDir.listFiles() ?: emptyArray())
+        .filter { f -> f.isFile && f.name.endsWith("_video.mp4") && f.length() > 0L }
+        .sortedBy { it.lastModified() }
+    if (mp4Files.isEmpty()) return 0
+
+    val vaultMap = loadReplayVaultMapStatic(prefs, gson)
+    val battleLogsById = battleLogs.associateBy {
+        it.id.replace(Regex("[^a-zA-Z0-9_-]"), "")
+    }
+
+    var uploaded = 0
+    for (mp4File in mp4Files) {
+        val cleanId = mp4File.name.removeSuffix("_video.mp4")
+        val existing = vaultMap[cleanId]
+        if (existing != null && existing.shareId.isNotBlank()) continue
+        val traceFile = File(replaysDir, "${cleanId}_deep_trace.jsonl")
+        var summaryRecord: AiTelemetryBattleRecordV510? = null
+        if (traceFile.exists()) {
+            try {
+                val firstLine = traceFile.bufferedReader(Charsets.UTF_8).use { it.readLine() }.orEmpty()
+                if (firstLine.startsWith("{\"recordType\":\"BATTLE_DVR_SUMMARY_HEADER\"")) {
+                    val obj = JsonParser.parseString(firstLine).asJsonObject
+                    if (obj.has("battleSummary") && obj.get("battleSummary").isJsonObject) {
+                        summaryRecord = gson.fromJson(obj.get("battleSummary"), AiTelemetryBattleRecordV510::class.java)
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        if (summaryRecord == null) {
+            val logEntry = battleLogsById[cleanId]
+            if (logEntry != null) {
+                summaryRecord = AiTelemetryBattleRecordV510(
+                    schemaVersion = APP_VERSION,
+                    battleId = cleanId,
+                    timestampMs = logEntry.timestampMs,
+                    appVersion = APP_VERSION,
+                    league = logEntry.league,
+                    result = logEntry.result,
+                    teamName = logEntry.userTeamName,
+                    userTeamSpecs = logEntry.userPokemon.filter { it.isNotBlank() }
+                        .mapIndexed { idx, sp -> AiTelemetrySlotSpec(slotIndex = idx, species = sp) },
+                    oppTeamSpecs = logEntry.opponents.filter { it.isNotBlank() }
+                        .mapIndexed { idx, sp -> AiTelemetryOppSlotSpec(slotIndex = idx, species = sp) }
+                )
+            }
+        }
+        val (ok, _, _) = uploadBattleReplayToR2VaultIfUnlockedBlocking(
+            prefs = prefs,
+            gson = gson,
+            battleId = cleanId,
+            summaryRecord = summaryRecord,
+            mp4File = mp4File,
+            traceFile = traceFile
+        )
+        if (ok) uploaded++
+    }
+    return uploaded
 }
 
 internal fun OverlayService.Companion.togglePinOrPrivacyReplayBlocking(

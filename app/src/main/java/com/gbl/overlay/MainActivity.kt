@@ -4139,12 +4139,12 @@ class MainActivity : AppCompatActivity() {
             }
             var recoveredDvrCount = 0
             try {
-                if (!silent &&
-                    OverlayService.countPendingCachedDvrBundlesStatic(cacheDir) > 0 &&
-                    OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs)
-                ) {
-                    val (dCount, _) = OverlayService.retryPendingCachedDvrBundlesBlocking(cacheDir, prefs, gson)
-                    recoveredDvrCount = dCount
+                if (!silent && OverlayService.hasCustomScreenNameForVideoLoggingStatic(prefs)) {
+                    if (OverlayService.countPendingCachedDvrBundlesStatic(cacheDir) > 0) {
+                        val (dCount, _) = OverlayService.retryPendingCachedDvrBundlesBlocking(cacheDir, prefs, gson)
+                        recoveredDvrCount += dCount
+                    }
+                    recoveredDvrCount += OverlayService.retryUnuploadedLocalDvrReplaysBlocking(filesDir, prefs, gson, loadBattleLogs())
                 }
                 if (!silent && OverlayService.getPendingAiTelemetryCountsFastStatic(prefs, gson).first > 0) {
                     OverlayService.uploadPendingAiTelemetryBatchBlocking(
@@ -8952,6 +8952,9 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "⚠️ No DVR video recording available for this battle.", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
+                btnShareLink.isEnabled = false
+                val origShareText = btnShareLink.text
+                btnShareLink.text = "⏳ Uploading..."
                 Toast.makeText(this, "☁️ Uploading battle to Cloud Replay Vault for sharing...", Toast.LENGTH_SHORT).show()
                 lifecycleScope.launch(Dispatchers.IO) {
                     val (ok, msg, uploadedMeta) = OverlayService.uploadBattleReplayToR2VaultIfUnlockedBlocking(
@@ -8963,8 +8966,12 @@ class MainActivity : AppCompatActivity() {
                         traceFile = localTraceFile ?: java.io.File(replaysDir, "${cleanBattleId}_deep_trace.jsonl")
                     )
                     withContext(Dispatchers.Main) {
+                        btnShareLink.isEnabled = true
                         if (ok && uploadedMeta != null && uploadedMeta.shareUrl.isNotBlank()) {
                             vaultMeta = uploadedMeta
+                            btnShareLink.text = "🔗 Share Link"
+                            btnPinToggle.visibility = android.view.View.VISIBLE
+                            btnPublicToggle.visibility = android.view.View.VISIBLE
                             val clip = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
                             clip?.setPrimaryClip(android.content.ClipData.newPlainText("SilphScope Replay", uploadedMeta.shareUrl))
                             Toast.makeText(this@MainActivity, "🔗 Share Link copied: ${uploadedMeta.shareUrl}", Toast.LENGTH_LONG).show()
@@ -8974,6 +8981,7 @@ class MainActivity : AppCompatActivity() {
                             }
                             startActivity(Intent.createChooser(sendIntent, "Share Battle Replay"))
                         } else {
+                            btnShareLink.text = origShareText
                             Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
                         }
                     }
