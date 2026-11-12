@@ -86,6 +86,44 @@ import com.gbl.overlay.OverlayService.Companion.FormResolver
 // (Pokeballs, Shields, Charge Circles, Prescan Calibration, Floating HP Bars)
 // =============================================================================
 
+private val COUNTDOWN_COS_16 = DoubleArray(16) { i -> kotlin.math.cos((i * 22.5) * Math.PI / 180.0) }
+private val COUNTDOWN_SIN_16 = DoubleArray(16) { i -> kotlin.math.sin((i * 22.5) * Math.PI / 180.0) }
+
+internal fun OverlayService.drawBinarizedWhiteTextCropOnto(
+    source: Bitmap,
+    crop: Rect,
+    dstCanvas: Canvas,
+    dstRect: Rect,
+    filterPaint: Paint
+): Boolean {
+    return try {
+        val left = crop.left.coerceIn(0, source.width - 1)
+        val top = crop.top.coerceIn(0, source.height - 1)
+        val cw = crop.width().coerceIn(1, source.width - left)
+        val ch = crop.height().coerceIn(1, source.height - top)
+        val totalPx = cw * ch
+        val pixels = ensureOcrScratchPixels(totalPx)
+        source.getPixels(pixels, 0, cw, left, top, cw, ch)
+        for (i in 0 until totalPx) {
+            val c = pixels[i]
+            val r = (c shr 16) and 0xFF
+            val g = (c shr 8) and 0xFF
+            val b = c and 0xFF
+            val maxCh = max(r, max(g, b))
+            val minCh = min(r, min(g, b))
+            val isWhiteGlyph = r >= 188 && g >= 188 && b >= 188 && (maxCh - minCh) <= 42
+            pixels[i] = if (isWhiteGlyph) Color.BLACK else Color.WHITE
+        }
+        val bwBmp = ensureReusableOcrBwBitmap(cw, ch)
+        bwBmp.setPixels(pixels, 0, cw, 0, 0, cw, ch)
+        reusableOcrBwSrcRect.set(0, 0, cw, ch)
+        dstCanvas.drawBitmap(bwBmp, reusableOcrBwSrcRect, dstRect, filterPaint)
+        true
+    } catch (_: Exception) {
+        false
+    }
+}
+
 internal fun OverlayService.createHighContrastWhiteTextBitmap(source: Bitmap, crop: Rect): Bitmap? {
     return try {
         val cw = crop.width().coerceAtLeast(1)
@@ -147,10 +185,10 @@ internal fun OverlayService.detectActivePokeballCount(screen: Bitmap, searchRect
         val ch = bottom - top
         if (cw <= 4 || ch <= 4) return -1
 
-        val pixels = IntArray(cw * ch)
+        val pixels = ensureVisionScratchPixels(cw * ch)
         screen.getPixels(pixels, 0, cw, left, top, cw, ch)
 
-        val rowRedCount = IntArray(ch)
+        val rowRedCount = ensureVisionScratchRows(ch)
         for (ry in 0 until ch) {
             val rowOffset = ry * cw
             var count = 0
@@ -186,8 +224,8 @@ internal fun OverlayService.detectActivePokeballCount(screen: Bitmap, searchRect
 
         val yStart = (bestRy - bandRadiusY).coerceAtLeast(0)
         val yEnd = (bestRy + bandRadiusY).coerceAtMost(ch - 1)
-        val colRed = IntArray(cw)
-        val colGrey = IntArray(cw)
+        val colRed = ensureVisionScratchColA(cw)
+        val colGrey = ensureVisionScratchColB(cw)
         var whiteCardCols = 0
         for (rx in 0 until cw) {
             var cr = 0
@@ -297,10 +335,10 @@ internal fun OverlayService.detectActiveShieldCount(screen: Bitmap, searchRect: 
         val ch = bottom - top
         if (cw <= 4 || ch <= 4) return -1
 
-        val pixels = IntArray(cw * ch)
+        val pixels = ensureVisionScratchPixels(cw * ch)
         screen.getPixels(pixels, 0, cw, left, top, cw, ch)
 
-        val rowPinkCount = IntArray(ch)
+        val rowPinkCount = ensureVisionScratchRows(ch)
         for (ry in 0 until ch) {
             val rowOffset = ry * cw
             var count = 0
@@ -334,7 +372,7 @@ internal fun OverlayService.detectActiveShieldCount(screen: Bitmap, searchRect: 
 
         val yStart = (bestRy - bandRadiusY).coerceAtLeast(0)
         val yEnd = (bestRy + bandRadiusY).coerceAtMost(ch - 1)
-        val colPink = IntArray(cw)
+        val colPink = ensureVisionScratchColA(cw)
         for (rx in 0 until cw) {
             var c = 0
             for (ry in yStart..yEnd) {
@@ -657,6 +695,25 @@ internal fun OverlayService.tryPrescanCalibrateChargeCircles(screen: Bitmap, w: 
         fun probeEmptyCircleAt(nomCx: Int): CirclePrescanProbe? {
             val rx = (w * 0.022f).toInt().coerceAtLeast(8)
             val ry = (h * 0.015f).toInt().coerceAtLeast(10)
+            val maxProbeHalf = max(flankDx + step * 2, (w * 0.095f).toInt()) + rx + 8
+            val roiLeft = (nomCx - maxProbeHalf).coerceIn(0, w - 1)
+            val roiTop = (nominalCy - maxProbeHalf).coerceIn(0, h - 1)
+            val roiRight = (nomCx + maxProbeHalf + 1).coerceIn(roiLeft + 1, w)
+            val roiBottom = (nominalCy + maxProbeHalf + 1).coerceIn(roiTop + 1, h)
+            val roiW = roiRight - roiLeft
+            val roiH = roiBottom - roiTop
+            val roiPixels = ensureVisionScratchPixels(roiW * roiH)
+            screen.getPixels(roiPixels, 0, roiW, roiLeft, roiTop, roiW, roiH)
+            fun pxAt(x: Int, y: Int): Int {
+                val cxC = x.coerceIn(0, w - 1)
+                val cyC = y.coerceIn(0, h - 1)
+                return if (cxC in roiLeft until roiRight && cyC in roiTop until roiBottom) {
+                    roiPixels[(cyC - roiTop) * roiW + (cxC - roiLeft)]
+                } else {
+                    screen.getPixel(cxC, cyC)
+                }
+            }
+
             var peakIconLuma = 0.0
             var py = (nominalCy - ry).coerceAtLeast(10)
             val pyMax = (nominalCy + ry).coerceAtMost(h - 10)
@@ -664,7 +721,7 @@ internal fun OverlayService.tryPrescanCalibrateChargeCircles(screen: Bitmap, w: 
                 var px = (nomCx - rx).coerceAtLeast(10)
                 val pxMax = (nomCx + rx).coerceAtMost(w - 10)
                 while (px <= pxMax) {
-                    val c = screen.getPixel(px, py)
+                    val c = pxAt(px, py)
                     val r = Color.red(c)
                     val g = Color.green(c)
                     val b = Color.blue(c)
@@ -688,7 +745,7 @@ internal fun OverlayService.tryPrescanCalibrateChargeCircles(screen: Bitmap, w: 
                 var px = (nomCx - rx).coerceAtLeast(10)
                 val pxMax = (nomCx + rx).coerceAtMost(w - 10)
                 while (px <= pxMax) {
-                    val c = screen.getPixel(px, py)
+                    val c = pxAt(px, py)
                     val r = Color.red(c)
                     val g = Color.green(c)
                     val b = Color.blue(c)
@@ -710,21 +767,23 @@ internal fun OverlayService.tryPrescanCalibrateChargeCircles(screen: Bitmap, w: 
             val seedCy = ((rawIconCy * 0.45) + (nominalCy * 0.55)).roundToInt().coerceIn((h * 0.880f).toInt(), (h * 0.908f).toInt())
 
             // 2. Sample upper & mid outer annulus flanks to verify uniform 0% dark-gray circle interior
-            val flankSamplesLuma = ArrayList<Double>(16)
-            val flankSamplesSat = ArrayList<Double>(16)
+            val flankSamplesLuma = DoubleArray(16)
+            val flankSamplesSat = DoubleArray(16)
+            var flankIdx = 0
             val dyCheck = (h * 0.012f).toInt().coerceAtLeast(6)
             for (dy in intArrayOf(-dyCheck * 2, -dyCheck, 0, dyCheck)) {
                 val sy = (seedCy + dy).coerceIn(10, h - 10)
                 for (dx in intArrayOf(-(flankDx + step * 2), -flankDx, flankDx, flankDx + step * 2)) {
                     val sx = (foundCx + dx).coerceIn(10, w - 10)
-                    val c = screen.getPixel(sx, sy)
+                    val c = pxAt(sx, sy)
                     val r = Color.red(c)
                     val g = Color.green(c)
                     val b = Color.blue(c)
                     val l = 0.299 * r + 0.587 * g + 0.114 * b
                     val s = (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
-                    flankSamplesLuma.add(l)
-                    flankSamplesSat.add(s)
+                    flankSamplesLuma[flankIdx] = l
+                    flankSamplesSat[flankIdx] = s
+                    flankIdx++
                 }
             }
             flankSamplesLuma.sort()
@@ -753,8 +812,8 @@ internal fun OverlayService.tryPrescanCalibrateChargeCircles(screen: Bitmap, w: 
                 val yIn = (seedCy + uy * rBorderIn).roundToInt().coerceIn(0, h - 1)
                 val xOut = (foundCx + ux * rBorderOut).roundToInt().coerceIn(0, w - 1)
                 val yOut = (seedCy + uy * rBorderOut).roundToInt().coerceIn(0, h - 1)
-                val cIn = screen.getPixel(xIn, yIn)
-                val cOut = screen.getPixel(xOut, yOut)
+                val cIn = pxAt(xIn, yIn)
+                val cOut = pxAt(xOut, yOut)
                 val rIn = Color.red(cIn); val gIn = Color.green(cIn); val bIn = Color.blue(cIn)
                 val rOut = Color.red(cOut); val gOut = Color.green(cOut); val bOut = Color.blue(cOut)
                 val lIn = 0.299 * rIn + 0.587 * gIn + 0.114 * bIn
@@ -911,6 +970,22 @@ internal fun OverlayService.detectTopCountdownCircle(screen: Bitmap, w: Int, h: 
         val cx = w * 0.500
         val radius = w * 0.0833
         val candidateCyFracs = doubleArrayOf(0.070, 0.073, 0.076, 0.078, 0.080, 0.082, 0.085, 0.088)
+        val roiPad = kotlin.math.ceil(radius * 1.08).toInt() + 4
+        val roiLeft = (cx.roundToInt() - roiPad).coerceIn(0, w - 1)
+        val roiRight = (cx.roundToInt() + roiPad + 1).coerceIn(roiLeft + 1, w)
+        val roiTop = ((h * 0.070).roundToInt() - roiPad).coerceIn(0, h - 1)
+        val roiBottom = ((h * 0.088).roundToInt() + roiPad + 1).coerceIn(roiTop + 1, h)
+        val roiW = roiRight - roiLeft
+        val roiH = roiBottom - roiTop
+        val roiPixels = ensureVisionScratchPixels(roiW * roiH)
+        screen.getPixels(roiPixels, 0, roiW, roiLeft, roiTop, roiW, roiH)
+        fun pxAt(x: Int, y: Int): Int {
+            return if (x in roiLeft until roiRight && y in roiTop until roiBottom) {
+                roiPixels[(y - roiTop) * roiW + (x - roiLeft)]
+            } else {
+                screen.getPixel(x, y)
+            }
+        }
 
         for (cyFrac in candidateCyFracs) {
             val cy = h * cyFrac
@@ -923,16 +998,15 @@ internal fun OverlayService.detectTopCountdownCircle(screen: Bitmap, w: Int, h: 
             var innerCount = 0
 
             for (i in 0 until 16) {
-                val theta = (i * 22.5) * Math.PI / 180.0
-                val ux = kotlin.math.cos(theta)
-                val uy = kotlin.math.sin(theta)
+                val ux = COUNTDOWN_COS_16[i]
+                val uy = COUNTDOWN_SIN_16[i]
 
                 var innerL = 0.0
                 var innerS = 0.0
                 for (rMult in doubleArrayOf(0.44, 0.52, 0.60)) {
                     val px = (cx + ux * radius * rMult).roundToInt().coerceIn(0, w - 1)
                     val py = (cy + uy * radius * rMult).roundToInt().coerceIn(0, h - 1)
-                    val c = screen.getPixel(px, py)
+                    val c = pxAt(px, py)
                     val r = Color.red(c)
                     val g = Color.green(c)
                     val b = Color.blue(c)
@@ -947,7 +1021,7 @@ internal fun OverlayService.detectTopCountdownCircle(screen: Bitmap, w: Int, h: 
                 for (rMult in doubleArrayOf(0.72, 0.77, 0.81, 0.85)) {
                     val px = (cx + ux * radius * rMult).roundToInt().coerceIn(0, w - 1)
                     val py = (cy + uy * radius * rMult).roundToInt().coerceIn(0, h - 1)
-                    val c = screen.getPixel(px, py)
+                    val c = pxAt(px, py)
                     val r = Color.red(c)
                     val g = Color.green(c)
                     val b = Color.blue(c)
@@ -964,7 +1038,7 @@ internal fun OverlayService.detectTopCountdownCircle(screen: Bitmap, w: Int, h: 
                 for (rMult in doubleArrayOf(0.93, 0.98, 1.03)) {
                     val px = (cx + ux * radius * rMult).roundToInt().coerceIn(0, w - 1)
                     val py = (cy + uy * radius * rMult).roundToInt().coerceIn(0, h - 1)
-                    val c = screen.getPixel(px, py)
+                    val c = pxAt(px, py)
                     val r = Color.red(c)
                     val g = Color.green(c)
                     val b = Color.blue(c)
@@ -1002,6 +1076,13 @@ internal fun OverlayService.detectTopCountdownCircle(screen: Bitmap, w: Int, h: 
                     if (ringPeakL >= 78.0) brightArcSpokes++
                     if (ringPeakL >= 205.0 && ringPeakS <= 22.0) pureWhiteArcSpokes++
                 }
+
+                val rem = 15 - i
+                if (validSpokes + rem < 7 ||
+                    (validSpokes + rem < 11 && upperSpokes + rem < 6 && validSpokes + antlerOccludedSpokes + rem < 12)
+                ) {
+                    break
+                }
             }
 
             // Full 16-spoke match, upper-semicircle match, OR antler/cloud-occluded match (8+ valid spokes & 12+ total valid/occluded spokes)
@@ -1026,7 +1107,7 @@ internal fun OverlayService.detectTopCountdownCircle(screen: Bitmap, w: Int, h: 
                 var dx = -digitRx
                 while (dx <= digitRx) {
                     val px = (cx + dx).roundToInt().coerceIn(0, w - 1)
-                    val c = screen.getPixel(px, py)
+                    val c = pxAt(px, py)
                     val r = Color.red(c)
                     val g = Color.green(c)
                     val b = Color.blue(c)
@@ -1085,6 +1166,14 @@ internal fun OverlayService.detectSingleChargeButtonFillPct(
         var maxCenterIconLuma = 0.0
         val searchRx = (w * 0.016f).toInt().coerceAtLeast(6)
         val searchRy = (h * 0.012f).toInt().coerceAtLeast(8)
+        val cPatchLeft = (cx - searchRx).coerceIn(0, w - 1)
+        val cPatchRight = (cx + searchRx + 1).coerceIn(cPatchLeft + 1, w)
+        val cPatchTop = (cy - searchRy).coerceIn(0, h - 1)
+        val cPatchBottom = (cy + searchRy + 1).coerceIn(cPatchTop + 1, h)
+        val cPatchW = cPatchRight - cPatchLeft
+        val cPatchH = cPatchBottom - cPatchTop
+        val cPatchPx = ensureVisionScratchPixels(cPatchW * cPatchH)
+        screen.getPixels(cPatchPx, 0, cPatchW, cPatchLeft, cPatchTop, cPatchW, cPatchH)
         var iconWx = 0.0
         var iconWy = 0.0
         var iconWSum = 0.0
@@ -1092,7 +1181,11 @@ internal fun OverlayService.detectSingleChargeButtonFillPct(
             val py = (cy + dy).coerceIn(0, h - 1)
             for (dx in -searchRx..searchRx step stepY) {
                 val px = (cx + dx).coerceIn(0, w - 1)
-                val c = screen.getPixel(px, py)
+                val c = if (px in cPatchLeft until cPatchRight && py in cPatchTop until cPatchBottom) {
+                    cPatchPx[(py - cPatchTop) * cPatchW + (px - cPatchLeft)]
+                } else {
+                    screen.getPixel(px, py)
+                }
                 val r = Color.red(c)
                 val g = Color.green(c)
                 val b = Color.blue(c)
@@ -1148,6 +1241,23 @@ internal fun OverlayService.detectSingleChargeButtonFillPct(
         val radiusPx = (w * calibratedRadiusWFrac).toDouble()
         val iconHalfH = (radiusY * 0.58).toInt().coerceAtLeast(16)
 
+        val maxRoiHalf = kotlin.math.ceil(max(radiusPx * 1.60, w * 0.095)).toInt() + 10
+        val roiLeft = (actualCx - maxRoiHalf).coerceIn(0, w - 1)
+        val roiRight = (actualCx + maxRoiHalf + 1).coerceIn(roiLeft + 1, w)
+        val roiTop = (actualCy - maxRoiHalf).coerceIn(0, h - 1)
+        val roiBottom = (actualCy + maxRoiHalf + 1).coerceIn(roiTop + 1, h)
+        val roiW = roiRight - roiLeft
+        val roiH = roiBottom - roiTop
+        val roiPixels = ensureVisionScratchPixels(roiW * roiH)
+        screen.getPixels(roiPixels, 0, roiW, roiLeft, roiTop, roiW, roiH)
+        fun pxAt(x: Int, y: Int): Int {
+            return if (x in roiLeft until roiRight && y in roiTop until roiBottom) {
+                roiPixels[(y - roiTop) * roiW + (x - roiLeft)]
+            } else {
+                screen.getPixel(x.coerceIn(0, w - 1), y.coerceIn(0, h - 1))
+            }
+        }
+
         // 1. v3.99 / v4.10 3-Ring Radial Perimeter Detector around `(actualCx, actualCy)`:
         //    - 1st Fill (`0..99%`): Dark-grey perimeter border (no white border).
         //    - 2nd Fill (`100..199%`): Main circle border filled in bright solid white (`rMult ∈ [0.98, 1.24]`), no second outer circle.
@@ -1175,7 +1285,7 @@ internal fun OverlayService.detectSingleChargeButtonFillPct(
             while (rMult <= 1.24) {
                 val rx = (actualCx + ux * radiusPx * rMult).roundToInt().coerceIn(0, w - 1)
                 val ry = (actualCy + uy * radiusPx * rMult).roundToInt().coerceIn(0, h - 1)
-                val c = screen.getPixel(rx, ry)
+                val c = pxAt(rx, ry)
                 val r = Color.red(c)
                 val g = Color.green(c)
                 val b = Color.blue(c)
@@ -1190,7 +1300,7 @@ internal fun OverlayService.detectSingleChargeButtonFillPct(
             // Guard against full-screen white flash: check exterior well outside the 2nd outer ring (rMult = 1.54)
             val extX = (actualCx + ux * radiusPx * 1.54).roundToInt().coerceIn(0, w - 1)
             val extY = (actualCy + uy * radiusPx * 1.54).roundToInt().coerceIn(0, h - 1)
-            val extC = screen.getPixel(extX, extY)
+            val extC = pxAt(extX, extY)
             val extR = Color.red(extC); val extG = Color.green(extC); val extB = Color.blue(extC)
             val extL = 0.299 * extR + 0.587 * extG + 0.114 * extB
             val extS = max(extR, max(extG, extB)) - min(extR, min(extG, extB))
@@ -1210,7 +1320,7 @@ internal fun OverlayService.detectSingleChargeButtonFillPct(
                 for (gMult in doubleArrayOf(1.26, 1.29, 1.32)) {
                     val gx = (actualCx + ux * radiusPx * gMult).roundToInt().coerceIn(0, w - 1)
                     val gy = (actualCy + uy * radiusPx * gMult).roundToInt().coerceIn(0, h - 1)
-                    val gc = screen.getPixel(gx, gy)
+                    val gc = pxAt(gx, gy)
                     val gl = 0.299 * Color.red(gc) + 0.587 * Color.green(gc) + 0.114 * Color.blue(gc)
                     if (gl < gapL) gapL = gl
                 }
@@ -1219,7 +1329,7 @@ internal fun OverlayService.detectSingleChargeButtonFillPct(
                 for (oMult in doubleArrayOf(1.50, 1.54)) {
                     val ox = (actualCx + ux * radiusPx * oMult).roundToInt().coerceIn(0, w - 1)
                     val oyBg = (actualCy + uy * radiusPx * oMult).roundToInt().coerceIn(0, h - 1)
-                    val oc = screen.getPixel(ox, oyBg)
+                    val oc = pxAt(ox, oyBg)
                     val ol = 0.299 * Color.red(oc) + 0.587 * Color.green(oc) + 0.114 * Color.blue(oc)
                     if (ol < outBgL) outBgL = ol
                 }
@@ -1229,7 +1339,7 @@ internal fun OverlayService.detectSingleChargeButtonFillPct(
                     while (rMult2 <= 1.46) {
                         val rx2 = (actualCx + ux * radiusPx * rMult2).roundToInt().coerceIn(0, w - 1)
                         val ry2 = (actualCy + uy * radiusPx * rMult2).roundToInt().coerceIn(0, h - 1)
-                        val c2 = screen.getPixel(rx2, ry2)
+                        val c2 = pxAt(rx2, ry2)
                         val r2 = Color.red(c2)
                         val g2 = Color.green(c2)
                         val b2 = Color.blue(c2)
@@ -1258,7 +1368,7 @@ internal fun OverlayService.detectSingleChargeButtonFillPct(
         while (ty <= topCheckYEnd) {
             for (dx in intArrayOf(-topCapHalfDx, -capDx, 0, capDx, topCapHalfDx)) {
                 val px = (actualCx + dx).coerceIn(0, w - 1)
-                val c = screen.getPixel(px, ty)
+                val c = pxAt(px, ty)
                 val r = Color.red(c)
                 val g = Color.green(c)
                 val b = Color.blue(c)
@@ -1295,7 +1405,7 @@ internal fun OverlayService.detectSingleChargeButtonFillPct(
             val pyCheck = (yBot - (pctCheck * span) / 100.0).roundToInt().coerceIn(yTop + 4, yBot - 4)
             for (dxCheck in intArrayOf(-flankDx1, flankDx1)) {
                 val pxCheck = (actualCx + dxCheck).coerceIn(0, w - 1)
-                val cCheck = screen.getPixel(pxCheck, pyCheck)
+                val cCheck = pxAt(pxCheck, pyCheck)
                 val rC = Color.red(cCheck); val gC = Color.green(cCheck); val bC = Color.blue(cCheck)
                 val lC = 0.299 * rC + 0.587 * gC + 0.114 * bC
                 val sC = (max(rC, max(gC, bC)) - min(rC, min(gC, bC))).toDouble()
@@ -1314,7 +1424,7 @@ internal fun OverlayService.detectSingleChargeButtonFillPct(
         var lowerFlankEarlyLuma = 0.0
         var lowerFlankEarlySat = 0.0
         for (dx in intArrayOf(-flankDx1, flankDx1)) {
-            val cLow = screen.getPixel((actualCx + dx).coerceIn(0, w - 1), lowerContinuityEarlyY)
+            val cLow = pxAt((actualCx + dx).coerceIn(0, w - 1), lowerContinuityEarlyY)
             val rl = Color.red(cLow); val gl = Color.green(cLow); val bl = Color.blue(cLow)
             lowerFlankEarlyLuma += (0.299 * rl + 0.587 * gl + 0.114 * bl) * 0.5
             lowerFlankEarlySat += (max(rl, max(gl, bl)) - min(rl, min(gl, bl))) * 0.5
@@ -1357,7 +1467,7 @@ internal fun OverlayService.detectSingleChargeButtonFillPct(
                 val ry = (yBotOverUv - (pct * overUvSpan) / 100.0).roundToInt().coerceIn(8, h - 8)
                 for (dx in intArrayOf(-topRefDx, topRefDx)) {
                     val px = (actualCx + dx).coerceIn(0, w - 1)
-                    val c = screen.getPixel(px, ry)
+                    val c = pxAt(px, ry)
                     val r = Color.red(c); val g = Color.green(c); val b = Color.blue(c)
                     val l = 0.299 * r + 0.587 * g + 0.114 * b
                     val s = (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
@@ -1370,7 +1480,7 @@ internal fun OverlayService.detectSingleChargeButtonFillPct(
                 val ry = (yBotOverUv - (pct * overUvSpan) / 100.0).roundToInt().coerceIn(8, h - 8)
                 for (dx in intArrayOf(-botRefDx, botRefDx)) {
                     val px = (actualCx + dx).coerceIn(0, w - 1)
-                    val c = screen.getPixel(px, ry)
+                    val c = pxAt(px, ry)
                     val r = Color.red(c); val g = Color.green(c); val b = Color.blue(c)
                     val l = 0.299 * r + 0.587 * g + 0.114 * b
                     val s = (max(r, max(g, b)) - min(r, min(g, b))).toDouble()
@@ -1418,9 +1528,9 @@ internal fun OverlayService.detectSingleChargeButtonFillPct(
                         var hasWhiteIconBleed = false
                         for (dx in xOffs) {
                             val px = (actualCx + dx).coerceIn(0, w - 1)
-                            val cU = screen.getPixel(px, yU)
-                            val cM = screen.getPixel(px, yM)
-                            val cD = screen.getPixel(px, yD)
+                            val cU = pxAt(px, yU)
+                            val cM = pxAt(px, yM)
+                            val cD = pxAt(px, yD)
                             val ru = Color.red(cU); val gu = Color.green(cU); val bu = Color.blue(cU)
                             val rm = Color.red(cM); val gm = Color.green(cM); val bm = Color.blue(cM)
                             val rd = Color.red(cD); val gd = Color.green(cD); val bd = Color.blue(cD)
@@ -1534,7 +1644,7 @@ internal fun OverlayService.detectSingleChargeButtonFillPct(
         var lowerFlankLuma = 0.0
         var lowerFlankSat = 0.0
         for (dx in intArrayOf(-flankDx1, flankDx1)) {
-            val cLow = screen.getPixel((actualCx + dx).coerceIn(0, w - 1), lowerContinuityY)
+            val cLow = pxAt((actualCx + dx).coerceIn(0, w - 1), lowerContinuityY)
             val rl = Color.red(cLow); val gl = Color.green(cLow); val bl = Color.blue(cLow)
             lowerFlankLuma += (0.299 * rl + 0.587 * gl + 0.114 * bl) * 0.5
             lowerFlankSat += (max(rl, max(gl, bl)) - min(rl, min(gl, bl))) * 0.5
@@ -1573,11 +1683,11 @@ internal fun OverlayService.detectSingleChargeButtonFillPct(
             var leftCnt = 0; var rightCnt = 0
             for (dx in xOffsets) {
                 val px = (actualCx + dx).coerceIn(0, w - 1)
-                val cu1 = screen.getPixel(px, yU1)
-                val cu2 = screen.getPixel(px, yU2)
-                val cm = screen.getPixel(px, yM)
-                val cd1 = screen.getPixel(px, yD1)
-                val cd2 = screen.getPixel(px, yD2)
+                val cu1 = pxAt(px, yU1)
+                val cu2 = pxAt(px, yU2)
+                val cm = pxAt(px, yM)
+                val cd1 = pxAt(px, yD1)
+                val cd2 = pxAt(px, yD2)
                 val ru = Color.red(cu1) + Color.red(cu2)
                 val gu = Color.green(cu1) + Color.green(cu2)
                 val bu = Color.blue(cu1) + Color.blue(cu2)
@@ -1714,7 +1824,7 @@ internal fun OverlayService.detectSingleChargeButtonFillPct(
             val py = (actualCy + dy).coerceIn(yTop + 4, yBot - 4)
             for (dx in intArrayOf(-flankDx1, flankDx1)) {
                 val px = (actualCx + dx).coerceIn(0, w - 1)
-                val c = screen.getPixel(px, py)
+                val c = pxAt(px, py)
                 val r = Color.red(c)
                 val g = Color.green(c)
                 val b = Color.blue(c)
@@ -1748,8 +1858,8 @@ internal fun OverlayService.detectSingleChargeButtonFillPct(
                     val yIn = (actualCy + uy * rBorderIn).roundToInt().coerceIn(0, h - 1)
                     val xOut = (actualCx + ux * rBorderOut).roundToInt().coerceIn(0, w - 1)
                     val yOut = (actualCy + uy * rBorderOut).roundToInt().coerceIn(0, h - 1)
-                    val cIn = screen.getPixel(xIn, yIn)
-                    val cOut = screen.getPixel(xOut, yOut)
+                    val cIn = pxAt(xIn, yIn)
+                    val cOut = pxAt(xOut, yOut)
                     val rIn = Color.red(cIn); val gIn = Color.green(cIn); val bIn = Color.blue(cIn)
                     val rOut = Color.red(cOut); val gOut = Color.green(cOut); val bOut = Color.blue(cOut)
                     val lIn = 0.299 * rIn + 0.587 * gIn + 0.114 * bIn
@@ -2182,11 +2292,11 @@ internal fun OverlayService.detectFloatingHpBarPct(
     return try {
         val left = searchRect.left.coerceIn(0, screen.width - 1)
         val right = searchRect.right.coerceIn(0, screen.width)
-        val top = searchRect.top.coerceIn(0, screen.height - 1)
-        val bottom = searchRect.bottom.coerceIn(0, screen.height)
+        val corridorTop = searchRect.top.coerceIn(0, screen.height - 1)
+        val corridorBottom = searchRect.bottom.coerceIn(0, screen.height)
         val cw = right - left
-        val ch = bottom - top
-        if (cw <= 24 || ch <= 14) return -1
+        val corridorCh = corridorBottom - corridorTop
+        if (cw <= 24 || corridorCh <= 14) return -1
 
         val minOuterW = (fullScreenWidth * 0.258f).toInt().coerceAtLeast(52)
         val maxOuterW = (fullScreenWidth * 0.312f).toInt().coerceAtLeast(minOuterW + 8)
@@ -2214,8 +2324,24 @@ internal fun OverlayService.detectFloatingHpBarPct(
         val relAnchorMaxX = (absAnchorMaxX - left).coerceIn(relAnchorMinX, cw - 1)
         val minAllowedAbsFillY = (screen.height * 0.065f).toInt()
 
-        val pixels = IntArray(cw * ch)
-        screen.getPixels(pixels, 0, cw, left, top, cw, ch)
+        val prevStableHpForLock = if (isOpponent) {
+            val activeOppBase = FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
+            val oppIdx = if (detectedOpponents.isNotEmpty()) {
+                detectedOpponents.indexOfFirst {
+                    FormResolver.extractBaseSpecies(it).equals(activeOppBase, ignoreCase = true)
+                }.let { if (it in 0..2) it else 0 }
+            } else 0
+            confirmedOppSlotHpPct.getOrElse(oppIdx) { 100 }.coerceIn(1, 100)
+        } else {
+            val userIdx = (currentPreset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) } ?: 0).coerceIn(0, 2)
+            confirmedPlayerSlotHpPct.getOrElse(userIdx) { 100 }.coerceIn(1, 100)
+        }
+
+        fun scanCorridorRange(top: Int, bottom: Int): Int {
+            val ch = bottom - top
+            if (ch <= 14) return -1
+            val pixels = ensureVisionScratchPixels(cw * ch)
+            screen.getPixels(pixels, 0, cw, left, top, cw, ch)
 
         fun pixelLuma(pixel: Int): Int {
             val r = (pixel shr 16) and 0xFF
@@ -2805,7 +2931,69 @@ internal fun OverlayService.detectFloatingHpBarPct(
             sampledPlayerPendingDmgPct = pendingPct
             sampledPlayerHpRowY = medianRowY
         }
-        ((medianWFill.toFloat() / medianFullInteriorW.toFloat()) * 100f).roundToInt().coerceIn(1, 100)
+        return ((medianWFill.toFloat() / medianFullInteriorW.toFloat()) * 100f).roundToInt().coerceIn(1, 100)
+        }
+
+        val nowMs = currentFrameTimestampMs.takeIf { it > 0L } ?: System.currentTimeMillis()
+        val curSpecies = if (isOpponent) {
+            FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
+        } else {
+            (activeUserPokemonName ?: currentPreset?.pokemon?.firstOrNull()?.name ?: "").lowercase()
+        }
+        val prevRowY = if (isOpponent) lastValidOppHpRowY else lastValidPlayerHpRowY
+        val prevRowMs = if (isOpponent) lastValidOppHpRowTimeMs else lastValidPlayerHpRowTimeMs
+        val prevSpecies = if (isOpponent) lastValidOppHpRowSpecies else lastValidPlayerHpRowSpecies
+        val halfWin = max(72, (screen.height * 0.038f).toInt())
+        val canTryNarrowLock = prevRowY in (corridorTop + 16)..(corridorBottom - 16) &&
+            curSpecies.isNotEmpty() &&
+            curSpecies != "waiting..." &&
+            curSpecies == prevSpecies &&
+            (nowMs - prevRowMs) in 0L..550L &&
+            !isAllCombatHudGone &&
+            pendingChargedAttackActor.isEmpty()
+
+        if (canTryNarrowLock) {
+            val narrowTop = max(corridorTop, prevRowY - halfWin)
+            val narrowBottom = min(corridorBottom, prevRowY + halfWin)
+            if ((narrowBottom - narrowTop) < corridorCh - 24) {
+                val narrowHp = scanCorridorRange(narrowTop, narrowBottom)
+                if (narrowHp in 1..100 && kotlin.math.abs(narrowHp - prevStableHpForLock) <= 35) {
+                    if (isOpponent) {
+                        lastValidOppHpRowY = sampledOppHpRowY
+                        lastValidOppHpRowTimeMs = nowMs
+                        lastValidOppHpRowSpecies = curSpecies
+                    } else {
+                        lastValidPlayerHpRowY = sampledPlayerHpRowY
+                        lastValidPlayerHpRowTimeMs = nowMs
+                        lastValidPlayerHpRowSpecies = curSpecies
+                    }
+                    return narrowHp
+                }
+                if (isOpponent) {
+                    sampledOppHasPendingDmg = false
+                    sampledOppPendingDmgPct = 0
+                    sampledOppHpRowY = -1
+                } else {
+                    sampledPlayerHasPendingDmg = false
+                    sampledPlayerPendingDmgPct = 0
+                    sampledPlayerHpRowY = -1
+                }
+            }
+        }
+
+        val fullHp = scanCorridorRange(corridorTop, corridorBottom)
+        if (fullHp in 1..100) {
+            if (isOpponent) {
+                lastValidOppHpRowY = sampledOppHpRowY
+                lastValidOppHpRowTimeMs = nowMs
+                lastValidOppHpRowSpecies = curSpecies
+            } else {
+                lastValidPlayerHpRowY = sampledPlayerHpRowY
+                lastValidPlayerHpRowTimeMs = nowMs
+                lastValidPlayerHpRowSpecies = curSpecies
+            }
+        }
+        fullHp
     } catch (_: Exception) {
         if (isOpponent) sampledOppHpRowY = -1 else sampledPlayerHpRowY = -1
         -1

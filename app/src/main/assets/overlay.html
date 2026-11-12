@@ -46,8 +46,6 @@
             border: 1px solid rgba(var(--panel-border-rgb), var(--panel-border-alpha));
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35), 0 0 6px rgba(var(--header-accent-rgb), 0.14);
-            backdrop-filter: blur(var(--panel-blur));
-            -webkit-backdrop-filter: blur(var(--panel-blur));
             padding: 5px 6px;
             display: flex;
             flex-direction: column;
@@ -314,13 +312,13 @@
                 background: rgba(220, 38, 38, 0.94);
                 border-color: #fef08a;
                 color: #ffffff;
-                box-shadow: 0 0 8px rgba(239, 68, 68, 0.85);
+                opacity: 1;
             }
             50% {
                 background: rgba(217, 119, 6, 0.94);
                 border-color: #ffffff;
                 color: #fef9c3;
-                box-shadow: 0 0 8px rgba(245, 158, 11, 0.85);
+                opacity: 0.92;
             }
         }
         @keyframes throwImmediateBlink {
@@ -328,13 +326,13 @@
                 background: rgba(185, 28, 28, 0.96);
                 border-color: #fde047;
                 color: #ffffff;
-                box-shadow: 0 0 10px rgba(248, 113, 113, 0.95);
+                opacity: 1;
             }
             50% {
                 background: rgba(127, 29, 29, 0.96);
                 border-color: #fca5a5;
                 color: #fef08a;
-                box-shadow: 0 0 4px rgba(220, 38, 38, 0.75);
+                opacity: 0.86;
             }
         }
         .tactical-rec-row {
@@ -390,28 +388,31 @@
         .tactical-rec-row.timing-blink-1 {
             animation: throwBlink 0.35s infinite !important;
             border-width: 1.5px !important;
+            box-shadow: 0 0 8px rgba(239, 68, 68, 0.85);
         }
         .tactical-rec-row.timing-immediate-0 {
             animation: throwImmediateBlink 0.22s infinite !important;
             border-width: 1.5px !important;
+            box-shadow: 0 0 9px rgba(248, 113, 113, 0.9);
         }
         @keyframes oppSwapWarnBlink {
             0%, 100% {
                 background-color: rgba(244, 63, 94, 0.88);
                 border-color: #fda4af;
                 color: #ffffff;
-                box-shadow: 0 0 7px rgba(244, 63, 94, 0.85);
+                opacity: 1;
             }
             50% {
                 background-color: rgba(245, 158, 11, 0.38);
                 border-color: #fde047;
                 color: #fef08a;
-                box-shadow: 0 0 4px rgba(250, 204, 21, 0.55);
+                opacity: 0.88;
             }
         }
         .opp-swap-blink-warning {
             animation: oppSwapWarnBlink 0.42s infinite !important;
             font-weight: 900 !important;
+            box-shadow: 0 0 6px rgba(244, 63, 94, 0.8) !important;
         }
         .tactical-rec-line1 {
             display: flex;
@@ -2442,7 +2443,7 @@
                 skyEl.classList.remove("hidden");
             }
             applyProportionalScale();
-            notifyHeight();
+            notifyHeight(true);
         }
 
         let activeAiAdviceHudPosition = "bottom";
@@ -2487,7 +2488,33 @@
             } catch (e) {}
         }
 
-        function notifyHeight() {
+        function setHtmlIfChanged(el, html) {
+            if (!el) return;
+            if (el.__lastHtml === html) return;
+            el.__lastHtml = html;
+            el.innerHTML = html;
+        }
+
+        let lastSentInteractiveRegionsKey = "";
+        let notifyHeightRafPending = false;
+
+        function scheduleNotifyHeight() {
+            if (notifyHeightRafPending) return;
+            notifyHeightRafPending = true;
+            if (window.requestAnimationFrame) {
+                window.requestAnimationFrame(function() {
+                    notifyHeightRafPending = false;
+                    notifyHeight(false);
+                });
+            } else {
+                setTimeout(function() {
+                    notifyHeightRafPending = false;
+                    notifyHeight(false);
+                }, 16);
+            }
+        }
+
+        function notifyHeight(forcePush) {
             try {
                 applyProportionalScale();
                 const el = document.getElementById(currentMode === "option1" ? "mode-sky-trench" : "mode-horizon-belt");
@@ -2535,6 +2562,12 @@
                         }
                     }
                 }
+
+                const geomKey = `${currentMode}|${totalHeightDp}|${topZoneHeightDp}|${oppX},${oppY},${oppW},${oppH}|${myX},${myY},${myW},${myH}`;
+                if (!forcePush && geomKey === lastSentInteractiveRegionsKey) {
+                    return;
+                }
+                lastSentInteractiveRegionsKey = geomKey;
 
                 if (window.AndroidOverlay && window.AndroidOverlay.updateInteractiveRegions) {
                     window.AndroidOverlay.updateInteractiveRegions(
@@ -2653,6 +2686,8 @@
             }
         }
 
+        let lastSwapStateKey = "";
+
         function refreshSwapClocks() {
             const now = Date.now();
             let playerSec = 0;
@@ -2671,6 +2706,14 @@
 
             const oppLatched = battleData.oppSwitchValidityLatched !== false;
             const playerLatched = battleData.playerSwitchValidityLatched !== false;
+            const warnSec = (typeof battleData.hapticOppSwapWarnSec === "number" && battleData.hapticOppSwapWarnSec >= 2)
+                ? battleData.hapticOppSwapWarnSec
+                : 5;
+            const stateKey = `${playerSec}|${oppSec}|${playerLatched ? 1 : 0}|${oppLatched ? 1 : 0}|${warnSec}|${battleData.oppSwapEndTimeMs || 0}`;
+            if (stateKey === lastSwapStateKey) {
+                return;
+            }
+            lastSwapStateKey = stateKey;
 
             const oppClockEl = document.getElementById("sky-opp-swap-clock");
             const playerClockEl = document.getElementById("sky-player-swap-clock");
@@ -3230,7 +3273,7 @@
                 const shadowBtn = document.getElementById("btn-toggle-shadow");
                 if (shadowBtn) {
                     const isShad = !!battleData.isOpponentShadow;
-                    shadowBtn.innerHTML = `<span class="btn-row-top">Shadow:</span><span class="btn-row-sub">${isShad ? "ON" : "OFF"}</span>`;
+                    setHtmlIfChanged(shadowBtn, `<span class="btn-row-top">Shadow:</span><span class="btn-row-sub">${isShad ? "ON" : "OFF"}</span>`);
                     if (isShad) shadowBtn.classList.add("active");
                     else shadowBtn.classList.remove("active");
                 }
@@ -3240,7 +3283,7 @@
                 if (formBtn) {
                     const forms = battleData.availableForms || [];
                     const formLabel = battleData.currentFormLabel || "Base";
-                    formBtn.innerHTML = `<span class="btn-row-top">Form:</span><span class="btn-row-sub">${escapeHtml(formLabel)}</span>`;
+                    setHtmlIfChanged(formBtn, `<span class="btn-row-top">Form:</span><span class="btn-row-sub">${escapeHtml(formLabel)}</span>`);
                     if (forms.length > 1 && !isWaitingState) {
                         formBtn.disabled = false;
                         formBtn.classList.remove("disabled");
@@ -3269,7 +3312,7 @@
                 const hpTrackingOnForChips = !!battleData.enableHpTracking;
                 if (teamChipsContainer && battleData.team) {
                     const pSlotHpArr = Array.isArray(battleData.playerSlotHpPct) ? battleData.playerSlotHpPct : [100, 100, 100];
-                    teamChipsContainer.innerHTML = battleData.team.map((member, mIdx) => {
+                    setHtmlIfChanged(teamChipsContainer, battleData.team.map((member, mIdx) => {
                         const fullName = member.name || "Pokemon";
                         const rawCode = String(member.code || "").replace(/^S(?=[A-Z]{3})/i, "").trim();
                         const poke3 = (rawCode.length === 3 ? rawCode.toUpperCase() : abbrPoke3Only(fullName));
@@ -3282,7 +3325,7 @@
                         const subText = hpTrackingOnForChips ? `${slotHp}%` : (isFainted ? "0%" : (isActive ? "ACT" : "RDY"));
                         const subColor = hpTrackingOnForChips || isFainted ? hpColor : (isActive ? "#67e8f9" : "#94a3b8");
                         return `<button class="chip-btn ${isActive && !isFainted ? 'active' : ''} ${isFainted ? 'col-fainted' : ''}" style="${faintStyle}" onclick="selectUserPokemonByIndex(${mIdx})" title="Active lead: ${escapeHtml(fullName)}${isFainted ? ' (Fainted 0% HP)' : (hpTrackingOnForChips ? ' (' + slotHp + '% HP)' : '')}"><span class="btn-row-top">${escapeHtml(poke3)}:</span><span class="btn-row-sub" style="color:${subColor};">${subText}</span></button>`;
-                    }).join("");
+                    }).join(""));
                 }
             } catch (e) {
                 console.error("Toolbar render error", e);
@@ -3417,7 +3460,7 @@
                     const prefixAb = ab.isAutoDetected ? "⚡ Auto" : "✓ Logged";
                     const colorAb = isWinAb ? "#4ade80" : "#f87171";
                     if (stEl) {
-                        stEl.innerHTML = `<span style="color:${colorAb};">${prefixAb} ${ab.result}</span>${ab.telemetryIgnored ? ' <span style="color:#fca5a5;">(AI Ignored)</span>' : ''}`;
+                        setHtmlIfChanged(stEl, `<span style="color:${colorAb};">${prefixAb} ${ab.result}</span>${ab.telemetryIgnored ? ' <span style="color:#fca5a5;">(AI Ignored)</span>' : ''}`);
                     }
                     if (ignBtn) {
                         if (ab.telemetryIgnored) {
@@ -3495,44 +3538,44 @@
 
                             if (dynOpts && dynPrompt) {
                                 const cleanPrompt = dynPrompt.replace(/\{leadMs\}/g, String(leadMs));
-                                tuningLblEl.innerHTML = chosen
+                                setHtmlIfChanged(tuningLblEl, chosen
                                     ? `${escapeHtml(cleanPrompt)} <span style="color:#4ade80;">${escapeHtml(chosen)} ✓</span>`
-                                    : escapeHtml(cleanPrompt);
-                                tuningBtnsEl.innerHTML = dynOpts.map(o => {
+                                    : escapeHtml(cleanPrompt));
+                                setHtmlIfChanged(tuningBtnsEl, dynOpts.map(o => {
                                     const valStr = String(o.val || "");
                                     const lblStr = String(o.label || valStr);
                                     const isSel = chosen === valStr;
                                     const activeStyle = isSel ? "background:#0284c7;color:#fff;border-color:#38bdf8;" : "";
                                     return `<button class="menu-btn menu-btn-lead-neu" style="${activeStyle}" onclick="submitTuningFeedback('${escapeHtml(qType)}','${escapeHtml(valStr)}')">${escapeHtml(lblStr)}</button>`;
-                                }).join("");
+                                }).join(""));
                             } else if (qType === "shield_energy") {
-                                tuningLblEl.innerHTML = chosen
+                                setHtmlIfChanged(tuningLblEl, chosen
                                     ? `🛡️ HP Shield Call: <span style="color:#4ade80;">${escapeHtml(chosen)} ✓</span>`
-                                    : `🛡️ HP Shield Call Energy:`;
+                                    : `🛡️ HP Shield Call Energy:`);
                                 const opts = [
                                     { val: "UNDERCOUNTED", label: "⬇️ Under" },
                                     { val: "ACCURATE", label: "✅ Spot-On" },
                                     { val: "OVERCOUNTED", label: "⬆️ Over" }
                                 ];
-                                tuningBtnsEl.innerHTML = opts.map(o => {
+                                setHtmlIfChanged(tuningBtnsEl, opts.map(o => {
                                     const isSel = chosen === o.val;
                                     const activeStyle = isSel ? "background:#0284c7;color:#fff;border-color:#38bdf8;" : "";
                                     return `<button class="menu-btn menu-btn-lead-neu" style="${activeStyle}" onclick="submitTuningFeedback('shield_energy','${o.val}')">${o.label}</button>`;
-                                }).join("");
+                                }).join(""));
                             } else {
-                                tuningLblEl.innerHTML = chosen
+                                setHtmlIfChanged(tuningLblEl, chosen
                                     ? `📳 Haptic (${leadMs}ms): <span style="color:#4ade80;">${escapeHtml(chosen)} ✓</span>`
-                                    : `📳 Haptic Timing (${leadMs}ms):`;
+                                    : `📳 Haptic Timing (${leadMs}ms):`);
                                 const opts = [
                                     { val: "TOO_EARLY", label: "⏪ Early" },
                                     { val: "IDEAL", label: "✅ Ideal" },
                                     { val: "TOO_LATE", label: "⏩ Late" }
                                 ];
-                                tuningBtnsEl.innerHTML = opts.map(o => {
+                                setHtmlIfChanged(tuningBtnsEl, opts.map(o => {
                                     const isSel = chosen === o.val;
                                     const activeStyle = isSel ? "background:#0284c7;color:#fff;border-color:#38bdf8;" : "";
                                     return `<button class="menu-btn menu-btn-lead-neu" style="${activeStyle}" onclick="submitTuningFeedback('haptic_timing','${o.val}')">${o.label}</button>`;
-                                }).join("");
+                                }).join(""));
                             }
                         } else {
                             tuningRowEl.classList.add("hidden");
@@ -3725,13 +3768,13 @@
                     dvrBtnEl.classList.toggle("recording", isRec);
                     dvrBtnEl.classList.toggle("armed", !isRec && isArmed);
                     if (isRec) {
-                        dvrBtnEl.innerHTML = `<span class="btn-row-top">🔴 REC</span><span class="btn-row-sub">F#${recFrames}</span>`;
+                        setHtmlIfChanged(dvrBtnEl, `<span class="btn-row-top">🔴 REC</span><span class="btn-row-sub">F#${recFrames}</span>`);
                     } else if (isArmed) {
-                        dvrBtnEl.innerHTML = `<span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">ARMED</span>`;
+                        setHtmlIfChanged(dvrBtnEl, `<span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">ARMED</span>`);
                     } else if (isVipAuto) {
-                        dvrBtnEl.innerHTML = `<span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">AUTO</span>`;
+                        setHtmlIfChanged(dvrBtnEl, `<span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">AUTO</span>`);
                     } else {
-                        dvrBtnEl.innerHTML = `<span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">OFF</span>`;
+                        setHtmlIfChanged(dvrBtnEl, `<span class="btn-row-top">🎥 DVR:</span><span class="btn-row-sub">OFF</span>`);
                     }
                 }
             }
@@ -3758,28 +3801,28 @@
                         const prefix = isActLead ? "★ " : "";
                         return `<span class="idle-poke-pill ${isActLead ? 'active-lead' : ''}" onclick="selectUserPokemonByIndex(${mIdx})" title="${isActLead ? 'Active Lead: ' : 'Tap to set as Lead: '}${escapeHtml(fullName)}">${prefix}${escapeHtml(fullName)}</span>`;
                     }).join("");
-                    idleTeamBannerEl.innerHTML = `
+                    setHtmlIfChanged(idleTeamBannerEl, `
                         <div class="idle-team-line1">
                             <span class="idle-league-pill" title="Active League: ${escapeHtml(activeLeagueStr)} • Team: ${escapeHtml(activeTeamNameStr || activeArchStr)}">🏆 ${escapeHtml(activeLeagueStr)} <span style="color:#94a3b8; font-weight:700;">• ${teamSubLabel}</span></span>
                             ${!isReplay ? `<span class="idle-hud-mode-badge ${isCompactNow ? 'compact' : ''}" onclick="toggleLiveHudModeFromBadge(event)" title="${hudBadgeTitle}">${hudBadgeText}</span>` : ""}
                         </div>
                         <div class="idle-team-line2">${pokePillsHtml}</div>
-                    `;
+                    `);
                 }
                 if (oppNameEl) oppNameEl.textContent = "WAITING FOR OPPONENT...";
-                if (oppMoveEl) oppMoveEl.textContent = "—";
+                if (oppMoveEl) setHtmlIfChanged(oppMoveEl, "—");
                 if (oppCmpBadgeEl) {
-                    oppCmpBadgeEl.textContent = "CMP—";
+                    setHtmlIfChanged(oppCmpBadgeEl, "CMP—");
                     oppCmpBadgeEl.className = "cmp-pill";
                 }
                 if (myCmpBadgeEl) {
-                    myCmpBadgeEl.textContent = "CMP—";
+                    setHtmlIfChanged(myCmpBadgeEl, "CMP—");
                     myCmpBadgeEl.className = "cmp-pill";
                 }
-                if (oppDmgHeadersEl) oppDmgHeadersEl.innerHTML = "";
-                if (myDmgHeadersEl) myDmgHeadersEl.innerHTML = "";
-                if (timingRowsEl) timingRowsEl.innerHTML = "";
-                if (myTimingRowsEl) myTimingRowsEl.innerHTML = "";
+                if (oppDmgHeadersEl) setHtmlIfChanged(oppDmgHeadersEl, "");
+                if (myDmgHeadersEl) setHtmlIfChanged(myDmgHeadersEl, "");
+                if (timingRowsEl) setHtmlIfChanged(timingRowsEl, "");
+                if (myTimingRowsEl) setHtmlIfChanged(myTimingRowsEl, "");
                 const recRowWait = document.getElementById("sky-tactical-rec-row");
                 const showRecWait = (isBattleActive || isReplay) && battleData.showTacticalRec !== false && battleData.showTacticalRecommendations !== false;
                 if (recRowWait) {
@@ -3806,7 +3849,7 @@
                 }
 
                 if (matrixBody) {
-                    matrixBody.innerHTML = "";
+                    setHtmlIfChanged(matrixBody, "");
                     matrixBody.classList.add("hidden");
                 }
             } else {
@@ -3830,38 +3873,38 @@
                         ? "Confirmed Standard Fast Move (>=10% HP damage check)"
                         : "Unconfirmed Standard Fast Move (awaiting >=10% HP damage check)");
                 if (oppMoveEl) {
-                    oppMoveEl.innerHTML = `${escapeHtml(opp3Letter)}${oppHpSuffix} · <span class="${oppFastSpanCls}" title="${oppFastTitle}">${escapeHtml(oppFastTelemetry)}</span>`;
+                    setHtmlIfChanged(oppMoveEl, `${escapeHtml(opp3Letter)}${oppHpSuffix} · <span class="${oppFastSpanCls}" title="${oppFastTitle}">${escapeHtml(oppFastTelemetry)}</span>`);
                 }
 
                 const winsCmp = battleData.winsCmp !== undefined ? !!battleData.winsCmp : true;
                 const oppWinsCmp = !winsCmp;
                 if (oppCmpBadgeEl) {
-                    oppCmpBadgeEl.innerHTML = oppWinsCmp
+                    setHtmlIfChanged(oppCmpBadgeEl, oppWinsCmp
                         ? 'CMP<span class="cmp-mark">✓</span>'
-                        : 'CMP<span class="cmp-mark">✗</span>';
+                        : 'CMP<span class="cmp-mark">✗</span>');
                     oppCmpBadgeEl.className = "cmp-pill " + (oppWinsCmp ? "win" : "loss");
                     oppCmpBadgeEl.title = oppWinsCmp ? "Opponent wins CMP tie" : "Opponent loses CMP tie";
                 }
                 if (myCmpBadgeEl) {
-                    myCmpBadgeEl.innerHTML = winsCmp
+                    setHtmlIfChanged(myCmpBadgeEl, winsCmp
                         ? 'CMP<span class="cmp-mark">✓</span>'
-                        : 'CMP<span class="cmp-mark">✗</span>';
+                        : 'CMP<span class="cmp-mark">✗</span>');
                     myCmpBadgeEl.className = "cmp-pill " + (winsCmp ? "win" : "loss");
                     myCmpBadgeEl.title = winsCmp ? "Your Pokémon wins CMP tie" : "Your Pokémon loses CMP tie";
                 }
                 const compactOppCmpEl = document.getElementById("sky-compact-opp-cmp");
                 const compactMyCmpEl = document.getElementById("sky-compact-my-cmp");
                 if (compactOppCmpEl) {
-                    compactOppCmpEl.innerHTML = oppWinsCmp
+                    setHtmlIfChanged(compactOppCmpEl, oppWinsCmp
                         ? 'CMP<span class="cmp-mark">✓</span>'
-                        : 'CMP<span class="cmp-mark">✗</span>';
+                        : 'CMP<span class="cmp-mark">✗</span>');
                     compactOppCmpEl.className = "cmp-pill " + (oppWinsCmp ? "win" : "loss");
                     compactOppCmpEl.title = oppWinsCmp ? "Opponent wins CMP tie" : "Opponent loses CMP tie";
                 }
                 if (compactMyCmpEl) {
-                    compactMyCmpEl.innerHTML = winsCmp
+                    setHtmlIfChanged(compactMyCmpEl, winsCmp
                         ? 'CMP<span class="cmp-mark">✓</span>'
-                        : 'CMP<span class="cmp-mark">✗</span>';
+                        : 'CMP<span class="cmp-mark">✗</span>');
                     compactMyCmpEl.className = "cmp-pill " + (winsCmp ? "win" : "loss");
                     compactMyCmpEl.title = winsCmp ? "Your Pokémon wins CMP tie" : "Your Pokémon loses CMP tie";
                 }
@@ -4020,7 +4063,7 @@
                             </div>
                         </div>
                         `;
-                        matrixBody.innerHTML = matrixHeaderHtml + battleData.scannedOpponents.map((opp, idx) => {
+                        setHtmlIfChanged(matrixBody, matrixHeaderHtml + battleData.scannedOpponents.map((opp, idx) => {
                             const isActiveOpp = (opp.isActive !== undefined) ? !!opp.isActive : (idx === activeOppSlotIdx);
                             const isOppShad = (opp.isShadow !== undefined) ? !!opp.isShadow : (isActiveOpp && battleData.isOpponentShadow);
                             const fullOppDisplay = (isOppShad ? "S-" : "") + (opp.name || opp.code);
@@ -4065,7 +4108,7 @@
                                 </div>
                             </div>
                             `;
-                        }).join("");
+                        }).join(""));
                     }
                 } catch (e) {
                     console.error("Matrix render error", e);
@@ -4074,7 +4117,7 @@
                 // 2. Render Opponent Attacks 3-Column Header & Segmented Range Rows
                 try {
                     if (oppDmgHeadersEl) {
-                        oppDmgHeadersEl.innerHTML = teamList.slice(0, 3).map((member, idx) => {
+                        setHtmlIfChanged(oppDmgHeadersEl, teamList.slice(0, 3).map((member, idx) => {
                             const code = member.code || abbrPoke(member.name, false);
                             const isAct = (idx === activeSlotIdx);
                             const rawHp = typeof member.hpPct === "number" ? member.hpPct : (typeof pSlotHpArr[idx] === "number" ? pSlotHpArr[idx] : 100);
@@ -4083,12 +4126,12 @@
                             const hpColor = isFainted ? "#64748b" : (slotHp > 50 ? "#6ee7b7" : (slotHp > 20 ? "#fde047" : "#fca5a5"));
                             const faintCls = isFainted ? "col-fainted" : "";
                             return `<span class="dmg-col-hdr ${isAct && !isFainted ? 'active-col' : ''} ${faintCls}" onclick="selectUserPokemonByIndex(${idx})" style="cursor:pointer;" title="${escapeHtml(member.name || code)} (${slotHp}% HP)"><span class="dmg-col-hdr-code">${escapeHtml(code)}</span><span class="dmg-col-hdr-hp" style="color:${hpColor};">${slotHp}%</span></span>`;
-                        }).join("");
+                        }).join(""));
                     }
 
                     if (timingRowsEl) {
                         const rows = battleData.oppMoveTimingRows || [];
-                        timingRowsEl.innerHTML = rows.map(row => {
+                        setHtmlIfChanged(timingRowsEl, rows.map(row => {
                             const shortMove = row.shortName || abbrMove5(row.name || "Move");
                             const actvPct = row.activeDmgPct || 35;
                             const actvEff = row.activeEff || 1.0;
@@ -4173,7 +4216,7 @@
                                     <div class="move-col-right-grid">${rightGridHtml}</div>
                                 </div>
                             `;
-                        }).join("");
+                        }).join(""));
                     }
                 } catch (e) {
                     console.error("Opponent attacks render error", e);
@@ -4183,7 +4226,7 @@
                 try {
                     const scanned = battleData.scannedOpponents || [];
                     if (myDmgHeadersEl) {
-                        myDmgHeadersEl.innerHTML = [0, 1, 2].map(idx => {
+                        setHtmlIfChanged(myDmgHeadersEl, [0, 1, 2].map(idx => {
                             const opp = scanned[idx];
                             const isAct = opp && opp.isActive !== undefined ? !!opp.isActive : (idx === activeOppSlotIdx);
                             const isShad = opp && opp.isShadow !== undefined ? !!opp.isShadow : (isAct && battleData.isOpponentShadow);
@@ -4196,12 +4239,12 @@
                             const faintCls = isFainted ? "col-fainted" : "";
                             const clickAttr = opp ? `onclick="swapOpponentByIndex(${idx})" style="cursor:pointer;" title="${escapeHtml(opp.name || code)} (${slotHp}% HP)"` : "";
                             return `<span class="dmg-col-hdr ${opp && isAct && !isFainted ? 'active-col' : ''} ${faintCls}" ${clickAttr}><span class="dmg-col-hdr-code">${escapeHtml(code)}</span><span class="dmg-col-hdr-hp" style="color:${hpColor};">${hpText}</span></span>`;
-                        }).join("");
+                        }).join(""));
                     }
 
                     if (myTimingRowsEl) {
                         const myRows = battleData.myMoveTimingRows || [];
-                        myTimingRowsEl.innerHTML = myRows.map(row => {
+                        setHtmlIfChanged(myTimingRowsEl, myRows.map(row => {
                             const shortMove = row.shortName || abbrMove5(row.name || "Move");
                             const dmgPct = row.dmgPct || 40;
                             const eff = row.eff || 1.0;
@@ -4289,7 +4332,7 @@
                                     <div class="move-col-right-grid">${rightGridHtml}</div>
                                 </div>
                             `;
-                        }).join("");
+                        }).join(""));
                     }
                 } catch (e) {
                     console.error("My attacks render error", e);
@@ -4305,7 +4348,7 @@
 
                 if (isWaitingState) {
                     if (horizonTitle) horizonTitle.textContent = `[${activeLeagueStr}] Waiting...`;
-                    if (horizonDots) horizonDots.textContent = "1 Hz OCR active...";
+                    if (horizonDots) setHtmlIfChanged(horizonDots, "1 Hz OCR active...");
                     if (horizonThrow) horizonThrow.textContent = "—";
                     if (horizonDmg) {
                         const idleTeamNames = teamList.slice(0, 3).map((m, idx) => (idx === activeSlotIdx ? `★${m.name}` : m.name)).join(" • ");
@@ -4317,10 +4360,10 @@
                     if (horizonTitle) horizonTitle.textContent = `[${battleData.activeOpponent}: ${oppFastTelemetry}]`;
                     if (horizonThrow) horizonThrow.textContent = battleData.throwHorizonText || "1st, 3rd, 5th";
                     if (horizonDots && battleData.scannedOpponents && battleData.scannedOpponents.length > 0) {
-                        horizonDots.innerHTML = battleData.scannedOpponents.map((opp, idx) => `
+                        setHtmlIfChanged(horizonDots, battleData.scannedOpponents.map((opp, idx) => `
                             <strong>${escapeHtml(opp.name)}</strong> <span class="shield-dots">${renderTierDots(opp.matrix ? opp.matrix.p1 : "W,N,L")}</span>
                             ${idx < battleData.scannedOpponents.length - 1 ? ' • ' : ''}
-                        `).join("");
+                        `).join(""));
                         if (horizonDmg) {
                             horizonDmg.textContent = `Opp: ${abbrMoveSummary(battleData.scannedOpponents[0].c1)} • My: ${abbrMoveSummary(battleData.myMove1Summary || '—')}`;
                         }
@@ -4342,7 +4385,7 @@
                         !!sd.visible;
                     if (!canShowSd) {
                         shieldCardEl.className = "shield-decision-card hidden";
-                        shieldCardEl.innerHTML = "";
+                        setHtmlIfChanged(shieldCardEl, "");
                     } else {
                         const buildShieldHpPillHtml = (remHpPct, isKo, isFunded) => {
                             const clampedRem = isKo ? 0 : Math.max(0, Math.min(100, Math.round(Number(remHpPct) || 0)));
@@ -4417,12 +4460,12 @@
                         shieldCardEl.className = "shield-decision-card";
                         shieldCardEl.style.background = sd.bgColorHex || "rgba(6, 78, 59, 0.95)";
                         shieldCardEl.style.borderColor = sd.strokeColorHex || "#10B981";
-                        shieldCardEl.innerHTML =
+                        setHtmlIfChanged(shieldCardEl,
                             `<div class="shield-dec-header">${escapeHtml(sd.headerLineText || "🛡️ SHIELD DECISION")}</div>` +
                             `<div class="shield-dec-divider"></div>` +
                             fundedRowsHtml +
                             unfundedRowsHtml +
-                            overflowSummaryHtml;
+                            overflowSummaryHtml);
                     }
                 }
             } catch (e) {
@@ -4430,15 +4473,12 @@
             }
 
             applyActiveHudModeVisibility(isWaitingState, isReplay);
-            if (window.requestAnimationFrame) {
-                window.requestAnimationFrame(notifyHeight);
-            }
-            setTimeout(notifyHeight, 40);
+            scheduleNotifyHeight();
         }
 
         window.addEventListener("resize", function() {
             applyProportionalScale();
-            notifyHeight();
+            notifyHeight(true);
         });
 
         window.replayHudMode = "live";
@@ -4566,7 +4606,7 @@
             if (window.AndroidOverlay && window.AndroidOverlay.onOverlayReady) {
                 window.AndroidOverlay.onOverlayReady();
             }
-            notifyHeight();
+            notifyHeight(true);
         };
     </script>
 </body>

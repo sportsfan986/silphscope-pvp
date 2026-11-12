@@ -162,7 +162,18 @@ internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap,
     val targetW = 544
     val targetH = (((screen.height.toFloat() / screen.width.toFloat()) * targetW.toFloat()).toInt() / 16 * 16).coerceIn(640, 1440)
     val scaledBmp = try {
-        Bitmap.createScaledBitmap(screen, targetW, targetH, true)
+        var reusable = dvrScaledBitmap
+        if (reusable == null || reusable.isRecycled || reusable.width != targetW || reusable.height != targetH) {
+            reusable?.let { if (!it.isRecycled) it.recycle() }
+            reusable = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+            dvrScaledBitmap = reusable
+            dvrScaledCanvas = Canvas(reusable)
+        }
+        val scCanvas = dvrScaledCanvas ?: Canvas(reusable).also { dvrScaledCanvas = it }
+        dvrScaleSrcRect.set(0, 0, screen.width, screen.height)
+        dvrScaleDstRect.set(0, 0, targetW, targetH)
+        scCanvas.drawBitmap(screen, dvrScaleSrcRect, dvrScaleDstRect, dvrScaleFilterPaint)
+        reusable
     } catch (_: Exception) {
         null
     }
@@ -170,6 +181,7 @@ internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap,
         dvrFrameInFlight.set(false)
         return
     }
+    lastDvrEncodedFrameSeq = capturedFrameSeq
 
     val uIdx = (currentPreset?.pokemon?.indexOfFirst { it.name.equals(activeUserPokemonName, ignoreCase = true) } ?: 0).coerceIn(0, 2)
     val activeOppBase = FormResolver.extractBaseSpecies(activeOpponentName).lowercase()
@@ -255,14 +267,12 @@ internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap,
     handler.post {
         try {
             if (!canRecordNow) {
-                scaledBmp.recycle()
                 return@post
             }
             if (!activeOneBattleDvrRecording) {
                 startDvrEncoderLocked(targetW, targetH, nowMs)
             }
             if (!activeOneBattleDvrRecording) {
-                scaledBmp.recycle()
                 return@post
             }
             dvrFrameCount++
@@ -274,7 +284,7 @@ internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap,
             )
 
             val surf = dvrInputSurface
-            if (surf != null) {
+            if (surf != null && !scaledBmp.isRecycled) {
                 val canvas = try {
                     surf.lockHardwareCanvas()
                 } catch (_: Exception) {
@@ -305,9 +315,6 @@ internal fun OverlayService.recordOneBattleDvrFrameAndTraceAsync(screen: Bitmap,
         } catch (_: Exception) {
         } finally {
             dvrFrameInFlight.set(false)
-            if (!scaledBmp.isRecycled) {
-                scaledBmp.recycle()
-            }
         }
     }
 }

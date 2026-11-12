@@ -335,6 +335,27 @@ internal fun OverlayService.Companion.precomputeActiveTeamTop200MatrixStatic(pre
     lastPrecomputedTeamSignature = sig
 }
 
+private val fallbackRoughMatchupLock = Any()
+private var fallbackRoughMatchupEpoch = -1
+private var fallbackRoughMatchupDbSize = -1
+private val FALLBACK_ROUGH_MATCHUP_CACHE = object : LinkedHashMap<String, Int>(256, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Int>?): Boolean = size > 1536
+}
+
+internal fun OverlayService.Companion.clearTeamAndMetaCachesStatic() {
+    synchronized(fallbackRoughMatchupLock) {
+        FALLBACK_ROUGH_MATCHUP_CACHE.clear()
+        fallbackRoughMatchupEpoch = -1
+        fallbackRoughMatchupDbSize = -1
+    }
+    synchronized(seasonLogsParseCacheLock) {
+        SAME_CP_LIMITED_LOGS_CACHE.clear()
+    }
+    synchronized(backlinePredCacheLock) {
+        BACKLINE_PREDICTION_CACHE.clear()
+    }
+}
+
 /**
  * O(1) lookup from the precomputed Top-200 9x9 shield matrix cache, with fast real-time rough math fallback
  * for non-Top-200 opponents.
@@ -358,7 +379,22 @@ internal fun OverlayService.Companion.getOverlayRealtimeMatchupRatingStatic(
     val key = buildUserSlotCacheKey(league, myName, myFastMove, myCharged1, myCharged2, myCp, myIvs, oppName, myPlusMoveLevel)
     PRECOMPUTED_TOP200_9X9_CACHE[key]?.get(code)?.let { return it }
 
-    return calculateFastRoughMatchupRatingStatic(
+    val dbSize = DYNAMIC_POKEMON_DATABASE.size
+    val simEpoch = simulationCacheEpoch
+    val fallbackKey = "$key|$code"
+    if (dbSize > 0) {
+        synchronized(fallbackRoughMatchupLock) {
+            if (fallbackRoughMatchupDbSize != dbSize || fallbackRoughMatchupEpoch != simEpoch) {
+                FALLBACK_ROUGH_MATCHUP_CACHE.clear()
+                fallbackRoughMatchupDbSize = dbSize
+                fallbackRoughMatchupEpoch = simEpoch
+            } else {
+                FALLBACK_ROUGH_MATCHUP_CACHE[fallbackKey]?.let { return it }
+            }
+        }
+    }
+
+    val computed = calculateFastRoughMatchupRatingStatic(
         myName = myName,
         oppName = oppName,
         userShields = sUser,
@@ -371,6 +407,12 @@ internal fun OverlayService.Companion.getOverlayRealtimeMatchupRatingStatic(
         myIvs = myIvs,
         myPlusMoveLevel = myPlusMoveLevel
     )
+    if (dbSize > 0) {
+        synchronized(fallbackRoughMatchupLock) {
+            FALLBACK_ROUGH_MATCHUP_CACHE[fallbackKey] = computed
+        }
+    }
+    return computed
 }
 
 /**
@@ -977,6 +1019,39 @@ internal fun OverlayService.Companion.loadCurrentSeasonStartMsStatic(prefs: Shar
     }
 }
 
+private val seasonLogsParseCacheLock = Any()
+private var cachedGblLogsRawJson: String = ""
+private var cachedGblLogsParsed: List<SyncBattleLogRecord> = emptyList()
+private var cachedShow6LogsRawJson: String = ""
+private var cachedShow6LogsParsed: List<SyncBattleLogRecord> = emptyList()
+
+private data class SeasonLeagueFilterKey(
+    val isShow6: Boolean,
+    val rawJsonIdentityHash: Int,
+    val rawJsonLength: Int,
+    val targetNorm: String,
+    val targetRemapped: String,
+    val empiricalLimit: Int?,
+    val seasonStartMs: Long
+)
+private val SEASON_LEAGUE_LOGS_CACHE = object : LinkedHashMap<SeasonLeagueFilterKey, Pair<String, List<Pair<Long, List<String>>>>>(16, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<SeasonLeagueFilterKey, Pair<String, List<Pair<Long, List<String>>>>>?): Boolean = size > 24
+}
+
+private data class SameCpLimitedFilterKey(
+    val normCup: String,
+    val stdLogsSize: Int,
+    val stdLogsHash: Int,
+    val newestTs: Long,
+    val oldestTs: Long,
+    val dbSize: Int,
+    val simEpoch: Int,
+    val cupRankCount: Int
+)
+private val SAME_CP_LIMITED_LOGS_CACHE = object : LinkedHashMap<SameCpLimitedFilterKey, List<Pair<Long, List<String>>>>(8, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<SameCpLimitedFilterKey, List<Pair<Long, List<String>>>>?): Boolean = size > 16
+}
+
 internal fun OverlayService.Companion.loadSeasonLogsForLeagueStatic(
     prefs: SharedPreferences?,
     gson: Gson,
@@ -987,15 +1062,54 @@ internal fun OverlayService.Companion.loadSeasonLogsForLeagueStatic(
     if (prefs == null) return emptyList()
     val prefKey = if (isShow6) PREFS_KEY_SHOW6_BATTLE_LOGS else PREFS_KEY_BATTLE_LOGS
     val rawJson = prefs.getString(prefKey, "[]") ?: "[]"
-    val records: List<SyncBattleLogRecord> = try {
-        gson.fromJson(rawJson, object : TypeToken<List<SyncBattleLogRecord>>() {}.type) ?: emptyList()
-    } catch (_: Exception) {
-        emptyList()
-    }
-    if (records.isEmpty()) return emptyList()
+    if (rawJson.length <= 2) return emptyList()
+
     val targetNorm = normalizeLeagueKeyStatic(league)
     val targetRemapped = remapLegacyLeagueForModeStatic(league, isShow6)
     val seasonStartMs = loadCurrentSeasonStartMsStatic(prefs)
+    val filterKey = SeasonLeagueFilterKey(
+        isShow6 = isShow6,
+        rawJsonIdentityHash = System.identityHashCode(rawJson),
+        rawJsonLength = rawJson.length,
+        targetNorm = targetNorm,
+        targetRemapped = targetRemapped,
+        empiricalLimit = empiricalLimit,
+        seasonStartMs = seasonStartMs
+    )
+
+    val records: List<SyncBattleLogRecord> = synchronized(seasonLogsParseCacheLock) {
+        SEASON_LEAGUE_LOGS_CACHE[filterKey]?.let { (cachedRaw, cachedOut) ->
+            if (cachedRaw == rawJson) return cachedOut
+        }
+        if (isShow6) {
+            if (rawJson == cachedShow6LogsRawJson) {
+                cachedShow6LogsParsed
+            } else {
+                val parsed: List<SyncBattleLogRecord> = try {
+                    gson.fromJson(rawJson, object : TypeToken<List<SyncBattleLogRecord>>() {}.type) ?: emptyList()
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                cachedShow6LogsRawJson = rawJson
+                cachedShow6LogsParsed = parsed
+                parsed
+            }
+        } else {
+            if (rawJson == cachedGblLogsRawJson) {
+                cachedGblLogsParsed
+            } else {
+                val parsed: List<SyncBattleLogRecord> = try {
+                    gson.fromJson(rawJson, object : TypeToken<List<SyncBattleLogRecord>>() {}.type) ?: emptyList()
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                cachedGblLogsRawJson = rawJson
+                cachedGblLogsParsed = parsed
+                parsed
+            }
+        }
+    }
+    if (records.isEmpty()) return emptyList()
 
     val matching = records.filter { rec ->
         val recNorm = normalizeLeagueKeyStatic(rec.league)
@@ -1009,7 +1123,11 @@ internal fun OverlayService.Companion.loadSeasonLogsForLeagueStatic(
     }.sortedByDescending { it.timestampMs }
 
     val sliced = if (empiricalLimit != null && empiricalLimit > 0) matching.take(empiricalLimit) else matching
-    return sliced.map { it.timestampMs to it.opponents }
+    val result = sliced.map { it.timestampMs to it.opponents }
+    synchronized(seasonLogsParseCacheLock) {
+        SEASON_LEAGUE_LOGS_CACHE[filterKey] = rawJson to result
+    }
+    return result
 }
 
 internal fun OverlayService.Companion.loadSameCpStandardSeasonLogsForLimitedCupStatic(
@@ -1024,17 +1142,42 @@ internal fun OverlayService.Companion.loadSameCpStandardSeasonLogsForLimitedCupS
     CACHED_GBL_STD_SEASON_LOGS[stdLeague] = rawStdLogs
     if (rawStdLogs.isEmpty()) return emptyList()
     val normCup = normalizeLeagueKeyStatic(league)
+    val dbSize = DYNAMIC_POKEMON_DATABASE.size
+    val limKey = SameCpLimitedFilterKey(
+        normCup = normCup,
+        stdLogsSize = rawStdLogs.size,
+        stdLogsHash = rawStdLogs.hashCode(),
+        newestTs = rawStdLogs.firstOrNull()?.first ?: 0L,
+        oldestTs = rawStdLogs.lastOrNull()?.first ?: 0L,
+        dbSize = dbSize,
+        simEpoch = simulationCacheEpoch,
+        cupRankCount = getLeagueRankingsCount(normCup)
+    )
+    if (dbSize > 0) {
+        synchronized(seasonLogsParseCacheLock) {
+            SAME_CP_LIMITED_LOGS_CACHE[limKey]?.let { return it }
+        }
+    }
     val eligiblePool = getTop100MetaCandidatesForLeagueStatic(normCup, 350).map { it.name }
         .ifEmpty { getTopMetaPoolForLeagueStatic(league) }
     val eligibleBaseSet = eligiblePool.map { FormResolver.extractBaseSpecies(it).lowercase() }.toSet()
-    if (eligibleBaseSet.isEmpty()) return rawStdLogs
-    return rawStdLogs.mapNotNull { (ts, opps) ->
-        val filteredOpps = opps.filter { o ->
-            val b = FormResolver.extractBaseSpecies(o).lowercase()
-            b.isNotEmpty() && b in eligibleBaseSet
+    val computed = if (eligibleBaseSet.isEmpty()) {
+        rawStdLogs
+    } else {
+        rawStdLogs.mapNotNull { (ts, opps) ->
+            val filteredOpps = opps.filter { o ->
+                val b = FormResolver.extractBaseSpecies(o).lowercase()
+                b.isNotEmpty() && b in eligibleBaseSet
+            }
+            if (filteredOpps.isNotEmpty()) ts to filteredOpps else null
         }
-        if (filteredOpps.isNotEmpty()) ts to filteredOpps else null
     }
+    if (dbSize > 0) {
+        synchronized(seasonLogsParseCacheLock) {
+            SAME_CP_LIMITED_LOGS_CACHE[limKey] = computed
+        }
+    }
+    return computed
 }
 
 internal fun OverlayService.Companion.computePositionWeightedBrStatic(
@@ -1317,9 +1460,10 @@ internal fun OverlayService.Companion.computeBlendedSeasonMetaCoresStatic(
     customLimitedStdDecay: Double? = null,
     customSheetWeightPct: Int? = null,
     empiricalOnlyLimit: Int? = null,
-    maxCores: Int = 20
+    maxCores: Int = 20,
+    precomputedDist: BlendedSeasonMetaDistribution? = null
 ): List<BlendedMetaCoreEntry> {
-    val dist = computeBlendedSeasonMetaStatic(
+    val dist = precomputedDist ?: computeBlendedSeasonMetaStatic(
         league = league,
         seasonLogs = seasonLogs,
         isShow6 = isShow6,
@@ -1521,6 +1665,11 @@ internal fun OverlayService.Companion.computeBlendedSeasonMetaCoresStatic(
         }
 }
 
+private val backlinePredCacheLock = Any()
+private val BACKLINE_PREDICTION_CACHE = object : LinkedHashMap<String, BacklinePredictionResult>(32, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, BacklinePredictionResult>?): Boolean = size > 64
+}
+
 /**
  * v6.00 Pillar 1 & Pillar 2: Live Opponent Backline Predictor & Swap Hard-Counter Risk Evaluator.
  */
@@ -1549,6 +1698,41 @@ internal fun OverlayService.Companion.predictOpponentBacklineStatic(
         )
     }
 
+    val dbSize = DYNAMIC_POKEMON_DATABASE.size
+    val normLeague = normalizeLeagueKeyStatic(league)
+    val simEpoch = simulationCacheEpoch
+    val leagueRankCount = getLeagueRankingsCount(normLeague)
+    val bfCoresCount = if (isShow6) (BATTLE_FRONTIER_CORES_MAP[normLeague]?.size ?: BATTLE_FRONTIER_CORES_MAP["GREAT LEAGUE"]?.size ?: 0) else 0
+    val faintMask = (if (playerFaintedSlots.getOrElse(0) { false }) 1 else 0) or
+        (if (playerFaintedSlots.getOrElse(1) { false }) 2 else 0) or
+        (if (playerFaintedSlots.getOrElse(2) { false }) 4 else 0)
+    val teamSig = myTeamSlots.joinToString(";") {
+        "${it.name}|${it.fastMove}|${it.chargedMove1}|${it.chargedMove2}|${it.cp}|${it.ivs}|${(it.plusMoveLevel ?: 4).coerceIn(0, 4)}"
+    }
+    val blendParamsSig = if (isShow6) {
+        "s6:$activeShow6MetaLogWeightPct:$activeShow6MetaDecayFactor:$activeShow6UsageWeightPct:$bfCoresCount"
+    } else {
+        "gbl:$activeGblMetaLogWeightPct:$activeGblMetaDecayFactor:$activeLimitedStdBlendPctGbl:$activeLimitedStdDecayGbl"
+    }
+    val cacheKey = buildString(320) {
+        append(normLeague).append('|')
+        append(cleanRevealed.joinToString(",")).append('|')
+        append(teamSig).append('|')
+        append(myActiveSlotIdx).append('|')
+        append(faintMask).append('|')
+        append(isShow6).append('|')
+        append(knownShow6UnrevealedPool.joinToString(",")).append('|')
+        append(seasonLogs.size).append(':').append(seasonLogs.hashCode()).append(':').append(seasonLogs.firstOrNull()?.first ?: 0L).append('|')
+        append(sameCpStandardLogs.size).append(':').append(sameCpStandardLogs.hashCode()).append(':').append(sameCpStandardLogs.firstOrNull()?.first ?: 0L).append('|')
+        append(blendParamsSig).append('|')
+        append(dbSize).append(':').append(simEpoch).append(':').append(leagueRankCount).append(':').append(lastPrecomputedTeamSignature.hashCode())
+    }
+    if (dbSize > 0) {
+        synchronized(backlinePredCacheLock) {
+            BACKLINE_PREDICTION_CACHE[cacheKey]?.let { return it }
+        }
+    }
+
     val dist = computeBlendedSeasonMetaStatic(
         league = league,
         seasonLogs = seasonLogs,
@@ -1560,19 +1744,44 @@ internal fun OverlayService.Companion.predictOpponentBacklineStatic(
         seasonLogs = seasonLogs,
         isShow6 = isShow6,
         sameCpStandardLogs = sameCpStandardLogs,
-        maxCores = 30
+        maxCores = 30,
+        precomputedDist = dist
     )
 
-    val revealedBases = cleanRevealed.map { FormResolver.extractBaseSpecies(it).lowercase() }.toSet()
-    val candidatePool = if (isShow6 && knownShow6UnrevealedPool.isNotEmpty()) {
-        knownShow6UnrevealedPool.filter { FormResolver.extractBaseSpecies(it).lowercase() !in revealedBases }
+    val revealedBases = cleanRevealed.map { FormResolver.extractBaseSpecies(it).lowercase() }.filter { it.isNotEmpty() }.toSet()
+    // GBL & Show 6 Species Clause: an opponent team can never run two Pokémon sharing the same Pokédex base species
+    // (e.g., Shadow Feraligatr + Feraligatr, Corviknight + Shadow Corviknight, or Alolan Ninetales + Kantonian Ninetales).
+    // Consolidate same-Pokédex-family variants BEFORE taking top 24, keeping the preferred/highest-weighted variant
+    // while preserving the family's combined field/backline prior so Shadow-split meta staples aren't underweighted.
+    val familyPriorMap = LinkedHashMap<String, Double>()
+    val rawCandidateList = if (isShow6 && knownShow6UnrevealedPool.isNotEmpty()) {
+        val seenFamilies = HashSet<String>()
+        val deduped = ArrayList<String>()
+        for (sp in knownShow6UnrevealedPool) {
+            val baseKey = FormResolver.extractBaseSpecies(sp).lowercase()
+            if (baseKey.isEmpty() || baseKey in revealedBases) continue
+            val prior = (dist.backWeights[sp] ?: dist.fieldWeights[sp] ?: 0.02).coerceAtLeast(0.008)
+            familyPriorMap[baseKey] = (familyPriorMap[baseKey] ?: 0.0) + prior
+            if (seenFamilies.add(baseKey)) {
+                deduped.add(sp)
+            }
+        }
+        deduped
     } else {
-        dist.backWeights.entries
-            .sortedByDescending { it.value }
-            .map { it.key }
-            .filter { FormResolver.extractBaseSpecies(it).lowercase() !in revealedBases }
+        val sortedBackEntries = dist.backWeights.entries.sortedByDescending { it.value }
+        val repByFamily = LinkedHashMap<String, String>()
+        for ((sp, w) in sortedBackEntries) {
+            val baseKey = FormResolver.extractBaseSpecies(sp).lowercase()
+            if (baseKey.isEmpty() || baseKey in revealedBases) continue
+            familyPriorMap[baseKey] = (familyPriorMap[baseKey] ?: 0.0) + w.coerceAtLeast(0.0)
+            repByFamily.putIfAbsent(baseKey, sp)
+        }
+        repByFamily.entries
+            .sortedByDescending { familyPriorMap[it.key] ?: 0.0 }
+            .map { it.value }
             .take(24)
     }
+    val candidatePool = rawCandidateList
 
     if (candidatePool.isEmpty()) {
         return BacklinePredictionResult(
@@ -1583,7 +1792,6 @@ internal fun OverlayService.Companion.predictOpponentBacklineStatic(
         )
     }
 
-    val normLeague = normalizeLeagueKeyStatic(league)
     // Compute weakness types of revealed opponents so we can boost backline candidates that cover them
     val revealedWeaknesses = HashSet<String>()
     for (rev in cleanRevealed) {
@@ -1622,10 +1830,10 @@ internal fun OverlayService.Companion.predictOpponentBacklineStatic(
         val candTypes = candMeta?.types ?: listOf("normal")
         val coveredCount = revealedWeaknesses.count { wk -> getTypeEffectivenessStatic(wk, candTypes) <= 0.7 }
         val coverageBoost = 1.0 + coveredCount * 0.22
-        val fieldPrior = (dist.backWeights[cand] ?: dist.fieldWeights[cand] ?: 0.02).coerceAtLeast(0.008)
+        val fieldPrior = (familyPriorMap[candBase] ?: dist.backWeights[cand] ?: dist.fieldWeights[cand] ?: 0.02).coerceAtLeast(0.008)
 
         val score = (0.55 * corePartnerBoost + 0.45 * (fieldPrior * 12.0)) * coverageBoost
-        rawScores[cand] = score.coerceAtLeast(0.01)
+        rawScores[cand] = if (score.isFinite()) score.coerceAtLeast(0.01) else 0.01
 
         if (primarySwapSlot != null) {
             val swapBrVsCand = getOverlayRealtimeMatchupRatingStatic(
@@ -1638,7 +1846,8 @@ internal fun OverlayService.Companion.predictOpponentBacklineStatic(
                 myCharged1 = primarySwapSlot.chargedMove1,
                 myCharged2 = primarySwapSlot.chargedMove2,
                 myCp = primarySwapSlot.cp,
-                myIvs = primarySwapSlot.ivs
+                myIvs = primarySwapSlot.ivs,
+                myPlusMoveLevel = primarySwapSlot.plusMoveLevel
             )
             hardCountersSwapMap[cand] = swapBrVsCand <= 375
         } else {
@@ -1646,9 +1855,28 @@ internal fun OverlayService.Companion.predictOpponentBacklineStatic(
         }
     }
 
-    val totalRaw = rawScores.values.sum().takeIf { it > 0.0 } ?: 1.0
+    val totalRaw = rawScores.values.sum().takeIf { it.isFinite() && it > 0.0 } ?: 1.0
     val unrevealedSlotsCount = (3 - cleanRevealed.size).coerceIn(1, 2)
-    val sortedCands = rawScores.entries.sortedByDescending { it.value }
+    // Enforce distinct Pokédex species AND distinct compact HUD codes so two slots never look identical or violate Species Clause
+    val seenPredBases = HashSet<String>(revealedBases)
+    val seenPredCodes = HashSet<String>()
+    val sortedCands = ArrayList<Map.Entry<String, Double>>()
+    for (entry in rawScores.entries.sortedByDescending { it.value }) {
+        val bKey = FormResolver.extractBaseSpecies(entry.key).lowercase()
+        val codeKey = abbrPokeCompactStatic(entry.key).uppercase()
+        if (bKey.isEmpty() || !seenPredBases.add(bKey)) continue
+        if (codeKey.isEmpty() || codeKey == "OPP" || !seenPredCodes.add(codeKey)) continue
+        sortedCands.add(entry)
+    }
+
+    if (sortedCands.isEmpty()) {
+        return BacklinePredictionResult(
+            candidates = emptyList(),
+            swapPunishRiskPct = 0,
+            swapPunishThreatCode = "NONE",
+            hudLine2Text = ""
+        )
+    }
 
     var swapPunishProbSum = 0.0
     var topPunishThreatCode = ""
@@ -1662,18 +1890,23 @@ internal fun OverlayService.Companion.predictOpponentBacklineStatic(
         }
     }
     val swapPunishRiskPct = (swapPunishProbSum * 100.0 * (if (unrevealedSlotsCount == 2) 1.35 else 1.0))
-        .roundToInt()
-        .coerceIn(5, 95)
+        .takeIf { it.isFinite() }
+        ?.roundToInt()
+        ?.coerceIn(5, 95) ?: 5
 
+    var prevPct = 99
     val topPredictions = sortedCands.take(3).mapIndexed { i, (cand, sc) ->
         val rawShare = (sc / totalRaw)
-        val scaledPct = (rawShare * (if (unrevealedSlotsCount == 2) 155.0 else 115.0))
-            .roundToInt()
-            .coerceIn(12, 89)
+        val rawScaled = (rawShare * (if (unrevealedSlotsCount == 2) 155.0 else 115.0))
+            .takeIf { it.isFinite() }
+            ?.roundToInt()
+            ?.coerceIn(12, 89) ?: 12
+        val monotonicPct = min(prevPct, rawScaled).coerceIn(12, 89)
+        prevPct = monotonicPct
         BacklineCandidatePrediction(
             name = cand,
             code = abbrPokeCompactStatic(cand),
-            likelihoodPct = scaledPct,
+            likelihoodPct = monotonicPct,
             hardCountersMySwap = hardCountersSwapMap[cand] == true,
             bestRoleVsMe = if (i == 0) "Core" else "Cover"
         )
@@ -1688,12 +1921,18 @@ internal fun OverlayService.Companion.predictOpponentBacklineStatic(
     val prefix = if (cleanRevealed.size == 1) "🔮 Back:" else "🔮 3rd:"
     val hudLine2 = "$prefix $top2Str | $riskTag"
 
-    return BacklinePredictionResult(
+    val result = BacklinePredictionResult(
         candidates = topPredictions,
         swapPunishRiskPct = swapPunishRiskPct,
         swapPunishThreatCode = topPunishThreatCode.ifEmpty { topPredictions.firstOrNull()?.code ?: "BACK" },
         hudLine2Text = hudLine2
     )
+    if (dbSize > 0) {
+        synchronized(backlinePredCacheLock) {
+            BACKLINE_PREDICTION_CACHE[cacheKey] = result
+        }
+    }
+    return result
 }
 
 internal fun OverlayService.Companion.abbrPokeCompactStatic(name: String, isShadow: Boolean = false): String {

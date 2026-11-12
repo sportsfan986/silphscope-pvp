@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.33"
-        const val APP_VERSION_CODE = 1733
+        const val APP_VERSION = "7.34"
+        const val APP_VERSION_CODE = 1734
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -114,6 +114,7 @@ class OverlayService : LifecycleService() {
 
         @Volatile var isInstanceRunning: Boolean = false
         @Volatile var hasActiveMediaProjection: Boolean = false
+        @Volatile internal var simulationCacheEpoch: Int = 1
         @Volatile var onRunningStateChanged: (() -> Unit)? = null
 
         fun notifyRunningStateChanged() {
@@ -2125,27 +2126,66 @@ class OverlayService : LifecycleService() {
                 map
             }
 
+            fun clearBaseSpeciesCache() {
+                BASE_SPECIES_CACHE.clear()
+            }
+
             fun extractBaseSpecies(name: String): String {
                 val trimmed = name.trim()
                 if (trimmed.isEmpty()) return ""
                 val lowerTrimmed = trimmed.lowercase()
                 BASE_SPECIES_CACHE[lowerTrimmed]?.let { return it }
 
-                val computed = STATIC_EXACT_BASE_SPECIES_MAP[lowerTrimmed] ?: run {
+                val dynExact = DYNAMIC_POKEMON_DATABASE.firstOrNull {
+                    it.name.equals(trimmed, ignoreCase = true) || it.speciesId.equals(trimmed, ignoreCase = true)
+                }?.baseSpecies?.lowercase()
+
+                val computed = dynExact ?: STATIC_EXACT_BASE_SPECIES_MAP[lowerTrimmed] ?: run {
                     val cleaned = lowerTrimmed
                         .replace(PARENS_REGEX, " ")
                         .replace(FORM_MODIFIERS_REGEX, " ")
                         .replace(MULTI_SPACE_REGEX, " ")
                         .trim()
 
-                    if (cleaned.startsWith("tapu ")) {
-                        cleaned
-                    } else {
-                        val token = cleaned.split(" ").firstOrNull()?.takeIf { it.isNotBlank() }
-                        token ?: (lowerTrimmed.replace(PARENS_REGEX, "").trim().split(" ").lastOrNull() ?: lowerTrimmed)
+                    when {
+                        cleaned.startsWith("tapu ") -> cleaned
+                        cleaned.startsWith("mr. ") || cleaned.startsWith("mr ") -> cleaned.replace("mr ", "mr. ")
+                        cleaned.startsWith("mime jr") -> "mime jr."
+                        cleaned.startsWith("ho-oh") || cleaned == "ho oh" -> "ho-oh"
+                        cleaned.startsWith("porygon-z") || cleaned == "porygon z" -> "porygon-z"
+                        cleaned.startsWith("jangmo-o") -> "jangmo-o"
+                        cleaned.startsWith("hakamo-o") -> "hakamo-o"
+                        cleaned.startsWith("kommo-o") -> "kommo-o"
+                        cleaned.startsWith("type: null") || cleaned.startsWith("type null") -> "type: null"
+                        cleaned.startsWith("great tusk") -> "great tusk"
+                        cleaned.startsWith("scream tail") -> "scream tail"
+                        cleaned.startsWith("brute bonnet") -> "brute bonnet"
+                        cleaned.startsWith("flutter mane") -> "flutter mane"
+                        cleaned.startsWith("slither wing") -> "slither wing"
+                        cleaned.startsWith("sandy shocks") -> "sandy shocks"
+                        cleaned.startsWith("roaring moon") -> "roaring moon"
+                        cleaned.startsWith("walking wake") -> "walking wake"
+                        cleaned.startsWith("gouging fire") -> "gouging fire"
+                        cleaned.startsWith("raging bolt") -> "raging bolt"
+                        cleaned.startsWith("iron treads") -> "iron treads"
+                        cleaned.startsWith("iron bundle") -> "iron bundle"
+                        cleaned.startsWith("iron hands") -> "iron hands"
+                        cleaned.startsWith("iron jugulis") -> "iron jugulis"
+                        cleaned.startsWith("iron moth") -> "iron moth"
+                        cleaned.startsWith("iron thorns") -> "iron thorns"
+                        cleaned.startsWith("iron valiant") -> "iron valiant"
+                        cleaned.startsWith("iron leaves") -> "iron leaves"
+                        cleaned.startsWith("iron boulder") -> "iron boulder"
+                        cleaned.startsWith("iron crown") -> "iron crown"
+                        else -> {
+                            val token = cleaned.split(" ").firstOrNull()?.takeIf { it.isNotBlank() }
+                            token ?: (lowerTrimmed.replace(PARENS_REGEX, "").trim().split(" ").lastOrNull() ?: lowerTrimmed)
+                        }
                     }
                 }
-                BASE_SPECIES_CACHE[lowerTrimmed] = computed
+                if (DYNAMIC_POKEMON_DATABASE.isNotEmpty() || dynExact != null || STATIC_EXACT_BASE_SPECIES_MAP.containsKey(lowerTrimmed)) {
+                    BASE_SPECIES_CACHE[lowerTrimmed] = computed
+                }
                 return computed
             }
         }
@@ -2763,7 +2803,136 @@ class OverlayService : LifecycleService() {
     internal var isOverlayMinimized = false
     internal var lastMinimizeTimestampMs: Long = 0L
     internal var cachedScreenBitmap: Bitmap? = null
+    internal var reusableStrideBitmap: Bitmap? = null
+    internal var reusableCleanCanvas: Canvas? = null
+    internal val reusableSrcCopyPaint = Paint().apply {
+        xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SRC)
+    }
+    internal val reusableCaptureSrcRect = Rect()
+    internal val reusableCaptureDstRect = Rect()
+    @Volatile internal var capturedFrameSeq: Long = 0L
+    @Volatile internal var hasValidCachedFrame: Boolean = false
+    internal var lastIdleProcessedFrameSeq: Long = -1L
+    @Volatile internal var lastDvrEncodedFrameSeq: Long = -1L
+    internal var dvrScaledBitmap: Bitmap? = null
+    internal var dvrScaledCanvas: Canvas? = null
+    internal val dvrScaleFilterPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+    internal val dvrScaleSrcRect = Rect()
+    internal val dvrScaleDstRect = Rect()
     internal val captureLock = Any()
+
+    // Reusable 10Hz vision scratch buffers & 2-stage HP Row-Lock corridor state (accessed on battleLoopJob)
+    internal var visionScratchPixels: IntArray = IntArray(0)
+    internal var visionScratchRows: IntArray = IntArray(0)
+    internal var visionScratchColA: IntArray = IntArray(0)
+    internal var visionScratchColB: IntArray = IntArray(0)
+    internal fun ensureVisionScratchPixels(minSize: Int): IntArray {
+        if (visionScratchPixels.size < minSize) {
+            visionScratchPixels = IntArray(max(minSize, (visionScratchPixels.size * 3) / 2))
+        }
+        return visionScratchPixels
+    }
+    internal fun ensureVisionScratchRows(minSize: Int): IntArray {
+        if (visionScratchRows.size < minSize) {
+            visionScratchRows = IntArray(max(minSize, 512))
+        }
+        return visionScratchRows
+    }
+    internal fun ensureVisionScratchColA(minSize: Int): IntArray {
+        if (visionScratchColA.size < minSize) {
+            visionScratchColA = IntArray(max(minSize, 512))
+        }
+        return visionScratchColA
+    }
+    internal fun ensureVisionScratchColB(minSize: Int): IntArray {
+        if (visionScratchColB.size < minSize) {
+            visionScratchColB = IntArray(max(minSize, 512))
+        }
+        return visionScratchColB
+    }
+    internal var lastValidOppHpRowY: Int = -1
+    internal var lastValidOppHpRowTimeMs: Long = 0L
+    internal var lastValidOppHpRowSpecies: String = ""
+    internal var lastValidPlayerHpRowY: Int = -1
+    internal var lastValidPlayerHpRowTimeMs: Long = 0L
+    internal var lastValidPlayerHpRowSpecies: String = ""
+
+    // Reusable ML Kit OCR sub-crop packing & binarization buffers (serialized by isOcrInFlight)
+    internal var reusableOcrRawPackBitmap: Bitmap? = null
+    internal var reusableOcrRawPackCanvas: Canvas? = null
+    internal var reusableOcrBwBitmap: Bitmap? = null
+    internal val reusableOcrBwSrcRect = Rect()
+    internal var reusableOcrCompositeFullBitmap: Bitmap? = null
+    internal var reusableOcrCompositeFullCanvas: Canvas? = null
+    internal var reusableOcrCompositeCompactBitmap: Bitmap? = null
+    internal var reusableOcrCompositeCompactCanvas: Canvas? = null
+    internal val ocrFilterPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+    internal var ocrScratchPixels: IntArray = IntArray(0)
+    internal fun ensureOcrScratchPixels(minSize: Int): IntArray {
+        if (ocrScratchPixels.size < minSize) {
+            ocrScratchPixels = IntArray(max(minSize, (ocrScratchPixels.size * 3) / 2))
+        }
+        return ocrScratchPixels
+    }
+    internal fun ensureReusableOcrBwBitmap(minW: Int, minH: Int): Bitmap {
+        val cur = reusableOcrBwBitmap
+        if (cur != null && !cur.isRecycled && cur.width >= minW && cur.height >= minH) {
+            return cur
+        }
+        val nextW = max(minW, cur?.width ?: 0).coerceAtLeast(64)
+        val nextH = max(minH, cur?.height ?: 0).coerceAtLeast(64)
+        cur?.let { if (!it.isRecycled) it.recycle() }
+        return Bitmap.createBitmap(nextW, nextH, Bitmap.Config.ARGB_8888).also {
+            reusableOcrBwBitmap = it
+        }
+    }
+
+    // Coalesced HUD payload evaluation, WebView JS diffing & WindowManager touch-zone dirty tracking
+    private val coalescePushDepthTl = object : ThreadLocal<Int>() {
+        override fun initialValue(): Int = 0
+    }
+    private val coalescePushDirtyTl = object : ThreadLocal<Boolean>() {
+        override fun initialValue(): Boolean = false
+    }
+    @Volatile internal var lastPushedBattlePayloadJson: String = ""
+    internal inline fun runWithCoalescedBattlePush(block: () -> Unit) {
+        val prevDepth = coalescePushDepthTl.get() ?: 0
+        coalescePushDepthTl.set(prevDepth + 1)
+        var shouldFlush = false
+        try {
+            block()
+        } finally {
+            val nextDepth = (coalescePushDepthTl.get() ?: 1) - 1
+            coalescePushDepthTl.set(nextDepth.coerceAtLeast(0))
+            if (nextDepth <= 0 && coalescePushDirtyTl.get() == true) {
+                coalescePushDirtyTl.set(false)
+                shouldFlush = true
+            }
+        }
+        if (shouldFlush) {
+            recalculateAndPushBattleData()
+        }
+    }
+
+    internal data class TouchZoneAppliedSpec(
+        val gravity: Int,
+        val x: Int,
+        val y: Int,
+        val width: Int,
+        val height: Int,
+        val flags: Int,
+        val visibility: Int
+    )
+    internal var lastAppliedTopZoneSpec: TouchZoneAppliedSpec? = null
+    internal var lastAppliedOppHdrZoneSpec: TouchZoneAppliedSpec? = null
+    internal var lastAppliedMyHdrZoneSpec: TouchZoneAppliedSpec? = null
+
+    private var cachedShow6Opp6RawJson: String = ""
+    private var cachedShow6Opp6Parsed: List<String> = emptyList()
+    private val matrix3v3CacheLock = Any()
+    private val cached3v3MatrixMap = object : LinkedHashMap<String, Map<String, String>>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Map<String, String>>?): Boolean = size > 128
+    }
 
     // v2.34: Independent 50s Swap Countdown Timers, Shield vs. Pokéball Isolation & Faint State Machine
     internal var playerSwapEndTimeMs: Long = 0L
@@ -5231,6 +5400,9 @@ class OverlayService : LifecycleService() {
             myHeadersTouchView = myHdrZone
             myHeadersTouchParams = myHdrParams
         } catch (_: Exception) {}
+        lastAppliedTopZoneSpec = null
+        lastAppliedOppHdrZoneSpec = null
+        lastAppliedMyHdrZoneSpec = null
     }
 
     internal fun syncOverlayTouchZonesLayout() {
@@ -5253,17 +5425,36 @@ class OverlayService : LifecycleService() {
                 layoutParams.height > 0 -> layoutParams.height
                 else -> (180 * density).toInt()
             }
-            topView.visibility = View.VISIBLE
-            try {
-                windowManager.updateViewLayout(topView, topParams)
-            } catch (_: Exception) {}
+            val nextTopSpec = TouchZoneAppliedSpec(
+                gravity = topParams.gravity,
+                x = topParams.x,
+                y = topParams.y,
+                width = topParams.width,
+                height = topParams.height,
+                flags = topParams.flags,
+                visibility = View.VISIBLE
+            )
+            if (nextTopSpec != lastAppliedTopZoneSpec || topView.visibility != View.VISIBLE) {
+                topView.visibility = View.VISIBLE
+                try {
+                    windowManager.updateViewLayout(topView, topParams)
+                    lastAppliedTopZoneSpec = nextTopSpec
+                } catch (_: Exception) {}
+            }
         }
 
         val showSubHeaderZones = !isLogOnlyStealthMode && currentLayoutMode == "option1"
 
-        fun updateSubZone(view: View?, params: WindowManager.LayoutParams?, rectPx: Rect) {
+        fun updateSubZone(
+            view: View?,
+            params: WindowManager.LayoutParams?,
+            rectPx: Rect,
+            lastSpec: TouchZoneAppliedSpec?,
+            assignSpec: (TouchZoneAppliedSpec) -> Unit
+        ) {
             if (view == null || params == null) return
             val hasValidRect = showSubHeaderZones && rectPx.width() > 4 && rectPx.height() > 4 && rectPx.top >= lastTopZoneHeightPx - 8
+            val nextVis: Int
             if (hasValidRect) {
                 params.gravity = Gravity.TOP or Gravity.START
                 params.x = layoutParams.x + rectPx.left
@@ -5275,7 +5466,7 @@ class OverlayService : LifecycleService() {
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                     WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
-                view.visibility = View.VISIBLE
+                nextVis = View.VISIBLE
             } else {
                 params.width = 0
                 params.height = 0
@@ -5284,15 +5475,32 @@ class OverlayService : LifecycleService() {
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                     WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
-                view.visibility = View.GONE
+                nextVis = View.GONE
             }
-            try {
-                windowManager.updateViewLayout(view, params)
-            } catch (_: Exception) {}
+            val nextSpec = TouchZoneAppliedSpec(
+                gravity = params.gravity,
+                x = params.x,
+                y = params.y,
+                width = params.width,
+                height = params.height,
+                flags = params.flags,
+                visibility = nextVis
+            )
+            if (nextSpec != lastSpec || view.visibility != nextVis) {
+                view.visibility = nextVis
+                try {
+                    windowManager.updateViewLayout(view, params)
+                    assignSpec(nextSpec)
+                } catch (_: Exception) {}
+            }
         }
 
-        updateSubZone(oppHeadersTouchView, oppHeadersTouchParams, lastOppHeadersRectPx)
-        updateSubZone(myHeadersTouchView, myHeadersTouchParams, lastMyHeadersRectPx)
+        updateSubZone(oppHeadersTouchView, oppHeadersTouchParams, lastOppHeadersRectPx, lastAppliedOppHdrZoneSpec) {
+            lastAppliedOppHdrZoneSpec = it
+        }
+        updateSubZone(myHeadersTouchView, myHeadersTouchParams, lastMyHeadersRectPx, lastAppliedMyHdrZoneSpec) {
+            lastAppliedMyHdrZoneSpec = it
+        }
     }
 
     internal fun applyOverlayScale(scalePct: Int) {
@@ -5367,6 +5575,8 @@ class OverlayService : LifecycleService() {
             dismissPostBattleBugReportDialogOverlay()
             try {
                 overlayView?.visibility = View.GONE
+                overlayView?.onPause()
+                overlayView?.pauseTimers()
             } catch (_: Exception) {}
             syncOverlayTouchZonesLayout()
             if (mediaProjection != null && battleLoopJob?.isActive != true) {
@@ -5374,6 +5584,11 @@ class OverlayService : LifecycleService() {
             }
             startForegroundNotification()
         } else {
+            lastPushedBattlePayloadJson = ""
+            try {
+                overlayView?.resumeTimers()
+                overlayView?.onResume()
+            } catch (_: Exception) {}
             if (::layoutParams.isInitialized) {
                 val targetWidth = (screenWidth * (overlayScalePct.coerceIn(50, 100) / 100f)).toInt()
                 layoutParams.width = targetWidth
@@ -5888,35 +6103,45 @@ class OverlayService : LifecycleService() {
                     try {
                         val plane = image.planes[0]
                         val buffer = plane.buffer
+                        buffer.rewind()
                         val pixelStride = plane.pixelStride
                         val rowStride = plane.rowStride
                         val rowPadding = rowStride - pixelStride * screenWidth
 
-                        val fullBitmap = Bitmap.createBitmap(
-                            screenWidth + rowPadding / pixelStride,
-                            screenHeight,
-                            Bitmap.Config.ARGB_8888
-                        )
-                        fullBitmap.copyPixelsFromBuffer(buffer)
-
-                        val clean = if (rowPadding == 0) {
-                            fullBitmap
-                        } else {
-                            val cropped = Bitmap.createBitmap(fullBitmap, 0, 0, screenWidth, screenHeight)
-                            fullBitmap.recycle()
-                            cropped
+                        var clean = cachedScreenBitmap
+                        if (clean == null || clean.isRecycled || clean.width != screenWidth || clean.height != screenHeight) {
+                            clean?.let { if (!it.isRecycled) it.recycle() }
+                            clean = Bitmap.createBitmap(screenWidth, screenHeight, Bitmap.Config.ARGB_8888)
+                            cachedScreenBitmap = clean
+                            reusableCleanCanvas = Canvas(clean)
                         }
 
-                        cachedScreenBitmap?.recycle()
-                        cachedScreenBitmap = clean
-                        clean.copy(Bitmap.Config.ARGB_8888, false)
+                        if (rowPadding == 0) {
+                            clean.copyPixelsFromBuffer(buffer)
+                        } else {
+                            val strideW = screenWidth + rowPadding / pixelStride
+                            var strideBmp = reusableStrideBitmap
+                            if (strideBmp == null || strideBmp.isRecycled || strideBmp.width != strideW || strideBmp.height != screenHeight) {
+                                strideBmp?.let { if (!it.isRecycled) it.recycle() }
+                                strideBmp = Bitmap.createBitmap(strideW, screenHeight, Bitmap.Config.ARGB_8888)
+                                reusableStrideBitmap = strideBmp
+                            }
+                            strideBmp.copyPixelsFromBuffer(buffer)
+                            val cCanvas = reusableCleanCanvas ?: Canvas(clean).also { reusableCleanCanvas = it }
+                            reusableCaptureSrcRect.set(0, 0, screenWidth, screenHeight)
+                            reusableCaptureDstRect.set(0, 0, screenWidth, screenHeight)
+                            cCanvas.drawBitmap(strideBmp, reusableCaptureSrcRect, reusableCaptureDstRect, reusableSrcCopyPaint)
+                        }
+
+                        capturedFrameSeq++
+                        hasValidCachedFrame = true
+                        clean
                     } finally {
                         image.close()
                     }
                 } else {
-                    cachedScreenBitmap?.let {
-                        if (!it.isRecycled) it.copy(Bitmap.Config.ARGB_8888, false) else null
-                    }
+                    val existing = cachedScreenBitmap
+                    if (hasValidCachedFrame && existing != null && !existing.isRecycled) existing else null
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -5974,12 +6199,8 @@ class OverlayService : LifecycleService() {
                     try {
                         if (cycleStartMs - lastBattleResetTimeMs >= 600L) {
                             val dvrBmp = captureCleanScreenBitmap()
-                            if (dvrBmp != null && !dvrBmp.isRecycled) {
-                                try {
-                                    recordOneBattleDvrFrameAndTraceAsync(dvrBmp, cycleStartMs)
-                                } finally {
-                                    if (!dvrBmp.isRecycled) dvrBmp.recycle()
-                                }
+                            if (dvrBmp != null && !dvrBmp.isRecycled && capturedFrameSeq != lastDvrEncodedFrameSeq) {
+                                recordOneBattleDvrFrameAndTraceAsync(dvrBmp, cycleStartMs)
                             }
                         }
                     } catch (_: Exception) {}
@@ -6030,8 +6251,19 @@ class OverlayService : LifecycleService() {
         val screen = captureCleanScreenBitmap() ?: return
         if (screen.isRecycled) return
         if (frameEpoch != battleResetEpoch) {
-            screen.recycle()
             return
+        }
+
+        val isIdleStandbyWindow = !isBattleActive && !isBattleIntroCountdownActive
+        if (isIdleStandbyWindow &&
+            introCountdownConfirmFrames == 0 &&
+            !isCountdownDimmedState &&
+            capturedFrameSeq == lastIdleProcessedFrameSeq
+        ) {
+            return
+        }
+        if (isIdleStandbyWindow) {
+            lastIdleProcessedFrameSeq = capturedFrameSeq
         }
 
         val w = screen.width
@@ -6080,49 +6312,93 @@ class OverlayService : LifecycleService() {
             (h * playerHpBottomFrac).toInt().coerceIn(1, h)
         )
 
-        // 1. Run 100ms (10 Hz) Pixel HUD Scan immediately on every frame
+        // 1. Run 100ms (10 Hz) Pixel HUD Scan immediately on every frame (with Smart Idle Overworld Gate when !isBattleActive)
         prevFrameTimestampMs = currentFrameTimestampMs
         currentFrameTimestampMs = System.currentTimeMillis()
         if (sampledPlayerBalls in 1..3) prevValidPlayerBalls = sampledPlayerBalls
         if (sampledOppBalls in 1..3) prevValidOppBalls = sampledOppBalls
         sampledPlayerBalls = detectActivePokeballCount(screen, playerPokeballRect)
         sampledOppBalls = detectActivePokeballCount(screen, oppPokeballRect)
-        sampledPlayerShields = detectActiveShieldCount(screen, playerShieldRect)
-        sampledOppShields = detectActiveShieldCount(screen, oppShieldRect)
-        if (enableHpTracking || enableEnergyTracking || showShieldDecisionOverlay) {
-            sampledOppHpPct = detectFloatingHpBarPct(screen, oppHpCorridorRect, w, isOpponent = true)
-            sampledPlayerHpPct = detectFloatingHpBarPct(screen, playerHpCorridorRect, w, isOpponent = false)
-        } else {
-            sampledOppHpPct = -1
-            sampledPlayerHpPct = -1
-            sampledOppHasPendingDmg = false
-            sampledPlayerHasPendingDmg = false
-            sampledOppPendingDmgPct = 0
-            sampledPlayerPendingDmgPct = 0
-        }
-        // v4.06: 100ms (10 Hz) Top-Center 5-Second Countdown Circle & Top-Right Opponent Nameplate Box Detector:
-        // Run BEFORE detectChargedMoveButtonFillLevels so an active 5s countdown circle immediately suppresses
-        // false 0% charge circle matches on the bottom "NOT NOW" text (`(0.50w, 0.8932h)`).
         sampledShieldHexagonVisible = false
         shieldHexagonConfirmFrames = 0
         sampledTopRightNameplateVisible = detectTopRightOpponentNameplate(screen, w, h)
-        // v5.13 Fix 1: Never treat the 10-second post-faint switch countdown circle as a 5-second opponent charged attack circle
-        sampledTopCountdownCircleVisible = if (isPostFaintSwitchPromptActive) false else detectTopCountdownCircle(screen, w, h)
-        if (sampledTopCountdownCircleVisible) {
-            topCountdownCircleConfirmFrames = (topCountdownCircleConfirmFrames + 1).coerceAtMost(30)
-            topCountdownCircleMissingFrames = 0
-            // v4.07: 2-frame confirmation debounce before activating the top countdown state to eliminate 1-frame startup flicker
-            if (topCountdownCircleConfirmFrames >= 2) {
-                isTopCountdownCircleActive = true
+
+        var hasIdleCombatOrIntroCue = true
+        if (isIdleStandbyWindow) {
+            sampledTopCountdownCircleVisible = false
+            topCountdownCircleConfirmFrames = 0
+            isTopCountdownCircleActive = false
+            detectChargedMoveButtonFillLevels(screen, w, h)
+            hasIdleCombatOrIntroCue = isCountdownDimmedState ||
+                sampledPlayerBalls in 1..3 ||
+                sampledOppBalls in 1..3 ||
+                sampledTopRightNameplateVisible ||
+                sampledLeftChargeBtnFillPct in 0..300 ||
+                sampledRightChargeBtnFillPct in 0..300 ||
+                sampledCenterChargeBtnFillPct in 0..300 ||
+                introCountdownConfirmFrames > 0
+
+            if (hasIdleCombatOrIntroCue) {
+                sampledPlayerShields = detectActiveShieldCount(screen, playerShieldRect)
+                sampledOppShields = detectActiveShieldCount(screen, oppShieldRect)
+                if (enableHpTracking || enableEnergyTracking || showShieldDecisionOverlay) {
+                    sampledOppHpPct = detectFloatingHpBarPct(screen, oppHpCorridorRect, w, isOpponent = true)
+                    sampledPlayerHpPct = detectFloatingHpBarPct(screen, playerHpCorridorRect, w, isOpponent = false)
+                } else {
+                    sampledOppHpPct = -1
+                    sampledPlayerHpPct = -1
+                    sampledOppHasPendingDmg = false
+                    sampledPlayerHasPendingDmg = false
+                    sampledOppPendingDmgPct = 0
+                    sampledPlayerPendingDmgPct = 0
+                }
+            } else {
+                sampledPlayerShields = 2
+                sampledOppShields = 2
+                sampledOppHpPct = -1
+                sampledPlayerHpPct = -1
+                sampledOppHasPendingDmg = false
+                sampledPlayerHasPendingDmg = false
+                sampledOppPendingDmgPct = 0
+                sampledPlayerPendingDmgPct = 0
+                sampledOppHpRowY = -1
+                sampledPlayerHpRowY = -1
             }
         } else {
-            topCountdownCircleMissingFrames = (topCountdownCircleMissingFrames + 1).coerceAtMost(30)
-            if (topCountdownCircleMissingFrames >= 3 || isPostFaintSwitchPromptActive) {
-                topCountdownCircleConfirmFrames = 0
-                isTopCountdownCircleActive = false
+            sampledPlayerShields = detectActiveShieldCount(screen, playerShieldRect)
+            sampledOppShields = detectActiveShieldCount(screen, oppShieldRect)
+            if (enableHpTracking || enableEnergyTracking || showShieldDecisionOverlay) {
+                sampledOppHpPct = detectFloatingHpBarPct(screen, oppHpCorridorRect, w, isOpponent = true)
+                sampledPlayerHpPct = detectFloatingHpBarPct(screen, playerHpCorridorRect, w, isOpponent = false)
+            } else {
+                sampledOppHpPct = -1
+                sampledPlayerHpPct = -1
+                sampledOppHasPendingDmg = false
+                sampledPlayerHasPendingDmg = false
+                sampledOppPendingDmgPct = 0
+                sampledPlayerPendingDmgPct = 0
             }
+            // v4.06: 100ms (10 Hz) Top-Center 5-Second Countdown Circle & Top-Right Opponent Nameplate Box Detector:
+            // Run BEFORE detectChargedMoveButtonFillLevels so an active 5s countdown circle immediately suppresses
+            // false 0% charge circle matches on the bottom "NOT NOW" text (`(0.50w, 0.8932h)`).
+            // v5.13 Fix 1: Never treat the 10-second post-faint switch countdown circle as a 5-second opponent charged attack circle
+            sampledTopCountdownCircleVisible = if (isPostFaintSwitchPromptActive) false else detectTopCountdownCircle(screen, w, h)
+            if (sampledTopCountdownCircleVisible) {
+                topCountdownCircleConfirmFrames = (topCountdownCircleConfirmFrames + 1).coerceAtMost(30)
+                topCountdownCircleMissingFrames = 0
+                // v4.07: 2-frame confirmation debounce before activating the top countdown state to eliminate 1-frame startup flicker
+                if (topCountdownCircleConfirmFrames >= 2) {
+                    isTopCountdownCircleActive = true
+                }
+            } else {
+                topCountdownCircleMissingFrames = (topCountdownCircleMissingFrames + 1).coerceAtMost(30)
+                if (topCountdownCircleMissingFrames >= 3 || isPostFaintSwitchPromptActive) {
+                    topCountdownCircleConfirmFrames = 0
+                    isTopCountdownCircleActive = false
+                }
+            }
+            detectChargedMoveButtonFillLevels(screen, w, h)
         }
-        detectChargedMoveButtonFillLevels(screen, w, h)
 
         // v3.94: Unified All-HUD-Gone & Cutscene Lockout + Multi-Frame Pokéball Debounce
         val areBottomCirclesVisible = sampledLeftChargeBtnFillPct in 0..300 || sampledRightChargeBtnFillPct in 0..300
@@ -6191,7 +6467,16 @@ class OverlayService : LifecycleService() {
             areBottomCirclesHiddenInCombat ||
             (lastChargedAttackLoggedMs > 0L && (nowMs - lastChargedAttackLoggedMs) <= 2200L)
         val targetOcrIntervalMs = if (isChargedWindowForFastOcr) 250L else 750L
-        val shouldStartOcr = !isOcrInFlight && (lastOcrStartMs == 0L || (nowMs - lastOcrStartMs) >= targetOcrIntervalMs)
+        val allowOcrThisFrame = !isIdleStandbyWindow || hasIdleCombatOrIntroCue
+        if (!allowOcrThisFrame) {
+            if (cachedOcrOppLines.isNotEmpty()) cachedOcrOppLines = emptyList()
+            if (cachedOcrPlayerTopLines.isNotEmpty()) cachedOcrPlayerTopLines = emptyList()
+            if (cachedOcrPlayerMoveLines.isNotEmpty()) cachedOcrPlayerMoveLines = emptyList()
+            if (cachedOcrMidBannerLines.isNotEmpty()) cachedOcrMidBannerLines = emptyList()
+        }
+        val shouldStartOcr = allowOcrThisFrame &&
+            !isOcrInFlight &&
+            (lastOcrStartMs == 0L || (nowMs - lastOcrStartMs) >= targetOcrIntervalMs)
 
         // v4.05 / v4.11: Keep bottom prompt OCR (`srcMoves`, expanded to `0.53h..0.96h` to eliminate the 0.52h-0.70h blind spot!)
         // active whenever bottom charge circles are hidden in combat OR the top countdown circle / shield prompt is active!
@@ -6203,33 +6488,103 @@ class OverlayService : LifecycleService() {
             cachedOcrPlayerMoveLines = emptyList()
         }
 
-        // v4.05: Offload all OCR cropping, high-contrast white-text binarization, and composite Canvas drawing
-        // off the 10Hz pixel scan thread onto Dispatchers.Default so the pixel loop stays well under 100ms!
-        val screenForOcr: Bitmap? = if (shouldStartOcr) {
+        // Pack ONLY the active 1:1 unscaled OCR sub-crops synchronously into a reusable buffer (< 0.3ms, zero allocation),
+        // eliminating the 15 MB full-screen Bitmap.copy() per OCR tick while keeping white-text binarization 100% unscaled!
+        val movesTopNorm = if (isCutscenePromptWindowForOcr) 0.53f else 0.68f
+        val srcOpp = Rect(
+            (w * 0.42f).toInt().coerceIn(0, w - 1),
+            (h * 0.025f).toInt().coerceIn(0, h - 1),
+            (w * 0.98f).toInt().coerceIn(1, w),
+            (h * 0.148f).toInt().coerceIn(1, h)
+        )
+        val srcPlayer = Rect(
+            (w * 0.01f).toInt().coerceIn(0, w - 1),
+            (h * 0.025f).toInt().coerceIn(0, h - 1),
+            (w * 0.47f).toInt().coerceIn(1, w),
+            (h * 0.148f).toInt().coerceIn(1, h)
+        )
+        val srcMoves = Rect(
+            (w * 0.08f).toInt().coerceIn(0, w - 1),
+            (h * movesTopNorm).toInt().coerceIn(0, h - 1),
+            (w * 0.92f).toInt().coerceIn(1, w),
+            (h * 0.96f).toInt().coerceIn(1, h)
+        )
+        val srcMidBanner = Rect(
+            (w * 0.08f).toInt().coerceIn(0, w - 1),
+            (h * 0.15f).toInt().coerceIn(0, h - 1),
+            (w * 0.92f).toInt().coerceIn(1, w),
+            (h * 0.66f).toInt().coerceIn(1, h)
+        )
+
+        var packedRawForOcr: Bitmap? = null
+        var packOppRect = Rect()
+        var packPlayerRect = Rect()
+        var packMidRect = Rect()
+        var packMovesRect: Rect? = null
+
+        if (shouldStartOcr) {
             try {
-                screen.copy(Bitmap.Config.ARGB_8888, false)
+                val packGap = 2
+                val packW = max(
+                    max(srcOpp.width(), srcPlayer.width()),
+                    max(srcMidBanner.width(), if (includeBottomMovesInOcr) srcMoves.width() else 0)
+                ).coerceAtLeast(64)
+                packOppRect = Rect(0, 0, srcOpp.width(), srcOpp.height())
+                val pTop = packOppRect.bottom + packGap
+                packPlayerRect = Rect(0, pTop, srcPlayer.width(), pTop + srcPlayer.height())
+                val midTop = packPlayerRect.bottom + packGap
+                packMidRect = Rect(0, midTop, srcMidBanner.width(), midTop + srcMidBanner.height())
+                val packH = if (includeBottomMovesInOcr) {
+                    val mvTop = packMidRect.bottom + packGap
+                    packMovesRect = Rect(0, mvTop, srcMoves.width(), mvTop + srcMoves.height())
+                    mvTop + srcMoves.height()
+                } else {
+                    packMidRect.bottom
+                }.coerceAtLeast(64)
+
+                var rawPack = reusableOcrRawPackBitmap
+                if (rawPack == null || rawPack.isRecycled || rawPack.width < packW || rawPack.height < packH) {
+                    val allocW = max(packW, rawPack?.width ?: 0)
+                    val allocH = max(packH, rawPack?.height ?: 0)
+                    rawPack?.let { if (!it.isRecycled) it.recycle() }
+                    rawPack = Bitmap.createBitmap(allocW, allocH, Bitmap.Config.ARGB_8888)
+                    reusableOcrRawPackBitmap = rawPack
+                    reusableOcrRawPackCanvas = Canvas(rawPack)
+                }
+                val rawCanvas = reusableOcrRawPackCanvas ?: Canvas(rawPack).also { reusableOcrRawPackCanvas = it }
+                rawCanvas.drawBitmap(screen, srcOpp, packOppRect, reusableSrcCopyPaint)
+                rawCanvas.drawBitmap(screen, srcPlayer, packPlayerRect, reusableSrcCopyPaint)
+                rawCanvas.drawBitmap(screen, srcMidBanner, packMidRect, reusableSrcCopyPaint)
+                if (packMovesRect != null) {
+                    rawCanvas.drawBitmap(screen, srcMoves, packMovesRect!!, reusableSrcCopyPaint)
+                }
+                packedRawForOcr = rawPack
             } catch (_: Exception) {
-                null
+                packedRawForOcr = null
             }
-        } else null
+        }
 
         // Immediately advance the 100ms Pixel HUD & Sliver Latch-and-Lock + Energy State Machine
         // using the latest cached OCR lines so 0.5s GBL turns are never delayed by ML Kit OCR!
         activeFrameScreenBitmap = screen
         try {
-            if (!isBattleMenuScreen(cachedOcrOppLines, cachedOcrPlayerTopLines, cachedOcrPlayerMoveLines)) {
-                updateSteadyFrameBallAndShieldState()
-                updateLiveHpAndChargedAttackState(
-                    cachedOcrOppLines,
-                    cachedOcrPlayerTopLines,
-                    cachedOcrPlayerMoveLines,
-                    cachedOcrMidBannerLines
-                )
-                checkAndTriggerBattleIntroCountdown(
-                    oppLines = cachedOcrOppLines,
-                    playerTopLines = cachedOcrPlayerTopLines,
-                    midBannerLines = cachedOcrMidBannerLines
-                )
+            if (!isIdleStandbyWindow || hasIdleCombatOrIntroCue) {
+                runWithCoalescedBattlePush {
+                    if (!isBattleMenuScreen(cachedOcrOppLines, cachedOcrPlayerTopLines, cachedOcrPlayerMoveLines)) {
+                        updateSteadyFrameBallAndShieldState()
+                        updateLiveHpAndChargedAttackState(
+                            cachedOcrOppLines,
+                            cachedOcrPlayerTopLines,
+                            cachedOcrPlayerMoveLines,
+                            cachedOcrMidBannerLines
+                        )
+                        checkAndTriggerBattleIntroCountdown(
+                            oppLines = cachedOcrOppLines,
+                            playerTopLines = cachedOcrPlayerTopLines,
+                            midBannerLines = cachedOcrMidBannerLines
+                        )
+                    }
+                }
             }
             if ((activeAlwaysOnDvrEnabled || activeOneBattleDvrArmed || isLogOnlyStealthMode) &&
                 ((isBattleActive && !isWaitingForOpponent) || isBattleIntroCountdownActive)
@@ -6238,132 +6593,106 @@ class OverlayService : LifecycleService() {
             }
         } finally {
             activeFrameScreenBitmap = null
-            screen.recycle()
         }
 
         // Launch asynchronous ML Kit OCR pass in background without blocking the 10Hz pixel loop
-        if (screenForOcr != null) {
+        val rawPackForAsync = packedRawForOcr
+        if (rawPackForAsync != null) {
             isOcrInFlight = true
             lastOcrStartMs = System.currentTimeMillis()
             val capturedEpoch = frameEpoch
             val isFastCutsceneOcrMode = isCutscenePromptWindowForOcr && !isPostFaintSwitchPromptActive
+            val capturedOppRect = packOppRect
+            val capturedPlayerRect = packPlayerRect
+            val capturedMidRect = packMidRect
+            val capturedMovesRect = packMovesRect
 
             lifecycleScope.launch(Dispatchers.Default) {
-                var compositeForOcr: Bitmap? = null
                 try {
                     val gap = 16
-                    val srcOpp = Rect(
-                        (w * 0.42f).toInt().coerceIn(0, w - 1),
-                        (h * 0.025f).toInt().coerceIn(0, h - 1),
-                        (w * 0.98f).toInt().coerceIn(1, w),
-                        (h * 0.148f).toInt().coerceIn(1, h)
-                    )
-                    val srcPlayer = Rect(
-                        (w * 0.01f).toInt().coerceIn(0, w - 1),
-                        (h * 0.025f).toInt().coerceIn(0, h - 1),
-                        (w * 0.47f).toInt().coerceIn(1, w),
-                        (h * 0.148f).toInt().coerceIn(1, h)
-                    )
-                    // v4.05: Expanded top of srcMoves from 0.70h to 0.53h during cutscenes so "Attack incoming!"
-                    // and "Use a Protect Shield?" (0.58h..0.78h) are 100% captured with zero blind spot!
-                    val movesTopNorm = if (isCutscenePromptWindowForOcr) 0.53f else 0.68f
-                    val srcMoves = Rect(
-                        (w * 0.08f).toInt().coerceIn(0, w - 1),
-                        (h * movesTopNorm).toInt().coerceIn(0, h - 1),
-                        (w * 0.92f).toInt().coerceIn(1, w),
-                        (h * 0.96f).toInt().coerceIn(1, h)
-                    )
-                    // v6.40: Expanded mid-banner crop (0.08w..0.92w, 0.15h..0.66h) so both Opponent (y ~ 0.20h..0.42h)
-                    // and Player (y ~ 0.54h..0.65h) floating HP-bar buff/debuff callouts ("ATTACK ROSE!", "DEFENSE FELL!") are captured!
-                    val srcMidBanner = Rect(
-                        (w * 0.08f).toInt().coerceIn(0, w - 1),
-                        (h * 0.15f).toInt().coerceIn(0, h - 1),
-                        (w * 0.92f).toInt().coerceIn(1, w),
-                        (h * 0.66f).toInt().coerceIn(1, h)
-                    )
-
-                    val bwOppBitmap = createHighContrastWhiteTextBitmap(screenForOcr, srcOpp)
-                    val bwPlayerBitmap = createHighContrastWhiteTextBitmap(screenForOcr, srcPlayer)
-                    val bwMovesBitmap = if (includeBottomMovesInOcr) createHighContrastWhiteTextBitmap(screenForOcr, srcMoves) else null
-                    val bwMidBannerBitmap = createHighContrastWhiteTextBitmap(screenForOcr, srcMidBanner)
-
                     // v4.05: Compact scaling (~1.3 MP total instead of 5.5 MP) so ML Kit inference finishes in <75ms!
                     val topScale = if (isFastCutsceneOcrMode) 1.0f else 1.35f
                     val movesScale = if (isFastCutsceneOcrMode) 0.85f else 0.90f
                     val midScale = 0.85f
 
-                    val dstOppW = (srcOpp.width() * topScale).toInt().coerceAtLeast(1)
-                    val dstOppH = (srcOpp.height() * topScale).toInt().coerceAtLeast(1)
-                    val dstPlayerW = (srcPlayer.width() * topScale).toInt().coerceAtLeast(1)
-                    val dstPlayerH = (srcPlayer.height() * topScale).toInt().coerceAtLeast(1)
-                    val movesW = if (includeBottomMovesInOcr) (srcMoves.width() * movesScale).toInt().coerceAtLeast(1) else 0
-                    val movesH = if (includeBottomMovesInOcr) (srcMoves.height() * movesScale).toInt().coerceAtLeast(1) else 0
-                    val ocrMovesZoneH = if (includeBottomMovesInOcr) (movesH + gap + movesH) else 0
-                    val dstMidW = (srcMidBanner.width() * midScale).toInt().coerceAtLeast(1)
-                    val dstMidH = (srcMidBanner.height() * midScale).toInt().coerceAtLeast(1)
+                    val dstOppW = (capturedOppRect.width() * topScale).toInt().coerceAtLeast(1)
+                    val dstOppH = (capturedOppRect.height() * topScale).toInt().coerceAtLeast(1)
+                    val dstPlayerW = (capturedPlayerRect.width() * topScale).toInt().coerceAtLeast(1)
+                    val dstPlayerH = (capturedPlayerRect.height() * topScale).toInt().coerceAtLeast(1)
+                    val movesW = if (capturedMovesRect != null) (capturedMovesRect.width() * movesScale).toInt().coerceAtLeast(1) else 0
+                    val movesH = if (capturedMovesRect != null) (capturedMovesRect.height() * movesScale).toInt().coerceAtLeast(1) else 0
+                    val ocrMovesZoneH = if (capturedMovesRect != null) (movesH + gap + movesH) else 0
+                    val dstMidW = (capturedMidRect.width() * midScale).toInt().coerceAtLeast(1)
+                    val dstMidH = (capturedMidRect.height() * midScale).toInt().coerceAtLeast(1)
                     val ocrMidZoneH = dstMidH + gap + dstMidH
 
                     val compW = max(max(max(dstOppW, dstPlayerW), movesW), dstMidW).coerceAtLeast(100)
                     val ocrOppZoneH = dstOppH + gap + dstOppH
                     val ocrPlayerZoneH = dstPlayerH + gap + dstPlayerH
-                    val ocrMovesBottomY = if (includeBottomMovesInOcr) {
+                    val ocrMovesBottomY = if (capturedMovesRect != null) {
                         ocrOppZoneH + gap + ocrPlayerZoneH + gap + ocrMovesZoneH
                     } else {
                         ocrOppZoneH + gap + ocrPlayerZoneH
                     }
                     val compH = ocrMovesBottomY + gap + ocrMidZoneH
 
-                    compositeForOcr = try {
-                        Bitmap.createBitmap(compW, compH, Bitmap.Config.ARGB_8888)
+                    val compositeForOcr: Bitmap? = try {
+                        if (capturedMovesRect != null) {
+                            var cur = reusableOcrCompositeFullBitmap
+                            if (cur == null || cur.isRecycled || cur.width != compW || cur.height != compH) {
+                                cur?.let { if (!it.isRecycled) it.recycle() }
+                                cur = Bitmap.createBitmap(compW, compH, Bitmap.Config.ARGB_8888)
+                                reusableOcrCompositeFullBitmap = cur
+                                reusableOcrCompositeFullCanvas = Canvas(cur)
+                            }
+                            cur
+                        } else {
+                            var cur = reusableOcrCompositeCompactBitmap
+                            if (cur == null || cur.isRecycled || cur.width != compW || cur.height != compH) {
+                                cur?.let { if (!it.isRecycled) it.recycle() }
+                                cur = Bitmap.createBitmap(compW, compH, Bitmap.Config.ARGB_8888)
+                                reusableOcrCompositeCompactBitmap = cur
+                                reusableOcrCompositeCompactCanvas = Canvas(cur)
+                            }
+                            cur
+                        }
                     } catch (_: Exception) {
                         null
                     }
 
-                    if (compositeForOcr != null) {
-                        val canvas = Canvas(compositeForOcr)
-                        canvas.drawColor(Color.BLACK)
-                        val filterPaint = Paint(Paint.FILTER_BITMAP_FLAG)
-
-                        val dstOppRaw = Rect(0, 0, dstOppW, dstOppH)
-                        val dstOppBw = Rect(0, dstOppH + gap, dstOppW, ocrOppZoneH)
-                        val dstPlayerRaw = Rect(0, ocrOppZoneH + gap, dstPlayerW, ocrOppZoneH + gap + dstPlayerH)
-                        val dstPlayerBw = Rect(0, ocrOppZoneH + gap + dstPlayerH + gap, dstPlayerW, ocrOppZoneH + gap + ocrPlayerZoneH)
-                        val dstMidBannerRaw = Rect(0, ocrMovesBottomY + gap, dstMidW, ocrMovesBottomY + gap + dstMidH)
-                        val dstMidBannerBw = Rect(0, ocrMovesBottomY + gap + dstMidH + gap, dstMidW, compH)
-
-                        canvas.drawBitmap(screenForOcr, srcOpp, dstOppRaw, filterPaint)
-                        if (bwOppBitmap != null) {
-                            canvas.drawBitmap(bwOppBitmap, null, dstOppBw, filterPaint)
-                        }
-                        canvas.drawBitmap(screenForOcr, srcPlayer, dstPlayerRaw, filterPaint)
-                        if (bwPlayerBitmap != null) {
-                            canvas.drawBitmap(bwPlayerBitmap, null, dstPlayerBw, filterPaint)
-                        }
-                        if (includeBottomMovesInOcr && movesW > 0 && movesH > 0) {
-                            val movesTopY = ocrOppZoneH + gap + ocrPlayerZoneH + gap
-                            val dstMovesRaw = Rect(0, movesTopY, movesW, movesTopY + movesH)
-                            canvas.drawBitmap(screenForOcr, srcMoves, dstMovesRaw, filterPaint)
-                            if (bwMovesBitmap != null) {
-                                val dstMovesBw = Rect(0, movesTopY + movesH + gap, movesW, ocrMovesBottomY)
-                                canvas.drawBitmap(bwMovesBitmap, null, dstMovesBw, filterPaint)
-                            }
-                        }
-                        canvas.drawBitmap(screenForOcr, srcMidBanner, dstMidBannerRaw, filterPaint)
-                        if (bwMidBannerBitmap != null) {
-                            canvas.drawBitmap(bwMidBannerBitmap, null, dstMidBannerBw, filterPaint)
-                        }
-                    }
-                    bwOppBitmap?.recycle()
-                    bwPlayerBitmap?.recycle()
-                    bwMovesBitmap?.recycle()
-                    bwMidBannerBitmap?.recycle()
-                    screenForOcr.recycle()
-
                     val ocrBmp = compositeForOcr ?: return@launch
+                    val canvas = if (capturedMovesRect != null) {
+                        reusableOcrCompositeFullCanvas ?: Canvas(ocrBmp).also { reusableOcrCompositeFullCanvas = it }
+                    } else {
+                        reusableOcrCompositeCompactCanvas ?: Canvas(ocrBmp).also { reusableOcrCompositeCompactCanvas = it }
+                    }
+                    canvas.drawColor(Color.BLACK)
+
+                    val dstOppRaw = Rect(0, 0, dstOppW, dstOppH)
+                    val dstOppBw = Rect(0, dstOppH + gap, dstOppW, ocrOppZoneH)
+                    val dstPlayerRaw = Rect(0, ocrOppZoneH + gap, dstPlayerW, ocrOppZoneH + gap + dstPlayerH)
+                    val dstPlayerBw = Rect(0, ocrOppZoneH + gap + dstPlayerH + gap, dstPlayerW, ocrOppZoneH + gap + ocrPlayerZoneH)
+                    val dstMidBannerRaw = Rect(0, ocrMovesBottomY + gap, dstMidW, ocrMovesBottomY + gap + dstMidH)
+                    val dstMidBannerBw = Rect(0, ocrMovesBottomY + gap + dstMidH + gap, dstMidW, compH)
+
+                    canvas.drawBitmap(rawPackForAsync, capturedOppRect, dstOppRaw, ocrFilterPaint)
+                    drawBinarizedWhiteTextCropOnto(rawPackForAsync, capturedOppRect, canvas, dstOppBw, ocrFilterPaint)
+                    canvas.drawBitmap(rawPackForAsync, capturedPlayerRect, dstPlayerRaw, ocrFilterPaint)
+                    drawBinarizedWhiteTextCropOnto(rawPackForAsync, capturedPlayerRect, canvas, dstPlayerBw, ocrFilterPaint)
+                    if (capturedMovesRect != null && movesW > 0 && movesH > 0) {
+                        val movesTopY = ocrOppZoneH + gap + ocrPlayerZoneH + gap
+                        val dstMovesRaw = Rect(0, movesTopY, movesW, movesTopY + movesH)
+                        val dstMovesBw = Rect(0, movesTopY + movesH + gap, movesW, ocrMovesBottomY)
+                        canvas.drawBitmap(rawPackForAsync, capturedMovesRect, dstMovesRaw, ocrFilterPaint)
+                        drawBinarizedWhiteTextCropOnto(rawPackForAsync, capturedMovesRect, canvas, dstMovesBw, ocrFilterPaint)
+                    }
+                    canvas.drawBitmap(rawPackForAsync, capturedMidRect, dstMidBannerRaw, ocrFilterPaint)
+                    drawBinarizedWhiteTextCropOnto(rawPackForAsync, capturedMidRect, canvas, dstMidBannerBw, ocrFilterPaint)
+
                     val ocrLaunchMs = System.currentTimeMillis()
                     val yDivider1 = ocrOppZoneH + gap / 2
                     val yDivider2 = ocrOppZoneH + gap + ocrPlayerZoneH + gap / 2
-                    val yDivider3 = if (includeBottomMovesInOcr) ocrMovesBottomY + gap / 2 else yDivider2
+                    val yDivider3 = if (capturedMovesRect != null) ocrMovesBottomY + gap / 2 else yDivider2
 
                     val visionText = suspendCancellableCoroutine<Text?> { cont ->
                         val input = InputImage.fromBitmap(ocrBmp, 0)
@@ -6374,8 +6703,10 @@ class OverlayService : LifecycleService() {
                             .addOnFailureListener {
                                 if (cont.isActive) cont.resume(null)
                             }
+                            .addOnCanceledListener {
+                                if (cont.isActive) cont.resume(null)
+                            }
                     }
-                    ocrBmp.recycle()
 
                     val ocrDoneMs = System.currentTimeMillis()
                     val ocrElapsedMs = (ocrDoneMs - ocrLaunchMs).coerceAtLeast(1L)
@@ -6398,7 +6729,7 @@ class OverlayService : LifecycleService() {
                                 when {
                                     cy < yDivider1 -> oppLines.add(line)
                                     cy < yDivider2 -> playerTopLines.add(line)
-                                    includeBottomMovesInOcr && cy < yDivider3 -> playerMoveLines.add(line)
+                                    capturedMovesRect != null && cy < yDivider3 -> playerMoveLines.add(line)
                                     else -> midBannerLines.add(line)
                                 }
                             }
@@ -6411,55 +6742,51 @@ class OverlayService : LifecycleService() {
                                 cachedOcrPlayerMoveLines = playerMoveLines
                                 cachedOcrMidBannerLines = midBannerLines
 
-                                if (!isBattleMenuScreen(oppLines, playerTopLines, playerMoveLines)) {
-                                    handleOpponentLines(oppLines)
-                                    handlePlayerSwitchLines(playerTopLines, playerMoveLines)
-                                    handleMidBannerUsedMoveLines(midBannerLines)
-                                    // v4.05: Immediately evaluate "Attack incoming!" OCR trigger on the Main thread upon OCR completion!
-                                    updateLiveHpAndChargedAttackState(
-                                        oppLines,
-                                        playerTopLines,
-                                        playerMoveLines,
-                                        midBannerLines
-                                    )
-                                    checkAndTriggerBattleIntroCountdown(
-                                        oppLines = oppLines,
-                                        playerTopLines = playerTopLines,
-                                        midBannerLines = midBannerLines
-                                    )
-                                    // v6.40: Spatial ML Kit OCR Buff/Debuff Callout Parser & Mimikyu Swap-In Reminder Guard
-                                    val movesTopYForCallout = ocrOppZoneH + gap + ocrPlayerZoneH + gap
-                                    handleOcrStatStageCalloutLines(
-                                        midBannerLines = midBannerLines,
-                                        playerMoveLines = playerMoveLines,
-                                        midRawTopY = ocrMovesBottomY + gap,
-                                        midBwTopY = ocrMovesBottomY + gap + dstMidH + gap,
-                                        midDstH = dstMidH,
-                                        midDstW = dstMidW,
-                                        movesRawTopY = movesTopYForCallout,
-                                        movesBwTopY = movesTopYForCallout + movesH + gap,
-                                        movesDstH = movesH,
-                                        movesTopNorm = movesTopNorm,
-                                        gap = gap
-                                    )
-                                    // v6.03: Auto-detect End of Battle (Win / Loss / Tie) & auto-log
-                                    checkAndHandleAutoEndOfBattle(
-                                        oppLines,
-                                        playerTopLines,
-                                        playerMoveLines,
-                                        midBannerLines
-                                    )
+                                runWithCoalescedBattlePush {
+                                    if (!isBattleMenuScreen(oppLines, playerTopLines, playerMoveLines)) {
+                                        handleOpponentLines(oppLines)
+                                        handlePlayerSwitchLines(playerTopLines, playerMoveLines)
+                                        handleMidBannerUsedMoveLines(midBannerLines)
+                                        // v4.05: Immediately evaluate "Attack incoming!" OCR trigger on the Main thread upon OCR completion!
+                                        updateLiveHpAndChargedAttackState(
+                                            oppLines,
+                                            playerTopLines,
+                                            playerMoveLines,
+                                            midBannerLines
+                                        )
+                                        checkAndTriggerBattleIntroCountdown(
+                                            oppLines = oppLines,
+                                            playerTopLines = playerTopLines,
+                                            midBannerLines = midBannerLines
+                                        )
+                                        // v6.40: Spatial ML Kit OCR Buff/Debuff Callout Parser & Mimikyu Swap-In Reminder Guard
+                                        val movesTopYForCallout = ocrOppZoneH + gap + ocrPlayerZoneH + gap
+                                        handleOcrStatStageCalloutLines(
+                                            midBannerLines = midBannerLines,
+                                            playerMoveLines = playerMoveLines,
+                                            midRawTopY = ocrMovesBottomY + gap,
+                                            midBwTopY = ocrMovesBottomY + gap + dstMidH + gap,
+                                            midDstH = dstMidH,
+                                            midDstW = dstMidW,
+                                            movesRawTopY = movesTopYForCallout,
+                                            movesBwTopY = movesTopYForCallout + movesH + gap,
+                                            movesDstH = movesH,
+                                            movesTopNorm = movesTopNorm,
+                                            gap = gap
+                                        )
+                                        // v6.03: Auto-detect End of Battle (Win / Loss / Tie) & auto-log
+                                        checkAndHandleAutoEndOfBattle(
+                                            oppLines,
+                                            playerTopLines,
+                                            playerMoveLines,
+                                            midBannerLines
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 } catch (_: Exception) {
-                    try {
-                        if (!screenForOcr.isRecycled) screenForOcr.recycle()
-                    } catch (_: Exception) {}
-                    try {
-                        if (compositeForOcr != null && !compositeForOcr.isRecycled) compositeForOcr.recycle()
-                    } catch (_: Exception) {}
                 } finally {
                     isOcrInFlight = false
                 }
@@ -13794,9 +14121,16 @@ class OverlayService : LifecycleService() {
                     img = imageReader?.acquireLatestImage()
                 }
             } catch (_: Exception) {}
-            cachedScreenBitmap?.recycle()
-            cachedScreenBitmap = null
+            hasValidCachedFrame = false
+            lastIdleProcessedFrameSeq = -1L
         }
+        lastValidOppHpRowY = -1
+        lastValidOppHpRowTimeMs = 0L
+        lastValidOppHpRowSpecies = ""
+        lastValidPlayerHpRowY = -1
+        lastValidPlayerHpRowTimeMs = 0L
+        lastValidPlayerHpRowSpecies = ""
+        lastPushedBattlePayloadJson = ""
 
         detectedOpponents.clear()
         manualFormOverrides.clear()
@@ -14229,6 +14563,13 @@ class OverlayService : LifecycleService() {
         introCountdownMissingFrames = 0
         introCountdownStartMs = 0L
         sampledTopRightNameplateVisible = false
+        lastValidOppHpRowY = -1
+        lastValidOppHpRowTimeMs = 0L
+        lastValidOppHpRowSpecies = ""
+        lastValidPlayerHpRowY = -1
+        lastValidPlayerHpRowTimeMs = 0L
+        lastValidPlayerHpRowSpecies = ""
+        lastIdleProcessedFrameSeq = -1L
         isPostFaintSwitchPromptActive = false
         pendingChargedAttackActor = ""
         pendingChargedAttackDeductedEnergy = 0
@@ -16267,9 +16608,17 @@ class OverlayService : LifecycleService() {
      * Calculates turn alignment, opponent incoming damage, and player outgoing damage ("My Dmg to [Opponent]")
      */
     internal fun recalculateAndPushBattleData() {
+        if ((coalescePushDepthTl.get() ?: 0) > 0) {
+            coalescePushDirtyTl.set(true)
+            return
+        }
         val jsonStr = buildBattlePayloadJson(isReplayMode = false)
+        if (isLogOnlyStealthMode) return
         Handler(Looper.getMainLooper()).post {
-            overlayView?.evaluateJavascript("updateBattleData($jsonStr)", null)
+            if (!isLogOnlyStealthMode && jsonStr != lastPushedBattlePayloadJson) {
+                lastPushedBattlePayloadJson = jsonStr
+                overlayView?.evaluateJavascript("updateBattleData($jsonStr)", null)
+            }
         }
     }
 
@@ -17335,10 +17684,19 @@ class OverlayService : LifecycleService() {
         val revealedOppAll = (detectedOpponents + listOf(activeOpponentName)).filter { it.isNotBlank() }.distinct()
         val knownShow6UnrevealedPool: List<String> = if (isShow6ModeActive && ::prefs.isInitialized) {
             val rawJson = prefs.getString(PREFS_KEY_SHOW6_OPPONENT_6, "[]") ?: "[]"
-            val parsed6: List<String> = try {
-                gson.fromJson(rawJson, object : TypeToken<List<String>>() {}.type) ?: emptyList()
-            } catch (_: Exception) {
-                emptyList()
+            val parsed6: List<String> = synchronized(matrix3v3CacheLock) {
+                if (rawJson == cachedShow6Opp6RawJson) {
+                    cachedShow6Opp6Parsed
+                } else {
+                    val parsed: List<String> = try {
+                        gson.fromJson(rawJson, object : TypeToken<List<String>>() {}.type) ?: emptyList()
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                    cachedShow6Opp6RawJson = rawJson
+                    cachedShow6Opp6Parsed = parsed
+                    parsed
+                }
             }
             val seenBaseSet = revealedOppAll
                 .map { FormResolver.extractBaseSpecies(it).lowercase() }
@@ -18385,22 +18743,40 @@ class OverlayService : LifecycleService() {
         p3: TeamMember?,
         oppSlotIdx: Int = -1
     ): Map<String, String> {
-        if (::prefs.isInitialized) {
-            syncTierThresholdsFromPrefs(prefs)
-        }
         val swMin = activeTierSwMin
         val wMin = activeTierWMin
         val lMax = activeTierLMax
         val slMax = activeTierSlMax
+        val activeLeague = currentPreset?.league ?: "MASTER LEAGUE"
+        val oppFullName = if (isOppShad && !oppMeta.name.startsWith("Shadow ", ignoreCase = true)) {
+            "Shadow ${oppMeta.name}"
+        } else {
+            oppMeta.name
+        }
+
+        fun slotKey(slot: TeamMember?, fallback: String): String {
+            if (slot == null) return fallback
+            return "${slot.name}|${slot.fastMove}|${slot.chargedMove1}|${slot.chargedMove2}|${slot.cp}|${slot.ivs}|${slot.plusMoveLevel}"
+        }
+
+        val cacheKey = buildString(224) {
+            append(activeLeague).append('|')
+            append(oppFullName).append('|')
+            append(slotKey(p1, "Palkia (Origin)")).append('|')
+            append(slotKey(p2, "Zacian (Crowned)")).append('|')
+            append(slotKey(p3, "Dialga (Origin)")).append('|')
+            append(swMin).append(',').append(wMin).append(',').append(lMax).append(',').append(slMax).append('|')
+            append(lastPrecomputedTeamSignature).append('|')
+            append(DYNAMIC_POKEMON_DATABASE.size).append('|')
+            append(simulationCacheEpoch).append('|')
+            append(getLeagueRankingsCount(activeLeague))
+        }
+        synchronized(matrix3v3CacheLock) {
+            cached3v3MatrixMap[cacheKey]?.let { return it }
+        }
 
         fun evaluateSlot(slotIdx: Int, slot: TeamMember?, fallbackName: String): String {
-            val activeLeague = currentPreset?.league ?: "MASTER LEAGUE"
             val userName = slot?.name ?: fallbackName
-            val oppFullName = if (isOppShad && !oppMeta.name.startsWith("Shadow ", ignoreCase = true)) {
-                "Shadow ${oppMeta.name}"
-            } else {
-                oppMeta.name
-            }
 
             // v3.42: Do NOT scale visual 3v3 shield matrix dots by remaining HP% (since the static matrix does not know live energy).
             // Remaining HP% continues to guide Pokémon swap/post-faint selections, shield callouts, and KO badges.
@@ -18455,14 +18831,19 @@ class OverlayService : LifecycleService() {
             return "${toTier(rating0s)},${toTier(rating1s)},${toTier(rating2s)}"
         }
 
-        return mapOf(
+        val result = mapOf(
             "p1" to evaluateSlot(0, p1, "Palkia (Origin)"),
             "p2" to evaluateSlot(1, p2, "Zacian (Crowned)"),
             "p3" to evaluateSlot(2, p3, "Dialga (Origin)")
         )
+        synchronized(matrix3v3CacheLock) {
+            cached3v3MatrixMap[cacheKey] = result
+        }
+        return result
     }
 
     internal fun loadInitialDataIntoOverlay() {
+        lastPushedBattlePayloadJson = ""
         val presets = loadPresets()
         val jsonPresets = gson.toJson(presets)
         Handler(Looper.getMainLooper()).post {
@@ -18542,23 +18923,52 @@ class OverlayService : LifecycleService() {
                         releaseDvrResourcesLocked(deleteFiles = true)
                     } catch (_: Exception) {}
                     try {
+                        dvrScaledCanvas = null
+                        dvrScaledBitmap?.let { if (!it.isRecycled) it.recycle() }
+                        dvrScaledBitmap = null
+                    } catch (_: Exception) {}
+                    try {
                         dvrT?.quitSafely()
                     } catch (_: Exception) {}
                 }
             } else {
                 releaseDvrResourcesLocked(deleteFiles = true)
+                try {
+                    dvrScaledCanvas = null
+                    dvrScaledBitmap?.let { if (!it.isRecycled) it.recycle() }
+                    dvrScaledBitmap = null
+                } catch (_: Exception) {}
                 dvrT?.quitSafely()
             }
             virtualDisplay?.release()
             virtualDisplay = null
             mediaProjection?.stop()
             mediaProjection = null
-            imageReader?.close()
-            imageReader = null
+            synchronized(captureLock) {
+                imageReader?.close()
+                imageReader = null
+                hasValidCachedFrame = false
+                reusableCleanCanvas = null
+                cachedScreenBitmap?.let { if (!it.isRecycled) it.recycle() }
+                cachedScreenBitmap = null
+                reusableStrideBitmap?.let { if (!it.isRecycled) it.recycle() }
+                reusableStrideBitmap = null
+            }
             imageReaderThread?.quitSafely()
             imageReaderThread = null
-            cachedScreenBitmap?.recycle()
-            cachedScreenBitmap = null
+            if (!isOcrInFlight) {
+                reusableOcrRawPackCanvas = null
+                reusableOcrRawPackBitmap?.let { if (!it.isRecycled) it.recycle() }
+                reusableOcrRawPackBitmap = null
+                reusableOcrBwBitmap?.let { if (!it.isRecycled) it.recycle() }
+                reusableOcrBwBitmap = null
+                reusableOcrCompositeFullCanvas = null
+                reusableOcrCompositeFullBitmap?.let { if (!it.isRecycled) it.recycle() }
+                reusableOcrCompositeFullBitmap = null
+                reusableOcrCompositeCompactCanvas = null
+                reusableOcrCompositeCompactBitmap?.let { if (!it.isRecycled) it.recycle() }
+                reusableOcrCompositeCompactBitmap = null
+            }
         } catch (_: Exception) {}
 
         mainToastHandler.removeCallbacks(hideStatusToastRunnable)

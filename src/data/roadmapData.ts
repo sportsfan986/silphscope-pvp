@@ -23,9 +23,24 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.34',
+    codename: 'Older-Phone CPU & Memory Engine + Species-Clause Backline Predictor',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Zero-allocation active-battle vision & OCR packing, 2-stage floating HP row-lock corridor windowing, WebView GPU compositor relief, and Species-Clause consolidated semi-dynamic backline predictions — keeping exact 100ms/67ms/33ms scan cadences and native resolution.',
+    icon: '🚀',
+    accentColor: '#2DD4BF',
+    highlights: [
+      'Zero-allocation screen capture, OCR sub-crop packing & reusable 544×1184 hardware H.264 DVR frame buffers',
+      '2-stage HP Row-Lock corridor windowing (±14px fast lock with instant same-tick full-corridor fallback)',
+      'Removed floating WebView backdrop-filter blur over live 60 FPS video + coalesced IPC & Stealth WebView pause',
+      'Species-Clause Pokédex family consolidation in Backline Predictor eliminating Shadow+Normal duplicate pairs',
+      'Automated daily Semi-Dynamic & Species-Clause audit verifying live weakness coverage, PvPoke blend & mid-battle updates'
+    ]
+  },
+  {
     version: 'v7.33',
     codename: 'True O(Δ) Cloud Vault & DVR Delta Sync + Instant Cold-Start Launch',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'End-to-end O(Δ) delta synchronization across Cloudflare D1 Vaults and Cloud R2 DVR Replay Vaults with zero-echo D1 short-circuiting, instant local cache hydration, and Main-thread cold-start optimizations.',
     icon: '⚡',

@@ -2127,10 +2127,15 @@ internal fun OverlayService.Companion.resolveFastTypeStatic(moveName: String, fa
 }
 
 internal fun OverlayService.Companion.clearSimulationCachesStatic() {
+    simulationCacheEpoch++
     CACHED_ALL_POKEMON_META = null
     RESOLVED_SPECIES_CACHE.clear()
     TOP_META_POOL_CACHE.clear()
     TOP_30_RANKED_POOL_CACHE.clear()
+    PRECOMPUTED_TOP200_9X9_CACHE.clear()
+    lastPrecomputedTeamSignature = ""
+    FormResolver.clearBaseSpeciesCache()
+    clearTeamAndMetaCachesStatic()
 }
 
 internal fun OverlayService.Companion.getAllPokemonMeta(): List<PokemonMeta> {

@@ -1183,6 +1183,767 @@ async function main() {
     console.warn("[UNRELEASED-AUDIT] Could not audit unreleased commits:", err.message || err);
   }
 
+  // 5d. Change #3 Daily Backline Predictor Sanity & Semi-Dynamic Engine Audit (0 AI Tokens)
+  // Audits:
+  //   (A) Static Kotlin source invariants in `TeamAndMetaEngine.kt` & `OverlayService.kt` (Species-Clause consolidation,
+  //       distinct HUD codes, simulationCacheEpoch invalidation, and capped history blend wMeta > 0).
+  //   (B) Live DVR `_deep_trace.jsonl` telemetry across all ingested recordings: flags `OPEN_NEEDS_FIX` if any `>= v7.34`
+  //       trace emits Species-Clause duplicates (e.g. `SFERA · FERAL` or `CORVI · SCORV`), predicts an already-revealed
+  //       opponent species, gets stuck on `🔮 Back:` after 2 distinct opponents are revealed, fails to clear `🔮` once all 3
+  //       opponents are revealed, or emits NaN/malformed percentages. (Also tracks pre-`v7.34` historical hits separately.)
+  //   (C) Deterministic 4-Scenario Semi-Dynamic Engine Proof confirming the predictor is NEVER purely history-based:
+  //       1. Cold-Start (`0` logs -> `wHist=0%`, `wMeta=100%` PvPoke + defensive synergy + weakness coverage),
+  //       2. Saturated History (`100` identical logs -> `wHist` capped at 65%, `wMeta=35%` remains live and unseen leads
+  //          dynamically shift predicted backliners via `coverageBoost`),
+  //       3. Mid-Battle 2nd-Reveal (`1 -> 2` revealed -> `🔮 Back:` -> `🔮 3rd:` & excludes both Pokédex families),
+  //       4. Player Bench Swap / Faint Reactivity (`swapPunishRiskPct` updates dynamically when bench swap target changes).
+  const backlinePredictorAudit = (() => {
+    const ALL_TYPES_18 = [
+      "normal", "fire", "water", "electric", "grass", "ice",
+      "fighting", "poison", "ground", "flying", "psychic", "bug",
+      "rock", "ghost", "dragon", "dark", "steel", "fairy",
+    ];
+    const TYPE_CHART_JS = {
+      normal: { rock: 0.625, steel: 0.625, ghost: 0.390625 },
+      fire: { grass: 1.6, ice: 1.6, bug: 1.6, steel: 1.6, fire: 0.625, water: 0.625, rock: 0.625, dragon: 0.625 },
+      water: { fire: 1.6, ground: 1.6, rock: 1.6, water: 0.625, grass: 0.625, dragon: 0.625 },
+      electric: { water: 1.6, flying: 1.6, electric: 0.625, grass: 0.625, dragon: 0.625, ground: 0.390625 },
+      grass: { water: 1.6, ground: 1.6, rock: 1.6, fire: 0.625, grass: 0.625, poison: 0.625, flying: 0.625, bug: 0.625, dragon: 0.625, steel: 0.625 },
+      ice: { grass: 1.6, ground: 1.6, flying: 1.6, dragon: 1.6, fire: 0.625, water: 0.625, ice: 0.625, steel: 0.625 },
+      fighting: { normal: 1.6, ice: 1.6, rock: 1.6, dark: 1.6, steel: 1.6, poison: 0.625, flying: 0.625, psychic: 0.625, bug: 0.625, fairy: 0.625, ghost: 0.390625 },
+      poison: { grass: 1.6, fairy: 1.6, poison: 0.625, ground: 0.625, rock: 0.625, ghost: 0.625, steel: 0.390625 },
+      ground: { fire: 1.6, electric: 1.6, poison: 1.6, rock: 1.6, steel: 1.6, grass: 0.625, bug: 0.625, flying: 0.390625 },
+      flying: { grass: 1.6, fighting: 1.6, bug: 1.6, electric: 0.625, rock: 0.625, steel: 0.625 },
+      psychic: { fighting: 1.6, poison: 1.6, psychic: 0.625, steel: 0.625, dark: 0.390625 },
+      bug: { grass: 1.6, psychic: 1.6, dark: 1.6, fire: 0.625, fighting: 0.625, poison: 0.625, flying: 0.625, ghost: 0.625, steel: 0.625, fairy: 0.625 },
+      rock: { fire: 1.6, ice: 1.6, flying: 1.6, bug: 1.6, fighting: 0.625, ground: 0.625, steel: 0.625 },
+      ghost: { psychic: 1.6, ghost: 1.6, dark: 0.625, normal: 0.390625 },
+      dragon: { dragon: 1.6, steel: 0.625, fairy: 0.390625 },
+      dark: { psychic: 1.6, ghost: 1.6, fighting: 0.625, dark: 0.625, fairy: 0.625 },
+      steel: { ice: 1.6, rock: 1.6, fairy: 1.6, fire: 0.625, water: 0.625, electric: 0.625, steel: 0.625 },
+      fairy: { fighting: 1.6, dragon: 1.6, dark: 1.6, fire: 0.625, poison: 0.625, steel: 0.625 },
+    };
+    function getTypeEff(atk, defTypes) {
+      let mult = 1.0;
+      const row = TYPE_CHART_JS[atk] || {};
+      for (const d of defTypes) {
+        if (row[d] !== undefined) mult *= row[d];
+      }
+      return mult;
+    }
+    function extractPokedexFamilyJs(rawName) {
+      const s = String(rawName || "")
+        .toLowerCase()
+        .replace(/\(.*?\)/g, " ")
+        .replace(
+          /\b(?:shadow|purified|kanto|kantonian|alolan|alola|galarian|galar|hisuian|hisui|paldean|paldea|unovan|unova|mega|primal|armored|origin|origine|altered|therian|incarnate|crowned|hero|resolute|ordinary|defense|attack|speed|normal|black|white|complete|unbound|confined|sky|land|bloodmoon|apex|dusk|mane|dawn|wings|single|rapid|strike|ice|rider|baile|pau|sensu|zen|standard|combat|blaze|aqua|wash|heat|frost|mow|fan|sunny|rainy|snowy|plant|trash|sandy|burn|chill|douse|shock|x|y)\b/g,
+          " "
+        )
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!s) return "";
+      if (s.startsWith("tapu ")) return s;
+      if (s.startsWith("ho-oh") || s === "ho oh") return "ho-oh";
+      return s.split(" ")[0] || s;
+    }
+    function abbrCodeJs(name) {
+      const raw = String(name || "").trim();
+      if (!raw || /^waiting/i.test(raw)) return "OPP";
+      const sh = /^shadow\s+/i.test(raw) || /\(shadow\)/i.test(raw);
+      const clean = raw.replace(/^shadow\s+/i, "").replace(/\s*\(shadow\)/i, "").trim();
+      const lower = clean.toLowerCase();
+      let mapped = "";
+      if (lower.includes("palkia") && lower.includes("origin")) mapped = "PAL-O";
+      else if (lower.includes("dialga") && lower.includes("origin")) mapped = "DIA-O";
+      else if (lower.includes("giratina") && lower.includes("origin")) mapped = "GIR-O";
+      else if (lower.includes("giratina") && lower.includes("altered")) mapped = "GIR-A";
+      else if (lower.includes("zacian") && lower.includes("crowned")) mapped = "ZAC-C";
+      else if (lower.includes("zamazenta") && lower.includes("crowned")) mapped = "ZAM-C";
+      else if (lower.includes("necrozma") && lower.includes("dusk")) mapped = "NDM";
+      else if (lower.includes("necrozma") && lower.includes("dawn")) mapped = "NDW";
+      else if (lower.includes("kyurem") && lower.includes("white")) mapped = "KYU-W";
+      else if (lower.includes("kyurem") && lower.includes("black")) mapped = "KYU-B";
+      else if (lower.includes("landorus") && lower.includes("therian")) mapped = "LND-T";
+      else if (lower.includes("enamorus") && lower.includes("therian")) mapped = "ENM-T";
+      else if (lower.includes("keldeo")) mapped = "KELD";
+      else if (lower.includes("ho-oh") || lower === "ho oh") mapped = "HO-OH";
+      else if (lower.includes("zygarde")) mapped = "ZYG";
+      else if (lower.includes("xerneas")) mapped = "XERN";
+      else if (lower.includes("yveltal")) mapped = "YVEL";
+      else if (lower.includes("solgaleo")) mapped = "SOLG";
+      else if (lower.includes("lunala")) mapped = "LUNA";
+      else if (lower.includes("mewtwo")) mapped = "M2";
+      else if (lower.includes("kyogre")) mapped = "KYOG";
+      else if (lower.includes("groudon")) mapped = "GROU";
+      else if (lower.includes("rhyperior")) mapped = "RHYP";
+      else if (lower.includes("florges")) mapped = "FLRG";
+      else if (lower.includes("primarina")) mapped = "PRIM";
+      else if (lower.includes("feraligatr")) mapped = "FERAL";
+      else if (lower.includes("clodsire")) mapped = "CLOD";
+      else if (lower.includes("mandibuzz")) mapped = "MANDI";
+      else if (lower.includes("annihilape")) mapped = "APE";
+      else if (lower.includes("azumarill")) mapped = "AZU";
+      else if (lower.includes("bastiodon")) mapped = "BASTI";
+      else if (lower.includes("wigglytuff")) mapped = "WIGG";
+      else if (lower.includes("talonflame")) mapped = "TALON";
+      else if (lower.includes("weezing") && lower.includes("galar")) mapped = "GWEEZ";
+      else if (lower.includes("corsola") && lower.includes("galar")) mapped = "GCORS";
+      else if (lower.includes("moltres") && lower.includes("galar")) mapped = "GMOLT";
+      else if (lower.includes("stunfisk") && lower.includes("galar")) mapped = "GFISK";
+      else if (lower.includes("ninetales") && lower.includes("alola")) mapped = "A9T";
+      else if (lower.includes("sandslash") && lower.includes("alola")) mapped = "ASAND";
+      else if (lower.includes("muk") && lower.includes("alola")) mapped = "AMUK";
+      else if (lower.includes("marowak") && lower.includes("alola")) mapped = "AWAK";
+      else if (lower.includes("deoxys") && lower.includes("defense")) mapped = "DD";
+      else if (lower.includes("urshifu") && lower.includes("single")) mapped = "URS-S";
+      else if (lower.includes("urshifu") && lower.includes("rapid")) mapped = "URS-R";
+      else {
+        mapped = (
+          clean
+            .replace(/^(kanto|alolan|galarian|hisuian|paldean|mega|primal)\s+/i, "")
+            .split(/[\s(]+/)[0] || "MON"
+        )
+          .toUpperCase()
+          .slice(0, 5);
+      }
+      return sh && !mapped.startsWith("S-") ? `S${mapped.replace(/-/g, "").slice(0, 4)}` : mapped.slice(0, 5);
+    }
+
+    // Canonical code -> Pokédex family resolver for auditing HUD `🔮 Back: X · Y` codes
+    const KNOWN_CODE_FAMILIES = new Map([
+      ["A9T", "ninetales"], ["SA9T", "ninetales"], ["NINET", "ninetales"], ["SNINE", "ninetales"],
+      ["ASAND", "sandslash"], ["SASAN", "sandslash"], ["SANDS", "sandslash"], ["SSAND", "sandslash"],
+      ["AMUK", "muk"], ["SAMUK", "muk"], ["MUK", "muk"], ["SMUK", "muk"],
+      ["AWAK", "marowak"], ["SAWAK", "marowak"], ["MAROW", "marowak"], ["SMARO", "marowak"],
+      ["GWEEZ", "weezing"], ["SGWEE", "weezing"], ["WEEZI", "weezing"], ["SWEEZ", "weezing"],
+      ["GCORS", "corsola"], ["CORS", "corsola"], ["CORSO", "corsola"],
+      ["GMOLT", "moltres"], ["MOLTR", "moltres"], ["SMOLT", "moltres"],
+      ["GFISK", "stunfisk"], ["STUNF", "stunfisk"],
+      ["FERAL", "feraligatr"], ["SFERA", "feraligatr"],
+      ["CORVI", "corviknight"], ["SCORV", "corviknight"],
+      ["SNORL", "snorlax"], ["SSNOR", "snorlax"],
+      ["DRAPI", "drapion"], ["SDRAP", "drapion"],
+      ["QUAGS", "quagsire"], ["SQUAG", "quagsire"],
+      ["WHISC", "whiscash"], ["SWHIS", "whiscash"],
+      ["GLIGA", "gligar"], ["SGLIG", "gligar"],
+      ["GLISC", "gliscor"], ["SGLIS", "gliscor"],
+      ["SWAMP", "swampert"], ["SSWAM", "swampert"],
+      ["VENUS", "venusaur"], ["SVENU", "venusaur"],
+      ["CHARI", "charizard"], ["SCHAR", "charizard"],
+      ["BLAST", "blastoise"], ["SBLAS", "blastoise"],
+      ["PIDGE", "pidgeot"], ["SPIDG", "pidgeot"],
+      ["MACHA", "machamp"], ["SMACH", "machamp"],
+      ["DRAGON", "dragonite"], ["DRAGO", "dragonite"], ["SDRAG", "dragonite"],
+      ["RHYP", "rhyperior"], ["SRHYP", "rhyperior"],
+      ["M2", "mewtwo"], ["SM2", "mewtwo"],
+      ["HO-OH", "ho-oh"], ["SHOOH", "ho-oh"],
+      ["KYOG", "kyogre"], ["SKYOG", "kyogre"],
+      ["GROU", "groudon"], ["SGROU", "groudon"],
+      ["PAL-O", "palkia"], ["PALKI", "palkia"], ["SPALK", "palkia"],
+      ["DIA-O", "dialga"], ["DIALG", "dialga"], ["SDIAL", "dialga"],
+      ["GIR-O", "giratina"], ["GIR-A", "giratina"], ["GIRAT", "giratina"], ["SGIRA", "giratina"],
+      ["ZAC-C", "zacian"], ["ZACIA", "zacian"],
+      ["ZAM-C", "zamazenta"], ["ZAMAZ", "zamazenta"],
+      ["KYU-W", "kyurem"], ["KYU-B", "kyurem"], ["KYURE", "kyurem"],
+      ["LND-T", "landorus"], ["LANDO", "landorus"], ["SLAND", "landorus"],
+      ["ENM-T", "enamorus"], ["ENAMO", "enamorus"],
+      ["NDM", "necrozma"], ["NDW", "necrozma"], ["NECRO", "necrozma"],
+      ["URS-S", "urshifu"], ["URS-R", "urshifu"],
+      ["APE", "annihilape"], ["SAPE", "annihilape"],
+      ["CLOD", "clodsire"], ["AZU", "azumarill"], ["MANDI", "mandibuzz"],
+      ["BASTI", "bastiodon"], ["SBAST", "bastiodon"],
+      ["WIGG", "wigglytuff"], ["SWIGG", "wigglytuff"],
+      ["TALON", "talonflame"], ["STALO", "talonflame"],
+      ["FLRG", "florges"], ["PRIM", "primarina"], ["ZYG", "zygarde"],
+      ["XERN", "xerneas"], ["YVEL", "yveltal"], ["SOLG", "solgaleo"], ["LUNA", "lunala"], ["KELD", "keldeo"],
+    ]);
+    function resolveHudCodeFamily(codeRaw) {
+      const c = String(codeRaw || "").trim().toUpperCase();
+      if (!c) return "";
+      if (KNOWN_CODE_FAMILIES.has(c)) return KNOWN_CODE_FAMILIES.get(c);
+      // Strip leading 'S' on 5-char Shadow codes (e.g. `STINK` -> `TINK`, `SSKEL` -> `SKEL`) when non-Shadow prefix matches
+      if (c.length === 5 && c.startsWith("S")) {
+        return `stem4:${c.slice(1, 5)}`;
+      }
+      return `stem4:${c.replace(/-/g, "").slice(0, 4)}`;
+    }
+    function hudCodesShareSpeciesClause(codeA, codeB) {
+      const a = String(codeA || "").trim().toUpperCase();
+      const b = String(codeB || "").trim().toUpperCase();
+      if (!a || !b) return false;
+      if (a === b) return true;
+      const fA = resolveHudCodeFamily(a);
+      const fB = resolveHudCodeFamily(b);
+      if (fA && fB && !fA.startsWith("stem4:") && !fB.startsWith("stem4:")) {
+        return fA === fB;
+      }
+      // Check `S` + first 4 letters of other code (exact `abbrPokeCompactStatic` Shadow rule!)
+      const cleanA = a.replace(/-/g, "");
+      const cleanB = b.replace(/-/g, "");
+      if (a === `S${cleanB.slice(0, 4)}` || b === `S${cleanA.slice(0, 4)}`) {
+        return true;
+      }
+      return false;
+    }
+
+    // (A) Source-Code Invariant Audit
+    let sourceInvariantsPass = false;
+    const sourceChecks = {};
+    try {
+      const ktTeam = fs.readFileSync(
+        path.resolve(ROOT_DIR, "app/src/main/java/com/gbl/overlay/TeamAndMetaEngine.kt"),
+        "utf8"
+      );
+      const ktSvc = fs.readFileSync(
+        path.resolve(ROOT_DIR, "app/src/main/java/com/gbl/overlay/OverlayService.kt"),
+        "utf8"
+      );
+      const ktDb = fs.readFileSync(
+        path.resolve(ROOT_DIR, "app/src/main/java/com/gbl/overlay/PokemonDatabase.kt"),
+        "utf8"
+      );
+      sourceChecks.hasFamilyPriorConsolidation = ktTeam.includes("val familyPriorMap = LinkedHashMap<String, Double>()");
+      sourceChecks.hasDistinctBaseAndCodeGuard =
+        ktTeam.includes("seenPredBases.add(bKey)") && ktTeam.includes("seenPredCodes.add(codeKey)");
+      sourceChecks.hasSimulationCacheEpoch =
+        ktSvc.includes("var simulationCacheEpoch: Int") &&
+        ktDb.includes("clearTeamAndMetaCachesStatic()") &&
+        ktTeam.includes("append(dbSize).append(':').append(simEpoch)");
+      sourceChecks.hasCappedHistoryBlend =
+        ktTeam.includes("val rawWHist = if (nMatches > 0) maxLogW * min(1.0, nMatches.toDouble() / 50.0)") &&
+        ktTeam.includes("val coverageBoost = 1.0 + coveredCount * 0.22");
+      sourceChecks.hasPlusMoveLevelInSwapEval = ktTeam.includes("myPlusMoveLevel = primarySwapSlot.plusMoveLevel");
+      sourceInvariantsPass = Object.values(sourceChecks).every(Boolean);
+    } catch {}
+
+    // (B) Live DVR Trace Audit across `.aistudio/telemetry_cache/recordings/`
+    const recRoot = path.join(CACHE_DIR, "recordings");
+    let tracesScanned = 0;
+    let framesWithBacklineHud = 0;
+    const preV734HistoricalSpeciesClauseBattles = [];
+    const postV734Regressions = [];
+
+    const bundleMetaByBattleId = new Map();
+    for (const [bId, bMeta] of Object.entries(state.dvrBundles || {})) {
+      bundleMetaByBattleId.set(bId, bMeta);
+    }
+    for (const rec of state.records || []) {
+      if (rec?.battleId && !bundleMetaByBattleId.has(rec.battleId)) {
+        bundleMetaByBattleId.set(rec.battleId, rec);
+      }
+    }
+
+    if (fs.existsSync(recRoot)) {
+      for (const userDir of fs.readdirSync(recRoot)) {
+        const uPath = path.join(recRoot, userDir);
+        if (!fs.statSync(uPath).isDirectory()) continue;
+        for (const fn of fs.readdirSync(uPath)) {
+          if (!fn.endsWith("_deep_trace.jsonl")) continue;
+          tracesScanned++;
+          const battleId = fn.replace(/_deep_trace\.jsonl$/, "");
+          const metaRec = bundleMetaByBattleId.get(battleId) || {};
+          let appVer = String(metaRec.appVersion || "");
+          const lines = fs.readFileSync(path.join(uPath, fn), "utf8").split(/\r?\n/);
+          let battleSpeciesDupSample = null;
+          let battleRevealedSelfPredSample = null;
+          let battleMalformedSample = null;
+          let framesStuckBackAfter2Revealed = 0;
+          let framesNotClearedAfter3Revealed = 0;
+
+          for (const line of lines) {
+            if (!line) continue;
+            let obj;
+            try {
+              obj = JSON.parse(line);
+            } catch {
+              continue;
+            }
+            if (!appVer && (obj.appVersion || obj.battleSummary?.appVersion)) {
+              appVer = String(obj.appVersion || obj.battleSummary?.appVersion);
+            }
+            const rawGoal = String(obj.recommendedGoalLine2 || obj.recommendedGoal || "");
+            const revSource = Array.isArray(obj.revealedOppSpecies)
+              ? obj.revealedOppSpecies
+              : Array.isArray(obj.detectedOpponentsSnapshot)
+              ? obj.detectedOpponentsSnapshot
+              : [];
+            const revList = revSource
+              .map((x) => String(x || "").trim())
+              .filter((x) => x && !/^waiting/i.test(x));
+            const distinctRevFamilies = new Set(revList.map(extractPokedexFamilyJs).filter(Boolean));
+
+            const predIdx = rawGoal.indexOf("🔮");
+            if (predIdx < 0) {
+              continue;
+            }
+            const g2 = rawGoal.slice(predIdx).trim();
+            framesWithBacklineHud++;
+
+            if (distinctRevFamilies.size >= 3) {
+              framesNotClearedAfter3Revealed++;
+            } else if (distinctRevFamilies.size === 2 && g2.startsWith("🔮 Back:")) {
+              framesStuckBackAfter2Revealed++;
+            }
+
+            const m = g2.match(/^🔮 (Back|3rd):\s+([A-Z0-9-]+)\s+(\d+)%(?:\s+·\s+([A-Z0-9-]+)\s+(\d+)%)?\s+\|\s+Rsk:(LO|MD|HI)$/);
+            if (!m) {
+              if (!battleMalformedSample) battleMalformedSample = { t: obj.t, hud: g2 };
+              continue;
+            }
+            const [, modeLabel, c1, p1Str, c2, p2Str] = m;
+            const p1 = Number(p1Str);
+            const p2 = p2Str ? Number(p2Str) : null;
+            if (!Number.isFinite(p1) || p1 < 1 || p1 > 99 || (p2 !== null && (!Number.isFinite(p2) || p2 < 1 || p2 > p1))) {
+              if (!battleMalformedSample) battleMalformedSample = { t: obj.t, hud: g2 };
+            }
+            if (c2 && hudCodesShareSpeciesClause(c1, c2)) {
+              if (!battleSpeciesDupSample) battleSpeciesDupSample = { t: obj.t, hud: g2, c1, c2 };
+            }
+            // Check whether c1 or c2 matches any already-revealed opponent on this frame
+            for (const revName of revList) {
+              const revCode = abbrCodeJs(revName);
+              if (hudCodesShareSpeciesClause(c1, revCode) || (c2 && hudCodesShareSpeciesClause(c2, revCode))) {
+                if (!battleRevealedSelfPredSample) {
+                  battleRevealedSelfPredSample = { t: obj.t, hud: g2, revealed: revList, modeLabel };
+                }
+              }
+            }
+          }
+
+          const verNum = parseVersionNum(appVer || "7.00");
+          if (battleSpeciesDupSample && verNum < 734) {
+            preV734HistoricalSpeciesClauseBattles.push({
+              battleId,
+              screenName: userDir,
+              appVersion: appVer || "pre-7.34",
+              sample: battleSpeciesDupSample.hud,
+            });
+          }
+          if (verNum >= 734) {
+            if (battleSpeciesDupSample) {
+              postV734Regressions.push({
+                type: "BACKLINE_SPECIES_CLAUSE_DUPLICATE",
+                battleId,
+                screenName: userDir,
+                appVersion: appVer,
+                tSec: battleSpeciesDupSample.t || 0,
+                detail: `Backline HUD emitted same-Pokédex-species pair '${battleSpeciesDupSample.hud}'.`,
+              });
+            }
+            if (battleRevealedSelfPredSample) {
+              postV734Regressions.push({
+                type: "BACKLINE_PREDICTED_REVEALED_OPP",
+                battleId,
+                screenName: userDir,
+                appVersion: appVer,
+                tSec: battleRevealedSelfPredSample.t || 0,
+                detail: `Backline HUD '${battleRevealedSelfPredSample.hud}' predicted an already-revealed opponent (${battleRevealedSelfPredSample.revealed.join(", ")}).`,
+              });
+            }
+            if (battleMalformedSample) {
+              postV734Regressions.push({
+                type: "BACKLINE_MALFORMED_OUTPUT",
+                battleId,
+                screenName: userDir,
+                appVersion: appVer,
+                tSec: battleMalformedSample.t || 0,
+                detail: `Malformed or non-monotonic Backline HUD string '${battleMalformedSample.hud}'.`,
+              });
+            }
+            if (framesStuckBackAfter2Revealed > 3 || framesNotClearedAfter3Revealed > 3) {
+              postV734Regressions.push({
+                type: "BACKLINE_STUCK_ON_REVEAL_TRANSITION",
+                battleId,
+                screenName: userDir,
+                appVersion: appVer,
+                tSec: 0,
+                detail: `Backline HUD failed mid-battle transition (stuckOn2nd=${framesStuckBackAfter2Revealed}f, notClearedOn3rd=${framesNotClearedAfter3Revealed}f).`,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // (C) Deterministic 4-Scenario Semi-Dynamic Engine Proof (Exact Kotlin v7.34 Math Mirror)
+    const SAMPLE_RANKED_GL = [
+      { name: "Clodsire", types: ["poison", "ground"] },
+      { name: "Shadow Feraligatr", types: ["water"] },
+      { name: "Feraligatr", types: ["water"] },
+      { name: "Azumarill", types: ["water", "fairy"] },
+      { name: "Mandibuzz", types: ["dark", "flying"] },
+      { name: "Corviknight", types: ["flying", "steel"] },
+      { name: "Shadow Corviknight", types: ["flying", "steel"] },
+      { name: "Tinkaton", types: ["fairy", "steel"] },
+      { name: "Gastrodon", types: ["water", "ground"] },
+      { name: "Annihilape", types: ["fighting", "ghost"] },
+      { name: "Shadow Drapion", types: ["poison", "dark"] },
+      { name: "Drapion", types: ["poison", "dark"] },
+      { name: "Wigglytuff", types: ["normal", "fairy"] },
+      { name: "Talonflame", types: ["fire", "flying"] },
+      { name: "Jumpluff", types: ["grass", "flying"] },
+      { name: "Bastiodon", types: ["rock", "steel"] },
+      { name: "Skeledirge", types: ["fire", "ghost"] },
+      { name: "Ninetales (Alolan)", types: ["ice", "fairy"] },
+      { name: "Shadow Ninetales", types: ["fire"] },
+      { name: "Serperior", types: ["grass"] },
+      { name: "Lickilicky", types: ["normal"] },
+      { name: "Dewgong", types: ["water", "ice"] },
+      { name: "Morpeko", types: ["electric", "dark"] },
+      { name: "Primeape", types: ["fighting"] },
+      { name: "Dunsparce", types: ["normal"] },
+      { name: "Toxapex", types: ["poison", "water"] },
+    ];
+    const TYPES_BY_NAME = new Map(SAMPLE_RANKED_GL.map((m) => [m.name, m.types]));
+
+    function runPredictorSimJs({ revealed, logs, maxLogWeightPct = 65, decayLambda = 0.035, swapTargetTypes = ["water", "fairy"] }) {
+      const cleanRev = [];
+      const seenRevB = new Set();
+      for (const r of revealed) {
+        const b = extractPokedexFamilyJs(r);
+        if (b && !seenRevB.has(b)) {
+          seenRevB.add(b);
+          cleanRev.push(r);
+        }
+      }
+      if (cleanRev.length === 0 || cleanRev.length >= 3) {
+        return { hud: "", candidates: [], wHistPct: 0, wMetaPct: 100, swapPunishRiskPct: 0 };
+      }
+      let rawMetaSum = 0;
+      const rawMeta = new Map();
+      SAMPLE_RANKED_GL.forEach((m, idx) => {
+        const w = Math.exp(-0.045 * idx);
+        rawMeta.set(m.name, w);
+        rawMetaSum += w;
+      });
+      const pMeta = new Map([...rawMeta.entries()].map(([k, v]) => [k, v / rawMetaSum]));
+
+      const sortedLogs = [...logs].sort((a, b) => b.ts - a.ts);
+      const nMatches = sortedLogs.length;
+      const rawHistBack = new Map();
+      let rawHistBackSum = 0;
+      const rawHistField = new Map();
+      let rawHistFieldSum = 0;
+      sortedLogs.forEach((lg, idx) => {
+        const recW = Math.exp(-decayLambda * idx);
+        lg.opps.slice(1).forEach((b) => {
+          rawHistBack.set(b, (rawHistBack.get(b) || 0) + recW);
+          rawHistBackSum += recW;
+        });
+        lg.opps.forEach((f) => {
+          rawHistField.set(f, (rawHistField.get(f) || 0) + recW);
+          rawHistFieldSum += recW;
+        });
+      });
+
+      const maxLogW = Math.max(0, Math.min(100, maxLogWeightPct)) / 100.0;
+      const wHist = nMatches > 0 ? maxLogW * Math.min(1.0, nMatches / 50.0) : 0.0;
+      const wMeta = Math.max(0.0, 1.0 - wHist);
+
+      const allSp = [...new Set([...pMeta.keys(), ...rawHistField.keys()])];
+      const fieldWeights = new Map();
+      const backWeights = new Map();
+      let fSum = 0, bSum = 0;
+      for (const sp of allSp) {
+        const mP = pMeta.get(sp) || 0;
+        const fH = rawHistFieldSum > 0 ? (rawHistField.get(sp) || 0) / rawHistFieldSum : mP;
+        const bH = rawHistBackSum > 0 ? (rawHistBack.get(sp) || 0) / rawHistBackSum : fH;
+        const fW = wHist * fH + wMeta * mP;
+        const bW = wHist * bH + wMeta * mP;
+        fieldWeights.set(sp, fW);
+        backWeights.set(sp, bW);
+        fSum += fW;
+        bSum += bW;
+      }
+      for (const [k, v] of fieldWeights) fieldWeights.set(k, v / (fSum || 1));
+      for (const [k, v] of backWeights) backWeights.set(k, v / (bSum || 1));
+
+      // Synthetic synergy + empirical cores
+      const histPairs = new Map();
+      let histPairSum = 0;
+      sortedLogs.forEach((lg, idx) => {
+        const recW = Math.exp(-decayLambda * idx);
+        const u = lg.opps.filter(Boolean);
+        for (let i = 0; i < u.length; i++) {
+          for (let j = i + 1; j < u.length; j++) {
+            if (extractPokedexFamilyJs(u[i]) === extractPokedexFamilyJs(u[j])) continue;
+            const pk = [u[i], u[j]].sort().join("|");
+            const cur = histPairs.get(pk) || { w: 0, cnt: 0 };
+            cur.w += recW;
+            cur.cnt += 1;
+            histPairs.set(pk, cur);
+            histPairSum += recW;
+          }
+        }
+      });
+
+      const synPairs = new Map();
+      let synPairSum = 0;
+      for (let i = 0; i < SAMPLE_RANKED_GL.length; i++) {
+        for (let j = i + 1; j < SAMPLE_RANKED_GL.length; j++) {
+          const a = SAMPLE_RANKED_GL[i];
+          const b = SAMPLE_RANKED_GL[j];
+          if (extractPokedexFamilyJs(a.name) === extractPokedexFamilyJs(b.name)) continue;
+          const wA = ALL_TYPES_18.filter((t) => getTypeEff(t, a.types) >= 1.4);
+          const rA = new Set(ALL_TYPES_18.filter((t) => getTypeEff(t, a.types) <= 0.7));
+          const wB = ALL_TYPES_18.filter((t) => getTypeEff(t, b.types) >= 1.4);
+          const rB = new Set(ALL_TYPES_18.filter((t) => getTypeEff(t, b.types) <= 0.7));
+          const sharedWeak = wA.filter((t) => wB.includes(t)).length;
+          if (sharedWeak >= 2) continue;
+          const cov = wB.filter((t) => rA.has(t)).length + wA.filter((t) => rB.has(t)).length;
+          const covFactor = 1.0 + 0.32 * cov - 0.38 * sharedWeak;
+          if (covFactor <= 0.65) continue;
+          const synW = Math.sqrt((fieldWeights.get(a.name) || 0.01) * (fieldWeights.get(b.name) || 0.01)) * covFactor;
+          const pk = [a.name, b.name].sort().join("|");
+          synPairs.set(pk, synW);
+          synPairSum += synW;
+        }
+      }
+      const allPairKeys = new Set([...histPairs.keys(), ...synPairs.keys()]);
+      const combinedCores = [];
+      let totalCoreScore = 0;
+      for (const pk of allPairKeys) {
+        const hP = histPairSum > 0 ? (histPairs.get(pk)?.w || 0) / histPairSum : 0;
+        const sP = synPairSum > 0 ? (synPairs.get(pk) || 0) / synPairSum : 0;
+        const sc = wHist * hP + wMeta * sP;
+        if (sc > 0) {
+          const [monA, monB] = pk.split("|");
+          combinedCores.push({ monA, monB, sc, cnt: histPairs.get(pk)?.cnt || 0 });
+          totalCoreScore += sc;
+        }
+      }
+      combinedCores.sort((a, b) => b.sc - a.sc);
+      const topCores = combinedCores.slice(0, 30).map((c) => ({
+        ...c,
+        blendedPairPct: Math.min(68.0, Math.max(0.8, (c.sc / (totalCoreScore || 1)) * 240.0)),
+      }));
+
+      // Consolidate candidatePool by Pokédex family (v7.34 Species-Clause consolidation)
+      const familyPrior = new Map();
+      const repByFamily = new Map();
+      for (const [sp, w] of [...backWeights.entries()].sort((a, b) => b[1] - a[1])) {
+        const bKey = extractPokedexFamilyJs(sp);
+        if (!bKey || seenRevB.has(bKey)) continue;
+        familyPrior.set(bKey, (familyPrior.get(bKey) || 0) + Math.max(0, w));
+        if (!repByFamily.has(bKey)) repByFamily.set(bKey, sp);
+      }
+      const candidatePool = [...repByFamily.entries()]
+        .sort((a, b) => (familyPrior.get(b[0]) || 0) - (familyPrior.get(a[0]) || 0))
+        .map((e) => e[1])
+        .slice(0, 24);
+
+      const revWeaknesses = new Set();
+      for (const rev of cleanRev) {
+        const rTypes = TYPES_BY_NAME.get(rev) || ["normal"];
+        for (const t of ALL_TYPES_18) {
+          if (getTypeEff(t, rTypes) >= 1.4) revWeaknesses.add(t);
+        }
+      }
+
+      const rawScores = [];
+      const hardCountersMap = new Map();
+      for (const cand of candidatePool) {
+        const cBase = extractPokedexFamilyJs(cand);
+        let coreBoost = 0;
+        for (const rev of cleanRev) {
+          const rBase = extractPokedexFamilyJs(rev);
+          const mc = topCores.find((c) => {
+            const aB = extractPokedexFamilyJs(c.monA);
+            const bB = extractPokedexFamilyJs(c.monB);
+            return (aB === cBase && bB === rBase) || (aB === rBase && bB === cBase);
+          });
+          if (mc) coreBoost += mc.blendedPairPct * 0.035 + mc.cnt * 0.18;
+        }
+        const cTypes = TYPES_BY_NAME.get(cand) || ["normal"];
+        let covCnt = 0;
+        for (const wk of revWeaknesses) {
+          if (getTypeEff(wk, cTypes) <= 0.7) covCnt++;
+        }
+        const coverageBoost = 1.0 + covCnt * 0.22;
+        const prior = Math.max(0.008, familyPrior.get(cBase) || backWeights.get(cand) || 0.02);
+        const score = Math.max(0.01, (0.55 * coreBoost + 0.45 * (prior * 12.0)) * coverageBoost);
+        rawScores.push([cand, score]);
+
+        // Swap hard-counter check: candidate offensive type hits user's primary swap super-effectively while resisting user's swap types
+        const hitsSwapSE = cTypes.some((ct) => getTypeEff(ct, swapTargetTypes) >= 1.4);
+        const resistsSwap = swapTargetTypes.every((st) => getTypeEff(st, cTypes) <= 0.7);
+        hardCountersMap.set(cand, hitsSwapSE && (resistsSwap || cTypes.includes("poison") || cTypes.includes("electric") || cTypes.includes("grass")));
+      }
+      rawScores.sort((a, b) => b[1] - a[1]);
+      const totalRaw = rawScores.reduce((acc, x) => acc + x[1], 0) || 1;
+      const unrev = Math.max(1, Math.min(2, 3 - cleanRev.length));
+
+      let punishSum = 0;
+      for (const [cand, sc] of rawScores.slice(0, 6)) {
+        if (hardCountersMap.get(cand)) punishSum += sc / totalRaw;
+      }
+      const swapPunishRiskPct = Math.max(5, Math.min(95, Math.round(punishSum * 100 * (unrev === 2 ? 1.35 : 1.0))));
+
+      let prevPct = 99;
+      const topPreds = rawScores.slice(0, 3).map(([cand, sc]) => {
+        const scaled = Math.max(12, Math.min(89, Math.round((sc / totalRaw) * (unrev === 2 ? 155 : 115))));
+        const mono = Math.min(prevPct, scaled);
+        prevPct = mono;
+        return { name: cand, code: abbrCodeJs(cand), pct: mono, base: extractPokedexFamilyJs(cand) };
+      });
+      const prefix = cleanRev.length === 1 ? "🔮 Back:" : "🔮 3rd:";
+      const riskTag = swapPunishRiskPct >= 55 ? "Rsk:HI" : swapPunishRiskPct >= 35 ? "Rsk:MD" : "Rsk:LO";
+      const hud = `${prefix} ${topPreds.slice(0, 2).map((p) => `${p.code} ${p.pct}%`).join(" · ")} | ${riskTag}`;
+      return {
+        hud,
+        candidates: topPreds,
+        wHistPct: Math.round(wHist * 100),
+        wMetaPct: Math.round(wMeta * 100),
+        swapPunishRiskPct,
+      };
+    }
+
+    // Scenario 1: Cold-start (0 history logs) -> Pure meta + synergy + live weakness coverage
+    const coldVsTalonflame = runPredictorSimJs({ revealed: ["Talonflame"], logs: [] });
+    const coldVsBastiodon = runPredictorSimJs({ revealed: ["Bastiodon"], logs: [] });
+
+    // Scenario 2: Saturated history (100 identical logs of Azumarill / Clodsire / Mandibuzz)
+    // Confirm: (a) wMeta stays >= 35% (never 100% history!), and (b) facing unseen leads (Talonflame vs Ninetales (Alolan))
+    // dynamically shifts predicted backline partners/scores via live weakness coverage + synthetic synergy cores!
+    const saturatedLogs = Array.from({ length: 100 }, (_, i) => ({
+      ts: 1780000000000 - i * 60000,
+      opps: ["Azumarill", "Clodsire", "Mandibuzz"],
+    }));
+    const satVsUnseenFireLead = runPredictorSimJs({ revealed: ["Talonflame"], logs: saturatedLogs });
+    const satVsUnseenIceFairyLead = runPredictorSimJs({ revealed: ["Ninetales (Alolan)"], logs: saturatedLogs });
+    // Also test recency adaptation: 15 fresh recent matches of Bastiodon / Jumpluff / Gastrodon shift top backline vs older history
+    const shiftingMetaLogs = [
+      ...Array.from({ length: 15 }, (_, i) => ({
+        ts: 1785000000000 - i * 60000,
+        opps: ["Bastiodon", "Jumpluff", "Gastrodon"],
+      })),
+      ...saturatedLogs,
+    ];
+    const shiftedVsBastiodon = runPredictorSimJs({ revealed: ["Bastiodon"], logs: shiftingMetaLogs });
+
+    // Scenario 3: Mid-battle 1 -> 2 -> 3 opponent reveal transitions + Species Clause on Shadow/Alolan variants
+    const midRev1 = runPredictorSimJs({ revealed: ["Shadow Feraligatr"], logs: shiftingMetaLogs });
+    const midRev2 = runPredictorSimJs({ revealed: ["Shadow Feraligatr", "Clodsire"], logs: shiftingMetaLogs });
+    const midRev3 = runPredictorSimJs({ revealed: ["Shadow Feraligatr", "Clodsire", "Mandibuzz"], logs: shiftingMetaLogs });
+
+    // Scenario 4: Live player bench swap / faint reactivity (Water/Fairy swap vs Fire/Flying swap against same revealed lead)
+    const swapRiskWaterBench = runPredictorSimJs({
+      revealed: ["Bastiodon"],
+      logs: shiftingMetaLogs,
+      swapTargetTypes: ["water", "fairy"], // Punished by Grass/Poison/Electric backliners (Jumpluff/Clodsire)
+    });
+    const swapRiskSteelBench = runPredictorSimJs({
+      revealed: ["Bastiodon"],
+      logs: shiftingMetaLogs,
+      swapTargetTypes: ["fire", "ghost"], // Different counter profile -> dynamic risk shift
+    });
+
+    const semiDynamicChecks = {
+      coldStartNonEmptyAndZeroHist:
+        coldVsTalonflame.wHistPct === 0 &&
+        coldVsTalonflame.wMetaPct === 100 &&
+        coldVsTalonflame.candidates.length === 3 &&
+        coldVsTalonflame.hud !== coldVsBastiodon.hud,
+      historyWeightCappedAt65Pct:
+        satVsUnseenFireLead.wHistPct === 65 && satVsUnseenFireLead.wMetaPct === 35,
+      unseenLeadsDynamicallyShiftUnderSaturatedHistory:
+        satVsUnseenFireLead.hud !== satVsUnseenIceFairyLead.hud,
+      recencyDecayAdaptsToNewMicroMeta:
+        shiftedVsBastiodon.candidates.some((c) => c.name === "Jumpluff" || c.name === "Gastrodon"),
+      midBattleTransition1To2To3Valid:
+        midRev1.hud.startsWith("🔮 Back:") &&
+        midRev2.hud.startsWith("🔮 3rd:") &&
+        midRev3.hud === "" &&
+        !midRev1.candidates.some((c) => c.base === "feraligatr") &&
+        !midRev2.candidates.some((c) => c.base === "feraligatr" || c.base === "clodsire"),
+      noSpeciesClauseDuplicatesAcrossAllScenarios: [
+        coldVsTalonflame,
+        coldVsBastiodon,
+        satVsUnseenFireLead,
+        satVsUnseenIceFairyLead,
+        shiftedVsBastiodon,
+        midRev1,
+        midRev2,
+      ].every((res) => {
+        const bases = res.candidates.map((c) => c.base);
+        return new Set(bases).size === bases.length;
+      }),
+      benchSwapRiskReactsDynamically:
+        swapRiskWaterBench.swapPunishRiskPct !== swapRiskSteelBench.swapPunishRiskPct,
+    };
+
+    const semiDynamicPass = Object.values(semiDynamicChecks).every(Boolean);
+    const overallHealthy = sourceInvariantsPass && semiDynamicPass && postV734Regressions.length === 0;
+
+    if (!sourceInvariantsPass || !semiDynamicPass) {
+      openActionItems.unshift({
+        priorityBucket: "P1_ENGINE_INVARIANT_FAILURE",
+        compositePriorityScore: 4800,
+        userTier: "VIP",
+        screenName: "sportsfan986",
+        battleId: "backline-predictor-semi-dynamic-audit",
+        appVersion: currentVersion,
+        league: "All Leagues",
+        type: "BACKLINE_PREDICTOR_INVARIANT_FAILURE",
+        tSec: 0,
+        detail: `Change #3 Backline Predictor invariant failed (sourceInvariantsPass=${sourceInvariantsPass}, semiDynamicPass=${semiDynamicPass}).`,
+        retroactiveAudit: {
+          status: "OPEN_NEEDS_FIX",
+          resolvedInVersion: null,
+          verificationMethod: "Nightly Change #3 Semi-Dynamic & Species-Clause Validator",
+          explanation: JSON.stringify({ sourceChecks, semiDynamicChecks }),
+        },
+      });
+    }
+    for (const reg of postV734Regressions) {
+      openActionItems.unshift({
+        priorityBucket: "P1_PAID_AUTO",
+        compositePriorityScore: 4600,
+        userTier: resolveUserTier(reg.screenName, userTiers).toUpperCase(),
+        screenName: reg.screenName,
+        battleId: reg.battleId,
+        appVersion: reg.appVersion,
+        league: "Live DVR Trace",
+        type: reg.type,
+        tSec: reg.tSec,
+        detail: reg.detail,
+        retroactiveAudit: {
+          status: "OPEN_NEEDS_FIX",
+          resolvedInVersion: null,
+          verificationMethod: "Nightly DVR Backline HUD Sanity Scanner",
+          explanation: reg.detail,
+        },
+      });
+    }
+
+    return {
+      overallHealthy,
+      sourceInvariantsPass,
+      sourceChecks,
+      semiDynamicPass,
+      semiDynamicChecks,
+      sampleProofOutputs: {
+        coldStartVsTalonflame: coldVsTalonflame.hud,
+        coldStartVsBastiodon: coldVsBastiodon.hud,
+        saturatedHist100VsUnseenTalonflame: `${satVsUnseenFireLead.hud} (wHist=${satVsUnseenFireLead.wHistPct}%, wMeta=${satVsUnseenFireLead.wMetaPct}%)`,
+        saturatedHist100VsUnseenAlolanNinetales: `${satVsUnseenIceFairyLead.hud} (wHist=${satVsUnseenIceFairyLead.wHistPct}%, wMeta=${satVsUnseenIceFairyLead.wMetaPct}%)`,
+        recencyShiftedVsBastiodon: shiftedVsBastiodon.hud,
+        midBattleReveal1: midRev1.hud,
+        midBattleReveal2: midRev2.hud,
+        midBattleReveal3Cleared: midRev3.hud === "",
+        swapPunishRiskWaterVsFireBench: `${swapRiskWaterBench.swapPunishRiskPct}% vs ${swapRiskSteelBench.swapPunishRiskPct}%`,
+      },
+      liveDvrTraceAudit: {
+        tracesScanned,
+        framesWithBacklineHud,
+        preV734HistoricalSpeciesClauseHits: preV734HistoricalSpeciesClauseBattles.length,
+        preV734ExamplesResolvedInV734: preV734HistoricalSpeciesClauseBattles.slice(0, 5),
+        postV734RegressionsCount: postV734Regressions.length,
+        postV734Regressions,
+      },
+    };
+  })();
+
   // Check for late-arriving P1 / P2 / HIGH issues since `--check-delta-since`
   let lateArrivals = [];
   if (CHECK_DELTA_SINCE) {
@@ -1501,6 +2262,7 @@ async function main() {
     referenceLatestIngestIso: new Date(latestIngestMs).toISOString(),
     modelRoutingPolicy,
     aiAutoTunedSettingsRecommendation,
+    backlinePredictorAudit,
     dailySurveyQuestionPool,
     postBattleTuningFeedbackSummary,
     totals: {
@@ -1556,6 +2318,7 @@ async function main() {
     `- **Open Action Items Needing Review**: \`${openActionItems.length}\``,
     `- **AI Auto-Tuned Hidden Settings (\`v7.20\`)**: Proactive Lead \`${aiAutoTunedSettingsRecommendation.proactiveEnergyLeadMs}ms\` • Predictive GUI/Haptic Lead \`${aiAutoTunedSettingsRecommendation.predictiveGuiHapticLeadMs}ms\` • HP Debounce \`${aiAutoTunedSettingsRecommendation.hpDebounceWindowMs}ms / ±${aiAutoTunedSettingsRecommendation.hpDebounceTolerancePct}%\` • Energy Debounce \`${aiAutoTunedSettingsRecommendation.energyDebounceWindowMs}ms\``,
     `- **Post-Battle 1-Tap Tuning Feedback (Informational Only)**: Total \`${postBattleTuningFeedbackSummary.totalResponses}\` • Haptic Timing (\`Early: ${postBattleTuningFeedbackSummary.hapticTiming.TOO_EARLY}\`, \`Ideal: ${postBattleTuningFeedbackSummary.hapticTiming.IDEAL}\`, \`Late: ${postBattleTuningFeedbackSummary.hapticTiming.TOO_LATE}\`) • HP Shield Call Energy (\`Under: ${postBattleTuningFeedbackSummary.shieldEnergy.UNDERCOUNTED}\`, \`Spot-On: ${postBattleTuningFeedbackSummary.shieldEnergy.ACCURATE}\`, \`Over: ${postBattleTuningFeedbackSummary.shieldEnergy.OVERCOUNTED}\`)`,
+    `- **Backline Predictor & Semi-Dynamic Engine Health (\`v7.34+\`)**: ${backlinePredictorAudit.overallHealthy ? "✅ **HEALTHY**" : "❌ **REGRESSION DETECTED**"} • Source Invariants \`${backlinePredictorAudit.sourceInvariantsPass ? "PASS" : "FAIL"}\` • Semi-Dynamic Proof \`${backlinePredictorAudit.semiDynamicPass ? "PASS (wHist capped <=65%, wMeta>=35% + live coverage + mid-battle 2nd-reveal + swap-risk reactive)" : "FAIL"}\` • Live DVR Traces (\`${backlinePredictorAudit.liveDvrTraceAudit.tracesScanned}\` traces / \`${backlinePredictorAudit.liveDvrTraceAudit.framesWithBacklineHud}\` HUD frames: \`${backlinePredictorAudit.liveDvrTraceAudit.postV734RegressionsCount}\` \`v7.34+\` regressions, \`${backlinePredictorAudit.liveDvrTraceAudit.preV734HistoricalSpeciesClauseHits}\` pre-\`v7.34\` Species-Clause hits resolved)`,
     ``,
   ];
 

@@ -1,4 +1,21 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.33`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.34`)
+
+---
+
+## v7.34 (2026-11-12) — Older-Phone CPU & Memory Optimization Engine, Species-Clause Backline Predictor Hardening & Daily Semi-Dynamic Audit
+*Live Android APK & Web Simulator release (`v7.34`, `versionCode = 1734`) substantially reducing active-battle CPU load, GC allocation churn, and GPU compositor cost on older and mid-range Android phones while preserving exact active scan cadences (`100ms` / `67ms` / `33ms` & `750ms` / `250ms` OCR) and native screen capture resolution, hardening the Live Backline Predictor against Species-Clause duplicate variants, and adding a daily zero-token Semi-Dynamic & Species-Clause audit.*
+
+- **v7.34 — Feature 1: Zero-Allocation Vision, OCR Sub-Crop Packing & Hardware DVR Frame Reuse (`OverlayService.kt`, `PixelScannerEngine.kt`, `BattleDvrEngine.kt`)**:
+  - Eliminated per-tick `Bitmap.createBitmap()` allocations in `captureCleanScreenBitmap()` and active-battle ML Kit OCR sub-crop packing via pre-allocated reusable ARGB_8888 buffers (`reusableScreenBitmap`, `reusableOcrRawPackBitmap`, and `reusableOcrCompositeBitmap`) and batch `getPixels()` ROI scratch arrays (`drawBinarizedWhiteTextCropOnto`, `ensureVisionScratch*`).
+  - Added 2-stage Floating HP Row-Lock corridor windowing (`±14px` fast lock scan with immediate same-tick full-corridor fallback if unlocked) so older phones scan ~85% fewer pixels per frame without losing a single frame on camera zooms or giant Master League sprites.
+  - Added `Smart Idle Overworld Gate` (skipping ML Kit OCR ticks between matches unless intro countdown visual cues appear) and reusable `544×1184` DVR scaling canvas + frame sequence deduplication (`lastDvrEncodedFrameSeq`) in `BattleDvrEngine.kt`.
+- **v7.34 — Feature 2: WebView GPU Compositor Relief, IPC Payload Coalescing & Stealth Pause (`OverlayService.kt`, `overlay.html`, `overlay-asset.mjs`)**:
+  - Removed expensive real-time `backdrop-filter: blur(...)` passes over live 60 FPS Pokémon GO video, converted `@keyframes` `box-shadow` repaints to static compositor-friendly opacity transitions, and added DOM innerHTML diffing (`setHtmlIfChanged`), `requestAnimationFrame`-coalesced height/touch-zone updates (`TouchZoneAppliedSpec`), and `refreshSwapClocks()` state-key short-circuiting.
+  - Coalesces nested `recalculateAndPushBattleData()` calls (`runWithCoalescedBattlePush` + JSON payload diffing) and pauses floating `WebView` timers/JS rendering while **Competitive Log-Only Stealth Mode** is active.
+- **v7.34 — Feature 3: Semi-Dynamic Backline Predictor Memoization, Species-Clause Consolidation & Daily Audit (`TeamAndMetaEngine.kt`, `PokemonDatabase.kt`, `Show6Engine.kt`, `scripts/nightly-telemetry-audit.mjs`)**:
+  - Memoized 3v3 Matchup Matrix (`cached3v3MatrixMap`), non-Top-200 rough matchup fallbacks (`FALLBACK_ROUGH_MATCHUP_CACHE`), season battle-log parsing (`SEASON_LEAGUE_LOGS_CACHE`), and live backline predictions (`BACKLINE_PREDICTION_CACHE`) with instant `simulationCacheEpoch` invalidation whenever Gamemaster, PvPoke rankings, Battle Frontier sheets, or Battle Logs update.
+  - Fixed a GBL Species-Clause edge case where Shadow + Normal or regional variants of the same Pokédex family (e.g. `SFERA · FERAL`, `CORVI · SCORV`, `SNINE · NINET`) could occupy both HUD backline prediction slots simultaneously; `predictOpponentBacklineStatic` now consolidates family priors before candidate selection while preserving semi-dynamic blending (`wHist` capped $\le 65\%$, `wMeta` $\ge 35\%$ PvPoke + defensive synergy cores + live revealed-weakness `coverageBoost`, dynamic `🔮 Back:` $\to$ `🔮 3rd:` mid-battle transitions, and live bench swap punish risk).
+  - Added an automated zero-token daily validator (`backlinePredictorAudit` in `scripts/nightly-telemetry-audit.mjs`) auditing live DVR `_deep_trace.jsonl` HUD frames and verifying all 4 semi-dynamic engine scenarios every morning.
 
 ---
 

@@ -796,6 +796,8 @@ internal fun OverlayService.Companion.loadCachedBattleFrontierUsageAndCores(pref
                 }
             }
         }
+        simulationCacheEpoch++
+        clearTeamAndMetaCachesStatic()
     } catch (_: Exception) {}
 }
 
@@ -949,6 +951,9 @@ internal fun OverlayService.Companion.syncBattleFrontierSheetsBlocking(
         .putString(PREFS_KEY_BF_CORES_JSON, Gson().toJson(BATTLE_FRONTIER_CORES_MAP))
         .putLong(PREFS_KEY_BF_LAST_SYNC_MS, System.currentTimeMillis())
         .apply()
+
+    simulationCacheEpoch++
+    clearTeamAndMetaCachesStatic()
 
     return getBattleFrontierLeagueCountsSummaryStatic("✅ Synced Battle Frontier Sheets")
 }
