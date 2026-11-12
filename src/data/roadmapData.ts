@@ -23,9 +23,24 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.36',
+    codename: 'True 1.0x Real-Time 30 FPS DVR Playback & Trace Serialization Fix',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Resolved a v7.35 JSON serialization substring slicing bug causing trailing videoElapsedMs:0 in deep frame traces and slow-motion replay playback, locked mp4TimeCompressionRatio to 1.0x for modern recordings, and added automated daily DVR trace integrity auditing.',
+    icon: '⚡',
+    accentColor: '#38BDF8',
+    highlights: [
+      'Eliminated string-slicing trace serialization in BattleDvrEngine in favor of clean gson.toJson(finalTrace)',
+      'Guaranteed accurate non-duplicate videoElapsedMs timestamps in all recorded _deep_trace.jsonl lines',
+      'Locked mp4TimeCompressionRatio = 1.0f in MainActivity for modern v7.02+ (versionCode >= 1702) recordings',
+      'Restored flawless 1.0x real-time 30 FPS playback in In-App and Web Replay viewers without artificial slow-motion',
+      'Added automated nightly DVR trace integrity scanner auditing JSON serialization and timing spans'
+    ]
+  },
+  {
     version: 'v7.35',
     codename: 'Decoupled 30 FPS VIP & 15 FPS Standard Hardware DVR Ticker',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Decoupled GBLBattleDvrThread from the 100ms vision loop with fractional postAtTime pacing and locked 30 FPS Smooth (900 kbps CBR) VIP DVR, eliminating VFR stutter and hardening tier persistence.',
     icon: '🎥',

@@ -93,8 +93,8 @@ import kotlin.math.roundToInt
 class OverlayService : LifecycleService() {
 
     companion object {
-        const val APP_VERSION = "7.35"
-        const val APP_VERSION_CODE = 1735
+        const val APP_VERSION = "7.36"
+        const val APP_VERSION_CODE = 1736
         const val ACTION_START_OVERLAY = "com.gbl.overlay.ACTION_START_OVERLAY"
         const val ACTION_STOP_OVERLAY = "com.gbl.overlay.ACTION_STOP_OVERLAY"
         const val ACTION_TOGGLE_OVERLAY = "com.gbl.overlay.ACTION_TOGGLE_OVERLAY"
@@ -2828,8 +2828,6 @@ class OverlayService : LifecycleService() {
     internal var dvrActiveTargetFps: Int = 15
     internal var dvrTickerAnchorUptimeMs: Long = 0L
     internal var dvrTickerStepIndex: Long = 0L
-    internal var lastSerializedTraceSnapRef: BattleDeepTraceFrame? = null
-    internal var cachedSerializedTraceJsonTail: String = ""
     internal val dvrFrameTickRunnable = Runnable { runDvrFrameTickOnHandler() }
 
     // Reusable 10Hz vision scratch buffers & 2-stage HP Row-Lock corridor state (accessed on battleLoopJob)

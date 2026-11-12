@@ -252,8 +252,6 @@ internal fun OverlayService.stopDvrFrameTickerLocked() {
     isDvrTickerScheduled = false
     dvrTickerAnchorUptimeMs = 0L
     dvrTickerStepIndex = 0L
-    lastSerializedTraceSnapRef = null
-    cachedSerializedTraceJsonTail = ""
     dvrHandler?.removeCallbacks(dvrFrameTickRunnable)
 }
 
@@ -327,30 +325,18 @@ internal fun OverlayService.runDvrFrameTickOnHandler() {
         }
 
         val snap = latestDvrTraceSnapshot ?: BattleDeepTraceFrame(timestampMs = frameNowMs)
-        if (snap !== lastSerializedTraceSnapRef || cachedSerializedTraceJsonTail.isEmpty()) {
-            val fullJson = gson.toJson(snap)
-            val markerIdx = fullJson.indexOf("\"rawUserHpPct\":")
-            cachedSerializedTraceJsonTail = if (markerIdx > 0) fullJson.substring(markerIdx) else ""
-            lastSerializedTraceSnapRef = snap
-        }
         val liveBattleElapsed = if (battleClockAnchorMs > 0L) {
             (frameNowMs - battleClockAnchorMs).coerceAtLeast(0L)
         } else {
             snap.battleElapsedMs
         }
-        val traceLine = if (cachedSerializedTraceJsonTail.isNotEmpty()) {
-            "{\"frameIdx\":$dvrFrameCount,\"timestampMs\":$frameNowMs,\"videoElapsedMs\":$vidElapsed,\"battleElapsedMs\":$liveBattleElapsed,$cachedSerializedTraceJsonTail\n"
-        } else {
-            gson.toJson(
-                snap.copy(
-                    frameIdx = dvrFrameCount,
-                    timestampMs = frameNowMs,
-                    videoElapsedMs = vidElapsed,
-                    battleElapsedMs = liveBattleElapsed
-                )
-            ) + "\n"
-        }
-        dvrTraceWriter?.write(traceLine)
+        val finalTrace = snap.copy(
+            frameIdx = dvrFrameCount,
+            timestampMs = frameNowMs,
+            videoElapsedMs = vidElapsed,
+            battleElapsedMs = liveBattleElapsed
+        )
+        dvrTraceWriter?.write(gson.toJson(finalTrace) + "\n")
         val flushEvery = dvrActiveTargetFps.coerceIn(15, 30)
         if (dvrFrameCount % flushEvery == 0) {
             dvrTraceWriter?.flush()
@@ -437,8 +423,6 @@ internal fun OverlayService.startDvrEncoderLocked(width: Int, height: Int, start
         activeOneBattleDvrFrames = 0
         dvrTickerAnchorUptimeMs = android.os.SystemClock.uptimeMillis()
         dvrTickerStepIndex = 0L
-        lastSerializedTraceSnapRef = null
-        cachedSerializedTraceJsonTail = ""
         activeOneBattleDvrRecording = true
     } catch (_: Exception) {
         releaseDvrResourcesLocked(deleteFiles = true)
@@ -493,8 +477,6 @@ internal fun OverlayService.releaseDvrResourcesLocked(deleteFiles: Boolean) {
     activeOneBattleDvrFrames = 0
     dvrFrameCount = 0
     dvrRecordingStartMs = 0L
-    lastSerializedTraceSnapRef = null
-    cachedSerializedTraceJsonTail = ""
     try {
         dvrTraceWriter?.flush()
         dvrTraceWriter?.close()

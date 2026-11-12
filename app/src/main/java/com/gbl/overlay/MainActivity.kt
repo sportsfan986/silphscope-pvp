@@ -8139,6 +8139,8 @@ class MainActivity : AppCompatActivity() {
 
             val traceFrames = mutableListOf<OverlayService.Companion.BattleDeepTraceFrame>()
             val summaryOppTeamSpecs = mutableListOf<OverlayService.Companion.AiTelemetryOppSlotSpec>()
+            var traceHeaderVersionCode = 0
+            var traceSummaryDurationMs = 0L
             var isIssueFlagged = vaultMeta?.manuallyFlagged == true ||
                 vaultMeta?.userIssueNote?.isNotBlank() == true ||
                 pendingTelemetry?.anomalies?.any { it.type == "USER_MANUAL_ISSUE_REPORT" } == true
@@ -8149,12 +8151,15 @@ class MainActivity : AppCompatActivity() {
             fun parseTraceLines(text: String) {
                 traceFrames.clear()
                 summaryOppTeamSpecs.clear()
+                traceHeaderVersionCode = 0
+                traceSummaryDurationMs = 0L
                 for (line in text.lineSequence()) {
                     val trimmed = line.trim()
                     if (trimmed.isEmpty()) continue
                     if (trimmed.startsWith("{\"recordType\":\"BATTLE_DVR_SUMMARY_HEADER\"")) {
                         try {
                             val root = com.google.gson.JsonParser.parseString(trimmed).asJsonObject
+                            traceHeaderVersionCode = root.get("versionCode")?.takeIf { !it.isJsonNull }?.asInt ?: 0
                             val mf = root.get("manuallyFlagged")?.takeIf { !it.isJsonNull }?.asBoolean == true
                             val note = root.get("userIssueNote")?.takeIf { !it.isJsonNull }?.asString?.trim().orEmpty()
                             isIssueFlagged = mf || note.isNotEmpty()
@@ -8163,6 +8168,7 @@ class MainActivity : AppCompatActivity() {
                             if (summaryObj != null) {
                                 val parsedSummary = gson.fromJson(summaryObj, OverlayService.Companion.AiTelemetryBattleRecordV510::class.java)
                                 if (parsedSummary != null) {
+                                    traceSummaryDurationMs = ((parsedSummary.battleDurationSec ?: 0.0) * 1000.0).toLong().coerceAtLeast(0L)
                                     if (parsedSummary.oppTeamSpecs.isNotEmpty()) {
                                         summaryOppTeamSpecs.addAll(parsedSummary.oppTeamSpecs)
                                     }
@@ -8182,8 +8188,15 @@ class MainActivity : AppCompatActivity() {
                 if (traceFrames.size > 1) {
                     val span = traceFrames.last().videoElapsedMs - traceFrames.first().videoElapsedMs
                     if (span < 2000L) {
+                        val battleSpanMs = (traceFrames.last().battleElapsedMs - traceFrames.first().battleElapsedMs).coerceAtLeast(0L)
+                        val refDurMs = when {
+                            battleSpanMs >= 2000L -> battleSpanMs
+                            traceSummaryDurationMs >= 2000L -> traceSummaryDurationMs
+                            else -> traceFrames.size * 100L
+                        }
+                        val stepMs = (refDurMs.toDouble() / (traceFrames.size - 1).coerceAtLeast(1).toDouble()).coerceIn(16.0, 200.0)
                         for (i in traceFrames.indices) {
-                            traceFrames[i] = traceFrames[i].copy(videoElapsedMs = i * 100L)
+                            traceFrames[i] = traceFrames[i].copy(videoElapsedMs = (i * stepMs).toLong())
                         }
                     }
                 }
@@ -8317,6 +8330,10 @@ class MainActivity : AppCompatActivity() {
             var mediaPlayerRef: android.media.MediaPlayer? = null
             var mp4TimeCompressionRatio = 1.0f
             fun recalcMp4TimeCompression() {
+                if (traceHeaderVersionCode >= 1702) {
+                    mp4TimeCompressionRatio = 1.0f
+                    return
+                }
                 val mp = mediaPlayerRef ?: return
                 val vDurMs = try { mp.duration.toLong() } catch (_: Exception) { 0L }
                 val traceDurMs = traceFrames.lastOrNull()?.videoElapsedMs ?: 0L

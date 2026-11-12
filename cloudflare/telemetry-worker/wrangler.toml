@@ -28,7 +28,7 @@ database_name = "silphscope-sync-db"
 database_id = "6588eb30-92b3-41d8-bc42-107b7ccfa305"
 
 [vars]
-WORKER_VERSION = "7.3.5"
+WORKER_VERSION = "7.3.6"
 TELEGRAM_NOTIFY_TELEMETRY_BATCHES = "false"
 TELEGRAM_NOTIFY_ONLY_MANUAL_DVR = "true"
 GLOBAL_MAX_R2_STORAGE_GB = "9.0"

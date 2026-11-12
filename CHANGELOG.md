@@ -1,4 +1,11 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.35`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.36`)
+
+---
+
+## [v7.36] - 2026-11-12
+*Live Android APK & Web Simulator release (`v7.36`, `versionCode = 1736`) resolving a deep trace JSON serialization substring slicing bug causing trailing videoElapsedMs:0 keys and slow-motion replay playback, locking 1.0x real-time playback for modern MP4s, and adding nightly DVR trace integrity auditing.*
+
+- **True 1.0x Real-Time DVR Playback Fix (`BattleDvrEngine.kt` & `MainActivity.kt`)**: Fixed a `v7.35` trace serialization bug where Android ART's alphabetical field ordering caused string-sliced `_deep_trace.jsonl` lines to carry a trailing `"videoElapsedMs":0`, triggering the legacy `mp4TimeCompressionRatio` fallback (~0.35x–0.5x slow-motion playback in In-App and Web Replay players despite a true 1.0x 30 FPS MP4). Replaced substring slicing with full `gson.toJson(finalTrace)` serialization on the decoupled `GBLBattleDvrThread`, locked `mp4TimeCompressionRatio = 1.0f` for all modern `v7.02+` (`versionCode >= 1702`) recordings in `MainActivity.kt`, and added `dvrTraceIntegrityAudit` to `scripts/nightly-telemetry-audit.mjs`.
 
 ---
 

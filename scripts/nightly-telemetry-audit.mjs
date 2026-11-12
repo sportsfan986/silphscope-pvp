@@ -1944,6 +1944,110 @@ async function main() {
     };
   })();
 
+  // 5e. DVR Decoupled Framerate & Trace JSON Integrity Audit (0 AI Tokens)
+  // Verifies:
+  //   1. `BattleDvrEngine.kt` uses full `gson.toJson(finalTrace)` (never string-slicing JSON by field position, which on
+  //      Android ART alphabetical field order caused duplicate `"videoElapsedMs":0` and slow-motion playback in v7.35)
+  //      and drives frames via drift-free `postAtTime(dvrFrameTickRunnable`.
+  //   2. `MainActivity.kt` locks `mp4TimeCompressionRatio = 1.0f` for modern `v7.02+` (`traceHeaderVersionCode >= 1702`) recordings.
+  //   3. All `>= v7.36` `_deep_trace.jsonl` traces have zero duplicate `"videoElapsedMs"` keys, positive `videoElapsedMs` span,
+  //      and intact core fields (`committedUserHpPct`, `committedOppHpPct`, `userEnergy`, `oppEnergy`).
+  const dvrTraceIntegrityAudit = (() => {
+    let dvrSrc = "";
+    let mainSrc = "";
+    let syncSrc = "";
+    try {
+      dvrSrc = fs.readFileSync(path.join(ROOT_DIR, "app/src/main/java/com/gbl/overlay/BattleDvrEngine.kt"), "utf8");
+      mainSrc = fs.readFileSync(path.join(ROOT_DIR, "app/src/main/java/com/gbl/overlay/MainActivity.kt"), "utf8");
+      syncSrc = fs.readFileSync(path.join(ROOT_DIR, "app/src/main/java/com/gbl/overlay/GitHubCloudSync.kt"), "utf8");
+    } catch (_) {}
+
+    const sourceChecks = {
+      usesFullGsonToJsonFinalTrace: dvrSrc.includes("gson.toJson(finalTrace)"),
+      noRawUserHpPctJsonSubstringSlice: !dvrSrc.includes('indexOf("\\"rawUserHpPct\\":")') && !dvrSrc.includes("cachedSerializedTraceJsonTail"),
+      usesDriftFreePostAtTimeTicker: dvrSrc.includes("handler.postAtTime(dvrFrameTickRunnable"),
+      vipLockedTo30Fps: syncSrc.includes('if (getEffectiveReplayTierStatic(prefs) == "vip") 30 else 15'),
+      modernRealTimeMp4GuardPresent: mainSrc.includes("traceHeaderVersionCode >= 1702"),
+    };
+    const sourceInvariantsPass = Object.values(sourceChecks).every(Boolean);
+
+    let postV736TracesScanned = 0;
+    const postV736Regressions = [];
+    for (const [bId, bundle] of Object.entries(state.dvrBundles || {})) {
+      const localTr = bundle?.localTracePath ? path.resolve(ROOT_DIR, bundle.localTracePath) : "";
+      if (!localTr || !fs.existsSync(localTr)) continue;
+      let raw = "";
+      try {
+        raw = fs.readFileSync(localTr, "utf8");
+      } catch (_) {
+        continue;
+      }
+      const lines = raw.split(/\r?\n/).filter(Boolean);
+      if (lines.length < 3) continue;
+      let verNum = 0;
+      try {
+        const hdr = JSON.parse(lines[0]);
+        if (hdr.recordType === "BATTLE_DVR_SUMMARY_HEADER") {
+          verNum = parseVersionNum(hdr.appVersion || hdr.battleSummary?.appVersion || "0");
+        }
+      } catch (_) {}
+      if (verNum < 736) continue;
+      postV736TracesScanned++;
+
+      const firstLine = lines[1];
+      const lastLine = lines[lines.length - 1];
+      const dupMatches = firstLine.match(/"videoElapsedMs"\s*:/g) || [];
+      let fObj = null;
+      let lObj = null;
+      try {
+        fObj = JSON.parse(firstLine);
+        lObj = JSON.parse(lastLine);
+      } catch (_) {}
+
+      const spanMs = fObj && lObj ? Number(lObj.videoElapsedMs || 0) - Number(fObj.videoElapsedMs || 0) : 0;
+      const missingCoreFields = !fObj || fObj.committedUserHpPct === undefined || fObj.committedOppHpPct === undefined;
+      if (dupMatches.length !== 1 || spanMs < 2000 || missingCoreFields) {
+        postV736Regressions.push({
+          battleId: bId,
+          dupVideoElapsedKeys: dupMatches.length,
+          spanMs,
+          missingCoreFields,
+        });
+      }
+    }
+
+    const overallHealthy = sourceInvariantsPass && postV736Regressions.length === 0;
+    if (!sourceInvariantsPass || postV736Regressions.length > 0) {
+      openActionItems.push({
+        priorityBucket: "P1_DVR_TRACE_INTEGRITY_REGRESSION",
+        compositePriorityScore: 5100,
+        userTier: "VIP",
+        screenName: "sportsfan986",
+        battleId: "dvr-trace-integrity-audit",
+        appVersion: currentVersion,
+        league: "DVR Engine",
+        type: "DVR_TRACE_JSON_OR_TIMING_REGRESSION",
+        tSec: 0,
+        detail: `DVR trace integrity failure: sourceInvariantsPass=${sourceInvariantsPass}, postV736Regressions=${postV736Regressions.length}`,
+        retroactiveAudit: {
+          status: "OPEN_NEEDS_FIX",
+          resolvedInVersion: null,
+          verificationMethod: "Nightly DVR Trace Integrity Scanner",
+          explanation: JSON.stringify({ sourceChecks, postV736Regressions: postV736Regressions.slice(0, 3) }),
+        },
+      });
+    }
+
+    return {
+      overallHealthy,
+      sourceInvariantsPass,
+      sourceChecks,
+      postV736TracesScanned,
+      postV736RegressionsCount: postV736Regressions.length,
+      postV736Regressions,
+    };
+  })();
+
   // Check for late-arriving P1 / P2 / HIGH issues since `--check-delta-since`
   let lateArrivals = [];
   if (CHECK_DELTA_SINCE) {
@@ -2263,6 +2367,7 @@ async function main() {
     modelRoutingPolicy,
     aiAutoTunedSettingsRecommendation,
     backlinePredictorAudit,
+    dvrTraceIntegrityAudit,
     dailySurveyQuestionPool,
     postBattleTuningFeedbackSummary,
     totals: {
