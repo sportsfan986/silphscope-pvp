@@ -725,6 +725,25 @@ function evaluateRetroactiveResolution(anomalyOrBundle, record, state, currentVe
     };
   }
 
+  // 3h. Check v7.37 Pre-Battle Intro Wake-Up, 1-Turn Fast Move Guard/Revert, Snuck-Move Meter Fix, Deficit Turn-Scaling & BLOCKED! Shield Lock
+  if (
+    recVerNum <= 736 &&
+    curVerNum >= 737 &&
+    (bidStr === "log-1794522241401-346" ||
+      bidStr === "log-1794521956485-784" ||
+      bidStr === "log-1794449498954-521" ||
+      bidStr === "log-1794450269755-916" ||
+      /zekrom\s+was\s+lead|energy\s+seemed\s+off\s+on\s+opponent|feraligator\s+was\s+not\s+running\s+an\s+alternate\s+move/i.test(note))
+  ) {
+    return {
+      status: "RESOLVED_BY_LATEST_RELEASE",
+      resolvedInVersion: "v7.37",
+      verificationMethod: "Deep-Trace Replay: Intro Dim/Flash Wake + Turn-0 Go Banner + 1T Guard/EPT Revert + BLOCKED! Shield Lock",
+      explanation:
+        "Resolved in v7.37: Unconditional 100ms intro check + luma dim/flash wake-up + turn-0 Go,<Species>! lead safety net (log-346); per-slot 1T floor-quantization guard & pre/post-banner EPT feasibility revert (log-521/log-346); non-backward snuck-move meter baseline & turn-scaled deficit promotion (log-784); and OCR-confirmed BLOCKED! shield lock (log-916/log-784).",
+    };
+  }
+
   // 4. Check benign 1-turn cadence boundary, post-cutscene rowY zoom transient, multi-hit animation or circle-shrink false positives
   if (
     diagCat === "ONE_FAST_MOVE_TURN_BOUNDARY_VARIANCE" ||
@@ -1899,7 +1918,7 @@ async function main() {
       openActionItems.unshift({
         priorityBucket: "P1_PAID_AUTO",
         compositePriorityScore: 4600,
-        userTier: resolveUserTier(reg.screenName, userTiers).toUpperCase(),
+        userTier: resolveUserTier(reg.screenName, state.userTiers).toUpperCase(),
         screenName: reg.screenName,
         battleId: reg.battleId,
         appVersion: reg.appVersion,

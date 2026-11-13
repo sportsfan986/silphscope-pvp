@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.37',
+    codename: 'Instant Pre-Battle Wake-Up, Zero-Lock 30 FPS Hardware DVR & Combat Energy/Shield Hardening',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Eliminates v7.34–v7.35 CPU optimization regressions with unconditional 100ms intro detection and screen dim/flash wake-up, zero-contention hardware DVR Surface scaling, full-corridor HP scanning, MainLooper payload serialization, and four live combat energy/shield fixes (plus Cloud DVR Vault upload auth & retry queueing).',
+    icon: '🚀',
+    accentColor: '#38BDF8',
+    highlights: [
+      'Unconditional 100ms pre-battle intro countdown checks + 6x6 luma dim/white-flash wake-up & turn-0 "Go, <Species>!" lead registration safety net',
+      'Zero-contention 30 FPS VIP hardware Surface DVR scaling outside captureLock + MainLooper-serialized HUD payload pushes + full-corridor zero-alloc HP scanning',
+      '1-turn fast-move floor-quantization guard with pre/post-banner EPT feasibility revert, non-backward snuck-move energy tracking, and turn-scaled deficit promotion',
+      'OCR-confirmed BLOCKED! shield lock preventing post-cutscene fast moves from refunding spent shields, plus Cloud DVR Vault upload auth & retry queueing'
+    ]
+  },
+  {
     version: 'v7.36',
     codename: 'True 1.0x Real-Time 30 FPS DVR Playback & Trace Serialization Fix',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Resolved a v7.35 JSON serialization substring slicing bug causing trailing videoElapsedMs:0 in deep frame traces and slow-motion replay playback, locked mp4TimeCompressionRatio to 1.0x for modern recordings, and added automated daily DVR trace integrity auditing.',
     icon: '⚡',

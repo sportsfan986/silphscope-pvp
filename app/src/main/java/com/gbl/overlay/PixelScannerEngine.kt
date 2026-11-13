@@ -2940,46 +2940,6 @@ internal fun OverlayService.detectFloatingHpBarPct(
         } else {
             (activeUserPokemonName ?: currentPreset?.pokemon?.firstOrNull()?.name ?: "").lowercase()
         }
-        val prevRowY = if (isOpponent) lastValidOppHpRowY else lastValidPlayerHpRowY
-        val prevRowMs = if (isOpponent) lastValidOppHpRowTimeMs else lastValidPlayerHpRowTimeMs
-        val prevSpecies = if (isOpponent) lastValidOppHpRowSpecies else lastValidPlayerHpRowSpecies
-        val halfWin = max(72, (screen.height * 0.038f).toInt())
-        val canTryNarrowLock = prevRowY in (corridorTop + 16)..(corridorBottom - 16) &&
-            curSpecies.isNotEmpty() &&
-            curSpecies != "waiting..." &&
-            curSpecies == prevSpecies &&
-            (nowMs - prevRowMs) in 0L..550L &&
-            !isAllCombatHudGone &&
-            pendingChargedAttackActor.isEmpty()
-
-        if (canTryNarrowLock) {
-            val narrowTop = max(corridorTop, prevRowY - halfWin)
-            val narrowBottom = min(corridorBottom, prevRowY + halfWin)
-            if ((narrowBottom - narrowTop) < corridorCh - 24) {
-                val narrowHp = scanCorridorRange(narrowTop, narrowBottom)
-                if (narrowHp in 1..100 && kotlin.math.abs(narrowHp - prevStableHpForLock) <= 35) {
-                    if (isOpponent) {
-                        lastValidOppHpRowY = sampledOppHpRowY
-                        lastValidOppHpRowTimeMs = nowMs
-                        lastValidOppHpRowSpecies = curSpecies
-                    } else {
-                        lastValidPlayerHpRowY = sampledPlayerHpRowY
-                        lastValidPlayerHpRowTimeMs = nowMs
-                        lastValidPlayerHpRowSpecies = curSpecies
-                    }
-                    return narrowHp
-                }
-                if (isOpponent) {
-                    sampledOppHasPendingDmg = false
-                    sampledOppPendingDmgPct = 0
-                    sampledOppHpRowY = -1
-                } else {
-                    sampledPlayerHasPendingDmg = false
-                    sampledPlayerPendingDmgPct = 0
-                    sampledPlayerHpRowY = -1
-                }
-            }
-        }
 
         val fullHp = scanCorridorRange(corridorTop, corridorBottom)
         if (fullHp in 1..100) {
