@@ -13,6 +13,8 @@ import {
   parseIvTriplet
 } from "./pokemonDb";
 import {
+  DEFAULT_MATCHUP_TIER_THRESHOLDS,
+  type MatchupTierThresholds,
   evaluateDiscreteShieldBattleRating,
   resolveCombatPokemonForEngine
 } from "./combatSimulator";
@@ -23,7 +25,21 @@ import {
 
 export type OppMetaPoolMode = "PVPOKE_TOP_100" | "BLENDED_ELO_META";
 export type OppIvBaselineMode = "RANK_1" | "PVPOKE_DEFAULT" | "MAX_ATK";
-export type ShieldScenarioKey = "0v0" | "1v1" | "2v2";
+export type EvenShieldScenarioKey = "0v0" | "1v1" | "2v2";
+export type ShieldScenarioKey = "0v0" | "1v1" | "2v2" | "1v0" | "0v1" | "2v1" | "1v2";
+export type ShieldScopeMode = "REALISTIC_7" | "EVEN_3";
+export type FlipCode = "L->W" | "W->L" | "T->W" | "W->T" | "L->T" | "T->L" | "NONE";
+
+export const EVEN_3_SHIELD_KEYS: EvenShieldScenarioKey[] = ["0v0", "1v1", "2v2"];
+export const REALISTIC_7_SHIELD_KEYS: ShieldScenarioKey[] = [
+  "0v0",
+  "1v1",
+  "2v2",
+  "1v0",
+  "0v1",
+  "2v1",
+  "1v2"
+];
 
 export const PINNED_RANK1_CANDIDATE_ID = "__RANK_1_BENCHMARK__";
 
@@ -43,6 +59,25 @@ export interface IvCandidateConfig {
   isPinnedRank1?: boolean;
 }
 
+export interface IvScenarioFlipDetail {
+  scenario: ShieldScenarioKey;
+  flipCode: FlipCode;
+  beforeBr: number;
+  afterBr: number;
+  deltaBr: number;
+  isGain: boolean;
+}
+
+export interface IvScenarioOutlierDetail {
+  scenario: ShieldScenarioKey;
+  beforeBr: number;
+  afterBr: number;
+  deltaBr: number;
+  beforeTierLabel: string;
+  afterTierLabel: string;
+  isUpgrade: boolean;
+}
+
 export interface IvOpponentBreakdown {
   oppName: string;
   oppIvs: string;
@@ -57,9 +92,13 @@ export interface IvOpponentBreakdown {
   rank1Br0v0: number;
   rank1Br1v1: number;
   rank1Br2v2: number;
-  flip0v0: "L->W" | "W->L" | "NONE";
-  flip1v1: "L->W" | "W->L" | "NONE";
-  flip2v2: "L->W" | "W->L" | "NONE";
+  flip0v0: FlipCode;
+  flip1v1: FlipCode;
+  flip2v2: FlipCode;
+  brByShield: Record<ShieldScenarioKey, number>;
+  baselineBrByShield: Record<ShieldScenarioKey, number>;
+  rank1BrByShield: Record<ShieldScenarioKey, number>;
+  flipsByShield: Record<ShieldScenarioKey, FlipCode>;
   fastMoveName: string;
   oppFastMoveName: string;
   fastDmgDealt: number;
@@ -71,8 +110,10 @@ export interface IvOpponentBreakdown {
   survivesExtraChargedCycle: boolean;
   losesExtraChargedCycle: boolean;
   userEffectiveAtk: number;
+  baselineUserEffectiveAtk: number;
   oppEffectiveAtk: number;
   cmpStatus: "WIN" | "TIE" | "LOSS";
+  baselineCmpStatus: "WIN" | "TIE" | "LOSS";
   cmpFlip: "GAINED" | "LOST" | "NONE";
 }
 
@@ -369,15 +410,109 @@ function buildLeagueOpponentPool(
   return prepared;
 }
 
-function classifyFlip(curBr: number, baseBr: number): "L->W" | "W->L" | "NONE" {
-  const curWin = curBr > 500;
-  const curLoss = curBr < 500;
-  const baseWin = baseBr > 500;
-  const baseLoss = baseBr < 500;
-  if (!baseWin && curWin) return "L->W";
-  if (baseWin && curLoss) return "W->L";
-  if (baseLoss && !curLoss && curBr > baseBr) return "L->W";
-  return "NONE";
+function classifyFlip(curBr: number, baseBr: number): FlipCode {
+  const curSign = curBr > 500 ? 1 : curBr < 500 ? -1 : 0;
+  const baseSign = baseBr > 500 ? 1 : baseBr < 500 ? -1 : 0;
+  if (curSign === baseSign) return "NONE";
+  if (baseSign < 0 && curSign > 0) return "L->W";
+  if (baseSign > 0 && curSign < 0) return "W->L";
+  if (baseSign === 0 && curSign > 0) return "T->W";
+  if (baseSign < 0 && curSign === 0) return "L->T";
+  if (baseSign > 0 && curSign === 0) return "W->T";
+  return "T->L";
+}
+
+export function isPositiveFlip(code: FlipCode): boolean {
+  return code === "L->W" || code === "T->W" || code === "L->T";
+}
+
+export function isNegativeFlip(code: FlipCode): boolean {
+  return code === "W->L" || code === "W->T" || code === "T->L";
+}
+
+export function formatFlipCode(code: FlipCode): string {
+  return code.replace("->", "→");
+}
+
+export function getShieldKeysForScope(scope: ShieldScopeMode): ShieldScenarioKey[] {
+  return scope === "EVEN_3" ? [...EVEN_3_SHIELD_KEYS] : [...REALISTIC_7_SHIELD_KEYS];
+}
+
+export function classifyMatchupSubTier(
+  br: number,
+  thresholds: MatchupTierThresholds = DEFAULT_MATCHUP_TIER_THRESHOLDS
+): {
+  code: "SW" | "W" | "SOFT_W" | "TIE" | "CLOSE_L" | "L" | "SL";
+  label: string;
+  band: number;
+} {
+  const effWMin = Math.max(502, thresholds.wMin);
+  const effSwMin = Math.max(effWMin + 1, thresholds.swMin);
+  const effLMax = Math.min(498, thresholds.lMax);
+  const effSlMax = Math.min(effLMax - 1, thresholds.slMax);
+
+  if (br >= effSwMin) return { code: "SW", label: "Strong W", band: 3 };
+  if (br >= effWMin) return { code: "W", label: "Solid W", band: 2 };
+  if (br >= 501) return { code: "SOFT_W", label: "Soft W", band: 1 };
+  if (br === 500) return { code: "TIE", label: "Tie", band: 0 };
+  if (br > effLMax) return { code: "CLOSE_L", label: "Close L", band: -1 };
+  if (br > effSlMax) return { code: "L", label: "Solid L", band: -2 };
+  return { code: "SL", label: "Strong L", band: -3 };
+}
+
+export function getOpponentShieldFlips(
+  opp: IvOpponentBreakdown,
+  scope: ShieldScopeMode
+): IvScenarioFlipDetail[] {
+  const keys = getShieldKeysForScope(scope);
+  const out: IvScenarioFlipDetail[] = [];
+  for (const sc of keys) {
+    const flipCode = opp.flipsByShield[sc] ?? "NONE";
+    if (flipCode === "NONE") continue;
+    const beforeBr = opp.baselineBrByShield[sc] ?? opp.baselineBr1v1;
+    const afterBr = opp.brByShield[sc] ?? opp.br1v1;
+    out.push({
+      scenario: sc,
+      flipCode,
+      beforeBr,
+      afterBr,
+      deltaBr: afterBr - beforeBr,
+      isGain: isPositiveFlip(flipCode)
+    });
+  }
+  return out;
+}
+
+export function getOpponentTierOutliers(
+  opp: IvOpponentBreakdown,
+  scope: ShieldScopeMode,
+  minDeltaBr: number = 40,
+  thresholds: MatchupTierThresholds = DEFAULT_MATCHUP_TIER_THRESHOLDS
+): IvScenarioOutlierDetail[] {
+  const keys = getShieldKeysForScope(scope);
+  const out: IvScenarioOutlierDetail[] = [];
+  for (const sc of keys) {
+    const beforeBr = opp.baselineBrByShield[sc] ?? opp.baselineBr1v1;
+    const afterBr = opp.brByShield[sc] ?? opp.br1v1;
+    const sameBinarySide =
+      (beforeBr > 500 && afterBr > 500) || (beforeBr < 500 && afterBr < 500);
+    if (!sameBinarySide) continue;
+    const deltaBr = afterBr - beforeBr;
+    if (Math.abs(deltaBr) < minDeltaBr) continue;
+    const beforeTier = classifyMatchupSubTier(beforeBr, thresholds);
+    const afterTier = classifyMatchupSubTier(afterBr, thresholds);
+    if (beforeTier.band === afterTier.band) continue;
+    out.push({
+      scenario: sc,
+      beforeBr,
+      afterBr,
+      deltaBr,
+      beforeTierLabel: beforeTier.label,
+      afterTierLabel: afterTier.label,
+      isUpgrade: afterTier.band > beforeTier.band
+    });
+  }
+  return out;
 }
 
 function summarizeRecord(
@@ -393,7 +528,7 @@ function summarizeRecord(
 
   for (let i = 0; i < opponents.length; i++) {
     const opp = opponents[i];
-    const br = key === "0v0" ? opp.br0v0 : key === "1v1" ? opp.br1v1 : opp.br2v2;
+    const br = opp.brByShield[key] ?? opp.br1v1;
     const w = weights[i] ?? 0;
     sumBr += br;
     if (br > 500) {
@@ -423,9 +558,7 @@ interface RawCandEval {
   member: TeamMember;
   resolved: ReturnType<typeof resolveCombatPokemonForEngine>;
   perOpp: Array<{
-    br0v0: number;
-    br1v1: number;
-    br2v2: number;
+    brByShield: Record<ShieldScenarioKey, number>;
     fastDmgDealt: number;
     fastDmgTaken: number;
     fastMoveName: string;
@@ -533,10 +666,21 @@ export function runMultiIvMatrixEvaluation(params: RunMultiIvMatrixParams): Mult
 
       const resolved = resolveCombatPokemonForEngine(member, league);
 
+      const SHIELD_PAIRS: Array<[ShieldScenarioKey, number, number]> = [
+        ["0v0", 0, 0],
+        ["1v1", 1, 1],
+        ["2v2", 2, 2],
+        ["1v0", 1, 0],
+        ["0v1", 0, 1],
+        ["2v1", 2, 1],
+        ["1v2", 1, 2]
+      ];
+
       const perOpp = opponents.map((opp) => {
-        const br0v0 = evaluateDiscreteShieldBattleRating(member, opp.member, 0, 0, league);
-        const br1v1 = evaluateDiscreteShieldBattleRating(member, opp.member, 1, 1, league);
-        const br2v2 = evaluateDiscreteShieldBattleRating(member, opp.member, 2, 2, league);
+        const brByShield = {} as Record<ShieldScenarioKey, number>;
+        for (const [key, su, so] of SHIELD_PAIRS) {
+          brByShield[key] = evaluateDiscreteShieldBattleRating(member, opp.member, su, so, league);
+        }
 
         const dealt = calculateFastDamage(
           resolved.stats,
@@ -579,9 +723,7 @@ export function runMultiIvMatrixEvaluation(params: RunMultiIvMatrixParams): Mult
             : "TIE";
 
         return {
-          br0v0,
-          br1v1,
-          br2v2,
+          brByShield,
           fastDmgDealt: dealt.damage,
           fastDmgTaken: taken.damage,
           fastMoveName: dealt.move.name,
@@ -607,7 +749,7 @@ export function runMultiIvMatrixEvaluation(params: RunMultiIvMatrixParams): Mult
       evaluated.find((e) => e.config.id === requestedBaseId) || rank1Eval;
 
     const rank1Wins1v1 = rank1Eval
-      ? rank1Eval.perOpp.filter((p) => p.br1v1 > 500).length
+      ? rank1Eval.perOpp.filter((p) => p.brByShield["1v1"] > 500).length
       : 0;
 
     const candidateResults: IvCandidateLeagueResult[] = evaluated.map((ev) => {
@@ -626,15 +768,19 @@ export function runMultiIvMatrixEvaluation(params: RunMultiIvMatrixParams): Mult
         const base = baseEval ? baseEval.perOpp[idx] : cur;
         const r1 = rank1Eval ? rank1Eval.perOpp[idx] : cur;
 
-        const flip0v0 = classifyFlip(cur.br0v0, base.br0v0);
-        const flip1v1 = classifyFlip(cur.br1v1, base.br1v1);
-        const flip2v2 = classifyFlip(cur.br2v2, base.br2v2);
-        if (flip1v1 === "L->W") netFlipsVsBase1v1 += 1;
-        else if (flip1v1 === "W->L") netFlipsVsBase1v1 -= 1;
+        const flipsByShield = {} as Record<ShieldScenarioKey, FlipCode>;
+        for (const sc of REALISTIC_7_SHIELD_KEYS) {
+          flipsByShield[sc] = classifyFlip(cur.brByShield[sc], base.brByShield[sc]);
+        }
+        const flip0v0 = flipsByShield["0v0"];
+        const flip1v1 = flipsByShield["1v1"];
+        const flip2v2 = flipsByShield["2v2"];
+        if (isPositiveFlip(flip1v1)) netFlipsVsBase1v1 += 1;
+        else if (isNegativeFlip(flip1v1)) netFlipsVsBase1v1 -= 1;
 
-        const r1Flip1v1 = classifyFlip(cur.br1v1, r1.br1v1);
-        if (r1Flip1v1 === "L->W") netFlipsVsRank11v1 += 1;
-        else if (r1Flip1v1 === "W->L") netFlipsVsRank11v1 -= 1;
+        const r1Flip1v1 = classifyFlip(cur.brByShield["1v1"], r1.brByShield["1v1"]);
+        if (isPositiveFlip(r1Flip1v1)) netFlipsVsRank11v1 += 1;
+        else if (isNegativeFlip(r1Flip1v1)) netFlipsVsRank11v1 -= 1;
 
         const fastBreakpointDelta = cur.fastDmgDealt - base.fastDmgDealt;
         if (fastBreakpointDelta > 0) breakpointsGainedCount += 1;
@@ -681,18 +827,22 @@ export function runMultiIvMatrixEvaluation(params: RunMultiIvMatrixParams): Mult
           oppIvs: opp.member.ivs || "",
           oppCp: opp.resolved.stats.resolvedCp,
           oppWeight: opp.weight,
-          br0v0: cur.br0v0,
-          br1v1: cur.br1v1,
-          br2v2: cur.br2v2,
-          baselineBr0v0: base.br0v0,
-          baselineBr1v1: base.br1v1,
-          baselineBr2v2: base.br2v2,
-          rank1Br0v0: r1.br0v0,
-          rank1Br1v1: r1.br1v1,
-          rank1Br2v2: r1.br2v2,
+          br0v0: cur.brByShield["0v0"],
+          br1v1: cur.brByShield["1v1"],
+          br2v2: cur.brByShield["2v2"],
+          baselineBr0v0: base.brByShield["0v0"],
+          baselineBr1v1: base.brByShield["1v1"],
+          baselineBr2v2: base.brByShield["2v2"],
+          rank1Br0v0: r1.brByShield["0v0"],
+          rank1Br1v1: r1.brByShield["1v1"],
+          rank1Br2v2: r1.brByShield["2v2"],
           flip0v0,
           flip1v1,
           flip2v2,
+          brByShield: { ...cur.brByShield },
+          baselineBrByShield: { ...base.brByShield },
+          rank1BrByShield: { ...r1.brByShield },
+          flipsByShield,
           fastMoveName: cur.fastMoveName,
           oppFastMoveName: cur.oppFastMoveName,
           fastDmgDealt: cur.fastDmgDealt,
@@ -704,15 +854,19 @@ export function runMultiIvMatrixEvaluation(params: RunMultiIvMatrixParams): Mult
           survivesExtraChargedCycle,
           losesExtraChargedCycle,
           userEffectiveAtk: cur.userEffectiveAtk,
+          baselineUserEffectiveAtk: base.userEffectiveAtk,
           oppEffectiveAtk: cur.oppEffectiveAtk,
           cmpStatus: cur.cmpStatus,
+          baselineCmpStatus: base.cmpStatus,
           cmpFlip
         };
       });
 
-      const rec0v0 = summarizeRecord(oppBreakdowns, weights, "0v0");
-      const rec1v1 = summarizeRecord(oppBreakdowns, weights, "1v1");
-      const rec2v2 = summarizeRecord(oppBreakdowns, weights, "2v2");
+      const records = {} as Record<ShieldScenarioKey, ShieldRecordSummary>;
+      for (const sc of REALISTIC_7_SHIELD_KEYS) {
+        records[sc] = summarizeRecord(oppBreakdowns, weights, sc);
+      }
+      const rec1v1 = records["1v1"];
 
       return {
         candidateId: ev.config.id,
@@ -738,11 +892,7 @@ export function runMultiIvMatrixEvaluation(params: RunMultiIvMatrixParams): Mult
         fastMove: ev.resolved.fastMove.name,
         chargedMove1: ev.resolved.chargedMoves[0]?.name || "",
         chargedMove2: ev.resolved.chargedMoves[1]?.name || "",
-        records: {
-          "0v0": rec0v0,
-          "1v1": rec1v1,
-          "2v2": rec2v2
-        },
+        records,
         deltaVsRank1: {
           br0v0: 0,
           br1v1: 0,

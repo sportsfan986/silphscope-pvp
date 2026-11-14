@@ -5,6 +5,7 @@ import com.gbl.overlay.OverlayService.Companion.PokemonMeta
 import com.gbl.overlay.OverlayService.Companion.getLeagueCpCapStatic
 import com.gbl.overlay.OverlayService.Companion.normalizeLeagueKeyStatic
 import java.util.UUID
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
@@ -38,6 +39,14 @@ object IvMatrixEngine {
         PVPOKE_DEFAULT,
         MAX_ATK
     }
+
+    enum class ShieldScopeMode {
+        REALISTIC_7,
+        EVEN_3
+    }
+
+    val EVEN_3_SHIELD_KEYS: List<String> = listOf("0v0", "1v1", "2v2")
+    val REALISTIC_7_SHIELD_KEYS: List<String> = listOf("0v0", "1v1", "2v2", "1v0", "0v1", "2v1", "1v2")
 
     data class IvSpreadEvalDetails(
         val atkIv: Int,
@@ -347,6 +356,25 @@ object IvMatrixEngine {
         val weightedWinPct: Double
     )
 
+    data class ScenarioFlipDetail(
+        val scenario: String,
+        val flipCode: String,
+        val beforeBr: Int,
+        val afterBr: Int,
+        val deltaBr: Int,
+        val isGain: Boolean
+    )
+
+    data class ScenarioOutlierDetail(
+        val scenario: String,
+        val beforeBr: Int,
+        val afterBr: Int,
+        val deltaBr: Int,
+        val beforeTierLabel: String,
+        val afterTierLabel: String,
+        val isUpgrade: Boolean
+    )
+
     data class IvOpponentBreakdown(
         val oppName: String,
         val oppIvs: String,
@@ -358,9 +386,14 @@ object IvMatrixEngine {
         val baselineBr0v0: Int,
         val baselineBr1v1: Int,
         val baselineBr2v2: Int,
-        val flip0v0: String, // "L->W" | "W->L" | "NONE"
+        val flip0v0: String, // "L->W" | "W->L" | "T->W" | "W->T" | "L->T" | "T->L" | "NONE"
         val flip1v1: String,
         val flip2v2: String,
+        val brByShield: Map<String, Int>,
+        val baselineBrByShield: Map<String, Int>,
+        val flipsByShield: Map<String, String>,
+        val userFastMoveName: String,
+        val oppFastMoveName: String,
         val fastDmgDealt: Int,
         val baselineFastDmgDealt: Int,
         val fastBreakpointDelta: Int,
@@ -370,8 +403,10 @@ object IvMatrixEngine {
         val survivesExtraChargedCycle: Boolean,
         val losesExtraChargedCycle: Boolean,
         val userEffectiveAtk: Double,
+        val baselineUserEffectiveAtk: Double,
         val oppEffectiveAtk: Double,
         val cmpStatus: String, // "WIN" | "TIE" | "LOSS"
+        val baselineCmpStatus: String, // "WIN" | "TIE" | "LOSS"
         val cmpFlip: String // "GAINED" | "LOST" | "NONE"
     )
 
@@ -467,16 +502,124 @@ object IvMatrixEngine {
     }
 
     private fun classifyFlip(curBr: Int, baseBr: Int): String {
-        val curWin = curBr > 500
-        val curLoss = curBr < 500
-        val baseWin = baseBr > 500
-        val baseLoss = baseBr < 500
-        return when {
-            !baseWin && curWin -> "L->W"
-            baseWin && curLoss -> "W->L"
-            baseLoss && !curLoss && curBr > baseBr -> "L->W"
-            else -> "NONE"
+        val curSign = when {
+            curBr > 500 -> 1
+            curBr < 500 -> -1
+            else -> 0
         }
+        val baseSign = when {
+            baseBr > 500 -> 1
+            baseBr < 500 -> -1
+            else -> 0
+        }
+        if (curSign == baseSign) return "NONE"
+        return when {
+            baseSign < 0 && curSign > 0 -> "L->W"
+            baseSign > 0 && curSign < 0 -> "W->L"
+            baseSign == 0 && curSign > 0 -> "T->W"
+            baseSign < 0 && curSign == 0 -> "L->T"
+            baseSign > 0 && curSign == 0 -> "W->T"
+            else -> "T->L"
+        }
+    }
+
+    fun isPositiveFlip(code: String): Boolean {
+        return code == "L->W" || code == "T->W" || code == "L->T"
+    }
+
+    fun isNegativeFlip(code: String): Boolean {
+        return code == "W->L" || code == "W->T" || code == "T->L"
+    }
+
+    fun formatFlipCode(code: String): String {
+        return code.replace("->", "→")
+    }
+
+    fun getShieldKeysForScope(scope: ShieldScopeMode): List<String> {
+        return if (scope == ShieldScopeMode.EVEN_3) EVEN_3_SHIELD_KEYS else REALISTIC_7_SHIELD_KEYS
+    }
+
+    fun classifyMatchupSubTier(
+        br: Int,
+        swMin: Int = 620,
+        wMin: Int = 530,
+        lMax: Int = 470,
+        slMax: Int = 380
+    ): Pair<Int, String> {
+        val effWMin = max(502, wMin)
+        val effSwMin = max(effWMin + 1, swMin)
+        val effLMax = min(498, lMax)
+        val effSlMax = min(effLMax - 1, slMax)
+        return when {
+            br >= effSwMin -> 3 to "Strong W"
+            br >= effWMin -> 2 to "Solid W"
+            br >= 501 -> 1 to "Soft W"
+            br == 500 -> 0 to "Tie"
+            br > effLMax -> -1 to "Close L"
+            br > effSlMax -> -2 to "Solid L"
+            else -> -3 to "Strong L"
+        }
+    }
+
+    fun getOpponentShieldFlips(
+        opp: IvOpponentBreakdown,
+        scope: ShieldScopeMode
+    ): List<ScenarioFlipDetail> {
+        val keys = getShieldKeysForScope(scope)
+        val out = ArrayList<ScenarioFlipDetail>(keys.size)
+        for (sc in keys) {
+            val code = opp.flipsByShield[sc] ?: "NONE"
+            if (code == "NONE") continue
+            val beforeBr = opp.baselineBrByShield[sc] ?: opp.baselineBr1v1
+            val afterBr = opp.brByShield[sc] ?: opp.br1v1
+            out.add(
+                ScenarioFlipDetail(
+                    scenario = sc,
+                    flipCode = code,
+                    beforeBr = beforeBr,
+                    afterBr = afterBr,
+                    deltaBr = afterBr - beforeBr,
+                    isGain = isPositiveFlip(code)
+                )
+            )
+        }
+        return out
+    }
+
+    fun getOpponentTierOutliers(
+        opp: IvOpponentBreakdown,
+        scope: ShieldScopeMode,
+        minDeltaBr: Int = 40,
+        swMin: Int = 620,
+        wMin: Int = 530,
+        lMax: Int = 470,
+        slMax: Int = 380
+    ): List<ScenarioOutlierDetail> {
+        val keys = getShieldKeysForScope(scope)
+        val out = ArrayList<ScenarioOutlierDetail>(keys.size)
+        for (sc in keys) {
+            val beforeBr = opp.baselineBrByShield[sc] ?: opp.baselineBr1v1
+            val afterBr = opp.brByShield[sc] ?: opp.br1v1
+            val sameBinarySide = (beforeBr > 500 && afterBr > 500) || (beforeBr < 500 && afterBr < 500)
+            if (!sameBinarySide) continue
+            val deltaBr = afterBr - beforeBr
+            if (abs(deltaBr) < minDeltaBr) continue
+            val (beforeBand, beforeLabel) = classifyMatchupSubTier(beforeBr, swMin, wMin, lMax, slMax)
+            val (afterBand, afterLabel) = classifyMatchupSubTier(afterBr, swMin, wMin, lMax, slMax)
+            if (beforeBand == afterBand) continue
+            out.add(
+                ScenarioOutlierDetail(
+                    scenario = sc,
+                    beforeBr = beforeBr,
+                    afterBr = afterBr,
+                    deltaBr = deltaBr,
+                    beforeTierLabel = beforeLabel,
+                    afterTierLabel = afterLabel,
+                    isUpgrade = afterBand > beforeBand
+                )
+            )
+        }
+        return out
     }
 
     private data class PreparedOpp(
@@ -490,11 +633,11 @@ object IvMatrixEngine {
     )
 
     private data class PerOppCandSim(
-        val br0v0: Int,
-        val br1v1: Int,
-        val br2v2: Int,
+        val brByShield: Map<String, Int>,
         val fastDmgDealt: Int,
         val fastDmgTaken: Int,
+        val userFastMoveName: String,
+        val oppFastMoveName: String,
         val userEffAtk: Double,
         val oppEffAtk: Double,
         val cmpStatus: String,
@@ -635,55 +778,36 @@ object IvMatrixEngine {
                 val c1 = cfg.chargedMove1.ifBlank { recMeta.chargedMove1 }
                 val c2 = cfg.chargedMove2.ifBlank { recMeta.chargedMove2 }
 
+                val shieldPairs = listOf(
+                    Triple("0v0", 0, 0),
+                    Triple("1v1", 1, 1),
+                    Triple("2v2", 2, 2),
+                    Triple("1v0", 1, 0),
+                    Triple("0v1", 0, 1),
+                    Triple("2v1", 2, 1),
+                    Triple("1v2", 1, 2)
+                )
+
                 val perOpp = preparedOpps.map { opp ->
-                    val br0v0 = OverlayService.calculateMatchupRatingStatic(
-                        myName = display,
-                        oppName = opp.name,
-                        userShields = 0,
-                        oppShields = 0,
-                        league = league,
-                        myFastMove = fastMove,
-                        myCharged1 = c1,
-                        myCharged2 = c2,
-                        myCp = details.cp,
-                        myIvs = details.ivs,
-                        myPlusMoveLevel = cfg.plusMoveLevel,
-                        myIsBestBuddy = cfg.isBestBuddy,
-                        oppIvs = opp.ivs,
-                        oppCp = opp.cp
-                    )
-                    val br1v1 = OverlayService.calculateMatchupRatingStatic(
-                        myName = display,
-                        oppName = opp.name,
-                        userShields = 1,
-                        oppShields = 1,
-                        league = league,
-                        myFastMove = fastMove,
-                        myCharged1 = c1,
-                        myCharged2 = c2,
-                        myCp = details.cp,
-                        myIvs = details.ivs,
-                        myPlusMoveLevel = cfg.plusMoveLevel,
-                        myIsBestBuddy = cfg.isBestBuddy,
-                        oppIvs = opp.ivs,
-                        oppCp = opp.cp
-                    )
-                    val br2v2 = OverlayService.calculateMatchupRatingStatic(
-                        myName = display,
-                        oppName = opp.name,
-                        userShields = 2,
-                        oppShields = 2,
-                        league = league,
-                        myFastMove = fastMove,
-                        myCharged1 = c1,
-                        myCharged2 = c2,
-                        myCp = details.cp,
-                        myIvs = details.ivs,
-                        myPlusMoveLevel = cfg.plusMoveLevel,
-                        myIsBestBuddy = cfg.isBestBuddy,
-                        oppIvs = opp.ivs,
-                        oppCp = opp.cp
-                    )
+                    val brByShield = LinkedHashMap<String, Int>(7)
+                    for ((scKey, su, so) in shieldPairs) {
+                        brByShield[scKey] = OverlayService.calculateMatchupRatingStatic(
+                            myName = display,
+                            oppName = opp.name,
+                            userShields = su,
+                            oppShields = so,
+                            league = league,
+                            myFastMove = fastMove,
+                            myCharged1 = c1,
+                            myCharged2 = c2,
+                            myCp = details.cp,
+                            myIvs = details.ivs,
+                            myPlusMoveLevel = cfg.plusMoveLevel,
+                            myIsBestBuddy = cfg.isBestBuddy,
+                            oppIvs = opp.ivs,
+                            oppCp = opp.cp
+                        )
+                    }
 
                     val fastDealt = calculateFastDmgRaw(recMeta, opp.meta, fastMove, cfg.isShadow, opp.isShadow)
                     val fastTaken = calculateFastDmgRaw(opp.meta, recMeta, opp.meta.defaultFastMove, opp.isShadow, cfg.isShadow)
@@ -698,11 +822,11 @@ object IvMatrixEngine {
                         else -> "TIE"
                     }
                     PerOppCandSim(
-                        br0v0 = br0v0,
-                        br1v1 = br1v1,
-                        br2v2 = br2v2,
+                        brByShield = brByShield,
                         fastDmgDealt = fastDealt,
                         fastDmgTaken = fastTaken,
+                        userFastMoveName = fastMove,
+                        oppFastMoveName = opp.meta.defaultFastMove,
                         userEffAtk = (recMeta.atk * 100.0).roundToInt() / 100.0,
                         oppEffAtk = (opp.meta.atk * 100.0).roundToInt() / 100.0,
                         cmpStatus = cmpStatus,
@@ -758,8 +882,8 @@ object IvMatrixEngine {
                 )
             }
 
-            val rank1Summary1v1 = rank1Eval?.let { r1 -> summarize(r1.perOpp) { it.br1v1 } }
-            val baseSummary1v1 = baseEval?.let { b -> summarize(b.perOpp) { it.br1v1 } }
+            val rank1Summary1v1 = rank1Eval?.let { r1 -> summarize(r1.perOpp) { it.brByShield["1v1"] ?: 500 } }
+            val baseSummary1v1 = baseEval?.let { b -> summarize(b.perOpp) { it.brByShield["1v1"] ?: 500 } }
 
             val results: List<IvCandidateLeagueResult> = evals.map { ev ->
                 var brkGain = 0
@@ -773,9 +897,15 @@ object IvMatrixEngine {
                 val oppList = preparedOpps.mapIndexed { idx, opp ->
                     val cur = ev.perOpp[idx]
                     val base = baseEval?.perOpp?.getOrNull(idx) ?: cur
-                    val flip0 = classifyFlip(cur.br0v0, base.br0v0)
-                    val flip1 = classifyFlip(cur.br1v1, base.br1v1)
-                    val flip2 = classifyFlip(cur.br2v2, base.br2v2)
+                    val flipsByShield = LinkedHashMap<String, String>(7)
+                    for (scKey in REALISTIC_7_SHIELD_KEYS) {
+                        val cBr = cur.brByShield[scKey] ?: 500
+                        val bBr = base.brByShield[scKey] ?: 500
+                        flipsByShield[scKey] = classifyFlip(cBr, bBr)
+                    }
+                    val flip0 = flipsByShield["0v0"] ?: "NONE"
+                    val flip1 = flipsByShield["1v1"] ?: "NONE"
+                    val flip2 = flipsByShield["2v2"] ?: "NONE"
 
                     val brkDelta = cur.fastDmgDealt - base.fastDmgDealt
                     if (brkDelta > 0) brkGain += 1 else if (brkDelta < 0) brkLoss += 1
@@ -806,15 +936,20 @@ object IvMatrixEngine {
                         oppIvs = opp.ivs,
                         oppCp = opp.cp,
                         oppWeight = opp.weight,
-                        br0v0 = cur.br0v0,
-                        br1v1 = cur.br1v1,
-                        br2v2 = cur.br2v2,
-                        baselineBr0v0 = base.br0v0,
-                        baselineBr1v1 = base.br1v1,
-                        baselineBr2v2 = base.br2v2,
+                        br0v0 = cur.brByShield["0v0"] ?: 500,
+                        br1v1 = cur.brByShield["1v1"] ?: 500,
+                        br2v2 = cur.brByShield["2v2"] ?: 500,
+                        baselineBr0v0 = base.brByShield["0v0"] ?: 500,
+                        baselineBr1v1 = base.brByShield["1v1"] ?: 500,
+                        baselineBr2v2 = base.brByShield["2v2"] ?: 500,
                         flip0v0 = flip0,
                         flip1v1 = flip1,
                         flip2v2 = flip2,
+                        brByShield = cur.brByShield,
+                        baselineBrByShield = base.brByShield,
+                        flipsByShield = flipsByShield,
+                        userFastMoveName = cur.userFastMoveName,
+                        oppFastMoveName = cur.oppFastMoveName,
                         fastDmgDealt = cur.fastDmgDealt,
                         baselineFastDmgDealt = base.fastDmgDealt,
                         fastBreakpointDelta = brkDelta,
@@ -824,15 +959,17 @@ object IvMatrixEngine {
                         survivesExtraChargedCycle = curExtra,
                         losesExtraChargedCycle = baseExtra,
                         userEffectiveAtk = cur.userEffAtk,
+                        baselineUserEffectiveAtk = base.userEffAtk,
                         oppEffectiveAtk = cur.oppEffAtk,
                         cmpStatus = cur.cmpStatus,
+                        baselineCmpStatus = base.cmpStatus,
                         cmpFlip = cmpFlip
                     )
                 }
 
-                val r0 = summarize(ev.perOpp) { it.br0v0 }
-                val r1 = summarize(ev.perOpp) { it.br1v1 }
-                val r2 = summarize(ev.perOpp) { it.br2v2 }
+                val r0 = summarize(ev.perOpp) { it.brByShield["0v0"] ?: 500 }
+                val r1 = summarize(ev.perOpp) { it.brByShield["1v1"] ?: 500 }
+                val r2 = summarize(ev.perOpp) { it.brByShield["2v2"] ?: 500 }
 
                 IvCandidateLeagueResult(
                     candidateId = ev.config.id,

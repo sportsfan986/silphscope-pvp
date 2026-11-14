@@ -1,4 +1,15 @@
-# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.38`)
+# SilphScope PvP — Complete Release Changelog (`v1.00` – `v7.39`)
+
+---
+
+## v7.39 (2026-11-14) — 7-Scenario Asymmetric Shield Flips, Fast Move Breakpoint/Bulkpoint Lists & Matchup Tier Outliers
+*Live Android APK & Web Simulator release (`v7.39`, `versionCode = 1739`) refining the **⚖️ IV Lab Multi-IV Matrix** breakdown to surface actionable fast-move damage breakpoints/bulkpoints, asymmetric shield-tree outcome flips, and sub-tier matchup swings while eliminating noisy non-flipping BR drift rows.*
+
+### Highlights
+- **4-Category Segmented Breakdown (`Fast BP/Bulk` • `Shield Flips` • `Tier Outliers` • `CMP`)**: Replaced the noisy `"Key Shifts"` list and generic non-flipping BR drift rows across Android (`MainActivity.kt`) and Web (`IvLabTab.tsx`) with dedicated category pills showing only meaningful matchups.
+- **Fast Move Breakpoints & Bulkpoints Split by Pokémon**: Displays explicit fast-move damage changes (`+1 Dmg Dealt` / `-1 Dmg Taken ✅` green vs `+1 Dmg Taken ⚠️` red) organized separately for Breakpoints and Bulkpoints (also fixed Android's inverted damage-taken sign and coloring).
+- **7-Scenario Asymmetric Shielding Tree (`0v0`, `1v1`, `2v2`, `1v0`, `0v1`, `2v1`, `1v2`)**: Evaluates realistic shielding trees beyond even shields with a 2-way scope toggle (`7 Realistic` vs `Even 3`), expandable per-opponent shield-tree deltas (`before → after BR`), and symmetric crossing classification at `BR 500`.
+- **Matchup Tier Outliers (`≥35 / ≥40 / ≥50 / ≥75 BR`, default `≥40`)**: Surfaces non-flipping binary outcomes that cross meaningful sub-tier boundaries (`Strong W / Solid W / Soft W` and `Close L / Solid L / Strong L`) synchronized with the user's configured tier thresholds.
 
 ---
 

@@ -18,21 +18,28 @@ import {
   cleanSpeciesNameWithoutShadow,
   evaluateIvSpreadDetails,
   findPokemonByName,
+  formatFlipCode,
   formatSpeciesDisplayName,
   getAvailableMovePoolForPokemon,
   getLeagueCpCap,
+  getOpponentShieldFlips,
+  getOpponentTierOutliers,
   getPokemonAutocompleteSuggestions,
   getPresetIvSpread,
   getRecommendedMovesForPokemon,
+  getStoredMatchupTierThresholds,
   normalizeLeagueName,
   PINNED_RANK1_CANDIDATE_ID,
+  REALISTIC_7_SHIELD_KEYS,
   runMultiIvMatrixEvaluation,
   teamMemberToBuiltPokemon,
   type IvCandidateConfig,
   type IvCandidateLeagueResult,
+  type IvScenarioFlipDetail,
+  type IvScenarioOutlierDetail,
   type OppIvBaselineMode,
   type OppMetaPoolMode,
-  type ShieldScenarioKey
+  type ShieldScopeMode
 } from "../data/gblData";
 import type { GblSeasonInfo, WebBattleLogEntry } from "./AppThemeAndModels";
 import { IvTripletInput, type IvTripletChangePayload } from "./IvTripletInput";
@@ -50,13 +57,8 @@ export interface IvLabTabProps {
   onDeleteBuiltPokemon: (id: string) => void;
 }
 
-type OppTableFilterMode =
-  | "ALL"
-  | "FLIPS"
-  | "BREAKPOINTS"
-  | "BULKPOINTS"
-  | "CMP"
-  | "SURVIVAL";
+type BreakdownCategory = "BP_BULK" | "FLIPS" | "OUTLIERS" | "CMP";
+type OutlierDeltaThreshold = 35 | 40 | 50 | 75;
 
 const OPEN_CORE_LEAGUES = new Set([
   "GREAT LEAGUE",
@@ -142,9 +144,12 @@ export function IvLabTab({
 
   // Per-result inspection filters
   const [inspectedCandidateId, setInspectedCandidateId] = useState<string>("cand-1");
-  const [oppFilter, setOppFilter] = useState<OppTableFilterMode>("ALL");
+  const [breakdownCategory, setBreakdownCategory] = useState<BreakdownCategory>("BP_BULK");
+  const [shieldScopeMode, setShieldScopeMode] = useState<ShieldScopeMode>("REALISTIC_7");
+  const [outlierMinDelta, setOutlierMinDelta] = useState<OutlierDeltaThreshold>(40);
   const [oppSearch, setOppSearch] = useState<string>("");
-  const [shieldFocus, setShieldFocus] = useState<ShieldScenarioKey>("1v1");
+  const [expandedFlipOppKey, setExpandedFlipOppKey] = useState<string | null>(null);
+  const tierThresholds = useMemo(() => getStoredMatchupTierThresholds(), []);
 
   const primaryLeague = selectedLeagues[0] || "GREAT LEAGUE";
 
@@ -893,27 +898,100 @@ export function IvLabTab({
                 lgMatrix.candidateResults.find(
                   (r) => r.candidateId === inspectedCandidateId
                 ) ||
-                lgMatrix.candidateResults.find((r) => !r.isPinnedRank1) ||
+                lgMatrix.candidateResults.find(
+                  (r) => r.candidateId !== lgMatrix.baselineComparisonId
+                ) ||
                 lgMatrix.candidateResults[0];
 
-              const filteredOpps = (inspected?.opponents || []).filter((opp) => {
-                const q = oppSearch.trim().toLowerCase();
-                if (q && !opp.oppName.toLowerCase().includes(q)) return false;
-                if (oppFilter === "FLIPS") {
-                  return (
-                    opp.flip0v0 !== "NONE" ||
-                    opp.flip1v1 !== "NONE" ||
-                    opp.flip2v2 !== "NONE"
+              const inspectedIsBase =
+                Boolean(inspected) &&
+                inspected.candidateId === lgMatrix.baselineComparisonId;
+
+              const q = oppSearch.trim().toLowerCase();
+              const searchedOpps = (inspected?.opponents || []).filter(
+                (opp) => !q || opp.oppName.toLowerCase().includes(q)
+              );
+
+              const bpOpps = searchedOpps
+                .filter((o) => o.fastBreakpointDelta !== 0)
+                .sort(
+                  (a, b) =>
+                    b.fastBreakpointDelta - a.fastBreakpointDelta ||
+                    a.oppName.localeCompare(b.oppName)
+                );
+              const bulkOpps = searchedOpps
+                .filter((o) => o.fastBulkpointDelta !== 0)
+                .sort(
+                  (a, b) =>
+                    b.fastBulkpointDelta - a.fastBulkpointDelta ||
+                    a.oppName.localeCompare(b.oppName)
+                );
+              const bpBulkTotalCount = searchedOpps.filter(
+                (o) => o.fastBreakpointDelta !== 0 || o.fastBulkpointDelta !== 0
+              ).length;
+
+              const flipRows: Array<{
+                opp: (typeof searchedOpps)[number];
+                flips: IvScenarioFlipDetail[];
+                netScore: number;
+                maxDelta: number;
+              }> = searchedOpps
+                .map((opp) => {
+                  const flips = getOpponentShieldFlips(opp, shieldScopeMode);
+                  const gains = flips.filter((f) => f.isGain).length;
+                  const losses = flips.length - gains;
+                  const maxDelta = flips.reduce(
+                    (m, f) => Math.max(m, Math.abs(f.deltaBr)),
+                    0
                   );
-                }
-                if (oppFilter === "BREAKPOINTS") return opp.fastBreakpointDelta !== 0;
-                if (oppFilter === "BULKPOINTS") return opp.fastBulkpointDelta !== 0;
-                if (oppFilter === "CMP") return opp.cmpFlip !== "NONE";
-                if (oppFilter === "SURVIVAL") {
-                  return opp.survivesExtraChargedCycle || opp.losesExtraChargedCycle;
-                }
-                return true;
-              });
+                  return { opp, flips, netScore: gains - losses, maxDelta };
+                })
+                .filter((item) => item.flips.length > 0)
+                .sort(
+                  (a, b) =>
+                    b.netScore - a.netScore ||
+                    b.maxDelta - a.maxDelta ||
+                    a.opp.oppName.localeCompare(b.opp.oppName)
+                );
+
+              const outlierRows: Array<{
+                opp: (typeof searchedOpps)[number];
+                outliers: IvScenarioOutlierDetail[];
+                maxAbsDelta: number;
+              }> = searchedOpps
+                .map((opp) => {
+                  const outliers = getOpponentTierOutliers(
+                    opp,
+                    shieldScopeMode,
+                    outlierMinDelta,
+                    tierThresholds
+                  );
+                  const maxAbsDelta = outliers.reduce(
+                    (m, o) => Math.max(m, Math.abs(o.deltaBr)),
+                    0
+                  );
+                  return { opp, outliers, maxAbsDelta };
+                })
+                .filter((item) => item.outliers.length > 0)
+                .sort(
+                  (a, b) =>
+                    b.maxAbsDelta - a.maxAbsDelta ||
+                    a.opp.oppName.localeCompare(b.opp.oppName)
+                );
+
+              const cmpOpps = searchedOpps
+                .filter((o) => o.cmpFlip !== "NONE")
+                .sort((a, b) => {
+                  if (a.cmpFlip !== b.cmpFlip) {
+                    return a.cmpFlip === "GAINED" ? -1 : 1;
+                  }
+                  return a.oppName.localeCompare(b.oppName);
+                });
+
+              const effWMin = Math.max(502, tierThresholds.wMin);
+              const effSwMin = Math.max(effWMin + 1, tierThresholds.swMin);
+              const effLMax = Math.min(498, tierThresholds.lMax);
+              const effSlMax = Math.min(effLMax - 1, tierThresholds.slMax);
 
               return (
                 <div
@@ -957,6 +1035,28 @@ export function IvLabTab({
                     {lgMatrix.candidateResults.map((res) => {
                       const isBase = res.candidateId === lgMatrix.baselineComparisonId;
                       const isInspected = res.candidateId === inspected?.candidateId;
+                      const cardFlipGainOpps = isBase
+                        ? 0
+                        : res.opponents.filter((o) =>
+                            getOpponentShieldFlips(o, shieldScopeMode).some((f) => f.isGain)
+                          ).length;
+                      const cardFlipLossOpps = isBase
+                        ? 0
+                        : res.opponents.filter((o) =>
+                            getOpponentShieldFlips(o, shieldScopeMode).some((f) => !f.isGain)
+                          ).length;
+                      const cardOutlierCount = isBase
+                        ? 0
+                        : res.opponents.filter(
+                            (o) =>
+                              getOpponentTierOutliers(
+                                o,
+                                shieldScopeMode,
+                                outlierMinDelta,
+                                tierThresholds
+                              ).length > 0
+                          ).length;
+
                       return (
                         <div
                           key={res.candidateId}
@@ -1053,6 +1153,9 @@ export function IvLabTab({
                                 {res.deltaVsRank1.wins1v1}W ({res.deltaVsRank1.br1v1 >= 0 ? "+" : ""}
                                 {res.deltaVsRank1.br1v1} BR)
                               </span>
+                              <span className="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-200">
+                                🔄 +{cardFlipGainOpps}/-{cardFlipLossOpps}
+                              </span>
                               <span
                                 className={`px-1.5 py-0.5 rounded ${
                                   res.breakpointsGainedCount > 0
@@ -1071,14 +1174,18 @@ export function IvLabTab({
                               >
                                 🛡️ +{res.bulkpointsGainedCount}/-{res.bulkpointsLostCount} Blk
                               </span>
+                              <span
+                                className={`px-1.5 py-0.5 rounded ${
+                                  cardOutlierCount > 0
+                                    ? "bg-amber-500/20 text-amber-300"
+                                    : "bg-slate-800 text-slate-400"
+                                }`}
+                              >
+                                ⚠️ {cardOutlierCount} Out
+                              </span>
                               <span className="px-1.5 py-0.5 rounded bg-slate-800 text-purple-200">
                                 ⚔️ +{res.cmpFlipsGainedCount}/-{res.cmpFlipsLostCount} CMP
                               </span>
-                              {res.extraCycleSurvivedCount > 0 && (
-                                <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-200">
-                                  💪 +{res.extraCycleSurvivedCount} Cycle
-                                </span>
-                              )}
                             </div>
                           )}
                         </div>
@@ -1086,31 +1193,48 @@ export function IvLabTab({
                     })}
                   </div>
 
-                  {/* Opponent-by-Opponent Matchup Flip & Breakpoint Table */}
-                  {inspected && (
-                    <div className="space-y-2.5 pt-2 border-t border-slate-800">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
-                        <div className="flex flex-wrap items-center gap-1.5">
+                  {/* Opponent-by-Opponent Segmented Category Breakdown */}
+                  {inspected && inspectedIsBase && (
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-950/15 px-3.5 py-3 text-xs text-amber-200">
+                      📌 <strong className="text-white">{inspected.label}</strong> ({inspected.ivs}) is currently selected as the comparison baseline. Select another candidate card above or change <strong>Compare vs.</strong> to inspect Fast Breakpoints/Bulkpoints, 7-Shield Flips, Tier Outliers, and CMP changes.
+                    </div>
+                  )}
+
+                  {inspected && !inspectedIsBase && (
+                    <div className="space-y-3 pt-2 border-t border-slate-800">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="text-xs font-bold text-cyan-300">
                             Inspecting: {inspected.label} ({inspected.ivs}) vs. {lgMatrix.baselineLabel}
                           </span>
-                          {(["0v0", "1v1", "2v2"] as const).map((s) => (
+                          {/* 2-Way Shield Scope Toggle */}
+                          <div className="inline-flex items-center rounded-lg border border-slate-700 bg-slate-950 p-0.5">
                             <button
-                              key={s}
                               type="button"
-                              onClick={() => setShieldFocus(s)}
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                                shieldFocus === s
-                                  ? "border-cyan-400 bg-cyan-500/25 text-white"
-                                  : "border-slate-700 bg-slate-950 text-slate-400"
+                              onClick={() => setShieldScopeMode("REALISTIC_7")}
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition ${
+                                shieldScopeMode === "REALISTIC_7"
+                                  ? "bg-cyan-500/25 text-cyan-100 border border-cyan-400/50"
+                                  : "text-slate-400 hover:text-white border border-transparent"
                               }`}
                             >
-                              {s} Focus
+                              🎯 7 Realistic (Even + ±1🛡️)
                             </button>
-                          ))}
+                            <button
+                              type="button"
+                              onClick={() => setShieldScopeMode("EVEN_3")}
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition ${
+                                shieldScopeMode === "EVEN_3"
+                                  ? "bg-cyan-500/25 text-cyan-100 border border-cyan-400/50"
+                                  : "text-slate-400 hover:text-white border border-transparent"
+                              }`}
+                            >
+                              ⚖️ Even 3 (0v0/1v1/2v2)
+                            </button>
+                          </div>
                         </div>
 
-                        <div className="relative w-full md:w-56">
+                        <div className="relative w-full lg:w-56">
                           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
                           <input
                             type="text"
@@ -1122,204 +1246,393 @@ export function IvLabTab({
                         </div>
                       </div>
 
+                      {/* 4 Segmented Category Pills */}
                       <div className="flex flex-wrap gap-1.5">
                         {(
                           [
-                            { id: "ALL", label: `All (${inspected.opponents.length})` },
-                            { id: "FLIPS", label: "🔄 Matchup Flips" },
-                            { id: "BREAKPOINTS", label: "⚡ Fast Breakpoints (+1)" },
-                            { id: "BULKPOINTS", label: "🛡️ Fast Bulkpoints (-1)" },
-                            { id: "CMP", label: "⚔️ CMP Tie Flips" },
-                            { id: "SURVIVAL", label: "💪 Extra Cycle Survival" }
+                            {
+                              id: "BP_BULK",
+                              label: `⚔️ Fast BP/Bulk (${bpBulkTotalCount})`
+                            },
+                            {
+                              id: "FLIPS",
+                              label: `🔄 Shield Flips (${flipRows.length})`
+                            },
+                            {
+                              id: "OUTLIERS",
+                              label: `⚠️ Tier Outliers (${outlierRows.length})`
+                            },
+                            {
+                              id: "CMP",
+                              label: `⚡ CMP (${cmpOpps.length})`
+                            }
                           ] as const
-                        ).map((tab) => (
+                        ).map((cat) => (
                           <button
-                            key={tab.id}
+                            key={cat.id}
                             type="button"
-                            onClick={() => setOppFilter(tab.id)}
-                            className={`px-2.5 py-1 rounded-lg border text-[10.5px] font-bold transition ${
-                              oppFilter === tab.id
-                                ? "border-cyan-400/70 bg-cyan-500/20 text-cyan-100"
+                            onClick={() => setBreakdownCategory(cat.id)}
+                            className={`px-3 py-1.5 rounded-lg border text-[11px] font-bold transition ${
+                              breakdownCategory === cat.id
+                                ? "border-cyan-400/80 bg-cyan-500/20 text-cyan-100 shadow-sm"
                                 : "border-slate-700 bg-slate-950 text-slate-400 hover:text-white"
                             }`}
                           >
-                            {tab.label}
+                            {cat.label}
                           </button>
                         ))}
                       </div>
 
-                      <div className="overflow-x-auto rounded-xl border border-slate-800">
-                        <table className="w-full text-left text-[11px]">
-                          <thead className="bg-slate-950 text-slate-400 font-bold uppercase text-[10px]">
-                            <tr>
-                              <th className="px-2.5 py-2">Opponent</th>
-                              <th className="px-2 py-2 text-center">{shieldFocus} BR (vs Base)</th>
-                              <th className="px-2 py-2 text-center">Flip</th>
-                              <th className="px-2 py-2 text-center">Fast Dealt</th>
-                              <th className="px-2 py-2 text-center">Fast Taken</th>
-                              <th className="px-2 py-2 text-center">CMP</th>
-                              <th className="px-2 py-2 text-center">Notes</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-800/70">
-                            {filteredOpps.length === 0 ? (
-                              <tr>
-                                <td
-                                  colSpan={7}
-                                  className="px-3 py-4 text-center text-xs text-slate-400"
-                                >
-                                  No opponents match this filter. Try switching filter or compare against a different spread.
-                                </td>
-                              </tr>
-                            ) : (
-                              filteredOpps.map((opp) => {
-                                const curBr =
-                                  shieldFocus === "0v0"
-                                    ? opp.br0v0
-                                    : shieldFocus === "1v1"
-                                    ? opp.br1v1
-                                    : opp.br2v2;
-                                const baseBr =
-                                  shieldFocus === "0v0"
-                                    ? opp.baselineBr0v0
-                                    : shieldFocus === "1v1"
-                                    ? opp.baselineBr1v1
-                                    : opp.baselineBr2v2;
-                                const curFlip =
-                                  shieldFocus === "0v0"
-                                    ? opp.flip0v0
-                                    : shieldFocus === "1v1"
-                                    ? opp.flip1v1
-                                    : opp.flip2v2;
-                                const anyFlip =
-                                  curFlip !== "NONE"
-                                    ? curFlip
-                                    : opp.flip1v1 !== "NONE"
-                                    ? opp.flip1v1
-                                    : opp.flip0v0 !== "NONE"
-                                    ? opp.flip0v0
-                                    : opp.flip2v2;
-
-                                return (
-                                  <tr
-                                    key={opp.oppName}
-                                    className="hover:bg-slate-800/40 transition-colors"
-                                  >
-                                    <td className="px-2.5 py-1.5">
-                                      <div className="font-bold text-white">{opp.oppName}</div>
-                                      <div className="text-[9.5px] font-mono text-slate-400">
-                                        {opp.oppIvs} • CP {opp.oppCp}
+                      {/* Category 1: Fast Breakpoints & Fast Bulkpoints */}
+                      {breakdownCategory === "BP_BULK" && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                          {/* Fast Move Breakpoints (Dealt) */}
+                          <div className="rounded-xl border border-slate-800 bg-slate-950/75 overflow-hidden">
+                            <div className="flex items-center justify-between px-3 py-2 bg-slate-950 border-b border-slate-800">
+                              <span className="text-xs font-extrabold text-amber-200">
+                                ⚔️ Fast Move Breakpoints (Damage Dealt)
+                              </span>
+                              <span className="text-[10.5px] font-mono font-bold text-slate-300">
+                                +{bpOpps.filter((o) => o.fastBreakpointDelta > 0).length} / -
+                                {bpOpps.filter((o) => o.fastBreakpointDelta < 0).length}
+                              </span>
+                            </div>
+                            <div className="divide-y divide-slate-800/70 max-h-96 overflow-y-auto">
+                              {bpOpps.length === 0 ? (
+                                <div className="px-3 py-5 text-center text-xs text-slate-400">
+                                  No Fast Move Breakpoint changes vs. {lgMatrix.baselineLabel}.
+                                </div>
+                              ) : (
+                                bpOpps.map((opp) => {
+                                  const gained = opp.fastBreakpointDelta > 0;
+                                  return (
+                                    <div
+                                      key={`bp_${opp.oppName}`}
+                                      className="px-3 py-2 flex items-center justify-between gap-2 text-[11px]"
+                                    >
+                                      <div className="min-w-0">
+                                        <div className="font-bold text-white truncate">
+                                          {opp.oppName}
+                                        </div>
+                                        <div className="text-[10px] font-mono text-slate-400">
+                                          Your {opp.fastMoveName}:{" "}
+                                          <span className="text-slate-200 font-bold">
+                                            {opp.baselineFastDmgDealt} → {opp.fastDmgDealt}
+                                          </span>{" "}
+                                          • 1v1 BR {opp.baselineBr1v1} → {opp.br1v1}
+                                        </div>
                                       </div>
-                                    </td>
-                                    <td className="px-2 py-1.5 text-center font-mono">
                                       <span
-                                        className={`font-bold ${
-                                          curBr > 500
-                                            ? "text-emerald-300"
-                                            : curBr < 500
-                                            ? "text-rose-300"
-                                            : "text-amber-300"
+                                        className={`shrink-0 px-2 py-0.5 rounded font-mono font-bold text-[10px] border ${
+                                          gained
+                                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-400/40"
+                                            : "bg-rose-500/20 text-rose-300 border-rose-400/40"
                                         }`}
                                       >
-                                        {curBr}
+                                        {gained
+                                          ? `+${opp.fastBreakpointDelta} dmg ⚡`
+                                          : `${opp.fastBreakpointDelta} dmg ⚠️`}
                                       </span>
-                                      <span className="text-slate-500 text-[10px]">
-                                        {" "}
-                                        / {baseBr}
-                                      </span>
-                                    </td>
-                                    <td className="px-2 py-1.5 text-center font-mono font-bold">
-                                      {anyFlip === "L->W" ? (
-                                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/40">
-                                          L → W
-                                        </span>
-                                      ) : anyFlip === "W->L" ? (
-                                        <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-400/40">
-                                          W → L
-                                        </span>
-                                      ) : (
-                                        <span className="text-slate-600">—</span>
-                                      )}
-                                    </td>
-                                    <td className="px-2 py-1.5 text-center font-mono">
-                                      <span className="text-white font-bold">
-                                        {opp.fastDmgDealt}
-                                      </span>
-                                      {opp.fastBreakpointDelta !== 0 && (
-                                        <span
-                                          className={`ml-1 px-1 rounded text-[9.5px] font-bold ${
-                                            opp.fastBreakpointDelta > 0
-                                              ? "bg-amber-500/25 text-amber-200"
-                                              : "bg-rose-500/25 text-rose-200"
-                                          }`}
-                                        >
-                                          {opp.fastBreakpointDelta > 0
-                                            ? `+${opp.fastBreakpointDelta}⚡`
-                                            : `${opp.fastBreakpointDelta}`}
-                                        </span>
-                                      )}
-                                    </td>
-                                    <td className="px-2 py-1.5 text-center font-mono">
-                                      <span className="text-white font-bold">
-                                        {opp.fastDmgTaken}
-                                      </span>
-                                      {opp.fastBulkpointDelta !== 0 && (
-                                        <span
-                                          className={`ml-1 px-1 rounded text-[9.5px] font-bold ${
-                                            opp.fastBulkpointDelta > 0
-                                              ? "bg-sky-500/25 text-sky-200"
-                                              : "bg-rose-500/25 text-rose-200"
-                                          }`}
-                                        >
-                                          {opp.fastBulkpointDelta > 0
-                                            ? `-${opp.fastBulkpointDelta}🛡️`
-                                            : `+${Math.abs(opp.fastBulkpointDelta)}`}
-                                        </span>
-                                      )}
-                                    </td>
-                                    <td className="px-2 py-1.5 text-center font-mono text-[10px]">
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Fast Move Bulkpoints (Taken) */}
+                          <div className="rounded-xl border border-slate-800 bg-slate-950/75 overflow-hidden">
+                            <div className="flex items-center justify-between px-3 py-2 bg-slate-950 border-b border-slate-800">
+                              <span className="text-xs font-extrabold text-sky-200">
+                                🛡️ Fast Move Bulkpoints (Damage Taken)
+                              </span>
+                              <span className="text-[10.5px] font-mono font-bold text-slate-300">
+                                +{bulkOpps.filter((o) => o.fastBulkpointDelta > 0).length} Gained / -
+                                {bulkOpps.filter((o) => o.fastBulkpointDelta < 0).length} Lost
+                              </span>
+                            </div>
+                            <div className="divide-y divide-slate-800/70 max-h-96 overflow-y-auto">
+                              {bulkOpps.length === 0 ? (
+                                <div className="px-3 py-5 text-center text-xs text-slate-400">
+                                  No Fast Move Bulkpoint changes vs. {lgMatrix.baselineLabel}.
+                                </div>
+                              ) : (
+                                bulkOpps.map((opp) => {
+                                  const gainedBulk = opp.fastBulkpointDelta > 0;
+                                  const deltaTakenSigned = opp.fastDmgTaken - opp.baselineFastDmgTaken;
+                                  return (
+                                    <div
+                                      key={`blk_${opp.oppName}`}
+                                      className="px-3 py-2 flex items-center justify-between gap-2 text-[11px]"
+                                    >
+                                      <div className="min-w-0">
+                                        <div className="font-bold text-white truncate">
+                                          {opp.oppName}
+                                          {opp.survivesExtraChargedCycle && (
+                                            <span className="ml-1.5 px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-bold">
+                                              💪 +Cycle
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-[10px] font-mono text-slate-400">
+                                          Opp {opp.oppFastMoveName} taken:{" "}
+                                          <span className="text-slate-200 font-bold">
+                                            {opp.baselineFastDmgTaken} → {opp.fastDmgTaken}
+                                          </span>{" "}
+                                          • 1v1 BR {opp.baselineBr1v1} → {opp.br1v1}
+                                        </div>
+                                      </div>
                                       <span
-                                        className={`font-bold ${
-                                          opp.cmpStatus === "WIN"
-                                            ? "text-emerald-300"
-                                            : opp.cmpStatus === "LOSS"
-                                            ? "text-rose-300"
-                                            : "text-amber-300"
+                                        className={`shrink-0 px-2 py-0.5 rounded font-mono font-bold text-[10px] border ${
+                                          gainedBulk
+                                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-400/40"
+                                            : "bg-rose-500/20 text-rose-300 border-rose-400/40"
                                         }`}
                                       >
-                                        {opp.cmpStatus}
+                                        {gainedBulk
+                                          ? `${deltaTakenSigned} taken ✅`
+                                          : `+${deltaTakenSigned} taken ⚠️`}
                                       </span>
-                                      {opp.cmpFlip !== "NONE" && (
-                                        <span
-                                          className={`block text-[9px] font-bold ${
-                                            opp.cmpFlip === "GAINED"
-                                              ? "text-purple-300"
-                                              : "text-rose-400"
-                                          }`}
-                                        >
-                                          {opp.cmpFlip === "GAINED" ? "↑ FLIP" : "↓ LOST"}
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Category 2: Asymmetric Shielding Tree Win/Loss Flips */}
+                      {breakdownCategory === "FLIPS" && (
+                        <div className="rounded-xl border border-slate-800 bg-slate-950/75 overflow-hidden">
+                          {flipRows.length === 0 ? (
+                            <div className="px-4 py-6 text-center text-xs text-slate-400">
+                              No Win/Loss outcome flips vs. {lgMatrix.baselineLabel} across{" "}
+                              {shieldScopeMode === "REALISTIC_7"
+                                ? "the 7 realistic shield scenarios (0v0, 1v1, 2v2, 1v0, 0v1, 2v1, 1v2)"
+                                : "the 3 even shield scenarios (0v0, 1v1, 2v2)"}
+                              .
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-slate-800/70">
+                              {flipRows.map(({ opp, flips }) => {
+                                const rowExpandKey = `${lgMatrix.league}|${inspected.candidateId}|${opp.oppName}`;
+                                const isExpandedRow = expandedFlipOppKey === rowExpandKey;
+                                return (
+                                  <div
+                                    key={`flip_${opp.oppName}`}
+                                    onClick={() =>
+                                      setExpandedFlipOppKey((prev) =>
+                                        prev === rowExpandKey ? null : rowExpandKey
+                                      )
+                                    }
+                                    className="px-3 py-2.5 hover:bg-slate-800/40 transition-colors cursor-pointer space-y-1.5"
+                                  >
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                      <div>
+                                        <span className="text-xs font-extrabold text-white">
+                                          {opp.oppName}
                                         </span>
-                                      )}
-                                    </td>
-                                    <td className="px-2 py-1.5 text-center text-[10px]">
-                                      {opp.survivesExtraChargedCycle && (
-                                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-200 font-bold">
-                                          💪 +Cycle
+                                        <span className="ml-2 text-[10px] font-mono text-slate-400">
+                                          {opp.oppIvs} • CP {opp.oppCp} • tap to{" "}
+                                          {isExpandedRow ? "hide" : "show"} full tree
                                         </span>
-                                      )}
-                                      {opp.losesExtraChargedCycle && (
-                                        <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold">
-                                          -Cycle
-                                        </span>
-                                      )}
-                                    </td>
-                                  </tr>
+                                      </div>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {flips.map((f) => (
+                                          <span
+                                            key={f.scenario}
+                                            className={`px-2 py-0.5 rounded-md border text-[10.5px] font-mono font-bold ${
+                                              f.isGain
+                                                ? "border-emerald-400/50 bg-emerald-500/20 text-emerald-200"
+                                                : "border-rose-400/50 bg-rose-500/20 text-rose-200"
+                                            }`}
+                                          >
+                                            [{f.scenario}] {formatFlipCode(f.flipCode)}:{" "}
+                                            {f.beforeBr} → {f.afterBr} (
+                                            {f.deltaBr >= 0 ? "+" : ""}
+                                            {f.deltaBr})
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    {isExpandedRow && (
+                                      <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5 pt-1">
+                                        {REALISTIC_7_SHIELD_KEYS.map((scKey) => {
+                                          const bBr = opp.baselineBrByShield[scKey];
+                                          const aBr = opp.brByShield[scKey];
+                                          const scFlip = opp.flipsByShield[scKey];
+                                          return (
+                                            <div
+                                              key={scKey}
+                                              className={`rounded border px-1.5 py-1 text-center font-mono text-[10px] ${
+                                                scFlip !== "NONE"
+                                                  ? "border-cyan-400/60 bg-cyan-950/40"
+                                                  : "border-slate-800 bg-slate-900/90"
+                                              }`}
+                                            >
+                                              <div className="text-[9px] font-bold text-slate-400">
+                                                {scKey}
+                                              </div>
+                                              <div
+                                                className={`font-bold ${
+                                                  aBr > 500
+                                                    ? "text-emerald-300"
+                                                    : aBr < 500
+                                                    ? "text-rose-300"
+                                                    : "text-amber-300"
+                                                }`}
+                                              >
+                                                {bBr} → {aBr}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
                                 );
-                              })
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Category 3: Non-Flipping Tier Outliers */}
+                      {breakdownCategory === "OUTLIERS" && (
+                        <div className="space-y-2.5">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/90 px-3 py-2">
+                            <div className="text-[10.5px] text-slate-300">
+                              Non-flipping matchups that cross a SilphScope sub-tier (
+                              <span className="font-mono text-slate-400">
+                                Strong W ≥{effSwMin} • Solid W ≥{effWMin} • Soft W 501–
+                                {effWMin - 1} | Close L {effLMax + 1}–499 • Solid L{" "}
+                                {effSlMax + 1}–{effLMax} • Strong L ≤{effSlMax}
+                              </span>
+                              )
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="text-[10px] font-bold text-slate-400 mr-1">
+                                Swing:
+                              </span>
+                              {([35, 40, 50, 75] as const).map((th) => (
+                                <button
+                                  key={th}
+                                  type="button"
+                                  onClick={() => setOutlierMinDelta(th)}
+                                  className={`px-2 py-0.5 rounded border text-[10px] font-mono font-bold transition ${
+                                    outlierMinDelta === th
+                                      ? "border-amber-400 bg-amber-500/20 text-amber-200"
+                                      : "border-slate-700 bg-slate-900 text-slate-400 hover:text-white"
+                                  }`}
+                                >
+                                  ≥{th} BR
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border border-slate-800 bg-slate-950/75 overflow-hidden">
+                            {outlierRows.length === 0 ? (
+                              <div className="px-4 py-6 text-center text-xs text-slate-400">
+                                No non-flipping sub-tier crossings ≥ {outlierMinDelta} BR vs.{" "}
+                                {lgMatrix.baselineLabel} in{" "}
+                                {shieldScopeMode === "REALISTIC_7"
+                                  ? "7 Realistic"
+                                  : "Even 3"}{" "}
+                                scenarios. Try ≥35 BR to widen detection.
+                              </div>
+                            ) : (
+                              <div className="divide-y divide-slate-800/70">
+                                {outlierRows.map(({ opp, outliers }) => (
+                                  <div
+                                    key={`out_${opp.oppName}`}
+                                    className="px-3 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                                  >
+                                    <div>
+                                      <span className="text-xs font-extrabold text-white">
+                                        {opp.oppName}
+                                      </span>
+                                      <span className="ml-2 text-[10px] font-mono text-slate-400">
+                                        {opp.oppIvs} • CP {opp.oppCp}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {outliers.map((o) => (
+                                        <span
+                                          key={o.scenario}
+                                          className={`px-2 py-0.5 rounded-md border text-[10.5px] font-mono font-bold ${
+                                            o.isUpgrade
+                                              ? "border-emerald-400/50 bg-emerald-500/15 text-emerald-200"
+                                              : "border-amber-400/50 bg-amber-500/15 text-amber-200"
+                                          }`}
+                                        >
+                                          [{o.scenario}] {o.beforeTierLabel} →{" "}
+                                          {o.afterTierLabel}: {o.beforeBr} → {o.afterBr} (
+                                          {o.deltaBr >= 0 ? "+" : ""}
+                                          {o.deltaBr} BR)
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                             )}
-                          </tbody>
-                        </table>
-                      </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Category 4: CMP Tie Flips */}
+                      {breakdownCategory === "CMP" && (
+                        <div className="rounded-xl border border-slate-800 bg-slate-950/75 overflow-hidden">
+                          {cmpOpps.length === 0 ? (
+                            <div className="px-4 py-6 text-center text-xs text-slate-400">
+                              No Charge Move Priority (CMP) flips vs. {lgMatrix.baselineLabel}.
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-slate-800/70">
+                              {cmpOpps.map((opp) => {
+                                const gained = opp.cmpFlip === "GAINED";
+                                return (
+                                  <div
+                                    key={`cmp_${opp.oppName}`}
+                                    className="px-3 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px]"
+                                  >
+                                    <div>
+                                      <div className="font-bold text-white">
+                                        {opp.oppName}
+                                        <span className="ml-2 text-[10px] font-mono text-slate-400">
+                                          {opp.oppIvs} • CP {opp.oppCp}
+                                        </span>
+                                      </div>
+                                      <div className="text-[10px] font-mono text-slate-400">
+                                        Effective Atk:{" "}
+                                        <span className="text-slate-200 font-bold">
+                                          {opp.baselineUserEffectiveAtk.toFixed(2)} →{" "}
+                                          {opp.userEffectiveAtk.toFixed(2)}
+                                        </span>{" "}
+                                        vs Opp {opp.oppEffectiveAtk.toFixed(2)} • 1v1 BR{" "}
+                                        {opp.baselineBr1v1} → {opp.br1v1}
+                                      </div>
+                                    </div>
+                                    <span
+                                      className={`shrink-0 px-2.5 py-0.5 rounded-md border font-mono font-bold text-[10.5px] ${
+                                        gained
+                                          ? "border-purple-400/50 bg-purple-500/20 text-purple-200"
+                                          : "border-rose-400/50 bg-rose-500/20 text-rose-200"
+                                      }`}
+                                    >
+                                      ⚡ CMP {opp.cmpFlip} ({opp.baselineCmpStatus} →{" "}
+                                      {opp.cmpStatus})
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

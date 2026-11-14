@@ -23,9 +23,23 @@ export interface RoadmapItem {
 
 export const VERSION_EVOLUTION_HISTORY: VersionRelease[] = [
   {
+    version: 'v7.39',
+    codename: '7-Scenario Asymmetric Shield Flips, Fast Move BP/Bulkpoint Lists & Matchup Tier Outliers',
+    badge: 'CURRENT',
+    date: 'Nov 2026',
+    summary: 'Refines the IV Lab Multi-IV Matrix breakdown across Android and Web Simulator by replacing generic non-flipping BR noise with 4 focused categories: Fast Move Breakpoints & Bulkpoints split by Pokémon, 7-scenario realistic asymmetric shield-tree Win/Loss flips, sensitivity-tunable Matchup Tier Outliers, and CMP tie flips.',
+    icon: '🎯',
+    accentColor: '#14B8A6',
+    highlights: [
+      '4-Category Segmented Breakdown (Fast BP/Bulk, Shield Flips, Tier Outliers, CMP) removing noisy generic non-flipping BR drift rows',
+      'Fast Move Breakpoints & Bulkpoints explicitly organized by Pokémon with corrected damage-taken signs and color coding',
+      '7-Scenario Asymmetric Shielding Tree (0v0, 1v1, 2v2, 1v0, 0v1, 2v1, 1v2) with 7 Realistic vs Even 3 scope toggle and per-shield before/after BR deltas',
+      'Sub-Tier Matchup Outlier detection (Strong/Solid/Soft W & Close/Solid/Strong L) with configurable ≥35/≥40/≥50/≥75 BR sensitivity'
+    ]
+  },
+  {
     version: 'v7.38',
     codename: 'IV Lab (Multi-IV Matrix & Breakpoint Engine), Universal 3-Box IV Inputs & My Built Pokémon Roster',
-    badge: 'CURRENT',
     date: 'Nov 2026',
     summary: 'Introduces the new IV Lab tab next to Meta across both Android and Web Simulator featuring side-by-side Multi-IV Matrix evaluation against Rank #1 Stat Product and custom candidate spreads, fast-move Breakpoints/Bulkpoints and CMP tie flips, universal 3-box [ATK][DEF][STA] inputs with real-time auto-CP recalculation, and Cloudflare D1-synced Built Pokémon roster linking.',
     icon: '⚖️',

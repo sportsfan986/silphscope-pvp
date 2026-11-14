@@ -16466,6 +16466,9 @@ class MainActivity : AppCompatActivity() {
     private val ivLabCandidates: MutableList<IvMatrixEngine.IvCandidateConfig> = mutableListOf()
     private var ivLabLastResult: IvMatrixEngine.MultiIvMatrixResult? = null
     private var ivLabExpandedCandidateKey: String? = null
+    private var ivLabBreakdownCategory: String = "BP_BULK"
+    private var ivLabShieldScope: IvMatrixEngine.ShieldScopeMode = IvMatrixEngine.ShieldScopeMode.REALISTIC_7
+    private var ivLabOutlierMinDelta: Int = 40
     private var ivLabBuiltLeagueFilter: String = "ALL"
     private var ivLabBuiltSearchQuery: String = ""
     private var ivLabIsRunning: Boolean = false
@@ -17293,6 +17296,12 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        OverlayService.syncTierThresholdsFromPrefs(prefs)
+        val tierSw = OverlayService.activeTierSwMin
+        val tierW = OverlayService.activeTierWMin
+        val tierL = OverlayService.activeTierLMax
+        val tierSl = OverlayService.activeTierSlMax
+
         for (leagueRes in simRes.leagues) {
             val secHead = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -17429,124 +17438,475 @@ class MainActivity : AppCompatActivity() {
                 addShieldBox("2v2", candRes.rec2v2, baseDelta)
                 resCard.addView(shieldGrid)
 
-                if (!isBaseTarget) {
-                    val flipsLW = candRes.opponents.count { it.flip1v1 == "L->W" || it.flip0v0 == "L->W" || it.flip2v2 == "L->W" }
-                    val flipsWL = candRes.opponents.count { it.flip1v1 == "W->L" || it.flip0v0 == "W->L" || it.flip2v2 == "W->L" }
-                    resCard.addView(TextView(this).apply {
-                        text = "🔄 Flips: +$flipsLW W / -$flipsWL L   •   ⚔️ +1 Fast BP: +${candRes.breakpointsGainedCount} / -${candRes.breakpointsLostCount}\n" +
-                            "🛡️ -1 Bulk: +${candRes.bulkpointsGainedCount} / -${candRes.bulkpointsLostCount}   •   ⚡ CMP: +${candRes.cmpFlipsGainedCount} / -${candRes.cmpFlipsLostCount}   •   ❤️ +Cycle: ${candRes.extraCycleSurvivedCount}"
+                fun createSaveBuiltButton(weight: Float): Button {
+                    return Button(this).apply {
+                        text = "💾 Save Built"
                         textSize = 10.5f
-                        setTextColor(theme.primaryTextColor)
-                        setPadding(0, ivDp(2), 0, ivDp(4))
-                    })
+                        isAllCaps = false
+                        backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
+                        setTextColor(android.graphics.Color.WHITE)
+                        setPadding(ivDp(8), ivDp(3), ivDp(8), ivDp(3))
+                        minWidth = 0
+                        minimumWidth = 0
+                        minHeight = 0
+                        minimumHeight = 0
+                        layoutParams = LinearLayout.LayoutParams(0, ivDp(30), weight)
+                        setOnClickListener {
+                            val (cleanSp, isSh) = IvMatrixEngine.cleanSpeciesNameWithoutShadow(candRes.speciesName)
+                            val saved = upsertBuiltPokemonEntry(
+                                BuiltPokemonEntry(
+                                    id = UUID.randomUUID().toString(),
+                                    speciesName = cleanSp,
+                                    isShadow = isSh || candRes.isShadow,
+                                    atkIv = candRes.atkIv,
+                                    defIv = candRes.defIv,
+                                    staIv = candRes.staIv,
+                                    ivs = candRes.ivs,
+                                    league = candRes.league,
+                                    cpCap = OverlayService.getLeagueCpCapStatic(candRes.league, prefs),
+                                    cp = candRes.cp,
+                                    level = candRes.level,
+                                    isBestBuddy = candRes.isBestBuddy,
+                                    fastMove = candRes.fastMove,
+                                    chargedMove1 = candRes.chargedMove1,
+                                    chargedMove2 = candRes.chargedMove2,
+                                    plusMoveLevel = 4,
+                                    label = if (candRes.isPinnedRank1) "Rank #1" else candRes.label.ifBlank { null },
+                                    statProductRank = candRes.rank,
+                                    statProductPct = candRes.pctOfRank1,
+                                    updatedAt = System.currentTimeMillis()
+                                ),
+                                triggerSync = true
+                            )
+                            refreshIvLabPageUi()
+                            Toast.makeText(this@MainActivity, "✅ Saved ${saved.speciesName} (${saved.ivs}) to Built Roster!", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
 
-                // Action Row: Details + Save Built
-                val resBtns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-                val keyOpps = candRes.opponents.filter {
-                    it.flip0v0 != "NONE" || it.flip1v1 != "NONE" || it.flip2v2 != "NONE" ||
-                        it.fastBreakpointDelta != 0 || it.fastBulkpointDelta != 0 ||
-                        it.cmpFlip != "NONE" || it.survivesExtraChargedCycle || it.losesExtraChargedCycle
+                if (isBaseTarget) {
+                    val baseActionRow = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = android.view.Gravity.CENTER_VERTICAL
+                    }
+                    baseActionRow.addView(TextView(this).apply {
+                        text = "📌 Active Comparison Baseline"
+                        textSize = 10.5f
+                        setTypeface(null, android.graphics.Typeface.BOLD)
+                        setTextColor(theme.secondaryAccentColor)
+                        layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.3f).apply {
+                            setMargins(0, 0, ivDp(6), 0)
+                        }
+                    })
+                    baseActionRow.addView(createSaveBuiltButton(1f))
+                    resCard.addView(baseActionRow)
+                    container.addView(resCard)
+                    continue
                 }
-                val isExpanded = ivLabExpandedCandidateKey == rowKey
-                resBtns.addView(Button(this).apply {
-                    text = if (isExpanded) "▲ Hide Shifts (${keyOpps.size})" else "🔍 Key Shifts (${keyOpps.size})"
-                    textSize = 10.5f
-                    isAllCaps = false
-                    backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
-                    setTextColor(theme.primaryTextColor)
-                    setPadding(ivDp(8), ivDp(3), ivDp(8), ivDp(3))
-                    minWidth = 0
-                    minimumWidth = 0
-                    minHeight = 0
-                    minimumHeight = 0
-                    layoutParams = LinearLayout.LayoutParams(0, ivDp(30), 1f).apply { setMargins(0, 0, ivDp(6), 0) }
-                    setOnClickListener {
-                        ivLabExpandedCandidateKey = if (isExpanded) null else rowKey
-                        refreshIvLabPageUi()
+
+                val bpOpps = candRes.opponents
+                    .filter { it.fastBreakpointDelta != 0 }
+                    .sortedWith(
+                        compareByDescending<IvMatrixEngine.IvOpponentBreakdown> { it.fastBreakpointDelta }
+                            .thenBy { it.oppName }
+                    )
+                val bulkOpps = candRes.opponents
+                    .filter { it.fastBulkpointDelta != 0 }
+                    .sortedWith(
+                        compareByDescending<IvMatrixEngine.IvOpponentBreakdown> { it.fastBulkpointDelta }
+                            .thenBy { it.oppName }
+                    )
+                val bpBulkTotalCount = candRes.opponents.count {
+                    it.fastBreakpointDelta != 0 || it.fastBulkpointDelta != 0
+                }
+                val flipRows = candRes.opponents
+                    .mapNotNull { opp ->
+                        val f = IvMatrixEngine.getOpponentShieldFlips(opp, ivLabShieldScope)
+                        if (f.isNotEmpty()) opp to f else null
                     }
-                })
-                resBtns.addView(Button(this).apply {
-                    text = "💾 Save Built"
-                    textSize = 10.5f
-                    isAllCaps = false
-                    backgroundTintList = android.content.res.ColorStateList.valueOf(theme.buttonAccentColor)
-                    setTextColor(android.graphics.Color.WHITE)
-                    setPadding(ivDp(8), ivDp(3), ivDp(8), ivDp(3))
-                    minWidth = 0
-                    minimumWidth = 0
-                    minHeight = 0
-                    minimumHeight = 0
-                    layoutParams = LinearLayout.LayoutParams(0, ivDp(30), 1f)
-                    setOnClickListener {
-                        val (cleanSp, isSh) = IvMatrixEngine.cleanSpeciesNameWithoutShadow(candRes.speciesName)
-                        val saved = upsertBuiltPokemonEntry(
-                            BuiltPokemonEntry(
-                                id = UUID.randomUUID().toString(),
-                                speciesName = cleanSp,
-                                isShadow = isSh || candRes.isShadow,
-                                atkIv = candRes.atkIv,
-                                defIv = candRes.defIv,
-                                staIv = candRes.staIv,
-                                ivs = candRes.ivs,
-                                league = candRes.league,
-                                cpCap = OverlayService.getLeagueCpCapStatic(candRes.league, prefs),
-                                cp = candRes.cp,
-                                level = candRes.level,
-                                isBestBuddy = candRes.isBestBuddy,
-                                fastMove = candRes.fastMove,
-                                chargedMove1 = candRes.chargedMove1,
-                                chargedMove2 = candRes.chargedMove2,
-                                plusMoveLevel = 4,
-                                label = if (candRes.isPinnedRank1) "Rank #1" else candRes.label.ifBlank { null },
-                                statProductRank = candRes.rank,
-                                statProductPct = candRes.pctOfRank1,
-                                updatedAt = System.currentTimeMillis()
-                            ),
-                            triggerSync = true
+                    .sortedWith(
+                        compareByDescending<Pair<IvMatrixEngine.IvOpponentBreakdown, List<IvMatrixEngine.ScenarioFlipDetail>>> { pair ->
+                            pair.second.count { it.isGain } - pair.second.count { !it.isGain }
+                        }
+                            .thenByDescending { pair -> pair.second.maxOf { kotlin.math.abs(it.deltaBr) } }
+                            .thenBy { it.first.oppName }
+                    )
+                val outlierRows = candRes.opponents
+                    .mapNotNull { opp ->
+                        val o = IvMatrixEngine.getOpponentTierOutliers(
+                            opp = opp,
+                            scope = ivLabShieldScope,
+                            minDeltaBr = ivLabOutlierMinDelta,
+                            swMin = tierSw,
+                            wMin = tierW,
+                            lMax = tierL,
+                            slMax = tierSl
                         )
-                        refreshIvLabPageUi()
-                        Toast.makeText(this@MainActivity, "✅ Saved ${saved.speciesName} (${saved.ivs}) to Built Roster!", Toast.LENGTH_SHORT).show()
+                        if (o.isNotEmpty()) opp to o else null
                     }
+                    .sortedWith(
+                        compareByDescending<Pair<IvMatrixEngine.IvOpponentBreakdown, List<IvMatrixEngine.ScenarioOutlierDetail>>> { pair ->
+                            pair.second.maxOf { kotlin.math.abs(it.deltaBr) }
+                        }.thenBy { it.first.oppName }
+                    )
+                val cmpOpps = candRes.opponents
+                    .filter { it.cmpFlip != "NONE" }
+                    .sortedWith(
+                        compareByDescending<IvMatrixEngine.IvOpponentBreakdown> {
+                            if (it.cmpFlip == "GAINED") 1 else 0
+                        }.thenBy { it.oppName }
+                    )
+
+                val flipGainOpps = flipRows.count { pair -> pair.second.any { it.isGain } }
+                val flipLossOpps = flipRows.count { pair -> pair.second.any { !it.isGain } }
+                val scopeShort = if (ivLabShieldScope == IvMatrixEngine.ShieldScopeMode.EVEN_3) "Even 3" else "7-Shield"
+
+                resCard.addView(TextView(this).apply {
+                    text = "🔄 Flips ($scopeShort): +$flipGainOpps / -$flipLossOpps opps   •   ⚠️ Outliers (≥$ivLabOutlierMinDelta): ${outlierRows.size}\n" +
+                        "⚔️ Fast BP: +${candRes.breakpointsGainedCount}/-${candRes.breakpointsLostCount}   •   " +
+                        "🛡️ Bulk: +${candRes.bulkpointsGainedCount}/-${candRes.bulkpointsLostCount}   •   " +
+                        "⚡ CMP: +${candRes.cmpFlipsGainedCount}/-${candRes.cmpFlipsLostCount}"
+                    textSize = 10.5f
+                    setTextColor(theme.primaryTextColor)
+                    setPadding(0, ivDp(2), 0, ivDp(4))
                 })
-                resCard.addView(resBtns)
+
+                val isExpanded = ivLabExpandedCandidateKey == rowKey
+                fun makeCatPill(catId: String, labelText: String, addRightMargin: Boolean): Button {
+                    val active = isExpanded && ivLabBreakdownCategory == catId
+                    return Button(this).apply {
+                        text = labelText
+                        textSize = 10.5f
+                        isAllCaps = false
+                        setTypeface(null, if (active) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                        backgroundTintList = android.content.res.ColorStateList.valueOf(
+                            if (active) theme.accentColor else theme.elevatedColor
+                        )
+                        setTextColor(if (active) android.graphics.Color.BLACK else theme.primaryTextColor)
+                        setPadding(ivDp(6), ivDp(3), ivDp(6), ivDp(3))
+                        minWidth = 0
+                        minimumWidth = 0
+                        minHeight = 0
+                        minimumHeight = 0
+                        layoutParams = LinearLayout.LayoutParams(0, ivDp(30), 1f).apply {
+                            setMargins(0, 0, if (addRightMargin) ivDp(6) else 0, ivDp(5))
+                        }
+                        setOnClickListener {
+                            if (active) {
+                                ivLabExpandedCandidateKey = null
+                            } else {
+                                ivLabExpandedCandidateKey = rowKey
+                                ivLabBreakdownCategory = catId
+                            }
+                            refreshIvLabPageUi()
+                        }
+                    }
+                }
+
+                // 4 Segmented Category Pills (2x2 clean grid) + Save Built row
+                val pillRow1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                pillRow1.addView(makeCatPill("BP_BULK", "⚔️ BP/Bulk ($bpBulkTotalCount)", true))
+                pillRow1.addView(makeCatPill("FLIPS", "🔄 Flips (${flipRows.size})", false))
+                resCard.addView(pillRow1)
+
+                val pillRow2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                pillRow2.addView(makeCatPill("OUTLIERS", "⚠️ Outliers (${outlierRows.size})", true))
+                pillRow2.addView(makeCatPill("CMP", "⚡ CMP (${cmpOpps.size})", false))
+                resCard.addView(pillRow2)
+
+                val saveRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                if (isExpanded) {
+                    saveRow.addView(Button(this).apply {
+                        text = "▲ Collapse"
+                        textSize = 10.5f
+                        isAllCaps = false
+                        backgroundTintList = android.content.res.ColorStateList.valueOf(theme.elevatedColor)
+                        setTextColor(theme.primaryTextColor)
+                        setPadding(ivDp(8), ivDp(3), ivDp(8), ivDp(3))
+                        minWidth = 0
+                        minimumWidth = 0
+                        minHeight = 0
+                        minimumHeight = 0
+                        layoutParams = LinearLayout.LayoutParams(0, ivDp(30), 1f).apply { setMargins(0, 0, ivDp(6), 0) }
+                        setOnClickListener {
+                            ivLabExpandedCandidateKey = null
+                            refreshIvLabPageUi()
+                        }
+                    })
+                }
+                saveRow.addView(createSaveBuiltButton(1f))
+                resCard.addView(saveRow)
 
                 if (isExpanded) {
                     val listWrap = LinearLayout(this).apply {
                         orientation = LinearLayout.VERTICAL
-                        setPadding(ivDp(6), ivDp(6), ivDp(6), ivDp(4))
+                        setPadding(ivDp(8), ivDp(7), ivDp(8), ivDp(6))
                         background = makeIvCardBg(theme.bgColor, theme.overlayBorderColor, radiusDp = 8)
                         layoutParams = LinearLayout.LayoutParams(
                             LinearLayout.LayoutParams.MATCH_PARENT,
                             LinearLayout.LayoutParams.WRAP_CONTENT
                         ).apply { setMargins(0, ivDp(6), 0, 0) }
                     }
-                    val displayRows = if (keyOpps.isNotEmpty()) keyOpps.take(40) else candRes.opponents.take(25)
-                    for (opp in displayRows) {
-                        val tags = mutableListOf<String>()
-                        if (opp.flip1v1 != "NONE") tags.add("1v1 ${opp.flip1v1}")
-                        if (opp.flip0v0 != "NONE") tags.add("0v0 ${opp.flip0v0}")
-                        if (opp.flip2v2 != "NONE") tags.add("2v2 ${opp.flip2v2}")
-                        if (opp.fastBreakpointDelta > 0) tags.add("+${opp.fastBreakpointDelta} Fast Dmg (${opp.baselineFastDmgDealt}→${opp.fastDmgDealt})")
-                        if (opp.fastBreakpointDelta < 0) tags.add("${opp.fastBreakpointDelta} Fast Dmg (${opp.baselineFastDmgDealt}→${opp.fastDmgDealt})")
-                        if (opp.fastBulkpointDelta < 0) tags.add("${opp.fastBulkpointDelta} Taken (${opp.baselineFastDmgTaken}→${opp.fastDmgTaken})")
-                        if (opp.fastBulkpointDelta > 0) tags.add("+${opp.fastBulkpointDelta} Taken (${opp.baselineFastDmgTaken}→${opp.fastDmgTaken})")
-                        if (opp.cmpFlip == "GAINED") tags.add("⚡ CMP GAINED")
-                        if (opp.cmpFlip == "LOST") tags.add("⚡ CMP LOST")
-                        if (opp.survivesExtraChargedCycle) tags.add("❤️ +1 Cycle")
-                        val tagStr = if (tags.isNotEmpty()) tags.joinToString(" • ") else "1v1 BR ${opp.baselineBr1v1} → ${opp.br1v1}"
-                        listWrap.addView(TextView(this).apply {
-                            text = "• ${opp.oppName} (${opp.oppIvs}) — 1v1 BR ${opp.br1v1}\n   $tagStr"
-                            textSize = 10.5f
-                            setTextColor(
-                                when {
-                                    opp.flip1v1 == "L->W" || opp.fastBreakpointDelta > 0 || opp.fastBulkpointDelta < 0 || opp.cmpFlip == "GAINED" -> android.graphics.Color.parseColor("#34D399")
-                                    opp.flip1v1 == "W->L" || opp.cmpFlip == "LOST" -> android.graphics.Color.parseColor("#F87171")
-                                    else -> theme.secondaryTextColor
+
+                    // 2-Way Shield Scope Toggle inside Flips & Outliers
+                    if (ivLabBreakdownCategory == "FLIPS" || ivLabBreakdownCategory == "OUTLIERS") {
+                        val scopeRow = LinearLayout(this).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            layoutParams = LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT
+                            ).apply { setMargins(0, 0, 0, ivDp(6)) }
+                        }
+                        fun makeScopeBtn(mode: IvMatrixEngine.ShieldScopeMode, label: String, hasRightMargin: Boolean): Button {
+                            val selected = ivLabShieldScope == mode
+                            return Button(this).apply {
+                                text = label
+                                textSize = 10f
+                                isAllCaps = false
+                                setTypeface(null, if (selected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                                backgroundTintList = android.content.res.ColorStateList.valueOf(
+                                    if (selected) theme.secondaryAccentColor else theme.surfaceColor
+                                )
+                                setTextColor(if (selected) android.graphics.Color.WHITE else theme.secondaryTextColor)
+                                setPadding(ivDp(6), ivDp(2), ivDp(6), ivDp(2))
+                                minWidth = 0
+                                minimumWidth = 0
+                                minHeight = 0
+                                minimumHeight = 0
+                                layoutParams = LinearLayout.LayoutParams(0, ivDp(28), 1f).apply {
+                                    if (hasRightMargin) setMargins(0, 0, ivDp(6), 0)
                                 }
-                            )
-                            setPadding(0, ivDp(2), 0, ivDp(3))
-                        })
+                                setOnClickListener {
+                                    if (ivLabShieldScope != mode) {
+                                        ivLabShieldScope = mode
+                                        refreshIvLabPageUi()
+                                    }
+                                }
+                            }
+                        }
+                        scopeRow.addView(makeScopeBtn(IvMatrixEngine.ShieldScopeMode.REALISTIC_7, "🎯 7 Realistic (Even+±1🛡️)", true))
+                        scopeRow.addView(makeScopeBtn(IvMatrixEngine.ShieldScopeMode.EVEN_3, "⚖️ Even 3 (0v0/1v1/2v2)", false))
+                        listWrap.addView(scopeRow)
+                    }
+
+                    when (ivLabBreakdownCategory) {
+                        "BP_BULK" -> {
+                            listWrap.addView(TextView(this).apply {
+                                text = "⚔️ Fast Move Breakpoints (+${candRes.breakpointsGainedCount} / -${candRes.breakpointsLostCount})"
+                                textSize = 11f
+                                setTypeface(null, android.graphics.Typeface.BOLD)
+                                setTextColor(android.graphics.Color.parseColor("#FBBF24"))
+                                setPadding(0, ivDp(2), 0, ivDp(3))
+                            })
+                            if (bpOpps.isEmpty()) {
+                                listWrap.addView(TextView(this).apply {
+                                    text = "No Fast Move Breakpoint shifts vs. ${leagueRes.baselineLabel}."
+                                    textSize = 10.5f
+                                    setTextColor(theme.secondaryTextColor)
+                                    setPadding(0, ivDp(2), 0, ivDp(6))
+                                })
+                            } else {
+                                for (opp in bpOpps) {
+                                    val gained = opp.fastBreakpointDelta > 0
+                                    val deltaTxt = if (gained) "+${opp.fastBreakpointDelta} dmg/fast ✅" else "${opp.fastBreakpointDelta} dmg/fast ⚠️"
+                                    val moveNm = opp.userFastMoveName.ifBlank { candRes.fastMove }
+                                    listWrap.addView(TextView(this).apply {
+                                        text = "• ${opp.oppName} (${opp.oppIvs}) • 1v1 BR ${opp.baselineBr1v1} → ${opp.br1v1}\n" +
+                                            "   Your $moveNm: ${opp.baselineFastDmgDealt} → ${opp.fastDmgDealt} ($deltaTxt)"
+                                        textSize = 10.5f
+                                        setTextColor(
+                                            if (gained) android.graphics.Color.parseColor("#34D399")
+                                            else android.graphics.Color.parseColor("#F87171")
+                                        )
+                                        setPadding(0, ivDp(2), 0, ivDp(3))
+                                    })
+                                }
+                            }
+
+                            listWrap.addView(TextView(this).apply {
+                                text = "🛡️ Fast Move Bulkpoints (+${candRes.bulkpointsGainedCount} Gained / -${candRes.bulkpointsLostCount} Lost)"
+                                textSize = 11f
+                                setTypeface(null, android.graphics.Typeface.BOLD)
+                                setTextColor(android.graphics.Color.parseColor("#38BDF8"))
+                                setPadding(0, ivDp(6), 0, ivDp(3))
+                            })
+                            if (bulkOpps.isEmpty()) {
+                                listWrap.addView(TextView(this).apply {
+                                    text = "No Fast Move Bulkpoint shifts vs. ${leagueRes.baselineLabel}."
+                                    textSize = 10.5f
+                                    setTextColor(theme.secondaryTextColor)
+                                    setPadding(0, ivDp(2), 0, ivDp(4))
+                                })
+                            } else {
+                                for (opp in bulkOpps) {
+                                    val gainedBulk = opp.fastBulkpointDelta > 0
+                                    val deltaTxt = if (gainedBulk) {
+                                        "-${opp.fastBulkpointDelta} dmg taken ✅"
+                                    } else {
+                                        "+${-opp.fastBulkpointDelta} dmg taken ⚠️"
+                                    }
+                                    val cycBadge = if (opp.survivesExtraChargedCycle) " • 💪 +Cycle" else ""
+                                    val oppMoveNm = opp.oppFastMoveName.ifBlank { "Fast" }
+                                    listWrap.addView(TextView(this).apply {
+                                        text = "• ${opp.oppName} (${opp.oppIvs}) • 1v1 BR ${opp.baselineBr1v1} → ${opp.br1v1}$cycBadge\n" +
+                                            "   Opp $oppMoveNm taken: ${opp.baselineFastDmgTaken} → ${opp.fastDmgTaken} ($deltaTxt)"
+                                        textSize = 10.5f
+                                        setTextColor(
+                                            if (gainedBulk) android.graphics.Color.parseColor("#34D399")
+                                            else android.graphics.Color.parseColor("#F87171")
+                                        )
+                                        setPadding(0, ivDp(2), 0, ivDp(3))
+                                    })
+                                }
+                            }
+                        }
+
+                        "FLIPS" -> {
+                            if (flipRows.isEmpty()) {
+                                listWrap.addView(TextView(this).apply {
+                                    text = "No Win/Loss outcome flips vs. ${leagueRes.baselineLabel} in $scopeShort scenarios."
+                                    textSize = 10.5f
+                                    setTextColor(theme.secondaryTextColor)
+                                    setPadding(0, ivDp(4), 0, ivDp(4))
+                                })
+                            } else {
+                                for ((opp, flips) in flipRows) {
+                                    val gains = flips.count { it.isGain }
+                                    val losses = flips.size - gains
+                                    val branchStr = flips.joinToString("  •  ") { f ->
+                                        val dStr = if (f.deltaBr >= 0) "+${f.deltaBr}" else "${f.deltaBr}"
+                                        "[${f.scenario}] ${IvMatrixEngine.formatFlipCode(f.flipCode)} (${f.beforeBr} → ${f.afterBr}, $dStr)"
+                                    }
+                                    listWrap.addView(TextView(this).apply {
+                                        text = "• ${opp.oppName} (${opp.oppIvs}, CP ${opp.oppCp})\n   $branchStr"
+                                        textSize = 10.5f
+                                        setTextColor(
+                                            when {
+                                                gains > 0 && losses == 0 -> android.graphics.Color.parseColor("#34D399")
+                                                losses > 0 && gains == 0 -> android.graphics.Color.parseColor("#F87171")
+                                                else -> android.graphics.Color.parseColor("#FBBF24")
+                                            }
+                                        )
+                                        setPadding(0, ivDp(2), 0, ivDp(4))
+                                    })
+                                }
+                            }
+                        }
+
+                        "OUTLIERS" -> {
+                            val swingRow = LinearLayout(this).apply {
+                                orientation = LinearLayout.HORIZONTAL
+                                gravity = android.view.Gravity.CENTER_VERTICAL
+                                layoutParams = LinearLayout.LayoutParams(
+                                    LinearLayout.LayoutParams.MATCH_PARENT,
+                                    LinearLayout.LayoutParams.WRAP_CONTENT
+                                ).apply { setMargins(0, 0, 0, ivDp(4)) }
+                            }
+                            swingRow.addView(TextView(this).apply {
+                                text = "Min Swing:"
+                                textSize = 10f
+                                setTypeface(null, android.graphics.Typeface.BOLD)
+                                setTextColor(theme.secondaryTextColor)
+                                layoutParams = LinearLayout.LayoutParams(
+                                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                                    LinearLayout.LayoutParams.WRAP_CONTENT
+                                ).apply { setMargins(0, 0, ivDp(6), 0) }
+                            })
+                            for (th in listOf(35, 40, 50, 75)) {
+                                val selectedTh = ivLabOutlierMinDelta == th
+                                swingRow.addView(Button(this).apply {
+                                    text = "≥$th"
+                                    textSize = 10f
+                                    isAllCaps = false
+                                    setTypeface(null, if (selectedTh) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                                    backgroundTintList = android.content.res.ColorStateList.valueOf(
+                                        if (selectedTh) android.graphics.Color.parseColor("#D97706") else theme.surfaceColor
+                                    )
+                                    setTextColor(if (selectedTh) android.graphics.Color.WHITE else theme.secondaryTextColor)
+                                    setPadding(ivDp(6), ivDp(2), ivDp(6), ivDp(2))
+                                    minWidth = 0
+                                    minimumWidth = 0
+                                    minHeight = 0
+                                    minimumHeight = 0
+                                    layoutParams = LinearLayout.LayoutParams(0, ivDp(26), 1f).apply {
+                                        setMargins(0, 0, if (th != 75) ivDp(4) else 0, 0)
+                                    }
+                                    setOnClickListener {
+                                        if (ivLabOutlierMinDelta != th) {
+                                            ivLabOutlierMinDelta = th
+                                            refreshIvLabPageUi()
+                                        }
+                                    }
+                                })
+                            }
+                            listWrap.addView(swingRow)
+
+                            val effWMin = kotlin.math.max(502, tierW)
+                            val effSwMin = kotlin.math.max(effWMin + 1, tierSw)
+                            val effLMax = kotlin.math.min(498, tierL)
+                            val effSlMax = kotlin.math.min(effLMax - 1, tierSl)
+                            listWrap.addView(TextView(this).apply {
+                                text = "Sub-tiers: Strong W ≥$effSwMin • Solid W ≥$effWMin • Soft W 501–${effWMin - 1} | Close L ${effLMax + 1}–499 • Solid L ${effSlMax + 1}–$effLMax • Strong L ≤$effSlMax"
+                                textSize = 9.5f
+                                setTextColor(theme.secondaryTextColor)
+                                setPadding(0, 0, 0, ivDp(5))
+                            })
+
+                            if (outlierRows.isEmpty()) {
+                                listWrap.addView(TextView(this).apply {
+                                    text = "No non-flipping sub-tier crossings ≥ $ivLabOutlierMinDelta BR vs. ${leagueRes.baselineLabel} in $scopeShort scenarios."
+                                    textSize = 10.5f
+                                    setTextColor(theme.secondaryTextColor)
+                                    setPadding(0, ivDp(4), 0, ivDp(4))
+                                })
+                            } else {
+                                for ((opp, outliers) in outlierRows) {
+                                    val upCnt = outliers.count { it.isUpgrade }
+                                    val downCnt = outliers.size - upCnt
+                                    val outStr = outliers.joinToString("  •  ") { o ->
+                                        val dStr = if (o.deltaBr >= 0) "+${o.deltaBr}" else "${o.deltaBr}"
+                                        "[${o.scenario}] ${o.beforeTierLabel} → ${o.afterTierLabel} (${o.beforeBr} → ${o.afterBr}, $dStr BR)"
+                                    }
+                                    listWrap.addView(TextView(this).apply {
+                                        text = "• ${opp.oppName} (${opp.oppIvs}, CP ${opp.oppCp})\n   $outStr"
+                                        textSize = 10.5f
+                                        setTextColor(
+                                            when {
+                                                upCnt > 0 && downCnt == 0 -> android.graphics.Color.parseColor("#34D399")
+                                                downCnt > 0 && upCnt == 0 -> android.graphics.Color.parseColor("#FBBF24")
+                                                else -> theme.primaryTextColor
+                                            }
+                                        )
+                                        setPadding(0, ivDp(2), 0, ivDp(4))
+                                    })
+                                }
+                            }
+                        }
+
+                        "CMP" -> {
+                            if (cmpOpps.isEmpty()) {
+                                listWrap.addView(TextView(this).apply {
+                                    text = "No Charge Move Priority (CMP) flips vs. ${leagueRes.baselineLabel}."
+                                    textSize = 10.5f
+                                    setTextColor(theme.secondaryTextColor)
+                                    setPadding(0, ivDp(4), 0, ivDp(4))
+                                })
+                            } else {
+                                for (opp in cmpOpps) {
+                                    val gained = opp.cmpFlip == "GAINED"
+                                    listWrap.addView(TextView(this).apply {
+                                        text = "• ${opp.oppName} (${opp.oppIvs}) — ⚡ CMP ${opp.cmpFlip}\n" +
+                                            "   Atk ${opp.baselineUserEffectiveAtk} → ${opp.userEffectiveAtk} vs Opp ${opp.oppEffectiveAtk} (${opp.baselineCmpStatus} → ${opp.cmpStatus}) • 1v1 BR ${opp.baselineBr1v1} → ${opp.br1v1}"
+                                        textSize = 10.5f
+                                        setTextColor(
+                                            if (gained) android.graphics.Color.parseColor("#C084FC")
+                                            else android.graphics.Color.parseColor("#F87171")
+                                        )
+                                        setPadding(0, ivDp(2), 0, ivDp(4))
+                                    })
+                                }
+                            }
+                        }
                     }
                     resCard.addView(listWrap)
                 }
