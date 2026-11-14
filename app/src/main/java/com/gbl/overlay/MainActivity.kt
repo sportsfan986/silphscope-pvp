@@ -13990,7 +13990,7 @@ class MainActivity : AppCompatActivity() {
                 },
                 enableBuiltControls = true,
                 showPresetChips = true,
-                onChanged = { _, _, _, _, _, _ ->
+                onChanged = { _ ->
                     if (!suppressIvChangeCallback) {
                         refreshEvaluationHook?.invoke()
                     }

@@ -2,21 +2,8 @@ package com.gbl.overlay
 
 import com.gbl.overlay.OverlayService.Companion.CPM_TABLE
 import com.gbl.overlay.OverlayService.Companion.PokemonMeta
-import com.gbl.overlay.OverlayService.Companion.calculateMatchupRatingStatic
-import com.gbl.overlay.OverlayService.Companion.computeBlendedSeasonMetaStatic
-import com.gbl.overlay.OverlayService.Companion.computeEffectiveCombatStats
-import com.gbl.overlay.OverlayService.Companion.getAllPokemonMeta
 import com.gbl.overlay.OverlayService.Companion.getLeagueCpCapStatic
-import com.gbl.overlay.OverlayService.Companion.getTop100MetaCandidatesForLeagueStatic
-import com.gbl.overlay.OverlayService.Companion.getTypeEffectivenessStatic
 import com.gbl.overlay.OverlayService.Companion.normalizeLeagueKeyStatic
-import com.gbl.overlay.OverlayService.Companion.parseIvTriplet
-import com.gbl.overlay.OverlayService.Companion.resolveChargedMoveStatsStatic
-import com.gbl.overlay.OverlayService.Companion.resolveFastPowerStatic
-import com.gbl.overlay.OverlayService.Companion.resolveFastTurnsStatic
-import com.gbl.overlay.OverlayService.Companion.resolveFastTypeStatic
-import com.gbl.overlay.OverlayService.Companion.resolveRecommendedMovesForSpecies
-import com.gbl.overlay.OverlayService.Companion.solveLeagueLevelAndCpm
 import java.util.UUID
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -649,7 +636,7 @@ object IvMatrixEngine {
                 val c2 = cfg.chargedMove2.ifBlank { recMeta.chargedMove2 }
 
                 val perOpp = preparedOpps.map { opp ->
-                    val br0v0 = calculateMatchupRatingStatic(
+                    val br0v0 = OverlayService.calculateMatchupRatingStatic(
                         myName = display,
                         oppName = opp.name,
                         userShields = 0,
@@ -665,7 +652,7 @@ object IvMatrixEngine {
                         oppIvs = opp.ivs,
                         oppCp = opp.cp
                     )
-                    val br1v1 = calculateMatchupRatingStatic(
+                    val br1v1 = OverlayService.calculateMatchupRatingStatic(
                         myName = display,
                         oppName = opp.name,
                         userShields = 1,
@@ -681,7 +668,7 @@ object IvMatrixEngine {
                         oppIvs = opp.ivs,
                         oppCp = opp.cp
                     )
-                    val br2v2 = calculateMatchupRatingStatic(
+                    val br2v2 = OverlayService.calculateMatchupRatingStatic(
                         myName = display,
                         oppName = opp.name,
                         userShields = 2,
